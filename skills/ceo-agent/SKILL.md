@@ -33,15 +33,15 @@ CEO **must** invoke `autopilot:think-tank` when encountering any of these:
 
 | Signal | Example | Why |
 |--------|---------|-----|
-| Scope 二選一以上 | 「先做 A 還是 B？」「Phase 1 包多少？」 | 多角色視角能發現盲點 |
-| Blast radius 跨 3+ 模組 | 改 core module 影響多個 downstream | QA/Ops 角色能預警 regression |
-| 用戶體驗 tradeoff | 效能 vs 功能、簡單 vs 完整 | UX/玩家代表 有不同觀點 |
-| 不確定 ROI | 「這值得做嗎？」 | 產品總監 + 玩家代表 能量化 |
+| Scope choice (2+ options) | "A or B first?" "What's in Phase 1?" | Multi-role perspectives catch blind spots |
+| Blast radius across 3+ modules | Changing core module affects multiple downstream | QA/Ops roles can flag regression risk |
+| UX tradeoff | Performance vs features, simple vs complete | UX/Customer advocates bring different views |
+| Uncertain ROI | "Is this worth doing?" | Product + Customer roles can quantify value |
 
-CEO **不需要** invoke think-tank 的情況：
-- 純技術選型（library A vs B）→ 用 survey
-- DOA 戰術層內的決策（實現路徑、error fix）→ CEO 自主
-- 已有明確 spec 的實作 → 直接做
+CEO does **NOT** need think-tank for:
+- Pure tech selection (library A vs B) → use survey
+- Tactical decisions within DOA (implementation path, error fix) → CEO decides
+- Clear spec already provided → just implement
 
 ### Mode Switch
 

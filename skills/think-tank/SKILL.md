@@ -5,75 +5,75 @@ description: "Multi-role think tank — 6 roles debate in parallel to produce a 
 
 # Think Tank — Multi-Role Decision Brief
 
-6 個專業角色平行分析同一個議題，各自產出觀點，然後交叉碰撞。價值在分歧點，不在共識。
+6 specialized roles analyze the same topic in parallel, each producing independent perspectives, then cross-collide. Value lies in divergence, not consensus.
 
-## 何時使用
+## When to Use
 
-| 觸發 | 範例 |
-|------|------|
-| 產品/策略決策 | 「要不要做 X？」「先做 A 還是 B？」 |
-| Scope 決策 | 「做到什麼程度？」「Phase 1 包含什麼？」 |
-| Tradeoff 分析 | 「效能 vs 功能 vs 維護成本」 |
-| 風險評估 | 「這個改動的 blast radius？」 |
-| CEO Agent 遇戰略決策 | CEO 可自主 invoke `autopilot:think-tank` |
-
-**不適用**：純技術選型（X library vs Y library）→ 用 `autopilot:survey`。
-
-## 和其他 skill 的關係
-
-```
-survey       → 外部資料蒐集（業界怎麼做）
-think-tank   → 內部多視角辯論（我們該怎麼做）  ← 本 skill
-ceo-agent    → 決策後自主執行
-```
-
-可串接：survey 產出 → 餵給 think-tank 當 input → Decision Brief → CEO 決策。
-
-## 角色配置
-
-### 6 個標準角色
-
-| 角色 | voltagent subagent_type | 關注維度 |
-|------|------------------------|---------|
-| **架構師** | `voltagent-qa-sec:architect-reviewer` | 技術可行性、系統耦合、效能、技術債 |
-| **產品總監** | `voltagent-biz:product-manager` | 功能 ROI、優先級、scope、success metrics |
-| **UX 代言人** | `voltagent-biz:ux-researcher` | 玩家體驗、操作流暢度、邊界互動 |
-| **QA 惡魔** | `voltagent-qa-sec:qa-expert` | 測試覆蓋、regression risk、failure modes |
-| **營運代表** | `voltagent-infra:sre-engineer` | 部署複雜度、監控、rollback、記憶體/CPU |
-| **玩家代表** | `voltagent-biz:customer-success-manager` | 玩家需求、痛點、留存影響 |
-
-### 快速模式（3 角色）
-
-小決策不需要 6 角色。依議題選最相關的 3 個：
-
-| 議題類型 | 建議角色 |
+| Trigger | Example |
 |---------|---------|
-| 技術方案選擇 | 架構師 + QA + 營運 |
-| 功能 scope 決策 | 產品 + UX + 玩家 |
-| 效能 vs 功能 | 架構師 + 產品 + 營運 |
-| 新遊戲功能 | UX + QA + 玩家 |
+| Product/strategy decisions | "Should we build X?" "A or B first?" |
+| Scope decisions | "How far do we go?" "What's in Phase 1?" |
+| Tradeoff analysis | "Performance vs features vs maintenance cost" |
+| Risk assessment | "What's the blast radius of this change?" |
+| CEO Agent hits strategic decision | CEO autonomously invokes `autopilot:think-tank` |
 
-## 執行流程
+**Not for**: pure technical selection (X library vs Y) → use `autopilot:survey`.
 
-### Step 1: 定義議題
+## Relationship to Other Skills
 
-從用戶輸入提取：
-- **議題**: 一句話描述要決定什麼
-- **背景**: 目前狀態、已知約束
-- **Survey 結果**: 如果之前跑過 survey，摘要結論
+```
+survey       → external research (what does the industry do?)
+think-tank   → internal multi-perspective debate (what should WE do?)  ← this skill
+ceo-agent    → autonomous execution after decision
+```
 
-如果議題太模糊，先問一輪釐清。
+Chain: survey output → feed into think-tank → Decision Brief → CEO executes.
 
-### Step 2: 準備 domain context
+## Role Configuration
 
-讀取與議題相關的 codebase context（architecture docs, game skills, 相關 source code），整理為所有角色共用的 context block。每個角色都需要足夠的 domain 知識才能產出有價值的觀點。
+### 6 Standard Roles
 
-### Step 3: 平行 dispatch
+| Role | voltagent subagent_type | Focus |
+|------|------------------------|-------|
+| **Architect** | `voltagent-qa-sec:architect-reviewer` | Technical feasibility, coupling, performance, tech debt |
+| **Product Director** | `voltagent-biz:product-manager` | Feature ROI, priority, scope, success metrics |
+| **UX Advocate** | `voltagent-biz:ux-researcher` | User experience, interaction flow, edge cases |
+| **QA Devil** | `voltagent-qa-sec:qa-expert` | Test coverage, regression risk, failure modes |
+| **Ops/SRE** | `voltagent-infra:sre-engineer` | Deploy complexity, monitoring, rollback, resource usage |
+| **Customer Advocate** | `voltagent-biz:customer-success-manager` | User needs, pain points, retention impact |
 
-同時 spawn 所有角色（6 或 3 個），每個 agent 帶：
-- 角色 prompt（見 [references/role-prompts.md](references/role-prompts.md)）
-- 共用 domain context
-- 議題 + 背景
+### Quick Mode (3 Roles)
+
+Small decisions don't need 6 roles. Pick the 3 most relevant:
+
+| Topic Type | Suggested Roles |
+|-----------|----------------|
+| Technical approach | Architect + QA + Ops |
+| Feature scope | Product + UX + Customer |
+| Performance vs features | Architect + Product + Ops |
+| New user-facing feature | UX + QA + Customer |
+
+## Execution Flow
+
+### Step 1: Define the Topic
+
+Extract from user input:
+- **Topic**: one sentence describing the decision
+- **Context**: current state, known constraints
+- **Survey results**: if a survey was run previously, summarize conclusions
+
+If the topic is too vague, ask one clarifying round first.
+
+### Step 2: Prepare Domain Context
+
+Read codebase context relevant to the topic (architecture docs, domain skills, related source code). Compile into a shared context block for all roles. Each role needs sufficient domain knowledge to produce valuable perspectives.
+
+### Step 3: Parallel Dispatch
+
+Spawn all roles simultaneously (6 or 3), each agent gets:
+- Role prompt (see [references/role-prompts.md](references/role-prompts.md))
+- Shared domain context
+- Topic + constraints
 
 ```
 Agent({
@@ -84,47 +84,47 @@ Agent({
 })
 ```
 
-所有角色 **同時** dispatch — 不要等一個完成再 dispatch 下一個。
+Dispatch ALL roles simultaneously — do not wait for one to complete before dispatching the next.
 
-### Step 4: 碰撞彙整
+### Step 4: Cross-Collision Synthesis
 
-所有角色回報後，彙整為 Decision Brief：
+After all roles report back, synthesize into a Decision Brief:
 
-1. **找共識** — 所有角色都同意的結論
-2. **找分歧** — 角色之間的衝突點（這是最有價值的部分）
-3. **找洞見** — 角色碰撞產出的新觀點（A 的觀點 + B 的觀點 → 誰都沒單獨想到的 insight）
-4. **彙總推薦** — 每個角色的立場 (✅/⚠️/❌) + 一句話理由
+1. **Find consensus** — conclusions all roles agree on
+2. **Find divergence** — conflict points between roles (this is the most valuable part)
+3. **Find collision insights** — new perspectives emerging from role interactions (A's view + B's view → insight neither had alone)
+4. **Summarize recommendations** — each role's stance (approve/conditional/reject) + one-sentence rationale
 
-### Step 5: 產出 Decision Brief
+### Step 5: Produce Decision Brief
 
-使用固定格式（見 [references/brief-template.md](references/brief-template.md)），包含：
-- 共識
-- 分歧地圖（ASCII diagram 呈現角色之間的張力）
-- 關鍵分歧點表（正方 vs 反方 + 張力等級）
-- 各角色推薦彙總表
-- 最有價值的 2-3 個碰撞洞見
-- CEO 建議（如果在 CEO mode 下）
+Use the fixed format (see [references/brief-template.md](references/brief-template.md)), including:
+- Consensus
+- Divergence map (ASCII diagram showing tensions between roles)
+- Key divergence table (pro vs con + tension level)
+- Role recommendation summary table
+- Top 2-3 collision insights
+- CEO recommendation (if in CEO mode)
 
-## 產出格式要求
+## Output Requirements
 
-- Decision Brief 必須在一則回覆中呈現完整結果
-- 分歧地圖用 ASCII diagram（不用 mermaid）
-- 每個角色最多 300 words 的 output
-- Brief 本身不超過用戶能在 2 分鐘內讀完的長度
+- Decision Brief must present complete results in a single response
+- Divergence map uses ASCII diagram (not mermaid)
+- Each role's output: max 300 words
+- Brief should be readable in under 2 minutes
 
-## 錯誤處理
+## Error Handling
 
-| 狀況 | 處理 |
-|------|------|
-| Agent timeout | 用已收到的角色結果產出 partial brief，標記缺席角色 |
-| 所有角色都同意 | 正常情況 — 標記為「共識強」，但特別檢查是否漏了角度 |
-| 所有角色都反對 | 呈報用戶，建議不做或重新定義議題 |
-| 議題太大（涉及多個獨立決策） | 拆成多個 sub-topic，每個跑一輪 |
+| Situation | Action |
+|-----------|--------|
+| Agent timeout | Produce partial brief from available roles, mark missing ones |
+| All roles agree | Normal — mark as "strong consensus", but verify no angle was missed |
+| All roles oppose | Report to user, suggest not proceeding or redefining the topic |
+| Topic too broad (multiple independent decisions) | Split into sub-topics, run one round per sub-topic |
 
 ## See Also
 
-| Skill | 關係 |
-|-------|------|
-| `autopilot:survey` | survey 找外部資料，think-tank 做內部辯論。可串接 |
-| `autopilot:ceo-agent` | CEO 在戰略決策時可自主 invoke think-tank |
-| `team` | team 做平行執行，think-tank 做平行分析 |
+| Skill | Relationship |
+|-------|-------------|
+| `autopilot:survey` | Survey finds external data, think-tank does internal debate. Can chain. |
+| `autopilot:ceo-agent` | CEO autonomously invokes think-tank for strategic decisions |
+| `autopilot:team` | Team does parallel execution, think-tank does parallel analysis |

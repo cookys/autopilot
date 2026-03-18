@@ -1,68 +1,68 @@
 # Decision Brief Template
 
-> 智庫彙整後使用此格式產出最終報告。
+> Use this format after synthesizing all role outputs.
 
 ```markdown
-## 🏛️ Think Tank Decision Brief: {議題標題}
+## Think Tank Decision Brief: {Topic Title}
 
-### 共識
-{所有角色都同意的結論，1-3 句}
+### Consensus
+{Conclusions all roles agree on, 1-3 sentences}
 
-### 分歧地圖
+### Divergence Map
 
-{ASCII diagram 呈現角色之間的張力關係}
-{範例：}
+{ASCII diagram showing tension relationships between roles}
+{Example:}
 
 ```
-                    架構師              產品總監
-                   「觀點 A」           「觀點 B」
+                    Architect              Product Director
+                   "View A"               "View B"
                          \               /
                           \             /
-          QA 惡魔 ─────── 核心議題 ─────── 營運代表
-         「觀點 C」                      「觀點 D」
+          QA Devil ─────── Core Topic ─────── Ops/SRE
+         "View C"                          "View D"
                           /             \
                          /               \
-                   UX 代言人             玩家代表
-                  「觀點 E」             「觀點 F」
+                   UX Advocate           Customer Advocate
+                  "View E"               "View F"
 ```
 
-### 關鍵分歧點
+### Key Divergence Points
 
-| 分歧 | 正方 | 反方 | 張力 |
-|------|------|------|------|
-| {分歧描述} | {角色}（{觀點}） | {角色}（{觀點}） | 🔴 高 / 🟡 中 / 🟢 低 |
+| Divergence | Pro | Con | Tension |
+|-----------|-----|-----|---------|
+| {description} | {role} ({view}) | {role} ({view}) | high / medium / low |
 
-### 各角色推薦彙總
+### Role Recommendation Summary
 
-| 角色 | 推薦 | 核心條件 | 獨特洞見 |
-|------|------|---------|---------|
-| 架構師 | ✅/⚠️/❌ | {一句話} | {只有這個角色想到的事} |
-| 產品總監 | ✅/⚠️/❌ | ... | ... |
-| UX 代言人 | ✅/⚠️/❌ | ... | ... |
-| QA 惡魔 | ✅/⚠️/❌ | ... | ... |
-| 營運代表 | ✅/⚠️/❌ | ... | ... |
-| 玩家代表 | ✅/⚠️/❌ | ... | ... |
+| Role | Recommendation | Key Condition | Unique Insight |
+|------|---------------|---------------|----------------|
+| Architect | approve/conditional/reject | {one sentence} | {something only this role noticed} |
+| Product Director | ... | ... | ... |
+| UX Advocate | ... | ... | ... |
+| QA Devil | ... | ... | ... |
+| Ops/SRE | ... | ... | ... |
+| Customer Advocate | ... | ... | ... |
 
-### 最有價值的碰撞洞見
+### Most Valuable Collision Insights
 
-**1. {角色 A} vs {角色 B}：{洞見標題}**
-> {2-3 句解釋為什麼這兩個觀點的碰撞產出了新的理解}
+**1. {Role A} vs {Role B}: {Insight Title}**
+> {2-3 sentences explaining why these two perspectives colliding produced a new understanding}
 
-**2. {角色 C} vs {角色 D}：{洞見標題}**
+**2. {Role C} vs {Role D}: {Insight Title}**
 > ...
 
-{2-3 個即可，不要列出每個分歧}
+{2-3 insights max — don't list every divergence}
 
-### CEO 建議
+### CEO Recommendation
 
-{如果在 CEO mode 下，給出整合所有角色觀點後的行動建議}
-{包含：做不做、Phase 劃分、前置條件}
+{If in CEO mode, provide integrated action recommendation}
+{Include: go/no-go, phase breakdown, preconditions}
 ```
 
-## 彙整原則
+## Synthesis Principles
 
-1. **共識不等於沒有價值** — 所有角色都同意「做」時，重點轉移到「條件」的差異
-2. **分歧地圖只顯示主要張力** — 不要把每個小分歧都放上去，選最有戰略意義的 2-4 個
-3. **碰撞洞見是 Brief 最高價值** — 單個角色都沒想到，但角色之間的觀點碰撞產出的新理解
-4. **不要粉飾** — 如果 QA 說「不要做」但其他 5 個說「做」，QA 的反對意見必須完整呈現
-5. **Brief 要讓用戶 2 分鐘內讀完** — 不是寫論文，是寫 executive summary
+1. **Consensus is still valuable** — when all roles agree to proceed, focus shifts to differences in conditions
+2. **Divergence map shows only major tensions** — pick the 2-4 most strategically significant, not every minor disagreement
+3. **Collision insights are the Brief's highest value** — perspectives that no single role had, emerging only from cross-role interaction
+4. **No whitewashing** — if QA says "don't do it" but 5 others say "do it", QA's objection must be fully presented
+5. **Brief must be readable in 2 minutes** — executive summary, not a thesis

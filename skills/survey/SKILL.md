@@ -11,7 +11,7 @@ Two independent agents (researcher + skeptic) search in parallel, bringing diffe
 
 | Method | When |
 |--------|------|
-| Manual | User says "survey", "research", "業界怎麼做" |
+| Manual | User says "survey", "research", "investigate", "what does the industry do" |
 | Signal suggestion | Plan Mode / brainstorming detects tech selection / architecture decision / uncertainty -> suggest (user confirms before running) |
 
 **Suggestion template** (when signal detected):
@@ -120,6 +120,6 @@ Present report, clearly mark "decision is yours". If user wants to dive deeper i
 |--------|---------|
 | Tech selection | "X or Y?", "which library?" |
 | Architecture decision | "canonical approach for this?" |
-| Uncertainty | "TBD", "方法待定" in plans |
+| Uncertainty | "TBD", "undecided", "pending" in plans |
 | New domain | Tech/protocol/pattern team hasn't used |
 | User bias | "I think X is good" -- worth verifying with survey |

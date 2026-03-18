@@ -130,6 +130,22 @@ If neither → size the **feature**:
 **Risk Escalation** (force L for features): money/points, auth/security, production protocol changes.
 Risk-escalated bug fixes stay Fix but add PR review before merge.
 
+### Scope Creep Detection
+
+Size is evaluated once at start, but scope can grow. After every commit, self-check:
+
+```
+Has the scope grown beyond original S-size?
+  - 3+ commits already made
+  - 3+ files in different modules changed
+  - User asked for additional features beyond original goal
+
+If yes → re-evaluate as L-size:
+  - Create project dir + README + INDEX (retroactive)
+  - Record prior commits as completed phases
+  - Continue with L Workflow tracking
+```
+
 ---
 
 ## S Workflow -- Direct Commit

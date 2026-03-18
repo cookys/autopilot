@@ -118,15 +118,44 @@ When encountering these, pause and propose:
 
 ```
 1. Confirm OKR + involvement level + no-go zones
-2. Invoke dev-flow (determine size, follow normal flow)
-3. At each decision point in dev-flow:
-   - Within DOA? -> CEO decides, record
-   - Beyond DOA? -> Pause, propose to Board
-4. Produce CEO Reports per involvement level
-5. Need research? -> Autonomously invoke autopilot:survey
-6. Need multi-perspective analysis? -> Invoke think-tank (see trigger rules above)
-7. Need team? -> Autonomously invoke autopilot:team
-8. Final report with complete decision log
+2. Size the task (S/L/H) — same criteria as dev-flow
+3. IF L-size:
+   a. Create project dir (docs/projects/YYYY-MM-DD-<name>/)     ← MANDATORY, not optional
+   b. Write README.md with OKR, phases, success criteria
+   c. Update INDEX.md
+   d. Create feature branch
+   e. Use TodoWrite for phase tracking
+   CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
+4. Execute phases:
+   - Within DOA? → CEO decides, record
+   - Beyond DOA? → Pause, propose to Board
+5. Produce CEO Reports per involvement level
+6. Need research? → Autonomously invoke autopilot:survey
+7. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
+8. Need team? → Autonomously invoke autopilot:team
+9. Final report with complete decision log
+```
+
+## Scope Creep Detection (mandatory)
+
+CEO must self-check after every major deliverable:
+
+```
+After completing a deliverable, ask:
+  "Is the TOTAL scope still S-size, or has it grown to L?"
+
+Indicators of S→L escalation:
+  - 3+ commits already made
+  - 3+ files in different modules changed
+  - Work has been going on for 30+ minutes
+  - User asked for additional features beyond original goal
+
+If escalated to L and no project exists:
+  → STOP. Create project dir + README + INDEX entry NOW.
+  → Record all prior work as completed phases (retroactive).
+  → Continue from current phase with proper tracking.
+
+This is NOT a suggestion. This is a hard gate.
 ```
 
 ## Circuit Breaker
@@ -163,5 +192,9 @@ User responses to reports:
 | Report only good news | Risks and bad news are more important |
 | Skip quality-pipeline "because I'm sure" | Quality gate is non-negotiable |
 | Pivot without evidence | Must have data/research backing |
-| Silently expand scope | Beyond original scope -> must report |
-| Same fix strategy after repeated failure | Consecutive failures -> circuit breaker |
+| Silently expand scope | Beyond original scope → must report |
+| Same fix strategy after repeated failure | Consecutive failures → circuit breaker |
+| L-size work without project dir | **Always** create project + README + INDEX |
+| "CEO mode exempts me from project tracking" | CEO wraps dev-flow, does not skip it |
+| Scope grew from S→L but no project created | Scope creep detection gate → stop and create |
+| "I'll track it in my head" | TodoWrite is the tracking mechanism, not memory |

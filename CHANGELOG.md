@@ -2,6 +2,9 @@
 
 ## v1.4.3
 - Enhanced `dev-flow` — added Fix workflow for bug fixes (any module count, no plan/project needed, ongoing-maintenance audit trail); restructured Quick Decision to separate nature (Fix/H) from size (S/L); fixed H scope check; updated session start/end to cover Fix
+- Added scope creep detection to `dev-flow` — auto-escalate S→L when scope grows (3+ commits, 3+ modules)
+- Fixed `ceo-agent` — CEO mode now **mandates** project setup for L-size (was text suggestion, now hard gate)
+- Added 4 anti-patterns to `ceo-agent` covering project tracking bypass
 
 ## v1.4.2
 - Activated config injection for `debug` and `test-strategy` skills (were commented out, inconsistent with other skills)

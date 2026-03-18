@@ -1,0 +1,14 @@
+{
+  "name": "autopilot",
+  "owner": {
+    "name": "TWGS Team"
+  },
+  "plugins": [
+    {
+      "name": "autopilot",
+      "source": "./",
+      "version": "1.0.0",
+      "description": "Development autopilot — workflow, research, decisions, self-improvement"
+    }
+  ]
+}

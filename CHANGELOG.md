@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.3
+- Enhanced `dev-flow` — added Fix workflow for bug fixes (any module count, no plan/project needed, ongoing-maintenance audit trail); restructured Quick Decision to separate nature (Fix/H) from size (S/L); fixed H scope check; updated session start/end to cover Fix
+
 ## v1.4.2
 - Activated config injection for `debug` and `test-strategy` skills (were commented out, inconsistent with other skills)
 - Rewrote `dev-setup.sh`: symlinks cache dir to local clone (Claude Code only loads from `~/.claude/plugins/cache/`); requires one-time `/plugin install` first

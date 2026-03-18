@@ -1,8 +1,9 @@
 ---
 name: dev-flow
 description: >
-  Unified lifecycle orchestrator -- session start, task sizing (S/L/H), workflow execution, goal alignment,
+  Unified lifecycle orchestrator -- session start, task sizing (S/L/H/Fix), workflow execution, goal alignment,
   and session end. Invoke BEFORE starting any code changes, including context continuations.
+  Fix = bug fix with known root cause (any module count, no plan/project needed).
 ---
 
 # Development Flow Evaluation
@@ -72,6 +73,19 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
 | >5 | 0 | Behind, no local work | Warn user, recommend merge |
 | >5 | >0 | DIVERGED | Flag to user before proceeding |
 
+### Fix Path
+
+Same lightweight start as S, plus branch creation:
+
+```
+1. Confirm root cause: restate the bug and known fix in one sentence.
+2. Branch: `git checkout -b fix/<description>`
+3. Skill routing check for the target code area.
+4. Proceed to Fix Workflow.
+```
+
+Fix skips: knowledge/digest review, plan overlap, branch freshness (short-lived branch).
+
 ### Context Continuation (Resuming Prior Work)
 
 When resuming work on an existing feature branch with an active project:
@@ -95,15 +109,26 @@ Context continuation never re-evaluates size. It uses the size established in th
 
 ---
 
-## Quick Decision (S/L/H)
+## Quick Decision
 
-| Size | Criteria |
-|------|----------|
-| **S** | Single commit (single module, no interface change, self-contained) |
-| **L** | Multiple commits (3+ modules / public API / incompatible data / Feature Flag / user requests planning) |
-| **H** | Production broken, immediate fix needed |
+First ask: **what kind of work is this?**
 
-**Risk Escalation** (force L): money/points, auth/security, production protocol changes.
+| Nature | Criteria | Workflow |
+|--------|----------|----------|
+| **Fix** | Bug fix — root cause known, solution clear. No design needed. | Fix (any module count) |
+| **H** | Production broken — immediate fix needed. | Hotfix |
+
+If neither → size the **feature**:
+
+| Size | Criteria | Workflow |
+|------|----------|----------|
+| **S** | Single commit (single module, no interface change, self-contained) | Direct commit |
+| **L** | Multiple commits (3+ modules / public API / incompatible data / Feature Flag / user requests planning) | Plan + Project |
+
+**Fix vs L**: "Do I need to *design* the solution, or just *implement* a known fix?" Design → L. Known fix → Fix.
+
+**Risk Escalation** (force L for features): money/points, auth/security, production protocol changes.
+Risk-escalated bug fixes stay Fix but add PR review before merge.
 
 ---
 
@@ -129,6 +154,26 @@ Context continuation never re-evaluates size. It uses the size established in th
 ```
 
 > S does not use TodoWrite -- too few steps to justify tracking overhead.
+
+---
+
+## Fix Workflow -- Bug Fix (any module count)
+
+> Bug fix with clear root cause. No plan/project needed. Feature branch for traceability.
+
+1. `git checkout -b fix/<description>`
+2. Investigate root cause (read code, trace data flow)
+3. Implement fix
+4. Quality gate (per project config, or: lint + test)
+5. Commit with **detailed message**: root cause + what was wrong + how it's fixed
+6. **Write ongoing-maintenance entry** — append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md`:
+   `| MM-DD | commit_hash | fix(area): 根因 → 修法 (跨 N 模組) |`
+7. Merge to develop
+8. Cleanup: delete fix branch
+
+If the fix revealed a non-obvious lesson, invoke `learn` skill.
+
+**Fix does NOT create**: plan, project dir, or PR (unless risk-escalated).
 
 ---
 
@@ -235,7 +280,7 @@ Deploy per project config (default: build + restart).
 > **Production is broken. Smallest possible fix, fastest path to stable.**
 
 1. `git checkout -b hotfix/<description> main`
-2. **Scope check**: if fix requires DB migration, 3+ modules, or public interface change -> STOP, re-route to L
+2. **Scope check**: if fix requires DB migration -> STOP, re-route to L. Cross-module bug fixes stay as H (or Fix if not production-critical).
 3. Fix the issue (smallest possible change)
 4. Run tests -- all must pass
 5. Quality gate (per project config, or: lint + test)
@@ -248,13 +293,14 @@ Deploy per project config (default: build + restart).
 
 ## Session End
 
-### S-Lite (S and H workflows)
+### S-Lite (S, H, and Fix workflows)
 
 Inline above in each workflow. Recap:
 
 1. **Retry check**: retried a non-trivial operation 2+ times? Invoke `learn`.
 2. **Deferred items**: anything postponed -> BACKLOG with context + trigger.
 3. **Confirm commit**: change landed on the correct branch.
+4. **Fix only**: verify ongoing-maintenance entry was written.
 
 ### L-Full (L workflow)
 
@@ -354,6 +400,7 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 
 | Wrong | Correct |
 |-------|---------|
+| Bug fix escalated to L because it crosses 3 modules | Use Fix -- module count doesn't determine bug fix workflow |
 | Ask "continue?" after Phase | Proceed directly to next Phase |
 | Team commit task says only "commit changes" | Must include quality gate |
 | User provides plan -> skip project setup | Project dir must be created regardless |
@@ -367,6 +414,7 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 ## Pre-implementation Checklist
 
 - [ ] Check for existing in-progress projects
+- [ ] Fix: `fix/` branch created, root cause confirmed
 - [ ] L-size: project structure created (plan + project dir + branch)
 
 ---

@@ -104,9 +104,9 @@ If all sources empty: suggest `/next --deep` or propose new features.
 |-------|-------------|
 | `autopilot:dev-flow` | Execution engine — `/next` selects task, dev-flow takes over |
 | `autopilot:project-lifecycle` | Invokes `/next` after archiving |
-| `digest-review (REMOVED)` | **DEPRECATED** — absorbed into Phase 0 |
-| `improvement-queue` | Absorbed into Phase 0 |
-| `autopilot:memory-health` | B-level partially calls its checks |
+| `digest-review (absorbed)` | Absorbed into Phase 0 |
+| `improvement-queue (absorbed)` | Absorbed into Phase 0 ([references/phase0-hygiene.md](references/phase0-hygiene.md)) |
+| `memory-health (absorbed)` | B-level partially calls its checks; see `autopilot:learn` skill, Knowledge Health Audit section |
 
 ## See Also
 

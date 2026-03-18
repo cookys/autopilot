@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-1.3.0-E8A838?style=flat-square" alt="v1.3.0">
+  <img src="https://img.shields.io/badge/version-1.4.0-E8A838?style=flat-square" alt="v1.4.0">
   <img src="https://img.shields.io/badge/skills-14-4A90D9?style=flat-square" alt="14 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
@@ -35,20 +35,20 @@ Autopilot gives your agent **standard operating procedures** that enforce discip
 
 | Skill | What It Does | Without It |
 |-------|-------------|------------|
-| **dev-flow** | Evaluates task size, routes to commit or plan+project | Agent dives in without a plan |
+| **dev-flow** | Evaluates task size, routes to commit or plan+project; includes session lifecycle (start/end) and goal alignment | Agent dives in without a plan |
 | **survey** | Dual-agent research (researcher + skeptic) | Agent picks first option it finds |
 | **think-tank** | 6-role debate for strategic decisions | Single-perspective analysis |
 | **ceo-agent** | Autonomous execution mode | Agent asks permission for everything |
 | **quality-pipeline** | Unified quality gate: test → scan → review | Inconsistent quality checks |
 | **project-lifecycle** | Plan → bootstrap → structure → archive | Projects left unfinished or unarchived |
-| **memory-health** | Audit MEMORY.md, knowledge files, staleness | Memory silently degrades |
-| **learn** | Auto-records knowledge from failures | Same mistakes repeated across sessions |
+| **learn** | Auto-records knowledge from failures; includes knowledge health audit | Same mistakes repeated across sessions |
 | **retro** | Engineering retrospective from git history | No visibility into work patterns |
-| **next** | Scan all work sources, recommend highest-priority task | No visibility into what to do next |
+| **next** | Scan all work sources, recommend highest-priority task; includes improvement processing | No visibility into what to do next |
 | **team** | Multi-agent parallelization with dependency analysis | Solo execution when parallelism would help |
-| **improvement-queue** | Process pending maintenance suggestions | Maintenance items pile up unnoticed |
 | **profiling** | Evidence-first performance profiling methodology | Agent guesses from code instead of measuring |
-| **context-reduce** | Analyzes and reduces context window usage | Context silently overflows |
+| **test-strategy** | Test pyramid, baseline management, feature flag levels | Inconsistent test coverage, no strategy |
+| **audit** | Systematic comparison between implementations | Differences missed in manual review |
+| **debug** | Evidence-first debugging: logs, tools, then code | Agent guesses instead of investigating |
 
 ---
 
@@ -85,8 +85,6 @@ That's it. All 14 skills are available immediately as `autopilot:dev-flow`, `aut
          │                                               │
          └─ session end ──→ learn (capture knowledge)    │
                             retro (periodic review)      │
-                            memory-health (periodic)     │
-                            context-reduce (if needed)   │
                                                          │
  what's next? ──→ next (scan → rank → recommend)         │
                                                          │
@@ -143,6 +141,10 @@ Customizes work source paths for the next skill.
 ### `.claude/team-config.md`
 
 Customizes team role templates for your project's tech stack.
+
+### `.claude/test-strategy-config.md`
+
+Customizes test-strategy's test commands, pyramid ratios, and coverage thresholds.
 
 ### `.claude/skill-routing.md`
 
@@ -209,8 +211,8 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 14 skills, not 21?**
-These 14 cover the workflow layer — decisions, processes, and quality gates that are universal across projects. Domain-specific skills (game logic, architecture, protocol debugging) belong in each project's `.claude/skills/`, not in a shared plugin.
+**Why 14 skills, not more?**
+Lean by design. Internal orchestration (session start/end, goal alignment, context reduction, improvement processing, memory health) is absorbed into the skills that use them — primarily dev-flow, learn, and next. The 14 exposed skills cover the workflow layer: decisions, processes, quality gates, and debugging that are universal across projects. Domain-specific skills belong in each project's `.claude/skills/`, not in a shared plugin.
 
 **Why `!`command`` injection, not config files?**
 In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.

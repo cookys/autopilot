@@ -49,9 +49,35 @@ Follow references/completeness-gate.md
 ```
 Follow references/code-review.md (via superpowers:code-reviewer subagent)
   → Critical/Important? → fix → re-review (repeat until clean)
-  → Suggestion/Minor? → dispatch analysis (see references/code-review.md)
+  → Suggestion/Minor? → dispatch via Decision Tree below
   → LGTM? → pass
 ```
+
+### Pre-existing Error Cleanup (after main task)
+
+```
+Follow references/test-policy.md "Pre-existing Error Cleanup" section
+  → Project hand-written code? → analyze + fix
+  → Auto-generated code? → record root cause, don't edit generated file
+  → Third-party dependency? → document only
+```
+
+## Dispatch Decision Tree (Non-Critical Findings)
+
+After code review, each Suggestion/Minor finding must be dispatched — never ignored:
+
+```
+Finding (Suggestion or Minor severity)
+├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Important
+├── (b) False positive / by-design → close with written rationale
+├── (c) Independent task needing separate analysis → create task with context
+└── (d) Deferred → add to BACKLOG with trigger condition
+```
+
+**Rules:**
+- Every finding must reach exactly one of (a)-(d). "Will look at it later" is not a valid outcome.
+- Backlog entries without a trigger condition are rejected (see references/code-review.md).
+- If 3+ findings route to (c) in the same review, consider whether scope was underestimated.
 
 ## Self-Regulation (WTF-Likelihood Cap)
 

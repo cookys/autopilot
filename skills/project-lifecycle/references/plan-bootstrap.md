@@ -4,6 +4,29 @@
 > **Trigger**: L-size project after ExitPlanMode, or after user approves a plan
 > **Input**: Plan file (from system-reminder path or `doc/plans/`)
 
+## Step 0: Draft Plan Overlap Check
+
+Before bootstrapping, check if any existing draft plans overlap with this plan:
+
+```bash
+# List draft plans (status: draft in frontmatter or no status field)
+for f in doc/plans/*.md; do
+  grep -q 'status: approved' "$f" 2>/dev/null || echo "$f"
+done
+```
+
+For each draft plan, check overlap against the plan being bootstrapped:
+- **Same feature**: both mention the same feature name or user story
+- **Same module**: both modify the same code area
+- **Same user story**: both address the same user workflow
+
+| Situation | Action |
+|-----------|--------|
+| No overlap | Proceed to Step 1 |
+| Full overlap | Draft plan is superseded — mark it `status: superseded-by: <this-plan>` |
+| Partial overlap | Annotate draft plan with which parts are now covered |
+| Uncertain | Surface to decision-maker (user or CEO) |
+
 ## Step 1: Locate Plan File
 
 | Source | How to Find |

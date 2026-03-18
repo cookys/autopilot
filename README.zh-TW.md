@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
+  <img src="https://img.shields.io/badge/version-1.1.0-E8A838?style=flat-square" alt="v1.1.0">
   <img src="https://img.shields.io/badge/skills-10-4A90D9?style=flat-square" alt="10 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
@@ -173,6 +174,21 @@ Skill 預設就能用。如果需要專案特化行為，加設定檔：
 
 ---
 
+## 已知限制
+
+Claude Code plugin 安裝時會 **pin 到特定 commit**。`/plugin update` 不一定偵測到新版。取得最新版：
+
+```bash
+/plugin uninstall autopilot@autopilot
+/plugin marketplace remove autopilot
+/plugin marketplace add cookys/autopilot
+/plugin install autopilot@autopilot
+```
+
+詳見 [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462)。
+
+---
+
 ## 設計哲學
 
 **為什麼是 plugin，不是複製 skill？**
@@ -194,6 +210,16 @@ Skill 預設就能用。如果需要專案特化行為，加設定檔：
 ```bash
 /plugin update autopilot@autopilot
 ```
+
+## 更新日誌
+
+### v1.1.0
+- 新增 `quality-pipeline` — 統一品質閘門 + 專案設定注入
+- 新增 `project-lifecycle` — plan → 建專案 → 結構 → 歸檔
+- 新增 `memory-health` — MEMORY.md 審計、knowledge 過期偵測
+
+### v1.0.0
+- 初始發布：dev-flow, survey, think-tank, ceo-agent, learn, retro, context-reduce
 
 ## 起源
 

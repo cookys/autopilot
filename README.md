@@ -8,6 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
+  <img src="https://img.shields.io/badge/version-1.1.0-E8A838?style=flat-square" alt="v1.1.0">
   <img src="https://img.shields.io/badge/skills-10-4A90D9?style=flat-square" alt="10 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
@@ -173,6 +174,21 @@ Add to your project's `.claude/settings.json` so team members get prompted to in
 
 ---
 
+## Known Limitation
+
+Claude Code plugins are **pinned to a specific commit** at install time. `/plugin update` may not detect new versions. To get the latest:
+
+```bash
+/plugin uninstall autopilot@autopilot
+/plugin marketplace remove autopilot
+/plugin marketplace add cookys/autopilot
+/plugin install autopilot@autopilot
+```
+
+See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462) for details.
+
+---
+
 ## Design Philosophy
 
 **Why a plugin, not copy-paste skills?**
@@ -194,6 +210,16 @@ Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers,
 ```bash
 /plugin update autopilot@autopilot
 ```
+
+## Changelog
+
+### v1.1.0
+- Added `quality-pipeline` — unified quality gate with project config injection
+- Added `project-lifecycle` — plan → bootstrap → structure → archive
+- Added `memory-health` — MEMORY.md audit, knowledge staleness detection
+
+### v1.0.0
+- Initial release: dev-flow, survey, think-tank, ceo-agent, learn, retro, context-reduce
 
 ## Origin
 

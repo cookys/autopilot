@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-1.4.0-E8A838?style=flat-square" alt="v1.4.0">
+  <img src="https://img.shields.io/badge/version-1.4.1-E8A838?style=flat-square" alt="v1.4.0">
   <img src="https://img.shields.io/badge/skills-14-4A90D9?style=flat-square" alt="14 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
@@ -222,7 +222,23 @@ Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers,
 
 ---
 
-## Update
+## Development
+
+To contribute or customize skills locally:
+
+```bash
+git clone git@github.com:cookys/autopilot.git ~/projects/autopilot
+cd ~/projects/autopilot
+./scripts/dev-setup.sh
+```
+
+This points Claude Code directly at your local clone (bypassing the plugin cache). Edits to `skills/` take effect immediately after `/reload-plugins` — no reinstall needed.
+
+Push/pull works normally across machines. Each machine runs `dev-setup.sh` once.
+
+> **Note:** Dev mode sets `version: "dev"` in the plugin registry, so marketplace updates won't overwrite your local setup.
+
+## Update (marketplace users)
 
 ```bash
 /plugin update autopilot@autopilot

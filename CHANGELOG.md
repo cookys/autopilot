@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.1
+- Added `scripts/dev-setup.sh` — one-command dev mode setup (points plugin registry at local clone, skips cache)
+- Added Development section to README / README.zh-TW
+
 ## v1.4.0
 - Enhanced `dev-flow` — unified session lifecycle (absorbed session-start, session-end, goal-check, context-reduce); H-size hotfix workflow, user override protocol
 - Enhanced `learn` — session learning summary for L-size tasks; merged memory-health (knowledge health audit)

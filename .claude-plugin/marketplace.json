@@ -7,7 +7,7 @@
     {
       "name": "autopilot",
       "source": "./",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "Development autopilot — 14 skills for workflow, research, decisions, quality, lifecycle, debugging, and self-improvement"
     }
   ]

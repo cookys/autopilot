@@ -2,14 +2,14 @@
 
 <p align="center">
   <strong>Development workflow skills for Claude Code — your agent's operating system.</strong><br>
-  10 skills that turn Claude from a general-purpose agent into a disciplined developer.<br>
+  13 skills that turn Claude from a general-purpose agent into a disciplined developer.<br>
   Install once, works across all projects. Zero configuration required.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-1.1.0-E8A838?style=flat-square" alt="v1.1.0">
-  <img src="https://img.shields.io/badge/skills-10-4A90D9?style=flat-square" alt="10 Skills">
+  <img src="https://img.shields.io/badge/version-1.2.0-E8A838?style=flat-square" alt="v1.1.0">
+  <img src="https://img.shields.io/badge/skills-13-4A90D9?style=flat-square" alt="10 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -44,6 +44,9 @@ Autopilot gives your agent **standard operating procedures** that enforce discip
 | **memory-health** | Audit MEMORY.md, knowledge files, staleness | Memory silently degrades |
 | **learn** | Auto-records knowledge from failures | Same mistakes repeated across sessions |
 | **retro** | Engineering retrospective from git history | No visibility into work patterns |
+| **next** | Scan all work sources, recommend highest-priority task | No visibility into what to do next |
+| **team** | Multi-agent parallelization with dependency analysis | Solo execution when parallelism would help |
+| **improvement-queue** | Process pending maintenance suggestions | Maintenance items pile up unnoticed |
 | **context-reduce** | Analyzes and reduces context window usage | Context silently overflows |
 
 ---
@@ -55,7 +58,7 @@ Autopilot gives your agent **standard operating procedures** that enforce discip
 /plugin install autopilot@autopilot
 ```
 
-That's it. All 10 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+That's it. All 13 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ---
 
@@ -77,11 +80,14 @@ That's it. All 10 skills are available immediately as `autopilot:dev-flow`, `aut
          ├─ needs research? ──→ survey                   │
          ├─ strategic decision? ──→ think-tank            │
          ├─ user says "handle it"? ──→ ceo-agent         │
+         ├─ parallelizable? ──→ team                     │
          │                                               │
          └─ session end ──→ learn (capture knowledge)    │
                             retro (periodic review)      │
                             memory-health (periodic)     │
                             context-reduce (if needed)   │
+                                                         │
+ what's next? ──→ next (scan → rank → recommend)         │
                                                          │
  ◄───────────────────────────────────────────────────────┘
 ```
@@ -128,6 +134,14 @@ Customizes quality-pipeline's test, scan, and review commands.
 ### `.claude/project-lifecycle-config.md`
 
 Customizes project paths, bootstrap/archive scripts.
+
+### `.claude/next-config.md`
+
+Customizes work source paths for the next skill.
+
+### `.claude/team-config.md`
+
+Customizes team role templates for your project's tech stack.
 
 ### `.claude/skill-routing.md`
 
@@ -194,8 +208,8 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 10 skills, not 21?**
-These 10 cover the workflow layer — decisions, processes, and quality gates that are universal across projects. Domain-specific skills (game logic, architecture, protocol debugging) belong in each project's `.claude/skills/`, not in a shared plugin.
+**Why 13 skills, not 21?**
+These 13 cover the workflow layer — decisions, processes, and quality gates that are universal across projects. Domain-specific skills (game logic, architecture, protocol debugging) belong in each project's `.claude/skills/`, not in a shared plugin.
 
 **Why `!`command`` injection, not config files?**
 In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.
@@ -213,6 +227,11 @@ Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers,
 
 ## Changelog
 
+### v1.2.0
+- Added `next` — global work recommender (scan → rank → recommend)
+- Added `team` — multi-agent parallelization with dependency analysis
+- Added `improvement-queue` — process pending maintenance suggestions
+
 ### v1.1.0
 - Added `quality-pipeline` — unified quality gate with project config injection
 - Added `project-lifecycle` — plan → bootstrap → structure → archive
@@ -223,7 +242,7 @@ Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers,
 
 ## Origin
 
-Distilled from 89+ completed projects using AI-driven development. Previously maintained as a 21-skill collection ([universal-dev-skills](https://github.com/cookys/universal-dev-skills)); consolidated to 10 workflow-essential skills and repackaged as a Claude Code plugin for easier distribution and maintenance.
+Distilled from 100+ completed projects using AI-driven development.
 
 ## License
 

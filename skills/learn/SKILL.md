@@ -1,6 +1,6 @@
 ---
 name: learn
-description: Record knowledge to .claude/knowledge/ — invoke after retrying 2+ times, finding non-obvious solutions, or recovering from environment-specific errors (path failures, compile loops, repeated searches). Also auto-triggered by CLAUDE.md rules on bash failure->fix cycles.
+description: Record knowledge to .claude/knowledge/ after retries, non-obvious fixes, or environment errors. Use when a solution took 2+ attempts or was surprising.
 ---
 
 # learn

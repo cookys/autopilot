@@ -1,6 +1,6 @@
 ---
 name: ceo-agent
-description: "Autonomous CEO mode -- user sets goal, agent owns all execution decisions. Use when user wants outcomes not involvement: '搞定 X', '幫我處理', '做完再說', 'CEO mode', '全權處理', or delegates decision-making ('你決定', '我不管怎麼做'). Do NOT use for participatory decisions (dev-flow) or research only (survey)."
+description: "Autonomous CEO mode — user sets goal, agent owns execution. Use when: '搞定 X', '幫我處理', 'CEO mode', '全權處理', '你決定'. Not for research-only (survey) or participatory flow (dev-flow)."
 ---
 
 # CEO Agent -- Autonomous Decision Mode
@@ -17,7 +17,7 @@ CEO mode:     dev-flow -> CEO decides within DOA
                        -> only escalate at DOA boundary
 ```
 
-CEO can autonomously invoke any skill (survey, team, think-tank, quality-pipeline, etc.).
+CEO can autonomously invoke any skill (autopilot:survey, autopilot:team, autopilot:think-tank, autopilot:quality-pipeline, etc.).
 
 ### Boundary with survey and think-tank
 
@@ -29,7 +29,7 @@ CEO can autonomously invoke any skill (survey, team, think-tank, quality-pipelin
 
 ### Think Tank trigger rules
 
-CEO **must** invoke `think-tank` when encountering any of these:
+CEO **must** invoke `autopilot:think-tank` when encountering any of these:
 
 | Signal | Example | Why |
 |--------|---------|-----|
@@ -123,9 +123,9 @@ When encountering these, pause and propose:
    - Within DOA? -> CEO decides, record
    - Beyond DOA? -> Pause, propose to Board
 4. Produce CEO Reports per involvement level
-5. Need research? -> Autonomously invoke survey
+5. Need research? -> Autonomously invoke autopilot:survey
 6. Need multi-perspective analysis? -> Invoke think-tank (see trigger rules above)
-7. Need team? -> Autonomously invoke team
+7. Need team? -> Autonomously invoke autopilot:team
 8. Final report with complete decision log
 ```
 

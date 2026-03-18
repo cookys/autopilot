@@ -1,6 +1,6 @@
 ---
 name: think-tank
-description: "Multi-role think tank for product/strategy decisions — 6 specialized roles debate in parallel, then collide to produce a Decision Brief with consensus, conflicts, and insights. Use when facing decisions beyond pure technical choice: 要不要做、做多大、先做哪個、怎麼平衡 tradeoffs. Complements survey (external research) with internal multi-perspective analysis."
+description: "Multi-role think tank — 6 roles debate in parallel to produce a Decision Brief. Use for strategic decisions beyond pure tech choice: scope, priority, tradeoffs. Complements survey (external) with internal debate."
 ---
 
 # Think Tank — Multi-Role Decision Brief
@@ -15,9 +15,9 @@ description: "Multi-role think tank for product/strategy decisions — 6 special
 | Scope 決策 | 「做到什麼程度？」「Phase 1 包含什麼？」 |
 | Tradeoff 分析 | 「效能 vs 功能 vs 維護成本」 |
 | 風險評估 | 「這個改動的 blast radius？」 |
-| CEO Agent 遇戰略決策 | CEO 可自主 invoke 此 skill |
+| CEO Agent 遇戰略決策 | CEO 可自主 invoke `autopilot:think-tank` |
 
-**不適用**：純技術選型（X library vs Y library）→ 用 `survey`。
+**不適用**：純技術選型（X library vs Y library）→ 用 `autopilot:survey`。
 
 ## 和其他 skill 的關係
 
@@ -125,6 +125,6 @@ Agent({
 
 | Skill | 關係 |
 |-------|------|
-| `survey` | survey 找外部資料，think-tank 做內部辯論。可串接 |
-| `ceo-agent` | CEO 在戰略決策時可自主 invoke think-tank |
+| `autopilot:survey` | survey 找外部資料，think-tank 做內部辯論。可串接 |
+| `autopilot:ceo-agent` | CEO 在戰略決策時可自主 invoke think-tank |
 | `team` | team 做平行執行，think-tank 做平行分析 |

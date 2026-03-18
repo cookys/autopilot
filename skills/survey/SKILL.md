@@ -1,6 +1,6 @@
 ---
 name: survey
-description: "Technology research before architecture decisions. Use when: technology selection (X vs Y), architecture decisions (canonical approach?), uncertainty in plans (TBD/待定), new domains the team hasn't touched, user says 先調查/survey/research/業界怎麼做, or brainstorming encounters multiple valid approaches with no clear winner."
+description: "Dual-agent tech research (researcher + skeptic). Use for technology selection, architecture decisions, uncertainty in plans, or when user says survey/research/業界怎麼做."
 ---
 
 # Survey -- Technology Research

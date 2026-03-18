@@ -1,6 +1,6 @@
 ---
 name: retro
-description: "Engineering retrospective — analyze git history for shipping velocity, test ratio, focus score, session patterns, and project completion trends. Use periodically (weekly/monthly) or when wanting to understand work patterns. Invoke with /retro or when user says 回顧/retro/分析工作模式."
+description: "Engineering retrospective from git history — velocity, test ratio, focus score, session patterns. Use periodically or when user says retro/回顧/分析工作模式."
 ---
 
 # retro — Engineering Retrospective

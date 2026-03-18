@@ -7,8 +7,8 @@
     {
       "name": "autopilot",
       "source": "./",
-      "version": "1.0.0",
-      "description": "Development autopilot — workflow, research, decisions, self-improvement"
+      "version": "1.1.0",
+      "description": "Development autopilot — workflow, research, decisions, quality, lifecycle, self-improvement"
     }
   ]
 }

@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.4.2
+- Activated config injection for `debug` and `test-strategy` skills (were commented out, inconsistent with other skills)
+
 ## v1.4.1
 - Added `scripts/dev-setup.sh` — one-command dev mode setup (points plugin registry at local clone, skips cache)
 - Added Development section to README / README.zh-TW

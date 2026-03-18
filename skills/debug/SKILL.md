@@ -6,7 +6,7 @@ description: Evidence-first debugging for correctness issues. Invoke when diagno
 # Evidence-First Debugging
 
 <!-- Project-specific config (tool tables, log locations, common commands) -->
-<!-- !cat .claude/debug-config.md 2>/dev/null || echo "No project-specific debug config found. Use generic evidence collection below." -->
+!`cat .claude/debug-config.md 2>/dev/null || echo "No project-specific debug config found. Use generic evidence collection below."`
 
 ## Core Principle
 

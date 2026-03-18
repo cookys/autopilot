@@ -6,7 +6,7 @@ description: Testing strategy and baseline management. Invoke when writing tests
 # Test Strategy
 
 <!-- Project-specific config (test commands, framework, conventions) -->
-<!-- !cat .claude/test-strategy-config.md 2>/dev/null || echo "No project-specific test config found. Using generic defaults." -->
+!`cat .claude/test-strategy-config.md 2>/dev/null || echo "No project-specific test config found. Using generic defaults."`
 
 ## Test Pyramid
 

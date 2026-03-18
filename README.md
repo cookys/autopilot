@@ -13,6 +13,10 @@
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
 
+<p align="center">
+  <b>English</b> &nbsp;|&nbsp; <a href="README.zh-TW.md">正體中文</a>
+</p>
+
 ---
 
 ## The Problem

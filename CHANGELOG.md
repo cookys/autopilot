@@ -2,6 +2,7 @@
 
 ## v1.4.2
 - Activated config injection for `debug` and `test-strategy` skills (were commented out, inconsistent with other skills)
+- Fixed `dev-setup.sh`: also registers marketplace in `known_marketplaces.json` (was missing, causing skills not to load)
 
 ## v1.4.1
 - Added `scripts/dev-setup.sh` — one-command dev mode setup (points plugin registry at local clone, skips cache)

@@ -227,16 +227,21 @@ Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers,
 To contribute or customize skills locally:
 
 ```bash
+# 1. Install once via the normal flow (required)
+/plugin marketplace add cookys/autopilot
+/plugin install autopilot@autopilot
+
+# 2. Clone and switch to dev mode
 git clone git@github.com:cookys/autopilot.git ~/projects/autopilot
 cd ~/projects/autopilot
 ./scripts/dev-setup.sh
 ```
 
-This points Claude Code directly at your local clone (bypassing the plugin cache). Edits to `skills/` take effect immediately after `/reload-plugins` — no reinstall needed.
+Dev mode symlinks the plugin cache to your local clone. Edits to `skills/` take effect immediately after `/reload-plugins` — no reinstall needed.
 
-Push/pull works normally across machines. Each machine runs `dev-setup.sh` once.
+Push/pull works normally across machines. Each machine runs step 1 once, then `dev-setup.sh` once.
 
-> **Note:** Dev mode sets `version: "dev"` in the plugin registry, so marketplace updates won't overwrite your local setup.
+> **Note:** Dev mode sets `version: "dev"` in the plugin registry. To revert to the release version, run `/plugin update autopilot@autopilot`.
 
 ## Update (marketplace users)
 

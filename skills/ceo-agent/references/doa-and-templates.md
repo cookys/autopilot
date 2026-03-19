@@ -52,6 +52,11 @@ Report frequency determined by user's chosen involvement level at startup.
 ### Risks & Findings
 {Report honestly. Bad news is more important than good news.}
 
+### Scope Opportunities (Expand/Selective mode only)
+| Opportunity | Effort | CEO Recommendation | Board Decision |
+|-------------|--------|-------------------|----------------|
+{In Hold/Reduce mode, omit this section entirely.}
+
 ### Next Steps
 {What comes next}
 

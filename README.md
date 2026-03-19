@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-1.4.3-E8A838?style=flat-square" alt="v1.4.3">
+  <img src="https://img.shields.io/badge/version-1.4.4-E8A838?style=flat-square" alt="v1.4.4">
   <img src="https://img.shields.io/badge/skills-14-4A90D9?style=flat-square" alt="14 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
@@ -38,7 +38,7 @@ Autopilot gives your agent **standard operating procedures** that enforce discip
 | **dev-flow** | Evaluates task size, routes to commit or plan+project; includes session lifecycle (start/end) and goal alignment | Agent dives in without a plan |
 | **survey** | Dual-agent research (researcher + skeptic) | Agent picks first option it finds |
 | **think-tank** | 6-role debate for strategic decisions | Single-perspective analysis |
-| **ceo-agent** | Autonomous execution mode | Agent asks permission for everything |
+| **ceo-agent** | Autonomous execution with CEO-level judgment | Agent asks permission for everything |
 | **quality-pipeline** | Unified quality gate: test → scan → review | Inconsistent quality checks |
 | **project-lifecycle** | Plan → bootstrap → structure → archive | Projects left unfinished or unarchived |
 | **learn** | Auto-records knowledge from failures; includes knowledge health audit | Same mistakes repeated across sessions |
@@ -52,18 +52,71 @@ Autopilot gives your agent **standard operating procedures** that enforce discip
 
 ---
 
-## Install
+## Key Features
 
-```bash
-/plugin marketplace add cookys/autopilot
-/plugin install autopilot@autopilot
+### Three Modes of Operation
+
+Autopilot provides three distinct cognitive modes for different situations:
+
+**`dev-flow` — Guided Development (default)**
+
+The entry point for all development tasks. Evaluates task size and routes accordingly:
+
+```
+You: "Add WebSocket compression"
+
+Claude (with dev-flow):
+  1. Size assessment: L (crosses network + protocol + client modules)
+  2. → Creates plan, project directory, feature branch
+  3. → Implements phase by phase, quality gate each phase
+  4. → Archives project on completion
+
+Claude (without dev-flow):
+  → Starts grep-ing the codebase immediately
+  → No plan, no phases, no quality gates
 ```
 
-That's it. All 14 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+dev-flow also handles the session lifecycle — health checks on startup, knowledge review, goal alignment on context continuation. You don't invoke these separately; dev-flow absorbs them.
 
----
+**`ceo-agent` — Autonomous Execution**
 
-## How Skills Work Together
+When you want outcomes, not involvement. The agent becomes CEO; you become the Board.
+
+```
+You: "CEO mode. Handle the reconnect system. Level 3, you decide everything."
+
+CEO startup:
+  1. OKR — concrete success criteria (not vague "make it work")
+  2. Involvement level — how often to report (every step / phase / just results)
+  3. Scope mode — Expand / Selective / Hold / Reduce
+  4. No-go zones — what's absolutely off-limits
+
+Then: autonomous execution within DOA (Delegation of Authority)
+```
+
+The CEO agent applies 10 cognitive patterns from great CEOs (Bezos's two-way doors, Munger's inversion reflex, Jobs's focus as subtraction) and follows the Boil the Lake principle — AI makes completeness nearly free, so always choose the complete implementation over shortcuts.
+
+CEO cannot self-audit. Like corporate governance, quality-pipeline and code-review run independently.
+
+**`think-tank` — Multi-Perspective Debate**
+
+For strategic decisions where a single perspective isn't enough. 6 roles debate in parallel:
+
+```
+You: "Should we rewrite the auth system or patch it?"
+
+Think Tank assembles:
+  - CTO (technical feasibility)
+  - Product Director (user impact)
+  - QA Lead (risk assessment)
+  - Security Architect (threat model)
+  - Customer Advocate (user experience)
+  - Operations (deployment/maintenance)
+
+Output: Decision Brief with consensus, dissenting views, and recommendation
+```
+
+### How They Work Together
 
 ```
  user task
@@ -102,76 +155,99 @@ That's it. All 14 skills are available immediately as `autopilot:dev-flow`, `aut
 
 ---
 
-## Project Configuration (Optional)
+## Install
 
-Skills work out of the box with sensible defaults. For project-specific behavior, add config files:
+```bash
+/plugin marketplace add cookys/autopilot
+/plugin install autopilot@autopilot
+```
 
-### `.claude/dev-flow-config.md`
+That's it. All 14 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
-Customizes dev-flow's size rules, quality gates, build commands, and special rules.
+---
+
+## Cross-Repository Configuration (Injection)
+
+Skills work out of the box with sensible defaults. For project-specific behavior, drop a markdown file into your project's `.claude/` directory — the skill reads it at invocation time via Claude Code's `!`command`` preprocessor.
+
+### How Injection Works
+
+```
+┌─────────────────────────────────┐
+│  Plugin (shared, read-only)     │   Autopilot skills live here.
+│  ~/.claude/plugins/cache/       │   Same for all projects.
+│  autopilot/skills/dev-flow/     │
+│           └── SKILL.md ─────────┼──┐
+└─────────────────────────────────┘  │
+                                     │  At invocation, SKILL.md runs:
+                                     │  !`cat .claude/dev-flow-config.md`
+                                     │
+┌─────────────────────────────────┐  │
+│  Your Project (per-repo)        │  │
+│  my-project/.claude/            │◄─┘  Reads from YOUR project's
+│    ├── dev-flow-config.md       │     .claude/ directory
+│    ├── quality-gate-config.md   │
+│    ├── skill-routing.md         │     These files are plain markdown.
+│    └── team-config.md           │     No schema. No YAML. Natural language.
+└─────────────────────────────────┘
+```
+
+The `!`command`` syntax is a Claude Code preprocessor — it runs a shell command and inlines the output into the skill body *before* the LLM sees it. This means:
+
+- **No config file?** The `|| echo "defaults"` fallback kicks in. Zero friction for new projects.
+- **Config is natural language.** A markdown file is more expressive than YAML — you can write rules, exceptions, and rationale in prose.
+- **Config is project-local.** Each repo has its own `.claude/` directory. The same autopilot plugin adapts to a C++ game server, a React app, or a Rust CLI — all through different config files.
+
+### Available Config Files
+
+| Config File | Customizes | Template |
+|-------------|-----------|----------|
+| `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules | [template](project-config-template/dev-flow-config.md) |
+| `.claude/quality-gate-config.md` | Test, scan, and review commands | [template](project-config-template/quality-gate-config.md) |
+| `.claude/project-lifecycle-config.md` | Project paths, bootstrap/archive scripts | [template](project-config-template/project-lifecycle-config.md) |
+| `.claude/next-config.md` | Work source paths for the next skill | [template](project-config-template/next-config.md) |
+| `.claude/team-config.md` | Team role templates for your tech stack | [template](project-config-template/team-config.md) |
+| `.claude/test-strategy-config.md` | Test commands, pyramid ratios, coverage thresholds | [template](project-config-template/test-strategy-config.md) |
+| `.claude/debug-config.md` | Project-specific debug tools and log paths | [template](project-config-template/debug-config.md) |
+| `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](project-config-template/profiling-config.md) |
+| `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](project-config-template/skill-routing.md) |
+
+### Example: C++ Game Server Config
 
 ```markdown
-# Dev Flow — Project Config
+# Dev Flow — TWGameServer Config
 
 ## Size Rules
 - **S**: single module, no interface change → direct commit
-- **L**: 3+ modules, public interface → plan + project + PR
+- **L**: 3+ modules, public interface, Feature Flag → plan + project + PR
 
 ## Quality Gate
-- S: `npm test && npm run lint`
-- L: full test suite + code review per phase
+- S: `node .claude/scripts/quality-pipeline.js --size S`
+- L: `node .claude/scripts/quality-pipeline.js --size L` per phase
 
 ## Build & Deploy
-- Build: `docker compose build`
-- Staging: `docker compose up -d`
+- Build: `../deploy/scripts/dev.sh build`
+- Build+Restart: `../deploy/scripts/dev.sh br`
+
+## Special Rules
+- Commit 前必須跑 E2E if 改了遊戲邏輯
+- Proto 改動要重編譯 SDK
 ```
 
-### `.claude/quality-gate-config.md`
-
-Customizes quality-pipeline's test, scan, and review commands.
-
-### `.claude/project-lifecycle-config.md`
-
-Customizes project paths, bootstrap/archive scripts.
-
-### `.claude/next-config.md`
-
-Customizes work source paths for the next skill.
-
-### `.claude/team-config.md`
-
-Customizes team role templates for your project's tech stack.
-
-### `.claude/test-strategy-config.md`
-
-Customizes test-strategy's test commands, pyramid ratios, and coverage thresholds.
-
-### `.claude/skill-routing.md`
-
-Maps keywords to your project's domain-specific skills.
+### Example: Skill Routing
 
 ```markdown
 # Skill Routing
 
 | Keyword | Invoke |
 |---------|--------|
-| database | `your-db-skill` |
-| deploy   | `your-deploy-skill` |
-| crash    | `your-debug-skill` |
+| MJ / mahjong | `twgs-game-dev` → references/mj.md |
+| crash / core dump | `twgs-debug` |
+| proto / protobuf | `twgs-protobuf` |
+| stress / 10K | `twgs-stress-test` |
 ```
 
-### How Injection Works
-
-`dev-flow` uses Claude Code's `!`command`` preprocessor to read config at invocation time:
-
-```markdown
-## Project Config (auto-injected)
-!`cat .claude/dev-flow-config.md 2>/dev/null || echo "No config — using defaults."`
-```
-
-No config file? Defaults kick in automatically. Zero friction for new projects.
-
-> Templates available in [`project-config-template/`](project-config-template/).
+This lets autopilot's `dev-flow` automatically invoke your project's domain-specific skills when it encounters relevant keywords — bridging the generic workflow layer with project-specific knowledge.
 
 ---
 
@@ -219,6 +295,12 @@ In the Claude Code world, "configuration" is natural language. A markdown file r
 
 **Works alongside other skills?**
 Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers, and other plugins all coexist — autopilot orchestrates, they execute.
+
+---
+
+## Inspired By
+
+- **[gstack](https://github.com/garry-t/gstack)** — Garry Tan's skill suite for Claude Code. The CEO agent's cognitive patterns (Bezos doors, Munger inversion, Jobs subtraction), Boil the Lake completeness principle, and scope mode system are adapted from gstack's `plan-ceo-review` skill.
 
 ---
 

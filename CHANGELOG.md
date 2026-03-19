@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.4
+- Enhanced `ceo-agent` — added cognitive layer inspired by gstack's CEO review agent:
+  - **Cognitive Patterns**: 10 thinking instincts (Bezos doors, Munger inversion, Jobs subtraction, Grove paranoia, Altman leverage) that shape tactical decisions within DOA
+  - **Boil the Lake**: completeness principle — AI makes marginal cost near-zero, always choose complete over shortcut
+  - **Prime Directives**: 5 execution principles (zero silent failures, named errors, shadow paths, 6-month horizon, permission to scrap) complementing quality-pipeline
+  - **Scope Mode**: 4 postures (Expand/Selective/Hold/Reduce) chosen at startup, governs opportunity handling throughout execution
+  - Fixed startup count, clarified Scope Mode vs DOA interaction, added Scope Opportunities to CEO Report template
+
 ## v1.4.3
 - Enhanced `dev-flow` — added Fix workflow for bug fixes (any module count, no plan/project needed, ongoing-maintenance audit trail); restructured Quick Decision to separate nature (Fix/H) from size (S/L); fixed H scope check; updated session start/end to cover Fix
 - Added scope creep detection to `dev-flow` — auto-escalate S→L when scope grows (3+ commits, 3+ modules)

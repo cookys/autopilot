@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.4.5
+- Fixed `dev-flow` L-5 — added **post-archive sanity check** (step 6): verify Active section has no `_archive/` links, feature branch deleted, no stale plan refs. Prevents archive completing but leaving stale INDEX entries.
+- Fixed `dev-flow` Session End step 5 — added **BACKLOG invalidation check**: when files are deleted during a session, grep BACKLOG for references and mark obsolete items. Previously only checked trigger-met (forward), never invalidated-by-deletion (reverse).
+- Fixed `project-archive` Step 4 — added **reverse filesystem↔INDEX consistency scan**: detect `_archive/` dirs not listed in INDEX, and stale branch references in Active section (branch deleted = likely merged but not archived).
+- Root cause: CodePower production audit found 12 orphaned components, 4 stale BACKLOG items, 1 phantom project, and 1 mis-archived project accumulated over ~30 projects due to missing reverse checks.
+
 ## v1.4.4
 - Enhanced `ceo-agent` — added cognitive layer inspired by gstack's CEO review agent:
   - **Cognitive Patterns**: 10 thinking instincts (Bezos doors, Munger inversion, Jobs subtraction, Grove paranoia, Altman leverage) that shape tactical decisions within DOA

@@ -1,6 +1,7 @@
 # Changelog
 
 ## v1.4.5
+- Fixed `dev-flow` S/Fix workflows — added **push** to commit steps. Previously only said "commit", causing CEO mode to stop after commit without pushing to remote. S step 3: "Commit and push", Fix step 7: "Merge to develop and push", S Session End: "Confirm commit and push".
 - Fixed `dev-flow` L-5 — added **post-archive sanity check** (step 6): verify Active section has no `_archive/` links, feature branch deleted, no stale plan refs. Prevents archive completing but leaving stale INDEX entries.
 - Fixed `dev-flow` Session End step 5 — added **BACKLOG invalidation check**: when files are deleted during a session, grep BACKLOG for references and mark obsolete items. Previously only checked trigger-met (forward), never invalidated-by-deletion (reverse).
 - Fixed `project-archive` Step 4 — added **reverse filesystem↔INDEX consistency scan**: detect `_archive/` dirs not listed in INDEX, and stale branch references in Active section (branch deleted = likely merged but not archived).

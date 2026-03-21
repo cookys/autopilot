@@ -152,7 +152,7 @@ If yes → re-evaluate as L-size:
 
 1. Implement
 2. Quality gate (per project config, or: lint + test)
-3. Commit to current branch (descriptive message)
+3. Commit and push to current branch (descriptive message)
 4. Cleanup: if from backlog, delete the item
 
 **S Session End (lite)**:
@@ -165,8 +165,8 @@ If yes → re-evaluate as L-size:
 2. Deferred items:
    If anything was postponed, add to BACKLOG with context + trigger condition.
 
-3. Confirm commit:
-   Verify the change landed on the correct branch.
+3. Confirm commit and push:
+   Verify the change landed on the correct branch and was pushed to remote.
 ```
 
 > S does not use TodoWrite -- too few steps to justify tracking overhead.
@@ -184,7 +184,7 @@ If yes → re-evaluate as L-size:
 5. Commit with **detailed message**: root cause + what was wrong + how it's fixed
 6. **Write ongoing-maintenance entry** — append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md`:
    `| MM-DD | commit_hash | fix(area): 根因 → 修法 (跨 N 模組) |`
-7. Merge to develop
+7. Merge to develop and push
 8. Cleanup: delete fix branch
 
 If the fix revealed a non-obvious lesson, invoke `learn` skill.

@@ -77,6 +77,25 @@ grep "_archive" doc/projects/INDEX.md 2>/dev/null
 
 # Check for "in progress" markers that should be resolved:
 grep -rn "in progress\|In Progress\|IN PROGRESS" doc/projects/INDEX.md doc/plans/INDEX.md 2>/dev/null
+
+# REVERSE CHECK: filesystem dirs/files NOT in their INDEX
+# Projects: dirs in _archive/ not listed in INDEX Archived section
+for d in doc/projects/_archive/*/; do
+  name=$(basename "$d")
+  grep -q "$name" doc/projects/INDEX.md || echo "ORPHAN PROJECT: $name not in INDEX"
+done
+
+# Plans: files in _archive/ not listed in INDEX Archived section
+for f in doc/plans/_archive/*.md; do
+  name=$(basename "$f")
+  grep -q "$name" doc/plans/INDEX.md || echo "ORPHAN PLAN: $name not in INDEX"
+done
+
+# Active projects with deleted branches (may indicate merged-but-not-archived):
+# Extract branch names from Active section, verify they exist
+grep -E '^\|.*feature/' doc/projects/INDEX.md | grep -oP 'feature/[\w-]+' | while read branch; do
+  git branch -a 2>/dev/null | grep -q "$branch" || echo "STALE BRANCH REF: $branch (deleted — project may be merged but not archived)"
+done
 ```
 
 **For each finding:**
@@ -84,6 +103,8 @@ grep -rn "in progress\|In Progress\|IN PROGRESS" doc/projects/INDEX.md doc/plans
 - Active table entry pointing to `_archive/` → remove from Active, ensure in Archived
 - "In progress" marker on completed project → update to final status
 - Empty Active table row → remove
+- Orphan in `_archive/` not in INDEX → add to INDEX Archived section
+- Stale branch reference → check if project was merged; if so, update README phases and archive
 
 ## Step 5: Invoke next (project-specific)
 

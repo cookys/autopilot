@@ -278,8 +278,14 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 2. **Pre-Merge Review** -- max 3 rounds
 3. **Merge** -- merge feature branch to main (or create PR per project convention)
 4. **Post-Merge Review** -- verify no merge losses
-5. **Archive** -- archive project docs
-6. **L Session End** -- run the full Session End checklist below
+5. **Archive** -- archive project docs (invoke project-lifecycle archive flow)
+6. **Post-Archive Sanity Check** -- verify archive was clean:
+   ```
+   - Active section in projects/INDEX has no entries pointing to _archive/
+   - Feature branch is deleted (local + remote)
+   - No stale plan entries remain in plans/INDEX Active section
+   ```
+7. **L Session End** -- run the full Session End checklist below
 
 > Merge completes integration. After merge, return here for post-merge review -> archive.
 
@@ -347,13 +353,20 @@ Run all steps. Create a checklist and complete each item before concluding.
    - Trigger condition: when it should be picked up
    Backlog safety: if the item affects the final goal, do NOT defer.
 
-5. Triggered BACKLOG pickup:
-   Check if any BACKLOG items have their trigger condition met by this session's work.
+5. Triggered BACKLOG pickup + invalidation:
    Scope "this session" using session-start-sha:
      git log --oneline $(cat .claude/session-start-sha 2>/dev/null || echo "HEAD~10")..HEAD
-   Surface matches to decision-maker:
-   - Normal mode: present to user for action.
-   - CEO mode: CEO decides autonomously (tactical). Record in CEO Report.
+
+   a) **Trigger check**: any BACKLOG items have their trigger condition met?
+      Surface matches to decision-maker:
+      - Normal mode: present to user for action.
+      - CEO mode: CEO decides autonomously (tactical). Record in CEO Report.
+
+   b) **Invalidation check**: did this session delete files referenced by BACKLOG items?
+      git diff --name-only --diff-filter=D $(cat .claude/session-start-sha 2>/dev/null || echo "HEAD~10")..HEAD
+      For each deleted file, grep BACKLOG for references.
+      If found: mark those BACKLOG items as obsolete with reason (e.g., "component deleted in insights-v2").
+      This prevents stale items from accumulating after refactors.
 
 6. Invoke learn skill:
    Produce a session learning summary covering:

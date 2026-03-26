@@ -1,15 +1,15 @@
 ---
 name: dev-flow
 description: >
-  Unified lifecycle orchestrator -- session start, task sizing (S/L/H/Fix), workflow execution, goal alignment,
-  and session end. Invoke BEFORE starting any code changes, including context continuations.
-  Fix = bug fix with known root cause (any module count, no plan/project needed).
+  Development lifecycle orchestrator — sizes tasks (S/L/H/Fix), sets session rules for config
+  injection and quality gates, manages project tracking. Invoke BEFORE starting any code changes,
+  including context continuations. Works WITH superpowers skills, not against them.
 ---
 
 # Development Flow Evaluation
 
 ## Project Config (auto-injected)
-!`cat .claude/dev-flow-config.md 2>/dev/null || echo "_No .claude/dev-flow-config.md found -- using defaults below._"`
+!`cat .claude/dev-flow-config.md 2>/dev/null`
 
 ---
 
@@ -106,6 +106,38 @@ When resuming work on an existing feature branch with an active project:
 ```
 
 Context continuation never re-evaluates size. It uses the size established in the original session.
+
+---
+
+## Session Rules (persist throughout)
+
+These rules apply to ALL subsequent work in this session, regardless of which skills are invoked.
+They complement (not replace) any built-in skills — providing project-specific context.
+
+### Config Injection Rules
+
+When performing these activities, FIRST read the corresponding config file if it exists.
+The config provides project-specific tools, commands, known issues, and conventions.
+If the config file does not exist, proceed normally without it.
+
+| Activity | Config File | What It Contains |
+|----------|------------|-----------------|
+| Debugging (bugs, crashes, logic errors) | `.claude/debug-config.md` | Debug tools, Docker commands, known gotchas, layer-by-layer diagnosis |
+| Writing or running tests | `.claude/test-strategy-config.md` | Test framework, commands, coverage thresholds, test pyramid conventions |
+| Parallel task dispatch (team work) | `.claude/team-config.md` | Role templates, tech stack context, team size rules |
+| Performance profiling | `.claude/profiling-config.md` | Profiling tools, metrics collection, baseline commands |
+| Comparison audit (old vs new) | `.claude/audit-config.md` | Known by-design divergences, audit scope definitions |
+
+### Quality Gate Rule
+
+**Before committing or merging, invoke `autopilot:quality-pipeline`.**
+This is non-negotiable. The quality pipeline runs: test → scan → completeness → review.
+
+### Session End Rule
+
+When the user signals session end (or task completion for S-size):
+- Update project tracking if L-size (`docs/projects/*/README.md` + `INDEX.md`)
+- Record knowledge if something was surprising or took >1 retry (`autopilot:learn`)
 
 ---
 
@@ -224,8 +256,9 @@ Any criterion without a threshold or verification method means the plan is incom
 **CEO mode**: SKIP intent confirmation -- CEO already confirmed OKR during Startup. Do not ask the user again.
 
 ### L-2. Plan
-- User provides plan: skip Plan Mode
-- Needs design: EnterPlanMode -> design -> ExitPlanMode -> user approval
+- User provides plan → use it directly, skip Plan Mode.
+- Needs design → EnterPlanMode → design → ExitPlanMode → user approval.
+- Save plan to: `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
 ### L-3. Project Setup (mandatory)
 - Create project directory structure, branch, update project index
@@ -403,7 +436,7 @@ Skip doc sync for: bug fixes, minor value tweaks, log message changes.
 ---
 
 ## Skill Routing (project-specific)
-!`cat .claude/skill-routing.md 2>/dev/null || echo "_No .claude/skill-routing.md found -- no project-specific skill routing._"`
+!`cat .claude/skill-routing.md 2>/dev/null`
 
 ## Completeness Principle
 

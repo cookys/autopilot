@@ -1,15 +1,15 @@
 <h1 align="center">Autopilot</h1>
 
 <p align="center">
-  <strong>Development workflow skills for Claude Code — your agent's operating system.</strong><br>
-  14 skills that turn Claude from a general-purpose agent into a disciplined developer.<br>
-  Install once, works across all projects. Zero configuration required.
+  <strong>Lifecycle orchestration for Claude Code — sets the rules, Superpowers executes.</strong><br>
+  10 skills that add lifecycle management, strategic decisions, and quality gates<br>
+  on top of built-in Superpowers. Drop a config file, get project-aware workflows.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-1.4.4-E8A838?style=flat-square" alt="v1.4.4">
-  <img src="https://img.shields.io/badge/skills-14-4A90D9?style=flat-square" alt="14 Skills">
+  <img src="https://img.shields.io/badge/version-2.0.0-E8A838?style=flat-square" alt="v2.0.0">
+  <img src="https://img.shields.io/badge/skills-10-4A90D9?style=flat-square" alt="10 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -22,33 +22,46 @@
 
 ## The Problem
 
-AI coding agents start from zero every session:
+Claude Code's built-in Superpowers handles tactics well — TDD, debugging, planning, code review. But it lacks:
 
-- A task needs 5 modules changed — the agent dives in without a plan and forgets half
-- You ask "should we use X or Y?" — the agent picks one without researching trade-offs
-- The agent fixes a tricky bug — next session, hits the **exact same issue** and doesn't remember
-- Session context compresses — hard-won solutions and architectural decisions disappear
+- **Lifecycle management** — no task sizing, no project tracking, no session start/end discipline
+- **Strategic decisions** — no multi-perspective debate, no dual-agent research
+- **Quality gates** — no unified pipeline enforcing test → scan → completeness → review
+- **Self-improvement** — no knowledge capture, no retrospectives, no "what's next?" recommendations
+- **Project-specific context** — no mechanism to inject your project's tools, conventions, and known gotchas
 
 ## The Solution
 
-Autopilot gives your agent **standard operating procedures** that enforce discipline:
+Autopilot adds **lifecycle orchestration and strategic intelligence** on top of Superpowers:
 
-| Skill | What It Does | Without It |
-|-------|-------------|------------|
-| **dev-flow** | Evaluates task size, routes to commit or plan+project; includes session lifecycle (start/end) and goal alignment | Agent dives in without a plan |
-| **survey** | Dual-agent research (researcher + skeptic) | Agent picks first option it finds |
-| **think-tank** | 6-role debate for strategic decisions | Single-perspective analysis |
-| **ceo-agent** | Autonomous execution with CEO-level judgment | Agent asks permission for everything |
-| **quality-pipeline** | Unified quality gate: test → scan → review | Inconsistent quality checks |
-| **project-lifecycle** | Plan → bootstrap → structure → archive | Projects left unfinished or unarchived |
-| **learn** | Auto-records knowledge from failures; includes knowledge health audit | Same mistakes repeated across sessions |
-| **retro** | Engineering retrospective from git history | No visibility into work patterns |
-| **next** | Scan all work sources, recommend highest-priority task; includes improvement processing | No visibility into what to do next |
-| **team** | Multi-agent parallelization with dependency analysis | Solo execution when parallelism would help |
-| **profiling** | Evidence-first performance profiling methodology | Agent guesses from code instead of measuring |
-| **test-strategy** | Test pyramid, baseline management, feature flag levels | Inconsistent test coverage, no strategy |
-| **audit** | Systematic comparison between implementations | Differences missed in manual review |
-| **debug** | Evidence-first debugging: logs, tools, then code | Agent guesses instead of investigating |
+| Skill | What It Does | Superpowers Handles |
+|-------|-------------|-------------------|
+| **dev-flow** | Sizes tasks (S/L/H), sets session rules for config injection and quality gates, manages project tracking | Planning, TDD, debugging, code review (tactical execution) |
+| **survey** | Dual-agent research (researcher + skeptic) | — (no equivalent) |
+| **think-tank** | 6-role debate for strategic decisions | brainstorming (different level — requirements exploration) |
+| **ceo-agent** | Autonomous execution with CEO-level judgment | — (no equivalent) |
+| **quality-pipeline** | Unified quality gate: test → scan → completeness → review | verification-before-completion (partial) |
+| **project-lifecycle** | Plan → bootstrap → structure → archive | finishing-a-development-branch (partial) |
+| **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
+| **retro** | Engineering retrospective from git history | — (no equivalent) |
+| **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |
+| **audit** | Systematic comparison between implementations | — (no equivalent) |
+
+### The Rule-Setter Model
+
+Autopilot doesn't compete with Superpowers — it sets the rules that Superpowers operates within:
+
+```
+autopilot:dev-flow sets session rules:
+  → "When debugging, read .claude/debug-config.md for project context"
+  → "Before committing, run autopilot:quality-pipeline"
+  → "On session end, update project tracking"
+
+superpowers skills execute within those rules:
+  → systematic-debugging (with project config in context)
+  → test-driven-development (with project test conventions)
+  → writing-plans (within dev-flow's sizing framework)
+```
 
 ---
 
@@ -134,7 +147,6 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
          ├─ needs research? ──→ survey                   │
          ├─ strategic decision? ──→ think-tank            │
          ├─ user says "handle it"? ──→ ceo-agent         │
-         ├─ parallelizable? ──→ team                     │
          │                                               │
          └─ session end ──→ learn (capture knowledge)    │
                             retro (periodic review)      │
@@ -162,7 +174,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 /plugin install autopilot@autopilot
 ```
 
-That's it. All 14 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+That's it. All 10 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ---
 
@@ -194,9 +206,10 @@ Skills work out of the box with sensible defaults. For project-specific behavior
 
 The `!`command`` syntax is a Claude Code preprocessor — it runs a shell command and inlines the output into the skill body *before* the LLM sees it. This means:
 
-- **No config file?** The `|| echo "defaults"` fallback kicks in. Zero friction for new projects.
+- **No config file?** Silent pass-through — the skill works normally without extra noise. Zero friction.
 - **Config is natural language.** A markdown file is more expressive than YAML — you can write rules, exceptions, and rationale in prose.
 - **Config is project-local.** Each repo has its own `.claude/` directory. The same autopilot plugin adapts to a C++ game server, a React app, or a Rust CLI — all through different config files.
+- **Session rules inject config for ALL activities.** dev-flow sets rules like "when debugging, read `.claude/debug-config.md`" — so even Superpowers' debugging skill gets your project context.
 
 ### Available Config Files
 
@@ -287,14 +300,14 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 14 skills, not more?**
-Lean by design. Internal orchestration (session start/end, goal alignment, context reduction, improvement processing, memory health) is absorbed into the skills that use them — primarily dev-flow, learn, and next. The 14 exposed skills cover the workflow layer: decisions, processes, quality gates, and debugging that are universal across projects. Domain-specific skills belong in each project's `.claude/skills/`, not in a shared plugin.
+**Why 10 skills, not 14?**
+v2 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with built-in Superpowers. Their methodology is now handled by Superpowers; their project-specific config injection is now handled by dev-flow's Session Rules. Fewer skills = less context window pressure, less routing ambiguity.
 
 **Why `!`command`` injection, not config files?**
 In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.
 
-**Works alongside other skills?**
-Yes. Autopilot is the workflow layer. Your project's domain skills, superpowers, and other plugins all coexist — autopilot orchestrates, they execute.
+**How does it work with Superpowers?**
+Autopilot is the rule-setter; Superpowers is the executor. dev-flow sets session rules ("when debugging, read your project config"), and Superpowers' skills execute within those rules. Zero coupling — Autopilot never dispatches to or wraps Superpowers skills.
 
 ---
 

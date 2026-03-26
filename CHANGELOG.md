@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.0.0 — Rule-Setter Architecture
+
+**Breaking:** Autopilot no longer competes with built-in Superpowers. It sets the rules; Superpowers executes.
+
+### Changed
+- **`dev-flow` gained Session Rules** — persistent config injection directives that tell the model to read project config files when debugging, testing, profiling, or dispatching teams. These rules complement Superpowers' tactical skills with project-specific context.
+- **`quality-pipeline` slimmed** — keeps pipeline orchestration (test → scan → completeness → review), delegates step methodology.
+- **`project-lifecycle` slimmed** — keeps bootstrap/structure, delegates branch finishing mechanics.
+- **`audit` config injection activated** — was commented out, now silent `!`cat``.
+- **All config fallbacks changed to silent** — `2>/dev/null` without `|| echo`. No noise for projects without config files.
+
+### Removed
+- **`debug`** — replaced by dev-flow session rule + superpowers:systematic-debugging
+- **`test-strategy`** — replaced by dev-flow session rule + superpowers:test-driven-development
+- **`team`** — replaced by dev-flow session rule + superpowers:dispatching-parallel-agents
+- **`profiling`** — replaced by dev-flow session rule (methodology was generic; config injection is what matters)
+
+### Migration
+Your `.claude/*-config.md` files still work unchanged. `dev-flow` now tells the model to read them via session rules instead of dedicated skills. No config file changes needed.
+
+If you relied on `autopilot:debug`, `autopilot:test-strategy`, `autopilot:team`, or `autopilot:profiling` as explicit skill invocations: invoke them via their Superpowers equivalents (`superpowers:systematic-debugging`, `superpowers:test-driven-development`, `superpowers:dispatching-parallel-agents`) — dev-flow's session rules ensure your project config is still read.
+
+---
+
 ## v1.4.4
 - Enhanced `ceo-agent` — added cognitive layer inspired by gstack's CEO review agent:
   - **Cognitive Patterns**: 10 thinking instincts (Bezos doors, Munger inversion, Jobs subtraction, Grove paranoia, Altman leverage) that shape tactical decisions within DOA

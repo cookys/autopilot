@@ -8,7 +8,7 @@ description: Global work recommender (/next) — scan all work sources (projects
 Scan all work sources, present categorized results, converge to a single recommendation.
 
 ## Project Config (auto-injected)
-!`cat .claude/next-config.md 2>/dev/null || echo "_No config — using defaults: doc/projects/INDEX.md, doc/plans/INDEX.md, doc/BACKLOG.md, doc/proposals/_"`
+!`cat .claude/next-config.md 2>/dev/null`
 
 ## Trigger
 

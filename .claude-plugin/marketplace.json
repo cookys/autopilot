@@ -7,8 +7,8 @@
     {
       "name": "autopilot",
       "source": "./",
-      "version": "1.4.1",
-      "description": "Development autopilot — 14 skills for workflow, research, decisions, quality, lifecycle, debugging, and self-improvement"
+      "version": "2.0.0",
+      "description": "Development autopilot — 10 skills for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Works with built-in Superpowers, not against it."
     }
   ]
 }

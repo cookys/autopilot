@@ -5,8 +5,8 @@ description: Systematic comparison audit between two implementations. Invoke whe
 
 # Systematic Comparison Audit
 
-<!-- Project-specific config (common audit targets, known by-design divergences) -->
-<!-- !cat .claude/audit-config.md 2>/dev/null || echo "No project-specific audit config found. Using generic defaults." -->
+## Project Audit Config
+!`cat .claude/audit-config.md 2>/dev/null`
 
 ## Key Concepts
 

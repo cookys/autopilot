@@ -10,7 +10,7 @@ description: >
 **Pipeline is a dispatcher. Each step follows its reference doc.**
 
 ## Project Config (auto-injected)
-!`cat .claude/quality-gate-config.md 2>/dev/null || echo "_No config — using defaults: lint + test before commit._"`
+!`cat .claude/quality-gate-config.md 2>/dev/null`
 
 ## Sub-step References
 
@@ -109,4 +109,4 @@ Step N fails
 **Max retries per step**: 3. After 3 failures, stop and report to user.
 
 ## See Also
-- `autopilot:dev-flow` — dispatches pipeline (decides which route)
+- `autopilot:dev-flow` — sets session rules and dispatches pipeline

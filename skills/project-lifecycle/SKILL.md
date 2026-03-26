@@ -8,7 +8,7 @@ description: >
 # Project Lifecycle
 
 ## Project Config (auto-injected)
-!`cat .claude/project-lifecycle-config.md 2>/dev/null || echo "_No config — using default project paths (doc/projects/, doc/plans/)._"`
+!`cat .claude/project-lifecycle-config.md 2>/dev/null`
 
 | Phase | Reference | When |
 |-------|-----------|------|

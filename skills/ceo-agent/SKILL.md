@@ -55,7 +55,7 @@ CEO mode:     dev-flow -> CEO decides within DOA
                        -> only escalate at DOA boundary
 ```
 
-CEO can autonomously invoke any skill (autopilot:survey, autopilot:team, autopilot:think-tank, autopilot:quality-pipeline, etc.).
+CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:quality-pipeline, superpowers:dispatching-parallel-agents, etc.).
 
 ### Boundary with survey and think-tank
 
@@ -193,7 +193,7 @@ When encountering these, pause and propose:
 5. Produce CEO Reports per involvement level
 6. Need research? → Autonomously invoke autopilot:survey
 7. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
-8. Need team? → Autonomously invoke autopilot:team
+8. Need parallel execution? → Use superpowers:dispatching-parallel-agents (dev-flow session rules inject team config)
 9. Final report with complete decision log
 ```
 

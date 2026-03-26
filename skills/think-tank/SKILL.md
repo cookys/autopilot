@@ -127,4 +127,4 @@ Use the fixed format (see [references/brief-template.md](references/brief-templa
 |-------|-------------|
 | `autopilot:survey` | Survey finds external data, think-tank does internal debate. Can chain. |
 | `autopilot:ceo-agent` | CEO autonomously invokes think-tank for strategic decisions |
-| `autopilot:team` | Team does parallel execution, think-tank does parallel analysis |
+| `superpowers:dispatching-parallel-agents` | Parallel execution; think-tank does parallel analysis |

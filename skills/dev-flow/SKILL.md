@@ -3,9 +3,10 @@ name: dev-flow
 description: >
   Start here before writing any code — sizes task (S/L/H/Fix), sets up branch and session rules.
   Use when: "I'm starting on X", "quick fix for Y", "continuing from yesterday", "hotfix needed",
-  "let's implement X", "skip to coding", resuming a feature branch, or any task that touches code.
-  Not for: debugging (→ systematic-debugging), writing plans (→ writing-plans), brainstorming
-  (→ brainstorming), or code review (→ quality-pipeline).
+  "let's implement X", "skip to coding", "我要開始做 X", "快速修一下", "接續昨天的進度",
+  resuming a feature branch, or any task that touches code. Not for: debugging
+  (→ systematic-debugging), writing plans (→ writing-plans), brainstorming (→ brainstorming),
+  or code review (→ quality-pipeline).
 ---
 
 # Development Flow Evaluation

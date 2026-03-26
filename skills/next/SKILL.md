@@ -3,8 +3,8 @@ name: next
 description: >
   Recommend what to work on next by scanning all projects, plans, backlog, and proposals. Use when:
   "/next", "what should I work on", "what's the highest priority", "what to pick up now", "I have
-  N hours — what fits?", or right after archiving a completed project. Not for: creating plans,
-  starting implementation, or running quality checks.
+  N hours — what fits?", "下一步做什麼", "最高優先是什麼", "現在該做什麼", or right after archiving
+  a completed project. Not for: creating plans, starting implementation, or running quality checks.
 ---
 
 # Next — Work Recommender Engine

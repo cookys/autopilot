@@ -4,8 +4,8 @@ description: >
   Multi-role debate (architect, ops, QA, product, UX, finance) for strategic decisions. Use when:
   "I want perspectives from different roles", "let's debate this", "tradeoff analysis", "which
   should we prioritize", "blast radius of X", "scope decision", "hear from architect/ops/product",
-  "what's the impact?". Not for: pure tech selection (→ survey), open brainstorming, or full
-  delegation (→ ceo-agent).
+  "what's the impact?", "要辯論一下", "多角度分析", "幫我評估利弊". Not for: pure tech selection
+  (→ survey), open brainstorming, or full delegation (→ ceo-agent).
 ---
 
 # Think Tank — Multi-Role Decision Brief

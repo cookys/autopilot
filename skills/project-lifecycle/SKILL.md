@@ -1,8 +1,10 @@
 ---
 name: project-lifecycle
 description: >
-  Project lifecycle management — bootstrap from plan, directory structure conventions, archive completed projects.
-  Use when creating L-size projects, organizing docs, or finishing a development branch.
+  Bootstrap, organize, or archive project tracking docs. Use when: "archive this project",
+  "bootstrap from plan", "set up project tracking", "clean up project docs", "update INDEX",
+  "reorganize docs/projects/", project is done and merged — needs cleanup. Not for: creating plans
+  (→ writing-plans), choosing what to work on (→ next), or running quality gates (→ quality-pipeline).
 ---
 
 # Project Lifecycle

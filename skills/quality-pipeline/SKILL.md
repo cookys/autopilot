@@ -1,8 +1,10 @@
 ---
 name: quality-pipeline
 description: >
-  Unified quality gate — test, scan, completeness check, code review. Triggered by dev-flow
-  before commit (S) or merge (L). Reads project config for specific commands.
+  Run pre-commit or pre-merge quality checks: tests, completeness scan (no stubs/TODOs/mocks),
+  code review. Use when: "quality gate", "quality checks", "run tests before merge", "check for
+  stubs", "scan for completeness", "is this ready to commit?", "pre-merge review". Not for:
+  writing new tests (→ TDD), debugging CI failures, or receiving external review feedback.
 ---
 
 # Quality Pipeline (Unified Quality Gate)

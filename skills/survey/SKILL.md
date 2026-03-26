@@ -1,6 +1,10 @@
 ---
 name: survey
-description: "Dual-agent tech research (researcher + skeptic). Use for technology selection, architecture decisions, uncertainty in plans, or when user says survey/research/業界怎麼做."
+description: >
+  Research what the industry does — dual-agent (researcher + skeptic) tech investigation. Use when:
+  "research X", "survey", "investigate options/tradeoffs", "what do others use", "industry standard
+  for X", "compare X vs Y vs Z", "I'm not sure which to pick", "業界怎麼做". Not for: strategic
+  priority decisions (→ think-tank), brainstorming designs, or creating implementation plans.
 ---
 
 # Survey -- Technology Research

@@ -1,6 +1,10 @@
 ---
 name: retro
-description: "Engineering retrospective from git history — velocity, test ratio, focus score, session patterns. Use periodically or when user says retro/回顧/分析工作模式."
+description: >
+  Engineering retrospective from git history — velocity, test ratio, focus score, commit patterns.
+  Use when: "/retro", "retro on last N days", "how productive was this sprint", "analyze my commit
+  history", "work patterns", "session analysis", "回顧", "分析工作模式". Not for: viewing specific
+  commit diffs, comparison audits, or debugging test coverage drops.
 ---
 
 # retro — Engineering Retrospective

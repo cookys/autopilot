@@ -1,6 +1,11 @@
 ---
 name: learn
-description: Record knowledge to .claude/knowledge/ after retries, non-obvious fixes, or environment errors. Also handles knowledge health auditing — MEMORY.md size, knowledge file sizes, stale verifications, INDEX overflow, orphan detection. Use when a solution took 2+ attempts, was surprising, or for periodic memory maintenance.
+description: >
+  Save a hard-won lesson or surprising fix so future sessions benefit. Use when: "save this to
+  knowledge", "record this", "remember for next time", "/learn", user shares a gotcha or non-obvious
+  fix, solution took 2+ attempts, environment-specific workaround discovered. Also handles:
+  "knowledge health audit", "check MEMORY.md size", stale knowledge cleanup. Not for: active
+  debugging, writing tests, or project status updates.
 ---
 
 # learn

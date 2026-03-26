@@ -1,6 +1,10 @@
 ---
 name: audit
-description: Systematic comparison audit between two implementations. Invoke when comparing old vs new, spec vs implementation, or verifying feature parity between systems.
+description: >
+  Compare two implementations and find every difference. Use when: "compare X with Y", "check X
+  against Y", "verify X matches Y", "flag anything missing", feature parity review between old and
+  new systems, spec vs implementation verification, cross-system completeness check. Not for
+  debugging a single discrepancy or writing comparison tests.
 ---
 
 # Systematic Comparison Audit

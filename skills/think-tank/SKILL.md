@@ -1,6 +1,11 @@
 ---
 name: think-tank
-description: "Multi-role think tank — 6 roles debate in parallel to produce a Decision Brief. Use for strategic decisions beyond pure tech choice: scope, priority, tradeoffs. Complements survey (external) with internal debate."
+description: >
+  Multi-role debate (architect, ops, QA, product, UX, finance) for strategic decisions. Use when:
+  "I want perspectives from different roles", "let's debate this", "tradeoff analysis", "which
+  should we prioritize", "blast radius of X", "scope decision", "hear from architect/ops/product",
+  "what's the impact?". Not for: pure tech selection (→ survey), open brainstorming, or full
+  delegation (→ ceo-agent).
 ---
 
 # Think Tank — Multi-Role Decision Brief

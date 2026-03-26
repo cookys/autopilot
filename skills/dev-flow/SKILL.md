@@ -1,10 +1,11 @@
 ---
 name: dev-flow
 description: >
-  Size and gate your session before you code. Determine task scope (S/L/H/Fix), validate branch
-  readiness, check for planning overlaps, set session rules. Use when starting a feature with or
-  without a plan, resuming work mid-stream, or tackling multi-module changes—anything that needs
-  pre-code validation and setup.
+  Start here before writing any code — sizes task (S/L/H/Fix), sets up branch and session rules.
+  Use when: "I'm starting on X", "quick fix for Y", "continuing from yesterday", "hotfix needed",
+  "let's implement X", "skip to coding", resuming a feature branch, or any task that touches code.
+  Not for: debugging (→ systematic-debugging), writing plans (→ writing-plans), brainstorming
+  (→ brainstorming), or code review (→ quality-pipeline).
 ---
 
 # Development Flow Evaluation

@@ -1,6 +1,10 @@
 ---
 name: next
-description: Global work recommender (/next) — scan all work sources (projects/plans/backlog/proposals/maintenance), converge to a single recommendation. Auto-triggered after archive or manually via /next.
+description: >
+  Recommend what to work on next by scanning all projects, plans, backlog, and proposals. Use when:
+  "/next", "what should I work on", "what's the highest priority", "what to pick up now", "I have
+  N hours — what fits?", or right after archiving a completed project. Not for: creating plans,
+  starting implementation, or running quality checks.
 ---
 
 # Next — Work Recommender Engine

@@ -1,6 +1,10 @@
 ---
 name: ceo-agent
-description: "Autonomous CEO mode — user sets goal, agent owns execution. Use when: '搞定 X', '幫我處理', 'CEO mode', '全權處理', '你決定'. Not for research-only (survey) or participatory flow (dev-flow)."
+description: >
+  Full delegation — you own the goal end-to-end, user just wants results. Triggers: "CEO mode",
+  "get it done", "you decide", "handle everything", "I trust you", "take over", "full authority",
+  "just do it", "搞定 X", "幫我處理", "全權處理", "你決定". Not for: research-only (→ survey),
+  participatory planning (→ dev-flow), or parallel task dispatch.
 ---
 
 # CEO Agent -- Autonomous Decision Mode

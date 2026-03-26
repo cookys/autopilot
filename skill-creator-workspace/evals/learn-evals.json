@@ -1,0 +1,52 @@
+[
+  {
+    "query": "I just spent 2 hours figuring out that sqlx::query! macros don't work with CTEs that have RETURNING clauses in offline mode. Save this to knowledge so we don't waste time again.",
+    "should_trigger": true,
+    "note": "Non-obvious fix after retries — classic learn trigger"
+  },
+  {
+    "query": "/learn build cargo watch ignores .sqlx/ changes — need to add --watch .sqlx to the command",
+    "should_trigger": true,
+    "note": "Explicit /learn invocation with category"
+  },
+  {
+    "query": "record this: when running migrations in Docker, the DATABASE_URL needs to use the container hostname (db) not localhost. Took me 3 tries to figure out.",
+    "should_trigger": true,
+    "note": "Environment error after multiple retries"
+  },
+  {
+    "query": "can you do a knowledge health audit? check if MEMORY.md is getting too long and whether any knowledge files are stale",
+    "should_trigger": true,
+    "note": "Knowledge health audit — learn skill handles this"
+  },
+  {
+    "query": "the pg_try_advisory_lock vs pg_try_advisory_xact_lock distinction almost bit us again. Make sure this is recorded in knowledge — session-scoped locks don't release when connections return to the pool.",
+    "should_trigger": true,
+    "note": "Recording a gotcha to prevent future mistakes"
+  },
+  {
+    "query": "write a unit test for the advisory lock helper function. Cover the happy path and the timeout case.",
+    "should_trigger": false,
+    "note": "Writing tests — superpowers:test-driven-development, not learn"
+  },
+  {
+    "query": "debug why the migration is failing — it says 'relation already exists' but I dropped it in the previous migration",
+    "should_trigger": false,
+    "note": "Active debugging — superpowers:systematic-debugging, not learn"
+  },
+  {
+    "query": "give me a retrospective on last week's commits — velocity, test ratio, focus areas",
+    "should_trigger": false,
+    "note": "Retrospective — autopilot:retro, not learn"
+  },
+  {
+    "query": "read .claude/knowledge/build-errors.md and tell me what we know about sqlx offline mode issues",
+    "should_trigger": false,
+    "note": "Reading existing knowledge — no skill needed, just read the file"
+  },
+  {
+    "query": "update the project README with the current status of the billing engine — phase 2 is done, phase 3 is in progress",
+    "should_trigger": false,
+    "note": "Project tracking update — autopilot:project-lifecycle or dev-flow session end, not learn"
+  }
+]

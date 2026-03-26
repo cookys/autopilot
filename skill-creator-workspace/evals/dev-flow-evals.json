@@ -1,0 +1,52 @@
+[
+  {
+    "query": "I'm starting on the new webhook retry logic. It touches support/executors, the scheduler, and needs a new config table. Let me size this before jumping in.",
+    "should_trigger": true,
+    "note": "L-size feature needing sizing and session setup"
+  },
+  {
+    "query": "quick fix — the date format in the CSV export header is wrong, just need to change the strftime pattern in one file",
+    "should_trigger": true,
+    "note": "S-size task still needs dev-flow for branch check and session rules"
+  },
+  {
+    "query": "continuing work on feature/cross-tenant-allowance from yesterday. I left off at phase 3 of the plan.",
+    "should_trigger": true,
+    "note": "Context continuation — dev-flow handles resume point identification"
+  },
+  {
+    "query": "production is down — the scheduler is panic'ing on startup because the advisory lock table doesn't exist after the migration rollback. hotfix needed NOW",
+    "should_trigger": true,
+    "note": "Hotfix workflow — dev-flow handles H-size path"
+  },
+  {
+    "query": "ok let's start implementing the monthly settlement cron job. the plan is already in docs/plans/2026-03-21-allowance-distribution-engine.md, skip planning and go straight to coding",
+    "should_trigger": true,
+    "note": "L-size with existing plan — dev-flow still needed for project setup, branch, tracking"
+  },
+  {
+    "query": "this endpoint returns 500 when the request body has a null broker_account_id. Can you trace through the handler and find the bug?",
+    "should_trigger": false,
+    "note": "Debugging — superpowers:systematic-debugging, not dev-flow"
+  },
+  {
+    "query": "create a detailed plan for migrating our notification system from polling to SSE. I want architecture diagrams, phase breakdown, risk analysis.",
+    "should_trigger": false,
+    "note": "Planning methodology — superpowers:writing-plans handles plan creation; dev-flow is for sizing/session setup AFTER a plan exists"
+  },
+  {
+    "query": "write integration tests for the allowance engine — cover tier policy, split policy, and the cross-tenant edge case where tenant A owes tenant B",
+    "should_trigger": false,
+    "note": "Writing tests — superpowers:test-driven-development, not dev-flow"
+  },
+  {
+    "query": "let's brainstorm different approaches for the real-time P&L dashboard. maybe SSE, maybe websockets, maybe polling with smart caching?",
+    "should_trigger": false,
+    "note": "Brainstorming — superpowers:brainstorming, not dev-flow"
+  },
+  {
+    "query": "review the code in my last 3 commits on this branch — check for security issues, missing error handling, and consistency with our patterns",
+    "should_trigger": false,
+    "note": "Code review — superpowers:code-reviewer or quality-pipeline handles review, not dev-flow directly"
+  }
+]

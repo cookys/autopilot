@@ -1,0 +1,52 @@
+[
+  {
+    "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+    "should_trigger": true,
+    "note": "Explicit CEO mode invocation with goal, autonomy level, and no-go zones"
+  },
+  {
+    "query": "ok just get it done, I trust you. implement the monthly settlement scheduler and wire up all the policies. you decide how.",
+    "should_trigger": true,
+    "note": "Implicit CEO trigger — 'get it done' + 'you decide' signals full delegation"
+  },
+  {
+    "query": "handle the go-live gap closure. you have full authority to fix whatever's needed — notifications, scheduler, yesterday close. just don't break existing accounting.",
+    "should_trigger": true,
+    "note": "Full delegation with scope and constraint"
+  },
+  {
+    "query": "CEO mode, reduce scope. Ship the absolute minimum viable allowance distribution — cut everything non-essential. Scope mode: reduce.",
+    "should_trigger": true,
+    "note": "CEO with explicit scope mode selection"
+  },
+  {
+    "query": "I don't want to think about this anymore. Take over the console migration — figure out what's left, prioritize, execute. Report when done.",
+    "should_trigger": true,
+    "note": "Fatigue-driven delegation — CEO agent owns the outcome"
+  },
+  {
+    "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+    "should_trigger": false,
+    "note": "Research only — autopilot:survey, not ceo-agent. User wants to decide themselves."
+  },
+  {
+    "query": "I need to add a new API endpoint for client monitoring. Let me plan this out — what size should this be?",
+    "should_trigger": false,
+    "note": "User wants to participate in planning — autopilot:dev-flow, not ceo-agent"
+  },
+  {
+    "query": "run these 5 tasks in parallel: update the schema, regenerate types, fix the migration, update the tests, deploy to staging",
+    "should_trigger": false,
+    "note": "Parallel dispatch — superpowers:dispatching-parallel-agents, not ceo-agent"
+  },
+  {
+    "query": "debug the memory leak in accountingd — it's using 23GB after batch runs",
+    "should_trigger": false,
+    "note": "Debugging — superpowers:systematic-debugging, not ceo-agent"
+  },
+  {
+    "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives — architect, ops, product.",
+    "should_trigger": false,
+    "note": "Multi-perspective debate — autopilot:think-tank, not ceo-agent. User wants perspectives, not execution."
+  }
+]

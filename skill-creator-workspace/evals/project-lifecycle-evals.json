@@ -1,0 +1,52 @@
+[
+  {
+    "query": "the allowance engine feature is done and merged. archive the project — move docs, update INDEX, mark it completed.",
+    "should_trigger": true,
+    "note": "Project archival — explicit lifecycle operation"
+  },
+  {
+    "query": "bootstrap a new project from the plan in docs/plans/2026-03-21-allowance-distribution-engine.md — create the directory structure, README, and update the index",
+    "should_trigger": true,
+    "note": "Project bootstrap from existing plan"
+  },
+  {
+    "query": "set up the project tracking for the notification system feature — directory, README with phases, INDEX entry, feature branch",
+    "should_trigger": true,
+    "note": "L-size project setup — lifecycle handles directory structure conventions"
+  },
+  {
+    "query": "the go-live-gap-closure branch is merged to develop. clean up the project docs and archive everything.",
+    "should_trigger": true,
+    "note": "Post-merge cleanup and archival"
+  },
+  {
+    "query": "I need to reorganize the docs/projects/ directory — some old projects are still marked in-progress but they were finished weeks ago",
+    "should_trigger": true,
+    "note": "Project organization and doc cleanup"
+  },
+  {
+    "query": "create a plan for migrating the notification system from polling to SSE. Include architecture, phases, and risks.",
+    "should_trigger": false,
+    "note": "Plan creation — superpowers:writing-plans, not project-lifecycle (lifecycle bootstraps FROM a plan)"
+  },
+  {
+    "query": "what should I work on next? scan all open projects and backlog.",
+    "should_trigger": false,
+    "note": "Work recommendation — autopilot:next, not project-lifecycle"
+  },
+  {
+    "query": "run tests and code review before I merge this feature branch",
+    "should_trigger": false,
+    "note": "Quality gate — autopilot:quality-pipeline, not project-lifecycle"
+  },
+  {
+    "query": "dispatch 3 parallel agents to work on the schema migration, type generation, and frontend updates simultaneously",
+    "should_trigger": false,
+    "note": "Parallel dispatch — superpowers:dispatching-parallel-agents, not project-lifecycle"
+  },
+  {
+    "query": "record the advisory lock gotcha in knowledge so future sessions know about it",
+    "should_trigger": false,
+    "note": "Knowledge recording — autopilot:learn, not project-lifecycle"
+  }
+]

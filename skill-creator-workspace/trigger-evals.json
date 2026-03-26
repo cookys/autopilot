@@ -1,0 +1,102 @@
+[
+  {
+    "query": "I need to add a new payment processing endpoint to our Rust backend. It touches the accounting module, the API layer, and needs a new DB migration. Should probably plan this out first.",
+    "should_trigger": true,
+    "expected_skill": "dev-flow"
+  },
+  {
+    "query": "just fix the typo in the error message on line 42 of auth.rs, super quick",
+    "should_trigger": true,
+    "expected_skill": "dev-flow"
+  },
+  {
+    "query": "we're considering switching from REST to gRPC for internal services, but I'm not sure about the tradeoffs. Can you look into what other companies in fintech are doing?",
+    "should_trigger": true,
+    "expected_skill": "survey"
+  },
+  {
+    "query": "should we build the notification system as a separate microservice or keep it in the monolith? this affects deployment, monitoring, and team ownership. I want multiple perspectives on this.",
+    "should_trigger": true,
+    "expected_skill": "think-tank"
+  },
+  {
+    "query": "CEO mode. Handle the entire billing reconciliation feature. Level 3, you decide everything. No-go: don't touch the legacy payment gateway.",
+    "should_trigger": true,
+    "expected_skill": "ceo-agent"
+  },
+  {
+    "query": "I'm about to merge this feature branch to main. Run the full quality checks before I do — tests, completeness scan, code review, everything.",
+    "should_trigger": true,
+    "expected_skill": "quality-pipeline"
+  },
+  {
+    "query": "we just finished the auth rewrite and it's merged. can you set up the project tracking, archive everything, update the index?",
+    "should_trigger": true,
+    "expected_skill": "project-lifecycle"
+  },
+  {
+    "query": "I spent 3 hours debugging this advisory lock issue. Turns out pg_try_advisory_lock is session-scoped and doesn't release when the connection returns to the pool. Save this so we don't hit it again.",
+    "should_trigger": true,
+    "expected_skill": "learn"
+  },
+  {
+    "query": "give me a retrospective on the last 2 weeks of commits — velocity, test ratio, focus score, hotspot files. I want to see if we're improving.",
+    "should_trigger": true,
+    "expected_skill": "retro"
+  },
+  {
+    "query": "I just finished archiving the billing project. What should I work on next? Check all the plans, backlog, and open proposals.",
+    "should_trigger": true,
+    "expected_skill": "next"
+  },
+  {
+    "query": "compare the old CRM's client list page with our new Vue 3 implementation. Check field completeness, sorting, filtering, and export functionality. Flag anything we're missing.",
+    "should_trigger": true,
+    "expected_skill": "audit"
+  },
+  {
+    "query": "this API endpoint is returning a 500 error when I pass an empty array. Can you look at the handler code and figure out what's going wrong?",
+    "should_trigger": false,
+    "note": "debugging — should go to superpowers:systematic-debugging, not autopilot"
+  },
+  {
+    "query": "write a unit test for the calculate_profit function. It should cover the FIFO case, empty positions, and negative quantities.",
+    "should_trigger": false,
+    "note": "testing — should go to superpowers:test-driven-development, not autopilot"
+  },
+  {
+    "query": "I need to run these 4 independent refactoring tasks in parallel — each touches different modules with no shared state.",
+    "should_trigger": false,
+    "note": "parallel dispatch — should go to superpowers:dispatching-parallel-agents, not autopilot"
+  },
+  {
+    "query": "the backend is using 23GB RAM in production. The heap keeps growing after every accountingd batch run. Need to profile this.",
+    "should_trigger": false,
+    "note": "profiling — removed from autopilot, session rule should inject config but superpowers handles execution"
+  },
+  {
+    "query": "read the contents of backend/src/accounting/service.rs and explain what the reconcile function does",
+    "should_trigger": false,
+    "note": "simple code reading — no skill needed"
+  },
+  {
+    "query": "create a new Vue component for the client detail page with a tab layout showing profile, accounts, and activity history",
+    "should_trigger": false,
+    "note": "frontend implementation — domain skill or direct implementation, not autopilot"
+  },
+  {
+    "query": "update the Dockerfile to use multi-stage builds and reduce the image size",
+    "should_trigger": false,
+    "note": "infrastructure — not autopilot territory"
+  },
+  {
+    "query": "write me a brainstorming session about the new onboarding flow — explore different approaches and user journeys before we commit to anything",
+    "should_trigger": false,
+    "note": "brainstorming — should go to superpowers:brainstorming, not autopilot"
+  },
+  {
+    "query": "I just got code review feedback on PR #234. Some suggestions seem wrong though — the reviewer says we should use a different pattern but I think our approach is correct. Help me evaluate their suggestions.",
+    "should_trigger": false,
+    "note": "receiving code review — should go to superpowers:receiving-code-review, not autopilot"
+  }
+]

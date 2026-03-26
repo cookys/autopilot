@@ -1,0 +1,52 @@
+[
+  {
+    "query": "should we build the real-time monitoring dashboard as a separate SPA or integrate it into the existing console? I want perspectives from architect, ops, UX, and product.",
+    "should_trigger": true,
+    "note": "Strategic architecture decision needing multi-role debate"
+  },
+  {
+    "query": "we need to decide: do we ship allowance distribution in phase 1 with basic tiers only, or wait and ship the full policy engine? This affects go-live timeline.",
+    "should_trigger": true,
+    "note": "Scope decision with tradeoffs — classic think-tank trigger"
+  },
+  {
+    "query": "what's the blast radius of switching the scheduler from 30-minute batches to real-time event processing? I want to hear from QA, ops, and architect.",
+    "should_trigger": true,
+    "note": "Risk assessment across 3+ modules — think-tank trigger"
+  },
+  {
+    "query": "performance vs features tradeoff: we can either optimize the P&L calculation to be 10x faster, or add the new cross-tenant billing feature. Both are P1. Which first?",
+    "should_trigger": true,
+    "note": "Tradeoff analysis with competing priorities"
+  },
+  {
+    "query": "the CRM redesign could go three ways: minimal reskin, full IA restructure, or phased migration. each has different user impact and dev cost. let's debate this.",
+    "should_trigger": true,
+    "note": "Product/strategy decision with multiple options and competing concerns"
+  },
+  {
+    "query": "which Rust crate should we use for job scheduling — tokio-cron-scheduler vs apalis vs custom? Compare features and maintenance status.",
+    "should_trigger": false,
+    "note": "Pure tech selection — autopilot:survey, not think-tank"
+  },
+  {
+    "query": "investigate what fintech companies use for real-time equity calculations. Look at industry benchmarks and published architectures.",
+    "should_trigger": false,
+    "note": "External research — autopilot:survey, not think-tank"
+  },
+  {
+    "query": "CEO mode. Just handle the notification integration end to end. You decide everything.",
+    "should_trigger": false,
+    "note": "Full delegation — autopilot:ceo-agent, not think-tank"
+  },
+  {
+    "query": "I need to run the billing calculation, the ETL sync, and the report generation in parallel — they're independent tasks.",
+    "should_trigger": false,
+    "note": "Parallel dispatch — superpowers:dispatching-parallel-agents, not think-tank"
+  },
+  {
+    "query": "brainstorm creative approaches for the onboarding flow — wild ideas welcome, we'll narrow down later",
+    "should_trigger": false,
+    "note": "Open brainstorming — superpowers:brainstorming, not think-tank (think-tank is structured debate, not free ideation)"
+  }
+]

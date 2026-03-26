@@ -1,0 +1,52 @@
+[
+  {
+    "query": "/next",
+    "should_trigger": true,
+    "note": "Explicit /next invocation — scan all sources and recommend"
+  },
+  {
+    "query": "what should I work on next? check the backlog, open plans, and in-progress projects.",
+    "should_trigger": true,
+    "note": "Natural language work recommendation request"
+  },
+  {
+    "query": "I just finished and archived the allowance engine project. What's the highest priority thing to pick up now?",
+    "should_trigger": true,
+    "note": "Post-archive trigger — next auto-fires after project-lifecycle"
+  },
+  {
+    "query": "/next --deep",
+    "should_trigger": true,
+    "note": "Deep scan — C-level with TODO/FIXME stats and cold zone detection"
+  },
+  {
+    "query": "I have 2 hours before a meeting. What's the best S-size task I can knock out from the backlog?",
+    "should_trigger": true,
+    "note": "Time-constrained work selection — next with implicit S-size filter"
+  },
+  {
+    "query": "create a detailed plan for the notification system — phases, architecture, migration steps, rollback strategy",
+    "should_trigger": false,
+    "note": "Plan creation — superpowers:writing-plans, not next"
+  },
+  {
+    "query": "start implementing the monthly settlement scheduler. the plan is already approved.",
+    "should_trigger": false,
+    "note": "Starting implementation — autopilot:dev-flow, not next"
+  },
+  {
+    "query": "run the full quality checks on my branch before merging",
+    "should_trigger": false,
+    "note": "Quality gate — autopilot:quality-pipeline, not next"
+  },
+  {
+    "query": "let's brainstorm what features to build for the next quarter — notification system, advanced reporting, mobile app?",
+    "should_trigger": false,
+    "note": "Brainstorming future features — superpowers:brainstorming, not next (next scans existing tracked work)"
+  },
+  {
+    "query": "give me a retro on the last week — velocity, test ratio, what shipped",
+    "should_trigger": false,
+    "note": "Retrospective — autopilot:retro, not next"
+  }
+]

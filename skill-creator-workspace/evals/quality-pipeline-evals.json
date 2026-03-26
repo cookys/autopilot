@@ -1,0 +1,52 @@
+[
+  {
+    "query": "I'm about to merge feature/billing-engine into develop. Run the full quality gate — tests, completeness scan, code review, the works.",
+    "should_trigger": true,
+    "note": "Explicit pre-merge quality gate request"
+  },
+  {
+    "query": "run quality checks on my changes before I commit. make sure there are no stubs or TODOs left",
+    "should_trigger": true,
+    "note": "Pre-commit quality pipeline request"
+  },
+  {
+    "query": "scan my code for completeness — I want to make sure nothing is a placeholder or mock implementation before this goes to staging",
+    "should_trigger": true,
+    "note": "Completeness gate is a sub-step of quality-pipeline"
+  },
+  {
+    "query": "quality gate please. this is an L-size feature so I need the full pipeline: test, scan, completeness, review",
+    "should_trigger": true,
+    "note": "Direct invocation with explicit L-size route"
+  },
+  {
+    "query": "this is a hotfix for the scheduler panic. run quality checks — but skip completeness since it's a hotfix, just tests and review",
+    "should_trigger": true,
+    "note": "Hotfix route — quality-pipeline knows to skip scan/completeness"
+  },
+  {
+    "query": "write unit tests for the calculate_monthly_settlement function covering edge cases: zero balance, negative commission, cross-tenant split",
+    "should_trigger": false,
+    "note": "Writing tests — superpowers:test-driven-development, not quality-pipeline (which runs existing tests)"
+  },
+  {
+    "query": "the CI pipeline is failing on the lint step. Can you look at the GitHub Actions log and figure out why?",
+    "should_trigger": false,
+    "note": "Debugging CI failure — superpowers:systematic-debugging, not quality-pipeline"
+  },
+  {
+    "query": "I got review comments from my teammate on PR #87. Help me evaluate whether their suggestions about error handling are valid.",
+    "should_trigger": false,
+    "note": "Receiving external code review — superpowers:receiving-code-review, not quality-pipeline"
+  },
+  {
+    "query": "refactor the test suite in backend/src/accounting/tests/ to use shared fixtures instead of duplicating setup code",
+    "should_trigger": false,
+    "note": "Test refactoring — direct implementation work, not quality-pipeline"
+  },
+  {
+    "query": "run cargo clippy on the backend and fix all the warnings",
+    "should_trigger": false,
+    "note": "Direct linting command — no skill needed, just run the command"
+  }
+]

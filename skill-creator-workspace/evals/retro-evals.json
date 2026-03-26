@@ -1,0 +1,52 @@
+[
+  {
+    "query": "/retro 14d",
+    "should_trigger": true,
+    "note": "Explicit /retro invocation with 14-day window"
+  },
+  {
+    "query": "give me a retro on the last 2 weeks — I want to see velocity, test ratio, focus score, and whether we're improving compared to last month",
+    "should_trigger": true,
+    "note": "Natural language retro request with specific metrics"
+  },
+  {
+    "query": "how productive was this sprint? analyze the git history for the past 7 days — commit patterns, session lengths, hotspot files",
+    "should_trigger": true,
+    "note": "Sprint analysis request — retro territory"
+  },
+  {
+    "query": "回顧一下最近的工作模式 — 哪些時段最有生產力？test coverage 有進步嗎？",
+    "should_trigger": true,
+    "note": "Chinese trigger '回顧' with specific analysis questions"
+  },
+  {
+    "query": "analyze my commit history for the last 30 days. I want the hourly distribution chart, session detection, and ship of the week.",
+    "should_trigger": true,
+    "note": "Explicit retro metrics request with 30-day window"
+  },
+  {
+    "query": "what changed in the last 5 commits? show me the diff summary",
+    "should_trigger": false,
+    "note": "Git log review — just run git commands, not a full retrospective"
+  },
+  {
+    "query": "compare our old CRM implementation with the new Vue 3 version — check field completeness and feature parity",
+    "should_trigger": false,
+    "note": "Comparison audit — autopilot:audit, not retro"
+  },
+  {
+    "query": "what should I work on next? scan all the plans and backlog items.",
+    "should_trigger": false,
+    "note": "Work recommendation — autopilot:next, not retro"
+  },
+  {
+    "query": "review the code quality of my recent changes — look for security issues and missing error handling",
+    "should_trigger": false,
+    "note": "Code review — superpowers:code-reviewer or quality-pipeline, not retro"
+  },
+  {
+    "query": "debug why the test coverage dropped from 22% to 8% — which test files were deleted or broken?",
+    "should_trigger": false,
+    "note": "Debugging a specific issue — superpowers:systematic-debugging, not retro (retro reports the number, doesn't fix it)"
+  }
+]

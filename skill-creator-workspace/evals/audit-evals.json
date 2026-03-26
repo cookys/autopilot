@@ -1,0 +1,52 @@
+[
+  {
+    "query": "compare the old CRM's client list page (_reference/crm/) with our new Vue 3 implementation in frontend/. Check every field, filter, sort option, and export feature.",
+    "should_trigger": true,
+    "note": "Feature parity audit — old vs new implementation"
+  },
+  {
+    "query": "audit the console billing page against the legacy Panel. Make sure we haven't missed any fields or calculations in the monthly statement view.",
+    "should_trigger": true,
+    "note": "Field completeness audit between two systems"
+  },
+  {
+    "query": "verify that our Rust P&L calculation matches the gobe implementation. Compare the FIFO logic step by step — I want to know every divergence.",
+    "should_trigger": true,
+    "note": "Behavioral comparison audit between old and new backend"
+  },
+  {
+    "query": "check our API responses against the OpenAPI spec. Are there fields in the spec that we're not returning, or fields we return that aren't documented?",
+    "should_trigger": true,
+    "note": "Spec vs implementation audit"
+  },
+  {
+    "query": "do a systematic comparison of the scheduler executor implementations — compare what gobe's cron jobs do vs what our Rust ticket executors do. Flag anything missing.",
+    "should_trigger": true,
+    "note": "Cross-system feature parity check"
+  },
+  {
+    "query": "should we prioritize finishing the audit or shipping the notification feature? Need different perspectives.",
+    "should_trigger": false,
+    "note": "Strategic decision — autopilot:think-tank, not audit"
+  },
+  {
+    "query": "give me a retrospective on the last 2 weeks of commits — how much time went to auditing vs new features?",
+    "should_trigger": false,
+    "note": "Retrospective — autopilot:retro, not audit"
+  },
+  {
+    "query": "debug why the P&L numbers don't match between PEACE and Panel for user 1234 on 2026-03-15",
+    "should_trigger": false,
+    "note": "Debugging a specific discrepancy — superpowers:systematic-debugging (or domain-specific debugging), not a systematic audit"
+  },
+  {
+    "query": "write tests that verify our billing calculation matches the expected output from the legacy system",
+    "should_trigger": false,
+    "note": "Writing tests — superpowers:test-driven-development, not audit"
+  },
+  {
+    "query": "read _reference/gobe/app/cockpit/hestia.go and explain the equity calculation logic",
+    "should_trigger": false,
+    "note": "Code reading — no skill needed, just read the file"
+  }
+]

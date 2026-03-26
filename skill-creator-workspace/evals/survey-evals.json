@@ -1,0 +1,52 @@
+[
+  {
+    "query": "we're considering switching from reqwest to hyper for the BQ cockpit client. Can you research what the Rust community recommends for high-throughput HTTP clients?",
+    "should_trigger": true,
+    "note": "Tech selection research — classic survey trigger"
+  },
+  {
+    "query": "survey: what's the industry standard for real-time P&L streaming? SSE, websockets, gRPC streaming? Especially in fintech/trading platforms.",
+    "should_trigger": true,
+    "note": "Explicit /survey invocation with domain context"
+  },
+  {
+    "query": "I'm not sure whether to use advisory locks or FOR UPDATE SKIP LOCKED for the scheduler job dequeue. What do other projects do?",
+    "should_trigger": true,
+    "note": "Architecture decision with uncertainty — survey signal"
+  },
+  {
+    "query": "investigate the tradeoffs between jemalloc, mimalloc, and tcmalloc for a Rust service doing large batch allocations. Need benchmarks.",
+    "should_trigger": true,
+    "note": "Technology selection with specific options to compare"
+  },
+  {
+    "query": "業界怎麼做 multi-tenant billing? 我想看看 Stripe, Chargebee 這些平台的做法",
+    "should_trigger": true,
+    "note": "Chinese trigger phrase '業界怎麼做' — explicit survey request"
+  },
+  {
+    "query": "should we prioritize the notification system or the monthly settlement feature? Which gives more business value for go-live?",
+    "should_trigger": false,
+    "note": "Strategic priority decision — autopilot:think-tank, not survey. No external research needed."
+  },
+  {
+    "query": "let's brainstorm different data models for the allowance distribution system — hierarchical vs flat vs graph-based",
+    "should_trigger": false,
+    "note": "Brainstorming — superpowers:brainstorming, not survey"
+  },
+  {
+    "query": "create a plan for migrating the scheduler from cron-based to event-driven. Include phases, risks, and rollback strategy.",
+    "should_trigger": false,
+    "note": "Plan creation — superpowers:writing-plans, not survey"
+  },
+  {
+    "query": "look at backend/src/accountingd/scheduler.rs and explain how the advisory lock pattern works",
+    "should_trigger": false,
+    "note": "Code reading/explanation — no skill needed, just read the file"
+  },
+  {
+    "query": "the websocket connection drops after 60 seconds. Debug this — check the timeout config, nginx proxy settings, and keep-alive headers.",
+    "should_trigger": false,
+    "note": "Debugging — superpowers:systematic-debugging, not survey"
+  }
+]

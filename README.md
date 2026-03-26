@@ -307,7 +307,31 @@ v2 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with
 In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.
 
 **How does it work with Superpowers?**
-Autopilot is the rule-setter; Superpowers is the executor. dev-flow sets session rules ("when debugging, read your project config"), and Superpowers' skills execute within those rules. Zero coupling — Autopilot never dispatches to or wraps Superpowers skills.
+
+Autopilot is the rule-setter; Superpowers is the executor. They coexist through a layered triggering design:
+
+```
+Layer 1 — CLAUDE.md routing table (project-level)
+  "新功能規劃 → autopilot:dev-flow"
+  "技術調研 → autopilot:survey"
+  Maps project context to skills. Written by the user.
+
+Layer 2 — using-superpowers skill (session-level)
+  "Check skills BEFORE any response. Even 1% chance = invoke."
+  This is what makes skill triggering work. Without it,
+  the model answers directly and never checks skills.
+
+Layer 3 — Skill description (skill-level)
+  "Use when: 'compare X with Y', 'check X against Y'..."
+  User-intent trigger phrases help the model match
+  the user's words to the right skill.
+```
+
+All three layers must work together. Layer 2 (Superpowers' `using-superpowers`) creates the *habit* of checking skills; Layer 1 (CLAUDE.md) provides project-specific routing; Layer 3 (descriptions) provides the semantic match. Autopilot never dispatches to or wraps Superpowers skills — they share the session, not a call chain.
+
+**Why do descriptions use quoted trigger phrases?**
+
+Skill descriptions serve Layer 3 — they're the last-mile match between user intent and skill selection. We write them in user-intent language (`"what should I work on"`, `"get it done"`, `"let's debate this"`) rather than internal mechanics (`"global work recommender"`, `"autonomous execution mode"`) because the model matches user messages against descriptions. The closer the description mirrors what users actually say, the more reliable the trigger.
 
 ---
 

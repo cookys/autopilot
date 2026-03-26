@@ -1,9 +1,10 @@
 ---
 name: dev-flow
 description: >
-  Development lifecycle orchestrator — sizes tasks (S/L/H/Fix), sets session rules for config
-  injection and quality gates, manages project tracking. Invoke BEFORE starting any code changes,
-  including context continuations. Works WITH superpowers skills, not against them.
+  Size and gate your session before you code. Determine task scope (S/L/H/Fix), validate branch
+  readiness, check for planning overlaps, set session rules. Use when starting a feature with or
+  without a plan, resuming work mid-stream, or tackling multi-module changes—anything that needs
+  pre-code validation and setup.
 ---
 
 # Development Flow Evaluation

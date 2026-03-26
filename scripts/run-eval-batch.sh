@@ -58,3 +58,10 @@ for skill in "${SKILLS[@]}"; do
 done
 echo ""
 echo "Results in: $RESULTS_BASE/*/$TIMESTAMP/"
+
+# Clean up eval artifacts that pollute the global skill list
+ARTIFACTS=$(ls ~/.claude/commands/*-skill-*.md 2>/dev/null | wc -l)
+if [[ "$ARTIFACTS" -gt 0 ]]; then
+  rm ~/.claude/commands/*-skill-*.md
+  echo "Cleaned $ARTIFACTS eval artifact(s) from ~/.claude/commands/"
+fi

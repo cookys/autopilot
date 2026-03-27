@@ -1,0 +1,456 @@
+{
+  "exit_reason": "max_iterations (3)",
+  "original_description": "Full delegation \u2014 you own the goal end-to-end, user just wants results. Triggers: \"CEO mode\", \"get it done\", \"you decide\", \"handle everything\", \"I trust you\", \"take over\", \"full authority\", \"just do it\", \"\u641e\u5b9a X\", \"\u5e6b\u6211\u8655\u7406\", \"\u5168\u6b0a\u8655\u7406\", \"\u4f60\u6c7a\u5b9a\". Not for: research-only (\u2192 survey), participatory planning (\u2192 dev-flow), or parallel task dispatch.",
+  "best_description": "Full delegation \u2014 you own the goal end-to-end, user just wants results. Triggers: \"CEO mode\", \"get it done\", \"you decide\", \"handle everything\", \"I trust you\", \"take over\", \"full authority\", \"just do it\", \"\u641e\u5b9a X\", \"\u5e6b\u6211\u8655\u7406\", \"\u5168\u6b0a\u8655\u7406\", \"\u4f60\u6c7a\u5b9a\". Not for: research-only (\u2192 survey), participatory planning (\u2192 dev-flow), or parallel task dispatch.",
+  "best_score": "2/4",
+  "best_train_score": "3/6",
+  "best_test_score": "2/4",
+  "final_description": "You've decided Claude should own it completely. Set the goal and constraints, Claude drives autonomously to completion. Typical signals: decision fatigue ('I don't want to think about this'), explicit authority ('you decide', 'full authority', 'handle it', 'take over'), or results-only framing ('just deliver it', 'report when done'). Claude makes all strategic and tactical choices within your stated no-go zones, then reports back. Not for: pure research, collaborative design, or staying hands-on.",
+  "iterations_run": 3,
+  "holdout": 0.4,
+  "train_size": 6,
+  "test_size": 4,
+  "history": [
+    {
+      "iteration": 1,
+      "description": "Full delegation \u2014 you own the goal end-to-end, user just wants results. Triggers: \"CEO mode\", \"get it done\", \"you decide\", \"handle everything\", \"I trust you\", \"take over\", \"full authority\", \"just do it\", \"\u641e\u5b9a X\", \"\u5e6b\u6211\u8655\u7406\", \"\u5168\u6b0a\u8655\u7406\", \"\u4f60\u6c7a\u5b9a\". Not for: research-only (\u2192 survey), participatory planning (\u2192 dev-flow), or parallel task dispatch.",
+      "train_passed": 3,
+      "train_failed": 3,
+      "train_total": 6,
+      "train_results": [
+        {
+          "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "handle the go-live gap closure. you have full authority to fix whatever's needed \u2014 notifications, scheduler, yesterday close. just don't break existing accounting.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I need to add a new API endpoint for client monitoring. Let me plan this out \u2014 what size should this be?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I don't want to think about this anymore. Take over the console migration \u2014 figure out what's left, prioritize, execute. Report when done.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives \u2014 architect, ops, product.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        }
+      ],
+      "test_passed": 2,
+      "test_failed": 2,
+      "test_total": 4,
+      "test_results": [
+        {
+          "query": "debug the memory leak in accountingd \u2014 it's using 23GB after batch runs",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "run these 5 tasks in parallel: update the schema, regenerate types, fix the migration, update the tests, deploy to staging",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "ok just get it done, I trust you. implement the monthly settlement scheduler and wire up all the policies. you decide how.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "CEO mode, reduce scope. Ship the absolute minimum viable allowance distribution \u2014 cut everything non-essential. Scope mode: reduce.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        }
+      ],
+      "passed": 3,
+      "failed": 3,
+      "total": 6,
+      "results": [
+        {
+          "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "handle the go-live gap closure. you have full authority to fix whatever's needed \u2014 notifications, scheduler, yesterday close. just don't break existing accounting.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I need to add a new API endpoint for client monitoring. Let me plan this out \u2014 what size should this be?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I don't want to think about this anymore. Take over the console migration \u2014 figure out what's left, prioritize, execute. Report when done.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives \u2014 architect, ops, product.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        }
+      ]
+    },
+    {
+      "iteration": 2,
+      "description": "Autonomous delegation: user hands you the complete goal with constraints/no-gos, expects you to decide and execute without checking back. Triggered by signals of decisional handoff\u2014mental step-back ('I don't want to think about this', 'just get it done'), explicit authority grant ('full authority', 'you decide', 'take over', 'handle it'), or requests for finished work without process involvement. You operate within their stated no-go zones. Key difference from dev-flow: there, Claude asks at decision forks; here, you decide solo. Not for: research-only queries, design collaboration, or scenarios where user stays in the loop.",
+      "train_passed": 3,
+      "train_failed": 3,
+      "train_total": 6,
+      "train_results": [
+        {
+          "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "I don't want to think about this anymore. Take over the console migration \u2014 figure out what's left, prioritize, execute. Report when done.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I need to add a new API endpoint for client monitoring. Let me plan this out \u2014 what size should this be?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives \u2014 architect, ops, product.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "handle the go-live gap closure. you have full authority to fix whatever's needed \u2014 notifications, scheduler, yesterday close. just don't break existing accounting.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        }
+      ],
+      "test_passed": 2,
+      "test_failed": 2,
+      "test_total": 4,
+      "test_results": [
+        {
+          "query": "debug the memory leak in accountingd \u2014 it's using 23GB after batch runs",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "ok just get it done, I trust you. implement the monthly settlement scheduler and wire up all the policies. you decide how.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "run these 5 tasks in parallel: update the schema, regenerate types, fix the migration, update the tests, deploy to staging",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode, reduce scope. Ship the absolute minimum viable allowance distribution \u2014 cut everything non-essential. Scope mode: reduce.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        }
+      ],
+      "passed": 3,
+      "failed": 3,
+      "total": 6,
+      "results": [
+        {
+          "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "I don't want to think about this anymore. Take over the console migration \u2014 figure out what's left, prioritize, execute. Report when done.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I need to add a new API endpoint for client monitoring. Let me plan this out \u2014 what size should this be?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives \u2014 architect, ops, product.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "handle the go-live gap closure. you have full authority to fix whatever's needed \u2014 notifications, scheduler, yesterday close. just don't break existing accounting.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        }
+      ]
+    },
+    {
+      "iteration": 3,
+      "description": "You've decided Claude should own it completely. Set the goal and constraints, Claude drives autonomously to completion. Typical signals: decision fatigue ('I don't want to think about this'), explicit authority ('you decide', 'full authority', 'handle it', 'take over'), or results-only framing ('just deliver it', 'report when done'). Claude makes all strategic and tactical choices within your stated no-go zones, then reports back. Not for: pure research, collaborative design, or staying hands-on.",
+      "train_passed": 3,
+      "train_failed": 3,
+      "train_total": 6,
+      "train_results": [
+        {
+          "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives \u2014 architect, ops, product.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "I don't want to think about this anymore. Take over the console migration \u2014 figure out what's left, prioritize, execute. Report when done.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "handle the go-live gap closure. you have full authority to fix whatever's needed \u2014 notifications, scheduler, yesterday close. just don't break existing accounting.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I need to add a new API endpoint for client monitoring. Let me plan this out \u2014 what size should this be?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        }
+      ],
+      "test_passed": 2,
+      "test_failed": 2,
+      "test_total": 4,
+      "test_results": [
+        {
+          "query": "ok just get it done, I trust you. implement the monthly settlement scheduler and wire up all the policies. you decide how.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "debug the memory leak in accountingd \u2014 it's using 23GB after batch runs",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode, reduce scope. Ship the absolute minimum viable allowance distribution \u2014 cut everything non-essential. Scope mode: reduce.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "run these 5 tasks in parallel: update the schema, regenerate types, fix the migration, update the tests, deploy to staging",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        }
+      ],
+      "passed": 3,
+      "failed": 3,
+      "total": 6,
+      "results": [
+        {
+          "query": "should we build the notification system as a microservice or keep it in the monolith? I want different perspectives \u2014 architect, ops, product.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "I don't want to think about this anymore. Take over the console migration \u2014 figure out what's left, prioritize, execute. Report when done.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "handle the go-live gap closure. you have full authority to fix whatever's needed \u2014 notifications, scheduler, yesterday close. just don't break existing accounting.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "I need to add a new API endpoint for client monitoring. Let me plan this out \u2014 what size should this be?",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        },
+        {
+          "query": "CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don't modify the existing webhook system.",
+          "should_trigger": true,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": false
+        },
+        {
+          "query": "investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.",
+          "should_trigger": false,
+          "trigger_rate": 0.0,
+          "triggers": 0,
+          "runs": 1,
+          "pass": true
+        }
+      ]
+    }
+  ]
+}

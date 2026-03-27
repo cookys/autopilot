@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ceo-agent — Skill Description Optimization</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Lora', Georgia, serif;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+            background: #faf9f5;
+            color: #141413;
+        }
+        h1 { font-family: 'Poppins', sans-serif; color: #141413; }
+        .explainer {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #e8e6dc;
+            color: #b0aea5;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+        .summary {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #e8e6dc;
+        }
+        .summary p { margin: 5px 0; }
+        .best { color: #788c5d; font-weight: bold; }
+        .table-container {
+            overflow-x: auto;
+            width: 100%;
+        }
+        table {
+            border-collapse: collapse;
+            background: white;
+            border: 1px solid #e8e6dc;
+            border-radius: 6px;
+            font-size: 12px;
+            min-width: 100%;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #e8e6dc;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        th {
+            font-family: 'Poppins', sans-serif;
+            background: #141413;
+            color: #faf9f5;
+            font-weight: 500;
+        }
+        th.test-col {
+            background: #6a9bcc;
+        }
+        th.query-col { min-width: 200px; }
+        td.description {
+            font-family: monospace;
+            font-size: 11px;
+            word-wrap: break-word;
+            max-width: 400px;
+        }
+        td.result {
+            text-align: center;
+            font-size: 16px;
+            min-width: 40px;
+        }
+        td.test-result {
+            background: #f0f6fc;
+        }
+        .pass { color: #788c5d; }
+        .fail { color: #c44; }
+        .rate {
+            font-size: 9px;
+            color: #b0aea5;
+            display: block;
+        }
+        tr:hover { background: #faf9f5; }
+        .score {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        .score-good { background: #eef2e8; color: #788c5d; }
+        .score-ok { background: #fef3c7; color: #d97706; }
+        .score-bad { background: #fceaea; color: #c44; }
+        .train-label { color: #b0aea5; font-size: 10px; }
+        .test-label { color: #6a9bcc; font-size: 10px; font-weight: bold; }
+        .best-row { background: #f5f8f2; }
+        th.positive-col { border-bottom: 3px solid #788c5d; }
+        th.negative-col { border-bottom: 3px solid #c44; }
+        th.test-col.positive-col { border-bottom: 3px solid #788c5d; }
+        th.test-col.negative-col { border-bottom: 3px solid #c44; }
+        .legend { font-family: 'Poppins', sans-serif; display: flex; gap: 20px; margin-bottom: 10px; font-size: 13px; align-items: center; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-swatch { width: 16px; height: 16px; border-radius: 3px; display: inline-block; }
+        .swatch-positive { background: #141413; border-bottom: 3px solid #788c5d; }
+        .swatch-negative { background: #141413; border-bottom: 3px solid #c44; }
+        .swatch-test { background: #6a9bcc; }
+        .swatch-train { background: #141413; }
+    </style>
+</head>
+<body>
+    <h1>ceo-agent — Skill Description Optimization</h1>
+    <div class="explainer">
+        <strong>Optimizing your skill's description.</strong> This page updates automatically as Claude tests different versions of your skill's description. Each row is an iteration — a new description attempt. The columns show test queries: green checkmarks mean the skill triggered correctly (or correctly didn't trigger), red crosses mean it got it wrong. The "Train" score shows performance on queries used to improve the description; the "Test" score shows performance on held-out queries the optimizer hasn't seen. When it's done, Claude will apply the best-performing description to your skill.
+    </div>
+
+    <div class="summary">
+        <p><strong>Original:</strong> Full delegation — you own the goal end-to-end, user just wants results. Triggers: &quot;CEO mode&quot;, &quot;get it done&quot;, &quot;you decide&quot;, &quot;handle everything&quot;, &quot;I trust you&quot;, &quot;take over&quot;, &quot;full authority&quot;, &quot;just do it&quot;, &quot;搞定 X&quot;, &quot;幫我處理&quot;, &quot;全權處理&quot;, &quot;你決定&quot;. Not for: research-only (→ survey), participatory planning (→ dev-flow), or parallel task dispatch.</p>
+        <p class="best"><strong>Best:</strong> Full delegation — you own the goal end-to-end, user just wants results. Triggers: &quot;CEO mode&quot;, &quot;get it done&quot;, &quot;you decide&quot;, &quot;handle everything&quot;, &quot;I trust you&quot;, &quot;take over&quot;, &quot;full authority&quot;, &quot;just do it&quot;, &quot;搞定 X&quot;, &quot;幫我處理&quot;, &quot;全權處理&quot;, &quot;你決定&quot;. Not for: research-only (→ survey), participatory planning (→ dev-flow), or parallel task dispatch.</p>
+        <p><strong>Best Score:</strong> 2/4 (test)</p>
+        <p><strong>Iterations:</strong> 3 | <strong>Train:</strong> 6 | <strong>Test:</strong> 4</p>
+    </div>
+
+    <div class="legend">
+        <span style="font-weight:600">Query columns:</span>
+        <span class="legend-item"><span class="legend-swatch swatch-positive"></span> Should trigger</span>
+        <span class="legend-item"><span class="legend-swatch swatch-negative"></span> Should NOT trigger</span>
+        <span class="legend-item"><span class="legend-swatch swatch-train"></span> Train</span>
+        <span class="legend-item"><span class="legend-swatch swatch-test"></span> Test</span>
+    </div>
+
+    <div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Iter</th>
+                <th>Train</th>
+                <th>Test</th>
+                <th class="query-col">Description</th>
+                <th class="negative-col">investigate whether we should use jemalloc or mimalloc for the accountingd memory issue. research both options and give me a comparison.</th>
+                <th class="positive-col">handle the go-live gap closure. you have full authority to fix whatever&#x27;s needed — notifications, scheduler, yesterday close. just don&#x27;t break existing accounting.</th>
+                <th class="negative-col">I need to add a new API endpoint for client monitoring. Let me plan this out — what size should this be?</th>
+                <th class="positive-col">CEO mode. Handle the entire LINE notification integration end to end. Level 3 autonomy, just results. No-go: don&#x27;t modify the existing webhook system.</th>
+                <th class="positive-col">I don&#x27;t want to think about this anymore. Take over the console migration — figure out what&#x27;s left, prioritize, execute. Report when done.</th>
+                <th class="negative-col">should we build the notification system as a microservice or keep it in the monolith? I want different perspectives — architect, ops, product.</th>
+                <th class="test-col negative-col">debug the memory leak in accountingd — it&#x27;s using 23GB after batch runs</th>
+                <th class="test-col negative-col">run these 5 tasks in parallel: update the schema, regenerate types, fix the migration, update the tests, deploy to staging</th>
+                <th class="test-col positive-col">ok just get it done, I trust you. implement the monthly settlement scheduler and wire up all the policies. you decide how.</th>
+                <th class="test-col positive-col">CEO mode, reduce scope. Ship the absolute minimum viable allowance distribution — cut everything non-essential. Scope mode: reduce.</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="best-row">
+                <td>1</td>
+                <td><span class="score score-ok">3/6</span></td>
+                <td><span class="score score-ok">2/4</span></td>
+                <td class="description">Full delegation — you own the goal end-to-end, user just wants results. Triggers: &quot;CEO mode&quot;, &quot;get it done&quot;, &quot;you decide&quot;, &quot;handle everything&quot;, &quot;I trust you&quot;, &quot;take over&quot;, &quot;full authority&quot;, &quot;just do it&quot;, &quot;搞定 X&quot;, &quot;幫我處理&quot;, &quot;全權處理&quot;, &quot;你決定&quot;. Not for: research-only (→ survey), participatory planning (→ dev-flow), or parallel task dispatch.</td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result fail">✗<span class="rate">0/1</span></td>
+                <td class="result test-result fail">✗<span class="rate">0/1</span></td>
+            </tr>
+            <tr class="">
+                <td>2</td>
+                <td><span class="score score-ok">3/6</span></td>
+                <td><span class="score score-ok">2/4</span></td>
+                <td class="description">Autonomous delegation: user hands you the complete goal with constraints/no-gos, expects you to decide and execute without checking back. Triggered by signals of decisional handoff—mental step-back (&#x27;I don&#x27;t want to think about this&#x27;, &#x27;just get it done&#x27;), explicit authority grant (&#x27;full authority&#x27;, &#x27;you decide&#x27;, &#x27;take over&#x27;, &#x27;handle it&#x27;), or requests for finished work without process involvement. You operate within their stated no-go zones. Key difference from dev-flow: there, Claude asks at decision forks; here, you decide solo. Not for: research-only queries, design collaboration, or scenarios where user stays in the loop.</td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result fail">✗<span class="rate">0/1</span></td>
+                <td class="result test-result fail">✗<span class="rate">0/1</span></td>
+            </tr>
+            <tr class="">
+                <td>3</td>
+                <td><span class="score score-ok">3/6</span></td>
+                <td><span class="score score-ok">2/4</span></td>
+                <td class="description">You&#x27;ve decided Claude should own it completely. Set the goal and constraints, Claude drives autonomously to completion. Typical signals: decision fatigue (&#x27;I don&#x27;t want to think about this&#x27;), explicit authority (&#x27;you decide&#x27;, &#x27;full authority&#x27;, &#x27;handle it&#x27;, &#x27;take over&#x27;), or results-only framing (&#x27;just deliver it&#x27;, &#x27;report when done&#x27;). Claude makes all strategic and tactical choices within your stated no-go zones, then reports back. Not for: pure research, collaborative design, or staying hands-on.</td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result fail">✗<span class="rate">0/1</span></td>
+                <td class="result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result pass">✓<span class="rate">0/1</span></td>
+                <td class="result test-result fail">✗<span class="rate">0/1</span></td>
+                <td class="result test-result fail">✗<span class="rate">0/1</span></td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+
+</body>
+</html>

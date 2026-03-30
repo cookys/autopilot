@@ -7,6 +7,7 @@ description: Team allocation and dependency-aware parallelization — decide whe
 
 ## Project Config (auto-injected)
 !`cat .claude/team-config.md 2>/dev/null || echo "_No config — using generic role templates below._"`
+!`cat .claude/agent-protocol-config.md 2>/dev/null || echo "_No agent protocol config — using defaults in references._"`
 
 ## When Teams Are Needed
 
@@ -30,13 +31,13 @@ L-size task
 
 ## Role Templates
 
-| Role | subagent_type | Use Case |
-|------|--------------|----------|
-| backend-dev | `general-purpose` | Backend/server changes |
-| frontend-dev | `general-purpose` | Frontend/client changes |
-| auditor | `Explore` | Code audit, investigation |
-| researcher | `Explore` | Architecture research, comparison |
-| tester | `general-purpose` | E2E/stress testing |
+| Role | subagent_type | model | boundaries | Use Case |
+|------|--------------|-------|------------|----------|
+| backend-dev | `general-purpose` | sonnet | — | Backend/server changes |
+| frontend-dev | `general-purpose` | sonnet | — | Frontend/client changes |
+| auditor | `Explore` | sonnet | read-only | Code audit, investigation |
+| researcher | `Explore` | sonnet | read-only | Architecture research, comparison |
+| tester | `general-purpose` | haiku | read-only | E2E/stress testing |
 
 ## Team Size Rules
 
@@ -78,7 +79,8 @@ Agent tool:
   subagent_type: "<from role templates>"
   team_name: "<project-name>"
   name: "<role-name>"
-  prompt: "You are <role>, responsible for <specific work>..."
+  model: "<from role templates or agent-protocol-config>"
+  prompt: "<Construct using 6-section template in references/agent-dispatch-protocol.md>"
 ```
 
 ### Coordination Principles
@@ -87,7 +89,9 @@ Agent tool:
 2. **Concise messaging**: SendMessage only when coordination needed
 3. **Leader does not implement**: Leader coordinates + reviews, does not take tasks
 4. **Report on completion**: Teammate does TaskUpdate + SendMessage when done
-5. **Timely shutdown**: All tasks complete -> run shutdown flow
+5. **Structured return**: Teammates return using 4-status protocol ([references/agent-dispatch-protocol.md](references/agent-dispatch-protocol.md) §4)
+6. **Context discipline**: Output >500 words → write to file, return summary only
+7. **Timely shutdown**: All tasks complete -> run shutdown flow
 
 ### Shutdown
 
@@ -110,4 +114,5 @@ All tasks completed
 ## See Also
 
 - [Dependency Analysis + Parallelization Tactics](references/team-tactics.md)
+- [Agent Dispatch Protocol](references/agent-dispatch-protocol.md) — role template, dispatch/return format, context rules
 - `autopilot:dev-flow` — orchestrates team evaluation at L-4

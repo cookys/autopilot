@@ -254,6 +254,8 @@ Any criterion without a threshold or verification method means the plan is incom
 
 **Execution**: Implement -> quality gate -> commit -> mark phase done.
 
+**Team dispatch**: If this phase dispatches parallel agents, use `autopilot:team` for dispatch protocol. Project-specific overrides go in `.claude/agent-protocol-config.md`.
+
 **Backlog safety** (before deferring anything):
 
 1. Does this item affect the final goal? If **yes**, do NOT defer.

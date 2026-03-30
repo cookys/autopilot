@@ -362,6 +362,33 @@ Push/pull works normally across machines. Each machine runs step 1 once, then `d
 
 > **Note:** Dev mode sets `version: "dev"` in the plugin registry. To revert to the release version, run `/plugin update autopilot@autopilot`.
 
+### Cache directory layout
+
+The plugin cache lives at `~/.claude/plugins/cache/autopilot/autopilot/`. Each entry is either a versioned directory (snapshot from install/update) or a symlink to a local clone:
+
+```
+~/.claude/plugins/cache/autopilot/autopilot/
+├── develop -> ~/projects/autopilot   # symlink — live edits, /reload-plugins to sync
+└── 2.0.0                             # snapshot — created by install or reload
+```
+
+**Symlink naming**: The cache directory name does not need to be a semver string. You can use semantic names like `develop`, `nightly`, or `local` to distinguish dev symlinks from release snapshots. Claude Code resolves the symlink and reads `plugin.json` inside for the actual version.
+
+**Stale cache cleanup**: After upgrading, old version directories may linger. Remove them manually:
+
+```bash
+rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<old-version>
+```
+
+### Branch workflow
+
+| Branch | Purpose | `plugin.json` version |
+|--------|---------|----------------------|
+| `main` | Stable releases, tagged (e.g. `v1.4.5`) | Matches latest tag |
+| `develop` | Next version development | Next major/minor (e.g. `2.0.0`) |
+
+When developing: checkout `develop`, symlink points to it, `/reload-plugins` picks up changes. Remember to bump `plugin.json` version before tagging a release.
+
 ## Update (marketplace users)
 
 ```bash

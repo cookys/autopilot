@@ -356,6 +356,33 @@ Dev 模式會把 plugin cache 目錄 symlink 到你的本地 clone。修改 `ski
 
 > **注意：** Dev 模式會把版本設為 `dev`。要回到正式版，執行 `/plugin update autopilot@autopilot`。
 
+### Cache 目錄結構
+
+Plugin cache 在 `~/.claude/plugins/cache/autopilot/autopilot/`。每個 entry 是版本快照（安裝/更新時建立）或 symlink（指向本地 clone）：
+
+```
+~/.claude/plugins/cache/autopilot/autopilot/
+├── develop -> ~/projects/autopilot   # symlink — 即時編輯，/reload-plugins 同步
+└── 2.0.0                             # 快照 — 安裝或 reload 時建立
+```
+
+**Symlink 命名**：目錄名不需要是 semver。可以用語意名如 `develop`、`nightly`、`local` 區分開發 symlink 和正式快照。Claude Code 會讀 symlink 指向的 `plugin.json` 取得實際版本號。
+
+**清理舊 cache**：升版後舊目錄不會自動刪除，手動清理：
+
+```bash
+rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<舊版本>
+```
+
+### Branch 工作流
+
+| Branch | 用途 | `plugin.json` version |
+|--------|------|----------------------|
+| `main` | 穩定發佈，打 tag（如 `v1.4.5`） | 對應最新 tag |
+| `develop` | 下一版開發中 | 下一個主/次版號（如 `2.0.0`） |
+
+開發時：checkout `develop`，symlink 指向它，`/reload-plugins` 即時生效。發佈前記得 bump `plugin.json` version 再打 tag。
+
 ## 更新（marketplace 使用者）
 
 ```bash

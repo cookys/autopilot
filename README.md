@@ -2,14 +2,14 @@
 
 <p align="center">
   <strong>Lifecycle orchestration for Claude Code — sets the rules, Superpowers executes.</strong><br>
-  10 skills that add lifecycle management, strategic decisions, and quality gates<br>
+  11 skills that add lifecycle management, strategic decisions, and quality gates<br>
   on top of built-in Superpowers. Drop a config file, get project-aware workflows.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.0.0-E8A838?style=flat-square" alt="v2.0.0">
-  <img src="https://img.shields.io/badge/skills-10-4A90D9?style=flat-square" alt="10 Skills">
+  <img src="https://img.shields.io/badge/version-2.1.0-E8A838?style=flat-square" alt="v2.1.0">
+  <img src="https://img.shields.io/badge/skills-11-4A90D9?style=flat-square" alt="11 Skills">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -41,6 +41,7 @@ Autopilot adds **lifecycle orchestration and strategic intelligence** on top of 
 | **think-tank** | 6-role debate for strategic decisions | brainstorming (different level — requirements exploration) |
 | **ceo-agent** | Autonomous execution with CEO-level judgment | — (no equivalent) |
 | **quality-pipeline** | Unified quality gate: test → scan → completeness → review | verification-before-completion (partial) |
+| **finish-flow** | Size-aware closing forcing function — TaskCreates discrete L-5 / H-9 / Fix / S-Lite sub-tasks so nothing gets silently compressed | — (no equivalent) |
 | **project-lifecycle** | Plan → bootstrap → structure → archive | finishing-a-development-branch (partial) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **retro** | Engineering retrospective from git history | — (no equivalent) |
@@ -174,7 +175,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 /plugin install autopilot@autopilot
 ```
 
-That's it. All 10 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+That's it. All 11 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ---
 
@@ -216,6 +217,7 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 | Config File | Customizes | Template |
 |-------------|-----------|----------|
 | `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules | [template](project-config-template/dev-flow-config.md) |
+| `.claude/finish-flow-config.md` | L-5 / H-9 closing sequence overrides (merge target, archive proc, per-size quality gate) | [template](project-config-template/finish-flow-config.md) |
 | `.claude/quality-gate-config.md` | Test, scan, and review commands | [template](project-config-template/quality-gate-config.md) |
 | `.claude/project-lifecycle-config.md` | Project paths, bootstrap/archive scripts | [template](project-config-template/project-lifecycle-config.md) |
 | `.claude/next-config.md` | Work source paths for the next skill | [template](project-config-template/next-config.md) |
@@ -300,7 +302,7 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 10 skills, not 14?**
+**Why 11 skills, not 14?**
 v2 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with built-in Superpowers. Their methodology is now handled by Superpowers; their project-specific config injection is now handled by dev-flow's Session Rules. Fewer skills = less context window pressure, less routing ambiguity.
 
 **Why `!`command`` injection, not config files?**

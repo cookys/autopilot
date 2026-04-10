@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.1.0 — finish-flow Forcing Function
+
+### Added
+- **`finish-flow` skill** — size-aware closing sequence forcing function. On invocation, immediately `TaskCreate`s size-appropriate discrete sub-tasks (L=6, H=6, Fix=5, S=3) each with explicit verification output. Solves the "passive markdown gets mentally compressed" failure mode that caused repeated L-5 skips in real projects.
+  - L-size: Final Goal Review → Pre-Merge Review → Merge → Post-Merge Review → Archive → L Session End
+  - H-size: Verify fix → Quality gate → Merge to main → Post-incident learn (MANDATORY) → Delete hotfix branch → Session end
+  - Fix-size (5 tasks) and S-size (3 tasks) are OPTIONAL — finish-flow is only enforced for L and H to preserve lightweight-workflow constraints
+- **`project-config-template/finish-flow-config.md`** — template for project-specific closing overrides (merge target branch, archive procedure, per-size quality gate, known pitfalls)
+
+### Changed
+- **`dev-flow` L-1** now MANDATORILY creates a parent closing `TaskCreate` (`"L-5: Invoke autopilot:finish-flow"`) alongside phase tasks. Parent task stays pending through all phases and is surfaced by system-reminder after every tool use — the forcing function that makes the closing sequence unskippable
+- **`dev-flow` L-5** — inline 6-step closing sequence replaced with "invoke `autopilot:finish-flow`". The skill owns the closing sequence via discrete TaskCreate items
+- **`dev-flow` H workflow** — step 4 now delegates to `finish-flow` (same forcing function, H-size branch). H-1 mandates parent `"H-9: Invoke autopilot:finish-flow"` TaskCreate
+- **`dev-flow` anti-patterns** — +4 rows covering skipped L-1 parent TaskCreate, inlined closing, premature parent completion, batched sub-task TaskCreate
+- **`ceo-agent`** — merge-to-develop clarified as within CEO DOA (tactical, locally reversible; merge-to-main still requires Board approval). Execution steps updated to mandate parent closing TaskCreate and finish-flow invocation without pausing between sub-tasks. +3 anti-patterns
+- **`project-config-template/dev-flow-config.md`** — new "L-5 / H-9 Closing Forcing Function" section explaining how to reference finish-flow
+- **README / README.zh-TW** — skill count 10 → 11, finish-flow row added to skill table and config table
+
+### Background
+L-5 completion was silently skipped on 2026-03-17 and 2026-04-11 across different projects. Prior fixes tried bolder markdown, expanded sub-steps, explicit anti-patterns — all passive text, all mentally compressed into "one action" under time pressure. The only mechanism in Claude Code that produces **active** reminders is `TaskCreate` (surfaced by system-reminder after every tool use). This release converts closing-sequence enforcement from passive text to active task reminders. Core insight: the forcing function turns **passive skipping** (forgetting, compressing) into **active cheating** — good-faith operators will not cross the latter line.
+
+### Migration
+No config changes required. Existing `.claude/dev-flow-config.md` keeps working. Optionally drop `.claude/finish-flow-config.md` into projects that need closing-sequence overrides — see `project-config-template/finish-flow-config.md`.
+
+---
+
 ## v2.0.0 — Rule-Setter Architecture
 
 **Breaking:** Autopilot no longer competes with built-in Superpowers. It sets the rules; Superpowers executes.

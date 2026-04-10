@@ -63,3 +63,22 @@
 ## Session Summary
 # Generate session summary for L-size tasks: true/false
 # Summary output path (e.g., .claude/session-digests/):
+
+## L-5 / H-9 Closing Forcing Function (via autopilot:finish-flow)
+# dev-flow now delegates L-5 (L-size completion) and H-9 (hotfix closing)
+# to the autopilot:finish-flow skill, which uses active TaskCreate reminders
+# as a forcing function against silently-compressed closing sequences.
+#
+# At L-1 / H-1, dev-flow MANDATORILY creates a parent closing TaskCreate:
+#   TaskCreate: "L-5: Invoke autopilot:finish-flow"  (L-size)
+#   TaskCreate: "H-9: Invoke autopilot:finish-flow"  (H-size)
+# This parent task stays pending through all phases and is surfaced by
+# system-reminder after every tool use, so it cannot be silently skipped.
+#
+# If your project has specific L-5 / H-9 conventions (merge target branch,
+# archive procedure, learn triggers), add them to `.claude/finish-flow-config.md`
+# — see project-config-template/finish-flow-config.md for the template.
+#
+# Historical context: prior attempts to enforce L-5 closing via bolder markdown
+# warnings failed — passive text gets mentally compressed into "one action".
+# Active TaskCreate reminders are the forcing function that actually works.

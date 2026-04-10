@@ -199,7 +199,18 @@ When encountering these, pause and propose:
       closing task. The parent task is the forcing function for L-5 completion and is
       NON-OPTIONAL — missing it = failed L-1 gate.
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
-4. IF H-size: TaskCreate parent "H-9: Invoke autopilot:finish-flow" closing task.
+4. IF H-size:
+   a. Create hotfix branch (`hotfix/<description>`).
+   b. TaskCreate parent "H-9: Invoke autopilot:finish-flow" closing task with full description:
+      ```
+      TaskCreate: "H-9: Invoke autopilot:finish-flow"
+        description: MANDATORY hotfix completion. Invoke autopilot:finish-flow
+        which will expand into 6 discrete sub-tasks (verify fix, quality gate,
+        merge to main --no-ff, post-incident learn [MANDATORY], delete hotfix
+        branch, session end). Do not mark completed until all 6 sub-tasks
+        reach completed.
+      ```
+   The parent task is the forcing function for H-9 and is NON-OPTIONAL.
 5. Execute phases:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board

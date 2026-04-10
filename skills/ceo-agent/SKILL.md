@@ -164,7 +164,13 @@ Record all decisions in CEO Report for traceability. No prior approval needed, b
 |---------------|---------|-----|
 | Goal change | "WS compression -> delta encoding instead" | Pivot beyond original authorization |
 | Scope expansion | "Need to refactor X first" | Resources exceed estimate |
-| Irreversible ops | Delete files/branches, merge to main | Cannot undo |
+| Irreversible ops | Delete files/branches, force-push, drop tables | Cannot undo |
+
+**Note on merge as an "irreversible op"**: A `git merge --no-ff` into `develop` (or equivalent
+team-default branch) is considered **within CEO DOA** for L-size workflows when all pre-merge
+gates pass. This is tactical and locally reversible (`git reset --hard`). Merging to `main`
+or force-pushing is NOT within DOA. The forcing function in `autopilot:finish-flow` treats
+merge (L-5.3 / H-9.3) as an autonomous sub-task; CEO does not pause to ask before merging.
 | Resources 2x+ | Work estimate doubles original | Exceeds implied budget |
 
 When encountering these, pause and propose:
@@ -189,16 +195,22 @@ When encountering these, pause and propose:
    b. Write README.md with OKR, phases, success criteria
    c. Update INDEX.md
    d. Create feature branch
-   e. Use TodoWrite for phase tracking
+   e. TaskCreate phase tasks (P0..PN) AND the parent "L-5: Invoke autopilot:finish-flow"
+      closing task. The parent task is the forcing function for L-5 completion and is
+      NON-OPTIONAL — missing it = failed L-1 gate.
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
-4. Execute phases:
+4. IF H-size: TaskCreate parent "H-9: Invoke autopilot:finish-flow" closing task.
+5. Execute phases:
    - Within DOA? → CEO decides, record
    - Beyond DOA? → Pause, propose to Board
-5. Produce CEO Reports per involvement level
-6. Need research? → Autonomously invoke autopilot:survey
-7. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
-8. Need parallel execution? → Use superpowers:dispatching-parallel-agents (dev-flow session rules inject team config)
-9. Final report with complete decision log
+6. Produce CEO Reports per involvement level
+7. Need research? → Autonomously invoke autopilot:survey
+8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
+9. Need parallel execution? → Use superpowers:dispatching-parallel-agents (dev-flow session rules inject team config)
+10. At workflow end (L or H): invoke `autopilot:finish-flow`. Execute all sub-tasks autonomously
+    within DOA. Do NOT pause between sub-tasks to ask the user — the forcing function is not
+    a pause point, it is a completeness gate.
+11. Final CEO Report with complete decision log.
 ```
 
 ## Scope Creep Detection (mandatory)
@@ -267,3 +279,6 @@ User responses to reports:
 | Say "handle errors" without specifics | Name the error, trigger, recovery, and user impact |
 | Drift from chosen scope mode mid-execution | Commit to the mode; raise Board Decision if mode itself needs changing |
 | Decide without thinking through failure modes | Inversion reflex — always ask "what would make this fail?" |
+| Stop at "ready for PR, your call" at L-5 | Merge to develop is within DOA; invoke `finish-flow` and execute all 6 sub-tasks autonomously |
+| Inline L-5 / H-9 closing steps "because CEO is fast" | Speed does not mean skipping — invoke `finish-flow`; the TaskCreate forcing function IS the speed discipline |
+| Skip `autopilot:learn` at L-5.6 / H-9.4 "nothing notable" | Evaluate the 5 learn-trigger questions first; for H-size, learn is unconditional MANDATORY |

@@ -233,7 +233,24 @@ If the fix revealed a non-obvious lesson, invoke `learn` skill.
 > **Continuous execution**: proceed between Phases without asking "continue?".
 > **Stop only for**: Staging Gate | Build/test failure | Design decision needed | Context near limit.
 
-Create Phase Todos at start (extract p0...pN + completion from plan).
+**Task tracking (MANDATORY at L-1)**: Create Phase Todos at start (extract p0...pN + completion
+from plan) **AND** create a final parent closing task:
+
+```
+TaskCreate: "L-5: Invoke autopilot:finish-flow"
+  description: MANDATORY L-size completion. Invoke autopilot:finish-flow which will
+  expand into 6 discrete sub-tasks (Final Goal Review, Pre-Merge Review, Merge,
+  Post-Merge Review, Archive, L Session End). Do not mark this completed until the
+  skill has run and all 6 sub-tasks reach completed.
+```
+
+This parent task is the forcing function: it remains pending through every phase and is
+surfaced by system-reminder after each tool use. It cannot be silently skipped because
+marking it completed requires invoking `autopilot:finish-flow`, which itself creates 6 more
+discrete pending tasks.
+
+**If the parent L-5 task is missing at any point after L-1**: STOP, create it retroactively,
+then continue.
 
 ### L-1. Intent Confirmation
 
@@ -308,16 +325,20 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 
 **CEO mode**: CEO verifies all prerequisites. No user confirmation needed for passing gates.
 
-### L-5. Completion (all mandatory)
+### L-5. Completion (MANDATORY — via finish-flow forcing function)
 
-1. **Final Goal Review** -- verify all goals/criteria/boundaries from L-1 are met
-2. **Pre-Merge Review** -- max 3 rounds
-3. **Merge** -- merge feature branch to main (or create PR per project convention)
-4. **Post-Merge Review** -- verify no merge losses
-5. **Archive** -- archive project docs
-6. **L Session End** -- run the full Session End checklist below
+**Invoke `autopilot:finish-flow`.** That skill owns the L-size closing sequence. On invocation
+it TaskCreates 6 discrete sub-tasks (Final Goal Review → Pre-Merge Review → Merge → Post-Merge
+Review → Archive → L Session End), each with an explicit verification output. Every sub-task
+must be individually completed — they cannot be batched or compressed.
 
-> Merge completes integration. After merge, return here for post-merge review -> archive.
+Why delegated: Historically L-5 was an inline 6-step list that got mentally compressed into
+"one action" and silently skipped. The `finish-flow` skill replaces passive markdown with
+active TaskCreate reminders that system-reminder surfaces until addressed. See
+`autopilot:finish-flow` for the full size → sub-tasks table.
+
+**CEO mode**: All 6 sub-tasks are within CEO DOA (tactical, reversible, local git ops). CEO
+does not pause to ask the user between sub-tasks — execute all, then report.
 
 ### Staging Gate
 
@@ -331,32 +352,48 @@ Deploy per project config (default: build + restart).
 
 > **Production is broken. Smallest possible fix, fastest path to stable.**
 
+**Task tracking (MANDATORY at H-1)**: Create a parent closing task at the start:
+
+```
+TaskCreate: "H-9: Invoke autopilot:finish-flow"
+  description: MANDATORY hotfix completion. Invoke autopilot:finish-flow which will
+  expand into 6 discrete sub-tasks (verify fix, quality gate, merge to main, post-incident
+  learn, delete hotfix branch, session end).
+```
+
 1. `git checkout -b hotfix/<description> main`
 2. **Scope check**: if fix requires DB migration -> STOP, re-route to L. Cross-module bug fixes stay as H (or Fix if not production-critical).
 3. Fix the issue (smallest possible change)
-4. Run tests -- all must pass
-5. Quality gate (per project config, or: lint + test)
-6. Merge to main (`--no-ff`)
-7. Post-incident: invoke `learn` skill -- mandatory knowledge entry
-8. Delete hotfix branch
-9. Run the full Session End checklist below
+4. Invoke `autopilot:finish-flow` — it expands the remaining closing sequence into 6 discrete
+   sub-tasks (verify fix → quality gate → merge to main `--no-ff` → post-incident `learn`
+   (MANDATORY) → delete hotfix branch → session end). Each must be individually completed.
+
+> H workflow prioritizes speed. The forcing function does not add steps — it only prevents
+> skipping the existing ones. For rollback situations, invoke `finish-flow` after the
+> rollback is verified stable.
 
 ---
 
 ## Session End
 
-### S-Lite (S, H, and Fix workflows)
+> **L-size and H-size**: Session End is a **sub-task inside `autopilot:finish-flow`** (L-5.6 /
+> H-9.6), not a standalone section you run yourself. Do not duplicate the checklist here —
+> `finish-flow` creates the discrete tasks and this section is their reference material.
+>
+> **S and Fix**: `finish-flow` is optional. You may either run the inline S-Lite below or
+> invoke `autopilot:finish-flow` for the same effect in TaskCreate form.
 
-Inline above in each workflow. Recap:
+### S-Lite (S and Fix workflows, inline)
 
 1. **Retry check**: retried a non-trivial operation 2+ times? Invoke `learn`.
 2. **Deferred items**: anything postponed -> BACKLOG with context + trigger.
 3. **Confirm commit**: change landed on the correct branch.
 4. **Fix only**: verify ongoing-maintenance entry was written.
 
-### L-Full (L workflow)
+### L-Full Reference (invoked by finish-flow L-5.6)
 
-Run all steps. Create a checklist and complete each item before concluding.
+The L Session End sub-task (L-5.6) runs the full checklist below. Create a checklist and
+complete each item before concluding.
 
 ```
 1. Verify completion:
@@ -462,6 +499,10 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 | Defer work that affects the final goal | Never defer goal-critical items |
 | Re-evaluate size on context continuation | Use size from the original session |
 | Auto-execute context reduction without confirmation | List confirm operations with numbered choices |
+| Skip the L-1 / H-1 parent closing TaskCreate "because I remember the steps" | The parent task IS the forcing function — memory is exactly what keeps failing; always create it |
+| Inline L-5 / H-9 steps instead of invoking `finish-flow` | Always invoke `finish-flow`; inlining defeats the TaskCreate forcing mechanism |
+| Mark parent L-5 / H-9 completed while finish-flow sub-tasks still pending | Parent only completes after all sub-tasks reach completed |
+| Batch multiple finish-flow sub-tasks into one TaskCreate call | Each sub-task is its own TaskCreate — batching breaks the surface-per-tool-use mechanism |
 
 ## Pre-implementation Checklist
 

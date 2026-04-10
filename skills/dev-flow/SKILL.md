@@ -275,6 +275,50 @@ Any criterion without a threshold or verification method means the plan is incom
 
 **CEO mode**: SKIP intent confirmation -- CEO already confirmed OKR during Startup. Do not ask the user again.
 
+#### Scope Completeness Audit (MANDATORY before phase TaskCreate)
+
+A correctly-executed phase plan cannot recover from an incomplete scope. Before creating
+phase tasks, run a dimensions audit so the scope boundary reflects every surface this
+change touches, not just the one the task description mentions.
+
+**Create a discrete TaskCreate as the first item**:
+
+```
+TaskCreate: "L-1.5: Scope completeness audit — enumerate all affected surfaces"
+  description: Before phase TaskCreate. Walk the dimensions checklist below.
+  For each "yes" row, either add a phase task for it OR document in README
+  scope boundary why it's explicitly out-of-scope. Do NOT mark this task
+  completed without dimension-by-dimension coverage recorded in README.
+```
+
+**Dimensions checklist** (non-exhaustive starter — add project-specific rows as needed):
+
+| Dimension | Trigger |
+|-----------|---------|
+| Source code + tests | Almost always |
+| User-facing docs (README, guides, help text) | Any user-visible behavior change |
+| API / interface reference | Any public interface change |
+| Config file templates / examples | Any new or changed config format |
+| CHANGELOG entry | Any release-worthy change to a versioned artifact |
+| Version bump (semver) | Any externally-visible change to a versioned artifact |
+| Migration guide / notes | Any breaking change or schema change |
+| Dependent repos / external consumers | Any interface change with downstream consumers |
+| Dogfood target | Any tooling/infra change (does it apply to itself?) |
+
+**For each "yes" row**, either:
+- Add a phase task covering it, OR
+- Document in `README.md` scope boundary why it's explicitly out-of-scope
+
+**Historical rationale** (why this gate exists): On 2026-04-11, the `dev-flow-l5-enforcement`
+project shipped the new `finish-flow` skill but initially missed the autopilot-side
+user-facing surface (README skill count, CHANGELOG entry, template example, plugin version
+bump). The source-code dimension was complete; the documentation dimension was invisible.
+The finish-flow forcing function could not recover this — it enforces closing discipline,
+not scope completeness. This is a different failure mode that belongs at L-1, not L-5.
+
+**CEO mode**: CEO performs the audit autonomously and records the coverage in the README
+scope boundary. Do not ask the user to enumerate dimensions — that's CEO tactical work.
+
 ### L-2. Plan
 - User provides plan → use it directly, skip Plan Mode.
 - Needs design → EnterPlanMode → design → ExitPlanMode → user approval.
@@ -503,6 +547,8 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 | Inline L-5 / H-9 steps instead of invoking `finish-flow` | Always invoke `finish-flow`; inlining defeats the TaskCreate forcing mechanism |
 | Mark parent L-5 / H-9 completed while finish-flow sub-tasks still pending | Parent only completes after all sub-tasks reach completed |
 | Batch multiple finish-flow sub-tasks into one TaskCreate call | Each sub-task is its own TaskCreate — batching breaks the surface-per-tool-use mechanism |
+| Enumerate L-size phases before running the L-1.5 Scope Completeness Audit | Scope audit determines WHICH phases should exist — it runs first |
+| Skip the scope audit "because the task is obvious" | Invisible scope holes are the whole reason the audit exists; shipping an incomplete deliverable is always cheaper to prevent than to fix |
 
 ## Pre-implementation Checklist
 

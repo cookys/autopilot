@@ -195,7 +195,15 @@ When encountering these, pause and propose:
    b. Write README.md with OKR, phases, success criteria
    c. Update INDEX.md
    d. Create feature branch
-   e. TaskCreate phase tasks (P0..PN) AND the parent "L-5: Invoke autopilot:finish-flow"
+   e. **Scope Completeness Audit** (MANDATORY before phase TaskCreate):
+      TaskCreate "L-1.5: Scope completeness audit" as the FIRST task. Walk the
+      dev-flow L-1 dimensions checklist (source/tests/docs/API/templates/CHANGELOG/
+      version/migration/consumers/dogfood). For each "yes" row, add a phase task
+      OR record it as explicitly out-of-scope in README. Do not proceed to (f) until
+      README scope boundary reflects this coverage. Historical rationale: scope holes
+      cannot be recovered by the L-5 forcing function — a phase plan that correctly
+      executes an incomplete scope still ships incomplete work.
+   f. TaskCreate phase tasks (P0..PN) AND the parent "L-5: Invoke autopilot:finish-flow"
       closing task. The parent task is the forcing function for L-5 completion and is
       NON-OPTIONAL — missing it = failed L-1 gate.
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
@@ -293,3 +301,5 @@ User responses to reports:
 | Stop at "ready for PR, your call" at L-5 | Merge to develop is within DOA; invoke `finish-flow` and execute all 6 sub-tasks autonomously |
 | Inline L-5 / H-9 closing steps "because CEO is fast" | Speed does not mean skipping — invoke `finish-flow`; the TaskCreate forcing function IS the speed discipline |
 | Skip `autopilot:learn` at L-5.6 / H-9.4 "nothing notable" | Evaluate the 5 learn-trigger questions first; for H-size, learn is unconditional MANDATORY |
+| Skip the L-1.5 Scope Completeness Audit "because the task is obvious" | Scope holes are invisible until after you've shipped the wrong deliverable; the audit is cheap and the alternative is not |
+| Enumerate phases before running the scope audit | Scope audit determines WHICH phases exist; phase TaskCreate comes second |

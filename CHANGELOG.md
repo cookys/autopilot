@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.1.1 — L-1.5 Scope Completeness Audit
+
+### Added
+- **`dev-flow` L-1.5 Scope Completeness Audit** — mandatory discrete TaskCreate before phase enumeration. Walks a dimensions checklist (source/tests/docs/API/templates/CHANGELOG/version/migration/consumers/dogfood) and requires each "yes" row to be either phased or explicitly marked out-of-scope in README. Prevents the failure mode where a correctly-executed phase plan ships an incomplete deliverable because the scope missed user-facing surfaces.
+- **`ceo-agent` Execution step 3e** — CEO mandate to run the scope audit BEFORE phase TaskCreate (renumbered prior step 3e to 3f for the phase/L-5-parent TaskCreate). Plus anti-patterns covering "skip audit because obvious" and "enumerate phases before audit".
+
+### Background
+2026-04-11 `dev-flow-l5-enforcement` project initially shipped the `finish-flow` skill but missed the autopilot-side user-facing surface (README skill count, CHANGELOG entry, template example, plugin version bump). The source-code dimension was complete; the docs dimension was invisible. `finish-flow` enforces closing discipline — it cannot recover a phase plan that never contained the docs phase in the first place. This is a different failure mode that belongs at L-1 (scope), not L-5 (closing). The audit is the L-1 counterpart to the L-5 forcing function: both are active TaskCreate items that cannot be silently compressed.
+
+### Note on v2.1.0
+The `v2.1.1` release itself is the first dogfood of the new audit. Had the audit existed 2 hours earlier, `v2.1.0` would have shipped with docs in a single commit instead of two.
+
+---
+
 ## v2.1.0 — finish-flow Forcing Function
 
 ### Added

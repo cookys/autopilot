@@ -59,15 +59,17 @@ CEO mode:     dev-flow -> CEO decides within DOA
                        -> only escalate at DOA boundary
 ```
 
-CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:quality-pipeline, superpowers:dispatching-parallel-agents, etc.).
+CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:think-tank-dialectic, autopilot:quality-pipeline, superpowers:dispatching-parallel-agents, etc.).
 
-### Boundary with survey and think-tank
+### Boundary with survey, think-tank, and think-tank-dialectic
 
 | User says | Trigger | Reason |
 |-----------|---------|--------|
 | "investigate X" | survey | User wants external research, decides themselves |
 | "handle X", "get X done" | ceo-agent | User wants outcome |
 | "investigate then do it" | ceo-agent (CEO decides whether to survey) | "do" is the main verb |
+| "which perspectives matter", "what are the tradeoffs" | think-tank | Maps multi-role views on medium decisions |
+| "I'm stuck between X and Y on an irreversible call" | think-tank-dialectic | Hegelian cross-examination when genuine stalemate meets high-stakes |
 
 ### Think Tank trigger rules
 
@@ -85,6 +87,25 @@ CEO does **NOT** need think-tank for:
 - Tactical decisions within DOA (implementation path, error fix) → CEO decides
 - Clear spec already provided → just implement
 - Individual scope proposals in Expand/Selective mode → CEO proposes directly to Board
+
+### Think Tank Dialectic escalation rules
+
+CEO **must** escalate from `autopilot:think-tank` to `autopilot:think-tank-dialectic` when **all** of the following are true:
+
+| Signal | Example |
+|--------|---------|
+| think-tank brief shows LOW consensus | R1 had <3/6 roles aligned |
+| Decision is irreversible or expensive to reverse | Architecture choice, platform migration, public API shape |
+| Two positions have genuine merit (not "A vs trivially-bad") | Real technical/strategic tradeoff, not a lopsided choice |
+| The deliberation may actually change the outcome | CEO is genuinely willing to commit either way depending on synthesis |
+
+CEO does **NOT** escalate to dialectic when:
+- think-tank already produced HIGH consensus (Rule 3 would auto-downgrade anyway — waste of tokens)
+- Decision is reversible (just pick one and iterate)
+- User has already decided and wants ceremony (this is rubber-stamping, not deliberation)
+- Same topic was already dialectic'd in this session (Rule 2 session re-entry guard will refuse — avoid the loop)
+
+**Never invoke dialectic as the first tool** on a fresh question. Always think-tank first; escalate only if the LOW consensus signal appears.
 
 ### Mode Switch
 

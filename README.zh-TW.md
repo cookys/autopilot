@@ -337,6 +337,7 @@ Description 服務的是 Layer 3 — 使用者意圖和 skill 之間的最後一
 - **[gstack](https://github.com/garry-t/gstack)** — Garry Tan 為 Claude Code 打造的 skill 套件。CEO agent 的認知模式（Bezos 的 two-way door、Munger 的反向思維、Jobs 的減法聚焦）、Boil the Lake 完整性原則、以及範圍模式系統，都改編自 gstack 的 `plan-ceo-review` skill。
 - **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk 的 18 位思想家多人格審議 skill。`think-tank-dialectic` 的強制機制（Dissent Quota、>70% 同意時的 Counterfactual Trigger、Problem Restate Gate、作為一級 verdict section 的 Minority Report、Epistemic Diversity Scorecard）改編自 Council 的 7 步協議和 agent frontmatter 慣例。最關鍵的 meta 洞察——*每個思考風格都必須攜帶自己的熔斷機制*——來自觀察到 Council 的 18 個 agent 100% 都有 `Grounding Protocol` section 帶自我限制的 hard rules。
 - **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li 在 Council 基礎上擴展的 6 審議室、31 位思想家版本。`think-tank-dialectic` 的 Hegelian Arc 結構（Thesis → Antithesis → Synthesis，強制提出非折中的 synthesis proposal）、Adaptive Depth Gate、Tacit Knowledge Extraction 協議（Polanyi 隱性知識）、以及「不同工具，不是更好的工具」這個關鍵定位框架，都改編自 Agora 的 8 步審議協議和 `/forge` 工程審議室的 verdict template。
+- **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung 為 Claude Code 打造的 12-agent + 15-hook 工程團隊 plugin。`v2.4.0` methodology agents（`reviewer` / `debugger` / `planner`）吸收了 devteam P7/P9/P10 框架的三條紅線紀律（closure / fact-driven / exhaustiveness）、六要素 Task Prompt 契約、evidence-first debug 方法論、PUA 壓力模式觸發、以及 read-only 方法論 agent 的物理工具限制模式。autopilot 負責方法論層、voltagent 負責角色特化層的分工，是對 devteam 一體化設計的刻意發散——保持和 voltagent 角色 agent 生態系的正交。
 
 ---
 

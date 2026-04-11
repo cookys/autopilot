@@ -1,7 +1,7 @@
 {
   "name": "autopilot",
-  "version": "2.3.0",
-  "description": "Development autopilot — lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Sets the rules; Superpowers executes.",
+  "version": "2.4.0",
+  "description": "Development autopilot — 12 lifecycle skills + 3 methodology agents (reviewer / debugger / planner) enforcing Three Red Lines discipline. Sets the rules; Superpowers executes.",
   "author": {
     "name": "TWGS Team"
   }

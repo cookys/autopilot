@@ -65,6 +65,9 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
 6. Skill routing:
    Check CLAUDE.md (or project config) for code-area-specific skills.
    If a skill is listed for the target code area, invoke it before writing code.
+   **Active enforcement**: For L-size, this gate is backed by the L-1.6 TaskCreate
+   parent task (see L Workflow → Task tracking). Reading this bullet is NOT enough —
+   the TaskCreate is the forcing function that prevents skipping.
 ```
 
 ### Branch Freshness Table
@@ -234,9 +237,23 @@ If the fix revealed a non-obvious lesson, invoke `learn` skill.
 > **Stop only for**: Staging Gate | Build/test failure | Design decision needed | Context near limit.
 
 **Task tracking (MANDATORY at L-1)**: Create Phase Todos at start (extract p0...pN + completion
-from plan) **AND** create a final parent closing task:
+from plan) **AND** create TWO parent tasks. Both are non-optional forcing functions — missing
+either one = failed L-1 gate:
 
 ```
+TaskCreate: "L-1.6: Skill routing — invoke required skills for all affected code areas"
+  description: MANDATORY before any implementation phase. Input: the module/surface list
+  produced by L-1.5 Scope Completeness Audit. For each affected area, consult project
+  CLAUDE.md and/or .claude/skill-routing.md for required skills. Invoke each required
+  skill via the Skill tool (reading the file is NOT invoking). Mark this task completed
+  ONLY after:
+    (a) every required skill has been invoked via Skill tool, AND
+    (b) one-line summary of "what this skill told me for this task" is captured in
+        session context (either a note or a TaskCreate subtask).
+  If a module has no skill routing entry, mark N/A with a one-line justification.
+  Phase implementation tasks (P0..PN) MUST be created with blockedBy=[this task] so
+  they cannot start until skill routing is confirmed done.
+
 TaskCreate: "L-5: Invoke autopilot:finish-flow"
   description: MANDATORY L-size completion. Invoke autopilot:finish-flow which will
   expand into 6 discrete sub-tasks (Final Goal Review, Pre-Merge Review, Merge,
@@ -244,13 +261,30 @@ TaskCreate: "L-5: Invoke autopilot:finish-flow"
   skill has run and all 6 sub-tasks reach completed.
 ```
 
-This parent task is the forcing function: it remains pending through every phase and is
-surfaced by system-reminder after each tool use. It cannot be silently skipped because
-marking it completed requires invoking `autopilot:finish-flow`, which itself creates 6 more
-discrete pending tasks.
+Both parent tasks are forcing functions: they remain pending through every phase and are
+surfaced by system-reminder after each tool use. They cannot be silently skipped because
+marking them completed requires explicit work — L-1.6 requires Skill-tool invocations,
+L-5 requires invoking `autopilot:finish-flow` which itself creates 6 more discrete pending
+tasks.
 
-**If the parent L-5 task is missing at any point after L-1**: STOP, create it retroactively,
-then continue.
+**Why L-1.6 exists** (historical rationale): On 2026-04-11, `reconnect-regression-fix` ran
+the full fix workflow against `src/network/`, `src/lobby/`, and E2E tests without invoking
+`twgs-network` / `twgs-debug` / other project skills. The existing "gate 6: Skill routing"
+bullet in L-size Full Gates (Phase 1 Session Start, line ~65) is passive markdown and got
+mentally compressed into "I know this area" — the same failure mode that L-5 hit before
+`finish-flow` replaced it. This active TaskCreate applies the identical passive→active
+pattern that worked for L-5. Missing `twgs-*` skill invocations don't produce immediate
+bugs, but they systematically waste the knowledge base the project has invested in.
+
+**Phase task dependency** (mechanical enforcement, not just a reminder): When TaskCreating
+phase tasks P0..PN, each MUST be created with `blockedBy=[L-1.6]`. This means phases
+literally cannot be claimed/started until L-1.6 reaches `completed`. The system-reminder
+surfaces pending L-1.6 after every tool use; the blockedBy dependency makes starting
+implementation impossible without first resolving it. Two layers of defense.
+
+**If either parent task is missing at any point after L-1**: STOP, create it retroactively,
+then continue. For L-1.6 specifically, if implementation has already started without skill
+routing: pause current phase, create L-1.6 now, invoke the missing skills, then resume.
 
 ### L-1. Intent Confirmation
 
@@ -310,6 +344,12 @@ TaskCreate: "L-1.5: Scope completeness audit — enumerate all affected surfaces
 **For each "yes" row**, either:
 - Add a phase task covering it, OR
 - Document in `README.md` scope boundary why it's explicitly out-of-scope
+
+**Feeds into L-1.6**: The module/surface list produced here is the direct input to the
+L-1.6 Skill routing TaskCreate. Every "Source code + tests" module enumerated here must
+have its required project skills invoked before any phase starts. Do not mark L-1.5
+completed without first cross-referencing each module against `.claude/skill-routing.md`
+(or project equivalent).
 
 **Historical rationale** (why this gate exists): On 2026-04-11, the `dev-flow-l5-enforcement`
 project shipped the new `finish-flow` skill but initially missed the autopilot-side
@@ -557,6 +597,9 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 | Re-evaluate size on context continuation | Use size from the original session |
 | Auto-execute context reduction without confirmation | List confirm operations with numbered choices |
 | Skip the L-1 / H-1 parent closing TaskCreate "because I remember the steps" | The parent task IS the forcing function — memory is exactly what keeps failing; always create it |
+| Skip the L-1.6 skill routing TaskCreate "because I already read CLAUDE.md" | Reading ≠ invoking. The TaskCreate exists because passive bullets get mentally compressed into "I know this area". Invoke each required skill via the Skill tool, even if you "remember" it |
+| Create phase tasks without `blockedBy=[L-1.6]` | The dependency is the mechanical enforcement; a pending L-1.6 that doesn't actually block implementation is just another reminder to ignore |
+| Mark L-1.6 completed after "reading" the skill files in knowledge base | Reading skill markdown is not the same as Skill-tool invocation. The invocation loads the skill into the session context and creates the explicit decision record. Read ≠ invoke |
 | Inline L-5 / H-9 steps instead of invoking `finish-flow` | Always invoke `finish-flow`; inlining defeats the TaskCreate forcing mechanism |
 | Mark parent L-5 / H-9 completed while finish-flow sub-tasks still pending | Parent only completes after all sub-tasks reach completed |
 | Batch multiple finish-flow sub-tasks into one TaskCreate call | Each sub-task is its own TaskCreate — batching breaks the surface-per-tool-use mechanism |
@@ -567,7 +610,13 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 
 - [ ] Check for existing in-progress projects
 - [ ] Fix: `fix/` branch created, root cause confirmed
+- [ ] Fix: skill routing checked for affected module (passive — Fix stays lightweight, no
+      TaskCreate; see BACKLOG for future Fix-workflow forcing function)
 - [ ] L-size: project structure created (plan + project dir + branch)
+- [ ] L-size: L-1.5 Scope Completeness Audit TaskCreate created
+- [ ] L-size: L-1.6 Skill routing TaskCreate created (parent forcing function, non-optional)
+- [ ] L-size: L-5 finish-flow TaskCreate created (parent forcing function, non-optional)
+- [ ] L-size: Phase tasks (P0..PN) created with `blockedBy=[L-1.6]`
 
 ---
 

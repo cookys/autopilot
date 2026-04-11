@@ -1,5 +1,79 @@
 # Changelog
 
+## v2.3.0 — L-1.6 skill routing forcing function
+
+### Added
+
+- **`dev-flow` L-1.6 Skill routing TaskCreate** — new mandatory parent task at L-1 alongside
+  the existing L-5 `finish-flow` parent. Applies the passive→active TaskCreate forcing
+  function pattern (first proven at L-5) to skill routing:
+  - Parent task "L-1.6: Skill routing — invoke required skills for all affected code areas"
+    must be created at L-1 time. Missing it = failed L-1 gate.
+  - Input is the module list produced by L-1.5 Scope Completeness Audit.
+  - Completion criteria: every required project skill actually invoked via the Skill tool
+    (reading the skill file is explicitly NOT invoking), plus a one-line "what this skill
+    told me for this task" note captured in session context.
+  - **Phase tasks (P0..PN) must be created with `blockedBy=[L-1.6]`** — this is the
+    mechanical layer: phases literally cannot start until skill routing completes. Two
+    layers of defense: system-reminder surfaces the pending parent, and the blockedBy
+    dependency makes implementation unclaimable.
+- **`dev-flow` Anti-patterns** — three new rows covering the failure modes L-1.6 is
+  designed to block: "skip because I already read CLAUDE.md", "create phase tasks
+  without blockedBy", and "mark L-1.6 completed after reading skill markdown".
+- **`dev-flow` Pre-implementation Checklist** — three new L-size rows covering L-1.5
+  audit, L-1.6 skill routing parent, and phase-task blockedBy dependency.
+- **`dev-flow` Phase 1 Session Start gate 6** — now cross-references L-1.6 as the active
+  enforcement (gate 6 alone is passive markdown, retained as documentation).
+- **`dev-flow` L-1.5 Scope Audit** — now explicitly "feeds into L-1.6", so the module
+  list cannot be dropped on the floor between audit and phase start.
+
+### Background
+
+On 2026-04-11, the `reconnect-regression-fix` session ran a full fix workflow against
+`src/network/`, `src/lobby/`, and E2E tests without invoking any of the project's `twgs-*`
+skills (`twgs-network`, `twgs-debug`, etc). The existing "Skill routing" bullet in the
+L-size Full Gates section (Phase 1 Session Start, gate 6) is passive markdown and got
+mentally compressed into "I know this area" — the exact same failure mode that L-5 closing
+hit before `finish-flow` replaced inline markdown with active TaskCreate.
+
+The `dev-flow-l5-enforcement` project (v2.2.0) proved that passive→active TaskCreate works
+for closing discipline. The Residual Gaps section of its Phase 5 dogfood walkthrough
+explicitly flagged skill routing as out-of-scope at the time, to be addressed if the same
+incident recurred. It recurred the same day. v2.3.0 applies the proven pattern to the
+second gate.
+
+Missing skill invocations don't produce immediate bugs — they systematically waste the
+knowledge base the project has invested in, and they're invisible until post-merge review
+spots a pattern the relevant skill would have flagged. This release surfaces the failure
+at L-1 time where it's cheap to fix.
+
+### Dogfood trace
+
+This release was itself developed under dev-flow S workflow (not L) because the scope is a
+single file edit plus mandatory version sync. The v2.2.1 L-1.5 audit dimensions were
+walked:
+- Source + tests: `skills/dev-flow/SKILL.md` ✅
+- User-facing docs: CHANGELOG entry (this section) ✅
+- Version bump (semver): 2.2.1 → 2.3.0 (new feat, backwards-compatible) ✅
+- Version sync verification (grep): `grep "2\.2\.1"` across repo returned 6 hits, all
+  addressed — plugin.json, marketplace.json, README.md badge, README.zh-TW.md badge,
+  CHANGELOG.md (new header), SKILL.md line 361 (historical reference, intentionally left)
+- Credit / attribution: N/A (pure internal process improvement)
+- Dogfood target: ✅ this file IS the target; the new forcing function applies to future
+  autopilot L-size work immediately after reload
+
+### Files changed
+
+- `skills/dev-flow/SKILL.md` (L Workflow task tracking block, L-1.5 feeds-into line,
+  Phase 1 gate 6 cross-reference, Anti-patterns +3 rows, Pre-implementation Checklist +3 rows)
+- `.claude-plugin/plugin.json` (2.2.1 → 2.3.0)
+- `.claude-plugin/marketplace.json` (2.2.1 → 2.3.0)
+- `README.md` (version badge 2.2.1 → 2.3.0)
+- `README.zh-TW.md` (version badge 2.2.1 → 2.3.0)
+- `CHANGELOG.md` (this entry)
+
+---
+
 ## v2.2.1 — L-1.5 audit: credit + version-sync dimensions
 
 ### Added

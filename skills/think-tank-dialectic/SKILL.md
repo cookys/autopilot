@@ -1,18 +1,15 @@
 ---
 name: think-tank-dialectic
 description: >
-  Hegelian dialectic deliberation (Thesis → Antithesis → Synthesis) for
-  irreversible or high-stakes decisions where two positions genuinely conflict.
-  NOT a "better think-tank" — a different tool for a different situation.
-  Use when: "這個決定反悔成本很高", "兩邊都有道理", "我在 X 和 Y 之間拉扯",
-  "辯證一下", "逃不掉的 tradeoff", "irreversible decision", "genuine stalemate",
-  "hard fork in the road", "both sides have merit", "need to resolve a real
-  dilemma". Panel: 4 voltagent 職能 roles (architect / product / ops-sre /
-  qa-devil) + 2 adversarial roles (falsifier / inverter via general-purpose)
-  for structural dissent. Two-round (R1 independent + optional R2 Hegelian
-  cross-examination), forced Hegelian Arc in verdict. Not for: everyday scope
-  decisions (→ think-tank), pure tech selection (→ survey), S-size reversible
-  tasks, or exploration with no clear tradeoff.
+  Hegelian dialectic (Thesis → Antithesis → Synthesis) for irreversible or high-stakes decisions
+  with genuine stalemate — NOT a "better think-tank", a different tool for a different situation.
+  Use when: "this decision is hard to reverse", "both sides have real merit", "genuinely torn
+  between X and Y", "irreversible decision", "real dilemma, not just tradeoffs", "need structured
+  dialectic", "這個決定反悔成本很高", "兩邊都有道理", "在 X 和 Y 之間拉扯", "辯證一下",
+  "不可逆決策", "逃不掉的 tradeoff". Always reach for `think-tank` first; escalate here only
+  when think-tank's Decision Brief shows LOW consensus AND the decision is costly to reverse.
+  Not for: everyday scope decisions (→ think-tank), pure tech selection (→ survey), reversible
+  tasks where you can iterate, or reflexive "let's debate this" requests.
 ---
 
 # Think Tank Dialectic — Hegelian Deliberation

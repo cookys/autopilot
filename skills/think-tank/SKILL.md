@@ -29,12 +29,15 @@ description: >
 ## Relationship to Other Skills
 
 ```
-survey       → external research (what does the industry do?)
-think-tank   → internal multi-perspective debate (what should WE do?)  ← this skill
-ceo-agent    → autonomous execution after decision
+survey                → external research (what does the industry do?)
+think-tank            → internal multi-perspective debate (what should WE do?)  ← this skill
+    ↓ (if LOW consensus + irreversible)
+think-tank-dialectic  → Hegelian resolution (how do we reconcile real tension?)
+    ↓
+ceo-agent             → autonomous execution after decision
 ```
 
-Chain: survey output → feed into think-tank → Decision Brief → CEO executes.
+Chain: survey output → feed into think-tank → Decision Brief → (optional escalate to dialectic for irreversible LOW-consensus calls) → CEO executes.
 
 ## Role Configuration
 

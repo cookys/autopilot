@@ -1,10 +1,10 @@
 # Methodology Agents + README Companionship 擴充計畫 (Ship A / v2.4.0)
 
 **日期：** 2026-04-12
-**狀態：** 🟢 Revised — review loop r2 完成
+**狀態：** ✅ Shipped in v2.4.0 — merged to develop as `14276bb` on 2026-04-12
 **來源：** 完整研究 `~/projects/my-claude-devteam/`（NYCU-Chung devteam plugin）後的機制吸收
 **Size：** L
-**Dogfood：** 本計畫使用 `autopilot:ceo-agent` level 3 + review loop + dev-flow L-size + finish-flow 驅動整個流程
+**Dogfood：** 本計畫使用 `autopilot:ceo-agent` level 3 + review loop + dev-flow L-size + finish-flow 驅動整個流程，完整閉環驗證 methodology → executable agents → skill integration → dogfood 的可行性
 
 ---
 

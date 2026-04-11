@@ -324,3 +324,5 @@ User responses to reports:
 | Skip `autopilot:learn` at L-5.6 / H-9.4 "nothing notable" | Evaluate the 5 learn-trigger questions first; for H-size, learn is unconditional MANDATORY |
 | Skip the L-1.5 Scope Completeness Audit "because the task is obvious" | Scope holes are invisible until after you've shipped the wrong deliverable; the audit is cheap and the alternative is not |
 | Enumerate phases before running the scope audit | Scope audit determines WHICH phases exist; phase TaskCreate comes second |
+| Bump version in one file from memory without grepping | Always `grep <old-version>` across the repo first; if the grep returns N hits, the edit list must touch all N. Memory drops files (marketplace.json, README badges) silently |
+| Absorb external OSS / prior art design without crediting source | The L-1.5 `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |

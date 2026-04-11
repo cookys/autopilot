@@ -301,8 +301,10 @@ TaskCreate: "L-1.5: Scope completeness audit — enumerate all affected surfaces
 | Config file templates / examples | Any new or changed config format |
 | CHANGELOG entry | Any release-worthy change to a versioned artifact |
 | Version bump (semver) | Any externally-visible change to a versioned artifact |
+| Version sync verification (grep) | Any version bump — `grep` the old version string across **all tracked files** (don't pre-filter by extension; tomorrow's repo may add `.toml` / `Dockerfile` / `.yaml`). If the grep returns N hits, the edit list must touch all N. Never enumerate the file list from memory |
 | Migration guide / notes | Any breaking change or schema change |
 | Dependent repos / external consumers | Any interface change with downstream consumers |
+| Credit / attribution | Any feature absorbing external OSS, prior art, or third-party design — README's `Inspired By` / credits / acknowledgements section must list the source(s) |
 | Dogfood target | Any tooling/infra change (does it apply to itself?) |
 
 **For each "yes" row**, either:
@@ -315,6 +317,17 @@ user-facing surface (README skill count, CHANGELOG entry, template example, plug
 bump). The source-code dimension was complete; the documentation dimension was invisible.
 The finish-flow forcing function could not recover this — it enforces closing discipline,
 not scope completeness. This is a different failure mode that belongs at L-1, not L-5.
+
+**Why "Version sync verification (grep)" and "Credit / attribution" exist** (added v2.2.1):
+The v2.2.0 `think-tank-dialectic` release walked the dimensions checklist correctly but
+still had two near-misses: (1) `marketplace.json`'s version bump was missed because the
+audit was walked from memory instead of grepping the old version string, so the edit list
+forgot one of the two version files; (2) the README's `Inspired By` section was not
+updated to credit the two source repos (`agora`, `council-of-high-intelligence`) because
+the dimensions checklist had no row for attribution at all. Both failures share a root
+cause: the audit was *enumerated* rather than *grepped*. The two new rows make grep the
+default for version bumps, and add attribution as a first-class dimension whenever
+external prior art is absorbed.
 
 **CEO mode**: CEO performs the audit autonomously and records the coverage in the README
 scope boundary. Do not ask the user to enumerate dimensions — that's CEO tactical work.

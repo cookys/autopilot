@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.2.1 — L-1.5 audit: credit + version-sync dimensions
+
+### Added
+
+- **`dev-flow` L-1.5 dimensions checklist** — two new rows added to the Scope Completeness Audit:
+  - **Version sync verification (grep)** — any version bump must `grep` the old version string across all tracked files (no pre-filter by extension — tomorrow's repo may add `.toml` / `Dockerfile`). If grep returns N hits, the edit list must touch all N. Enumerating from memory is the failure mode.
+  - **Credit / attribution** — any feature absorbing external OSS, prior art, or third-party design must update README's `Inspired By` / credits / acknowledgements section as part of the same release.
+- **`ceo-agent` SKILL.md anti-patterns** — two new rows mirroring the new dimensions: "bump version in one file from memory without grepping" and "absorb external OSS / prior art design without crediting source".
+- **`dev-flow` L-1.5 historical rationale** — additional paragraph explaining why these two rows were added (the v2.2.0 dual near-miss).
+
+### Background
+
+v2.2.0 (`think-tank-dialectic`) walked the L-1.5 dimensions checklist correctly but still had two near-misses:
+
+1. **`marketplace.json` version bump was missed** — `autopilot:quality-pipeline` caught it after the main commit had already landed. The audit's existing `Version bump (semver)` row correctly triggered, but the audit was walked from memory and the edit list forgot one of the two version files. A `grep "2.1.1"` would have surfaced both immediately.
+2. **README `Inspired By` credit was missed** — the user pointed out post-merge that the two source repos (`agora`, `council-of-high-intelligence`) were not credited. The dimensions checklist had no row for attribution at all, so even a careful audit could not have caught it.
+
+Both failures share a root cause: the audit was *enumerated* rather than *grepped*, and one whole dimension (attribution) was missing from the checklist. v2.2.1 fixes both: grep becomes the default for version bumps, and attribution joins the dimensions list as a first-class row.
+
+This release dogfoods both new dimensions: the first action of the v2.2.1 session was `grep "2.2.0"` across the autopilot repo to enumerate all live references before editing, and the credit dimension was checked (N/A — pure internal process improvement, no external OSS absorbed).
+
+### Scope Completeness (L-1.5 walkthrough)
+
+7 files in this release:
+
+**0 new** (process tightening, no new artifacts).
+
+**7 modified**:
+- `skills/dev-flow/SKILL.md` (2 new dimension rows + historical rationale paragraph)
+- `skills/ceo-agent/SKILL.md` (2 new anti-pattern rows)
+- `CHANGELOG.md` (this entry)
+- `.claude-plugin/plugin.json` (2.2.0 → 2.2.1)
+- `.claude-plugin/marketplace.json` (2.2.0 → 2.2.1)
+- `README.md` (version badge 2.2.0 → 2.2.1)
+- `README.zh-TW.md` (version badge 2.2.0 → 2.2.1)
+
+Skill count unchanged at 12 (no new skill). No public skill API changes.
+
+---
+
 ## v2.2.0 — think-tank-dialectic: Hegelian dialectic for hard decisions
 
 ### Added

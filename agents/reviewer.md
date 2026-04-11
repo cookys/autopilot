@@ -90,7 +90,7 @@ Overall risk: Low / Medium / High
 Top 3 priorities to fix: 1. ... 2. ... 3. ...
 
 ### Handoff
-Next consumer: <MAIN_CLAUDE | AUTOPILOT_DEBUGGER | NEEDS_DOMAIN_EXPERT | DOCUMENT_ONLY>
+Next consumer: <MAIN_CLAUDE | AUTOPILOT_DEBUGGER | AUTOPILOT_PLANNER | NEEDS_DOMAIN_EXPERT | DOCUMENT_ONLY>
 Routing rationale: <one sentence; example: "🔴 auth bypass — needs domain expert to review JWT implementation">
 Remaining risks: <list or "none">
 ```
@@ -102,6 +102,7 @@ The `Next consumer` field must be one of the enum values below. Pick based on th
 | Highest finding | Recommended enum | When to pick it |
 |----------------|------------------|------|
 | 🔴 Critical — root cause unclear | `AUTOPILOT_DEBUGGER` | You found a symptom but the cause needs systematic investigation |
+| 🔴 / 🟠 — structural refactor across many files | `AUTOPILOT_PLANNER` | The finding requires six-element Task Prompt decomposition before a fix can be scoped |
 | 🔴 Critical — language/stack specific | `NEEDS_DOMAIN_EXPERT` | JWT crypto, DB query plans, concurrency — caller will map to correct voltagent role |
 | 🔴 / 🟠 — fix is clear | `MAIN_CLAUDE` | Straightforward patch the calling skill or main Claude can apply |
 | 🟡 / 🔵 only | `DOCUMENT_ONLY` | Record the finding, no action required |

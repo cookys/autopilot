@@ -89,12 +89,15 @@ quality-pipeline does **not** runtime-detect which reviewers are available. `aut
 
 ## Handoff Consumption
 
-After the reviewer returns, read the `### Handoff` section and route the next step by enum:
+After the reviewer returns, read the `### Handoff` section and route the next step by enum.
+
+**Scope note**: the table below lists only the enum values `autopilot:reviewer` itself emits. The global enum grammar (see `agents/README.md`) also defines `AUTOPILOT_PLANNER`, `PARALLEL_DISPATCH`, and `SEQUENTIAL_DISPATCH` — those are emitted by other methodology agents (planner / debugger) but never by reviewer, so quality-pipeline does not need to consume them here.
 
 | Enum | quality-pipeline action |
 |------|------------------------|
 | `MAIN_CLAUDE` | Apply fixes inline (or hand to main Claude context) |
 | `AUTOPILOT_DEBUGGER` | Re-dispatch `autopilot:debugger` as an independent session to investigate root cause, then loop back to review |
+| `AUTOPILOT_PLANNER` | Re-dispatch `autopilot:planner` for six-element Task Prompt decomposition before attempting the fix |
 | `NEEDS_DOMAIN_EXPERT` | Use the rationale to pick the appropriate voltagent role agent (e.g., `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`) and dispatch for the fix |
 | `DOCUMENT_ONLY` | Record the findings without taking fix action (typical for 🟡 Minor / 🔵 Suggestion only runs) |
 

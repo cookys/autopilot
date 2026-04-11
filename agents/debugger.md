@@ -133,7 +133,7 @@ Look for: unhandled exceptions, OOM kills, port conflicts, missing env vars, mis
 
 ## Output Contract (MANDATORY format)
 
-```
+~~~
 ## Debugger Report
 
 ### Problem
@@ -168,7 +168,7 @@ Example: "Between `order-service.ts:88` and `order-service.ts:92`, two concurren
 Next consumer: <MAIN_CLAUDE | NEEDS_DOMAIN_EXPERT>
 Routing rationale: <one sentence; example: "Fix is cross-file rename affecting N consumers, needs refactor specialist">
 Remaining risks: <list or "none">
-```
+~~~
 
 ### Handoff enum — debugger only uses 2 values
 

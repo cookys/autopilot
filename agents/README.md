@@ -81,7 +81,7 @@ The `Next consumer` field uses a **fixed enum** so calling skills can pattern-ma
 
 The round-trip happens **in the skill**, never inside the agent's own session. This keeps each agent session bounded, its output contract deterministic, and the orchestration topology legible in the skill trace.
 
-## Tool permissions — physically read-only
+## Tool permissions — no direct file patching
 
 All three agents have `tools` frontmatter that excludes `Edit` and `Write`:
 
@@ -89,7 +89,9 @@ All three agents have `tools` frontmatter that excludes `Edit` and `Write`:
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
 ```
 
-Claude Code enforces this allowlist. The agents **cannot** patch files even if something in their prompt tried to. This turns "methodology agents diagnose, caller skills orchestrate fixes" from a convention into a mechanical guarantee.
+Claude Code enforces this allowlist. The agents **cannot patch source files via `Edit` / `Write`** even if something in their prompt tried to — this turns "methodology agents diagnose, caller skills orchestrate fixes" from a convention into a mechanical guarantee for the file-patching channel.
+
+**Scope of the guarantee**: The allowlist prevents `Edit` / `Write` use. It does **not** sandbox `Bash`, which the agents retain for read-only diagnostics (`git log`, `docker logs`, `grep`, running test commands). Each agent's system prompt explicitly forbids Bash-side mutations (`rm`, `git commit`, `curl -X POST`, destructive DB commands, etc.). The prompt-level discipline plus `Edit` / `Write` mechanical denial together give you: methodology agents **read and reason**, caller skills **decide and apply**.
 
 ## Further reading
 

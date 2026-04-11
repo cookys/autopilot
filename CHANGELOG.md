@@ -1,5 +1,70 @@
 # Changelog
 
+## v2.4.0 — Methodology agents + voltagent companionship
+
+### Added
+
+- **3 methodology agents** (`agents/reviewer.md`, `agents/debugger.md`, `agents/planner.md`) —
+  autopilot's Three Red Lines discipline (closure / fact-driven / exhaustiveness) now has an
+  executable carrier. Dispatched automatically by `quality-pipeline`, `dev-flow`, `ceo-agent`,
+  and other autopilot skills. All three are read-only (no `Edit` / `Write` tools) and produce
+  findings/proposals/plans with a unified enum-based `### Handoff` output contract.
+  - `reviewer` (opus) — pre-commit / pre-merge code review, security audit, plan critique;
+    enforces file:line citations and `✅ Verified Clean` sections
+  - `debugger` (opus) — evidence-first root-cause analysis with 5-phase methodology and PUA
+    stress trigger (2+ failed attempts → forced 3 fresh hypotheses); produces `Proposed Fix`
+    as diff, never applies patches
+  - `planner` (sonnet) — six-element Task Prompt decomposition (goal / scope / input / output /
+    acceptance / boundaries); cannot write code, emits plan for caller to execute
+- **`agents/README.md`** — documents dispatch boundary, unified output contract, enum grammar,
+  and how autopilot methodology agents coexist with voltagent role agents without conflict
+- **README `Recommended Companions` section** — positions voltagent as the recommended
+  companion for role-specialized work (80+ language / infra / domain agents), clarifies
+  three-layer architecture (methodology / role / project), explains that autopilot does not
+  runtime-detect voltagent
+
+### Changed
+
+- **`quality-pipeline` dispatches `autopilot:reviewer` by default** — `skills/quality-pipeline/
+  references/code-review.md` updated to dispatch `autopilot:reviewer` instead of
+  `superpowers:code-reviewer`. This is a static dispatch-target change in skill prose, not a
+  runtime fallback mechanism. External skill API unchanged.
+- **`.claude-plugin/plugin.json` and `marketplace.json`** — version 2.3.0 → 2.4.0, description
+  updated to mention 3 methodology agents
+
+### Rationale
+
+autopilot's methodology was previously documented only in skill markdown. When `quality-pipeline`
+or `ceo-agent` dispatched reviewers or debuggers, they fell back to `superpowers:code-reviewer`
+or third-party agents that lacked autopilot's Three Red Lines discipline — the plugin's core
+differentiation was not reaching the execution layer. The 3 methodology agents close this gap
+by carrying closure / fact-driven / exhaustiveness rules into the agent's system prompt with
+a fixed output contract (severity tiers, `✅ Verified Clean`, enum-based Handoff).
+
+The layered split — autopilot owns methodology, voltagent owns role specialization, project
+repos own domain-specific agents — is a deliberate divergence from
+[`NYCU-Chung/my-claude-devteam`](https://github.com/NYCU-Chung/my-claude-devteam)'s all-in-one
+12-agent approach. autopilot stays orthogonal to voltagent's role-agent ecosystem by deferring
+role expertise and only shipping the methodology axis.
+
+### Source
+
+- Design source: [NYCU-Chung/my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)
+  v1.1.0 (MIT licensed). Absorbed: Three Red Lines, P7 `[P7-COMPLETION]` output contract pattern
+  (adapted to autopilot's unified `### Handoff` section), P9 six-element Task Prompt,
+  evidence-first debug methodology, PUA stress trigger, physical tool-restriction for methodology
+  agents. Not absorbed: P7/P9/P10 role language (overlaps with autopilot S/L/H sizing), 12 role
+  agents (deferred to voltagent), 15 hooks (deferred to Ship B / v2.5.0).
+- Review history: two rounds of parallel review via voltagent-qa-sec:architect-reviewer +
+  feature-dev:code-reviewer + voltagent-meta:agent-organizer. Plan doc:
+  `docs/plans/2026-04-12-methodology-agents-and-hooks.md`.
+
+### Out of Scope (deferred to Ship B / v2.5.0)
+
+- 14 universal hooks (large-file-warner, suggest-compact, cost-tracker, audit-log,
+  session-summary, log-error, commit-secret-scan, branch-protection + 6 opt-in hooks) —
+  separate plan / ship once v2.4.0 has dogfood exposure
+
 ## v2.3.0 — L-1.6 skill routing forcing function
 
 ### Added

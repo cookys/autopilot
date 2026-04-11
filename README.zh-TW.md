@@ -8,8 +8,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.3.0-E8A838?style=flat-square" alt="v2.3.0">
+  <img src="https://img.shields.io/badge/version-2.4.0-E8A838?style=flat-square" alt="v2.4.0">
   <img src="https://img.shields.io/badge/skills-12-4A90D9?style=flat-square" alt="12 Skills">
+  <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -332,11 +333,61 @@ Description 服務的是 Layer 3 — 使用者意圖和 skill 之間的最後一
 
 ---
 
+## 方法論 Agents
+
+Autopilot v2.4.0 內建 **3 個 read-only 方法論 agent**，把三條紅線紀律帶到 agent 執行層。Autopilot skill 會自動 dispatch 它們，你很少需要直接呼叫。
+
+| Agent | 用途 | Model | 被誰 dispatch |
+|-------|------|-------|---------------|
+| **`autopilot:reviewer`** | Pre-commit / pre-merge 審查、安全審核、計畫審查。嚴重度分級 + `file:line` 引用 + `✅ Verified Clean` section | opus | `quality-pipeline`、`ceo-agent`、`finish-flow` |
+| **`autopilot:debugger`** | Evidence-first 根因分析。5-phase 方法論 + 失敗 2 次以上觸發 PUA 模式。產出 `Proposed Fix` diff，不直接 patch | opus | `quality-pipeline`（round-trip）、`ceo-agent`、`dev-flow` |
+| **`autopilot:planner`** | L-size 任務的六要素 Task Prompt 拆解（goal / scope / input / output / acceptance / boundaries）。不能寫 code | sonnet | `dev-flow`、`think-tank` |
+
+三個 agent 都是**物理上 read-only** — `tools` frontmatter 不包含 `Edit` 和 `Write`，Claude Code 機制上就防止它們 patch 檔案。它們產生 findings、proposals、或 plans，透過統一的 `### Handoff` section（enum 格式的 `Next consumer` 欄位）交棒給呼叫 skill。
+
+三個 agent 把 autopilot 的**三條紅線**帶進 agent 層：
+
+1. **Closure** — 每個 finding 都附 impact + fix direction，沒有 open-ended 結尾
+2. **Fact-driven** — 每個結論都引用 `file_path:line_number`；「probably」/「likely」是違規
+3. **Exhaustiveness** — 完整 checklist；乾淨項目明確列出；靜默跳過 = 違規
+
+詳見 [`agents/README.md`](agents/README.md) — dispatch 邊界、統一 Output Contract、enum 文法、以及「autopilot 方法論層 / voltagent 角色層 / 專案層」的三層架構。
+
+---
+
+## 推薦搭配
+
+Autopilot **方法論和生命週期層面自給自足** — 單獨安裝 autopilot 就能拿到所有 12 skills + 3 methodology agents。如果需要**角色特化**（語言專家、DB 管理員、Kubernetes 專家、前端設計師等），我們推薦搭配 voltagent 使用：
+
+```
+/plugin install voltagent@...
+```
+
+Autopilot 和 voltagent **正交設計**：
+
+| 層 | 做什麼 | 去哪找 |
+|----|--------|--------|
+| **方法論 (Methodology)** | 三條紅線紀律、evidence-first 除錯、六要素 Task Prompt、生命週期編排 | autopilot（這個 plugin） |
+| **角色 (Role)** | 語言專家、基礎設施專家、領域專家（80+ 個 agent） | voltagent |
+| **專案 (Project)** | 你的技術棧陷阱、團隊慣例、領域特化 agent | `<project>/.claude/agents/` |
+
+**Dispatch 邊界**：
+
+- 走 **autopilot skill**（`quality-pipeline`、`dev-flow`、`ceo-agent`）會自動 dispatch `autopilot:reviewer` / `:debugger` / `:planner`，把方法論紀律帶進每次 invocation
+- **直接呼叫 agent**（透過 `Agent` tool）時，voltagent 的角色 agent（`voltagent-qa-sec:code-reviewer`、`voltagent-lang:rust-engineer`、`voltagent-data-ai:postgres-pro` 等）通常是更好的首選，因為它們的 domain 覆蓋更廣
+
+兩個 workflow、兩個 dispatch 路徑、實際上不重疊。
+
+Autopilot **不會** runtime 偵測 voltagent。Autopilot skill 的 prose 直接寫明 autopilot agent 的名字。如果某個任務你想要不同的 reviewer，直接透過 `Agent` tool 顯式呼叫 — 這是 user 層的選擇，不是 autopilot skill 裡的 graceful degradation 機制。
+
+---
+
 ## 靈感來源
 
 - **[gstack](https://github.com/garry-t/gstack)** — Garry Tan 為 Claude Code 打造的 skill 套件。CEO agent 的認知模式（Bezos 的 two-way door、Munger 的反向思維、Jobs 的減法聚焦）、Boil the Lake 完整性原則、以及範圍模式系統，都改編自 gstack 的 `plan-ceo-review` skill。
 - **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk 的 18 位思想家多人格審議 skill。`think-tank-dialectic` 的強制機制（Dissent Quota、>70% 同意時的 Counterfactual Trigger、Problem Restate Gate、作為一級 verdict section 的 Minority Report、Epistemic Diversity Scorecard）改編自 Council 的 7 步協議和 agent frontmatter 慣例。最關鍵的 meta 洞察——*每個思考風格都必須攜帶自己的熔斷機制*——來自觀察到 Council 的 18 個 agent 100% 都有 `Grounding Protocol` section 帶自我限制的 hard rules。
 - **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li 在 Council 基礎上擴展的 6 審議室、31 位思想家版本。`think-tank-dialectic` 的 Hegelian Arc 結構（Thesis → Antithesis → Synthesis，強制提出非折中的 synthesis proposal）、Adaptive Depth Gate、Tacit Knowledge Extraction 協議（Polanyi 隱性知識）、以及「不同工具，不是更好的工具」這個關鍵定位框架，都改編自 Agora 的 8 步審議協議和 `/forge` 工程審議室的 verdict template。
+- **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung 為 Claude Code 打造的 12-agent + 15-hook 工程團隊 plugin。`v2.4.0` methodology agents（`reviewer` / `debugger` / `planner`）吸收了 devteam P7/P9/P10 框架的三條紅線紀律（closure / fact-driven / exhaustiveness）、六要素 Task Prompt 契約、evidence-first debug 方法論、PUA 壓力模式觸發、以及 read-only 方法論 agent 的物理工具限制模式。autopilot 負責方法論層、voltagent 負責角色特化層的分工，是對 devteam 一體化設計的刻意發散——保持和 voltagent 角色 agent 生態系的正交。
 
 ---
 

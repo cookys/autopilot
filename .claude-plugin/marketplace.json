@@ -7,8 +7,8 @@
     {
       "name": "autopilot",
       "source": "./",
-      "version": "2.3.0",
-      "description": "Development autopilot — 12 skills for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Works with built-in Superpowers, not against it."
+      "version": "2.4.0",
+      "description": "Development autopilot — 12 skills + 3 methodology agents (reviewer / debugger / planner) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Works with built-in Superpowers, not against it."
     }
   ]
 }

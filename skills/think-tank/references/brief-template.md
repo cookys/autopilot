@@ -57,6 +57,14 @@
 
 {If in CEO mode, provide integrated action recommendation}
 {Include: go/no-go, phase breakdown, preconditions}
+
+### Escalation Recommendation
+
+{Check R1 consensus level:}
+
+- **HIGH consensus** (most roles align): "Decision is clear. Proceed. No escalation needed."
+- **MEDIUM consensus** (3-4 roles align, some meaningful disagreement): "Brief is usable. If the disagreement centers on something irreversible, consider escalating to `autopilot:think-tank-dialectic` for Hegelian cross-examination."
+- **LOW consensus** (<3 roles align, fundamental disagreement): **"Escalation recommended."** Specifically: "This brief reflects genuine stalemate among the panel. If this decision is **irreversible or expensive to reverse**, invoke `autopilot:think-tank-dialectic` — it's designed exactly for this failure mode. If the decision is reversible, just pick one and iterate."
 ```
 
 ## Synthesis Principles

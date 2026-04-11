@@ -20,6 +20,7 @@ You have **Autopilot** lifecycle skills. Before starting any task, check if one 
 | Starting code work, "I'm working on X", quick fix, hotfix, continuing from yesterday | `autopilot:dev-flow` |
 | Research options, "what do others use", compare X vs Y, 業界怎麼做 | `autopilot:survey` |
 | Strategic decision, need perspectives, tradeoff analysis, 要辯論一下 | `autopilot:think-tank` |
+| Irreversible decision, genuine stalemate, Hegelian dialectic, 不可逆決策, 兩邊都有道理, 辯證一下 | `autopilot:think-tank-dialectic` |
 | Full delegation, "get it done", CEO mode, 搞定, 全權處理 | `autopilot:ceo-agent` |
 | Pre-commit/merge quality checks, "is this ready?" | `autopilot:quality-pipeline` |
 | Archive project, bootstrap from plan, set up tracking | `autopilot:project-lifecycle` |

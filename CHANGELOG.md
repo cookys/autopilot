@@ -1,5 +1,72 @@
 # Changelog
 
+## v2.2.0 — think-tank-dialectic: Hegelian dialectic for hard decisions
+
+### Added
+
+- **`think-tank-dialectic` skill** — structured Hegelian dialectic (Thesis → Antithesis → Synthesis) for irreversible or high-stakes decisions where two positions have genuine merit. **NOT** a "better think-tank" — a different tool for a different situation. 6 roles: 4 職能 (architect / product / ops-sre / qa-devil via voltagent) + 2 adversarial (Falsifier Popper-style / Inverter Munger-style via general-purpose with inline prompts). Two rounds: R1 independent blind analysis + optional R2 Hegelian cross-examination with forced thesis/antithesis declaration. Outputs Advance Decision Brief with Hegelian Arc, first-class Minority Report, Epistemic Diversity Scorecard self-eval, and sharp distinction between Unresolved Questions (factual gaps — can be researched) and Questions Only You Can Answer (value/preference — human must decide).
+- **`think-tank-dialectic` Grounding Protocol** — 5 hard rules preventing "dialectic-for-the-sake-of-dialectic" overuse:
+  - Rule 1: Max 2 rounds (no R3)
+  - Rule 2: Session-scoped re-entry guard (3rd invocation on same topic → refuse with escape hatch)
+  - Rule 3: HIGH consensus auto-downgrade (≥5/6 aligned → skip R2, output Downgrade Brief, recommend `think-tank` next time)
+  - Rule 4: Turn-count budget (`dispatched_count > 12` without brief → emergency interim brief)
+  - Rule 5: R2 hemlock rule targeting drifting agents (adversarial roles specifically)
+- **`think-tank-dialectic` adversarial drift mitigations** — 4 concrete protections against `general-purpose` subagents softening over 2 rounds: R2 full prompt re-injection, verbatim concrete example moves in role prompts, front-weighted anti-drift anchor sentence, hemlock enforcement scan
+
+### Changed
+
+- **`think-tank` SKILL.md** — added escalation path note in "When to Use" (LOW consensus + irreversible → recommend `think-tank-dialectic`) and added `think-tank-dialectic` to "See Also" table. Existing think-tank workflow unchanged — no breaking change
+- **`think-tank` brief-template.md** — Decision Brief footer now includes an `### Escalation Recommendation` section that checks R1 consensus level and recommends escalation to dialectic only when LOW consensus meets irreversible decision
+- **`ceo-agent` SKILL.md** — added `think-tank-dialectic` to CEO's autonomous skill list, renamed boundary section to "Boundary with survey, think-tank, and think-tank-dialectic" with expanded trigger table, added dedicated "Think Tank Dialectic escalation rules" subsection specifying when CEO must escalate (LOW think-tank consensus + irreversible + both positions have genuine merit + CEO is genuinely willing to commit either way) and when NOT to escalate
+- **`hooks/session-start.sh`** — routing table now includes `think-tank-dialectic` row (`"Irreversible decision, genuine stalemate, Hegelian dialectic, 不可逆決策, 兩邊都有道理, 辯證一下"`) so new sessions discover the escalation target
+- **README.md + README.zh-TW.md** — skill count 11 → 12, version badge 2.1.1 → 2.2.0, skill count badge 11 → 12, skill table row added, design philosophy section updated
+
+### Background
+
+Completed a full scan of two open-source Claude Code skills: [agora](https://github.com/geekjourneyx/agora) (6 審議室, 31 思想家, 8-step dialectic protocol) and [council-of-high-intelligence](https://github.com/0xNyk/council-of-high-intelligence) (18-member council with enforcement mechanisms). Three key design insights were extracted and absorbed into autopilot:
+
+1. **Every thinking style must carry its own fail-safe** — 100% of the 31 reference agents have a `## Grounding Protocol` section with 3-5 hard rules constraining their own overuse (e.g., Feynman max 2 analogies, Socrates 3-level depth limit on questioning, Popper max 1 analogy). This is the meta-pattern that makes multi-agent deliberation work: single LLMs fail because they have no limits, multi-agent structures force each voice to declare its own.
+2. **The core of dialectic is Hegelian (Thesis → Antithesis → Synthesis), not consensus-finding** — `think-tank` maps perspectives; `think-tank-dialectic` resolves genuine stalemates through forced transcendent synthesis (must NOT be compromise).
+3. **think-tank-class tools split into two types, not two depths**: "multi-perspective map" (frequent, low cost — think-tank) vs "structured dialectic" (rare, high cost — dialectic). Merging them into `--depth full` flag would erase the friction that keeps dialectic from being reflexively invoked. Separate skill enforces cost discipline.
+
+### Scope Completeness (L-1.5 walkthrough)
+
+16 files in this release:
+
+**8 new**:
+- `docs/plans/2026-04-11-think-tank-dialectic.md` (plan doc)
+- `skills/think-tank-dialectic/SKILL.md`
+- `skills/think-tank-dialectic/references/role-prompts.md`
+- `skills/think-tank-dialectic/references/brief-template.md`
+- `skills/think-tank-dialectic/references/problem-restate-gate.md`
+- `skills/think-tank-dialectic/references/silent-pre-check.md`
+- `skills/think-tank-dialectic/references/minority-report.md`
+- `skills/think-tank-dialectic/references/epistemic-diversity-scorecard.md`
+
+**8 modified**:
+- `.claude-plugin/plugin.json` (version bump)
+- `CHANGELOG.md` (this entry)
+- `README.md` (skill count, badges, skill table, design philosophy)
+- `README.zh-TW.md` (same)
+- `hooks/session-start.sh` (routing table row)
+- `skills/ceo-agent/SKILL.md` (autonomous skill list, boundary section, escalation rules)
+- `skills/think-tank/SKILL.md` (escalation note, See Also row)
+- `skills/think-tank/references/brief-template.md` (footer Escalation Recommendation)
+
+Survey skill's boundary comment was evaluated but intentionally not changed — `think-tank` remains the single entry for strategic questions, and dialectic is discovered via think-tank's LOW-consensus escalation to preserve cost discipline.
+
+### Phase 2 deferred (not shipped)
+
+Four mechanisms are explicitly deferred pending Phase 1 real-session feedback:
+- Forced Synthesis (R2 禁止選邊 — currently Synthesis Proposal exists but is not enforced)
+- Novelty Gate (R2 must have new arguments vs R1)
+- Counterfactual Trigger at >70% agreement (currently Dissent Quota exists but no auto-steelman)
+- Anti-Recursion rules (Socrates-style 3-level depth limit)
+
+Phase 2 triggers when ≥3 real dialectic sessions reveal: dissent quota failures, synthesis degrading to compromise, or user feedback showing brief didn't change the decision. If Phase 1's 4 core mechanisms prove sufficient, Phase 2 remains unshipped.
+
+---
+
 ## v2.1.1 — L-1.5 Scope Completeness Audit
 
 ### Added

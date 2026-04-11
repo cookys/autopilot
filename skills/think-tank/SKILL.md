@@ -24,6 +24,8 @@ description: >
 
 **Not for**: pure technical selection (X library vs Y) → use `autopilot:survey`.
 
+**Escalation path**: If R1 reveals **LOW consensus** (roles fundamentally disagree) **AND** the decision is irreversible or high-stakes, the Decision Brief will recommend escalating to `autopilot:think-tank-dialectic` for Hegelian cross-examination. Do not escalate for medium decisions — dialectic is expensive and only justified when genuine tension exists on an irreversible choice.
+
 ## Relationship to Other Skills
 
 ```
@@ -131,5 +133,6 @@ Use the fixed format (see [references/brief-template.md](references/brief-templa
 | Skill | Relationship |
 |-------|-------------|
 | `autopilot:survey` | Survey finds external data, think-tank does internal debate. Can chain. |
+| `autopilot:think-tank-dialectic` | Escalation target for LOW consensus + irreversible decisions. Think-tank maps perspectives; dialectic resolves genuine stalemates via Hegelian synthesis. Use dialectic only after think-tank shows real tension, not as a default. |
 | `autopilot:ceo-agent` | CEO autonomously invokes think-tank for strategic decisions |
 | `superpowers:dispatching-parallel-agents` | Parallel execution; think-tank does parallel analysis |

@@ -1,7 +1,7 @@
 # think-tank-dialectic Skill 設計計畫
 
 **日期：** 2026-04-11
-**狀態：** 🟡 設計階段 → 實作中
+**狀態：** ✅ Phase 1 完成 — v2.2.0 已 merge 到 develop 並 push
 **來源：** 完整研究 `~/projects/agora/` 和 `~/projects/council-of-high-intelligence/` 後的機制吸收
 **Size：** L
 **Dogfood：** 這個計畫本身的決策（think-tank 是否分成兩個 skill）即是 think-tank-dialectic 的典型使用場景

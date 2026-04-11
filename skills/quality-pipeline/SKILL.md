@@ -50,7 +50,7 @@ Follow references/completeness-gate.md
 ### Code Review (always runs)
 
 ```
-Follow references/code-review.md (via superpowers:code-reviewer subagent)
+Follow references/code-review.md (dispatches autopilot:reviewer as primary reviewer)
   → Critical/Important? → fix → re-review (repeat until clean)
   → Suggestion/Minor? → dispatch via Decision Tree below
   → LGTM? → pass

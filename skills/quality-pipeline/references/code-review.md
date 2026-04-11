@@ -66,18 +66,39 @@ Everything else, including items that seem trivial:
 
 ## Invocation
 
-Dispatch `superpowers:code-reviewer` agent:
+Dispatch `autopilot:reviewer` as the primary code reviewer — it carries autopilot's Three Red Lines discipline (closure / fact-driven / exhaustiveness) and emits a unified Output Contract with enum-based `### Handoff` section that quality-pipeline can pattern-match:
+
 ```
 Task tool:
-  subagent_type: "superpowers:code-reviewer"
+  subagent_type: "autopilot:reviewer"
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
 The agent will:
 1. Read all changed files (git diff)
 2. Compare against the original plan/task intent
-3. Check: coding standards, security, side effects, edge cases
-4. Return findings with 4-tier severity
+3. Run the full correctness / security / boundary / error-handling / performance / API-usage checklist
+4. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`
+
+**Alternate reviewers** (invoke explicitly when you want a different discipline axis):
+
+- `superpowers:code-reviewer` — broader latitude, less strict on discipline enforcement
+- `voltagent-qa-sec:code-reviewer` — role-specialized with broader domain catalog
+
+quality-pipeline does **not** runtime-detect which reviewers are available. `autopilot:reviewer` is the primary because autopilot ships it. If you want an alternate, dispatch it directly via the Agent tool — that is a user-layer choice, not a quality-pipeline decision.
+
+## Handoff Consumption
+
+After the reviewer returns, read the `### Handoff` section and route the next step by enum:
+
+| Enum | quality-pipeline action |
+|------|------------------------|
+| `MAIN_CLAUDE` | Apply fixes inline (or hand to main Claude context) |
+| `AUTOPILOT_DEBUGGER` | Re-dispatch `autopilot:debugger` as an independent session to investigate root cause, then loop back to review |
+| `NEEDS_DOMAIN_EXPERT` | Use the rationale to pick the appropriate voltagent role agent (e.g., `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`) and dispatch for the fix |
+| `DOCUMENT_ONLY` | Record the findings without taking fix action (typical for 🟡 Minor / 🔵 Suggestion only runs) |
+
+Methodology agents do not call each other. Any re-dispatch happens in quality-pipeline, never inside the reviewer's own session.
 
 ## 4-Tier Severity
 

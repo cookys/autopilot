@@ -8,8 +8,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.3.0-E8A838?style=flat-square" alt="v2.3.0">
+  <img src="https://img.shields.io/badge/version-2.4.0-E8A838?style=flat-square" alt="v2.4.0">
   <img src="https://img.shields.io/badge/skills-12-4A90D9?style=flat-square" alt="12 Skills">
+  <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -335,6 +336,55 @@ All three layers must work together. Layer 2 (Superpowers' `using-superpowers`) 
 **Why do descriptions use quoted trigger phrases?**
 
 Skill descriptions serve Layer 3 — they're the last-mile match between user intent and skill selection. We write them in user-intent language (`"what should I work on"`, `"get it done"`, `"let's debate this"`) rather than internal mechanics (`"global work recommender"`, `"autonomous execution mode"`) because the model matches user messages against descriptions. The closer the description mirrors what users actually say, the more reliable the trigger.
+
+---
+
+## Methodology Agents
+
+Autopilot ships **three read-only methodology agents** (v2.4.0) that carry Three Red Lines discipline into agent-level execution. Autopilot skills dispatch them automatically; you rarely invoke them directly.
+
+| Agent | Purpose | Model | Dispatched by |
+|-------|---------|-------|---------------|
+| **`autopilot:reviewer`** | Pre-commit / pre-merge review, security audit, plan critique. Severity-tiered findings with `file:line` citations and `✅ Verified Clean` section | opus | `quality-pipeline`, `ceo-agent`, `finish-flow` |
+| **`autopilot:debugger`** | Evidence-first root-cause analysis. 5-phase methodology with PUA trigger on 2+ failures. Produces `Proposed Fix` as diff, never applies patches | opus | `quality-pipeline` (round-trip), `ceo-agent`, `dev-flow` |
+| **`autopilot:planner`** | Six-element Task Prompt decomposition for L-size work (goal / scope / input / output / acceptance / boundaries). Cannot write code | sonnet | `dev-flow`, `think-tank` |
+
+All three are **physically read-only** — their `tools` frontmatter excludes `Edit` and `Write`, so Claude Code mechanically prevents them from patching files. They produce findings, proposals, or plans, and hand off to the calling skill via a unified `### Handoff` section with an enum-based `Next consumer` field.
+
+The three agents carry autopilot's **Three Red Lines** into the agent layer:
+
+1. **Closure** — every finding has impact + fix direction, no open-ended output
+2. **Fact-driven** — every claim cites `file_path:line_number`; "probably" / "likely" are violations
+3. **Exhaustiveness** — full checklists run; clean items explicitly listed; silent omission is a violation
+
+See [`agents/README.md`](agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / voltagent role / project-specific" layer cake.
+
+---
+
+## Recommended Companions
+
+Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 12 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
+
+```
+/plugin install voltagent@...
+```
+
+Autopilot and voltagent are **orthogonal by design**:
+
+| Layer | What it does | Where to look |
+|-------|-------------|---------------|
+| **Methodology** | Three Red Lines discipline, evidence-first debugging, six-element Task Prompts, lifecycle orchestration | autopilot (this plugin) |
+| **Role** | Language experts, infra specialists, domain experts (80+ agents) | voltagent |
+| **Project** | Your tech stack's pitfalls, team conventions, domain-specific agents | `<project>/.claude/agents/` |
+
+**Dispatch boundary:**
+
+- Going through an **autopilot skill** (`quality-pipeline`, `dev-flow`, `ceo-agent`) auto-dispatches `autopilot:reviewer` / `:debugger` / `:planner` to carry methodology discipline into every invocation
+- **Directly invoking an agent** via the `Agent` tool — voltagent's role agents (`voltagent-qa-sec:code-reviewer`, `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`, etc.) are usually the better primary choice because they have broader domain coverage
+
+Two workflows, two dispatch paths, zero overlap in practice.
+
+Autopilot does **not** runtime-detect voltagent. Autopilot skills name autopilot agents directly in their prose. If you want a different reviewer for a specific task, invoke the alternate explicitly via the `Agent` tool — that is a user-layer choice, not graceful degradation inside autopilot skills.
 
 ---
 

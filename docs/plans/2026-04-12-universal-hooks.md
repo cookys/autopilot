@@ -1,7 +1,7 @@
 # Universal Hooks Ship B (v2.5.0) — 8 Default-On + 6 Opt-In Hooks
 
 **日期：** 2026-04-12
-**狀態：** 📋 Draft — execution not yet approved
+**狀態：** ✅ Shipped in v2.5.0 (2026-04-13, merge `817c707`)
 **執行觸發條件：** Ship A (v2.4.0) 完成後 1-2 個 session 的 runtime dogfood 觀察期結束，把踩到的痛點作為 Ship B OKR 輸入
 **來源：** Ship A (`2026-04-12-methodology-agents-and-hooks.md`) 的 deferred scope + r1 review 的 Critical/Major 修正
 **Size：** L

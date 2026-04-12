@@ -6,14 +6,13 @@
 
 ## 進行中 (In Progress)
 
-| Date | Project | Version | Branch | Plan |
-|------|---------|---------|--------|------|
-| 2026-04-13 | [universal-hooks-ship-b](2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 | `feature/v2.5.0-universal-hooks` | [plan](../plans/2026-04-12-universal-hooks.md) |
+_None._
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-04-13 | [universal-hooks-ship-b](_archive/2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 | [`817c707`](../../../../commit/817c707) | [plan](../plans/2026-04-12-universal-hooks.md) |
 | 2026-04-12 | [methodology-agents-ship-a](2026-04-12-methodology-agents-ship-a/README.md) | v2.4.0 | [`14276bb`](../../../../commit/14276bb) | [plan](../plans/2026-04-12-methodology-agents-and-hooks.md) |
 
 ## 歷史債 (Historical Debt — pre-2026-04-12, not retrofitted)
@@ -34,4 +33,6 @@ _None._
 
 ## 歸檔 (Archived)
 
-_None yet — Ship A was just completed and has not been moved to `_archive/` because it is the most recent ship. Future L-5.5 steps may move completed projects here once they are several versions old._
+| Date | Project | Version |
+|------|---------|---------|
+| 2026-04-13 | [universal-hooks-ship-b](_archive/2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 |

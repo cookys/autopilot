@@ -1,0 +1,106 @@
+{
+  "//": "Autopilot plugin settings — copy relevant sections to your Claude Code settings.json",
+
+  "autopilot": {
+    "//costTracker": "Set to false to disable token cost tracking (privacy opt-out)",
+    "costTracker": true,
+
+    "//protectedBranches": "Regex alternation of branch names to protect (anchored with ^...$)",
+    "protectedBranches": "main|master"
+  },
+
+  "//opt-in-hooks": "Copy individual hook entries below into your settings.json hooks section to enable them",
+  "hooks-opt-in-examples": {
+    "PreToolUse": [
+      {
+        "//": "config-protection: blocks edits to linter/formatter config files",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/config-protection.js"
+          }
+        ]
+      },
+      {
+        "//": "mcp-health (pre): exponential backoff for unhealthy MCP servers",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js pre"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "//": "accumulator: collects edited JS/TS paths for batch-format",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/accumulator.js"
+          }
+        ]
+      },
+      {
+        "//": "test-runner: auto-runs sibling tests on edit (requires vitest or jest)",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/test-runner.js",
+            "timeout": 60000
+          }
+        ]
+      },
+      {
+        "//": "design-quality: warns on generic template UI patterns",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/design-quality.js",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "//": "mcp-health (failure): marks MCP server unhealthy on infra errors",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js failure"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "//": "check-console: warns about console.log in modified files",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/check-console.js"
+          }
+        ]
+      },
+      {
+        "//": "batch-format: runs Prettier + tsc on all edited JS/TS files (requires accumulator)",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/batch-format.js",
+            "timeout": 300000
+          }
+        ]
+      }
+    ]
+  }
+}

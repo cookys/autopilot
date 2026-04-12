@@ -8,9 +8,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.4.0-E8A838?style=flat-square" alt="v2.4.0">
+  <img src="https://img.shields.io/badge/version-2.5.0-E8A838?style=flat-square" alt="v2.5.0">
   <img src="https://img.shields.io/badge/skills-12-4A90D9?style=flat-square" alt="12 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
+  <img src="https://img.shields.io/badge/hooks-14-6B8E6B?style=flat-square" alt="14 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -304,8 +305,8 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 12 skills, not 14?**
-v2 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with built-in Superpowers. Their methodology is now handled by Superpowers; their project-specific config injection is now handled by dev-flow's Session Rules. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. Fewer skills = less context window pressure, less routing ambiguity.
+**Why 12 skills + 14 hooks, not more skills?**
+v2 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with built-in Superpowers. Their methodology is now handled by Superpowers; their project-specific config injection is now handled by dev-flow's Session Rules. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
 
 **Why `!`command`` injection, not config files?**
 In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.
@@ -388,12 +389,56 @@ Autopilot does **not** runtime-detect voltagent. Autopilot skills name autopilot
 
 ---
 
+## Hooks (v2.5.0)
+
+Autopilot ships **14 hooks** that enforce development discipline at the Claude Code runtime layer — no self-discipline required.
+
+### Tier A — Default-On (8 hooks)
+
+These activate automatically when the plugin is installed. All are non-destructive and safe for any project.
+
+| Hook | Event | What It Does |
+|------|-------|-------------|
+| **large-file-warner** | PreToolUse/Read | Warns at 500KB, hard blocks at 2MB. Bypasses if `offset`/`limit` specified |
+| **suggest-compact** | PostToolUse/Write\|Edit | Counts tool calls per session; suggests `/compact` at 50, then every 25 |
+| **cost-tracker** | Stop | Logs token usage + estimated USD cost to `~/.claude/metrics/costs.jsonl` |
+| **audit-log** | PostToolUse/Bash | Logs bash commands with auto secret redaction |
+| **session-summary** | Stop | Writes git status + recent commits to `~/.claude/sessions/` |
+| **log-error** | PostToolUse/* | Detects error keywords in tool output, appends to `~/.claude/error-log.md` |
+| **commit-secret-scan** | PreToolUse/Bash | Scans staged content for API keys/tokens. Hard blocks `git commit` if found |
+| **branch-protection** | PreToolUse/Bash | Blocks force push and direct commits on `main`/`master` (anchored regex, env override) |
+
+### Tier B — Opt-In (6 hooks)
+
+Enable individually by copying entries from [`settings.example.json`](settings.example.json) to your `settings.json`.
+
+| Hook | Event | What It Does |
+|------|-------|-------------|
+| **config-protection** | PreToolUse/Write\|Edit | Blocks edits to linter/formatter config files |
+| **check-console** | Stop | Warns about `console.log` in modified JS/TS files |
+| **accumulator** + **batch-format** | PostToolUse + Stop | Batch Prettier + tsc on all edited files at session end |
+| **test-runner** | PostToolUse/Write\|Edit | Auto-runs sibling test files on edit (vitest/jest) |
+| **design-quality** | PostToolUse/Write\|Edit | Warns on generic template UI patterns |
+| **mcp-health** | PreToolUse + PostToolUseFailure | Exponential backoff for unhealthy MCP servers |
+
+### Secret Detection
+
+`commit-secret-scan` and `audit-log` share a unified secret pattern module (`hooks/_shared/secret-patterns.js`) covering: OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API, Slack, Stripe tokens + inline `--token`/`password`/`Authorization` patterns.
+
+### Override
+
+- **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
+- **Custom protected branches**: set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
+- **Disable cost tracking**: set `autopilot.costTracker = false`
+
+---
+
 ## Inspired By
 
 - **[gstack](https://github.com/garry-t/gstack)** — Garry Tan's skill suite for Claude Code. The CEO agent's cognitive patterns (Bezos doors, Munger inversion, Jobs subtraction), Boil the Lake completeness principle, and scope mode system are adapted from gstack's `plan-ceo-review` skill.
 - **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk's 18-thinker multi-persona deliberation skill. The `think-tank-dialectic` skill's enforcement mechanisms (Dissent Quota, Counterfactual Trigger at >70%, Problem Restate Gate, Minority Report as first-class verdict section, Epistemic Diversity Scorecard) are adapted from Council's 7-step protocol and agent frontmatter conventions. The key meta-insight — *every thinking style must carry its own fail-safe* — comes from observing that 100% of Council's 18 agents have a `Grounding Protocol` section with self-constraining hard rules.
 - **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li's 6-room, 31-thinker extension of Council. The `think-tank-dialectic` skill's Hegelian Arc structure (Thesis → Antithesis → Synthesis with forced non-compromise synthesis proposal), Adaptive Depth Gate, Tacit Knowledge Extraction protocol (Polanyi), and "different tool, not better tool" framing are adapted from Agora's 8-step deliberation protocol and the `/forge` engineering room's verdict template.
-- **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung's 12-agent + 15-hook engineering team plugin for Claude Code. The `v2.4.0` methodology agents (`reviewer` / `debugger` / `planner`) absorb the Three Red Lines discipline (closure / fact-driven / exhaustiveness), six-element Task Prompt contract, evidence-first debug methodology, PUA stress-mode trigger, and physical tool-restriction pattern (read-only methodology agents) from devteam's P7/P9/P10 framework. The layered split — autopilot owns methodology, voltagent owns role specialization — is a deliberate divergence from devteam's all-in-one approach to stay orthogonal to the voltagent role-agent ecosystem.
+- **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung's 12-agent + 15-hook engineering team plugin for Claude Code. The `v2.4.0` methodology agents (`reviewer` / `debugger` / `planner`) absorb the Three Red Lines discipline (closure / fact-driven / exhaustiveness), six-element Task Prompt contract, evidence-first debug methodology, PUA stress-mode trigger, and physical tool-restriction pattern (read-only methodology agents) from devteam's P7/P9/P10 framework. The `v2.5.0` hooks layer absorbs 14 of devteam's 15 hooks (8 default-on Tier A + 6 opt-in Tier B) with Ship A review adjustments: anchored branch-protection regex (C1 fix), unified secret-patterns module (mi1 fix), cost-tracker opt-out, and 8/8 Tier A testing coverage. The layered split — autopilot owns methodology, voltagent owns role specialization — is a deliberate divergence from devteam's all-in-one approach to stay orthogonal to the voltagent role-agent ecosystem.
 
 ---
 

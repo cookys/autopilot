@@ -1,5 +1,66 @@
 # Changelog
 
+## v2.5.0 — Universal Hooks (Ship B)
+
+### Added
+
+- **14 universal hooks** — runtime enforcement layer complementing the methodology agent layer
+  shipped in v2.4.0. Ported from [my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)
+  v1.1.0 (MIT) with Ship A review adjustments.
+  - **8 Tier A hooks (default-on)**: `large-file-warner` (>500KB warn, >2MB block),
+    `suggest-compact` (tool-call counter, /compact at 50), `cost-tracker` (token cost JSONL),
+    `audit-log` (bash commands + auto secret redaction), `session-summary` (git state at Stop),
+    `log-error` (error keyword detection), `commit-secret-scan` (staged secret scan, hard block),
+    `branch-protection` (anchored whole-ref regex, env override)
+  - **6 Tier B hooks (opt-in)**: `config-protection` (linter config guard),
+    `check-console` (console.log warning), `accumulator` + `batch-format` (batch Prettier + tsc),
+    `test-runner` (auto sibling test), `design-quality` (generic UI warning),
+    `mcp-health` (exponential backoff)
+- **`hooks/_shared/secret-patterns.js`** — shared secret detection module used by `audit-log`
+  and `commit-secret-scan`. Covers OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API,
+  Slack, Stripe tokens + inline kv patterns. Fixes Ship A r1 mi1 (regex drift between hooks).
+- **`hooks/README.md`** — comprehensive hook documentation with exit code convention, architecture,
+  and source attribution
+- **`settings.example.json`** — opt-in hook activation examples for Tier B hooks
+- **`project-config-template/hooks.json`** — project-level hook override template
+
+### Changed
+
+- **`hooks/hooks.json`** — expanded from SessionStart-only to full lifecycle registration
+  (PreToolUse, PostToolUse, Stop) for all 8 Tier A hooks
+- **`.claude-plugin/plugin.json` and `marketplace.json`** — version 2.4.0 → 2.5.0, description
+  updated to mention 14 hooks
+- **README.md + README.zh-TW.md** — new Hooks section, hooks-14 badge, updated Inspired By
+  devteam entry for Ship B, updated design philosophy
+
+### Ship A Review Fixes (incorporated into design)
+
+| Finding | Fix |
+|---------|-----|
+| C1: branch-protection substring match | Anchored whole-ref regex `^(main\|master)$` + env override |
+| mi1: secret regex drift | Shared `_shared/secret-patterns.js` module |
+| mi1: cost-tracker privacy | `AUTOPILOT_COST_TRACKER=false` opt-out |
+| mi1: suggest-compact counter persistence | `/tmp/claude-tool-count-${CLAUDE_SESSION_ID}` |
+| mi2: testing 3/8 too soft | 8/8 Tier A positive + negative tests |
+
+### Source
+
+Same as Ship A — [NYCU-Chung/my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)
+v1.1.0 (MIT). Ship B absorbs 14 of 15 hooks with the adjustments listed above. `log-error`
+rewritten from Bash to Node.js for consistency with other hooks.
+
+### Scope Completeness (L-1.5 walkthrough)
+
+~26 files in this release:
+
+**~20 new**: plan doc, project dir, 14 hook JS files, `_shared/secret-patterns.js`,
+`hooks/README.md`, `settings.example.json`, `project-config-template/hooks.json`
+
+**6 modified**: `hooks/hooks.json`, `README.md`, `README.zh-TW.md`, `plugin.json`,
+`marketplace.json`, `CHANGELOG.md`
+
+---
+
 ## v2.4.0 — Methodology agents + voltagent companionship
 
 ### Added

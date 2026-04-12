@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None — v2.4.0 just shipped; Ship B (v2.5.0) is drafted as a plan but not yet started._
+| Date | Project | Version | Branch | Plan |
+|------|---------|---------|--------|------|
+| 2026-04-13 | [universal-hooks-ship-b](2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 | `feature/v2.5.0-universal-hooks` | [plan](../plans/2026-04-12-universal-hooks.md) |
 
 ## 已完成 (Completed)
 
@@ -28,9 +30,7 @@ These L-size ships predate the `docs/projects/` convention. They are intentional
 
 ## 規劃中 (Drafted — plan only, not yet started)
 
-| Target Version | Plan | Trigger to start |
-|----------------|------|------------------|
-| v2.5.0 | [universal-hooks](../plans/2026-04-12-universal-hooks.md) | After Ship A (v2.4.0) has 1-2 sessions of runtime dogfood exposure; Ship A's memory lessons should inform Ship B's OKR |
+_None._
 
 ## 歸檔 (Archived)
 

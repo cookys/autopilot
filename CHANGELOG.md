@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.6.0 — Model Routing
+
+### Added
+
+- **Model routing for subagent dispatch** — skills now select model + mode per role
+  (planner/reviewer → sonnet+plan, implementer → opus, test-runner → haiku)
+- **`references/model-routing.md`** — shared default routing table, ships with plugin
+- **`.claude/model-routing-config.md`** — per-project override (optional)
+- **`project-config-template/model-routing-config.md`** — template for project customization
+
+### Changed
+
+- **`dev-flow`** — auto-injects `model-routing-config.md` via `!cat` preprocessor
+- **`think-tank`** — role agents dispatch with `model: "sonnet", mode: "plan"`
+- **`quality-pipeline`** — reviewer dispatch with `model: "sonnet", mode: "plan"`
+- **`survey`** — researcher/skeptic dispatch with `model: "sonnet"`
+
+### Evidence
+
+Based on 90-run benchmark across 6 providers (Claude opus/sonnet/haiku, Gemini 2.5
+Flash, GLM 5.1, MiniMax 2.7) using 10 real codebase tasks:
+- All providers scored 94-98% accuracy on analysis tasks — model choice barely matters
+- Runtime constraint (`mode: "plan"`) achieves 95-100% compliance vs 70-80% prompt-only
+- Cost: opus $0.115 → sonnet $0.074 (-34%) → haiku $0.037 (-68%) per run
+
 ## v2.5.0 — Universal Hooks (Ship B)
 
 ### Added

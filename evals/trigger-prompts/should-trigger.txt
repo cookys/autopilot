@@ -1,0 +1,41 @@
+# Prompts that SHOULD trigger the corresponding autopilot skill.
+# Format: <skill-name> | <prompt>
+# Test with: claude -p "<prompt>" --plugin-dir <path> --max-turns 2 --output-format stream-json
+
+# dev-flow
+autopilot:dev-flow | I'm working on adding WebSocket compression
+autopilot:dev-flow | Quick fix for the login bug
+autopilot:dev-flow | Continuing from yesterday's refactor
+
+# survey
+autopilot:survey | What do others use for compression? Compare zstd vs deflate
+autopilot:survey | Research options for state management
+
+# think-tank
+autopilot:think-tank | I need different perspectives on this architecture decision
+autopilot:think-tank | What are the tradeoffs between approach A and B?
+
+# think-tank-dialectic
+autopilot:think-tank-dialectic | This is an irreversible decision and both sides have merit
+
+# ceo-agent
+autopilot:ceo-agent | CEO mode, get this done: implement the caching layer
+autopilot:ceo-agent | Handle everything, full authority on the auth refactor
+
+# quality-pipeline
+autopilot:quality-pipeline | Is this ready to commit? Run the quality checks
+
+# project-lifecycle
+autopilot:project-lifecycle | Archive the compression project
+
+# learn
+autopilot:learn | Save this lesson: the build path was wrong because of Docker volume mapping
+
+# retro
+autopilot:retro | Retro on the last 3 days of work
+
+# next
+autopilot:next | What should I work on next?
+
+# audit
+autopilot:audit | Compare the old auth system with the new implementation

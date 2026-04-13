@@ -1,6 +1,17 @@
 {
-  "description": "Autopilot hooks — session priming + 8 default-on Tier A hooks (v2.5.0)",
+  "description": "Autopilot hooks — session priming + 9 default-on Tier A hooks (v2.6.0)",
   "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/state-checkpoint.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup|clear|compact",
@@ -40,6 +51,10 @@
       {
         "matcher": "Bash",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
+          },
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/audit-log.js"

@@ -1,0 +1,29 @@
+# Prompts that should NOT trigger any autopilot skill.
+# These are normal requests or non-coding tasks.
+# Test: verify NO autopilot:* skill appears in stream-json output.
+
+# Simple information queries
+What is the difference between TCP and UDP?
+How does async/await work in Python?
+Explain the CAP theorem
+
+# Simple coding (first attempt, no lifecycle needed)
+Write a function to reverse a string
+Create a simple HTTP server in Node.js
+
+# Non-coding tasks
+What's the weather today?
+Translate this paragraph to English
+Summarize this article for me
+
+# Git operations (routine, not project lifecycle)
+Show me the git log
+What changed in the last commit?
+
+# File reading (no workflow needed)
+Read the README.md file
+What's in the package.json?
+
+# General chat
+Hello, how are you?
+Thanks, that worked!

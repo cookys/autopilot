@@ -14,3 +14,8 @@
 # S: scan → review (skip completeness if scan is clean)
 # L: test → scan → completeness → review (full pipeline)
 # hotfix: test → review only (skip scan/completeness for speed)
+
+## Anti-Rationalization (optional — reference only)
+# When enabled, quality-pipeline loads anti-rationalization patterns during review.
+# See: skills/quality-pipeline/references/anti-rationalization.md
+# anti_rationalization: true

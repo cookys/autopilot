@@ -247,6 +247,8 @@ When encountering these, pause and propose:
 7. Need research? → Autonomously invoke autopilot:survey
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Use superpowers:dispatching-parallel-agents (dev-flow session rules inject team config)
+   - For L-size parallel dispatch: use Six-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)
+   - Subagents report via [COMPLETION] / [ESCALATION] structured formats
 10. At workflow end (L or H): invoke `autopilot:finish-flow`. Execute all sub-tasks autonomously
     within DOA. Do NOT pause between sub-tasks to ask the user — the forcing function is not
     a pause point, it is a completeness gate.

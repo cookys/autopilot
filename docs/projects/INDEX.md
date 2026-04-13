@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Target Version | Plan |
+|------|---------|---------------|------|
+| 2026-04-13 | [pua-inspired-enhancement](2026-04-13-pua-inspired-enhancement/README.md) | v2.6.0 | (self-contained in README) |
 
 ## 已完成 (Completed)
 

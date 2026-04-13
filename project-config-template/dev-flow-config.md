@@ -64,6 +64,18 @@
 # Generate session summary for L-size tasks: true/false
 # Summary output path (e.g., .claude/session-digests/):
 
+## Failure Escalation Behavior
+# The failure-escalation hook (PostToolUse/Bash) automatically tracks consecutive
+# failures and injects escalating behavioral requirements:
+#   L1 (2 failures): switch to fundamentally different approach
+#   L2 (3 failures): 5 mandatory investigation steps
+#   L3 (4 failures): 7-point checklist
+#   L4 (5+ failures): structured failure report
+#
+# This is automatic via the hook — no project config needed.
+# To reference the anti-rationalization patterns during debugging:
+# See: skills/quality-pipeline/references/anti-rationalization.md
+
 ## L-5 / H-9 Closing Forcing Function (via autopilot:finish-flow)
 # dev-flow now delegates L-5 (L-size completion) and H-9 (hotfix closing)
 # to the autopilot:finish-flow skill, which uses active TaskCreate reminders

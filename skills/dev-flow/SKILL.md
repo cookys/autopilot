@@ -14,6 +14,11 @@ description: >
 ## Project Config (auto-injected)
 !`cat .claude/dev-flow-config.md 2>/dev/null`
 
+## Model Routing (for subagent dispatch)
+!`cat .claude/model-routing-config.md 2>/dev/null`
+
+If no project config above, use defaults from [references/model-routing.md](references/model-routing.md).
+
 ---
 
 ## Phase 1: Session Start

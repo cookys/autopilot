@@ -80,6 +80,8 @@ Read codebase context relevant to the topic (architecture docs, domain skills, r
 
 ### Step 3: Parallel Dispatch
 
+**Model routing**: Read `.claude/model-routing-config.md` if it exists; otherwise use defaults from [references/model-routing.md](references/model-routing.md). Think-tank roles map to `think-tank-role` → default: `model: "sonnet", mode: "plan"`.
+
 Spawn all roles simultaneously (6 or 3), each agent gets:
 - Role prompt (see [references/role-prompts.md](references/role-prompts.md))
 - Shared domain context
@@ -88,6 +90,8 @@ Spawn all roles simultaneously (6 or 3), each agent gets:
 ```
 Agent({
   subagent_type: "<voltagent-type>",
+  model: "sonnet",           // from model-routing config (think-tank-role)
+  mode: "plan",              // analysis only — no implementation
   prompt: "<role-prompt> + <domain-context> + <topic>",
   run_in_background: true,
   name: "tt-<role>"

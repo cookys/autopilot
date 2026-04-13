@@ -41,18 +41,22 @@ If input is vague (e.g. "look into cache"), ask one clarifying round before disp
 
 ### Step 2: Parallel Dispatch
 
+**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Survey agents map to `researcher` → default: `model: "sonnet"` (needs web search tools, so NOT plan mode).
+
 Spawn researcher + skeptic **simultaneously**. Skeptic does NOT wait for researcher -- independent search finds different angles.
 
 ```
 Agent tool:
   name: "survey-researcher"
   subagent_type: "general-purpose"
+  model: "sonnet"              # from model-routing config (researcher role)
   run_in_background: true
   prompt: -> references/prompts.md #Researcher
 
 Agent tool:
   name: "survey-skeptic"
   subagent_type: "general-purpose"
+  model: "sonnet"              # from model-routing config (researcher role)
   run_in_background: true
   prompt: -> references/prompts.md #Skeptic
 ```

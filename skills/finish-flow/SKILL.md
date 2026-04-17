@@ -22,7 +22,7 @@ silently skipped twice — despite the dev-flow SKILL.md being patched with bold
 anti-patterns. Passive text cannot force behavior. Active TaskCreate reminders can.
 
 ## Project Config (auto-injected)
-!`cat .claude/finish-flow-config.md 2>/dev/null`
+!`cat .claude/finish-flow-config.md 2>/dev/null || true`
 
 ## Entry Protocol (MANDATORY)
 

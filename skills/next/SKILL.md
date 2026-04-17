@@ -12,7 +12,7 @@ description: >
 Scan all work sources, present categorized results, converge to a single recommendation.
 
 ## Project Config (auto-injected)
-!`cat .claude/next-config.md 2>/dev/null`
+!`cat .claude/next-config.md 2>/dev/null || true`
 
 ## Trigger
 

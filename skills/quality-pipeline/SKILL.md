@@ -13,7 +13,7 @@ description: >
 **Pipeline is a dispatcher. Each step follows its reference doc.**
 
 ## Project Config (auto-injected)
-!`cat .claude/quality-gate-config.md 2>/dev/null`
+!`cat .claude/quality-gate-config.md 2>/dev/null || true`
 
 ## Sub-step References
 

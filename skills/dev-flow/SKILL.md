@@ -12,10 +12,10 @@ description: >
 # Development Flow Evaluation
 
 ## Project Config (auto-injected)
-!`cat .claude/dev-flow-config.md 2>/dev/null`
+!`cat .claude/dev-flow-config.md 2>/dev/null || true`
 
 ## Model Routing (for subagent dispatch)
-!`cat .claude/model-routing-config.md 2>/dev/null`
+!`cat .claude/model-routing-config.md 2>/dev/null || true`
 
 If no project config above, use defaults from [references/model-routing.md](references/model-routing.md).
 
@@ -578,7 +578,7 @@ Skip doc sync for: bug fixes, minor value tweaks, log message changes.
 ---
 
 ## Skill Routing (project-specific)
-!`cat .claude/skill-routing.md 2>/dev/null`
+!`cat .claude/skill-routing.md 2>/dev/null || true`
 
 ## Completeness Principle
 

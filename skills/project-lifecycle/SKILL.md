@@ -11,7 +11,7 @@ description: >
 # Project Lifecycle
 
 ## Project Config (auto-injected)
-!`cat .claude/project-lifecycle-config.md 2>/dev/null`
+!`cat .claude/project-lifecycle-config.md 2>/dev/null || true`
 
 | Phase | Reference | When |
 |-------|-----------|------|

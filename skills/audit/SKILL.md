@@ -11,7 +11,7 @@ description: >
 # Systematic Comparison Audit
 
 ## Project Audit Config
-!`cat .claude/audit-config.md 2>/dev/null`
+!`cat .claude/audit-config.md 2>/dev/null || true`
 
 ## Key Concepts
 

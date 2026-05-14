@@ -10,6 +10,9 @@ description: >
 
 # Think Tank — Multi-Role Decision Brief
 
+## Dispatch Chains (auto-injected)
+!`cat .claude/dispatch-config.md 2>/dev/null || true`
+
 6 specialized roles analyze the same topic in parallel, each producing independent perspectives, then cross-collide. Value lies in divergence, not consensus.
 
 ## When to Use
@@ -142,4 +145,4 @@ Use the fixed format (see [references/brief-template.md](references/brief-templa
 | `autopilot:survey` | Survey finds external data, think-tank does internal debate. Can chain. |
 | `autopilot:think-tank-dialectic` | Escalation target for LOW consensus + irreversible decisions. Think-tank maps perspectives; dialectic resolves genuine stalemates via Hegelian synthesis. Use dialectic only after think-tank shows real tension, not as a default. |
 | `autopilot:ceo-agent` | CEO autonomously invokes think-tank for strategic decisions |
-| `superpowers:dispatching-parallel-agents` | Parallel execution; think-tank does parallel analysis |
+| Parallel dispatcher (per `.claude/dispatch-config.md`, default: native `Task` tool) | think-tank fans roles out in parallel via the first available entry — `superpowers:dispatching-parallel-agents` if configured and installed, otherwise multiple `Task` tool calls in a single response |

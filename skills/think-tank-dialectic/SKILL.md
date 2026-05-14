@@ -14,6 +14,9 @@ description: >
 
 # Think Tank Dialectic — Hegelian Deliberation
 
+## Dispatch Chains (auto-injected)
+!`cat .claude/dispatch-config.md 2>/dev/null || true`
+
 Structured dialectic for hard decisions. Where `autopilot:think-tank` maps perspectives, `think-tank-dialectic` resolves genuine stalemates via Hegelian Thesis → Antithesis → Synthesis. Cost is higher; use is rare by design.
 
 ## This is NOT a "Better" Think-Tank
@@ -292,7 +295,7 @@ Use `think-tank-dialectic` only when **all** of these are true:
 If any of these is false, use one of:
 - `autopilot:think-tank` — multi-perspective mapping
 - `autopilot:survey` — external research on options
-- `autopilot:brainstorming` (superpowers) — exploration with no set options
+- `superpowers:brainstorming` (only if `superpowers` plugin installed) — exploration with no set options
 
 ## Escalation from think-tank
 
@@ -327,7 +330,7 @@ ceo-agent    → autonomous execution on the decision
 | `autopilot:think-tank` | Parent — dialectic is an escalation target, not a replacement |
 | `autopilot:survey` | If dialectic reveals an evidence gap, chain to survey to fill it |
 | `autopilot:ceo-agent` | CEO may invoke dialectic for irreversible decisions within its Board-approval zone |
-| `superpowers:dispatching-parallel-agents` | Used internally for R1/R2 parallel dispatch |
+| Parallel dispatcher (per `.claude/dispatch-config.md`) | Used internally for R1/R2 parallel dispatch — first available entry; `superpowers:dispatching-parallel-agents` if configured and installed, otherwise native `Task` tool (multiple calls in one response) |
 
 ## References
 

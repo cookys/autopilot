@@ -1,5 +1,78 @@
 # Changelog
 
+## v2.7.0 — Superpowers Coexistence + Standalone Mode
+
+**Headline**: autopilot now works fully without the `superpowers` plugin installed, and offers first-class coexistence semantics when it is. v2.0-v2.6 implicitly assumed `superpowers` was always present; v2.7.0 makes that explicit and optional.
+
+### Added
+
+- **4 restored fallback skills** (originally removed in v2.0 commit `f08812c` under the「Superpowers always installed」assumption):
+  - `skills/debug/` — evidence-first debugging (tool → log → code) with Three Red Lines
+  - `skills/test-strategy/` — test pyramid, baseline 守則, failure investigation funnel
+  - `skills/team/` — team allocation decisions (when to組隊, role selection, dependency analysis)
+  - `skills/profiling/` — evidence-first performance profiling (only methodology entry point in the ecosystem)
+  Each ships with a `## Coexistence with Superpowers` body section explaining the relationship to its superpowers counterpart (if any).
+- **`project-config-template/dispatch-config.md`** — declarative routing chains for orchestrator skills:
+  - `## Parallel Dispatch` (superpowers:dispatching-parallel-agents → native)
+  - `## Code Review` (autopilot:reviewer → superpowers:code-reviewer → project-specific)
+  - `## Methodology Preferences` (4 sub-chains: Debugging, Testing methodology, Performance profiling, Team allocation)
+  First-available-wins; no `mode` field; per-chain ordering expresses all preferences.
+- **README "Superpowers Coexistence" section** (both EN and zh-TW) — three deployment scenarios with concrete config snippets:
+  - A: superpowers installed (recommended default; dispatch-config chain delegates tactically)
+  - B: superpowers NOT installed (autopilot standalone)
+  - C: superpowers user-level, pure-autopilot per-project (`.claude/settings.json` `disabledSkills` escape hatch)
+
+### Changed
+
+- **Tagline revision**: plugin.json + marketplace.json + both READMEs reframed from「Sets the rules; Superpowers executes」(v2.0-v2.6) to「Standalone-capable orchestration that coexists with Superpowers」.
+- **6 orchestrator skills now auto-inject `dispatch-config.md`** via `!cat` preprocessor (matches existing config-injection pattern in dev-flow / quality-pipeline / finish-flow): `quality-pipeline`, `ceo-agent`, `finish-flow`, `think-tank`, `think-tank-dialectic`, `dev-flow`. dev-flow also gains a Session Rules table row pointing at dispatch-config.
+- **`skills/quality-pipeline/references/code-review.md:80-95`** — rewrote the previous「quality-pipeline does **not** runtime-detect」paragraph to align with chain-based dispatch design. Reviewer selection now reads from dispatch-config's Code Review chain; first available wins; unavailable plugins fall through naturally.
+- **`.claude/finish-flow-config.md` + `.claude/quality-gate-config.md`** — `superpowers:code-reviewer` fallback marked as conditional on the plugin being installed (rather than implicitly available).
+- **README skills count badge**: 12 → 16 (4 fallback skills restored); plugin.json + marketplace.json description "12 skills" → "16 skills".
+- **README "Why 12 skills?" → "Why 16 skills?"** — Design Philosophy section reframed: v2.0 removal claim updated to「v2.7.0 restores them as fallbacks with explicit coexistence design」.
+- **README "Hooks (v2.5.0)" heading → "Hooks"** — version info moved inline to avoid heading-bump on every release.
+- **README.zh-TW.md version badge** — catch-up from v2.5.0 to v2.7.0 (was drifting behind EN README's v2.6.0).
+- **`hooks/hooks.json`** description string version (v2.6.0) → (v2.7.0).
+- **`plugin.json` + `marketplace.json` version 2.5.0 → 2.7.0** — also catches up missed v2.6.0 manifest bump.
+
+### Migration
+
+If you upgrade from v2.6.0 and previously **removed** `debug`, `test-strategy`, `team`, or `profiling` entries from your `CLAUDE.md` skill routing tables (expecting them to remain absent post-v2.0), be aware they're back as fallback skills in v2.7.0 and may now trigger on the corresponding keywords. Two ways to suppress:
+
+1. (Preferred) **Express your preference in `.claude/dispatch-config.md`** — list `superpowers:X` first in each methodology chain so orchestrator skills delegate to superpowers; the autopilot fallback stays in the catalog but is not preferentially dispatched.
+2. (Hard cut) **Add to `.claude/settings.json`'s `disabledSkills`**:
+   ```jsonc
+   {
+     "disabledSkills": [
+       "autopilot:debug",
+       "autopilot:test-strategy",
+       "autopilot:team",
+       "autopilot:profiling"
+     ]
+   }
+   ```
+
+### Note on v2.0 design intent
+
+v2.0's rule-setter model (autopilot sets rules, Superpowers executes tactics) remains the **recommended deployment** when superpowers is installed. v2.7.0 is forward-progress, not reversal: it adds a standalone-capable mode for users without superpowers while preserving the v2.0-v2.6 coexistence semantics for users with superpowers. The brand tagline change reflects coexistence becoming first-class, not the rule-setter model being abandoned.
+
+### Evidence
+
+- 4 SKILL.md files at `skills/{debug,test-strategy,team,profiling}/`; each contains `## Coexistence with Superpowers` H2 + verbatim restoration of body content from `f08812c^`.
+- `dispatch-config.md` has 2 H2 operational chains + 1 H2 Methodology Preferences umbrella with 4 H3 sub-chains + Fallback semantics; no `mode` field.
+- 6 orchestrator SKILL.md files contain `!\`cat .claude/dispatch-config.md` preprocessor.
+- `skills/quality-pipeline/references/code-review.md`: `grep -c "runtime-detect"` returns 0.
+- README + zh-TW: both have `## Superpowers Coexistence` H2 section; both have skills-16 badge; both have v2.7.0 version badge.
+- CHANGELOG (this entry): describes all phases; migration callout for v2.6.0 users present.
+
+### Plan + project tracking
+
+- Plan: [`docs/plans/2026-05-14-superpowers-coexistence.md`](docs/plans/2026-05-14-superpowers-coexistence.md)
+- Project: [`docs/projects/2026-05-14-superpowers-coexistence/README.md`](docs/projects/2026-05-14-superpowers-coexistence/README.md)
+- Review loop: r1 (3 parallel reviewers, approve-with-revisions) + r2 (single focused reviewer, approve-with-minor-revisions). See plan §9 for findings.
+
+---
+
 ## v2.6.0 — Model Routing
 
 ### Added

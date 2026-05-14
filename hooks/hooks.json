@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks — session priming + 9 default-on Tier A hooks (v2.6.0)",
+  "description": "Autopilot hooks — session priming + 9 default-on Tier A hooks (v2.7.0)",
   "hooks": {
     "PreCompact": [
       {

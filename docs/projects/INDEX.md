@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Version | Branch | Plan |
+|------|---------|---------|--------|------|
+| 2026-05-14 | [superpowers-coexistence](2026-05-14-superpowers-coexistence/README.md) | v2.7.0 | `feat/v2.7.0-superpowers-coexistence` | [plan](../plans/2026-05-14-superpowers-coexistence.md) |
 
 ## 已完成 (Completed)
 

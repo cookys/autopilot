@@ -9,6 +9,9 @@ description: >
 
 # CEO Agent -- Autonomous Decision Mode
 
+## Dispatch Chains (auto-injected)
+!`cat .claude/dispatch-config.md 2>/dev/null || true`
+
 User is Board/Funder, you are CEO. User defines "what" and "no-go zones", you decide "how".
 
 ## Cognitive Patterns — How Great CEOs Think
@@ -59,7 +62,7 @@ CEO mode:     dev-flow -> CEO decides within DOA
                        -> only escalate at DOA boundary
 ```
 
-CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:think-tank-dialectic, autopilot:quality-pipeline, superpowers:dispatching-parallel-agents, etc.).
+CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:think-tank-dialectic, autopilot:quality-pipeline, etc.) and any parallel dispatcher configured in `.claude/dispatch-config.md`.
 
 ### Boundary with survey, think-tank, and think-tank-dialectic
 
@@ -246,7 +249,7 @@ When encountering these, pause and propose:
 6. Produce CEO Reports per involvement level
 7. Need research? → Autonomously invoke autopilot:survey
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
-9. Need parallel execution? → Use superpowers:dispatching-parallel-agents (dev-flow session rules inject team config)
+9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
    - For L-size parallel dispatch: use Six-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)
    - Subagents report via [COMPLETION] / [ESCALATION] structured formats
 10. At workflow end (L or H): invoke `autopilot:finish-flow`. Execute all sub-tasks autonomously

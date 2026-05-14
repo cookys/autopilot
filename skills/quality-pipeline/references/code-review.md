@@ -80,12 +80,16 @@ The agent will:
 3. Run the full correctness / security / boundary / error-handling / performance / API-usage checklist
 4. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`
 
-**Alternate reviewers** (invoke explicitly when you want a different discipline axis):
+**Reviewer chain** — dispatch by reading `.claude/dispatch-config.md`'s `## Code Review` chain (auto-injected at the top of `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the first AVAILABLE reviewer in that chain:
 
-- `superpowers:code-reviewer` — broader latitude, less strict on discipline enforcement
-- `voltagent-qa-sec:code-reviewer` — role-specialized with broader domain catalog
+- If the project lists `autopilot:reviewer` first (default) → use it; it is autopilot's methodology-disciplined reviewer
+- If the project lists `superpowers:code-reviewer` first (or as fallback when `autopilot:reviewer` is not yet loaded mid-session) → use it; broader latitude, less strict on discipline enforcement
+- If the project lists a project-specific reviewer (e.g. `voltagent-qa-sec:code-reviewer`) → use it; role-specialized with broader domain catalog
+- If no `dispatch-config.md` exists → default to `autopilot:reviewer`
 
-quality-pipeline does **not** runtime-detect which reviewers are available. `autopilot:reviewer` is the primary because autopilot ships it. If you want an alternate, dispatch it directly via the Agent tool — that is a user-layer choice, not a quality-pipeline decision.
+Plugins listed in the chain whose plugin is not installed are skipped automatically (Claude routing returns no-such-skill when invoked). The chain is a declarative preference, not runtime introspection — but Claude's own catalog awareness means unavailable entries fall through without producing dispatch errors.
+
+If you want a reviewer not in the chain for a one-off invocation, dispatch it directly via the Agent tool — that is a user-layer choice, not a quality-pipeline decision.
 
 ## Handoff Consumption
 

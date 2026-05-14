@@ -15,7 +15,7 @@
 
 Primary: dispatch `autopilot:reviewer` (the methodology-disciplined reviewer that ships with this plugin — reads Three Red Lines into the system prompt).
 
-Fallback: `superpowers:code-reviewer` — only when `autopilot:reviewer` is not available in the current session (e.g., dev-mode plugin and new agents added mid-session that require restart to register).
+Fallback: `superpowers:code-reviewer` — **only if the `superpowers` plugin is installed AND** `autopilot:reviewer` is not available in the current session (e.g., dev-mode plugin and new agents added mid-session that require restart to register). If `superpowers` is not installed, there is no fallback: prompt the user to restart Claude Code so `autopilot:reviewer` registers, rather than skipping review.
 
 Follow `skills/quality-pipeline/references/code-review.md` for the 4-tier severity grading and Handoff enum consumption table.
 

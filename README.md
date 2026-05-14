@@ -1,15 +1,15 @@
 <h1 align="center">Autopilot</h1>
 
 <p align="center">
-  <strong>Lifecycle orchestration for Claude Code — sets the rules, Superpowers executes.</strong><br>
-  12 skills that add lifecycle management, strategic decisions, and quality gates<br>
-  on top of built-in Superpowers. Drop a config file, get project-aware workflows.
+  <strong>Standalone-capable lifecycle orchestration for Claude Code that coexists with Superpowers.</strong><br>
+  16 skills covering lifecycle management, strategic decisions, methodology, and quality gates.<br>
+  Works standalone; gracefully delegates tactical execution to Superpowers when installed.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.6.0-E8A838?style=flat-square" alt="v2.6.0">
-  <img src="https://img.shields.io/badge/skills-12-4A90D9?style=flat-square" alt="12 Skills">
+  <img src="https://img.shields.io/badge/version-2.7.0-E8A838?style=flat-square" alt="v2.7.0">
+  <img src="https://img.shields.io/badge/skills-16-4A90D9?style=flat-square" alt="16 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-14-6B8E6B?style=flat-square" alt="14 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -24,36 +24,41 @@
 
 ## The Problem
 
-Claude Code's built-in Superpowers handles tactics well — TDD, debugging, planning, code review. But it lacks:
+Claude Code on its own — even with the built-in `superpowers` plugin if you've installed it — leaves several layers unaddressed:
 
 - **Lifecycle management** — no task sizing, no project tracking, no session start/end discipline
 - **Strategic decisions** — no multi-perspective debate, no dual-agent research
 - **Quality gates** — no unified pipeline enforcing test → scan → completeness → review
+- **Methodology discipline** — evidence-first debugging, test pyramid baselines, team allocation, performance profiling all need explicit frames
 - **Self-improvement** — no knowledge capture, no retrospectives, no "what's next?" recommendations
 - **Project-specific context** — no mechanism to inject your project's tools, conventions, and known gotchas
 
 ## The Solution
 
-Autopilot adds **lifecycle orchestration and strategic intelligence** on top of Superpowers:
+Autopilot ships **16 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](#superpowers-coexistence) below).
 
-| Skill | What It Does | Superpowers Handles |
-|-------|-------------|-------------------|
-| **dev-flow** | Sizes tasks (S/L/H), sets session rules for config injection and quality gates, manages project tracking | Planning, TDD, debugging, code review (tactical execution) |
+| Skill | What It Does | Coexists with |
+|-------|-------------|---------------|
+| **dev-flow** | Sizes tasks (S/L/H), sets session rules for config injection and quality gates, manages project tracking | `superpowers:writing-plans` (planning) |
 | **survey** | Dual-agent research (researcher + skeptic) | — (no equivalent) |
-| **think-tank** | 6-role debate for strategic decisions | brainstorming (different level — requirements exploration) |
+| **think-tank** | 6-role debate for strategic decisions | `superpowers:brainstorming` (different level — requirements exploration) |
 | **think-tank-dialectic** | Hegelian dialectic for irreversible / high-stakes decisions with LOW consensus. 4 职能 + 2 adversarial roles (Popper falsifier + Munger inverter). NOT a "better think-tank" — a different tool for a different situation | — (no equivalent) |
 | **ceo-agent** | Autonomous execution with CEO-level judgment | — (no equivalent) |
-| **quality-pipeline** | Unified quality gate: test → scan → completeness → review | verification-before-completion (partial) |
+| **quality-pipeline** | Unified quality gate: test → scan → completeness → review | `superpowers:verification-before-completion` (partial) |
 | **finish-flow** | Size-aware closing forcing function — TaskCreates discrete L-5 / H-9 / Fix / S-Lite sub-tasks so nothing gets silently compressed | — (no equivalent) |
-| **project-lifecycle** | Plan → bootstrap → structure → archive | finishing-a-development-branch (partial) |
+| **project-lifecycle** | Plan → bootstrap → structure → archive | `superpowers:finishing-a-development-branch` (partial) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **retro** | Engineering retrospective from git history | — (no equivalent) |
 | **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |
 | **audit** | Systematic comparison between implementations | — (no equivalent) |
+| **debug** | Evidence-first debugging methodology (tool → log → code) with Three Red Lines | `superpowers:systematic-debugging` (broader hypothesis-driven framing) |
+| **test-strategy** | Test pyramid, baseline 守則, failure investigation funnel — **not** TDD (orthogonal scope) | `superpowers:test-driven-development` (coding loop, complementary not equivalent) |
+| **team** | Team allocation decisions: when to組隊, role selection, dependency analysis | `superpowers:dispatching-parallel-agents` (dispatch mechanism — the verb to autopilot:team's noun) |
+| **profiling** | Evidence-first performance profiling (only methodology entry point in the ecosystem) | — (no superpowers equivalent) |
 
-### The Rule-Setter Model
+### Coexistence Model — autopilot is standalone-capable, Superpowers is optional
 
-Autopilot doesn't compete with Superpowers — it sets the rules that Superpowers operates within:
+Autopilot works fully without `superpowers`. If you also have `superpowers` installed, autopilot's orchestrator skills (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank{,-dialectic}`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to.
 
 ```
 autopilot:dev-flow sets session rules:
@@ -61,11 +66,74 @@ autopilot:dev-flow sets session rules:
   → "Before committing, run autopilot:quality-pipeline"
   → "On session end, update project tracking"
 
-superpowers skills execute within those rules:
-  → systematic-debugging (with project config in context)
-  → test-driven-development (with project test conventions)
-  → writing-plans (within dev-flow's sizing framework)
+Methodology dispatch (per .claude/dispatch-config.md):
+  → Debugging:  superpowers:systematic-debugging (if installed) → autopilot:debug
+  → Testing:    superpowers:test-driven-development + autopilot:test-strategy (complementary)
+  → Profiling:  autopilot:profiling (no superpowers equivalent)
+  → Team:       autopilot:team (allocation) + superpowers:dispatching-parallel-agents (dispatch)
+  → Review:     autopilot:reviewer → superpowers:code-reviewer (fallback)
 ```
+
+This was historically positioned as「sets the rules; Superpowers executes」(v2.0-v2.6); v2.7.0 preserves that model when superpowers is installed while making autopilot also work as a standalone plugin. See [Superpowers Coexistence](#superpowers-coexistence) for per-scenario UX.
+
+---
+
+## Superpowers Coexistence
+
+Autopilot supports three deployment scenarios:
+
+### A. You have `superpowers` installed (user-level or marketplace)
+
+Recommended default. autopilot's orchestrators delegate tactical execution to superpowers via `.claude/dispatch-config.md` chains.
+
+`.claude/dispatch-config.md` example (paste into your project):
+
+```markdown
+## Code Review
+- autopilot:reviewer
+- superpowers:code-reviewer
+
+## Parallel Dispatch
+- superpowers:dispatching-parallel-agents
+- native
+
+## Methodology Preferences
+
+### Debugging
+- superpowers:systematic-debugging
+- autopilot:debug
+
+### Testing methodology
+- autopilot:test-strategy
+- superpowers:test-driven-development
+```
+
+### B. You do NOT have `superpowers` installed
+
+Autopilot runs fully standalone. Orchestrators fall through to autopilot's own fallback skills (`autopilot:debug`, `autopilot:test-strategy`, `autopilot:team`, `autopilot:profiling`) and `native` parallel dispatch (multiple `Task` tool calls in one response).
+
+No `.claude/dispatch-config.md` needed — the defaults documented at the top of [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md) match this scenario.
+
+### C. You have `superpowers` user-level but want pure-autopilot in a specific project
+
+Use `.claude/settings.json`'s `disabledSkills` to hard-cut superpowers skills per-project:
+
+```jsonc
+{
+  "disabledSkills": [
+    "superpowers:systematic-debugging",
+    "superpowers:test-driven-development",
+    "superpowers:dispatching-parallel-agents",
+    "superpowers:code-reviewer"
+  ]
+}
+```
+
+This is a Claude Code native mechanism; autopilot doesn't need a config flag for it.
+
+### Migration note (v2.6.0 → v2.7.0)
+
+If you upgrade from v2.6.0 and previously **removed** `debug`, `test-strategy`, `team`, or `profiling` entries from your `CLAUDE.md` skill routing tables (expecting these skills to remain absent), be aware they're back as fallback skills in v2.7.0 and may now trigger on the corresponding keywords. To suppress: add them to `.claude/settings.json`'s `disabledSkills`.
 
 ---
 
@@ -178,7 +246,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 /plugin install autopilot@autopilot
 ```
 
-That's it. All 12 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+That's it. All 16 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ---
 
@@ -306,8 +374,8 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 12 skills + 14 hooks, not more skills?**
-v2 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with built-in Superpowers. Their methodology is now handled by Superpowers; their project-specific config injection is now handled by dev-flow's Session Rules. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
+**Why 16 skills + 14 hooks?**
+v2.0 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with `superpowers` skills, on the assumption that `superpowers` was always installed. v2.7.0 restores them as standalone fallbacks (with explicit `## Coexistence with Superpowers` sections in their bodies explaining the relationship) so autopilot works without `superpowers`. When `superpowers` IS installed, `.claude/dispatch-config.md` chains let orchestrators prefer the superpowers equivalent for runtime delegation; the autopilot skill stays in the catalog as the standalone fallback. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
 
 **Why `!`command`` injection, not config files?**
 In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.
@@ -365,7 +433,7 @@ See [`agents/README.md`](agents/README.md) for dispatch boundary, unified Output
 
 ## Recommended Companions
 
-Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 12 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
+Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 16 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
 
 ```
 /plugin install voltagent@...
@@ -390,9 +458,9 @@ Autopilot does **not** runtime-detect voltagent. Autopilot skills name autopilot
 
 ---
 
-## Hooks (v2.5.0)
+## Hooks
 
-Autopilot ships **14 hooks** that enforce development discipline at the Claude Code runtime layer — no self-discipline required.
+Autopilot ships **14 hooks** (shipped in v2.5.0) that enforce development discipline at the Claude Code runtime layer — no self-discipline required.
 
 ### Tier A — Default-On (8 hooks)
 

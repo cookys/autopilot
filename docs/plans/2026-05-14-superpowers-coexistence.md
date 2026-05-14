@@ -364,8 +364,8 @@ L-5.1 Final Goal Review 階段驗證以下 7 點（每點需具體證據）：
 2. **情境 A 不退化 + agents/ 無 regression**：
    - `grep -rn "superpowers:" skills/ .claude/ project-config-template/` 後 step 指示中無殘餘 hardcoded ref（只剩 chain / See Also / 註解）
    - `grep -rn "superpowers:" agents/` 只命中既有「we don't hardcode」聲明
-3. **dispatch-config.md schema 完整**：6 條 chains + Fallback semantics 段；無 `mode` 欄位
-   證據：`grep -c "^### " project-config-template/dispatch-config.md` ≥ 6；`grep -c "^mode:" project-config-template/dispatch-config.md` = 0
+3. **dispatch-config.md schema 完整**：6 條 chains（2 個 operational chains + 4 個 methodology chains under `## Methodology Preferences` 傘狀標題）+ Fallback semantics 段；無 `mode` 欄位
+   證據：`grep -c "^## " project-config-template/dispatch-config.md` ≥ 4（Parallel Dispatch / Code Review / Methodology Preferences / Fallback semantics）；`grep -c "^### " project-config-template/dispatch-config.md` ≥ 4（Debugging / Testing methodology / Performance profiling / Team allocation）；`grep -c "^mode:" project-config-template/dispatch-config.md` = 0
 4. **5 個 orchestrator skill 接上 preprocessor**：
    證據：`grep -l '!`cat .claude/dispatch-config.md' skills/{quality-pipeline,ceo-agent,finish-flow,think-tank,think-tank-dialectic}/SKILL.md` 全列
 5. **code-review.md 同步改寫**：

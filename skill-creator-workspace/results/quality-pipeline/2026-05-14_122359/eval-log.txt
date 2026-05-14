@@ -1,0 +1,12 @@
+Evaluating: Run pre-commit or pre-merge quality checks: tests, completeness scan (no stubs/TODOs/mocks), code review. Use when: "quality gate", "quality checks", "run tests before merge", "check for stubs", "scan for completeness", "is this ready to commit?", "pre-merge review", "品質檢查", "準備好可以 commit 了嗎", "跑一下檢查". Not for: writing new tests (→ TDD), debugging CI failures, or receiving external review feedback.
+Results: 6/10 passed
+  [PASS] rate=0/1 expected=False: write unit tests for the calculate_monthly_settlement function coverin
+  [PASS] rate=0/1 expected=False: I got review comments from my teammate on PR #87. Help me evaluate whe
+  [FAIL] rate=0/1 expected=True: scan my code for completeness — I want to make sure nothing is a place
+  [PASS] rate=0/1 expected=False: refactor the test suite in backend/src/accounting/tests/ to use shared
+  [PASS] rate=1/1 expected=True: run quality checks on my changes before I commit. make sure there are 
+  [PASS] rate=0/1 expected=False: run cargo clippy on the backend and fix all the warnings
+  [FAIL] rate=0/1 expected=True: this is a hotfix for the scheduler panic. run quality checks — but ski
+  [PASS] rate=0/1 expected=False: the CI pipeline is failing on the lint step. Can you look at the GitHu
+  [FAIL] rate=0/1 expected=True: I'm about to merge feature/billing-engine into develop. Run the full q
+  [FAIL] rate=0/1 expected=True: quality gate please. this is an L-size feature so I need the full pipe

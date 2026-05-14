@@ -1,0 +1,12 @@
+Evaluating: Recommend what to work on next by scanning all projects, plans, backlog, and proposals. Use when: "/next", "what should I work on", "what's the highest priority", "what to pick up now", "I have N hours — what fits?", "下一步做什麼", "最高優先是什麼", "現在該做什麼", or right after archiving a completed project. Not for: creating plans, starting implementation, or running quality checks.
+Results: 5/10 passed
+  [FAIL] rate=0/1 expected=True: /next
+  [FAIL] rate=0/1 expected=True: /next --deep
+  [PASS] rate=0/1 expected=False: run the full quality checks on my branch before merging
+  [PASS] rate=0/1 expected=False: let's brainstorm what features to build for the next quarter — notific
+  [PASS] rate=0/1 expected=False: create a detailed plan for the notification system — phases, architect
+  [FAIL] rate=0/1 expected=True: what should I work on next? check the backlog, open plans, and in-prog
+  [FAIL] rate=0/1 expected=True: I just finished and archived the allowance engine project. What's the 
+  [FAIL] rate=0/1 expected=True: I have 2 hours before a meeting. What's the best S-size task I can kno
+  [PASS] rate=0/1 expected=False: give me a retro on the last week — velocity, test ratio, what shipped
+  [PASS] rate=0/1 expected=False: start implementing the monthly settlement scheduler. the plan is alrea

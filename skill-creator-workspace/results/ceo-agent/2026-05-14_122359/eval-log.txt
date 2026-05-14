@@ -1,0 +1,12 @@
+Evaluating: Full delegation — you own the goal end-to-end, user just wants results. Triggers: "CEO mode", "get it done", "you decide", "handle everything", "I trust you", "take over", "full authority", "just do it", "搞定 X", "幫我處理", "全權處理", "你決定". Not for: research-only (→ survey), participatory planning (→ dev-flow), or parallel task dispatch.
+Results: 5/10 passed
+  [FAIL] rate=0/1 expected=True: ok just get it done, I trust you. implement the monthly settlement sch
+  [FAIL] rate=0/1 expected=True: I don't want to think about this anymore. Take over the console migrat
+  [FAIL] rate=0/1 expected=True: CEO mode. Handle the entire LINE notification integration end to end. 
+  [PASS] rate=0/1 expected=False: I need to add a new API endpoint for client monitoring. Let me plan th
+  [FAIL] rate=0/1 expected=True: handle the go-live gap closure. you have full authority to fix whateve
+  [PASS] rate=0/1 expected=False: run these 5 tasks in parallel: update the schema, regenerate types, fi
+  [PASS] rate=0/1 expected=False: investigate whether we should use jemalloc or mimalloc for the account
+  [FAIL] rate=0/1 expected=True: CEO mode, reduce scope. Ship the absolute minimum viable allowance dis
+  [PASS] rate=0/1 expected=False: debug the memory leak in accountingd — it's using 23GB after batch run
+  [PASS] rate=0/1 expected=False: should we build the notification system as a microservice or keep it i

@@ -1,0 +1,12 @@
+Evaluating: Evidence-first performance profiling — tool selection, methodology, interpretation. Use BEFORE guessing at performance issues. Tools first, logs second, code last.
+Results: 5/10 passed
+  [FAIL] rate=0/1 expected=True: the CPU is pegged at 100% during peak hours. which functions are eatin
+  [PASS] rate=0/1 expected=False: the payment handler is crashing with SIGSEGV on certain inputs. find t
+  [PASS] rate=0/1 expected=False: let's plan the migration from gunicorn to uvicorn. impacts: deploy, mo
+  [PASS] rate=0/1 expected=False: what's the performance characteristic of HashMap vs BTreeMap in Rust f
+  [FAIL] rate=0/1 expected=True: 我們的 query 在 staging 跑得超慢但 dev 機正常。需要找出 bottleneck — DB? code? network?
+  [FAIL] rate=0/1 expected=True: before we approve this PR, I want to make sure it didn't regress basel
+  [FAIL] rate=0/1 expected=True: the gobe Rust service has been creeping up to 8GB RAM in production. i
+  [FAIL] rate=0/1 expected=True: the /api/dashboard endpoint p99 latency went from 300ms to 2.5s over t
+  [PASS] rate=0/1 expected=False: save the lesson we just learned about Postgres autovacuum being the ca
+  [PASS] rate=0/1 expected=False: implement caching for the dashboard query — it's slow because we hit D

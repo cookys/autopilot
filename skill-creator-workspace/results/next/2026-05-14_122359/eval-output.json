@@ -1,0 +1,91 @@
+{
+  "skill_name": "next",
+  "description": "Recommend what to work on next by scanning all projects, plans, backlog, and proposals. Use when: \"/next\", \"what should I work on\", \"what's the highest priority\", \"what to pick up now\", \"I have N hours \u2014 what fits?\", \"\u4e0b\u4e00\u6b65\u505a\u4ec0\u9ebc\", \"\u6700\u9ad8\u512a\u5148\u662f\u4ec0\u9ebc\", \"\u73fe\u5728\u8a72\u505a\u4ec0\u9ebc\", or right after archiving a completed project. Not for: creating plans, starting implementation, or running quality checks.",
+  "results": [
+    {
+      "query": "/next",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "/next --deep",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "run the full quality checks on my branch before merging",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "let's brainstorm what features to build for the next quarter \u2014 notification system, advanced reporting, mobile app?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "create a detailed plan for the notification system \u2014 phases, architecture, migration steps, rollback strategy",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "what should I work on next? check the backlog, open plans, and in-progress projects.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "I just finished and archived the allowance engine project. What's the highest priority thing to pick up now?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "I have 2 hours before a meeting. What's the best S-size task I can knock out from the backlog?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "give me a retro on the last week \u2014 velocity, test ratio, what shipped",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "start implementing the monthly settlement scheduler. the plan is already approved.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

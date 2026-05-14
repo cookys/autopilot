@@ -1,0 +1,12 @@
+Evaluating: Team allocation and dependency-aware parallelization — decide when to use teams, select roles, dispatch parallel work safely. Invoke for L-size tasks to evaluate whether team dispatch reduces wall-clock time.
+Results: 5/10 passed
+  [FAIL] rate=0/1 expected=True: I'm thinking 3 agents for this: researcher, implementer, tester. is th
+  [PASS] rate=0/1 expected=False: research how other companies organize cross-functional teams in fintec
+  [PASS] rate=0/1 expected=False: go ahead and spawn 4 parallel agents to handle these tasks — I've alre
+  [FAIL] rate=0/1 expected=True: I want to do an audit + implement plan, but I'm not sure if they shoul
+  [PASS] rate=0/1 expected=False: the team_members table is showing stale data after the last deploy. de
+  [PASS] rate=0/1 expected=False: let me size this work first — small fix or big feature?
+  [FAIL] rate=0/1 expected=True: the dependency graph for this refactor has 8 phases — which can run in
+  [FAIL] rate=0/1 expected=True: this L-size feature has backend changes, frontend changes, and DB migr
+  [FAIL] rate=0/1 expected=True: we have 4 modules that all need similar changes — can we parallelize, 
+  [PASS] rate=0/1 expected=False: how should we structure the engineering team — flat vs squad-based? gi

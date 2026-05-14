@@ -1,0 +1,91 @@
+{
+  "skill_name": "quality-pipeline",
+  "description": "Run pre-commit or pre-merge quality checks: tests, completeness scan (no stubs/TODOs/mocks), code review. Use when: \"quality gate\", \"quality checks\", \"run tests before merge\", \"check for stubs\", \"scan for completeness\", \"is this ready to commit?\", \"pre-merge review\", \"\u54c1\u8cea\u6aa2\u67e5\", \"\u6e96\u5099\u597d\u53ef\u4ee5 commit \u4e86\u55ce\", \"\u8dd1\u4e00\u4e0b\u6aa2\u67e5\". Not for: writing new tests (\u2192 TDD), debugging CI failures, or receiving external review feedback.",
+  "results": [
+    {
+      "query": "write unit tests for the calculate_monthly_settlement function covering edge cases: zero balance, negative commission, cross-tenant split",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "I got review comments from my teammate on PR #87. Help me evaluate whether their suggestions about error handling are valid.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "scan my code for completeness \u2014 I want to make sure nothing is a placeholder or mock implementation before this goes to staging",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "refactor the test suite in backend/src/accounting/tests/ to use shared fixtures instead of duplicating setup code",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "run quality checks on my changes before I commit. make sure there are no stubs or TODOs left",
+      "should_trigger": true,
+      "trigger_rate": 1.0,
+      "triggers": 1,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "run cargo clippy on the backend and fix all the warnings",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "this is a hotfix for the scheduler panic. run quality checks \u2014 but skip completeness since it's a hotfix, just tests and review",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "the CI pipeline is failing on the lint step. Can you look at the GitHub Actions log and figure out why?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": true
+    },
+    {
+      "query": "I'm about to merge feature/billing-engine into develop. Run the full quality gate \u2014 tests, completeness scan, code review, the works.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    },
+    {
+      "query": "quality gate please. this is an L-size feature so I need the full pipeline: test, scan, completeness, review",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 1,
+      "pass": false
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 6,
+    "failed": 4
+  }
+}

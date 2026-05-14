@@ -1,0 +1,12 @@
+Evaluating: Bootstrap, organize, or archive project tracking docs. Use when: "archive this project", "bootstrap from plan", "set up project tracking", "clean up project docs", "update INDEX", "reorganize docs/projects/", "歸檔這個專案", "建專案", "整理專案文件", project is done and merged — needs cleanup. Not for: creating plans (→ writing-plans), choosing what to work on (→ next), or running quality gates (→ quality-pipeline).
+Results: 5/10 passed
+  [FAIL] rate=0/1 expected=True: set up the project tracking for the notification system feature — dire
+  [FAIL] rate=0/1 expected=True: bootstrap a new project from the plan in docs/plans/2026-03-21-allowan
+  [FAIL] rate=0/1 expected=True: I need to reorganize the docs/projects/ directory — some old projects 
+  [PASS] rate=0/1 expected=False: dispatch 3 parallel agents to work on the schema migration, type gener
+  [PASS] rate=0/1 expected=False: what should I work on next? scan all open projects and backlog.
+  [PASS] rate=0/1 expected=False: create a plan for migrating the notification system from polling to SS
+  [PASS] rate=0/1 expected=False: run tests and code review before I merge this feature branch
+  [FAIL] rate=0/1 expected=True: the go-live-gap-closure branch is merged to develop. clean up the proj
+  [PASS] rate=0/1 expected=False: record the advisory lock gotcha in knowledge so future sessions know a
+  [FAIL] rate=0/1 expected=True: the allowance engine feature is done and merged. archive the project —

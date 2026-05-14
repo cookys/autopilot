@@ -1,0 +1,12 @@
+Evaluating: Compare two implementations and find every difference. Use when: "compare X with Y", "check X against Y", "verify X matches Y", "flag anything missing", "比對 X 和 Y", "檢查有沒有漏掉", "驗證是否一致", feature parity review between old and new systems, spec vs implementation verification, cross-system completeness check. Not for debugging a single discrepancy or writing comparison tests.
+Results: 5/10 passed
+  [PASS] rate=0/1 expected=False: read _reference/gobe/app/cockpit/hestia.go and explain the equity calc
+  [FAIL] rate=0/1 expected=True: verify that our Rust P&L calculation matches the gobe implementation. 
+  [PASS] rate=0/1 expected=False: write tests that verify our billing calculation matches the expected o
+  [FAIL] rate=0/1 expected=True: compare the old CRM's client list page (_reference/crm/) with our new 
+  [FAIL] rate=0/1 expected=True: do a systematic comparison of the scheduler executor implementations —
+  [PASS] rate=0/1 expected=False: should we prioritize finishing the audit or shipping the notification 
+  [FAIL] rate=0/1 expected=True: check our API responses against the OpenAPI spec. Are there fields in 
+  [PASS] rate=0/1 expected=False: give me a retrospective on the last 2 weeks of commits — how much time
+  [PASS] rate=0/1 expected=False: debug why the P&L numbers don't match between PEACE and Panel for user
+  [FAIL] rate=0/1 expected=True: audit the console billing page against the legacy Panel. Make sure we 

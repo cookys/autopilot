@@ -1,0 +1,12 @@
+Evaluating: Multi-role debate (architect, ops, QA, product, UX, finance) for strategic decisions. Use when: "I want perspectives from different roles", "let's debate this", "tradeoff analysis", "which should we prioritize", "blast radius of X", "scope decision", "hear from architect/ops/product", "what's the impact?", "要辯論一下", "多角度分析", "幫我評估利弊". Not for: pure tech selection (→ survey), open brainstorming, or full delegation (→ ceo-agent).
+Results: 5/10 passed
+  [PASS] rate=0/1 expected=False: investigate what fintech companies use for real-time equity calculatio
+  [PASS] rate=0/1 expected=False: CEO mode. Just handle the notification integration end to end. You dec
+  [FAIL] rate=0/1 expected=True: what's the blast radius of switching the scheduler from 30-minute batc
+  [PASS] rate=0/1 expected=False: I need to run the billing calculation, the ETL sync, and the report ge
+  [FAIL] rate=0/1 expected=True: should we build the real-time monitoring dashboard as a separate SPA o
+  [PASS] rate=0/1 expected=False: brainstorm creative approaches for the onboarding flow — wild ideas we
+  [FAIL] rate=0/1 expected=True: performance vs features tradeoff: we can either optimize the P&L calcu
+  [FAIL] rate=0/1 expected=True: we need to decide: do we ship allowance distribution in phase 1 with b
+  [FAIL] rate=0/1 expected=True: the CRM redesign could go three ways: minimal reskin, full IA restruct
+  [PASS] rate=0/1 expected=False: which Rust crate should we use for job scheduling — tokio-cron-schedul

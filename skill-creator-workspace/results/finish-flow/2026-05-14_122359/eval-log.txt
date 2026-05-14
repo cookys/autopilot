@@ -1,0 +1,12 @@
+Evaluating: Closing sequence forcing function — use at the END of any dev-flow workflow (L, H, Fix, S) to guarantee no step in the closing sequence gets silently compressed or skipped. On invocation, creates size-appropriate sub-tasks via TaskCreate so each step is individually trackable. MANDATORY for L-size (invoked at L-5) and H-size (invoked at step 9); optional for Fix/S. Use when: finishing L-size project, closing hotfix, "time to merge", "wrap this up", "跑完收尾", "收掉這個專案", "L-5 開始". Not for: mid-phase work, starting new work (→ dev-flow), writing plans (→ writing-plans).
+Results: 6/10 passed
+  [PASS] rate=1/1 expected=True: wrap up the hotfix — merge to main, tag, archive. don't let me forget 
+  [PASS] rate=0/1 expected=False: review the diff before I merge — what looks risky?
+  [FAIL] rate=0/1 expected=True: L-5 開始。請走完整收尾流程。
+  [FAIL] rate=0/1 expected=True: the cross-tenant-allowance feature is done — time to merge and close. 
+  [FAIL] rate=0/1 expected=True: 跑完收尾流程吧，這 ticket 該結了
+  [PASS] rate=0/1 expected=False: we're at phase 3 of 5, just finished implementing — what's next?
+  [PASS] rate=0/1 expected=False: write the plan for the new audit feature
+  [FAIL] rate=0/1 expected=True: I think we're at the end of the L-size workflow but I'm not sure I've 
+  [PASS] rate=0/1 expected=False: the integration tests are failing on CI — debug what's broken
+  [PASS] rate=0/1 expected=False: I'm starting a new L-size feature — set me up with branch and project 

@@ -1,0 +1,12 @@
+Evaluating: Evidence-first debugging for correctness issues. Invoke when diagnosing bugs, crashes, logic errors, data corruption, or connectivity problems. For performance issues, use the profiling skill instead.
+Results: 5/10 passed
+  [PASS] rate=0/1 expected=False: the database queries on the dashboard page are getting slow — went fro
+  [FAIL] rate=0/1 expected=True: the auth service intermittently returns 401 even with valid tokens. Ha
+  [FAIL] rate=0/1 expected=True: the payment webhook handler is panicking with 'null pointer dereferenc
+  [FAIL] rate=0/1 expected=True: user reports that the order total shows wrong sum when they have more 
+  [PASS] rate=0/1 expected=False: write a unit test for the new TaxCalculator.calculate() method to veri
+  [FAIL] rate=0/1 expected=True: data corruption — the loyalty points balance for a few users doesn't m
+  [PASS] rate=0/1 expected=False: I want to plan out how to migrate from MySQL to Postgres. multiple mod
+  [PASS] rate=0/1 expected=False: should we keep the notification logic in the monolith or extract it in
+  [PASS] rate=0/1 expected=False: save what we just learned about pg_try_advisory_lock being session-sco
+  [FAIL] rate=0/1 expected=True: this curl request to our /api/v2/orders endpoint times out from outsid

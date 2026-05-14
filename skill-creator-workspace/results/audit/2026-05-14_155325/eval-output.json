@@ -1,0 +1,91 @@
+{
+  "skill_name": "audit",
+  "description": "Compare two implementations and find every difference. Use when: \"compare X with Y\", \"check X against Y\", \"verify X matches Y\", \"flag anything missing\", \"\u6bd4\u5c0d X \u548c Y\", \"\u6aa2\u67e5\u6709\u6c92\u6709\u6f0f\u6389\", \"\u9a57\u8b49\u662f\u5426\u4e00\u81f4\", feature parity review between old and new systems, spec vs implementation verification, cross-system completeness check. Not for debugging a single discrepancy or writing comparison tests.",
+  "results": [
+    {
+      "query": "audit the console billing page against the legacy Panel. Make sure we haven't missed any fields or calculations in the monthly statement view.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "compare the old CRM's client list page (_reference/crm/) with our new Vue 3 implementation in frontend/. Check every field, filter, sort option, and export feature.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "verify that our Rust P&L calculation matches the gobe implementation. Compare the FIFO logic step by step \u2014 I want to know every divergence.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "check our API responses against the OpenAPI spec. Are there fields in the spec that we're not returning, or fields we return that aren't documented?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "do a systematic comparison of the scheduler executor implementations \u2014 compare what gobe's cron jobs do vs what our Rust ticket executors do. Flag anything missing.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "should we prioritize finishing the audit or shipping the notification feature? Need different perspectives.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "give me a retrospective on the last 2 weeks of commits \u2014 how much time went to auditing vs new features?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "debug why the P&L numbers don't match between PEACE and Panel for user 1234 on 2026-03-15",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "read _reference/gobe/app/cockpit/hestia.go and explain the equity calculation logic",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "write tests that verify our billing calculation matches the expected output from the legacy system",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

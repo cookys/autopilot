@@ -1,0 +1,13 @@
+Evaluating: Evidence-first performance profiling — tool selection, methodology, interpretation. Use BEFORE guessing at performance issues. Tools first, logs second, code last. Covers: slow queries, high latency, CPU spikes, memory growth, throughput regressions (including 'got slower after deploy' — measure before assuming the deploy diff is the cause). Not for: crashes / logic errors (→ debug), tests being slow as test design issue (→ test-strategy).
+Results: 5/11 passed
+  [FAIL] rate=0/5 expected=True: the API got slower after we deployed yesterday
+  [FAIL] rate=0/5 expected=True: the /api/dashboard endpoint p99 latency went from 300ms to 2.5s over t
+  [FAIL] rate=0/5 expected=True: the gobe Rust service has been creeping up to 8GB RAM in production. i
+  [FAIL] rate=0/5 expected=True: 我們的 query 在 staging 跑得超慢但 dev 機正常。需要找出 bottleneck — DB? code? network?
+  [FAIL] rate=0/5 expected=True: the CPU is pegged at 100% during peak hours. which functions are eatin
+  [FAIL] rate=0/5 expected=True: before we approve this PR, I want to make sure it didn't regress basel
+  [PASS] rate=0/5 expected=False: the payment handler is crashing with SIGSEGV on certain inputs. find t
+  [PASS] rate=0/5 expected=False: implement caching for the dashboard query — it's slow because we hit D
+  [PASS] rate=0/5 expected=False: what's the performance characteristic of HashMap vs BTreeMap in Rust f
+  [PASS] rate=0/5 expected=False: save the lesson we just learned about Postgres autovacuum being the ca
+  [PASS] rate=0/5 expected=False: let's plan the migration from gunicorn to uvicorn. impacts: deploy, mo

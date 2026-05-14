@@ -1,7 +1,49 @@
 #!/usr/bin/env bash
 # Run eval-only for all 16 autopilot skills (no improve loop).
 # Uses run_eval.py from skill-creator directly.
+#
+# WHAT THIS MEASURES (and what it doesn't)
+# -----------------------------------------
+# run_eval.py spawns `claude -p <query>` with ONLY the skill description
+# placed in `.claude/commands/<skill>-skill-<random>.md`. No body, no other
+# autopilot skills, no project context. It listens to stream events to see
+# whether Claude invokes the `Skill` tool against that one command for each
+# query.
+#
+# This is an **isolation test** of description attractiveness:
+#   - HIGH pass on should_trigger=False cases → description is not overly broad
+#   - LOW recall on should_trigger=True cases → description is too weak to
+#     attract its own query when alone in the catalog
+#
+# This is NOT a measure of:
+#   - Real-world routing precision (production has 16+ competing skills)
+#   - Skill body quality, methodology fidelity, or workflow correctness
+#   - Whether quality-pipeline / ceo-agent / etc. correctly chain
+#
+# The "2.5% trigger rate baseline" observed at v2.7.0 (cookys-dogfood log
+# 2026-05-14_122359) is the description-in-isolation FLOOR — not a routing
+# regression metric. Stochasticity is ±1-2 cases / 10 with runs-per-query=1.
+# Use RUNS_PER_QUERY=5 + MODEL=claude-opus-4-7 for a high-fidelity baseline
+# (~5-10x cost, far less noisy).
+#
+# For real routing fidelity check, augment with manual scenario walks
+# (e.g. dogfood-routing-log.md D-1/D-2 9-query pattern). For a future
+# automated alternative, see docs/plans/2026-05-14-eval-router-judge.md.
+#
+# Configurable via env vars:
+#   RUNS_PER_QUERY  (default: 1)   — runs per case; 5+ stabilises stochasticity
+#   MODEL           (default: claude-sonnet-4-6) — claude-opus-4-7 for less noise
+#   NUM_WORKERS     (default: 10)  — parallelism per skill
+#   TIMEOUT         (default: 30)  — seconds per query
+#
+# Example high-fidelity baseline run:
+#   RUNS_PER_QUERY=5 MODEL=claude-opus-4-7 bash scripts/run-eval-batch.sh
 set -euo pipefail
+
+RUNS_PER_QUERY="${RUNS_PER_QUERY:-1}"
+MODEL="${MODEL:-claude-sonnet-4-6}"
+NUM_WORKERS="${NUM_WORKERS:-10}"
+TIMEOUT="${TIMEOUT:-30}"
 
 AUTOPILOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_CREATOR_DIR="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
@@ -12,6 +54,7 @@ SKILLS=(audit ceo-agent debug dev-flow finish-flow learn next profiling project-
 
 echo "=== Batch Eval — $TIMESTAMP ==="
 echo "Running ${#SKILLS[@]} skills"
+echo "  runs/query=$RUNS_PER_QUERY model=$MODEL workers=$NUM_WORKERS timeout=${TIMEOUT}s"
 echo ""
 
 declare -A SCORES
@@ -28,10 +71,10 @@ for skill in "${SKILLS[@]}"; do
   python3 -m scripts.run_eval \
     --eval-set "$EVAL_FILE" \
     --skill-path "$SKILL_PATH" \
-    --num-workers 10 \
-    --timeout 30 \
-    --runs-per-query 1 \
-    --model claude-sonnet-4-6 \
+    --num-workers "$NUM_WORKERS" \
+    --timeout "$TIMEOUT" \
+    --runs-per-query "$RUNS_PER_QUERY" \
+    --model "$MODEL" \
     --verbose \
     > "$RESULT_DIR/eval-output.json" \
     2> "$RESULT_DIR/eval-log.txt" || true

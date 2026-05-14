@@ -1,0 +1,91 @@
+{
+  "skill_name": "dev-flow",
+  "description": "Start here before writing any code \u2014 sizes task (S/L/H/Fix), sets up branch and session rules. Use when: \"I'm starting on X\", \"quick fix for Y\", \"continuing from yesterday\", \"hotfix needed\", \"let's implement X\", \"skip to coding\", \"\u6211\u8981\u958b\u59cb\u505a X\", \"\u5feb\u901f\u4fee\u4e00\u4e0b\", \"\u63a5\u7e8c\u6628\u5929\u7684\u9032\u5ea6\", resuming a feature branch, or any task that touches code. Not for: debugging (\u2192 systematic-debugging), writing plans (\u2192 writing-plans), brainstorming (\u2192 brainstorming), or code review (\u2192 quality-pipeline).",
+  "results": [
+    {
+      "query": "quick fix \u2014 the date format in the CSV export header is wrong, just need to change the strftime pattern in one file",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I'm starting on the new webhook retry logic. It touches support/executors, the scheduler, and needs a new config table. Let me size this before jumping in.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "continuing work on feature/cross-tenant-allowance from yesterday. I left off at phase 3 of the plan.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "production is down \u2014 the scheduler is panic'ing on startup because the advisory lock table doesn't exist after the migration rollback. hotfix needed NOW",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "ok let's start implementing the monthly settlement cron job. the plan is already in docs/plans/2026-03-21-allowance-distribution-engine.md, skip planning and go straight to coding",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "this endpoint returns 500 when the request body has a null broker_account_id. Can you trace through the handler and find the bug?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "write integration tests for the allowance engine \u2014 cover tier policy, split policy, and the cross-tenant edge case where tenant A owes tenant B",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "create a detailed plan for migrating our notification system from polling to SSE. I want architecture diagrams, phase breakdown, risk analysis.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "review the code in my last 3 commits on this branch \u2014 check for security issues, missing error handling, and consistency with our patterns",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "let's brainstorm different approaches for the real-time P&L dashboard. maybe SSE, maybe websockets, maybe polling with smart caching?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

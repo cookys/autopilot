@@ -1,0 +1,91 @@
+{
+  "skill_name": "learn",
+  "description": "Save a hard-won lesson or surprising fix so future sessions benefit. Use when: \"save this to knowledge\", \"record this\", \"remember for next time\", \"/learn\", \"\u8a18\u4e0b\u4f86\", \"\u5b58\u5230 knowledge\", \"\u8a18\u4f4f\u9019\u500b\", user shares a gotcha or non-obvious fix, solution took 2+ attempts, environment-specific workaround discovered. Also handles: \"knowledge health audit\", \"check MEMORY.md size\", stale knowledge cleanup. Not for: active debugging, writing tests, or project status updates.",
+  "results": [
+    {
+      "query": "I just spent 2 hours figuring out that sqlx::query! macros don't work with CTEs that have RETURNING clauses in offline mode. Save this to knowledge so we don't waste time again.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "/learn build cargo watch ignores .sqlx/ changes \u2014 need to add --watch .sqlx to the command",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "record this: when running migrations in Docker, the DATABASE_URL needs to use the container hostname (db) not localhost. Took me 3 tries to figure out.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "can you do a knowledge health audit? check if MEMORY.md is getting too long and whether any knowledge files are stale",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the pg_try_advisory_lock vs pg_try_advisory_xact_lock distinction almost bit us again. Make sure this is recorded in knowledge \u2014 session-scoped locks don't release when connections return to the pool.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "write a unit test for the advisory lock helper function. Cover the happy path and the timeout case.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "debug why the migration is failing \u2014 it says 'relation already exists' but I dropped it in the previous migration",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "give me a retrospective on last week's commits \u2014 velocity, test ratio, focus areas",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "read .claude/knowledge/build-errors.md and tell me what we know about sqlx offline mode issues",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "update the project README with the current status of the billing engine \u2014 phase 2 is done, phase 3 is in progress",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

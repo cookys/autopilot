@@ -1,0 +1,91 @@
+{
+  "skill_name": "team",
+  "description": "Team allocation and dependency-aware parallelization \u2014 decide when to use teams, select roles, dispatch parallel work safely. Invoke for L-size tasks to evaluate whether team dispatch reduces wall-clock time.",
+  "results": [
+    {
+      "query": "this L-size feature has backend changes, frontend changes, and DB migrations. Should I do this solo phase-by-phase or organize parallel work?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "we have 4 modules that all need similar changes \u2014 can we parallelize, or will the changes overlap and cause conflicts?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I want to do an audit + implement plan, but I'm not sure if they should be one role or two parallel agents",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the dependency graph for this refactor has 8 phases \u2014 which can run in parallel, which must be sequential? walk me through the analysis",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I'm thinking 3 agents for this: researcher, implementer, tester. is that too many or about right for the scope?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "go ahead and spawn 4 parallel agents to handle these tasks \u2014 I've already decided the work breakdown",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "the team_members table is showing stale data after the last deploy. debug what's wrong",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "let me size this work first \u2014 small fix or big feature?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "how should we structure the engineering team \u2014 flat vs squad-based? give me multiple perspectives.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "research how other companies organize cross-functional teams in fintech",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

@@ -217,6 +217,40 @@ Decision Brief 與 perspectives，**不執行 project code 工作**。SKILLS rul
 | Six-Element → Seven-Element 自動工具化 | 文檔規範就夠，工具化是 over-engineering |
 | 借 `examples/` 目錄結構 | autopilot 已有 `references/` 慣例。同事抄 powerloop examples/ 結構是格式潔癖，沒實際 ROI |
 
+### eval-proxy limitation（B/A 收尾跑 skill-creator 驗證時 surface 的）
+
+跑 `scripts/run-eval-batch.sh` 想用 skill-creator 完整驗證 B/A 沒 regression 時觀察到：**`run_eval.py` 是 description-in-isolation test，不是 routing precision 量尺**。
+
+機制：對每 query 在 test project 寫一個 `.claude/commands/<skill>-skill-<random>.md`（只放 description），spawn `claude -p`，看 stream event 是否觸發那唯一一個 command。整套 measure 的是「單一 description 在零干擾條件下被選中的機率」。
+
+實測 16 skill: 15/16 recall = 0%、1/16 recall = 20%（sonnet 4.6, runs=1）。所謂「2.5% baseline」就是這個 isolation-test floor — **不是 proxy 壞、不是 routing 出問題**，是設計上就只測 description attractiveness。
+
+**S3 high-fidelity baseline 進一步揭露（2026-05-14_155325，runs=5 + opus 4.7，$45）**：
+
+| Metric | sonnet × 1 run | opus × 5 runs |
+|---|---|---|
+| TP | 1 / 82 (think-tank lucky hit) | **0 / 82** |
+| FP | 0 / 81 | 0 / 81 |
+| Recall | 1.2% | **0.0%** |
+| Precision | 100% | 100% |
+
+更多 runs + 更強 model 把先前的 1 TP 也磨平了 → **proxy 對 autopilot skill 是結構性無法 trigger**，不是 stochasticity 噪音。Sonnet × 1 run 的 ±1 case 波動全部是隨機，本質訊號是 0。
+
+可能原因（未深究，留 T4 Phase 1 處理）：
+- 命令檔 `<skill>-skill-<random>` 跟 autopilot 內部 `autopilot:<name>` 引用解耦，Claude 看不出兩者關聯
+- 命令檔只放 description、無 body — Claude 可能對 body-less skill 不夠 confident
+- autopilot description 引用其他 autopilot skill（"Not for: → debug"），那些 skill 在 isolation test 中不存在 → 不完整 context
+
+判讀更新：原 plan §6 提出「2.5% 是 isolation-test floor」— 修正為「**0% 是 isolation-test floor**，2.5% 是過往單 run 殘餘 noise」。對 B/A 的結論不變：沒動 description → eval 結果跟 baseline 同（0%）。
+
+對 B/A 的判讀：
+- 沒動 SKILL.md description → eval 結果 ±1-2 case 是 LLM stochasticity，不是 regression
+- 想真正測 routing fidelity，需要 manual scenario walks（D-1/D-2 9-query 已是現有做法）OR 寫獨立 router-judge harness（見 `docs/plans/2026-05-14-eval-router-judge.md`）
+
+文件化動作：
+- `scripts/run-eval-batch.sh` 加 header comment 講清楚這個機制 + parametrize `RUNS_PER_QUERY` / `MODEL` 兩個 env var，方便 high-fidelity 跑（5 runs × opus 4.7）vs 日常 quick check
+- 這節記錄這次發現，下次 me 不重蹈誤讀 5/10 為「routing regression」的覆轍
+
 ---
 
 ## 7. Credit

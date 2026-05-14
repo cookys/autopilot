@@ -1,0 +1,99 @@
+{
+  "skill_name": "debug",
+  "description": "Evidence-first debugging for correctness issues. Invoke when diagnosing bugs, crashes, logic errors, data corruption, connectivity problems, intermittent failures (incl. flaky tests with environment divergence), or 'works on my machine' issues. For performance issues (slow / high latency / CPU / memory), use the profiling skill instead. For perf regressions with known change attribution, profiling is still primary \u2014 measure first, don't guess from the deploy diff.",
+  "results": [
+    {
+      "query": "the payment webhook handler is panicking with 'null pointer dereference' on certain payloads. Can you find the root cause?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "user reports that the order total shows wrong sum when they have more than 10 items in cart. there's no error log, just wrong output. dig into it.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the auth service intermittently returns 401 even with valid tokens. Happens maybe 1 in 50 requests. Help me track this down.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the test is flaky \u2014 passes locally fails on CI",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "data corruption \u2014 the loyalty points balance for a few users doesn't match the sum of their point_transactions records. Need to find what's causing the drift.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the database queries on the dashboard page are getting slow \u2014 went from 200ms to 2s over the last week. need to figure out what's dragging it down",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "write a unit test for the new TaxCalculator.calculate() method to verify it handles VAT correctly for EU vs non-EU customers",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "this curl request to our /api/v2/orders endpoint times out from outside the cluster but works internally. dns? firewall? what's going on?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I want to plan out how to migrate from MySQL to Postgres. multiple modules touched, need to think about backwards compatibility.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "save what we just learned about pg_try_advisory_lock being session-scoped \u2014 I want this in the knowledge base for next time",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "should we keep the notification logic in the monolith or extract it into a separate service? want multiple perspectives.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 11,
+    "passed": 5,
+    "failed": 6
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "skill_name": "profiling",
+  "description": "Evidence-first performance profiling \u2014 tool selection, methodology, interpretation. Use BEFORE guessing at performance issues. Tools first, logs second, code last. Covers: slow queries, high latency, CPU spikes, memory growth, throughput regressions (including 'got slower after deploy' \u2014 measure before assuming the deploy diff is the cause). Not for: crashes / logic errors (\u2192 debug), tests being slow as test design issue (\u2192 test-strategy).",
+  "results": [
+    {
+      "query": "the API got slower after we deployed yesterday",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the /api/dashboard endpoint p99 latency went from 300ms to 2.5s over the last week. need to figure out where the time is going.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the gobe Rust service has been creeping up to 8GB RAM in production. it was steady at 2GB a month ago. profile what's leaking.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "\u6211\u5011\u7684 query \u5728 staging \u8dd1\u5f97\u8d85\u6162\u4f46 dev \u6a5f\u6b63\u5e38\u3002\u9700\u8981\u627e\u51fa bottleneck \u2014 DB? code? network?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the CPU is pegged at 100% during peak hours. which functions are eating it? need a flame graph or similar.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "before we approve this PR, I want to make sure it didn't regress baseline performance \u2014 can we measure before/after?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the payment handler is crashing with SIGSEGV on certain inputs. find the bug.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "implement caching for the dashboard query \u2014 it's slow because we hit DB on every request",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "what's the performance characteristic of HashMap vs BTreeMap in Rust for our use case? research before deciding",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "save the lesson we just learned about Postgres autovacuum being the cause of the latency spikes",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "let's plan the migration from gunicorn to uvicorn. impacts: deploy, monitoring, latency profile",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 11,
+    "passed": 5,
+    "failed": 6
+  }
+}

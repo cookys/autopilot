@@ -89,12 +89,18 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
   - autopilot tool-event hooks 從未 e2e tested via real Claude Code dispatch（過去只 heredoc synthetic 測 script 本身）
 - **Workaround paths** (next-step decision):
   1. ~~Downgrade~~ **RULED OUT** by Round 2 test
-  2. **Upstream report**：bug report Anthropic — 含官方 PreToolUse Bash example broken + ENXIO transcripts；reproducible
+  2. **Upstream comment**（updated 2026-05-14 post web-research）：**comment on existing open issue `#6305`** 而非 file 新 — Anthropic close 同類 issue "not planned" 多次（#9567, #6403, #38162）、新 issue 預期低 ROI。#6305 reporter 已給 macOS 範例、加 Linux ENXIO + 2.1.139 changelog correlation + binary strings diff 補強
   3. **Hook design pivot**：tool-event hooks 改 read transcript JSONL（path = `~/.claude/projects/-<cwd-encoded>/<CLAUDE_CODE_SESSION_ID>.jsonl`）；PreToolUse 救不了（tool 還沒 run、transcript 還沒寫 entry）；PostToolUse 可救
-  4. **Disable broken hooks**：承認 audit-log + failure-escalation 等在這環境跑不動、從 hooks.json 拔掉、改文件警告 user
-- **Effort**: (2) ~30min；(3) L-size ~6-10hr；(4) S ~30min
-- **Recommendation**: (2) + (4) 同時做。(2) push 上游修；(4) 立即 reduce 假象 hook 跑、清理 hooks.json。等 1-2 週 upstream 無回應再考慮 (3)
-- **Source**: 2026-05-14 fresh-claude transcripts `76a7e1b6-...` (2.1.141) + `7bd61ac4-...` (2.1.129)；binary strings 2.1.128/129/141 對比
+  4. **Disable broken hooks** ✅ DONE in `c5e5a4c` (v2.7.4)
+- **Web research (2026-05-14)**:
+  - **同 class issue 出現多次跨多平台**：macOS（#9567, #6403, #6305）、Windows（#17424, #36156, #46601）、Linux（我們確認 + 暗示 in #38162 inverted-async-bug）
+  - **Anthropic 不修紀錄**：#9567, #6403 closed not planned 無回應；#6305 仍 open 無回應
+  - **changelog smoking gun**：v2.1.139 `Fixed a bug where a hook writing to the terminal could corrupt an on-screen interactive prompt; hooks now run without terminal access` — 拔 hook terminal access 後 `/dev/stdin` open 拋 ENXIO；但 2.1.129 (pre-2.1.139) 也 ENXIO 表示 bug 比這次改動更早
+  - **`ruvnet/ruflo #1172` 反證**：claude-flow 在 2.1.45–47 Linux Node v22 **正常** stdin → 退化發生於 2.1.47 → 2.1.128 區間（autopilot intent file 史上 `last_tool: <unknown>` 對應）
+  - **官方 docs example `jq -r '.tool_input.command'` broken** — 強化 case
+- **Effort**: (2) comment on #6305 ~30min；(3) L-size ~6-10hr
+- **Recommendation**: 等 1-2 週看 (2) comment 有沒有回應；若無、(3) hook design pivot 排上 next L-size
+- **Source**: 2026-05-14 fresh-claude transcripts `76a7e1b6-...` (2.1.141) + `7bd61ac4-...` (2.1.129)；binary strings diff 2.1.128/129/141；Claude Code official changelog v2.1.139；GitHub issues #6305, #9567, #6403, #38162, ruvnet/ruflo #1172
 
 ### Re-enable v2.7.4 disabled hooks once upstream stdin-pipe lands
 - **Trigger** (任一觸發即跑驗證、全綠才 re-enable):

@@ -5,6 +5,15 @@ description: Testing strategy and baseline management. Invoke when writing tests
 
 # Test Strategy
 
+## Coexistence with Superpowers
+
+This skill is autopilot's standalone fallback for testing methodology. If the `superpowers` plugin is installed, `superpowers:test-driven-development` is available — note these are **NOT equivalent**.
+
+Differences worth knowing:
+
+- **TDD ≠ test-strategy.** `superpowers:test-driven-development` focuses on the「先寫測試再寫實作」red-green-refactor cycle. **autopilot:test-strategy** covers test pyramid, baseline 守則, failure investigation funnel — orthogonal scope.
+- If you want both, use them together: TDD as the *coding loop*, test-strategy as the *strategy frame*. `.claude/dispatch-config.md`'s `## Testing methodology` chain controls orchestrator preference.
+
 <!-- Project-specific config (test commands, framework, conventions) -->
 !`cat .claude/test-strategy-config.md 2>/dev/null || echo "No project-specific test config found. Using generic defaults."`
 

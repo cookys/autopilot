@@ -5,6 +5,16 @@ description: Team allocation and dependency-aware parallelization — decide whe
 
 # Team Allocation
 
+## Coexistence with Superpowers
+
+This skill is autopilot's standalone methodology for *team allocation decisions* — when to organize parallel work, which roles to assign, how to analyze dependencies. If the `superpowers` plugin is installed, `superpowers:dispatching-parallel-agents` is the **dispatch mechanism** (the verb), but role/dependency planning (the noun) is still this skill's domain.
+
+Differences worth knowing:
+
+- **autopilot:team** = allocation decision tree (when to組隊, role 選擇, 依賴分析, team size rules, shutdown flow).
+- **superpowers:dispatching-parallel-agents** = the technical dispatch mechanism — issuing parallel agent calls with structured reporting.
+- For the dispatch mechanism preference (after allocation decided), see `.claude/dispatch-config.md`'s `## Parallel Dispatch` chain. For allocation methodology, this skill is the primary entry point regardless.
+
 ## Project Config (auto-injected)
 !`cat .claude/team-config.md 2>/dev/null || echo "_No config — using generic role templates below._"`
 

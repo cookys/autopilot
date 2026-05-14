@@ -5,6 +5,15 @@ description: Evidence-first debugging for correctness issues. Invoke when diagno
 
 # Evidence-First Debugging
 
+## Coexistence with Superpowers
+
+This skill is autopilot's standalone fallback for debugging methodology. If the `superpowers` plugin is installed, you may prefer `superpowers:systematic-debugging` — both work; `.claude/dispatch-config.md`'s `## Debugging` chain controls which one orchestrator skills (ceo-agent / finish-flow / quality-pipeline) dispatch.
+
+Differences worth knowing:
+
+- **autopilot:debug** is evidence-first (tool → log → code) with explicit Three Red Lines integration and `debug-config.md` project context injection. Stricter discipline; prescriptive ordering.
+- **superpowers:systematic-debugging** is more general-purpose with broader hypothesis-driven framing. Less prescriptive, broader applicability.
+
 <!-- Project-specific config (tool tables, log locations, common commands) -->
 !`cat .claude/debug-config.md 2>/dev/null || echo "No project-specific debug config found. Use generic evidence collection below."`
 

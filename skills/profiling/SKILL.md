@@ -5,6 +5,12 @@ description: "Evidence-first performance profiling — tool selection, methodolo
 
 # Evidence-First Profiling
 
+## Coexistence with Superpowers
+
+This skill is the **only methodology entry point** for performance investigation in the autopilot + superpowers ecosystem. `superpowers` does not ship a dedicated profiling skill — CHANGELOG v2.0 acknowledged this explicitly. Whether or not you have superpowers installed, this is the primary skill for performance work.
+
+Use this skill for: performance-only investigation (slow queries, high memory, CPU spikes, latency). For **correctness** debugging (crashes, logic errors), use `autopilot:debug` (or `superpowers:systematic-debugging` if installed).
+
 ## Project Config (auto-injected)
 !`cat .claude/profiling-config.md 2>/dev/null || echo "_No config — using generic tool selection below._"`
 

@@ -6,14 +6,13 @@
 
 ## 進行中 (In Progress)
 
-| Date | Project | Version | Branch | Plan |
-|------|---------|---------|--------|------|
-| 2026-05-14 | [context-handoff-hardening](2026-05-14-context-handoff-hardening/README.md) | v2.7.2 (target) | `feat/v2.7.2-context-handoff-hardening` | [plan](../plans/2026-05-14-context-handoff-hardening.md) |
+_None._
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-05-14 | [context-handoff-hardening](_archive/2026-05-14-context-handoff-hardening/README.md) | v2.7.2 | [`670cc23`](../../../../commit/670cc23) | [plan](../plans/2026-05-14-context-handoff-hardening.md) |
 | 2026-05-14 | [superpowers-coexistence](_archive/2026-05-14-superpowers-coexistence/README.md) | v2.7.0 | [`eb70999`](../../../../commit/eb70999) | [plan](../plans/2026-05-14-superpowers-coexistence.md) |
 | 2026-04-13 | [pua-inspired-enhancement](_archive/2026-04-13-pua-inspired-enhancement/README.md) | v2.6.0 | [`cd6e73b`](../../../../commit/cd6e73b) | (self-contained in README) |
 | 2026-04-13 | [universal-hooks-ship-b](_archive/2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 | [`817c707`](../../../../commit/817c707) | [plan](../plans/2026-04-12-universal-hooks.md) |

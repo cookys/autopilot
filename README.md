@@ -449,12 +449,12 @@ Autopilot and voltagent are **orthogonal by design**:
 
 **Dispatch boundary:**
 
-- Going through an **autopilot skill** (`quality-pipeline`, `dev-flow`, `ceo-agent`) auto-dispatches `autopilot:reviewer` / `:debugger` / `:planner` to carry methodology discipline into every invocation
+- Going through an **autopilot skill** (`quality-pipeline`, `dev-flow`, `ceo-agent`) auto-dispatches autopilot methodology agents — `:debugger` and `:planner` named directly by their consumer skills, reviewer selected via the `.claude/dispatch-config.md` `## Code Review` chain (defaults to `autopilot:reviewer` when chain unset or no entry dispatchable) — to carry methodology discipline into every invocation
 - **Directly invoking an agent** via the `Agent` tool — voltagent's role agents (`voltagent-qa-sec:code-reviewer`, `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`, etc.) are usually the better primary choice because they have broader domain coverage
 
 Two workflows, two dispatch paths, zero overlap in practice.
 
-Autopilot does **not** runtime-detect voltagent. Autopilot skills name autopilot agents directly in their prose. If you want a different reviewer for a specific task, invoke the alternate explicitly via the `Agent` tool — that is a user-layer choice, not graceful degradation inside autopilot skills.
+Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are named directly by their consumer skills; the reviewer is selected via the `.claude/dispatch-config.md` `## Code Review` chain with `autopilot:reviewer` as the default fallback when the chain is unset or no chain entry is dispatchable. If you want a reviewer not in the chain for a one-off task, invoke it explicitly via the `Agent` tool — that is a user-layer choice on top of the chain mechanism.
 
 ---
 

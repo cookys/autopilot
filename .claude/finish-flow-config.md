@@ -29,7 +29,7 @@ autopilot-specific criteria usually fall into: file existence, grep hit count, v
 
 ### L-5.2 Pre-Merge Review
 
-Invoke `autopilot:quality-pipeline`. Up to 3 fix-review rounds allowed. Dispatch to `autopilot:reviewer` (primary). Fallback `superpowers:code-reviewer` applies only when (a) `superpowers` plugin is installed and (b) `autopilot:reviewer` is not yet loaded in session; otherwise restart Claude Code to register `autopilot:reviewer` rather than skipping review.
+Invoke `autopilot:quality-pipeline`. Up to 3 fix-review rounds allowed. Reviewer is selected per `.claude/dispatch-config.md` `## Code Review` chain (autopilot's own chain currently: `superpowers:code-reviewer → autopilot:reviewer`); `autopilot:reviewer` is the default fallback when the chain is unset or no chain entry is dispatchable. If `autopilot:reviewer` is not yet loaded in session and no chain alternative is available, restart Claude Code to register it rather than skipping review.
 
 ### L-5.3 Merge to develop
 

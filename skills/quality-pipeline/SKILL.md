@@ -53,7 +53,7 @@ Follow references/completeness-gate.md
 **Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Reviewer role → default: `model: "sonnet", mode: "plan"`.
 
 ```
-Follow references/code-review.md (dispatches autopilot:reviewer as primary reviewer)
+Follow references/code-review.md (dispatches per .claude/dispatch-config.md '## Code Review' chain; defaults to autopilot:reviewer when chain unset or no chain entry is dispatchable)
   Agent dispatch: model="sonnet", mode="plan" (from model-routing config, reviewer role)
   → Critical/Important? → fix → re-review (repeat until clean)
   → Suggestion/Minor? → dispatch via Decision Tree below

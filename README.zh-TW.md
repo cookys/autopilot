@@ -442,12 +442,12 @@ Autopilot 和 voltagent **正交設計**：
 
 **Dispatch 邊界**：
 
-- 走 **autopilot skill**（`quality-pipeline`、`dev-flow`、`ceo-agent`）會自動 dispatch `autopilot:reviewer` / `:debugger` / `:planner`，把方法論紀律帶進每次 invocation
+- 走 **autopilot skill**（`quality-pipeline`、`dev-flow`、`ceo-agent`）會自動 dispatch autopilot 方法論 agent — `:debugger` 和 `:planner` 由 consumer skill 直接指定，reviewer 由 `.claude/dispatch-config.md` `## Code Review` chain 選擇（chain 未設或 entry 不可 dispatch 時預設 fallback 為 `autopilot:reviewer`）— 把方法論紀律帶進每次 invocation
 - **直接呼叫 agent**（透過 `Agent` tool）時，voltagent 的角色 agent（`voltagent-qa-sec:code-reviewer`、`voltagent-lang:rust-engineer`、`voltagent-data-ai:postgres-pro` 等）通常是更好的首選，因為它們的 domain 覆蓋更廣
 
 兩個 workflow、兩個 dispatch 路徑、實際上不重疊。
 
-Autopilot **不會** runtime 偵測 voltagent。Autopilot skill 的 prose 直接寫明 autopilot agent 的名字。如果某個任務你想要不同的 reviewer，直接透過 `Agent` tool 顯式呼叫 — 這是 user 層的選擇，不是 autopilot skill 裡的 graceful degradation 機制。
+Autopilot **不會** runtime 偵測 voltagent。`:debugger` 和 `:planner` 由 consumer skill 直接指定；reviewer 由 `.claude/dispatch-config.md` `## Code Review` chain 選擇，chain 未設或 entry 不可 dispatch 時預設 fallback 為 `autopilot:reviewer`。如果某個任務你想要不在 chain 的 reviewer，直接透過 `Agent` tool 顯式呼叫 — 這是 user 層的選擇，疊加在 chain 機制之上。
 
 ---
 

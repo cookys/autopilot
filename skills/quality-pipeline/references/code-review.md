@@ -66,7 +66,9 @@ Everything else, including items that seem trivial:
 
 ## Invocation
 
-Dispatch `autopilot:reviewer` as the primary code reviewer — it carries autopilot's Three Red Lines discipline (closure / fact-driven / exhaustiveness) and emits a unified Output Contract with enum-based `### Handoff` section that quality-pipeline can pattern-match:
+**Dispatch per the `.claude/dispatch-config.md` `## Code Review` chain** (auto-injected at the top of `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the first AVAILABLE reviewer in that chain; **`autopilot:reviewer` is the default fallback** when the chain is unset or no chain entry is dispatchable.
+
+Example dispatch (when the chain selects `autopilot:reviewer` — autopilot's methodology-disciplined reviewer carrying Three Red Lines: closure / fact-driven / exhaustiveness, emitting a unified Output Contract with enum-based `### Handoff` that quality-pipeline can pattern-match):
 
 ```
 Task tool:
@@ -74,13 +76,15 @@ Task tool:
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
-The agent will:
+Whichever reviewer the chain selects, the agent will:
 1. Read all changed files (git diff)
 2. Compare against the original plan/task intent
 3. Run the full correctness / security / boundary / error-handling / performance / API-usage checklist
 4. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`
 
-**Reviewer chain** — dispatch by reading `.claude/dispatch-config.md`'s `## Code Review` chain (auto-injected at the top of `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the first AVAILABLE reviewer in that chain:
+(Non-autopilot reviewers may return a different output shape — see "Handoff Consumption" below for enum vocabulary; foreign-shape outputs fall back to inline interpretation by quality-pipeline.)
+
+**Chain semantics** — quality-pipeline picks the first AVAILABLE reviewer in `.claude/dispatch-config.md`'s `## Code Review` chain:
 
 - If the project lists `autopilot:reviewer` first (default) → use it; it is autopilot's methodology-disciplined reviewer
 - If the project lists `superpowers:code-reviewer` first (or as fallback when `autopilot:reviewer` is not yet loaded mid-session) → use it; broader latitude, less strict on discipline enforcement

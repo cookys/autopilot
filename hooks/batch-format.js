@@ -16,7 +16,7 @@ const { spawnSync } = require('child_process');
 const MAX_ERROR_LINES = 30;
 
 function getSessionId() {
-  const raw = process.env.CLAUDE_SESSION_ID || '';
+  const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
   if (raw) return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
   return crypto.createHash('sha1').update(process.cwd()).digest('hex').slice(0, 12);
 }

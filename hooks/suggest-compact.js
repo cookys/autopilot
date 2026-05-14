@@ -14,7 +14,7 @@ const FIRST_THRESHOLD = 50;
 const INTERVAL = 25;
 
 function getSessionId() {
-  const raw = process.env.CLAUDE_SESSION_ID || process.cwd();
+  const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || process.cwd();
   return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
 }
 

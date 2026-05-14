@@ -1,0 +1,91 @@
+{
+  "skill_name": "finish-flow",
+  "description": "Closing sequence forcing function \u2014 use at the END of any dev-flow workflow (L, H, Fix, S) to guarantee no step in the closing sequence gets silently compressed or skipped. On invocation, creates size-appropriate sub-tasks via TaskCreate so each step is individually trackable. MANDATORY for L-size (invoked at L-5) and H-size (invoked at step 9); optional for Fix/S. Use when: finishing L-size project, closing hotfix, \"time to merge\", \"wrap this up\", \"\u8dd1\u5b8c\u6536\u5c3e\", \"\u6536\u6389\u9019\u500b\u5c08\u6848\", \"L-5 \u958b\u59cb\". Not for: mid-phase work, starting new work (\u2192 dev-flow), writing plans (\u2192 writing-plans).",
+  "results": [
+    {
+      "query": "the cross-tenant-allowance feature is done \u2014 time to merge and close. run the closing sequence so we don't skip steps.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "L-5 \u958b\u59cb\u3002\u8acb\u8d70\u5b8c\u6574\u6536\u5c3e\u6d41\u7a0b\u3002",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I think we're at the end of the L-size workflow but I'm not sure I've done everything \u2014 guide me through what's left.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "wrap up the hotfix \u2014 merge to main, tag, archive. don't let me forget anything.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "\u8dd1\u5b8c\u6536\u5c3e\u6d41\u7a0b\u5427\uff0c\u9019 ticket \u8a72\u7d50\u4e86",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I'm starting a new L-size feature \u2014 set me up with branch and project tracking",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "we're at phase 3 of 5, just finished implementing \u2014 what's next?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "write the plan for the new audit feature",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "the integration tests are failing on CI \u2014 debug what's broken",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "review the diff before I merge \u2014 what looks risky?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

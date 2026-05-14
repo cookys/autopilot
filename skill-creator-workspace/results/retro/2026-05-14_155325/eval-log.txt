@@ -1,0 +1,12 @@
+Evaluating: Engineering retrospective from git history — velocity, test ratio, focus score, commit patterns. Use when: "/retro", "retro on last N days", "how productive was this sprint", "analyze my commit history", "work patterns", "session analysis", "回顧", "分析工作模式", "這週做了什麼". Not for: viewing specific commit diffs, comparison audits, or debugging test coverage drops.
+Results: 5/10 passed
+  [FAIL] rate=0/5 expected=True: /retro 14d
+  [FAIL] rate=0/5 expected=True: give me a retro on the last 2 weeks — I want to see velocity, test rat
+  [FAIL] rate=0/5 expected=True: how productive was this sprint? analyze the git history for the past 7
+  [FAIL] rate=0/5 expected=True: 回顧一下最近的工作模式 — 哪些時段最有生產力？test coverage 有進步嗎？
+  [FAIL] rate=0/5 expected=True: analyze my commit history for the last 30 days. I want the hourly dist
+  [PASS] rate=0/5 expected=False: what changed in the last 5 commits? show me the diff summary
+  [PASS] rate=0/5 expected=False: compare our old CRM implementation with the new Vue 3 version — check 
+  [PASS] rate=0/5 expected=False: what should I work on next? scan all the plans and backlog items.
+  [PASS] rate=0/5 expected=False: debug why the test coverage dropped from 22% to 8% — which test files 
+  [PASS] rate=0/5 expected=False: review the code quality of my recent changes — look for security issue

@@ -1,0 +1,13 @@
+Evaluating: Testing strategy and baseline management — test pyramid placement, baseline守則, failure investigation funnel, regression scoping, flaky-test systemic handling. Invoke when validating changes or designing test approach. Not for: TDD red-green-refactor coding cycle (→ superpowers:test-driven-development if installed; this skill is orthogonal — see Coexistence section), specific test debugging (→ debug), or quality gate (→ quality-pipeline).
+Results: 6/11 passed
+  [FAIL] rate=0/5 expected=True: we're adding integration tests for the new payment flow but I'm not su
+  [FAIL] rate=0/5 expected=True: I want to set up a testing baseline before this refactor — record what
+  [FAIL] rate=0/5 expected=True: 我寫的測試一直 flaky — 同樣 input 有時候過有時候 fail。怎麼系統性處理這類問題？
+  [FAIL] rate=0/5 expected=True: we have 200 unit tests and 5 e2e tests for this service. is that the r
+  [FAIL] rate=0/5 expected=True: regression check — make sure these new changes don't break any existin
+  [PASS] rate=0/5 expected=False: let's TDD this — write the failing test for the new commission calcula
+  [PASS] rate=0/5 expected=False: the test_payment_handler test is failing with 'connection refused' — d
+  [PASS] rate=0/5 expected=False: the test is flaky — passes locally fails on CI
+  [PASS] rate=0/5 expected=False: should we use Jest or Vitest for the frontend tests? what's the tradeo
+  [PASS] rate=0/5 expected=False: before I commit, run the full quality gate — tests, completeness scan,
+  [PASS] rate=0/5 expected=False: the slow query in the dashboard is killing our p99 — profile it

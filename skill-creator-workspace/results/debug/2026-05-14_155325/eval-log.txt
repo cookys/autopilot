@@ -1,0 +1,13 @@
+Evaluating: Evidence-first debugging for correctness issues. Invoke when diagnosing bugs, crashes, logic errors, data corruption, connectivity problems, intermittent failures (incl. flaky tests with environment divergence), or 'works on my machine' issues. For performance issues (slow / high latency / CPU / memory), use the profiling skill instead. For perf regressions with known change attribution, profiling is still primary — measure first, don't guess from the deploy diff.
+Results: 5/11 passed
+  [FAIL] rate=0/5 expected=True: the payment webhook handler is panicking with 'null pointer dereferenc
+  [FAIL] rate=0/5 expected=True: user reports that the order total shows wrong sum when they have more 
+  [FAIL] rate=0/5 expected=True: the auth service intermittently returns 401 even with valid tokens. Ha
+  [FAIL] rate=0/5 expected=True: the test is flaky — passes locally fails on CI
+  [FAIL] rate=0/5 expected=True: data corruption — the loyalty points balance for a few users doesn't m
+  [PASS] rate=0/5 expected=False: the database queries on the dashboard page are getting slow — went fro
+  [PASS] rate=0/5 expected=False: write a unit test for the new TaxCalculator.calculate() method to veri
+  [FAIL] rate=0/5 expected=True: this curl request to our /api/v2/orders endpoint times out from outsid
+  [PASS] rate=0/5 expected=False: I want to plan out how to migrate from MySQL to Postgres. multiple mod
+  [PASS] rate=0/5 expected=False: save what we just learned about pg_try_advisory_lock being session-sco
+  [PASS] rate=0/5 expected=False: should we keep the notification logic in the monolith or extract it in

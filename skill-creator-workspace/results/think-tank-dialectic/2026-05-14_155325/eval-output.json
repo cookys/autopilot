@@ -1,0 +1,91 @@
+{
+  "skill_name": "think-tank-dialectic",
+  "description": "Hegelian dialectic (Thesis \u2192 Antithesis \u2192 Synthesis) for irreversible or high-stakes decisions with genuine stalemate \u2014 NOT a \"better think-tank\", a different tool for a different situation. Use when: \"this decision is hard to reverse\", \"both sides have real merit\", \"genuinely torn between X and Y\", \"irreversible decision\", \"real dilemma, not just tradeoffs\", \"need structured dialectic\", \"\u9019\u500b\u6c7a\u5b9a\u53cd\u6094\u6210\u672c\u5f88\u9ad8\", \"\u5169\u908a\u90fd\u6709\u9053\u7406\", \"\u5728 X \u548c Y \u4e4b\u9593\u62c9\u626f\", \"\u8faf\u8b49\u4e00\u4e0b\", \"\u4e0d\u53ef\u9006\u6c7a\u7b56\", \"\u9003\u4e0d\u6389\u7684 tradeoff\". Always reach for `think-tank` first; escalate here only when think-tank's Decision Brief shows LOW consensus AND the decision is costly to reverse. Not for: everyday scope decisions (\u2192 think-tank), pure tech selection (\u2192 survey), reversible tasks where you can iterate, or reflexive \"let's debate this\" requests.",
+  "results": [
+    {
+      "query": "this is genuinely hard: both keeping the old architecture and migrating have real merit. I need a structured dialectic, not just a survey.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "we already ran think-tank on the monolith-vs-microservices question and it came back LOW consensus. this decision is hard to reverse. escalate to dialectic.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "\u9019\u500b\u6c7a\u5b9a\u53cd\u6094\u6210\u672c\u5f88\u9ad8 \u2014 \u4e00\u65e6\u9078\u5b9a\u8cc7\u6599\u5eab\u5ee0\u5546\u5c31\u5f88\u96e3\u63db\u3002\u9700\u8981 thesis vs antithesis \u8a8d\u771f\u5c0d\u649e\u3002",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "two senior engineers are deadlocked on whether to build the orchestrator in-house or buy Temporal. neither side will budge. need Hegelian synthesis.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "I keep going back and forth on the timezone storage question \u2014 UTC everywhere vs preserving local. both feel wrong. need to resolve.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "should we use TanStack Query or SWR for client-side data fetching? both have pros and cons.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "let's debate this for fun \u2014 multi-role perspectives on the new feature",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "\u6211\u6bcf\u6b21\u6c7a\u5b9a\u90fd\u60f3\u8dd1\u4e00\u6b21 dialectic \u597d\u55ce",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "should we prioritize feature A or feature B for Q3?",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "the auth service is failing intermittently \u2014 debug it",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

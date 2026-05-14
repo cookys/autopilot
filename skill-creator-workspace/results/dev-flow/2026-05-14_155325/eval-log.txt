@@ -1,0 +1,12 @@
+Evaluating: Start here before writing any code — sizes task (S/L/H/Fix), sets up branch and session rules. Use when: "I'm starting on X", "quick fix for Y", "continuing from yesterday", "hotfix needed", "let's implement X", "skip to coding", "我要開始做 X", "快速修一下", "接續昨天的進度", resuming a feature branch, or any task that touches code. Not for: debugging (→ systematic-debugging), writing plans (→ writing-plans), brainstorming (→ brainstorming), or code review (→ quality-pipeline).
+Results: 5/10 passed
+  [FAIL] rate=0/5 expected=True: quick fix — the date format in the CSV export header is wrong, just ne
+  [FAIL] rate=0/5 expected=True: I'm starting on the new webhook retry logic. It touches support/execut
+  [FAIL] rate=0/5 expected=True: continuing work on feature/cross-tenant-allowance from yesterday. I le
+  [FAIL] rate=0/5 expected=True: production is down — the scheduler is panic'ing on startup because the
+  [FAIL] rate=0/5 expected=True: ok let's start implementing the monthly settlement cron job. the plan 
+  [PASS] rate=0/5 expected=False: this endpoint returns 500 when the request body has a null broker_acco
+  [PASS] rate=0/5 expected=False: write integration tests for the allowance engine — cover tier policy, 
+  [PASS] rate=0/5 expected=False: create a detailed plan for migrating our notification system from poll
+  [PASS] rate=0/5 expected=False: review the code in my last 3 commits on this branch — check for securi
+  [PASS] rate=0/5 expected=False: let's brainstorm different approaches for the real-time P&L dashboard.

@@ -1,0 +1,12 @@
+Evaluating: Save a hard-won lesson or surprising fix so future sessions benefit. Use when: "save this to knowledge", "record this", "remember for next time", "/learn", "記下來", "存到 knowledge", "記住這個", user shares a gotcha or non-obvious fix, solution took 2+ attempts, environment-specific workaround discovered. Also handles: "knowledge health audit", "check MEMORY.md size", stale knowledge cleanup. Not for: active debugging, writing tests, or project status updates.
+Results: 5/10 passed
+  [FAIL] rate=0/5 expected=True: I just spent 2 hours figuring out that sqlx::query! macros don't work 
+  [FAIL] rate=0/5 expected=True: /learn build cargo watch ignores .sqlx/ changes — need to add --watch 
+  [FAIL] rate=0/5 expected=True: record this: when running migrations in Docker, the DATABASE_URL needs
+  [FAIL] rate=0/5 expected=True: can you do a knowledge health audit? check if MEMORY.md is getting too
+  [FAIL] rate=0/5 expected=True: the pg_try_advisory_lock vs pg_try_advisory_xact_lock distinction almo
+  [PASS] rate=0/5 expected=False: write a unit test for the advisory lock helper function. Cover the hap
+  [PASS] rate=0/5 expected=False: debug why the migration is failing — it says 'relation already exists'
+  [PASS] rate=0/5 expected=False: give me a retrospective on last week's commits — velocity, test ratio,
+  [PASS] rate=0/5 expected=False: read .claude/knowledge/build-errors.md and tell me what we know about 
+  [PASS] rate=0/5 expected=False: update the project README with the current status of the billing engin

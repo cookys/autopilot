@@ -1,0 +1,91 @@
+{
+  "skill_name": "think-tank",
+  "description": "Multi-role debate (architect, ops, QA, product, UX, finance) for strategic decisions. Use when: \"I want perspectives from different roles\", \"let's debate this\", \"tradeoff analysis\", \"which should we prioritize\", \"blast radius of X\", \"scope decision\", \"hear from architect/ops/product\", \"what's the impact?\", \"\u8981\u8faf\u8ad6\u4e00\u4e0b\", \"\u591a\u89d2\u5ea6\u5206\u6790\", \"\u5e6b\u6211\u8a55\u4f30\u5229\u5f0a\". Not for: pure tech selection (\u2192 survey), open brainstorming, or full delegation (\u2192 ceo-agent).",
+  "results": [
+    {
+      "query": "we need to decide: do we ship allowance distribution in phase 1 with basic tiers only, or wait and ship the full policy engine? This affects go-live timeline.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "should we build the real-time monitoring dashboard as a separate SPA or integrate it into the existing console? I want perspectives from architect, ops, UX, and product.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "what's the blast radius of switching the scheduler from 30-minute batches to real-time event processing? I want to hear from QA, ops, and architect.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "performance vs features tradeoff: we can either optimize the P&L calculation to be 10x faster, or add the new cross-tenant billing feature. Both are P1. Which first?",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "the CRM redesign could go three ways: minimal reskin, full IA restructure, or phased migration. each has different user impact and dev cost. let's debate this.",
+      "should_trigger": true,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": false
+    },
+    {
+      "query": "which Rust crate should we use for job scheduling \u2014 tokio-cron-scheduler vs apalis vs custom? Compare features and maintenance status.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "investigate what fintech companies use for real-time equity calculations. Look at industry benchmarks and published architectures.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "CEO mode. Just handle the notification integration end to end. You decide everything.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "I need to run the billing calculation, the ETL sync, and the report generation in parallel \u2014 they're independent tasks.",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    },
+    {
+      "query": "brainstorm creative approaches for the onboarding flow \u2014 wild ideas welcome, we'll narrow down later",
+      "should_trigger": false,
+      "trigger_rate": 0.0,
+      "triggers": 0,
+      "runs": 5,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 5
+  }
+}

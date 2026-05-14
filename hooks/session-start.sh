@@ -54,6 +54,63 @@ Read the above state block to restore your working context:
   fi
 fi
 
+# --- Per-cwd intent resume hint (v2.7.2+) ---
+# Reads ~/.autopilot/intent/<sha1(realpath($PWD))>.json written by intent-capture.js
+# on previous PostToolUse. Filtered by hostname (avoid ghost intent across machines)
+# and TTL (default 4h, reuses TTL_HOURS from compaction recovery if set).
+INTENT_HINT=""
+
+# Resolve canonical cwd (match intent-capture.js realpathSync behavior)
+CANONICAL_CWD=$(cd -P . 2>/dev/null && pwd -P 2>/dev/null || pwd)
+if command -v sha1sum &>/dev/null; then
+  CWD_HASH=$(printf '%s' "$CANONICAL_CWD" | sha1sum | cut -d' ' -f1)
+elif command -v shasum &>/dev/null; then
+  CWD_HASH=$(printf '%s' "$CANONICAL_CWD" | shasum -a 1 | cut -d' ' -f1)
+else
+  CWD_HASH=""
+fi
+
+INTENT_FILE="${HOME}/.autopilot/intent/${CWD_HASH}.json"
+if [ -n "$CWD_HASH" ] && [ -f "$INTENT_FILE" ] && command -v python3 &>/dev/null; then
+  # TTL check (reuse TTL_HOURS / TTL_SECONDS from above, fallback 4h)
+  INTENT_TTL_SECONDS="${TTL_SECONDS:-14400}"
+  if [ "$(uname)" = "Darwin" ]; then
+    INTENT_AGE=$(( $(date +%s) - $(stat -f %m "$INTENT_FILE") ))
+  else
+    INTENT_AGE=$(( $(date +%s) - $(stat -c %Y "$INTENT_FILE") ))
+  fi
+
+  if [ "$INTENT_AGE" -le "$INTENT_TTL_SECONDS" ]; then
+    # Parse intent JSON, filter by hostname
+    CURRENT_HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
+    INTENT_HOST=$(python3 -c "import json; print(json.load(open('$INTENT_FILE')).get('hostname',''))" 2>/dev/null || echo "")
+    if [ "$INTENT_HOST" = "$CURRENT_HOSTNAME" ]; then
+      INTENT_TS=$(python3 -c "import json; print(json.load(open('$INTENT_FILE')).get('last_updated','?'))" 2>/dev/null || echo "?")
+      INTENT_TOOL=$(python3 -c "import json; print(json.load(open('$INTENT_FILE')).get('last_tool_input_summary','?'))" 2>/dev/null || echo "?")
+      INTENT_BRANCH=$(python3 -c "import json; print(json.load(open('$INTENT_FILE')).get('git_branch') or '')" 2>/dev/null || echo "")
+      INTENT_HINT="
+
+[Autopilot Resume Hint]
+上 session 最後動作 (${INTENT_TS}): ${INTENT_TOOL}"
+      if [ -n "$INTENT_BRANCH" ]; then
+        INTENT_HINT="${INTENT_HINT}
+Branch: ${INTENT_BRANCH}"
+      fi
+    fi
+  fi
+fi
+
+# --- intent-capture disabled warning (v2.7.2+) ---
+DISABLE_FLAG="${HOME}/.autopilot/intent-capture.disabled"
+DISABLE_WARNING=""
+if [ -f "$DISABLE_FLAG" ]; then
+  DISABLE_WARNING="
+
+⚠ intent-capture hook disabled due to repeated failures.
+  Diagnostics: ~/.autopilot/.state-checkpoint.log
+  Re-enable: rm ${DISABLE_FLAG}"
+fi
+
 # Build the context string
 read -r -d '' CONTEXT << 'CONTEXT_EOF' || true
 You have **Autopilot** lifecycle skills. Before starting any task, check if one applies:
@@ -89,6 +146,16 @@ escape_for_json() {
 # Append compaction recovery if present
 if [ -n "$COMPACTION_RECOVERY" ]; then
   CONTEXT="${CONTEXT}${COMPACTION_RECOVERY}"
+fi
+
+# Append per-cwd intent hint if present (v2.7.2+)
+if [ -n "$INTENT_HINT" ]; then
+  CONTEXT="${CONTEXT}${INTENT_HINT}"
+fi
+
+# Append disable warning if present (v2.7.2+)
+if [ -n "$DISABLE_WARNING" ]; then
+  CONTEXT="${CONTEXT}${DISABLE_WARNING}"
 fi
 
 ESCAPED=$(escape_for_json "$CONTEXT")

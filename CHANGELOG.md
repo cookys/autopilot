@@ -1,5 +1,40 @@
 # Changelog
 
+## v2.7.2 — Context-Handoff Hardening (L-size) + 3 post-v2.7.1 Fix cycles
+
+**Headline**: Auto-compact 不再 silent drop important context。`hooks/state-checkpoint.sh` 從「bash + 叫 Claude 自願 Edit-append（best-effort）」改寫為 `hooks/state-checkpoint.js`（Node JSONL parser，hook 自己撈 transcript，**零 LLM compliance dependency**）。新增 `hooks/intent-capture.js`（PostToolUse 寫 per-cwd resume hint）；`hooks/session-start.sh` 加 per-cwd intent 顯示（hostname filter + 24h auto-clear circuit breaker）。Plus 3 post-v2.7.1 Fix cycles consolidated（B/A/eval-proxy）。
+
+### Added
+
+- **`hooks/state-checkpoint.js`** — Node 重寫 PreCompact hook（v2.7.2，replaces bash + `state-checkpoint.sh` which becomes `state-checkpoint.sh.bak`）。Hook 自己 parse transcript JSONL（newest-first、filter-first/tail-after、per-block thinking truncate 500B、global 8KB cap、UTF-8 safe）。失敗 emit visible diag in-file + stderr。Diagnostic JSONL log at `~/.autopilot/.state-checkpoint.log`（rotate 1MB）。Inspired by tanweai/pua session-restore.sh + claude-powerloop-plugin sibling-file design。
+- **`hooks/intent-capture.js`** — Tier A PostToolUse hook（v2.7.2）。寫 per-cwd `~/.autopilot/intent/<sha1(realpath(cwd))>.json`：session_id, hostname, last_updated, last_tool, last_tool_input_summary, tool_count_session, cwd, git_branch。Multi-cwd race-free。Circuit breaker：10 連續 fail → `intent-capture.disabled` flag（auto-clear 24h / plugin-version-bump / manual `rm`）。Env opt-out `AUTOPILOT_INTENT_CAPTURE=false`。
+- **`hooks/session-start.sh` 加 per-cwd intent hint** — 啟動時讀 per-cwd intent，hostname filter 後輸出 1-2 行 resume hint；intent-capture disabled 時印 ⚠ warning。既有 compaction-state.md recovery 邏輯保留。
+- **B fix** (`99ab8a6`) — SubAgent skill-invocation rule。Seven-Element Task Prompt 加 `### SKILLS` 段，dev-flow L-1.6 紀律延伸進 ceo-agent / team SubAgent dispatch。Inspired by claude-powerloop-plugin v0.4.0+ commit `8f6af68`。
+- **A fix** (`ec9027f`) — Blind re-dispatch principle。新 `references/blind-dispatch.md` + quality-pipeline Re-review Loop / audit Phase 2+4 接引用。Round 2 reviewer dispatch 必須剝離 prior verdicts 防 quality-gate self-bypass。Inspired by claude-powerloop-plugin v0.4.0+ `examples/blind-dispatch.md`。
+- **Eval-proxy clarification + router-judge plan** (`01ad396`) — `scripts/run-eval-batch.sh` 加 header documentation 與 env parametrize (`RUNS_PER_QUERY` / `MODEL`)；docs/plans/2026-05-14-eval-router-judge.md 新 proposal。High-fidelity baseline at `skill-creator-workspace/results/*/2026-05-14_155325/`（opus×5 runs, 0% recall confirmed as isolation-test floor）。
+
+### Changed
+
+- `hooks/hooks.json` — PreCompact hook `state-checkpoint.sh` → `state-checkpoint.js`；PostToolUse `.*` 加 `intent-capture.js`（order：suggest-compact → intent-capture → log-error → reload-watch）；description「9 default-on」→「10 default-on」。
+- `hooks/README.md` — Tier A 9→10 hooks，加 reload-watch + state-checkpoint + intent-capture rows，加 Self-Disable Recovery subsection。Architecture diagram 同步。
+- `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` — version 2.7.1→2.7.2，description「14 hooks (8 default-on)」→「16 hooks (10 default-on)」。
+
+### Review Loop（L-size dogfood）
+
+3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](docs/projects/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](docs/plans/2026-05-14-context-handoff-hardening.md)。
+
+### Rollback
+
+- **Maintainer**: `git revert <merge-sha>` on develop
+- **User-side** (post-marketplace pull): `/plugin update autopilot` to v2.7.1 + cleanup new sibling files:
+  ```bash
+  rm -rf ~/.autopilot/intent/
+  rm -f ~/.autopilot/intent-capture.disabled
+  rm -f ~/.autopilot/.state-checkpoint.log
+  ```
+
+---
+
 ## v2.7.1 — Post-v2.7.0 Routing Polish + D-1/D-2 Dogfood Closure
 
 **Headline**: Three post-merge Fix cycles consolidated into a release: skill-description tightening (`bae3f43`), D-1 + D-2 scenario dogfood verification (`f5c1d0a`), and chain-aware reviewer-prose alignment across six doc surfaces (`f69f4b7`). v2.7.0's coexistence design is now backed by routing evidence; v2.7.1 is the first taggable release of the post-merge train.

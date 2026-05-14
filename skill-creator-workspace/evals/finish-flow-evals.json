@@ -1,0 +1,52 @@
+[
+  {
+    "query": "the cross-tenant-allowance feature is done — time to merge and close. run the closing sequence so we don't skip steps.",
+    "should_trigger": true,
+    "note": "L-size completion / L-5 closing sequence — finish-flow's primary use case"
+  },
+  {
+    "query": "L-5 開始。請走完整收尾流程。",
+    "should_trigger": true,
+    "note": "Explicit L-5 invocation (zh-TW phrasing matches description trigger)"
+  },
+  {
+    "query": "wrap up the hotfix — merge to main, tag, archive. don't let me forget anything.",
+    "should_trigger": true,
+    "note": "H-size closing — finish-flow's H-9 path"
+  },
+  {
+    "query": "I think we're at the end of the L-size workflow but I'm not sure I've done everything — guide me through what's left.",
+    "should_trigger": true,
+    "note": "Completion forcing function — exactly what finish-flow exists to prevent silent compression"
+  },
+  {
+    "query": "跑完收尾流程吧，這 ticket 該結了",
+    "should_trigger": true,
+    "note": "zh-TW '跑完收尾' explicit trigger phrase in description"
+  },
+  {
+    "query": "I'm starting a new L-size feature — set me up with branch and project tracking",
+    "should_trigger": false,
+    "note": "Starting work — autopilot:dev-flow at L-1, not finish-flow (which is for L-5)"
+  },
+  {
+    "query": "we're at phase 3 of 5, just finished implementing — what's next?",
+    "should_trigger": false,
+    "note": "Mid-phase work — not closing yet; dev-flow phase advancement"
+  },
+  {
+    "query": "write the plan for the new audit feature",
+    "should_trigger": false,
+    "note": "Plan writing — autopilot:dev-flow or superpowers:writing-plans, not finish-flow"
+  },
+  {
+    "query": "the integration tests are failing on CI — debug what's broken",
+    "should_trigger": false,
+    "note": "Debugging — autopilot:debug, not finish-flow"
+  },
+  {
+    "query": "review the diff before I merge — what looks risky?",
+    "should_trigger": false,
+    "note": "Code review request — autopilot:quality-pipeline, not finish-flow (finish-flow invokes quality-pipeline internally but is invoked AT close, not for the review itself)"
+  }
+]

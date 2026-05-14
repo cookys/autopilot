@@ -1,0 +1,52 @@
+[
+  {
+    "query": "we already ran think-tank on the monolith-vs-microservices question and it came back LOW consensus. this decision is hard to reverse. escalate to dialectic.",
+    "should_trigger": true,
+    "note": "Explicit escalation from think-tank LOW consensus + irreversible — primary use case"
+  },
+  {
+    "query": "this is genuinely hard: both keeping the old architecture and migrating have real merit. I need a structured dialectic, not just a survey.",
+    "should_trigger": true,
+    "note": "Both-sides-have-merit + structured dialectic — direct description match"
+  },
+  {
+    "query": "這個決定反悔成本很高 — 一旦選定資料庫廠商就很難換。需要 thesis vs antithesis 認真對撞。",
+    "should_trigger": true,
+    "note": "zh-TW '反悔成本很高' + 'thesis vs antithesis' phrasing in description triggers"
+  },
+  {
+    "query": "two senior engineers are deadlocked on whether to build the orchestrator in-house or buy Temporal. neither side will budge. need Hegelian synthesis.",
+    "should_trigger": true,
+    "note": "Genuine stalemate between two positions — dialectic synthesizes, doesn't pick a winner"
+  },
+  {
+    "query": "I keep going back and forth on the timezone storage question — UTC everywhere vs preserving local. both feel wrong. need to resolve.",
+    "should_trigger": true,
+    "note": "Genuinely torn between X and Y — explicit trigger phrase"
+  },
+  {
+    "query": "should we use TanStack Query or SWR for client-side data fetching? both have pros and cons.",
+    "should_trigger": false,
+    "note": "Reversible technical choice — autopilot:think-tank or autopilot:survey, NOT dialectic (cost-of-reverse is low)"
+  },
+  {
+    "query": "let's debate this for fun — multi-role perspectives on the new feature",
+    "should_trigger": false,
+    "note": "Reflexive 'let's debate' — exactly what dialectic anti-pattern table calls out; use think-tank instead"
+  },
+  {
+    "query": "我每次決定都想跑一次 dialectic 好嗎",
+    "should_trigger": false,
+    "note": "Dialectic-for-every-question anti-pattern — description explicitly says 'reflexive let''s-debate-this'"
+  },
+  {
+    "query": "should we prioritize feature A or feature B for Q3?",
+    "should_trigger": false,
+    "note": "Everyday scope decision (reversible) — autopilot:think-tank, not dialectic"
+  },
+  {
+    "query": "the auth service is failing intermittently — debug it",
+    "should_trigger": false,
+    "note": "Debugging — autopilot:debug, not dialectic"
+  }
+]

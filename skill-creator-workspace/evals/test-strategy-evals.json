@@ -1,0 +1,52 @@
+[
+  {
+    "query": "we're adding integration tests for the new payment flow but I'm not sure where they fit in our test pyramid. some are e2e-ish, some hit real DBs. how should I structure these?",
+    "should_trigger": true,
+    "note": "Test pyramid placement question — autopilot:test-strategy covers test categories and pyramid structure"
+  },
+  {
+    "query": "I want to set up a testing baseline before this refactor — record what's currently passing vs failing so we know what we broke",
+    "should_trigger": true,
+    "note": "Baseline management — explicit autopilot:test-strategy use case"
+  },
+  {
+    "query": "我寫的測試一直 flaky — 同樣 input 有時候過有時候 fail。怎麼系統性處理這類問題？",
+    "should_trigger": true,
+    "note": "Failure investigation / flaky test analysis — test-strategy methodology"
+  },
+  {
+    "query": "we have 200 unit tests and 5 e2e tests for this service. is that the right ratio? should we have more or different coverage at each level?",
+    "should_trigger": true,
+    "note": "Test pyramid balance — strategic test category decisions"
+  },
+  {
+    "query": "regression check — make sure these new changes don't break any existing tests. what's the right scope for regression coverage?",
+    "should_trigger": true,
+    "note": "Regression test scoping — test-strategy covers regression category"
+  },
+  {
+    "query": "let's TDD this — write the failing test for the new commission calculation first, then implement until it passes",
+    "should_trigger": false,
+    "note": "TDD red-green-refactor cycle — superpowers:test-driven-development, NOT autopilot:test-strategy (TDD ≠ test-strategy, see Coexistence section)"
+  },
+  {
+    "query": "the test_payment_handler test is failing with 'connection refused' — debug what's broken",
+    "should_trigger": false,
+    "note": "Debugging a specific test failure — autopilot:debug, not test-strategy"
+  },
+  {
+    "query": "should we use Jest or Vitest for the frontend tests? what's the tradeoff?",
+    "should_trigger": false,
+    "note": "Tool selection — autopilot:survey, not test-strategy"
+  },
+  {
+    "query": "before I commit, run the full quality gate — tests, completeness scan, code review",
+    "should_trigger": false,
+    "note": "Quality pipeline invocation — autopilot:quality-pipeline, not test-strategy"
+  },
+  {
+    "query": "the slow query in the dashboard is killing our p99 — profile it",
+    "should_trigger": false,
+    "note": "Performance investigation — autopilot:profiling, not test-strategy"
+  }
+]

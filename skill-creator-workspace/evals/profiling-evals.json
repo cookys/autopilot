@@ -1,0 +1,52 @@
+[
+  {
+    "query": "the /api/dashboard endpoint p99 latency went from 300ms to 2.5s over the last week. need to figure out where the time is going.",
+    "should_trigger": true,
+    "note": "Performance investigation — high latency, evidence-first profiling"
+  },
+  {
+    "query": "the gobe Rust service has been creeping up to 8GB RAM in production. it was steady at 2GB a month ago. profile what's leaking.",
+    "should_trigger": true,
+    "note": "Memory growth — heap profiler appropriate, autopilot:profiling has tool selection table"
+  },
+  {
+    "query": "我們的 query 在 staging 跑得超慢但 dev 機正常。需要找出 bottleneck — DB? code? network?",
+    "should_trigger": true,
+    "note": "Slow query investigation — profiling methodology guides tool selection by symptom"
+  },
+  {
+    "query": "the CPU is pegged at 100% during peak hours. which functions are eating it? need a flame graph or similar.",
+    "should_trigger": true,
+    "note": "CPU profiling — explicit flame-graph / async-profiler use case"
+  },
+  {
+    "query": "before we approve this PR, I want to make sure it didn't regress baseline performance — can we measure before/after?",
+    "should_trigger": true,
+    "note": "Performance baseline comparison — profiling 'Fix and Verify' section covers this"
+  },
+  {
+    "query": "the payment handler is crashing with SIGSEGV on certain inputs. find the bug.",
+    "should_trigger": false,
+    "note": "Crash debugging (correctness, not performance) — autopilot:debug, not profiling"
+  },
+  {
+    "query": "implement caching for the dashboard query — it's slow because we hit DB on every request",
+    "should_trigger": false,
+    "note": "Implementation task with known cause (caching) — autopilot:dev-flow, not profiling (profiling is for unknown bottleneck)"
+  },
+  {
+    "query": "what's the performance characteristic of HashMap vs BTreeMap in Rust for our use case? research before deciding",
+    "should_trigger": false,
+    "note": "External research on options — autopilot:survey, not profiling"
+  },
+  {
+    "query": "let's plan the migration from gunicorn to uvicorn. impacts: deploy, monitoring, latency profile",
+    "should_trigger": false,
+    "note": "L-size feature planning — autopilot:dev-flow, not profiling (note keyword 'latency profile' is a side reference, not the request)"
+  },
+  {
+    "query": "save the lesson we just learned about Postgres autovacuum being the cause of the latency spikes",
+    "should_trigger": false,
+    "note": "Knowledge recording — autopilot:learn, not profiling"
+  }
+]

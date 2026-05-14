@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run eval-only for all 10 autopilot skills (no improve loop).
+# Run eval-only for all 16 autopilot skills (no improve loop).
 # Uses run_eval.py from skill-creator directly.
 set -euo pipefail
 
@@ -8,7 +8,7 @@ SKILL_CREATOR_DIR="$HOME/.claude/plugins/marketplaces/claude-plugins-official/pl
 RESULTS_BASE="$AUTOPILOT_DIR/skill-creator-workspace/results"
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
 
-SKILLS=(audit ceo-agent dev-flow learn next project-lifecycle quality-pipeline retro survey think-tank)
+SKILLS=(audit ceo-agent debug dev-flow finish-flow learn next profiling project-lifecycle quality-pipeline retro survey team test-strategy think-tank think-tank-dialectic)
 
 echo "=== Batch Eval — $TIMESTAMP ==="
 echo "Running ${#SKILLS[@]} skills"

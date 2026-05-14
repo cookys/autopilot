@@ -1,0 +1,52 @@
+[
+  {
+    "query": "this L-size feature has backend changes, frontend changes, and DB migrations. Should I do this solo phase-by-phase or organize parallel work?",
+    "should_trigger": true,
+    "note": "Team allocation decision — when to組隊 for L-size with multiple independent work blocks"
+  },
+  {
+    "query": "we have 4 modules that all need similar changes — can we parallelize, or will the changes overlap and cause conflicts?",
+    "should_trigger": true,
+    "note": "File overlap analysis — autopilot:team has explicit overlap check methodology"
+  },
+  {
+    "query": "I want to do an audit + implement plan, but I'm not sure if they should be one role or two parallel agents",
+    "should_trigger": true,
+    "note": "Role selection / team composition decision"
+  },
+  {
+    "query": "the dependency graph for this refactor has 8 phases — which can run in parallel, which must be sequential? walk me through the analysis",
+    "should_trigger": true,
+    "note": "Dependency graph analysis — team-tactics.md has Manual Dependency Graph protocol"
+  },
+  {
+    "query": "I'm thinking 3 agents for this: researcher, implementer, tester. is that too many or about right for the scope?",
+    "should_trigger": true,
+    "note": "Team size sanity check — autopilot:team's 'Cap at 3' rule applies"
+  },
+  {
+    "query": "go ahead and spawn 4 parallel agents to handle these tasks — I've already decided the work breakdown",
+    "should_trigger": false,
+    "note": "Dispatch mechanism (already decided who/what) — superpowers:dispatching-parallel-agents or native Task, not team allocation"
+  },
+  {
+    "query": "the team_members table is showing stale data after the last deploy. debug what's wrong",
+    "should_trigger": false,
+    "note": "Debugging — autopilot:debug, not autopilot:team (note keyword 'team' is in the table name, not the skill domain)"
+  },
+  {
+    "query": "let me size this work first — small fix or big feature?",
+    "should_trigger": false,
+    "note": "Size evaluation — autopilot:dev-flow, not team"
+  },
+  {
+    "query": "research how other companies organize cross-functional teams in fintech",
+    "should_trigger": false,
+    "note": "External research — autopilot:survey, not team (note 'teams' is the research topic, not allocation domain)"
+  },
+  {
+    "query": "how should we structure the engineering team — flat vs squad-based? give me multiple perspectives.",
+    "should_trigger": false,
+    "note": "Strategic org-design decision — autopilot:think-tank, not autopilot:team (which is for tactical work allocation within a coding task)"
+  }
+]

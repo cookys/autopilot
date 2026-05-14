@@ -1,0 +1,52 @@
+[
+  {
+    "query": "the payment webhook handler is panicking with 'null pointer dereference' on certain payloads. Can you find the root cause?",
+    "should_trigger": true,
+    "note": "Crash debugging — evidence-first investigation of a panic"
+  },
+  {
+    "query": "user reports that the order total shows wrong sum when they have more than 10 items in cart. there's no error log, just wrong output. dig into it.",
+    "should_trigger": true,
+    "note": "Logic error — wrong output, no crash, needs evidence-first methodology"
+  },
+  {
+    "query": "the auth service intermittently returns 401 even with valid tokens. Happens maybe 1 in 50 requests. Help me track this down.",
+    "should_trigger": true,
+    "note": "Intermittent bug — debug methodology guides reproduction under controlled conditions"
+  },
+  {
+    "query": "data corruption — the loyalty points balance for a few users doesn't match the sum of their point_transactions records. Need to find what's causing the drift.",
+    "should_trigger": true,
+    "note": "Data corruption category — debug methodology has tool table for this"
+  },
+  {
+    "query": "this curl request to our /api/v2/orders endpoint times out from outside the cluster but works internally. dns? firewall? what's going on?",
+    "should_trigger": true,
+    "note": "Connectivity debugging — tools-first investigation (curl, netcat, tcpdump)"
+  },
+  {
+    "query": "the database queries on the dashboard page are getting slow — went from 200ms to 2s over the last week. need to figure out what's dragging it down",
+    "should_trigger": false,
+    "note": "Performance issue (slow queries) — use autopilot:profiling, not debug"
+  },
+  {
+    "query": "write a unit test for the new TaxCalculator.calculate() method to verify it handles VAT correctly for EU vs non-EU customers",
+    "should_trigger": false,
+    "note": "Test writing — autopilot:test-strategy or superpowers:test-driven-development"
+  },
+  {
+    "query": "I want to plan out how to migrate from MySQL to Postgres. multiple modules touched, need to think about backwards compatibility.",
+    "should_trigger": false,
+    "note": "L-size feature planning — autopilot:dev-flow, not debug"
+  },
+  {
+    "query": "save what we just learned about pg_try_advisory_lock being session-scoped — I want this in the knowledge base for next time",
+    "should_trigger": false,
+    "note": "Knowledge recording — autopilot:learn, not debug"
+  },
+  {
+    "query": "should we keep the notification logic in the monolith or extract it into a separate service? want multiple perspectives.",
+    "should_trigger": false,
+    "note": "Strategic decision — autopilot:think-tank, not debug"
+  }
+]

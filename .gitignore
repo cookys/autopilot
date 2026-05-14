@@ -6,6 +6,7 @@ node_modules/
 .claude/knowledge/
 .claude/settings.local.json
 .in_use/
+hooks/hooks.json.capture-backup
 # Dated eval result dirs that are noise — non-baseline runs.
 # Baseline runs (2026-05-14_122359 + _155325) are explicitly tracked.
 skill-creator-workspace/results/*/2026-05-14_154034/

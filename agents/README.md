@@ -81,6 +81,8 @@ The `Next consumer` field uses a **fixed enum** so calling skills can pattern-ma
 
 The round-trip happens **in the skill**, never inside the agent's own session. This keeps each agent session bounded, its output contract deterministic, and the orchestration topology legible in the skill trace.
 
+> When the re-dispatch is reviewer- or auditor-role on the same target after a fix, the prompt MUST follow [`references/blind-dispatch.md`](../references/blind-dispatch.md) (outcome-blinding to prevent quality-gate self-bypass). First-pass / fixer / domain-expert handoff are explicitly out of scope.
+
 ## Tool permissions — no direct file patching
 
 All three agents have `tools` frontmatter that excludes `Edit` and `Write`:

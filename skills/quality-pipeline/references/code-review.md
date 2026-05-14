@@ -76,6 +76,8 @@ Task tool:
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
+> On round 2+ for the same diff (Re-review Loop below), leave `[specific concerns]` blank or restrict it to **non-finding-derived** scope reminders only — passing prior findings here anchors the reviewer per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md).
+
 Whichever reviewer the chain selects, the agent will:
 1. Read all changed files (git diff)
 2. Compare against the original plan/task intent
@@ -141,6 +143,12 @@ review → findings?
 ```
 
 **Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues.
+
+**Re-review dispatch is blind** — when re-dispatching `autopilot:reviewer` (or whichever reviewer the chain selects) for round 2+ on the same diff, the dispatch prompt MUST be stripped of prior-round findings before sending. Telling the SubAgent "round 1 found Important at line 42, verify the fix" anchors it to confirm line 42 and lets every other latent bug slip past. The prior finding lives in the dispatcher's memory for after-the-fact comparison, not in the reviewer's prompt.
+
+Follow the dispatcher pre-flight checklist in [`references/blind-dispatch.md`](../../../references/blind-dispatch.md). The fixer that applied the patch is NOT blind — it receives the full finding because it needs the specifics to act on; only the re-dispatched reviewer is blinded.
+
+This addresses the failure mode where quality-pipeline's own dispatch silently self-bypasses the gate by anchoring round 2+ to round 1's verdict.
 
 ## Suggestion / Minor Processing
 

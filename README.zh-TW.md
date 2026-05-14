@@ -554,6 +554,12 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<舊版本>
 
 從 100+ 個 AI 驅動開發專案實戰提煉。
 
+## Inspired By
+
+- **[claude-powerloop-plugin](https://github.com/elct9620/claude-powerloop-plugin)** — Aotokitsuruya 的 cron-loop Plan/Execute/Review/Sample plugin（Apache-2.0）。`references/blind-dispatch.md` 的 outcome-blinding 原則（round-2+ reviewer re-dispatch 必須剝離先前判決以防 quality-gate 自我繞過）與 leaky-vs-blind prompt 範例組來自 powerloop `skills/powerloop/examples/blind-dispatch.md`。powerloop 用在多 session cron loop，autopilot 限定在 `quality-pipeline` Re-review Loop 與 `audit` Phase 4 verification 的 session-driven re-dispatch。
+
+> 完整來源清單見 EN [README §Inspired By](README.md#inspired-by) — gstack / Council of High Intelligence / Agora / my-claude-devteam 在 zh-TW 尚未 backfill。Deferred until next zh-TW-touching release（trigger：下次任何 zh-TW 文件更動的 release-bump，順手翻譯這 4 條 credit）。
+
 ## License
 
 MIT — 見 [LICENSE](LICENSE)。

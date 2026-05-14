@@ -90,6 +90,14 @@ powerloop 是 cron-scheduled 多 session 接力的 quality-loop framework，auto
   - `skills/think-tank-dialectic/SKILL.md`（檢一下）
 - **不**動 `agents/reviewer.md / debugger.md / planner.md` — agent 是被叫的對象，本身不 dispatch SubAgent
 
+**Scope reduction in implementation (2026-05-14)**：think-tank 與
+think-tank-dialectic 兩個檔案 review 後**排除**，原因：兩者的 SubAgent 是 voltagent
+分析師（architect-reviewer / product-manager / ux-researcher 等），輸出
+Decision Brief 與 perspectives，**不執行 project code 工作**。SKILLS rule 是
+「touching code 前載入 methodology」紀律，對 read-only 角色分析不咬合。最終實際
+動 3 個檔案：`task-prompt-templates.md` + `ceo-agent/SKILL.md` + `team/SKILL.md`，
+外加 README disambiguation 註記。
+
 **Size**：S Fix（1 主檔 + 4 引用點）
 
 ---

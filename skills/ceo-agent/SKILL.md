@@ -250,7 +250,8 @@ When encountering these, pause and propose:
 7. Need research? → Autonomously invoke autopilot:survey
 8. Need multi-perspective analysis? → Invoke think-tank (see trigger rules above)
 9. Need parallel execution? → Pick the first AVAILABLE entry from `.claude/dispatch-config.md` → Parallel Dispatch. If no config file exists, or `superpowers:dispatching-parallel-agents` is listed but the plugin is not installed, fall back to `native` — issue multiple `Task` tool calls in a single response. (dev-flow session rules inject team config either way.)
-   - For L-size parallel dispatch: use Six-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)
+   - For L-size parallel dispatch: use Seven-Element Task Prompt from [references/task-prompt-templates.md](references/task-prompt-templates.md)
+   - Every subagent prompt MUST include a `### SKILLS` section instructing the subagent to invoke each required skill via the Skill tool before touching code. Paraphrasing a skill's methodology in the prompt is NOT a substitute — same discipline dev-flow L-1.6 enforces on the main session, applied to dispatch.
    - Subagents report via [COMPLETION] / [ESCALATION] structured formats
 10. At workflow end (L or H): invoke `autopilot:finish-flow`. Execute all sub-tasks autonomously
     within DOA. Do NOT pause between sub-tasks to ask the user — the forcing function is not
@@ -331,3 +332,4 @@ User responses to reports:
 | Enumerate phases before running the scope audit | Scope audit determines WHICH phases exist; phase TaskCreate comes second |
 | Bump version in one file from memory without grepping | Always `grep <old-version>` across the repo first; if the grep returns N hits, the edit list must touch all N. Memory drops files (marketplace.json, README badges) silently |
 | Absorb external OSS / prior art design without crediting source | The L-1.5 `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |
+| Dispatch subagent with prompt that paraphrases a skill's methodology | The subagent must invoke the skill via the Skill tool — same as dev-flow L-1.6 enforces on the main session. Paraphrasing loses fidelity (full checklist / red-line rules / rationalization table). Every L-size dispatch prompt must include the `### SKILLS` section per `references/task-prompt-templates.md` |

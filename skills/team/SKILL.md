@@ -88,8 +88,25 @@ Agent tool:
   subagent_type: "<from role templates>"
   team_name: "<project-name>"
   name: "<role-name>"
-  prompt: "You are <role>, responsible for <specific work>..."
+  prompt: |
+    You are <role>, responsible for <specific work>...
+
+    ### SKILLS — Invoke these via the Skill tool before touching code
+    - /<plugin>:<skill>   # e.g. /autopilot:debug if this teammate will touch
+                          # failure-prone code
+    - /<project>:<skill>  # project skill for the affected module, if any
+    - none — explain why  # explicit fallback when no skill applies
+
+    <rest of role-specific instructions>
 ```
+
+Paraphrasing a skill's methodology inside `<role-specific instructions>` is NOT
+a substitute for the SKILLS block. The subagent must call the Skill tool so the
+skill's full checklist / red-line rules / rationalization table load into its
+session context — same discipline dev-flow L-1.6 enforces on the main session,
+applied to subagent dispatch. For the full Seven-Element template (including
+SKILLS) when dispatching L-size project work, see
+`skills/ceo-agent/references/task-prompt-templates.md`.
 
 ### Coordination Principles
 
@@ -116,6 +133,7 @@ All tasks completed
 | "I'll do it faster solo" | Evaluate objectively — 2 modules = worth parallelizing |
 | Team commit task says "commit changes" | Must include quality-pipeline |
 | Dispatch without file overlap check | Always check overlap first |
+| Dispatch teammate prompt without `### SKILLS` section | Subagent must invoke required skills via the Skill tool before touching code; paraphrasing the methodology in the prompt loses fidelity (same rule as ceo-agent step 9 and dev-flow L-1.6) |
 
 ## See Also
 

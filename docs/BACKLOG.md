@@ -55,11 +55,21 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: (a) S; (b) external — out of scope; (c) M, 但複雜度未必值得
 - **Source**: 2026-05-14 v2.7.2 method-B verification — user diagnostic report
 
-### Investigate intent-capture auto-fire stagnation post-reload
-- **Trigger**: 下次 reload + 長時間運行同 session 時觀察 intent file mtime 是否持續更新
-- **Context**: 2026-05-14 post-`/reload-plugins` 測試：intent-capture 自動觸發了 ~20 次（count 從 ~5 跳到 25），然後 9 分鐘 + ~10 個 Bash tool call 無動靜（mtime 卡 19:08）。手動 fire `node intent-capture.js` 仍 work（count 26）→ script OK、Claude Code 那層 stop dispatching `.*` matcher hook 給 intent-capture。Possibly Claude Code hook re-load 後一段時間就停 dispatch / matcher cache 失效 / 別的內部 throttle。不影響 v2.7.2 整體 design（fresh session 應該還是 fire）但 reliability 待澄清
-- **Effort**: S investigation, 解法待診斷後決定
-- **Source**: 2026-05-14 v2.7.2 post-reload verification
+### PostToolUse hooks dead after `/clear` — `/reload-plugins` does NOT recover
+- **Trigger**: 下次有 user 回報 intent-capture / audit-log / reload-watch 在 long-running session 沒更新；或 Claude Code 升級 release notes 提到 hook dispatch 變更
+- **Context**: 2026-05-14 兩階段觀察，diagnosis 收斂：
+  - **Phase 1 (initial Obs-1)**: post-`/reload-plugins` intent-capture 跑了 ~20 次 burst 然後 stagnate 9+ 分鐘。手動 fire 仍 work → script OK
+  - **Phase 2 (post-`/clear` 驗證)**: **全部 PostToolUse hooks 死透**，不只 `.*` matcher：
+    - `Bash` matcher (audit-log, failure-escalation): `~/.claude/bash-commands.log` 從不存在、`~/.autopilot/failure-counter.json` 從不存在
+    - `.*` matcher (intent-capture, reload-watch, log-error): intent file mtime + reload-watch state mtime 在 5+ Bash tool calls 後都不動
+    - `Write|Edit` matcher (suggest-compact): unverified 但同 pattern
+  - **PreCompact / SessionStart 正常**：log entries 存在、restored-state block 在新 session 收到
+  - `/reload-plugins` 報「11 hooks reloaded」**但 PostToolUse 沒復活**（intent count 不增、`bash-commands.log` 不出現）
+- **Hypothesis**: Claude Code PostToolUse dispatch table 跟 process boot 綁定一次性 init，`/clear` 跟 `/reload-plugins` 都不 re-init。Only fix: 完整重啟 `claude` process
+- **Impact**: 直接破 v2.7.2 cross-session intent recovery 設計 — 新 session 一開無法累積 fresh intent
+- **Next step**: process-restart 驗證；證實後 → (a) 升級成 v2.7.4 critical fix candidate（看是否能 detect + 提示 user restart），(b) upstream report 給 Claude Code
+- **Effort**: S investigation (~30min)、解法待診斷後決定（可能 L 看 fix 在哪層）
+- **Source**: 2026-05-14 v2.7.2 post-`/clear` continue-session diagnostic（本 session）
 
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics

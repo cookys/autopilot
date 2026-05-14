@@ -14,6 +14,7 @@ description: >
 
 ## Project Config (auto-injected)
 !`cat .claude/quality-gate-config.md 2>/dev/null || true`
+!`cat .claude/dispatch-config.md 2>/dev/null || true`
 
 ## Sub-step References
 

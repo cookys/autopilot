@@ -23,6 +23,7 @@ anti-patterns. Passive text cannot force behavior. Active TaskCreate reminders c
 
 ## Project Config (auto-injected)
 !`cat .claude/finish-flow-config.md 2>/dev/null || true`
+!`cat .claude/dispatch-config.md 2>/dev/null || true`
 
 ## Entry Protocol (MANDATORY)
 

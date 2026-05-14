@@ -19,6 +19,11 @@ description: >
 
 If no project config above, use defaults from [references/model-routing.md](references/model-routing.md).
 
+## Dispatch Chains (for orchestrator routing)
+!`cat .claude/dispatch-config.md 2>/dev/null || true`
+
+If no project config above, autopilot's own fallback skills are primary for methodology; `native` Task dispatch for parallel; `autopilot:reviewer` for code review. See [project-config-template/dispatch-config.md](../../project-config-template/dispatch-config.md) for the schema.
+
 ---
 
 ## Phase 1: Session Start
@@ -138,6 +143,7 @@ If the config file does not exist, proceed normally without it.
 | Parallel task dispatch (team work) | `.claude/team-config.md` | Role templates, tech stack context, team size rules |
 | Performance profiling | `.claude/profiling-config.md` | Profiling tools, metrics collection, baseline commands |
 | Comparison audit (old vs new) | `.claude/audit-config.md` | Known by-design divergences, audit scope definitions |
+| Methodology / reviewer / parallel dispatch routing | `.claude/dispatch-config.md` | Preference chains for debugging / testing / profiling / team / review / parallel dispatch (also auto-injected at top of this skill) |
 
 ### Quality Gate Rule
 

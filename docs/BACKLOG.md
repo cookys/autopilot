@@ -55,21 +55,41 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: (a) S; (b) external — out of scope; (c) M, 但複雜度未必值得
 - **Source**: 2026-05-14 v2.7.2 method-B verification — user diagnostic report
 
-### PostToolUse hooks dead after `/clear` — `/reload-plugins` does NOT recover
+### PostToolUse dispatch dies after `/clear` — process restart required（verified）
 - **Trigger**: 下次有 user 回報 intent-capture / audit-log / reload-watch 在 long-running session 沒更新；或 Claude Code 升級 release notes 提到 hook dispatch 變更
-- **Context**: 2026-05-14 兩階段觀察，diagnosis 收斂：
-  - **Phase 1 (initial Obs-1)**: post-`/reload-plugins` intent-capture 跑了 ~20 次 burst 然後 stagnate 9+ 分鐘。手動 fire 仍 work → script OK
-  - **Phase 2 (post-`/clear` 驗證)**: **全部 PostToolUse hooks 死透**，不只 `.*` matcher：
-    - `Bash` matcher (audit-log, failure-escalation): `~/.claude/bash-commands.log` 從不存在、`~/.autopilot/failure-counter.json` 從不存在
-    - `.*` matcher (intent-capture, reload-watch, log-error): intent file mtime + reload-watch state mtime 在 5+ Bash tool calls 後都不動
-    - `Write|Edit` matcher (suggest-compact): unverified 但同 pattern
-  - **PreCompact / SessionStart 正常**：log entries 存在、restored-state block 在新 session 收到
-  - `/reload-plugins` 報「11 hooks reloaded」**但 PostToolUse 沒復活**（intent count 不增、`bash-commands.log` 不出現）
-- **Hypothesis**: Claude Code PostToolUse dispatch table 跟 process boot 綁定一次性 init，`/clear` 跟 `/reload-plugins` 都不 re-init。Only fix: 完整重啟 `claude` process
-- **Impact**: 直接破 v2.7.2 cross-session intent recovery 設計 — 新 session 一開無法累積 fresh intent
-- **Next step**: process-restart 驗證；證實後 → (a) 升級成 v2.7.4 critical fix candidate（看是否能 detect + 提示 user restart），(b) upstream report 給 Claude Code
-- **Effort**: S investigation (~30min)、解法待診斷後決定（可能 L 看 fix 在哪層）
-- **Source**: 2026-05-14 v2.7.2 post-`/clear` continue-session diagnostic（本 session）
+- **Context**: 2026-05-14 三階段觀察，verified via fresh-process test：
+  - **Phase 1**: post-`/reload-plugins` intent-capture 跑 ~20 次 burst 後 stagnate 9+ 分鐘
+  - **Phase 2 (post-`/clear` 同 session)**: 全部 PostToolUse hooks 不 fire（intent count, reload-watch mtime, audit-log 全凍）。`/reload-plugins` reload 11 hooks 但 **不 re-init dispatch**
+  - **Phase 3 (fresh `claude` process 驗證)**: PostToolUse `.*` matcher **復活** — intent count 10→11、mtime 變新。**確認**：`/clear` + `/reload-plugins` 不 re-init PostToolUse dispatch、fresh process boot 才會
+- **Verified hypothesis**: Claude Code PostToolUse dispatch table 跟 process boot 綁定一次性 init
+- **Workaround**: 完整 exit + relaunch `claude`（不是 `/clear`、不是 `/reload-plugins`）
+- **Impact**: v2.7.2 cross-session intent recovery 在 long-running session post-/clear 失效；user 不會察覺到 hooks 已 dead
+- **Next step options**:
+  - (a) **detect** — 在 SessionStart 階段檢查上 N 個 Bash tool 後 audit-log/intent mtime 是否有 advance、無 → 提示 user restart
+  - (b) upstream report 給 Claude Code（PostToolUse re-init on `/clear` matcher dispatch）
+  - (c) docs in hooks/README.md warn long-session users
+- **Effort**: (a) M（需 SessionStart 邏輯 + timer），(b) external，(c) S
+- **Source**: 2026-05-14 v2.7.2 post-`/clear` continue-session diagnostic + fresh-process verification
+
+### PostToolUse payload missing `tool_name` + `tool_input` from Claude Code（CRITICAL — silent regression）
+- **Trigger**: 立即（影響 audit-log 從 v2.7.2 ship 以來一直 broken）
+- **Context**: 2026-05-14 fresh-process diagnostic 揭露：
+  - Fresh `claude` session 中 PostToolUse hooks DO fire（intent count 10→11）
+  - **但 stdin JSON payload 缺欄位**：`tool_name` 跟 `tool_input.command` 都不存在
+  - 證據：intent-capture 寫 `last_tool: <unknown>` + `last_tool_input_summary: <unknown>`（intent-capture.js:198-199 fallback 路徑）
+  - audit-log.js:20 `if (!command) process.exit(0)` → **silent skip 從未寫過 `~/.claude/bash-commands.log`**
+  - failure-escalation.js 同樣 schema-dependent，artifact 也不存在
+- **Impact (silent)**:
+  - **Bash audit trail 整個失效**（v2.7.2 ship 那天起到現在 `~/.claude/bash-commands.log` 不存在過）
+  - v2.7.2 cross-session resume hint 永遠 `last_tool: <unknown>` — degrades intent recovery 設計目標
+  - `Write|Edit` matcher (suggest-compact) 同樣 schema-dependent、未驗證但同 pattern
+- **Hypothesis**: Claude Code Opus 4.7 PostToolUse schema 改了（可能用 `tool_response` 取代 `tool_input`、或 envelope rename）。或 Anthropic dropped field for some reason
+- **Next step**:
+  1. 寫一個 capture-stdin debug hook (`tee /tmp/pt-payload.json`) 暫 add 進 hooks.json、fresh Claude 跑 1 Bash、dump 實際 payload → 確認 schema
+  2. 修 audit-log + failure-escalation + intent-capture 支援新 schema
+  3. 補 hook test：mock realistic payload format
+- **Effort**: Fix（debug hook + schema migration + 3 scripts patch ~2hr）
+- **Source**: 2026-05-14 fresh-process verification（autopilot intent file 史上每筆 auto-fire 都 `last_tool: <unknown>`、`bash-commands.log` 從未存在）
 
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics

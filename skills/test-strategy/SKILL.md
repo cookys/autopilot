@@ -90,3 +90,10 @@ Use when: changing core business logic, replacing algorithms, instant rollback n
 - [ ] Deterministic (no flaky random failures)
 - [ ] Negative cases covered
 - [ ] Edge cases covered (empty, max, concurrent)
+
+## See Also
+
+- `autopilot:dev-flow` — invokes test commands during quality gate
+- `autopilot:quality-pipeline` — orchestrates test → scan → completeness → review
+- `autopilot:learn` — record test-strategy findings (flaky tests, baseline patterns)
+- `superpowers:test-driven-development` (if installed) — complementary, not equivalent (see Coexistence section)

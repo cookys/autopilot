@@ -94,3 +94,5 @@ After fixing, **re-profile with the same tool and workload** to confirm improvem
 ## See Also
 
 - Project-specific profiling tools and commands: `.claude/profiling-config.md`
+- `autopilot:debug` — correctness debugging (crashes / logic errors); start there if unsure
+- `autopilot:learn` — record profiling findings for future sessions

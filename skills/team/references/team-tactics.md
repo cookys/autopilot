@@ -2,10 +2,12 @@
 
 ## Data Source
 
-`plan-bootstrap.js` auto-parses the plan table's "prerequisites" column, computing parallel groups:
+Plan table's "prerequisites" column is the primary data source. If your project has a `plan-bootstrap.js` (or similar) script, it can auto-parse this column into:
 - `phaseDeps` — each phase's dependency list
 - `parallelGroups` — topologically sorted batch groups
 - README "Parallel Execution Opportunities" section — human-readable parallel hints
+
+autopilot itself ships **no** `plan-bootstrap.js`. Treat plan tables as hand-edited and read the "Manual Dependency Graph" section below for the no-script flow.
 
 ## Phase Completion Flow
 

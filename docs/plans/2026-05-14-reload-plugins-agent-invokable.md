@@ -1,8 +1,8 @@
 # `/reload-plugins` Agent-Invokable — Unblocking D-2-Style Dogfood Automation
 
 **日期：** 2026-05-14
-**狀態：** Proposed (post-v2.7.0 dogfood follow-up)
-**Size：** S–M (depends on chosen option, see §3)
+**狀態：** ✅ Option D shipped (commit `a80c19d`, develop) — short-term remediation in place; Option A (Claude Code core agent-invokable reload) tracked as long-term watch item.
+**Size：** S–M (depends on chosen option, see §3) — Option D landed as S-size (~70 lines + hooks.json registration, 2-round review)
 **Origin：** D-1 + D-2 dogfood verification on `develop@f5c1d0a`, loud finding #3 (`docs/projects/_archive/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` 之 D-2 §Reload behaviour)
 
 ---

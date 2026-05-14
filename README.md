@@ -443,7 +443,7 @@ Autopilot and voltagent are **orthogonal by design**:
 
 | Layer | What it does | Where to look |
 |-------|-------------|---------------|
-| **Methodology** | Three Red Lines discipline, evidence-first debugging, six-element Task Prompts, lifecycle orchestration | autopilot (this plugin) |
+| **Methodology** | Three Red Lines discipline, evidence-first debugging, Seven-Element dispatch + six-element Planner decomposition contract, lifecycle orchestration | autopilot (this plugin) |
 | **Role** | Language experts, infra specialists, domain experts (80+ agents) | voltagent |
 | **Project** | Your tech stack's pitfalls, team conventions, domain-specific agents | `<project>/.claude/agents/` |
 

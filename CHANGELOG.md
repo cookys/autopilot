@@ -24,6 +24,30 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.7.4 — Disable batch: tool-event hooks broken by upstream stdin-pipe (Fix)
+
+**Headline**: 2026-05-14 fresh-claude transcript diagnostic 揭露 Claude Code（2.1.128–2.1.141 全測 over）**從未** pipe stdin 給 PreToolUse / PostToolUse / Stop hook events（Linux + Bun-spawned-Node 環境）。所有依賴 `tool_input` / `tool_response` / `usage` 的 hooks silent-skip 跑了等於沒跑。autopilot ship 至今的 tool-event hooks 從未 e2e tested via real dispatch — 是這次 capture-payload + 兩輪 transcript inspection 才浮上來。
+
+### Changed
+- **`hooks/hooks.json` 簡化** — 從 13 entries 拔成 4，只留 stdin-pipe-working（PreCompact, SessionStart）或 stdin-tolerant（PostToolUse `.*` 的 intent-capture + reload-watch）兩類。
+- **`hooks/README.md` 開頭加「v2.7.4 disable batch」section** — 列出 9 個 disabled hooks 跟原因表。
+
+### Fixed
+- **`a2cd815`** — 6 hooks（intent-capture, batch-format, accumulator, session-summary, suggest-compact, cost-tracker）原本讀 `process.env.CLAUDE_SESSION_ID`、Claude Code 實際送 `CLAUDE_CODE_SESSION_ID`。所有 hooks `getSessionId()` 從來都走 cwd-hash fallback。修正後 SessionStart / PreCompact-class hooks 能正確 join 真 session UUID。
+
+### Added (diagnostic infrastructure)
+- **`hooks/capture-payload.js`** (`9f56a36`) — Tier B opt-in 診斷 hook。dump raw stdin + CLAUDE_/AUTOPILOT_ env vars to `~/.autopilot/payloads/<ts>-<pid>-<marker>.json` when `AUTOPILOT_CAPTURE_PAYLOAD=1`. Rotation keep-50 FIFO。
+- **`scripts/toggle-payload-capture.sh`** (`7e4d2a1`) — One-shot enable/disable helper：wires capture-payload into 4 matchers via jq，backup + restore hooks.json byte-for-byte。
+
+### Disabled (silent-broken pre-v2.7.4)
+- `large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`
+- 9 hooks total. Script files retained in `hooks/`; re-enable when upstream stdin-pipe fix lands. Tracking: `docs/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe".
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`，hooks.json 回 13-entries 版（hooks 雖 silent-broken 但不會 break workflow，只是 audit trail empty）
+
+---
+
 ## v2.7.2 — Context-Handoff Hardening (L-size) + 3 post-v2.7.1 Fix cycles
 
 **Headline**: Auto-compact 不再 silent drop important context。`hooks/state-checkpoint.sh` 從「bash + 叫 Claude 自願 Edit-append（best-effort）」改寫為 `hooks/state-checkpoint.js`（Node JSONL parser，hook 自己撈 transcript，**零 LLM compliance dependency**）。新增 `hooks/intent-capture.js`（PostToolUse 寫 per-cwd resume hint）；`hooks/session-start.sh` 加 per-cwd intent 顯示（hostname filter + 24h auto-clear circuit breaker）。Plus 3 post-v2.7.1 Fix cycles consolidated（B/A/eval-proxy）。

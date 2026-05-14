@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks — session priming + 12 default-on Tier A hooks (v2.7.2)",
+  "description": "Autopilot hooks — only stdin-tolerant entries (v2.7.4 disable batch; see hooks/README.md for disabled-by-upstream-issue list)",
   "hooks": {
     "PreCompact": [
       {
@@ -23,53 +23,7 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/large-file-warner.js"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/branch-protection.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/commit-secret-scan.js"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/audit-log.js"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/suggest-compact.js"
-          }
-        ]
-      },
       {
         "matcher": ".*",
         "hooks": [
@@ -79,26 +33,7 @@
           },
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js"
-          },
-          {
-            "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/reload-watch.js"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-summary.js"
           }
         ]
       }

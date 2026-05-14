@@ -1,6 +1,38 @@
 # Autopilot Hooks
 
-19 Claude Code hooks for runtime enforcement of development discipline (12 Tier A default-on + 7 Tier B opt-in) plus `session-start.sh` SessionStart priming.
+19 Claude Code hooks for runtime enforcement of development discipline (originally 12 Tier A default-on + 7 Tier B opt-in) plus `session-start.sh` SessionStart priming.
+
+## ⚠ v2.7.4 disable batch — upstream stdin-pipe regression
+
+2026-05-14 diagnostic (fresh-claude transcripts in both 2.1.129 and 2.1.141)
+confirmed Claude Code **never pipes stdin** to PreToolUse / PostToolUse / Stop
+hook events on this Linux + Bun-spawned-Node environment. All affected hooks
+silently no-op via fail-open exit 0; users had no signal they were broken.
+
+**Currently disabled in hooks.json** (script files kept; can re-wire when upstream fixes):
+
+| Hook | Event | Why disabled |
+|------|-------|--------------|
+| large-file-warner | PreToolUse Read | Needs `tool_input.file_path` |
+| branch-protection | PreToolUse Bash | Needs `tool_input.command` |
+| commit-secret-scan | PreToolUse Bash | Needs `tool_input.command` |
+| audit-log | PostToolUse Bash | Needs `tool_input.command` |
+| failure-escalation | PostToolUse Bash | Needs `tool_response` |
+| suggest-compact | PostToolUse Write\|Edit | Needs `tool_input` |
+| log-error | PostToolUse .* | Needs `tool_output` |
+| cost-tracker | Stop | Needs `input.usage` |
+| session-summary | Stop | Whole body inside try/catch — ENXIO aborts before any work |
+
+**Still active** (stdin-pipe-working OR stdin-tolerant):
+
+| Hook | Event | Behavior |
+|------|-------|----------|
+| state-checkpoint | PreCompact | Gets stdin payload reliably |
+| session-start.sh | SessionStart | Gets stdin payload reliably |
+| intent-capture | PostToolUse .* | Stdin-tolerant — still writes minimal record + increments counter even on ENXIO |
+| reload-watch | PostToolUse .* | Doesn't consume stdin content — checks dispatch-config / installed_plugins mtime |
+
+Tracking: `docs/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe". See also commits `9366291`, `753bb1d`.
 
 ## Architecture
 

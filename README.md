@@ -246,7 +246,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 /plugin install autopilot@autopilot
 ```
 
-That's it. All 12 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+That's it. All 16 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ---
 
@@ -433,7 +433,7 @@ See [`agents/README.md`](agents/README.md) for dispatch boundary, unified Output
 
 ## Recommended Companions
 
-Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 12 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
+Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 16 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
 
 ```
 /plugin install voltagent@...

@@ -244,7 +244,7 @@ Think Tank 組成：
 /plugin install autopilot@autopilot
 ```
 
-完成。12 個 skill 立即可用：`autopilot:dev-flow`、`autopilot:survey` 等。
+完成。16 個 skill 立即可用：`autopilot:dev-flow`、`autopilot:survey` 等。
 
 ---
 
@@ -426,7 +426,7 @@ Autopilot v2.4.0 內建 **3 個 read-only 方法論 agent**，把三條紅線紀
 
 ## 推薦搭配
 
-Autopilot **方法論和生命週期層面自給自足** — 單獨安裝 autopilot 就能拿到所有 12 skills + 3 methodology agents。如果需要**角色特化**（語言專家、DB 管理員、Kubernetes 專家、前端設計師等），我們推薦搭配 voltagent 使用：
+Autopilot **方法論和生命週期層面自給自足** — 單獨安裝 autopilot 就能拿到所有 16 skills + 3 methodology agents。如果需要**角色特化**（語言專家、DB 管理員、Kubernetes 專家、前端設計師等），我們推薦搭配 voltagent 使用：
 
 ```
 /plugin install voltagent@...

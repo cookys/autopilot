@@ -96,6 +96,30 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Recommendation**: (2) + (4) 同時做。(2) push 上游修；(4) 立即 reduce 假象 hook 跑、清理 hooks.json。等 1-2 週 upstream 無回應再考慮 (3)
 - **Source**: 2026-05-14 fresh-claude transcripts `76a7e1b6-...` (2.1.141) + `7bd61ac4-...` (2.1.129)；binary strings 2.1.128/129/141 對比
 
+### Re-enable v2.7.4 disabled hooks once upstream stdin-pipe lands
+- **Trigger** (任一觸發即跑驗證、全綠才 re-enable):
+  1. Claude Code release notes 提到 hook stdin / PreToolUse / PostToolUse fix
+  2. autopilot user 在 issue / discussion 報「audit-log 突然有 entries」「branch-protection 真的 block 了」
+  3. 距 v2.7.4 ship 過 30 天且想主動 re-test（避免無限拖延）
+  4. 跑 path (3) transcript-file pivot 前先做這個 verification — 確認還是 broken 才值得寫 L-size code
+- **Verification recipe**:
+  1. `cd ~/projects/autopilot && scripts/toggle-payload-capture.sh enable`
+  2. 新 terminal 跑：`AUTOPILOT_CAPTURE_PAYLOAD=1 claude`（用 current version OR 指定 binary path）
+  3. 在 fresh claude 跑 `echo TEST_$(date +%s)` + read a small file + exit
+  4. `ls ~/.autopilot/payloads/` — **要看到 4 個檔（pre-bash + post-bash + pre-read + post-star）**且 stdin_parsed 不是 null
+  5. 同 transcript（最新 jsonl in `~/.claude/projects/-home-cookys-projects-*/`）grep `"stderr":"[^"]*ENXIO"` 必須 **0 hits**
+  6. `scripts/toggle-payload-capture.sh disable`
+- **Re-enable order** (低風險 → 高風險，每加一個跑 1 fresh claude 驗 artifact 寫):
+  1. **Log-only / no block**: `log-error` → `cost-tracker` → `session-summary` → `audit-log` → `failure-escalation` → `suggest-compact`
+     - 每個 re-enable 後 fresh claude 1 Bash、確認對應 artifact 寫了東西（`~/.claude/bash-commands.log` 增 row、`~/.claude/metrics/costs.jsonl` 增 row 等）
+  2. **Blockers**（最後，因為錯誤行為會 break workflow）: `large-file-warner` → `branch-protection` → `commit-secret-scan`
+     - 每個都試一個 **正常操作不被誤 block**（read small file、commit secret-clean code、push to feature branch）
+     - 再試一個 **應該 block 的操作** 驗真的 block（read 5MB 檔、push to main、commit with 假 API key）
+- **Effort**: Verification ~15min；6 log-only hooks 重 wire + smoke ~30min；3 blockers 重 wire + 雙向 smoke ~45min。Total Fix-cycle ~1.5hr
+- **Rollback**: 任何 re-enable 後出現問題 → `git revert <re-enable-commit>` + `/reload-plugins` OR 直接 edit hooks.json 拔回 v2.7.4 狀態
+- **Don't forget**: re-enable 完同步 CHANGELOG（v2.7.5 entry）+ `hooks/README.md` 拔掉 v2.7.4 disable batch section
+- **Source**: 2026-05-14 v2.7.4 disable batch ship（`c5e5a4c`）
+
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics
 - **Context**: 2026-05-14 v2.7.2 post-reload 觀察 `/reload-plugins` 回報「11 hooks」但 hooks.json 實際 13 entries (1 PreCompact + 1 SessionStart + 3 PreToolUse + 6 PostToolUse + 2 Stop)。差 2 — 可能忽略 SessionStart 或 PreCompact runtime hook count。Live functionality OK（intent-capture 確認 firing post-reload）

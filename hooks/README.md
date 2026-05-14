@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-14 Claude Code hooks for runtime enforcement of development discipline.
+19 Claude Code hooks for runtime enforcement of development discipline (12 Tier A default-on + 7 Tier B opt-in) plus `session-start.sh` SessionStart priming.
 
 ## Architecture
 
@@ -10,6 +10,8 @@ hooks/
     secret-patterns.js     # Shared secret detection (used by audit-log + commit-secret-scan)
   hooks.json               # Hook registration (Tier A default-on)
   session-start.sh         # SessionStart priming (pre-existing)
+  state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
+  state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier A
   suggest-compact.js       # Tier A
   cost-tracker.js          # Tier A
@@ -18,6 +20,8 @@ hooks/
   log-error.js             # Tier A
   commit-secret-scan.js    # Tier A
   branch-protection.js     # Tier A
+  reload-watch.js          # Tier A — drift detection (v2.7.1+)
+  intent-capture.js        # Tier A — per-cwd resume hint (v2.7.2+)
   config-protection.js     # Tier B (opt-in)
   check-console.js         # Tier B (opt-in)
   accumulator.js           # Tier B (opt-in)
@@ -35,7 +39,7 @@ hooks/
 | `1` | Warning (context injection) | branch-protection (mutations) |
 | `2` | Hard block | large-file-warner, branch-protection, commit-secret-scan, config-protection, mcp-health |
 
-## Tier A — Default-On (8 hooks)
+## Tier A — Default-On (12 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users.
 
@@ -49,6 +53,43 @@ Registered in `hooks.json`. Active for all autopilot users.
 | log-error | PostToolUse | .* | Detects error keywords, appends to `~/.claude/error-log.md` |
 | commit-secret-scan | PreToolUse | Bash | Scans `git diff --cached`. Uses `_shared/secret-patterns.js` |
 | branch-protection | PreToolUse | Bash | Default: `^(main\|master)$`. Override: `AUTOPILOT_PROTECTED_BRANCHES` env |
+| failure-escalation | PostToolUse | Bash | Tracks consecutive Bash failures per session; escalates to user (was undocumented in README pre-v2.7.2) |
+| reload-watch | PostToolUse | .* | Detects on-disk catalog drift (`installed_plugins.json`, `dispatch-config.md`, `settings.local.json`); injects `/reload-plugins` reminder. Idempotent state at `~/.claude/plugins/.reload-watch-state.json` (v2.7.1) |
+| state-checkpoint | PreCompact | * | Node JSONL parser extracts last 20 user/assistant turns from `transcript_path`, writes verbatim to `~/.autopilot/compaction-state.md` (no LLM compliance dependency); JSONL log at `~/.autopilot/.state-checkpoint.log` (rotate 1MB); visible failure diag inline + stderr (v2.7.2) |
+| intent-capture | PostToolUse | .* | Per-cwd intent file at `~/.autopilot/intent/<sha1(realpath(cwd))>.json` for cross-session resume hint (read by `session-start.sh`). Tier A but env opt-out via `AUTOPILOT_INTENT_CAPTURE=false`. Circuit breaker: 10 consecutive fails → `~/.autopilot/intent-capture.disabled` flag (auto-clears at 24h or plugin version bump; manual clear: `rm` the flag) (v2.7.2) |
+
+### Hook order on PostToolUse
+
+Intra-`.*` matcher order is deterministic: `intent-capture → log-error → reload-watch`. intent-capture intentionally placed before log-error so the resume hint reflects state BEFORE any error capture noise.
+
+`suggest-compact` runs in a separate `Write|Edit` matcher block, `failure-escalation` + `audit-log` in `Bash` matcher block — Claude Code may execute different matcher blocks in parallel / non-deterministic order. Only intra-matcher sequencing is guaranteed.
+
+### Self-Disable Recovery (intent-capture)
+
+If `intent-capture.js` hits 10 consecutive failures, it writes `~/.autopilot/intent-capture.disabled` and subsequent runs silently skip. The flag is **automatically cleared** by:
+- (a) plugin version bump — flag stores `plugin_version`; next run detects mismatch and clears
+- (b) flag age > 24 hours — stale flag treated as resolvable, auto-cleared
+- (c) manual `rm ~/.autopilot/intent-capture.disabled`
+
+SessionStart prints a `⚠ intent-capture hook disabled` warning when the flag is active. Inspect `~/.autopilot/.state-checkpoint.log` for diagnostic JSONL records (also written by intent-capture's sibling state-checkpoint).
+
+### v2.7.2 Rollback
+
+If `state-checkpoint.js` or `intent-capture.js` misbehaves, downgrade plugin + clean sibling state:
+
+```bash
+# 1. Reinstall previous version via marketplace
+/plugin update autopilot   # to v2.7.1 tag
+
+# 2. Clean v2.7.2 sibling files (they're tolerated by v2.7.1 but stale)
+rm -rf ~/.autopilot/intent/
+rm -f ~/.autopilot/intent-capture.disabled
+rm -f ~/.autopilot/.state-checkpoint.log
+
+# 3. v2.7.1's bash state-checkpoint.sh resumes
+```
+
+Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
 
 ## Tier B — Opt-In (6 hooks)
 

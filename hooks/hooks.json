@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks — session priming + 9 default-on Tier A hooks (v2.7.0)",
+  "description": "Autopilot hooks — session priming + 12 default-on Tier A hooks (v2.7.2)",
   "hooks": {
     "PreCompact": [
       {
@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/state-checkpoint.sh"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/state-checkpoint.js"
           }
         ]
       }
@@ -73,6 +73,10 @@
       {
         "matcher": ".*",
         "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/intent-capture.js"
+          },
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js"

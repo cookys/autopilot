@@ -7,6 +7,27 @@
 
 ---
 
+## Status Update 2026-05-14 後續（重要 — 計畫變更）
+
+原本 handoff 假設「同 session install superpowers + 跑 D-1 + D-2」。新 session evaluate 後改採方案：
+**dogfood 移到另一台機器（autopilot + superpowers 都已正式 install）跑**，避開 §「已知陷阱 #1」的 session-install 污染。
+
+新 session 在這台 commit 了 2 件事再 push develop：
+1. `chore(.claude): add dispatch-config.md for autopilot dogfood`（ef9a7b9）— D-1 Step 4 fixture 改成 committed config，省掉「另一台手建」
+2. 此 status update + 修正 §Step 4「.claude 是 gitignored」的錯誤陳述
+
+**對另一台機器 me 的影響**：
+- Step 0：依舊跑（確認 dev-mode 鏈）
+- Step 1：跳過（superpowers 已裝）
+- Step 2：依舊跑（確認 catalog）
+- Step 3：依舊跑 9 case
+- Step 4：fixture 已存在於 repo，**不要重建**；直接觸發 quality-pipeline 觀察 chain 行為
+- Step 5–7：依舊跑
+
+---
+
+---
+
 ## TL;DR — 給新 session 的 1 段話
 
 autopilot v2.7.0 (superpowers coexistence) + v2.7.1 (routing tightening Fix) 已在 develop 完成 + merge + archive。Scenario B（無 superpowers）已 dogfood 過 9 個 query 通過。**剩下要做的是 D-1（scenario A）+ D-2（scenario C disabledSkills）兩個 dogfood，必須同 session 連續做，以免 superpowers install state 中斷**。本檔 §「立即執行步驟」是不需要重新理解上下文就能照做的清單。
@@ -111,7 +132,9 @@ session 重啟（或 `/reload-plugins`）後，看 system reminder 的 skill cat
 
 ### Step 4 — 重要：建 `.claude/dispatch-config.md` 測 chain 行為
 
-D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實生效。在 `/home/cookys/projects/autopilot/.claude/dispatch-config.md` 建一個測試用 config（autopilot 自家 .claude 是 gitignored，OK）：
+D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實生效。
+
+**注意 — 2026-05-14 更正**：原 handoff 寫「autopilot 自家 .claude 是 gitignored，OK」是錯的；只有 `.claude/session-start-sha` 與 `.claude/knowledge/` 被 ignore，其他 `.claude/*-config.md` 都 tracked。Status Update 後本檔已 commit `dispatch-config.md`（ef9a7b9），所以另一台 me **不用重建**，直接拉 develop 就有。內容如下供參：
 
 ```markdown
 ## Code Review

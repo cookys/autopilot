@@ -44,6 +44,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（intent-capture.js JSON parse fail branch → 視為 STALE 自動清）
 - **Source**: 2026-05-14 v2.7.2 L-5.2 reviewer Suggestion #3 (`abb4a4d`)
 
+### Investigate `/reload-plugins` hook count discrepancy
+- **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics
+- **Context**: 2026-05-14 v2.7.2 post-reload 觀察 `/reload-plugins` 回報「11 hooks」但 hooks.json 實際 13 entries (1 PreCompact + 1 SessionStart + 3 PreToolUse + 6 PostToolUse + 2 Stop)。差 2 — 可能忽略 SessionStart 或 PreCompact runtime hook count。Live functionality OK（intent-capture 確認 firing post-reload）
+- **Effort**: S（看 Claude Code source / docs 確認 count semantics）
+- **Source**: 2026-05-14 v2.7.2 post-ship reload verification
+
 ### Test suite for autopilot — automated coverage for hooks / scripts
 - **Trigger**: 下次出現 v2.7.3 sync-version.js-class 「reviewer-跑了-才抓到」class of bug，OR v2.7.4/2.8.0 release 前
 - **Context**: autopilot 至今無 automated test infrastructure (`quality-gate-config.md` 寫「Test Command: N/A」)。每次 ship 靠 manual reviewer dispatch + synthetic stdin。今天就有 2 起 review-loop catch (v2.7.2 newest-turn-cap + v2.7.3 sync-version.js Critical x2)。Long-term review-fatigue + catch-rate-decay 風險

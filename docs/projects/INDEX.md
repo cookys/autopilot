@@ -8,7 +8,7 @@
 
 | Date | Project | Version | Branch | Plan |
 |------|---------|---------|--------|------|
-| 2026-05-14 | [context-handoff-hardening](2026-05-14-context-handoff-hardening/README.md) | v2.7.2 (target) | `feat/v2.7.2-context-handoff-hardening` | [plan](../plans/2026-05-14-context-handoff-hardening.md) (pending) |
+| 2026-05-14 | [context-handoff-hardening](2026-05-14-context-handoff-hardening/README.md) | v2.7.2 (target) | `feat/v2.7.2-context-handoff-hardening` | [plan](../plans/2026-05-14-context-handoff-hardening.md) |
 
 ## 已完成 (Completed)
 

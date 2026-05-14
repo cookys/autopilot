@@ -60,8 +60,18 @@ function getSessionId() {
 
 function getGitBranch() {
   try {
+    // Walk up from cwd looking for .git — skip spawn if not a git repo
+    let dir = process.cwd();
+    let found = false;
+    for (let i = 0; i < 10; i++) { // bounded climb
+      if (fs.existsSync(path.join(dir, '.git'))) { found = true; break; }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    if (!found) return null;
     const r = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      timeout: 1000, encoding: 'utf8', cwd: process.cwd(),
+      timeout: 250, encoding: 'utf8', cwd: process.cwd(),
     });
     return (r.stdout || '').trim() || null;
   } catch {
@@ -160,7 +170,7 @@ function getToolCount(sessionId) {
     let n = 0;
     try { n = parseInt(fs.readFileSync(f, 'utf8'), 10) || 0; } catch { /* first */ }
     n++;
-    fs.writeFileSync(f, String(n));
+    fs.writeFileSync(f, String(n), { mode: 0o600 });
     return n;
   } catch {
     return 0;

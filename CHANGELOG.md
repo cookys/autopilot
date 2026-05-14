@@ -15,7 +15,7 @@
 
 ### Changed
 
-- `hooks/hooks.json` — PreCompact hook `state-checkpoint.sh` → `state-checkpoint.js`；PostToolUse `.*` 加 `intent-capture.js`（order：suggest-compact → intent-capture → log-error → reload-watch）；description「9 default-on」→「10 default-on」。
+- `hooks/hooks.json` — PreCompact hook `state-checkpoint.sh` → `state-checkpoint.js`；PostToolUse `.*` 加 `intent-capture.js`（intra-matcher order：intent-capture → log-error → reload-watch；`suggest-compact` 在 separate Write|Edit matcher block，與 `.*` block 跨 block 並行 / 非確定順序）；description「9 default-on」→「10 default-on」。
 - `hooks/README.md` — Tier A 9→10 hooks，加 reload-watch + state-checkpoint + intent-capture rows，加 Self-Disable Recovery subsection。Architecture diagram 同步。
 - `.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json` — version 2.7.1→2.7.2，description「14 hooks (8 default-on)」→「16 hooks (10 default-on)」。
 

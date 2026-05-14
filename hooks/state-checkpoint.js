@@ -28,7 +28,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
 
 // === Constants ===
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
@@ -92,21 +91,18 @@ ${extraDetail ? '- Detail: ' + extraDetail + '\n' : ''}- This means compact will
 function truncateUtf8Safe(str, maxBytes) {
   const buf = Buffer.from(str, 'utf8');
   if (buf.length <= maxBytes) return { text: str, truncated: false, originalBytes: buf.length };
-  // Find safe codepoint boundary near maxBytes by stepping back until valid
+  // UTF-8 codepoint boundary detection: continuation bytes have high bits 10xxxxxx (0x80-0xBF).
+  // Step back from maxBytes until we hit a non-continuation byte (start of a codepoint).
+  // This preserves legitimate U+FFFD chars (replacement-char detection is unreliable for that).
   let cut = maxBytes;
-  while (cut > 0) {
-    try {
-      const slice = buf.subarray(0, cut).toString('utf8');
-      // Detect U+FFFD (replacement char) at end → not on boundary
-      if (!slice.endsWith('�')) return { text: slice, truncated: true, originalBytes: buf.length };
-    } catch { /* keep stepping */ }
-    cut--;
-  }
-  return { text: '', truncated: true, originalBytes: buf.length };
+  while (cut > 0 && (buf[cut] & 0xC0) === 0x80) cut--;
+  return { text: buf.subarray(0, cut).toString('utf8'), truncated: true, originalBytes: buf.length };
 }
 
-function renderContentBlocks(blocks, isNewest) {
+function renderContentBlocks(blocks) {
   // blocks: array of content blocks from message.content
+  // Renders blocks to text. Per-turn budget enforcement happens in
+  // buildTranscriptTail AFTER this, so newest-turn can be exempted there.
   const parts = [];
   for (const block of blocks) {
     if (!block || typeof block !== 'object') continue;
@@ -133,17 +129,12 @@ function renderContentBlocks(blocks, isNewest) {
       parts.push(`[${t || 'unknown-block'}]`);
     }
   }
-  let combined = parts.join('\n');
-  // Per-turn budget applies to OLDER turns only
-  if (!isNewest && Buffer.byteLength(combined, 'utf8') > PER_TURN_BUDGET) {
-    const { text, truncated, originalBytes } = truncateUtf8Safe(combined, PER_TURN_BUDGET);
-    combined = text + (truncated ? `\n[...turn truncated, original size: ${originalBytes}B]` : '');
-  }
-  return combined;
+  return parts.join('\n');
 }
 
 function extractTurn(record) {
-  // Returns { role, text, timestamp } or null if uninteresting
+  // Returns { role, text, timestamp } with RAW rendered text (no per-turn cap).
+  // Per-turn cap is applied in buildTranscriptTail so newest turn can be exempted.
   const role = record.type; // "user" | "assistant"
   const msg = record.message;
   if (!msg) return null;
@@ -152,7 +143,7 @@ function extractTurn(record) {
     return { role, text: content, timestamp: record.timestamp || '' };
   }
   if (Array.isArray(content)) {
-    return { role, text: renderContentBlocks(content, false), timestamp: record.timestamp || '' };
+    return { role, text: renderContentBlocks(content), timestamp: record.timestamp || '' };
   }
   // Unknown shape — render as JSON stub
   try {
@@ -218,7 +209,8 @@ function buildTranscriptTail(turns) {
     const isNewest = i === tail.length - 1;
     let rendered = turn.text;
     if (!isNewest && Buffer.byteLength(rendered, 'utf8') > PER_TURN_BUDGET) {
-      // Already truncated in renderContentBlocks for array content; for string content, apply here too
+      // Per-turn cap applied to OLDER turns only; newest turn is exempt
+      // (extractTurn / renderContentBlocks return raw, no per-turn cap upstream)
       const { text, truncated, originalBytes } = truncateUtf8Safe(rendered, PER_TURN_BUDGET);
       rendered = text + (truncated ? `\n[...turn truncated, original size: ${originalBytes}B]` : '');
     }
@@ -349,9 +341,11 @@ ${body}`;
 `;
 
     // Write state file
+    let stateFileWritten = false;
     try {
       fs.writeFileSync(STATE_FILE, stateContent, { mode: 0o600 });
       try { fs.chmodSync(STATE_FILE, 0o600); } catch { /* ignore */ }
+      stateFileWritten = true;
     } catch (err) {
       // State file IO failure — diagnostic only goes to stderr + log
       process.stderr.write(`[state-checkpoint] CRITICAL: state file write failed: ${err.message}\n`);
@@ -359,14 +353,23 @@ ${body}`;
       failureReason = `state_file_write: ${err.message}`;
     }
 
-    // Stdout — instruction for Claude (now optional)
-    process.stdout.write(`[Autopilot State Checkpoint — PreCompact]
+    // Stdout — instruction for Claude (reflects actual write result)
+    if (stateFileWritten) {
+      process.stdout.write(`[Autopilot State Checkpoint — PreCompact]
 Transcript tail extracted by hook to ~/.autopilot/compaction-state.md
 (${kept} turns, ${bytesUsed} bytes). The hook captures verbatim turns;
 the LLM-append section below is OPTIONAL supplement for hidden in-flight
 context (excluded reasoning paths etc.). Not critical — machine state +
 transcript tail are already guaranteed.
 `);
+    } else {
+      process.stdout.write(`[Autopilot State Checkpoint — PreCompact — WRITE FAILED]
+State file write to ~/.autopilot/compaction-state.md FAILED — see stderr
+for diagnostic. In-memory tail held ${kept} turns / ${bytesUsed} bytes but
+NOT persisted. Compact will proceed without hook-extracted handoff.
+Reason: ${failureReason || 'unknown'}
+`);
+    }
 
     // Final log entry
     appendLog({

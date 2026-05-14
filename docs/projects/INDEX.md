@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Version | Branch | Plan |
+|------|---------|---------|--------|------|
+| 2026-05-14 | [retro-roundup](2026-05-14-retro-roundup/README.md) | v2.7.3 (target) | `feat/v2.7.3-retro-roundup` | [plan](../plans/2026-05-14-retro-roundup.md) |
 
 ## 已完成 (Completed)
 

@@ -1,6 +1,6 @@
 ---
 name: profiling
-description: "Evidence-first performance profiling — tool selection, methodology, interpretation. Use BEFORE guessing at performance issues. Tools first, logs second, code last."
+description: "Evidence-first performance profiling — tool selection, methodology, interpretation. Use BEFORE guessing at performance issues. Tools first, logs second, code last. Covers: slow queries, high latency, CPU spikes, memory growth, throughput regressions (including 'got slower after deploy' — measure before assuming the deploy diff is the cause). Not for: crashes / logic errors (→ debug), tests being slow as test design issue (→ test-strategy)."
 ---
 
 # Evidence-First Profiling

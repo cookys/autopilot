@@ -1,6 +1,6 @@
 ---
 name: test-strategy
-description: Testing strategy and baseline management. Invoke when writing tests or validating changes.
+description: Testing strategy and baseline management — test pyramid placement, baseline守則, failure investigation funnel, regression scoping, flaky-test systemic handling. Invoke when validating changes or designing test approach. Not for: TDD red-green-refactor coding cycle (→ superpowers:test-driven-development if installed; this skill is orthogonal — see Coexistence section), specific test debugging (→ debug), or quality gate (→ quality-pipeline).
 ---
 
 # Test Strategy

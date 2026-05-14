@@ -71,25 +71,26 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: (a) M（需 SessionStart 邏輯 + timer），(b) external，(c) S
 - **Source**: 2026-05-14 v2.7.2 post-`/clear` continue-session diagnostic + fresh-process verification
 
-### PostToolUse payload missing `tool_name` + `tool_input` from Claude Code（CRITICAL — silent regression）
-- **Trigger**: 立即（影響 audit-log 從 v2.7.2 ship 以來一直 broken）
-- **Context**: 2026-05-14 fresh-process diagnostic 揭露：
-  - Fresh `claude` session 中 PostToolUse hooks DO fire（intent count 10→11）
-  - **但 stdin JSON payload 缺欄位**：`tool_name` 跟 `tool_input.command` 都不存在
-  - 證據：intent-capture 寫 `last_tool: <unknown>` + `last_tool_input_summary: <unknown>`（intent-capture.js:198-199 fallback 路徑）
-  - audit-log.js:20 `if (!command) process.exit(0)` → **silent skip 從未寫過 `~/.claude/bash-commands.log`**
-  - failure-escalation.js 同樣 schema-dependent，artifact 也不存在
-- **Impact (silent)**:
-  - **Bash audit trail 整個失效**（v2.7.2 ship 那天起到現在 `~/.claude/bash-commands.log` 不存在過）
-  - v2.7.2 cross-session resume hint 永遠 `last_tool: <unknown>` — degrades intent recovery 設計目標
-  - `Write|Edit` matcher (suggest-compact) 同樣 schema-dependent、未驗證但同 pattern
-- **Hypothesis**: Claude Code Opus 4.7 PostToolUse schema 改了（可能用 `tool_response` 取代 `tool_input`、或 envelope rename）。或 Anthropic dropped field for some reason
-- **Next step**:
-  1. 寫一個 capture-stdin debug hook (`tee /tmp/pt-payload.json`) 暫 add 進 hooks.json、fresh Claude 跑 1 Bash、dump 實際 payload → 確認 schema
-  2. 修 audit-log + failure-escalation + intent-capture 支援新 schema
-  3. 補 hook test：mock realistic payload format
-- **Effort**: Fix（debug hook + schema migration + 3 scripts patch ~2hr）
-- **Source**: 2026-05-14 fresh-process verification（autopilot intent file 史上每筆 auto-fire 都 `last_tool: <unknown>`、`bash-commands.log` 從未存在）
+### Claude Code 2.1.141 fails to pipe stdin for tool-event hooks（ROOT CAUSE — upstream regression）
+- **Trigger**: 立即（影響所有 PreToolUse / PostToolUse hooks 從 2.1.141 升級時起）
+- **Context**: 2026-05-14 fresh-claude transcript 直接揭示 root cause（先前 hypothesis 全推翻）：
+  - **Schema 正確**：binary 內 Zod schema `{hook_event_name, tool_name, tool_input, tool_response, tool_use_id, duration_ms?}` 跟我們 hooks 讀的一致
+  - **問題不在 schema，在 dispatch**：fresh claude 2.1.141 session 中 11 個 tool-event hook fires **全部 ENXIO**：
+    - PostToolUse:Bash × 4 (audit-log, capture-payload, log-error, intent-capture 都吐 `ENXIO: no such device or address, open '/dev/stdin'`)
+    - PreToolUse:Bash × 3、PreToolUse:Read × 2 同樣 ENXIO
+  - SessionStart × 1 + Stop × 2 **正常**（不同 stdin 處理路徑）
+- **Smoking gun**: 2.1.141 binary 含 string `EPIPE error while writing to hook stdin (hook command likely closed early)` + `Hook command closed stdin before hook input was fully written (EPIPE)`。2.1.129 binary 無此 strings → 2.1.141 改了 hook stdin write path、新 code 有 bug
+- **Impact** (all silent due to fail-open hook convention):
+  - 所有依賴 `tool_input` / `tool_response` 的 hook 都 broken（audit-log, failure-escalation, large-file-warner, suggest-compact, design-quality, ...）
+  - intent-capture 仍 write file 但 `last_tool: <unknown>` — v2.7.2 cross-session resume degraded
+  - `~/.claude/bash-commands.log` 從未存在（audit-log silent-skip）
+  - 影響時點：user 升級到 2.1.141 之後（installedAt 顯示 2026-05-14T04:35:54Z）
+- **Workaround paths** (next-step decision):
+  1. **Downgrade**：`ln -sfn /home/cookys/.local/share/claude/versions/2.1.129 ~/.local/bin/claude` 後 fresh terminal 試。若 2.1.129 hook stdin 正常 → 確認 regression、pin 直到 upstream fix
+  2. **Upstream report**：bug report 給 Anthropic Claude Code，附 ENXIO transcript 段
+  3. **Hook design pivot**：tool-event hooks 不再依賴 stdin、改 read transcript file（CLAUDE_PROJECT_DIR/projects/*/latest.jsonl）— 大改、only if upstream 不修
+- **Effort**: Downgrade test ~10min；upstream report ~30min；hook design pivot L-size
+- **Source**: 2026-05-14 fresh-claude transcript `76a7e1b6-d73d-4164-9639-56d32347f95d.jsonl` + binary strings diff 2.1.141 vs 2.1.129
 
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics

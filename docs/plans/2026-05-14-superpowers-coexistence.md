@@ -1,7 +1,7 @@
 # Superpowers Coexistence — Self-Sufficient autopilot with First-Class Superpowers Coexistence (v2.7.0)
 
 **日期：** 2026-05-14
-**狀態：** 🟢 r2 pass — minor revisions inline applied; ready for Phase 1
+**狀態：** ✅ Shipped in v2.7.0 — merged to `develop` as `eb70999` on 2026-05-14
 **Size：** L
 **Dogfood：** 本計畫使用 autopilot 自家的 dev-flow L-size + parallel-reviewer review loop（r1 已 3 reviewer 角度收斂）+ finish-flow 驅動，閉環驗證 dispatch-config.md 機制能跑通實際 L-size 工作流。
 

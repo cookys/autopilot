@@ -6,14 +6,13 @@
 
 ## 進行中 (In Progress)
 
-| Date | Project | Version | Branch | Plan |
-|------|---------|---------|--------|------|
-| 2026-05-14 | [superpowers-coexistence](2026-05-14-superpowers-coexistence/README.md) | v2.7.0 | `feat/v2.7.0-superpowers-coexistence` | [plan](../plans/2026-05-14-superpowers-coexistence.md) |
+_None._
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-05-14 | [superpowers-coexistence](_archive/2026-05-14-superpowers-coexistence/README.md) | v2.7.0 | [`eb70999`](../../../../commit/eb70999) | [plan](../plans/2026-05-14-superpowers-coexistence.md) |
 | 2026-04-13 | [pua-inspired-enhancement](_archive/2026-04-13-pua-inspired-enhancement/README.md) | v2.6.0 | [`cd6e73b`](../../../../commit/cd6e73b) | (self-contained in README) |
 | 2026-04-13 | [universal-hooks-ship-b](_archive/2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 | [`817c707`](../../../../commit/817c707) | [plan](../plans/2026-04-12-universal-hooks.md) |
 | 2026-04-12 | [methodology-agents-ship-a](2026-04-12-methodology-agents-ship-a/README.md) | v2.4.0 | [`14276bb`](../../../../commit/14276bb) | [plan](../plans/2026-04-12-methodology-agents-and-hooks.md) |
@@ -38,5 +37,6 @@ _None._
 
 | Date | Project | Version |
 |------|---------|---------|
+| 2026-05-14 | [superpowers-coexistence](_archive/2026-05-14-superpowers-coexistence/README.md) | v2.7.0 |
 | 2026-04-13 | [pua-inspired-enhancement](_archive/2026-04-13-pua-inspired-enhancement/README.md) | v2.6.0 |
 | 2026-04-13 | [universal-hooks-ship-b](_archive/2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 |

@@ -8,7 +8,11 @@
 # e.g., node .claude/scripts/pre-commit-scan.js, npx eslint .
 
 ## Code Review
-# e.g., Dispatch superpowers:code-reviewer subagent
+# Default: dispatch `autopilot:reviewer` (ships with autopilot — no extra plugin needed).
+# For preference chains (e.g., adding superpowers:code-reviewer as fallback when
+# autopilot:reviewer is not loaded mid-session), see `.claude/dispatch-config.md`
+# (template: project-config-template/dispatch-config.md).
+# If `superpowers` is NOT installed, just leave autopilot:reviewer as the only entry.
 
 ## Route Overrides
 # S: scan → review (skip completeness if scan is clean)

@@ -71,26 +71,30 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: (a) M（需 SessionStart 邏輯 + timer），(b) external，(c) S
 - **Source**: 2026-05-14 v2.7.2 post-`/clear` continue-session diagnostic + fresh-process verification
 
-### Claude Code 2.1.141 fails to pipe stdin for tool-event hooks（ROOT CAUSE — upstream regression）
-- **Trigger**: 立即（影響所有 PreToolUse / PostToolUse hooks 從 2.1.141 升級時起）
-- **Context**: 2026-05-14 fresh-claude transcript 直接揭示 root cause（先前 hypothesis 全推翻）：
-  - **Schema 正確**：binary 內 Zod schema `{hook_event_name, tool_name, tool_input, tool_response, tool_use_id, duration_ms?}` 跟我們 hooks 讀的一致
-  - **問題不在 schema，在 dispatch**：fresh claude 2.1.141 session 中 11 個 tool-event hook fires **全部 ENXIO**：
-    - PostToolUse:Bash × 4 (audit-log, capture-payload, log-error, intent-capture 都吐 `ENXIO: no such device or address, open '/dev/stdin'`)
-    - PreToolUse:Bash × 3、PreToolUse:Read × 2 同樣 ENXIO
-  - SessionStart × 1 + Stop × 2 **正常**（不同 stdin 處理路徑）
-- **Smoking gun**: 2.1.141 binary 含 string `EPIPE error while writing to hook stdin (hook command likely closed early)` + `Hook command closed stdin before hook input was fully written (EPIPE)`。2.1.129 binary 無此 strings → 2.1.141 改了 hook stdin write path、新 code 有 bug
+### Claude Code tool-event hooks get NO stdin pipe — event-type-specific, not version regression
+- **Trigger**: 立即（影響所有 PreToolUse / PostToolUse hooks since hooks were authored）
+- **Context**: 2026-05-14 兩輪 fresh-claude transcript 驗證收斂：
+  - **Round 1 (2.1.141)**: 11 tool-event hook fires 全 ENXIO opening `/dev/stdin`
+    - transcript `76a7e1b6-...jsonl`
+    - PostToolUse:Bash × 4 + PreToolUse:Bash × 3 + PreToolUse:Read × 2 全部 ENXIO
+    - SessionStart + Stop 正常
+  - **Round 2 (2.1.129 downgrade test)**: 同 transcript 結構 `7bd61ac4-...jsonl`，**同 ENXIO**，`~/.claude/bash-commands.log` mtime 沒動
+  - **2.1.128 binary strings**: 無 `EPIPE.*hook` markers（同 2.1.129），同類 issue 推斷一致
+- **Final root cause**: 不是版本 regression — 是 **Claude Code 的 hook stdin pipe 對 PreToolUse / PostToolUse event 從來沒運作**（at least on Linux + this Bun-spawned Node 環境）。SessionStart 跟 PreCompact 用不同 spawn path 所以 work
+- **Critical implication**: Anthropic docs 內附 example `jq -r '.tool_input.command' >> ~/.claude/bash-log.txt`（給 PreToolUse Bash logging）**也是 broken** — 不只我們 hooks 受影響、官方 docs example 也跑不動
 - **Impact** (all silent due to fail-open hook convention):
   - 所有依賴 `tool_input` / `tool_response` 的 hook 都 broken（audit-log, failure-escalation, large-file-warner, suggest-compact, design-quality, ...）
   - intent-capture 仍 write file 但 `last_tool: <unknown>` — v2.7.2 cross-session resume degraded
   - `~/.claude/bash-commands.log` 從未存在（audit-log silent-skip）
-  - 影響時點：user 升級到 2.1.141 之後（installedAt 顯示 2026-05-14T04:35:54Z）
+  - autopilot tool-event hooks 從未 e2e tested via real Claude Code dispatch（過去只 heredoc synthetic 測 script 本身）
 - **Workaround paths** (next-step decision):
-  1. **Downgrade**：`ln -sfn /home/cookys/.local/share/claude/versions/2.1.129 ~/.local/bin/claude` 後 fresh terminal 試。若 2.1.129 hook stdin 正常 → 確認 regression、pin 直到 upstream fix
-  2. **Upstream report**：bug report 給 Anthropic Claude Code，附 ENXIO transcript 段
-  3. **Hook design pivot**：tool-event hooks 不再依賴 stdin、改 read transcript file（CLAUDE_PROJECT_DIR/projects/*/latest.jsonl）— 大改、only if upstream 不修
-- **Effort**: Downgrade test ~10min；upstream report ~30min；hook design pivot L-size
-- **Source**: 2026-05-14 fresh-claude transcript `76a7e1b6-d73d-4164-9639-56d32347f95d.jsonl` + binary strings diff 2.1.141 vs 2.1.129
+  1. ~~Downgrade~~ **RULED OUT** by Round 2 test
+  2. **Upstream report**：bug report Anthropic — 含官方 PreToolUse Bash example broken + ENXIO transcripts；reproducible
+  3. **Hook design pivot**：tool-event hooks 改 read transcript JSONL（path = `~/.claude/projects/-<cwd-encoded>/<CLAUDE_CODE_SESSION_ID>.jsonl`）；PreToolUse 救不了（tool 還沒 run、transcript 還沒寫 entry）；PostToolUse 可救
+  4. **Disable broken hooks**：承認 audit-log + failure-escalation 等在這環境跑不動、從 hooks.json 拔掉、改文件警告 user
+- **Effort**: (2) ~30min；(3) L-size ~6-10hr；(4) S ~30min
+- **Recommendation**: (2) + (4) 同時做。(2) push 上游修；(4) 立即 reduce 假象 hook 跑、清理 hooks.json。等 1-2 週 upstream 無回應再考慮 (3)
+- **Source**: 2026-05-14 fresh-claude transcripts `76a7e1b6-...` (2.1.141) + `7bd61ac4-...` (2.1.129)；binary strings 2.1.128/129/141 對比
 
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics

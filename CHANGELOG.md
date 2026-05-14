@@ -1,5 +1,29 @@
 # Changelog
 
+<!--
+RELEASE TEMPLATE (paste below this comment for each new release):
+
+## v<X.Y.Z> — <Headline>
+
+**Headline**: <one paragraph user-facing summary>
+
+### Added
+- ...
+
+### Changed
+- ...
+
+### Fixed
+- ...
+
+### Hook-order semantics reminder (if hooks change)
+- Claude Code hooks run **in parallel / non-deterministic order across different matcher blocks** (e.g., PostToolUse `Bash` vs `Write|Edit` vs `.*` are independent). Only **intra-matcher** sequencing within a single matcher block is guaranteed. Do not claim cross-matcher ordering in release notes.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
+-->
+
 ## v2.7.2 — Context-Handoff Hardening (L-size) + 3 post-v2.7.1 Fix cycles
 
 **Headline**: Auto-compact 不再 silent drop important context。`hooks/state-checkpoint.sh` 從「bash + 叫 Claude 自願 Edit-append（best-effort）」改寫為 `hooks/state-checkpoint.js`（Node JSONL parser，hook 自己撈 transcript，**零 LLM compliance dependency**）。新增 `hooks/intent-capture.js`（PostToolUse 寫 per-cwd resume hint）；`hooks/session-start.sh` 加 per-cwd intent 顯示（hostname filter + 24h auto-clear circuit breaker）。Plus 3 post-v2.7.1 Fix cycles consolidated（B/A/eval-proxy）。

@@ -5,3 +5,4 @@ node_modules/
 .claude/session-start-sha
 .claude/knowledge/
 .claude/settings.local.json
+.in_use/

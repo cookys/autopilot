@@ -259,7 +259,27 @@ function buildTranscriptTail(turns) {
 
   // Always log start
   try {
-    const stdin = fs.readFileSync('/dev/stdin', 'utf8');
+    // Read stdin with ENXIO graceful handling:
+    // `/compact` slash command invokes PreCompact hook WITHOUT piping a JSON
+    // payload — fs.readFileSync('/dev/stdin') then throws ENXIO. This is not
+    // a real failure (Claude Code's auto-compact DOES pipe the payload); the
+    // /compact CLI path simply skips hook payload. Detect and skip gracefully
+    // without polluting the log with "catastrophic" entries.
+    // (Discovered 2026-05-14 method-B testing — `docs/BACKLOG.md` entry.)
+    let stdin = '';
+    try {
+      stdin = fs.readFileSync('/dev/stdin', 'utf8');
+    } catch (err) {
+      if (err.code === 'ENXIO' || err.code === 'EAGAIN') {
+        // No payload available — typical for /compact slash invocation.
+        // Log as skip + exit cleanly without writing checkpoint (there's
+        // nothing useful we could capture without transcript_path).
+        process.stderr.write(`[state-checkpoint] /compact invocation (no stdin payload) — skipping\n`);
+        appendLog({ ts: timestamp, hostname: os.hostname(), session_id: '<no-stdin>', status: 'no_payload_skip', reason: `${err.code}: stdin not piped` });
+        return process.exit(0);
+      }
+      throw err; // any other stdin read error → real catastrophic, fall through
+    }
     const input = stdin.trim() ? JSON.parse(stdin) : {};
     sessionId = input.session_id || '<unknown>';
     transcriptPath = input.transcript_path || '';

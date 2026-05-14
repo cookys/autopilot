@@ -5,6 +5,11 @@
     "note": "Performance investigation — high latency, evidence-first profiling"
   },
   {
+    "query": "the API got slower after we deployed yesterday",
+    "should_trigger": true,
+    "note": "Performance regression with known change attribution — profiling primary (measurable latency symptom + 'tools first, don't guess from deploy diff' principle). debug runner-up is legitimate but profiling owns 'slower' keyword surface. v2.7.0 dogfood log amb-2; chain ordering in dispatch-config can express user preference."
+  },
+  {
     "query": "the gobe Rust service has been creeping up to 8GB RAM in production. it was steady at 2GB a month ago. profile what's leaking.",
     "should_trigger": true,
     "note": "Memory growth — heap profiler appropriate, autopilot:profiling has tool selection table"

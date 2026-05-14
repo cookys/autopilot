@@ -35,6 +35,11 @@
     "note": "Debugging a specific test failure — autopilot:debug, not test-strategy"
   },
   {
+    "query": "the test is flaky — passes locally fails on CI",
+    "should_trigger": false,
+    "note": "Specific-symptom flaky-test investigation (env-specific) — autopilot:debug (intermittent failure + 'works on my machine' anti-pattern). Different from '系統性處理 flaky' framing which IS test-strategy. v2.7.0 dogfood log amb-1."
+  },
+  {
     "query": "should we use Jest or Vitest for the frontend tests? what's the tradeoff?",
     "should_trigger": false,
     "note": "Tool selection — autopilot:survey, not test-strategy"

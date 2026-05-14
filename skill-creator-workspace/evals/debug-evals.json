@@ -15,6 +15,11 @@
     "note": "Intermittent bug — debug methodology guides reproduction under controlled conditions"
   },
   {
+    "query": "the test is flaky — passes locally fails on CI",
+    "should_trigger": true,
+    "note": "Specific-symptom flaky test (env divergence local-vs-CI) — debug's 'works on my machine' anti-pattern + 'reproduce under controlled conditions' directly applies. NOT test-strategy (which is for systematic / strategy framing). v2.7.0 dogfood log amb-1."
+  },
+  {
     "query": "data corruption — the loyalty points balance for a few users doesn't match the sum of their point_transactions records. Need to find what's causing the drift.",
     "should_trigger": true,
     "note": "Data corruption category — debug methodology has tool table for this"

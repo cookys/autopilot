@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.7.1 — Post-v2.7.0 Routing Polish + D-1/D-2 Dogfood Closure
+
+**Headline**: Three post-merge Fix cycles consolidated into a release: skill-description tightening (`bae3f43`), D-1 + D-2 scenario dogfood verification (`f5c1d0a`), and chain-aware reviewer-prose alignment across six doc surfaces (`f69f4b7`). v2.7.0's coexistence design is now backed by routing evidence; v2.7.1 is the first taggable release of the post-merge train.
+
+### Added
+
+- **D-1 + D-2 dogfood log** (`docs/projects/_archive/2026-05-14-superpowers-coexistence/dogfood-routing-log.md`, §D-1 + §D-2) — 9-query scenario A routing observation (autopilot v2.7.0 + superpowers both installed, dispatch-config chain active) plus 2-query scenario C `disabledSkills` cutoff observation. Verifies chain delegation works as designed; documents three loud findings (session-snapshot vs disk-state gap, doc-prose fragility now closed, `/reload-plugins` agent-invokable bottleneck).
+- **Follow-up plan** `docs/plans/2026-05-14-reload-plugins-agent-invokable.md` — proposes Option D (watcher hook + reminder) as short-term mitigation for the `/reload-plugins` bottleneck surfaced by D-2; Option A (Claude Code core agent-invokable reload) for long-term.
+
+### Changed
+
+- **Skill descriptions tightened** (`bae3f43`) — 3 routing ambiguities from v2.7.0 scenario B dogfood addressed by precise description claims:
+  - `test-strategy`: explicit `Not for: TDD red-green-refactor cycle (→ superpowers:test-driven-development)` exclusion + `specific test debugging (→ debug)`
+  - `profiling`: claims `'got slower after deploy' — measure before assuming the deploy diff is the cause`, defers crashes → debug, slow-tests-by-design → test-strategy
+  - `debug`: claims `intermittent failures (incl. flaky tests with environment divergence), or 'works on my machine' issues`, explicitly defers perf regressions to profiling
+- **Chain-aware reviewer prose alignment** (`f69f4b7`) — six doc surfaces updated to point at the `.claude/dispatch-config.md` `## Code Review` chain instead of hardcoded `autopilot:reviewer`:
+  - `skills/quality-pipeline/SKILL.md:56` — pipeline directive
+  - `skills/quality-pipeline/references/code-review.md:67-92` — `## Invocation` restructured
+  - `.claude/finish-flow-config.md:32` — L-5.2 Pre-Merge Review wording
+  - `agents/README.md:25,38` — dispatch boundary explainer
+  - `README.md:452,457` + `README.zh-TW.md:445,450` — Dispatch boundary section (EN + zh-TW mirrors)
+
+  All six surfaces use the canonical phrasing `default fallback when the chain is unset or no chain entry is dispatchable` (EN) / `chain 未設或 entry 不可 dispatch 時預設 fallback 為 autopilot:reviewer` (zh-TW). The reviewer-chain default-to-autopilot:reviewer is preserved triple-redundantly (SKILL directive + code-review.md lead + bullet list at code-review.md:92).
+
+### Fixed
+
+- **Documentation fragility** identified by D-1 dogfood (`f5c1d0a` loud finding #2) — `skills/quality-pipeline/SKILL.md:56` + `references/code-review.md:69` + `.claude/finish-flow-config.md:32` previously had hardcoded "primary reviewer" prose that contradicted chain logic in the same files. Now consistent. (Closed in `f69f4b7` after 3 review rounds.)
+
+### Notes
+
+- **Release model** — v2.7.1 is the first git-tag of the v2.7.x line. v2.7.0 (`eb70999`) was version-marked in manifests but not git-tagged; the cumulative v2.7.1 tag at this commit captures the full v2.7.0 coexistence ship + post-merge polish train.
+- **Single-reviewer Fix-size waiver** applied to both `bae3f43` and `f69f4b7` (rationale: narrow follow-ups grounded in dogfood evidence; full L-loop already ran for v2.7.0). Both waivers documented in `dogfood-routing-log.md` §59-67.
+- **Known limitation**: `/reload-plugins` is user-side; agent cannot fire it. D-2 scenario C verification used reasoned inference rather than live observation. See `docs/plans/2026-05-14-reload-plugins-agent-invokable.md` for the proposed remediation.
+
 ## v2.7.0 — Superpowers Coexistence + Standalone Mode
 
 **Headline**: autopilot now works fully without the `superpowers` plugin installed, and offers first-class coexistence semantics when it is. v2.0-v2.6 implicitly assumed `superpowers` was always present; v2.7.0 makes that explicit and optional.

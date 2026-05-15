@@ -46,6 +46,15 @@ These are the autopilot methodology discipline. Violating any of them means your
 - **Performance**: N+1 queries, nested loops over large data, memory leaks, unbounded cache growth, blocking I/O on hot paths
 - **API usage**: deprecated APIs, wrong parameters, missing required headers, missing timeouts, missing pagination
 
+### Scope discipline (Surgical Changes)
+**Every changed line must trace directly to the task / plan / commit message.** For each changed hunk, answer: "Which sentence of the task description does this hunk implement?" If no sentence maps to it, it is scope creep.
+
+Severity: scope-creep in compiled output → 🟠 Major; in formatting / comments → 🟡 Minor / 🔵 Suggestion. Newly-orphaned imports/vars/funcs removed by the task are cleanup, not scope creep.
+
+The `✅ Verified Clean` section MUST include the line `Reviewed full diff for scope creep — every changed line traces to the task.` when no scope creep is detected — silent omission of this line is a Three Red Lines (Exhaustiveness) violation.
+
+Canonical patterns, examples, and output format: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "Scope Creep / Surgical Changes Scan".
+
 ### Plan / architecture review (when reviewing a plan doc)
 - **Hidden assumptions**: dependencies assumed to exist, environments assumed to match, inputs assumed to be validated upstream
 - **Completeness**: missing rollback plan, missing monitoring, missing failure modes
@@ -84,6 +93,7 @@ Every reviewer run must produce output in this exact structure:
 - Reviewed auth flow — no timing attacks, uses safe comparison
 - Reviewed SQL queries — all parameterized via ORM
 - Reviewed error handling in payment-service.ts — no swallowed errors
+- Reviewed full diff for scope creep — every changed line traces to the task
 
 ### Summary
 Overall risk: Low / Medium / High
@@ -141,6 +151,7 @@ Seeing any of these in your own output means you violated Three Red Lines:
 - Severity listed without `file_path:line_number`
 - Empty `### Verified Clean` with no explanation
 - Missing `### Handoff` section
+- Missing scope-creep line in `### Verified Clean` (silent omission of the surgical-changes scan)
 
 All of these mean: rewrite the report following the Output Contract exactly.
 

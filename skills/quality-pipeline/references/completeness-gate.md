@@ -18,8 +18,12 @@
 ### Step 1: Automated Regex Scan
 
 ```bash
-# Run your project's scan script, or manually check for TODO/FIXME/stubs
-node .claude/scripts/pre-commit-scan.js  # adjust path for your project
+# autopilot ships scripts/completeness-scan.sh (default: scans staged diff)
+scripts/completeness-scan.sh                  # staged diff
+scripts/completeness-scan.sh --range A..B     # explicit commit range
+scripts/completeness-scan.sh --all            # whole tree (slow)
+
+# If your project has its own scan script with the same JSON contract, prefer it.
 ```
 
 **What the script does:**
@@ -27,6 +31,7 @@ node .claude/scripts/pre-commit-scan.js  # adjust path for your project
 2. For each file, runs regex patterns for all 5 categories above
 3. Uses `git blame --porcelain` to classify each finding as **new** (uncommitted) vs **pre-existing**
 4. Outputs JSON with findings grouped by type
+5. Exit code: `0` clean, `1` has new findings (gate fails), `2` usage error
 
 **Example output (clean):**
 ```json
@@ -96,8 +101,7 @@ scan results
 ## Example: Full Gate Pass
 
 ```
-1. Run: # Run your project's scan script, or manually check for TODO/FIXME/stubs
-node .claude/scripts/pre-commit-scan.js  # adjust path for your project
+1. Run: scripts/completeness-scan.sh
 2. Output: 1 finding — "return {};" in getPlayerCards(), isNew=true
 3. Read context: function should return current hand, not empty
 4. Action: implement actual card retrieval logic

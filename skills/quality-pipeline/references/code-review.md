@@ -81,7 +81,7 @@ Task tool:
 Whichever reviewer the chain selects, the agent will:
 1. Read all changed files (git diff)
 2. Compare against the original plan/task intent
-3. Run the full correctness / security / boundary / error-handling / performance / API-usage checklist
+3. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep dimension defined in "Scope Creep / Surgical Changes Scan" below)
 4. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`
 
 (Non-autopilot reviewers may return a different output shape — see "Handoff Consumption" below for enum vocabulary; foreign-shape outputs fall back to inline interpretation by quality-pipeline.)
@@ -113,12 +113,66 @@ After the reviewer returns, read the `### Handoff` section and route the next st
 
 Methodology agents do not call each other. Any re-dispatch happens in quality-pipeline, never inside the reviewer's own session.
 
+## Scope Creep / Surgical Changes Scan
+
+**Every changed line must trace directly to the stated task, plan, or commit message.**
+
+In addition to the correctness / security / boundary / error-handling / performance / API-usage checklist, the reviewer **must** scan the diff for changes that are not requested by the task. This addresses the most common LLM-coding failure mode: agents "improving" adjacent code, refactoring what isn't broken, or cleaning up code they think they understand.
+
+### What counts as scope creep
+
+| Pattern | Example |
+|---------|---------|
+| Reformatting unrelated lines | Reindenting a function the task didn't touch |
+| Renaming outside the task surface | Renaming `tmp` → `pendingCards` in a file the task only adds one method to |
+| Refactoring "while we're here" | Extracting a helper from existing code the task didn't need to call |
+| Style alignment beyond changed lines | `'` → `"` quote swaps, trailing commas, etc., in unmodified code |
+| Deleting pre-existing dead code | Removing a function the task didn't make unused (only newly-orphaned code may be removed) |
+| Comment cleanup unrelated to the change | Rewording or removing comments on lines the task didn't touch |
+| Dependency / config tweaks not required by the task | Bumping unrelated package versions, reordering imports |
+
+### The test
+
+For each changed hunk the reviewer answers: **"Which sentence of the task description does this hunk implement?"** If no sentence maps to it, it is scope creep.
+
+### Severity
+
+| Situation | Severity |
+|-----------|----------|
+| Unrequested change in compiled output (rename, refactor, dep change, behavior tweak) | **Major** |
+| Unrequested whitespace / formatting / comment edit in compiled-output files | **Minor** |
+| Unrequested whitespace / formatting in pure-doc files (`.md`, comments-only) | **Suggestion** |
+| Newly-orphaned imports/variables/functions removed by the task | ✅ Verified Clean (not scope creep — cleanup is required) |
+
+### Reviewer output contract
+
+When scope creep is found, emit a dedicated subsection:
+
+```
+### Scope Creep Findings
+
+🟠 Major — `src/foo.cpp:42-58` reindented; not in task description.
+🟡 Minor    — `src/bar.h:103` comment reworded; not part of the requested fix.
+```
+
+When no scope creep is detected, the `✅ Verified Clean` section MUST explicitly include the line:
+
+```
+- No scope creep — every changed line traces to the task.
+```
+
+so downstream consumers can confirm the scan ran rather than being silently skipped.
+
+### Why this matters (one-liner)
+
+Mixed task-driven and scope-creep changes inflate review time, break `git blame` / bisect attribution, and (especially in C++) risk silent behavior changes from "harmless" refactors. Cheaper to push back at review than revert after merge.
+
 ## 4-Tier Severity
 
 | Severity | Definition | Action |
 |----------|------------|--------|
 | **Critical** | Correctness / security / data-loss | Fix immediately, before commit |
-| **Important** | Quality / maintainability / reliability | Fix immediately, before commit |
+| **Major** | Quality / maintainability / reliability | Fix immediately, before commit |
 | **Suggestion** | Improvement, does not affect correctness | Analyze, then backlog or fix (see below) |
 | **Minor** | Style, naming, cosmetic | Analyze, then backlog or fix (see below) |
 
@@ -127,26 +181,26 @@ Methodology agents do not call each other. Any re-dispatch happens in quality-pi
 | Symptom | Severity |
 |---------|----------|
 | Crash, data corruption, security hole | **Critical** |
-| Coding convention violation, missing error handling, resource leak risk | **Important** |
+| Coding convention violation, missing error handling, resource leak risk | **Major** |
 | Better design, readability, performance suggestion | **Suggestion** |
 | Naming style, whitespace, formatting | **Minor** |
 
-## Re-review Loop (Critical / Important)
+## Re-review Loop (Critical / Major)
 
-Fix Critical and Important findings, then re-review. Repeat until only Suggestion/Minor remain or reviewer says LGTM.
+Fix Critical and Major findings, then re-review. Repeat until only Suggestion/Minor remain or reviewer says LGTM.
 
 ```
 review → findings?
-├── Has Critical/Important → fix → re-review (repeat until clean)
+├── Has Critical/Major → fix → re-review (repeat until clean)
 ├── Only Suggestion/Minor → process per below → commit
 └── Clean (LGTM) → commit
 ```
 
 **Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues.
 
-**Re-review dispatch is blind** — when re-dispatching `autopilot:reviewer` (or whichever reviewer the chain selects) for round 2+ on the same diff, the dispatch prompt MUST be stripped of prior-round findings before sending. Telling the SubAgent "round 1 found Important at line 42, verify the fix" anchors it to confirm line 42 and lets every other latent bug slip past. The prior finding lives in the dispatcher's memory for after-the-fact comparison, not in the reviewer's prompt.
+**Re-review dispatch is blind** — when re-dispatching `autopilot:reviewer` (or whichever reviewer the chain selects) for round 2+ on the same diff, the dispatch prompt MUST be stripped of prior-round findings before sending. Telling the SubAgent "round 1 found Major at line 42, verify the fix" anchors it to confirm line 42 and lets every other latent bug slip past. The prior finding lives in the dispatcher's memory for after-the-fact comparison, not in the reviewer's prompt.
 
-Follow the dispatcher pre-flight checklist in [`references/blind-dispatch.md`](../../../references/blind-dispatch.md). The fixer that applied the patch is NOT blind — it receives the full finding because it needs the specifics to act on; only the re-dispatched reviewer is blinded.
+Follow the dispatcher pre-flight checklist in [`references/blind-dispatch.md`](../../../references/blind-dispatch.md), then run `scripts/check-redispatch-prompt.sh <prompt-file>` against the round 2+ prompt — the linter encodes the checklist's forbidden phrases and exits non-zero if any survive. The fixer that applied the patch is NOT blind — it receives the full finding because it needs the specifics to act on; only the re-dispatched reviewer is blinded.
 
 This addresses the failure mode where quality-pipeline's own dispatch silently self-bypasses the gate by anchoring round 2+ to round 1's verdict.
 
@@ -160,7 +214,7 @@ For each Suggestion/Minor finding:
 Dispatch Explore agent to analyze impact and effort
     ↓
 Classify into one of four outcomes:
-├── S-size fix (< 5 min) → fix now, treat as Important
+├── S-size fix (< 5 min) → fix now, treat as Major
 ├── False positive / by-design → close with written rationale
 ├── Independent task needing more analysis → create next task with context
 └── Has clear trigger condition → add to doc/BACKLOG.md with trigger
@@ -171,9 +225,9 @@ Classify into one of four outcomes:
 | # | Issue | Severity | Analysis | Size | Disposition |
 |---|-------|----------|----------|------|-------------|
 | 1 | Null deref in error path | Critical | Crash when DB returns empty | S | Fix now + re-review |
-| 2 | Missing mutex on shared map | Important | Race condition under load | S | Fix now + re-review |
-| 3 | Could use string_view instead of string copy | Suggestion | 2% fewer allocations in hot path | S | Fix now (upgrade to Important) |
-| 4 | Function name `doIt()` unclear | Minor | Rename to `processMatchResult()` | S | Fix now (upgrade to Important) |
+| 2 | Missing mutex on shared map | Major | Race condition under load | S | Fix now + re-review |
+| 3 | Could use string_view instead of string copy | Suggestion | 2% fewer allocations in hot path | S | Fix now (upgrade to Major) |
+| 4 | Function name `doIt()` unclear | Minor | Rename to `processMatchResult()` | S | Fix now (upgrade to Major) |
 | 5 | Consider caching DB query result | Suggestion | Would help at 10K+ users, not current scale | M | Backlog (trigger: when optimizing for 10K+) |
 | 6 | "Magic number 42" | Minor | Actually `MAX_TILES` constant, used consistently | - | Close (by-design) |
 
@@ -199,7 +253,7 @@ Entries without trigger conditions are rejected.
 
 ## Prohibited Excuses
 
-All sizes require review. Important must be fixed now. Fix requires re-review. No severity judgment without analysis. No backlog without trigger condition.
+All sizes require review. Major must be fixed now. Fix requires re-review. No severity judgment without analysis. No backlog without trigger condition.
 > Full list: [_base/prohibited-behaviors.md](../_base/prohibited-behaviors.md)
 
 ## See Also

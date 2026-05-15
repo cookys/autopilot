@@ -55,7 +55,7 @@ Follow references/completeness-gate.md
 ```
 Follow references/code-review.md (dispatches per .claude/dispatch-config.md '## Code Review' chain; defaults to autopilot:reviewer when chain unset or no chain entry is dispatchable)
   Agent dispatch: model="sonnet", mode="plan" (from model-routing config, reviewer role)
-  → Critical/Important? → fix → re-review (repeat until clean)
+  → Critical/Major? → fix → re-review (repeat until clean)
   → Suggestion/Minor? → dispatch via Decision Tree below
   → LGTM? → pass
 ```
@@ -75,7 +75,7 @@ After code review, each Suggestion/Minor finding must be dispatched — never ig
 
 ```
 Finding (Suggestion or Minor severity)
-├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Important
+├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Major
 ├── (b) False positive / by-design → close with written rationale
 ├── (c) Independent task needing separate analysis → create task with context
 └── (d) Deferred → add to BACKLOG with trigger condition

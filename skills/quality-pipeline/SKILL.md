@@ -21,6 +21,24 @@ description: >
 - **Test policy**: [references/test-policy.md](references/test-policy.md) — failure investigation, pre-existing cleanup
 - **Completeness gate**: [references/completeness-gate.md](references/completeness-gate.md) — anti-stub scan
 - **Code review**: [references/code-review.md](references/code-review.md) — 4-tier severity, fix-first classification
+- **Anti-rationalization patterns**: [references/anti-rationalization.md](references/anti-rationalization.md) — invoked from Failure Handling when retries exhaust
+
+## Available Scripts (prefer over LLM judgment)
+
+Each script encodes a step the pipeline previously asked the LLM to do by hand. Use them; the JSON output is stable across rounds and cheap to consume.
+
+| Script | Replaces LLM-judgment for | When invoked |
+|--------|---------------------------|--------------|
+| [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
+| [`scripts/check-redispatch-prompt.sh`](../../scripts/check-redispatch-prompt.sh) | Round 2+ leaky-phrase detection (per `references/blind-dispatch.md`) | Before every re-review dispatch |
+| [`scripts/diff-file-list.sh`](../../scripts/diff-file-list.sh) | Reviewer's "list every file I read" enumeration in Verified Clean | Reviewer prompt assembly |
+| [`scripts/diff-scope-report.sh`](../../scripts/diff-scope-report.sh) | v2 scope-creep filter: whitespace-only files, files not in message, comment-only hunks, quote-style swaps | Code Review step (Scope Creep Scan) |
+| [`scripts/resolve-dispatch.sh`](../../scripts/resolve-dispatch.sh) | Per-dispatch model/mode lookup against `model-routing-config.md` | Any subagent dispatch |
+| [`scripts/verify-preexisting.sh`](../../scripts/verify-preexisting.sh) | Stash + checkout-base + run-test classification | Test Failure Investigation step |
+| [`scripts/risk-counter.sh`](../../scripts/risk-counter.sh) | Cross-round WTF-Likelihood Cap state tracking | Self-Regulation section |
+| [`scripts/diff-since-last-round.sh`](../../scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint (dispatcher-only) | Re-review Loop short-circuit decision |
+
+All scripts: `<script> --help` for usage; deterministic exit codes; JSON output where applicable. If a user project ships its own script with the same contract, prefer the project version.
 
 ## Route Table
 
@@ -32,11 +50,15 @@ description: >
 
 ## Execution Steps
 
+> **Contract** — the pseudocode blocks below are the **executable dispatch contract** that quality-pipeline reads at runtime: which step runs, which script to invoke, which reference doc owns the rest. They are intentionally minimal. Each step's full spec — rationale, examples, exceptions, prohibitions — lives in the linked reference doc, which is the **canonical source of truth**. Edits to the canonical spec MUST be mirrored here if (and only if) they change the dispatch shape (script name, branching outcome, ordering). Edits to examples/rationale stay in the reference — never duplicate them here.
+
 ### Tests (L-size only)
 
 ```
 Follow references/test-policy.md
-  → fail? → fix → re-run tests
+  → failure? → classify via `scripts/verify-preexisting.sh '<test-cmd>'`
+              → PRE_EXISTING / INTRODUCED / NO_FAILURE / INCONCLUSIVE
+              → fix per test-policy → re-run tests
   → pass? → continue
 ```
 
@@ -44,18 +66,21 @@ Follow references/test-policy.md
 
 ```
 Follow references/completeness-gate.md
+  → run `scripts/completeness-scan.sh` (exit 1 ⇒ has new findings)
   → TODO/stub/placeholder found? → complete or remove them
   → clean? → continue
 ```
 
 ### Code Review (always runs)
 
-**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Reviewer role → default: `model: "sonnet", mode: "plan"`.
+**Model routing**: resolve via `scripts/resolve-dispatch.sh --role reviewer` — reads `.claude/model-routing-config.md` if present, else defaults from [references/model-routing.md](references/model-routing.md). Do not hardcode defaults in this file.
 
 ```
 Follow references/code-review.md (dispatches per .claude/dispatch-config.md '## Code Review' chain; defaults to autopilot:reviewer when chain unset or no chain entry is dispatchable)
-  Agent dispatch: model="sonnet", mode="plan" (from model-routing config, reviewer role)
-  → Critical/Important? → fix → re-review (repeat until clean)
+  Agent dispatch: read JSON from `resolve-dispatch.sh --role reviewer`
+  Before any round 2+ dispatch: `scripts/check-redispatch-prompt.sh <prompt>` (exit 1 ⇒ leaky, strip and retry)
+  Optional short-circuit: `scripts/diff-since-last-round.sh stat` (dispatcher-only — doc_only=true ⇒ skip re-review)
+  → Critical/Major? → fix → re-review (repeat until clean)
   → Suggestion/Minor? → dispatch via Decision Tree below
   → LGTM? → pass
 ```
@@ -75,7 +100,7 @@ After code review, each Suggestion/Minor finding must be dispatched — never ig
 
 ```
 Finding (Suggestion or Minor severity)
-├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Important
+├── (a) S-size fix (< 5 min, self-contained) → fix now, treat as Major
 ├── (b) False positive / by-design → close with written rationale
 ├── (c) Independent task needing separate analysis → create task with context
 └── (d) Deferred → add to BACKLOG with trigger condition
@@ -88,19 +113,20 @@ Finding (Suggestion or Minor severity)
 
 ## Self-Regulation (WTF-Likelihood Cap)
 
-During fix loops, track cumulative risk:
+During fix loops, track cumulative risk via `scripts/risk-counter.sh` (persisted per repo+branch — no LLM cross-round memory required):
 
-| Event | Risk Increment |
-|-------|---------------|
-| Fix reverted (didn't work) | +15% |
-| Fix touches 3+ files | +5% |
-| After 10th fix in same pipeline run | +1% per additional fix |
-| Fix touches files unrelated to original change | +20% |
+| Event | Risk delta | Increment command |
+|-------|-----------|-------------------|
+| Fix reverted (didn't work) | +15 | `scripts/risk-counter.sh increment --event reverted` |
+| Fix touches 3+ files | +5 | `scripts/risk-counter.sh increment --event multi-file` |
+| After 10th fix in same pipeline run | +1 per add'l fix | `scripts/risk-counter.sh increment --event late-fix` |
+| Fix touches files unrelated to original change | +20 | `scripts/risk-counter.sh increment --event unrelated-files` |
+| Any other fix (just counts toward fixes total) | 0 | `scripts/risk-counter.sh increment --event fix` |
 
-**Thresholds**:
-- Risk > 20% → **STOP**. Report: "Fix loop risk elevated. N fixes attempted, M reverted."
-- Hard cap: 30 fixes per pipeline run
-- On STOP: list all attempted fixes, outcomes, and remaining issues
+**Thresholds** (orthogonal to retries-per-step below):
+- Risk > 20 → **STOP** (check via `scripts/risk-counter.sh threshold-hit`; exit 1 ⇒ stop). Report: "Fix loop risk elevated. N fixes attempted, M reverted."
+- Hard cap: 30 fixes per pipeline run (separate from per-step retry cap below)
+- On STOP: list all attempted fixes, outcomes, and remaining issues; reset via `scripts/risk-counter.sh reset` only after closing the pipeline run
 
 ## Failure Handling
 
@@ -113,7 +139,7 @@ Step N fails
   3. Pass → continue to Step N+1
 ```
 
-**Max retries per step**: 3. After 3 failures, stop and report to user.
+**Max retries per step**: 3 (counts step failures, not fix attempts — orthogonal to the 30-fix pipeline cap and the 20-risk threshold above). After 3 step failures, escalate via [references/anti-rationalization.md](references/anti-rationalization.md) (7-point checklist + structured failure report) before declaring inability to solve.
 
 ## See Also
 - `autopilot:dev-flow` — sets session rules and dispatches pipeline

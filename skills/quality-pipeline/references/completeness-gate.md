@@ -18,8 +18,12 @@
 ### Step 1: Automated Regex Scan
 
 ```bash
-# Run your project's scan script, or manually check for TODO/FIXME/stubs
-node .claude/scripts/pre-commit-scan.js  # adjust path for your project
+# autopilot ships scripts/completeness-scan.sh (default: scans staged diff)
+scripts/completeness-scan.sh                  # staged diff
+scripts/completeness-scan.sh --range A..B     # explicit commit range
+scripts/completeness-scan.sh --all            # whole tree (slow)
+
+# If your project has its own scan script with the same JSON contract, prefer it.
 ```
 
 **What the script does:**
@@ -27,6 +31,7 @@ node .claude/scripts/pre-commit-scan.js  # adjust path for your project
 2. For each file, runs regex patterns for all 5 categories above
 3. Uses `git blame --porcelain` to classify each finding as **new** (uncommitted) vs **pre-existing**
 4. Outputs JSON with findings grouped by type
+5. Exit code: `0` clean, `1` has new findings (gate fails), `2` usage error
 
 **Example output (clean):**
 ```json
@@ -93,17 +98,9 @@ scan results
 | Placeholder assertion in test (`EXPECT_TRUE(true)`) | **No** — test assertions must be meaningful |
 | `return {}` as valid empty-collection return | Yes — if semantically correct (e.g., "no results found") |
 
-## Example: Full Gate Pass
+## Example: Full Gate Pass (compressed)
 
-```
-1. Run: # Run your project's scan script, or manually check for TODO/FIXME/stubs
-node .claude/scripts/pre-commit-scan.js  # adjust path for your project
-2. Output: 1 finding — "return {};" in getPlayerCards(), isNew=true
-3. Read context: function should return current hand, not empty
-4. Action: implement actual card retrieval logic
-5. Re-run: clean=true
-6. → Pass, proceed to code review
-```
+`scripts/completeness-scan.sh` → 1 finding `return {};` in `getPlayerCards()` (isNew=true) → implement card retrieval → re-run → `clean=true` → proceed to code review.
 
 ## See Also
 

@@ -43,13 +43,13 @@ Split into segments (Entry/Init, Core Ops, Edge Cases, Post-Op, Field Completene
 | Severity | Definition |
 |----------|-----------|
 | **Critical** | Feature broken or missing entirely |
-| **Important** | Functionality degraded, display affected |
+| **Major** | Functionality degraded, display affected |
 | **Minor** | Cosmetic, no functional impact |
 | **By-Design** | Intentional difference, documented reason |
 
 ### Phase 4: Prioritized Fix
 
-Fix order: Critical -> Important -> Minor (backlog).
+Fix order: Critical -> Major -> Minor (backlog).
 
 Per fix: update target -> verify against source -> update comparison matrix -> re-run tests.
 

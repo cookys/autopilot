@@ -56,25 +56,22 @@ fact-driven integrity to round 2+.
 
 ## Leaky vs blind — re-review prompt comparison
 
-**Scenario**: Round 1 of `quality-pipeline` review found an Important finding
+**Scenario**: Round 1 of `quality-pipeline` review found an Major finding
 at `src/components/SearchBar.tsx:42` (unhandled null on `query` prop). The
 calling skill dispatched a fixer SubAgent which applied a patch. Now
 `quality-pipeline`'s Re-review Loop is about to dispatch `autopilot:reviewer`
 a second time to confirm the entire diff is clean.
 
-> Severity nomenclature: this scenario uses `quality-pipeline`'s 4-tier
-> labels (Critical / Important / Suggestion / Minor — see
-> `skills/quality-pipeline/references/code-review.md`). The `agents/reviewer.md`
-> emit-side tiers use 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion;
-> `Important` here is the same severity band as 🟠 Major. The forbidden-phrase
-> list below covers both vocabularies.
+> Severity nomenclature: unified across `quality-pipeline` and `agents/reviewer.md` as
+> 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion. Forbidden-phrase list below
+> targets this vocabulary.
 
 ### ❌ Leaky re-dispatch prompt (anti-pattern)
 
 ```
 Re-review src/components/SearchBar.tsx against the original task.
 
-FYI from prior review: Round 1 (commit <round-1-sha>) found an Important
+FYI from prior review: Round 1 (commit <round-1-sha>) found an Major
 finding at line 42 — unhandled null on the `query` prop. A fixer applied
 a patch in the following commit; you are re-reviewing to verify the fix
 held. Pay particular attention to null handling on `query` around line 42.
@@ -134,7 +131,7 @@ is leaky — strip it before dispatch.
 - Specific line numbers tied to a prior finding (e.g., "around line 42")
 - "Verify the fix" / "confirm the patch held" / "re-check"
 - Specific aspect labels from a prior verdict (e.g., "focus on null handling")
-- Severity tier names OR tier glyphs (🔴 🟠 🟡 🔵) tied to a prior finding (e.g., "the Important from round 1", "the 🟠 from last review")
+- Severity tier names OR tier glyphs (🔴 🟠 🟡 🔵) tied to a prior finding (e.g., "the Major from round 1", "the 🟠 from last review")
 - Quoted code excerpts pulled from a prior finding's body
 - Round-cycle meta-signals — even framed as "no leakage": "this is a re-review",
   "re-derive findings from scratch", "no prior context is being passed"

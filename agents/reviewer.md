@@ -30,11 +30,13 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 ## Workflow
 
-1. **Build complete context.** Read every file affected by the change. Read the callers, the tests, the config. Don't review a diff in isolation.
-2. **Run the full checklist** (below) systematically. Do not skip sections.
-3. **Verify uncertain API behavior with WebSearch** — but remember: WebSearch results are not findings themselves (see Red Lines below).
-4. **Run static analysis tools when available.** Grep for known bad patterns. Run type-check / lint if the environment has them.
-5. **Produce the report** in the exact format below. Even if everything passes.
+1. **Build context.** Read every file affected by the diff and the original task / plan / commit message as baseline (canonical scope statement: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) Invocation §). Pull in callers / tests / config **only when a specific finding's correctness depends on them** — don't pre-expand scope.
+2. **Seed Verified Clean** from `scripts/diff-file-list.sh changed` (or `staged`) so the file enumeration is deterministic rather than memory-based. Add per-category notes per file.
+3. **Pre-screen scope-creep candidates** with `scripts/diff-scope-report.sh [--message-file <msg>]` — JSON `findings` lists whitespace-only files and files not mentioned in the commit message. Judge each, do not auto-flag.
+4. **Run the full checklist** (below) systematically. Do not skip sections.
+5. **Verify uncertain API behavior with WebSearch** — but remember: WebSearch results are not findings themselves (see Red Lines below).
+6. **Run static analysis tools when available.** Grep for known bad patterns. Run type-check / lint if the environment has them.
+7. **Produce the report** in the exact format below. Even if everything passes.
 
 ## Review Checklist
 
@@ -45,6 +47,15 @@ These are the autopilot methodology discipline. Violating any of them means your
 - **Error handling**: uncaught exceptions, swallowed errors, silent fallbacks, misleading error messages
 - **Performance**: N+1 queries, nested loops over large data, memory leaks, unbounded cache growth, blocking I/O on hot paths
 - **API usage**: deprecated APIs, wrong parameters, missing required headers, missing timeouts, missing pagination
+
+### Scope discipline (Surgical Changes)
+**Every changed line must trace directly to the task / plan / commit message.** For each changed hunk, answer: "Which sentence of the task description does this hunk implement?" If no sentence maps to it, it is scope creep.
+
+Severity: scope-creep in compiled output → 🟠 Major; in formatting / comments → 🟡 Minor / 🔵 Suggestion. Newly-orphaned imports/vars/funcs removed by the task are cleanup, not scope creep.
+
+The `✅ Verified Clean` section MUST include the line `Reviewed full diff for scope creep — every changed line traces to the task.` when no scope creep is detected — silent omission of this line is a Three Red Lines (Exhaustiveness) violation.
+
+Canonical patterns, examples, and output format: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "Scope Creep / Surgical Changes Scan".
 
 ### Plan / architecture review (when reviewing a plan doc)
 - **Hidden assumptions**: dependencies assumed to exist, environments assumed to match, inputs assumed to be validated upstream
@@ -84,6 +95,7 @@ Every reviewer run must produce output in this exact structure:
 - Reviewed auth flow — no timing attacks, uses safe comparison
 - Reviewed SQL queries — all parameterized via ORM
 - Reviewed error handling in payment-service.ts — no swallowed errors
+- Reviewed full diff for scope creep — every changed line traces to the task
 
 ### Summary
 Overall risk: Low / Medium / High
@@ -141,6 +153,7 @@ Seeing any of these in your own output means you violated Three Red Lines:
 - Severity listed without `file_path:line_number`
 - Empty `### Verified Clean` with no explanation
 - Missing `### Handoff` section
+- Missing scope-creep line in `### Verified Clean` (silent omission of the surgical-changes scan)
 
 All of these mean: rewrite the report following the Output Contract exactly.
 

@@ -46,10 +46,13 @@ Example C — pre-existing verification:
 ```
 FAIL: ReconnectTest.GameStateRestore
 → Not obviously related to current changes
-→ git stash && <your-test-command>  (or checkout develop)
-→ Same test fails on develop → confirmed pre-existing
-→ Still fix it: the state serializer was missing a field
+→ scripts/verify-preexisting.sh '<your-test-command>' --base develop
+  → JSON: {"head":"fail","base":"fail","verdict":"PRE_EXISTING"}
+  → Still fix it: the state serializer was missing a field
+  → (verdict INTRODUCED ⇒ regression this session; NO_FAILURE ⇒ rerun)
 ```
+
+The script stashes uncommitted work, checks out base, runs the test, restores. Replaces the manual `git stash && checkout develop` recipe — fewer ways to leave the work tree in a bad state.
 
 **Step 3: Re-run until clean.**
 ```bash
@@ -105,21 +108,17 @@ main task done → run build/type-check
 └── All clean → pass
 ```
 
-### Example: Pre-existing Warning
+### Examples (compressed)
 
 ```
-src/games/big2/Big2Rules.cpp:142:15: warning: implicit conversion loses precision
-  int count = cards.size();  // size_t → int
-→ Pre-existing (git blame confirms not from this session)
+# Pre-existing project warning — fix directly
+src/games/big2/Big2Rules.cpp:142: implicit conversion loses precision
+  int count = cards.size();  // size_t → int (pre-existing per git blame)
 → Fix: auto count = static_cast<int>(cards.size());
-```
 
-### Example: Auto-generated Code
-
-```
-proto/gen/game.pb.cc:1234: warning: unused parameter 'arena'
-→ Root cause: protobuf codegen option missing LITE_RUNTIME
-→ Record in backlog, do not hand-edit generated file
+# Auto-generated — record root cause, don't hand-edit
+proto/gen/game.pb.cc:1234: unused parameter 'arena'
+→ Root cause: protobuf codegen missing LITE_RUNTIME → record in backlog
 ```
 
 ## Prohibited Behaviors

@@ -5,6 +5,7 @@ node_modules/
 .claude/session-start-sha
 .claude/knowledge/
 .claude/settings.local.json
+.context/
 .in_use/
 hooks/hooks.json.capture-backup
 # Dated eval result dirs that are noise — non-baseline runs.

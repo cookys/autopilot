@@ -30,11 +30,13 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 ## Workflow
 
-1. **Build complete context.** Read every file affected by the change. Read the callers, the tests, the config. Don't review a diff in isolation.
-2. **Run the full checklist** (below) systematically. Do not skip sections.
-3. **Verify uncertain API behavior with WebSearch** — but remember: WebSearch results are not findings themselves (see Red Lines below).
-4. **Run static analysis tools when available.** Grep for known bad patterns. Run type-check / lint if the environment has them.
-5. **Produce the report** in the exact format below. Even if everything passes.
+1. **Build context.** Read every file affected by the diff and the original task / plan / commit message as baseline (canonical scope statement: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) Invocation §). Pull in callers / tests / config **only when a specific finding's correctness depends on them** — don't pre-expand scope.
+2. **Seed Verified Clean** from `scripts/diff-file-list.sh changed` (or `staged`) so the file enumeration is deterministic rather than memory-based. Add per-category notes per file.
+3. **Pre-screen scope-creep candidates** with `scripts/diff-scope-report.sh [--message-file <msg>]` — JSON `findings` lists whitespace-only files and files not mentioned in the commit message. Judge each, do not auto-flag.
+4. **Run the full checklist** (below) systematically. Do not skip sections.
+5. **Verify uncertain API behavior with WebSearch** — but remember: WebSearch results are not findings themselves (see Red Lines below).
+6. **Run static analysis tools when available.** Grep for known bad patterns. Run type-check / lint if the environment has them.
+7. **Produce the report** in the exact format below. Even if everything passes.
 
 ## Review Checklist
 

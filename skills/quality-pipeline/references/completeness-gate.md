@@ -98,16 +98,9 @@ scan results
 | Placeholder assertion in test (`EXPECT_TRUE(true)`) | **No** — test assertions must be meaningful |
 | `return {}` as valid empty-collection return | Yes — if semantically correct (e.g., "no results found") |
 
-## Example: Full Gate Pass
+## Example: Full Gate Pass (compressed)
 
-```
-1. Run: scripts/completeness-scan.sh
-2. Output: 1 finding — "return {};" in getPlayerCards(), isNew=true
-3. Read context: function should return current hand, not empty
-4. Action: implement actual card retrieval logic
-5. Re-run: clean=true
-6. → Pass, proceed to code review
-```
+`scripts/completeness-scan.sh` → 1 finding `return {};` in `getPlayerCards()` (isNew=true) → implement card retrieval → re-run → `clean=true` → proceed to code review.
 
 ## See Also
 

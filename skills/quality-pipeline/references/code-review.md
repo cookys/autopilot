@@ -66,9 +66,11 @@ Everything else, including items that seem trivial:
 
 ## Invocation
 
-**Dispatch per the `.claude/dispatch-config.md` `## Code Review` chain** (auto-injected at the top of `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the first AVAILABLE reviewer in that chain; **`autopilot:reviewer` is the default fallback** when the chain is unset or no chain entry is dispatchable.
+**Dispatch per the `.claude/dispatch-config.md` `## Code Review` chain** (auto-injected at the top of `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the **first AVAILABLE** reviewer in the chain; plugins not installed are skipped automatically. **`autopilot:reviewer` is the default fallback** when the chain is unset or no entry is dispatchable. The chain is a declarative preference; if you want a one-off non-chain reviewer, dispatch it directly via the Agent tool.
 
-Example dispatch (when the chain selects `autopilot:reviewer` — autopilot's methodology-disciplined reviewer carrying Three Red Lines: closure / fact-driven / exhaustiveness, emitting a unified Output Contract with enum-based `### Handoff` that quality-pipeline can pattern-match):
+**Model/mode**: resolve via `scripts/resolve-dispatch.sh --role reviewer` — emits JSON `{model, mode, agent, source}` consulting `.claude/model-routing-config.md` or [`references/model-routing.md`](../../../references/model-routing.md) defaults. Do not hardcode defaults at the dispatch site.
+
+Example dispatch (when the chain selects `autopilot:reviewer`):
 
 ```
 Task tool:
@@ -76,26 +78,14 @@ Task tool:
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
-> On round 2+ for the same diff (Re-review Loop below), leave `[specific concerns]` blank or restrict it to **non-finding-derived** scope reminders only — passing prior findings here anchors the reviewer per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md).
+> On round 2+ (Re-review Loop below), leave `[specific concerns]` blank or restrict it to **non-finding-derived** scope reminders only. Run `scripts/check-redispatch-prompt.sh <prompt>` before dispatching — exit 1 means the prompt is leaky per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md) and MUST be stripped.
 
-Whichever reviewer the chain selects, the agent will:
-1. Read all changed files (git diff)
-2. Compare against the original plan/task intent
-3. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep dimension defined in "Scope Creep / Surgical Changes Scan" below)
-4. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`
+Whichever reviewer the chain selects, the agent (per the canonical scope statement consumed by `agents/reviewer.md` too) will:
+1. Read every file affected by the diff and the **original task / plan / commit message** as baseline. Callers / tests / config are read only when a finding depends on them.
+2. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep dimension defined in "Scope Creep / Surgical Changes Scan" below).
+3. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`.
 
 (Non-autopilot reviewers may return a different output shape — see "Handoff Consumption" below for enum vocabulary; foreign-shape outputs fall back to inline interpretation by quality-pipeline.)
-
-**Chain semantics** — quality-pipeline picks the first AVAILABLE reviewer in `.claude/dispatch-config.md`'s `## Code Review` chain:
-
-- If the project lists `autopilot:reviewer` first (default) → use it; it is autopilot's methodology-disciplined reviewer
-- If the project lists `superpowers:code-reviewer` first (or as fallback when `autopilot:reviewer` is not yet loaded mid-session) → use it; broader latitude, less strict on discipline enforcement
-- If the project lists a project-specific reviewer (e.g. `voltagent-qa-sec:code-reviewer`) → use it; role-specialized with broader domain catalog
-- If no `dispatch-config.md` exists → default to `autopilot:reviewer`
-
-Plugins listed in the chain whose plugin is not installed are skipped automatically (Claude routing returns no-such-skill when invoked). The chain is a declarative preference, not runtime introspection — but Claude's own catalog awareness means unavailable entries fall through without producing dispatch errors.
-
-If you want a reviewer not in the chain for a one-off invocation, dispatch it directly via the Agent tool — that is a user-layer choice, not a quality-pipeline decision.
 
 ## Handoff Consumption
 
@@ -118,6 +108,10 @@ Methodology agents do not call each other. Any re-dispatch happens in quality-pi
 **Every changed line must trace directly to the stated task, plan, or commit message.**
 
 In addition to the correctness / security / boundary / error-handling / performance / API-usage checklist, the reviewer **must** scan the diff for changes that are not requested by the task. This addresses the most common LLM-coding failure mode: agents "improving" adjacent code, refactoring what isn't broken, or cleaning up code they think they understand.
+
+### Pre-screen (cheap, deterministic)
+
+Before the per-hunk judgment pass, run `scripts/diff-scope-report.sh [--message-file <commit-msg>]`. v1 covers two language-agnostic signals: `whitespace_only_file` and `unrelated_to_message`. The script emits JSON `findings`; the reviewer treats each as a candidate that must be judged, not an auto-finding. Hunks not pre-screened still get the full "which sentence implements this hunk?" test below.
 
 ### What counts as scope creep
 
@@ -161,7 +155,7 @@ When no scope creep is detected, the `✅ Verified Clean` section MUST explicitl
 - No scope creep — every changed line traces to the task.
 ```
 
-so downstream consumers can confirm the scan ran rather than being silently skipped.
+so downstream consumers can confirm the scan ran rather than being silently skipped. To populate that Verified Clean section deterministically (every reviewed file enumerated), seed it from `scripts/diff-file-list.sh changed` — that removes the LLM-from-memory file enumeration step.
 
 ### Why this matters (one-liner)
 
@@ -198,11 +192,9 @@ review → findings?
 
 **Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues.
 
-**Re-review dispatch is blind** — when re-dispatching `autopilot:reviewer` (or whichever reviewer the chain selects) for round 2+ on the same diff, the dispatch prompt MUST be stripped of prior-round findings before sending. Telling the SubAgent "round 1 found Major at line 42, verify the fix" anchors it to confirm line 42 and lets every other latent bug slip past. The prior finding lives in the dispatcher's memory for after-the-fact comparison, not in the reviewer's prompt.
+**Re-review checkpoint (dispatcher-only)**: Before round 1, run `scripts/diff-since-last-round.sh mark` to snapshot the HEAD SHA; between rounds, `scripts/diff-since-last-round.sh stat` returns JSON `{changed_files, insertions, deletions, doc_only}`. If `doc_only=true` and `changed_files` is trivially small, the dispatcher MAY short-circuit re-review. This decision and its data live **only in the dispatcher** — never pass the delta to the reviewer (leaks round-cycle meta-signal per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). After the loop closes, `scripts/diff-since-last-round.sh clear`.
 
-Follow the dispatcher pre-flight checklist in [`references/blind-dispatch.md`](../../../references/blind-dispatch.md), then run `scripts/check-redispatch-prompt.sh <prompt-file>` against the round 2+ prompt — the linter encodes the checklist's forbidden phrases and exits non-zero if any survive. The fixer that applied the patch is NOT blind — it receives the full finding because it needs the specifics to act on; only the re-dispatched reviewer is blinded.
-
-This addresses the failure mode where quality-pipeline's own dispatch silently self-bypasses the gate by anchoring round 2+ to round 1's verdict.
+**Re-review dispatch is blind** — when re-dispatching `autopilot:reviewer` (or whichever reviewer the chain selects) for round 2+ on the same diff, the dispatch prompt MUST be stripped of prior-round findings. Follow the dispatcher pre-flight checklist in [`references/blind-dispatch.md`](../../../references/blind-dispatch.md); run `scripts/check-redispatch-prompt.sh <prompt-file>` — exit 1 ⇒ strip and re-check before dispatching. The prior finding lives in the dispatcher's memory; the fixer is NOT blind (it gets the full finding). Skipping the linter step is how the gate silently self-bypasses.
 
 ## Suggestion / Minor Processing
 

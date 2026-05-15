@@ -1,8 +1,9 @@
 # Handoff — 2026-05-14 End-of-Day (post v2.7.3 + observations)
 
 **建立**：2026-05-14 ~19:30 local
+**狀態**：✅ Consumed — fresh observations 已 promote 到 [`docs/BACKLOG.md`](../BACKLOG.md)（`/reload-plugins` hook count discrepancy、PostToolUse dispatch dies after `/clear`）。本 doc 保留為歷史 snapshot。
 **目的**：context clear 後新 session 接續執行
-**現況**：`develop` 在 `871fd77`、無 active branch、無 uncommitted changes、全 push 過
+**現況**（建立當時）：`develop` 在 `871fd77`、無 active branch、無 uncommitted changes、全 push 過
 
 ---
 

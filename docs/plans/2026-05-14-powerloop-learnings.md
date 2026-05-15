@@ -1,7 +1,7 @@
 # Powerloop Learnings → Autopilot Tightenings
 
 **日期：** 2026-05-14
-**狀態：** 📋 Plan — pending review
+**狀態：** ✅ Shipped — B (`99ab8a6` SubAgent skill invocation rule) + A (`ec9027f` blind re-dispatch); C 緩議, D 跳過
 **Size：** S（拆兩個獨立 Fix-cycle）
 **Source survey：** `~/projects/claude-powerloop-plugin` v0.4.1（Aotokitsuruya，Apache-2.0）
 

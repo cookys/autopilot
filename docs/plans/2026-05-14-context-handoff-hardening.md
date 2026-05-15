@@ -1,7 +1,7 @@
 # Context-Handoff Hardening — autopilot v2.7.2
 
 **日期：** 2026-05-14
-**狀態：** ✅ Plan v4 — r3 critical findings inline-absorbed, READY for P1/P2/P3 implementation (3 review rounds complete, trajectory shows convergence)
+**狀態：** ✅ Shipped in v2.7.2 — merged to develop as `670cc23` on 2026-05-14 (implementation: `6780a2b`)
 **Size：** L
 **Branch：** `feat/v2.7.2-context-handoff-hardening`
 **Project doc：** [`docs/projects/2026-05-14-context-handoff-hardening/README.md`](../projects/2026-05-14-context-handoff-hardening/README.md)

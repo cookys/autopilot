@@ -1,7 +1,7 @@
 # Retro Roundup — Post-v2.7.2 Plumbing + Process Improvements
 
 **日期：** 2026-05-14
-**狀態：** ✅ Plan v2 — r1 reviewer findings absorbed; READY for P1a/P1b execution
+**狀態：** ✅ Shipped in v2.7.3 — merged to develop as `57c88ee` on 2026-05-14
 **Size：** L-lite（plan + project + L-5；P1 batch ~50min 實作）
 **Branch：** `feat/v2.7.3-retro-roundup`
 **Project：** [`docs/projects/2026-05-14-retro-roundup/README.md`](../projects/2026-05-14-retro-roundup/README.md)

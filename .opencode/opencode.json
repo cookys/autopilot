@@ -1,0 +1,27 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "paths": [".opencode/skills"]
+  },
+  "agent": {
+    "autopilot-reviewer": {
+      "description": "Autopilot methodology code reviewer — Three Red Lines discipline (closure / fact-driven / exhaustiveness). Use when performing pre-commit/pre-merge review, security audit, or plan critique.",
+      "mode": "subagent",
+      "prompt": "{file:agents/autopilot-reviewer.md}"
+    },
+    "autopilot-debugger": {
+      "description": "Systematic debugging agent for root cause analysis. Use when: 'debug', 'investigate', 'root cause', '為什麼會壞', '追蹤問題'.",
+      "mode": "subagent",
+      "prompt": "{file:agents/autopilot-debugger.md}"
+    },
+    "autopilot-planner": {
+      "description": "Task decomposition and planning agent. Use when: 'plan', 'decompose', 'break down', '規劃', '拆解任務'.",
+      "mode": "subagent",
+      "prompt": "{file:agents/autopilot-planner.md}"
+    }
+  },
+  "plugin": [
+    "./.opencode/plugins"
+  ],
+  "instructions": [".opencode/README.md"]
+}

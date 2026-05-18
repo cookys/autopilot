@@ -58,11 +58,20 @@ Autopilot is standalone-capable. When `superpowers` is installed, orchestrators 
 | Skill execution rules | `skills/<name>/SKILL.md` |
 | Methodology agent prompts | `agents/{reviewer,debugger,planner}.md` |
 | Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
+| **Multi-agent portability** | `references/multi-agent-portability.md` |
 | Project tracking | `docs/projects/` (active + `_archive/`) |
 | Backlog | `docs/BACKLOG.md` |
 | Plans | `docs/plans/` |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
+
+## Multi-agent considerations
+
+When working on features that span multiple coding agents (Claude Code / OpenCode / Gemini CLI / Codex):
+
+- Consult [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for architecture comparison and portability classification.
+- Skill body format (YAML frontmatter + Markdown) is largely agent-agnostic; prefer writing portable skills.
+- Agent definitions and hooks have platform-specific formats; check the portability doc before attempting cross-agent support.
 
 ## Reply preference
 
@@ -75,3 +84,4 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.
 - Don't introduce new severity vocabulary — use the unified 4-tier above.
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
+- Don't add Claude Code-only hook logic or OpenCode-only plugin logic without a portability assessment — check `references/multi-agent-portability.md` first.

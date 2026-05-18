@@ -5,6 +5,7 @@ node_modules/
 .claude/session-start-sha
 .claude/knowledge/
 .claude/settings.local.json
+.claude/next-state.json
 .context/
 .in_use/
 hooks/hooks.json.capture-backup

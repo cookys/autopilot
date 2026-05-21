@@ -1,22 +1,25 @@
 # Multi-Agent Coding Assistant Skill Portability
 
-本文件探討如何讓 autopilot 的 skill/agent 系統同時支援多個 coding agent（Claude Code、OpenCode、Gemini CLI、Codex）。
+本文件探討如何讓 autopilot 的 skill/agent 系統同時支援多個 coding agent（Claude Code、OpenCode/Codex、Gemini/Antigravity CLI `agy`）。
 
-## 已知 Agent 系統架構對比
+---
 
-| 維度 | Claude Code | OpenCode | Gemini CLI | Codex |
-|------|-------------|----------|-----------|-------|
-| **Plugin 註冊** | `.claude-plugin/plugin.json` | `opencode.json` 的 `plugin: [...]` | ? | ? |
-| **Skills 格式** | `skills/*/SKILL.md` | `.opencode/skills/*/SKILL.md` | ? | ? |
-| **Skill 自動發現** | `.claude/skills/` + `skills/` | `.opencode/skills/` + `.claude/skills/` + `.agents/skills/` | ? | ? |
-| **Agents 格式** | `agents/*.md` | `.opencode/agents/*.md` | ? | ? |
-| **Hooks 系統** | `hooks/hooks.json` + script files | `.opencode/plugins/*.ts` (event-based) | ? | ? |
-| **Hook Event 表面** | PreToolUse, PostToolUse, PreCompact, SessionStart, Stop | `tool.execute.before`, `session.created`, `session.compacted` 等 | ? | ? |
-| **外部擴展 Protocol** | MCP | MCP + Plugin API | ? | ? |
+## 🗺️ 已知 Agent 系統架構對比
 
-## 核心發現：Skill Format 是事實標準
+| 維度 | Claude Code | OpenCode / Codex | Gemini / Antigravity (`agy`) |
+|------|-------------|------------------|-----------------------------|
+| **Plugin 註冊描述檔** | `.claude-plugin/plugin.json` | 根目錄 `plugin.json` | 根目錄 `plugin.json` (必備，且支援 `/plugin validate` 校驗) |
+| **Skills 格式** | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `skills/*/SKILL.md` (相容 Markdown frontmatter) |
+| **Skill 自動發現** | `.claude/skills/` + `skills/` | `.agents/skills/` + `skills/` | `~/.gemini/antigravity-cli/plugins/` |
+| **Hooks 系統描述檔** | `hooks/hooks.json` | `hooks.json` | `hooks.json` 或 `hooks/hooks.json` |
+| **Hook Event 類型** | SessionStart, PreCompact, PostToolUse, Stop | SessionStart, PreCompact, PostToolUse, Stop | SessionStart, PreCompact, PostToolUse, PreToolUse |
+| **環境變數注入** | `CLAUDE_PLUGIN_ROOT` | `CODEX_PLUGIN_ROOT`, `AGENT_PLUGIN_ROOT` | `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT` |
 
-Skill 的 YAML frontmatter + Markdown body 格式在 Claude Code 和 OpenCode 之间已经近乎通用：
+---
+
+## 1. 核心發現：Skill Format 是通用標準
+
+Skill 的 YAML frontmatter + Markdown body 格式在各個 Agent 平台之間已經近乎通用：
 
 ```yaml
 ---
@@ -25,178 +28,61 @@ description: >
   One sentence covering what this skill does AND when to trigger it.
   Use when: "trigger phrase 1", "trigger phrase 2"
   Not for: adjacent use cases
+compatibility: claude-code codex gemini
 ---
 
 # Skill Name
-
-## Section 1
 ...
 ```
 
-**兩者差異**：
-- `name` 格式：兩者都是 lowercase hyphen-separated，長度限制相似
-- `description`：兩者都要求 1-1024 chars，會出現在 skill tool 的 available_skills 清單
-- `compatibility` field：OpenCode 明確支援 `compatibility: opencode`；Claude Code 忽略未知 field
+**規範細節**：
+- `name` 格式：均為 lowercase hyphen-separated，長度限制相似。
+- `description`：均要求 1-1024 字符，會出現在 Agent 決策時的 available_skills 清單中。
+- `compatibility`：在 SKILL.md frontmatter 加入 `compatibility` 欄位，用以標注所支援的 agent。
 
-**建議**：在 SKILL.md frontmatter 加入 `compatibility` 欄位標注支援的 agent：
+---
 
-```yaml
+## 2. Manifest (描述檔) 雙模相容性
+
+由於 Claude Code 預設讀取 `.claude-plugin/plugin.json`，而 Antigravity (`agy`) 與 Codex 則要求根目錄必須存在 `plugin.json`：
+* **開發規範**：任何對描述檔的修改，**必須同時同步更新根目錄 `plugin.json` 與 `.claude-plugin/plugin.json`**，否則會導致其他 Agent 驗證（如 `agy plugin validate`）失敗。
+
 ---
-name: dev-flow
-description: ...
-compatibility: claude-code opencode
----
+
+## 3. Hook/Plugin 系統相容性與環境變數
+
+雖然各 Agent 平台在 Hooks 事件命名上高度一致（例如 `SessionStart`、`PreCompact`），但在背景執行腳本時注入的「外掛根路徑」環境變數不同。
+
+### 絕對路徑解析規範
+不要在 JS 腳本中寫死 `process.env.CLAUDE_PLUGIN_ROOT`。開發 Hook 腳本時，必須採用**多 Agent 變數鍊與物理路徑 fallback 降級機制**：
+
+**JavaScript / Node.js 範例**：
+```javascript
+const path = require('path');
+const pkgRoot = process.env.CLAUDE_PLUGIN_ROOT 
+             || process.env.CODEX_PLUGIN_ROOT 
+             || process.env.AGY_PLUGIN_ROOT 
+             || process.env.GEMINI_PLUGIN_ROOT 
+             || path.dirname(__dirname); // fallback 到本機執行腳本的父目錄
 ```
 
-## Agent 格式對比
-
-### Claude Code Agent
-
-```markdown
----
-name: reviewer
-description: Use when performing pre-commit review...
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
-model: opus
----
-
-# Reviewer
-
-You are the Reviewer for the autopilot plugin...
-```
-
-### OpenCode Agent
-
-```markdown
----
-description: Reviews code for quality and best practices
-mode: subagent
-model: anthropic/claude-sonnet-4-6
-permission:
-  edit: deny
-  bash: ask
----
-
-You are in code review mode...
-```
-
-**關鍵差異**：
-
-| 維度 | Claude Code | OpenCode |
-|------|-------------|----------|
-| `tools:` field | 有（工具白名單） | 無（由 permission 控制） |
-| `mode:` field | 無 | primary/subagent/all |
-| `permission:` field | 無 | 有（精細控制） |
-| Agent 存放路徑 | `agents/` | `.opencode/agents/` |
-
-## Hook/Plugin 系統不兼容
-
-**這是遷移最大的障礙**。Claude Code 的 hook 系統（PreToolUse/PostToolUse/PreCompact/Stop/SessionStart）與 OpenCode 的 plugin event 系統（`tool.execute.before`/`session.created` 等）**沒有直接對應關係**。
-
-### 遷移策略
-
-#### 1. 純計算腳本（推薦）
-
-如果 hook 的核心邏輯是**計算/檢查**，將其重寫為可被 skill 直接或通過 `!()` 語法呼叫的腳本。
-
+**Bash 範例**：
 ```bash
-# Claude Code hook: branch-protection.js
-# 遷移策略：保留為 pure script，透過 skill 內的 `!()` 呼叫
-
-#!/usr/bin/env node
-const fs = require('fs');
-const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
-// ... logic
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || [ -n "${CODEX_PLUGIN_ROOT:-}" ] || [ -n "${AGY_PLUGIN_ROOT:-}" ] || [ -n "${GEMINI_PLUGIN_ROOT:-}" ]; then
+  # 支援 Context Injection
+else
+  # 降級輸出
+fi
 ```
 
-#### 2. Plugin 適配層
+**`hooks.json` 指令格式**：
+在 `hooks.json` 的 `"command"` 定義中，由於相容性轉換層（如 `agy` 載入 Claude 外掛時）會主動尋找並替換 `${CLAUDE_PLUGIN_ROOT}` 關鍵字，因此**依然保留 `${CLAUDE_PLUGIN_ROOT}` 字樣**以配合其相容轉換，但底層執行腳本必須落實上述的多變數 Fallback 機制。
 
-對於需要即時攔截的工具调用，透過 OpenCode Plugin API 包裝：
+---
 
-```ts
-// .opencode/plugins/autopilot-branch-protection.ts
-import type { Plugin } from "@opencode-ai/plugin"
+## 4. 遷移與開發檢查清單
 
-export const BranchProtectionPlugin: Plugin = async (ctx) => {
-  return {
-    "tool.execute.before": async (input, output) => {
-      if (input.tool === "bash" && output.args.command?.match(/\bgit\b/)) {
-        // ... protection logic
-      }
-    },
-  }
-}
-```
-
-#### 3. OpenCode 專用 Plugin 與 Claude Code 專用 Hook 並行
-
-將不相容的 hooks 拆分為兩個實作：
-
-```
-autopilot/
-  hooks/                    # Claude Code hooks (原目錄)
-    hooks.json
-    branch-protection.js
-    ...
-  .opencode/
-    plugins/                # OpenCode plugins (新建)
-      branch-protection.ts
-      intent-capture.ts
-    agents/
-    skills/
-```
-
-## Skill Portability 分類
-
-### 高可移植（直接複製）
-
-- `skills/dev-flow/SKILL.md` — 純引導流程，無 agent/hook 依賴
-- `skills/quality-pipeline/SKILL.md` — 流程定義，調用 reviewer agent 但本身無平台特定程式碼
-- `skills/think-tank/SKILL.md` — 純對話流程
-- `skills/think-tank-dialectic/SKILL.md` — 純對話流程
-
-### 中等可移植（需小幅適配）
-
-- `skills/finish-flow/SKILL.md` — 包含對 hooks 的引用，需改為條件引用
-- `skills/ceo-agent/SKILL.md` — 包含對 scripts 的引用，部分 agent 特定指令
-
-### 低可移植（需重寫）
-
-- 所有 agent 定義（`agents/*.md`）— 工具聲明格式不同
-- 所有 hook 腳本（`hooks/*.js`）— 架構完全不同
-
-## 遷移檢查清單
-
-當需要將 autopilot skill 遷移到 OpenCode 時：
-
-- [ ] 確認 skill 主體（SKILL.md）無平台特定工具調用
-- [ ] 將 agent 引用從 `autopilot:reviewer` 改為 `reviewer` 或 `.opencode/agents/reviewer.md`
-- [ ] 將 hook 引用改為條件判斷（OpenCode 環境，跳過 hook 專用指令）
-- [ ] 將 `!()` 嵌入式腳本改為明確的 Bash 調用
-- [ ] 在 frontmatter 加入 `compatibility: claude-code opencode`
-- [ ] 驗證 skill 在目標 agent 的 `skill` tool 中正確出現
-
-## 討論：是否需要一個 `agent-abstraction` Skill？
-
-選項：
-
-1. **不做** — 手動維護兩套技能樹，靈活但維護成本高
-2. **做一個 `cross-agent-runtime` skill** — 這個 skill 檢測當前運行環境，提供統一的抽象層。例如：
-   - 檢測是 Claude Code 還是 OpenCode（環境變數、工具可得性）
-   - 動態路由 agent 調用
-   - 條件化 hook 行為
-
-目前建議 **選項 1（不做）**，原因：
-- 大多數 skill 已經是平台無關的 Markdown
-- Agent 和 Hook 的差異是結構性而非功能性的
-- 引入抽象層會增加複雜度和調試難度
-
-如果未來有第三個 agent 需要支持，再考慮抽象層。
-
-## 參考資料
-
-- [OpenCode Skills Documentation](https://opencode.ai/docs/skills/)
-- [OpenCode Agents Documentation](https://opencode.ai/docs/agents/)
-- [OpenCode Plugins Documentation](https://opencode.ai/docs/plugins/)
-- [Claude Code Skills Documentation](https://docs.claude.com/en/skills)
-- [Claude Code Hooks Documentation](https://docs.claude.com/en/hooks)
+當在 autopilot 中開發新功能或更新 Hooks 時，請確保：
+- [ ] 根目錄的 `plugin.json` 與 `.claude-plugin/plugin.json` 的版本號與內容保持同步。
+- [ ] 所有的 Hook 腳本（JS / Shell）均已導入「多 Agent 變數鍊與物理路徑 fallback」。
+- [ ] 檢驗指令 `agy plugin validate <path_to_autopilot>` 可成功通過，無錯誤警告。

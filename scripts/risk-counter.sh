@@ -53,9 +53,10 @@ d['risk']  = d.get('risk', 0) + delta
 d['fixes'] = d.get('fixes', 0) + 1
 if event == 'reverted':
     d['reverted'] = d.get('reverted', 0) + 1
+now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
 d.setdefault('events', []).append({
     'event': event, 'delta': delta,
-    'ts': datetime.datetime.utcnow().isoformat() + 'Z',
+    'ts': now,
 })
 with open(path, 'w') as f: json.dump(d, f, indent=2)
 PY

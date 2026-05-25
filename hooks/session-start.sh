@@ -161,7 +161,7 @@ fi
 ESCAPED=$(escape_for_json "$CONTEXT")
 
 # Output JSON for Claude Code context injection
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || [ -n "${CODEX_PLUGIN_ROOT:-}" ] || [ -n "${AGY_PLUGIN_ROOT:-}" ] || [ -n "${GEMINI_PLUGIN_ROOT:-}" ]; then
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
     printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$ESCAPED"
 else
     printf '{\n  "additional_context": "%s"\n}\n' "$ESCAPED"

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# autopilot pre-commit gate — run version-sync drift check.
+#
+# Activated by:  scripts/install-hooks.sh  (sets core.hooksPath=.githooks)
+#
+# What it checks (Phase 0.5):
+#   - sync-version.js --check: .claude-plugin/plugin.json (canonical) vs
+#     all mirrors (plugin.json, marketplace.json, hooks/README.md, README.md).
+#     Exits 1 if any mirror drifts.
+#
+# Future phases will add more checks here (e.g. sync-agent-bodies.sh --check
+# in Phase 3). Each new check should be additive and fail-fast.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# --- sync-version drift check ---
+if ! node scripts/sync-version.js --check >/dev/null 2>&1; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-commit: version-manifest drift detected" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  node scripts/sync-version.js --check >&2 || true
+  echo "" >&2
+  echo "To fix: edit .claude-plugin/plugin.json (canonical) then run sync-version.js" >&2
+  echo "with the new args, then re-commit." >&2
+  exit 1
+fi

@@ -1,10 +1,12 @@
-# autopilot — project conventions
+# autopilot — project conventions (Claude Code)
 
 For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`; this file covers cross-cutting things a session needs at entry.
 
+For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS.md`](AGENTS.md) for the agents.md-spec readme that applies to any agent. For cross-platform portability details (what each platform actually supports vs. what's unverified), see [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
+
 ## What this repo is
 
-Standalone-capable lifecycle orchestration plugin for Claude Code. 16 skills, 3 methodology agents, 14 hooks. Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`README.md`](README.md) for the full coexistence model.
+Standalone-capable lifecycle orchestration plugin for Claude Code. 16 skills, 3 methodology agents, 19 hooks (12 default-on, 7 opt-in). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`README.md`](README.md) for the full coexistence model.
 
 ## Scripts inventory (prefer over LLM judgment)
 
@@ -75,3 +77,4 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.
 - Don't introduce new severity vocabulary — use the unified 4-tier above.
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
+- Don't claim cross-platform env vars or CLI subcommands without an official doc URL. Past lesson: `CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`, `agy plugin validate` were all fabricated and shipped to main before being caught. If you can't cite the URL, it's a Spike candidate, not a fact.

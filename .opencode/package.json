@@ -1,0 +1,9 @@
+{
+  "name": "autopilot-opencode",
+  "private": true,
+  "type": "module",
+  "description": "Type-resolution package for autopilot's OpenCode plugin. OpenCode auto-discovers .opencode/plugins/*.ts at runtime; this package.json declares @opencode-ai/plugin so editors (and `npm install` in .opencode/) can resolve the Plugin type.",
+  "dependencies": {
+    "@opencode-ai/plugin": "1.15.10"
+  }
+}

@@ -13,8 +13,16 @@ import * as fs from "fs"
 import * as os from "os"
 import * as path from "path"
 import * as crypto from "crypto"
+import { fileURLToPath } from "node:url"
 
 const STATE_DIR = path.join(os.homedir(), ".autopilot")
+
+// __dirname is undefined in OpenCode Bun ESM plugin context (Spike 0 verified
+// against OpenCode 1.15.10). Use import.meta.url + fileURLToPath instead.
+const __filename = fileURLToPath(import.meta.url)
+const PLUGIN_DIR = path.dirname(__filename)
+// 2-level climb: .opencode/plugins/ → .opencode/ → repo root
+const PLUGIN_ROOT = path.join(PLUGIN_DIR, "..", "..")
 
 function ensureDir(dir: string, mode: number = 0o700): void {
   if (!fs.existsSync(dir)) {
@@ -24,11 +32,14 @@ function ensureDir(dir: string, mode: number = 0o700): void {
 
 function getPluginVersion(): string {
   try {
-    const pluginRoot = path.join(__dirname, "..", "..", "..")
-    const pkgPath = path.join(pluginRoot, "plugin.json")
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"))
-      return pkg.version || "unknown"
+    // Read .claude-plugin/plugin.json (canonical, per §3.7 of v2.7.3 plan).
+    // Fall back to root plugin.json (mirror) for compatibility.
+    for (const rel of [".claude-plugin/plugin.json", "plugin.json"]) {
+      const pkgPath = path.join(PLUGIN_ROOT, rel)
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"))
+        return pkg.version || "unknown"
+      }
     }
   } catch {
     // ignore

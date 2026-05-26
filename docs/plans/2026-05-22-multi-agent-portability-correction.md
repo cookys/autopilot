@@ -553,3 +553,79 @@ R3 揭發但**推到 Spike 階段現場解**（不在 plan 靜態解）：
 - [x] **使用者拍板（2026-05-25）：套用 R4 修正、進 Phase 0**
 
 **Spike-driven 原則明文化**：Phase 3 Spike 0/1/2 為 plan 與現實對齊的閘門。任何 Spike 失敗 → §3.5 退路啟動 → 不阻斷 Phase 0/0.5/1/2/4 hot-fix + doc 路徑。
+
+---
+
+## 附錄 A：OpenCode Spike 結果（2026-05-26 實測，OpenCode 1.15.10）
+
+Fixture 位置：`/tmp/oc-spike/{spike0,spike1,spike2}/`。每個 spike 用 minimal `opencode.json` + 一支 probe 元件。
+
+### Spike 0：`__dirname` 在 Bun ESM plugin context 內
+
+**Probe**：`.opencode/plugins/probe.ts` 在頂層 `console.error` 印出 `typeof __dirname`、`__dirname` 值、`import.meta.url`、以及 plugin function 內的 `context.{directory, project, worktree}`。
+
+**結果**：
+```
+__dirname typeof: undefined          ← Bun ESM NOT shim CJS globals
+__dirname value: null
+import.meta.url: file:///tmp/oc-spike/spike0/.opencode/plugins/probe.ts   ← 可用
+context.directory: /tmp/oc-spike/spike0     (從 root cwd)
+context.directory: /tmp/oc-spike/spike0/subdir   (從 subdir cwd)
+context.worktree: "/"  (非 git repo 時)
+```
+
+**結論**：
+- `__dirname` 在 OpenCode plugin context 內為 `undefined`。**`.opencode/plugins/autopilot.ts` 既有 `path.join(__dirname, ...)` 一直在 throw、被 catch 吃掉**（Architect R3 + Skeptic R3 推論皆驗證）。
+- **正解：用 `import.meta.url + fileURLToPath`**：
+  ```ts
+  import { fileURLToPath } from "node:url"
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+  const pluginRoot = path.join(__dirname, "..", "..")   // .opencode/plugins/ → .opencode/ → repo root
+  ```
+- `context.directory` = 使用者 cwd（非 plugin install 路徑），**不適合**作 plugin self-location（Skeptic R2 catch 對）。
+- `context.worktree` 在非 git repo 時為 `"/"`（無用）；git repo 時應為 repo root（未在 spike 內驗證）。
+
+### Spike 1：`{file:..}` 跨層解析
+
+**Probe**：3 個 agent variants（same-dir / cross-layer / absolute），用 `opencode debug agent <name>` 看 `prompt` 欄位是否解析為 body 內容。
+
+**初步失敗**：`{file:..}` 在 **description 欄位**內出現字面字串會觸發 parser 誤試解析、丟 `EISDIR` 錯。修掉 description 後 retry 即過。
+
+**結果**：3 種 reference 皆解析正確：
+| 寫法 | 結果 |
+|---|---|
+| `{file:./body-same-dir.md}` | body 內容 inline ✓ |
+| `{file:../shared/body.md}` | body 內容 inline ✓ **(autopilot 主路徑)** |
+| `{file:/tmp/oc-spike/spike1/shared/body.md}` | body 內容 inline ✓ |
+
+**結論**：
+- 跨層 `../` 解析支援、autopilot `{file:../../agents/_bodies/<role>.body.md}` 可行。
+- **新發現的 footgun**：description / 任何被 OpenCode 解析的字串欄位內**不能含字面 `{file:..}` 樣式**，會被 parser 當實際 file reference 處理。Phase 3 step 21 加註：寫範例 description 時用「同類 reference」這種描述語、不要含字面 `{file:...}` 字串。
+
+### Spike 2：`.agents/skills/` 原生掃描
+
+**Probe**：`/tmp/oc-spike/spike2/.agents/skills/probe-skill/SKILL.md`、無任何 plugin / config 註冊、`opencode debug skill` 看是否列出。
+
+**結果**：probe-skill 確實出現於輸出，location 指向 fixture path。**`.agents/skills/` 原生支援、無需 plugin、無需 opencode.json `skills.paths`**。
+
+### Bonus：內建 `customize-opencode` skill 是權威 OpenCode schema 文件
+
+`opencode debug skill` 第一筆是 `customize-opencode`（OpenCode 自身內建 skill），內含完整 opencode.json schema 與 plugin / agent / skill 規範。此前 webfetch 推論被它修正的幾條：
+
+| R3 plan 條目 | 修正 |
+|---|---|
+| `"skills": { "paths": [...] }` 是非法鍵、應移除 | **錯**——customize-opencode 明列此鍵合法（與 `urls`）。可保留、亦可移除（因 `.opencode/skills/` 預設掃）。 |
+| `"plugin": [...]` 只接受 npm 名 | **錯**——亦接受 `"./local-plugin.ts"` 等本地檔案路徑。但**目錄路徑無效**——PM 原 `"./.opencode/plugins"` 仍是錯的，因該是 dir 不是 file。 |
+| `.opencode/plugins/` 路徑（複數） | **正確**——`.opencode/plugin/` 與 `.opencode/plugins/` **兩種寫法都自動掃**。 |
+| `.opencode/agents/` 路徑 | **正確**——`.opencode/agent/` 與 `.opencode/agents/` 都接受 agent 檔。 |
+
+**Escape hatches 可用於 troubleshooting**：`OPENCODE_DISABLE_PROJECT_CONFIG=1` / `OPENCODE_PURE=1` / `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` 等 env var。
+
+### Phase 3 修法（基於 Spike 結果）
+
+1. **§3.3 OpenCode `getPluginVersion`**：改用 `import.meta.url + fileURLToPath`，**不**用 `__dirname` 也不用 `context.directory`。
+2. **§3.4 / Phase 3 step 21**：`opencode.json` 保留 `agent.*` 與 `instructions`；移除 `"plugin": [...]`（既有寫法是無效的目錄路徑，但 auto-discovery 會自動撿）；`"skills"` 鍵保留與否皆可（建議移除以簡化）。
+3. **§3.4 footgun**：avoid 字面 `{file:..}` 進入任何 OpenCode 解析的字串欄位（description / mode / 等）。
+4. **§3.1 directory tree**：`.opencode/skills/` symlink 確認不需要——`.agents/skills/` 已被 OpenCode native 掃。
+5. **Phase 3 step 19 退路**：Spike 1 + Spike 2 皆 PASS，退路不啟動。`agents/_bodies/` 維持 single source、`sync-agent-bodies.sh` 只寫一份。

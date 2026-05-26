@@ -27,3 +27,17 @@ if ! node scripts/sync-version.js --check >/dev/null 2>&1; then
   echo "with the new args, then re-commit." >&2
   exit 1
 fi
+
+# --- sync-agent-bodies drift check ---
+# agents/<role>.md (with frontmatter) → agents/_bodies/<role>.body.md (no frontmatter)
+# OpenCode references _bodies/ via {file:..} cross-layer. Drift means body file is stale.
+if ! ./scripts/sync-agent-bodies.sh --check >/dev/null 2>&1; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-commit: agent body sync drift detected" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  ./scripts/sync-agent-bodies.sh --check >&2 || true
+  echo "" >&2
+  echo "To fix:" >&2
+  echo "  ./scripts/sync-agent-bodies.sh && git add agents/_bodies/" >&2
+  exit 1
+fi

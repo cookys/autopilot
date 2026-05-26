@@ -1,88 +1,105 @@
-# Multi-Agent Coding Assistant Skill Portability
+# Multi-Agent Portability — Verified Facts
 
-本文件探討如何讓 autopilot 的 skill/agent 系統同時支援多個 coding agent（Claude Code、OpenCode/Codex、Gemini/Antigravity CLI `agy`）。
+How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL or is explicitly marked as unverified.** Past lesson: a previous version of this doc fabricated env vars and CLI subcommands which only got caught after three reviews.
 
----
-
-## 🗺️ 已知 Agent 系統架構對比
-
-| 維度 | Claude Code | OpenCode / Codex | Gemini / Antigravity (`agy`) |
-|------|-------------|------------------|-----------------------------|
-| **Plugin 註冊描述檔** | `.claude-plugin/plugin.json` | 根目錄 `plugin.json` | 根目錄 `plugin.json` (必備，且支援 `/plugin validate` 校驗) |
-| **Skills 格式** | `skills/*/SKILL.md` | `skills/*/SKILL.md` | `skills/*/SKILL.md` (相容 Markdown frontmatter) |
-| **Skill 自動發現** | `.claude/skills/` + `skills/` | `.agents/skills/` + `skills/` | `~/.gemini/antigravity-cli/plugins/` |
-| **Hooks 系統描述檔** | `hooks/hooks.json` | `hooks.json` | `hooks.json` 或 `hooks/hooks.json` |
-| **Hook Event 類型** | SessionStart, PreCompact, PostToolUse, Stop | SessionStart, PreCompact, PostToolUse, Stop | SessionStart, PreCompact, PostToolUse, PreToolUse |
-| **環境變數注入** | `CLAUDE_PLUGIN_ROOT` | `CODEX_PLUGIN_ROOT`, `AGENT_PLUGIN_ROOT` | `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT` |
+Last verified: 2026-05-26.
 
 ---
 
-## 1. 核心發現：Skill Format 是通用標準
+## 1. Platform Comparison
 
-Skill 的 YAML frontmatter + Markdown body 格式在各個 Agent 平台之間已經近乎通用：
+| Dimension | Claude Code | OpenCode | Codex (OpenAI) | Antigravity (`agy`) |
+|---|---|---|---|---|
+| Plugin manifest | `.claude-plugin/plugin.json` ([docs](https://code.claude.com/docs/en/plugins-reference)) | `opencode.json` ([docs](https://opencode.ai/docs/config/)) | `~/.codex/config.toml` ([docs](https://developers.openai.com/codex/config-reference)) | `gemini-extension.json` (sharing the Gemini-CLI extension format — [docs](https://geminicli.com/docs/extensions/reference/)) |
+| Skill format | `SKILL.md` with YAML frontmatter (`name`, `description`) | same SKILL.md format ([docs](https://opencode.ai/docs/skills/)) | same SKILL.md format ([docs](https://developers.openai.com/codex/skills)) | same SKILL.md format ([docs](https://antigravity.google/docs/skills)) |
+| Skill discovery paths | `<plugin>/skills/`, `.claude/skills/` | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, `~/.config/opencode/skills/`, `~/.claude/skills/` ([docs](https://opencode.ai/docs/skills/)) | `<repo>/.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills/`, bundled ([docs](https://developers.openai.com/codex/skills)) | `<workspace>/.agents/skills/`, `~/.gemini/antigravity/skills/` (codelabs walkthrough; not stable spec — verify with `agy --version`) |
+| Plugin code | bash/JS hooks invoked by Claude Code via `hooks.json` | in-process TypeScript module exporting hooks ([docs](https://opencode.ai/docs/plugins/)) | MCP servers via `[plugins.<n>.mcp_servers.<s>]` in config.toml | Gemini-CLI extension format |
+| Plugin env vars | `CLAUDE_PLUGIN_ROOT` (in hook commands; [issue #27145](https://github.com/anthropics/claude-code/issues/27145)) | none injected; plugins receive `{ project, client, $, directory, worktree }` as context argument ([docs](https://opencode.ai/docs/plugins/)) | `CODEX_HOME` (defaults to `~/.codex/`); **no** `CODEX_PLUGIN_ROOT` | none documented |
+| Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | n/a (no per-event hook surface beyond MCP server lifecycle) | n/a documented |
+
+### Things explicitly NOT verified
+
+These have been **searched** but **no authoritative source found**:
+
+- `CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`, `AGENT_PLUGIN_ROOT`, `OPENCODE_PLUGIN_ROOT` environment variables — none of these are documented anywhere. **Do not use in code.**
+- `agy plugin validate` subcommand — documented `agy plugin` subcommands are: `install`, `uninstall`, `list`, `enable`, `disable`, `import gemini` ([deepwiki](https://deepwiki.com/google-antigravity/antigravity-cli/2-getting-started)). `validate` is not in this list.
+- "OpenCode auto-substitutes `${CLAUDE_PLUGIN_ROOT}` in hooks" — no documentation supports this claim.
+- Bun-loaded ESM TypeScript `__dirname` semantics in OpenCode plugin context — undocumented (Phase 3 Spike 0 will verify empirically).
+- OpenCode `{file:..}` cross-layer resolution (`../` parent traversal) — docs only confirm "relative to the config file directory" but don't address `../` (Phase 3 Spike 1 will verify).
+
+---
+
+## 2. Key Insight: `.agents/skills/` is the cross-platform intersection
+
+OpenCode, Codex, and Antigravity workspace skill discovery all scan `.agents/skills/`. autopilot exploits this by making `.agents/skills/` a symlink to `../skills/` (added in Phase 4 of the v2.7.3 plan). Result: one source-of-truth directory (`skills/`) feeds three platforms without copy duplication.
+
+Note plural: `.agents/` (not `.agent/`). Earlier docs got this wrong.
+
+Claude Code uses `<plugin>/skills/` directly (no `.agents/skills/` indirection needed).
+
+---
+
+## 3. SKILL.md as the de facto standard
+
+All four platforms read the same SKILL.md frontmatter shape:
 
 ```yaml
 ---
-name: skill-name
-description: >
-  One sentence covering what this skill does AND when to trigger it.
-  Use when: "trigger phrase 1", "trigger phrase 2"
-  Not for: adjacent use cases
-compatibility: claude-code codex gemini
+name: skill-name                  # lowercase-kebab; matches enclosing directory
+description: |
+  One-sentence trigger guide. Use when: "phrase A", "phrase B".
+  Not for: adjacent use cases.
 ---
 
 # Skill Name
-...
+
+Body markdown — instructions consumed as agent context.
 ```
 
-**規範細節**：
-- `name` 格式：均為 lowercase hyphen-separated，長度限制相似。
-- `description`：均要求 1-1024 字符，會出現在 Agent 決策時的 available_skills 清單中。
-- `compatibility`：在 SKILL.md frontmatter 加入 `compatibility` 欄位，用以標注所支援的 agent。
+Per-platform extensions exist (e.g. Claude Code accepts a `tools:` allowlist; OpenCode accepts `compatibility:` for explicit platform tagging) but unknown fields are tolerated by each parser. **Cross-platform skills should keep frontmatter minimal**: `name` + `description` only.
 
 ---
 
-## 2. Manifest (描述檔) 雙模相容性
+## 4. Manifest divergence (hard to harmonize)
 
-由於 Claude Code 預設讀取 `.claude-plugin/plugin.json`，而 Antigravity (`agy`) 與 Codex 則要求根目錄必須存在 `plugin.json`：
-* **開發規範**：任何對描述檔的修改，**必須同時同步更新根目錄 `plugin.json` 與 `.claude-plugin/plugin.json`**，否則會導致其他 Agent 驗證（如 `agy plugin validate`）失敗。
+Plugin manifests are NOT a shared format:
 
----
+- **Claude Code** reads `.claude-plugin/plugin.json` (canonical for version + description in this repo).
+- **OpenCode** reads `opencode.json` (different keys: `agent`, `instructions`, `plugin`, `model`, `tools`, `permission`, …). It does not read `plugin.json`.
+- **Codex** reads `~/.codex/config.toml` (TOML; per-user, not per-repo).
+- **Antigravity** reads `gemini-extension.json` (Gemini-CLI extension format).
 
-## 3. Hook/Plugin 系統相容性與環境變數
-
-雖然各 Agent 平台在 Hooks 事件命名上高度一致（例如 `SessionStart`、`PreCompact`），但在背景執行腳本時注入的「外掛根路徑」環境變數不同。
-
-### 絕對路徑解析規範
-不要在 JS 腳本中寫死 `process.env.CLAUDE_PLUGIN_ROOT`。開發 Hook 腳本時，必須採用**多 Agent 變數鍊與物理路徑 fallback 降級機制**：
-
-**JavaScript / Node.js 範例**：
-```javascript
-const path = require('path');
-const pkgRoot = process.env.CLAUDE_PLUGIN_ROOT 
-             || process.env.CODEX_PLUGIN_ROOT 
-             || process.env.AGY_PLUGIN_ROOT 
-             || process.env.GEMINI_PLUGIN_ROOT 
-             || path.dirname(__dirname); // fallback 到本機執行腳本的父目錄
-```
-
-**Bash 範例**：
-```bash
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || [ -n "${CODEX_PLUGIN_ROOT:-}" ] || [ -n "${AGY_PLUGIN_ROOT:-}" ] || [ -n "${GEMINI_PLUGIN_ROOT:-}" ]; then
-  # 支援 Context Injection
-else
-  # 降級輸出
-fi
-```
-
-**`hooks.json` 指令格式**：
-在 `hooks.json` 的 `"command"` 定義中，由於相容性轉換層（如 `agy` 載入 Claude 外掛時）會主動尋找並替換 `${CLAUDE_PLUGIN_ROOT}` 關鍵字，因此**依然保留 `${CLAUDE_PLUGIN_ROOT}` 字樣**以配合其相容轉換，但底層執行腳本必須落實上述的多變數 Fallback 機制。
+autopilot maintains a root `plugin.json` as a mirror of `.claude-plugin/plugin.json` for npm registry / GitHub UI metadata consumption only. `scripts/sync-version.js --check` enforces they stay aligned (pre-commit gate).
 
 ---
 
-## 4. 遷移與開發檢查清單
+## 5. Hooks are non-portable
 
-當在 autopilot 中開發新功能或更新 Hooks 時，請確保：
-- [ ] 根目錄的 `plugin.json` 與 `.claude-plugin/plugin.json` 的版本號與內容保持同步。
-- [ ] 所有的 Hook 腳本（JS / Shell）均已導入「多 Agent 變數鍊與物理路徑 fallback」。
-- [ ] 檢驗指令 `agy plugin validate <path_to_autopilot>` 可成功通過，無錯誤警告。
+Per-platform hook systems use different event names, different invocation models (subprocess vs in-process), and different APIs. Attempts to write "universal hook code" with env-var fallback chains create bugs (see git history of `hooks/intent-capture.js` — three rounds of fabricated env var fallback that broke runtime on every non-Claude platform).
+
+The pragmatic split:
+
+- **Claude Code hooks**: `hooks/*.{sh,js}` + `hooks/hooks.json` manifest. Use only `CLAUDE_PLUGIN_ROOT`; if absent, fail-quiet (return `unknown`, exit 0).
+- **OpenCode hook surface**: `.opencode/plugins/autopilot.ts` (in-process TS). Use the context argument's `project` / `directory` / `worktree` for paths; do not read env vars.
+- **Codex/Antigravity**: not currently implemented. The skill-sharing benefit alone (via `.agents/skills/` symlink) covers most autopilot value without needing hooks on those platforms.
+
+---
+
+## 6. Migration checklist for cross-agent changes
+
+When touching anything that crosses platform boundaries:
+
+- [ ] Every env var / path / CLI command referenced has an official-doc URL cited inline.
+- [ ] No platform-specific code paths use env vars that haven't been verified.
+- [ ] Skill changes happen only in `skills/<name>/SKILL.md` (one source of truth).
+- [ ] Agent body changes happen in `agents/<role>.md` (Claude Code) and propagate via `scripts/sync-agent-bodies.sh` (Phase 3+).
+- [ ] `scripts/sync-version.js --check` passes (pre-commit gate enforces).
+- [ ] If introducing a new claim about a platform, either (a) cite source, or (b) write a Spike script in `docs/plans/` that produces a yes/no answer empirically.
+
+---
+
+## 7. Related docs
+
+- [`AGENTS.md`](../AGENTS.md) — agents.md-spec readme for any agent
+- [`CLAUDE.md`](../CLAUDE.md) — Claude Code-specific conventions
+- [`docs/plans/2026-05-22-multi-agent-portability-correction.md`](../docs/plans/2026-05-22-multi-agent-portability-correction.md) — the plan that produced this fact version

@@ -1,0 +1,25 @@
+# Codex (OpenAI) configuration example for using autopilot skills.
+#
+# Place at: ~/.codex/config.toml (or merge into existing file)
+# verified-against: developers.openai.com/codex/skills (2026-05-22)
+#
+# Codex scans for skills in this order (from cwd up to /):
+#   1. <repo>/.agents/skills/         (covered by autopilot's .agents/skills/ → ../skills symlink)
+#   2. ~/.agents/skills/              (global; uncomment skills.config entry below to point here)
+#   3. /etc/codex/skills/             (system-wide)
+#   4. bundled                        (built-in)
+#
+# autopilot's .agents/skills/ symlink (auto-created by scripts/setup-symlinks.sh)
+# is sufficient for per-repo Codex usage — no config.toml change required.
+#
+# Only use this file if you want autopilot skills globally available across
+# repos without symlinking each one.
+
+# Optional: enable a custom skill path (requires Codex with [skills.config] support).
+# [[skills.config]]
+# path = "~/.agents/skills"
+# enabled = true
+
+# CODEX_HOME defaults to ~/.codex; this file lives there.
+# No CODEX_PLUGIN_ROOT exists — that env var is fictional (see autopilot's
+# references/multi-agent-portability.md "Things NOT verified" section).

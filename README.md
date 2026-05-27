@@ -8,10 +8,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.7.0-E8A838?style=flat-square" alt="v2.7.0">
+  <img src="https://img.shields.io/badge/version-2.7.3-E8A838?style=flat-square" alt="v2.7.3">
   <img src="https://img.shields.io/badge/skills-16-4A90D9?style=flat-square" alt="16 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-14-6B8E6B?style=flat-square" alt="14 Hooks">
+  <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -241,12 +241,64 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 
 ## Install
 
+### Claude Code (primary)
+
 ```bash
 /plugin marketplace add cookys/autopilot
 /plugin install autopilot@autopilot
 ```
 
-That's it. All 16 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+All 16 skills available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+
+### OpenCode (`.agents/skills/` auto-scan)
+
+Clone the repo anywhere; OpenCode native skill scanner picks up `.agents/skills/` from cwd.
+
+```bash
+git clone https://github.com/cookys/autopilot.git
+cd autopilot
+./scripts/setup-symlinks.sh                          # ensure .agents/skills/ symlink resolves (no-op on Linux/macOS/WSL)
+cd .opencode && npm install                          # for @opencode-ai/plugin types (optional unless editing the TS plugin)
+cd ..
+opencode debug skill | grep autopilot                # verify autopilot skills discovered
+```
+
+Agents (`autopilot-reviewer`, `autopilot-debugger`, `autopilot-planner`) load via `.opencode/opencode.json` automatically.
+
+### Codex (OpenAI)
+
+Same `.agents/skills/` symlink as OpenCode — Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed for per-repo usage.
+
+For global availability across repos, see `platforms/codex/config.toml.example`.
+
+### Antigravity (`agy`)
+
+```bash
+./scripts/install-antigravity.sh                     # symlinks skills/ → ~/.gemini/antigravity/skills/autopilot
+agy skills list | grep autopilot                     # verify
+```
+
+### Windows
+
+Repo-tracked symlinks (`.agents/skills/`) require Developer Mode + `core.symlinks=true` **before** cloning:
+
+```powershell
+git config --global core.symlinks true               # one-time, system-wide
+# Enable Developer Mode: Settings -> Privacy & security -> For developers
+git clone https://github.com/cookys/autopilot.git
+cd autopilot
+.\scripts\setup-symlinks.ps1
+```
+
+Without these, symlinks materialise as plain text files containing the target path — `setup-symlinks.ps1` will detect and try to repair, but Developer Mode is still required for the repair.
+
+### Cross-platform pre-commit gate
+
+```bash
+./scripts/install-hooks.sh                           # one-time per clone
+```
+
+Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-agent-bodies.sh --check` to catch version-manifest drift and agent-body drift before they reach the remote.
 
 ---
 

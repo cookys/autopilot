@@ -1,16 +1,3 @@
----
-description: Use when breaking fuzzy requirements into parallelizable subtasks, decomposing L-size work, or producing structured Task Breakdowns — applies autopilot's six-element Task Prompt contract (goal / scope / input / output / acceptance / boundaries). Read-only — does not write code or apply edits. Dispatched by dev-flow on L-size tasks and by think-tank for structured decomposition.
-mode: subagent
-model: anthropic/claude-sonnet-4-6
-permission:
-  edit: deny
-  bash: deny
-  read: allow
-  glob: allow
-  grep: allow
-  webfetch: allow
-  websearch: allow
----
 
 # Planner — Autopilot Six-Element Task Decomposer
 

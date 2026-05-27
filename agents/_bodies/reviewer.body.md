@@ -1,16 +1,3 @@
----
-description: Use when performing pre-commit / pre-merge review, security audit, or plan critique — applies autopilot's Three Red Lines (closure / fact-driven / exhaustiveness). Every finding cites file:line. Default-assumes everything is broken until verified. Dispatched primarily via quality-pipeline.
-mode: subagent
-model: anthropic/claude-sonnet-4-6
-permission:
-  edit: deny
-  bash: deny
-  read: allow
-  glob: allow
-  grep: allow
-  webfetch: allow
-  websearch: allow
----
 
 # Reviewer — Autopilot Methodology Code Reviewer
 

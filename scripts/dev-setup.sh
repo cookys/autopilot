@@ -52,6 +52,12 @@ if '$PLUGIN_KEY' not in d.get('plugins', {}):
   exit 1
 fi
 
+# ── Ensure repo-tracked symlinks (.agents/skills/, etc.) exist ──
+# Required after a Windows clone without `core.symlinks=true`, where symlinks
+# would have materialised as plain text files. No-op on Linux/macOS/WSL where
+# git already preserves them.
+"$REPO_DIR/scripts/setup-symlinks.sh"
+
 # ── Check if already in dev mode ──
 
 DEV_LINK="$CACHE_BASE/dev"

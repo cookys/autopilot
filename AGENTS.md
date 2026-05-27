@@ -1,42 +1,65 @@
-# autopilot — Universal Agent Orchestration Plugin
+# autopilot — Agent Instructions
 
-## 專案目標
-提供 Standalone-capable 的 AI Agent 生命週期編排與方法論框架。內含 16 個 Skills、3 個 Methodology Agents 以及 25 個 Hooks。支援 **Claude Code**、**OpenCode/Codex** 與 **Gemini/Antigravity CLI (`agy`)**。
+This file follows the [agents.md](https://agents.md/) convention: a single agent-facing readme that any coding agent (Claude Code, OpenCode, Codex, Antigravity, Cursor, Aider, …) can read on entry to this repository. Sections below follow the spec's recommended four-section structure (Project Structure / Coding Conventions / Testing / PR Guidelines) plus two autopilot-added sections (Build / Contribution).
+
+For Claude Code-specific conventions, see [`CLAUDE.md`](CLAUDE.md). For cross-agent portability detail (what each platform actually supports vs. what's unverified), see [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
 ---
 
-## 🛠️ 跨平台相容開發規範 (Cross-Platform Compatibility Rules)
+## Project Structure (spec)
 
-為了確保 autopilot 在多種 AI 開發代理人環境中皆能原生且無摩擦地安裝與執行，所有在此專案工作的 AI 代理人必須嚴格遵守以下開發鐵律：
-
-### 1. 雙描述檔同步更新 (Manifest Sync)
-專案內有兩份 `plugin.json`：
-- **Claude Code 專用**：`.claude-plugin/plugin.json`
-- **Antigravity / Codex 專用**：根目錄 `plugin.json` (必備，用於 `agy plugin validate` 驗證)
-* **規則**：當更新版本號、描述或依賴時，**必須同時修改此兩份檔案**，保持內容完全一致。
-
-### 2. 多環境路徑 Fallback 機制 (Hook Path Resolution)
-- **背景**：不同 Agent 執行 Hook 時會注入不同的外掛根目錄變數。
-- **規則**：**嚴禁**在 Hook 程式碼（Node.js / Shell）中只讀取 `CLAUDE_PLUGIN_ROOT`。所有解析路徑的邏輯必須導入以下 Fallback 鏈路：
-  * **Node.js**:
-    `const pkgRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.CODEX_PLUGIN_ROOT || process.env.AGY_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT || path.dirname(__dirname);`
-  * **Shell**:
-    `if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || [ -n "${CODEX_PLUGIN_ROOT:-}" ] || [ -n "${AGY_PLUGIN_ROOT:-}" ] || [ -n "${GEMINI_PLUGIN_ROOT:-}" ];`
-- **`hooks.json` 定義**：在描述檔中，維持使用 `${CLAUDE_PLUGIN_ROOT}` 作為預設路徑變數（因為各平台的轉換層會主動搜尋並取代此字樣）。
-
-### 3. 校驗與測試 (Validation Gate)
-在修改任何描述檔、外掛勾子或 Skill 之後，必須在終端執行：
-```bash
-agy plugin validate .
 ```
-必須確保輸出 `[ok]` 且所有 skills, agents, hooks 被 100% 正確解析，無任何警告與錯誤。
+skills/              16 lifecycle/methodology skills (SKILL.md format)
+agents/              3 methodology agents (reviewer, debugger, planner) — markdown body + YAML frontmatter
+hooks/               Claude Code hooks (bash + JS) and hooks.json manifest
+.opencode/           OpenCode wrapper (opencode.json, in-process TS plugin)
+.claude-plugin/      Claude Code plugin manifest (canonical for version + description)
+plugin.json          Root mirror of .claude-plugin/plugin.json (for non-Claude tools)
+references/          Cross-skill reference docs (blind-dispatch, model-routing, portability)
+scripts/             Deterministic tooling — prefer these over LLM judgment for mechanical work
+docs/                projects/ (active + archive), plans/, BACKLOG.md, CHANGELOG.md
+.githooks/           Repo-tracked pre-commit hooks (activated via scripts/install-hooks.sh)
+```
+
+Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `agents/<role>.md`. Hooks live in `hooks/` and are registered via `hooks/hooks.json`.
+
+## Coding Conventions (spec)
+
+- **Severity vocabulary** (unified across skills + agents): `🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion`. The dialectic skills (`think-tank*`) use a separate lowercase `critical / important / minor` tag for risk-not-severity — intentionally distinct.
+- **No hardcoded dispatch metadata** in skill files. Use `scripts/resolve-dispatch.sh` to map role → `{model, mode, agent}` JSON.
+- **Prefer scripts over LLM judgment** for mechanical work (regex scans, JSON parsing, diff filtering). When you write a new script, wire it into both `CLAUDE.md` scripts inventory and the relevant skill's "Available Scripts" table.
+
+## Testing (spec)
+
+- **Skill structure**: `scripts/validate.sh` validates every `SKILL.md` has the required YAML frontmatter (`name`, `description`) and structure.
+- **Version manifest sync**: `node scripts/sync-version.js --check` (read-only) verifies all mirrors (root `plugin.json`, `README.md` badges, etc.) match the canonical `.claude-plugin/plugin.json`. Run before any commit that touches version metadata.
+- **Hooks runtime smoke test**: `CLAUDE_PLUGIN_ROOT=$(pwd) node hooks/intent-capture.js < /dev/null` should write to `~/.autopilot/intent/` without throwing.
+- **Pre-commit gate**: After running `scripts/install-hooks.sh` once per clone, `git commit` runs `sync-version.js --check` automatically. Drift blocks the commit.
+
+## Build (autopilot-added)
+
+- **No build step for production**. Skills, agents, hooks ship as source. Claude Code loads them at plugin install time.
+- **OpenCode plugin** (`.opencode/plugins/autopilot.ts`) is loaded by Bun in-process — no compilation, but `@opencode-ai/plugin` types are needed at edit time (see `.opencode/package.json`).
+- **Version bump**: `node scripts/sync-version.js --version X.Y.Z --hook-count N --skill-count M --opt-in-count K` propagates the new version to all mirrors atomically (two-pass; fail-loud on regex drift).
+- **Dev mode for Claude Code**: `scripts/dev-setup.sh` replaces the installed plugin cache with a symlink to your local clone. Edits take effect immediately.
+
+## PR Guidelines (spec)
+
+- **Branch naming**: `feat/<scope>`, `fix/<scope>`, `chore/<scope>`, `docs/<scope>`. For multi-phase work, use `<type>/v<version>-<short-name>` (e.g. `fix/v2.7.3-multi-agent-portability-correction`).
+- **Commit messages**: Conventional Commits style (`type(scope): summary`). Co-authored-by lines are welcome for AI-assisted commits.
+- **One logical change per commit**. For phased work, each phase = independent commit (bisect-friendly).
+- **Severity in PR descriptions**: when listing reviewer findings, use the unified `🔴 / 🟠 / 🟡 / 🔵` vocabulary.
+
+## Contribution (autopilot-added)
+
+- **Plans go in `docs/plans/`** with date prefix (`YYYY-MM-DD-<name>.md`). Plans capture: background, design decisions, implementation steps, acceptance criteria, risks, out-of-scope items, open questions.
+- **Reviews are dialectic**. For non-trivial changes, prefer 3-perspective review (Architect / Ops / Skeptic) — each spawned in parallel with disjoint focus. Findings get tagged with the unified severity vocabulary and consolidated in a review summary table within the plan.
+- **Spike before assert**. Any cross-platform claim (env var, CLI subcommand, directory path) that isn't in official docs MUST be verified by a Spike script before being written into reference material. Past lesson: three multi-platform support commits had to be reverted because they were full of LLM-fabricated env vars and CLI subcommands; the fact-checking pass is non-negotiable.
 
 ---
 
-## 📁 關鍵路徑 (Key Paths)
+## Cross-Platform Notes (factual)
 
-- `skills/` — 外掛技能（YAML Frontmatter + Markdown）
-- `agents/` — 方法論 Agents 定義
-- `hooks/` — 生命週期 Hook 腳本與 `hooks.json`
-- `references/` — 跨 Agent 相容性文檔與指令規範
-- `references/multi-agent-portability.md` — 跨 Agent 設計對比與遷移細則
+Each platform reads different config files and uses different skill discovery paths. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified facts table with source URLs.
+
+The single cross-platform intersection that **is** verified: `.agents/skills/` (plural) is scanned by both OpenAI Codex and (per workspace setup) Antigravity. OpenCode also scans it natively. SKILL.md format (YAML frontmatter + Markdown body) is the de facto standard across all four platforms.

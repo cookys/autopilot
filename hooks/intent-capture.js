@@ -43,7 +43,7 @@ const SESSION_TOOL_COUNTER_PREFIX = path.join(os.tmpdir(), 'claude-intent-tool-c
 
 function getPluginVersion() {
   try {
-    const pkgRoot = process.env.CLAUDE_PLUGIN_ROOT || process.env.CODEX_PLUGIN_ROOT || process.env.AGY_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT || path.dirname(__dirname);
+    const pkgRoot = process.env.CLAUDE_PLUGIN_ROOT;
     if (!pkgRoot) return 'unknown';
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, '.claude-plugin', 'plugin.json'), 'utf8'));
     return pkg.version || 'unknown';

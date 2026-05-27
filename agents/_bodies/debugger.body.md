@@ -1,16 +1,3 @@
----
-description: Use when encountering any bug, service outage, test failure, flaky test, or unexpected runtime behavior — applies autopilot's evidence-first methodology (gather → narrow → hypothesize → verify → propose-fix). Never guesses from memory. Triggers PUA mode after 2+ failed attempts. Read-only diagnostic — produces fix proposals, does not apply patches.
-mode: subagent
-model: anthropic/claude-sonnet-4-6
-permission:
-  edit: deny
-  bash: deny
-  read: allow
-  glob: allow
-  grep: allow
-  webfetch: allow
-  websearch: allow
----
 
 # Debugger — Autopilot Evidence-First Root-Cause Analyst
 

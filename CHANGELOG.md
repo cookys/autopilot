@@ -24,9 +24,15 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.7.3 — Multi-Agent Portability Correction
+## v2.7.3 — Multi-Agent Portability Correction + disable-batch + capture-payload
 
-**Headline**: Reverts and replaces 3 previous commits (`bf0c637`, `b7d1adb`, `139ca49`) that shipped fabricated cross-platform support — env vars (`CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`) that don't exist, CLI subcommands (`agy plugin validate`) that don't exist, hook fallback chains that broke runtime on every non-Claude host. Replaced with **empirically verified** OpenCode integration (3 Spikes against real OpenCode 1.15.10), `.agents/skills/` cross-agent intersection symlink, and a canonical-mirror version manifest split with pre-commit drift gate. **4 rounds of dialectic review (Architect / Ops / Skeptic)** documented in the plan; each round caught self-inflicted bugs introduced by the prior round, including a latent `__dirname` 3-level arithmetic bug in the existing OpenCode plugin that had been silently returning `"unknown"` since `bf0c637`.
+**Headline**: Aggregates three batches of post-v2.7.2 work that all shipped to develop without an intervening canonical version bump:
+
+1. **Multi-Agent Portability Correction** (this release's headline, 2026-05-22~27): reverts and replaces 3 previous commits (`bf0c637`, `b7d1adb`, `139ca49`) that shipped fabricated cross-platform support — env vars (`CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`) that don't exist, CLI subcommands (`agy plugin validate`) that don't exist, hook fallback chains that broke runtime on every non-Claude host. Replaced with **empirically verified** OpenCode integration (3 Spikes against real OpenCode 1.15.10), `.agents/skills/` cross-agent intersection symlink, and a canonical-mirror version manifest split with pre-commit drift gate. **4 rounds of dialectic review (Architect / Ops / Skeptic)** documented in the plan; each round caught self-inflicted bugs introduced by the prior round, including a latent `__dirname` 3-level arithmetic bug in the existing OpenCode plugin that had been silently returning `"unknown"` since `bf0c637`.
+
+2. **Hook disable batch** (originally drafted as v2.7.4, 2026-05-14): fresh-claude transcript diagnostic (Claude Code 2.1.128–2.1.141) confirmed Claude Code **never** pipes stdin to PreToolUse / PostToolUse / Stop hook events on Linux + Bun-spawned-Node. All `tool_input` / `tool_response` / `usage`-dependent hooks were silent-skipping. `hooks/hooks.json` simplified from 13 entries to 4 — only `PreCompact` + `SessionStart` (stdin-pipe-working) plus `PostToolUse .*` (stdin-tolerant: intent-capture, reload-watch) survive.
+
+3. **SESSION_ID env-var fix** (`a2cd815`): 6 hooks were reading `process.env.CLAUDE_SESSION_ID` but Claude Code actually sets `CLAUDE_CODE_SESSION_ID`. All hooks' `getSessionId()` were falling back to cwd-hash. Fixed so SessionStart / PreCompact-class hooks now join the real session UUID.
 
 ### Added
 - **`.agents/skills/ → ../skills` symlink** — single path scanned natively by OpenCode and by Codex's skill discovery walk-up; reused by Antigravity install script. Replaces the per-platform skill duplication attempted in `bf0c637`.
@@ -42,6 +48,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - **`.opencode/package.json` + `.opencode/package-lock.json`** — declares `@opencode-ai/plugin@1.15.10` so editors / `npm install` can resolve the `Plugin` type for the local TS plugin.
 - **`docs/plans/2026-05-22-multi-agent-portability-correction.md`** — 4-round dialectic-reviewed plan with Spike-results appendix (§A).
 - **`docs/projects/2026-05-22-multi-agent-portability-correction/README.md`** — project tracking doc.
+- **`hooks/capture-payload.js`** (`9f56a36`) — Tier B opt-in diagnostic hook. Dumps raw stdin + CLAUDE_/AUTOPILOT_ env vars to `~/.autopilot/payloads/<ts>-<pid>-<marker>.json` when `AUTOPILOT_CAPTURE_PAYLOAD=1`. Rotation keep-50 FIFO.
+- **`scripts/toggle-payload-capture.sh`** (`7e4d2a1`) — One-shot enable/disable helper for capture-payload. Wires it into 4 matchers via jq, byte-for-byte backup + restore of `hooks.json`.
 
 ### Changed
 - **`AGENTS.md`** — rewritten as [agents.md](https://agents.md/)-spec readme (Project Structure / Coding Conventions / Testing / PR Guidelines + autopilot-added Build / Contribution, explicitly marked as additive). No more LLM-fabricated env vars or "25 Hooks" claims contradicting `plugin.json`.
@@ -53,6 +61,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - **`scripts/validate.sh`** — reference-existence check handles 3 SKILL.md reference forms (skill-local / repo-root / sibling-skill). Fixes pre-existing false positives on `audit`, `quality-pipeline`, `team`.
 - **`README.md`** — Install section expanded from Claude-Code-only to 4 platforms; Windows symlink prerequisites documented (`git config --global core.symlinks=true` + Developer Mode BEFORE clone).
 - **`docs/projects/INDEX.md`** — relabelled the 2026-05-14 retro-roundup row from `v2.7.3` to `v2.7.2-followup` (no canonical version bump occurred in that ship).
+- **`hooks/hooks.json`** (from disable-batch work, `c5e5a4c`) — simplified from 13 entries to 4. Only stdin-pipe-working (PreCompact, SessionStart) and stdin-tolerant (PostToolUse `.*` intent-capture + reload-watch) hooks remain wired.
+- **`hooks/README.md`** (from disable-batch work) — added "v2.7.4 disable batch" section listing the 9 disabled hooks and their reasons (`large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`). Note: `hooks/README.md` retains the literal text `v2.7.4 disable batch` as an event marker referring to the disable batch event, not a plugin version label.
 
 ### Removed
 - `.opencode/skills/{quality-pipeline,think-tank,survey,dev-flow}/references/model-routing.md` — 4 dangling symlinks (`../../../` only climbs to `.opencode/`, not 4 levels needed for repo root). Conditional-rm guard ensures only true dangling links are removed.
@@ -61,6 +71,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Fixed
 - **Hook env-var fallback chain reverted** (`hooks/intent-capture.js`, `hooks/session-start.sh` restored to `b1ee7a6` state). The added `CODEX_PLUGIN_ROOT || AGY_PLUGIN_ROOT || GEMINI_PLUGIN_ROOT || path.dirname(__dirname)` chain was non-functional (env vars don't exist) AND combined with the hardcoded `.claude-plugin/plugin.json` lookup would throw on any non-Claude host. `session-start.sh`'s broadened OR-condition also inverted semantics — emitting Claude's `hookSpecificOutput` envelope whenever any of the fabricated env vars happened to be set.
 - **OpenCode `getPluginVersion()` silent `"unknown"` regression** since `bf0c637` — the 3-level `__dirname` climb landed at the repo's parent dir, so `plugin.json` was never found. Spike 0 + Architect R3 catch.
+- **CLAUDE_SESSION_ID → CLAUDE_CODE_SESSION_ID** (`a2cd815`) — 6 hooks (`intent-capture`, `batch-format`, `accumulator`, `session-summary`, `suggest-compact`, `cost-tracker`) were reading the wrong env var name. All `getSessionId()` calls were silently falling back to cwd-hash. Post-fix, SessionStart / PreCompact-class hooks correctly join the real session UUID.
+- **9 silent-broken hooks disabled** (`c5e5a4c`, from disable-batch work) — `large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`. Script files retained in `hooks/`; re-enable when upstream Claude Code stdin-pipe fix lands. Tracking: `docs/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe" entry.
 
 ### Hook-order semantics reminder
 No hook ordering changes in this release. Existing 4 hook entries in `hooks/hooks.json` (PreCompact / SessionStart / PostToolUse × 2) all properly prefixed with `${CLAUDE_PLUGIN_ROOT}` per Phase 1 audit.
@@ -70,31 +82,13 @@ No hook ordering changes in this release. Existing 4 hook entries in `hooks/hook
 - User-side: `/plugin update autopilot @v2.7.2`; the v2.7.3 changes are additive (new scripts, new docs, new `.agents/skills/` symlink) so rollback leaves no stale state apart from the symlink which can be removed manually (`rm .agents/skills`).
 
 ### Predecessor version-label note
-`docs/projects/INDEX.md` previously listed retro-roundup (`57c88ee`, 2026-05-14) under `v2.7.3`. That ship did not bump canonical version (`.claude-plugin/plugin.json` stayed at `2.7.2`). INDEX relabelled as `v2.7.2-followup` in this release to reflect canonical truth.
+The 2026-05-14 retro-roundup ship (`57c88ee`) and the 2026-05-14 hook-disable-batch ship (`c5e5a4c`) both previously appeared as separate "releases" (retro-roundup labelled v2.7.3 in INDEX; disable-batch drafted as v2.7.4 in CHANGELOG). Neither bumped canonical `.claude-plugin/plugin.json` (which stayed at `2.7.2`). The first actual post-v2.7.2 canonical bump is this v2.7.3 release, which therefore aggregates all three work batches:
 
----
+- retro-roundup → relabelled `v2.7.2-followup` in `docs/projects/INDEX.md`
+- disable-batch + capture-payload + SESSION_ID fix → merged into this v2.7.3 CHANGELOG entry (the standalone draft v2.7.4 entry has been removed)
+- multi-agent portability correction → this release's headline work
 
-## v2.7.4 — Disable batch: tool-event hooks broken by upstream stdin-pipe (Fix)
-
-**Headline**: 2026-05-14 fresh-claude transcript diagnostic 揭露 Claude Code（2.1.128–2.1.141 全測 over）**從未** pipe stdin 給 PreToolUse / PostToolUse / Stop hook events（Linux + Bun-spawned-Node 環境）。所有依賴 `tool_input` / `tool_response` / `usage` 的 hooks silent-skip 跑了等於沒跑。autopilot ship 至今的 tool-event hooks 從未 e2e tested via real dispatch — 是這次 capture-payload + 兩輪 transcript inspection 才浮上來。
-
-### Changed
-- **`hooks/hooks.json` 簡化** — 從 13 entries 拔成 4，只留 stdin-pipe-working（PreCompact, SessionStart）或 stdin-tolerant（PostToolUse `.*` 的 intent-capture + reload-watch）兩類。
-- **`hooks/README.md` 開頭加「v2.7.4 disable batch」section** — 列出 9 個 disabled hooks 跟原因表。
-
-### Fixed
-- **`a2cd815`** — 6 hooks（intent-capture, batch-format, accumulator, session-summary, suggest-compact, cost-tracker）原本讀 `process.env.CLAUDE_SESSION_ID`、Claude Code 實際送 `CLAUDE_CODE_SESSION_ID`。所有 hooks `getSessionId()` 從來都走 cwd-hash fallback。修正後 SessionStart / PreCompact-class hooks 能正確 join 真 session UUID。
-
-### Added (diagnostic infrastructure)
-- **`hooks/capture-payload.js`** (`9f56a36`) — Tier B opt-in 診斷 hook。dump raw stdin + CLAUDE_/AUTOPILOT_ env vars to `~/.autopilot/payloads/<ts>-<pid>-<marker>.json` when `AUTOPILOT_CAPTURE_PAYLOAD=1`. Rotation keep-50 FIFO。
-- **`scripts/toggle-payload-capture.sh`** (`7e4d2a1`) — One-shot enable/disable helper：wires capture-payload into 4 matchers via jq，backup + restore hooks.json byte-for-byte。
-
-### Disabled (silent-broken pre-v2.7.4)
-- `large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`
-- 9 hooks total. Script files retained in `hooks/`; re-enable when upstream stdin-pipe fix lands. Tracking: `docs/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe".
-
-### Rollback
-- Maintainer: `git revert <merge-sha>`，hooks.json 回 13-entries 版（hooks 雖 silent-broken 但不會 break workflow，只是 audit trail empty）
+The `hooks/README.md` "v2.7.4 disable batch" section header is retained as an **event marker** (referring to the 2026-05-14 disable event), not a plugin version label.
 
 ---
 

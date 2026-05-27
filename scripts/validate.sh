@@ -42,14 +42,27 @@ for skill_dir in "$SKILLS_DIR"/*/; do
       fi
     fi
 
-    # Check file references exist
-    # Look for references like `references/foo.md` or references/foo.md in the content
+    # Check file references exist.
+    # SKILL.md may reference:
+    #   1. Skill-local       : references/<file>                ⇒  <skill_dir>/<ref>
+    #   2. Repo-root          : ../../references/<file>          ⇒  <repo_root>/references/<file>
+    #   3. Sibling skill      : skills/<name>/references/<file>  ⇒  <repo_root>/skills/<name>/references/<file>
+    # The regex captures the optional `skills/<name>/` prefix; if absent, fall back to local & root.
     while IFS= read -r ref; do
-      ref_path="$skill_dir/$ref"
-      if [[ ! -f "$ref_path" ]]; then
-        errors+=("referenced file not found: $ref")
+      if [[ "$ref" == skills/* ]]; then
+        # Absolute sibling-skill form — resolve against repo root only.
+        candidate="$ROOT_DIR/$ref"
+        if [[ ! -f "$candidate" ]]; then
+          errors+=("referenced file not found: $ref (checked $candidate)")
+        fi
+      else
+        skill_local="$skill_dir/$ref"
+        repo_root="$ROOT_DIR/$ref"
+        if [[ ! -f "$skill_local" && ! -f "$repo_root" ]]; then
+          errors+=("referenced file not found: $ref (checked $skill_local and $repo_root)")
+        fi
       fi
-    done < <(grep -oP '(?:references/[a-zA-Z0-9_.-]+(?:\.[a-zA-Z]+)?)' "$skill_file" 2>/dev/null | sort -u)
+    done < <(grep -oP '(?:skills/[a-zA-Z0-9_-]+/)?references/[a-zA-Z0-9_.-]+(?:\.[a-zA-Z]+)?' "$skill_file" 2>/dev/null | sort -u)
   fi
 
   if [[ ${#errors[@]} -eq 0 ]]; then

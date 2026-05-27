@@ -24,6 +24,56 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.7.3 — Multi-Agent Portability Correction
+
+**Headline**: Reverts and replaces 3 previous commits (`bf0c637`, `b7d1adb`, `139ca49`) that shipped fabricated cross-platform support — env vars (`CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`) that don't exist, CLI subcommands (`agy plugin validate`) that don't exist, hook fallback chains that broke runtime on every non-Claude host. Replaced with **empirically verified** OpenCode integration (3 Spikes against real OpenCode 1.15.10), `.agents/skills/` cross-agent intersection symlink, and a canonical-mirror version manifest split with pre-commit drift gate. **4 rounds of dialectic review (Architect / Ops / Skeptic)** documented in the plan; each round caught self-inflicted bugs introduced by the prior round, including a latent `__dirname` 3-level arithmetic bug in the existing OpenCode plugin that had been silently returning `"unknown"` since `bf0c637`.
+
+### Added
+- **`.agents/skills/ → ../skills` symlink** — single path scanned natively by OpenCode and by Codex's skill discovery walk-up; reused by Antigravity install script. Replaces the per-platform skill duplication attempted in `bf0c637`.
+- **`agents/_bodies/<role>.body.md`** — YAML-frontmatter-stripped copies of `agents/{reviewer,debugger,planner}.md` for OpenCode `{file:..}` reference (avoids leaking `name:` / `tools:` / `model:` into agent prompt body).
+- **`scripts/sync-agent-bodies.sh`** — generates `_bodies/` from canonical `agents/<role>.md`; `--check` mode wired into `.githooks/pre-commit`.
+- **`scripts/sync-version.js --check`** — read-only canonical-vs-mirror drift detector. Canonical = `.claude-plugin/plugin.json`; mirrors = root `plugin.json` + `README.md` badges + `hooks/README.md` hook count. Pre-commit gate.
+- **`scripts/setup-symlinks.{sh,ps1}`** — ensures `.agents/skills/` resolves correctly post-clone. PowerShell variant detects `UnauthorizedAccessException` and points user to Developer Mode. Wired into `scripts/dev-setup.sh` line 54-56 anchor (after Validate section, before marketplace registration).
+- **`scripts/install-antigravity.{sh,ps1}`** — symlinks `skills/` into `~/.gemini/antigravity/skills/autopilot`. Script header `# verified-against: codelabs walkthrough 2026-05-22` flags when target path may have drifted upstream.
+- **`scripts/install-hooks.sh`** — one-time `git config core.hooksPath .githooks` activation. Required after clone before pre-commit gates fire.
+- **`scripts/preflight-portability.sh`** — 12-check acceptance bundle (intent-capture × 3, session-start × 2, sync-version, sync-agent-bodies, .agents/skills, validate.sh, OpenCode × 3). Self-skips OpenCode checks when binary not installed.
+- **`.githooks/pre-commit`** — runs `sync-version.js --check` and `sync-agent-bodies.sh --check`. Activated via `scripts/install-hooks.sh`.
+- **`platforms/codex/config.toml.example`** — Codex skill-discovery example. Notes that `.agents/skills/` symlink alone is sufficient for per-repo usage.
+- **`.opencode/package.json` + `.opencode/package-lock.json`** — declares `@opencode-ai/plugin@1.15.10` so editors / `npm install` can resolve the `Plugin` type for the local TS plugin.
+- **`docs/plans/2026-05-22-multi-agent-portability-correction.md`** — 4-round dialectic-reviewed plan with Spike-results appendix (§A).
+- **`docs/projects/2026-05-22-multi-agent-portability-correction/README.md`** — project tracking doc.
+
+### Changed
+- **`AGENTS.md`** — rewritten as [agents.md](https://agents.md/)-spec readme (Project Structure / Coding Conventions / Testing / PR Guidelines + autopilot-added Build / Contribution, explicitly marked as additive). No more LLM-fabricated env vars or "25 Hooks" claims contradicting `plugin.json`.
+- **`CLAUDE.md`** — header note pointing non-Claude agents to AGENTS.md and portability doc; hook count `14 → 19 (12 default-on, 7 opt-in)` per canonical; new Don't entry forbidding unverified cross-platform claims.
+- **`references/multi-agent-portability.md`** — fact-version with citation URLs for every claim. Includes "Things explicitly NOT verified" subsection listing `CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`, `AGENT_PLUGIN_ROOT`, `OPENCODE_PLUGIN_ROOT`, `agy plugin validate` — these explicitly **cannot** be used in code.
+- **`.opencode/opencode.json`** — schema cleanup: removed `"skills": { "paths": [...] }` (auto-scan covers it) and `"plugin": ["./.opencode/plugins"]` (directory path invalid; .ts files auto-discover regardless). Agent prompts switched to cross-layer `{file:../agents/_bodies/<role>.body.md}` references (Spike 1 verified).
+- **`.opencode/plugins/autopilot.ts`** — `getPluginVersion()` rewritten: `import.meta.url + fileURLToPath` instead of `__dirname` (Spike 0 verified `__dirname` is `undefined` in Bun ESM plugin context); 2-level climb instead of 3-level (Architect R3 catch: 3-level landed at repo's *parent* dir, so version has been silently `"unknown"` since `bf0c637`).
+- **`scripts/sync-version.js`** — `editPlan` extended to cover root `plugin.json` + `README.md` badges; `hooks/hooks.json` dropped from editPlan (its `v2.7.4 disable batch` reference is an event marker, not plugin version).
+- **`scripts/validate.sh`** — reference-existence check handles 3 SKILL.md reference forms (skill-local / repo-root / sibling-skill). Fixes pre-existing false positives on `audit`, `quality-pipeline`, `team`.
+- **`README.md`** — Install section expanded from Claude-Code-only to 4 platforms; Windows symlink prerequisites documented (`git config --global core.symlinks=true` + Developer Mode BEFORE clone).
+- **`docs/projects/INDEX.md`** — relabelled the 2026-05-14 retro-roundup row from `v2.7.3` to `v2.7.2-followup` (no canonical version bump occurred in that ship).
+
+### Removed
+- `.opencode/skills/{quality-pipeline,think-tank,survey,dev-flow}/references/model-routing.md` — 4 dangling symlinks (`../../../` only climbs to `.opencode/`, not 4 levels needed for repo root). Conditional-rm guard ensures only true dangling links are removed.
+- `.opencode/agents/autopilot-{reviewer,debugger,planner}.md` — orphan duplicates now that `opencode.json` defines agents inline with cross-layer `{file:..}` body references.
+
+### Fixed
+- **Hook env-var fallback chain reverted** (`hooks/intent-capture.js`, `hooks/session-start.sh` restored to `b1ee7a6` state). The added `CODEX_PLUGIN_ROOT || AGY_PLUGIN_ROOT || GEMINI_PLUGIN_ROOT || path.dirname(__dirname)` chain was non-functional (env vars don't exist) AND combined with the hardcoded `.claude-plugin/plugin.json` lookup would throw on any non-Claude host. `session-start.sh`'s broadened OR-condition also inverted semantics — emitting Claude's `hookSpecificOutput` envelope whenever any of the fabricated env vars happened to be set.
+- **OpenCode `getPluginVersion()` silent `"unknown"` regression** since `bf0c637` — the 3-level `__dirname` climb landed at the repo's parent dir, so `plugin.json` was never found. Spike 0 + Architect R3 catch.
+
+### Hook-order semantics reminder
+No hook ordering changes in this release. Existing 4 hook entries in `hooks/hooks.json` (PreCompact / SessionStart / PostToolUse × 2) all properly prefixed with `${CLAUDE_PLUGIN_ROOT}` per Phase 1 audit.
+
+### Rollback
+- Maintainer: `git revert 5099d75` (merge SHA)
+- User-side: `/plugin update autopilot @v2.7.2`; the v2.7.3 changes are additive (new scripts, new docs, new `.agents/skills/` symlink) so rollback leaves no stale state apart from the symlink which can be removed manually (`rm .agents/skills`).
+
+### Predecessor version-label note
+`docs/projects/INDEX.md` previously listed retro-roundup (`57c88ee`, 2026-05-14) under `v2.7.3`. That ship did not bump canonical version (`.claude-plugin/plugin.json` stayed at `2.7.2`). INDEX relabelled as `v2.7.2-followup` in this release to reflect canonical truth.
+
+---
+
 ## v2.7.4 — Disable batch: tool-event hooks broken by upstream stdin-pipe (Fix)
 
 **Headline**: 2026-05-14 fresh-claude transcript diagnostic 揭露 Claude Code（2.1.128–2.1.141 全測 over）**從未** pipe stdin 給 PreToolUse / PostToolUse / Stop hook events（Linux + Bun-spawned-Node 環境）。所有依賴 `tool_input` / `tool_response` / `usage` 的 hooks silent-skip 跑了等於沒跑。autopilot ship 至今的 tool-event hooks 從未 e2e tested via real dispatch — 是這次 capture-payload + 兩輪 transcript inspection 才浮上來。

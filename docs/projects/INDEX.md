@@ -12,7 +12,8 @@ _None._
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
-| 2026-05-14 | [retro-roundup](_archive/2026-05-14-retro-roundup/README.md) | v2.7.3 | [`57c88ee`](../../../../commit/57c88ee) | [plan](../plans/2026-05-14-retro-roundup.md) |
+| 2026-05-27 | [multi-agent-portability-correction](2026-05-22-multi-agent-portability-correction/README.md) | v2.7.3 | [`5099d75`](../../../../commit/5099d75) | [plan](../plans/2026-05-22-multi-agent-portability-correction.md) |
+| 2026-05-14 | [retro-roundup](_archive/2026-05-14-retro-roundup/README.md) | v2.7.2-followup ⚠ | [`57c88ee`](../../../../commit/57c88ee) | [plan](../plans/2026-05-14-retro-roundup.md) |
 | 2026-05-14 | [context-handoff-hardening](_archive/2026-05-14-context-handoff-hardening/README.md) | v2.7.2 | [`670cc23`](../../../../commit/670cc23) | [plan](../plans/2026-05-14-context-handoff-hardening.md) |
 | 2026-05-14 | [superpowers-coexistence](_archive/2026-05-14-superpowers-coexistence/README.md) | v2.7.0 | [`eb70999`](../../../../commit/eb70999) | [plan](../plans/2026-05-14-superpowers-coexistence.md) |
 | 2026-04-13 | [pua-inspired-enhancement](_archive/2026-04-13-pua-inspired-enhancement/README.md) | v2.6.0 | [`cd6e73b`](../../../../commit/cd6e73b) | (self-contained in README) |
@@ -30,6 +31,10 @@ These L-size ships predate the `docs/projects/` convention. They are intentional
 | (earlier) | [skill-description-optimization](../plans/2026-03-26-skill-description-optimization.md) | plan exists | plan-only record |
 
 **Retrofit policy**: do not retrofit these. If a historical ship needs reference, read its plan doc directly. The `docs/projects/` convention is forward-looking from v2.4.0 onwards.
+
+### ⚠ Version-label note (2026-05-27)
+
+The 2026-05-14 retro-roundup row originally claimed `v2.7.3`. Relabelled to `v2.7.2-followup` because that ship never bumped canonical `.claude-plugin/plugin.json` (which stayed at `2.7.2`). The first actual `v2.7.3` canonical bump is the 2026-05-27 multi-agent-portability-correction ship. See CHANGELOG.md v2.7.3 "Predecessor version-label note" for full reasoning.
 
 ## 規劃中 (Drafted — plan only, not yet started)
 

@@ -273,9 +273,12 @@ For global availability across repos, see `platforms/codex/config.toml.example`.
 
 ### Antigravity (`agy`)
 
+`agy` imports autopilot as a Claude Code-source plugin (verified against agy 1.0.1 — there is no loose skills-dir scan; the older `~/.gemini/antigravity/skills/` approach was superseded).
+
 ```bash
-./scripts/install-antigravity.sh                     # symlinks skills/ → ~/.gemini/antigravity/skills/autopilot
-agy skills list | grep autopilot                     # verify
+./scripts/install-antigravity.sh                     # agy plugin validate → install → list
+agy plugin list | grep autopilot                     # verify it's registered
+# remove with: agy plugin uninstall autopilot
 ```
 
 ### Windows

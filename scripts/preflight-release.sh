@@ -70,15 +70,20 @@ check_index_links_resolve() {
   local missing=0
   # Extract markdown link targets that look like project README paths.
   while IFS= read -r target; do
-    # Strip anchor (#...) and resolve relative to docs/projects/
+    # Strip anchor (#...)
     local clean="${target%%#*}"
     [ -z "$clean" ] && continue
-    local resolved="docs/projects/$clean"
-    if [ ! -e "$resolved" ]; then
-      echo "    missing: $resolved (from INDEX link $target)" >&2
+    # Resolve relative to INDEX's own directory (docs/projects/) so that both
+    # bare `<name>/README.md` and `../<name>/README.md` forms work. Using
+    # realpath-style resolution instead of excluding `../` links (which would
+    # silently skip — and thus pass — a genuinely broken parent-relative link).
+    local resolved
+    resolved="$(cd "docs/projects" 2>/dev/null && readlink -m "$clean")"
+    if [ -z "$resolved" ] || [ ! -e "$resolved" ]; then
+      echo "    missing: $clean (from INDEX link $target)" >&2
       missing=$((missing + 1))
     fi
-  done < <(grep -oE '\]\([^)]*README\.md[^)]*\)' "$INDEX" | sed -E 's/^\]\(//; s/\)$//' | grep -vE '^https?://|^\.\./\.\./\.\.')
+  done < <(grep -oE '\]\([^)]*README\.md[^)]*\)' "$INDEX" | sed -E 's/^\]\(//; s/\)$//' | grep -vE '^https?://')
   [ "$missing" -eq 0 ]
 }
 

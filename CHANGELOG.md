@@ -24,6 +24,32 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.7.4 — Post-portability follow-ups (OpenCode parity + release-hygiene + agy fact correction)
+
+**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/2026-05-29-post-portability-followups](docs/projects/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
+
+### Added
+- **`scripts/preflight-release.sh`** — release-hygiene gate (5 checks): canonical version parseable, CHANGELOG entry present, version mirrors in sync, INDEX references the version, all INDEX project-README links resolve. Wired into `finish-flow` L-5.5. Prevents the doc-drift class that bit v2.7.3 (version bump with no CHANGELOG entry / colliding INDEX labels). Negative-tested (phantom version fails checks 2/3/4).
+- **OpenCode circuit-breaker** in `.opencode/plugins/autopilot.ts` — disable-flag / failure-counter / stale-clear parity with `hooks/intent-capture.js`. 10 consecutive intent-write failures → disable flag; auto-clears on staleness (>24h) or plugin-version bump. OpenCode-specific flag filenames (`opencode-intent-capture.disabled`) so the two runtimes don't cross-contaminate state.
+
+### Changed
+- **`scripts/install-antigravity.{sh,ps1}`** — rewritten from the wrong symlink-into-`~/.gemini/antigravity/skills/` model (from a codelabs walkthrough) to the **real `agy` plugin model**: `agy plugin validate → install → list`. Verified end-to-end against `agy` 1.0.1 (install + uninstall).
+- **`references/multi-agent-portability.md`** — corrected the Antigravity rows and the "NOT verified" section. `agy plugin validate` moved to a new "Corrected — previously mislabelled" subsection. Root `plugin.json` documented as having two real consumers (agy validate + npm/GitHub metadata), not "metadata only". `Last verified` bumped to 2026-05-29 (agy 1.0.1).
+- **`AGENTS.md` + `CLAUDE.md`** — Spike-before-assert lesson reworded to note it "cuts both ways" (fabrication AND over-correction); skill-sharing paths corrected (Antigravity uses plugin import, not a `.agents/skills/` scan).
+- **`README.md` §Antigravity** — install snippet updated to the `agy plugin validate → install → list` flow.
+- **`CLAUDE.md` scripts inventory** — backfilled 6 v2.7.3 scripts that existed but were unlisted (sync-agent-bodies, preflight-portability, preflight-release, setup-symlinks, install-antigravity, install-hooks).
+
+### Empirical findings (agy 1.0.1, 2026-05-29)
+- `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — full verified subcommand set.
+- `agy plugin validate <repo>` → `[ok]` (16 skills / 5 agents / 25 hooks); **requires root `plugin.json`** (removing it → `Error: missing plugin.json`).
+- `agy plugin install <repo>` → imports as `source: claude-code`, registering skills + agents + hooks.
+- Still **unverified**: `AGY_PLUGIN_ROOT` / `GEMINI_PLUGIN_ROOT` env vars; whether agy fires the imported hooks at runtime.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. All changes additive (new script, OpenCode-only plugin logic, doc corrections); no Claude Code runtime behavior changed.
+
+---
+
 ## v2.7.3 — Multi-Agent Portability Correction + disable-batch + capture-payload
 
 **Headline**: Aggregates three batches of post-v2.7.2 work that all shipped to develop without an intervening canonical version bump:
@@ -40,7 +66,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - **`scripts/sync-agent-bodies.sh`** — generates `_bodies/` from canonical `agents/<role>.md`; `--check` mode wired into `.githooks/pre-commit`.
 - **`scripts/sync-version.js --check`** — read-only canonical-vs-mirror drift detector. Canonical = `.claude-plugin/plugin.json`; mirrors = root `plugin.json` + `README.md` badges + `hooks/README.md` hook count. Pre-commit gate.
 - **`scripts/setup-symlinks.{sh,ps1}`** — ensures `.agents/skills/` resolves correctly post-clone. PowerShell variant detects `UnauthorizedAccessException` and points user to Developer Mode. Wired into `scripts/dev-setup.sh` line 54-56 anchor (after Validate section, before marketplace registration).
-- **`scripts/install-antigravity.{sh,ps1}`** — symlinks `skills/` into `~/.gemini/antigravity/skills/autopilot`. Script header `# verified-against: codelabs walkthrough 2026-05-22` flags when target path may have drifted upstream.
+- **`scripts/install-antigravity.{sh,ps1}`** — symlinks `skills/` into `~/.gemini/antigravity/skills/autopilot`. Script header `# verified-against: codelabs walkthrough 2026-05-22` flags when target path may have drifted upstream. **⚠ Superseded in v2.7.4**: empirical `agy` 1.0.1 testing showed this symlink model is wrong; the real mechanism is `agy plugin install`. See v2.7.4 entry.
 - **`scripts/install-hooks.sh`** — one-time `git config core.hooksPath .githooks` activation. Required after clone before pre-commit gates fire.
 - **`scripts/preflight-portability.sh`** — 12-check acceptance bundle (intent-capture × 3, session-start × 2, sync-version, sync-agent-bodies, .agents/skills, validate.sh, OpenCode × 3). Self-skips OpenCode checks when binary not installed.
 - **`.githooks/pre-commit`** — runs `sync-version.js --check` and `sync-agent-bodies.sh --check`. Activated via `scripts/install-hooks.sh`.

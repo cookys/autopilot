@@ -1,6 +1,6 @@
 # Post-Portability Follow-ups
 
-**Status**: 🟡 In progress — started 2026-05-29
+**Status**: ✅ Shipped 2026-05-29 (v2.7.4)
 **Branch**: `feat/post-v2.7.3-followups`
 **Size**: M (3 executable items; project-tracked per dev-flow L-1 since multi-file + multi-concern)
 **Predecessor**: [multi-agent-portability-correction (v2.7.3)](../2026-05-22-multi-agent-portability-correction/README.md) — this project consumes its out-of-scope list + RETRO backlog
@@ -28,10 +28,10 @@ The v2.7.3 ship left a documented out-of-scope list. CEO applied focus-as-subtra
 
 | Phase | Item | Status |
 |-------|------|--------|
-| P1 | Item 5a — Antigravity empirical verify (Spike-first, may surface script fixes) | ⬜ |
-| P2 | Item 1 — OpenCode plugin circuit-breaker parity | ⬜ |
-| P3 | Item 2 — `scripts/preflight-release.sh` | ⬜ |
-| P4 | Quality review (dispatched reviewer) + finish (CHANGELOG / INDEX / preflight / merge) | ⬜ |
+| P1 | Item 5a — Antigravity empirical verify (Spike-first, may surface script fixes) | ✅ `3ee13ec` — overturned PM + v2.7.3 claims; rewrote install script |
+| P2 | Item 1 — OpenCode plugin circuit-breaker parity | ✅ `30869d1` |
+| P3 | Item 2 — `scripts/preflight-release.sh` | ✅ `3f1c77a` |
+| P4 | Quality review (dispatched reviewer) + finish (CHANGELOG / INDEX / preflight / merge) | ✅ reviewer Medium→fixed `159feb6`; v2.7.4 bump + finish |
 
 Item 5a runs first deliberately: it's empirical and may overturn assumptions in the `install-antigravity.sh` written during v2.7.3, consistent with the "Spike before assert" discipline.
 

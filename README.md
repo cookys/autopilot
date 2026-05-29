@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.7.3-E8A838?style=flat-square" alt="v2.7.3">
+  <img src="https://img.shields.io/badge/version-2.7.4-E8A838?style=flat-square" alt="v2.7.4">
   <img src="https://img.shields.io/badge/skills-16-4A90D9?style=flat-square" alt="16 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">
@@ -273,9 +273,12 @@ For global availability across repos, see `platforms/codex/config.toml.example`.
 
 ### Antigravity (`agy`)
 
+`agy` imports autopilot as a Claude Code-source plugin (verified against agy 1.0.1 — there is no loose skills-dir scan; the older `~/.gemini/antigravity/skills/` approach was superseded).
+
 ```bash
-./scripts/install-antigravity.sh                     # symlinks skills/ → ~/.gemini/antigravity/skills/autopilot
-agy skills list | grep autopilot                     # verify
+./scripts/install-antigravity.sh                     # agy plugin validate → install → list
+agy plugin list | grep autopilot                     # verify it's registered
+# remove with: agy plugin uninstall autopilot
 ```
 
 ### Windows

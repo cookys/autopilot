@@ -12,6 +12,7 @@ _None._
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-05-29 | [post-portability-followups](2026-05-29-post-portability-followups/README.md) | v2.7.4 | (pending merge) | (self-contained in README) |
 | 2026-05-27 | [multi-agent-portability-correction](2026-05-22-multi-agent-portability-correction/README.md) | v2.7.3 | [`5099d75`](../../../../commit/5099d75) | [plan](../plans/2026-05-22-multi-agent-portability-correction.md) |
 | 2026-05-14 | [retro-roundup](_archive/2026-05-14-retro-roundup/README.md) | v2.7.2-followup ⚠ | [`57c88ee`](../../../../commit/57c88ee) | [plan](../plans/2026-05-14-retro-roundup.md) |
 | 2026-05-14 | [context-handoff-hardening](_archive/2026-05-14-context-handoff-hardening/README.md) | v2.7.2 | [`670cc23`](../../../../commit/670cc23) | [plan](../plans/2026-05-14-context-handoff-hardening.md) |

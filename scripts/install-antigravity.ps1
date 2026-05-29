@@ -1,41 +1,36 @@
 # install-antigravity.ps1 — Windows counterpart to install-antigravity.sh.
 #
-# verified-against: codelabs walkthrough 2026-05-22; antigravity.google/docs/skills
-# Path is from a Google codelabs tutorial, not a stable spec — re-verify
-# with `agy --version` if Google updates the CLI.
+# verified-against: agy 1.0.1 empirical (Linux), 2026-05-29. The agy plugin
+# model is platform-agnostic (CLI subcommands identical); the PowerShell port
+# mirrors the bash logic. NOT the codelabs ~/.gemini/antigravity/skills/ symlink
+# approach (that is not how agy's plugin mechanism works).
 #
-# Requires Developer Mode or elevated PowerShell (see setup-symlinks.ps1).
+# Real agy plugin model: validate <path> → install <path> → list / uninstall <name>.
 
 $ErrorActionPreference = "Stop"
 
 $repo = Split-Path -Parent $PSScriptRoot
-$destRoot = Join-Path $env:USERPROFILE ".gemini\antigravity\skills"
-$link = Join-Path $destRoot "autopilot"
-$target = Join-Path $repo "skills"
 
-New-Item -ItemType Directory -Force -Path $destRoot | Out-Null
-
-if (Test-Path $link) {
-    $item = Get-Item $link -Force
-    if ($item.LinkType -eq "SymbolicLink" -and $item.Target -eq $target) {
-        Write-Host "OK: already installed ($link -> $target)"
-        exit 0
-    }
-    Write-Error "$link exists and is not the expected symlink. Remove manually to overwrite."
-    exit 2
+if (-not (Get-Command agy -ErrorAction SilentlyContinue)) {
+    Write-Error "agy (Antigravity CLI) not found on PATH. Install Antigravity first: https://antigravity.google/"
+    exit 1
 }
 
-try {
-    New-Item -ItemType SymbolicLink -Path $link -Target $target -ErrorAction Stop | Out-Null
-    Write-Host "installed: $link -> $target"
-} catch [System.UnauthorizedAccessException] {
-    Write-Error @"
-Symlink creation requires Developer Mode (ms-settings:developers) or
-elevated privileges. See setup-symlinks.ps1 message for steps.
-"@
-    exit 2
+$rootManifest = Join-Path $repo "plugin.json"
+if (-not (Test-Path $rootManifest)) {
+    Write-Error "$rootManifest missing — agy validate requires the root manifest. Run: node scripts/sync-version.js --check"
+    exit 1
 }
+
+Write-Host "== validate =="
+agy plugin validate $repo
 
 Write-Host ""
-Write-Host "verify (if agy is installed):"
-Write-Host "  agy skills list | Select-String 'autopilot|finish-flow|dev-flow'"
+Write-Host "== install =="
+agy plugin install $repo
+
+Write-Host ""
+Write-Host "== verify =="
+agy plugin list
+Write-Host ""
+Write-Host "autopilot registered as an agy plugin. To remove: agy plugin uninstall autopilot"

@@ -1,54 +1,47 @@
 #!/usr/bin/env bash
-# install-antigravity.sh — link autopilot's skills/ into the user's global
-# Antigravity skill directory so `agy` discovers them.
+# install-antigravity.sh — register autopilot as an Antigravity (`agy`) plugin.
 #
-# verified-against: codelabs walkthrough 2026-05-22; antigravity.google/docs/skills
-# Path is from a Google codelabs tutorial, not a stable spec — re-verify
-# with `agy --version` if Google updates the CLI.
+# verified-against: agy 1.0.1 empirical, 2026-05-29 (NOT the codelabs walkthrough —
+# that described a loose ~/.gemini/antigravity/skills/ path which is NOT how agy's
+# plugin mechanism works; see references/multi-agent-portability.md).
 #
-# What this does:
-#   1. Locate user's Antigravity skills root: ~/.gemini/antigravity/skills/
-#   2. Symlink autopilot/skills → <skills-root>/autopilot
+# Real agy plugin model (agy 1.0.1):
+#   - `agy plugin validate <path>`  → reads ROOT plugin.json; reports skills/agents/hooks
+#   - `agy plugin install <path>`   → imports the repo as a claude-code-source plugin
+#                                      (reads .claude-plugin/plugin.json for source detection)
+#   - `agy plugin list`             → shows the imports registry
+#   - `agy plugin uninstall <name>` → removes it
 #
-# Idempotent: if the symlink already points to autopilot, exits 0 with a
-# no-op message. If the destination exists but is something else, exits 2
-# without touching it.
+# This script validates then installs. Idempotent-ish: if already imported,
+# agy install re-imports (no error). Uninstall with: agy plugin uninstall autopilot
 
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
-case "$(uname -s)" in
-  Linux|Darwin) ;;
-  *)
-    echo "ERROR: this is the POSIX installer; for Windows use install-antigravity.ps1" >&2
-    exit 1
-    ;;
-esac
-
-DEST_ROOT="$HOME/.gemini/antigravity/skills"
-LINK="$DEST_ROOT/autopilot"
-TARGET="$REPO/skills"
-
-mkdir -p "$DEST_ROOT"
-
-if [ -L "$LINK" ]; then
-  current="$(readlink "$LINK")"
-  if [ "$current" = "$TARGET" ]; then
-    echo "OK: already installed ($LINK -> $TARGET)"
-    exit 0
-  fi
-  echo "ERROR: $LINK is a symlink to '$current' (expected '$TARGET')" >&2
-  echo "       Remove it manually if you want this installer to overwrite." >&2
-  exit 2
-elif [ -e "$LINK" ]; then
-  echo "ERROR: $LINK exists and is not a symlink" >&2
-  echo "       Remove it manually if you want this installer to overwrite." >&2
-  exit 2
+if ! command -v agy >/dev/null 2>&1; then
+  echo "ERROR: agy (Antigravity CLI) not found on PATH." >&2
+  echo "       Install Antigravity first: https://antigravity.google/" >&2
+  exit 1
 fi
 
-ln -s "$TARGET" "$LINK"
-echo "installed: $LINK -> $TARGET"
+# Root plugin.json is required by `agy plugin validate` (verified: removing it
+# yields 'Error: missing plugin.json'). Fail early with a clear message.
+if [ ! -f "$REPO/plugin.json" ]; then
+  echo "ERROR: $REPO/plugin.json missing — agy validate requires the root manifest." >&2
+  echo "       Run: node scripts/sync-version.js --check  (and re-sync if it reports drift)" >&2
+  exit 1
+fi
+
+echo "== validate =="
+agy plugin validate "$REPO"
+
 echo ""
-echo "verify (if agy is installed):"
-echo "  agy skills list 2>/dev/null | grep -E 'autopilot|finish-flow|dev-flow'"
+echo "== install =="
+agy plugin install "$REPO"
+
+echo ""
+echo "== verify =="
+agy plugin list
+echo ""
+echo "autopilot registered as an agy plugin. To remove: agy plugin uninstall autopilot"

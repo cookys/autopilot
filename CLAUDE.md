@@ -24,7 +24,13 @@ Standalone-capable lifecycle orchestration plugin for Claude Code. 16 skills, 3 
 | [`scripts/diff-since-last-round.sh`](scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint. **Delta output is dispatcher-only — never pass to reviewer** (leaks round-cycle meta-signal). |
 | [`scripts/validate.sh`](scripts/validate.sh) | Validate every skill's SKILL.md structure (YAML frontmatter, required fields). |
 | [`scripts/dev-setup.sh`](scripts/dev-setup.sh) | One-time local-dev setup. |
-| [`scripts/sync-version.js`](scripts/sync-version.js) | Sync version across `package.json`/skills metadata. |
+| [`scripts/sync-version.js`](scripts/sync-version.js) | Sync version across canonical `.claude-plugin/plugin.json` + mirrors (root `plugin.json`, README badges). `--check` mode (read-only drift gate, used by `.githooks/pre-commit`). |
+| [`scripts/sync-agent-bodies.sh`](scripts/sync-agent-bodies.sh) | Strip YAML frontmatter from `agents/<role>.md` → `agents/_bodies/<role>.body.md` (OpenCode `{file:..}` reference target). `--check` mode in pre-commit. |
+| [`scripts/preflight-portability.sh`](scripts/preflight-portability.sh) | 12-check cross-agent acceptance gate (hooks smoke, symlinks, OpenCode plugin/skill/agent). Self-skips OpenCode checks when binary absent. |
+| [`scripts/preflight-release.sh`](scripts/preflight-release.sh) | Release-hygiene gate: CHANGELOG entry + INDEX row + version-mirror parity for canonical version. Run at finish-flow L-5.5 when a ship bumps the version. |
+| [`scripts/setup-symlinks.sh`](scripts/setup-symlinks.sh) / [`.ps1`](scripts/setup-symlinks.ps1) | Ensure `.agents/skills/` symlink resolves (Windows-safe). Auto-run by `dev-setup.sh`. |
+| [`scripts/install-antigravity.sh`](scripts/install-antigravity.sh) / [`.ps1`](scripts/install-antigravity.ps1) | Register autopilot as an `agy` plugin (validate → install → list). Verified against agy 1.0.1. |
+| [`scripts/install-hooks.sh`](scripts/install-hooks.sh) | Set `git config core.hooksPath .githooks` to activate the pre-commit gate. |
 | [`scripts/run-eval-batch.sh`](scripts/run-eval-batch.sh) / [`run-skill-opt.sh`](scripts/run-skill-opt.sh) | Eval harness; see `evals/`. |
 | [`scripts/toggle-payload-capture.sh`](scripts/toggle-payload-capture.sh) | Hook payload capture (Tier B diagnostic — see hooks gotchas). |
 
@@ -77,4 +83,4 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.
 - Don't introduce new severity vocabulary — use the unified 4-tier above.
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
-- Don't claim cross-platform env vars or CLI subcommands without an official doc URL. Past lesson: `CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`, `agy plugin validate` were all fabricated and shipped to main before being caught. If you can't cite the URL, it's a Spike candidate, not a fact.
+- Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Past lesson cuts both ways: `CODEX_PLUGIN_ROOT` / `AGY_PLUGIN_ROOT` / `GEMINI_PLUGIN_ROOT` env vars were fabricated and shipped to main; but the *correction* then over-corrected, labelling `agy plugin validate` + the root-`plugin.json` requirement as fabricated when installing real `agy` 1.0.1 proved both genuine. If you can't cite a URL or show a tool run, it's a Spike candidate, not a fact. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) "Corrected — previously mislabelled" §.

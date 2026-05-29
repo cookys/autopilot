@@ -17,6 +17,14 @@ import { fileURLToPath } from "node:url"
 
 const STATE_DIR = path.join(os.homedir(), ".autopilot")
 
+// Circuit breaker — parity with hooks/intent-capture.js, but OpenCode-specific
+// flag/counter filenames so the two runtimes don't cross-contaminate state when
+// a user runs both Claude Code and OpenCode in the same repo.
+const DISABLE_FLAG = path.join(STATE_DIR, "opencode-intent-capture.disabled")
+const FAILURE_COUNTER = path.join(STATE_DIR, ".opencode-intent-capture-failures")
+const FAILURE_THRESHOLD = 10
+const STALE_DISABLE_HOURS = 24
+
 // __dirname is undefined in OpenCode Bun ESM plugin context (Spike 0 verified
 // against OpenCode 1.15.10). Use import.meta.url + fileURLToPath instead.
 const __filename = fileURLToPath(import.meta.url)
@@ -45,6 +53,66 @@ function getPluginVersion(): string {
     // ignore
   }
   return "unknown"
+}
+
+// === Circuit breaker (ported from hooks/intent-capture.js) ===
+
+function readFailureCount(): number {
+  try {
+    return parseInt(fs.readFileSync(FAILURE_COUNTER, "utf8").trim(), 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+function writeFailureCount(n: number): void {
+  try {
+    ensureDir(STATE_DIR, 0o700)
+    fs.writeFileSync(FAILURE_COUNTER, String(n), { mode: 0o600 })
+  } catch { /* ignore */ }
+}
+
+// Returns true if intent-capture should skip (flag active & not auto-clearable).
+function checkDisableFlag(): boolean {
+  try {
+    if (!fs.existsSync(DISABLE_FLAG)) return false
+
+    const stat = fs.statSync(DISABLE_FLAG)
+    const ageHours = (Date.now() - stat.mtimeMs) / (1000 * 60 * 60)
+
+    // Auto-clear: stale (>24h)
+    if (ageHours > STALE_DISABLE_HOURS) {
+      try { fs.unlinkSync(DISABLE_FLAG) } catch { /* ignore */ }
+      return false
+    }
+
+    // Auto-clear: plugin version differs
+    try {
+      const content = JSON.parse(fs.readFileSync(DISABLE_FLAG, "utf8"))
+      if (content.plugin_version && content.plugin_version !== getPluginVersion()) {
+        try { fs.unlinkSync(DISABLE_FLAG) } catch { /* ignore */ }
+        return false
+      }
+    } catch { /* malformed flag — leave active */ }
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+function writeDisableFlag(reason: string): void {
+  try {
+    ensureDir(STATE_DIR, 0o700)
+    const content = {
+      disabled_at: new Date().toISOString(),
+      reason,
+      plugin_version: getPluginVersion(),
+      manual_reset: `rm ${DISABLE_FLAG}`,
+    }
+    fs.writeFileSync(DISABLE_FLAG, JSON.stringify(content, null, 2), { mode: 0o600 })
+    console.error(`[autopilot] opencode intent-capture disabled after ${FAILURE_THRESHOLD} consecutive failures — see ${DISABLE_FLAG}`)
+  } catch { /* nothing more we can do */ }
 }
 
 export default (async ({ client, project, directory, worktree }) => {
@@ -96,6 +164,9 @@ export default (async ({ client, project, directory, worktree }) => {
 
     "tool.execute.after": async (input, output) => {
       if (process.env.AUTOPILOT_INTENT_CAPTURE === "false") return
+
+      // Circuit breaker: skip if disabled (with auto-clear on stale / version bump)
+      if (checkDisableFlag()) return
 
       try {
         const intentDir = path.join(STATE_DIR, "intent")
@@ -149,7 +220,16 @@ export default (async ({ client, project, directory, worktree }) => {
         const tmp = `${intentFile}.${process.pid}.tmp`
         fs.writeFileSync(tmp, JSON.stringify(intent, null, 2) + "\n", { mode: 0o600 })
         fs.renameSync(tmp, intentFile)
+
+        // Reset failure counter on success
+        writeFailureCount(0)
       } catch (err) {
+        // Increment failure counter; engage circuit breaker at threshold
+        const failures = readFailureCount() + 1
+        writeFailureCount(failures)
+        if (failures >= FAILURE_THRESHOLD) {
+          writeDisableFlag(`${failures} consecutive failures: ${(err as Error).message}`)
+        }
         console.error("[autopilot] intent-capture failed:", (err as Error).message)
       }
     },

@@ -1,8 +1,8 @@
 # Multi-Agent Portability — Verified Facts
 
-How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL or is explicitly marked as unverified.** Past lesson: a previous version of this doc fabricated env vars and CLI subcommands which only got caught after three reviews.
+How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-05-26.
+Last verified: 2026-05-29 (Antigravity facts empirical against `agy` 1.0.1; OpenCode against 1.15.10).
 
 ---
 
@@ -10,22 +10,34 @@ Last verified: 2026-05-26.
 
 | Dimension | Claude Code | OpenCode | Codex (OpenAI) | Antigravity (`agy`) |
 |---|---|---|---|---|
-| Plugin manifest | `.claude-plugin/plugin.json` ([docs](https://code.claude.com/docs/en/plugins-reference)) | `opencode.json` ([docs](https://opencode.ai/docs/config/)) | `~/.codex/config.toml` ([docs](https://developers.openai.com/codex/config-reference)) | `gemini-extension.json` (sharing the Gemini-CLI extension format — [docs](https://geminicli.com/docs/extensions/reference/)) |
+| Plugin manifest | `.claude-plugin/plugin.json` ([docs](https://code.claude.com/docs/en/plugins-reference)) | `opencode.json` ([docs](https://opencode.ai/docs/config/)) | `~/.codex/config.toml` ([docs](https://developers.openai.com/codex/config-reference)) | **root `plugin.json`** for `agy plugin validate`; `.claude-plugin/plugin.json` for `agy plugin install` (detects `source: claude-code`). Verified empirically agy 1.0.1 — agy natively imports Claude Code plugins, no `gemini-extension.json` needed. |
 | Skill format | `SKILL.md` with YAML frontmatter (`name`, `description`) | same SKILL.md format ([docs](https://opencode.ai/docs/skills/)) | same SKILL.md format ([docs](https://developers.openai.com/codex/skills)) | same SKILL.md format ([docs](https://antigravity.google/docs/skills)) |
-| Skill discovery paths | `<plugin>/skills/`, `.claude/skills/` | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, `~/.config/opencode/skills/`, `~/.claude/skills/` ([docs](https://opencode.ai/docs/skills/)) | `<repo>/.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills/`, bundled ([docs](https://developers.openai.com/codex/skills)) | `<workspace>/.agents/skills/`, `~/.gemini/antigravity/skills/` (codelabs walkthrough; not stable spec — verify with `agy --version`) |
-| Plugin code | bash/JS hooks invoked by Claude Code via `hooks.json` | in-process TypeScript module exporting hooks ([docs](https://opencode.ai/docs/plugins/)) | MCP servers via `[plugins.<n>.mcp_servers.<s>]` in config.toml | Gemini-CLI extension format |
-| Plugin env vars | `CLAUDE_PLUGIN_ROOT` (in hook commands; [issue #27145](https://github.com/anthropics/claude-code/issues/27145)) | none injected; plugins receive `{ project, client, $, directory, worktree }` as context argument ([docs](https://opencode.ai/docs/plugins/)) | `CODEX_HOME` (defaults to `~/.codex/`); **no** `CODEX_PLUGIN_ROOT` | none documented |
-| Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | n/a (no per-event hook surface beyond MCP server lifecycle) | n/a documented |
+| Skill discovery paths | `<plugin>/skills/`, `.claude/skills/` | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, `~/.config/opencode/skills/`, `~/.claude/skills/` ([docs](https://opencode.ai/docs/skills/)) | `<repo>/.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills/`, bundled ([docs](https://developers.openai.com/codex/skills)) | imported via `agy plugin install <repo>` (registry, not a scan path). `agy plugin validate <repo>` reads `skills/` by convention. The codelabs `~/.gemini/antigravity/skills/` path is NOT the plugin mechanism — superseded by empirical agy 1.0.1 testing. |
+| Plugin code | bash/JS hooks invoked by Claude Code via `hooks.json` | in-process TypeScript module exporting hooks ([docs](https://opencode.ai/docs/plugins/)) | MCP servers via `[plugins.<n>.mcp_servers.<s>]` in config.toml | imports Claude Code plugins directly (`source: claude-code`); reuses `hooks/hooks.json` + `skills/` + `agents/` |
+| Plugin env vars | `CLAUDE_PLUGIN_ROOT` (in hook commands; [issue #27145](https://github.com/anthropics/claude-code/issues/27145)) | none injected; plugins receive `{ project, client, $, directory, worktree }` as context argument ([docs](https://opencode.ai/docs/plugins/)) | `CODEX_HOME` (defaults to `~/.codex/`); **no** `CODEX_PLUGIN_ROOT` | unverified — `agy plugin validate/install` don't reveal runtime hook env injection (would need to observe a hook process spawned by agy) |
+| Plugin CLI | n/a (loaded at install) | n/a (auto-discovered) | n/a | `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — verified agy 1.0.1. `validate <path>` + `install <path>` both exit `[ok]` on this repo. |
+| Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | n/a (no per-event hook surface beyond MCP server lifecycle) | imports Claude Code `hooks.json`; runtime event-firing behavior unverified |
 
 ### Things explicitly NOT verified
 
-These have been **searched** but **no authoritative source found**:
+These remain **unverified** (searched + not confirmed, OR only partially probed):
 
-- `CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`, `AGENT_PLUGIN_ROOT`, `OPENCODE_PLUGIN_ROOT` environment variables — none of these are documented anywhere. **Do not use in code.**
-- `agy plugin validate` subcommand — documented `agy plugin` subcommands are: `install`, `uninstall`, `list`, `enable`, `disable`, `import gemini` ([deepwiki](https://deepwiki.com/google-antigravity/antigravity-cli/2-getting-started)). `validate` is not in this list.
-- "OpenCode auto-substitutes `${CLAUDE_PLUGIN_ROOT}` in hooks" — no documentation supports this claim.
-- Bun-loaded ESM TypeScript `__dirname` semantics in OpenCode plugin context — undocumented (Phase 3 Spike 0 will verify empirically).
-- OpenCode `{file:..}` cross-layer resolution (`../` parent traversal) — docs only confirm "relative to the config file directory" but don't address `../` (Phase 3 Spike 1 will verify).
+- `CODEX_PLUGIN_ROOT`, `AGY_PLUGIN_ROOT`, `GEMINI_PLUGIN_ROOT`, `AGENT_PLUGIN_ROOT`, `OPENCODE_PLUGIN_ROOT` environment variables — none documented; `agy plugin validate/install` testing does not exercise runtime hook env injection, so the `agy`/`gemini` ones remain genuinely unconfirmed. **Do not use in code.**
+- Whether `agy` actually fires the imported `hooks.json` hooks at runtime, and what env it injects — `agy plugin install` registers them (`components: [..., hooks]`) but firing behavior was not observed.
+
+### Corrected — previously mislabelled as NOT verified
+
+Empirical `agy` 1.0.1 testing (2026-05-29) overturned earlier claims in this doc:
+
+- **`agy plugin validate <path>` EXISTS** and exits `[ok]` on this repo (16 skills / 5 agents / 25 hooks processed). The earlier "not in the subcommand list" claim came from a possibly-stale [deepwiki](https://deepwiki.com/google-antigravity/antigravity-cli/2-getting-started) source. The original PM commit's `agy plugin validate .` instruction was correct.
+- **Root `plugin.json` is required by `agy plugin validate`** — removing it yields `Error: missing plugin.json`. So root `plugin.json` is NOT merely npm/GitHub metadata (as a later edit claimed) — it has a real consumer.
+- `agy plugin` full subcommand set (verified): `validate, install, uninstall, list, enable, disable, import, link`.
+
+### Verified by Spike (Phase 3, OpenCode 1.15.10)
+
+- `__dirname` is **`undefined`** in OpenCode's Bun ESM plugin context — use `import.meta.url + fileURLToPath`.
+- OpenCode `{file:../...}` cross-layer resolution **works** (caveat: a literal `{file:..}` inside a description field triggers spurious parse attempts).
+- "OpenCode auto-substitutes `${CLAUDE_PLUGIN_ROOT}` in hooks" — still no evidence; OpenCode doesn't use Claude's hooks.json at all.
 
 ---
 
@@ -62,14 +74,14 @@ Per-platform extensions exist (e.g. Claude Code accepts a `tools:` allowlist; Op
 
 ## 4. Manifest divergence (hard to harmonize)
 
-Plugin manifests are NOT a shared format:
+Plugin manifests are partly shared, partly divergent:
 
 - **Claude Code** reads `.claude-plugin/plugin.json` (canonical for version + description in this repo).
 - **OpenCode** reads `opencode.json` (different keys: `agent`, `instructions`, `plugin`, `model`, `tools`, `permission`, …). It does not read `plugin.json`.
 - **Codex** reads `~/.codex/config.toml` (TOML; per-user, not per-repo).
-- **Antigravity** reads `gemini-extension.json` (Gemini-CLI extension format).
+- **Antigravity** (`agy` 1.0.1, empirical): imports Claude Code plugins directly. `agy plugin validate <repo>` requires the **root `plugin.json`**; `agy plugin install <repo>` reads `.claude-plugin/plugin.json` and registers `source: claude-code`. No `gemini-extension.json` is needed for autopilot — that format is for native Gemini-CLI extensions, a separate path.
 
-autopilot maintains a root `plugin.json` as a mirror of `.claude-plugin/plugin.json` for npm registry / GitHub UI metadata consumption only. `scripts/sync-version.js --check` enforces they stay aligned (pre-commit gate).
+autopilot maintains a root `plugin.json` as a mirror of `.claude-plugin/plugin.json`. It has **two real consumers**: (1) `agy plugin validate`, which fails without it; (2) npm registry / GitHub UI metadata. `scripts/sync-version.js --check` enforces the two manifests stay aligned (pre-commit gate). Earlier versions of this doc wrongly called the root manifest "metadata only" — `agy` is a hard dependency on it.
 
 ---
 
@@ -81,7 +93,8 @@ The pragmatic split:
 
 - **Claude Code hooks**: `hooks/*.{sh,js}` + `hooks/hooks.json` manifest. Use only `CLAUDE_PLUGIN_ROOT`; if absent, fail-quiet (return `unknown`, exit 0).
 - **OpenCode hook surface**: `.opencode/plugins/autopilot.ts` (in-process TS). Use the context argument's `project` / `directory` / `worktree` for paths; do not read env vars.
-- **Codex/Antigravity**: not currently implemented. The skill-sharing benefit alone (via `.agents/skills/` symlink) covers most autopilot value without needing hooks on those platforms.
+- **Codex**: not implemented. The skill-sharing benefit alone (via `.agents/skills/` symlink) covers most autopilot value without a hook layer.
+- **Antigravity**: `agy plugin install <repo>` registers `skills` + `agents` + `hooks` components from the Claude Code plugin. Whether agy *fires* the imported hooks at runtime (and with what env) is unverified — install only confirms registration, not execution. Install via `scripts/install-antigravity.sh` (validate → install → list).
 
 ---
 

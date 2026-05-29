@@ -54,7 +54,7 @@ Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `
 
 - **Plans go in `docs/plans/`** with date prefix (`YYYY-MM-DD-<name>.md`). Plans capture: background, design decisions, implementation steps, acceptance criteria, risks, out-of-scope items, open questions.
 - **Reviews are dialectic**. For non-trivial changes, prefer 3-perspective review (Architect / Ops / Skeptic) — each spawned in parallel with disjoint focus. Findings get tagged with the unified severity vocabulary and consolidated in a review summary table within the plan.
-- **Spike before assert**. Any cross-platform claim (env var, CLI subcommand, directory path) that isn't in official docs MUST be verified by a Spike script before being written into reference material. Past lesson: three multi-platform support commits had to be reverted because they were full of LLM-fabricated env vars and CLI subcommands; the fact-checking pass is non-negotiable.
+- **Spike before assert**. Any cross-platform claim (env var, CLI subcommand, directory path) MUST be verified — by official-doc URL or by running the real tool — before being written into reference material. The lesson cuts both ways: three multi-platform commits were reverted for LLM-fabricated env vars and CLI subcommands; then the correction *over-corrected* (labelled `agy plugin validate` and the root-`plugin.json` requirement as fabricated), and only installing real `agy` 1.0.1 settled it — both are genuine. Second-hand survey/WebFetch can be stale; prefer running the tool when it's installable.
 
 ---
 
@@ -62,4 +62,4 @@ Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `
 
 Each platform reads different config files and uses different skill discovery paths. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified facts table with source URLs.
 
-The single cross-platform intersection that **is** verified: `.agents/skills/` (plural) is scanned by both OpenAI Codex and (per workspace setup) Antigravity. OpenCode also scans it natively. SKILL.md format (YAML frontmatter + Markdown body) is the de facto standard across all four platforms.
+Skill-sharing paths by platform: **OpenCode** scans `.agents/skills/` natively (verified empirically, OpenCode 1.15.10). **Codex** docs list `.agents/skills/` in its discovery walk-up (not empirically verified here — `codex` not installed). **Antigravity** does NOT scan a loose skills dir — it imports the whole repo as a plugin via `agy plugin install <repo>` (verified empirically, `agy` 1.0.1), registering skills + agents + hooks. SKILL.md format (YAML frontmatter + Markdown body) is the de facto standard across all four platforms.

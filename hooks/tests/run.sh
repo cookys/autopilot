@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# hooks/tests/run.sh — umbrella runner for autopilot's hook test suite.
+#
+# Discovers and runs:
+#   - L1 unit tests: `node --test` on hooks/*.test.js (Node built-in runner)
+#   - L2 integration tests: every hooks/tests/*.test.sh file
+#
+# Exit 0 only if every layer passes. Per-file pass/fail summary at the end.
+#
+# Usage:
+#   bash hooks/tests/run.sh              # run everything
+#   bash hooks/tests/run.sh state-checkpoint   # filter (substring match on file)
+
+set -uo pipefail
+
+TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOOKS_DIR="$(cd "$TESTS_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+FILTER="${1:-}"
+TOTAL=0
+FAILED=0
+declare -a FAILED_TESTS=()
+
+run_one() {
+  local file="$1"
+  local rel="${file#$REPO_ROOT/}"
+  TOTAL=$((TOTAL + 1))
+  if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
+    TOTAL=$((TOTAL - 1))
+    return
+  fi
+  echo ""
+  echo "──────── $rel ────────"
+  if bash "$file"; then
+    : # PASS line printed by finalize_test
+  else
+    FAILED=$((FAILED + 1))
+    FAILED_TESTS+=("$rel")
+  fi
+}
+
+# ── L1 unit tests via node --test ──
+# Node's test runner reports its own pass/fail.
+echo "════════ L1 unit tests (node --test) ════════"
+shopt -s nullglob
+UNIT_FILES=("$HOOKS_DIR"/*.test.js)
+shopt -u nullglob
+if [ "${#UNIT_FILES[@]}" -eq 0 ]; then
+  echo "(no L1 unit tests yet)"
+else
+  if [ -n "$FILTER" ]; then
+    # Filter unit files too
+    FILTERED=()
+    for f in "${UNIT_FILES[@]}"; do
+      case "$f" in *"$FILTER"*) FILTERED+=("$f");; esac
+    done
+    UNIT_FILES=("${FILTERED[@]}")
+  fi
+  if [ "${#UNIT_FILES[@]}" -gt 0 ]; then
+    TOTAL=$((TOTAL + ${#UNIT_FILES[@]}))
+    if ! node --test "${UNIT_FILES[@]}"; then
+      FAILED=$((FAILED + 1))
+      FAILED_TESTS+=("L1 unit suite")
+    fi
+  else
+    # Filter matched nothing — neutral
+    :
+  fi
+fi
+
+# ── L2 integration tests ──
+echo ""
+echo "════════ L2 integration tests (*.test.sh) ════════"
+shopt -s nullglob
+for file in "$TESTS_DIR"/*.test.sh; do
+  run_one "$file"
+done
+shopt -u nullglob
+
+# ── Summary ──
+echo ""
+echo "════════ Summary ════════"
+if [ "$FAILED" -eq 0 ]; then
+  echo "✅ ALL TESTS PASSED ($TOTAL test files)"
+  exit 0
+else
+  echo "❌ $FAILED / $TOTAL test files FAILED:"
+  for t in "${FAILED_TESTS[@]}"; do echo "   - $t"; done
+  exit 1
+fi

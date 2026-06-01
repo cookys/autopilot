@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.7.6 — Hook-polish batch (3 backlog items, now test-covered)
+
+**Headline**: Three small backlog fixes that the v2.7.5 test harness made cheap+safe to land — each ships with a regression test. A dialectic review round caught a Major (empty-file disable-flag parity gap) before merge.
+
+### Fixed
+- **state-checkpoint symlink-reject diag echoes `$HOME`** (Item A). The "transcript path resolves outside HOME" failure detail now reads `resolved=<path> (HOME=<homedir>)` so users with `CLAUDE_CONFIG_DIR` overrides or cross-volume symlinks can see *why* it was rejected. (Backlog: v2.7.2 L-5.2 Suggestion #1.)
+- **Failure-counter mtime cleanup** (Item B). `hooks/state-checkpoint-lib.js` gains `selectFailureCounter`: `.failure_count_*` files older than 7 days are excluded from "current" selection AND unlinked as orphans, so the scan can't grow unbounded. (Backlog: v2.7.2 L-5.2 Suggestion #2.)
+- **Malformed / empty disable flag self-heals** (Item C). `intent-capture` disable flag with invalid JSON — or a 0-byte partial write (the most common ENOSPC outcome) — now auto-clears (`clear_malformed` decision) instead of wedging the hook with no recovery path but manual `rm`. `null` (read-failed, transient) still leaves the flag active. OpenCode plugin (`.opencode/plugins/autopilot.ts`) given matching parity. (Backlog: v2.7.2 L-5.2 Suggestion #3.)
+
+### Tests
+- `hooks/state-checkpoint.test.js`: +6 L1 unit tests for `selectFailureCounter` (freshest-wins, stale-excluded, all-stale, override, boundary).
+- `hooks/intent-capture.test.js`: malformed→clear_malformed, empty/whitespace→clear_malformed, stale-precedence.
+- `hooks/tests/`: symlink-reject extended to assert `HOME=`; new `intent-capture-disable-flag-malformed.test.sh` + `intent-capture-disable-flag-empty.test.sh`.
+- Full suite: 25 test files green.
+
+### Review
+- 1 dialectic review round. Major caught: `disableFlagDecision`'s `if (flagContentJson)` guard treated a present-but-empty `''` as falsy → left the Node hook wedged on a 0-byte flag while the OpenCode plugin cleared it. Fixed by distinguishing `null` (read failed → active) from `''` (present-but-empty → clear_malformed) + a 0-byte L2 fixture.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. All changes additive; the lib helpers are pure + unit-tested, wrappers verified via the existing smoke tests.
+
+---
+
 ## v2.7.5 — Test Suite Foundation
 
 **Headline**: Closes the long-standing "autopilot has zero automated test infrastructure" gap (filed in backlog 2026-05-14 after the v2.7.3 sync-version Critical was only caught because a reviewer agent happened to run the script). Three-layer pyramid: L1 unit tests via `node:test` against pure-helper libs, L2 integration tests via bash + `hooks/tests/run.sh` umbrella, GitHub Actions CI. Two highest-complexity hooks (state-checkpoint, intent-capture) refactored to extract pure helpers into `*-lib.js` modules for testability; wrappers keep all fs/process IO. Smoke-test parity verified pre/post the refactor (R1 mitigation). 23 test files total (5 L1 + 18 L2 = 78+ assertions). 1 dialectic review round caught a Major (sync-version tests mutating live repo files); fixed by adding a sandbox helper that copies sync-version.js + the 5 tracked manifests into `$TEST_TMP/sandbox/`.

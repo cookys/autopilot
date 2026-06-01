@@ -55,7 +55,13 @@ function disableFlagDecision({ mtimeMs, nowMs, flagContentJson, currentVersion, 
   if (mtimeMs == null) return 'no_flag';
   const ageHours = (nowMs - mtimeMs) / (1000 * 60 * 60);
   if (ageHours > staleHours) return 'clear_stale';
-  if (flagContentJson) {
+  // flagContentJson === null means "file exists but read failed" (transient fs
+  // issue) → leave active, defer to manual reset. A present-but-empty string
+  // ('') is the most common partial-write outcome (0-byte truncate before any
+  // byte lands, e.g. ENOSPC) and MUST be treated as malformed → clear, matching
+  // the OpenCode plugin which clears it via JSON.parse('') throwing.
+  if (flagContentJson !== null && flagContentJson !== undefined) {
+    if (flagContentJson.trim() === '') return 'clear_malformed';
     try {
       const content = JSON.parse(flagContentJson);
       if (content.plugin_version && content.plugin_version !== currentVersion) {

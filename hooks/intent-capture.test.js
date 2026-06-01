@@ -95,6 +95,13 @@ test('disableFlagDecision: malformed JSON content → clear_malformed (self-heal
   assert.equal(d, 'clear_malformed');
 });
 
+test('disableFlagDecision: empty-but-present flag (0-byte truncate) → clear_malformed', () => {
+  // The most common partial-write outcome. readFileSync returns '' (present),
+  // distinct from null (read failed). Must clear, matching the OpenCode plugin.
+  assert.equal(disableFlagDecision({ mtimeMs: now - 1000, nowMs: now, flagContentJson: '', currentVersion: '1.0.0' }), 'clear_malformed');
+  assert.equal(disableFlagDecision({ mtimeMs: now - 1000, nowMs: now, flagContentJson: '   \n', currentVersion: '1.0.0' }), 'clear_malformed');
+});
+
 test('disableFlagDecision: stale takes precedence over malformed', () => {
   // A flag that is BOTH stale and malformed clears as stale (freshness checked first)
   const mtime = now - (STALE_DISABLE_HOURS + 1) * 3600 * 1000;

@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+jobs:
+  test-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # node:test (the built-in runner used by hooks/*.test.js) requires
+          # Node 18+. 22 is the current LTS as of this commit.
+          node-version: '22'
+
+      - name: Ensure repo-tracked symlinks resolve
+        run: bash scripts/setup-symlinks.sh
+
+      - name: Run hooks test suite (L1 unit + L2 integration)
+        run: bash hooks/tests/run.sh
+
+      - name: Version-manifest drift check
+        run: node scripts/sync-version.js --check
+
+      - name: Agent-bodies drift check
+        run: bash scripts/sync-agent-bodies.sh --check
+
+      - name: Release-hygiene gate
+        run: bash scripts/preflight-release.sh
+
+      - name: Cross-agent portability gate
+        # preflight-portability self-skips OpenCode checks when the binary
+        # isn't on PATH, which it won't be in CI. The other 9 checks still
+        # exercise hooks, symlinks, validate.sh, and sync-version --check.
+        run: bash scripts/preflight-portability.sh

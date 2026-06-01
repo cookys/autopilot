@@ -86,14 +86,21 @@ function checkDisableFlag(): boolean {
       return false
     }
 
-    // Auto-clear: plugin version differs
+    // Auto-clear: plugin version differs, OR flag content is malformed.
+    // Malformed → clear (parity with hooks/intent-capture-lib.js
+    // disableFlagDecision): a partial write shouldn't wedge the hook with no
+    // user recovery path. The next run self-heals.
     try {
       const content = JSON.parse(fs.readFileSync(DISABLE_FLAG, "utf8"))
       if (content.plugin_version && content.plugin_version !== getPluginVersion()) {
         try { fs.unlinkSync(DISABLE_FLAG) } catch { /* ignore */ }
         return false
       }
-    } catch { /* malformed flag — leave active */ }
+    } catch {
+      // malformed flag — clear it so the user isn't stuck
+      try { fs.unlinkSync(DISABLE_FLAG) } catch { /* ignore */ }
+      return false
+    }
 
     return true
   } catch {

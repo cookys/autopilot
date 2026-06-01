@@ -14,6 +14,25 @@
 const PER_TURN_BUDGET = 1500;            // bytes, applies to OLDER turns; newest turn exempt
 const THINKING_BLOCK_CAP = 500;          // bytes per thinking block
 const MAX_LINE_BYTES = 5 * 1024 * 1024;  // 5 MB; oversize-line skip guard
+const FAILURE_COUNTER_STALE_MS = 7 * 24 * 60 * 60 * 1000;  // 7 days
+
+// Pure selector for the failure-counter scan. Given the list of
+// `.failure_count_*` files (each {name, mtimeMs}), decide which one is the
+// current counter and which are stale orphans the wrapper should unlink.
+//
+// Returns { current: name|null, stale: [names] }.
+// - current = freshest file whose age <= staleMs (null if none qualify)
+// - stale   = every file older than staleMs (orphans worth cleaning up)
+function selectFailureCounter(files, nowMs, staleMs = FAILURE_COUNTER_STALE_MS) {
+  const fresh = [];
+  const stale = [];
+  for (const f of files) {
+    if (nowMs - f.mtimeMs > staleMs) stale.push(f.name);
+    else fresh.push(f);
+  }
+  fresh.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return { current: fresh.length ? fresh[0].name : null, stale };
+}
 
 // === Helpers ===
 
@@ -190,6 +209,7 @@ module.exports = {
   PER_TURN_BUDGET,
   THINKING_BLOCK_CAP,
   MAX_LINE_BYTES,
+  FAILURE_COUNTER_STALE_MS,
   // Pure helpers
   emitFailure,
   truncateUtf8Safe,
@@ -197,4 +217,5 @@ module.exports = {
   extractTurn,
   parseTranscriptText,
   buildTranscriptTail,
+  selectFailureCounter,
 };

@@ -39,6 +39,7 @@ const {
   extractTurn,
   parseTranscriptText,
   buildTranscriptTail: libBuildTranscriptTail,
+  selectFailureCounter,
   PER_TURN_BUDGET,
   THINKING_BLOCK_CAP,
   MAX_LINE_BYTES,
@@ -57,10 +58,15 @@ function readFailureCounter() {
   try {
     const files = fs.readdirSync(STATE_DIR)
       .filter(f => f.startsWith('.failure_count_'))
-      .map(f => ({ name: f, mtime: fs.statSync(path.join(STATE_DIR, f)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime);
-    if (files.length === 0) return 0;
-    const v = fs.readFileSync(path.join(STATE_DIR, files[0].name), 'utf8').trim();
+      .map(f => ({ name: f, mtimeMs: fs.statSync(path.join(STATE_DIR, f)).mtimeMs }));
+    const { current, stale } = selectFailureCounter(files, Date.now());
+    // Opportunistically unlink orphan counters (>7d) so the scan doesn't grow
+    // unbounded (backlog: "Failure counter cleanup — housekeeping").
+    for (const name of stale) {
+      try { fs.unlinkSync(path.join(STATE_DIR, name)); } catch { /* ignore */ }
+    }
+    if (!current) return 0;
+    const v = fs.readFileSync(path.join(STATE_DIR, current), 'utf8').trim();
     return parseInt(v, 10) || 0;
   } catch {
     return 0;
@@ -187,7 +193,13 @@ function buildTranscriptTail(turns) {
         // Symlink reject: resolve and check stays within $HOME
         const realTranscript = fs.realpathSync(transcriptPath);
         if (!realTranscript.startsWith(os.homedir())) {
-          stateContent += emitFailure('transcript path resolves outside HOME', 'symlink check', realTranscript);
+          // Include the resolved $HOME so the user can see WHY the path was
+          // rejected (e.g. CLAUDE_CONFIG_DIR override / cross-volume symlink).
+          stateContent += emitFailure(
+            'transcript path resolves outside HOME',
+            'symlink check',
+            `resolved=${realTranscript} (HOME=${os.homedir()})`
+          );
           status = 'failed';
           failureReason = 'transcript_outside_home';
         } else {

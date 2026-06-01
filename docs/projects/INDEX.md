@@ -12,7 +12,7 @@ _None._
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
-| 2026-06-01 | [test-suite-foundation](2026-06-01-test-suite-foundation/README.md) | v2.7.5 | (pending merge) | [plan](../plans/2026-05-14-test-suite.md) |
+| 2026-06-01 | [test-suite-foundation](2026-06-01-test-suite-foundation/README.md) | v2.7.5 | [`81e769d`](../../../../commit/81e769d) | [plan](../plans/2026-05-14-test-suite.md) |
 | 2026-05-29 | [post-portability-followups](2026-05-29-post-portability-followups/README.md) | v2.7.4 | [`6ed9e55`](../../../../commit/6ed9e55) | (self-contained in README) |
 | 2026-05-27 | [multi-agent-portability-correction](2026-05-22-multi-agent-portability-correction/README.md) | v2.7.3 | [`5099d75`](../../../../commit/5099d75) | [plan](../plans/2026-05-22-multi-agent-portability-correction.md) |
 | 2026-05-14 | [retro-roundup](_archive/2026-05-14-retro-roundup/README.md) | v2.7.2-followup ⚠ | [`57c88ee`](../../../../commit/57c88ee) | [plan](../plans/2026-05-14-retro-roundup.md) |
@@ -21,6 +21,14 @@ _None._
 | 2026-04-13 | [pua-inspired-enhancement](_archive/2026-04-13-pua-inspired-enhancement/README.md) | v2.6.0 | [`cd6e73b`](../../../../commit/cd6e73b) | (self-contained in README) |
 | 2026-04-13 | [universal-hooks-ship-b](_archive/2026-04-13-universal-hooks-ship-b/README.md) | v2.5.0 | [`817c707`](../../../../commit/817c707) | [plan](../plans/2026-04-12-universal-hooks.md) |
 | 2026-04-12 | [methodology-agents-ship-a](2026-04-12-methodology-agents-ship-a/README.md) | v2.4.0 | [`14276bb`](../../../../commit/14276bb) | [plan](../plans/2026-04-12-methodology-agents-and-hooks.md) |
+
+## Fix ships (no project dir — per dev-flow Fix-size convention)
+
+Small batches that bump the version but don't warrant a project README. Source of truth: CHANGELOG entry.
+
+| Date | Ship | Version | Merge |
+|------|------|---------|-------|
+| 2026-06-01 | hook-polish batch (symlink diag + failure-counter cleanup + malformed-flag self-heal) | v2.7.6 | (pending merge) |
 
 ## 歷史債 (Historical Debt — pre-2026-04-12, not retrofitted)
 

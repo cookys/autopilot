@@ -30,15 +30,26 @@ const os = require('os');
 const path = require('path');
 
 // === Constants ===
+// Pure helpers + invariants extracted to state-checkpoint-lib.js (2026-06-01 v2.7.5 test-suite ship).
+// The wrapper here owns all fs/process IO; the lib stays unit-testable.
+const lib = require('./state-checkpoint-lib.js');
+const {
+  truncateUtf8Safe,
+  renderContentBlocks,
+  extractTurn,
+  parseTranscriptText,
+  buildTranscriptTail: libBuildTranscriptTail,
+  PER_TURN_BUDGET,
+  THINKING_BLOCK_CAP,
+  MAX_LINE_BYTES,
+} = lib;
+
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
 const STATE_FILE = path.join(STATE_DIR, 'compaction-state.md');
 const LOG_FILE = path.join(STATE_DIR, '.state-checkpoint.log');
 const LOG_ROTATE_BYTES = 1 * 1024 * 1024; // 1 MB
 const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '20', 10);
 const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '8192', 10);
-const PER_TURN_BUDGET = 1500; // bytes, applies to OLDER turns; newest turn exempt
-const THINKING_BLOCK_CAP = 500;
-const MAX_LINE_BYTES = 5 * 1024 * 1024; // 5 MB; oversize-line skip guard
 
 // === Helpers ===
 
@@ -77,174 +88,34 @@ function appendLog(record) {
   }
 }
 
+// Wrapper-side emitFailure — delegates to lib + writes to process.stderr so the
+// diag surfaces in the active session (per QA r2#6).
 function emitFailure(reason, lastStep, extraDetail = '') {
-  const message = `## Transcript Tail: FAILED
-- Reason: ${reason}
-- Last successful step: ${lastStep}
-${extraDetail ? '- Detail: ' + extraDetail + '\n' : ''}- This means compact will only have machine state + Claude-append (the original failure mode)
-`;
-  // Stderr — surfaces in current session (per QA r2#6)
-  process.stderr.write(`[state-checkpoint] ${reason} at "${lastStep}"\n`);
-  return message;
+  return lib.emitFailure(reason, lastStep, extraDetail, process.stderr);
 }
 
-function truncateUtf8Safe(str, maxBytes) {
-  const buf = Buffer.from(str, 'utf8');
-  if (buf.length <= maxBytes) return { text: str, truncated: false, originalBytes: buf.length };
-  // UTF-8 codepoint boundary detection: continuation bytes have high bits 10xxxxxx (0x80-0xBF).
-  // Step back from maxBytes until we hit a non-continuation byte (start of a codepoint).
-  // This preserves legitimate U+FFFD chars (replacement-char detection is unreliable for that).
-  let cut = maxBytes;
-  while (cut > 0 && (buf[cut] & 0xC0) === 0x80) cut--;
-  return { text: buf.subarray(0, cut).toString('utf8'), truncated: true, originalBytes: buf.length };
-}
-
-function renderContentBlocks(blocks) {
-  // blocks: array of content blocks from message.content
-  // Renders blocks to text. Per-turn budget enforcement happens in
-  // buildTranscriptTail AFTER this, so newest-turn can be exempted there.
-  const parts = [];
-  for (const block of blocks) {
-    if (!block || typeof block !== 'object') continue;
-    const t = block.type;
-    if (t === 'text') {
-      parts.push(block.text || '');
-    } else if (t === 'thinking') {
-      const thinking = block.thinking || block.text || '';
-      const { text, truncated } = truncateUtf8Safe(thinking, THINKING_BLOCK_CAP);
-      parts.push(`<thinking>${text}${truncated ? '[...thinking truncated]' : ''}</thinking>`);
-    } else if (t === 'tool_use') {
-      const name = block.name || '<unknown>';
-      parts.push(`[tool_use: ${name}(...)]`);
-    } else if (t === 'tool_result') {
-      let bodySize = 0;
-      try {
-        if (typeof block.content === 'string') bodySize = block.content.length;
-        else if (Array.isArray(block.content)) bodySize = JSON.stringify(block.content).length;
-      } catch { /* ignore */ }
-      parts.push(`[tool_result: ${bodySize}B]`);
-    } else if (t === 'image') {
-      parts.push('[image]');
-    } else {
-      parts.push(`[${t || 'unknown-block'}]`);
-    }
-  }
-  return parts.join('\n');
-}
-
-function extractTurn(record) {
-  // Returns { role, text, timestamp } with RAW rendered text (no per-turn cap).
-  // Per-turn cap is applied in buildTranscriptTail so newest turn can be exempted.
-  const role = record.type; // "user" | "assistant"
-  const msg = record.message;
-  if (!msg) return null;
-  let content = msg.content;
-  if (typeof content === 'string') {
-    return { role, text: content, timestamp: record.timestamp || '' };
-  }
-  if (Array.isArray(content)) {
-    return { role, text: renderContentBlocks(content), timestamp: record.timestamp || '' };
-  }
-  // Unknown shape — render as JSON stub
-  try {
-    return { role, text: `[non-standard content: ${JSON.stringify(content).slice(0, 200)}]`, timestamp: record.timestamp || '' };
-  } catch {
-    return { role, text: '[non-standard content]', timestamp: record.timestamp || '' };
-  }
-}
+// truncateUtf8Safe / renderContentBlocks / extractTurn now come from the lib
+// (imported above). They contain no IO so they are unit-tested directly.
 
 function parseTranscript(transcriptPath) {
-  // Returns { turns: array, totalRecords, filteredOut, oversizeSkipped, errors }
-  const stats = { totalRecords: 0, filteredOut: 0, oversizeSkipped: 0, errors: 0 };
-  const turns = [];
-
+  // Thin IO wrapper around lib.parseTranscriptText. Splitting fs.readFileSync
+  // from parsing lets the parser run against in-memory fixtures in unit tests.
   let raw;
   try {
     raw = fs.readFileSync(transcriptPath, 'utf8');
   } catch (err) {
     throw new Error(`cannot read transcript: ${err.code || err.message}`);
   }
-
-  // Tolerate CRLF — normalize
-  raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  const lines = raw.split('\n');
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    if (Buffer.byteLength(line, 'utf8') > MAX_LINE_BYTES) {
-      stats.oversizeSkipped++;
-      continue;
-    }
-    stats.totalRecords++;
-    let rec;
-    try {
-      rec = JSON.parse(line);
-    } catch {
-      stats.errors++;
-      continue;
-    }
-    if (rec.type !== 'user' && rec.type !== 'assistant') {
-      stats.filteredOut++;
-      continue;
-    }
-    const turn = extractTurn(rec);
-    if (turn) turns.push(turn);
-  }
-
-  return { turns, ...stats };
+  return parseTranscriptText(raw);
 }
 
+// buildTranscriptTail moved to state-checkpoint-lib.js. Wrapper calls into the
+// lib with the env-overridable tail-N + byte-cap so the runtime knobs survive.
 function buildTranscriptTail(turns) {
-  // Take last N turns
-  const tail = turns.slice(-TRANSCRIPT_TAIL_N);
-  if (tail.length === 0) return { body: '', metadata: { kept: 0, droppedToCap: 0, bytesUsed: 0 } };
-
-  // Iterate newest-first, accumulating bytes until cap; newest turn exempt from per-turn cap
-  const reversedSelected = [];
-  let bytesUsed = 0;
-  let droppedToCap = 0;
-
-  for (let i = tail.length - 1; i >= 0; i--) {
-    const turn = tail[i];
-    const isNewest = i === tail.length - 1;
-    let rendered = turn.text;
-    if (!isNewest && Buffer.byteLength(rendered, 'utf8') > PER_TURN_BUDGET) {
-      // Per-turn cap applied to OLDER turns only; newest turn is exempt
-      // (extractTurn / renderContentBlocks return raw, no per-turn cap upstream)
-      const { text, truncated, originalBytes } = truncateUtf8Safe(rendered, PER_TURN_BUDGET);
-      rendered = text + (truncated ? `\n[...turn truncated, original size: ${originalBytes}B]` : '');
-    }
-    const header = `### ${turn.role} [${turn.timestamp}]\n`;
-    const segment = header + rendered + '\n\n';
-    const segBytes = Buffer.byteLength(segment, 'utf8');
-
-    if (isNewest) {
-      // Newest turn always included verbatim (subject only to MAX_LINE / runtime sanity)
-      reversedSelected.push(segment);
-      bytesUsed += segBytes;
-    } else if (bytesUsed + segBytes <= TRANSCRIPT_BYTE_CAP) {
-      reversedSelected.push(segment);
-      bytesUsed += segBytes;
-    } else {
-      // Try truncating the rest of this segment to fit
-      const remaining = TRANSCRIPT_BYTE_CAP - bytesUsed;
-      if (remaining > 200) {
-        const { text, truncated } = truncateUtf8Safe(segment, remaining - 50);
-        reversedSelected.push(text + (truncated ? '\n[...segment truncated to fit cap]\n\n' : '\n'));
-        bytesUsed = TRANSCRIPT_BYTE_CAP;
-      } else {
-        droppedToCap = i + 1; // turns 0..i dropped
-        break;
-      }
-    }
-  }
-
-  // Reverse back to chronological for output
-  const body = reversedSelected.reverse().join('');
-  const result = droppedToCap > 0
-    ? `[...older ${droppedToCap} turns truncated to fit ${TRANSCRIPT_BYTE_CAP}-byte cap]\n\n` + body
-    : body;
-  return { body: result, metadata: { kept: reversedSelected.length, droppedToCap, bytesUsed } };
+  return libBuildTranscriptTail(turns, {
+    tailN: TRANSCRIPT_TAIL_N,
+    byteCap: TRANSCRIPT_BYTE_CAP,
+  });
 }
 
 // === Main ===

@@ -3,9 +3,9 @@
 # empty `{}` payload. Catches regression-class bugs: syntax errors, uncaught
 # exceptions on missing fields, accidentally-required env vars.
 #
-# Two of the 19 Node hooks (state-checkpoint, intent-capture) are exhaustively
+# Two of the 20 Node hooks (state-checkpoint, intent-capture) are exhaustively
 # covered by their own suites; included here too because the fail-open contract
-# applies uniformly. The bash session-start hook is also exercised.
+# applies uniformly. The bash session-start hook brings the total to 21.
 . "$(dirname "$0")/lib.sh"
 
 cd "$REPO_ROOT"

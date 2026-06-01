@@ -26,6 +26,13 @@ REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
 HOOK_HOME="$TEST_TMP/home"
 mkdir -p "$HOOK_HOME"
 
+# Some hooks also write to os.tmpdir() (accumulator.js, batch-format.js,
+# suggest-compact.js, intent-capture.js SESSION_TOOL_COUNTER). Redirect TMPDIR
+# alongside HOME so test runs don't leak `/tmp/claude-*` files into the host
+# tmp namespace. The hook-spawning `run_hook` exports this for the child.
+HOOK_TMPDIR="$TEST_TMP/tmp"
+mkdir -p "$HOOK_TMPDIR"
+
 cleanup_test_tmp() { rm -rf "$TEST_TMP"; }
 trap cleanup_test_tmp EXIT
 
@@ -107,19 +114,19 @@ run_hook() {
   case "$hook" in
     *.js)
       if [ -n "$stdin_content" ]; then
-        HOME="$HOOK_HOME" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+        HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
           node "$HOOKS_DIR/$hook" >"$stdout_file" 2>"$stderr_file" <<< "$stdin_content"
       else
-        HOME="$HOOK_HOME" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+        HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
           node "$HOOKS_DIR/$hook" >"$stdout_file" 2>"$stderr_file" </dev/null
       fi
       ;;
     *.sh)
       if [ -n "$stdin_content" ]; then
-        HOME="$HOOK_HOME" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+        HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
           bash "$HOOKS_DIR/$hook" >"$stdout_file" 2>"$stderr_file" <<< "$stdin_content"
       else
-        HOME="$HOOK_HOME" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+        HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
           bash "$HOOKS_DIR/$hook" >"$stdout_file" 2>"$stderr_file" </dev/null
       fi
       ;;
@@ -134,6 +141,33 @@ run_hook() {
   __RUN_STDERR=$(cat "$stderr_file")
   __RUN_EXIT=$cmd_exit
   rm -f "$stdout_file" "$stderr_file"
+}
+
+# setup_sync_version_sandbox <sandbox-dir>
+# Materialises a self-contained mini-repo so sync-version.js can be invoked
+# WITHOUT touching the live repo's manifest files. sync-version uses
+# `path.resolve(__dirname, '..')` to find REPO_ROOT, so by copying the script
+# into <sandbox-dir>/scripts/ and the 5 tracked files into the sandbox at the
+# same relative paths, the script edits the sandbox copies.
+#
+# Echoes the sandbox script's full path. Caller can pass it to `node`.
+#
+# Files mirrored (must match the editPlan in scripts/sync-version.js):
+#   - .claude-plugin/plugin.json   (canonical)
+#   - plugin.json                  (root mirror)
+#   - .claude-plugin/marketplace.json
+#   - README.md                    (version + hooks badges)
+#   - hooks/README.md              (hook-count header)
+setup_sync_version_sandbox() {
+  local sandbox="$1"
+  mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks"
+  cp "$REPO_ROOT/scripts/sync-version.js"        "$sandbox/scripts/sync-version.js"
+  cp "$REPO_ROOT/.claude-plugin/plugin.json"     "$sandbox/.claude-plugin/plugin.json"
+  cp "$REPO_ROOT/.claude-plugin/marketplace.json" "$sandbox/.claude-plugin/marketplace.json"
+  cp "$REPO_ROOT/plugin.json"                    "$sandbox/plugin.json"
+  cp "$REPO_ROOT/README.md"                      "$sandbox/README.md"
+  cp "$REPO_ROOT/hooks/README.md"                "$sandbox/hooks/README.md"
+  echo "$sandbox/scripts/sync-version.js"
 }
 
 # Call once at end of each *.test.sh file.

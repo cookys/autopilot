@@ -30,13 +30,22 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
+// === Pure helpers + invariants extracted to intent-capture-lib.js ===
+// (2026-06-01 v2.7.5 test-suite ship). Wrapper owns all fs/process IO; the
+// lib is unit-tested directly.
+const lib = require('./intent-capture-lib.js');
+const {
+  summarizeToolInput,
+  disableFlagDecision,
+  FAILURE_THRESHOLD,
+  STALE_DISABLE_HOURS,
+} = lib;
+
 // === Constants ===
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
 const INTENT_DIR = path.join(STATE_DIR, 'intent');
 const DISABLE_FLAG = path.join(STATE_DIR, 'intent-capture.disabled');
 const FAILURE_COUNTER = path.join(STATE_DIR, '.intent-capture-failures');
-const FAILURE_THRESHOLD = 10;
-const STALE_DISABLE_HOURS = 24;
 const SESSION_TOOL_COUNTER_PREFIX = path.join(os.tmpdir(), 'claude-intent-tool-count-');
 
 // === Helpers ===
@@ -108,30 +117,29 @@ function writeFailureCount(n) {
 }
 
 function checkDisableFlag() {
-  // Returns true if hook should skip (flag active and not auto-clearable)
+  // Returns true if hook should skip (flag active and not auto-clearable).
+  // Decision logic lives in lib.disableFlagDecision (unit-tested); this wrapper
+  // does the fs side: stat the flag, read its content, act on the decision.
   try {
     if (!fs.existsSync(DISABLE_FLAG)) return false;
 
     const stat = fs.statSync(DISABLE_FLAG);
-    const ageHours = (Date.now() - stat.mtimeMs) / (1000 * 60 * 60);
+    let flagContentJson = null;
+    try { flagContentJson = fs.readFileSync(DISABLE_FLAG, 'utf8'); } catch { /* leave null */ }
 
-    // Auto-clear: stale (>24h)
-    if (ageHours > STALE_DISABLE_HOURS) {
+    const decision = disableFlagDecision({
+      mtimeMs: stat.mtimeMs,
+      nowMs: Date.now(),
+      flagContentJson,
+      currentVersion: getPluginVersion(),
+      staleHours: STALE_DISABLE_HOURS,
+    });
+
+    if (decision === 'clear_stale' || decision === 'clear_version') {
       try { fs.unlinkSync(DISABLE_FLAG); } catch { /* ignore */ }
       return false;
     }
-
-    // Auto-clear: version differs
-    try {
-      const content = JSON.parse(fs.readFileSync(DISABLE_FLAG, 'utf8'));
-      const currentVersion = getPluginVersion();
-      if (content.plugin_version && content.plugin_version !== currentVersion) {
-        try { fs.unlinkSync(DISABLE_FLAG); } catch { /* ignore */ }
-        return false;
-      }
-    } catch { /* malformed flag — leave active */ }
-
-    return true;
+    return decision === 'active';
   } catch {
     return false;
   }
@@ -151,18 +159,7 @@ function writeDisableFlag(reason) {
   } catch { /* nothing more we can do */ }
 }
 
-function summarizeToolInput(toolName, toolInput) {
-  if (!toolInput || typeof toolInput !== 'object') return toolName;
-  // Best-effort short summary
-  const candidates = ['file_path', 'pattern', 'command', 'description', 'prompt', 'query', 'url'];
-  for (const key of candidates) {
-    if (toolInput[key]) {
-      const v = String(toolInput[key]);
-      return `${toolName} ${v.length > 80 ? v.slice(0, 77) + '...' : v}`;
-    }
-  }
-  return toolName;
-}
+// summarizeToolInput is imported from intent-capture-lib.js at module top.
 
 function getToolCount(sessionId) {
   try {

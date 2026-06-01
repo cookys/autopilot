@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-06-01T00:00:00Z","message":{"content":"hello"}}
+{"type":"assistant","timestamp":"2026-06-01T00:00:01Z","message":{"content":"hi"}}

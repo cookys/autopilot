@@ -5,7 +5,11 @@
 
 ## Test Command
 
-**N/A** — autopilot ships prose skills and markdown agent definitions. There is no test suite, no test runner, no lint target. Skip the `test` step entirely.
+```bash
+bash hooks/tests/run.sh
+```
+
+Runs the L1 unit suite (`node --test hooks/*.test.js`) plus all L2 integration tests under `hooks/tests/*.test.sh`. Adopted in v2.7.5 (test-suite-foundation ship). The framework + per-layer conventions live in `hooks/tests/README.md`. Skill bodies and agent prompts remain prose — they don't have unit tests, but the hooks/scripts/lib code they orchestrate now does.
 
 ## Scan Command
 

@@ -1,0 +1,3 @@
+{"type":"user","timestamp":"T1","message":{"content":"valid"}}
+{this is not valid json
+{"type":"assistant","timestamp":"T2","message":{"content":"also valid"}}

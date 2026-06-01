@@ -36,7 +36,8 @@ These are the autopilot methodology discipline. Violating any of them means your
 4. **Run the full checklist** (below) systematically. Do not skip sections.
 5. **Verify uncertain API behavior with WebSearch** — but remember: WebSearch results are not findings themselves (see Red Lines below).
 6. **Run static analysis tools when available.** Grep for known bad patterns. Run type-check / lint if the environment has them.
-7. **Produce the report** in the exact format below. Even if everything passes.
+7. **Run the project's test suite** as a pre-merge gate. For autopilot itself this is `bash hooks/tests/run.sh` (L1 unit + L2 integration). A non-zero exit is a 🔴 Critical finding; cite the specific failing test file in `file_path:line_number` form. For other projects, use the `Test Command` from `.claude/quality-gate-config.md`. If `Test Command: N/A`, note "no test suite — skipped per project config" in `### ✅ Verified Clean`.
+8. **Produce the report** in the exact format below. Even if everything passes.
 
 ## Review Checklist
 

@@ -1,6 +1,6 @@
 # Test Suite Foundation
 
-**Status**: 🟡 In progress — started 2026-06-01
+**Status**: ✅ Shipped 2026-06-01 (v2.7.5)
 **Branch**: `feat/test-suite-foundation`
 **Source plan**: [`docs/plans/2026-05-14-test-suite.md`](../../plans/2026-05-14-test-suite.md) (2026-05-14, refreshed below)
 **Backlog entry**: "Test suite for autopilot — automated coverage for hooks / scripts" (L ~12hr)
@@ -28,14 +28,15 @@ User scope decision (2026-06-01): **full P1–P6 + lib-refactor + CI** ("處理�
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| P1 | Harness: `hooks/tests/{run.sh, fixtures/, README.md}` + first proof test | ⬜ |
-| P2 | `state-checkpoint.js` — lib-refactor + L1 unit tests + L2 12 R10 scenarios | ⬜ |
-| P3 | `intent-capture.js` — lib-refactor + L1 unit tests + L2 6 scenarios | ⬜ |
-| P4 | `sync-version.js` — 6 scenarios (incl. `--check` drift) | ⬜ |
-| P5 | `reload-watch` + 9 disabled hooks (happy-path + fail-open) + bash hooks | ⬜ |
-| P6 | CI: `.github/workflows/test.yml` running `node --test` + `hooks/tests/run.sh` | ⬜ |
-| Glue | `quality-gate-config.md` Test Command update + reviewer prompt addition | ⬜ |
-| Finish | Review → fix findings → bump 2.7.5 → CHANGELOG/INDEX/preflights → merge | ⬜ |
+| P1 | Harness: `hooks/tests/{run.sh, fixtures/, README.md}` + first proof test | ✅ `c446c32` |
+| P2 | `state-checkpoint.js` — lib-refactor + 27 L1 unit + 7 L2 (R10 A/B/C/D/E/H/K) | ✅ `3e01042` |
+| P3 | `intent-capture.js` — lib-refactor + 17 L1 unit + 6 L2 | ✅ `22dda4e` |
+| P4 | `sync-version.js` — 6 L2 scenarios (incl. `--check` + round-trip) | ✅ `3b9c858` |
+| P5 | 21-hook fail-open baseline + reload-watch happy path | ✅ `0a938fd` |
+| P6 | CI: `.github/workflows/test.yml` | ✅ `b8235e2` |
+| Glue | quality-gate-config Test Command + reviewer prompt §7 | ✅ `e1d225c` |
+| Review-fix | Reviewer Major (sync-version sandbox) + 3 Minors + 1 Suggestion | ✅ `06762fb` |
+| Finish | v2.7.5 bump + CHANGELOG + INDEX + preflights green + merge | ✅ this commit |
 
 ---
 

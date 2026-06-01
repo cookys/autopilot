@@ -24,6 +24,37 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.7.5 — Test Suite Foundation
+
+**Headline**: Closes the long-standing "autopilot has zero automated test infrastructure" gap (filed in backlog 2026-05-14 after the v2.7.3 sync-version Critical was only caught because a reviewer agent happened to run the script). Three-layer pyramid: L1 unit tests via `node:test` against pure-helper libs, L2 integration tests via bash + `hooks/tests/run.sh` umbrella, GitHub Actions CI. Two highest-complexity hooks (state-checkpoint, intent-capture) refactored to extract pure helpers into `*-lib.js` modules for testability; wrappers keep all fs/process IO. Smoke-test parity verified pre/post the refactor (R1 mitigation). 23 test files total (5 L1 + 18 L2 = 78+ assertions). 1 dialectic review round caught a Major (sync-version tests mutating live repo files); fixed by adding a sandbox helper that copies sync-version.js + the 5 tracked manifests into `$TEST_TMP/sandbox/`.
+
+### Added
+- **`hooks/tests/lib.sh`** — assertion helpers + per-test sandbox (`mktemp -d`, redirected `HOME` AND `TMPDIR`, auto-cleanup on EXIT). `run_hook` spawns the script under sandbox env with stdin/stdout/stderr capture. `setup_sync_version_sandbox` builds a self-contained mini-repo for sync-version tests so live manifests are never touched.
+- **`hooks/tests/run.sh`** — umbrella runner. Discovers L1 (`hooks/*.test.js` → `node --test`) and L2 (`hooks/tests/*.test.sh`) tests. Per-file pass/fail + aggregate exit. Substring filter as first arg.
+- **`hooks/tests/README.md`** — framework docs + "writing a new test" recipes for both layers.
+- **`hooks/state-checkpoint-lib.js`** — pure helpers extracted: `truncateUtf8Safe`, `renderContentBlocks`, `extractTurn`, `parseTranscriptText`, `buildTranscriptTail`, `emitFailure` (+ constants `PER_TURN_BUDGET` / `THINKING_BLOCK_CAP` / `MAX_LINE_BYTES`). No fs/process IO.
+- **`hooks/state-checkpoint.test.js`** — 27 L1 unit tests covering codepoint-boundary truncation, content-block rendering, transcript parsing edges (CRLF, malformed, oversize), tail building (newest-exempt, older-truncated, byte-cap-drop), emitFailure shape + stderr sink.
+- **7 L2 integration tests** under `hooks/tests/` for state-checkpoint covering R10-A through R10-K scenarios from the original test-suite plan (empty stdin, missing transcript, malformed JSONL, thinking-only newest, newest-verbatim regression for v2.7.2 fix, CRLF transcript, symlink-rejection security guard).
+- **`hooks/intent-capture-lib.js`** — `summarizeToolInput` + `disableFlagDecision` pure helpers; constants `FAILURE_THRESHOLD=10` / `STALE_DISABLE_HOURS=24` / `SUMMARY_MAX_LENGTH`.
+- **`hooks/intent-capture.test.js`** — 17 L1 unit tests covering tool-input summarization (precedence, ellipsis, empty-string-as-absent) and disable-flag decision branches (no_flag/clear_stale/clear_version/active, malformed JSON → active, staleHours override).
+- **6 L2 integration tests** for intent-capture: basic write path + mode 0600, env opt-out short-circuit, stale-flag auto-clear, version-mismatched flag auto-clear, active flag suppresses write, long-command summary truncation end-to-end.
+- **6 L2 integration tests** for sync-version: --dry-run (no writes, all 5 mirrors byte-identical), invalid version rejected, invalid counts rejected, --check on clean tree, --check detects drift, full round-trip byte-identity. All run inside `$TEST_TMP/sandbox/` — live repo never touched.
+- **`hooks/tests/all-hooks-fail-open.test.sh`** — every hook script (20 Node + 1 bash) must exit 0 on `{}` payload. The regression net for syntax errors, missing-field crashes, accidentally-required env vars across the whole hook directory.
+- **`hooks/tests/reload-watch-detects-mtime-change.test.sh`** — happy path for the third active Node hook; first-run silent init, subsequent change fires "Plugin catalog signal changed" warning.
+- **`.github/workflows/test.yml`** — Node 22 LTS Ubuntu CI running setup-symlinks → tests → sync-version --check → sync-agent-bodies --check → preflight-release → preflight-portability. Triggers on push to develop/main + PR + manual dispatch.
+- **`docs/projects/2026-06-01-test-suite-foundation/README.md`** — project tracking doc.
+
+### Changed
+- **`hooks/state-checkpoint.js`** — wired to import from `state-checkpoint-lib.js`. `emitFailure` wrapper injects `process.stderr`; `parseTranscript` is a thin `fs.readFileSync` shim around `parseTranscriptText`; `buildTranscriptTail` shim forwards env-overridable `TRANSCRIPT_TAIL_N` / `TRANSCRIPT_BYTE_CAP` into the lib. Smoke-test parity verified.
+- **`hooks/intent-capture.js`** — wired to import from `intent-capture-lib.js`. `checkDisableFlag` reduced to the fs side; decision logic goes through `disableFlagDecision`. Inline `summarizeToolInput` removed in favor of the lib export.
+- **`.claude/quality-gate-config.md`** — `Test Command: N/A` → `bash hooks/tests/run.sh`. The "autopilot ships only prose" rationale is no longer true.
+- **`agents/reviewer.md` Workflow §7** — adds "Run the project's test suite as a pre-merge gate" step. Non-zero exit is a 🔴 Critical finding. Falls back to the project's `.claude/quality-gate-config.md` Test Command for non-autopilot repos. `agents/_bodies/reviewer.body.md` regenerated via pre-commit gate.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. The lib refactor is the only behavior-touching change; the wrappers were verified byte-equivalent via the smoke test (state-checkpoint-empty-stdin) before and after. If reverted, the tests under `hooks/tests/` will also disappear cleanly (no other code references them outside the workflow file).
+
+---
+
 ## v2.7.4 — Post-portability follow-ups (OpenCode parity + release-hygiene + agy fact correction)
 
 **Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/2026-05-29-post-portability-followups](docs/projects/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.

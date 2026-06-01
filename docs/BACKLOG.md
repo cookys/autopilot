@@ -62,6 +62,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
     - SessionStart + Stop 正常
   - **Round 2 (2.1.129 downgrade test)**: 同 transcript 結構 `7bd61ac4-...jsonl`，**同 ENXIO**，`~/.claude/bash-commands.log` mtime 沒動
   - **2.1.128 binary strings**: 無 `EPIPE.*hook` markers（同 2.1.129），同類 issue 推斷一致
+  - **Round 3 (2.1.159, 2026-06-01 `/next` probe)**: **仍 broken**。`~/.autopilot/intent/<cwd-hash>.json` 顯示 `last_tool: <unknown>` 但 `tool_count_session: 41` — PostToolUse 這 session fire 41 次、stdin 仍未 pipe（讀不到 tool_name）。確認 bug 跨 2.1.128→2.1.159 持續存在、Anthropic 尚未修。
 - **Final root cause**: 不是版本 regression — 是 **Claude Code 的 hook stdin pipe 對 PreToolUse / PostToolUse event 從來沒運作**（at least on Linux + this Bun-spawned Node 環境）。SessionStart 跟 PreCompact 用不同 spawn path 所以 work
 - **Critical implication**: Anthropic docs 內附 example `jq -r '.tool_input.command' >> ~/.claude/bash-log.txt`（給 PreToolUse Bash logging）**也是 broken** — 不只我們 hooks 受影響、官方 docs example 也跑不動
 - **Impact** (all silent due to fail-open hook convention):
@@ -85,6 +86,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-05-14 fresh-claude transcripts `76a7e1b6-...` (2.1.141) + `7bd61ac4-...` (2.1.129)；binary strings diff 2.1.128/129/141；Claude Code official changelog v2.1.139；GitHub issues #6305, #9567, #6403, #38162, ruvnet/ruflo #1172
 
 ### Re-enable v2.7.4 disabled hooks once upstream stdin-pipe lands
+- **Status (2026-06-01)**: ⛔ still blocked — 2.1.159 probe confirms stdin pipe NOT fixed (see "tool-event hooks get NO stdin pipe" Round 3). Do not re-enable. Next cheap re-probe: same intent-file `last_tool` check after any Claude Code update past 2.1.159.
 - **Trigger** (任一觸發即跑驗證、全綠才 re-enable):
   1. Claude Code release notes 提到 hook stdin / PreToolUse / PostToolUse fix
   2. autopilot user 在 issue / discussion 報「audit-log 突然有 entries」「branch-protection 真的 block 了」

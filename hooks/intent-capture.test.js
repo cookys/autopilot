@@ -90,9 +90,16 @@ test('disableFlagDecision: active when content has no plugin_version field', () 
   assert.equal(d, 'active');
 });
 
-test('disableFlagDecision: malformed JSON content → leave active', () => {
+test('disableFlagDecision: malformed JSON content → clear_malformed (self-heal)', () => {
   const d = disableFlagDecision({ mtimeMs: now - 1000, nowMs: now, flagContentJson: '{not json', currentVersion: '1.0.0' });
-  assert.equal(d, 'active');
+  assert.equal(d, 'clear_malformed');
+});
+
+test('disableFlagDecision: stale takes precedence over malformed', () => {
+  // A flag that is BOTH stale and malformed clears as stale (freshness checked first)
+  const mtime = now - (STALE_DISABLE_HOURS + 1) * 3600 * 1000;
+  const d = disableFlagDecision({ mtimeMs: mtime, nowMs: now, flagContentJson: '{bad', currentVersion: '1.0.0' });
+  assert.equal(d, 'clear_stale');
 });
 
 test('disableFlagDecision: null flagContentJson + fresh → active', () => {

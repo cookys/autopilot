@@ -16,8 +16,10 @@ const {
   parseTranscriptText,
   buildTranscriptTail,
   emitFailure,
+  selectFailureCounter,
   PER_TURN_BUDGET,
   THINKING_BLOCK_CAP,
+  FAILURE_COUNTER_STALE_MS,
 } = require('./state-checkpoint-lib.js');
 
 // ──────────────── truncateUtf8Safe ────────────────
@@ -213,4 +215,61 @@ test('emitFailure: optional stderr-like sink receives diag line', () => {
 test('emitFailure: extraDetail included when provided', () => {
   const msg = emitFailure('r', 's', 'extra info');
   assert.match(msg, /Detail: extra info/);
+});
+
+// ──────────────── selectFailureCounter ────────────────
+
+const NOW = 1_700_000_000_000;
+
+test('selectFailureCounter: empty list → current null, no stale', () => {
+  const r = selectFailureCounter([], NOW);
+  assert.equal(r.current, null);
+  assert.deepEqual(r.stale, []);
+});
+
+test('selectFailureCounter: picks freshest among fresh files', () => {
+  const files = [
+    { name: '.failure_count_a', mtimeMs: NOW - 1000 },
+    { name: '.failure_count_b', mtimeMs: NOW - 50 },   // freshest
+    { name: '.failure_count_c', mtimeMs: NOW - 5000 },
+  ];
+  const r = selectFailureCounter(files, NOW);
+  assert.equal(r.current, '.failure_count_b');
+  assert.deepEqual(r.stale, []);
+});
+
+test('selectFailureCounter: files older than staleMs go to stale, not current', () => {
+  const files = [
+    { name: '.failure_count_old', mtimeMs: NOW - (FAILURE_COUNTER_STALE_MS + 1000) },
+    { name: '.failure_count_fresh', mtimeMs: NOW - 1000 },
+  ];
+  const r = selectFailureCounter(files, NOW);
+  assert.equal(r.current, '.failure_count_fresh');
+  assert.deepEqual(r.stale, ['.failure_count_old']);
+});
+
+test('selectFailureCounter: all stale → current null, all listed stale', () => {
+  const files = [
+    { name: '.failure_count_x', mtimeMs: NOW - (FAILURE_COUNTER_STALE_MS + 1) },
+    { name: '.failure_count_y', mtimeMs: NOW - (FAILURE_COUNTER_STALE_MS + 99999) },
+  ];
+  const r = selectFailureCounter(files, NOW);
+  assert.equal(r.current, null);
+  assert.equal(r.stale.length, 2);
+});
+
+test('selectFailureCounter: staleMs override honored', () => {
+  const files = [{ name: '.failure_count_a', mtimeMs: NOW - 2000 }];
+  // 2s age with a 1s stale window → orphan
+  const r = selectFailureCounter(files, NOW, 1000);
+  assert.equal(r.current, null);
+  assert.deepEqual(r.stale, ['.failure_count_a']);
+});
+
+test('selectFailureCounter: boundary — exactly staleMs old counts as fresh', () => {
+  // age == staleMs is NOT > staleMs, so it stays current
+  const files = [{ name: '.failure_count_a', mtimeMs: NOW - FAILURE_COUNTER_STALE_MS }];
+  const r = selectFailureCounter(files, NOW);
+  assert.equal(r.current, '.failure_count_a');
+  assert.deepEqual(r.stale, []);
 });

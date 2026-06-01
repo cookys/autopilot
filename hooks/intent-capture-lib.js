@@ -42,7 +42,15 @@ function summarizeToolInput(toolName, toolInput) {
 //   'no_flag'         — wrapper didn't pass mtime; nothing to do
 //   'clear_stale'     — flag is older than STALE_DISABLE_HOURS, wrapper should rm
 //   'clear_version'   — flag was created against a different plugin version
+//   'clear_malformed' — flag content isn't valid JSON, wrapper should rm
 //   'active'          — leave flag in place
+//
+// Malformed flags auto-clear (rather than wedge the hook permanently): a
+// partial write during ENOSPC etc. could leave invalid JSON, and a user has no
+// obvious recovery path besides manually rm'ing the flag. Treating malformed as
+// clearable lets the next run self-heal. (Backlog: "intent-capture disable flag
+// — malformed → STALE handling".) The freshness check still runs first, so a
+// fresh-but-malformed flag clears via this branch, not the stale one.
 function disableFlagDecision({ mtimeMs, nowMs, flagContentJson, currentVersion, staleHours = STALE_DISABLE_HOURS }) {
   if (mtimeMs == null) return 'no_flag';
   const ageHours = (nowMs - mtimeMs) / (1000 * 60 * 60);
@@ -54,7 +62,7 @@ function disableFlagDecision({ mtimeMs, nowMs, flagContentJson, currentVersion, 
         return 'clear_version';
       }
     } catch {
-      // malformed flag — leave active (caller's call to either ignore or treat as STALE per a future policy)
+      return 'clear_malformed';
     }
   }
   return 'active';

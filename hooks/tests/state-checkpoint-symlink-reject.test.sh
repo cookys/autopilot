@@ -30,4 +30,8 @@ case "$state_content" in
   *) fail "expected symlink-reject diagnostic in state file (got: $(echo "$state_content" | head -3))" ;;
 esac
 
+# The diag must surface the resolved $HOME so the user understands the rejection
+# (backlog: "Context-handoff state-checkpoint symlink reject — diag detail").
+assert_contains "$state_content" "HOME=$HOOK_HOME" "diag echoes the resolved \$HOME value"
+
 finalize_test

@@ -135,7 +135,7 @@ function checkDisableFlag() {
       staleHours: STALE_DISABLE_HOURS,
     });
 
-    if (decision === 'clear_stale' || decision === 'clear_version') {
+    if (decision === 'clear_stale' || decision === 'clear_version' || decision === 'clear_malformed') {
       try { fs.unlinkSync(DISABLE_FLAG); } catch { /* ignore */ }
       return false;
     }

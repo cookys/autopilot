@@ -52,6 +52,17 @@ The 2026-05-14 retro-roundup row originally claimed `v2.7.3`. Relabelled to `v2.
 
 _None._
 
+### Plan-only records (work shipped/absorbed — no project dir, kept for reference)
+
+Triaged 2026-06-02 (level-3 `/next` deep scan found these unreferenced). Not retrofitted per the retrofit policy above — listed here so they are tracked, not orphaned.
+
+| Plan | Status |
+|------|--------|
+| [2026-05-14-eval-router-judge](../plans/2026-05-14-eval-router-judge.md) | referenced in CHANGELOG (eval harness work) |
+| [2026-05-14-reload-plugins-agent-invokable](../plans/2026-05-14-reload-plugins-agent-invokable.md) | referenced in CHANGELOG (reload-plugins work) |
+| [2026-05-14-next-session-handoff](../plans/2026-05-14-next-session-handoff.md) | planning note, absorbed into context-handoff-hardening (v2.7.2) |
+| [2026-05-14-powerloop-learnings](../plans/2026-05-14-powerloop-learnings.md) | retro/learnings note, absorbed into retro-roundup (v2.7.2-followup) |
+
 ## 歸檔 (Archived)
 
 | Date | Project | Version |

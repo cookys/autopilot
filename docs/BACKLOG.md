@@ -116,12 +116,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（看 Claude Code source / docs 確認 count semantics）
 - **Source**: 2026-05-14 v2.7.2 post-ship reload verification
 
-### Orphaned plan docs (4× 2026-05-14) — triage or link
-- **Trigger**: next docs-hygiene pass, or when project-lifecycle archive logic is next touched
-- **Context**: 2026-06-02 `/next --deep` found 4 plan docs unreferenced by any project dir / INDEX row: `2026-05-14-{eval-router-judge, next-session-handoff, powerloop-learnings, reload-plugins-agent-invokable}.md`. Likely plan-only records for shipped/absorbed work, but linked nowhere. Action: either add an INDEX "plan-only record" row for each (like the existing 歷史債 section) or confirm-and-leave. Low value; do not retrofit project dirs (per INDEX retrofit policy).
-- **Effort**: S
-- **Source**: 2026-06-02 level-3 deep scan
-
 ### Generated `_bodies/*.body.md` relative links break one level deep
 - **Trigger**: next time `scripts/sync-agent-bodies.sh` is touched, OR an OpenCode agent reports a dangling `code-review.md` link
 - **Context**: 2026-06-02 link-check found `agents/_bodies/reviewer.body.md` inherits `../skills/quality-pipeline/references/code-review.md` from `agents/reviewer.md` — correct at `agents/` depth, but resolves to `agents/skills/...` (missing) from `agents/_bodies/`. Generated artifact; the link is informational and the body is consumed via OpenCode `{file:..}` inline, so low severity. Fix options: (a) sync script rewrites `../` → `../../` for links when generating bodies; (b) make the source links repo-root-relative; (c) accept. NOTE: the v2.7.x validate.sh link-check is scoped to `skills/` only, so this does NOT fail CI today.

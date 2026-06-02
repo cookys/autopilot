@@ -38,7 +38,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - No user-facing behavior change; no version bump. Project: `docs/projects/2026-06-02-skill-leverage-extraction/`.
 
 ### Rollback
-- Maintainer: `git revert <merge-sha>` (each phase is its own commit: P0 docs / P1 dev-flow / P2 retro).
+- Maintainer: `git revert -m 1 a4c5db6` (merge), or revert individual phase commits (P0 docs / P1 dev-flow / P2 retro).
 
 ## v2.7.6 — Hook-polish batch (3 backlog items, now test-covered)
 

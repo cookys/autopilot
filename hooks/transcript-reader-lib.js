@@ -115,4 +115,30 @@ function readLatestToolEvent({ env, homedir } = {}) {
   return findLatestToolEvent(raw);
 }
 
-module.exports = { findLatestToolEvent, resolveTranscriptPath, readLatestToolEvent };
+// --- convenience: unified tool-event accessor for tool-event hooks ----------
+// stdin-first (works if Claude Code ever fixes the pipe), transcript-fallback
+// otherwise. Returns { tool_name, tool_input, tool_response, is_error, source }.
+// source ∈ 'stdin' | 'transcript' | 'none'. Never throws (fail-open → 'none').
+function getToolEvent({ stdin, env, homedir } = {}) {
+  // 1. stdin path (currently broken upstream, but future-proof + test-friendly)
+  if (typeof stdin === 'string' && stdin.trim()) {
+    try {
+      const input = JSON.parse(stdin);
+      if (input && input.tool_name) {
+        return {
+          tool_name: input.tool_name,
+          tool_input: input.tool_input || {},
+          tool_response: input.tool_response,
+          is_error: input.is_error === true,
+          source: 'stdin',
+        };
+      }
+    } catch { /* fall through to transcript */ }
+  }
+  // 2. transcript fallback
+  const ev = readLatestToolEvent({ env, homedir });
+  if (ev && ev.tool_name) return { ...ev, source: 'transcript' };
+  return { tool_name: '<unknown>', tool_input: {}, tool_response: undefined, is_error: false, source: 'none' };
+}
+
+module.exports = { findLatestToolEvent, resolveTranscriptPath, readLatestToolEvent, getToolEvent };

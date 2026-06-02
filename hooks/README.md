@@ -35,9 +35,10 @@ transcript JSONL** instead of stdin, via [`transcript-reader-lib.js`](transcript
 
 | Hook | Event | Note |
 |------|-------|------|
-| suggest-compact | PostToolUse Write\|Edit | PostToolUse → recoverable via transcript; deferred (BACKLOG) |
 | cost-tracker | Stop | Stop event + needs usage data; not a tool-event — separate |
 | session-summary | Stop | Stop event; env-driven — separate verification |
+
+> `suggest-compact` (PostToolUse `Write\|Edit`) was re-enabled in **v2.8.1** — it only counts tool calls (no `tool_name` needed, so no transcript recovery), the matcher does the filtering. The one fix was isolating the broken `/dev/stdin` read so the counter increments under ENXIO. See the Tier A table below.
 
 **Always active** (stdin-tolerant / different event): state-checkpoint (PreCompact),
 session-start.sh (SessionStart), reload-watch (PostToolUse, mtime-based).
@@ -45,6 +46,38 @@ session-start.sh (SessionStart), reload-watch (PostToolUse, mtime-based).
 Diagnostic: [`_transcript-timing-probe.js`](_transcript-timing-probe.js) (opt-in;
 wire into a PostToolUse hook to confirm intra-cycle write timing in a fresh session).
 Tracking: `docs/BACKLOG.md`.
+
+## Is my PostToolUse dispatch dead? (how to tell + recover)
+
+Claude Code binds its PostToolUse **dispatch table** once at process boot. After a
+`/clear` (or `/reload-plugins`) **within the same process**, that table is *not*
+re-initialised — so every PostToolUse hook silently stops firing for the rest of
+that session, with no error. (Verified; tracked in `docs/BACKLOG.md`.) An automatic
+SessionStart detector for this is **deferred** — a SessionStart hook cannot reliably
+distinguish "dead dispatch" from "fresh start with a stale intent file" (see the
+BACKLOG spike entry). Until then, here is a **deterministic** manual check.
+
+**Check (run from the session you're unsure about):**
+
+1. Run any **`Bash`** tool call (the `bash-commands.log` signal only fires on the
+   `Bash` matcher — a Write/Edit-only test would false-read "dead").
+2. Check whether **`~/.claude/bash-commands.log` gained a new line** — this is the
+   **primary** signal (`audit-log` has no self-disable, so a missing line means the
+   PostToolUse subsystem itself didn't run).
+   - Secondary: whether `~/.autopilot/intent/<sha1(realpath(cwd))>.json`'s
+     `last_updated` advanced. Treat this as confirmatory only — `intent-capture` can
+     self-disable via its circuit breaker, which would freeze `last_updated` even on
+     a live dispatch (a false "dead").
+3. If **neither advanced** after a Bash call, the PostToolUse hook subsystem is dead
+   for this session.
+
+This probe proves the **hook subsystem** is alive (or not) — not that any one hook
+behaves correctly. It is valid only on **v2.8.0+** installs (`bash-commands.log`
+did not exist before the transcript pivot, so its absence pre-v2.8.0 is not a "dead"
+signal).
+
+**Recover:** fully **exit and relaunch `claude`**. `/clear` and `/reload-plugins`
+do **not** re-init the dispatch table — only a fresh process does.
 
 ## Architecture
 
@@ -90,7 +123,7 @@ Registered in `hooks.json`. Active for all autopilot users.
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
-| suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Warns at 50/75/100 |
+| suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Nudges at 50, then every 25 (**unbounded**: 50, 75, 100, 125, …). Opt-out: `AUTOPILOT_SUGGEST_COMPACT=false`. Re-enabled v2.8.1 |
 | cost-tracker | Stop | — | JSONL to `~/.claude/metrics/costs.jsonl`. Opt-out: `AUTOPILOT_COST_TRACKER=false` |
 | audit-log | PostToolUse | Bash | Appends to `~/.claude/bash-commands.log`. Uses `_shared/secret-patterns.js` |
 | session-summary | Stop | — | Writes to `~/.claude/sessions/{date}-{sid}.md` |
@@ -107,6 +140,19 @@ Registered in `hooks.json`. Active for all autopilot users.
 Intra-`.*` matcher order is deterministic: `intent-capture → log-error → reload-watch`. intent-capture intentionally placed before log-error so the resume hint reflects state BEFORE any error capture noise.
 
 `suggest-compact` runs in a separate `Write|Edit` matcher block, `failure-escalation` + `audit-log` in `Bash` matcher block — Claude Code may execute different matcher blocks in parallel / non-deterministic order. Only intra-matcher sequencing is guaranteed.
+
+### Testing PreCompact: `/compact` ≠ real PreCompact
+
+The `/compact` **slash command** is not a faithful test of the `state-checkpoint`
+PreCompact hook. Manually triggering `/compact` does **not** pipe a JSON payload to
+the hook — it hits the same broken-stdin ENXIO as the tool-event hooks, which
+`state-checkpoint.js` handles as a graceful `no_payload_skip` (logged, not
+`catastrophic`). So `/compact` only proves the hook is *reachable*, not that its
+extraction logic works. **Auto-compact** (the ~token-threshold trigger) **does**
+pipe the payload, so the extraction path only exercises there. (Empirical source:
+2026-05-14 method-B testing — see `docs/BACKLOG.md` "/compact slash-command silent
+miss".) To exercise extraction deterministically, prefer the unit test
+(`state-checkpoint` JSONL parser) over a manual `/compact`.
 
 ### Self-Disable Recovery (intent-capture)
 

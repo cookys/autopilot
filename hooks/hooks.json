@@ -48,6 +48,15 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/suggest-compact.js"
+          }
+        ]
       }
     ]
   }

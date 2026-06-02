@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Size | Branch | Plan |
+|------|---------|------|--------|------|
+| 2026-06-02 | [hook-followups](2026-06-02-hook-followups/README.md) | L | `feat/hook-followups` | (self-contained in README) |
 
 ## 已完成 (Completed)
 

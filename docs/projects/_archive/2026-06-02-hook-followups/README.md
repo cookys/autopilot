@@ -1,7 +1,7 @@
 # Hook Follow-ups Batch (post-v2.8.0)
 
-> **Status**: 🚧 In progress · **Size**: L · **Branch**: `feat/hook-followups`
-> **Started**: 2026-06-02 · **Plan**: this README (self-contained) · **Target version**: v2.8.1 (confirm at finish-flow)
+> **Status**: ✅ Completed (v2.8.1) · **Size**: L · **Branch**: `feat/hook-followups` · **Merge**: `a43b81b`
+> **Started**: 2026-06-02 · **Plan**: this README (self-contained)
 
 ## OKR
 

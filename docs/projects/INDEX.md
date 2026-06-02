@@ -29,7 +29,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
-| 2026-06-02 | level-3 doc-rot batch (authored 2 missing canonical refs + validate.sh link-check hardening + test + BACKLOG hygiene) | v2.7.7 | (pending merge) |
+| 2026-06-02 | level-3 doc-rot batch (authored 2 missing canonical refs + validate.sh link-check hardening + test + BACKLOG hygiene) | v2.7.7 | [`2b5f6ed`](../../../../commit/2b5f6ed) |
 | 2026-06-01 | hook-polish batch (symlink diag + failure-counter cleanup + malformed-flag self-heal) | v2.7.6 | [`c79e44c`](../../../../commit/c79e44c) |
 
 ## 歷史債 (Historical Debt — pre-2026-04-12, not retrofitted)

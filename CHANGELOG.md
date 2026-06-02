@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased — Maintenance: skill leverage extraction
+
+**Headline**: Internal, behavior-preserving refactor (no version bump). Trims the always-loaded tail of two over-200-line skills by relocating *genuinely passive* leaf content to flat `references/*.md`, loaded on demand. Driven by a `/next` deep scan and converged through a 2-round Architect/Ops/Skeptic review loop that narrowed the original "all 4 skills" scope down to the two with real, safe leverage.
+
+### Changed
+- **dev-flow** (645 → 618 lines): Context Continuation (resume-path-only) → `references/context-continuation.md`; Post-Feature Doc Sync → `references/post-feature-doc-sync.md`. Forcing functions, gates, and cross-skill-named sections (Scope Audit L-1.5, H Workflow H-1, Session-End L-Full cited by finish-flow:64, dimensions checklist cited by ceo-agent:224) kept **inline** — review confirmed extracting them would silently regress the finish-flow forcing mechanism.
+- **retro** (225 → 130 lines): Step 1 data-collection commands → `references/data-collection.md`; Step 4 output-report templates → `references/report-templates.md`. Step 1-6 sequence kept inline.
+
+### Notes
+- Scope-cut: think-tank-dialectic (342) and ceo-agent (335) were evaluated and **rejected** as negative-ROI churn (mostly inline control flow; what's extractable is small and risk-bearing).
+- Verification: per-phase verbatim-no-loss diff (zero content dropped) + `validate.sh` 16/16 + `preflight-portability.sh` 12/12 (OpenCode skill discovery confirmed).
+- No user-facing behavior change; no version bump. Project: `docs/projects/2026-06-02-skill-leverage-extraction/`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (each phase is its own commit: P0 docs / P1 dev-flow / P2 retro).
+
 ## v2.7.6 — Hook-polish batch (3 backlog items, now test-covered)
 
 **Headline**: Three small backlog fixes that the v2.7.5 test harness made cheap+safe to land — each ships with a regression test. A dialectic review round caught a Major (empty-file disable-flag parity gap) before merge.

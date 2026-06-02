@@ -104,24 +104,7 @@ Fix skips: knowledge/digest review, plan overlap, branch freshness (short-lived 
 
 ### Context Continuation (Resuming Prior Work)
 
-When resuming work on an existing feature branch with an active project:
-
-```
-1. Check for uncommitted changes: `git status -s`
-   If dirty, ask user: commit, stash, or discard.
-   Default if no response: `git stash push -m "auto-stash"`
-
-2. Refresh session start SHA:
-   git rev-parse HEAD > .claude/session-start-sha
-
-3. Branch check + freshness (same as L-size gates 2-3).
-
-4. Identify resume point from project docs or prior task state.
-
-5. Skill routing check for the target code area.
-```
-
-Context continuation never re-evaluates size. It uses the size established in the original session.
+Resuming work on an existing feature branch with an active project → follow the 5-step procedure in [references/context-continuation.md](references/context-continuation.md) (uncommitted-changes check, SHA refresh, branch freshness, resume point, skill routing). Context continuation never re-evaluates size — it uses the size from the original session.
 
 ---
 
@@ -569,17 +552,7 @@ If specific files are bloated: recommend compress or split strategies.
 
 ### Post-Feature Doc Sync
 
-After code changes, verify documentation matches the new state:
-
-| Changed | Should Update |
-|---------|--------------|
-| Core logic / business rules | Module docs or skills |
-| Architecture / system design | Architecture docs |
-| Interfaces / API contracts | API spec files |
-| New/removed components | Component index, project config |
-| Environment / infra changes | Deploy or infra docs |
-
-Skip doc sync for: bug fixes, minor value tweaks, log message changes.
+After code changes, verify documentation matches the new state — see the changed→update mapping table in [references/post-feature-doc-sync.md](references/post-feature-doc-sync.md). Skip doc sync for: bug fixes, minor value tweaks, log message changes.
 
 ---
 

@@ -47,11 +47,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Workaround**: 完整 exit + relaunch `claude`（不是 `/clear`、不是 `/reload-plugins`）
 - **Impact**: v2.7.2 cross-session intent recovery 在 long-running session post-/clear 失效；user 不會察覺到 hooks 已 dead
 - **Next step options**:
-  - (a) **detect** — 在 SessionStart 階段檢查上 N 個 Bash tool 後 audit-log/intent mtime 是否有 advance、無 → 提示 user restart
+  - (a) **detect (SPIKE-GATED — do NOT write code first)** — auto-detect at SessionStart and prompt restart. **v2.8.1 dialectic (5/6) ruled the naive heuristic NON-FUNCTIONAL**, not merely risky: (1) the intent file is keyed by `sha1(realpath(cwd))`, *not* session_id; (2) SessionStart runs at boot *before* the new session's first PostToolUse writes the new session_id, so the file still shows the prior id — indistinguishable from a dead-dispatch `/clear`; (3) dispatch dies *mid*-session but SessionStart only fires at the *next* entry (already a fresh live process); (4) `intent.tool_count` is written by the very hook that's dead → invalid liveness oracle. **Required spike before any (a) code**: empirically verify what `CLAUDE_CODE_SESSION_ID` does across `startup` / `clear` / `compact` (same vs new value, and write-ordering vs SessionStart) in a fresh `claude`. Only if a clean discriminator exists is (a) buildable.
   - (b) upstream report 給 Claude Code（PostToolUse re-init on `/clear` matcher dispatch）
-  - (c) docs in hooks/README.md warn long-session users
-- **Effort**: (a) M（需 SessionStart 邏輯 + timer），(b) external，(c) S
-- **Source**: 2026-05-14 v2.7.2 post-`/clear` continue-session diagnostic + fresh-process verification
+  - (c) ✅ **DONE v2.8.1** — `hooks/README.md` "Is my PostToolUse dispatch dead?" section: deterministic manual check (run a Bash tool → did `bash-commands.log` gain a line?) + recovery (full restart).
+- **Effort**: (a) spike ~15min + M if buildable; (b) external; (c) ✅ done
+- **Source**: 2026-05-14 v2.7.2 post-`/clear` diagnostic + fresh-process verification; 2026-06-02 v2.8.1 hook-followups dialectic (KR2 deferred → docs-only)
 
 ### Claude Code tool-event hooks get NO stdin pipe — event-type-specific, not version regression
 - **Trigger**: 立即（影響所有 PreToolUse / PostToolUse hooks since hooks were authored）
@@ -86,8 +86,10 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-05-14 fresh-claude transcripts `76a7e1b6-...` (2.1.141) + `7bd61ac4-...` (2.1.129)；binary strings diff 2.1.128/129/141；Claude Code official changelog v2.1.139；GitHub issues #6305, #9567, #6403, #38162, ruvnet/ruflo #1172
 
 ### Re-enable v2.7.4 disabled hooks once upstream stdin-pipe lands
-- **Status (2026-06-01)**: ⛔ still blocked — 2.1.159 probe confirms stdin pipe NOT fixed (see "tool-event hooks get NO stdin pipe" Round 3). Do not re-enable. Next cheap re-probe: same intent-file `last_tool` check after any Claude Code update past 2.1.159.
-- **Trigger** (任一觸發即跑驗證、全綠才 re-enable):
+- **Status (2026-06-02, post-v2.8.1)**: ✅ the **PostToolUse tool-event** hooks were re-enabled by the **transcript pivot, not by waiting for the stdin fix** — `log-error` / `audit-log` / `failure-escalation` in **v2.8.0**, `suggest-compact` in **v2.8.1** (suggest-compact needed no transcript recovery — it only counts; the fix was isolating its ENXIO stdin read). **Remaining, in two genuinely-different buckets:**
+  - **PreToolUse blockers** (`large-file-warner`, `branch-protection`, `commit-secret-scan`): ⛔ **permanently unrecoverable** by the transcript approach (the tool hasn't run → no transcript entry). These are the *only* hooks still genuinely blocked on the upstream #6305 stdin fix. 2.1.159 probe confirms stdin still broken — do not re-enable until a Claude Code update lands the fix; re-probe via the recipe below.
+  - **Stop-event hooks** (`cost-tracker`, `session-summary`): NOT the tool-event-stdin problem (Stop events, env-driven). Need their own separate verification before re-enabling — not gated on #6305.
+- **Trigger** (任一觸發即跑驗證、全綠才 re-enable — applies to the PreToolUse blockers):
   1. Claude Code release notes 提到 hook stdin / PreToolUse / PostToolUse fix
   2. autopilot user 在 issue / discussion 報「audit-log 突然有 entries」「branch-protection 真的 block 了」
   3. 距 v2.7.4 ship 過 30 天且想主動 re-test（避免無限拖延）
@@ -99,16 +101,22 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
   4. `ls ~/.autopilot/payloads/` — **要看到 4 個檔（pre-bash + post-bash + pre-read + post-star）**且 stdin_parsed 不是 null
   5. 同 transcript（最新 jsonl in `~/.claude/projects/-home-cookys-projects-*/`）grep `"stderr":"[^"]*ENXIO"` 必須 **0 hits**
   6. `scripts/toggle-payload-capture.sh disable`
-- **Re-enable order** (低風險 → 高風險，每加一個跑 1 fresh claude 驗 artifact 寫):
-  1. **Log-only / no block**: `log-error` → `cost-tracker` → `session-summary` → `audit-log` → `failure-escalation` → `suggest-compact`
-     - 每個 re-enable 後 fresh claude 1 Bash、確認對應 artifact 寫了東西（`~/.claude/bash-commands.log` 增 row、`~/.claude/metrics/costs.jsonl` 增 row 等）
-  2. **Blockers**（最後，因為錯誤行為會 break workflow）: `large-file-warner` → `branch-protection` → `commit-secret-scan`
+- **Re-enable order** — remaining only (the 6 log-only PostToolUse hooks are DONE via v2.8.0/v2.8.1):
+  1. **Stop-event hooks** (separate verification, NOT #6305): `cost-tracker` → `session-summary`. Re-enable each, fresh claude, confirm artifact (`~/.claude/metrics/costs.jsonl` row, `~/.claude/sessions/{date}-{sid}.md`).
+  2. **PreToolUse blockers**（最後，gated on upstream stdin fix）: `large-file-warner` → `branch-protection` → `commit-secret-scan`
      - 每個都試一個 **正常操作不被誤 block**（read small file、commit secret-clean code、push to feature branch）
      - 再試一個 **應該 block 的操作** 驗真的 block（read 5MB 檔、push to main、commit with 假 API key）
-- **Effort**: Verification ~15min；6 log-only hooks 重 wire + smoke ~30min；3 blockers 重 wire + 雙向 smoke ~45min。Total Fix-cycle ~1.5hr
-- **Rollback**: 任何 re-enable 後出現問題 → `git revert <re-enable-commit>` + `/reload-plugins` OR 直接 edit hooks.json 拔回 v2.7.4 狀態
-- **Don't forget**: re-enable 完同步 CHANGELOG（v2.7.5 entry）+ `hooks/README.md` 拔掉 v2.7.4 disable batch section
-- **Source**: 2026-05-14 v2.7.4 disable batch ship（`c5e5a4c`）
+- **Effort**: PreToolUse re-probe ~15min；2 Stop hooks 重 wire + smoke ~20min；3 blockers 重 wire + 雙向 smoke ~45min
+- **Rollback**: 任何 re-enable 後出現問題 → `git revert <re-enable-commit>` + `/reload-plugins` OR 直接 edit hooks.json 拔回前一狀態
+- **Don't forget**: re-enable 完同步 CHANGELOG + `hooks/README.md` 對應 section
+- **Source**: 2026-05-14 v2.7.4 disable batch ship（`c5e5a4c`）；2026-06-02 v2.8.0 transcript pivot + v2.8.1 suggest-compact re-enable
+
+### Hook tally is stale across multiple docs (12 default-on no longer true)
+- **Trigger**: next time the hooks layer is audited, OR a user asks "how many hooks ship default-on"
+- **Context**: 2026-06-02 v2.8.1 dialectic surfaced that the "default-on" tally is wrong in several places and uses inconsistent bases. After the v2.7.4 disable batch + v2.8.0 pivot + v2.8.1, `hooks.json` actually wires only ~7 default-on (state-checkpoint + intent-capture/reload-watch/audit-log/log-error/failure-escalation + suggest-compact), but: CLAUDE.md L9 says "19 hooks (12 default-on, 7 opt-in)"; hooks/README.md L3 mirrors "12 Tier A + 7 Tier B"; hooks/README.md `## Tier A — Default-On (12 hooks)` table still lists v2.7.4-disabled hooks (large-file-warner, cost-tracker, session-summary, commit-secret-scan, branch-protection) as if active; hooks/README.md `## Tier B — Opt-In (6 hooks)` header vs the "7 opt-in" claim; README.md L565 says "8 default-on Tier A + 6 opt-in" (devteam-absorb narrative, a *historical* count — likely should stay). v2.8.1 deliberately did NOT half-fix this (focus-as-subtraction) to avoid introducing a new contradiction mid-batch; it only fixed the suggest-compact-specific rows.
+- **Action**: one pass that derives the real default-on set from `hooks.json`, reconciles CLAUDE.md L9 + hooks/README.md L3/L86-header/L138-header to match, and decides whether README.md L565's historical count is left as-is (recommend yes, with a "(at v2.5.0)" qualifier).
+- **Effort**: S (doc-only, but touch-count is the trap — grep every tally string first)
+- **Source**: 2026-06-02 v2.8.1 hook-followups dialectic R2 (Architect + Inverter new_concerns)
 
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics

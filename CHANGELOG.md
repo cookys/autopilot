@@ -24,6 +24,33 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.8.1 — Hook follow-ups: suggest-compact revived + dead-dispatch guidance
+
+**Headline**: Closes the actionable hook follow-ups left after the v2.8.0 transcript pivot. `suggest-compact` is wired and working again (it never needed transcript recovery — it only counts `Write|Edit` calls; the one bug was that its `/dev/stdin` read threw ENXIO *before* the counter incremented, so it silently never fired). Adds a deterministic, docs-only way to tell when your PostToolUse dispatch has died mid-session (and how to recover), after a 5-role dialectic review found the auto-detector design non-functional and deferred it to a spike. Two stale hook docs are brought in line with v2.8.0 reality.
+
+### Added
+- **`hooks/suggest-compact-lib.js`** — pure `compactDecision(count)` threshold logic, unit-tested.
+- **`hooks/suggest-compact.test.js`** — 9 tests: threshold boundaries (49 silent / 50 nudge / 51-74 silent / 75 nudge / unbounded 100,125) + a subprocess test proving the counter increments without a real stdin payload (the ENXIO regression) + the `AUTOPILOT_SUGGEST_COMPACT=false` opt-out.
+- **`hooks/README.md` "Is my PostToolUse dispatch dead?"** — deterministic manual check (run a `Bash` tool → did `~/.claude/bash-commands.log` gain a line?) + recovery (full restart; `/clear` and `/reload-plugins` do not re-init dispatch). Valid on v2.8.0+.
+
+### Fixed
+- **suggest-compact re-enabled** — `/dev/stdin` read isolated in its own inner try so the counter increments under ENXIO; wired under a `Write|Edit` PostToolUse matcher block; `AUTOPILOT_SUGGEST_COMPACT=false` opt-out added.
+
+### Changed (docs)
+- **`hooks/README.md`** — reconciled the contradictory suggest-compact rows (removed it from "still disabled"; fixed the threshold drift "50/75/100" → unbounded "50, then every 25"); added a "`/compact` ≠ real PreCompact for testing" caveat (cites the 2026-05-14 method-B observation).
+- **`docs/BACKLOG.md`** — "Re-enable v2.7.4 disabled hooks" rewritten to reflect that the PostToolUse log-only hooks are done (v2.8.0/v2.8.1); remaining split into PreToolUse blockers (gated on #6305) vs Stop-event hooks (separate). Dead-dispatch auto-detector marked SPIKE-GATED with the dialectic rationale. New entry logging the stale "12 default-on" hook tally (deferred, pre-existing).
+
+### Hook-order semantics reminder
+- Claude Code hooks run **in parallel / non-deterministic order across different matcher blocks** (PostToolUse `Write|Edit` vs `.*` are independent). Only **intra-matcher** sequencing is guaranteed. suggest-compact's new `Write|Edit` block carries no cross-block ordering guarantee.
+
+### Notes
+- Tier counts unchanged (suggest-compact was always counted in the 19/12 Tier A tally; this only wires it). The broader "12 default-on" tally is stale post-v2.7.4 — logged to BACKLOG, deliberately not half-fixed here.
+- The dead-dispatch auto-detector (SessionStart-side) was **deferred**: a 5-role dialectic (0/5 for shipping the heuristic) found it non-functional — intent file keyed by `sha1(cwd)` not session_id, SessionStart runs before the new id is written, and dispatch dies mid-session while SessionStart only fires at the next (already-fresh) entry. Replaced by the deterministic manual check above + a spike-gated BACKLOG entry.
+- Project: `docs/projects/2026-06-02-hook-followups/`.
+
+### Rollback
+- `git revert -m 1 <merge-sha>`. suggest-compact returns to unwired; docs revert. No data loss.
+
 ## v2.8.0 — Hook transcript pivot: revive tool-event hooks without stdin
 
 **Headline**: Claude Code never pipes stdin to PreToolUse/PostToolUse hooks (ENXIO; upstream #6305, re-confirmed at 2.1.159), which silently broke every hook depending on `tool_input`/`tool_response` (disabled in v2.7.4). This release recovers tool data from the **session transcript JSONL** instead, re-enabling the PostToolUse hooks. A 4-point spike (structure / recoverability / path-discovery via `CLAUDE_CODE_SESSION_ID` / write-timing) confirmed feasibility against real transcripts before any code.

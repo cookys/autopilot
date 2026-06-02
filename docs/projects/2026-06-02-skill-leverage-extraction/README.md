@@ -1,6 +1,6 @@
 # Skill Leverage Extraction
 
-> **Status**: In progress · **Size**: L · **Branch**: `feat/skill-leverage-extraction`
+> **Status**: ✅ Completed (merged to develop) · **Size**: L · **Branch**: `feat/skill-leverage-extraction`
 > **Started**: 2026-06-02 · **Mode**: CEO-agent (autonomous, results-only)
 > **Plan**: [`docs/plans/2026-06-02-skill-leverage-extraction.md`](../../plans/2026-06-02-skill-leverage-extraction.md)
 
@@ -51,9 +51,9 @@
 |-------|--------|
 | P0 — plan + review loop | ✅ converged |
 | L-1.5 — scope audit | ✅ (this table) |
-| P1 — dev-flow extraction (2 blocks) | pending |
-| P2 — retro extraction (2 blocks) | pending |
-| P-final — quality-pipeline → preflight-portability → finish-flow | pending |
+| P1 — dev-flow extraction (2 blocks) | ✅ 645→618, verbatim-no-loss 0 missing |
+| P2 — retro extraction (2 blocks) | ✅ 225→130, verbatim-no-loss clean |
+| P-final — quality-pipeline → preflight-portability → finish-flow | ✅ completeness clean, validate 16/16, portability 12/12 |
 
 ## Success criteria
 - Both skills' SKILL.md trimmed; all moved content reachable via inline pointer.

@@ -12,7 +12,7 @@ _None._
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
-| 2026-06-02 | [hook-transcript-pivot](2026-06-02-hook-transcript-pivot/README.md) | v2.8.0 | (pending merge) | [plan](../plans/2026-06-02-hook-transcript-pivot.md) |
+| 2026-06-02 | [hook-transcript-pivot](2026-06-02-hook-transcript-pivot/README.md) | v2.8.0 | [`e6c7f25`](../../../../commit/e6c7f25) | [plan](../plans/2026-06-02-hook-transcript-pivot.md) |
 | 2026-06-02 | [skill-leverage-extraction](2026-06-02-skill-leverage-extraction/README.md) | v2.7.7 | [`a4c5db6`](../../../../commit/a4c5db6) | [plan](../plans/2026-06-02-skill-leverage-extraction.md) |
 | 2026-06-01 | [test-suite-foundation](2026-06-01-test-suite-foundation/README.md) | v2.7.5 | [`81e769d`](../../../../commit/81e769d) | [plan](../plans/2026-05-14-test-suite.md) |
 | 2026-05-29 | [post-portability-followups](2026-05-29-post-portability-followups/README.md) | v2.7.4 | [`6ed9e55`](../../../../commit/6ed9e55) | (self-contained in README) |

@@ -77,7 +77,7 @@ Titles: English lowercase + hyphens (kebab-case), 2-4 words describing content.
 
 ### Phase Merging
 
-Merge rules and naming conventions: [references/templates.md](references/templates.md)
+Merge rules and naming conventions: [templates.md](templates.md)
 
 ## Size Limits
 
@@ -119,7 +119,7 @@ doc/projects/2026-02-15-async-db-pool/
 
 ## Templates
 
-README.md, ADR.md, dev-info.md, and Phase merging templates: [references/templates.md](references/templates.md)
+README.md, ADR.md, dev-info.md, and Phase merging templates: [templates.md](templates.md)
 
 ## See Also
 

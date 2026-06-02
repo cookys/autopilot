@@ -42,27 +42,28 @@ for skill_dir in "$SKILLS_DIR"/*/; do
       fi
     fi
 
-    # Check file references exist.
-    # SKILL.md may reference:
-    #   1. Skill-local       : references/<file>                ⇒  <skill_dir>/<ref>
-    #   2. Repo-root          : ../../references/<file>          ⇒  <repo_root>/references/<file>
-    #   3. Sibling skill      : skills/<name>/references/<file>  ⇒  <repo_root>/skills/<name>/references/<file>
-    # The regex captures the optional `skills/<name>/` prefix; if absent, fall back to local & root.
-    while IFS= read -r ref; do
-      if [[ "$ref" == skills/* ]]; then
-        # Absolute sibling-skill form — resolve against repo root only.
-        candidate="$ROOT_DIR/$ref"
-        if [[ ! -f "$candidate" ]]; then
-          errors+=("referenced file not found: $ref (checked $candidate)")
+    # Check markdown links resolve — across SKILL.md AND every skill-local .md
+    # doc (references/, _base/, …). Each `[text](path.md)` link (anchor stripped)
+    # must resolve relative to the containing file OR the repo root. Catches the
+    # patterns the old SKILL.md-only / `references/`-prefix-only check missed:
+    # `../_base/x.md`, doubled `references/references/x.md`, links inside ref files.
+    # Skips http(s)/mailto and pure-anchor links. Links with a title
+    # (`](x.md "t")`) are not matched and therefore not checked.
+    while IFS= read -r md_file; do
+      file_dir="$(dirname "$md_file")"
+      while IFS= read -r link; do
+        target="${link%%#*}"          # strip #anchor
+        [[ -z "$target" ]] && continue
+        case "$target" in
+          http://*|https://*|mailto:*) continue ;;
+        esac
+        # The filesystem resolves `..`, so no realpath needed (portable).
+        if [[ ! -f "$file_dir/$target" && ! -f "$ROOT_DIR/$target" ]]; then
+          rel="${md_file#"$ROOT_DIR"/}"
+          errors+=("broken link in $rel: $link")
         fi
-      else
-        skill_local="$skill_dir/$ref"
-        repo_root="$ROOT_DIR/$ref"
-        if [[ ! -f "$skill_local" && ! -f "$repo_root" ]]; then
-          errors+=("referenced file not found: $ref (checked $skill_local and $repo_root)")
-        fi
-      fi
-    done < <(grep -oP '(?:skills/[a-zA-Z0-9_-]+/)?references/[a-zA-Z0-9_.-]+(?:\.[a-zA-Z]+)?' "$skill_file" 2>/dev/null | sort -u)
+      done < <(awk '/^[[:space:]]*```/{f=!f; next} !f' "$md_file" 2>/dev/null | grep -oE '\]\([^)]+\.md(#[^)]*)?\)' | sed -E 's/^\]\(//; s/\)$//' | sort -u)
+    done < <(find "$skill_dir" -name '*.md' 2>/dev/null)
   fi
 
   if [[ ${#errors[@]} -eq 0 ]]; then

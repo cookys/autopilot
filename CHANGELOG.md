@@ -24,21 +24,28 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — Maintenance: skill leverage extraction
+## v2.7.7 — Maintenance: doc-rot fixes + skill leverage extraction
 
-**Headline**: Internal, behavior-preserving refactor (no version bump). Trims the always-loaded tail of two over-200-line skills by relocating *genuinely passive* leaf content to flat `references/*.md`, loaded on demand. Driven by a `/next` deep scan and converged through a 2-round Architect/Ops/Skeptic review loop that narrowed the original "all 4 skills" scope down to the two with real, safe leverage.
+**Headline**: Two maintenance efforts driven by `/next` deep scans, shipped together. (1) A `/next --deep` link audit found shipped skills citing reference files that were **never created**; this release authors the missing canonical references, fixes the broken links, and closes the validator gap that hid them. (2) A behavior-preserving refactor trims the always-loaded tail of two over-200-line skills by relocating passive leaf content to `references/`.
 
-### Changed
+### Fixed (doc-rot — level-3 batch)
+- **Authored `quality-pipeline/_base/prohibited-behaviors.md`** — `test-policy.md` (×2) and `code-review.md` (×1) cited *"Full list: ../_base/prohibited-behaviors.md"*, a file that never existed. Now a real consolidated canonical list (test-failure / pre-existing-error / code-review prohibitions).
+- **Authored `project-lifecycle/references/templates.md`** — `project-structure.md` (×2) cited a missing templates file via a **doubled** `references/references/` path. Now a real file (README/ADR/dev-info/phase-N skeletons + phase-merging rules); the citing path is corrected to the sibling `templates.md`.
+
+### Added
+- **`scripts/validate.sh` link-check, hardened.** It previously scanned only `SKILL.md` with a `references/`-prefix-only regex — so broken links inside reference docs, `../_base/x.md`, and doubled paths all shipped undetected. It now validates **every relative `.md` link in every skill-local doc** (SKILL.md + references/ + _base/), resolving against the file dir or repo root, while **skipping links inside fenced code blocks** (template/example placeholders). New regression test `hooks/tests/validate-link-check.test.sh`.
+
+### Changed (skill leverage extraction)
 - **dev-flow** (645 → 618 lines): Context Continuation (resume-path-only) → `references/context-continuation.md`; Post-Feature Doc Sync → `references/post-feature-doc-sync.md`. Forcing functions, gates, and cross-skill-named sections (Scope Audit L-1.5, H Workflow H-1, Session-End L-Full cited by finish-flow:64, dimensions checklist cited by ceo-agent:224) kept **inline** — review confirmed extracting them would silently regress the finish-flow forcing mechanism.
 - **retro** (225 → 130 lines): Step 1 data-collection commands → `references/data-collection.md`; Step 4 output-report templates → `references/report-templates.md`. Step 1-6 sequence kept inline.
 
 ### Notes
-- Scope-cut: think-tank-dialectic (342) and ceo-agent (335) were evaluated and **rejected** as negative-ROI churn (mostly inline control flow; what's extractable is small and risk-bearing).
-- Verification: per-phase verbatim-no-loss diff (zero content dropped) + `validate.sh` 16/16 + `preflight-portability.sh` 12/12 (OpenCode skill discovery confirmed).
-- No user-facing behavior change; no version bump. Project: `docs/projects/2026-06-02-skill-leverage-extraction/`.
+- Scope-cut (refactor): think-tank-dialectic (342) and ceo-agent (335) evaluated and **rejected** as negative-ROI churn (mostly inline control flow). Project: `docs/projects/2026-06-02-skill-leverage-extraction/`.
+- Deferred to BACKLOG with triggers: 4 orphaned 2026-05-14 plan docs; `_bodies/*.body.md` relative-link depth bug (generated artifact, low severity, not CI-failing).
+- Verification: `validate.sh` 16/16 (new link-check), completeness clean, **26 test files** green, `preflight-portability.sh` 12/12, `preflight-release.sh` green.
 
 ### Rollback
-- Maintainer: `git revert -m 1 a4c5db6` (merge), or revert individual phase commits (P0 docs / P1 dev-flow / P2 retro).
+- Maintainer: `git revert -m 1 <merge-sha>`, or revert individual phase commits. Skill-leverage refactor shipped earlier on develop as merge `a4c5db6` (commits 6d62ee0 / e1a9974 / 69b29ca).
 
 ## v2.7.6 — Hook-polish batch (3 backlog items, now test-covered)
 

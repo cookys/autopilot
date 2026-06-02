@@ -116,11 +116,20 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（看 Claude Code source / docs 確認 count semantics）
 - **Source**: 2026-05-14 v2.7.2 post-ship reload verification
 
+### Orphaned plan docs (4× 2026-05-14) — triage or link
+- **Trigger**: next docs-hygiene pass, or when project-lifecycle archive logic is next touched
+- **Context**: 2026-06-02 `/next --deep` found 4 plan docs unreferenced by any project dir / INDEX row: `2026-05-14-{eval-router-judge, next-session-handoff, powerloop-learnings, reload-plugins-agent-invokable}.md`. Likely plan-only records for shipped/absorbed work, but linked nowhere. Action: either add an INDEX "plan-only record" row for each (like the existing 歷史債 section) or confirm-and-leave. Low value; do not retrofit project dirs (per INDEX retrofit policy).
+- **Effort**: S
+- **Source**: 2026-06-02 level-3 deep scan
+
+### Generated `_bodies/*.body.md` relative links break one level deep
+- **Trigger**: next time `scripts/sync-agent-bodies.sh` is touched, OR an OpenCode agent reports a dangling `code-review.md` link
+- **Context**: 2026-06-02 link-check found `agents/_bodies/reviewer.body.md` inherits `../skills/quality-pipeline/references/code-review.md` from `agents/reviewer.md` — correct at `agents/` depth, but resolves to `agents/skills/...` (missing) from `agents/_bodies/`. Generated artifact; the link is informational and the body is consumed via OpenCode `{file:..}` inline, so low severity. Fix options: (a) sync script rewrites `../` → `../../` for links when generating bodies; (b) make the source links repo-root-relative; (c) accept. NOTE: the v2.7.x validate.sh link-check is scoped to `skills/` only, so this does NOT fail CI today.
+- **Effort**: S (fiddly — link-rewriting in the sync script risks other links)
+- **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
+
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)
 
-- **Test suite for autopilot** — ✅ shipped v2.7.5 (`81e769d`), project `docs/projects/2026-06-01-test-suite-foundation/`. 3-layer pyramid (node:test L1 + bash L2 + GitHub Actions CI), 24 test files.
-- **state-checkpoint symlink-reject diag detail** — ✅ shipped v2.7.6, Item A. Diag now echoes `HOME=<home>`.
-- **Failure counter cleanup (housekeeping)** — ✅ shipped v2.7.6, Item B. `selectFailureCounter` excludes + unlinks >7d orphans.
-- **intent-capture disable flag malformed → STALE** — ✅ shipped v2.7.6, Item C. Malformed flag now auto-clears (self-heal); OpenCode plugin parity.
+_None pending pruning._ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth). Last pruned 2026-06-02: v2.7.5 test-suite + v2.7.6 hook-polish items A/B/C.

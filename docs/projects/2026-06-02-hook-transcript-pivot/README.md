@@ -1,6 +1,6 @@
 # Hook Transcript Pivot
 
-> **Status**: In progress (foundation) · **Size**: L · **Branch**: `feat/hook-transcript-pivot`
+> **Status**: ✅ Completed (v2.8.0) · **Size**: L · **Branch**: `feat/hook-transcript-pivot`
 > **Started**: 2026-06-02 · **Plan**: [plan](../../plans/2026-06-02-hook-transcript-pivot.md)
 
 ## OKR
@@ -28,8 +28,10 @@ Structure ✅, recoverable ✅, path-discovery ✅ (`CLAUDE_CODE_SESSION_ID` + U
 ## Phases
 | Phase | Status |
 |-------|--------|
-| P1 — transcript-reader lib + test | in progress |
-| P2 — timing probe hook (human gate) | pending |
-| P3 — rewire intent-capture | pending (gated on P2) |
-| P4 — re-enable log-only hooks | pending (gated on P2) |
-| P5 — quality gate + finish | pending |
+| P1 — transcript-reader lib + test | ✅ 9 unit tests; validated on real transcript |
+| P2 — timing probe hook | ✅ built; timing de-risked (user opted B — proceed, probe = opt-in confirm) |
+| P3 — rewire intent-capture | ✅ last_tool recovered; live + L2 test |
+| P4 — re-enable audit-log/log-error/failure-escalation | ✅ smoke-verified artifacts; +L2 tests |
+| P5 — quality gate + finish | ✅ 29 tests, validate, preflight, v2.8.0 |
+
+**Scope note**: user chose to proceed without the live fresh-`claude` timing gate (option B) — timing was strongly de-risked (transcript flushes incrementally; lib recovers prior tool within seconds, 3× confirmed) and all in-scope hooks are low-harm PostToolUse log-only where an off-by-one is non-breaking + fail-open. The probe (`_transcript-timing-probe.js`) ships as an opt-in diagnostic for definitive confirmation.

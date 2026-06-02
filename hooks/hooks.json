@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks — only stdin-tolerant entries (v2.7.4 disable batch; see hooks/README.md). TEMP: _transcript-timing-probe.js in PostToolUse is a B-P2 diagnostic, removed at B-P3.",
+  "description": "Autopilot hooks. Tool-event hooks recover data from the session transcript (transcript-reader-lib) since the upstream stdin pipe is broken (#6305); see hooks/README.md. _transcript-timing-probe.js is an opt-in diagnostic (not wired).",
   "hooks": {
     "PreCompact": [
       {
@@ -46,10 +46,6 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/_transcript-timing-probe.js"
           }
         ]
       }

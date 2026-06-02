@@ -188,6 +188,7 @@ function atomicWrite(target, content, mode = 0o600) {
     // Always consume stdin (required even if unused)
     let toolName = '<unknown>';
     let toolInput = {};
+    let toolSource = 'stdin';
     try {
       const stdin = fs.readFileSync('/dev/stdin', 'utf8');
       if (stdin.trim()) {
@@ -196,6 +197,21 @@ function atomicWrite(target, content, mode = 0o600) {
         toolInput = input.tool_input || {};
       }
     } catch { /* parse fail → still try to write minimal record */ }
+
+    // stdin pipe is broken for PreToolUse/PostToolUse hooks (ENXIO; upstream
+    // #6305) — when it yields nothing, recover the tool from the session
+    // transcript JSONL. PostToolUse only: the tool has run, so its entry exists.
+    if (toolName === '<unknown>') {
+      try {
+        const { readLatestToolEvent } = require('./transcript-reader-lib.js');
+        const ev = readLatestToolEvent({ env: process.env });
+        if (ev && ev.tool_name) {
+          toolName = ev.tool_name;
+          toolInput = ev.tool_input || {};
+          toolSource = 'transcript';
+        }
+      } catch { /* fail-open — transcript-reader is itself fail-open */ }
+    }
 
     // Env opt-out
     if (process.env.AUTOPILOT_INTENT_CAPTURE === 'false') return process.exit(0);
@@ -214,6 +230,7 @@ function atomicWrite(target, content, mode = 0o600) {
       hostname: os.hostname(),
       last_updated: new Date().toISOString(),
       last_tool: toolName,
+      last_tool_source: toolSource,
       last_tool_input_summary: summarizeToolInput(toolName, toolInput),
       tool_count_session: getToolCount(sessionId),
       cwd,

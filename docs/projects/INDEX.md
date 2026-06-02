@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Size | Branch | Plan |
+|------|---------|------|--------|------|
+| 2026-06-02 | [hook-transcript-pivot](2026-06-02-hook-transcript-pivot/README.md) | L | `feat/hook-transcript-pivot` | [plan](../plans/2026-06-02-hook-transcript-pivot.md) |
 
 ## 已完成 (Completed)
 

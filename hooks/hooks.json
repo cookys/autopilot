@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks — only stdin-tolerant entries (v2.7.4 disable batch; see hooks/README.md for disabled-by-upstream-issue list)",
+  "description": "Autopilot hooks — only stdin-tolerant entries (v2.7.4 disable batch; see hooks/README.md). TEMP: _transcript-timing-probe.js in PostToolUse is a B-P2 diagnostic, removed at B-P3.",
   "hooks": {
     "PreCompact": [
       {
@@ -34,6 +34,10 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/reload-watch.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/_transcript-timing-probe.js"
           }
         ]
       }

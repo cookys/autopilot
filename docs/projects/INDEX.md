@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Size | Branch | Plan |
+|------|---------|------|--------|------|
+| 2026-06-02 | [skill-leverage-extraction](2026-06-02-skill-leverage-extraction/README.md) | L | `feat/skill-leverage-extraction` | [plan](../plans/2026-06-02-skill-leverage-extraction.md) |
 
 ## 已完成 (Completed)
 
@@ -28,7 +30,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
-| 2026-06-01 | hook-polish batch (symlink diag + failure-counter cleanup + malformed-flag self-heal) | v2.7.6 | (pending merge) |
+| 2026-06-01 | hook-polish batch (symlink diag + failure-counter cleanup + malformed-flag self-heal) | v2.7.6 | [`c79e44c`](../../../../commit/c79e44c) |
 
 ## 歷史債 (Historical Debt — pre-2026-04-12, not retrofitted)
 

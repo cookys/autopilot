@@ -15,13 +15,21 @@ const ERROR_PATTERN = /\b(error|failed|fatal|ENOENT|EACCES|permission denied|not
 const MAX_INPUT_CHARS = 300;
 const MAX_ERROR_CHARS = 500;
 
-try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
-  const toolName = input.tool_name || 'unknown';
-  const toolOutput = String(input.tool_output || '');
-  const toolInput = JSON.stringify(input.tool_input || {});
+const { getToolEvent } = require('./transcript-reader-lib.js');
 
-  if (!ERROR_PATTERN.test(toolOutput)) process.exit(0);
+try {
+  // stdin pipe broken for tool-event hooks (ENXIO; #6305) → transcript fallback.
+  let stdin = '';
+  try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
+  const ev = getToolEvent({ stdin, env: process.env });
+  const toolName = ev.tool_name || 'unknown';
+  const toolOutput = typeof ev.tool_response === 'string'
+    ? ev.tool_response
+    : (ev.tool_response !== undefined ? JSON.stringify(ev.tool_response) : '');
+  const toolInput = JSON.stringify(ev.tool_input || {});
+
+  // Trigger on an explicit error flag OR error keywords in the output.
+  if (!ev.is_error && !ERROR_PATTERN.test(toolOutput)) process.exit(0);
 
   const ts = new Date().toISOString();
   const truncInput = toolInput.length > MAX_INPUT_CHARS

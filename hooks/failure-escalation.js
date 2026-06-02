@@ -26,6 +26,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { getToolEvent } = require('./transcript-reader-lib.js');
 
 // Strong error patterns — only these trigger failure on exit code 0.
 // Bare "error" keyword is intentionally excluded to prevent false positives
@@ -169,14 +170,27 @@ If you are genuinely stuck after exhausting all approaches, this report IS the d
 
 // Main
 try {
-  let rawInput;
+  let rawInput = '';
   try {
     rawInput = fs.readFileSync(0, 'utf8');
   } catch {
-    // Fallback for environments where fd 0 direct read fails
-    rawInput = fs.readFileSync('/dev/stdin', 'utf8');
+    try { rawInput = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO; #6305 */ }
   }
-  const input = JSON.parse(rawInput);
+  let input;
+  try { input = JSON.parse(rawInput); } catch { input = {}; }
+
+  // stdin pipe broken for tool-event hooks → recover from the transcript and
+  // shape it into the fields isFailure()/getSessionHash() expect.
+  if (!input || !input.tool_name) {
+    const ev = getToolEvent({ stdin: '', env: process.env });
+    input = {
+      tool_name: ev.tool_name,
+      tool_input: ev.tool_input,
+      tool_result: ev.tool_response,
+      session_id: process.env.CLAUDE_CODE_SESSION_ID,
+    };
+    if (ev.is_error) input.exit_code = 1; // reliable failure signal from transcript
+  }
 
   // Only process Bash tool results
   const toolName = input.tool_name || '';

@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks — only stdin-tolerant entries (v2.7.4 disable batch; see hooks/README.md for disabled-by-upstream-issue list)",
+  "description": "Autopilot hooks. Tool-event hooks recover data from the session transcript (transcript-reader-lib) since the upstream stdin pipe is broken (#6305); see hooks/README.md. _transcript-timing-probe.js is an opt-in diagnostic (not wired).",
   "hooks": {
     "PreCompact": [
       {
@@ -34,6 +34,18 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/reload-watch.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/audit-log.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
           }
         ]
       }

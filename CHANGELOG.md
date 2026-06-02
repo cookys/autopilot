@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.8.0 — Hook transcript pivot: revive tool-event hooks without stdin
+
+**Headline**: Claude Code never pipes stdin to PreToolUse/PostToolUse hooks (ENXIO; upstream #6305, re-confirmed at 2.1.159), which silently broke every hook depending on `tool_input`/`tool_response` (disabled in v2.7.4). This release recovers tool data from the **session transcript JSONL** instead, re-enabling the PostToolUse hooks. A 4-point spike (structure / recoverability / path-discovery via `CLAUDE_CODE_SESSION_ID` / write-timing) confirmed feasibility against real transcripts before any code.
+
+### Added
+- **`hooks/transcript-reader-lib.js`** — pure `findLatestToolEvent()` + `resolveTranscriptPath()` (UUID glob, no cwd-encoding assumption) + fail-open `readLatestToolEvent()` / `getToolEvent()` (stdin-first, transcript-fallback). 9 unit tests.
+- **`hooks/_transcript-timing-probe.js`** — opt-in diagnostic to confirm intra-cycle write-vs-dispatch timing in a fresh session (not wired by default).
+
+### Fixed (re-enabled via transcript pivot)
+- **intent-capture** — `last_tool` is populated again (was `<unknown>`); adds `last_tool_source`.
+- **audit-log** — recovers `tool_input.command` → `~/.claude/bash-commands.log`.
+- **log-error** — recovers `tool_response` + `is_error` → `~/.claude/error-log.md`.
+- **failure-escalation** — recovers Bash `is_error` → escalation counter.
+- Each smoke-verified producing its artifact via the transcript; +3 L2 tests (29 test files total).
+
+### Notes
+- **PreToolUse hooks stay disabled — permanently unrecoverable** by this approach (the tool hasn't run, so no transcript entry exists): large-file-warner, branch-protection, commit-secret-scan.
+- **Out of scope (follow-up, BACKLOG)**: suggest-compact (PostToolUse — recoverable, deferred); cost-tracker + session-summary (Stop events, env-driven — not tool-event-stdin).
+- Project: `docs/projects/2026-06-02-hook-transcript-pivot/`. Tier counts unchanged (the re-enabled hooks were always "default-on" tier, just temporarily off).
+
+### Rollback
+- `git revert -m 1 <merge-sha>`. Hooks revert to disabled (v2.7.4 state); no data loss.
+
 ## v2.7.7 — Maintenance: doc-rot fixes + skill leverage extraction
 
 **Headline**: Two maintenance efforts driven by `/next` deep scans, shipped together. (1) A `/next --deep` link audit found shipped skills citing reference files that were **never created**; this release authors the missing canonical references, fixes the broken links, and closes the validator gap that hid them. (2) A behavior-preserving refactor trims the always-loaded tail of two over-200-line skills by relocating passive leaf content to `references/`.

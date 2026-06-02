@@ -73,7 +73,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Workaround paths** (next-step decision):
   1. ~~Downgrade~~ **RULED OUT** by Round 2 test
   2. **Upstream comment**（updated 2026-05-14 post web-research）：**comment on existing open issue `#6305`** 而非 file 新 — Anthropic close 同類 issue "not planned" 多次（#9567, #6403, #38162）、新 issue 預期低 ROI。#6305 reporter 已給 macOS 範例、加 Linux ENXIO + 2.1.139 changelog correlation + binary strings diff 補強
-  3. **Hook design pivot**：tool-event hooks 改 read transcript JSONL（path = `~/.claude/projects/-<cwd-encoded>/<CLAUDE_CODE_SESSION_ID>.jsonl`）；PreToolUse 救不了（tool 還沒 run、transcript 還沒寫 entry）；PostToolUse 可救
+  3. **Hook design pivot** ✅ DONE in v2.8.0 (project `2026-06-02-hook-transcript-pivot`): PostToolUse hooks read transcript JSONL via `transcript-reader-lib.js`. Re-enabled: intent-capture `last_tool`, audit-log, log-error, failure-escalation. PreToolUse (large-file-warner, branch-protection, commit-secret-scan) **permanently unrecoverable** by this approach (tool hasn't run). **Remaining follow-up** (not done): suggest-compact (PostToolUse Write|Edit — recoverable, deferred), cost-tracker + session-summary (Stop events, env-driven — separate verification, NOT tool-event-stdin).
   4. **Disable broken hooks** ✅ DONE in `c5e5a4c` (v2.7.4)
 - **Web research (2026-05-14)**:
   - **同 class issue 出現多次跨多平台**：macOS（#9567, #6403, #6305）、Windows（#17424, #36156, #46601）、Linux（我們確認 + 暗示 in #38162 inverted-async-bug）

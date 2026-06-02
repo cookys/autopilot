@@ -2,37 +2,49 @@
 
 19 Claude Code hooks for runtime enforcement of development discipline (originally 12 Tier A default-on + 7 Tier B opt-in) plus `session-start.sh` SessionStart priming.
 
-## ⚠ v2.7.4 disable batch — upstream stdin-pipe regression
+## Tool-event stdin pipe is broken upstream — transcript pivot (v2.8.0)
 
-2026-05-14 diagnostic (fresh-claude transcripts in both 2.1.129 and 2.1.141)
-confirmed Claude Code **never pipes stdin** to PreToolUse / PostToolUse / Stop
-hook events on this Linux + Bun-spawned-Node environment. All affected hooks
-silently no-op via fail-open exit 0; users had no signal they were broken.
+2026-05-14 diagnostic (re-confirmed at 2.1.159) showed Claude Code **never pipes
+stdin** to PreToolUse / PostToolUse hook events on this Linux + Bun-spawned-Node
+environment (upstream #6305, unfixed). The v2.7.4 batch disabled all affected
+hooks.
 
-**Currently disabled in hooks.json** (script files kept; can re-wire when upstream fixes):
+**v2.8.0 pivot**: PostToolUse hooks now recover tool data from the **session
+transcript JSONL** instead of stdin, via [`transcript-reader-lib.js`](transcript-reader-lib.js)
+(`getToolEvent()` — stdin-first, transcript-fallback; path discovery via
+`CLAUDE_CODE_SESSION_ID`). See spike + design: `docs/projects/2026-06-02-hook-transcript-pivot/`.
 
-| Hook | Event | Why disabled |
-|------|-------|--------------|
-| large-file-warner | PreToolUse Read | Needs `tool_input.file_path` |
-| branch-protection | PreToolUse Bash | Needs `tool_input.command` |
-| commit-secret-scan | PreToolUse Bash | Needs `tool_input.command` |
-| audit-log | PostToolUse Bash | Needs `tool_input.command` |
-| failure-escalation | PostToolUse Bash | Needs `tool_response` |
-| suggest-compact | PostToolUse Write\|Edit | Needs `tool_input` |
-| log-error | PostToolUse .* | Needs `tool_output` |
-| cost-tracker | Stop | Needs `input.usage` |
-| session-summary | Stop | Whole body inside try/catch — ENXIO aborts before any work |
+**Re-enabled via transcript-reader (v2.8.0):**
 
-**Still active** (stdin-pipe-working OR stdin-tolerant):
+| Hook | Event | Recovered from transcript |
+|------|-------|---------------------------|
+| intent-capture | PostToolUse .* | `last_tool` (+ `last_tool_source`) |
+| audit-log | PostToolUse .* | `tool_input.command` → bash-commands.log |
+| log-error | PostToolUse .* | `tool_response` + `is_error` → error-log.md |
+| failure-escalation | PostToolUse .* | Bash `is_error` → escalation counter |
 
-| Hook | Event | Behavior |
-|------|-------|----------|
-| state-checkpoint | PreCompact | Gets stdin payload reliably |
-| session-start.sh | SessionStart | Gets stdin payload reliably |
-| intent-capture | PostToolUse .* | Stdin-tolerant — still writes minimal record + increments counter even on ENXIO |
-| reload-watch | PostToolUse .* | Doesn't consume stdin content — checks dispatch-config / installed_plugins mtime |
+**Still disabled — PreToolUse (UNRECOVERABLE: tool hasn't run, no transcript entry yet):**
 
-Tracking: `docs/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe". See also commits `9366291`, `753bb1d`.
+| Hook | Event | Why permanently blocked by this approach |
+|------|-------|------------------------------------------|
+| large-file-warner | PreToolUse Read | pre-run; nothing in transcript to read |
+| branch-protection | PreToolUse Bash | pre-run; cannot block before the tool runs |
+| commit-secret-scan | PreToolUse Bash | pre-run; cannot block before the tool runs |
+
+**Still disabled — follow-up candidates (not in this pivot's scope):**
+
+| Hook | Event | Note |
+|------|-------|------|
+| suggest-compact | PostToolUse Write\|Edit | PostToolUse → recoverable via transcript; deferred (BACKLOG) |
+| cost-tracker | Stop | Stop event + needs usage data; not a tool-event — separate |
+| session-summary | Stop | Stop event; env-driven — separate verification |
+
+**Always active** (stdin-tolerant / different event): state-checkpoint (PreCompact),
+session-start.sh (SessionStart), reload-watch (PostToolUse, mtime-based).
+
+Diagnostic: [`_transcript-timing-probe.js`](_transcript-timing-probe.js) (opt-in;
+wire into a PostToolUse hook to confirm intra-cycle write timing in a fresh session).
+Tracking: `docs/BACKLOG.md`.
 
 ## Architecture
 

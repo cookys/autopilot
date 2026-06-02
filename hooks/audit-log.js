@@ -11,11 +11,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const secrets = require('./_shared/secret-patterns');
+const { getToolEvent } = require('./transcript-reader-lib.js');
 
 try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
-  const toolInput = input.tool_input || {};
-  const command = toolInput.command || '';
+  // stdin pipe is broken for tool-event hooks (ENXIO; upstream #6305) — recover
+  // the tool from the transcript instead. stdin-first keeps it future-proof.
+  let stdin = '';
+  try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
+  const ev = getToolEvent({ stdin, env: process.env });
+  const command = (ev.tool_input && ev.tool_input.command) || '';
 
   if (!command) process.exit(0);
 

@@ -49,15 +49,18 @@ echo "────────────────────────�
 # --- advisory: release-hygiene status (never blocks) ---
 if [ -x scripts/preflight-release.sh ]; then
   echo "release-hygiene (advisory — preflight-release.sh):"
-  if scripts/preflight-release.sh >/tmp/autopilot-postmerge-preflight.$$ 2>&1; then
-    # All green — show only the summary line to stay quiet on the happy path.
-    grep -E '^✅' /tmp/autopilot-postmerge-preflight.$$ || echo "  ✅ release docs consistent"
-  else
-    # Something drifted — show the full report so the user can act.
-    sed 's/^/  /' /tmp/autopilot-postmerge-preflight.$$
-    echo "  ⚠ release docs need attention (advisory only — merge already committed)."
+  PREFLIGHT_OUT="$(mktemp "${TMPDIR:-/tmp}/autopilot-postmerge-preflight.XXXXXX")" || PREFLIGHT_OUT=""
+  if [ -n "$PREFLIGHT_OUT" ]; then
+    if scripts/preflight-release.sh >"$PREFLIGHT_OUT" 2>&1; then
+      # All green — show only the summary line (indented to match the block).
+      grep -E '^✅' "$PREFLIGHT_OUT" | sed 's/^/  /' || echo "  ✅ release docs consistent"
+    else
+      # Something drifted — show the full report so the user can act.
+      sed 's/^/  /' "$PREFLIGHT_OUT"
+      echo "  ⚠ release docs need attention (advisory only — merge already committed)."
+    fi
+    rm -f "$PREFLIGHT_OUT"
   fi
-  rm -f /tmp/autopilot-postmerge-preflight.$$
 fi
 
 echo "Tip: to record this merge — git commit --allow-empty -m \"docs: record merge SHA $MERGE_SHA\""

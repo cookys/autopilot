@@ -4,6 +4,24 @@ Distilled **global** skills live in the pack `~/.claude/skills/autopilot-distill
 across your machines, make that folder a private git repo (or a Syncthing share). The pack is also a
 `@skills-dir` plugin, so every machine that has the folder loads the skills natively — no install.
 
+## Running distill on another machine (contribute, not just consume)
+Cloning the pack only lets a machine **consume** the existing skills. To also **distill on it** — mine
+*that machine's own* conversation history into new skills — do the full onboarding once:
+
+1. **Install autopilot** on that machine — the `distill` skill (the factory) ships with it.
+2. **Clone the pack** to `~/.claude/skills/autopilot-distill-skills/` (see Option A below) — distill
+   writes approved global skills there. (First-ever `~/.claude/skills/` creation → one CC restart.)
+3. *(optional)* Create `~/.autopilot/distill/identifiers.deny` with that machine's real hostnames /
+   client names (one per line) so the lint can catch the identifiers a regex can't infer.
+4. Run **`/autopilot:distill`** — it scans *this* machine's `~/.claude/projects/`, proposes candidates
+   from its own history, you approve, and it writes them into the cloned pack (global) or the relevant
+   project's `.claude/skills/`.
+5. `git push` the pack → other machines `git pull` and gain the new skills.
+
+Each machine distills its **own** history; the pack accumulates every machine's approved skills (union
+by skill directory). If two machines ever distil the *same* procedure, that one file conflicts on
+`git pull` — resolve it by hand once (the automatic `consolidate` merge is deferred, plan §0.3.1).
+
 ## Option A — private git repo (recommended for an async fleet)
 A remote is always-on store-and-forward, so machines that are on at different times still converge.
 

@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.8.1-E8A838?style=flat-square" alt="v2.8.1">
+  <img src="https://img.shields.io/badge/version-2.9.0-E8A838?style=flat-square" alt="v2.9.0">
   <img src="https://img.shields.io/badge/skills-17-4A90D9?style=flat-square" alt="17 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">

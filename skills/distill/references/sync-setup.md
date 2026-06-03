@@ -1,8 +1,13 @@
 # distill — fleet sync setup (the pack as a private repo)
 
-Distilled **global** skills live in the pack `~/.claude/skills/autopilot-distill-skills/`. To sync them
-across your machines, make that folder a private git repo (or a Syncthing share). The pack is also a
-`@skills-dir` plugin, so every machine that has the folder loads the skills natively — no install.
+Distilled **global** skills live in the pack `~/.claude/skills/autopilot-distill-skills/`. The pack is
+also a `@skills-dir` plugin, so every machine that has the folder loads the skills natively — no install.
+
+> **⚠️ Durability first, sync second.** A remote is **required for durability**, not a sync nicety: until
+> the pack has a remote, the distilled skills are a **single on-disk copy** — one `rm -rf ~/.claude/skills`
+> or disk failure from total loss. Set up the remote **before** you rely on distilled skills. (Skills are
+> committed at approval time — `commit-on-approve` — so they survive concurrency/crashes locally; the
+> remote is what survives losing the whole machine.)
 
 ## Running distill on another machine (contribute, not just consume)
 Cloning the pack only lets a machine **consume** the existing skills. To also **distill on it** — mine

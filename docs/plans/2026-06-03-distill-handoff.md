@@ -7,7 +7,7 @@
 - Multi-machine `consolidate` **deferred** (trigger: first real cross-machine `git pull` conflict on a pack SKILL.md).
 
 ## Open items (user's / non-blocking)
-1. **Pack has no git remote.** `~/.claude/skills/autopilot-distill-skills/` has 2 local commits (fix-git-identity, remote-dev-handoff), no remote → fleet can't sync yet. Create a **private** repo, then `git -C ~/.claude/skills/autopilot-distill-skills remote add origin <url> && git push -u origin main`. Other machines clone per [sync-setup.md](../../skills/distill/references/sync-setup.md).
+1. **🔴 Pack has no git remote — DURABILITY GAP, not just sync.** `~/.claude/skills/autopilot-distill-skills/` is a **single on-disk copy** (2 local commits, no remote) → one `rm -rf`/disk-loss from total loss of the distilled skills. The remote is **backup, not a sync nicety** — set it up before relying on distilled skills. Create a **private** repo, then `git -C ~/.claude/skills/autopilot-distill-skills remote add origin <url> && git push -u origin main`. Other machines clone per [sync-setup.md](../../skills/distill/references/sync-setup.md). (Local durability is covered: v2.9.1 commits each skill at approval time — `commit-on-approve`.)
 2. **llm-playground E is gitignored.** `commit-eval-tasks-to-repo` was written to `~/projects/llm-playground/.claude/skills/` but that repo's `.gitignore:47` ignores `.claude/` → it won't propagate. Fix: add `!.claude/skills/` negation to llm-playground's .gitignore, OR move E to the global pack. (Known-limitation now documented in sync-setup.md.)
 
 ## Next candidates (ranked)

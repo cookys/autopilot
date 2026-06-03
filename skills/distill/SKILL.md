@@ -43,21 +43,34 @@ catches structured tokens (email / IPv4 / `/home/<user>/` / FQDN / key-shapes); 
 client names are the **gate's** job — surface proper-noun-shaped tokens for the user. Nothing is
 written without per-candidate approval.
 
-## Step 4 — Write (routed; loads immediately)
+## Step 4 — Write + **commit-on-approve** (atomic durability)
 On approval, write a well-formed `SKILL.md` (`name` + `description` so `scripts/validate.sh` passes;
-body = the generic procedure) to the routed location. **Plain slug**, no staging. Parameterize
-identifiers; keep real values in `~/.ssh/config` / local config, not in the synced skill body.
-- First-ever pack creation: scaffold `~/.claude/skills/autopilot-distill-skills/` with
-  `.claude-plugin/plugin.json` + `git init`. Creating `~/.claude/skills/` for the first time needs one
-  CC restart to be watched; adding a skill to an already-loaded pack may need `/reload-plugins`.
-- **Project writes are left UNSTAGED** with an explicit "I wrote X — review and commit" note; never
-  auto-commit into the user's project. Refuse on same-name collision.
+body = the generic procedure). **Plain slug**, no staging. Parameterize identifiers; keep real values
+in `~/.ssh/config` / local config, not in the synced skill body.
+- **Global (pack) → write AND commit in the same step** (do NOT leave an approved skill as a loose
+  uncommitted file — a concurrent session's destructive git op or a crash would lose it):
+  ```
+  cd ~/.claude/skills/autopilot-distill-skills
+  # write skills/<slug>/SKILL.md, then immediately:
+  git add skills/<slug>/ && git commit -m "distill: <slug>"
+  ```
+  Now the approved skill is in git history → recoverable even under concurrency / machine loss.
+  First-ever pack: scaffold `.claude-plugin/plugin.json` + `git init` first. (Creating `~/.claude/skills/`
+  the first time needs one CC restart; adding a skill to an already-loaded pack may need `/reload-plugins`.)
+- **Project → write UNSTAGED** with an explicit "I wrote X — review and commit" note; never auto-commit
+  into the user's project repo. Durability there is the user's via their project git. Refuse on
+  same-name collision.
 
 ## Step 5 — Sync (manual git, transport-agnostic)
-The pack is a private git repo: `git -C ~/.claude/skills/autopilot-distill-skills pull --rebase`
-(guard first-run: set upstream before first pull) → review → `commit` → `push`. Other machines `pull`.
-Project skills ride the project's own git. Syncthing on the pack folder is the no-git alternative.
-Full setup (fleet enrollment, auth, Syncthing): [references/sync-setup.md](references/sync-setup.md).
+The approved skill is **already committed** (Step 4). Sync = propagate that commit:
+`git -C ~/.claude/skills/autopilot-distill-skills pull --rebase` (guard first-run: set upstream first)
+→ `push`. Other machines `pull`. Project skills ride the project's own git. Syncthing on the pack
+folder is the no-git alternative. Full setup: [references/sync-setup.md](references/sync-setup.md).
+
+> **Durability — the pack MUST have a remote.** A single on-disk copy is one `rm -rf` from total loss.
+> The remote is **backup, not just sync** — set it up before relying on distilled skills (see
+> sync-setup.md). Concurrency is loss-safe given commit-on-approve: the worst case is a same-skill
+> merge conflict to resolve by hand (the deferred `consolidate` case), never lost data.
 
 ## Deferred (do NOT build until it's needed)
 Multi-machine **consolidate** (per-host staging + LLM-merge of variants) is deferred until a real

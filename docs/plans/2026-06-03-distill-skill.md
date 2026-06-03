@@ -1,6 +1,6 @@
 # Plan v3 — `distill` skill (recurring procedures → user-level skills, fleet-synced via a path CC already reads)
 
-> **Status**: v3 — FINALIZED by CEO (2026-06-03). All Board decisions resolved (§11). Consumption path spiked & verified (§0.1). Execution is **gated on P1 value-check** (§12) before any L-size commitment. Ready to start P1.
+> **Status**: ✅ Shipped in v2.9.0 — merged as `ef1f542` (2026-06-03). Flat MVP built (scan + review→pack/project write); consumption verified end-to-end on a fresh session; multi-machine consolidate deferred (§0.3.1). All Board decisions resolved (§11); spiked & verified (§0.1).
 > **Owner**: cookys (participatory). **Branch**: `feat/distill-skill` (not cut). **Created**: 2026-06-03 · **Revised**: 2026-06-03 (post R1, R2).
 > **Frame**: [[project-methodology-sync-frame]]; self-use-first ([[feedback-solve-real-problem-not-artifact]]). Name `distill` working (§11-A).
 

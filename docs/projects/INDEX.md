@@ -6,14 +6,13 @@
 
 ## 進行中 (In Progress)
 
-| Date | Project | Status | Plan |
-|------|---------|--------|------|
-| 2026-06-03 | [distill](2026-06-03-distill/README.md) | P1 value-gate passed → narrowed; building P2 | [plan](../plans/2026-06-03-distill-skill.md) |
+_None._
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-03 | [distill](_archive/2026-06-03-distill/README.md) | v2.9.0 | [`ef1f542`](../../../../commit/ef1f542) | [plan](../plans/2026-06-03-distill-skill.md) |
 | 2026-06-02 | [hook-followups](_archive/2026-06-02-hook-followups/README.md) | v2.8.1 | [`a43b81b`](../../../../commit/a43b81b) | (self-contained in README) |
 | 2026-06-02 | [hook-transcript-pivot](2026-06-02-hook-transcript-pivot/README.md) | v2.8.0 | [`e6c7f25`](../../../../commit/e6c7f25) | [plan](../plans/2026-06-02-hook-transcript-pivot.md) |
 | 2026-06-02 | [skill-leverage-extraction](2026-06-02-skill-leverage-extraction/README.md) | v2.7.7 | [`a4c5db6`](../../../../commit/a4c5db6) | [plan](../plans/2026-06-02-skill-leverage-extraction.md) |

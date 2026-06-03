@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# install-hooks.sh — point git at .githooks/ for repo-tracked pre-commit gates.
+# install-hooks.sh — point git at .githooks/ for repo-tracked git hooks.
 #
 # Sets `git config core.hooksPath .githooks` (local to this clone) so the
-# pre-commit script in .githooks/ runs on every commit.
+# scripts in .githooks/ run on their git events:
+#   - pre-commit : version/agent-body drift gate (blocks the commit on drift)
+#   - post-merge : release-ritual advisory (prints merge SHA + preflight status
+#                  when a merge lands on develop/main; never blocks, never commits)
 #
 # Why not .git/hooks/? Those aren't tracked. By committing hooks to .githooks/
 # and setting core.hooksPath, everyone who runs this script gets the same

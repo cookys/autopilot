@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.10.0 — harness integration + release-ritual automation
+
+**Headline**: autopilot now **deepens Claude Code** with three of its session-control primitives while staying multi-agent-portable (each is capability-gated with a documented non-CC fallback). A new `.githooks/post-merge` advisory closes the release-ritual toil loop — when a merge lands on develop/main it surfaces the merge SHA (ready to paste) plus the `preflight-release.sh` status, **without ever blocking or auto-committing**. `ceo-agent` gains `/goal` as an optional convergence engine, a shipped `loop.md` template enables unattended branch babysitting, and the quality gate can wait on CI-backed tests via `Monitor` instead of busy-polling.
+
+### Added
+- **`.githooks/post-merge`** — release-ritual advisory. Fires only on a true merge commit (2+ parents) landing on `develop`/`main`; prints the short SHA + a paste-ready `docs: record merge SHA` tip + `preflight-release.sh` summary (full report only when something drifts). Always exits 0 — an advisory must never disrupt git flow. Auto-activates via the existing `core.hooksPath=.githooks`. Deliberately does **not** block (impossible post-merge) and **not** auto-commit (a hook-authored commit is a surprising one-way door).
+- **`project-config-template/loop.md`** — default prompt for a bare `/loop`: unattended babysit of the current branch (continue work → tend PR/CI → `autopilot:quality-pipeline` before "done" → stop when clean), with hard constraints against unauthorized irreversible actions and scope drift. CC-only (v2.1.72+); copy to `.claude/loop.md` or `~/.claude/loop.md`.
+- **`/goal` convergence primitive** in `ceo-agent` — recommend a transcript-checkable OKR condition so the session converges autonomously; coexists with autopilot's side-effect-only Stop hooks; degrades to per-phase re-prompting where `/goal` is unavailable. Requires CC v2.1.139+.
+- **`Monitor` CI-polling** — capability-gated note in `quality-pipeline` Tests (canonical) + a pointer from `finish-flow` L-5.2: wait on CI-backed/long-running test commands via `Monitor` instead of busy-looping `gh run watch`; falls back to manual polling elsewhere.
+- **`references/multi-agent-portability.md` §7** — "Harness primitives are Claude-Code-only (capability-gated)": `/goal` / `/loop` / `Monitor` table with official-doc sources, autopilot integration points, and per-primitive non-CC fallbacks.
+
+### Changed
+- `CLAUDE.md` scripts inventory + `scripts/install-hooks.sh` header: document the new `post-merge` hook alongside `pre-commit`.
+- `README.md` config-template table: add the `.claude/loop.md` row.
+
+### Hook-order semantics reminder
+- The new `post-merge` is a **git hook** (fires on the `git merge` / `git pull` event), not a Claude Code lifecycle hook — the CC parallel-matcher ordering caveat does not apply to it.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.9.1 — distill durability hardening
 
 **Headline**: `distill` now commits each approved skill **at approval time** (`commit-on-approve`) instead of leaving it as a loose uncommitted file — so an approved skill survives concurrent sessions / crashes (it's in git history immediately). Docs reframe the pack remote as **durability-required (backup, not just sync)**: a remote-less pack is a single on-disk copy, one `rm -rf` from total loss.

@@ -116,6 +116,32 @@ User can downgrade to normal dev-flow anytime:
 - "I'll decide" / "let me look" -> switch immediately
 - CEO produces current CEO Report as handoff context
 
+### Harness primitives — `/goal` as a convergence engine (Claude Code only)
+
+When running under Claude Code, the CEO can use **`/goal`** to drive autonomous convergence:
+set the OKR's verifiable success criterion as a `/goal` condition and the session keeps
+taking turns until a fresh evaluator confirms the criterion holds — turning the CEO's
+"execute phases until done" loop into a harness-enforced one instead of a self-policed one.
+
+This is **optional leverage, not a requirement**. It is gated:
+
+- **Only suggest `/goal` when the OKR has a transcript-checkable end state** — the evaluator
+  is a small fast model that reads the conversation and *does not run tools*. "all tests in
+  `test/x` pass" works (Claude runs them, the result lands in the transcript); "the code is
+  well-architected" does not. Write the condition as something the CEO's own output proves.
+- **Coexists with autopilot's Stop hooks** — `/goal` and a Stop hook both fire after every
+  turn; autopilot's hooks are side-effect-only and never block, so they don't interfere.
+- **Degrades cleanly elsewhere** — on non-Claude-Code agents (or when `disableAllHooks` /
+  `allowManagedHooksOnly` is set), `/goal` is unavailable; the CEO falls back to re-prompting
+  at each phase boundary exactly as today. Never assume `/goal` exists; offer it, don't require it.
+- **The user sets `/goal`, not the CEO** — it's a session-scoped user command. The CEO's role
+  is to *recommend* a well-formed condition (and bound it, e.g. `or stop after N turns`) when
+  Level-3 full-autonomy work has a clean verifiable finish line.
+
+Requires CC v2.1.139+. Full behavior + fallbacks:
+[`references/multi-agent-portability.md` §7](../../references/multi-agent-portability.md).
+For unattended *interval* re-runs (vs converge-until-done), see `project-config-template/loop.md`.
+
 ## Startup
 
 Confirm four things after receiving user's goal:

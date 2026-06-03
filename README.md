@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.9.1-E8A838?style=flat-square" alt="v2.9.1">
+  <img src="https://img.shields.io/badge/version-2.10.0-E8A838?style=flat-square" alt="v2.10.0">
   <img src="https://img.shields.io/badge/skills-17-4A90D9?style=flat-square" alt="17 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">
@@ -354,6 +354,7 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 | `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](project-config-template/profiling-config.md) |
 | `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](project-config-template/skill-routing.md) |
 | `.claude/model-routing-config.md` | Subagent model/mode per role (planner, reviewer, etc.) | [template](project-config-template/model-routing-config.md) |
+| `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](project-config-template/loop.md) |
 
 ### Example: C++ Game Server Config
 

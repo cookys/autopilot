@@ -31,7 +31,7 @@ Standalone-capable lifecycle orchestration plugin for Claude Code. 17 skills, 3 
 | [`scripts/preflight-release.sh`](scripts/preflight-release.sh) | Release-hygiene gate: CHANGELOG entry + INDEX row + version-mirror parity for canonical version. Run at finish-flow L-5.5 when a ship bumps the version. |
 | [`scripts/setup-symlinks.sh`](scripts/setup-symlinks.sh) / [`.ps1`](scripts/setup-symlinks.ps1) | Ensure `.agents/skills/` symlink resolves (Windows-safe). Auto-run by `dev-setup.sh`. |
 | [`scripts/install-antigravity.sh`](scripts/install-antigravity.sh) / [`.ps1`](scripts/install-antigravity.ps1) | Register autopilot as an `agy` plugin (validate → install → list). Verified against agy 1.0.1. |
-| [`scripts/install-hooks.sh`](scripts/install-hooks.sh) | Set `git config core.hooksPath .githooks` to activate the pre-commit gate. |
+| [`scripts/install-hooks.sh`](scripts/install-hooks.sh) | Set `git config core.hooksPath .githooks` to activate the git hooks: `pre-commit` (version/agent-body drift gate) + `post-merge` (release-ritual advisory — prints merge SHA + `preflight-release.sh` status when a merge lands on develop/main; never blocks, never commits). |
 | [`scripts/run-eval-batch.sh`](scripts/run-eval-batch.sh) / [`run-skill-opt.sh`](scripts/run-skill-opt.sh) | Eval harness; see `evals/`. |
 | [`scripts/toggle-payload-capture.sh`](scripts/toggle-payload-capture.sh) | Hook payload capture (Tier B diagnostic — see hooks gotchas). |
 

@@ -113,7 +113,34 @@ When touching anything that crosses platform boundaries:
 
 ---
 
-## 7. Related docs
+## 7. Harness primitives are Claude-Code-only (capability-gated)
+
+Claude Code ships session-control primitives that other agents do not have: `/goal`,
+`/loop`, and the `Monitor` tool. autopilot **deepens** CC by referencing these where they
+add leverage, but gates each behind a "if your agent supports it" framing so non-CC agents
+degrade to the manual equivalent. This mirrors the `dispatch-config.md` chain pattern: the
+enhancement is optional, the fallback is always documented.
+
+The gating is **documentation prose, not a runtime capability probe** — autopilot does not
+ship a "does this agent support /goal?" detector (that would be its own project). A skill
+that mentions `/goal` always states the non-CC fallback inline.
+
+| Primitive | What it is (verified) | Source | autopilot integration | Non-CC fallback |
+|---|---|---|---|---|
+| `/goal` | Session-scoped completion condition; after each turn a small fast model (Haiku default) judges the condition and continues or stops. Wrapper around a **prompt-based Stop hook**. Evaluator reads the transcript only — **does not call tools**. Requires **CC v2.1.139+**. Unavailable (visibly, not silently) under `disableAllHooks` / `allowManagedHooksOnly`. | [goal docs](https://code.claude.com/docs/en/goal) | `ceo-agent` convergence primitive — drive autonomous work until OKR met (see ceo-agent SKILL.md "Harness primitives"). | Manual: re-prompt at each Stop / dev-flow decision point. |
+| `/loop` | Re-runs a prompt or slash command on a time interval (or self-paced); stops when you stop it or the work is judged done. | [scheduled-tasks docs](https://code.claude.com/docs/en/scheduled-tasks#run-a-prompt-repeatedly-with-%2Floop) | `project-config-template/loop.md` — unattended babysit of `next` / `debug` / `quality-pipeline`. | Manual: re-invoke the skill each cycle. |
+| `Monitor` | Tool that watches a condition / long-running process and re-invokes the agent on change. | CC tool (present in this build, `claude 2.1.161`) | `finish-flow` / `quality-pipeline` CI-polling — wait on a CI run without busy-looping. | Manual: poll `gh run watch` / re-check by hand. |
+
+**`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
+Stop hook both fire after every turn." autopilot's own Stop hooks (`cost-tracker`,
+`session-summary`) are side-effect-only and never return `decision: block`, so they do not
+interfere with `/goal`'s continue/stop decision. The only gate is the `disableAllHooks` /
+`allowManagedHooksOnly` case above, which errors visibly. (Coexistence verified firsthand via
+tool schemas + goal docs, 2026-06-02 — see the harness-integration direction memo.)
+
+---
+
+## 8. Related docs
 
 - [`AGENTS.md`](../AGENTS.md) — agents.md-spec readme for any agent
 - [`CLAUDE.md`](../CLAUDE.md) — Claude Code-specific conventions

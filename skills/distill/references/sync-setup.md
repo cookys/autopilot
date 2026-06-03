@@ -55,6 +55,17 @@ resolve that one merge by hand — see plan §0.3.1 DEFERRED for the eventual co
 Share the `~/.claude/skills/autopilot-distill-skills/` folder between machines. Caveat: both ends must
 be online simultaneously to converge (no store-and-forward) — worse for an async/time-zone-split fleet.
 
-## Project-scoped skills need no setup
+## Project-scoped skills need no setup — UNLESS the project gitignores `.claude/`
 Skills routed to `<project>/.claude/skills/` ride that project's own git — any machine that pulls the
 project gets them for free.
+
+**Known limitation**: many repos `.gitignore` the whole `.claude/` dir, in which case a project-scoped
+distilled skill is **local-only and never propagates**. Check with `git check-ignore .claude/skills/`.
+Two fixes: (a) add a negation to that repo's `.gitignore` so the skills tracked:
+```gitignore
+.claude/
+!.claude/skills/
+!.claude/skills/**
+```
+or (b) route the skill to the **global pack** instead (it always syncs), accepting it loads in every
+project rather than just this one.

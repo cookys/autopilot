@@ -24,6 +24,16 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.9.1 — distill durability hardening
+
+**Headline**: `distill` now commits each approved skill **at approval time** (`commit-on-approve`) instead of leaving it as a loose uncommitted file — so an approved skill survives concurrent sessions / crashes (it's in git history immediately). Docs reframe the pack remote as **durability-required (backup, not just sync)**: a remote-less pack is a single on-disk copy, one `rm -rf` from total loss.
+
+### Changed
+- `skills/distill/SKILL.md` Step 4: write **and commit** the approved global skill atomically into the pack; project writes stay unstaged (user's repo). Step 5 sync = propagate the already-made commit.
+
+### Fixed
+- Durability gap: approved-but-uncommitted skills were vulnerable to loss under the concurrent-session races common on shared machines. Now loss-safe locally; worst concurrency case = a same-skill merge conflict (deferred `consolidate`), never lost data.
+
 ## v2.9.0 — distill (recurring procedures → your personal skills)
 
 **Headline**: New `distill` skill — autopilot ships a *distiller* that mines your local conversation history for recurring procedures and corrections and turns the ones you approve into **your own personal skills**, routed into your skill dirs (a private `autopilot-distill-skills@skills-dir` pack for global, `<project>/.claude/skills/` for project-scoped). autopilot ships only the factory; the distilled skills are yours and never enter autopilot's repo. Sync across your fleet via the pack repo (git) or Syncthing.

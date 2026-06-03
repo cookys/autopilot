@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# autopilot post-merge hook — release-ritual advisory.
+#
+# Activated by:  scripts/install-hooks.sh  (sets core.hooksPath=.githooks)
+#
+# Why this exists:
+#   Every release the user hand-makes a `docs: record merge SHA <sha>` commit and
+#   is repeatedly re-reminded to run release-hygiene checks. This hook automates
+#   the *reminder*: when a real merge lands on develop/main, it surfaces the merge
+#   SHA (ready to paste) and the preflight-release.sh status.
+#
+# Deliberate non-features (see project README "Out of scope"):
+#   - It NEVER blocks. post-merge runs AFTER the merge is committed; blocking is
+#     impossible here by design. Enforcement (if ever wanted) belongs in pre-push.
+#   - It NEVER auto-commits. Creating a commit from inside a hook is a surprising
+#     one-way door; this only prints. The user decides what to record.
+#
+# Fires only when ALL hold:
+#   - HEAD is a true merge commit (2+ parents) — skips fast-forward pulls.
+#   - current branch is develop or main — skips topic/feature branches.
+#
+# Always exits 0: an advisory must never disrupt the user's git flow.
+
+# Resolve repo root; bail quietly if anything is off.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$REPO_ROOT" || exit 0
+
+# --- gate 1: only on develop / main ---
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+case "$BRANCH" in
+  develop|main) ;;
+  *) exit 0 ;;
+esac
+
+# --- gate 2: only on a real merge commit (HEAD has a second parent) ---
+if ! git rev-parse --verify -q HEAD^2 >/dev/null 2>&1; then
+  exit 0
+fi
+
+MERGE_SHA="$(git rev-parse --short HEAD 2>/dev/null)"
+MERGE_SUBJECT="$(git log -1 --pretty=%s HEAD 2>/dev/null)"
+
+echo "─────────────────────────────────────────────────────────────"
+echo "post-merge: merge landed on $BRANCH"
+echo "  SHA:     $MERGE_SHA"
+echo "  subject: $MERGE_SUBJECT"
+echo "─────────────────────────────────────────────────────────────"
+
+# --- advisory: release-hygiene status (never blocks) ---
+if [ -x scripts/preflight-release.sh ]; then
+  echo "release-hygiene (advisory — preflight-release.sh):"
+  PREFLIGHT_OUT="$(mktemp "${TMPDIR:-/tmp}/autopilot-postmerge-preflight.XXXXXX")" || PREFLIGHT_OUT=""
+  if [ -n "$PREFLIGHT_OUT" ]; then
+    if scripts/preflight-release.sh >"$PREFLIGHT_OUT" 2>&1; then
+      # All green — show only the summary line (indented to match the block).
+      grep -E '^✅' "$PREFLIGHT_OUT" | sed 's/^/  /' || echo "  ✅ release docs consistent"
+    else
+      # Something drifted — show the full report so the user can act.
+      sed 's/^/  /' "$PREFLIGHT_OUT"
+      echo "  ⚠ release docs need attention (advisory only — merge already committed)."
+    fi
+    rm -f "$PREFLIGHT_OUT"
+  fi
+fi
+
+echo "Tip: to record this merge — git commit --allow-empty -m \"docs: record merge SHA $MERGE_SHA\""
+exit 0

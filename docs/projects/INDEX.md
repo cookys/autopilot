@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Version | Plan |
+|------|---------|---------|------|
+| 2026-06-03 | [harness-integration](2026-06-03-harness-integration/README.md) | v2.10.0 (wip) | [handoff](../plans/2026-06-03-distill-handoff.md) |
 
 ## 已完成 (Completed)
 

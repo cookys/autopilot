@@ -29,7 +29,7 @@ do the smallest useful thing each iteration, and stay strictly within what the w
 already in this conversation authorizes.
 
 1. **Continue unfinished work.** If there is an in-progress task from this conversation
-   (check the task list / last TODO), advance it by one concrete step.
+   (check the task list / last open item), advance it by one concrete step.
 
 2. **Tend the current branch's pull request.**
    - CI red? Pull the failing job log and diagnose. If the fix is small and obviously

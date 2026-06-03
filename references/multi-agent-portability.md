@@ -70,6 +70,8 @@ Body markdown — instructions consumed as agent context.
 
 Per-platform extensions exist (e.g. Claude Code accepts a `tools:` allowlist; OpenCode accepts `compatibility:` for explicit platform tagging) but unknown fields are tolerated by each parser. **Cross-platform skills should keep frontmatter minimal**: `name` + `description` only.
 
+> **`distill` is Claude-Code-function-specific** (v2.9.0). Its SKILL.md text is portable, but its function depends on Claude-Code-only mechanisms — reading `~/.claude/projects/*/*.jsonl` transcripts and writing the `autopilot-distill-skills@skills-dir` plugin pack + personal `~/.claude/skills/`. On other agents it has no transcript source / pack mechanism and is a no-op. This is intentional: autopilot stays multi-agent-portable, but `distill` deepens Claude Code specifically. Keep its `allowed-tools` (a CC extension) — it's a CC-only skill by design.
+
 ---
 
 ## 4. Manifest divergence (hard to harmonize)

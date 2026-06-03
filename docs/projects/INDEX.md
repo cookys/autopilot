@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Status | Plan |
+|------|---------|--------|------|
+| 2026-06-03 | [distill](2026-06-03-distill/README.md) | P1 value-gate passed → narrowed; building P2 | [plan](../plans/2026-06-03-distill-skill.md) |
 
 ## 已完成 (Completed)
 

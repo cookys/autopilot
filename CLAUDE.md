@@ -6,7 +6,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone-capable lifecycle orchestration plugin for Claude Code. 16 skills, 3 methodology agents, 19 hooks (12 default-on, 7 opt-in). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`README.md`](README.md) for the full coexistence model.
+Standalone-capable lifecycle orchestration plugin for Claude Code. 17 skills, 3 methodology agents, 19 hooks (12 default-on, 7 opt-in). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`README.md`](README.md) for the full coexistence model.
 
 ## Scripts inventory (prefer over LLM judgment)
 
@@ -22,6 +22,7 @@ Standalone-capable lifecycle orchestration plugin for Claude Code. 16 skills, 3 
 | [`scripts/verify-preexisting.sh`](scripts/verify-preexisting.sh) | Test failure classification: PRE_EXISTING / INTRODUCED / NO_FAILURE / INCONCLUSIVE. Replaces manual `git stash + checkout develop` recipe. |
 | [`scripts/risk-counter.sh`](scripts/risk-counter.sh) | Persistent WTF-Likelihood Cap counter (per repo+branch). Subcommands: `status`, `increment --event <kind>`, `threshold-hit`, `reset`. |
 | [`scripts/diff-since-last-round.sh`](scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint. **Delta output is dispatcher-only — never pass to reviewer** (leaks round-cycle meta-signal). |
+| [`scripts/distill-scan.js`](scripts/distill-scan.js) | Deterministic full-history scanner for `skills/distill`: reads `~/.claude/projects/*/*.jsonl` → frequency atoms in two buckets (ritual + correction candidates). `--real-only`, `--json`, `--top N`. No LLM in the count path. |
 | [`scripts/validate.sh`](scripts/validate.sh) | Validate every skill's SKILL.md structure (YAML frontmatter, required fields). |
 | [`scripts/dev-setup.sh`](scripts/dev-setup.sh) | One-time local-dev setup. |
 | [`scripts/sync-version.js`](scripts/sync-version.js) | Sync version across canonical `.claude-plugin/plugin.json` + mirrors (root `plugin.json`, README badges). `--check` mode (read-only drift gate, used by `.githooks/pre-commit`). |

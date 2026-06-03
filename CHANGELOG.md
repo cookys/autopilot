@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.9.0 — distill (recurring procedures → your personal skills)
+
+**Headline**: New `distill` skill — autopilot ships a *distiller* that mines your local conversation history for recurring procedures and corrections and turns the ones you approve into **your own personal skills**, routed into your skill dirs (a private `autopilot-distill-skills@skills-dir` pack for global, `<project>/.claude/skills/` for project-scoped). autopilot ships only the factory; the distilled skills are yours and never enter autopilot's repo. Sync across your fleet via the pack repo (git) or Syncthing.
+
+### Added
+- `skills/distill/` — scan → review (human gate + identifier lint + deny-list) → scope-aware write. Privacy: de-identified by construction + approval gate; raw history never leaves the machine.
+- `scripts/distill-scan.js` — deterministic full-history scanner → frequency atoms in two buckets (ritual + correction candidates); `--real-only`, `--json`, `--top N`. No LLM in the count path.
+- `skills/distill/references/sync-setup.md` — fleet enrollment (pack-as-private-repo / Syncthing).
+
+### Notes
+- Multi-machine `consolidate` (merging the same procedure distilled on N machines) is deliberately **deferred** until a real cross-machine conflict occurs (plan §0.3.1). Self-use-first; publish-grade de-id hardening is a later phase.
+
 ## v2.8.1 — Hook follow-ups: suggest-compact revived + dead-dispatch guidance
 
 **Headline**: Closes the actionable hook follow-ups left after the v2.8.0 transcript pivot. `suggest-compact` is wired and working again (it never needed transcript recovery — it only counts `Write|Edit` calls; the one bug was that its `/dev/stdin` read threw ENXIO *before* the counter incremented, so it silently never fired). Adds a deterministic, docs-only way to tell when your PostToolUse dispatch has died mid-session (and how to recover), after a 5-role dialectic review found the auto-detector design non-functional and deferred it to a spike. Two stale hook docs are brought in line with v2.8.0 reality.

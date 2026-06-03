@@ -2,14 +2,14 @@
 
 <p align="center">
   <strong>Standalone-capable lifecycle orchestration for Claude Code that coexists with Superpowers.</strong><br>
-  16 skills covering lifecycle management, strategic decisions, methodology, and quality gates.<br>
+  17 skills covering lifecycle management, strategic decisions, methodology, and quality gates.<br>
   Works standalone; gracefully delegates tactical execution to Superpowers when installed.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.8.1-E8A838?style=flat-square" alt="v2.8.1">
-  <img src="https://img.shields.io/badge/skills-16-4A90D9?style=flat-square" alt="16 Skills">
+  <img src="https://img.shields.io/badge/version-2.9.0-E8A838?style=flat-square" alt="v2.9.0">
+  <img src="https://img.shields.io/badge/skills-17-4A90D9?style=flat-square" alt="17 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -35,7 +35,7 @@ Claude Code on its own — even with the built-in `superpowers` plugin if you've
 
 ## The Solution
 
-Autopilot ships **16 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](#superpowers-coexistence) below).
+Autopilot ships **17 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](#superpowers-coexistence) below).
 
 | Skill | What It Does | Coexists with |
 |-------|-------------|---------------|
@@ -49,6 +49,7 @@ Autopilot ships **16 skills** covering lifecycle orchestration, strategic intell
 | **project-lifecycle** | Plan → bootstrap → structure → archive | `superpowers:finishing-a-development-branch` (partial) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **retro** | Engineering retrospective from git history | — (no equivalent) |
+| **distill** | Distills recurring procedures/corrections from your conversation history into *your own* personal skills (routed to a private `@skills-dir` pack / project dirs, never into autopilot) | — (no equivalent) |
 | **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |
 | **audit** | Systematic comparison between implementations | — (no equivalent) |
 | **debug** | Evidence-first debugging methodology (tool → log → code) with Three Red Lines | `superpowers:systematic-debugging` (broader hypothesis-driven framing) |
@@ -248,7 +249,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 /plugin install autopilot@autopilot
 ```
 
-All 16 skills available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+All 17 skills available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ### OpenCode (`.agents/skills/` auto-scan)
 
@@ -429,7 +430,7 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 16 skills + 14 hooks?**
+**Why 17 skills + 14 hooks?**
 v2.0 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with `superpowers` skills, on the assumption that `superpowers` was always installed. v2.7.0 restores them as standalone fallbacks (with explicit `## Coexistence with Superpowers` sections in their bodies explaining the relationship) so autopilot works without `superpowers`. When `superpowers` IS installed, `.claude/dispatch-config.md` chains let orchestrators prefer the superpowers equivalent for runtime delegation; the autopilot skill stays in the catalog as the standalone fallback. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
 
 **Why `!`command`` injection, not config files?**
@@ -488,7 +489,7 @@ See [`agents/README.md`](agents/README.md) for dispatch boundary, unified Output
 
 ## Recommended Companions
 
-Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 16 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
+Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 17 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
 
 ```
 /plugin install voltagent@...

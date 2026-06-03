@@ -56,4 +56,14 @@ User fixed the candidate list ("全做完"). Bulletproof exactly these; no scope
 
 ## Progress
 
-_In progress — see TaskList._
+✅ **Shipped in v2.10.0** — merged to develop as `4036a1b` (2026-06-03).
+
+All 6 OKR criteria met (verified at L-5.1). Quality gate passed: 30/30 test files
+green (incl. a pre-existing round-trip test fixed as release hygiene), completeness
+clean, `autopilot:reviewer` returned zero Critical/Major — one Minor (case-insensitive
+stale-qualifier guard) + two Suggestions (post-merge `mktemp` + happy-path indent), all
+fixed in `9e2af4f`. The post-merge hook **dogfooded itself** during its own merge
+(printed SHA + preflight ✅ 5/5, exit 0).
+
+Open#2 (llm-playground `.gitignore`) fixed + committed locally in that repo (`410f65b`),
+**not pushed** — push left to the user.

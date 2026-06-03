@@ -6,14 +6,13 @@
 
 ## 進行中 (In Progress)
 
-| Date | Project | Version | Plan |
-|------|---------|---------|------|
-| 2026-06-03 | [harness-integration](2026-06-03-harness-integration/README.md) | v2.10.0 (wip) | [handoff](../plans/2026-06-03-distill-handoff.md) |
+_None._
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-03 | [harness-integration](_archive/2026-06-03-harness-integration/README.md) | v2.10.0 | [`4036a1b`](../../../../commit/4036a1b) | [handoff](../plans/2026-06-03-distill-handoff.md) |
 | 2026-06-03 | [distill](_archive/2026-06-03-distill/README.md) | v2.9.0 | [`ef1f542`](../../../../commit/ef1f542) | [plan](../plans/2026-06-03-distill-skill.md) |
 | 2026-06-02 | [hook-followups](_archive/2026-06-02-hook-followups/README.md) | v2.8.1 | [`a43b81b`](../../../../commit/a43b81b) | (self-contained in README) |
 | 2026-06-02 | [hook-transcript-pivot](2026-06-02-hook-transcript-pivot/README.md) | v2.8.0 | [`e6c7f25`](../../../../commit/e6c7f25) | [plan](../plans/2026-06-02-hook-transcript-pivot.md) |

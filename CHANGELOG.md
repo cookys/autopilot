@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.11.0 — distill cross-machine consolidate (slug-normalize + proactive merge)
+
+**Headline**: when two fleet machines distil the **same** recurring procedure, `/distill` now converges them automatically instead of stopping on a raw git conflict. A deterministic **slug normalizer** (Step 4) makes independent namings of one procedure land on a single path (`fix-git-identity`, `git-identity-fix`, `ensure-git-identity` → `git-identity`), and Step 5 does a **proactive** divergence check (`compare` against the pack's `@{u}` *before* committing the push) so the human-gated LLM merge happens in the clean working tree — **never inside a held rebase/merge transaction**. Shipped after two dialectic review rounds that cut a held-rebase design (it inverted git's `:2:`/`:3:` stages and could wedge the pack) and a per-host-staging design (it regressed Claude Code skill loading and used a self-defeating content-hash key); see [`docs/plans/2026-06-04-distill-consolidate.md`](docs/plans/2026-06-04-distill-consolidate.md).
+
+### Added
+- `scripts/distill-consolidate.sh` (deterministic, no LLM): `normalize-slug <raw>` (lowercase + drop a tiny stopword set + **preserve token order** — converges naming divergence while keeping antonyms like `add-user`/`remove-user` distinct), `migrate [pack]` (one-time rename of existing dirs to normalized slugs; STOPs when two dirs collide on one slug — a real consolidation case), `compare <slug> [pack]` (proactive divergence check vs `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; requires a configured upstream, never guesses `origin/<branch>`).
+- `hooks/tests/distill-consolidate.test.sh` — 26 assertions: normalize convergence + antonym-safety + all-stopword fallback; migrate rename/idempotent/collision-STOP; compare all four statuses + no-upstream/non-git guards (bare+two-clone fixture).
+
+### Changed
+- `skills/distill/SKILL.md`: Step 4 normalizes the pack slug; Step 5 replaces "STOP on conflict (deferred consolidate)" with the proactive `compare` → human-gated LLM-merge → normal commit flow + a one-time `migrate` note; the "Deferred" section is un-deferred. `references/sync-setup.md`: migration steps + a **fleet-rollback runbook** (`git revert` works because the consolidation is a normal commit, not a merge commit; documents the peer-re-consolidated descendant case).
+- **Correctness boundary** (stated in SKILL.md): the scripts are tested for git-plumbing; the **LLM merge quality is human-gated, not test-gated**.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.10.2` + `rm -f ~/.autopilot/distill/slug-stopwords` (the new scripts are inert if unused; no migration is auto-run).
+
 ## v2.10.2 — distill incremental cursor + batch-approval UX
 
 **Headline**: `/distill` is now cheap to re-run and lower-friction to approve. `distill-scan.js` gained a **per-session cursor** (`--incremental` / `--new-only`) so a routine re-scan only re-reads sessions that are new or changed since last time, then reports just the candidates whose recurrence **rose this run** — "what's newly worth distilling" instead of re-proposing everything you already triaged. The skill's human review gate is unchanged in substance but collapsed in friction: present the whole candidate list once and accept a **batch multi-select** rather than one yes/no per candidate, followed by **one** "push back to the shared pack?" prompt.

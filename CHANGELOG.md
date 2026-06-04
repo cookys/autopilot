@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.12.3 — reviewer: claim-completeness via decompose + per-outcome grounding
+
+**Headline**: sharpens the reviewer's existing "claimed but missing" stance (v2.12.1) from *eyeball* into *method*. The **goal-scoped vs artifact-scoped** miss — a change that *claims* something ("make X idempotent", "add validation") but delivers it only partially, with the gap in code the diff didn't touch — is now handled by an explicit instruction: decompose the stated claim into the outcomes it implies, treat **the claim's scope (not the diff's scope) as the unit of done**, and confirm each implied outcome against an **external signal** (a test, a measured invariant, or every named code site enumerated) or mark it **`UNVERIFIED`** — reusing the v2.12.1 live-fact convention. This is **recall** (catch partial delivery), complementary to v2.12.1's **precision** (don't confabulate) and the deferred verify-barrier's finding-level refutation.
+
+Deliberately a **prose sharpening of the existing stance, not a new pipeline step / dispatch pass** — consistent with the review-verify-barrier dialectic's ruling (claim/spec-compliance = stance in prose, not a separate gate, `docs/plans/2026-06-04-review-verify-barrier.md` §10) and with the evidence that reflexive ungrounded self-checks backfire (each outcome must ground in an external signal, never "looks done"; Sphinx arXiv:2601.04252 + SGCR arXiv:2512.17540 for intent-decomposition, arXiv:2603.00539 + Huang ICLR 2024 for why grounding-not-introspection).
+
+### Changed
+- `agents/reviewer.md`: Review Philosophy "Don't trust the report" bullet gains a "claimed but missing: decompose, don't just eyeball" sub-point — claim-scope as unit of done, per-outcome external grounding or `UNVERIFIED`, with the "make X idempotent ⇒ every write on the re-entered path, not just the changed one" worked example.
+- `agents/_bodies/reviewer.body.md`: re-synced via `scripts/sync-agent-bodies.sh`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.12.2 — team: cap-3 ≠ independent read-only fan-out; no parallel code-mutation
 
 **Fix** (methodology clarification): `team`'s "cap at 3" governs **coordination cost of collaborative teams** — it was being mis-read as a cap on *independent read-only fan-out* (N agents each producing findings/reports over disjoint inputs, no inter-agent messaging, no shared-file writes — e.g. `audit` Phase 2 per-segment exploration, parallel review dimensions, multi-source research). That kind of fan-out **is not a team and is not capped at 3**; bound it by concurrency (~8) and assert *collected == dispatched* before synthesizing so a dropped unit fails loudly. Also records an explicit **non-goal**: do NOT parallelize code *mutation* via per-unit git worktrees — disjoint-file merges are clean but you can't guarantee disjointness up front, and merge-back conflict-resolution cost outweighs the wall-clock saved.

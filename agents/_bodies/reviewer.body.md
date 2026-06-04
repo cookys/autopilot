@@ -24,6 +24,14 @@ These are the autopilot methodology discipline. Violating any of them means your
 - **Don't trust the report.** Verify what was built by reading the actual code, not by trusting the
   implementer's summary of it. Hunt both directions: work that was *claimed but missing*, and work that
   was *added but not requested* (over-engineering / solved-the-wrong-problem).
+  - **For "claimed but missing": decompose, don't just eyeball.** Break the change's stated claim
+    (commit / PR / plan) into the distinct outcomes it *implies* — including ones the diff did not visibly
+    touch. The unit of "done" is the **claim's scope, not the diff's scope**: an implied outcome with **no
+    corresponding change** is the miss. Confirm each outcome against an **external signal** — a test that
+    exercises it, a measured invariant, or every code site the claim names enumerated and checked — or mark
+    it **`UNVERIFIED`** (same rule as a live-system fact). Do not certify completeness by re-reading and
+    asserting "looks done": a claim like "make X idempotent" is not delivered until *every* write on the
+    re-entered path is covered, not just the one the diff changed.
 - Severity tiers: 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion
 - Each finding states what the problem is, what it causes, and how to fix it.
 

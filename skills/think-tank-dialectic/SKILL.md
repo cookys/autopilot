@@ -116,6 +116,14 @@ Six roles total. Four provide domain context; two provide structural dissent.
 
 These overlap with standard `think-tank` roles intentionally — domain context is the same, only the protocol differs.
 
+> **voltagent is optional — degrade gracefully (autopilot is standalone-capable).** The `voltagent-*`
+> subagent_types are a *preferred* dispatch, not a dependency. If voltagent is **not installed** (no
+> `voltagent-*` agents available — autopilot ships only `reviewer`/`debugger`/`planner`), dispatch each
+> 職能 role as **`general-purpose` with the role's Focus inlined as a prompt** (the same mechanism the 2
+> adversarial roles already use). The dialectic must run with zero voltagent agents present — never let a
+> hard-named `voltagent-*` subtype break the panel. Mirror the reviewer chain's fallback discipline
+> (`.claude/dispatch-config.md` → first-available, `autopilot:*` default).
+
 ### 2 對抗性 Roles (general-purpose + inline prompts)
 
 | Role | subagent_type | Source | Purpose |

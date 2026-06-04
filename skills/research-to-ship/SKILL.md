@@ -24,10 +24,17 @@ re-typing each time.
 The objective/topic is whatever the user passed after the command. If it is empty, ask for it in one
 line before starting. Derive a kebab-case `<slug>` from it for the plan/project filenames.
 
-## The pipeline (5 phases, a human gate between each)
+## The pipeline (Phase 0 optional, then 5 phases, a human gate between each)
 
 Run the phases in order. At each **gate**, use `AskUserQuestion` and do not proceed until the user
 approves — this is what keeps the flow participatory (the opposite of `ceo-agent`'s full autonomy).
+
+### Phase 0 — (optional) discover the design  · delegate → `autopilot:brainstorm`
+**Only when the topic starts fuzzy — the *options don't exist yet***. If the user hands a vague need
+("not sure how to approach X / 還沒想清楚"), run `autopilot:brainstorm` first: Socratic exploration →
+2-3 approaches → a design spec the user approves. Then carry the chosen approach into Phase 1. **Skip
+Phase 0 when the topic is already a clear question** (most invocations) — go straight to Phase 1.
+**Gate** (only if Phase 0 ran): "design approved — research best-practice for it?"
 
 ### Phase 1 — Research best-practice  · delegate → `autopilot:survey`
 Invoke `autopilot:survey` on the topic for external best-practice (dual researcher + skeptic). If the

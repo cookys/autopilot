@@ -34,11 +34,12 @@ Invoke `autopilot:survey` on the topic for external best-practice (dual research
 topic needs deep, multi-source, fact-checked synthesis, use `deep-research` instead.
 **Gate**: present the synthesized findings → "research enough to plan, or dig deeper / redirect?"
 
-### Phase 2 — Write the plan  · inline (no `writing-plans` skill exists yet)
-Write a concrete plan to `docs/plans/<YYYY-MM-DD>-<slug>.md`, grounded in Phase 1: OKR / KRs, phases
-with dev-flow sizes (S/L/H/Fix), explicit scope cut, test plan, risks + inversion ("what guarantees
-this fails?"), and open questions only the user can answer. Use the **real current date** from the
-environment — never invent one.
+### Phase 2 — Write the plan  · follow [`references/plan-template.md`](../../references/plan-template.md)
+Author a concrete plan to `docs/plans/<YYYY-MM-DD>-<slug>.md` using the **plan-authoring template** —
+file-structure map, bite-sized phases with dev-flow sizes (S/L/H/Fix) + acceptance, every step concrete
+(actual command/code/expected output, never "improve X"), scope cut, test plan, risks + inversion, and
+open questions only the user can answer. Run the template's self-review (scope coverage / placeholder
+scan / dependency map) before the gate. Use the **real current date** from the environment — never invent.
 **Gate**: "plan good to send to review, or revise first?"
 
 ### Phase 3 — Dialectic loop review  · delegate → `autopilot:think-tank-dialectic`  (PINNED)

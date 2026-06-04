@@ -7,7 +7,7 @@ description: >
   MANDATORY for L-size (invoked at L-5) and H-size (invoked at step 9); optional for Fix/S.
   Use when: finishing L-size project, closing hotfix, "time to merge", "wrap this up",
   "跑完收尾", "收掉這個專案", "L-5 開始". Not for: mid-phase work, starting new work
-  (→ dev-flow), writing plans (→ writing-plans).
+  (→ dev-flow), authoring a plan doc (→ references/plan-template.md).
 ---
 
 # finish-flow — Closing Sequence Forcing Function

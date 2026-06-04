@@ -24,6 +24,23 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.13.0 — internalize 3 superpowers capabilities (brainstorm skill + plan template + verification)
+
+**Headline**: surveyed all 14 `obra/superpowers` skills (cloned & read) for what's worth internalizing into autopilot (the user runs without superpowers by choice), then a dialectic right-sized the 3 HIGH candidates. Net: **one new skill, one template, one one-line discipline edit** — each capability addressed at its correct size rather than as three new skills.
+
+### Added
+- **`skills/brainstorm/`** (19th skill) — pre-code **Socratic design exploration**: discovers options *when none exist yet*, surfaces 2-3 genuinely different approaches, and **gates implementation until a design is approved**. The discriminator vs neighbours is *whether options exist yet*: `brainstorm` (no options) vs `think-tank` (decide between known options) vs `survey` (external research). Internalizes `superpowers:brainstorming`.
+- **`references/plan-template.md`** — the **plan-authoring** discipline internalized from `superpowers:writing-plans` as a *template* (a plan form never triggers standalone — it's invoked by `research-to-ship` Phase 2 / `dev-flow` L-2): file-structure map, bite-sized phases with dev-flow sizes + acceptance, every-step-concrete, and a self-review checklist (scope coverage / placeholder scan / dependency map).
+
+### Changed
+- `skills/quality-pipeline/references/anti-rationalization.md`: the **Unverified completion** rule now generalizes the reviewer's soft-language ban (should/seems/probably/likely…) from *findings* to **any completion claim** — "no completion claim without fresh verification evidence this turn" (internalizes `superpowers:verification-before-completion`, which autopilot was ~80% already enforcing).
+- `research-to-ship` Phase 2 now follows `references/plan-template.md` (removes its inline plan duplication). Resolved the dangling `→ writing-plans` / `→ brainstorming` "Not for" refs in `dev-flow` / `finish-flow` / `project-lifecycle` (they pointed at non-existent skills) → now point at `plan-template.md` / `brainstorm`.
+- Skill count 18 → 19 (README badge + prose + table).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.12.3` (new skill/template are inert if not invoked).
+
 ## v2.12.3 — reviewer: claim-completeness via decompose + per-outcome grounding
 
 **Headline**: sharpens the reviewer's existing "claimed but missing" stance (v2.12.1) from *eyeball* into *method*. The **goal-scoped vs artifact-scoped** miss — a change that *claims* something ("make X idempotent", "add validation") but delivers it only partially, with the gap in code the diff didn't touch — is now handled by an explicit instruction: decompose the stated claim into the outcomes it implies, treat **the claim's scope (not the diff's scope) as the unit of done**, and confirm each implied outcome against an **external signal** (a test, a measured invariant, or every named code site enumerated) or mark it **`UNVERIFIED`** — reusing the v2.12.1 live-fact convention. This is **recall** (catch partial delivery), complementary to v2.12.1's **precision** (don't confabulate) and the deferred verify-barrier's finding-level refutation.

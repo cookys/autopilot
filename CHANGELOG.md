@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.12.0 — `research-to-ship` skill (pinned research→plan→dialectic→project→dev-flow pipeline)
+
+**Headline**: a new orchestrator skill for a recurring ritual — start from a *topic*, and get best-practice research → a written plan → a **multi-round dialectic review loop** → a tracked project → step-by-step dev-flow execution, with a **human approval gate between every phase**. It's a *thin* skill: it pins the sequence and the gates, and delegates the real work to existing skills (`survey`/`deep-research`, `think-tank-dialectic`, `project-lifecycle`, `dev-flow`, `quality-pipeline`, `finish-flow`). The dialectic loop is **pinned on** (unlike `ceo-agent`, which only escalates to it conditionally). Researched against the Claude Code primitives first: the Workflow tool was rejected (it can't pause mid-run for the human gates), `/loop` is interval-polling (wrong shape), and `/goal` is offered only for Phase-5 execution where a transcript-checkable finish line exists.
+
+### Added
+- `skills/research-to-ship/SKILL.md` — 18th skill. Invoke `autopilot:research-to-ship <topic>`. Participatory (you approve each gate); coexists with `ceo-agent` (full autonomy) and `dev-flow` (starts at "we know what to build"). Multi-agent portable; only the optional Phase-5 `/goal` is Claude-Code-specific and degrades cleanly.
+
+### Changed
+- Skill count 17 → 18 across README (badge + prose + skill table) and CLAUDE.md.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.11.1` (the skill is inert if never invoked).
+
 ## v2.11.1 — fix: `distill-consolidate.sh migrate` must rewrite frontmatter `name:`
 
 **Fix**: v2.11.0's `migrate` only `git mv`'d the skill directory to its normalized slug but left the frontmatter `name:` stale — so two machines would converge on the directory while still diverging on `name:`, which is the skill's actual identity. The engine would never truly converge. `migrate` now rewrites the first `name:` line to the normalized slug (byte-preserving the rest of the file) alongside the dir rename, idempotently fixing a stale `name:` even when the dir is already normalized. JSON output gains a `name_fixed` array. Caught by inspecting a real migration before committing. Test fixture upgraded to real frontmatter; +3 assertions (29 total).

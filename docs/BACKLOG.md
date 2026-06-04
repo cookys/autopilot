@@ -26,6 +26,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### 🔴 Reviewer confabulates live-system facts (`verified` == cites-a-repo-line defect)
+- **Trigger**: next time `agents/reviewer.md` (or quality-pipeline review logic) is touched, OR a reviewer makes a live-world claim (DNS / reachability / version / running-process) in a finding.
+- **Context**: HIGH-severity methodology bug. The reviewer (opus, has Bash) asserted "`fr.cookys.org` does not exist" citing `fr/README.md:22-24` — FALSE; the name resolves to `51.159.23.200` and SSH works. Root cause is the *instructions*, not the model: `reviewer.md:19` ("can't point to a line ⇒ not verified") + `:129` ("only the codebase is the source of truth") + `:185` ("the diff it gave you") together define `verified == cites-a-repo-line`, so a live-world fact got "verified" against a README that never mentions it — **argument from silence stated as fact**. Failure mode: "real direction + fabricated specifics" — a true fuzzy intuition (heterogeneous fleet reachability) propped up by a manufactured, confidently-cited example; it propagated into a downstream roadmap before a human caught it. Ties to the user's verify-reviewer-claims / spike-before-assert preferences.
+- **Proposed direction**: distinguish documented-fact from live-system-fact in reviewer.md; live claims must be execution-verified (Bash) or explicitly marked `UNVERIFIED`; ban argument-from-silence. Caller-side layers (dispatch-fit, orchestrator verification of load-bearing claims) are out-of-scope-for-the-skill. Fixer designs the fix + runs the quality loop.
+- **Effort**: L (methodology change to reviewer.md + eval that a live claim without Bash verification is caught)
+- **Source**: branch `issue/reviewer-livefact-confabulation` commit `8d108f9` (2026-06-02, doc-only, no fix applied) — branch retired into this entry 2026-06-04.
+
 ### `/compact` slash-command silent miss documentation
 - **Trigger**: 任何 user 想用 `/compact` 測 state-checkpoint hook 時 — 必須先讀本條
 - **Context**: 2026-05-14 method-B testing 發現：Claude Code 的 `/compact` slash command 觸發 PreCompact hook 時**不 pipe JSON payload**，而是讓 hook 撞 ENXIO on `/dev/stdin`。Auto-compact (~150K-token threshold) DOES pipe payload — 兩條路徑不對稱。

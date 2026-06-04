@@ -22,13 +22,26 @@ writes a per-project skill; autopilot only ships the generator.
 
 Routing is decided by the originating project (`cwd`) of each signal.
 
-## Step 1 — Scan (deterministic, no LLM)
+## Step 1 — Scan (deterministic, no LLM) — incremental by default
 ```
+# routine run: only sessions new/changed since last distill (remembers a per-session cursor)
+node ${CLAUDE_PLUGIN_ROOT}/scripts/distill-scan.js --real-only --new-only
+# first ever run, or "show me everything again": drop --new-only for the full cumulative report
 node ${CLAUDE_PLUGIN_ROOT}/scripts/distill-scan.js --real-only
 ```
 Emits frequency **atoms** in two buckets: **ritual candidates** (de-noised procedural command
 n-grams) and **correction candidates** (recurring user-friction contexts). Evidence (counts, source
 project) is deterministic — never invented. `--json` for machine output; `--top N` to widen.
+
+**Cursor (`--new-only` / `--incremental`).** Each session jsonl is scanned **whole exactly once**;
+its per-session atom contribution is cached in `~/.autopilot/distill/scan-state.json` keyed by
+`{size, mtime}`. Unchanged (completed) sessions are reused — only new/grown ones are re-read.
+**Cumulative totals stay identical to a full scan** (the ≥N× value gate is unaffected); the cursor
+only changes *which* sessions are re-read and, with `--new-only`, filters the report to candidates
+whose cumulative count **rose this run** — i.e. "what's newly worth distilling since last time". This
+is what makes `/distill` cheap to re-run: it picks up where it left off instead of re-proposing what
+you already triaged. (Deliberately NOT a raw byte-offset — that would split a session's command
+sequence across runs and risk a half-written trailing line. See the script header.)
 
 ## Step 2 — Propose (≤7 per bucket, from atoms only)
 Name each genuinely recurring procedure; **abstract to generic steps**. **Refuse to propose a procedure
@@ -36,12 +49,24 @@ that cannot be expressed without a specific literal** (inherently-specific) — 
 where the user's own identifiers (their git email, their host alias) may stay. Classify each candidate's
 scope (global vs which project) from its `cwd`.
 
-## Step 3 — Review (human gate — the privacy backbone)
-Present each candidate as a draft `SKILL.md`. Run the identifier lint + the user's deny-list
-(`~/.autopilot/distill/identifiers.deny`, one real hostname/client name per line). The lint reliably
-catches structured tokens (email / IPv4 / `/home/<user>/` / FQDN / key-shapes); bare hostnames and
-client names are the **gate's** job — surface proper-noun-shaped tokens for the user. Nothing is
-written without per-candidate approval.
+## Step 3 — Review (human gate — the privacy backbone) — batch multi-select
+The gate stays, but the *friction* is collapsed: present the whole candidate list **once** and let the
+user pick which to accept in a single `AskUserQuestion` (`multiSelect: true`) instead of one
+yes/no per candidate. Approval is still **explicit and per-candidate** — nothing is written that the
+user did not tick.
+
+**The lint runs first, per candidate, and gates the batch.** Run the identifier lint + the user's
+deny-list (`~/.autopilot/distill/identifiers.deny`, one real hostname/client name per line) on every
+draft `SKILL.md`. The lint reliably catches structured tokens (email / IPv4 / `/home/<user>/` / FQDN /
+key-shapes); bare hostnames and client names are the **gate's** job.
+- **Clean candidates** → offered together in the multi-select. Ticking = approval.
+- **Lint-flagged candidates** → do NOT put them in the batch silently. Surface each flagged token to
+  the user individually first; only after they clear/parameterize it does that candidate join the
+  selectable set. A flagged identifier must never ride into the pack on a batch tick.
+
+This keeps the privacy backbone (no auto-write of anything the lint touched) while giving the
+"distill, then accept a batch" UX. For **self-use scope**, the user's own identifiers (their git
+email, their host alias) may stay — that exemption is theirs to grant per candidate, not a default.
 
 ## Step 4 — Write + **commit-on-approve** (atomic durability)
 On approval, write a well-formed `SKILL.md` (`name` + `description` so `scripts/validate.sh` passes;
@@ -61,11 +86,27 @@ in `~/.ssh/config` / local config, not in the synced skill body.
   into the user's project repo. Durability there is the user's via their project git. Refuse on
   same-name collision.
 
-## Step 5 — Sync (manual git, transport-agnostic)
-The approved skill is **already committed** (Step 4). Sync = propagate that commit:
-`git -C ~/.claude/skills/autopilot-distill-skills pull --rebase` (guard first-run: set upstream first)
-→ `push`. Other machines `pull`. Project skills ride the project's own git. Syncthing on the pack
-folder is the no-git alternative. Full setup: [references/sync-setup.md](references/sync-setup.md).
+## Step 5 — Sync (manual git, transport-agnostic) — one push-back prompt
+The approved skill is **already committed locally** (Step 4). Sync = propagate that commit. After a
+batch of approvals, ask the user **once** (not per skill) "push these N distilled skills back to the
+shared private pack?" — a single yes/no. On yes:
+```
+git -C ~/.claude/skills/autopilot-distill-skills pull --rebase   # absorb other machines first
+git -C ~/.claude/skills/autopilot-distill-skills push            # share yours back
+```
+The **pull-before-push** is mandatory — it folds in other machines' distilled skills before you share
+yours. If the pull hits a same-name `SKILL.md` **conflict**, STOP and hand it to the user to resolve
+(the deferred multi-machine `consolidate` case — never auto-merge another machine's skill). Other
+machines pick yours up on their next `pull`. Project skills ride the project's own git. Syncthing on
+the pack folder is the no-git alternative. Guard first-run: set upstream first. Full setup:
+[references/sync-setup.md](references/sync-setup.md).
+
+### The full automated loop (what `/distill` does on a routine re-run)
+1. `distill-scan.js --real-only --new-only` → only candidates new since the last cursor.
+2. Propose (Step 2) → lint each (Step 3) → **one batch multi-select** of the clean ones.
+3. Selected → write + `git commit` into the pack (Step 4, commit-on-approve).
+4. **One** "push back to the shared pack?" yes/no → `pull --rebase` then `push` (this step).
+The cursor advances automatically, so the next `/distill` resumes from new conversations only.
 
 ### First-run setup — guided (run BEFORE relying on distilled skills)
 Don't make the user hand-copy git plumbing (the `.gitignore` negation is easy to get wrong — the
@@ -100,5 +141,5 @@ cross-machine conflict actually occurs — the trigger is the first `git pull` c
 ## Available scripts
 | Script | Purpose |
 |--------|---------|
-| [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic full-history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. No LLM in the count path. |
+| [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. **Cursor:** `--incremental` reuses cached per-session atoms (only re-reads new/changed jsonl; totals identical to full scan); `--new-only` reports only candidates risen since last run. State in `~/.autopilot/distill/scan-state.json`. No LLM in the count path. |
 | [`scripts/distill-sync-setup.sh`](../../scripts/distill-sync-setup.sh) | Onboarding plumbing for pack sync: `status` / `init-remote <url>` / `enroll <url>` / `fix-gitignore [repo]`. Idempotent; emits the **correct** `.claude/*` + `!.claude/skills/` negation (the obvious `.claude/` form is silently broken). Drives Step 5 first-run setup. |

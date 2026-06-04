@@ -102,18 +102,33 @@ cmd_migrate() {
       "$(printf '"%s",' "${collisions[@]}" | sed 's/,$//')" >&2
     return 1
   fi
-  # pass 2: act
+  # pass 2: act. Convergence needs BOTH the dir AND the frontmatter `name:` to equal the normalized
+  # slug — the skill's identity is its `name:`, so renaming only the dir leaves two machines divergent
+  # on `name:` and the engine never truly converges. Idempotent: fixes a stale `name:` even when the
+  # dir is already normalized.
+  local namefixed=() f curname
   for slug in "${!target_of[@]}"; do
     norm="${target_of[$slug]}"
-    [ "$slug" != "$norm" ] || continue
-    git -C "$pack" mv "skills/$slug" "skills/$norm"
-    moved+=("$slug=>$norm")
+    if [ "$slug" != "$norm" ]; then
+      git -C "$pack" mv "skills/$slug" "skills/$norm"
+      moved+=("$slug=>$norm")
+    fi
+    f="$pack/skills/$norm/SKILL.md"
+    [ -f "$f" ] || continue
+    curname="$(sed -n 's/^name:[[:space:]]*//p' "$f" | head -1)"
+    if [ -n "$curname" ] && [ "$curname" != "$norm" ]; then
+      # rewrite only the first top-level `name:` line; preserve everything else byte-for-byte
+      sed -i "0,/^name:[[:space:]]*.*/s//name: $norm/" "$f"
+      git -C "$pack" add "skills/$norm/SKILL.md"
+      namefixed+=("$curname=>$norm")
+    fi
   done
-  if [ "${#moved[@]}" -gt 0 ]; then
-    printf '{"migrated":[%s],"collisions":[],"note":"git mv staged — review and commit"}\n' \
-      "$(printf '"%s",' "${moved[@]}" | sed 's/,$//')"
+  if [ "${#moved[@]}" -gt 0 ] || [ "${#namefixed[@]}" -gt 0 ]; then
+    printf '{"migrated":[%s],"name_fixed":[%s],"collisions":[],"note":"git mv + name: rewrite staged — review and commit"}\n' \
+      "$(printf '"%s",' "${moved[@]:-}" | sed 's/,$//; s/""//')" \
+      "$(printf '"%s",' "${namefixed[@]:-}" | sed 's/,$//; s/""//')"
   else
-    printf '{"migrated":[],"collisions":[],"note":"all slugs already normalized"}\n'
+    printf '{"migrated":[],"name_fixed":[],"collisions":[],"note":"all slugs + names already normalized"}\n'
   fi
 }
 

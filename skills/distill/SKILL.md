@@ -151,7 +151,8 @@ The cursor advances automatically, so the next `/distill` resumes from new conve
 
 ### One-time migration (existing packs)
 A pack created before slug-normalization may hold non-normalized dirs (`fix-git-identity` etc.). Run once
-per pack to rename them to their canonical slug so future cross-machine compares line up:
+per pack to rename them (dir **and** frontmatter `name:`) to their canonical slug so future cross-machine
+compares line up:
 ```
 ${CLAUDE_PLUGIN_ROOT}/scripts/distill-consolidate.sh migrate    # git mv staged — review + commit
 ```
@@ -196,4 +197,4 @@ design and the two dialectic rounds behind it.
 |--------|---------|
 | [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. **Cursor:** `--incremental` reuses cached per-session atoms (only re-reads new/changed jsonl; totals identical to full scan); `--new-only` reports only candidates risen since last run. State in `~/.autopilot/distill/scan-state.json`. No LLM in the count path. |
 | [`scripts/distill-sync-setup.sh`](../../scripts/distill-sync-setup.sh) | Onboarding plumbing for pack sync: `status` / `init-remote <url>` / `enroll <url>` / `fix-gitignore [repo]`. Idempotent; emits the **correct** `.claude/*` + `!.claude/skills/` negation (the obvious `.claude/` form is silently broken). Drives Step 5 first-run setup. |
-| [`scripts/distill-consolidate.sh`](../../scripts/distill-consolidate.sh) | Cross-machine consolidation plumbing (deterministic, no LLM): `normalize-slug <raw>` (machine-stable slug — lowercase + drop tiny stopword set + preserve order), `migrate [pack]` (one-time rename of existing dirs to normalized slugs; STOPs on collision), `compare <slug> [pack]` (**proactive** divergence check against `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; no merge-conflict state). The human-gated LLM merge lives in Step 5, not the script. |
+| [`scripts/distill-consolidate.sh`](../../scripts/distill-consolidate.sh) | Cross-machine consolidation plumbing (deterministic, no LLM): `normalize-slug <raw>` (machine-stable slug — lowercase + drop tiny stopword set + preserve order), `migrate [pack]` (one-time: rename existing dirs to normalized slugs **and rewrite each frontmatter `name:`** — a skill's identity is its `name:`, so both must converge; STOPs on collision), `compare <slug> [pack]` (**proactive** divergence check against `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; no merge-conflict state). The human-gated LLM merge lives in Step 5, not the script. |

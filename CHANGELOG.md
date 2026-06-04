@@ -24,6 +24,13 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.11.1 — fix: `distill-consolidate.sh migrate` must rewrite frontmatter `name:`
+
+**Fix**: v2.11.0's `migrate` only `git mv`'d the skill directory to its normalized slug but left the frontmatter `name:` stale — so two machines would converge on the directory while still diverging on `name:`, which is the skill's actual identity. The engine would never truly converge. `migrate` now rewrites the first `name:` line to the normalized slug (byte-preserving the rest of the file) alongside the dir rename, idempotently fixing a stale `name:` even when the dir is already normalized. JSON output gains a `name_fixed` array. Caught by inspecting a real migration before committing. Test fixture upgraded to real frontmatter; +3 assertions (29 total).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.11.0 — distill cross-machine consolidate (slug-normalize + proactive merge)
 
 **Headline**: when two fleet machines distil the **same** recurring procedure, `/distill` now converges them automatically instead of stopping on a raw git conflict. A deterministic **slug normalizer** (Step 4) makes independent namings of one procedure land on a single path (`fix-git-identity`, `git-identity-fix`, `ensure-git-identity` → `git-identity`), and Step 5 does a **proactive** divergence check (`compare` against the pack's `@{u}` *before* committing the push) so the human-gated LLM merge happens in the clean working tree — **never inside a held rebase/merge transaction**. Shipped after two dialectic review rounds that cut a held-rebase design (it inverted git's `:2:`/`:3:` stages and could wedge the pack) and a per-host-staging design (it regressed Claude Code skill loading and used a self-defeating content-hash key); see [`docs/plans/2026-06-04-distill-consolidate.md`](docs/plans/2026-06-04-distill-consolidate.md).

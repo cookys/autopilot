@@ -70,8 +70,20 @@ email, their host alias) may stay — that exemption is theirs to grant per cand
 
 ## Step 4 — Write + **commit-on-approve** (atomic durability)
 On approval, write a well-formed `SKILL.md` (`name` + `description` so `scripts/validate.sh` passes;
-body = the generic procedure). **Plain slug**, no staging. Parameterize identifiers; keep real values
-in `~/.ssh/config` / local config, not in the synced skill body.
+body = the generic procedure). Parameterize identifiers; keep real values in `~/.ssh/config` / local
+config, not in the synced skill body.
+
+**Normalize the slug (pack scope) — the cross-machine convergence key.** Before writing, run the slug
+through the deterministic normalizer so two machines that name the *same* procedure land on the *same*
+path (the precondition for `consolidate` in Step 5 to ever fire):
+```
+slug=$(${CLAUDE_PLUGIN_ROOT}/scripts/distill-consolidate.sh normalize-slug "<llm-chosen-slug>")
+```
+It lowercases, drops a tiny stopword set (`fix`/`ensure`/`setup`/…), and **preserves token order** (no
+sort — readability kept), so `fix-git-identity`, `git-identity-fix`, `ensure-git-identity` all converge
+to `git-identity`, while antonym pairs (`add-user` vs `remove-user`) stay distinct. Use the normalized
+`slug` for the pack write path; set the frontmatter `name:` to match. (Project-scoped skills keep the
+LLM's literal slug — a project has one repo, no fleet of writers to converge.)
 - **Global (pack) → write AND commit in the same step** (do NOT leave an approved skill as a loose
   uncommitted file — a concurrent session's destructive git op or a crash would lose it):
   ```
@@ -86,27 +98,65 @@ in `~/.ssh/config` / local config, not in the synced skill body.
   into the user's project repo. Durability there is the user's via their project git. Refuse on
   same-name collision.
 
-## Step 5 — Sync (manual git, transport-agnostic) — one push-back prompt
+## Step 5 — Sync + **proactive consolidate** (one push-back prompt)
 The approved skill is **already committed locally** (Step 4). Sync = propagate that commit. After a
 batch of approvals, ask the user **once** (not per skill) "push these N distilled skills back to the
-shared private pack?" — a single yes/no. On yes:
+shared private pack?" — a single yes/no.
+
+**Before pushing, check each pushed slug for cross-machine divergence — proactively, NOT by triggering a
+merge conflict.** For every `<slug>` in the batch:
 ```
-git -C ~/.claude/skills/autopilot-distill-skills pull --rebase   # absorb other machines first
-git -C ~/.claude/skills/autopilot-distill-skills push            # share yours back
+${CLAUDE_PLUGIN_ROOT}/scripts/distill-consolidate.sh compare <slug>   # JSON: identical|divergent|absent-theirs|absent-mine
 ```
-The **pull-before-push** is mandatory — it folds in other machines' distilled skills before you share
-yours. If the pull hits a same-name `SKILL.md` **conflict**, STOP and hand it to the user to resolve
-(the deferred multi-machine `consolidate` case — never auto-merge another machine's skill). Other
-machines pick yours up on their next `pull`. Project skills ride the project's own git. Syncthing on
-the pack folder is the no-git alternative. Guard first-run: set upstream first. Full setup:
-[references/sync-setup.md](references/sync-setup.md).
+- **`identical` / `absent-theirs`** (no upstream divergence) → nothing to do; this slug just pushes.
+- **`divergent`** (another machine already pushed a different `SKILL.md` for the same normalized slug) →
+  **consolidate it now, in the clean working tree** (no rebase/merge state is ever entered — this is the
+  whole point of comparing *before* committing the push):
+  1. Read both variants: `mine` = the working-tree `skills/<slug>/SKILL.md`; `theirs` =
+     `git -C <pack> show @{u}:skills/<slug>/SKILL.md`.
+  2. **LLM-merge** them into one canonical: union of distinct procedural steps, dedup phrasings, keep the
+     clearer wording, preserve `name:`/`description:`. **If the two variants are not recognizably the
+     same procedure, STOP** and hand to the user — do not merge unrelated content (the normalizer can,
+     rarely, over-collapse two distinct procedures; this is the backstop).
+  3. **Lint the merged draft** (identifier lint + deny-list, Step 3) — a merge can surface an identifier
+     neither half flagged alone. Then **human-gate** it (`AskUserQuestion`: approve / edit / reject).
+  4. On approve → overwrite the working-tree `skills/<slug>/SKILL.md` with the canonical, `git add`,
+     `git commit -m "consolidate: <slug>"`. On reject → leave yours; STOP/handoff that slug.
+
+Then push (normal, no merge commit — the canonical already contains theirs, so the rebase applies clean):
+```
+git -C ~/.claude/skills/autopilot-distill-skills pull --rebase   # absorb other machines
+git -C ~/.claude/skills/autopilot-distill-skills push            # share the consolidated canonical
+```
+Other machines pick the canonical up on their next sync (both variants are now ancestors → no
+re-conflict). Convergence is **DAG-level**; if a 3rd machine later adds yet another variant, the
+canonical is re-merged then (content converges as variants stop arriving, not via a fixpoint guarantee).
+Concurrent same-slug consolidate self-heals via git's push-reject (second push rejected → pull → re-merge).
+**Rollback** (a bad canonical that already pushed): `git -C <pack> revert <sha> && git push`; other
+machines absorb the revert next sync — but if a peer already re-consolidated on top, the revert is itself
+a same-slug conflict → manual STOP. See [references/sync-setup.md](references/sync-setup.md). Project
+skills ride the project's own git; guard first-run by setting upstream first.
 
 ### The full automated loop (what `/distill` does on a routine re-run)
 1. `distill-scan.js --real-only --new-only` → only candidates new since the last cursor.
 2. Propose (Step 2) → lint each (Step 3) → **one batch multi-select** of the clean ones.
-3. Selected → write + `git commit` into the pack (Step 4, commit-on-approve).
-4. **One** "push back to the shared pack?" yes/no → `pull --rebase` then `push` (this step).
+3. Selected → normalize slug + write + `git commit` into the pack (Step 4, commit-on-approve).
+4. **One** "push back to the shared pack?" yes/no → `compare` each slug → consolidate any `divergent` one
+   (human-gated) → `pull --rebase` then `push` (this step).
 The cursor advances automatically, so the next `/distill` resumes from new conversations only.
+
+> **Correctness note**: the deterministic scripts (`normalize-slug` / `migrate` / `compare`) are tested
+> for git-plumbing correctness; the **LLM merge quality is human-gated, not test-gated** — the human gate
+> (step 3 above) is the real backstop for whether a consolidation is correct.
+
+### One-time migration (existing packs)
+A pack created before slug-normalization may hold non-normalized dirs (`fix-git-identity` etc.). Run once
+per pack to rename them to their canonical slug so future cross-machine compares line up:
+```
+${CLAUDE_PLUGIN_ROOT}/scripts/distill-consolidate.sh migrate    # git mv staged — review + commit
+```
+If two existing dirs normalize to the *same* slug it STOPs (a real consolidation case — resolve by hand,
+don't let `migrate` merge them). Tell the user to commit the rename + push so the fleet converges.
 
 ### First-run setup — guided (run BEFORE relying on distilled skills)
 Don't make the user hand-copy git plumbing (the `.gitignore` negation is easy to get wrong — the
@@ -130,16 +180,20 @@ the questions and just sync.
 
 > **Durability — the pack MUST have a remote.** A single on-disk copy is one `rm -rf` from total loss.
 > The remote is **backup, not just sync** — set it up before relying on distilled skills (see
-> sync-setup.md). Concurrency is loss-safe given commit-on-approve: the worst case is a same-skill
-> merge conflict to resolve by hand (the deferred `consolidate` case), never lost data.
+> sync-setup.md). Concurrency is loss-safe given commit-on-approve.
 
-## Deferred (do NOT build until it's needed)
-Multi-machine **consolidate** (per-host staging + LLM-merge of variants) is deferred until a real
-cross-machine conflict actually occurs — the trigger is the first `git pull` conflict on a pack
-`SKILL.md`. Until then a single hand-resolved merge is the entire cost. See plan §0.3.1 (DEFERRED).
+## Multi-machine consolidate (shipped — Step 5 `compare`)
+Two machines distilling the same procedure now converge automatically: the slug normalizer (Step 4)
+makes them collide on one path, and Step 5's **proactive `compare`** detects a `divergent` upstream
+variant *before* committing the push, so the human-gated LLM merge runs in the clean working tree —
+**never inside a held rebase/merge transaction**. The earlier per-host-staging design was rejected (it
+regressed Claude Code skill loading and used a self-defeating content-hash key); see
+[plan 2026-06-04-distill-consolidate](../../docs/plans/2026-06-04-distill-consolidate.md) §v3 for the
+design and the two dialectic rounds behind it.
 
 ## Available scripts
 | Script | Purpose |
 |--------|---------|
 | [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. **Cursor:** `--incremental` reuses cached per-session atoms (only re-reads new/changed jsonl; totals identical to full scan); `--new-only` reports only candidates risen since last run. State in `~/.autopilot/distill/scan-state.json`. No LLM in the count path. |
 | [`scripts/distill-sync-setup.sh`](../../scripts/distill-sync-setup.sh) | Onboarding plumbing for pack sync: `status` / `init-remote <url>` / `enroll <url>` / `fix-gitignore [repo]`. Idempotent; emits the **correct** `.claude/*` + `!.claude/skills/` negation (the obvious `.claude/` form is silently broken). Drives Step 5 first-run setup. |
+| [`scripts/distill-consolidate.sh`](../../scripts/distill-consolidate.sh) | Cross-machine consolidation plumbing (deterministic, no LLM): `normalize-slug <raw>` (machine-stable slug — lowercase + drop tiny stopword set + preserve order), `migrate [pack]` (one-time rename of existing dirs to normalized slugs; STOPs on collision), `compare <slug> [pack]` (**proactive** divergence check against `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; no merge-conflict state). The human-gated LLM merge lives in Step 5, not the script. |

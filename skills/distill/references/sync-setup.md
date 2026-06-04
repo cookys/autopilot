@@ -30,8 +30,10 @@ Cloning the pack only lets a machine **consume** the existing skills. To also **
 5. `git push` the pack → other machines `git pull` and gain the new skills.
 
 Each machine distills its **own** history; the pack accumulates every machine's approved skills (union
-by skill directory). If two machines ever distil the *same* procedure, that one file conflicts on
-`git pull` — resolve it by hand once (the automatic `consolidate` merge is deferred, plan §0.3.1).
+by skill directory). If two machines distil the *same* procedure, the slug normalizer makes them land on
+one path and `/distill` **consolidates them automatically** before pushing — `distill-consolidate.sh
+compare <slug>` detects the divergent upstream variant in the clean working tree, then a human-gated LLM
+merge writes the canonical (no merge-conflict state is ever entered). See SKILL.md Step 5.
 
 ## Option A — private git repo (recommended for an async fleet)
 A remote is always-on store-and-forward, so machines that are on at different times still converge.
@@ -59,8 +61,29 @@ git pull --rebase      # has-upstream guaranteed by the -u push above
 ```
 Auth: use an SSH deploy key or a PAT in your credential store per host (no `gh` required). Per-skill
 subdirectories mean a new skill from machine A and one from machine B never touch the same file — a
-plain pull/push merges cleanly. (A genuine conflict only arises if two machines edit the *same* skill;
-resolve that one merge by hand — see plan §0.3.1 DEFERRED for the eventual consolidate mechanism.)
+plain pull/push merges cleanly. When two machines distil the *same* procedure (same normalized slug),
+`/distill` consolidates them automatically at push time (SKILL.md Step 5, `distill-consolidate.sh`).
+
+**One-time migration (packs created before slug-normalization):**
+```bash
+cd ~/.claude/skills/autopilot-distill-skills
+${CLAUDE_PLUGIN_ROOT:-<plugin>}/scripts/distill-consolidate.sh migrate   # git mv staged
+git commit -am "distill: normalize skill slugs" && git push
+```
+Renames existing dirs (`fix-git-identity` → `git-identity`) to the canonical slug so future cross-machine
+compares line up. If two existing dirs normalize to the same slug it STOPs (a real consolidation case —
+resolve by hand; don't let `migrate` merge them).
+
+## Fleet rollback — a bad consolidation that already pushed
+The consolidate write is a **normal commit** (not a merge commit), so a plain revert works:
+```bash
+cd ~/.claude/skills/autopilot-distill-skills
+git revert <bad-sha> && git push    # other machines absorb the revert on their next pull
+```
+The propagation channel that spread the bad canonical also spreads the fix. **Caveat — descendant
+case**: if another machine *already pulled the bad canonical and re-consolidated on top of it*, the
+revert lands as a fresh same-slug conflict on that machine → it STOPs for manual resolution (the engine
+never auto-merges a revert). Revert promptly to stay ahead of peers.
 
 ## Option B — Syncthing (no git, P2P, no cloud)
 Share the `~/.claude/skills/autopilot-distill-skills/` folder between machines. Caveat: both ends must

@@ -70,8 +70,8 @@ cd ~/.claude/skills/autopilot-distill-skills
 ${CLAUDE_PLUGIN_ROOT:-<plugin>}/scripts/distill-consolidate.sh migrate   # git mv staged
 git commit -am "distill: normalize skill slugs" && git push
 ```
-Renames existing dirs (`fix-git-identity` → `git-identity`) to the canonical slug so future cross-machine
-compares line up. If two existing dirs normalize to the same slug it STOPs (a real consolidation case —
+Renames existing dirs (`fix-git-identity` → `git-identity`) **and rewrites each frontmatter `name:`** to
+the canonical slug so future cross-machine compares line up (a skill's identity is its `name:`). If two existing dirs normalize to the same slug it STOPs (a real consolidation case —
 resolve by hand; don't let `migrate` merge them).
 
 ## Fleet rollback — a bad consolidation that already pushed

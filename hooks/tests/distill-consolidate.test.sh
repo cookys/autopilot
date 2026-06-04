@@ -36,15 +36,21 @@ bash "$S" normalize-slug >/dev/null 2>&1; assert_exit_code "$?" 2 "normalize-slu
 # ── 2. migrate ───────────────────────────────────────────────────────────────
 pack="$(mkrepo packm)"
 mkdir -p "$pack/skills/fix-git-identity" "$pack/skills/remote-dev-handoff"
-echo a > "$pack/skills/fix-git-identity/SKILL.md"; echo b > "$pack/skills/remote-dev-handoff/SKILL.md"
+# real frontmatter so the name: rewrite can be asserted
+printf 'name: fix-git-identity\ndescription: x\n\nbody\n' > "$pack/skills/fix-git-identity/SKILL.md"
+printf 'name: remote-dev-handoff\ndescription: y\n\nbody\n' > "$pack/skills/remote-dev-handoff/SKILL.md"
 git -C "$pack" add -A; git -C "$pack" commit -qm init
 out="$(bash "$S" migrate "$pack")"
 assert_contains "$out" '"fix-git-identity=>git-identity"' "migrate renames fix-git-identity"
 assert_eq "$([ -d "$pack/skills/git-identity" ] && echo yes)" "yes" "git-identity dir exists after migrate"
 assert_eq "$([ -d "$pack/skills/remote-dev-handoff" ] && echo yes)" "yes" "already-normal dir untouched"
+# frontmatter name: must be rewritten to match the normalized slug (identity convergence, not just dir)
+assert_eq "$(sed -n 's/^name:[[:space:]]*//p' "$pack/skills/git-identity/SKILL.md" | head -1)" "git-identity" "frontmatter name: rewritten to normalized slug"
+assert_contains "$out" '"fix-git-identity=>git-identity"' "name_fixed reported"
+assert_eq "$(grep -c '^description: x' "$pack/skills/git-identity/SKILL.md")" "1" "rest of SKILL.md preserved"
 git -C "$pack" commit -qm mv
 out="$(bash "$S" migrate "$pack")"
-assert_contains "$out" "already normalized" "migrate is idempotent"
+assert_contains "$out" "already normalized" "migrate is idempotent (dir + name)"
 # collision: two existing dirs → same normalized slug → STOP, exit 1, nothing moved
 coll="$(mkrepo packc)"
 mkdir -p "$coll/skills/fix-git-identity" "$coll/skills/git-identity-fix"

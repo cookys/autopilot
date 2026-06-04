@@ -34,6 +34,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-06-04 | internalize 3 superpowers caps → `brainstorm` skill (pre-code Socratic design gate) + `references/plan-template.md` + verification-before-completion 1-liner; dialectic descoped 3 proposed skills to 1 skill+1 template+1 edit ([plan](../plans/2026-06-04-internalize-superpowers-trio.md)) | v2.13.0 | _pending merge_ |
 | 2026-06-04 | team cap-3 clarification (collaborative coordination ≠ independent read-only fan-out, uncapped ~8) + non-goal: no parallel code-mutation via worktree (merge-back conflict cost) ([plan](../plans/2026-06-04-parallel-read-fanout.md)) | v2.12.2 | [`b67340a`](../../../../commit/b67340a) |
 | 2026-06-04 | reviewer live-fact rule (documented vs live-system fact; Bash-verify-or-UNVERIFIED; ban argument-from-silence) + calibration + consumer verify-pushback; retires `reviewer-livefact-confabulation` 🔴; absorbed superpowers' cheap wins ([plan](../plans/2026-06-04-review-verify-barrier.md)) | v2.12.1 | [`b5bb995`](../../../../commit/b5bb995) |
 | 2026-06-04 | `research-to-ship` skill (pinned research→plan→dialectic-loop→project→dev-flow pipeline; thin orchestrator delegating to existing skills; Workflow rejected — can't pause for human gates) | v2.12.0 | [`947a04d`](../../../../commit/947a04d) |

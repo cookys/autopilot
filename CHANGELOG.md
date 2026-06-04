@@ -24,6 +24,23 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.13.0 — internalize 3 superpowers capabilities (brainstorm skill + plan template + verification)
+
+**Headline**: surveyed all 14 `obra/superpowers` skills (cloned & read) for what's worth internalizing into autopilot (the user runs without superpowers by choice), then a dialectic right-sized the 3 HIGH candidates. Net: **one new skill, one template, one one-line discipline edit** — each capability addressed at its correct size rather than as three new skills.
+
+### Added
+- **`skills/brainstorm/`** (19th skill) — pre-code **Socratic design exploration**: discovers options *when none exist yet*, surfaces 2-3 genuinely different approaches, and **gates implementation until a design is approved**. The discriminator vs neighbours is *whether options exist yet*: `brainstorm` (no options) vs `think-tank` (decide between known options) vs `survey` (external research). Internalizes `superpowers:brainstorming`.
+- **`references/plan-template.md`** — the **plan-authoring** discipline internalized from `superpowers:writing-plans` as a *template* (a plan form never triggers standalone — it's invoked by `research-to-ship` Phase 2 / `dev-flow` L-2): file-structure map, bite-sized phases with dev-flow sizes + acceptance, every-step-concrete, and a self-review checklist (scope coverage / placeholder scan / dependency map).
+
+### Changed
+- `skills/quality-pipeline/references/anti-rationalization.md`: the **Unverified completion** rule now generalizes the reviewer's soft-language ban (should/seems/probably/likely…) from *findings* to **any completion claim** — "no completion claim without fresh verification evidence this turn" (internalizes `superpowers:verification-before-completion`, which autopilot was ~80% already enforcing).
+- `research-to-ship` Phase 2 now follows `references/plan-template.md` (removes its inline plan duplication). Resolved the dangling `→ writing-plans` / `→ brainstorming` "Not for" refs in `dev-flow` / `finish-flow` / `project-lifecycle` (they pointed at non-existent skills) → now point at `plan-template.md` / `brainstorm`.
+- Skill count 18 → 19 (README badge + prose + table).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.12.2` (new skill/template are inert if not invoked).
+
 ## v2.12.2 — team: cap-3 ≠ independent read-only fan-out; no parallel code-mutation
 
 **Fix** (methodology clarification): `team`'s "cap at 3" governs **coordination cost of collaborative teams** — it was being mis-read as a cap on *independent read-only fan-out* (N agents each producing findings/reports over disjoint inputs, no inter-agent messaging, no shared-file writes — e.g. `audit` Phase 2 per-segment exploration, parallel review dimensions, multi-source research). That kind of fan-out **is not a team and is not capped at 3**; bound it by concurrency (~8) and assert *collected == dispatched* before synthesizing so a dropped unit fails loudly. Also records an explicit **non-goal**: do NOT parallelize code *mutation* via per-unit git worktrees — disjoint-file merges are clean but you can't guarantee disjointness up front, and merge-back conflict-resolution cost outweighs the wall-clock saved.

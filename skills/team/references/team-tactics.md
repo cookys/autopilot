@@ -31,6 +31,14 @@ List each candidate phase's expected file changes, then assess overlap:
 | None | Different directories/files | Parallel dispatch |
 | Minor shared | Only headers/config (non-conflicting changes) | Parallel, but specify merge order |
 | Core file overlap | Multiple phases modify same .cpp/.ts | Sequential execution, no parallel |
+| Output-only (no file writes) | Agents produce findings/reports, never edit shared files | Overlap N/A → fan out to N (≤~8); see Team Size Rules |
+
+> **Non-goal — do NOT parallelize code *mutation* via per-unit git worktrees.** It's tempting (worktree
+> setup is ~free), but the merge-back conflict-resolution cost outweighs the wall-clock saved: you can't
+> reliably guarantee the parallel edits stay file-disjoint up front, so overlaps happen and each costs a
+> manual conflict resolution. Parallelize **read/analysis** work (output-only, no merge-back); keep
+> **code edits** on the sequential / file-overlap-gated path above. (Empirically: disjoint-file worktree
+> merges are clean, but overlap conflicts per shared-file pair — and disjointness isn't predictable.)
 
 ### Common Overlap Traps
 

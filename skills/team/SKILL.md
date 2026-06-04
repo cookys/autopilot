@@ -54,6 +54,14 @@ L-size task
 - **Cap at 3**: Coordination cost exceeds parallelism benefit beyond 3.
 - **Leader = self**: Main agent coordinates. Do not spawn a separate leader.
 
+> **cap-3 governs COORDINATION, i.e. collaborative teams (agents that message / share state) — NOT
+> independent read-only fan-out.** Spawning N agents that each produce findings/reports over disjoint
+> inputs and never write back to shared files (e.g. `audit` Phase 2 per-segment exploration, parallel
+> review dimensions, multi-source research) is **not a team and is not capped at 3** — there's no
+> inter-agent coordination to pay for. Bound such fan-out by the practical concurrency sweet spot (~8)
+> and assert *collected == dispatched* before synthesizing, so a dropped unit fails loudly instead of
+> silently thinning the result.
+
 ## Dependency Analysis
 
 Details on dependency graph construction, file overlap checks, and common parallelization patterns: [references/team-tactics.md](references/team-tactics.md)

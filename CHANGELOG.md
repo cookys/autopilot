@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.12.2 — team: cap-3 ≠ independent read-only fan-out; no parallel code-mutation
+
+**Fix** (methodology clarification): `team`'s "cap at 3" governs **coordination cost of collaborative teams** — it was being mis-read as a cap on *independent read-only fan-out* (N agents each producing findings/reports over disjoint inputs, no inter-agent messaging, no shared-file writes — e.g. `audit` Phase 2 per-segment exploration, parallel review dimensions, multi-source research). That kind of fan-out **is not a team and is not capped at 3**; bound it by concurrency (~8) and assert *collected == dispatched* before synthesizing so a dropped unit fails loudly. Also records an explicit **non-goal**: do NOT parallelize code *mutation* via per-unit git worktrees — disjoint-file merges are clean but you can't guarantee disjointness up front, and merge-back conflict-resolution cost outweighs the wall-clock saved.
+
+### Changed
+- `skills/team/SKILL.md`: Team Size Rules note distinguishing collaborative cap-3 from uncapped independent read-only fan-out.
+- `skills/team/references/team-tactics.md`: File Overlap Check gains an **output-only → overlap N/A → fan out to N** row + the parallel-code-mutation non-goal with its rationale.
+- Design + research record (3 research rounds incl. an empirical git-worktree spike + a 4-way parallelizable-work inventory, and the dialectic that descoped a larger proposal to this): `docs/plans/2026-06-04-parallel-read-fanout.md`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (doc-only).
+
 ## v2.12.1 — reviewer live-fact rule + calibration + consumer verify-pushback
 
 **Fix**: retires the HIGH-severity `reviewer-livefact-confabulation` defect (the reviewer "verified" a live-world claim — `fr.cookys.org` does not exist — by citing a README that never mentioned it; `verified == cites-a-repo-line` let argument-from-silence pass as fact). The fix is in the reviewer's own discipline, not a new verification layer (the BACKLOG entry's own scoping ruled the caller-side layer out — confirmed by a research-to-ship run whose dialectic descoped a proposed verify-barrier down to this). Also absorbs the genuinely useful, cheap ideas from `obra/superpowers`' reviewer (studied by cloning it) without taking its weaker ones (its 3-tier `Critical/Important/Minor` uses the `Important` vocab autopilot already retired).

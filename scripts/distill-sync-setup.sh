@@ -25,8 +25,20 @@ set -euo pipefail
 
 PACK_DIR="${AUTOPILOT_DISTILL_PACK_DIR:-$HOME/.claude/skills/autopilot-distill-skills}"
 PROBE=".claude/skills/__distill_probe__/SKILL.md"   # check-ignore works on non-existent paths
+SIBLING_PROBE=".claude/__distill_nonskill_probe__"  # a non-skills path under .claude/
 
 usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# Ensure a file ends in a newline before we `>>` onto it — otherwise the append
+# concatenates onto the last line and silently mangles the user's existing rule
+# (e.g. `.claude/*` + append → `.claude/*!.claude/skills/`, which un-ignores
+# everything under .claude/). No-op on empty files and files already ending in \n.
+ensure_trailing_nl() {
+  local f="$1"
+  [ -s "$f" ] || return 0
+  [ -n "$(tail -c1 "$f")" ] && printf '\n' >> "$f"
+  return 0
+}
 
 # ── status ───────────────────────────────────────────────────────────────────
 cmd_status() {
@@ -105,6 +117,12 @@ cmd_fix_gitignore() {
     return 0
   fi
 
+  # Record whether non-skills .claude/ state is ignored BEFORE we edit, so we can
+  # prove the edit didn't accidentally un-ignore it (the trailing-newline failure
+  # mode). If it was ignored, it MUST stay ignored.
+  local pre_sibling_ignored=no
+  git -C "$root" check-ignore -q "$SIBLING_PROBE" && pre_sibling_ignored=yes
+
   local gi="$root/.gitignore" marker="# Track distilled skills (autopilot:distill)"
   touch "$gi"
   if grep -qE '^\.claude/?$' "$gi"; then
@@ -119,9 +137,11 @@ cmd_fix_gitignore() {
   elif grep -qE '^\.claude/\*\*$' "$gi" && ! grep -qE '^!\.claude/skills/\*\*$' "$gi"; then
     # Recursive glob: dir isn't excluded, but contents are at every depth — needs
     # BOTH the dir negation and a contents negation (empirically verified).
+    ensure_trailing_nl "$gi"
     printf '!.claude/skills/\n!.claude/skills/**\n' >> "$gi"
     echo "patched: added '!.claude/skills/' + '!.claude/skills/**' for existing '.claude/**' in $gi" >&2
   elif grep -qE '^\.claude/\*$' "$gi" && ! grep -qE '^!\.claude/skills/?$' "$gi"; then
+    ensure_trailing_nl "$gi"
     printf '!.claude/skills/\n' >> "$gi"
     echo "patched: added '!.claude/skills/' negation to existing '.claude/*' in $gi" >&2
   elif grep -qF "$marker" "$gi"; then
@@ -129,16 +149,24 @@ cmd_fix_gitignore() {
     # rule wins. Don't append again (idempotent); fall through to the WARN below.
     :
   else
+    ensure_trailing_nl "$gi"
     {
-      printf '\n%s while ignoring other .claude/ state.\n' "$marker"
+      printf '%s while ignoring other .claude/ state.\n' "$marker"
       printf '.claude/*\n!.claude/skills/\n'
     } >> "$gi"
     echo "patched: appended '.claude/*' + '!.claude/skills/' block to $gi" >&2
   fi
 
+  # Verify BOTH halves: skills now tracked, AND non-skills .claude/ state still
+  # ignored if it was before (catches an edit that corrupted a parent rule).
   if git -C "$root" check-ignore -q "$PROBE"; then
     echo "WARN: .claude/skills/ is STILL ignored — another rule is involved:" >&2
     git -C "$root" check-ignore -v "$PROBE" >&2 || true
+    exit 1
+  fi
+  if [ "$pre_sibling_ignored" = yes ] && ! git -C "$root" check-ignore -q "$SIBLING_PROBE"; then
+    echo "ERROR: the edit un-ignored non-skills .claude/ state (e.g. settings.json) — your .gitignore" >&2
+    echo "       may be corrupted. Inspect $gi and revert if needed (git checkout -- .gitignore)." >&2
     exit 1
   fi
   echo "fixed ✓ — verify: git -C \"$root\" check-ignore .claude/skills/<name>/SKILL.md  (should print nothing)" >&2

@@ -28,6 +28,9 @@ const path = require('path');
 const os = require('os');
 
 const ROOT = process.env.DISTILL_SCAN_ROOT || path.join(os.homedir(), '.claude', 'projects');
+// --real-only keeps only encoded-cwd dirs under the user's real home (skip /tmp eval dirs).
+// Derived from os.homedir() so it works for any user (not a hardcoded username).
+const HOME_TOKEN = os.homedir().replace(/[^a-zA-Z0-9]/g, '-');
 const MAX_LINE_BYTES = 2 * 1024 * 1024;
 const STATE_SCHEMA = 2;
 const DEFAULT_STATE = path.join(os.homedir(), '.autopilot', 'distill', 'scan-state.json');
@@ -198,7 +201,7 @@ function collectFiles(dir, out) {
     const fp = path.join(dir, e.name);
     if (e.isDirectory()) collectFiles(fp, out);
     else if (e.name.endsWith('.jsonl')) {
-      if (REAL_ONLY && !/-home-cookys/.test(path.basename(dir))) continue;
+      if (REAL_ONLY && !path.basename(dir).startsWith(HOME_TOKEN)) continue;
       out.push(fp);
     }
   }

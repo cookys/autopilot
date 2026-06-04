@@ -33,7 +33,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
-| 2026-06-04 | distill incremental cursor (`distill-scan.js --incremental`/`--new-only` per-session cursor; batch multi-select review gate + single push-back prompt) | v2.10.2 | _pending merge_ |
+| 2026-06-04 | distill incremental cursor (`distill-scan.js --incremental`/`--new-only` per-session cursor; batch multi-select review gate + single push-back prompt) | v2.10.2 | [`5d29803`](../../../../commit/5d29803) |
 | 2026-06-04 | distill onboarding hardening (fix broken `.gitignore` advice + `distill-sync-setup.sh` + guided first-run flow) | v2.10.1 | [`a6cf076`](../../../../commit/a6cf076) |
 | 2026-06-02 | level-3 doc-rot batch (authored 2 missing canonical refs + validate.sh link-check hardening + test + BACKLOG hygiene) | v2.7.7 | [`2b5f6ed`](../../../../commit/2b5f6ed) |
 | 2026-06-01 | hook-polish batch (symlink diag + failure-counter cleanup + malformed-flag self-heal) | v2.7.6 | [`c79e44c`](../../../../commit/c79e44c) |

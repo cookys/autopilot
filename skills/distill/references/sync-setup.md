@@ -9,6 +9,12 @@ also a `@skills-dir` plugin, so every machine that has the folder loads the skil
 > committed at approval time — `commit-on-approve` — so they survive concurrency/crashes locally; the
 > remote is what survives losing the whole machine.)
 
+> **Fastest path — use the script.** `scripts/distill-sync-setup.sh` does every git step below
+> deterministically and idempotently: `status` (what's set up?), `init-remote <url>` (machine #1
+> backup), `enroll <url>` (new machine), `fix-gitignore [repo]` (track project-scoped skills with
+> the *correct* negation). The manual commands below are the same steps, for reference / no-script
+> environments. `/autopilot:distill` invokes the script automatically on first run (Step 5).
+
 ## Running distill on another machine (contribute, not just consume)
 Cloning the pack only lets a machine **consume** the existing skills. To also **distill on it** — mine
 *that machine's own* conversation history into new skills — do the full onboarding once:
@@ -66,11 +72,14 @@ project gets them for free.
 
 **Known limitation**: many repos `.gitignore` the whole `.claude/` dir, in which case a project-scoped
 distilled skill is **local-only and never propagates**. Check with `git check-ignore .claude/skills/`.
-Two fixes: (a) add a negation to that repo's `.gitignore` so the skills tracked:
+Two fixes: (a) add a negation to that repo's `.gitignore` so the skills are tracked. **Git cannot
+re-include a path whose parent directory is fully excluded** — so `.claude/` + `!.claude/skills/`
+does *not* work (the skill stays ignored). Exclude the *contents* with `.claude/*`, then negate:
 ```gitignore
-.claude/
+.claude/*
 !.claude/skills/
-!.claude/skills/**
 ```
-or (b) route the skill to the **global pack** instead (it always syncs), accepting it loads in every
+This keeps `.claude/settings.json` etc. ignored while tracking `.claude/skills/`. (Verify:
+`git check-ignore .claude/skills/<name>/SKILL.md` should print nothing.)
+Or (b) route the skill to the **global pack** instead (it always syncs), accepting it loads in every
 project rather than just this one.

@@ -67,6 +67,26 @@ The approved skill is **already committed** (Step 4). Sync = propagate that comm
 → `push`. Other machines `pull`. Project skills ride the project's own git. Syncthing on the pack
 folder is the no-git alternative. Full setup: [references/sync-setup.md](references/sync-setup.md).
 
+### First-run setup — guided (run BEFORE relying on distilled skills)
+Don't make the user hand-copy git plumbing (the `.gitignore` negation is easy to get wrong — the
+obvious `.claude/` + `!.claude/skills/` is silently broken). Drive it with the script:
+
+1. **Detect state**: `scripts/distill-sync-setup.sh status` (JSON: pack exists? has remote? + a
+   next-step hint on stderr).
+2. **If the pack has no remote** (durability risk — a single on-disk copy), ask the user with
+   `AskUserQuestion` *before* proceeding:
+   - **Q "This machine's role?"** → *Set up the pack's backup remote here* (machine #1) /
+     *Enrol this machine from an existing remote* (already have a pack elsewhere) / *Skip — local only*.
+   - If they pick a remote path, ask for the git URL, then run `distill-sync-setup.sh init-remote <url>`
+     (machine #1) or `enroll <url>` (new machine). Both are idempotent.
+3. **For a PROJECT-scoped skill** you just wrote, if `git -C <repo> check-ignore .claude/skills/<name>/SKILL.md`
+   prints anything, the repo ignores it and it will never propagate. Run
+   `scripts/distill-sync-setup.sh fix-gitignore <repo>` (idempotent; emits the correct `.claude/*`
+   + `!.claude/skills/` form and verifies), then tell the user to commit the `.gitignore` change.
+
+Only ask when a decision is genuinely needed — if `status` shows a remote already configured, skip
+the questions and just sync.
+
 > **Durability — the pack MUST have a remote.** A single on-disk copy is one `rm -rf` from total loss.
 > The remote is **backup, not just sync** — set it up before relying on distilled skills (see
 > sync-setup.md). Concurrency is loss-safe given commit-on-approve: the worst case is a same-skill
@@ -81,3 +101,4 @@ cross-machine conflict actually occurs — the trigger is the first `git pull` c
 | Script | Purpose |
 |--------|---------|
 | [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic full-history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. No LLM in the count path. |
+| [`scripts/distill-sync-setup.sh`](../../scripts/distill-sync-setup.sh) | Onboarding plumbing for pack sync: `status` / `init-remote <url>` / `enroll <url>` / `fix-gitignore [repo]`. Idempotent; emits the **correct** `.claude/*` + `!.claude/skills/` negation (the obvious `.claude/` form is silently broken). Drives Step 5 first-run setup. |

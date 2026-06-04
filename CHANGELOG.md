@@ -24,7 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.10.0 — harness integration + release-ritual automation
+## v2.10.1 — distill onboarding hardening
+
+**Headline**: the `distill` pack-sync onboarding shipped a **silently broken** `.gitignore` fix — `.claude/` + `!.claude/skills/` does *not* track a project-scoped skill (git cannot re-include a path under a fully-excluded parent), so any teammate following it got skills that never propagated. Fixed, and replaced the hand-copied git plumbing with a deterministic, idempotent setup script plus a guided first-run flow inside the skill.
+
+### Fixed
+- `skills/distill/references/sync-setup.md` — corrected the broken negation to the working `.claude/*` + `!.claude/skills/` form, with an explanation of *why* the obvious form fails (verified empirically: `git check-ignore` on the probe path).
+
+### Added
+- **`scripts/distill-sync-setup.sh`** — onboarding plumbing: `status` (state as JSON + next-step hint), `init-remote <url>` (pack machine #1 backup remote), `enroll <url>` (clone the pack on a new machine), `fix-gitignore [repo]` (make a repo track `.claude/skills/` with the correct form — handles bare `.claude/`, `.claude/*`, and recursive `.claude/**`; verifies via `check-ignore`). Every subcommand idempotent.
+- `skills/distill/SKILL.md` Step 5 — guided first-run setup: detect state via the script, `AskUserQuestion` only when a decision is genuinely needed (this machine's role / remote URL), then call the script. No more hand-copied commands.
+
+### Changed
+- CLAUDE.md scripts inventory + distill SKILL.md "Available scripts" + sync-setup.md: document the new script as the primary onboarding path.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
 
 **Headline**: autopilot now **deepens Claude Code** with three of its session-control primitives while staying multi-agent-portable (each is capability-gated with a documented non-CC fallback). A new `.githooks/post-merge` advisory closes the release-ritual toil loop — when a merge lands on develop/main it surfaces the merge SHA (ready to paste) plus the `preflight-release.sh` status, **without ever blocking or auto-committing**. `ceo-agent` gains `/goal` as an optional convergence engine, a shipped `loop.md` template enables unattended branch babysitting, and the quality gate can wait on CI-backed tests via `Monitor` instead of busy-polling.
 

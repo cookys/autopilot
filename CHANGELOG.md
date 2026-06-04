@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.12.1 — reviewer live-fact rule + calibration + consumer verify-pushback
+
+**Fix**: retires the HIGH-severity `reviewer-livefact-confabulation` defect (the reviewer "verified" a live-world claim — `fr.cookys.org` does not exist — by citing a README that never mentioned it; `verified == cites-a-repo-line` let argument-from-silence pass as fact). The fix is in the reviewer's own discipline, not a new verification layer (the BACKLOG entry's own scoping ruled the caller-side layer out — confirmed by a research-to-ship run whose dialectic descoped a proposed verify-barrier down to this). Also absorbs the genuinely useful, cheap ideas from `obra/superpowers`' reviewer (studied by cloning it) without taking its weaker ones (its 3-tier `Critical/Important/Minor` uses the `Important` vocab autopilot already retired).
+
+### Changed
+- `agents/reviewer.md`: Fact-driven Red Line now distinguishes **documented-fact from live-system-fact** — live claims (DNS/reachability/version/process/existence) must be **Bash-execution-verified or marked `UNVERIFIED`**, never "verified" by a doc/README citation; **argument-from-silence is banned** ("repo doesn't mention Y" ≠ "Y is false"). Added a **Calibration** section (not everything is Critical; acknowledge what's clean; explicit DON'Ts) + a "**don't trust the report** — verify by reading code; hunt over-engineering + solved-wrong-problem" philosophy line (absorbed from superpowers' spec-reviewer).
+- `skills/quality-pipeline/references/code-review.md`: new **"Consuming a finding — verify before implementing"** step in Handoff Consumption (findings are suggestions to evaluate, not orders; verify against the codebase; push back with technical reasoning; YAGNI-grep; **no performative agreement** — no "You're absolutely right!"/thanks; one fix at a time). Operationalizes the `verify-reviewer-claims` discipline on the consumer side.
+- `docs/BACKLOG.md`: retired the `reviewer-livefact-confabulation` 🔴 entry (now fixed).
+- Design record + the full dialectic that descoped a larger proposal: `docs/plans/2026-06-04-review-verify-barrier.md` (verify-barrier / spec-gate / Workflow fan-out all deferred with explicit triggers).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.12.0 — `research-to-ship` skill (pinned research→plan→dialectic→project→dev-flow pipeline)
 
 **Headline**: a new orchestrator skill for a recurring ritual — start from a *topic*, and get best-practice research → a written plan → a **multi-round dialectic review loop** → a tracked project → step-by-step dev-flow execution, with a **human approval gate between every phase**. It's a *thin* skill: it pins the sequence and the gates, and delegates the real work to existing skills (`survey`/`deep-research`, `think-tank-dialectic`, `project-lifecycle`, `dev-flow`, `quality-pipeline`, `finish-flow`). The dialectic loop is **pinned on** (unlike `ceo-agent`, which only escalates to it conditionally). Researched against the Claude Code primitives first: the Workflow tool was rejected (it can't pause mid-run for the human gates), `/loop` is interval-polling (wrong shape), and `/goal` is offered only for Phase-5 execution where a transcript-checkable finish line exists.

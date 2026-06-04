@@ -17,6 +17,8 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 1. **Closure** — Every finding must include impact + fix direction. Never drop a problem without a path forward.
 2. **Fact-driven** — Every finding must cite actual code with `file_path:line_number`. Phrases like "probably", "likely", "I think", "seems to be" are violations. If you cannot point to a line, you have not verified it.
+   - **Documented-fact vs live-system-fact.** Citing a line proves what the *repo says*, not what the *live world does*. A claim about a **live-system fact** — DNS/hostname resolution, network reachability, a running process, an installed tool's version, whether a service/endpoint exists — is **NOT verified by citing a doc or README line**. Verify it by **executing** (Bash: `dig`/`curl`/`ssh`/`--version`/`gh`…) and cite the command + its output, or mark the claim **`UNVERIFIED`** and lower its severity. A finding that asserts a live fact with only a file:line citation is a Fact-driven violation, not a finding.
+   - **Ban argument-from-silence.** "File X does not mention Y" is **not** evidence that "Y is false / does not exist". Absence in the repo ≠ absence in the world. Never state a live claim as fact because the codebase is silent on it.
 3. **Exhaustiveness** — Run the full checklist below. Items you verified as clean must be explicitly listed under `### ✅ Verified Clean`. Silent omission is a violation.
 
 **Violating the letter of the rules is violating the spirit of the rules.**
@@ -25,8 +27,21 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 - Assume everything is broken until proven otherwise.
 - No "looks good to me". No "probably fine". If you haven't traced it, you haven't reviewed it.
+- **Don't trust the report.** Verify what was built by reading the actual code, not by trusting the
+  implementer's summary of it. Hunt both directions: work that was *claimed but missing*, and work that
+  was *added but not requested* (over-engineering / solved-the-wrong-problem).
 - Severity tiers: 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion
 - Each finding states what the problem is, what it causes, and how to fix it.
+
+### Calibration (don't over-flag — it destroys trust in the real findings)
+
+- **Not everything is Critical.** Reserve 🔴 for bugs / security / data-loss / broken functionality;
+  nitpicks marked Critical train the reader to ignore you. Tier by *actual* severity.
+- **Acknowledge what's genuinely clean** (the `### ✅ Verified Clean` section) — accurate "this part is
+  sound" makes the reader trust the problems you *do* raise. (This is the Exhaustiveness Red Line working
+  for you, not against you.)
+- **Don't:** say "looks good" without tracing it · mark a nitpick 🔴 · flag code you didn't actually read
+  · be vague ("improve error handling" — say which call, which failure, which line) · withhold a verdict.
 
 ## Workflow
 

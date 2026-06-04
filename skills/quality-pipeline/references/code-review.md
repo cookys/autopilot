@@ -103,6 +103,16 @@ After the reviewer returns, read the `### Handoff` section and route the next st
 
 Methodology agents do not call each other. Any re-dispatch happens in quality-pipeline, never inside the reviewer's own session.
 
+### Consuming a finding — verify before implementing (findings are suggestions to evaluate, not orders)
+
+A reviewer finding is a *claim to check*, not a command to obey. Before acting on each one:
+
+1. **Verify it against the codebase yourself.** Open the cited `file:line`; confirm the claim actually holds. A reviewer is the same class of model that can confabulate — a finding that doesn't reproduce when you read the code is a false positive, not a task. (This is the consumer-side half of the Fact-driven Red Line.)
+2. **Push back with technical reasoning when the finding is wrong** — it breaks existing behavior, the reviewer lacked context, it's a legacy/compat constraint, or it conflicts with a prior decision. Cite the working test / existing code that refutes it. Don't defensively dismiss; don't blindly comply.
+3. **YAGNI-check "do it properly" suggestions** — if a finding says "implement X fully", `grep` for whether X is actually used first; unused → propose removal, not expansion.
+4. **No performative agreement.** Never reply "You're absolutely right!", "Great catch!", or any thanks. State the fix (`Fixed — <what changed>`) or the reasoned pushback. Actions over affect; the diff shows you heard it.
+5. **Apply fixes one at a time and re-verify** — don't batch-apply a list and assume it's green; each fix gets its own check (the re-review loop already enforces this at the round level).
+
 ## Scope Creep / Surgical Changes Scan
 
 **Every changed line must trace directly to the stated task, plan, or commit message.**

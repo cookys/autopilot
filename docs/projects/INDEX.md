@@ -34,6 +34,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-06-04 | reviewer live-fact rule (documented vs live-system fact; Bash-verify-or-UNVERIFIED; ban argument-from-silence) + calibration + consumer verify-pushback; retires `reviewer-livefact-confabulation` 🔴; absorbed superpowers' cheap wins ([plan](../plans/2026-06-04-review-verify-barrier.md)) | v2.12.1 | _pending merge_ |
 | 2026-06-04 | `research-to-ship` skill (pinned research→plan→dialectic-loop→project→dev-flow pipeline; thin orchestrator delegating to existing skills; Workflow rejected — can't pause for human gates) | v2.12.0 | [`947a04d`](../../../../commit/947a04d) |
 | 2026-06-04 | distill-consolidate `migrate` fix (rewrite frontmatter `name:` alongside dir rename — identity convergence needs both) | v2.11.1 | [`16407a7`](../../../../commit/16407a7) |
 | 2026-06-04 | distill incremental cursor (`distill-scan.js --incremental`/`--new-only` per-session cursor; batch multi-select review gate + single push-back prompt) | v2.10.2 | [`5d29803`](../../../../commit/5d29803) |

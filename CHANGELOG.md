@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.10.2 — distill incremental cursor + batch-approval UX
+
+**Headline**: `/distill` is now cheap to re-run and lower-friction to approve. `distill-scan.js` gained a **per-session cursor** (`--incremental` / `--new-only`) so a routine re-scan only re-reads sessions that are new or changed since last time, then reports just the candidates whose recurrence **rose this run** — "what's newly worth distilling" instead of re-proposing everything you already triaged. The skill's human review gate is unchanged in substance but collapsed in friction: present the whole candidate list once and accept a **batch multi-select** rather than one yes/no per candidate, followed by **one** "push back to the shared pack?" prompt.
+
+### Added
+- `scripts/distill-scan.js --incremental`: reuses cached per-session atoms from `~/.autopilot/distill/scan-state.json` (keyed by `{size, mtime}`); only new/grown session jsonl is re-read. **Cumulative totals stay identical to a full scan** — the ≥N× value gate is unaffected (asserted by a parity test).
+- `scripts/distill-scan.js --new-only`: like `--incremental`, but filters the report to candidates whose cumulative count rose this run (the cursor's "what's new since last time" view).
+- `DISTILL_SCAN_ROOT` env seam on the scanner (testability) + `hooks/tests/distill-scan-incremental.test.sh` (9 assertions incl. full-vs-incremental count parity).
+
+### Changed
+- `skills/distill/SKILL.md`: Step 1 uses the incremental cursor on routine runs; Step 3 review gate is now a **batch multi-select** (lint still runs per-candidate first and gates the batch — a lint-flagged identifier can never ride into the pack on a batch tick); Step 5 adds a single "push back to the shared pack?" yes/no that does `pull --rebase` then `push`, stopping on same-name conflict (the deferred multi-machine `consolidate` case — never auto-merge another machine's skill).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.10.1` + `rm -f ~/.autopilot/distill/scan-state.json`
+
 ## v2.10.1 — distill onboarding hardening
 
 **Headline**: the `distill` pack-sync onboarding shipped a **silently broken** `.gitignore` fix — `.claude/` + `!.claude/skills/` does *not* track a project-scoped skill (git cannot re-include a path under a fully-excluded parent), so any teammate following it got skills that never propagated. Fixed, and replaced the hand-copied git plumbing with a deterministic, idempotent setup script plus a guided first-run flow inside the skill.

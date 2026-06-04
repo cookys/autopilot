@@ -26,6 +26,20 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### subagent-driven-development: explicit BLOCKED / incomplete-return handling
+- **Trigger**: next time a dispatched implementer subagent returns **incomplete / blocked** (NEEDS_CONTEXT, partial, gave up) and the orchestrator mishandles it (proceeds as if done, or stalls silently).
+- **Context**: From the superpowers-parity survey (2026-06-04). superpowers' `subagent-driven-development` has (a) a two-stage **spec-compliance → code-quality** review ORDER and (b) explicit dispatched-subagent return-status handling (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED). Light design found (a) is **already covered** — `agents/reviewer.md` v2.12.1/v2.12.3 folded claim-completeness / "claimed but missing: decompose / claim-scope = unit of done" into the reviewer, which IS spec-compliance within `quality-pipeline`. The residue is (b): a documented status-enum + escalation for incomplete implementer returns, landing in `skills/team/references/team-tactics.md`. Today this works ad-hoc (the orchestrator sees an incomplete return and re-dispatches); formalizing is nice-to-have, not biting.
+- **Proposed**: add a short "dispatched-subagent return contract" to team-tactics (status enum + BLOCKED→re-scope/escalate path). Do NOT rebuild a separate spec-reviewer (reviewer already does it).
+- **Effort**: S
+- **Source**: 2026-06-04 superpowers-parity inventory + research-to-ship light design (CEO-deferred: no biting value for self-use yet).
+
+### writing-skills: RED-phase pressure-testing for behavior-shaping skills
+- **Trigger**: when autopilot starts **publishing skills broadly** (beyond self-use / the distill pack), OR a distilled/authored skill ships and then visibly fails to shape behavior (agents rationalize around it).
+- **Context**: superpowers' `writing-skills` applies TDD to skill docs — a RED phase (run a pressure scenario WITHOUT the skill, watch the agent rationalize, then write the skill to close those exact loopholes) + rationalization tables + Cialdini-grounded rules. Light design (2026-06-04) found this is **calibrated for public shared codebases (94% PR rejection)** and **overkill for self-use**; it's also coupled to `distill` maturity. The cheap high-leverage bit — the **CSO description principle** (description states triggering conditions only, never a workflow summary) — is **already autopilot practice** (see `brainstorm` / `research-to-ship` descriptions). So the genuine remaining delta is only the RED-phase apparatus, which is deferred.
+- **Proposed**: if/when publishing, add a RED-phase intake gate to `distill` Step 3 (pressure-scenario baseline → write → loophole-close). Until then, keep CSO-only.
+- **Effort**: M (distill-coupled)
+- **Source**: 2026-06-04 superpowers writing-skills study + research-to-ship light design (CEO-deferred: self-use doesn't warrant the apparatus).
+
 ### `/compact` slash-command silent miss documentation
 - **Trigger**: 任何 user 想用 `/compact` 測 state-checkpoint hook 時 — 必須先讀本條
 - **Context**: 2026-05-14 method-B testing 發現：Claude Code 的 `/compact` slash command 觸發 PreCompact hook 時**不 pipe JSON payload**，而是讓 hook 撞 ENXIO on `/dev/stdin`。Auto-compact (~150K-token threshold) DOES pipe payload — 兩條路徑不對稱。

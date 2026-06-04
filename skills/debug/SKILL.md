@@ -46,6 +46,14 @@ If unsure, start with `debug`. If evidence points to a performance root cause, s
 6. Verify fix with same tool + same test
 7. Record in knowledge base if non-trivial (invoke learn skill)
 
+> **3-fix architecture gate.** If **3 fix attempts have failed**, STOP attempting fix #4 — the
+> repeated failure is itself evidence that the **mental model of the architecture is wrong**, not that
+> the next tweak is the right one. Step back and question the structure: is the bug where you think it
+> is? Is a component boundary / assumption (data shape, ordering, ownership, environment) violated
+> upstream of where you're patching? Re-collect evidence at the boundary above the suspected site
+> before any further fix. (Changing a flag/parameter is not a new attempt; changing the diagnostic
+> *angle* is.)
+
 ## Evidence Collection Guide
 
 Identify the right tools for your problem category. If your project has a `debug-config.md`, it will list specific commands. Otherwise, use this generic guide:

@@ -66,6 +66,7 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 ### Code correctness
 - **Security**: SQL injection, XSS, CSRF, command injection, path traversal, SSRF, hardcoded secrets, insecure deserialization, timing attacks on secret comparison
+  - This is the **general pre-merge security pass**, run as part of every review. For a **dedicated, security-focused deep-dive** (threat modeling, supply-chain / dependency audit, exhaustive vuln sweep), autopilot does not ship a separate skill — use Claude Code's **native `/security-review`** command. autopilot owns *when* security is in scope (this checklist, on every review); the deep specialist pass is delegated, not re-implemented.
 - **Logic**: off-by-one, null/undefined dereference, type coercion, inverted conditionals, unreachable branches
 - **Boundaries**: empty input, empty string, negative numbers, integer overflow, Unicode edge cases, concurrent modification
 - **Error handling**: uncaught exceptions, swallowed errors, silent fallbacks, misleading error messages

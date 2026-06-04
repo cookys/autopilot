@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.13.1 — standalone-fallback fix + 3 parity refinements (superpowers-gap batch)
+
+**Fix batch** from the superpowers-parity inventory (via `research-to-ship`, right-sized: small known items built, 2 M items CEO-deferred to BACKLOG). The headline is a real **standalone-capability bug**.
+
+### Fixed
+- 🔴 **`think-tank-dialectic` no longer hard-depends on voltagent** (standalone bug): the 4 職能 roles named `voltagent-*` subagent_types with **no fallback** — so the dialectic broke when voltagent isn't installed (i.e. the default, autopilot-standalone case). Now documents graceful degradation to `general-purpose` + inlined role Focus (the mechanism the 2 adversarial roles already use), mirroring the reviewer-chain fallback. The panel runs with zero voltagent agents present.
+
+### Changed
+- `skills/research-to-ship/SKILL.md`: added an **optional Phase 0 → `autopilot:brainstorm`** (discover the design when the topic starts fuzzy; skip when it's already a clear question) — resolves the prior one-way link (brainstorm declared a research-to-ship Phase-0 that research-to-ship didn't reciprocate).
+- `skills/debug/SKILL.md`: added the **3-fix architecture gate** — after 3 failed fix attempts, STOP and question the architecture/mental-model (re-collect evidence at the boundary above the suspected site) rather than attempting fix #4. (Internalized from `superpowers:systematic-debugging`.)
+- `agents/reviewer.md`: the Security checklist now points to Claude Code's **native `/security-review`** for a dedicated security deep-dive (threat model / supply-chain), clarifying that autopilot's reviewer owns the *general* pre-merge security pass and delegates the specialist deep-dive rather than shipping a separate skill.
+
+### Deferred (CEO call — no biting value for self-use; recorded with triggers in `docs/BACKLOG.md`)
+- **subagent-driven-development**: the spec→quality review ORDER is already covered (reviewer's v2.12.1/v2.12.3 claim-completeness IS spec-compliance); only the BLOCKED/incomplete-return handling residue remains → backlog (trigger: a mishandled blocked dispatch).
+- **writing-skills RED-phase**: overkill for self-use (it's tuned for public skill publishing); the cheap CSO description principle is already autopilot practice → backlog (trigger: publishing skills broadly).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (doc/methodology-only).
+
 ## v2.13.0 — internalize 3 superpowers capabilities (brainstorm skill + plan template + verification)
 
 **Headline**: surveyed all 14 `obra/superpowers` skills (cloned & read) for what's worth internalizing into autopilot (the user runs without superpowers by choice), then a dialectic right-sized the 3 HIGH candidates. Net: **one new skill, one template, one one-line discipline edit** — each capability addressed at its correct size rather than as three new skills.

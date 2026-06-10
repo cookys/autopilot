@@ -144,6 +144,21 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (fiddly — link-rewriting in the sync script risks other links)
 - **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
 
+### Nested subagent (depth=5) integration — capability-gated, spike-gated
+- **Trigger**（任一即重測；探針全綠才動 docs/code）:
+  1. Claude Code changelog / release notes / sub-agents doc 出現 nested subagent / agent nesting 條目（截至 2026-06-10 查核 v2.1.170 為止 **零條目**，官方 docs 仍寫 "subagents cannot spawn other subagents"）
+  2. `claude` 升版後，新 session 派 `.claude/agents/nest-probe.md` 探針（untracked，留在 repo）回報 subagent 拿到 Agent/Task tool
+- **Context**: 2026-06-09 Boris Cherny 宣布 "agents kicking off agents"，**depth=5 上限（巢狀深度，非併發）**，experimental，動機是 context 管理（subagent 在 context 滿之前外包、子層只回 summary）。2026-06-10 雙重陰性 spike on v2.1.170：(a) general-purpose subagent 工具清單無 Agent/Task；(b) fresh headless session + 自訂 agent 明確宣告 `tools: Agent, Task` 仍被 runtime 剝除 → explicit grant 無效，是 server-side / phased rollout。詳見 memory `project_nested-subagent-status.md`。
+- **Proposed**（確認生效後的落地清單，docs-first）:
+  1. `references/multi-agent-portability.md` §7 加 nested-dispatch 一列（CC: experimental depth≤5；OpenCode/Codex/agy: ❌）
+  2. `agents/README.md` Handoff 段加一句：Handoff ENUM（`PARALLEL_DISPATCH`/`SEQUENTIAL_DISPATCH`）維持跨平台 canonical；subagent 自己的工具清單裡有 Agent tool 時**可**自行消化 handoff，永不強制 → 非 CC 平台零改動
+  3. `references/blind-dispatch.md` 加硬規則：巢狀派工 **round 內分解可以、跨 round 禁止**（reviewer self-re-dispatch 洩漏全部 prior findings，`check-redispatch-prompt.sh` 也攔不到子層派工；`diff-since-last-round.sh` delta 仍 dispatcher-only、dispatcher 留 main session）
+  4. `agents/planner.md` `tools:` 先開 `Agent`（researcher 子代理探索 codebase 不灌爆 planner context — 最對味用例）；reviewer 等 (3) 落地後再評估
+  5. autopilot 自限 depth ≤ 2（main → orchestrating agent → leaf），與 team cap-3 同一協調成本哲學，不用滿 harness 的 5
+  - 相容點（已驗證設計，不需改）: agent 都有 Bash → 巢狀層一樣跑 `resolve-dispatch.sh` 拿 model/mode，script-first 設計耐巢狀
+- **Effort**: docs 三件 S；planner opt-in S（spike-gated）
+- **Source**: 2026-06-10 research session（兩輪 claude-code-guide 查證 + 兩個實證 spike）；memory `project_nested-subagent-status.md`
+
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)

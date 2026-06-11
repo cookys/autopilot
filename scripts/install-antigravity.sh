@@ -110,14 +110,23 @@ fi
 SRC="$REPO"
 if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
   EXPORT_DIR="$(mktemp -d -t autopilot-agy-export-XXXXXX)"
+  trap 'rm -rf "$EXPORT_DIR"' EXIT   # no leak on any failure path
   git -C "$REPO" archive HEAD | tar -x -C "$EXPORT_DIR"
   SRC="$EXPORT_DIR"
   echo "export: installing from sacrificial copy $SRC (HEAD of $REPO, no .git)"
+  if [ "$SKIP_GIT_CHECKS" = "1" ] && [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+    echo "WARNING: --skip-git-checks active; git archive HEAD exports COMMITTED state only — working-tree changes are NOT included." >&2
+  fi
 else
   echo "WARNING: non-git source — installing directly from $REPO (no export possible)." >&2
 fi
 
 if [ "$EXPORT_ONLY" = "1" ]; then
+  if [ "$SRC" = "$REPO" ]; then
+    echo "ERROR: --export-only requires a git source — non-git source cannot be exported." >&2
+    exit 1
+  fi
+  trap - EXIT   # the export is the deliverable; caller owns cleanup
   echo "$SRC"
   exit 0
 fi
@@ -128,8 +137,6 @@ agy plugin validate "$SRC"
 echo ""
 echo "== install =="
 agy plugin install "$SRC"
-
-[ "$SRC" != "$REPO" ] && rm -rf "$SRC"
 
 echo ""
 echo "== verify =="

@@ -80,4 +80,10 @@ assert_file_exists "$EXPORT_PATH/plugin.json" "export contains manifest"
 assert_file_absent "$EXPORT_PATH/.git" "export has no .git"
 rm -rf "$EXPORT_PATH"
 
+# 9. --export-only on a non-git source → explicit error, exit 1 (no silent $REPO passthrough)
+echo '{"name":"t"}' > "$NOGIT/plugin.json"   # pass the manifest check so the export-only check is reached
+OUT="$(HOME="$GUARD_HOME" AUTOPILOT_REPO_OVERRIDE="$NOGIT" bash "$SCRIPT" --export-only --skip-git-checks 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "export-only non-git exit code"
+assert_contains "$OUT" "requires a git source" "export-only non-git error message"
+
 finalize_test

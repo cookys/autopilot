@@ -107,7 +107,7 @@ When touching anything that crosses platform boundaries:
 - [ ] Every env var / path / CLI command referenced has an official-doc URL cited inline.
 - [ ] No platform-specific code paths use env vars that haven't been verified.
 - [ ] Skill changes happen only in `skills/<name>/SKILL.md` (one source of truth).
-- [ ] Agent body changes happen in `agents/<role>.md` (Claude Code) and propagate via `scripts/sync-agent-bodies.sh` (Phase 3+).
+- [ ] Agent body changes happen in `agents/<role>.md` (Claude Code) and propagate via `scripts/sync-agent-bodies.sh` (Phase 3+; output: `.opencode/agent-bodies/`).
 - [ ] `scripts/sync-version.js --check` passes (pre-commit gate enforces).
 - [ ] If introducing a new claim about a platform, either (a) cite source, or (b) write a Spike script in `docs/plans/` that produces a yes/no answer empirically.
 

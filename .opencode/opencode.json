@@ -13,7 +13,7 @@
         "webfetch": "allow",
         "websearch": "allow"
       },
-      "prompt": "{file:../agents/_bodies/reviewer.body.md}"
+      "prompt": "{file:agent-bodies/reviewer.body.md}"
     },
     "autopilot-debugger": {
       "description": "Systematic debugging agent for root cause analysis. Use when: 'debug', 'investigate', 'root cause', '為什麼會壞', '追蹤問題'.",
@@ -27,7 +27,7 @@
         "webfetch": "allow",
         "websearch": "allow"
       },
-      "prompt": "{file:../agents/_bodies/debugger.body.md}"
+      "prompt": "{file:agent-bodies/debugger.body.md}"
     },
     "autopilot-planner": {
       "description": "Task decomposition and planning agent. Use when: 'plan', 'decompose', 'break down', '規劃', '拆解任務'.",
@@ -41,7 +41,7 @@
         "webfetch": "allow",
         "websearch": "allow"
       },
-      "prompt": "{file:../agents/_bodies/planner.body.md}"
+      "prompt": "{file:agent-bodies/planner.body.md}"
     }
   },
   "instructions": [".opencode/README.md"]

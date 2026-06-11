@@ -63,7 +63,7 @@ git status -sb | head -1                            # clean, synced
 - **suggest-compact** — PostToolUse Write|Edit, recoverable via the same transcript pivot; deferred (not done). Easy next win if wanted.
 - **cost-tracker / session-summary** — Stop events, env-driven; NOT the tool-event-stdin problem → separate verification before re-enabling.
 - **PreToolUse hooks** (large-file-warner, branch-protection, commit-secret-scan) — **permanently unrecoverable** by the transcript approach (tool hasn't run). Leave disabled unless upstream #6305 is fixed.
-- **`_bodies/*.body.md` relative-link depth bug** — generated artifact, low severity, BACKLOG entry with trigger.
+- **`.opencode/agent-bodies/*.body.md` relative-link depth bug** — generated artifact, low severity, BACKLOG entry with trigger.
 - **stdin pipe upstream #6305** — still broken at 2.1.159; re-probe on any Claude Code update.
 
 ## Environment caveat (important)

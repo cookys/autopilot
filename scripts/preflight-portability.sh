@@ -161,7 +161,7 @@ run_check "intent-capture.js works from symlinked path (no throw)" check_intent_
 run_check "session-start.sh emits hookSpecificOutput envelope when env set" check_session_start_claude_envelope
 run_check "session-start.sh emits additional_context envelope when env unset" check_session_start_plain_envelope
 run_check "sync-version.js --check: canonical & mirrors in sync" check_sync_version
-run_check "sync-agent-bodies.sh --check: _bodies/ in sync with agents/" check_sync_agent_bodies
+run_check "sync-agent-bodies.sh --check: agent-bodies/ in sync with agents/" check_sync_agent_bodies
 run_check ".agents/skills symlink resolves to ../skills (target exists)" check_agents_skills_symlink
 run_check "scripts/validate.sh: all skills pass structural validation" check_validate_skills
 run_check "OpenCode plugin getPluginVersion returns real version" check_opencode_plugin_version

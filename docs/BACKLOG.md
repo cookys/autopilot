@@ -144,6 +144,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (fiddly — link-rewriting in the sync script risks other links)
 - **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
 
+### hetero-dispatch skill wrapper (and/or dispatch-config Implementer chain)
+- **Trigger**: after 2-3 more real uses of `scripts/dispatch-hetero.sh` beyond the `_bodies` relocation (recurrence proven), OR when a second engine (gemini CLI / codex / `opencode run`) passes the headless-equivalence spike and the engine choice needs routing logic.
+- **Context**: heterogeneous dispatch shipped script-first (v2.15.0): `scripts/dispatch-hetero.sh` + `references/hetero-dispatch.md`. Per distill philosophy, the skill wrapper (when-to-use routing, forcing-function TaskCreates for the review-before-merge step, possible `dispatch-config.md` Implementer chain + `resolve-dispatch.sh` runner field) waits for recurrence instead of speculative construction — same reasoning as the 2026-06-04 workflow-parallelization deferral.
+- **Effort**: S (skill) + S (resolve-dispatch runner field, if chain routing is wanted)
+- **Source**: 2026-06-11 hetero-dispatch spike + first production use (`a83c04a`); CEO decision to ship script-first.
+
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)

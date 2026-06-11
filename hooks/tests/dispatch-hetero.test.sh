@@ -63,6 +63,31 @@ OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-
 assert_eq "2" "$EXIT" "duplicate branch exit code"
 assert_contains "$OUT" "branch already exists" "duplicate branch error"
 
+# 5b. dirty path: stub commits then leaves an unstaged file → exit 1, status dirty, worktree kept
+STUB_DIRTY="$TEST_TMP/agy-dirty"
+cat > "$STUB_DIRTY" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: partial"
+echo leftover > unstaged.txt
+EOF
+chmod +x "$STUB_DIRTY"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/dirty --prompt-file "$PROMPT" --agy-bin "$STUB_DIRTY" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "dirty path exit code"
+assert_contains "$OUT" '"status": "dirty"' "dirty status"
+DIRTY_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+assert_file_exists "$DIRTY_WT/unstaged.txt" "dirty worktree kept with unstaged file"
+git -C "$SBX" worktree remove --force "$DIRTY_WT" >/dev/null 2>&1 || true
+
+# 5c. --keep-worktree: success still keeps the worktree, JSON carries its path
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/keep --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --keep-worktree 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "keep-worktree exit code"
+assert_contains "$OUT" '"status": "committed"' "keep-worktree committed status"
+KEEP_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+assert_file_exists "$KEEP_WT/ok.txt" "kept worktree present on success"
+git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
+
 # 6. no_commit path: stub does nothing → exit 1, worktree KEPT for inspection
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "no_commit exit code"

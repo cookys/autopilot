@@ -93,8 +93,7 @@ if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
 fi
 
 # --- isolated worktree (the non-skippable safety rail) ---
-WT="$(mktemp -d -t "hetero-${BRANCH//\//-}-XXXXXX")"
-rmdir "$WT"  # git worktree add wants to create it
+WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
 git worktree add --quiet "$WT" -b "$BRANCH" "$BASE" || die_precondition "git worktree add failed"
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"

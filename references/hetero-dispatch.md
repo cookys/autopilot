@@ -26,9 +26,14 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}`. Exit 0 = committed + clean tree (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but `no_commit` / `dirty` (worktree **kept** for inspection). Exit 2 = precondition failure. Agent stdout goes to `agent_log`, keeping stdout parseable.
+JSON to stdout: `{status, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}`. Exit 0 = committed + clean tree (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but `no_commit` / `dirty` (worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
 
 After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then merge or discard the branch.
+
+### Cleanup (caller's responsibility — both are deliberate persistence)
+
+- `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
+- Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` when done. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear.
 
 ## Role-prompt reuse (engine-neutral bodies)
 

@@ -23,49 +23,51 @@ run_guard() { HOME="$GUARD_HOME" AUTOPILOT_REPO_OVERRIDE="$SBX" bash "$SCRIPT" -
 
 # 1. clean repo + clean dest → preflight OK, exit 0
 OUT="$(run_guard)"; EXIT=$?
-assert_eq "0" "$EXIT" "clean state exit code"
+assert_eq "$EXIT" "0" "clean state exit code"
 assert_contains "$OUT" "preflight OK" "clean state message"
 
 # 2. symlinked dest → refuse, exit 1, never bypassable (even with --skip-git-checks)
 ln -s "$SBX" "$GUARD_HOME/.gemini/config/plugins/autopilot"
 OUT="$(run_guard)"; EXIT=$?
-assert_eq "1" "$EXIT" "symlink dest exit code"
+assert_eq "$EXIT" "1" "symlink dest exit code"
 assert_contains "$OUT" "SYMLINK" "symlink dest message"
 OUT="$(run_guard --skip-git-checks)"; EXIT=$?
-assert_eq "1" "$EXIT" "symlink dest NOT bypassable by --skip-git-checks"
+assert_eq "$EXIT" "1" "symlink dest NOT bypassable by --skip-git-checks"
 rm "$GUARD_HOME/.gemini/config/plugins/autopilot"
 
 # 3. real-dir dest → fine (only symlinks are the kill condition)
 mkdir -p "$GUARD_HOME/.gemini/config/plugins/autopilot"
 OUT="$(run_guard)"; EXIT=$?
-assert_eq "0" "$EXIT" "real-dir dest exit code"
+assert_eq "$EXIT" "0" "real-dir dest exit code"
 
 # 4. dirty repo → refuse; --skip-git-checks bypasses
 echo x > "$SBX/dirty.txt"
 OUT="$(run_guard)"; EXIT=$?
-assert_eq "1" "$EXIT" "dirty repo exit code"
+assert_eq "$EXIT" "1" "dirty repo exit code"
 assert_contains "$OUT" "uncommitted" "dirty repo message"
 OUT="$(run_guard --skip-git-checks)"; EXIT=$?
-assert_eq "0" "$EXIT" "dirty repo bypassed by --skip-git-checks"
+assert_eq "$EXIT" "0" "dirty repo bypassed by --skip-git-checks"
 rm "$SBX/dirty.txt"
 
 # 5. unpushed commit → refuse; push clears it
 git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m unpushed
 OUT="$(run_guard)"; EXIT=$?
-assert_eq "1" "$EXIT" "unpushed commit exit code"
+assert_eq "$EXIT" "1" "unpushed commit exit code"
 assert_contains "$OUT" "unpushed" "unpushed commit message"
 git -C "$SBX" push -q origin develop
 OUT="$(run_guard)"; EXIT=$?
-assert_eq "0" "$EXIT" "after push exit code"
+assert_eq "$EXIT" "0" "after push exit code"
 
-# 6. non-git source → refuse without --skip-git-checks
+# 6. non-git source → refuse without --skip-git-checks; bypassable with it
 NOGIT="$TEST_TMP/nogit"; mkdir -p "$NOGIT"
 OUT="$(HOME="$GUARD_HOME" AUTOPILOT_REPO_OVERRIDE="$NOGIT" bash "$SCRIPT" --preflight-only 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "non-git source exit code"
+assert_eq "$EXIT" "1" "non-git source exit code"
 assert_contains "$OUT" "not a git repository" "non-git source message"
+OUT="$(HOME="$GUARD_HOME" AUTOPILOT_REPO_OVERRIDE="$NOGIT" bash "$SCRIPT" --preflight-only --skip-git-checks 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "non-git source bypassed by --skip-git-checks"
 
 # 7. unknown argument → refuse
 OUT="$(run_guard --bogus)"; EXIT=$?
-assert_eq "1" "$EXIT" "unknown arg exit code"
+assert_eq "$EXIT" "1" "unknown arg exit code"
 
 finalize_test

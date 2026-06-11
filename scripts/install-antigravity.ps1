@@ -16,23 +16,33 @@ $ErrorActionPreference = "Stop"
 
 $repo = Split-Path -Parent $PSScriptRoot
 
+# Feature-gap note vs the bash script: no --skip-git-checks / --preflight-only /
+# AUTOPILOT_REPO_OVERRIDE here — the PS1 mirror is guard-equivalent but
+# stricter (no bypass flags). Guards use Write-Host + exit (not Write-Error,
+# which under $ErrorActionPreference=Stop throws before any exit line runs).
+
 # Guard 1 (never bypassable): symlinked destination = confirmed kill condition.
 $dest = Join-Path $HOME ".gemini/config/plugins/autopilot"
 if (Test-Path $dest) {
     $item = Get-Item $dest -Force
     if ($item.LinkType) {
-        Write-Error "$dest is a $($item.LinkType) (-> $($item.Target)). agy plugin install follows it and self-copy-truncates the TARGET (confirmed data-loss bug, agy <= 1.0.7). Inspect the target, then remove the link itself before retrying."
+        Write-Host "ERROR: $dest is a $($item.LinkType) (-> $($item.Target)). agy plugin install follows it and self-copy-truncates the TARGET (confirmed data-loss bug, agy <= 1.0.7). Inspect the target, then remove the link itself before retrying." -ForegroundColor Red
         exit 1
     }
 }
 
-# Guards 2+3: require a clean, fully-pushed repo (recovery depends on git).
+# Guards 2+3: require a clean, fully-pushed GIT repo (recovery depends on git).
+git -C $repo rev-parse --git-dir 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: $repo is not a git repository - cannot verify it is recoverable. Install from a sacrificial clone instead." -ForegroundColor Red
+    exit 1
+}
 if (git -C $repo status --porcelain) {
-    Write-Error "$repo has uncommitted changes. Commit/stash first, or install from a sacrificial clone."
+    Write-Host "ERROR: $repo has uncommitted changes. Commit/stash first, or install from a sacrificial clone." -ForegroundColor Red
     exit 1
 }
 if (git -C $repo log --branches --not --remotes --oneline 2>$null | Select-Object -First 1) {
-    Write-Error "$repo has unpushed commits. Push first, or install from a sacrificial clone."
+    Write-Host "ERROR: $repo has unpushed commits. Push first, or install from a sacrificial clone." -ForegroundColor Red
     exit 1
 }
 

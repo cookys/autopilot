@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.14.1 — _bodies relocation (closes all-tools bypass) + agy headless dispatch facts
+
+**Headline**: the generated OpenCode body files moved out of Claude Code's plugin agent scan path (`agents/_bodies/` → `.opencode/agent-bodies/`), closing a real bypass: frontmatter-less body files registered as dispatchable CC agents with ALL tools, and a natural-language "dispatch the planner" was observed misrouting to `autopilot:_bodies:planner.body` in practice. Bonus: the fix itself was implemented by **Gemini 3.5 Flash via `agy -p`** in an isolated worktree from a six-element Task Prompt — the first verified heterogeneous dispatch — with the review verdict kept in the dispatching Claude Code session.
+
+### Fixed
+- 🟠 **`agents/_bodies/*.body.md` no longer surface as dispatchable CC agents** (all-tools bypass): relocated to `.opencode/agent-bodies/`, co-located with their sole consumer. `sync-agent-bodies.sh` output path, `.opencode/opencode.json` `{file:..}` refs (now same-dir, no `../` traversal), pre-commit hint, and live docs updated; body files are pure renames (R100). Acceptance verified: fresh-session roster lists only `autopilot:{reviewer,debugger,planner}`; `preflight-portability.sh` 12/12 including live OpenCode body resolution. Merged as `a83c04a`.
+
+### Added
+- `references/multi-agent-portability.md`: "Verified by Spike (agy 1.0.5 headless dispatch)" — `agy -p` is a full agentic loop equivalent to `claude -p`; verified flags and the two hard differences (no granular tool allowlist ⇒ worktree mandatory; no structured output ⇒ verify by artifacts). Records the heterogeneous-dispatch invariant: shelled-out agents implement, verdict stays at depth 0.
+
+### Rollback
+- Maintainer: `git revert a83c04a` (restores `agents/_bodies/`; OpenCode refs revert with it)
+- User-side: `/plugin update autopilot @v2.14.0`
+
 ## v2.14.0 — nested-dispatch integration (capability-gated)
 
 **Headline**: Claude Code v2.1.172 shipped nested subagents ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)"). autopilot integrates it capability-gated: Handoff ENUMs stay the canonical cross-platform dispatch path, the planner gains read-only research children, and blind-dispatch review integrity is hardened to hold at every nesting depth. Non-CC platforms (OpenCode / Codex / Antigravity) need zero changes — they degrade to the existing skill-layer round-trip. Validated pre-ship by a 3-lens review team (portability / blind-dispatch safety / feasibility) + two empirical spikes on 2.1.172.

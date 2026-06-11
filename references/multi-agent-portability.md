@@ -2,7 +2,7 @@
 
 How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-05-29 (Antigravity facts empirical against `agy` 1.0.1; OpenCode against 1.15.10).
+Last verified: 2026-06-11 (agy headless dispatch empirical against `agy` 1.0.5; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
 
 ---
 
@@ -38,6 +38,17 @@ Empirical `agy` 1.0.1 testing (2026-05-29) overturned earlier claims in this doc
 - `__dirname` is **`undefined`** in OpenCode's Bun ESM plugin context — use `import.meta.url + fileURLToPath`.
 - OpenCode `{file:../...}` cross-layer resolution **works** (caveat: a literal `{file:..}` inside a description field triggers spurious parse attempts).
 - "OpenCode auto-substitutes `${CLAUDE_PLUGIN_ROOT}` in hooks" — still no evidence; OpenCode doesn't use Claude's hooks.json at all.
+
+### Verified by Spike (agy 1.0.5 headless dispatch, 2026-06-11)
+
+Heterogeneous outbound dispatch — Claude Code shelling out to agy via Bash — is empirically proven:
+
+- **`agy -p` / `--print` is a full agentic loop**, not single-shot completion: one invocation created two files then ran `ls` to confirm (multi-turn tool chain, artifacts verified on disk). Functional equivalent of `claude -p`.
+- **Real-phase execution verified**: Gemini 3.5 Flash (High) executed a 3-task autopilot plan (the `_bodies` relocation, merged as `a83c04a`) in a git worktree from a **six-element Task Prompt alone — no autopilot plugin installed in agy**. Pure-rename fidelity (R100), zero boundary violations, review gate found no Critical/Major.
+- Flags verified: `--model "Gemini 3.5 Flash (Low|Medium|High)"` (names from `agy models`), `--dangerously-skip-permissions`, `--sandbox`, `--continue`/`--conversation`, `--print-timeout` (**default 5m** — raise for real phases).
+- **Differences vs `claude -p`**: no `--allowedTools`-grade granular allowlist (all-or-nothing) ⇒ **worktree isolation is mandatory** for mutation work; no `--max-turns` / `--output-format json` equivalent observed ⇒ verify by artifacts (files / `git diff`), never by the agent's self-report (observed failure: it skipped printing the requested commit hash while claiming success).
+- **Verdict stays at depth 0**: the shelled-out agent implements; the dispatching Claude Code session reviews the diff (quality-pipeline) before merge — same invariant as `references/blind-dispatch.md` § Nested dispatch.
+- NOT verified: whether agy with the autopilot plugin installed loads skills in `-p` mode.
 
 ---
 

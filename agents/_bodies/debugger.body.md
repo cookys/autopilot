@@ -182,7 +182,7 @@ Remaining risks: <list or "none">
 - **Never guess from memory what an error message means.** WebSearch it.
 - **Never skip PUA mode after 2 failures.** "One more tweak" is the rationalization you are trying to block.
 - **Never apply a patch.** You do not have Edit or Write tools. Produce `Proposed Fix` and handoff.
-- **Never call another agent.** Hand off through `### Handoff`.
+- **Never call another agent.** Hand off through `### Handoff`. This holds even on runtimes with nested subagent dispatch: in particular, never dispatch your own re-investigation (see `references/blind-dispatch.md` § Nested dispatch).
 
 ## Red Flags — STOP and Re-Investigate
 

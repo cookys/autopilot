@@ -145,11 +145,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
 
 ### `agents/_bodies/*.body.md` surface as dispatchable agents with NO tool allowlist
-- **Trigger**: next time the agents layer or `sync-agent-bodies.sh` is touched, OR anyone observes `autopilot:_bodies:<role>.body` in a live agent roster
-- **Context**: 2026-06-11 nested-dispatch validation (validator C) observed the frontmatter-less `_bodies/*.body.md` files register as dispatchable Claude Code agents with "All tools" — dispatching the body variant bypasses the read-only `tools:` allowlist of the canonical `agents/<role>.md` entirely. They exist only as OpenCode `{file:..}` inline targets and were never meant to be CC-dispatchable.
-- **Options**: (a) move `_bodies/` out of any CC agent scan path; (b) add minimal frontmatter with the same allowlist (but then sync must maintain it — defeats "body" purpose); (c) accept + document. Investigate which scan path picks them up first.
-- **Effort**: S (investigation) + S (fix)
-- **Source**: 2026-06-11 nested-dispatch-integration 3-lens validation, validator C 🔵
+- **Trigger**: **HARD PRECONDITION — before granting `Agent` (or any new tool) to any further agent frontmatter, this must be fixed first.** Also: next time `sync-agent-bodies.sh` is touched, or the next version bump, whichever comes first.
+- **Context**: 2026-06-11 nested-dispatch validation (validator C) observed the frontmatter-less `_bodies/*.body.md` files register as dispatchable Claude Code agents with "All tools" — dispatching the body variant bypasses the read-only `tools:` allowlist of the canonical `agents/<role>.md` entirely. They exist only as OpenCode `{file:..}` inline targets and were never meant to be CC-dispatchable. **2026-06-11 v2.14.0 R2 review escalated this to 🟠 and asked for an in-PR fix; CEO re-deferred with rationale**: the bypass is pre-existing and orthogonal to the v2.14.0 diff (body route was all-tools before AND after — the planner `Agent` grant did not change the body variant's toolset), and the fix (relocating `_bodies/` out of the CC scan path) touches OpenCode consumption (`.opencode/opencode.json` `{file:..}` refs + `sync-agent-bodies.sh` output path) which needs `preflight-portability.sh` verification — wrong tail-of-release risk profile. The trigger above is now a hard precondition precisely so this cannot be deferred past the next capability grant.
+- **Options**: (a) move `_bodies/` out of any CC agent scan path (preferred; verify CC stops listing `autopilot:_bodies:*` in a fresh session + preflight-portability green); (b) add minimal frontmatter with the same allowlist (sync burden); (c) accept + document. Investigate which scan path picks them up first.
+- **Effort**: S (investigation) + S (fix) + portability verification
+- **Source**: 2026-06-11 nested-dispatch-integration 3-lens validation, validator C 🔵; escalated by v2.14.0 R2 review 🟠
 
 ---
 

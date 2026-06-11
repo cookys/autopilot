@@ -45,6 +45,10 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 - agy `-p` exposes `define_subagent` / `invoke_subagent` / `manage_subagents` — a native subagent surface inside the headless executor. Semantics unprobed; could matter if a dispatched phase wants its own fan-out.
 - Other engines' headless equivalence (`gemini` CLI, `codex` CLI, `opencode run`): same spike shape as the agy one — prove full agentic loop + flags before writing them here.
 
+## Shell-level guard for raw agy calls
+
+The guarded installer only protects its own path. For raw `agy plugin install/uninstall` typed in a shell, source [`scripts/agy-shell-guard.zsh`](../scripts/agy-shell-guard.zsh) in your `~/.zshrc` — it blocks plugin operations while any symlink sits in `~/.gemini/config/plugins/` (the agy ≤ 1.0.7 data-loss kill condition; see [`multi-agent-portability.md`](multi-agent-portability.md) § agy spike). Note: `agy -p` dispatch (this doc's subject) was never the dangerous path — the wrapper passes it straight through.
+
 ## No skill yet — deliberately
 
 Two real uses so far. Per the distill philosophy (extract skills from recurring practice, not speculatively), the skill wrapper waits for recurrence — trigger tracked in [`docs/BACKLOG.md`](../docs/BACKLOG.md).

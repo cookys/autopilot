@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.15.3 — incident knowledge into the repo (recovery recipe + shell guard)
+
+**Headline**: two gaps closed so the agy-incident protections work for anyone, not just this machine: the **recovery recipe** for the symlinked-dest truncation is now inlined in `references/multi-agent-portability.md` (it previously pointed at a private session memory — useless to other users), and the shell-level backstop ships as sourceable [`scripts/agy-shell-guard.zsh`](scripts/agy-shell-guard.zsh).
+
+### Added
+- `scripts/agy-shell-guard.zsh` — wraps raw `agy plugin install/uninstall`: blocks while any symlink sits in `~/.gemini/config/plugins/` (the agy ≤ 1.0.7 kill condition); `agy -p` dispatch passes through untouched. Install: `source` it from `~/.zshrc`.
+- `references/multi-agent-portability.md`: 5-step recovery recipe inlined (HEAD/config rebuild, index reset, zero-byte-only restore preserving surviving edits, fsck).
+- `references/hetero-dispatch.md`: shell-guard section.
+- BACKLOG skill-wrapper entry: user-facing README section explicitly deferred to ship with the skill.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (docs + standalone snippet; nothing depends on it)
+
 ## v2.15.2 — agy export-then-install (structural workaround)
 
 **Headline**: while the agy ≤ 1.0.7 symlinked-dest truncation bug is unfixed upstream, `install-antigravity.sh`/`.ps1` now **never hand agy the live repo**: the install runs against a sacrificial `git archive HEAD` export (no `.git`, no path back to the real checkout). Even an installer failure mode we haven't guarded against cannot touch the working copy. The v2.15.1 preflight guards remain as defense in depth.

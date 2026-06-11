@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.15.2 — agy export-then-install (structural workaround)
+
+**Headline**: while the agy ≤ 1.0.7 symlinked-dest truncation bug is unfixed upstream, `install-antigravity.sh`/`.ps1` now **never hand agy the live repo**: the install runs against a sacrificial `git archive HEAD` export (no `.git`, no path back to the real checkout). Even an installer failure mode we haven't guarded against cannot touch the working copy. The v2.15.1 preflight guards remain as defense in depth.
+
+### Added
+- Export-then-install in both scripts: `git archive HEAD` → temp dir → validate + install from there → cleanup. Non-git source (reachable only via `--skip-git-checks`) falls back to direct install with a warning. `--export-only` creates the export, prints its path, and exits (test seam / manual inspection; needs no agy binary).
+- Test scenarios: export is not the source, contains the manifest, has no `.git` (20 assertions total).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (restores direct-from-repo install; guards stay via v2.15.1)
+
 ## v2.15.1 — agy install data-loss guard
 
 **Headline**: `scripts/install-antigravity.sh` (+ `.ps1`) now refuse the conditions behind the 2026-06-11 source-repo truncation incident. Mechanism (confirmed by sandboxed repro, **still present in agy 1.0.7, latest**): `agy plugin install` follows a symlinked `~/.gemini/config/plugins/<name>` and self-copies — truncating the source repo file-by-file (1497–1503 files zeroed in repro, `.git/HEAD` destroyed).

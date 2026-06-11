@@ -24,6 +24,12 @@
 # headless dispatch)". Guards below: the symlink check is NEVER bypassable;
 # dirty/unpushed checks can be bypassed with --skip-git-checks (e.g. for a
 # tarball source). --preflight-only runs the guards and exits (used by tests).
+#
+# Additionally, the install is EXPORT-THEN-INSTALL: agy is pointed at a
+# sacrificial `git archive HEAD` export (no .git, no path back to the real
+# checkout), never at the live repo — so even an installer bug we haven't
+# guarded against cannot touch the working copy. --export-only creates the
+# export, prints its path, and exits (test seam / manual inspection).
 
 set -euo pipefail
 
@@ -31,11 +37,13 @@ REPO="${AUTOPILOT_REPO_OVERRIDE:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 PREFLIGHT_ONLY=0
 SKIP_GIT_CHECKS=0
+EXPORT_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --preflight-only) PREFLIGHT_ONLY=1 ;;
     --skip-git-checks) SKIP_GIT_CHECKS=1 ;;
-    *) echo "ERROR: unknown argument: $arg (known: --preflight-only, --skip-git-checks)" >&2; exit 1 ;;
+    --export-only) EXPORT_ONLY=1 ;;
+    *) echo "ERROR: unknown argument: $arg (known: --preflight-only, --skip-git-checks, --export-only)" >&2; exit 1 ;;
   esac
 done
 
@@ -80,7 +88,7 @@ if [ "$PREFLIGHT_ONLY" = "1" ]; then
   exit 0
 fi
 
-if ! command -v agy >/dev/null 2>&1; then
+if [ "$EXPORT_ONLY" = "0" ] && ! command -v agy >/dev/null 2>&1; then
   echo "ERROR: agy (Antigravity CLI) not found on PATH." >&2
   echo "       Install Antigravity first: https://antigravity.google/" >&2
   exit 1
@@ -94,12 +102,41 @@ if [ ! -f "$REPO/plugin.json" ]; then
   exit 1
 fi
 
+# --- export-then-install: never hand agy the live repo ---
+# agy is pointed at a sacrificial `git archive` export (no .git, no path back
+# to the real checkout), so even an unguarded-against installer state cannot
+# touch the working repo. Falls back to direct install only for a non-git
+# source under --skip-git-checks (export impossible there).
+SRC="$REPO"
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  EXPORT_DIR="$(mktemp -d -t autopilot-agy-export-XXXXXX)"
+  trap 'rm -rf "$EXPORT_DIR"' EXIT   # no leak on any failure path
+  git -C "$REPO" archive HEAD | tar -x -C "$EXPORT_DIR"
+  SRC="$EXPORT_DIR"
+  echo "export: installing from sacrificial copy $SRC (HEAD of $REPO, no .git)"
+  if [ "$SKIP_GIT_CHECKS" = "1" ] && [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+    echo "WARNING: --skip-git-checks active; git archive HEAD exports COMMITTED state only — working-tree changes are NOT included." >&2
+  fi
+else
+  echo "WARNING: non-git source — installing directly from $REPO (no export possible)." >&2
+fi
+
+if [ "$EXPORT_ONLY" = "1" ]; then
+  if [ "$SRC" = "$REPO" ]; then
+    echo "ERROR: --export-only requires a git source — non-git source cannot be exported." >&2
+    exit 1
+  fi
+  trap - EXIT   # the export is the deliverable; caller owns cleanup
+  echo "$SRC"
+  exit 0
+fi
+
 echo "== validate =="
-agy plugin validate "$REPO"
+agy plugin validate "$SRC"
 
 echo ""
 echo "== install =="
-agy plugin install "$REPO"
+agy plugin install "$SRC"
 
 echo ""
 echo "== verify =="

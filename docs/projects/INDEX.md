@@ -12,6 +12,7 @@ _None._
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-11 | hetero-dispatch-script (S-size; `dispatch-hetero.sh` + reference doc, script-first — no project dir, see CHANGELOG) | v2.15.0 | (merge pending) | (CHANGELOG entry) |
 | 2026-06-11 | _bodies-relocation (S-size; implemented by Gemini 3.5 Flash via `agy -p`, first heterogeneous dispatch — no project dir, see CHANGELOG) | v2.14.1 | [`a83c04a`](../../../../commit/a83c04a) | (CHANGELOG entry) |
 | 2026-06-11 | [nested-dispatch-integration](_archive/2026-06-11-nested-dispatch-integration/README.md) | v2.14.0 | [`98d6ab2`](../../../../commit/98d6ab2) | (self-contained in README) |
 | 2026-06-04 | [distill-consolidate](2026-06-04-distill-consolidate/README.md) | v2.11.0 | [`d2060e3`](../../../../commit/d2060e3) | [plan](../plans/2026-06-04-distill-consolidate.md) |

@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.15.0 — heterogeneous dispatch, script-first
+
+**Headline**: Claude Code can now dispatch a non-Claude engine as a headless implementer through a hard-railed script. `scripts/dispatch-hetero.sh` wraps the verified `agy -p` (Gemini) pattern with **non-skippable worktree isolation** (agy has no granular tool allowlist — the rail is hard-coded, not prose) and **artifact-based verification** (commit/diff/cleanliness from git; the agent's self-report is never trusted — an observed Gemini run claimed success while omitting the requested commit hash). Verdict stays at depth 0: the dispatching session reviews the returned branch via quality-pipeline before merge. Skill wrapper deliberately deferred until recurrence (BACKLOG trigger).
+
+### Added
+- `scripts/dispatch-hetero.sh` — heterogeneous implementer dispatch: JSON output `{status, commit, files_changed, …}`; exit 0 committed (worktree auto-removed, branch survives for review) / 1 no-commit-or-dirty (worktree kept for inspection) / 2 precondition failure. `--agy-bin` seam for testing.
+- `hooks/tests/dispatch-hetero.test.sh` — 18-assertion integration test via PATH-stubbed fake agy (no network): preconditions, committed path, duplicate-branch guard, no-commit path with kept worktree.
+- `references/hetero-dispatch.md` — the ritual + four invariants (worktree mandatory / artifacts-not-self-report / verdict at depth 0 / six-element prompt as the contract), engine-neutral role-prompt reuse of `.opencode/agent-bodies/*.body.md`, unverified-engines list.
+- `docs/BACKLOG.md` — skill-wrapper entry, trigger: 2-3 more real uses or a second engine passing the headless spike.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (pure addition — no existing behavior changed)
+- User-side: `/plugin update autopilot @v2.14.1`
+
 ## v2.14.1 — _bodies relocation (closes all-tools bypass) + agy headless dispatch facts
 
 **Headline**: the generated OpenCode body files moved out of Claude Code's plugin agent scan path (`agents/_bodies/` → `.opencode/agent-bodies/`), closing a real bypass: frontmatter-less body files registered as dispatchable CC agents with ALL tools, and a natural-language "dispatch the planner" was observed misrouting to `autopilot:_bodies:planner.body` in practice. Bonus: the fix itself was implemented by **Gemini 3.5 Flash via `agy -p`** in an isolated worktree from a six-element Task Prompt — the first verified heterogeneous dispatch — with the review verdict kept in the dispatching Claude Code session.

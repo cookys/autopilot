@@ -138,23 +138,17 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（看 Claude Code source / docs 確認 count semantics）
 - **Source**: 2026-05-14 v2.7.2 post-ship reload verification
 
-### Generated `_bodies/*.body.md` relative links break one level deep
+### Generated `.opencode/agent-bodies/*.body.md` relative links break one level deep
 - **Trigger**: next time `scripts/sync-agent-bodies.sh` is touched, OR an OpenCode agent reports a dangling `code-review.md` link
-- **Context**: 2026-06-02 link-check found `agents/_bodies/reviewer.body.md` inherits `../skills/quality-pipeline/references/code-review.md` from `agents/reviewer.md` — correct at `agents/` depth, but resolves to `agents/skills/...` (missing) from `agents/_bodies/`. Generated artifact; the link is informational and the body is consumed via OpenCode `{file:..}` inline, so low severity. Fix options: (a) sync script rewrites `../` → `../../` for links when generating bodies; (b) make the source links repo-root-relative; (c) accept. NOTE: the v2.7.x validate.sh link-check is scoped to `skills/` only, so this does NOT fail CI today.
+- **Context**: 2026-06-02 link-check found `.opencode/agent-bodies/reviewer.body.md` inherits `../skills/quality-pipeline/references/code-review.md` from `agents/reviewer.md` — correct at `agents/` depth, but resolves to `agents/skills/...` (missing) from `.opencode/agent-bodies/`. Generated artifact; the link is informational and the body is consumed via OpenCode `{file:..}` inline, so low severity. Fix options: (a) sync script rewrites `../` → `../../` for links when generating bodies; (b) make the source links repo-root-relative; (c) accept. NOTE: the v2.7.x validate.sh link-check is scoped to `skills/` only, so this does NOT fail CI today.
 - **Effort**: S (fiddly — link-rewriting in the sync script risks other links)
 - **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
-
-### `agents/_bodies/*.body.md` surface as dispatchable agents with NO tool allowlist
-- **Trigger**: **HARD PRECONDITION — before granting `Agent` (or any new tool) to any further agent frontmatter, this must be fixed first.** Also: next time `sync-agent-bodies.sh` is touched, or the next version bump, whichever comes first.
-- **Context**: 2026-06-11 nested-dispatch validation (validator C) observed the frontmatter-less `_bodies/*.body.md` files register as dispatchable Claude Code agents with "All tools" — dispatching the body variant bypasses the read-only `tools:` allowlist of the canonical `agents/<role>.md` entirely. They exist only as OpenCode `{file:..}` inline targets and were never meant to be CC-dispatchable. **2026-06-11 v2.14.0 R2 review escalated this to 🟠 and asked for an in-PR fix; CEO re-deferred with rationale**: the bypass is pre-existing and orthogonal to the v2.14.0 diff (body route was all-tools before AND after — the planner `Agent` grant did not change the body variant's toolset), and the fix (relocating `_bodies/` out of the CC scan path) touches OpenCode consumption (`.opencode/opencode.json` `{file:..}` refs + `sync-agent-bodies.sh` output path) which needs `preflight-portability.sh` verification — wrong tail-of-release risk profile. The trigger above is now a hard precondition precisely so this cannot be deferred past the next capability grant.
-- **Options**: (a) move `_bodies/` out of any CC agent scan path (preferred; verify CC stops listing `autopilot:_bodies:*` in a fresh session + preflight-portability green); (b) add minimal frontmatter with the same allowlist (sync burden); (c) accept + document. Investigate which scan path picks them up first.
-- **Effort**: S (investigation) + S (fix) + portability verification
-- **Source**: 2026-06-11 nested-dispatch-integration 3-lens validation, validator C 🔵; escalated by v2.14.0 R2 review 🟠
 
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)
 
+- **agents/_bodies/*.body.md surface as dispatchable agents with NO tool allowlist** — ✅ fixed by relocating bodies out of the CC agent scan path, date 2026-06-11.
 - **Nested subagent (depth=5) integration** — ✅ shipped v2.14.0 (project `docs/projects/2026-06-11-nested-dispatch-integration/`). Both triggers fired 2026-06-11: CC v2.1.172 changelog ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)") + nest-probe green (explicit grant honored; children get `Agent` not `Task`; v2.1.170 negatives were server-side rollout lag). Landed with two upgrades over the original proposal: blind-dispatch rule is **context-indexed** ("verdict dispatch only from depth 0" — closes the fixer→verify-my-fix hole), and depth ≤ 2 policy has a single canonical home (`agents/README.md` § Orchestration). See CHANGELOG v2.14.0.
 
 Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth). Last pruned 2026-06-02: v2.7.5 test-suite + v2.7.6 hook-polish items A/B/C.

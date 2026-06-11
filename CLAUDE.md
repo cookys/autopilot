@@ -28,7 +28,7 @@ Standalone-capable lifecycle orchestration plugin for Claude Code. 19 skills, 3 
 | [`scripts/validate.sh`](scripts/validate.sh) | Validate every skill's SKILL.md structure (YAML frontmatter, required fields). |
 | [`scripts/dev-setup.sh`](scripts/dev-setup.sh) | One-time local-dev setup. |
 | [`scripts/sync-version.js`](scripts/sync-version.js) | Sync version across canonical `.claude-plugin/plugin.json` + mirrors (root `plugin.json`, README badges). `--check` mode (read-only drift gate, used by `.githooks/pre-commit`). |
-| [`scripts/sync-agent-bodies.sh`](scripts/sync-agent-bodies.sh) | Strip YAML frontmatter from `agents/<role>.md` → `agents/_bodies/<role>.body.md` (OpenCode `{file:..}` reference target). `--check` mode in pre-commit. |
+| [`scripts/sync-agent-bodies.sh`](scripts/sync-agent-bodies.sh) | Strip YAML frontmatter from `agents/<role>.md` → `.opencode/agent-bodies/<role>.body.md` (OpenCode `{file:..}` reference target). `--check` mode in pre-commit. |
 | [`scripts/preflight-portability.sh`](scripts/preflight-portability.sh) | 12-check cross-agent acceptance gate (hooks smoke, symlinks, OpenCode plugin/skill/agent). Self-skips OpenCode checks when binary absent. |
 | [`scripts/preflight-release.sh`](scripts/preflight-release.sh) | Release-hygiene gate: CHANGELOG entry + INDEX row + version-mirror parity for canonical version. Run at finish-flow L-5.5 when a ship bumps the version. |
 | [`scripts/setup-symlinks.sh`](scripts/setup-symlinks.sh) / [`.ps1`](scripts/setup-symlinks.ps1) | Ensure `.agents/skills/` symlink resolves (Windows-safe). Auto-run by `dev-setup.sh`. |

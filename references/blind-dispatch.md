@@ -179,7 +179,9 @@ Three clauses hold at **every nesting depth**:
 2. **No round-cycle meta-signal flows down.** Nested children are never told
    the round number, that a fix landed, or that a re-review is in progress.
    The full pre-flight checklist above applies to every prompt at every
-   depth — including prompts the fixer writes for its children.
+   depth — including prompts the fixer writes for its children (intent-only
+   at depth ≥ 1: the linter cannot see nested prompts — see the enforcement
+   caveat above).
 3. **Round-delta stays at depth 0.** Output of
    `scripts/diff-since-last-round.sh` (any subcommand) must not enter ANY
    subagent prompt at any depth, and no child may be pointed at the

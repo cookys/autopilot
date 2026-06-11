@@ -150,12 +150,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (skill) + S (resolve-dispatch runner field, if chain routing is wanted)
 - **Source**: 2026-06-11 hetero-dispatch spike + first production use (`a83c04a`); CEO decision to ship script-first.
 
-### agy plugin install/uninstall zero-truncates SOURCE repo files — repro + guard + upstream report
-- **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (HARD precondition: do it from a sacrificial clone until this is closed), OR when picking up an S-size hardening slot.
-- **Context**: 2026-06-11 incident (agy 1.0.5): failed install (read-only `.git` objects in the plugins-dir copy from an older install) → uninstall + reinstall → **55+ tracked files + `.git/{HEAD,config,index,logs/HEAD,ORIG_HEAD,FETCH_HEAD}` zero-truncated in the source repo** during the install window (manifest `importedAt` 12:29:25 vs damage mtime 12:29:07; `-p` probes started 12:29:42, exonerated). Full recovery from origin/develop — zero loss only because everything was pushed. Truncated set ≈ the failed first install's already-processed file list → src/dst-reversed copy/cleanup hypothesis, unconfirmed.
-- **Proposed**: (a) repro in a sacrificial clone (failed-install state → uninstall/reinstall → watch source) to pin mechanism; (b) guard `scripts/install-antigravity.sh`: refuse to run if the repo has uncommitted/unpushed work, print sacrificial-clone instructions; consider `--exclude .git` strategy (copy from `git archive` instead of the live dir); (c) upstream report to Antigravity with the forensic timeline.
-- **Effort**: (a) S spike; (b) S; (c) S (report writing)
-- **Source**: 2026-06-11 hetero-dispatch skills-probe session — incident forensics in `references/multi-agent-portability.md` § agy spike + memory `project_agy-install-incident`.
+### agy install symlinked-dest self-copy truncation — guard install script + upstream report
+- **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check `ls -la ~/.gemini/config/plugins/` for symlinks first), OR next S-size hardening slot.
+- **Context**: 2026-06-11 incident, **mechanism CONFIRMED by sandboxed repro same day** (repro spike ✅ done): `agy plugin install` follows a symlinked destination `~/.gemini/config/plugins/<name>` and self-copies — open+truncate "dest" (= source through the symlink), read back empty, write 0 bytes, file after file. Sandbox: symlinked dest → 1497 files zeroed + `.git/HEAD` destroyed. Incident = legacy symlink from the 5/29 agy-1.0.1 era; the first (failed) install truncated 55 files before dying on read-only `.git` object `008efd…` (same object in sandbox — deterministic walk); uninstall/reinstall exonerated (all 4 sandbox control phases clean). Hazard + guards documented in `references/multi-agent-portability.md` § agy spike.
+- **Remaining**: (b) guard `scripts/install-antigravity.sh`: pre-flight refuse if `~/.gemini/config/plugins/<name>` is a symlink OR repo has uncommitted/unpushed work; print sacrificial-clone instructions; (c) upstream report to Antigravity — now with a 3-line deterministic repro (clone, `ln -s` dest, install) instead of a forensic timeline.
+- **Effort**: (b) S; (c) S (report writing)
+- **Source**: 2026-06-11 incident + same-day sandboxed repro spike (H1/H2/H3 refuted, H6 symlink-dest confirmed).
 
 ---
 

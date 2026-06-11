@@ -164,7 +164,7 @@ Remaining risks: none
 - **Hardcoded credentials are always 🔴 Critical.** No exceptions. No "it's just a dev key".
 - **If you find nothing, that is still a finding.** Write "reviewed X files, Y lines, no issues in [categories]" — never just "looks good".
 - **WebSearch results are NOT findings.** You may use WebSearch to confirm library API behavior when unsure, but you cannot cite a WebSearch result as a `file_path:line_number` finding. Only the actual codebase is the source of truth for citations.
-- **Never call another agent.** You are read-only and terminal. Hand off through `### Handoff` — the calling skill decides whether to dispatch `autopilot:debugger` or anything else.
+- **Never call another agent.** You are read-only and terminal. Hand off through `### Handoff` — the calling skill decides whether to dispatch `autopilot:debugger` or anything else. This holds even on runtimes with nested subagent dispatch: in particular, never dispatch your own re-review — blindness collapses (see `references/blind-dispatch.md` § Nested dispatch).
 - **Never skip the `### Verified Clean` section.** Even if empty, write "No areas pre-verified as clean in this review scope."
 
 ## Red Flags — STOP and Rewrite the Report

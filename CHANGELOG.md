@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.14.0 — nested-dispatch integration (capability-gated)
+
+**Headline**: Claude Code v2.1.172 shipped nested subagents ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)"). autopilot integrates it capability-gated: Handoff ENUMs stay the canonical cross-platform dispatch path, the planner gains read-only research children, and blind-dispatch review integrity is hardened to hold at every nesting depth. Non-CC platforms (OpenCode / Codex / Antigravity) need zero changes — they degrade to the existing skill-layer round-trip. Validated pre-ship by a 3-lens review team (portability / blind-dispatch safety / feasibility) + two empirical spikes on 2.1.172.
+
+### Added
+- `references/blind-dispatch.md` § **Nested dispatch**: the blinding boundary is **who holds verdict context, not the round number** — verdict dispatch originates only from the dispatcher (depth 0); fixer may decompose fixes but never dispatch a "verify my fix" sub-review; reviewer stays terminal; round-delta and round-cycle meta-signals never flow down to any depth. Enforcement is contract-only (`check-redispatch-prompt.sh` cannot see nested prompts) — the structural lever is keeping `Agent`/`Task` out of reviewer tools.
+- `agents/planner.md` § **Research Children**: planner's `tools:` now includes `Agent` — read-only researcher children (`subagent_type: Explore`) to explore the codebase without filling planner context. Children never mutate, never spawn grandchildren; child claims are spot-checked before citation (Fact-driven red line applies through the hop).
+- `agents/README.md` § Orchestration: **autopilot nesting policy depth ≤ 2** (canonical statement; main → orchestrating agent → leaf) — same coordination-cost philosophy as team cap-3; harness depth-5 is a limit, not a target. Nested self-dispatch documented as a scoped, never-required exception to "agents do not call each other".
+- `references/multi-agent-portability.md` §7: nested-dispatch row (CC v2.1.172+, spike evidence 2026-06-11: default grant + explicit allowlist both honored, children get `Agent` not `Task`; other platforms ❌ unverified-by-absence).
+
+### Changed
+- `agents/reviewer.md` Red Line extended: never dispatch your own re-review, even on nesting-capable runtimes.
+- `skills/quality-pipeline/references/code-review.md`: re-review blindness constraints stated to hold at any nesting depth.
+- `agents/README.md` tool-permissions: planner allowlist variant documented; child-hop guarantee flagged as convention-enforced, not mechanical.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.13.1`; behavior change is planner-only (drop of research children), no data/file migration involved.
+
 ## v2.13.1 — standalone-fallback fix + 3 parity refinements (superpowers-gap batch)
 
 **Fix batch** from the superpowers-parity inventory (via `research-to-ship`, right-sized: small known items built, 2 M items CEO-deferred to BACKLOG). The headline is a real **standalone-capability bug**.

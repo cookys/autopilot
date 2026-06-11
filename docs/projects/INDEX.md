@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Target version | Branch |
+|------|---------|----------------|--------|
+| 2026-06-11 | [nested-dispatch-integration](2026-06-11-nested-dispatch-integration/README.md) | v2.14.0 | `feat/nested-dispatch-integration` |
 
 ## 已完成 (Completed)
 

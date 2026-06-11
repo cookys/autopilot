@@ -69,9 +69,9 @@ The `Next consumer` field uses a **fixed enum** so calling skills can pattern-ma
 - **Agents do not need voltagent catalog awareness.** A methodology agent says "needs domain expert" — it is the calling skill's job to know which voltagent role to invoke.
 - **No hard dependencies on third-party plugins.** `PARALLEL_DISPATCH` does not hardcode `superpowers:dispatching-parallel-agents` or any other dispatcher; autopilot remains self-sufficient.
 
-## Orchestration — agents do not call each other
+## Orchestration — agents do not call each other (one scoped exception)
 
-**Methodology agents never dispatch other agents.** All chaining happens at the skill layer.
+**Methodology agents never dispatch other methodology agents, and verdict-producing agents (reviewer, debugger) never dispatch at all.** All chaining happens at the skill layer. (Sole exception: the planner's read-only research children — see the nested self-dispatch paragraph below.)
 
 | Consumer skill | When it re-dispatches |
 |----------------|----------------------|
@@ -81,6 +81,10 @@ The `Next consumer` field uses a **fixed enum** so calling skills can pattern-ma
 
 The round-trip happens **in the skill**, never inside the agent's own session. This keeps each agent session bounded, its output contract deterministic, and the orchestration topology legible in the skill trace.
 
+**Nested self-dispatch (Claude Code v2.1.172+) — scoped exception, never required.** The Handoff ENUMs (`PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH`) remain the canonical cross-platform path: the agent reports, the calling skill dispatches. On Claude Code v2.1.172+, a subagent whose own `tools:` frontmatter includes `Agent` can spawn nested subagents (harness max depth 5). No shipped agent is authorized to self-consume a `PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH` handoff today: the planner's contract permanently forbids dispatching executors (research children only), and reviewer/debugger are terminal. An executor-capable agent that self-consumes its handoff is a possible future pattern, but it is a **topology change** (removes skill-layer oversight), not a mere optimization — adopting it requires an explicit design decision and an update to this section, not just a `tools:` addition. Because this is never required, non-CC platforms need zero changes — they degrade to the skill-layer round-trip above. Today only the **planner** carries `Agent` in its allowlist, and only for read-only research children (see `planner.md` § Research Children); the reviewer and debugger remain terminal, so the invariant above holds for every verdict-producing agent. Review-integrity rules for any nested dispatch live in [`references/blind-dispatch.md`](../references/blind-dispatch.md) § Nested dispatch.
+
+**autopilot nesting policy: depth ≤ 2** (main session → orchestrating agent → leaf). Same coordination-cost philosophy as the team skill's cap-3 — the harness's depth-5 ceiling is a limit, not a target. The context-offload motivation for nesting is fully served at depth 2; a leaf that needs to orchestrate further is a sign the skill-layer decomposition should be redone at depth 0, not deepened. Like cap-3, this is documentation policy, not a runtime gate.
+
 > When the re-dispatch is reviewer- or auditor-role on the same target after a fix, the prompt MUST follow [`references/blind-dispatch.md`](../references/blind-dispatch.md) (outcome-blinding to prevent quality-gate self-bypass). First-pass / fixer / domain-expert handoff are explicitly out of scope.
 
 ## Tool permissions — no direct file patching
@@ -88,12 +92,15 @@ The round-trip happens **in the skill**, never inside the agent's own session. T
 All three agents have `tools` frontmatter that excludes `Edit` and `Write`:
 
 ```yaml
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
+tools: Read, Grep, Glob, Bash, WebSearch, WebFetch          # reviewer, debugger
+tools: Read, Grep, Glob, Bash, WebSearch, WebFetch, Agent   # planner (research children only)
 ```
 
 Claude Code enforces this allowlist. The agents **cannot patch source files via `Edit` / `Write`** even if something in their prompt tried to — this turns "methodology agents diagnose, caller skills orchestrate fixes" from a convention into a mechanical guarantee for the file-patching channel.
 
 **Scope of the guarantee**: The allowlist prevents `Edit` / `Write` use. It does **not** sandbox `Bash`, which the agents retain for read-only diagnostics (`git log`, `docker logs`, `grep`, running test commands). Each agent's system prompt explicitly forbids Bash-side mutations (`rm`, `git commit`, `curl -X POST`, destructive DB commands, etc.). The prompt-level discipline plus `Edit` / `Write` mechanical denial together give you: methodology agents **read and reason**, caller skills **decide and apply**.
+
+**Child-hop caveat (planner)**: a nested child's toolset comes from the *child's* agent type, not the parent's allowlist — a planner child dispatched as `general-purpose` would have Edit/Write. The planner contract therefore mandates `subagent_type: Explore` (read-only by construction) or an explicit read-only prompt preamble (`planner.md` § Research Children). For the child hop the guarantee is **convention-enforced, not mechanical**.
 
 ## Further reading
 

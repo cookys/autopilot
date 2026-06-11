@@ -149,6 +149,45 @@ Not acceptable (despite seeming innocuous):
   of round 2+ still nudges the SubAgent toward over-search. Send the prompt
   as if it were a first-pass; the dispatcher tracks the cycle, not the agent
 
+## Nested dispatch (subagents spawning subagents)
+
+> Claude Code v2.1.172+ lets subagents spawn their own subagents (depth ≤ 5;
+> see `references/multi-agent-portability.md` §7). Enforcement of the rules
+> below is documentation + agent-prompt-contract only:
+> `scripts/check-redispatch-prompt.sh` runs in the dispatcher's session and
+> CANNOT see prompts constructed inside a subagent — no harness hook
+> intercepts nested dispatch today. The one structural lever is the `tools:`
+> line in `agents/reviewer.md` — never add `Agent` or `Task` to it.
+
+**The blinding boundary is who holds verdict context, not the round number.**
+Whoever knows prior findings must never be the one who dispatches the next
+verdict. (Depth numbering follows `agents/README.md` § Orchestration: main
+session = depth 0, dispatched agent = depth 1, its child = depth 2.)
+
+| Nested pattern | Allowed? | Why |
+|----------------|----------|-----|
+| Round-N reviewer dispatches its own **round-N+1 replacement** | ❌ **Forbidden** | The reviewer knows its own findings — any re-dispatch prompt it writes is leaky by construction, and the dispatcher-side linter never sees it. Blindness collapses |
+| **Fixer** (non-blind, holds full findings) dispatches a **verdict-producing** child ("verify my fix" sub-review) | ❌ **Forbidden** | Same collapse from the other side: the child inherits the finding context. A fixer's self-verification never substitutes for the dispatcher's blind re-review |
+| Fixer dispatches **fix-executing** children (decompose a multi-file fix) | ✅ Yes | Fixer dispatch is non-blind by design — but each child's applied fixes must be reported up so the dispatcher can increment `scripts/risk-counter.sh` (the WTF cap cannot see nested fixes otherwise) |
+| Reviewer dispatches read-only **evidence gatherers** within its round (find callers, enumerate sites) | ⚠ Future only | `agents/reviewer.md` Red Lines keep the reviewer terminal ("Never call another agent") and its tool list excludes `Agent`/`Task`. Relaxing this requires an explicit Red Line revision plus an update to this row — never just a `tools:` addition. If so revised: sub-prompts must contain none of the parent's findings ("I found X — check for similar" anchors the child), and `✅ Verified Clean` is **non-delegable** — the top reviewer may not clear code it has not read. Every sub-finding is re-verified at `file:line` before inclusion |
+| Planner dispatches read-only **research children** (codebase exploration) | ✅ Yes | Planner is not a blind role and produces no verdict; children are research-only (see `agents/planner.md` § Research Children) |
+
+Three clauses hold at **every nesting depth**:
+
+1. **Verdict dispatch originates only from the dispatcher (depth 0).** Any
+   agent holding finding context — its own or received — must not dispatch
+   an agent whose output is a review/audit verdict on the same target.
+2. **No round-cycle meta-signal flows down.** Nested children are never told
+   the round number, that a fix landed, or that a re-review is in progress.
+   The full pre-flight checklist above applies to every prompt at every
+   depth — including prompts the fixer writes for its children (intent-only
+   at depth ≥ 1: the linter cannot see nested prompts — see the enforcement
+   caveat above).
+3. **Round-delta stays at depth 0.** Output of
+   `scripts/diff-since-last-round.sh` (any subcommand) must not enter ANY
+   subagent prompt at any depth, and no child may be pointed at the
+   checkpoint file (`<git-dir>/autopilot-rereview-checkpoint`).
+
 ## Where this principle is referenced
 
 | Site | How it consumes blind-dispatch |

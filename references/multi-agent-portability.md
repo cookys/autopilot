@@ -116,7 +116,8 @@ When touching anything that crosses platform boundaries:
 ## 7. Harness primitives are Claude-Code-only (capability-gated)
 
 Claude Code ships session-control primitives that other agents do not have: `/goal`,
-`/loop`, and the `Monitor` tool. autopilot **deepens** CC by referencing these where they
+`/loop`, the `Monitor` tool, and nested subagent dispatch (the `Agent` tool inside
+subagent sessions). autopilot **deepens** CC by referencing these where they
 add leverage, but gates each behind a "if your agent supports it" framing so non-CC agents
 degrade to the manual equivalent. This mirrors the `dispatch-config.md` chain pattern: the
 enhancement is optional, the fallback is always documented.
@@ -130,6 +131,7 @@ that mentions `/goal` always states the non-CC fallback inline.
 | `/goal` | Session-scoped completion condition; after each turn a small fast model (Haiku default) judges the condition and continues or stops. Wrapper around a **prompt-based Stop hook**. Evaluator reads the transcript only — **does not call tools**. Requires **CC v2.1.139+**. Unavailable (visibly, not silently) under `disableAllHooks` / `allowManagedHooksOnly`. | [goal docs](https://code.claude.com/docs/en/goal) | `ceo-agent` convergence primitive — drive autonomous work until OKR met (see ceo-agent SKILL.md "Harness primitives"). | Manual: re-prompt at each Stop / dev-flow decision point. |
 | `/loop` | Re-runs a prompt or slash command on a time interval (or self-paced); stops when you stop it or the work is judged done. | [scheduled-tasks docs](https://code.claude.com/docs/en/scheduled-tasks#run-a-prompt-repeatedly-with-%2Floop) | `project-config-template/loop.md` — unattended babysit of `next` / `debug` / `quality-pipeline`. | Manual: re-invoke the skill each cycle. |
 | `Monitor` | Tool that watches a condition / long-running process and re-invokes the agent on change. | CC tool (present in this build, `claude 2.1.161`) | `finish-flow` / `quality-pipeline` CI-polling — wait on a CI run without busy-looping. | Manual: poll `gh run watch` / re-check by hand. |
+| Nested dispatch | Subagents can spawn their own subagents, max depth 5. Requires **CC v2.1.172+** ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)"). Empirically verified 2026-06-11 on 2.1.172: a subagent gets `Agent` by default (no frontmatter needed) AND an explicit `tools:` allowlist containing `Agent` is honored; children get `Agent` but not `Task`. Negative on v2.1.170 (grants stripped — server-side rollout). OpenCode / Codex / Antigravity: ❌ no documented equivalent (unverified-by-absence; spike before asserting otherwise). | [CC changelog v2.1.172](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) + nest-probe spikes 2026-06-11 | Handoff ENUMs stay canonical; an agent whose `tools:` includes `Agent` MAY self-consume a `PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH` handoff. Policy (canonical statement in `agents/README.md` § Orchestration): autopilot self-caps at **depth ≤ 2**. Review-integrity rules at any depth: `references/blind-dispatch.md` § Nested dispatch. | Hand the Handoff ENUM back to the calling skill — the skill-layer round-trip in `agents/README.md` § Orchestration works on every platform. |
 
 **`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
 Stop hook both fire after every turn." autopilot's own Stop hooks (`cost-tracker`,

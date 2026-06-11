@@ -14,10 +14,71 @@
 #
 # This script validates then installs. Idempotent-ish: if already imported,
 # agy install re-imports (no error). Uninstall with: agy plugin uninstall autopilot
+#
+# DATA-LOSS GUARD (mechanism confirmed by sandboxed repro 2026-06-11; still
+# present in agy 1.0.7): `agy plugin install` follows a symlinked destination
+# `~/.gemini/config/plugins/<name>` — if that symlink points back at the source
+# repo, the install self-copies and ZERO-TRUNCATES the source (open+truncate
+# "dest" = the source itself, read back empty). 1497+ files destroyed in repro.
+# See references/multi-agent-portability.md § "Verified by Spike (agy 1.0.5
+# headless dispatch)". Guards below: the symlink check is NEVER bypassable;
+# dirty/unpushed checks can be bypassed with --skip-git-checks (e.g. for a
+# tarball source). --preflight-only runs the guards and exits (used by tests).
 
 set -euo pipefail
 
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REPO="${AUTOPILOT_REPO_OVERRIDE:-$(cd "$(dirname "$0")/.." && pwd)}"
+
+PREFLIGHT_ONLY=0
+SKIP_GIT_CHECKS=0
+for arg in "$@"; do
+  case "$arg" in
+    --preflight-only) PREFLIGHT_ONLY=1 ;;
+    --skip-git-checks) SKIP_GIT_CHECKS=1 ;;
+    *) echo "ERROR: unknown argument: $arg (known: --preflight-only, --skip-git-checks)" >&2; exit 1 ;;
+  esac
+done
+
+PLUGIN_NAME="autopilot"
+DEST="$HOME/.gemini/config/plugins/$PLUGIN_NAME"
+
+# Guard 1 (NEVER bypassable): symlinked destination = confirmed kill condition.
+if [ -L "$DEST" ]; then
+  echo "ERROR: $DEST is a SYMLINK (-> $(readlink "$DEST"))." >&2
+  echo "       agy plugin install follows it and self-copy-truncates the TARGET" >&2
+  echo "       (confirmed data-loss bug, agy <= 1.0.7). Refusing to proceed." >&2
+  echo "       Inspect the link target, then remove the symlink itself:" >&2
+  echo "         rm $DEST    # removes the link only, never the target" >&2
+  exit 1
+fi
+
+# Guards 2+3 (bypassable with --skip-git-checks): the install copies this repo
+# wholesale; if anything goes wrong, recovery = restore from git. So require a
+# clean, fully-pushed state — or better, run from a sacrificial clone:
+#   git clone <repo> /tmp/autopilot-install && /tmp/autopilot-install/scripts/install-antigravity.sh
+if [ "$SKIP_GIT_CHECKS" = "0" ]; then
+  if ! git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "ERROR: $REPO is not a git repository — cannot verify it is recoverable." >&2
+    echo "       Use --skip-git-checks only if you accept the risk." >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
+    echo "ERROR: $REPO has uncommitted changes. Commit/stash first (recovery from" >&2
+    echo "       the 2026-06-11 incident was only possible because everything was" >&2
+    echo "       committed and pushed), or install from a sacrificial clone." >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "$REPO" log --branches --not --remotes --oneline 2>/dev/null | head -1)" ]; then
+    echo "ERROR: $REPO has unpushed commits. Push first, or install from a" >&2
+    echo "       sacrificial clone (--skip-git-checks to override)." >&2
+    exit 1
+  fi
+fi
+
+if [ "$PREFLIGHT_ONLY" = "1" ]; then
+  echo "preflight OK: dest is not a symlink; repo state safe."
+  exit 0
+fi
 
 if ! command -v agy >/dev/null 2>&1; then
   echo "ERROR: agy (Antigravity CLI) not found on PATH." >&2

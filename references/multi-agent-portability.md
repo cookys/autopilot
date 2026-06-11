@@ -48,7 +48,9 @@ Heterogeneous outbound dispatch — Claude Code shelling out to agy via Bash —
 - Flags verified: `--model "Gemini 3.5 Flash (Low|Medium|High)"` (names from `agy models`), `--dangerously-skip-permissions`, `--sandbox`, `--continue`/`--conversation`, `--print-timeout` (**default 5m** — raise for real phases).
 - **Differences vs `claude -p`**: no `--allowedTools`-grade granular allowlist (all-or-nothing) ⇒ **worktree isolation is mandatory** for mutation work; no `--max-turns` / `--output-format json` equivalent observed ⇒ verify by artifacts (files / `git diff`), never by the agent's self-report (observed failure: it skipped printing the requested commit hash while claiming success).
 - **Verdict stays at depth 0**: the shelled-out agent implements; the dispatching Claude Code session reviews the diff (quality-pipeline) before merge — same invariant as `references/blind-dispatch.md` § Nested dispatch.
-- NOT verified: whether agy with the autopilot plugin installed loads skills in `-p` mode.
+- **Skills do NOT load in `-p` mode** (verified negative, 2026-06-11): with autopilot installed via `agy plugin install` (19 skills + 4 agents copied to `~/.gemini/config/plugins/autopilot/`), a `-p` probe from two different cwds reports "NO SKILLS LOADED", and the `-p` tool inventory contains no skill mechanism. Methodology must travel inside the prompt (see `references/hetero-dispatch.md` — "the contract is the prompt" is a necessity, not a preference). Interactive-mode skill loading remains untested.
+- Bonus finding: `-p` tool inventory includes `define_subagent` / `invoke_subagent` / `manage_subagents` — agy headless has its own subagent dispatch surface (semantics unprobed).
+- Install gotcha: re-installing over a previous install fails with `permission denied` on read-only `.git` objects in `~/.gemini/config/plugins/autopilot/` (the installer copies the whole repo including `.git`). Fix: `agy plugin uninstall autopilot && rm -rf ~/.gemini/config/plugins/autopilot`, then install.
 
 ---
 

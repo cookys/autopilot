@@ -41,7 +41,8 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 
 ## Unverified — spike before asserting
 
-- agy with the autopilot plugin installed: do skills load in `-p` mode?
+- ~~agy with the autopilot plugin installed: do skills load in `-p` mode?~~ **Resolved 2026-06-11: NO** — verified negative (probe + tool-inventory; see [`multi-agent-portability.md`](multi-agent-portability.md) § agy spike). Invariant 4 ("the contract is the prompt") is therefore a necessity, not a preference. Interactive-mode loading untested.
+- agy `-p` exposes `define_subagent` / `invoke_subagent` / `manage_subagents` — a native subagent surface inside the headless executor. Semantics unprobed; could matter if a dispatched phase wants its own fan-out.
 - Other engines' headless equivalence (`gemini` CLI, `codex` CLI, `opencode run`): same spike shape as the agy one — prove full agentic loop + flags before writing them here.
 
 ## No skill yet — deliberately

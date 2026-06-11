@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.15.1 — agy install data-loss guard
+
+**Headline**: `scripts/install-antigravity.sh` (+ `.ps1`) now refuse the conditions behind the 2026-06-11 source-repo truncation incident. Mechanism (confirmed by sandboxed repro, **still present in agy 1.0.7, latest**): `agy plugin install` follows a symlinked `~/.gemini/config/plugins/<name>` and self-copies — truncating the source repo file-by-file (1497–1503 files zeroed in repro, `.git/HEAD` destroyed).
+
+### Added
+- Install preflight in `install-antigravity.sh`: **symlinked destination → hard refuse (never bypassable)**; uncommitted / unpushed / non-git source → refuse with sacrificial-clone instructions (`--skip-git-checks` to override); `--preflight-only` runs guards and exits. `AUTOPILOT_REPO_OVERRIDE` test seam.
+- `hooks/tests/install-antigravity-guard.test.sh` — 15 assertions across symlink (incl. non-bypassability), real-dir, dirty, unpushed, non-git, unknown-arg paths. No agy binary needed.
+- PowerShell mirror guards in `install-antigravity.ps1` (syntax unverified on this machine — no pwsh; logic mirrors bash).
+- `references/multi-agent-portability.md`: hazard re-verified against agy 1.0.7 (unfixed upstream).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (guard-only change; removing it restores the unguarded installer)
+
 ## v2.15.0 — heterogeneous dispatch, script-first
 
 **Headline**: Claude Code can now dispatch a non-Claude engine as a headless implementer through a hard-railed script. `scripts/dispatch-hetero.sh` wraps the verified `agy -p` (Gemini) pattern with **non-skippable worktree isolation** (agy has no granular tool allowlist — the rail is hard-coded, not prose) and **artifact-based verification** (commit/diff/cleanliness from git; the agent's self-report is never trusted — an observed Gemini run claimed success while omitting the requested commit hash). Verdict stays at depth 0: the dispatching session reviews the returned branch via quality-pipeline before merge. Skill wrapper deliberately deferred until recurrence (BACKLOG trigger).

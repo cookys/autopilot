@@ -150,6 +150,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (skill) + S (resolve-dispatch runner field, if chain routing is wanted)
 - **Source**: 2026-06-11 hetero-dispatch spike + first production use (`a83c04a`); CEO decision to ship script-first.
 
+### agy plugin install/uninstall zero-truncates SOURCE repo files — repro + guard + upstream report
+- **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (HARD precondition: do it from a sacrificial clone until this is closed), OR when picking up an S-size hardening slot.
+- **Context**: 2026-06-11 incident (agy 1.0.5): failed install (read-only `.git` objects in the plugins-dir copy from an older install) → uninstall + reinstall → **55+ tracked files + `.git/{HEAD,config,index,logs/HEAD,ORIG_HEAD,FETCH_HEAD}` zero-truncated in the source repo** during the install window (manifest `importedAt` 12:29:25 vs damage mtime 12:29:07; `-p` probes started 12:29:42, exonerated). Full recovery from origin/develop — zero loss only because everything was pushed. Truncated set ≈ the failed first install's already-processed file list → src/dst-reversed copy/cleanup hypothesis, unconfirmed.
+- **Proposed**: (a) repro in a sacrificial clone (failed-install state → uninstall/reinstall → watch source) to pin mechanism; (b) guard `scripts/install-antigravity.sh`: refuse to run if the repo has uncommitted/unpushed work, print sacrificial-clone instructions; consider `--exclude .git` strategy (copy from `git archive` instead of the live dir); (c) upstream report to Antigravity with the forensic timeline.
+- **Effort**: (a) S spike; (b) S; (c) S (report writing)
+- **Source**: 2026-06-11 hetero-dispatch skills-probe session — incident forensics in `references/multi-agent-portability.md` § agy spike + memory `project_agy-install-incident`.
+
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)

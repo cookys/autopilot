@@ -30,7 +30,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Added
 - `scripts/dispatch-hetero.sh` — heterogeneous implementer dispatch: JSON output `{status, commit, files_changed, …}`; exit 0 committed (worktree auto-removed, branch survives for review) / 1 no-commit-or-dirty (worktree kept for inspection) / 2 precondition failure. `--agy-bin` seam for testing.
-- `hooks/tests/dispatch-hetero.test.sh` — 18-assertion integration test via PATH-stubbed fake agy (no network): preconditions, committed path, duplicate-branch guard, no-commit path with kept worktree.
+- `hooks/tests/dispatch-hetero.test.sh` — 24-assertion integration test via PATH-stubbed fake agy (no network): preconditions, committed path, duplicate-branch guard, dirty and no-commit paths with kept worktree, `--keep-worktree`.
 - `references/hetero-dispatch.md` — the ritual + four invariants (worktree mandatory / artifacts-not-self-report / verdict at depth 0 / six-element prompt as the contract), engine-neutral role-prompt reuse of `.opencode/agent-bodies/*.body.md`, unverified-engines list.
 - `docs/BACKLOG.md` — skill-wrapper entry, trigger: 2-3 more real uses or a second engine passing the headless spike.
 

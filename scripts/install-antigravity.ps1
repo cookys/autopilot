@@ -57,15 +57,26 @@ if (-not (Test-Path $rootManifest)) {
     exit 1
 }
 
+# Export-then-install: agy gets a sacrificial `git archive` export (no .git,
+# no path back to the real checkout), never the live repo.
+$exportDir = Join-Path ([System.IO.Path]::GetTempPath()) ("autopilot-agy-export-" + [System.IO.Path]::GetRandomFileName())
+New-Item -ItemType Directory -Path $exportDir | Out-Null
+$archive = Join-Path $exportDir "export.tar"
+git -C $repo archive HEAD -o $archive
+tar -x -f $archive -C $exportDir
+Remove-Item $archive
+Write-Host "export: installing from sacrificial copy $exportDir (HEAD of $repo, no .git)"
+
 Write-Host "== validate =="
-agy plugin validate $repo
+agy plugin validate $exportDir
 
 Write-Host ""
 Write-Host "== install =="
-agy plugin install $repo
+agy plugin install $exportDir
 
 Write-Host ""
 Write-Host "== verify =="
 agy plugin list
 Write-Host ""
 Write-Host "autopilot registered as an agy plugin. To remove: agy plugin uninstall autopilot"
+Remove-Item -Recurse -Force $exportDir

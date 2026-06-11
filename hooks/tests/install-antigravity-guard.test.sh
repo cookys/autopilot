@@ -70,4 +70,14 @@ assert_eq "$EXIT" "0" "non-git source bypassed by --skip-git-checks"
 OUT="$(run_guard --bogus)"; EXIT=$?
 assert_eq "$EXIT" "1" "unknown arg exit code"
 
+# 8. --export-only: sacrificial export has the manifest, no .git, and is not the source
+echo '{"name":"t"}' > "$SBX/plugin.json"
+git -C "$SBX" add plugin.json && git -C "$SBX" -c user.email=t@t -c user.name=t commit -q -m manifest && git -C "$SBX" push -q origin develop
+EXPORT_PATH="$(HOME="$GUARD_HOME" AUTOPILOT_REPO_OVERRIDE="$SBX" bash "$SCRIPT" --export-only 2>/dev/null | tail -1)"; EXIT=$?
+assert_eq "$EXIT" "0" "export-only exit code"
+assert_neq "$EXPORT_PATH" "$SBX" "export is not the source repo"
+assert_file_exists "$EXPORT_PATH/plugin.json" "export contains manifest"
+assert_file_absent "$EXPORT_PATH/.git" "export has no .git"
+rm -rf "$EXPORT_PATH"
+
 finalize_test

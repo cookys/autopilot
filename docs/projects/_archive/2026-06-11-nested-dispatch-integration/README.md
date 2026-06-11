@@ -1,6 +1,6 @@
 # Nested-dispatch integration (capability-gated)
 
-> **Status**: In progress
+> **Status**: ✅ Shipped in v2.14.0 — merged as `98d6ab2`
 > **Branch**: `feat/nested-dispatch-integration` (off develop, carries cherry-picked `dd1676b` BACKLOG entry)
 > **Origin**: docs/BACKLOG.md "Nested subagent (depth=5) integration" — both triggers fired 2026-06-11 (CC v2.1.172 changelog entry + nest-probe green). Escalated S→L by the S-scope-gate (4 modules touched: references/, agents/, skills/quality-pipeline/, docs/).
 > **Mode**: CEO (involvement: results; scope: Hold; no-go: main branch, fix/scope-creep-gate-forcing-function work)

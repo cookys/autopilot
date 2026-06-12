@@ -12,3 +12,5 @@ hooks/hooks.json.capture-backup
 # Dated eval result dirs that are noise — non-baseline runs.
 # Baseline runs (2026-05-14_122359 + _155325) are explicitly tracked.
 skill-creator-workspace/results/*/2026-05-14_154034/
+# Task-tree engine: index.json is derived from events.jsonl and must not be tracked.
+docs/projects/*/tree/index.json

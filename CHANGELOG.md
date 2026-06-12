@@ -31,8 +31,11 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Added
 - `scripts/resolve-dispatch.sh --tree` — tree-role table; tree-path output carries `"table":"tree"` (legacy output unchanged, no new field); `--role manager --tree` refuses with named error `MANAGER_NOT_DISPATCHABLE` (exit 3) — "Fable is never dispatched" is now a tool-layer invariant, not just prose.
 - Project override rows for tree roles: `tree:<role>` prefix in `.claude/model-routing-config.md` — coexists with legacy bare-role rows in one table, no collision in either direction (tested both ways). Template documented in `project-config-template/model-routing-config.md`.
-- `hooks/tests/resolve-dispatch.test.sh` — 104 assertions: legacy byte-stability across all 7 roles, tree table, manager refusal, override isolation, sanitization, malformed-override resilience.
+- `hooks/tests/resolve-dispatch.test.sh` — 114 assertions: legacy byte-stability across all 7 roles, tree table, manager refusal, override isolation, sanitization, override-value injection protection, `--help` leak guard, malformed-override resilience.
 - Hardening parity with sibling `resolve-doa.sh`: input sanitization (`$ROLE` flows into `grep -iE` — same injection vector, now closed) + `MODEL_ROUTING_CONFIG_OVERRIDE` env test seam.
+
+### Fixed
+- `scripts/qc-panel.sh` — calibration vocabulary bridge: node-report verdicts are free-form (`tree-contracts.md` §4: "approved"/"rejected") but `calibration.sh add-sample` only accepts `pass|fail`; the panel now normalizes (`pass|approved|approve|lgtm` → pass; `fail|rejected|reject` → fail) **before judges run**, and an unmappable verdict is a named `VERDICT_UNMAPPABLE` liveness failure instead of a generic add-sample error after a ~100k-token panel run. Found live by this ship's shadow-dogfood run (first reviewer-baseline calibration sample landed).
 
 ### Changed
 - `references/model-routing.md` §Tree roles, `skills/ceo-agent/SKILL.md` + `references/tree-adapter.md` §6, `CLAUDE.md` inventory — "integration deferred / would return wrong models" notes replaced with `--tree` usage.

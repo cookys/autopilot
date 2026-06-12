@@ -1,6 +1,6 @@
 # tree-role-dispatch — resolve-dispatch.sh tree-role integration
 
-> **Status**: in progress
+> **Status**: Complete (2026-06-12) — shipped v2.17.0
 > **Started**: 2026-06-12 · **Branch**: `feat/tree-role-dispatch` · **Target**: v2.17.0
 > **Source**: BACKLOG "resolve-dispatch.sh tree-role integration" (R1 review round 1 Fix 3, Amendment 11)
 > **Mode**: CEO (Hold scope) · tree adapter dual-run (shadow) dogfood session

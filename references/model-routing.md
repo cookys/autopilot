@@ -57,3 +57,39 @@ Based on benchmark (2026-04-13, 90 runs, 10 real cases, 6 providers):
 - Runtime constraint (mode:"plan") achieves 95-100% compliance
 - Model strength doesn't affect boundary violation rate
 - Cost: opus $0.115 → sonnet $0.074 → haiku $0.037 per run
+
+---
+
+## Tree roles (task-tree engine)
+
+> **Source**: R1 Amendment 11 (Board directive, 2026-06-12 dialectic).
+> Extends this file; does not change existing roles above.
+> Consumed by `scripts/resolve-doa.sh` (role → DOA preset) and `scripts/resolve-dispatch.sh`
+> (role → model/mode) when tree-engine roles are dispatched.
+
+All values below are **factory defaults, locally calibratable**.
+Per-tier token spend lands in the calibration report (P5 — `scripts/calibration.sh report`)
+so routing economy is auditable, not assumed.
+
+| Tree role | Default tier | Rationale |
+|-----------|-------------|-----------|
+| **Manager** (depth 0) | Fable-class | Smallest context by design (decision-shaped input only); highest per-token leverage; **NEVER dispatched as a delegate** |
+| **Fable escalation triggers** | — | ONLY: top-fork adjudication, panel-dissent arbitration, DOA setting/changes, Board interface. Everything else never reaches Fable |
+| **Sub-orchestrator** (depth 1) | opus/sonnet-class | Absorbs sub-decisions; DOA-bounded |
+| **Planner / researcher** | sonnet-class | Existing routing default unchanged (see Default Routing Table above) |
+| **Implementer** | sonnet-class or hetero flash-class (Gemini) | Cost arbitrage proven (`references/hetero-dispatch.md`); use flash for closed-spec tasks |
+| **QC panel judges** | flash/haiku-class, cross-family | PoLL evidence: panels of small judges beat a single large judge at ~1/7 cost — cheap judges are the design, not a compromise |
+| **Synthesizer** | deterministic script + haiku-class pass | Merge is mechanical; judgment already happened upstream |
+
+### Depth policy
+
+v1 depth limit: manager (0) → sub-orchestrator (1) → worker (2).
+If P6 dogfood demonstrates a real depth-3 need, propose a named bound (≤3) + escalation
+rule as a separate Board decision before implementing.
+
+### DOA interaction
+
+Tree roles map to DOA presets via `scripts/resolve-doa.sh`.
+Cloud-tier roles (Fable / Opus / Sonnet): `cloud-high-trust` preset (tiers 1-2 autonomous, 3 logged, 4 escalate).
+Local/flash-tier roles: `local-low-trust` preset (tier 1 autonomous, tiers 2-4 escalate).
+See `project-config-template/doa-config.md` for the full four-tier action table.

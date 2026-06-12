@@ -73,15 +73,21 @@ now_ts() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
-proj_tree_dir() {
-  # Guard against path traversal / accidental misuse: project names are
-  # plain dirnames (alnum start; alnum/dot/dash/underscore body; no "..").
+# Guard against path traversal / accidental misuse: project names are
+# plain dirnames (alnum start; alnum/dot/dash/underscore body; no "..").
+# MUST be called from a non-subshell context (the main dispatcher) — an
+# exit inside $(...) is swallowed by the command substitution, so putting
+# this guard inside proj_tree_dir would be dead code.
+validate_proj_name() {
   case "$1" in
     *..*|/*|-*|.*|"") usage_error "invalid project name: '$1' (alphanumeric start; a-zA-Z0-9._- only)" ;;
   esac
   if ! printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
     usage_error "invalid project name: '$1' (alphanumeric start; a-zA-Z0-9._- only)"
   fi
+}
+
+proj_tree_dir() {
   echo "$TREE_PROJECTS_DIR/$1/tree"
 }
 
@@ -455,8 +461,10 @@ cmd_rebuild_index() {
     log_err "WARNING: truncated tail detected at byte offset $truncated_byte_offset (partial write, likely kill mid-append)"
   fi
 
-  # Write index atomically via temp file
-  local tmp_index; tmp_index="$(mktemp)"
+  # Write index atomically via temp file. The temp file MUST live in the
+  # same directory as index.json: mv across filesystems (/tmp is often
+  # tmpfs) degrades to copy+delete and loses rename(2) atomicity.
+  local tmp_index; tmp_index="$(mktemp "$(dirname "$index_file")/index.XXXXXX")"
   printf '%s\n' "$index_json" > "$tmp_index"
   mv "$tmp_index" "$index_file"
 }
@@ -468,7 +476,9 @@ cmd_rebuild_index() {
 maybe_rebuild() {
   local proj="$1"
   if index_is_stale "$proj"; then
-    cmd_rebuild_index "$proj" 2>/dev/null
+    # Do NOT suppress stderr here: a failed rebuild (corrupt log, jq
+    # missing, disk full) must surface, not degrade to "index not found".
+    cmd_rebuild_index "$proj" >/dev/null
   fi
 }
 
@@ -632,6 +642,15 @@ shift || true
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
   show_help; exit 0
 fi
+
+# Every subcommand's first positional is <proj>. Validate it HERE, in the
+# main script context — exit propagates. (Inside $() it would not.)
+case "$CMD" in
+  init|emit|rebuild-index|next-decision|report|escalations|fetch)
+    [ $# -ge 1 ] || usage_error "$CMD requires <proj>"
+    validate_proj_name "$1"
+    ;;
+esac
 
 case "$CMD" in
   init)              cmd_init "$@" ;;

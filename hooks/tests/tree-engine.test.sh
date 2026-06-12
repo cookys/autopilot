@@ -360,4 +360,16 @@ assert_eq "$UNK_EXIT" "2" "unknown subcommand exits 2"
 TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" 2>/dev/null; NO_CMD_EXIT=$?
 assert_eq "$NO_CMD_EXIT" "2" "no-subcommand exits 2"
 
+# 8.6 Path-traversal / invalid project names are rejected BEFORE any file op.
+# The guard must run in the dispatcher (non-subshell) context — an exit
+# inside $(...) is swallowed, so this asserts the guard actually bites.
+for bad in "../escape" "a/../../b" "/abs" "-dash" ".dot" "has space"; do
+  tree init "$bad" >/dev/null 2>&1; BAD_EXIT=$?
+  assert_eq "$BAD_EXIT" "2" "init '$bad' rejected with exit 2"
+done
+assert_file_absent "$PROJECTS/../escape/tree/events.jsonl" "traversal name created no files outside projects dir"
+# Read subcommands reject too (guard is at the dispatcher chokepoint)
+tree next-decision "../escape" >/dev/null 2>&1; BAD_ND_EXIT=$?
+assert_eq "$BAD_ND_EXIT" "2" "next-decision '../escape' rejected with exit 2"
+
 finalize_test

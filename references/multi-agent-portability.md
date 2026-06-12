@@ -2,7 +2,7 @@
 
 How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-06-11 (agy headless dispatch empirical against `agy` 1.0.5; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
+Last verified: 2026-06-12 (P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
 
 ---
 

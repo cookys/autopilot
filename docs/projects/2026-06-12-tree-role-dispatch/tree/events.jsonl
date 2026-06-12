@@ -8,3 +8,4 @@
 {"schema_version":1,"ts":"2026-06-12T09:48:36Z","node":"p0-impl","type":"verdict","verdict":"approved","confidence":0.95}
 {"schema_version":1,"ts":"2026-06-12T09:51:34Z","node":"p2-docs","type":"node_report","artifact_paths":[],"evidence_pointers":["docs/BACKLOG.md:175-177@8ed86ca","references/model-routing.md:66-79@8ed86ca"],"artifact_sha256":null}
 {"schema_version":1,"ts":"2026-06-12T09:51:34Z","node":"p2-docs","type":"verdict","verdict":"approved","confidence":0.9}
+{"schema_version":1,"ts":"2026-06-12T10:13:54Z","node":"l5-close","type":"doa_decision","action":"merge-to-develop","tier":"reversible","outcome":"autonomous"}

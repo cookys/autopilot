@@ -81,10 +81,6 @@ proj_events_file() {
   echo "$(proj_tree_dir "$1")/events.jsonl"
 }
 
-proj_lock_file() {
-  echo "$(proj_tree_dir "$1")/events.jsonl.lock"
-}
-
 proj_index_file() {
   echo "$(proj_tree_dir "$1")/index.json"
 }
@@ -141,9 +137,15 @@ locked_append() {
   # SC2094: opening the events file with >> inside the locked block is safe
   # because the lock sidecar is a separate file from events_file.
   (
-    flock -x -w 10 9
+    flock -x -w 10 9 || exit 99
     printf '%s\n' "$line" >> "$events_file"
   ) 9>"$lock_file"
+  local rc=$?
+  if [ "$rc" -eq 99 ]; then
+    log_err "could not acquire lock on $lock_file within 10s — append aborted (no unlocked write)"
+    exit 1
+  fi
+  return "$rc"
 }
 
 # Check whether index needs rebuilding:
@@ -268,14 +270,12 @@ cmd_rebuild_index() {
     # 0a = newline in hex
     if [ "$last_char" != "0a" ]; then
       has_truncated_tail=true
-      # Extract the last (partial) line — it has no newline
-      truncated_content="$(tail -c +"$((file_size))" "$events_file" | head -1 || true)"
-      # More precisely: the partial line is everything after the last newline
-      # Use awk to get the last line without relying on shell IFS tricks
+      # The partial line is everything after the last newline; awk END
+      # yields the last line without relying on shell IFS tricks.
       truncated_content="$(awk 'END{print}' "$events_file")"
-      # Compute byte offset of the start of the truncated tail
-      # = size_of_file - length_of_truncated_line_bytes
-      local trunc_len; trunc_len="${#truncated_content}"
+      # Byte offset of the start of the truncated tail. wc -c counts bytes
+      # (${#var} counts characters, which under-counts multibyte UTF-8).
+      local trunc_len; trunc_len="$(printf '%s' "$truncated_content" | wc -c)"
       truncated_byte_offset=$(( file_size - trunc_len ))
     fi
   fi

@@ -38,10 +38,17 @@ emit_event() {
 tree init rt 2>/dev/null
 assert_file_exists "$PROJECTS/rt/tree/events.jsonl" "init creates events.jsonl"
 
-# 2.2 init is idempotent on empty file (no error, no double bootstrap line)
+# 2.2 init refuses to overwrite a non-empty events.jsonl
 SECOND_INIT_OUT="$(tree init rt 2>&1)"; SECOND_INIT_EXIT=$?
 assert_eq "$SECOND_INIT_EXIT" "1" "second init on non-empty file exits 1 (guards against overwrite)"
 assert_contains "$SECOND_INIT_OUT" "not overwriting" "second init message"
+
+# 2.2b init DOES re-bootstrap a 0-byte events.jsonl (empty file = safe to reinit)
+tree init rt0 2>/dev/null
+: > "$PROJECTS/rt0/tree/events.jsonl"
+tree init rt0 >/dev/null 2>&1; REINIT_EXIT=$?
+assert_eq "$REINIT_EXIT" "0" "init on 0-byte events.jsonl exits 0 (reinitializes)"
+assert_eq "$(wc -l < "$PROJECTS/rt0/tree/events.jsonl" | tr -d ' ')" "1" "0-byte reinit writes exactly one bootstrap line"
 
 # 2.3 init line is valid JSON with tree_initialized type
 INIT_LINE="$(head -1 "$PROJECTS/rt/tree/events.jsonl")"
@@ -94,6 +101,9 @@ ND_OUT="$(tree next-decision rt 2>/dev/null)"
 assert_contains "$ND_OUT" "Which approach?" "next-decision returns escalation question"
 assert_contains "$ND_OUT" '"decision_type": "escalation"' "next-decision labels as escalation"
 assert_not_contains "$ND_OUT" "artifact" "next-decision never prints artifact content"
+# Structural no-leak guarantee: output keys are EXACTLY the decision projection
+ND_KEYS="$(printf '%s' "$ND_OUT" | jq -r 'keys_unsorted | sort | join(",")')"
+assert_eq "$ND_KEYS" "decision_type,evidence_pointers,node,options,question" "next-decision emits exactly the projected key set (no work-product fields)"
 
 # 2.12 report returns node data
 RPT_OUT="$(tree report rt node1 2>/dev/null)"; RPT_EXIT=$?
@@ -148,20 +158,35 @@ assert_eq "$SEQ_COUNT" "200" "concurrency: all 200 unique nodes indexed"
 
 tree init crash 2>/dev/null
 
-# Start a victim emitter that emits many events (it gets kill-9'd mid-way)
+# Start a victim emitter with an effectively-unbounded event budget so it
+# CANNOT complete before the kill — the mid-run property is guaranteed, not
+# timing-dependent. We poll until it has demonstrably started (>=3 events in
+# the log), then kill -9.
+VICTIM_TOTAL=100000
 VICTIM_PID=""
 (
-  for j in $(seq 1 1000); do
+  for j in $(seq 1 "$VICTIM_TOTAL"); do
     EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"victim${j}\",\"type\":\"node_created\"}"
     TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" emit crash "victim${j}" "$EV" 2>/dev/null
   done
 ) &
 VICTIM_PID=$!
 
-# Let it run briefly, then kill -9
-sleep 0.2
+# Wait until the victim has written at least 3 events (poll, max ~10s)
+VICTIM_STARTED=0
+for _ in $(seq 1 100); do
+  if [ "$(grep -c '"victim' "$PROJECTS/crash/tree/events.jsonl" 2>/dev/null || echo 0)" -ge 3 ]; then
+    VICTIM_STARTED=1; break
+  fi
+  sleep 0.1
+done
 kill -9 "$VICTIM_PID" 2>/dev/null || true
 wait "$VICTIM_PID" 2>/dev/null || true
+assert_eq "$VICTIM_STARTED" "1" "crash: victim emitter demonstrably started before kill -9"
+VICTIM_COUNT="$(grep -c '"victim' "$PROJECTS/crash/tree/events.jsonl" 2>/dev/null || echo 0)"
+VICTIM_MIDRUN=0
+[ "$VICTIM_COUNT" -lt "$VICTIM_TOTAL" ] && VICTIM_MIDRUN=1
+assert_eq "$VICTIM_MIDRUN" "1" "crash: kill -9 landed mid-run (victim wrote $VICTIM_COUNT < $VICTIM_TOTAL events)"
 
 # Meanwhile emit 20 survivor events from a different "emitter"
 for k in $(seq 1 20); do
@@ -241,7 +266,7 @@ STALE_EVENTS="$PROJECTS/stale/tree/events.jsonl"
 
 # 6.1 No index yet → next-decision auto-rebuilds
 assert_file_absent "$INDEX_FILE" "staleness: index does not exist yet"
-ND_STALE="$(tree next-decision stale 2>/dev/null)"; ND_STALE_EXIT=$?
+tree next-decision stale >/dev/null 2>&1; ND_STALE_EXIT=$?
 assert_eq "$ND_STALE_EXIT" "0" "staleness: next-decision exits 0 with no index"
 assert_file_exists "$INDEX_FILE" "staleness: index auto-created by next-decision"
 

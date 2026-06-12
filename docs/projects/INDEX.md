@@ -8,12 +8,12 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-06-12 | [tree-role-dispatch](2026-06-12-tree-role-dispatch/README.md) | v2.17.0 | `feat/tree-role-dispatch` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-12 | [tree-role-dispatch](_archive/2026-06-12-tree-role-dispatch/README.md) | v2.17.0 | [`58c05d3`](../../../../commit/58c05d3) | (self-contained in README) |
 | 2026-06-12 | [task-tree-engine](_archive/2026-06-12-task-tree-engine/README.md) | v2.16.0 | [`569a8b2`](../../../../commit/569a8b2) | [plan](../plans/2026-06-12-task-tree-engine.md) |
 | 2026-06-11 | agy-incident-knowledge (S-size; recovery recipe inlined + sourceable shell guard — no project dir, see CHANGELOG) | v2.15.3 | [`56c7c2a`](../../../../commit/56c7c2a) | (CHANGELOG entry) |
 | 2026-06-11 | agy-export-then-install (S-size; structural workaround — agy never sees the live repo — no project dir, see CHANGELOG) | v2.15.2 | [`a2c89de`](../../../../commit/a2c89de) | (CHANGELOG entry) |

@@ -377,4 +377,80 @@ assert_file_absent "$PROJECTS/../escape/tree/events.jsonl" "traversal name creat
 tree next-decision "../escape" >/dev/null 2>&1; BAD_ND_EXIT=$?
 assert_eq "$BAD_ND_EXIT" "2" "next-decision '../escape' rejected with exit 2"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 9: ID-targeted decision_resolved + escalation_resolved semantics (Fix 1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+tree init idres 2>/dev/null
+
+# Emit two decision_fork events on the same node, each with a distinct decision_id
+TS_A="2026-06-12T10:00:00Z"
+TS_B="2026-06-12T10:00:01Z"
+FORK_A="{\"schema_version\":1,\"ts\":\"$TS_A\",\"node\":\"dnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-A\",\"question\":\"Fork A?\",\"options\":[],\"evidence_pointers\":[]}"
+FORK_B="{\"schema_version\":1,\"ts\":\"$TS_B\",\"node\":\"dnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-B\",\"question\":\"Fork B?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit idres dnode "$FORK_A" 2>/dev/null
+tree emit idres dnode "$FORK_B" 2>/dev/null
+
+# 9.1 Both forks open before any resolve
+tree rebuild-index idres 2>/dev/null
+OPEN_BEFORE="$(jq '[.decisions[] | select(.node=="dnode" and .resolved==false)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$OPEN_BEFORE" "2" "decision: two open forks on same node before resolve"
+
+# 9.2 Resolve by id: only fork-A closes; fork-B remains open
+TS_R="2026-06-12T10:00:02Z"
+RESOLVE_A="{\"schema_version\":1,\"ts\":\"$TS_R\",\"node\":\"dnode\",\"type\":\"decision_resolved\",\"decision_id\":\"fork-A\",\"chosen\":\"yes\"}"
+tree emit idres dnode "$RESOLVE_A" 2>/dev/null
+tree rebuild-index idres 2>/dev/null
+OPEN_AFTER_A="$(jq '[.decisions[] | select(.node=="dnode" and .resolved==false)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$OPEN_AFTER_A" "1" "decision id-targeted resolve: exactly one fork still open"
+CLOSED_A="$(jq '[.decisions[] | select(.node=="dnode" and .id=="fork-A" and .resolved==true)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$CLOSED_A" "1" "decision id-targeted resolve: fork-A is now closed"
+OPEN_B="$(jq '[.decisions[] | select(.node=="dnode" and .id=="fork-B" and .resolved==false)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$OPEN_B" "1" "decision id-targeted resolve: fork-B still open in index"
+
+# next-decision still returns fork-B (the remaining open fork)
+ND_IDRES="$(tree next-decision idres 2>/dev/null)"
+assert_contains "$ND_IDRES" "Fork B?" "decision id-targeted resolve: next-decision returns remaining open fork"
+
+# 9.3 Bulk resolve (no decision_id): both open forks close simultaneously
+# Add a fresh pair of forks for bulk-close test
+tree init idres2 2>/dev/null
+FORK_C="{\"schema_version\":1,\"ts\":\"2026-06-12T11:00:00Z\",\"node\":\"bnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-C\",\"question\":\"Fork C?\",\"options\":[],\"evidence_pointers\":[]}"
+FORK_D="{\"schema_version\":1,\"ts\":\"2026-06-12T11:00:01Z\",\"node\":\"bnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-D\",\"question\":\"Fork D?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit idres2 bnode "$FORK_C" 2>/dev/null
+tree emit idres2 bnode "$FORK_D" 2>/dev/null
+BULK_RESOLVE="{\"schema_version\":1,\"ts\":\"2026-06-12T11:00:02Z\",\"node\":\"bnode\",\"type\":\"decision_resolved\",\"chosen\":\"bulk\"}"
+tree emit idres2 bnode "$BULK_RESOLVE" 2>/dev/null
+tree rebuild-index idres2 2>/dev/null
+OPEN_AFTER_BULK="$(jq '[.decisions[] | select(.node=="bnode" and .resolved==false)] | length' "$PROJECTS/idres2/tree/index.json")"
+assert_eq "$OPEN_AFTER_BULK" "0" "decision bulk resolve (no id): all open forks for node closed"
+
+# 9.4 Escalation id-targeted resolve: two open escalations, resolve one by id
+tree init escres 2>/dev/null
+ESC_EV_P="{\"schema_version\":1,\"ts\":\"2026-06-12T12:00:00Z\",\"node\":\"escnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-1\",\"question\":\"Esc 1?\",\"options\":[],\"evidence_pointers\":[]}"
+ESC_EV_Q="{\"schema_version\":1,\"ts\":\"2026-06-12T12:00:01Z\",\"node\":\"escnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-2\",\"question\":\"Esc 2?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit escres escnode "$ESC_EV_P" 2>/dev/null
+tree emit escres escnode "$ESC_EV_Q" 2>/dev/null
+ESC_RESOLVE_1="{\"schema_version\":1,\"ts\":\"2026-06-12T12:00:02Z\",\"node\":\"escnode\",\"type\":\"escalation_resolved\",\"escalation_id\":\"esc-1\"}"
+tree emit escres escnode "$ESC_RESOLVE_1" 2>/dev/null
+tree rebuild-index escres 2>/dev/null
+OPEN_ESC="$(jq '[.escalations[] | select(.node=="escnode" and .resolved==false)] | length' "$PROJECTS/escres/tree/index.json")"
+assert_eq "$OPEN_ESC" "1" "escalation id-targeted resolve: exactly one escalation still open"
+CLOSED_ESC_1="$(jq '[.escalations[] | select(.node=="escnode" and .id=="esc-1" and .resolved==true)] | length' "$PROJECTS/escres/tree/index.json")"
+assert_eq "$CLOSED_ESC_1" "1" "escalation id-targeted resolve: esc-1 is now closed"
+OPEN_ESC_2="$(jq '[.escalations[] | select(.node=="escnode" and .id=="esc-2" and .resolved==false)] | length' "$PROJECTS/escres/tree/index.json")"
+assert_eq "$OPEN_ESC_2" "1" "escalation id-targeted resolve: esc-2 still open in index"
+
+# 9.5 Escalation bulk resolve (no escalation_id): both close
+tree init escres2 2>/dev/null
+ESC_EV_R="{\"schema_version\":1,\"ts\":\"2026-06-12T13:00:00Z\",\"node\":\"bescnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-R\",\"question\":\"Esc R?\",\"options\":[],\"evidence_pointers\":[]}"
+ESC_EV_S="{\"schema_version\":1,\"ts\":\"2026-06-12T13:00:01Z\",\"node\":\"bescnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-S\",\"question\":\"Esc S?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit escres2 bescnode "$ESC_EV_R" 2>/dev/null
+tree emit escres2 bescnode "$ESC_EV_S" 2>/dev/null
+BULK_ESC_RESOLVE="{\"schema_version\":1,\"ts\":\"2026-06-12T13:00:02Z\",\"node\":\"bescnode\",\"type\":\"escalation_resolved\"}"
+tree emit escres2 bescnode "$BULK_ESC_RESOLVE" 2>/dev/null
+tree rebuild-index escres2 2>/dev/null
+OPEN_BULK_ESC="$(jq '[.escalations[] | select(.node=="bescnode" and .resolved==false)] | length' "$PROJECTS/escres2/tree/index.json")"
+assert_eq "$OPEN_BULK_ESC" "0" "escalation bulk resolve (no id): all open escalations for node closed"
+
 finalize_test

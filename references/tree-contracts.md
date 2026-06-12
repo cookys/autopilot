@@ -107,7 +107,12 @@ Closes a previously opened escalation.
 
 | Payload field | Type | Notes |
 |---------------|------|-------|
-| `escalation_id` | string | Must match the `escalation_id` of the `escalation_opened` event |
+| `escalation_id` | string or null | If present, resolves ONLY the entry with this id. If absent/empty, resolves ALL open escalations for this node (bulk fallback) |
+
+**Resolution semantics**: the fold is ID-targeted when `escalation_id` is
+provided — exactly the escalation with the matching id is resolved (others
+remain open). If no `escalation_id` is given, all open escalations for the
+node are closed simultaneously (documented bulk fallback, not a bug).
 
 ### 3.7 `verdict`
 
@@ -145,6 +150,7 @@ top-level `decisions[]` array.
 
 | Payload field | Type | Notes |
 |---------------|------|-------|
+| `decision_id` | string or null | Unique decision identifier; if absent, synthesized as `<node>:<ts>` |
 | `question` | string or null | The fork question |
 | `options` | array | Candidate options |
 | `evidence_pointers` | array | Evidence pointer strings — see §5 |
@@ -157,10 +163,13 @@ Marks a decision fork as resolved.
 
 | Payload field | Type | Notes |
 |---------------|------|-------|
+| `decision_id` | string or null | If present, resolves ONLY the entry with this id. If absent/empty, resolves ALL open forks for this node (bulk fallback) |
 | `chosen` | string or null | The chosen option |
 
-The fold matches on `node == $ev.node AND resolved == false` — if multiple
-unresolved forks exist for the same node, the oldest is resolved first.
+**Resolution semantics**: the fold is ID-targeted when `decision_id` is
+provided — exactly the fork with the matching id is resolved (others remain
+open). If no `decision_id` is given, all open forks for the node are closed
+simultaneously (documented bulk fallback, not a bug).
 
 ### 3.11 `manager_raw_read`
 
@@ -237,17 +246,34 @@ Resolution rules:
 
 ### 5.3 Moved-file resolution
 
-When a `file:line-range` pointer's path does not exist in the working tree (or
-at the specified commit):
+When a `file:line-range` pointer's path does not exist in the working tree,
+`check-node-report.sh` operates in one of two modes depending on whether a
+commit-SHA anchor is present:
 
-1. Search for a file whose content hash matches, bounded to `git ls-files`
-   output.
-2. If found: emit a `pointer_stale` WARNING in the validator output (field
-   `warnings[]`) and continue validation (the pointer is still resolvable).
-3. If not found: the pointer is unresolvable → validation FAILURE.
+**Mode A — SHA anchor present** (`<path>:<start>-<end>@<sha>`):
+1. Compute the original content hash: `git show <sha>:<path> | sha256sum`.
+2. Search `git ls-files` candidates; for each, compare its `sha256` against
+   the original content hash. Basename candidates are checked first
+   (optimization), then the full tracked-file list.
+3. **Content-hash match found** → emit `pointer_stale` WARNING
+   (`warnings[]`) and continue (exit 0); pointer is still resolvable.
+4. **Same-basename candidate found but content differs** (and no content-hash
+   match anywhere) → FAILURE (invalid); the basename match would be a
+   false positive.
+5. **Not found anywhere** → validation FAILURE.
 
-**Never silently pass a moved-file case.** A `pointer_stale` warning is the
-minimum required signal.
+**Mode B — No SHA anchor** (content-hash search impossible):
+1. Fall back to basename heuristic: search `git ls-files` for a tracked file
+   with the same basename.
+2. Match found → emit `pointer_degraded_basename_match` WARNING (`warnings[]`)
+   and continue (exit 0); content is unverified.
+3. No basename match → validation FAILURE.
+
+**Never silently pass a moved-file case.** A `pointer_stale` or
+`pointer_degraded_basename_match` warning is the minimum required signal.
+
+**Update the script header** (`check-node-report.sh` lines 18-25) to document
+this two-mode behavior when modifying pointer resolution logic.
 
 ---
 

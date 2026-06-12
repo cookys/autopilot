@@ -400,12 +400,23 @@ cmd_rebuild_index() {
           resolved: false
         }]
       elif $ev.type == "escalation_resolved" then
-        .nodes[$ev.node].escalations |= map(
-          if .id == $ev.escalation_id then . + {resolved: true, resolved_at: $ev.ts} else . end
-        ) |
-        .escalations |= map(
-          if .id == $ev.escalation_id then . + {resolved: true, resolved_at: $ev.ts} else . end
-        )
+        # ID-targeted: if escalation_id present, resolve only the matching entry.
+        # Bulk fallback: if no escalation_id, resolve ALL open escalations for this node.
+        if $ev.escalation_id != null and $ev.escalation_id != "" then
+          (.nodes[$ev.node].escalations |= map(
+            if .id == $ev.escalation_id and .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          )) |
+          (.escalations |= map(
+            if .node == $ev.node and .id == $ev.escalation_id and .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          ))
+        else
+          (.nodes[$ev.node].escalations |= map(
+            if .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          )) |
+          (.escalations |= map(
+            if .node == $ev.node and .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          ))
+        end
       elif $ev.type == "verdict" then
         .nodes[$ev.node].status = "complete" |
         .nodes[$ev.node].verdict = ($ev.verdict // null) |
@@ -418,6 +429,7 @@ cmd_rebuild_index() {
       elif $ev.type == "decision_fork" then
         .decisions += [{
           node: $ev.node,
+          id: ($ev.decision_id // ($ev.node + ":" + $ev.ts)),
           question: ($ev.question // null),
           options: ($ev.options // []),
           evidence_pointers: ($ev.evidence_pointers // []),
@@ -425,12 +437,23 @@ cmd_rebuild_index() {
           resolved: false
         }]
       elif $ev.type == "decision_resolved" then
-        .decisions |= map(
-          if .node == $ev.node and .resolved == false then
-            . + {resolved: true, resolved_at: $ev.ts, chosen: ($ev.chosen // null)}
-          else .
-          end
-        )
+        # ID-targeted: if decision_id present, resolve only the matching entry.
+        # Bulk fallback: if no decision_id, resolve ALL open entries for this node.
+        if $ev.decision_id != null and $ev.decision_id != "" then
+          .decisions |= map(
+            if .node == $ev.node and .id == $ev.decision_id and .resolved == false then
+              . + {resolved: true, resolved_at: $ev.ts, chosen: ($ev.chosen // null)}
+            else .
+            end
+          )
+        else
+          .decisions |= map(
+            if .node == $ev.node and .resolved == false then
+              . + {resolved: true, resolved_at: $ev.ts, chosen: ($ev.chosen // null)}
+            else .
+            end
+          )
+        end
       elif $ev.type == "manager_raw_read" then
         .nodes[$ev.node].raw_reads = ((.nodes[$ev.node].raw_reads // []) + [$ev.ts])
       else .

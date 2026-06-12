@@ -74,12 +74,33 @@ Hardening folded into P0 (same lake, not creep): input sanitization + env config
 seam — both exist in sibling `resolve-doa.sh` for the identical injection vector
 (`$ROLE` interpolated into `grep -iE`).
 
-## Tree dogfood (dual-run shadow)
+## Tree dogfood (dual-run shadow) — RESULTS (2026-06-12)
 
-This project opts into `docs/projects/2026-06-12-tree-role-dispatch/tree/`.
-TaskCreate stays authoritative (no `board_signoff` → shadow mode). Verification
-checklist at close (memory `task-tree-engine-status`):
-1. tree initialized + node_created/delegated/verdict events emitted
-2. TaskCreate forcing functions ran as authoritative
-3. qc-panel shadow ran on verdict-bearing nodes; reviewer-baseline calibration samples landed
-4. tree-vs-reality divergences recorded in review log (P6 clause)
+First ceo-agent tree-adapter dual-run on a real task. 4-point checklist:
+1. ✅ tree initialized (`board-status` = null → shadow); 12 events across
+   root/p0-impl/p2-docs/l5-close (node_created ×4, delegated, node_report ×2,
+   verdict ×2, doa_decision).
+2. ✅ TaskCreate stayed authoritative end-to-end (11 tasks incl. finish-flow
+   expansion); zero `next-decision` routing, as designed pre-signoff.
+3. ✅ qc-panel shadow ran twice on p0-impl (verdict-bearing); liveness sample +
+   **first reviewer-baseline calibration sample landed** (`calibration.sh report`:
+   reviewer count 0 → 1; panel fail / reviewer pass disagreement).
+4. Divergences (P6 review-log clause):
+   - **Verdict vocabulary gap** (FIXED this ship): tree-contracts §4 verdicts are
+     free-form; `calibration.sh` accepts only pass|fail → first live panel run died
+     at liveness AFTER a full ~109k-token panel. Fix: qc-panel normalization bridge
+     + named `VERDICT_UNMAPPABLE` failure BEFORE judges run.
+   - **Panel scope strictness** (calibration data, not a bug): both panel runs
+     verdicted `fail` because judges count project-lifecycle closure (merge, L-5
+     gates) as missed goals of a P0 *implementation* node. Same pattern as the
+     first live sample (2026-06-12 am). If this repeats across tasks, consider
+     scoping judge prompts to the node's question, not the project's.
+   - **Archive ordering**: `tree.sh` rejects `_archive/<proj>` (proj-name
+     validation) → archived trees are read-only. Final node verdicts MUST be
+     emitted before L-5.5 archive. l5-close therefore carries doa_decision but its
+     verdict event was refused post-archive (recorded here instead).
+   - **Report-hash refresh on fix rounds**: node-report `artifact_paths[].sha256`
+     pins working-tree hashes; any post-report fix round invalidates the report
+     until the dispatcher refreshes hashes (check-node-report correctly caught it).
+   - **Panel cost**: ~109k–149k tokens per panel run (2 runs this ship). Acceptable
+     for shadow-phase sampling density, not for every node at scale.

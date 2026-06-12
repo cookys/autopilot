@@ -129,7 +129,11 @@ tier_to_preset() {
 PROJECT_CONFIG="${DOA_CONFIG_OVERRIDE:-$REPO_ROOT/.claude/doa-config.md}"
 
 if [[ -f "$PROJECT_CONFIG" ]]; then
-  row="$(grep -iE "^\|[[:space:]]*(\*\*)?${ROLE}(\*\*)?[[:space:]]*\|[[:space:]]*(\*\*)?${MODEL_TIER}(\*\*)?[[:space:]]*\|" \
+  # Escape dots before regex interpolation: sanitization allows '.', and an
+  # unescaped dot matches any character (sonnet.v3 would match sonnet_v3).
+  ROLE_RE="${ROLE//./\\.}"
+  TIER_RE="${MODEL_TIER//./\\.}"
+  row="$(grep -iE "^\|[[:space:]]*(\*\*)?${ROLE_RE}(\*\*)?[[:space:]]*\|[[:space:]]*(\*\*)?${TIER_RE}(\*\*)?[[:space:]]*\|" \
     "$PROJECT_CONFIG" 2>/dev/null | head -1 || true)"
   if [[ -n "$row" ]]; then
     preset_val="$(printf '%s' "$row" | awk -F'|' '{print $4}' | tr -d ' *')"

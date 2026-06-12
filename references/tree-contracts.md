@@ -269,6 +269,11 @@ commit-SHA anchor is present:
    and continue (exit 0); content is unverified.
 3. No basename match → validation FAILURE.
 
+Mode B requires a git context: `--repo` must point at a git repository (or
+the validator must run inside one). Without a git context the fallback search
+cannot run and the result is a validation FAILURE (`file not found`), not a
+degraded warning.
+
 **Never silently pass a moved-file case.** A `pointer_stale` or
 `pointer_degraded_basename_match` warning is the minimum required signal.
 

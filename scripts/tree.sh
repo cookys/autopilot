@@ -22,9 +22,10 @@
 #   node            (string)
 #   type            (string)
 #
-# Stricter per-type validation is a P2 concern. emit is designed so that
-# plugging in a validator ($TREE_EVENT_VALIDATOR env var pointing to a
-# script) requires no CLI surface changes.
+# Per-type event validation (beyond the 4-field envelope) is not yet wired:
+# $TREE_EVENT_VALIDATOR (stdin = event JSON) is the extension point. Note
+# check-node-report.sh validates NODE REPORT FILES by path — a different
+# interface; it is not a drop-in event validator.
 #
 # File locations (per project):
 #   docs/projects/<proj>/tree/events.jsonl   — append-only event log (git-tracked)

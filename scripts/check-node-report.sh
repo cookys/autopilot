@@ -350,6 +350,9 @@ resolve_file_pointer() {
             "$commit_sha" "$pointer"
         fi
       else
+        # File still exists at its original path: the pointer is anchored to
+        # the COMMIT content (verified via git show above), so working-tree
+        # divergence is by design not checked here.
         printf 'ok\n'
       fi
       return
@@ -529,6 +532,9 @@ if [ "$EP_IS_ARRAY" = "true" ]; then
             ok|stale:*|degraded:*|error:*) resolve_result="$rline" ;;
           esac
         done < <(resolve_file_pointer "$ptr")
+        # Exhaustive: every resolve_result code emitted by resolve_file_pointer
+        # MUST have an arm here — an unmatched code falls to the "" internal-
+        # error branch below, which is a bug signal, not a pass.
         case "$resolve_result" in
           ok) ;;
           stale:*)

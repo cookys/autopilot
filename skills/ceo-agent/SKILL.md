@@ -333,6 +333,46 @@ User responses to reports:
 - **Feedback** -> CEO adjusts direction
 - **Stop** -> CEO halts immediately
 
+## Tree Adapter (task-tree engine)
+
+> Full procedure: [references/tree-adapter.md](references/tree-adapter.md)
+
+When `docs/projects/<proj>/tree/` exists, the task-tree engine is ACTIVE for
+this project. Check at startup and at each phase boundary.
+
+**Authority gate** — before routing any decisions through the tree, run:
+```bash
+jq 'select(.type=="board_signoff")' docs/projects/<proj>/tree/events.jsonl
+```
+- Empty → **dual-run (shadow)**: emit lifecycle events; TaskCreate stays authoritative.
+- Non-empty → **post-signoff (active)**: decisions flow from `scripts/tree.sh next-decision`.
+
+**Post-signoff decision loop** (replaces TaskCreate-driven loop):
+1. `scripts/tree.sh next-decision <proj>` → compact JSON `{node, question, options[], evidence_pointers[]}`. This is the manager's ONLY default input.
+2. Adjudicate via `scripts/resolve-doa.sh`. Emit `doa_decision` event.
+3. Within DOA → emit `decision_resolved` with the `decision_id`. Beyond DOA → emit `escalation_opened`, pause for Board, emit `escalation_resolved`.
+4. Repeat until `next-decision` returns empty.
+
+**KR1 rule**: never Read work products directly on the happy path. Every artifact
+read MUST go through `scripts/tree.sh fetch <proj> <node> --raw` — this emits
+a `manager_raw_read` event (the logged escalation valve). KR1 is measured by
+post-hoc transcript audit by the P6 reviewer (retro-style scan), not self-reported.
+The P4 shadow period provides the before-baseline so P6 reports a delta.
+
+**No tree dir → legacy path**: zero behavior change (KR5).
+
+**Model routing** (Amendment 11): manager at depth 0 is Fable-class. Fable is
+NEVER dispatched as a delegate. Sub-orchestrators are opus/sonnet-class;
+implementers are sonnet-class or hetero flash-class. Use `scripts/resolve-dispatch.sh`.
+See `references/model-routing.md` §"Tree roles".
+
+| References/scripts | Purpose |
+|--------------------|---------|
+| [`references/tree-adapter.md`](references/tree-adapter.md) | Full adapter procedure: modes, event cheat-sheet, authority gate command, depth policy, initialization |
+| [`references/tree-contracts.md`](../../references/tree-contracts.md) | Event schemas, node report contract, invariants |
+| [`scripts/tree.sh`](../../scripts/tree.sh) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw` |
+| [`scripts/resolve-doa.sh`](../../scripts/resolve-doa.sh) | Role/tier → DOA preset JSON |
+
 ## Anti-patterns
 
 | Wrong | Right |
@@ -359,3 +399,7 @@ User responses to reports:
 | Bump version in one file from memory without grepping | Always `grep <old-version>` across the repo first; if the grep returns N hits, the edit list must touch all N. Memory drops files (marketplace.json, README badges) silently |
 | Absorb external OSS / prior art design without crediting source | The L-1.5 `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |
 | Dispatch subagent with prompt that paraphrases a skill's methodology | The subagent must invoke the skill via the Skill tool — same as dev-flow L-1.6 enforces on the main session. Paraphrasing loses fidelity (full checklist / red-line rules / rationalization table). Every L-size dispatch prompt must include the `### SKILLS` section per `references/task-prompt-templates.md` |
+| Route decisions through `tree.sh next-decision` before `board_signoff` exists | Check the authority gate first — no `board_signoff` event = dual-run (shadow) mode; TaskCreate stays authoritative |
+| Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.sh fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event; a bare Read is a KR1 violation |
+| Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
+| Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |

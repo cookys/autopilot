@@ -93,6 +93,22 @@ make_git_repo() {
   printf '%s %s' "$repo" "$sha"
 }
 
+# make_git_repo_n <suffix> — like make_git_repo but uses a unique suffix to avoid
+# PID-collision when called multiple times within the same bash process.
+make_git_repo_n() {
+  local suffix="${1:-x}"
+  local repo="$TEST_TMP/repo.$$.${suffix}"
+  mkdir -p "$repo/src"
+  git -C "$repo" init -q
+  git -C "$repo" config user.email t@t
+  git -C "$repo" config user.name t
+  printf 'alpha\nbeta\ngamma\ndelta\nepsilon\n' > "$repo/src/evidence.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit -q -m "initial"
+  local sha; sha="$(git -C "$repo" rev-parse HEAD)"
+  printf '%s %s' "$repo" "$sha"
+}
+
 # ---------------------------------------------------------------------------
 # TEST 1: --help exits 0
 # ---------------------------------------------------------------------------
@@ -233,18 +249,105 @@ jq -n \
   }' > "$MOVED_REPORT"
 
 run_validator "$MOVED_REPORT" --repo "$MOVED_REPO"
-assert_exit_code "$__RUN_EXIT" "0" "moved-file exits 0 (still valid with warning)"
+assert_exit_code "$__RUN_EXIT" "0" "moved-file (no sha) exits 0 (still valid with warning)"
 MOVED_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
-assert_eq "$MOVED_VALID" "true" "moved-file has valid:true"
+assert_eq "$MOVED_VALID" "true" "moved-file (no sha) has valid:true"
 MOVED_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | length')"
-assert_eq "$MOVED_ERRS" "0" "moved-file has 0 errors"
+assert_eq "$MOVED_ERRS" "0" "moved-file (no sha) has 0 errors"
 MOVED_WARNS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | join(" ")')"
-assert_contains "$MOVED_WARNS" "pointer_stale" "moved-file emits pointer_stale warning"
-assert_contains "$MOVED_WARNS" "evidence.txt" "moved-file warning names the file"
+# No SHA anchor → Mode B: pointer_degraded_basename_match (not pointer_stale)
+assert_contains "$MOVED_WARNS" "pointer_degraded_basename_match" "moved-file (no sha) emits pointer_degraded_basename_match warning"
+assert_contains "$MOVED_WARNS" "evidence.txt" "moved-file (no sha) warning names the file"
 
 # Confirm NOT silently passed: warning count must be > 0
 MOVED_WARN_COUNT="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | length')"
-assert_neq "$MOVED_WARN_COUNT" "0" "moved-file is not silently passed (warning count > 0)"
+assert_neq "$MOVED_WARN_COUNT" "0" "moved-file (no sha) is not silently passed (warning count > 0)"
+
+# ---------------------------------------------------------------------------
+# TEST 9b: moved-file WITH sha anchor + same content → pointer_stale + exit 0
+# The pointer uses the ORIGINAL sha (where src/evidence.txt existed), but the file
+# has since moved to lib/evidence.txt in the current working tree.
+# git show ORIG_SHA:src/evidence.txt succeeds → line count check passes → but
+# src/evidence.txt no longer in working tree → content-hash search → stale warning.
+# ---------------------------------------------------------------------------
+MSHA_REPO_RESULT="$(make_git_repo_n stale)"
+MSHA_REPO="${MSHA_REPO_RESULT% *}"
+MSHA_SHA="${MSHA_REPO_RESULT#* }"
+# MSHA_SHA is the initial commit (src/evidence.txt exists there).
+# Now move the file (same content) in a new commit.
+mkdir -p "$MSHA_REPO/lib"
+mv "$MSHA_REPO/src/evidence.txt" "$MSHA_REPO/lib/evidence.txt"
+git -C "$MSHA_REPO" add -A
+git -C "$MSHA_REPO" commit -q -m "move evidence"
+# Current working tree: src/evidence.txt gone, lib/evidence.txt has SAME content.
+
+MSHA_ART="$(make_artifact)"
+MSHA_ART_SHA="$(artifact_sha "$MSHA_ART")"
+MSHA_REPORT="$TEST_TMP/msha-report.json"
+jq -n \
+  --arg node "msha-node" \
+  --arg art "$MSHA_ART" \
+  --arg sha "$MSHA_ART_SHA" \
+  --arg ptr "src/evidence.txt:1-3@${MSHA_SHA}" \
+  '{
+    schema_version: 1, node: $node, verdict: "approved", confidence: 0.8,
+    evidence_pointers: [$ptr],
+    artifact_paths: [{"path": $art, "sha256": $sha}],
+    doa_log: [], escalations: []
+  }' > "$MSHA_REPORT"
+
+run_validator "$MSHA_REPORT" --repo "$MSHA_REPO"
+assert_exit_code "$__RUN_EXIT" "0" "moved-file (sha, same content) exits 0"
+MSHA_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$MSHA_VALID" "true" "moved-file (sha, same content) has valid:true"
+MSHA_WARNS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | join(" ")')"
+assert_contains "$MSHA_WARNS" "pointer_stale" "moved-file (sha, same content) emits pointer_stale"
+MSHA_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | length')"
+assert_eq "$MSHA_ERRS" "0" "moved-file (sha, same content) has 0 errors"
+
+# ---------------------------------------------------------------------------
+# TEST 9c: sha anchor (original), file moved to lib/ but with DIFFERENT content →
+# same-basename match with different hash → error (false-positive guard)
+# The pointer uses the ORIGINAL sha (git show succeeds). In current working tree
+# src/evidence.txt is gone; lib/evidence.txt exists but with DIFFERENT content.
+# Content-hash search finds no match. Same-basename file has different content → error.
+# ---------------------------------------------------------------------------
+DIFF_REPO_RESULT="$(make_git_repo_n diff)"
+DIFF_REPO="${DIFF_REPO_RESULT% *}"
+DIFF_ORIG_SHA="${DIFF_REPO_RESULT#* }"
+# Create lib/evidence.txt with DIFFERENT content; remove src/evidence.txt
+mkdir -p "$DIFF_REPO/lib"
+rm "$DIFF_REPO/src/evidence.txt"
+printf 'completely different content line 1\nline 2\n' > "$DIFF_REPO/lib/evidence.txt"
+git -C "$DIFF_REPO" add -A
+git -C "$DIFF_REPO" commit -q -m "replace with different content"
+# Current working tree: src/evidence.txt gone; lib/evidence.txt has DIFFERENT content.
+# Pointer anchor = DIFF_ORIG_SHA (original commit where src/evidence.txt existed).
+
+DIFF_ART="$(make_artifact)"
+DIFF_ART_SHA="$(artifact_sha "$DIFF_ART")"
+DIFF_REPORT="$TEST_TMP/diff-report.json"
+jq -n \
+  --arg node "diff-node" \
+  --arg art "$DIFF_ART" \
+  --arg sha "$DIFF_ART_SHA" \
+  --arg ptr "src/evidence.txt:1-3@${DIFF_ORIG_SHA}" \
+  '{
+    schema_version: 1, node: $node, verdict: "approved", confidence: 0.8,
+    evidence_pointers: [$ptr],
+    artifact_paths: [{"path": $art, "sha256": $sha}],
+    doa_log: [], escalations: []
+  }' > "$DIFF_REPORT"
+
+run_validator "$DIFF_REPORT" --repo "$DIFF_REPO"
+# git show DIFF_ORIG_SHA:src/evidence.txt succeeds → file not in working tree at src/ →
+# content-hash search: lib/evidence.txt has DIFFERENT hash → basename match different content
+# → error (false-positive guard fires)
+assert_exit_code "$__RUN_EXIT" "1" "moved-file (sha, diff content, basename match) exits 1"
+DIFF_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$DIFF_VALID" "false" "moved-file (sha, diff content, basename match) has valid:false"
+DIFF_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | join(" ")')"
+assert_contains "$DIFF_ERRS" "invalid" "moved-file (sha, diff content) error mentions invalid"
 
 # ---------------------------------------------------------------------------
 # TEST 10 (Amendment 2c): file:line-range with commit SHA anchor → git show → exit 0
@@ -367,6 +470,35 @@ run_validator "$DANGLE_ART_REPORT"
 assert_exit_code "$__RUN_EXIT" "1" "dangling-artifact exits 1"
 DA_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | join(" ")')"
 assert_contains "$DA_ERRS" "not found at path" "dangling-artifact error mentions path"
+
+# ---------------------------------------------------------------------------
+# TEST 16a (Fix 6): @HEAD anchor → warning but still exit 0
+# ---------------------------------------------------------------------------
+HEAD_REPO_RESULT="$(make_git_repo_n head)"
+HEAD_REPO="${HEAD_REPO_RESULT% *}"
+
+HEAD_ART="$(make_artifact)"
+HEAD_ART_SHA="$(artifact_sha "$HEAD_ART")"
+HEAD_REPORT="$TEST_TMP/head-report.json"
+jq -n \
+  --arg node "head-node" \
+  --arg art "$HEAD_ART" \
+  --arg sha "$HEAD_ART_SHA" \
+  '{
+    schema_version: 1, node: $node, verdict: "approved", confidence: 0.8,
+    evidence_pointers: ["src/evidence.txt:1-3@HEAD"],
+    artifact_paths: [{"path": $art, "sha256": $sha}],
+    doa_log: [], escalations: []
+  }' > "$HEAD_REPORT"
+
+run_validator "$HEAD_REPORT" --repo "$HEAD_REPO"
+assert_exit_code "$__RUN_EXIT" "0" "@HEAD anchor exits 0 (warning, not error)"
+HEAD_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$HEAD_VALID" "true" "@HEAD anchor report has valid:true"
+HEAD_WARNS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | join(" ")')"
+assert_contains "$HEAD_WARNS" "@HEAD anchor which is not stable" "@HEAD anchor emits instability warning"
+HEAD_WARN_COUNT="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | length')"
+assert_neq "$HEAD_WARN_COUNT" "0" "@HEAD anchor warning count > 0"
 
 # ---------------------------------------------------------------------------
 # TEST 16: bash -n clean; shellcheck clean (if installed)

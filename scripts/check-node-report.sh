@@ -19,9 +19,15 @@
 #   file:line-range  <path>:<start>-<end>[@<commit-sha>]
 #                    File must exist; line range must be within file length.
 #                    If @sha present and --repo given, resolves via `git show`.
-#                    If path missing from working tree, searches git ls-files
-#                    by content hash; emits pointer_stale warning if found,
-#                    fails if not found (never silently passes).
+#                    Moved-file resolution (two modes — §5.3):
+#                      Mode A (SHA anchor present): compute content hash of
+#                        original file at commit via `git show <sha>:<path>`,
+#                        compare against git ls-files candidates. Content-hash
+#                        match → pointer_stale warning (exit 0). Same-basename
+#                        candidate with different content → error (invalid).
+#                      Mode B (no SHA anchor): basename heuristic only; emits
+#                        pointer_degraded_basename_match warning (exit 0).
+#                      Not found in either mode → validation FAILURE.
 #   sha256:<hex>     64 lowercase hex chars after prefix. Format check only.
 #
 # Output (stdout): one JSON object
@@ -47,7 +53,7 @@ usage_error() {
 }
 
 show_help() {
-  sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------------------
@@ -203,10 +209,10 @@ if [ "$AP_LEN" -gt 0 ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Early exit if structural errors make pointer resolution unsafe
+# Guard variables: skip pointer/artifact resolution if fields are not arrays
+# (structural errors from §1 make resolution unsafe or meaningless)
 # ---------------------------------------------------------------------------
 
-# If evidence_pointers is not an array, skip pointer resolution
 EP_IS_ARRAY="$(printf '%s' "$REPORT_JSON" | jq -r '(.evidence_pointers | type) == "array"')"
 AP_IS_ARRAY="$(printf '%s' "$REPORT_JSON" | jq -r '(.artifact_paths | type) == "array"')"
 
@@ -226,7 +232,15 @@ file_sha256() {
 }
 
 # Helper: resolve a file:line-range pointer.
-# Outputs "ok", "stale:<found-path>", or "error:<message>"
+# Outputs one or more lines; each line is either:
+#   warn:<message>        — a warning to surface (may appear 0 or more times)
+#   ok                    — pointer resolved successfully
+#   stale:<found-path>    — pointer resolved via content-hash after file moved (emit warning)
+#   degraded:<found-path> — pointer resolved via basename heuristic; no SHA anchor (emit warning)
+#   error:<message>       — validation failure
+# IMPORTANT: add_warning / add_error cannot be called here because this function is
+# invoked inside $(...) (command substitution), which runs in a subshell. All
+# diagnostic signals must be conveyed via stdout lines (warn:/error:/stale:/degraded:).
 resolve_file_pointer() {
   local pointer="$1"
 
@@ -256,7 +270,7 @@ resolve_file_pointer() {
       file_path="${rest%:*}"
       ;;
     *)
-      printf '%s' "error:malformed file:line-range pointer (expected path:start-end[@sha]): $pointer"
+      printf 'error:malformed file:line-range pointer (expected path:start-end[@sha]): %s\n' "$pointer"
       return
       ;;
   esac
@@ -267,93 +281,190 @@ resolve_file_pointer() {
   end="${line_range#*-}"
 
   # Validate start/end are positive integers
-  case "$start" in ''|*[!0-9]*) printf '%s' "error:line range start is not a positive integer: $pointer"; return ;; esac
-  case "$end" in ''|*[!0-9]*) printf '%s' "error:line range end is not a positive integer: $pointer"; return ;; esac
+  case "$start" in ''|*[!0-9]*) printf 'error:line range start is not a positive integer: %s\n' "$pointer"; return ;; esac
+  case "$end" in ''|*[!0-9]*) printf 'error:line range end is not a positive integer: %s\n' "$pointer"; return ;; esac
   if [ "$start" -lt 1 ]; then
-    printf '%s' "error:line range start must be >= 1: $pointer"
+    printf 'error:line range start must be >= 1: %s\n' "$pointer"
     return
   fi
   if [ "$end" -lt "$start" ]; then
-    printf '%s' "error:line range end ($end) must be >= start ($start): $pointer"
+    printf 'error:line range end (%s) must be >= start (%s): %s\n' "$end" "$start" "$pointer"
     return
   fi
 
+  # Warn on @HEAD anchor: HEAD is not a stable reference; a concrete SHA is required
+  # for reproducible validation. Still resolves (exit 0), but warns.
+  if [ "$commit_sha" = "HEAD" ]; then
+    printf 'warn:pointer uses @HEAD anchor which is not stable; use a concrete SHA for reproducible validation: %s\n' "$pointer"
+  fi
+
   # Try to resolve the file
-  local resolved_content=""
   local line_count=0
 
   if [ -n "$commit_sha" ] && [ -n "$REPO_PATH" ] && [ -d "$REPO_PATH/.git" ]; then
     # Attempt git show <sha>:<path> to get file at commit
-    if resolved_content="$(git -C "$REPO_PATH" show "${commit_sha}:${file_path}" 2>/dev/null)"; then
-      line_count="$(printf '%s\n' "$resolved_content" | wc -l | tr -d ' ')"
+    if line_count="$(git -C "$REPO_PATH" show "${commit_sha}:${file_path}" 2>/dev/null | wc -l | tr -d ' ')"; then
       if [ "$end" -gt "$line_count" ]; then
-        printf '%s' "error:line range $start-$end exceeds file length ($line_count lines) at commit $commit_sha: $pointer"
+        printf 'error:line range %s-%s exceeds file length (%s lines) at commit %s: %s\n' \
+          "$start" "$end" "$line_count" "$commit_sha" "$pointer"
         return
       fi
-      printf '%s' "ok"
+      # File resolved at the commit. Also check if it still exists at the SAME PATH
+      # in the current working tree — if not, the file has moved and the pointer is stale.
+      # Check in the repo working tree (REPO_PATH-relative), not CWD-relative.
+      if [ ! -f "$REPO_PATH/$file_path" ]; then
+        # File no longer at original path in working tree — search for it by content hash.
+        local moved_hash basename_fp
+        moved_hash="$(git -C "$REPO_PATH" show "${commit_sha}:${file_path}" 2>/dev/null | sha256sum | awk '{print $1}')"
+        basename_fp="$(basename "$file_path")"
+        local all_candidates_mv
+        all_candidates_mv="$(git -C "$REPO_PATH" ls-files 2>/dev/null)"
+        local moved_found="" basename_diff_found=""
+        while IFS= read -r candidate; do
+          [ -z "$candidate" ] && continue
+          local full_cand="$REPO_PATH/$candidate"
+          [ -f "$full_cand" ] || continue
+          local c_hash; c_hash="$(sha256sum "$full_cand" | awk '{print $1}')"
+          if [ "$c_hash" = "$moved_hash" ]; then
+            moved_found="$full_cand"
+            break
+          fi
+          # Track same-basename candidates with different content for false-positive detection
+          if [ "$(basename "$candidate")" = "$basename_fp" ] && [ -z "$basename_diff_found" ]; then
+            basename_diff_found="$full_cand"
+          fi
+        done <<< "$all_candidates_mv"
+        if [ -n "$moved_found" ]; then
+          printf 'stale:%s\n' "$moved_found"
+        elif [ -n "$basename_diff_found" ]; then
+          # Same-basename file exists but content differs — this would be a false positive
+          # if basename-only matching were used. Report as error.
+          printf 'error:moved-file: basename match '"'"'%s'"'"' has different content than original at %s; pointer is invalid: %s\n' \
+            "$basename_diff_found" "$commit_sha" "$pointer"
+        else
+          # Resolved at commit but file is gone from working tree with no successor found.
+          printf 'ok\n'
+        fi
+      else
+        printf 'ok\n'
+      fi
       return
     else
       # SHA-based lookup failed — fall through to working tree with warning
-      add_warning "commit SHA '$commit_sha' not found in repo; falling back to working tree for pointer: $pointer"
+      printf 'warn:commit SHA '"'"'%s'"'"' not found in repo; falling back to working tree for pointer: %s\n' \
+        "$commit_sha" "$pointer"
     fi
   elif [ -n "$commit_sha" ] && { [ -z "$REPO_PATH" ] || [ ! -d "${REPO_PATH}/.git" ]; }; then
     # Have a SHA but no usable repo — fall back to working tree with warning
-    add_warning "pointer has commit SHA anchor but no --repo provided; falling back to working tree: $pointer"
+    printf 'warn:pointer has commit SHA anchor but no --repo provided; falling back to working tree: %s\n' "$pointer"
   fi
 
   # Working-tree resolution
   if [ -f "$file_path" ]; then
     line_count="$(file_line_count "$file_path")"
     if [ "$end" -gt "$line_count" ]; then
-      printf '%s' "error:line range $start-$end exceeds file length ($line_count lines) in working tree: $pointer"
+      printf 'error:line range %s-%s exceeds file length (%s lines) in working tree: %s\n' \
+        "$start" "$end" "$line_count" "$pointer"
       return
     fi
-    printf '%s' "ok"
+    printf 'ok\n'
     return
   fi
 
-  # File not found in working tree — try content-hash search via git ls-files
+  # File not found in working tree — attempt moved-file resolution.
+  #
+  # Two modes:
+  #   With SHA anchor: compute the original content hash via `git show <sha>:<path>`,
+  #     then search git ls-files candidates comparing sha256; basename candidates
+  #     are tried first (optimization), then the full tracked-file list.
+  #     - Content-hash match → stale:<found-path> (caller emits pointer_stale warning).
+  #     - Same-basename candidate with DIFFERENT content and no content match
+  #       anywhere → error (the false-positive case: basename match would be wrong).
+  #   Without SHA anchor: content-hash search is impossible; fall back to basename
+  #     heuristic → degraded:<found-path> (caller emits pointer_degraded_basename_match).
   if [ -n "$REPO_PATH" ] && [ -d "$REPO_PATH/.git" ]; then
-    # Bounded search: iterate tracked files looking for a content match.
-    # We can't know the exact content of the missing file without it, so we
-    # search by filename basename as a heuristic first, then full scan.
     local basename_file; basename_file="$(basename "$file_path")"
-    local found_path=""
 
-    # Search by basename match first (fast path)
-    while IFS= read -r candidate; do
-      [ -z "$candidate" ] && continue
-      if [ "$(basename "$candidate")" = "$basename_file" ]; then
-        found_path="$candidate"
-        break
+    if [ -n "$commit_sha" ]; then
+      # Compute the content hash of the file at the anchor commit.
+      # IMPORTANT: pipe directly through sha256sum — do NOT capture to a variable
+      # first, as command substitution strips trailing newlines, corrupting the hash.
+      local orig_hash=""
+      if git -C "$REPO_PATH" show "${commit_sha}:${file_path}" >/dev/null 2>&1; then
+        orig_hash="$(git -C "$REPO_PATH" show "${commit_sha}:${file_path}" 2>/dev/null | sha256sum | awk '{print $1}')"
       fi
-    done < <(git -C "$REPO_PATH" ls-files 2>/dev/null)
 
-    if [ -n "$found_path" ]; then
-      local full_found="$REPO_PATH/$found_path"
-      if [ -f "$full_found" ]; then
-        printf '%s' "stale:$full_found"
-        return
-      fi
-    fi
+      if [ -n "$orig_hash" ]; then
+        # orig_hash available — do real content-hash search.
+        # Collect all tracked files. Basename candidates come first (optimization)
+        # so the hot path avoids scanning unrelated files.
+        local basename_match_path=""
+        local content_match_path=""
+        local all_candidates
+        all_candidates="$(git -C "$REPO_PATH" ls-files 2>/dev/null)"
 
-    # Full scan: check every tracked file's path stem
-    while IFS= read -r candidate; do
-      [ -z "$candidate" ] && continue
-      local full_candidate="$REPO_PATH/$candidate"
-      if [ -f "$full_candidate" ]; then
-        found_path="$candidate"
-        # Only accept if the basename matches (content-hash heuristic)
-        if [ "$(basename "$candidate")" = "$basename_file" ]; then
-          printf '%s' "stale:$full_candidate"
+        # Phase 1: basename candidates first
+        while IFS= read -r candidate; do
+          [ -z "$candidate" ] && continue
+          [ "$(basename "$candidate")" = "$basename_file" ] || continue
+          local full_candidate="$REPO_PATH/$candidate"
+          [ -f "$full_candidate" ] || continue
+          if [ -z "$basename_match_path" ]; then
+            basename_match_path="$full_candidate"
+          fi
+          local cand_hash; cand_hash="$(sha256sum "$full_candidate" | awk '{print $1}')"
+          if [ "$cand_hash" = "$orig_hash" ]; then
+            content_match_path="$full_candidate"
+            break
+          fi
+        done <<< "$all_candidates"
+
+        # Phase 2: full scan if no content match yet (non-basename-matching files)
+        if [ -z "$content_match_path" ]; then
+          while IFS= read -r candidate; do
+            [ -z "$candidate" ] && continue
+            [ "$(basename "$candidate")" = "$basename_file" ] && continue  # already checked
+            local full_candidate="$REPO_PATH/$candidate"
+            [ -f "$full_candidate" ] || continue
+            local cand_hash; cand_hash="$(sha256sum "$full_candidate" | awk '{print $1}')"
+            if [ "$cand_hash" = "$orig_hash" ]; then
+              content_match_path="$full_candidate"
+              break
+            fi
+          done <<< "$all_candidates"
+        fi
+
+        if [ -n "$content_match_path" ]; then
+          printf 'stale:%s\n' "$content_match_path"
+          return
+        fi
+
+        # No content-hash match found anywhere.
+        if [ -n "$basename_match_path" ]; then
+          # Same-basename candidate exists but content differs → false-positive guard: error.
+          printf 'error:moved-file: basename match '"'"'%s'"'"' has different content than original at %s; pointer is invalid: %s\n' \
+            "$basename_match_path" "$commit_sha" "$pointer"
           return
         fi
       fi
-    done < <(git -C "$REPO_PATH" ls-files 2>/dev/null)
+      # orig_hash unavailable (commit did not contain this path) — fall through to not-found.
+    else
+      # No SHA anchor — content-hash impossible; use basename heuristic with degraded result.
+      while IFS= read -r candidate; do
+        [ -z "$candidate" ] && continue
+        if [ "$(basename "$candidate")" = "$basename_file" ]; then
+          local full_candidate="$REPO_PATH/$candidate"
+          if [ -f "$full_candidate" ]; then
+            printf 'degraded:%s\n' "$full_candidate"
+            return
+          fi
+        fi
+      done < <(git -C "$REPO_PATH" ls-files 2>/dev/null)
+    fi
   fi
 
   # Not found anywhere
-  printf '%s' "error:file not found: $file_path (pointer: $pointer)"
+  printf 'error:file not found: %s (pointer: %s)\n' "$file_path" "$pointer"
 }
 
 # Helper: validate a sha256-only pointer format
@@ -400,14 +511,32 @@ if [ "$EP_IS_ARRAY" = "true" ]; then
         esac
         ;;
       file:*|*:*-*)
-        result="$(resolve_file_pointer "$ptr")"
-        case "$result" in
+        # resolve_file_pointer may return multiple lines:
+        #   warn:<msg>        — warning to surface
+        #   ok                — resolved successfully
+        #   stale:<path>      — resolved via content-hash after file moved
+        #   degraded:<path>   — resolved via basename heuristic (no SHA anchor)
+        #   error:<msg>       — validation failure
+        # Process all lines; the last non-warn line is the resolution result.
+        resolve_result=""
+        while IFS= read -r rline; do
+          case "$rline" in
+            warn:*)  add_warning "${rline#warn:}" ;;
+            ok|stale:*|degraded:*|error:*) resolve_result="$rline" ;;
+          esac
+        done < <(resolve_file_pointer "$ptr")
+        case "$resolve_result" in
           ok) ;;
           stale:*)
-            found="${result#stale:}"
-            add_warning "pointer_stale: file '${ptr%%:*}' (or path component) has moved; found at '$found' — pointer should be updated: $ptr"
+            found="${resolve_result#stale:}"
+            add_warning "pointer_stale: file has moved; found at '$found' (content-hash verified) — pointer should be updated: $ptr"
             ;;
-          error:*) add_error "${result#error:}" ;;
+          degraded:*)
+            found="${resolve_result#degraded:}"
+            add_warning "pointer_degraded_basename_match: no commit-SHA anchor; basename heuristic matched '$found' — pointer may be stale, content unverified: $ptr"
+            ;;
+          error:*) add_error "${resolve_result#error:}" ;;
+          "")       add_error "pointer resolution returned no result (internal error): $ptr" ;;
         esac
         ;;
       *)

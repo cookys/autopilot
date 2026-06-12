@@ -615,8 +615,11 @@ cmd_fetch() {
 
   # Get artifact paths from the node's report
   local artifact_paths
+  # artifact_paths elements are {path, sha256} objects per tree-contracts.md
+  # §4; bare-string elements are tolerated for backward compatibility.
   artifact_paths="$(jq -r --arg node "$node_id" \
-    '(.nodes[$node].artifact_paths // [])[]' "$index_file" 2>/dev/null || true)"
+    '(.nodes[$node].artifact_paths // []) | map(if type == "object" then .path // empty else . end) | .[]' \
+    "$index_file" 2>/dev/null || true)"
 
   if [ -z "$artifact_paths" ]; then
     log_err "fetch: no artifact_paths found for node '$node_id'"
@@ -639,7 +642,7 @@ cmd_fetch() {
     while IFS= read -r path; do
       [ -z "$path" ] && continue
       if [ -f "$path" ]; then
-        cat "$path"
+        cat -- "$path"
       else
         log_err "fetch: artifact not found at path: $path"
       fi

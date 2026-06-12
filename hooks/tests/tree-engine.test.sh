@@ -306,14 +306,24 @@ tree init fetch 2>/dev/null
 ARTIFACT="$TEST_TMP/artifact.txt"
 printf 'artifact content line 1\nartifact content line 2\n' > "$ARTIFACT"
 
-# Emit a node_report event with an artifact path
-REPORT_EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"work1\",\"type\":\"node_report\",\"artifact_paths\":[\"$ARTIFACT\"],\"evidence_pointers\":[],\"artifact_sha256\":\"abc123\"}"
+# Emit a node_report event with the contract-mandated {path, sha256} object
+# format (tree-contracts.md §4) — bare strings are only a compat fallback,
+# so the test must exercise the conformant shape.
+ARTIFACT_SHA="$(sha256sum "$ARTIFACT" | awk '{print $1}')"
+REPORT_EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"work1\",\"type\":\"node_report\",\"artifact_paths\":[{\"path\":\"$ARTIFACT\",\"sha256\":\"$ARTIFACT_SHA\"}],\"evidence_pointers\":[],\"artifact_sha256\":\"abc123\"}"
 tree emit fetch work1 "$REPORT_EV" 2>/dev/null
 
-# 7.1 fetch --raw prints artifact content
+# 7.1 fetch --raw prints artifact content (object-format artifact_paths)
 FETCH_OUT="$(tree fetch fetch work1 --raw 2>/dev/null)"
 assert_contains "$FETCH_OUT" "artifact content line 1" "fetch --raw prints artifact content"
 assert_contains "$FETCH_OUT" "artifact content line 2" "fetch --raw prints full artifact content"
+
+# 7.1b bare-string artifact_paths still works (compat fallback)
+tree init fetchstr 2>/dev/null
+REPORT_EV_STR="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"w2\",\"type\":\"node_report\",\"artifact_paths\":[\"$ARTIFACT\"],\"evidence_pointers\":[],\"artifact_sha256\":\"abc123\"}"
+tree emit fetchstr w2 "$REPORT_EV_STR" 2>/dev/null
+FETCH_STR_OUT="$(tree fetch fetchstr w2 --raw 2>/dev/null)"
+assert_contains "$FETCH_STR_OUT" "artifact content line 1" "fetch --raw compat: bare-string artifact path still printed"
 
 # 7.2 fetch --raw appended manager_raw_read event
 LAST_EVENT="$(tail -1 "$PROJECTS/fetch/tree/events.jsonl")"

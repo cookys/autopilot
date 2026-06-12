@@ -350,6 +350,42 @@ DIFF_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | join(" ")')"
 assert_contains "$DIFF_ERRS" "invalid" "moved-file (sha, diff content) error mentions invalid"
 
 # ---------------------------------------------------------------------------
+# TEST 9d: sha anchor resolves at commit, but the file was DELETED outright —
+# no successor anywhere (no content match, no same-basename candidate).
+# Contract §5.3: "not found anywhere → validation FAILURE". A deleted citation
+# is not spot-checkable; this must be exit 1, never a silent pass.
+# ---------------------------------------------------------------------------
+DEL_REPO_RESULT="$(make_git_repo_n del)"
+DEL_REPO="${DEL_REPO_RESULT% *}"
+DEL_ORIG_SHA="${DEL_REPO_RESULT#* }"
+rm "$DEL_REPO/src/evidence.txt"
+git -C "$DEL_REPO" add -A
+git -C "$DEL_REPO" commit -q -m "delete evidence outright"
+# Working tree: src/evidence.txt gone; NO file with matching content or basename.
+
+DEL_ART="$(make_artifact)"
+DEL_ART_SHA="$(artifact_sha "$DEL_ART")"
+DEL_REPORT="$TEST_TMP/del-report.json"
+jq -n \
+  --arg node "del-node" \
+  --arg art "$DEL_ART" \
+  --arg sha "$DEL_ART_SHA" \
+  --arg ptr "src/evidence.txt:1-3@${DEL_ORIG_SHA}" \
+  '{
+    schema_version: 1, node: $node, verdict: "approved", confidence: 0.8,
+    evidence_pointers: [$ptr],
+    artifact_paths: [{"path": $art, "sha256": $sha}],
+    doa_log: [], escalations: []
+  }' > "$DEL_REPORT"
+
+run_validator "$DEL_REPORT" --repo "$DEL_REPO"
+assert_exit_code "$__RUN_EXIT" "1" "deleted-file (sha anchor, no successor) exits 1"
+DEL_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$DEL_VALID" "false" "deleted-file (no successor) has valid:false"
+DEL_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | join(" ")')"
+assert_contains "$DEL_ERRS" "deleted-file" "deleted-file error names the deleted-file class"
+
+# ---------------------------------------------------------------------------
 # TEST 10 (Amendment 2c): file:line-range with commit SHA anchor → git show → exit 0
 # ---------------------------------------------------------------------------
 GSHOW_REPO_RESULT="$(make_git_repo)"

@@ -342,8 +342,12 @@ resolve_file_pointer() {
           printf 'error:moved-file: basename match '"'"'%s'"'"' has different content than original at %s; pointer is invalid: %s\n' \
             "$basename_diff_found" "$commit_sha" "$pointer"
         else
-          # Resolved at commit but file is gone from working tree with no successor found.
-          printf 'ok\n'
+          # Resolved at commit but the file is gone from the working tree and
+          # no content-hash successor exists anywhere — contract §5.3: "not
+          # found anywhere → validation FAILURE". A deleted citation is not
+          # spot-checkable.
+          printf 'error:deleted-file: file resolved at commit %s but no longer exists in working tree and no successor found: %s\n' \
+            "$commit_sha" "$pointer"
         fi
       else
         printf 'ok\n'

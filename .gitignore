@@ -14,7 +14,8 @@ hooks/hooks.json.capture-backup
 skill-creator-workspace/results/*/2026-05-14_154034/
 # Task-tree engine: index.json is derived from events.jsonl and must not be
 # tracked. index.* also covers the same-dir mktemp temp file (index.XXXXXX)
-# that an interrupted rebuild could leave behind.
-docs/projects/*/tree/index.*
+# that an interrupted rebuild could leave behind. ** (not *) so archived
+# projects under _archive/<proj>/ stay covered too.
+docs/projects/**/tree/index.*
 # Ephemeral flock sidecar created by tree.sh locked_append.
-docs/projects/*/tree/events.jsonl.lock
+docs/projects/**/tree/events.jsonl.lock

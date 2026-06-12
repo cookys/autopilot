@@ -206,11 +206,11 @@ CONTEXT_FILE="$WORK_DIR/context.txt"
   for ap in "${ARTIFACT_PATHS[@]}"; do
     ap="$(printf '%s' "$ap" | tr -d ' ')"
     if [ -f "$ap" ]; then
-      printf '--- %s ---\n' "$ap"
-      cat "$ap"
+      printf -- '--- %s ---\n' "$ap"
+      cat -- "$ap"
       printf '\n'
     else
-      printf '--- %s (NOT FOUND) ---\n' "$ap"
+      printf -- '--- %s (NOT FOUND) ---\n' "$ap"
     fi
   done
   if [ -n "$DIFF_FILE" ] && [ -f "$DIFF_FILE" ]; then

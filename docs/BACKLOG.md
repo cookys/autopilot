@@ -150,6 +150,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (skill) + S (resolve-dispatch runner field, if chain routing is wanted) + S (user-facing README section for hetero-dispatch — deliberately deferred to ship together with the skill so the public story is written once)
 - **Source**: 2026-06-11 hetero-dispatch spike + first production use (`a83c04a`); CEO decision to ship script-first.
 
+### Tree-engine graduation Board review
+- **Trigger**: `~/.autopilot/calibration/samples.jsonl` reaches 50 reviewer-baseline samples OR 30 days after the first shadow run (2026-06-12), whichever comes first.
+- **Context**: Amendment 6 — Board decides graduate / extend / abort based on `scripts/calibration.sh report` output. Silence is NOT extension. P6 adapter post-signoff activation is blocked on a `board_signoff` event recorded in the project tree (see `references/tree-contracts.md` §3.12 and `scripts/tree.sh board-status`).
+- **Effort**: Fix (Board review meeting; not a code task)
+- **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
+
 ### resolve-dispatch.sh tree-role integration
 - **Trigger**: before P6 tree-adapter activation, OR when any skill needs model dispatch (model/mode) for tree roles (manager, sub-orchestrator, implementer, judge, synthesizer, etc.).
 - **Context**: Amendment 11 (2026-06-12) shipped the tree-role tier table in `references/model-routing.md`. The existing `implementer` role key in `resolve-dispatch.sh` conflicts with the new tree-implementer tier (tree-implementer maps to sonnet-class OR flash-class hetero, while the existing implementer maps to opus). The `resolve-doa.sh` script handles DOA presets for tree roles; `resolve-dispatch.sh` integration (model/mode dispatch) is deferred because the conflict and the per-role dispatch logic need design before P6 dogfood.

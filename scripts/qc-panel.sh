@@ -13,11 +13,16 @@
 #
 # JUDGES:
 #   Judge A — Claude family via $QC_CLAUDE_BIN (default: claude)
-#             Model: haiku-class (cheap tier, Amendment 11)
+#             Model: $QC_JUDGE_A_MODEL (default: claude-haiku-4-5, Amendment-11 factory default)
 #   Judge B — Gemini via $QC_AGY_BIN (default: agy)
-#             Model: Gemini 3.5 Flash (Medium) — spike-proven recipe
+#             Model: $QC_JUDGE_B_MODEL (default: "Gemini 3.5 Flash (Medium)", Amendment-11 factory default)
 #             Runs in a throwaway dir with ONLY intended inputs; file-write
 #             mode; --dangerously-skip-permissions --print-timeout 8m
+#
+# NOTE on model seams: QC_JUDGE_A_MODEL / QC_JUDGE_B_MODEL / QC_SYNTH_MODEL
+#   override the hardcoded Amendment-11 factory defaults. Full resolve-dispatch.sh
+#   integration for tree-role routing is deferred — see docs/BACKLOG.md
+#   "resolve-dispatch.sh tree-role integration".
 #
 # QUESTION SHAPES (×2 judges = 6 calls):
 #   Q1  "What goals were achieved? Cite evidence from the report."
@@ -57,8 +62,11 @@
 #   2  usage / precondition failure
 #
 # ENV SEAMS (for testing — PATH-stub these binaries):
-#   QC_CLAUDE_BIN   claude binary (default: claude)
-#   QC_AGY_BIN      agy binary    (default: agy)
+#   QC_CLAUDE_BIN     claude binary (default: claude)
+#   QC_AGY_BIN        agy binary    (default: agy)
+#   QC_JUDGE_A_MODEL  Claude judge model  (default: claude-haiku-4-5, Amendment-11 factory default)
+#   QC_JUDGE_B_MODEL  Gemini judge model  (default: "Gemini 3.5 Flash (Medium)", Amendment-11 factory default)
+#   QC_SYNTH_MODEL    Synthesizer model   (default: claude-haiku-4-5, Amendment-11 factory default)
 #   CALIBRATION_DATA_DIR  passed through to calibration.sh
 #
 # NOTE on agy judge recipe (verified spike, references/multi-agent-portability.md §7):
@@ -80,6 +88,11 @@ CALIBRATION_SH="$SCRIPT_DIR/calibration.sh"
 CLAUDE_BIN="${QC_CLAUDE_BIN:-claude}"
 AGY_BIN="${QC_AGY_BIN:-agy}"
 
+# ── Model seams (Amendment-11 factory defaults; override via env) ─────────────
+JUDGE_A_MODEL="${QC_JUDGE_A_MODEL:-claude-haiku-4-5}"
+JUDGE_B_MODEL="${QC_JUDGE_B_MODEL:-Gemini 3.5 Flash (Medium)}"
+SYNTH_MODEL="${QC_SYNTH_MODEL:-claude-haiku-4-5}"
+
 # ── Question shapes ───────────────────────────────────────────────────────────
 Q1="What goals were achieved? Cite specific evidence from the report and artifacts. List each achieved goal on its own line prefixed 'ACHIEVED:'."
 Q2="What was done BEYOND the stated goals (extras, scope creep, unrequested changes)? Be specific. List each on its own line prefixed 'EXTRA:'."
@@ -100,7 +113,9 @@ qc-panel.sh — QC interrogation panel (task-tree engine P4)
   --proj       <project-name>        used to derive default --out path
   --node       <node-id>             used to derive default --out path
 
-ENV: QC_CLAUDE_BIN, QC_AGY_BIN, CALIBRATION_DATA_DIR
+ENV: QC_CLAUDE_BIN, QC_AGY_BIN,
+     QC_JUDGE_A_MODEL, QC_JUDGE_B_MODEL, QC_SYNTH_MODEL,
+     CALIBRATION_DATA_DIR
 
 EXIT: 0=ok/skipped, 1=judge/liveness failure, 2=usage/precondition
 EOF
@@ -169,6 +184,24 @@ done
 [ -r "$REPORT_FILE" ]  || die "report file not readable: $REPORT_FILE"
 [ -n "$ARTIFACTS_RAW" ] || die "--artifacts is required"
 
+# Validate --proj and --node: reject values not matching ^[A-Za-z0-9][A-Za-z0-9._-]*$
+# or containing '..'; mirrors tree.sh validate_proj_name.
+validate_path_component() {
+  local name="$1" label="$2"
+  case "$name" in
+    *..*)
+      printf 'qc-panel.sh: invalid %s: contains ".." path traversal: %s\n' "$label" "$name" >&2
+      exit 2
+      ;;
+  esac
+  if ! printf '%s' "$name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+    printf 'qc-panel.sh: invalid %s: must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (got: %s)\n' "$label" "$name" >&2
+    exit 2
+  fi
+}
+[ -n "$PROJ" ]    && validate_path_component "$PROJ" "--proj"
+[ -n "$NODE_ID" ] && validate_path_component "$NODE_ID" "--node"
+
 # Derive --out from --proj/--node if not given
 if [ -z "$OUT_DIR" ]; then
   [ -n "$PROJ" ] && [ -n "$NODE_ID" ] || die "--out is required unless both --proj and --node are set"
@@ -180,7 +213,7 @@ mkdir -p "$OUT_DIR" || die "cannot create output dir: $OUT_DIR"
 IFS=',' read -ra ARTIFACT_PATHS <<< "$ARTIFACTS_RAW"
 
 # ── Check for null verdict (non-verdict-bearing node) ─────────────────────────
-NODE_VERDICT="$(grep -o '"verdict":[^,}]*' "$REPORT_FILE" | head -1 | cut -d: -f2 | tr -d ' "' )"
+NODE_VERDICT="$(jq -r '.verdict // "null"' "$REPORT_FILE" 2>/dev/null)"
 if [ "$NODE_VERDICT" = "null" ] || [ -z "$NODE_VERDICT" ]; then
   TS="$(now_iso | tr -c '[:alnum:]' '-' | sed 's/-*$//')"
   SKIP_FILE="$OUT_DIR/${NODE_ID:-node}-${TS}-skipped.json"
@@ -220,7 +253,7 @@ CONTEXT_FILE="$WORK_DIR/context.txt"
 } > "$CONTEXT_FILE"
 
 CTX_TOKENS="$(estimate_tokens_file "$CONTEXT_FILE")"
-TOKEN_TOTAL=$((TOKEN_TOTAL + CTX_TOKENS))
+# CTX_TOKENS is accumulated per judge call (each judge sees the context once);
 
 # ── Judge A: Claude (haiku-class) ─────────────────────────────────────────────
 # Judge A writes its verdict directly to a file (--output-file not available in
@@ -235,7 +268,7 @@ run_judge_a() {
   TOKEN_TOTAL=$((TOKEN_TOTAL + prompt_tokens + CTX_TOKENS))
 
   if ! { printf '%s' "$prompt"; cat "$CONTEXT_FILE"; } | \
-      "$CLAUDE_BIN" -p --model claude-haiku-4-5 > "$outfile" 2>/dev/null; then
+      "$CLAUDE_BIN" -p --model "$JUDGE_A_MODEL" > "$outfile" 2>/dev/null; then
     printf 'qc-panel.sh: judge A Q%s failed\n' "$qnum" >&2
     printf '{"judge":"a","q":%s,"error":"judge_failed"}\n' "$qnum" > "$outfile"
     return 1
@@ -266,7 +299,7 @@ run_judge_b() {
 
   local agy_out
   agy_out="$(cd "$judge_dir" && "$AGY_BIN" -p "$prompt" \
-      --model "Gemini 3.5 Flash (Medium)" \
+      --model "$JUDGE_B_MODEL" \
       --dangerously-skip-permissions \
       --print-timeout 8m 2>/dev/null)" || true
 
@@ -387,7 +420,7 @@ SYNTH_OUT="$WORK_DIR/synth.txt"
 SYNTH_TOKEN_EST="$(estimate_tokens_str "$SYNTH_PROMPT")"
 TOKEN_TOTAL=$((TOKEN_TOTAL + SYNTH_TOKEN_EST))
 
-if printf '%s' "$SYNTH_PROMPT" | "$CLAUDE_BIN" -p --model claude-haiku-4-5 > "$SYNTH_OUT" 2>/dev/null; then
+if printf '%s' "$SYNTH_PROMPT" | "$CLAUDE_BIN" -p --model "$SYNTH_MODEL" > "$SYNTH_OUT" 2>/dev/null; then
   SYNTH_RESP_TOKENS="$(estimate_tokens_file "$SYNTH_OUT")"
   TOKEN_TOTAL=$((TOKEN_TOTAL + SYNTH_RESP_TOKENS))
 
@@ -460,12 +493,16 @@ VERDICT_JSON="$(printf '{"status":"ok","verdict":"%s","dissents":%s,"extras":%s,
 printf '%s\n' "$VERDICT_JSON" > "$VERDICT_FILE" || die_liveness "failed to write verdict artifact: $VERDICT_FILE"
 
 # ── Calibration sample (Amendment 4 liveness part b) ─────────────────────────
-# The authoritative verdict is the current node report verdict (what was claimed).
-# Panel verdict is our synthesized assessment.
-# Note: the 'outcome' field is deferred (unknown at panel time; set later by dispatcher).
+# This internal sample uses --baseline self-report: the authoritative-verdict
+# here is the node report's own verdict (worker self-report), not the reviewer's
+# verdict.  It is liveness-only and excluded from graduation math.
+# The dispatcher's post-review add-sample (--baseline reviewer) is the
+# graduation-bearing sample (see skills/quality-pipeline/references/code-review.md
+# "Shadow QC panel" § and skills/quality-pipeline/SKILL.md "Shadow QC panel" §).
 CALIBRATION_ARGS=(
   --panel-verdict "$SYNTH_VERDICT"
   --authoritative-verdict "$NODE_VERDICT"
+  --baseline self-report
   --tokens "$TOKEN_TOTAL"
 )
 [ -n "${NODE_ID:-}" ] && CALIBRATION_ARGS+=(--source "node:$NODE_ID")

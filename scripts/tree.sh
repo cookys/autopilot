@@ -15,6 +15,7 @@
 #   report <proj> <node>               Print node report JSON
 #   escalations <proj>                 List open escalations as JSON array
 #   fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
+#   board-status <proj>                Print board_signoff index object ({present,ts,authorized_by} or null)
 #
 # Event envelope (minimal, validated by emit):
 #   schema_version  (integer)
@@ -457,6 +458,8 @@ cmd_rebuild_index() {
         end
       elif $ev.type == "manager_raw_read" then
         .nodes[$ev.node].raw_reads = ((.nodes[$ev.node].raw_reads // []) + [$ev.ts])
+      elif $ev.type == "board_signoff" then
+        .board_signoff = {present: true, ts: $ev.ts, authorized_by: ($ev.authorized_by // null)}
       else .
       end
     ) |
@@ -468,7 +471,11 @@ cmd_rebuild_index() {
       events_hash: $events_hash,
       event_count: ($events | length),
       truncated_tail: null
-    }
+    } |
+
+    # Ensure board_signoff defaults to null when no event was seen
+    if .board_signoff == null then . else . end |
+    .board_signoff //= null
     ')"
 
   # Inject truncated_tail tombstone if detected
@@ -652,11 +659,30 @@ cmd_fetch() {
 }
 
 # ---------------------------------------------------------------------------
+# subcommand: board-status
+# ---------------------------------------------------------------------------
+
+cmd_board_status() {
+  [ $# -ge 1 ] || usage_error "board-status requires <proj>"
+  local proj="$1"
+  local events_file; events_file="$(proj_events_file "$proj")"
+  [ -f "$events_file" ] || { log_err "tree not initialized for project '$proj'"; exit 1; }
+
+  maybe_rebuild "$proj"
+
+  local index_file; index_file="$(proj_index_file "$proj")"
+  [ -f "$index_file" ] || { log_err "index not found after rebuild attempt"; exit 1; }
+
+  # Print the board_signoff index object (null when absent)
+  jq -r '.board_signoff' "$index_file"
+}
+
+# ---------------------------------------------------------------------------
 # --help dispatcher
 # ---------------------------------------------------------------------------
 
 show_help() {
-  sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------------------
@@ -675,7 +701,7 @@ fi
 # Every subcommand's first positional is <proj>. Validate it HERE, in the
 # main script context — exit propagates. (Inside $() it would not.)
 case "$CMD" in
-  init|emit|rebuild-index|next-decision|report|escalations|fetch)
+  init|emit|rebuild-index|next-decision|report|escalations|fetch|board-status)
     [ $# -ge 1 ] || usage_error "$CMD requires <proj>"
     validate_proj_name "$1"
     ;;
@@ -689,6 +715,7 @@ case "$CMD" in
   report)            cmd_report "$@" ;;
   escalations)       cmd_escalations "$@" ;;
   fetch)             cmd_fetch "$@" ;;
+  board-status)      cmd_board_status "$@" ;;
   -h|--help|help)    show_help; exit 0 ;;
   *)
     log_err "unknown subcommand: $CMD"

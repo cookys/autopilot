@@ -181,6 +181,40 @@ event tracked for KR1 measurement).
 |---------------|------|-------|
 | `proj` | string | Project name |
 
+### 3.12 `board_signoff`
+
+The P6 authority-gate event. Transitions the tree from dual-run (shadow) mode
+to post-signoff (active) mode. See `skills/ceo-agent/references/tree-adapter.md`
+§2 (authority gate) for the mode semantics. **Without a `board_signoff` event,
+the P6 adapter post-signoff activation is blocked.**
+
+| Payload field | Type | Required | Notes |
+|---------------|------|----------|-------|
+| `authorized_by` | string | yes | The Board identity granting signoff (e.g. user handle or role) |
+| `decision` | string | yes | Must be `"graduate"` — the only accepted decision value |
+| `scope` | string | no | Optional human-readable scope qualifier (e.g. `"p5-graduation-criteria-met"`) |
+
+The full event envelope (§2 — `schema_version`, `ts`, `node`, `type`) is required
+as always. `node` SHOULD be `"root"` (signoff is project-level, not node-local).
+
+Example:
+
+```json
+{
+  "schema_version": 1,
+  "ts": "2026-07-01T12:00:00Z",
+  "node": "root",
+  "type": "board_signoff",
+  "authorized_by": "board",
+  "decision": "graduate",
+  "scope": "p5-graduation-criteria-met"
+}
+```
+
+The index fold records this event at the top level as
+`board_signoff: {present: true, ts, authorized_by}` (or `null` when absent).
+Use `scripts/tree.sh board-status <proj>` to inspect.
+
 ---
 
 ## 4. Node report schema
@@ -296,6 +330,7 @@ read `index.json` directly.
 | `events_hash` | string | SHA256 of all valid complete events (determinism signal) |
 | `event_count` | integer | Number of valid complete events processed |
 | `truncated_tail` | object or null | Tombstone for a partial last line; see §7 |
+| `board_signoff` | object or null | `{present: true, ts, authorized_by}` when a `board_signoff` event exists; `null` otherwise. Use `tree.sh board-status <proj>` to read. |
 | `nodes` | object | Map of `node_id → node_state` |
 | `escalations` | array | Top-level list of all escalation objects (open and resolved) |
 | `decisions` | array | Top-level list of all decision forks (open and resolved) |

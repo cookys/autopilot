@@ -269,17 +269,23 @@ Condition: `docs/projects/<proj>/tree/` exists AND the review target is a verdic
 
 **Amendment 4 liveness (binding)**: every panel run MUST produce (a) a verdict artifact JSON in `docs/projects/<proj>/tree/panel/` AND (b) a calibration sample via `scripts/calibration.sh add-sample`. If either fails, `qc-panel.sh` exits non-zero — a silently-dead shadow fails the gate.
 
-After both verdicts are available, log the pair:
+**Baseline separation (M2 binding)**:
+
+- `qc-panel.sh`'s internal `calibration.sh add-sample` call uses `--baseline self-report`. This records the panel's verdict against the node report's own verdict (worker self-report). It is **liveness-only** — not counted in graduation math.
+- After both the authoritative reviewer verdict AND the panel verdict are available, the dispatcher adds a **second sample** with `--baseline reviewer`. This is the **graduation-bearing** sample:
 
 ```sh
 scripts/calibration.sh add-sample \
   --panel-verdict <panel_verdict> \
   --authoritative-verdict <authoritative_reviewer_verdict> \
+  --baseline reviewer \
   [--class <severity_class>] \
   [--tokens <panel_token_estimate>]
 ```
 
-The calibration report (`scripts/calibration.sh report`) exposes agreement rate, false-pass-on-critical, and graduation status — the data the Board needs for the P5→active decision (Amendment 6). No authority shifts before graduation criteria are met.
+`scripts/calibration.sh report` computes agreement rate, false-pass-on-critical, sample_count, and graduation status **exclusively over `baseline==reviewer` samples** (records lacking the field count as reviewer for backward compat). `self_report_sample_count` is printed separately.
+
+The calibration report exposes the data the Board needs for the P5→active decision (Amendment 6). No authority shifts before graduation criteria are met.
 
 ## See Also
 

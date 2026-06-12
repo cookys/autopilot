@@ -342,10 +342,12 @@ this project. Check at startup and at each phase boundary.
 
 **Authority gate** — before routing any decisions through the tree, run:
 ```bash
-jq 'select(.type=="board_signoff")' docs/projects/<proj>/tree/events.jsonl
+scripts/tree.sh board-status <proj>
 ```
-- Empty → **dual-run (shadow)**: emit lifecycle events; TaskCreate stays authoritative.
-- Non-empty → **post-signoff (active)**: decisions flow from `scripts/tree.sh next-decision`.
+- `null` output (or error) → **dual-run (shadow)**: emit lifecycle events; TaskCreate stays authoritative.
+- `{"present":true,...}` → **post-signoff (active)**: decisions flow from `scripts/tree.sh next-decision`.
+
+> Non-CC fallback: `jq 'select(.type=="board_signoff")' docs/projects/<proj>/tree/events.jsonl` (empty = shadow).
 
 **Post-signoff decision loop** (replaces TaskCreate-driven loop):
 1. `scripts/tree.sh next-decision <proj>` → compact JSON `{node, question, options[], evidence_pointers[]}`. This is the manager's ONLY default input.
@@ -370,7 +372,7 @@ See `references/model-routing.md` §"Tree roles".
 |--------------------|---------|
 | [`references/tree-adapter.md`](references/tree-adapter.md) | Full adapter procedure: modes, event cheat-sheet, authority gate command, depth policy, initialization |
 | [`references/tree-contracts.md`](../../references/tree-contracts.md) | Event schemas, node report contract, invariants |
-| [`scripts/tree.sh`](../../scripts/tree.sh) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw` |
+| [`scripts/tree.sh`](../../scripts/tree.sh) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw`, `board-status` |
 | [`scripts/resolve-doa.sh`](../../scripts/resolve-doa.sh) | Role/tier → DOA preset JSON |
 
 ## Anti-patterns

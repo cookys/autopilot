@@ -2,7 +2,8 @@
 # calibration.sh integration tests.
 # Covers: add-sample appends valid JSONL; report computes agreement rate;
 # false_pass_on_critical counted; graduation unmet on small samples;
-# run-known-bad with stubbed panel-cmd; corpus integrity check.
+# run-known-bad with stubbed panel-cmd; corpus integrity check;
+# baseline separation (M2): self-report excluded from agreement math.
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/calibration.sh"
@@ -18,7 +19,7 @@ assert_eq "0" "$EXIT" "--help exit code"
 assert_contains "$OUT" "add-sample" "--help mentions add-sample"
 assert_contains "$OUT" "report" "--help mentions report"
 
-# ── 2. add-sample appends valid JSONL ─────────────────────────────────────────
+# ── 2. add-sample appends valid JSONL (default baseline=reviewer) ─────────────
 "$SCRIPT" add-sample --panel-verdict pass --authoritative-verdict pass \
   --outcome ok --class minor --tokens 100 --source test-src-1
 assert_file_exists "$CAL_DIR/samples.jsonl" "samples.jsonl created"
@@ -30,6 +31,7 @@ assert_contains "$LINE" '"agreed":true'             "agreed=true when both pass"
 assert_contains "$LINE" '"class":"minor"'           "class written"
 assert_contains "$LINE" '"tokens":100'              "tokens written"
 assert_contains "$LINE" '"source":"test-src-1"'     "source written"
+assert_contains "$LINE" '"baseline":"reviewer"'     "default baseline=reviewer written"
 
 # ── 3. add-sample: disagreement → agreed=false ────────────────────────────────
 "$SCRIPT" add-sample --panel-verdict pass --authoritative-verdict fail \
@@ -37,7 +39,7 @@ assert_contains "$LINE" '"source":"test-src-1"'     "source written"
 LINE2="$(tail -1 "$CAL_DIR/samples.jsonl")"
 assert_contains "$LINE2" '"agreed":false' "agreed=false when verdicts differ"
 
-# ── 4. report: agreement rate 1/2 = 0.5 ──────────────────────────────────────
+# ── 4. report: agreement rate 1/2 = 0.5 (both samples are reviewer-baseline) ──
 REPORT="$("$SCRIPT" report)"
 assert_contains "$REPORT" '"sample_count": 2'   "sample_count correct"
 assert_contains "$REPORT" '"agreement_rate": 0.5000' "agreement_rate 0.5000"
@@ -56,8 +58,50 @@ assert_contains "$REPORT" '"met": false' "graduation not met"
 assert_contains "$REPORT" '"unmet_reasons"' "unmet_reasons present"
 assert_contains "$REPORT" '50 samples' "unmet: sample count reason"
 
+# ── M2-A. internal (self-report-baseline) sample carries baseline=self-report ──
+CAL_M2="$TEST_TMP/calibration-m2"
+CALIBRATION_DATA_DIR="$CAL_M2" "$SCRIPT" add-sample \
+  --panel-verdict pass --authoritative-verdict pass --baseline self-report \
+  --source internal-liveness
+SR_LINE="$(tail -1 "$CAL_M2/samples.jsonl")"
+assert_contains "$SR_LINE" '"baseline":"self-report"' "self-report baseline written"
+
+# ── M2-B. report excludes self-report samples from agreement math ─────────────
+# Add a reviewer-baseline disagree sample and a self-report agree sample.
+# agreement_rate should be 0/1 = 0.0 (only the reviewer-disagree counts).
+CAL_M2B="$TEST_TMP/calibration-m2b"
+CALIBRATION_DATA_DIR="$CAL_M2B" "$SCRIPT" add-sample \
+  --panel-verdict pass --authoritative-verdict fail --baseline reviewer   # disagree
+CALIBRATION_DATA_DIR="$CAL_M2B" "$SCRIPT" add-sample \
+  --panel-verdict pass --authoritative-verdict pass --baseline self-report # agree but excluded
+
+REPORT_M2B="$(CALIBRATION_DATA_DIR="$CAL_M2B" "$SCRIPT" report)"
+# reviewer sample_count=1 (self-report excluded); self_report_sample_count=1
+assert_contains "$REPORT_M2B" '"sample_count": 1' "M2: reviewer sample_count=1 (self-report excluded)"
+assert_contains "$REPORT_M2B" '"self_report_sample_count": 1' "M2: self_report_sample_count=1"
+assert_contains "$REPORT_M2B" '"agreement_rate": 0.0000' "M2: agreement rate excludes self-report"
+
+# ── M2-C. mixed-file report: legacy records (no baseline field) count as reviewer ─
+CAL_M2C="$TEST_TMP/calibration-m2c"
+mkdir -p "$CAL_M2C"
+# Write a legacy record (no baseline field) directly
+printf '{"ts":"2026-01-01T00:00:00Z","panel_verdict":"pass","authoritative_verdict":"pass","agreed":true}\n' \
+  >> "$CAL_M2C/samples.jsonl"
+# Add a reviewer-baseline disagree
+CALIBRATION_DATA_DIR="$CAL_M2C" "$SCRIPT" add-sample \
+  --panel-verdict fail --authoritative-verdict pass --baseline reviewer
+# Add a self-report agree (excluded)
+CALIBRATION_DATA_DIR="$CAL_M2C" "$SCRIPT" add-sample \
+  --panel-verdict pass --authoritative-verdict pass --baseline self-report
+
+REPORT_M2C="$(CALIBRATION_DATA_DIR="$CAL_M2C" "$SCRIPT" report)"
+# 2 reviewer-baseline (legacy + explicit reviewer), 1 self-report excluded
+assert_contains "$REPORT_M2C" '"sample_count": 2' "M2C: legacy+reviewer=2"
+assert_contains "$REPORT_M2C" '"self_report_sample_count": 1' "M2C: self_report_count=1"
+assert_contains "$REPORT_M2C" '"agreement_rate": 0.5000' "M2C: legacy counts as reviewer (1 agree/2 total)"
+
 # ── 8. agreement rate 4/5 = 0.80 ─────────────────────────────────────────────
-# Build a fresh data dir with 5 samples: 4 agree, 1 disagree
+# Build a fresh data dir with 5 samples: 4 agree, 1 disagree (all reviewer-baseline)
 CAL_DIR2="$TEST_TMP/calibration2"
 CALIBRATION_DATA_DIR="$CAL_DIR2" "$SCRIPT" add-sample --panel-verdict pass --authoritative-verdict pass
 CALIBRATION_DATA_DIR="$CAL_DIR2" "$SCRIPT" add-sample --panel-verdict pass --authoritative-verdict pass
@@ -132,5 +176,10 @@ assert_eq "1" "$ADD_EXIT" "invalid panel-verdict exits 1"
 # ── 14. run-known-bad: --panel-cmd required ───────────────────────────────────
 "$SCRIPT" run-known-bad 2>/dev/null; RKB_EXIT=$?
 assert_eq "1" "$RKB_EXIT" "run-known-bad without --panel-cmd exits 1"
+
+# ── 15. add-sample: bad baseline → exit 1 ────────────────────────────────────
+"$SCRIPT" add-sample --panel-verdict pass --authoritative-verdict pass \
+  --baseline bad-value 2>/dev/null; BL_EXIT=$?
+assert_eq "1" "$BL_EXIT" "invalid --baseline exits 1"
 
 finalize_test

@@ -51,12 +51,17 @@ IF docs/projects/<proj>/tree/ exists AND node report has verdict != null:
   Run scripts/qc-panel.sh --report <node-report.json> \
       --artifacts <artifact-paths> --out <panel-out-dir> \
       --proj <proj> --node <node-id>
-  Panel writes verdict artifact + appends calibration sample (Amendment 4 liveness).
-  Log both the authoritative reviewer verdict AND the panel verdict via:
+  Panel writes verdict artifact + appends a liveness (self-report-baseline)
+  calibration sample automatically (Amendment 4 liveness).
+  After the authoritative reviewer completes, add the graduation-bearing sample:
     scripts/calibration.sh add-sample \
       --panel-verdict <panel_verdict> \
       --authoritative-verdict <reviewer_verdict> \
+      --baseline reviewer \
       [--class <severity-class>]
+  (Baseline separation: the panel's internal sample is liveness-only and
+  excluded from graduation math; only the dispatcher's reviewer-baseline
+  sample counts toward graduation criteria.)
 ELSE: shadow path is a no-op; authoritative reviewer runs unchanged.
 ```
 

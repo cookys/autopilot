@@ -31,14 +31,17 @@ The `<proj>` identifier is the project directory name under `docs/projects/`
 Before operating in tree-active mode, determine the authority level:
 
 ```bash
-jq 'select(.type=="board_signoff")' \
-  docs/projects/<proj>/tree/events.jsonl
+scripts/tree.sh board-status <proj>
 ```
 
-| Result | Mode | Meaning |
+| Output | Mode | Meaning |
 |--------|------|---------|
-| Non-empty output | **Post-signoff (active)** | Tree is authoritative for decisions |
-| Empty / file missing | **Dual-run (shadow)** | Tree records in parallel; TaskCreate stays authoritative |
+| `{"present":true,...}` | **Post-signoff (active)** | Tree is authoritative for decisions |
+| `null` / error | **Dual-run (shadow)** | Tree records in parallel; TaskCreate stays authoritative |
+
+> **Non-CC fallback**: if `scripts/tree.sh` is not available, scan the event log directly:
+> `jq 'select(.type=="board_signoff")' docs/projects/<proj>/tree/events.jsonl`
+> — non-empty output = post-signoff, empty/missing = shadow.
 
 **Dual-run mode**: emit lifecycle events as normal (§4), but continue using
 TaskCreate forcing functions as the authoritative decision source. The tree

@@ -7,6 +7,7 @@
 # SUBCOMMANDS:
 #   add-sample  --panel-verdict <pass|fail>
 #               --authoritative-verdict <pass|fail>
+#               [--baseline <self-report|reviewer>]  default: reviewer
 #               [--outcome <ok|defect-found>]
 #               [--class <critical|major|minor>]
 #               [--tokens <n>]
@@ -14,7 +15,14 @@
 #
 #   report      → JSON: {sample_count, agreement_rate, false_pass_on_critical,
 #                         per_class, cumulative_token_estimate,
+#                         self_report_sample_count,
 #                         graduation: {criteria, met, unmet_reasons}}
+#
+#              Agreement rate, false_pass_on_critical, sample_count, and ALL
+#              graduation math are computed ONLY over baseline=="reviewer"
+#              samples (or records lacking the field, treated as reviewer for
+#              backward compat).  self_report_sample_count is reported
+#              separately and excluded from graduation math.
 #
 #   run-known-bad --panel-cmd '<cmd>'
 #               Feeds each diff in evals/known-bad/ to the panel command and
@@ -22,6 +30,11 @@
 #               The panel-cmd receives the diff on stdin; it must exit 0 and
 #               print a JSON object containing {"verdict":"pass"|"fail"} on the
 #               last line (or anywhere extractable with the last-JSON heuristic).
+#
+#               TRUST NOTE (internal tool): --panel-cmd value executes as shell
+#               via eval.  Callers must treat this as a trusted-caller interface
+#               — only pass panel-cmd values from the same trust boundary as
+#               this script.
 #
 # DATA DIR: ~/.autopilot/calibration/ (seam: CALIBRATION_DATA_DIR env override)
 #
@@ -57,17 +70,24 @@ SUBCOMMANDS:
 
   add-sample  --panel-verdict <pass|fail>
               --authoritative-verdict <pass|fail>
+              [--baseline <self-report|reviewer>]   default: reviewer
               [--outcome <ok|defect-found>]
               [--class <critical|major|minor>]
               [--tokens <n>]
               [--source <id>]
 
   report      Print JSON calibration report including graduation status.
+              Agreement rate and graduation math use only baseline==reviewer
+              samples. self_report_sample_count is listed separately.
 
   run-known-bad --panel-cmd '<cmd>'
               Feed each diff in evals/known-bad/ to the panel command and
               record false-passes.  Panel cmd reads diff on stdin, writes
               JSON containing {"verdict":"pass"|"fail"} to stdout.
+
+              TRUST NOTE: --panel-cmd executes as shell via eval.  This is
+              an internal tool; panel-cmd must come from the same trust
+              boundary as this script.
 
 EXIT CODES:
   0  success
@@ -92,18 +112,15 @@ ensure_data_dir() {
 
 now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
-# Append one JSON line to samples.jsonl (atomic via temp+mv)
+# Append one JSON line to samples.jsonl.
+# Direct append; atomic for lines < PIPE_BUF (typically 4096 bytes on Linux).
 append_sample() {
   local line="$1"
   ensure_data_dir
-  local tmp
-  tmp="$(mktemp "$DATA_DIR/sample-XXXXXX.tmp")" || { printf 'calibration.sh: mktemp failed\n' >&2; exit 2; }
   printf '%s\n' "$line" >> "$SAMPLES_FILE" 2>/dev/null || {
-    rm -f "$tmp"
     printf 'calibration.sh: write to %s failed\n' "$SAMPLES_FILE" >&2
     exit 2
   }
-  rm -f "$tmp"
 }
 
 # Extract the last JSON object from a string (handles narrative-polluted output)
@@ -114,12 +131,13 @@ extract_last_json() {
 # ── add-sample ────────────────────────────────────────────────────────────────
 
 cmd_add_sample() {
-  local panel_verdict="" auth_verdict="" outcome="" class="" tokens="" source_id=""
+  local panel_verdict="" auth_verdict="" baseline="reviewer" outcome="" class="" tokens="" source_id=""
 
   while [ $# -gt 0 ]; do
     case "$1" in
       --panel-verdict)       panel_verdict="${2:-}";  shift 2 ;;
       --authoritative-verdict) auth_verdict="${2:-}"; shift 2 ;;
+      --baseline)            baseline="${2:-}";        shift 2 ;;
       --outcome)             outcome="${2:-}";         shift 2 ;;
       --class)               class="${2:-}";           shift 2 ;;
       --tokens)              tokens="${2:-}";          shift 2 ;;
@@ -134,6 +152,7 @@ cmd_add_sample() {
 
   case "$panel_verdict" in pass|fail) ;; *) die "add-sample: --panel-verdict must be pass or fail" ;; esac
   case "$auth_verdict"  in pass|fail) ;; *) die "add-sample: --authoritative-verdict must be pass or fail" ;; esac
+  case "$baseline" in self-report|reviewer) ;; *) die "add-sample: --baseline must be self-report or reviewer" ;; esac
 
   if [ -n "$outcome" ]; then
     case "$outcome" in ok|defect-found) ;; *) die "add-sample: --outcome must be ok or defect-found" ;; esac
@@ -147,10 +166,10 @@ cmd_add_sample() {
   local agreed="false"
   [ "$panel_verdict" = "$auth_verdict" ] && agreed="true"
 
-  # Build JSON
+  # Build JSON — baseline field is always emitted so the report can filter
   local json
-  json="$(printf '{"ts":"%s","panel_verdict":"%s","authoritative_verdict":"%s","agreed":%s' \
-    "$ts" "$panel_verdict" "$auth_verdict" "$agreed")"
+  json="$(printf '{"ts":"%s","panel_verdict":"%s","authoritative_verdict":"%s","agreed":%s,"baseline":"%s"' \
+    "$ts" "$panel_verdict" "$auth_verdict" "$agreed" "$baseline")"
   [ -n "$outcome" ]   && json="$json$(printf ',"outcome":"%s"' "$outcome")"
   [ -n "$class" ]     && json="$json$(printf ',"class":"%s"' "$class")"
   [ -n "$tokens" ]    && json="$json$(printf ',"tokens":%s' "$tokens")"
@@ -165,28 +184,41 @@ cmd_add_sample() {
 cmd_report() {
   ensure_data_dir
 
+  # Reviewer-baseline counters (used for agreement math + graduation)
   local sample_count=0
   local agreed_count=0
   local false_pass_on_critical=0
   local token_total=0
-  # per-class: critical, major, minor
+  # per-class: critical, major, minor (reviewer-baseline only)
   local crit_total=0 crit_agreed=0 crit_false_pass=0
   local maj_total=0  maj_agreed=0  maj_false_pass=0
   local min_total=0  min_agreed=0  min_false_pass=0
 
+  # Self-report-baseline counter (reported separately; excluded from graduation)
+  local self_report_count=0
+
   if [ -f "$SAMPLES_FILE" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       [ -z "$line" ] && continue
-      sample_count=$((sample_count + 1))
 
       # Extract fields with grep+sed (no jq dependency)
-      local pv av agreed_val cls tok
+      local pv av agreed_val cls tok bl
       pv="$(printf '%s' "$line"   | grep -o '"panel_verdict":"[^"]*"'        | cut -d'"' -f4)"
       av="$(printf '%s' "$line"   | grep -o '"authoritative_verdict":"[^"]*"' | cut -d'"' -f4)"
       agreed_val="$(printf '%s' "$line" | grep -o '"agreed":[a-z]*'          | cut -d: -f2)"
       cls="$(printf '%s' "$line"  | grep -o '"class":"[^"]*"'                | cut -d'"' -f4)"
       tok="$(printf '%s' "$line"  | grep -o '"tokens":[0-9]*'                | cut -d: -f2)"
+      bl="$(printf '%s' "$line"   | grep -o '"baseline":"[^"]*"'             | cut -d'"' -f4)"
 
+      # Records lacking the baseline field count as reviewer (legacy compat)
+      if [ "$bl" = "self-report" ]; then
+        self_report_count=$((self_report_count + 1))
+        [ -n "$tok" ] && token_total=$((token_total + tok))
+        continue
+      fi
+
+      # -- Reviewer-baseline record --
+      sample_count=$((sample_count + 1))
       [ "$agreed_val" = "true" ] && agreed_count=$((agreed_count + 1))
       [ -n "$tok" ] && token_total=$((token_total + tok))
 
@@ -227,12 +259,12 @@ cmd_report() {
   [ "$maj_total"  -gt 0 ] && maj_rate="$(awk  "BEGIN { printf \"%.4f\", $maj_agreed  / $maj_total  }")"
   [ "$min_total"  -gt 0 ] && min_rate="$(awk  "BEGIN { printf \"%.4f\", $min_agreed  / $min_total  }")"
 
-  # Graduation check
+  # Graduation check (uses reviewer-baseline counts only)
   local grad_met="false"
   local unmet_json="[]"
   local unmet=""
 
-  # Criterion 1: sample count
+  # Criterion 1: sample count (reviewer-baseline)
   [ "$sample_count" -lt "$GRAD_MIN_SAMPLES" ] && \
     unmet="$unmet,\"need >= $GRAD_MIN_SAMPLES samples (have $sample_count)\""
 
@@ -263,6 +295,7 @@ cmd_report() {
 
   printf '{
   "sample_count": %d,
+  "self_report_sample_count": %d,
   "agreement_rate": %s,
   "false_pass_on_critical": %d,
   "per_class": {
@@ -278,7 +311,7 @@ cmd_report() {
   }
 }
 ' \
-    "$sample_count" "$agreement_rate" \
+    "$sample_count" "$self_report_count" "$agreement_rate" \
     "$false_pass_on_critical" \
     "$crit_total" "$crit_agreed" "$crit_rate" "$crit_false_pass" \
     "$maj_total"  "$maj_agreed"  "$maj_rate"  "$maj_false_pass" \

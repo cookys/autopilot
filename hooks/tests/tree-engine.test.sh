@@ -362,7 +362,7 @@ else
 fi
 
 # 8.3 All subcommands + top-level --help exit 0
-for sub in --help help -h init emit rebuild-index next-decision report escalations fetch; do
+for sub in --help help -h init emit rebuild-index next-decision report escalations fetch board-status; do
   tree "$sub" --help >/dev/null 2>&1; H_EXIT=$?
   assert_eq "$H_EXIT" "0" "$sub --help exits 0"
 done
@@ -462,5 +462,45 @@ tree emit escres2 bescnode "$BULK_ESC_RESOLVE" 2>/dev/null
 tree rebuild-index escres2 2>/dev/null
 OPEN_BULK_ESC="$(jq '[.escalations[] | select(.node=="bescnode" and .resolved==false)] | length' "$PROJECTS/escres2/tree/index.json")"
 assert_eq "$OPEN_BULK_ESC" "0" "escalation bulk resolve (no id): all open escalations for node closed"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 10: board_signoff event + board-status subcommand (M3)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 10.1 No board_signoff event → board-status returns null
+tree init bsig 2>/dev/null
+BS_NO_EVENT="$(tree board-status bsig 2>/dev/null)"
+assert_eq "$BS_NO_EVENT" "null" "board-status: null when no board_signoff event"
+
+# 10.2 Emit board_signoff → board-status returns present:true with authorized_by
+SIGNOFF_EV="{\"schema_version\":1,\"ts\":\"2026-07-01T12:00:00Z\",\"node\":\"root\",\"type\":\"board_signoff\",\"authorized_by\":\"board\",\"decision\":\"graduate\",\"scope\":\"test\"}"
+tree emit bsig root "$SIGNOFF_EV" 2>/dev/null
+BS_AFTER="$(tree board-status bsig 2>/dev/null)"
+assert_contains "$BS_AFTER" '"present"' "board-status: present field after signoff"
+assert_contains "$BS_AFTER" 'true' "board-status: present=true after signoff"
+assert_contains "$BS_AFTER" '"board"' "board-status: authorized_by=board"
+
+# 10.3 Index fold records board_signoff at top level
+tree rebuild-index bsig 2>/dev/null
+BS_INDEX="$(jq '.board_signoff' "$PROJECTS/bsig/tree/index.json")"
+assert_neq "$BS_INDEX" "null" "board-status: index.board_signoff is non-null after signoff event"
+BS_PRESENT="$(jq -r '.board_signoff.present' "$PROJECTS/bsig/tree/index.json")"
+assert_eq "$BS_PRESENT" "true" "board-status: index.board_signoff.present=true"
+BS_AUTH="$(jq -r '.board_signoff.authorized_by' "$PROJECTS/bsig/tree/index.json")"
+assert_eq "$BS_AUTH" "board" "board-status: index.board_signoff.authorized_by=board"
+
+# 10.4 board-status auto-rebuilds when index is stale (like other read subcommands)
+rm -f "$PROJECTS/bsig/tree/index.json"
+BS_REBUILT="$(tree board-status bsig 2>/dev/null)"
+assert_contains "$BS_REBUILT" 'true' "board-status: auto-rebuilds index when absent"
+
+# 10.5 board-status --help exits 0
+tree board-status --help >/dev/null 2>&1; BS_HELP_EXIT=$?
+assert_eq "$BS_HELP_EXIT" "0" "board-status --help exits 0"
+
+# 10.6 Project without board_signoff has board_signoff=null in index
+tree rebuild-index rt 2>/dev/null
+RT_BS="$(jq '.board_signoff' "$PROJECTS/rt/tree/index.json")"
+assert_eq "$RT_BS" "null" "index.board_signoff=null for project without signoff event"
 
 finalize_test

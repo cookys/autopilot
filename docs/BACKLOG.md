@@ -156,6 +156,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix (Board review meeting; not a code task)
 - **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
 
+### resolve-doa.sh override-row preset-column injection (sibling of v2.17.0 fix)
+- **Trigger**: next time `scripts/resolve-doa.sh` is touched for any reason.
+- **Context**: v2.17.0 review found override-config column values flow into printf-built JSON in both resolve-* scripts. resolve-dispatch.sh got allowlist validation on extracted model/mode (warn + fall back to defaults); resolve-doa.sh has the same vector on its Preset column — though its `emit_preset_json` maps unknown presets to fail-closed, the `role`/`tier` echo-back fields are sanitized at entry, so exploitability is lower still. Verify and, if needed, apply the same `valid_token` pattern for symmetry.
+- **Effort**: S
+- **Source**: 2026-06-12 tree-role-dispatch pre-merge review (🔵 Suggestion 2).
+
 ### `.opencode/skills/` mirror is a stale manual snapshot (no sync script)
 - **Trigger**: next OpenCode-facing ship, OR a user reports OpenCode skill behavior diverging from CC (e.g. ceo-agent tree adapter missing under OpenCode).
 - **Context**: 2026-06-12 tree-role-dispatch P2 consumers sweep found `.opencode/skills/*` are tracked **copies** last synced 2026-05-22 (`bf0c637`) with no sync script (only agent bodies have `sync-agent-bodies.sh`). All skill edits since — including the entire v2.16.0 ceo-agent tree adapter — are absent from the mirror. Either add a `sync-opencode-skills.sh` (+ `--check` in pre-commit, like agent bodies) or document the mirror as point-in-time and regenerate per OpenCode release.

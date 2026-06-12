@@ -224,6 +224,22 @@ IFS=',' read -ra ARTIFACT_PATHS <<< "$ARTIFACTS_RAW"
 
 # ── Check for null verdict (non-verdict-bearing node) ─────────────────────────
 NODE_VERDICT="$(jq -r '.verdict // "null"' "$REPORT_FILE" 2>/dev/null)"
+
+# ── Calibration vocabulary bridge ─────────────────────────────────────────────
+# Node-report verdicts are free-form strings (tree-contracts §4 examples:
+# "approved", "rejected"), but calibration.sh add-sample accepts only
+# pass|fail. Map the documented vocabulary HERE, before any judge tokens are
+# spent — an unmappable verdict is a NAMED liveness failure (VERDICT_UNMAPPABLE),
+# not a generic add-sample error after a ~100k-token panel run.
+NODE_VERDICT_CAL=""
+if [ "$NODE_VERDICT" != "null" ] && [ -n "$NODE_VERDICT" ]; then
+  case "$(printf '%s' "$NODE_VERDICT" | tr '[:upper:]' '[:lower:]')" in
+    pass|approved|approve|lgtm) NODE_VERDICT_CAL="pass" ;;
+    fail|rejected|reject)       NODE_VERDICT_CAL="fail" ;;
+    *) die_liveness "VERDICT_UNMAPPABLE: node report verdict '$NODE_VERDICT' has no pass/fail mapping for calibration (pass|approved|approve|lgtm → pass; fail|rejected|reject → fail). Fix the node report verdict or extend the map." ;;
+  esac
+fi
+
 if [ "$NODE_VERDICT" = "null" ] || [ -z "$NODE_VERDICT" ]; then
   TS="$(now_iso | tr -c '[:alnum:]' '-' | sed 's/-*$//')"
   SKIP_FILE="$OUT_DIR/${NODE_ID:-node}-${TS}-skipped.json"
@@ -503,7 +519,7 @@ printf '%s\n' "$VERDICT_JSON" > "$VERDICT_FILE" || die_liveness "failed to write
 # "Shadow QC panel" § and skills/quality-pipeline/SKILL.md "Shadow QC panel" §).
 CALIBRATION_ARGS=(
   --panel-verdict "$SYNTH_VERDICT"
-  --authoritative-verdict "$NODE_VERDICT"
+  --authoritative-verdict "$NODE_VERDICT_CAL"
   --baseline self-report
   --tokens "$TOKEN_TOTAL"
 )

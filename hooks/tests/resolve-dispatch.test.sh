@@ -261,4 +261,32 @@ assert_eq "0" "$EXIT"                            "malformed tree: exit code (no 
 assert_contains "$OUT" '"model":"sonnet"'         "malformed tree: falls back to sonnet default"
 assert_contains "$OUT" '"table":"tree"'           "malformed tree: table=tree still present"
 
+# ── 12. --help must not leak implementation code ──────────────────────────
+HELP_OUT="$(bash "$SCRIPT" --help 2>&1)"
+assert_not_contains "$HELP_OUT" "set -euo pipefail" "--help does not leak code (set -euo)"
+assert_not_contains "$HELP_OUT" 'TREE_MODE=0'       "--help does not leak code (TREE_MODE)"
+
+# ── 13. Override-row model/mode injection → row ignored, fall back ────────
+INJECT_FILE="$TEST_TMP/inject-routing.md"
+cat > "$INJECT_FILE" <<'IEOF'
+| Role | Model | Mode |
+|------|-------|------|
+| tree:implementer | sonnet","injected":"true | default |
+| implementer | bad"value | plan |
+IEOF
+
+OUT="$(MODEL_ROUTING_CONFIG_OVERRIDE="$INJECT_FILE" \
+  bash "$SCRIPT" --role implementer --tree 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                             "inject tree: exit code (no crash)"
+assert_not_contains "$OUT" '"injected"'            "inject tree: crafted field NOT in output"
+assert_contains "$OUT" '"model":"sonnet"'          "inject tree: falls back to tree default"
+assert_contains "$OUT" '"source":"default"'        "inject tree: source=default (row ignored)"
+assert_contains "$OUT" "warning: ignoring override row" "inject tree: loud stderr warning"
+
+OUT="$(MODEL_ROUTING_CONFIG_OVERRIDE="$INJECT_FILE" \
+  bash "$SCRIPT" --role implementer 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                             "inject legacy: exit code (no crash)"
+assert_not_contains "$OUT" 'bad"value'             "inject legacy: crafted value NOT in output"
+assert_contains "$OUT" '"model":"opus"'            "inject legacy: falls back to opus default"
+
 finalize_test

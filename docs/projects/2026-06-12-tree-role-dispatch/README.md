@@ -49,11 +49,11 @@ Hetero flash-class implementer dispatch stays routed via `scripts/dispatch-heter
 
 | Phase | Deliverable | Status |
 |-------|------------|--------|
-| L-1.5 | Scope completeness audit | pending |
-| P0 | `--tree` table + manager refusal + `tree:<role>` override matching in resolve-dispatch.sh | pending |
-| P1 | Test coverage (evals harness conventions) | pending |
-| P2 | Docs sync (model-routing / tree-adapter / SKILL.md / CLAUDE.md / BACKLOG / consumers sweep) | pending |
-| L-5 | finish-flow (quality-pipeline + qc-panel shadow, version, CHANGELOG, merge) | pending |
+| L-1.5 | Scope completeness audit | ✅ done |
+| P0 | `--tree` table + manager refusal + `tree:<role>` override matching in resolve-dispatch.sh | ✅ done (`d9f55ed`, sonnet implementer) |
+| P1 | Test coverage (evals harness conventions) | ✅ done (104+ assertions) |
+| P2 | Docs sync (model-routing / tree-adapter / SKILL.md / CLAUDE.md / BACKLOG / consumers sweep) | ✅ done (`8ed86ca`) |
+| L-5 | finish-flow (quality-pipeline + qc-panel shadow, version, CHANGELOG, merge) | in progress |
 
 ## L-1.5 Scope completeness audit (2026-06-12)
 

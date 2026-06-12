@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --role) ROLE="$2"; shift 2 ;;
     --tree) TREE_MODE=1; shift ;;
-    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -46,6 +46,12 @@ if ! [[ "$ROLE" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "invalid --role value (only [A-Za-z0-9._-] allowed): $ROLE" >&2
   exit 2
 fi
+
+# Override-row column values flow into printf-built JSON; allowlist them like
+# $ROLE. An invalid value (e.g. a crafted row injecting extra JSON fields) is
+# warned and the row ignored — falls through to defaults, mirroring the
+# malformed-override resilience convention.
+valid_token() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }
 
 # ── Tree path ────────────────────────────────────────────────────────────────
 
@@ -73,8 +79,11 @@ if [[ "$TREE_MODE" -eq 1 ]]; then
     if [[ -n "$row" ]]; then
       model="$(echo "$row" | awk -F'|' '{print $3}' | tr -d ' *')"
       mode="$(echo "$row"  | awk -F'|' '{print $4}' | tr -d ' *')"
-      printf '{"model":"%s","mode":"%s","agent":"","table":"tree","source":"project"}\n' "$model" "$mode"
-      exit 0
+      if valid_token "$model" && valid_token "$mode"; then
+        printf '{"model":"%s","mode":"%s","agent":"","table":"tree","source":"project"}\n' "$model" "$mode"
+        exit 0
+      fi
+      echo "warning: ignoring override row for tree:${ROLE} (model/mode must match [A-Za-z0-9._-]+); using defaults" >&2
     fi
   fi
 
@@ -112,8 +121,11 @@ if [[ -f "$CONFIG" ]]; then
   if [[ -n "$row" ]]; then
     model="$(echo "$row" | awk -F'|' '{print $3}' | tr -d ' *')"
     mode="$(echo "$row"  | awk -F'|' '{print $4}' | tr -d ' *')"
-    printf '{"model":"%s","mode":"%s","agent":"","source":"project"}\n' "$model" "$mode"
-    exit 0
+    if valid_token "$model" && valid_token "$mode"; then
+      printf '{"model":"%s","mode":"%s","agent":"","source":"project"}\n' "$model" "$mode"
+      exit 0
+    fi
+    echo "warning: ignoring override row for ${ROLE} (model/mode must match [A-Za-z0-9._-]+); using defaults" >&2
   fi
 fi
 

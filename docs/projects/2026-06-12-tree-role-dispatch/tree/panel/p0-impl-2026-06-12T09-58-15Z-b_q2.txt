@@ -1,0 +1,5 @@
+EXTRA: Input sanitization was added to scripts/resolve-dispatch.sh to validate the --role argument and reject inputs with shell-special characters.
+EXTRA: The MODEL_ROUTING_CONFIG_OVERRIDE environment variable was introduced in scripts/resolve-dispatch.sh to allow overriding the routing configuration file path for testing.
+EXTRA: Resilience to malformed override files was implemented in scripts/resolve-dispatch.sh, ensuring the script falls back to default models instead of crashing on invalid config files.
+EXTRA: A new backlog entry tracking the stale .opencode/skills/ mirror snapshot was added to docs/BACKLOG.md.
+EXTRA: A dual-run shadow dogfooding setup was run for the project, creating the task-tree event logs (tree/events.jsonl) and node reports (tree/reports/p0-impl.json) under docs/projects/2026-06-12-tree-role-dispatch/.

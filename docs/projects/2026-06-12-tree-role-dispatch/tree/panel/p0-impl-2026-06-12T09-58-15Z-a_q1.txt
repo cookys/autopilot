@@ -1,0 +1,15 @@
+ACHIEVED: `--tree` context flag added to `scripts/resolve-dispatch.sh` — switches role resolution to tree-role table while legacy path remains byte-identical (evidence: script lines 28, 46-85 with TREE_MODE condition and TREE_DEFAULTS table)
+
+ACHIEVED: All 6 tree-dispatchable roles resolve to correct models — sub-orchestrator→opus, planner→sonnet, researcher→sonnet, implementer→sonnet, judge→haiku, synthesizer→haiku (evidence: resolve-dispatch.test.sh §6 lines 130-137, 144-156, 160-204; script lines 60-66 TREE_DEFAULTS table)
+
+ACHIEVED: `--role manager --tree` fails closed with named error — exits 3 with stderr "MANAGER_NOT_DISPATCHABLE" (Amendment 11 invariant enforced at tool layer) (evidence: resolve-dispatch.test.sh §7 line 153-156; script lines 54-57 manager check)
+
+ACHIEVED: Legacy implementer role remains opus — `implementer` without `--tree` still resolves to opus/default, not sonnet (evidence: resolve-dispatch.test.sh §4 line 74-81 legacy implementer assertions, script legacy path unchanged lines 92-125)
+
+ACHIEVED: Project override supports `tree:<role>` rows without collision — same config file can hold both bare `implementer` (legacy) and `tree:implementer` (tree) rows; `--tree` matches only `tree:` prefixed rows (evidence: resolve-dispatch.test.sh §9a-d lines 174-204 override isolation tests; script lines 70-80 tree override matching with negative grep for legacy rows)
+
+ACHIEVED: Input sanitization hardened — `$ROLE` rejects shell-special characters (pipes, wildcards) before interpolation into grep patterns; same vector as resolve-doa.sh, now closed in both (evidence: resolve-dispatch.test.sh §10 lines 201-213 sanitization tests; script lines 41-44 regex validation)
+
+ACHIEVED: Comprehensive test coverage — 104 assertions across legacy table stability (§4), tree table (§6), manager refusal (§7), override isolation (§9), sanitization (§10), malformed-config resilience (§11) (evidence: hooks/tests/resolve-dispatch.test.sh artifact sha256 9d5ff87286f958a85dc3e584af9fe18a8b67af250a1814166067654499e20ece)
+
+ACHIEVED: Documentation reconciled — CHANGELOG entry (v2.17.0 headline), CLAUDE.md inventory row updated, model-routing.md §Tree roles now references working `--tree` usage instead of "integration deferred", ceo-agent SKILL.md and tree-adapter.md updated to point at `--tree`, project-config-template gains tree override row template (evidence: diff shows all doc updates; evidence pointers span only P0 scope, P2 docs reconciliation separate node)

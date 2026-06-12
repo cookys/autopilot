@@ -348,4 +348,58 @@ printf 'this is { not valid json\n' > "$BAD_REPORT"
   --out "$TEST_TMP/bad-out" >/dev/null 2>&1; BAD_EXIT=$?
 assert_eq "2" "$BAD_EXIT" "R3: corrupt report file exits 2 (precondition), not silent skip"
 
+# ── Test 16: verdict vocabulary bridge — "approved" maps to pass ──────────────
+APPROVED_REPORT="$TEST_TMP/approved-report.json"
+cat > "$APPROVED_REPORT" <<'EOF'
+{
+  "node": "approved-node",
+  "verdict": "approved",
+  "confidence": 0.9,
+  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "artifact_paths": [],
+  "doa_log": [],
+  "escalations": []
+}
+EOF
+
+VOCAB_CAL_DIR="$TEST_TMP/calibration-vocab"
+VOCAB_OUT_DIR="$TEST_TMP/vocab-panel-out"
+mkdir -p "$VOCAB_OUT_DIR"
+QC_CLAUDE_BIN="$STUB_CLAUDE" QC_AGY_BIN="$STUB_AGY" \
+  CALIBRATION_DATA_DIR="$VOCAB_CAL_DIR" \
+  "$SCRIPT" --report "$APPROVED_REPORT" --artifacts "$ARTIFACT" \
+  --out "$VOCAB_OUT_DIR" --node approved-node >/dev/null 2>&1
+VOCAB_EXIT=$?
+assert_eq "0" "$VOCAB_EXIT" "vocab: 'approved' verdict exits 0 (mapped to pass)"
+assert_file_exists "$VOCAB_CAL_DIR/samples.jsonl" "vocab: calibration sample landed"
+assert_contains "$(cat "$VOCAB_CAL_DIR/samples.jsonl")" '"authoritative_verdict":"pass"' \
+  "vocab: 'approved' normalized to pass in sample"
+
+# ── Test 17: unmappable verdict → NAMED liveness failure BEFORE judges run ────
+WEIRD_REPORT="$TEST_TMP/weird-report.json"
+cat > "$WEIRD_REPORT" <<'EOF'
+{
+  "node": "weird-node",
+  "verdict": "implemented-tests-green",
+  "confidence": 0.9,
+  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "artifact_paths": [],
+  "doa_log": [],
+  "escalations": []
+}
+EOF
+
+WEIRD_CAL_DIR="$TEST_TMP/calibration-weird"
+WEIRD_OUT_DIR="$TEST_TMP/weird-panel-out"
+mkdir -p "$WEIRD_OUT_DIR"
+WEIRD_ERR="$(QC_CLAUDE_BIN="$STUB_CLAUDE" QC_AGY_BIN="$STUB_AGY" \
+  CALIBRATION_DATA_DIR="$WEIRD_CAL_DIR" \
+  "$SCRIPT" --report "$WEIRD_REPORT" --artifacts "$ARTIFACT" \
+  --out "$WEIRD_OUT_DIR" --node weird-node 2>&1 >/dev/null)"
+WEIRD_EXIT=$?
+assert_eq "1" "$WEIRD_EXIT" "vocab: unmappable verdict exits 1 (liveness)"
+assert_contains "$WEIRD_ERR" "VERDICT_UNMAPPABLE" "vocab: named error on stderr"
+assert_file_absent "$WEIRD_CAL_DIR/samples.jsonl" \
+  "vocab: no sample for unmappable verdict (failed before judges)"
+
 finalize_test

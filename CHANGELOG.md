@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.17.0 — resolve-dispatch tree-role integration (`--tree`)
+
+**Headline**: `scripts/resolve-dispatch.sh` now resolves task-tree roles. A new `--tree` context flag switches to the Amendment-11 tree table (sub-orchestrator→opus, planner/researcher/implementer→sonnet, judge/synthesizer→haiku) while the legacy table stays **byte-identical** — the `implementer`-key conflict (opus legacy vs sonnet tree) is resolved by context, not by renaming, so the role vocabulary stays shared with `scripts/resolve-doa.sh`. Closes the BACKLOG item deferred at v2.16.0 ship (R1 Fix 3). First ship dogfooding the ceo-agent tree adapter in dual-run shadow mode on a real task.
+
+### Added
+- `scripts/resolve-dispatch.sh --tree` — tree-role table; tree-path output carries `"table":"tree"` (legacy output unchanged, no new field); `--role manager --tree` refuses with named error `MANAGER_NOT_DISPATCHABLE` (exit 3) — "Fable is never dispatched" is now a tool-layer invariant, not just prose.
+- Project override rows for tree roles: `tree:<role>` prefix in `.claude/model-routing-config.md` — coexists with legacy bare-role rows in one table, no collision in either direction (tested both ways). Template documented in `project-config-template/model-routing-config.md`.
+- `hooks/tests/resolve-dispatch.test.sh` — 114 assertions: legacy byte-stability across all 7 roles, tree table, manager refusal, override isolation, sanitization, override-value injection protection, `--help` leak guard, malformed-override resilience.
+- Hardening parity with sibling `resolve-doa.sh`: input sanitization (`$ROLE` flows into `grep -iE` — same injection vector, now closed) + `MODEL_ROUTING_CONFIG_OVERRIDE` env test seam.
+
+### Fixed
+- `scripts/qc-panel.sh` — calibration vocabulary bridge: node-report verdicts are free-form (`tree-contracts.md` §4: "approved"/"rejected") but `calibration.sh add-sample` only accepts `pass|fail`; the panel now normalizes (`pass|approved|approve|lgtm` → pass; `fail|rejected|reject` → fail) **before judges run**, and an unmappable verdict is a named `VERDICT_UNMAPPABLE` liveness failure instead of a generic add-sample error after a ~100k-token panel run. Found live by this ship's shadow-dogfood run (first reviewer-baseline calibration sample landed).
+
+### Changed
+- `references/model-routing.md` §Tree roles, `skills/ceo-agent/SKILL.md` + `references/tree-adapter.md` §6, `CLAUDE.md` inventory — "integration deferred / would return wrong models" notes replaced with `--tree` usage.
+- `docs/BACKLOG.md` — tree-role-integration entry → Resolved; new entry: `.opencode/skills/` mirror is a stale manual snapshot (found by the P2 consumers sweep; out of scope here).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (additive flag; no callers depend on `--tree` yet)
+- User-side: `/plugin update autopilot @v2.16.0`
+
 ## v2.16.0 — task-tree engine v1 (delegated orchestration core, shadow-mode)
 
 **Headline**: the manager's context now grows with *decisions*, not work products. New append-only JSONL task tree (`scripts/tree.sh`) externalizes execution state per project; delegates return decision-shaped reports with evidence pointers (`references/tree-contracts.md` + `scripts/check-node-report.sh` validator); a cross-family interrogation QC panel (`scripts/qc-panel.sh`, Claude + Gemini judges × 3 question shapes) runs in **shadow** alongside the authoritative reviewer, feeding a calibration harness (`scripts/calibration.sh` + `evals/known-bad/` ground-truth corpus). **Zero behavior change unless a project opts in** (tree dir exists); verification-authority graduation is a Board decision gated on local calibration data (≥50 reviewer-baseline samples, zero false-pass on known-bad critical, H1 replay) — never on published benchmarks.

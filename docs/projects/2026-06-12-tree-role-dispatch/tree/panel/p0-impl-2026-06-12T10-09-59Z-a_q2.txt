@@ -1,0 +1,15 @@
+EXTRA: Created comprehensive project README (`docs/projects/2026-06-12-tree-role-dispatch/README.md`) with OKR, design decision rationale, phases table, and L-1.5 scope completeness audit — substantially beyond the implementation deliverable.
+
+EXTRA: Initialized task-tree dogfood tracking with dual-run shadow mode (`docs/projects/2026-06-12-tree-role-dispatch/tree/` directory with events.jsonl and 6 node_report panel artifacts) — not part of stated P0-P2 phase deliverables.
+
+EXTRA: Added regex-safe `ROLE_RE="${ROLE//./\\.}"` escaping for dot characters in role names before grep pattern interpolation — defensive hardening beyond the stated input-sanitization scope (which only required alphanumeric + `._-` allowlist).
+
+EXTRA: Extended `project-config-template/model-routing-config.md` with new "Tree roles" section documenting `tree:<role>` override syntax, example rows, and a note that `manager` is not overridable — template documentation beyond P2 "docs reconciliation."
+
+EXTRA: Discovered and documented a new BACKLOG item (`.opencode/skills/ mirror is a stale manual snapshot`) during the P2 "consumers sweep" — identified and filed a sibling maintenance gap outside the stated tree-role scope.
+
+EXTRA: Added `MODEL_ROUTING_CONFIG_OVERRIDE` environment variable as a test seam for configuration override path testing — testing infrastructure beyond the core implementation.
+
+EXTRA: Implemented resilience to malformed override files (no crash, graceful fallback with warning messages) — error handling beyond the stated core feature.
+
+EXTRA: Added calibration vocabulary bridge in `scripts/qc-panel.sh` mapping node-report verdicts ("approved", "reject") to calibration pass/fail vocabulary with named-error failure mode (`VERDICT_UNMAPPABLE`, exit 1) — fixes a sibling integration gap discovered during the node-report review phase.

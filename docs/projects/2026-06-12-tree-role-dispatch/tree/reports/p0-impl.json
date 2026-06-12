@@ -1,0 +1,24 @@
+{
+  "node": "p0-impl",
+  "verdict": "pass",
+  "confidence": 0.97,
+  "evidence_pointers": [
+    "scripts/resolve-dispatch.sh:60-66@d9f55ed",
+    "scripts/resolve-dispatch.sh:54-57@d9f55ed",
+    "hooks/tests/resolve-dispatch.test.sh:130-137@d9f55ed",
+    "hooks/tests/resolve-dispatch.test.sh:153-156@d9f55ed",
+    "hooks/tests/resolve-dispatch.test.sh:174-204@d9f55ed"
+  ],
+  "artifact_paths": [
+    {
+      "path": "scripts/resolve-dispatch.sh",
+      "sha256": "2f85807351038a1961bff6e86b51d99a8fa41f594d0a7845d725ef4809f69483"
+    },
+    {
+      "path": "hooks/tests/resolve-dispatch.test.sh",
+      "sha256": "1dd3964f7b12aef9390be9db6b91c3e06793930d45e4ecbd5c0af15adfb175dd"
+    }
+  ],
+  "doa_log": [],
+  "escalations": []
+}

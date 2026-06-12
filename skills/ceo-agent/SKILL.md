@@ -366,8 +366,9 @@ The P4 shadow period provides the before-baseline so P6 reports a delta.
 
 **Model routing** (Amendment 11): manager at depth 0 is Fable-class. Fable is
 NEVER dispatched as a delegate. Sub-orchestrators are opus/sonnet-class;
-implementers are sonnet-class or hetero flash-class. Use `scripts/resolve-dispatch.sh`.
-See `references/model-routing.md` §"Tree roles".
+implementers are sonnet-class or hetero flash-class. Use
+`scripts/resolve-dispatch.sh --role <role> --tree` (tree table; `manager` refuses
+with exit 3). See `references/model-routing.md` §"Tree roles".
 
 | References/scripts | Purpose |
 |--------------------|---------|
@@ -376,7 +377,7 @@ See `references/model-routing.md` §"Tree roles".
 | [`scripts/tree.sh`](../../scripts/tree.sh) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw`, `board-status` |
 | [`scripts/resolve-doa.sh`](../../scripts/resolve-doa.sh) | Role/tier → DOA preset JSON |
 | [`scripts/check-node-report.sh`](../../scripts/check-node-report.sh) | Validate a delegate's node report before accepting it: schema + evidence-pointer resolution + artifact sha256 |
-| [`references/model-routing.md`](../../references/model-routing.md) §Tree roles | Model routing for TREE roles (judges/synthesizer/tree-implementer) — consult the table directly; `resolve-dispatch.sh` tree-role integration is deferred (docs/BACKLOG.md) and would return wrong models for tree roles today |
+| [`references/model-routing.md`](../../references/model-routing.md) §Tree roles | Model routing for TREE roles — resolve via `scripts/resolve-dispatch.sh --role <role> --tree` (v2.17.0); `manager` refuses with exit 3 (never dispatched by design) |
 
 ## Anti-patterns
 

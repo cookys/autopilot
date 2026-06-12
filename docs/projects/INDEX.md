@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-06-12 | [tree-role-dispatch](2026-06-12-tree-role-dispatch/README.md) | v2.17.0 | `feat/tree-role-dispatch` |
 
 ## 已完成 (Completed)
 

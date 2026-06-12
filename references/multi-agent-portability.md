@@ -153,6 +153,21 @@ that mentions `/goal` always states the non-CC fallback inline.
 | `Monitor` | Tool that watches a condition / long-running process and re-invokes the agent on change. | CC tool (present in this build, `claude 2.1.161`) | `finish-flow` / `quality-pipeline` CI-polling — wait on a CI run without busy-looping. | Manual: poll `gh run watch` / re-check by hand. |
 | Nested dispatch | Subagents can spawn their own subagents, max depth 5. Requires **CC v2.1.172+** ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)"). Empirically verified 2026-06-11 on 2.1.172: a subagent gets `Agent` by default (no frontmatter needed) AND an explicit `tools:` allowlist containing `Agent` is honored; children get `Agent` but not `Task`; `subagent_type: Explore` works at depth 2 and its child has no Edit/Write (but does carry `Agent` — depth caps are contract-level). Negative on v2.1.170 (grants stripped — server-side rollout). OpenCode / Codex / Antigravity: ❌ no documented equivalent (unverified-by-absence; spike before asserting otherwise). | [CC changelog v2.1.172](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) + nest-probe spikes 2026-06-11 | Handoff ENUMs stay canonical; an agent whose `tools:` includes `Agent` MAY self-consume a `PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH` handoff. Policy (canonical statement in `agents/README.md` § Orchestration): autopilot self-caps at **depth ≤ 2**. Review-integrity rules at any depth: `references/blind-dispatch.md` § Nested dispatch. | Hand the Handoff ENUM back to the calling skill — the skill-layer round-trip in `agents/README.md` § Orchestration works on every platform. |
 
+| Native task persistence (`TaskCreate`/`TaskList`) | **Session-scoped, not global** — empirically verified 2026-06-12 (CC 2.1.x): tasks persist as durable JSON (`~/.claude/tasks/<session-id>/<n>.json`, one file per task, `blocks`/`blockedBy` dependency fields, `.lock` sidecar) and survive session end; but a **fresh session's `TaskList` cannot see them** (headless probe: session A created `p0a-probe-tte-20260612` → file on disk → fresh session B `TaskList` = empty). Cross-session access exists ONLY by re-attaching to the lineage: `claude -p --resume <session-id>` saw the probe task. No global/project-scoped task list surface found (`claude --help` has `--session-id`/`--resume`/`--fork-session`, nothing task-scoped). | Spike 2026-06-12 (task-tree-engine P0a), `claude 2.1.175` | Tree engine (`scripts/tree.sh`, files+bash) stays the cross-session source of truth; TaskCreate mirror is a within-session-lineage accelerator only (P6 adapter). Forcing-function TaskCreates (dev-flow L-1.x) are per-session by design — unaffected. | The tree itself IS the fallback — `docs/projects/<proj>/tree/events.jsonl` is plain files, readable by any agent. |
+
+**`agy -p` judge mode — VIABLE (spike 2026-06-12, task-tree-engine P0b, agy 1.0.7).** Role prompt
+(`.opencode/agent-bodies/reviewer.body.md`) + a real 112-line diff → Gemini 3.5 Flash (Medium)
+produced a schema-conformant verdict JSON (`{verdict, confidence, findings[], achieved[], missed[]}`)
+with sane findings, twice. Operational caveats for P4's `qc-panel.sh`: (1) **stdout mode is
+narration-polluted** — agentic "I will…" lines precede the JSON; extract the last JSON object or use
+file-write mode; (2) **file-write mode** ("WRITE verdict to ./verdict.json, final stdout = DONE") is
+the clean plumbing — but needs `--print-timeout 8m` (4m timed out once); (3) `--dangerously-skip-permissions`
+is required even for read-only judging (without it, `-p` hangs silently waiting on permission) — so
+judge runs go in a **throwaway dir containing ONLY the intended inputs**; the judge empirically wanders
+(listed dir, read its own output file, tried git); (4) it's a full agentic loop, not a pure LLM call —
+same lesson as the implementer spike. Amendment-3 fallback (two Claude sessions from independent
+conversation roots) NOT needed.
+
 **`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
 Stop hook both fire after every turn." autopilot's own Stop hooks (`cost-tracker`,
 `session-summary`) are side-effect-only and never return `decision: block`, so they do not

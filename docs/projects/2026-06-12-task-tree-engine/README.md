@@ -31,6 +31,23 @@
 | P6 | L | First consumer: ceo-agent tree adapter; KR1 transcript audit | pending |
 | P7 | S | Docs, wire-in, memory-rule evolution (post-P5-data only) | pending |
 
+## L-1.5 Scope completeness audit (2026-06-12, execution session)
+
+| Dimension | Verdict | Coverage |
+|-----------|---------|----------|
+| Source code + tests | yes | P1–P5 each ship script + `hooks/tests/*.test.sh` (plan §5 script-gated; stubbed judges, no network) |
+| User-facing docs | yes | P7: CLAUDE.md inventory rows for 5 new scripts; SKILL.md edits ride P4 (quality-pipeline) / P6 (ceo-agent) review loops |
+| API / interface reference | yes | P2: `references/tree-contracts.md` is the canonical interface doc (incl. amendment-7 intent/state boundary table) |
+| Config file templates | yes | P3: `project-config-template/doa-config.md` + model-routing extension |
+| CHANGELOG entry | yes | P7 |
+| Version bump (semver) | yes | P7; minor bump (new opt-in feature, KR5 zero behavior change) |
+| Version sync grep | yes | P7 + `preflight-release.sh` at finish-flow L-5.5 |
+| Migration guide | N/A for v1 | Schema starts at v1; `schema_version` per event + lazy `migrations/` pattern reserved (plan §6 row 1). No existing data to migrate; no breaking change to any current user surface |
+| Dependent repos / external consumers | yes | Tree is opt-in (KR5); cross-agent surface = portability doc §7 (P0 + P7). No `agents/*.md` edits planned → no agent-body sync; if that changes, `sync-agent-bodies.sh --check` gates at pre-commit anyway |
+| Credit / attribution | yes — **gap found, folded into P7** | Survey-absorbed prior art (Beads/Yegge postmortem, TaskMaster incidents, Temporal evolvability, LangGraph schema lesson, PoLL small-judge-panel evidence) must land in README Inspired By at P7 |
+| Dogfood target | yes | P6 dogfood is a phase; this project itself migrates execution state into the tree once P1 ships (amendment 7 note above) |
+| Skill `description:` fields | watch | P4/P6 may touch SKILL.md descriptions — already inside L flow with review loop (autopilot rule: description change = routing change) |
+
 ## Decision log
 
 - 2026-06-12: research-to-ship Phases 0-4 completed in one arc (brainstorm spec → survey with skeptic corrections → plan → R1 dialectic HIGH-consensus downgrade → 10 binding amendments → this project). Execution (Phase 5) begins in a fresh session per the externalized-state philosophy this project itself implements.

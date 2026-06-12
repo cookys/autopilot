@@ -43,7 +43,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
-| 2026-06-12 | qc-panel node-scope rule (judges judge the node, not project lifecycle — fixes systematic shadow-fail) + tree-by-default in ceo-agent L-size setup + archive-ordering rule | v2.17.1 | (pending) |
+| 2026-06-12 | qc-panel node-scope rule (judges judge the node, not project lifecycle — fixes systematic shadow-fail) + tree-by-default in ceo-agent L-size setup + archive-ordering rule | v2.17.1 | [`1e833bd`](../../../../commit/1e833bd) |
 | 2026-06-04 | standalone-fallback fix (think-tank-dialectic no longer hard-depends on voltagent) + brainstorm Phase-0 wiring + debug 3-fix architecture gate + reviewer→CC-native `/security-review` pointer; subagent-driven + writing-skills RED-phase CEO-deferred to BACKLOG ([plan](../plans/2026-06-04-internalize-superpowers-trio.md)) | v2.13.1 | [`c0d00d8`](../../../../commit/c0d00d8) |
 | 2026-06-04 | internalize 3 superpowers caps → `brainstorm` skill (pre-code Socratic design gate) + `references/plan-template.md` + verification-before-completion 1-liner; dialectic descoped 3 proposed skills to 1 skill+1 template+1 edit ([plan](../plans/2026-06-04-internalize-superpowers-trio.md)) | v2.13.0 | [`b142972`](../../../../commit/b142972) |
 | 2026-06-04 | reviewer claim-completeness (decompose stated claim → per-outcome external grounding or UNVERIFIED; claim-scope not diff-scope = unit of done; recall complement to v2.12.1 precision; prose sharpening not a new pass per review-verify-barrier §10) | v2.12.3 | [`7576db5`](../../../../commit/7576db5) |

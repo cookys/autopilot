@@ -1,0 +1,5 @@
+{"schema_version":1,"ts":"2026-06-12T09:37:33Z","node":"root","type":"tree_initialized","proj":"2026-06-12-tree-role-dispatch"}
+{"schema_version":1,"ts":"2026-06-12T09:39:25Z","node":"root","type":"node_created","parent":null,"question":"resolve-dispatch.sh resolves tree roles to correct {model,mode} without breaking the legacy role table?","options":[],"evidence_pointers":[]}
+{"schema_version":1,"ts":"2026-06-12T09:39:25Z","node":"p0-impl","type":"node_created","parent":"root","question":"--tree table + manager refusal + tree:<role> override implemented with tests green?","options":[],"evidence_pointers":[]}
+{"schema_version":1,"ts":"2026-06-12T09:39:25Z","node":"p2-docs","type":"node_created","parent":"root","question":"all referencing docs reconciled, no stale deferred claims?","options":[],"evidence_pointers":[]}
+{"schema_version":1,"ts":"2026-06-12T09:39:25Z","node":"l5-close","type":"node_created","parent":"root","question":"quality gates green, version/CHANGELOG shipped, merged to develop?","options":[],"evidence_pointers":[]}

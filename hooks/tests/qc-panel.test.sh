@@ -402,4 +402,33 @@ assert_contains "$WEIRD_ERR" "VERDICT_UNMAPPABLE" "vocab: named error on stderr"
 assert_file_absent "$WEIRD_CAL_DIR/samples.jsonl" \
   "vocab: no sample for unmappable verdict (failed before judges)"
 
+# ── Test 18: SCOPE_RULE actually reaches the judge prompts ────────────────────
+# A silent drop of the scope-rule injection would pass every stub-routing test;
+# record the real prompts and assert the rule's distinctive phrase is present.
+PROMPT_RECORD="$TEST_TMP/prompt-records.txt"
+PROMPT_CLAUDE="$TEST_TMP/claude-prompt-record"
+cat > "$PROMPT_CLAUDE" <<STUB
+#!/usr/bin/env bash
+# Records full stdin (prompt+context) then answers like the basic stub
+cat >> "${PROMPT_RECORD}"
+printf 'ACHIEVED: recorded\n'
+STUB
+chmod +x "$PROMPT_CLAUDE"
+
+SCOPE_CAL_DIR="$TEST_TMP/calibration-scope"
+SCOPE_OUT_DIR="$TEST_TMP/scope-panel-out"
+mkdir -p "$SCOPE_OUT_DIR"
+QC_CLAUDE_BIN="$PROMPT_CLAUDE" QC_AGY_BIN="$STUB_AGY" \
+  CALIBRATION_DATA_DIR="$SCOPE_CAL_DIR" \
+  "$SCRIPT" --report "$REPORT" --artifacts "$ARTIFACT" \
+  --out "$SCOPE_OUT_DIR" --node scope-node >/dev/null 2>&1 || true
+if [ -f "$PROMPT_RECORD" ]; then
+  assert_contains "$(cat "$PROMPT_RECORD")" "OUT OF SCOPE" \
+    "scope rule reaches judge A prompt"
+  assert_contains "$(cat "$PROMPT_RECORD")" "Scope rule:" \
+    "scope rule preamble present in prompt"
+else
+  fail "scope-rule test: no prompts recorded by stub"
+fi
+
 finalize_test

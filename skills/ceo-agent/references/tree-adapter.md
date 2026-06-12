@@ -233,10 +233,20 @@ To opt a project into the tree:
 scripts/tree.sh init <proj>
 ```
 
+**Default for CEO L-size tasks** (Board directive 2026-06-12): the CEO runs
+`tree.sh init` as part of L-1 project setup (SKILL.md Execution step 3.c2) so
+shadow calibration samples and the audit trail accumulate on every L-ship.
+Skip only on explicit Board instruction for that task.
+
 This creates `docs/projects/<proj>/tree/events.jsonl` with a `tree_initialized`
 event. The tree immediately enters dual-run (shadow) mode. Post-signoff mode
 requires a `board_signoff` event emitted after the Board approves graduation
 (see §2).
+
+**Close-out ordering**: `tree.sh` validates project names (no `/`), so once
+finish-flow L-5.5 moves the project under `_archive/` the tree is **read-only**.
+Emit every node's final `verdict` (including the closing node's) BEFORE the
+archive move (2026-06-12 dogfood divergence).
 
 After init, emit the root node:
 ```bash

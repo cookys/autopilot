@@ -94,6 +94,12 @@ JUDGE_B_MODEL="${QC_JUDGE_B_MODEL:-Gemini 3.5 Flash (Medium)}"
 SYNTH_MODEL="${QC_SYNTH_MODEL:-claude-haiku-4-5}"
 
 # ── Question shapes ───────────────────────────────────────────────────────────
+# Node-scope rule: the unit under judgment is THE NODE, not the project.
+# (2026-06-12 dogfood: without this, judges counted project-lifecycle closure —
+# merge / release gates / archiving — as missed goals of an implementation node,
+# producing systematic fail verdicts on every mid-flight node; both live
+# calibration samples showed the same pattern.)
+SCOPE_RULE="Scope rule: judge ONLY the node whose report appears in the context — the deliverables implied by its 'node'/'question' fields and the claims the report itself makes. Project-level lifecycle steps (merging branches, release/quality gates, archiving, project status updates, and work belonging to OTHER nodes) are OUT OF SCOPE: do not list them as goals, extras, or misses."
 Q1="What goals were achieved? Cite specific evidence from the report and artifacts. List each achieved goal on its own line prefixed 'ACHIEVED:'."
 Q2="What was done BEYOND the stated goals (extras, scope creep, unrequested changes)? Be specific. List each on its own line prefixed 'EXTRA:'."
 Q3="What goals were NOT achieved? What is still missing or incomplete? List each on its own line prefixed 'MISSED:'."
@@ -288,7 +294,7 @@ CTX_TOKENS="$(estimate_tokens_file "$CONTEXT_FILE")"
 run_judge_a() {
   local qnum="$1" question="$2" outfile="$3"
   local prompt
-  prompt="$(printf 'You are a code review judge. Review the following context and answer the question.\n\nQUESTION: %s\n\nCONTEXT:\n' "$question")"
+  prompt="$(printf 'You are a code review judge. Review the following context and answer the question.\n\n%s\n\nQUESTION: %s\n\nCONTEXT:\n' "$SCOPE_RULE" "$question")"
   local prompt_tokens
   prompt_tokens="$(estimate_tokens_str "$prompt")"
   TOKEN_TOTAL=$((TOKEN_TOTAL + prompt_tokens + CTX_TOKENS))
@@ -318,7 +324,7 @@ run_judge_b() {
   local verdict_target="$judge_dir/verdict.txt"
 
   local prompt
-  prompt="$(printf 'You are a code review judge. Review context.txt and answer this question:\n\nQUESTION: %s\n\nWRITE your answer to ./verdict.txt then output only the word DONE.\n' "$question")"
+  prompt="$(printf 'You are a code review judge. Review context.txt and answer this question:\n\n%s\n\nQUESTION: %s\n\nWRITE your answer to ./verdict.txt then output only the word DONE.\n' "$SCOPE_RULE" "$question")"
   local prompt_tokens
   prompt_tokens="$(estimate_tokens_str "$prompt")"
   TOKEN_TOTAL=$((TOKEN_TOTAL + prompt_tokens + CTX_TOKENS))
@@ -410,7 +416,9 @@ SYNTH_DISSENTS="[]"
 SYNTH_EXTRAS="$EXTRAS_JSON"
 
 SYNTH_PROMPT="$(cat <<PROMPT
-You are a synthesis judge. Based on the following interrogation results:
+You are a synthesis judge. $SCOPE_RULE
+
+Based on the following interrogation results:
 
 ACHIEVED GOALS:
 $(cat "$ACHIEVED_FILE" 2>/dev/null || echo "(none)")
@@ -422,7 +430,7 @@ UNACHIEVED GOALS:
 $(cat "$MISSED_FILE" 2>/dev/null || echo "(none)")
 
 Output ONLY a JSON object with these fields:
-- verdict: "pass" or "fail" (pass = all stated goals achieved with no critical misses)
+- verdict: "pass" or "fail" (pass = all the NODE's stated goals achieved with no critical misses, applying the scope rule above)
 - dissents: array of strings describing disagreements between judges (can be empty)
 - extras: array of strings listing items done beyond stated goals (can be empty)
 

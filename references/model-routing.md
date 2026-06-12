@@ -64,8 +64,9 @@ Based on benchmark (2026-04-13, 90 runs, 10 real cases, 6 providers):
 
 > **Source**: R1 Amendment 11 (Board directive, 2026-06-12 dialectic).
 > Extends this file; does not change existing roles above.
-> Consumed by `scripts/resolve-doa.sh` (role → DOA preset) and `scripts/resolve-dispatch.sh`
-> (role → model/mode) when tree-engine roles are dispatched.
+> Consumed by `scripts/resolve-doa.sh` (role → DOA preset).
+> `scripts/resolve-dispatch.sh` integration is deferred — see `docs/BACKLOG.md`
+> ("resolve-dispatch.sh tree-role integration").
 
 All values below are **factory defaults, locally calibratable**.
 Per-tier token spend lands in the calibration report (P5 — `scripts/calibration.sh report`)

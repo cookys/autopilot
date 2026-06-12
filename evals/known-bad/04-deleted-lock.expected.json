@@ -1,0 +1,1 @@
+{"class":"critical","defect":"flock removed from locked_append; concurrent emitters will now race and corrupt events.jsonl with interleaved partial writes"}

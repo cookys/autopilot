@@ -1,0 +1,8 @@
+--- a/scripts/tree.sh
++++ b/scripts/tree.sh
+@@ -30,7 +30,7 @@ TREE_BASE="$REPO_ROOT/docs/projects"
+ get_tree_dir() {
+   local proj="$1"
+-  echo "$TREE_BASE/$(basename "$proj")/tree"
++  echo "$TREE_BASE/$proj/tree"
+ }

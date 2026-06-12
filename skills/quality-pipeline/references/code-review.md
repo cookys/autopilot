@@ -258,6 +258,29 @@ Entries without trigger conditions are rejected.
 All sizes require review. Major must be fixed now. Fix requires re-review. No severity judgment without analysis. No backlog without trigger condition.
 > Full list: [_base/prohibited-behaviors.md](../_base/prohibited-behaviors.md)
 
+## Shadow QC panel (task-tree engine)
+
+Condition: `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (node report has non-null `verdict`). Opt-in is automatic — the shadow path activates only when the tree is present (KR5: zero behavior change for non-opted-in users).
+
+| What runs | How | Authority |
+|-----------|-----|-----------|
+| Authoritative reviewer | Existing flow (this doc) | Authoritative — findings drive fixes |
+| `scripts/qc-panel.sh` | In parallel with authoritative reviewer | Shadow only — no fix action; informs calibration |
+
+**Amendment 4 liveness (binding)**: every panel run MUST produce (a) a verdict artifact JSON in `docs/projects/<proj>/tree/panel/` AND (b) a calibration sample via `scripts/calibration.sh add-sample`. If either fails, `qc-panel.sh` exits non-zero — a silently-dead shadow fails the gate.
+
+After both verdicts are available, log the pair:
+
+```sh
+scripts/calibration.sh add-sample \
+  --panel-verdict <panel_verdict> \
+  --authoritative-verdict <authoritative_reviewer_verdict> \
+  [--class <severity_class>] \
+  [--tokens <panel_token_estimate>]
+```
+
+The calibration report (`scripts/calibration.sh report`) exposes agreement rate, false-pass-on-critical, and graduation status — the data the Board needs for the P5→active decision (Amendment 6). No authority shifts before graduation criteria are met.
+
 ## See Also
 
 | Skill | Boundary |

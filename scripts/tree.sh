@@ -239,7 +239,9 @@ cmd_emit() {
     exit 1
   fi
 
-  # If an external validator is configured, run it (P2 extension point)
+  # If an external validator is configured, run it (P2 extension point).
+  # TRUST NOTE: the path in $TREE_EVENT_VALIDATOR is executed directly —
+  # callers must treat it as fully trusted (same trust level as this script).
   if [ -n "${TREE_EVENT_VALIDATOR:-}" ] && [ -x "$TREE_EVENT_VALIDATOR" ]; then
     printf '%s' "$event_json" | "$TREE_EVENT_VALIDATOR" || {
       log_err "external event validator rejected event"

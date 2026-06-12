@@ -147,6 +147,11 @@ tree rebuild-index conc 2>/dev/null
 IDX2="$(jq '.event_count' "$PROJECTS/conc/tree/index.json")"
 assert_eq "$IDX1" "$IDX2" "concurrency: rebuild is deterministic (same event_count)"
 assert_eq "$IDX1" "201" "concurrency: index event_count = 201"
+# events_hash is the stronger determinism signal (content-equality, not count)
+HASH1="$(jq -r '.events_hash' "$PROJECTS/conc/tree/index.json")"
+tree rebuild-index conc >/dev/null 2>&1
+HASH2="$(jq -r '.events_hash' "$PROJECTS/conc/tree/index.json")"
+assert_eq "$HASH1" "$HASH2" "concurrency: rebuild is deterministic (same events_hash)"
 
 # 3.4 All seq values 1-200 present (no duplicates from lock collision)
 SEQ_COUNT="$(jq '[.nodes | to_entries[] | select(.key != "root") | .key] | length' "$PROJECTS/conc/tree/index.json")"

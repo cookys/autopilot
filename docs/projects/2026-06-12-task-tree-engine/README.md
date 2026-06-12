@@ -1,6 +1,6 @@
 # Task-Tree Engine v1 — delegated orchestration core
 
-> **Status**: In progress (Phase 5 of research-to-ship — execution per dev-flow)
+> **Status**: Complete (2026-06-12) — execution state lives in [`tree/events.jsonl`](tree/events.jsonl); read via `scripts/tree.sh report 2026-06-12-task-tree-engine <node>`. Shadow calibration ongoing; graduation = Board decision (see BACKLOG checkpoint)
 > **Branch**: `feat/task-tree-engine`
 > **Plan**: [`docs/plans/2026-06-12-task-tree-engine.md`](../../plans/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
 > **Spec**: [`docs/plans/2026-06-12-task-tree-engine-design-spec.md`](../../plans/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)
@@ -24,12 +24,12 @@
 |-------|------|---------|--------|
 | P0 | S | Spikes: CC native task persistence; `agy -p` judge mode | done (2026-06-12 — both recorded in portability §7) |
 | P1 | L | Tree substrate (`scripts/tree.sh`, append-only JSONL, auto-rebuild index, torture test) | done (2026-06-12 — 45ee431 + 4 review rounds; full torture matrix green, see hooks/tests/tree-engine.test.sh) |
-| P2 | S | Contracts + validator (`references/tree-contracts.md`, `check-node-report.sh`) | pending |
-| P3 | S | DOA presets (`resolve-doa.sh`, four-tier table, dual-track trust) | pending |
-| P4 | L | Interrogation QC panel, shadow-wired with liveness assertion + cost visibility | pending |
-| P5 | S | Calibration harness + ground-truth corpus + graduation forcing function | pending |
-| P6 | L | First consumer: ceo-agent tree adapter; KR1 transcript audit | pending |
-| P7 | S | Docs, wire-in, memory-rule evolution (post-P5-data only) | pending |
+| P2 | S | Contracts + validator (`references/tree-contracts.md`, `check-node-report.sh`) | done (2026-06-12 — 3 review rounds, 75-assertion matrix) |
+| P3 | S | DOA presets (`resolve-doa.sh`, four-tier table, dual-track trust) | done (2026-06-12 — fail-closed verified) |
+| P4 | L | Interrogation QC panel, shadow-wired with liveness assertion + cost visibility | done (2026-06-12 — 3 review rounds; live e2e: 6/6 judges, first disagreement sample captured) |
+| P5 | S | Calibration harness + ground-truth corpus + graduation forcing function | done (2026-06-12 — baseline separation; known-bad breakout; Board checkpoint in BACKLOG + session task) |
+| P6 | L | First consumer: ceo-agent tree adapter; KR1 transcript audit | done (2026-06-12 — adapter ships GATED: dual-run default, activation requires board_signoff decision=="graduate"; KR1 audit deferred to first post-signoff run, this session's manager-read pattern = P4-era baseline per amendment 9) |
+| P7 | S | Docs, wire-in, memory-rule evolution (post-P5-data only) | done (2026-06-12 — v2.16.0; memory rule feedback_verify-reviewer-claims UNCHANGED: only 1 shadow sample exists, far below the ≥50 evolution threshold) |
 
 ## L-1.5 Scope completeness audit (2026-06-12, execution session)
 
@@ -50,4 +50,5 @@
 
 ## Decision log
 
+- 2026-06-12 (execution session): P0–P7 all shipped in one CEO-mode session. Manager (Fable, depth 0) dispatched sonnet implementers in worktrees + blind sonnet reviewer rounds per phase group (P1: 4 rounds; P2+P3: 3; P4/5/6: 3); all integration verified by artifacts (cherry-pick + rerun), never self-report. Dogfood: this project's own execution state lives in `tree/events.jsonl` (P0–P7 nodes, verdicts with commit-anchored evidence pointers). First live panel run disagreed with the authoritative reviewer (panel fail / reviewer pass — strict extras interpretation): recorded as calibration sample #1, baseline=self_report. Graduation checkpoint: docs/BACKLOG.md + session task; Board-only.
 - 2026-06-12: research-to-ship Phases 0-4 completed in one arc (brainstorm spec → survey with skeptic corrections → plan → R1 dialectic HIGH-consensus downgrade → 10 binding amendments → this project). Execution (Phase 5) begins in a fresh session per the externalized-state philosophy this project itself implements.

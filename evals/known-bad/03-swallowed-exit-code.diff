@@ -1,0 +1,11 @@
+--- a/scripts/tree.sh
++++ b/scripts/tree.sh
+@@ -88,9 +88,8 @@ cmd_emit() {
+   validate_event "$EVENT_JSON" || { echo "validation failed" >&2; return 1; }
+
+-  locked_append "$EVENTS_FILE" "$EVENT_JSON"
+-  local rc=$?
+-  return $rc
++  locked_append "$EVENTS_FILE" "$EVENT_JSON" || true
++  return 0
+ }

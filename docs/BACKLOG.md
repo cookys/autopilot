@@ -150,6 +150,18 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (skill) + S (resolve-dispatch runner field, if chain routing is wanted) + S (user-facing README section for hetero-dispatch — deliberately deferred to ship together with the skill so the public story is written once)
 - **Source**: 2026-06-11 hetero-dispatch spike + first production use (`a83c04a`); CEO decision to ship script-first.
 
+### Tree-engine graduation Board review
+- **Trigger**: `~/.autopilot/calibration/samples.jsonl` reaches 50 reviewer-baseline samples OR 30 days after the first shadow run (2026-06-12), whichever comes first.
+- **Context**: Amendment 6 — Board decides graduate / extend / abort based on `scripts/calibration.sh report` output. Silence is NOT extension. P6 adapter post-signoff activation is blocked on a `board_signoff` event recorded in the project tree (see `references/tree-contracts.md` §3.12 and `scripts/tree.sh board-status`).
+- **Effort**: Fix (Board review meeting; not a code task)
+- **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
+
+### resolve-dispatch.sh tree-role integration
+- **Trigger**: before P6 tree-adapter activation, OR when any skill needs model dispatch (model/mode) for tree roles (manager, sub-orchestrator, implementer, judge, synthesizer, etc.).
+- **Context**: Amendment 11 (2026-06-12) shipped the tree-role tier table in `references/model-routing.md`. The existing `implementer` role key in `resolve-dispatch.sh` conflicts with the new tree-implementer tier (tree-implementer maps to sonnet-class OR flash-class hetero, while the existing implementer maps to opus). The `resolve-doa.sh` script handles DOA presets for tree roles; `resolve-dispatch.sh` integration (model/mode dispatch) is deferred because the conflict and the per-role dispatch logic need design before P6 dogfood.
+- **Effort**: S
+- **Source**: R1 review round 1 Fix 3 (2026-06-12); `references/model-routing.md` §Tree roles.
+
 ### agy install symlinked-dest self-copy truncation — guard install script + upstream report
 - **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check `ls -la ~/.gemini/config/plugins/` for symlinks first), OR next S-size hardening slot.
 - **Context**: 2026-06-11 incident, **mechanism CONFIRMED by sandboxed repro same day** (repro spike ✅ done): `agy plugin install` follows a symlinked destination `~/.gemini/config/plugins/<name>` and self-copies — open+truncate "dest" (= source through the symlink), read back empty, write 0 bytes, file after file. Sandbox: symlinked dest → 1497 files zeroed + `.git/HEAD` destroyed. Incident = legacy symlink from the 5/29 agy-1.0.1 era; the first (failed) install truncated 55 files before dying on read-only `.git` object `008efd…` (same object in sandbox — deterministic walk); uninstall/reinstall exonerated (all 4 sandbox control phases clean). Hazard + guards documented in `references/multi-agent-portability.md` § agy spike.

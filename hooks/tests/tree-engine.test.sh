@@ -306,14 +306,24 @@ tree init fetch 2>/dev/null
 ARTIFACT="$TEST_TMP/artifact.txt"
 printf 'artifact content line 1\nartifact content line 2\n' > "$ARTIFACT"
 
-# Emit a node_report event with an artifact path
-REPORT_EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"work1\",\"type\":\"node_report\",\"artifact_paths\":[\"$ARTIFACT\"],\"evidence_pointers\":[],\"artifact_sha256\":\"abc123\"}"
+# Emit a node_report event with the contract-mandated {path, sha256} object
+# format (tree-contracts.md §4) — bare strings are only a compat fallback,
+# so the test must exercise the conformant shape.
+ARTIFACT_SHA="$(sha256sum "$ARTIFACT" | awk '{print $1}')"
+REPORT_EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"work1\",\"type\":\"node_report\",\"artifact_paths\":[{\"path\":\"$ARTIFACT\",\"sha256\":\"$ARTIFACT_SHA\"}],\"evidence_pointers\":[],\"artifact_sha256\":\"abc123\"}"
 tree emit fetch work1 "$REPORT_EV" 2>/dev/null
 
-# 7.1 fetch --raw prints artifact content
+# 7.1 fetch --raw prints artifact content (object-format artifact_paths)
 FETCH_OUT="$(tree fetch fetch work1 --raw 2>/dev/null)"
 assert_contains "$FETCH_OUT" "artifact content line 1" "fetch --raw prints artifact content"
 assert_contains "$FETCH_OUT" "artifact content line 2" "fetch --raw prints full artifact content"
+
+# 7.1b bare-string artifact_paths still works (compat fallback)
+tree init fetchstr 2>/dev/null
+REPORT_EV_STR="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"w2\",\"type\":\"node_report\",\"artifact_paths\":[\"$ARTIFACT\"],\"evidence_pointers\":[],\"artifact_sha256\":\"abc123\"}"
+tree emit fetchstr w2 "$REPORT_EV_STR" 2>/dev/null
+FETCH_STR_OUT="$(tree fetch fetchstr w2 --raw 2>/dev/null)"
+assert_contains "$FETCH_STR_OUT" "artifact content line 1" "fetch --raw compat: bare-string artifact path still printed"
 
 # 7.2 fetch --raw appended manager_raw_read event
 LAST_EVENT="$(tail -1 "$PROJECTS/fetch/tree/events.jsonl")"
@@ -334,6 +344,20 @@ tree fetch fetch2 noartifact --raw 2>/dev/null
 LAST_FETCH2="$(tail -1 "$PROJECTS/fetch2/tree/events.jsonl")"
 assert_eq "$(printf '%s' "$LAST_FETCH2" | jq -r '.type')" "manager_raw_read" "fetch --raw logs event even with no artifacts"
 
+# 7.4b no-artifact node exits 0 (legitimately empty ≠ failure)
+tree fetch fetch2 noartifact --raw >/dev/null 2>&1; NOART_EXIT=$?
+assert_eq "$NOART_EXIT" "0" "fetch --raw exits 0 when node declares no artifacts"
+
+# 7.5 declared-but-MISSING artifact → exit 1 (fail closed; distinguishes
+# misconfigured paths from legitimately artifact-less nodes)
+tree init fetch3 2>/dev/null
+MISSING_EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"w3\",\"type\":\"node_report\",\"artifact_paths\":[{\"path\":\"$TEST_TMP/does-not-exist.txt\",\"sha256\":\"abc\"}],\"evidence_pointers\":[],\"artifact_sha256\":null}"
+tree emit fetch3 w3 "$MISSING_EV" 2>/dev/null
+tree fetch fetch3 w3 --raw >/dev/null 2>&1; MISS_EXIT=$?
+assert_eq "$MISS_EXIT" "1" "fetch --raw exits 1 when a declared artifact file is missing"
+LAST_FETCH3="$(tail -1 "$PROJECTS/fetch3/tree/events.jsonl")"
+assert_eq "$(printf '%s' "$LAST_FETCH3" | jq -r '.type')" "manager_raw_read" "fetch --raw still logs the read attempt before failing closed"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TEST 8: syntax / shellcheck / --help exits
 # ─────────────────────────────────────────────────────────────────────────────
@@ -352,7 +376,7 @@ else
 fi
 
 # 8.3 All subcommands + top-level --help exit 0
-for sub in --help help -h init emit rebuild-index next-decision report escalations fetch; do
+for sub in --help help -h init emit rebuild-index next-decision report escalations fetch board-status; do
   tree "$sub" --help >/dev/null 2>&1; H_EXIT=$?
   assert_eq "$H_EXIT" "0" "$sub --help exits 0"
 done
@@ -376,5 +400,133 @@ assert_file_absent "$PROJECTS/../escape/tree/events.jsonl" "traversal name creat
 # Read subcommands reject too (guard is at the dispatcher chokepoint)
 tree next-decision "../escape" >/dev/null 2>&1; BAD_ND_EXIT=$?
 assert_eq "$BAD_ND_EXIT" "2" "next-decision '../escape' rejected with exit 2"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 9: ID-targeted decision_resolved + escalation_resolved semantics (Fix 1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+tree init idres 2>/dev/null
+
+# Emit two decision_fork events on the same node, each with a distinct decision_id
+TS_A="2026-06-12T10:00:00Z"
+TS_B="2026-06-12T10:00:01Z"
+FORK_A="{\"schema_version\":1,\"ts\":\"$TS_A\",\"node\":\"dnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-A\",\"question\":\"Fork A?\",\"options\":[],\"evidence_pointers\":[]}"
+FORK_B="{\"schema_version\":1,\"ts\":\"$TS_B\",\"node\":\"dnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-B\",\"question\":\"Fork B?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit idres dnode "$FORK_A" 2>/dev/null
+tree emit idres dnode "$FORK_B" 2>/dev/null
+
+# 9.1 Both forks open before any resolve
+tree rebuild-index idres 2>/dev/null
+OPEN_BEFORE="$(jq '[.decisions[] | select(.node=="dnode" and .resolved==false)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$OPEN_BEFORE" "2" "decision: two open forks on same node before resolve"
+
+# 9.2 Resolve by id: only fork-A closes; fork-B remains open
+TS_R="2026-06-12T10:00:02Z"
+RESOLVE_A="{\"schema_version\":1,\"ts\":\"$TS_R\",\"node\":\"dnode\",\"type\":\"decision_resolved\",\"decision_id\":\"fork-A\",\"chosen\":\"yes\"}"
+tree emit idres dnode "$RESOLVE_A" 2>/dev/null
+tree rebuild-index idres 2>/dev/null
+OPEN_AFTER_A="$(jq '[.decisions[] | select(.node=="dnode" and .resolved==false)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$OPEN_AFTER_A" "1" "decision id-targeted resolve: exactly one fork still open"
+CLOSED_A="$(jq '[.decisions[] | select(.node=="dnode" and .id=="fork-A" and .resolved==true)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$CLOSED_A" "1" "decision id-targeted resolve: fork-A is now closed"
+OPEN_B="$(jq '[.decisions[] | select(.node=="dnode" and .id=="fork-B" and .resolved==false)] | length' "$PROJECTS/idres/tree/index.json")"
+assert_eq "$OPEN_B" "1" "decision id-targeted resolve: fork-B still open in index"
+
+# next-decision still returns fork-B (the remaining open fork)
+ND_IDRES="$(tree next-decision idres 2>/dev/null)"
+assert_contains "$ND_IDRES" "Fork B?" "decision id-targeted resolve: next-decision returns remaining open fork"
+
+# 9.3 Bulk resolve (no decision_id): both open forks close simultaneously
+# Add a fresh pair of forks for bulk-close test
+tree init idres2 2>/dev/null
+FORK_C="{\"schema_version\":1,\"ts\":\"2026-06-12T11:00:00Z\",\"node\":\"bnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-C\",\"question\":\"Fork C?\",\"options\":[],\"evidence_pointers\":[]}"
+FORK_D="{\"schema_version\":1,\"ts\":\"2026-06-12T11:00:01Z\",\"node\":\"bnode\",\"type\":\"decision_fork\",\"decision_id\":\"fork-D\",\"question\":\"Fork D?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit idres2 bnode "$FORK_C" 2>/dev/null
+tree emit idres2 bnode "$FORK_D" 2>/dev/null
+BULK_RESOLVE="{\"schema_version\":1,\"ts\":\"2026-06-12T11:00:02Z\",\"node\":\"bnode\",\"type\":\"decision_resolved\",\"chosen\":\"bulk\"}"
+tree emit idres2 bnode "$BULK_RESOLVE" 2>/dev/null
+tree rebuild-index idres2 2>/dev/null
+OPEN_AFTER_BULK="$(jq '[.decisions[] | select(.node=="bnode" and .resolved==false)] | length' "$PROJECTS/idres2/tree/index.json")"
+assert_eq "$OPEN_AFTER_BULK" "0" "decision bulk resolve (no id): all open forks for node closed"
+
+# 9.4 Escalation id-targeted resolve: two open escalations, resolve one by id
+tree init escres 2>/dev/null
+ESC_EV_P="{\"schema_version\":1,\"ts\":\"2026-06-12T12:00:00Z\",\"node\":\"escnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-1\",\"question\":\"Esc 1?\",\"options\":[],\"evidence_pointers\":[]}"
+ESC_EV_Q="{\"schema_version\":1,\"ts\":\"2026-06-12T12:00:01Z\",\"node\":\"escnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-2\",\"question\":\"Esc 2?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit escres escnode "$ESC_EV_P" 2>/dev/null
+tree emit escres escnode "$ESC_EV_Q" 2>/dev/null
+ESC_RESOLVE_1="{\"schema_version\":1,\"ts\":\"2026-06-12T12:00:02Z\",\"node\":\"escnode\",\"type\":\"escalation_resolved\",\"escalation_id\":\"esc-1\"}"
+tree emit escres escnode "$ESC_RESOLVE_1" 2>/dev/null
+tree rebuild-index escres 2>/dev/null
+OPEN_ESC="$(jq '[.escalations[] | select(.node=="escnode" and .resolved==false)] | length' "$PROJECTS/escres/tree/index.json")"
+assert_eq "$OPEN_ESC" "1" "escalation id-targeted resolve: exactly one escalation still open"
+CLOSED_ESC_1="$(jq '[.escalations[] | select(.node=="escnode" and .id=="esc-1" and .resolved==true)] | length' "$PROJECTS/escres/tree/index.json")"
+assert_eq "$CLOSED_ESC_1" "1" "escalation id-targeted resolve: esc-1 is now closed"
+OPEN_ESC_2="$(jq '[.escalations[] | select(.node=="escnode" and .id=="esc-2" and .resolved==false)] | length' "$PROJECTS/escres/tree/index.json")"
+assert_eq "$OPEN_ESC_2" "1" "escalation id-targeted resolve: esc-2 still open in index"
+
+# 9.5 Escalation bulk resolve (no escalation_id): both close
+tree init escres2 2>/dev/null
+ESC_EV_R="{\"schema_version\":1,\"ts\":\"2026-06-12T13:00:00Z\",\"node\":\"bescnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-R\",\"question\":\"Esc R?\",\"options\":[],\"evidence_pointers\":[]}"
+ESC_EV_S="{\"schema_version\":1,\"ts\":\"2026-06-12T13:00:01Z\",\"node\":\"bescnode\",\"type\":\"escalation_opened\",\"escalation_id\":\"esc-S\",\"question\":\"Esc S?\",\"options\":[],\"evidence_pointers\":[]}"
+tree emit escres2 bescnode "$ESC_EV_R" 2>/dev/null
+tree emit escres2 bescnode "$ESC_EV_S" 2>/dev/null
+BULK_ESC_RESOLVE="{\"schema_version\":1,\"ts\":\"2026-06-12T13:00:02Z\",\"node\":\"bescnode\",\"type\":\"escalation_resolved\"}"
+tree emit escres2 bescnode "$BULK_ESC_RESOLVE" 2>/dev/null
+tree rebuild-index escres2 2>/dev/null
+OPEN_BULK_ESC="$(jq '[.escalations[] | select(.node=="bescnode" and .resolved==false)] | length' "$PROJECTS/escres2/tree/index.json")"
+assert_eq "$OPEN_BULK_ESC" "0" "escalation bulk resolve (no id): all open escalations for node closed"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST 10: board_signoff event + board-status subcommand (M3)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 10.1 No board_signoff event → board-status returns null
+tree init bsig 2>/dev/null
+BS_NO_EVENT="$(tree board-status bsig 2>/dev/null)"
+assert_eq "$BS_NO_EVENT" "null" "board-status: null when no board_signoff event"
+
+# 10.2 Emit board_signoff → board-status returns present:true with authorized_by
+SIGNOFF_EV="{\"schema_version\":1,\"ts\":\"2026-07-01T12:00:00Z\",\"node\":\"root\",\"type\":\"board_signoff\",\"authorized_by\":\"board\",\"decision\":\"graduate\",\"scope\":\"test\"}"
+tree emit bsig root "$SIGNOFF_EV" 2>/dev/null
+BS_AFTER="$(tree board-status bsig 2>/dev/null)"
+assert_contains "$BS_AFTER" '"present"' "board-status: present field after signoff"
+assert_contains "$BS_AFTER" 'true' "board-status: present=true after signoff"
+assert_contains "$BS_AFTER" '"board"' "board-status: authorized_by=board"
+
+# 10.3 Index fold records board_signoff at top level
+tree rebuild-index bsig 2>/dev/null
+BS_INDEX="$(jq '.board_signoff' "$PROJECTS/bsig/tree/index.json")"
+assert_neq "$BS_INDEX" "null" "board-status: index.board_signoff is non-null after signoff event"
+BS_PRESENT="$(jq -r '.board_signoff.present' "$PROJECTS/bsig/tree/index.json")"
+assert_eq "$BS_PRESENT" "true" "board-status: index.board_signoff.present=true"
+BS_AUTH="$(jq -r '.board_signoff.authorized_by' "$PROJECTS/bsig/tree/index.json")"
+assert_eq "$BS_AUTH" "board" "board-status: index.board_signoff.authorized_by=board"
+
+# 10.3b decision=="graduate" → active=true (the authority-gate field)
+BS_ACTIVE="$(jq -r '.board_signoff.active' "$PROJECTS/bsig/tree/index.json")"
+assert_eq "$BS_ACTIVE" "true" "board-status: decision=graduate sets active=true"
+
+# 10.3c a non-graduate decision is recorded but NOT active (gate stays closed)
+tree init bsig2 2>/dev/null
+EXTEND_EV="{\"schema_version\":1,\"ts\":\"2026-07-01T12:00:00Z\",\"node\":\"root\",\"type\":\"board_signoff\",\"authorized_by\":\"board\",\"decision\":\"extend\"}"
+tree emit bsig2 root "$EXTEND_EV" 2>/dev/null
+BS2="$(tree board-status bsig2 2>/dev/null)"
+assert_contains "$BS2" '"present": true' "board-status: extend decision still recorded (present=true)"
+assert_eq "$(printf '%s' "$BS2" | jq -r '.active')" "false" "board-status: extend decision does NOT activate (active=false)"
+
+# 10.4 board-status auto-rebuilds when index is stale (like other read subcommands)
+rm -f "$PROJECTS/bsig/tree/index.json"
+BS_REBUILT="$(tree board-status bsig 2>/dev/null)"
+assert_contains "$BS_REBUILT" 'true' "board-status: auto-rebuilds index when absent"
+
+# 10.5 board-status --help exits 0
+tree board-status --help >/dev/null 2>&1; BS_HELP_EXIT=$?
+assert_eq "$BS_HELP_EXIT" "0" "board-status --help exits 0"
+
+# 10.6 Project without board_signoff has board_signoff=null in index
+tree rebuild-index rt 2>/dev/null
+RT_BS="$(jq '.board_signoff' "$PROJECTS/rt/tree/index.json")"
+assert_eq "$RT_BS" "null" "index.board_signoff=null for project without signoff event"
 
 finalize_test

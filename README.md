@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.15.3-E8A838?style=flat-square" alt="v2.15.3">
+  <img src="https://img.shields.io/badge/version-2.16.0-E8A838?style=flat-square" alt="v2.16.0">
   <img src="https://img.shields.io/badge/skills-19-4A90D9?style=flat-square" alt="19 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">
@@ -563,6 +563,7 @@ Enable individually by copying entries from [`settings.example.json`](settings.e
 
 ## Inspired By
 
+- **Task-tree engine prior art (v2.16.0)** — the externalized-state substrate and its guardrails absorb published lessons rather than reinventing failures: append-only event log + derived index over read-modify-write node files (Steve Yegge's [Beads](https://github.com/steveyegge/beads) postmortem; TaskMaster schema/concurrency incident reports — community issue-tracker reports surveyed 2026-06-12; no single canonical URL recorded at survey time), per-event `schema_version` with lazy migrations ([LangGraph](https://github.com/langchain-ai/langgraph)'s versioned-state lesson; [Temporal](https://temporal.io)'s history-evolvability model), and cheap cross-family judge panels over a single large judge (the PoLL result — [Verga et al. 2024, "Replacing Judges with Juries"](https://arxiv.org/abs/2404.18796)). All quantitative thresholds from these sources are treated as factory defaults pending local calibration, never as justification.
 - **[gstack](https://github.com/garry-t/gstack)** — Garry Tan's skill suite for Claude Code. The CEO agent's cognitive patterns (Bezos doors, Munger inversion, Jobs subtraction), Boil the Lake completeness principle, and scope mode system are adapted from gstack's `plan-ceo-review` skill.
 - **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk's 18-thinker multi-persona deliberation skill. The `think-tank-dialectic` skill's enforcement mechanisms (Dissent Quota, Counterfactual Trigger at >70%, Problem Restate Gate, Minority Report as first-class verdict section, Epistemic Diversity Scorecard) are adapted from Council's 7-step protocol and agent frontmatter conventions. The key meta-insight — *every thinking style must carry its own fail-safe* — comes from observing that 100% of Council's 18 agents have a `Grounding Protocol` section with self-constraining hard rules.
 - **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li's 6-room, 31-thinker extension of Council. The `think-tank-dialectic` skill's Hegelian Arc structure (Thesis → Antithesis → Synthesis with forced non-compromise synthesis proposal), Adaptive Depth Gate, Tacit Knowledge Extraction protocol (Polanyi), and "different tool, not better tool" framing are adapted from Agora's 8-step deliberation protocol and the `/forge` engineering room's verdict template.

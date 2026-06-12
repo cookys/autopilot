@@ -1,0 +1,1 @@
+{"class":"critical","defect":"locked_append failure swallowed with '|| true'; caller always sees exit 0 even when the append to events.jsonl fails, silently losing events"}

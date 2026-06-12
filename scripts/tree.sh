@@ -15,6 +15,8 @@
 #   report <proj> <node>               Print node report JSON
 #   escalations <proj>                 List open escalations as JSON array
 #   fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
+#   board-status <proj>                Print board_signoff index object or null;
+#                                      gate on .active (present AND decision=="graduate")
 #
 # Event envelope (minimal, validated by emit):
 #   schema_version  (integer)
@@ -22,9 +24,10 @@
 #   node            (string)
 #   type            (string)
 #
-# Stricter per-type validation is a P2 concern. emit is designed so that
-# plugging in a validator ($TREE_EVENT_VALIDATOR env var pointing to a
-# script) requires no CLI surface changes.
+# Per-type event validation (beyond the 4-field envelope) is not yet wired:
+# $TREE_EVENT_VALIDATOR (stdin = event JSON) is the extension point. Note
+# check-node-report.sh validates NODE REPORT FILES by path — a different
+# interface; it is not a drop-in event validator.
 #
 # File locations (per project):
 #   docs/projects/<proj>/tree/events.jsonl   — append-only event log (git-tracked)
@@ -400,12 +403,23 @@ cmd_rebuild_index() {
           resolved: false
         }]
       elif $ev.type == "escalation_resolved" then
-        .nodes[$ev.node].escalations |= map(
-          if .id == $ev.escalation_id then . + {resolved: true, resolved_at: $ev.ts} else . end
-        ) |
-        .escalations |= map(
-          if .id == $ev.escalation_id then . + {resolved: true, resolved_at: $ev.ts} else . end
-        )
+        # ID-targeted: if escalation_id present, resolve only the matching entry.
+        # Bulk fallback: if no escalation_id, resolve ALL open escalations for this node.
+        if $ev.escalation_id != null and $ev.escalation_id != "" then
+          (.nodes[$ev.node].escalations |= map(
+            if .id == $ev.escalation_id and .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          )) |
+          (.escalations |= map(
+            if .node == $ev.node and .id == $ev.escalation_id and .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          ))
+        else
+          (.nodes[$ev.node].escalations |= map(
+            if .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          )) |
+          (.escalations |= map(
+            if .node == $ev.node and .resolved == false then . + {resolved: true, resolved_at: $ev.ts} else . end
+          ))
+        end
       elif $ev.type == "verdict" then
         .nodes[$ev.node].status = "complete" |
         .nodes[$ev.node].verdict = ($ev.verdict // null) |
@@ -418,6 +432,7 @@ cmd_rebuild_index() {
       elif $ev.type == "decision_fork" then
         .decisions += [{
           node: $ev.node,
+          id: ($ev.decision_id // ($ev.node + ":" + $ev.ts)),
           question: ($ev.question // null),
           options: ($ev.options // []),
           evidence_pointers: ($ev.evidence_pointers // []),
@@ -425,14 +440,30 @@ cmd_rebuild_index() {
           resolved: false
         }]
       elif $ev.type == "decision_resolved" then
-        .decisions |= map(
-          if .node == $ev.node and .resolved == false then
-            . + {resolved: true, resolved_at: $ev.ts, chosen: ($ev.chosen // null)}
-          else .
-          end
-        )
+        # ID-targeted: if decision_id present, resolve only the matching entry.
+        # Bulk fallback: if no decision_id, resolve ALL open entries for this node.
+        if $ev.decision_id != null and $ev.decision_id != "" then
+          .decisions |= map(
+            if .node == $ev.node and .id == $ev.decision_id and .resolved == false then
+              . + {resolved: true, resolved_at: $ev.ts, chosen: ($ev.chosen // null)}
+            else .
+            end
+          )
+        else
+          .decisions |= map(
+            if .node == $ev.node and .resolved == false then
+              . + {resolved: true, resolved_at: $ev.ts, chosen: ($ev.chosen // null)}
+            else .
+            end
+          )
+        end
       elif $ev.type == "manager_raw_read" then
         .nodes[$ev.node].raw_reads = ((.nodes[$ev.node].raw_reads // []) + [$ev.ts])
+      elif $ev.type == "board_signoff" then
+        .board_signoff = {present: true, ts: $ev.ts,
+                          authorized_by: ($ev.authorized_by // null),
+                          decision: ($ev.decision // null),
+                          active: (($ev.decision // "") == "graduate")}
       else .
       end
     ) |
@@ -444,7 +475,10 @@ cmd_rebuild_index() {
       events_hash: $events_hash,
       event_count: ($events | length),
       truncated_tail: null
-    }
+    } |
+
+    # Ensure board_signoff defaults to null when no event was seen
+    .board_signoff //= null
     ')"
 
   # Inject truncated_tail tombstone if detected
@@ -467,7 +501,11 @@ cmd_rebuild_index() {
   # same directory as index.json: mv across filesystems (/tmp is often
   # tmpfs) degrades to copy+delete and loses rename(2) atomicity.
   local tmp_index; tmp_index="$(mktemp "$(dirname "$index_file")/index.XXXXXX")"
-  printf '%s\n' "$index_json" > "$tmp_index"
+  if ! printf '%s\n' "$index_json" > "$tmp_index"; then
+    rm -f "$tmp_index"
+    log_err "failed to write temp index (disk full?) — index NOT replaced"
+    exit 1
+  fi
   mv "$tmp_index" "$index_file"
 }
 
@@ -592,8 +630,11 @@ cmd_fetch() {
 
   # Get artifact paths from the node's report
   local artifact_paths
+  # artifact_paths elements are {path, sha256} objects per tree-contracts.md
+  # §4; bare-string elements are tolerated for backward compatibility.
   artifact_paths="$(jq -r --arg node "$node_id" \
-    '(.nodes[$node].artifact_paths // [])[]' "$index_file" 2>/dev/null || true)"
+    '(.nodes[$node].artifact_paths // []) | map(if type == "object" then .path // empty else . end) | .[]' \
+    "$index_file" 2>/dev/null || true)"
 
   if [ -z "$artifact_paths" ]; then
     log_err "fetch: no artifact_paths found for node '$node_id'"
@@ -611,17 +652,46 @@ cmd_fetch() {
 
   locked_append "$events_file" "$raw_read_event"
 
-  # Print artifact content
+  # Print artifact content. Declared-but-missing artifacts are a failure:
+  # exit 0 with empty output would be indistinguishable from a node that
+  # legitimately has no artifacts (fail closed; found ones still print).
+  local missing=0
   if [ -n "$artifact_paths" ]; then
     while IFS= read -r path; do
       [ -z "$path" ] && continue
       if [ -f "$path" ]; then
-        cat "$path"
+        cat -- "$path"
       else
         log_err "fetch: artifact not found at path: $path"
+        missing=$((missing + 1))
       fi
     done <<< "$artifact_paths"
   fi
+  if [ "$missing" -gt 0 ]; then
+    log_err "fetch: $missing declared artifact(s) missing — failing closed"
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# subcommand: board-status
+# ---------------------------------------------------------------------------
+
+cmd_board_status() {
+  [ $# -ge 1 ] || usage_error "board-status requires <proj>"
+  local proj="$1"
+  local events_file; events_file="$(proj_events_file "$proj")"
+  [ -f "$events_file" ] || { log_err "tree not initialized for project '$proj'"; exit 1; }
+
+  maybe_rebuild "$proj"
+
+  local index_file; index_file="$(proj_index_file "$proj")"
+  [ -f "$index_file" ] || { log_err "index not found after rebuild attempt"; exit 1; }
+
+  # Print the board_signoff index object (null when absent). The authority
+  # gate is the .active field: present AND decision=="graduate". A signoff
+  # event with any other decision (abort/extend) is recorded but NOT active.
+  jq -r '.board_signoff' "$index_file"
 }
 
 # ---------------------------------------------------------------------------
@@ -629,7 +699,7 @@ cmd_fetch() {
 # ---------------------------------------------------------------------------
 
 show_help() {
-  sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------------------
@@ -648,7 +718,7 @@ fi
 # Every subcommand's first positional is <proj>. Validate it HERE, in the
 # main script context — exit propagates. (Inside $() it would not.)
 case "$CMD" in
-  init|emit|rebuild-index|next-decision|report|escalations|fetch)
+  init|emit|rebuild-index|next-decision|report|escalations|fetch|board-status)
     [ $# -ge 1 ] || usage_error "$CMD requires <proj>"
     validate_proj_name "$1"
     ;;
@@ -662,6 +732,7 @@ case "$CMD" in
   report)            cmd_report "$@" ;;
   escalations)       cmd_escalations "$@" ;;
   fetch)             cmd_fetch "$@" ;;
+  board-status)      cmd_board_status "$@" ;;
   -h|--help|help)    show_help; exit 0 ;;
   *)
     log_err "unknown subcommand: $CMD"

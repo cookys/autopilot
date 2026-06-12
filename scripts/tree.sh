@@ -501,7 +501,11 @@ cmd_rebuild_index() {
   # same directory as index.json: mv across filesystems (/tmp is often
   # tmpfs) degrades to copy+delete and loses rename(2) atomicity.
   local tmp_index; tmp_index="$(mktemp "$(dirname "$index_file")/index.XXXXXX")"
-  printf '%s\n' "$index_json" > "$tmp_index"
+  if ! printf '%s\n' "$index_json" > "$tmp_index"; then
+    rm -f "$tmp_index"
+    log_err "failed to write temp index (disk full?) — index NOT replaced"
+    exit 1
+  fi
   mv "$tmp_index" "$index_file"
 }
 
@@ -648,7 +652,10 @@ cmd_fetch() {
 
   locked_append "$events_file" "$raw_read_event"
 
-  # Print artifact content
+  # Print artifact content. Declared-but-missing artifacts are a failure:
+  # exit 0 with empty output would be indistinguishable from a node that
+  # legitimately has no artifacts (fail closed; found ones still print).
+  local missing=0
   if [ -n "$artifact_paths" ]; then
     while IFS= read -r path; do
       [ -z "$path" ] && continue
@@ -656,8 +663,13 @@ cmd_fetch() {
         cat -- "$path"
       else
         log_err "fetch: artifact not found at path: $path"
+        missing=$((missing + 1))
       fi
     done <<< "$artifact_paths"
+  fi
+  if [ "$missing" -gt 0 ]; then
+    log_err "fetch: $missing declared artifact(s) missing — failing closed"
+    exit 1
   fi
 }
 

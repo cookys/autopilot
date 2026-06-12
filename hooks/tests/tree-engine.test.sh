@@ -344,6 +344,20 @@ tree fetch fetch2 noartifact --raw 2>/dev/null
 LAST_FETCH2="$(tail -1 "$PROJECTS/fetch2/tree/events.jsonl")"
 assert_eq "$(printf '%s' "$LAST_FETCH2" | jq -r '.type')" "manager_raw_read" "fetch --raw logs event even with no artifacts"
 
+# 7.4b no-artifact node exits 0 (legitimately empty ≠ failure)
+tree fetch fetch2 noartifact --raw >/dev/null 2>&1; NOART_EXIT=$?
+assert_eq "$NOART_EXIT" "0" "fetch --raw exits 0 when node declares no artifacts"
+
+# 7.5 declared-but-MISSING artifact → exit 1 (fail closed; distinguishes
+# misconfigured paths from legitimately artifact-less nodes)
+tree init fetch3 2>/dev/null
+MISSING_EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"w3\",\"type\":\"node_report\",\"artifact_paths\":[{\"path\":\"$TEST_TMP/does-not-exist.txt\",\"sha256\":\"abc\"}],\"evidence_pointers\":[],\"artifact_sha256\":null}"
+tree emit fetch3 w3 "$MISSING_EV" 2>/dev/null
+tree fetch fetch3 w3 --raw >/dev/null 2>&1; MISS_EXIT=$?
+assert_eq "$MISS_EXIT" "1" "fetch --raw exits 1 when a declared artifact file is missing"
+LAST_FETCH3="$(tail -1 "$PROJECTS/fetch3/tree/events.jsonl")"
+assert_eq "$(printf '%s' "$LAST_FETCH3" | jq -r '.type')" "manager_raw_read" "fetch --raw still logs the read attempt before failing closed"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TEST 8: syntax / shellcheck / --help exits
 # ─────────────────────────────────────────────────────────────────────────────

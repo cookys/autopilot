@@ -22,8 +22,8 @@
 
 | Phase | Size | Summary | Status |
 |-------|------|---------|--------|
-| P0 | S | Spikes: CC native task persistence; `agy -p` judge mode | pending |
-| P1 | L | Tree substrate (`scripts/tree.sh`, append-only JSONL, auto-rebuild index, torture test) | pending |
+| P0 | S | Spikes: CC native task persistence; `agy -p` judge mode | done (2026-06-12 — both recorded in portability §7) |
+| P1 | L | Tree substrate (`scripts/tree.sh`, append-only JSONL, auto-rebuild index, torture test) | done (2026-06-12 — 45ee431 + review fixes; 81-assertion torture matrix green) |
 | P2 | S | Contracts + validator (`references/tree-contracts.md`, `check-node-report.sh`) | pending |
 | P3 | S | DOA presets (`resolve-doa.sh`, four-tier table, dual-track trust) | pending |
 | P4 | L | Interrogation QC panel, shadow-wired with liveness assertion + cost visibility | pending |

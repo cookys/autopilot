@@ -74,6 +74,14 @@ now_ts() {
 }
 
 proj_tree_dir() {
+  # Guard against path traversal / accidental misuse: project names are
+  # plain dirnames (alnum start; alnum/dot/dash/underscore body; no "..").
+  case "$1" in
+    *..*|/*|-*|.*|"") usage_error "invalid project name: '$1' (alphanumeric start; a-zA-Z0-9._- only)" ;;
+  esac
+  if ! printf '%s' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+    usage_error "invalid project name: '$1' (alphanumeric start; a-zA-Z0-9._- only)"
+  fi
   echo "$TREE_PROJECTS_DIR/$1/tree"
 }
 
@@ -144,8 +152,13 @@ locked_append() {
   if [ "$rc" -eq 99 ]; then
     log_err "could not acquire lock on $lock_file within 10s — append aborted (no unlocked write)"
     exit 1
+  elif [ "$rc" -ne 0 ]; then
+    # printf failure: disk full / permissions / fd error. Fail closed —
+    # callers must never report success for an event that was not written.
+    log_err "append failed (write error rc=$rc) for $events_file — event NOT recorded"
+    exit 1
   fi
-  return "$rc"
+  return 0
 }
 
 # Check whether index needs rebuilding:
@@ -309,8 +322,15 @@ cmd_rebuild_index() {
     events_json="$(printf '%s\n' "${valid_lines[@]}" | jq -s '.')"
   fi
 
-  # Compute a content hash of valid events for determinism verification
-  local events_hash; events_hash="$(printf '%s\n' "${valid_lines[@]}" | sha256sum | awk '{print $1}')"
+  # Compute a content hash of valid events for determinism verification.
+  # Empty-array guard: "${arr[@]}" on an empty array is an unbound-variable
+  # error under set -u on bash 3.2 (macOS system bash).
+  local events_hash
+  if [ "${#valid_lines[@]}" -gt 0 ]; then
+    events_hash="$(printf '%s\n' "${valid_lines[@]}" | sha256sum | awk '{print $1}')"
+  else
+    events_hash="$(printf '' | sha256sum | awk '{print $1}')"
+  fi
 
   # Fold events into node states
   local index_json

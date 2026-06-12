@@ -175,7 +175,8 @@ VICTIM_PID=$!
 # Wait until the victim has written at least 3 events (poll, max ~10s)
 VICTIM_STARTED=0
 for _ in $(seq 1 100); do
-  if [ "$(grep -c '"victim' "$PROJECTS/crash/tree/events.jsonl" 2>/dev/null || echo 0)" -ge 3 ]; then
+  # shellcheck disable=SC2126  # NOT grep -c: it exits 1 on zero matches, and `|| echo 0` would emit a second line ("0\n0")
+  if [ "$(grep '"victim' "$PROJECTS/crash/tree/events.jsonl" 2>/dev/null | wc -l | tr -d ' ')" -ge 3 ]; then
     VICTIM_STARTED=1; break
   fi
   sleep 0.1
@@ -183,7 +184,8 @@ done
 kill -9 "$VICTIM_PID" 2>/dev/null || true
 wait "$VICTIM_PID" 2>/dev/null || true
 assert_eq "$VICTIM_STARTED" "1" "crash: victim emitter demonstrably started before kill -9"
-VICTIM_COUNT="$(grep -c '"victim' "$PROJECTS/crash/tree/events.jsonl" 2>/dev/null || echo 0)"
+# shellcheck disable=SC2126  # NOT grep -c: it exits 1 on zero matches (see poll loop above)
+VICTIM_COUNT="$(grep '"victim' "$PROJECTS/crash/tree/events.jsonl" 2>/dev/null | wc -l | tr -d ' ')"
 VICTIM_MIDRUN=0
 [ "$VICTIM_COUNT" -lt "$VICTIM_TOTAL" ] && VICTIM_MIDRUN=1
 assert_eq "$VICTIM_MIDRUN" "1" "crash: kill -9 landed mid-run (victim wrote $VICTIM_COUNT < $VICTIM_TOTAL events)"

@@ -168,6 +168,28 @@ judge runs go in a **throwaway dir containing ONLY the intended inputs**; the ju
 same lesson as the implementer spike. Amendment-3 fallback (two Claude sessions from independent
 conversation roots) NOT needed.
 
+<details><summary>Spike raw evidence (2026-06-12)</summary>
+
+P0a — probe task on disk after session A exited, fresh session B sees nothing, resume sees it:
+
+```
+$ grep -rl "p0a-probe-tte-20260612" ~/.claude/tasks/
+/home/cookys/.claude/tasks/6995afc6-2f09-4598-88df-61c54782c97d/1.json
+$ claude -p --model haiku 'Use the TaskList tool and output its raw result verbatim...'
+NO_TASKS_VISIBLE
+$ claude -p --model haiku --resume 6995afc6-2f09-4598-88df-61c54782c97d '...TaskList...'
+#1 [pending] p0a-probe-tte-20260612
+```
+
+P0b — file-write-mode verdict head (full JSON was jq-valid; run dir `/tmp/p0b-judge2/`, ephemeral):
+
+```
+{"verdict": "pass", "confidence": 1.0, "findings": [{"severity": "suggestion",
+ "file": "scripts/install-antigravity.sh:88", ...}], "achieved": [5 items], "missed": [2 items]}
+```
+
+</details>
+
 **`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
 Stop hook both fire after every turn." autopilot's own Stop hooks (`cost-tracker`,
 `session-summary`) are side-effect-only and never return `decision: block`, so they do not

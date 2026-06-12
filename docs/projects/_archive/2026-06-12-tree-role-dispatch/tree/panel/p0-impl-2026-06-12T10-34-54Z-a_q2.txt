@@ -1,0 +1,15 @@
+Looking at the node report and artifacts, I can identify the following work that goes beyond implementing basic role-to-model/mode resolution:
+
+EXTRA: Input sanitization for `$ROLE` using regex validation `[A-Za-z0-9._-]+` to prevent shell metacharacter injection via grep patterns (scripts/resolve-dispatch.sh:46-50)
+
+EXTRA: Override row field injection prevention via `valid_token()` function that validates `model` and `mode` values before inserting them into JSON output, catching crafted payloads (scripts/resolve-dispatch.sh:52-53 and usage at 103-106, 152-155)
+
+EXTRA: Malformed configuration file resilience — logs warnings instead of failing when override files don't contain expected pipe-table rows, then falls back to defaults (scripts/resolve-dispatch.sh:62-68, 143-148)
+
+EXTRA: Test section 13 explicitly covering override-row injection attempts with validation that crafted JSON fields are rejected and rows are dropped with warnings (hooks/tests/resolve-dispatch.test.sh:174-204)
+
+EXTRA: `run_dispatch_split` test helper function that captures stdout/stderr separately for better diagnostics of error conditions (hooks/tests/resolve-dispatch.test.sh:11-21)
+
+EXTRA: Comprehensive edge-case test coverage — 13 numbered test sections including sanitization testing (§10), injection testing (§13), and malformed-file resilience (§11) that go beyond happy-path validation
+
+The core task appears to be "resolve role → JSON", but the implementation includes significant security hardening (input/output validation, injection prevention) and defensive resilience patterns (graceful degradation on malformed input).

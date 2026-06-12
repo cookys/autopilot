@@ -416,7 +416,9 @@ SYNTH_DISSENTS="[]"
 SYNTH_EXTRAS="$EXTRAS_JSON"
 
 SYNTH_PROMPT="$(cat <<PROMPT
-You are a synthesis judge. Based on the following interrogation results:
+You are a synthesis judge. $SCOPE_RULE
+
+Based on the following interrogation results:
 
 ACHIEVED GOALS:
 $(cat "$ACHIEVED_FILE" 2>/dev/null || echo "(none)")
@@ -428,7 +430,7 @@ UNACHIEVED GOALS:
 $(cat "$MISSED_FILE" 2>/dev/null || echo "(none)")
 
 Output ONLY a JSON object with these fields:
-- verdict: "pass" or "fail" (pass = all the NODE's stated goals achieved with no critical misses; project-lifecycle items — merge, release gates, archiving — are outside the node's scope and never count as misses)
+- verdict: "pass" or "fail" (pass = all the NODE's stated goals achieved with no critical misses, applying the scope rule above)
 - dissents: array of strings describing disagreements between judges (can be empty)
 - extras: array of strings listing items done beyond stated goals (can be empty)
 

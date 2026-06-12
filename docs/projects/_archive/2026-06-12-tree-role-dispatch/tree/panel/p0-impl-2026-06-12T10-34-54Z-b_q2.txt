@@ -1,0 +1,6 @@
+EXTRA: Input sanitization on the --role argument: Rejecting inputs with shell-special characters (allowing only [A-Za-z0-9._-]) and exiting with code 2 to prevent pattern injection.
+EXTRA: Allowlist validation of override-row columns: Restricting parsed model/mode values to [A-Za-z0-9._-]+, ignoring invalid rows, and outputting warnings to stderr.
+EXTRA: Environment variable config override seam: Adding the MODEL_ROUTING_CONFIG_OVERRIDE environment variable to override the configuration file path.
+EXTRA: Hardening of the --help output: Restricting the help output to lines 2-25 of the script to avoid leaking implementation details (like 'set -euo pipefail' and 'TREE_MODE=0').
+EXTRA: Malformed override file resilience: Gracefully falling back to default values without crashing when the override configuration file is malformed.
+EXTRA: Table key inclusion: Appending an additive "table":"tree" field to the JSON output under the tree path.

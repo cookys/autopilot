@@ -154,4 +154,25 @@ assert_eq "0" "$EXIT"                                   "bad preset name: exit c
 assert_contains "$OUT" '"preset":"fail-closed-default"' "bad preset name: fail-closed"
 assert_contains "$OUT" '"source":"fail-closed-default"' "bad preset name: source=fail-closed-default"
 
+# ── 15. Input sanitization — shell-special chars rejected with exit 2 ──────
+# Pipe in role value: 'implementer|judge' should not match the grep -iE pattern
+OUT="$(bash "$SCRIPT" --role 'implementer|judge' --tier sonnet 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT"                                      "sanitize: pipe-in-role exits 2"
+assert_contains "$OUT" "invalid --role"                    "sanitize: pipe-in-role error message"
+
+# Wildcard in role: '.*' is a valid regex meta-char; must be rejected
+OUT="$(bash "$SCRIPT" --role '.*' --tier sonnet 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT"                                      "sanitize: wildcard-role exits 2"
+assert_contains "$OUT" "invalid --role"                    "sanitize: wildcard-role error message"
+
+# Pipe in tier value
+OUT="$(bash "$SCRIPT" --role implementer --tier 'sonnet|haiku' 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT"                                      "sanitize: pipe-in-tier exits 2"
+assert_contains "$OUT" "invalid --tier"                    "sanitize: pipe-in-tier error message"
+
+# Clean valid inputs still work (regression check)
+OUT="$(run_doa --role implementer --tier sonnet)"; EXIT=$?
+assert_eq "0" "$EXIT"                                      "sanitize: clean input still works"
+assert_contains "$OUT" '"preset":"cloud-high-trust"'       "sanitize: clean input correct preset"
+
 finalize_test

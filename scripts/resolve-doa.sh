@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     --role)   ROLE="$2";       shift 2 ;;
     --tier)   MODEL_TIER="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     -*)
@@ -62,6 +62,19 @@ done
 
 [[ -z "$ROLE" ]]       && { echo "missing --role"       >&2; exit 2; }
 [[ -z "$MODEL_TIER" ]] && { echo "missing --tier"       >&2; exit 2; }
+
+# Input sanitization: reject inputs that contain shell-special characters.
+# $ROLE and $MODEL_TIER are interpolated into grep -iE patterns below; an
+# unvalidated value such as 'implementer|judge' or '.*' would silently match
+# rows it should not, defeating the override lookup.
+if ! [[ "$ROLE"       =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "invalid --role value (only [A-Za-z0-9._-] allowed): $ROLE" >&2
+  exit 2
+fi
+if ! [[ "$MODEL_TIER" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "invalid --tier value (only [A-Za-z0-9._-] allowed): $MODEL_TIER" >&2
+  exit 2
+fi
 
 # ── Preset → action-policy tables ────────────────────────────────────────────
 # Presets are canonical; project overrides can only select a preset by name.

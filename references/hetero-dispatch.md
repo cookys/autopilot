@@ -49,6 +49,15 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 
 The guarded installer only protects its own path. For raw `agy plugin install/uninstall` typed in a shell, source [`scripts/agy-shell-guard.zsh`](../scripts/agy-shell-guard.zsh) in your `~/.zshrc` — it blocks plugin operations while any symlink sits in `~/.gemini/config/plugins/` (the agy ≤ 1.0.7 data-loss kill condition; see [`multi-agent-portability.md`](multi-agent-portability.md) § agy spike). Note: `agy -p` dispatch (this doc's subject) was never the dangerous path — the wrapper passes it straight through.
 
+## QC panel judges ride the same recipe
+
+`scripts/qc-panel.sh` (task-tree engine P4) dispatches its Gemini judge via the same
+`agy -p` plumbing this doc describes — read-only judging in a throwaway dir with only
+the intended inputs, file-write verdict, `--print-timeout 8m`,
+`--dangerously-skip-permissions`. The judge path never mutates a repo, so the worktree
+rail is replaced by the throwaway-dir rail; everything else (artifact-based verification,
+never trust self-report) carries over. Spike caveats: `multi-agent-portability.md` §7.
+
 ## No skill yet — deliberately
 
 Two real uses so far. Per the distill philosophy (extract skills from recurring practice, not speculatively), the skill wrapper waits for recurrence — trigger tracked in [`docs/BACKLOG.md`](../docs/BACKLOG.md).

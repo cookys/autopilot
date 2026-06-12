@@ -1,0 +1,20 @@
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"root","type":"tree_initialized","proj":"2026-06-12-task-tree-engine"}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p0","type":"node_created","title":"P0 spikes"}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p0","type":"verdict","verdict":"pass","confidence":0.95,"evidence_pointers":["references/multi-agent-portability.md:156-186@85a4afa"]}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p1","type":"node_created","title":"P1 tree substrate"}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p1","type":"verdict","verdict":"pass","confidence":0.95,"evidence_pointers":["scripts/tree.sh:1-50@85a4afa","hooks/tests/tree-engine.test.sh:1-30@85a4afa"]}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p2","type":"node_created","title":"P2 contracts + validator"}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p2","type":"delegated","delegate":"sonnet-implementer-worktree"}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p3","type":"node_created","title":"P3 DOA presets + routing"}
+{"schema_version":1,"ts":"2026-06-12T05:31:58Z","node":"p3","type":"delegated","delegate":"sonnet-implementer-worktree"}
+{"schema_version":1,"ts":"2026-06-12T06:40:10Z","node":"p2","type":"verdict","verdict":"pass","confidence":0.9,"evidence_pointers":["references/tree-contracts.md:1-40@3ce1481","scripts/check-node-report.sh:1-30@3ce1481"]}
+{"schema_version":1,"ts":"2026-06-12T06:40:11Z","node":"p3","type":"verdict","verdict":"pass","confidence":0.9,"evidence_pointers":["scripts/resolve-doa.sh:1-30@3ce1481","references/model-routing.md:60-90@3ce1481"]}
+{"schema_version":1,"ts":"2026-06-12T06:40:11Z","node":"p4","type":"node_created","title":"P4 QC panel shadow"}
+{"schema_version":1,"ts":"2026-06-12T06:40:11Z","node":"p5","type":"node_created","title":"P5 calibration harness"}
+{"schema_version":1,"ts":"2026-06-12T06:40:11Z","node":"p4","type":"delegated","delegate":"sonnet-implementer-worktree (joint P4+P5 unit)"}
+{"schema_version":1,"ts":"2026-06-12T06:40:11Z","node":"p5","type":"delegated","delegate":"sonnet-implementer-worktree (joint P4+P5 unit)"}
+{"schema_version":1,"ts":"2026-06-12T07:45:14Z","node":"p4","type":"verdict","verdict":"pass","confidence":0.9,"evidence_pointers":["scripts/qc-panel.sh:1-80@d80d736","hooks/tests/qc-panel.test.sh:1-20@d80d736"]}
+{"schema_version":1,"ts":"2026-06-12T07:45:14Z","node":"p5","type":"verdict","verdict":"pass","confidence":0.9,"evidence_pointers":["scripts/calibration.sh:1-40@d80d736","evals/known-bad/01-dropped-error-check.diff:1-10@d80d736"]}
+{"schema_version":1,"ts":"2026-06-12T07:45:14Z","node":"p6","type":"node_created","title":"P6 ceo-agent adapter"}
+{"schema_version":1,"ts":"2026-06-12T07:45:14Z","node":"p6","type":"verdict","verdict":"pass","confidence":0.85,"evidence_pointers":["skills/ceo-agent/references/tree-adapter.md:1-40@d80d736"]}
+{"schema_version":1,"ts":"2026-06-12T07:45:14Z","node":"p7","type":"node_created","title":"P7 docs wire-in"}

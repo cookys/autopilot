@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.16.0 — task-tree engine v1 (delegated orchestration core, shadow-mode)
+
+**Headline**: the manager's context now grows with *decisions*, not work products. New append-only JSONL task tree (`scripts/tree.sh`) externalizes execution state per project; delegates return decision-shaped reports with evidence pointers (`references/tree-contracts.md` + `scripts/check-node-report.sh` validator); a cross-family interrogation QC panel (`scripts/qc-panel.sh`, Claude + Gemini judges × 3 question shapes) runs in **shadow** alongside the authoritative reviewer, feeding a calibration harness (`scripts/calibration.sh` + `evals/known-bad/` ground-truth corpus). **Zero behavior change unless a project opts in** (tree dir exists); verification-authority graduation is a Board decision gated on local calibration data (≥50 reviewer-baseline samples, zero false-pass on known-bad critical, H1 replay) — never on published benchmarks.
+
+### Added
+- `scripts/tree.sh` — single state-owning tree CLI: `init` / `emit` (flock, fail-closed) / `rebuild-index` (truncated-tail tombstone) / `next-decision` (never prints work content) / `report` / `escalations` / `fetch --raw` (logged escalation valve) / `board-status` (authority gate on `.active`, i.e. `decision=="graduate"`). 115-assertion torture matrix incl. 8-parallel emitters, kill -9 mid-append, truncated-tail injection.
+- `references/tree-contracts.md` — canonical event/report schemas; evidence pointers carry commit-SHA anchors (sha256-only for binaries; moved-file content-hash fallback emits `pointer_stale`, never silent); intent/state boundary table (README owns INTENT, tree owns EXECUTION STATE).
+- `scripts/check-node-report.sh` — report-contract validator (schema + pointer resolution + sha256; deleted-evidence fails closed).
+- `scripts/resolve-doa.sh` + `project-config-template/doa-config.md` — four-tier DOA presets (cloud-high-trust / local-low-trust), fail-closed on unknown role/tier, all thresholds `calibrate-me`.
+- `references/model-routing.md` § Tree roles — Amendment-11 routing economy: Fable-class = manager (depth 0) + named escalations ONLY, never a delegate; sonnet implementers; flash/haiku cross-family judges (PoLL); script+haiku synthesizer.
+- `scripts/qc-panel.sh` — 2 judges × 3 question shapes (achieved/extra/missed) with deterministic merge + cheap-model synthesis; Amendment-4 liveness (verdict artifact + calibration sample per run or non-zero exit); judge model env seams; verified live end-to-end (6/6 judges, first real disagreement sample captured).
+- `scripts/calibration.sh` + `evals/known-bad/` — verdict-agreement store with baseline separation (self-report vs reviewer; only reviewer-baseline counts toward graduation), known-bad breakout, per-class false-pass tracking, graduation criteria as data; 10-diff injected-defect ground-truth corpus.
+- `skills/ceo-agent/references/tree-adapter.md` — branch-by-abstraction adapter: dual-run (shadow) by default; post-signoff mode requires a `board_signoff` event with `decision=="graduate"`; KR1 measured by post-hoc transcript audit, not self-report.
+
+### Changed
+- `skills/quality-pipeline/SKILL.md` + `references/code-review.md` — shadow QC panel wiring (MUST run when tree exists and node is verdict-bearing; authoritative reviewer unchanged).
+- `skills/ceo-agent/SKILL.md` — Tree Adapter section + authority-gate anti-patterns.
+- `references/multi-agent-portability.md` §7 — P0 spike records: CC native tasks are session-scoped (only `--resume <session-id>` reattaches); `agy -p` judge mode viable with file-write recipe.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.15.3`; remove `~/.autopilot/calibration/` and any `docs/projects/*/tree/` dirs if opted in.
+
 ## v2.15.3 — incident knowledge into the repo (recovery recipe + shell guard)
 
 **Headline**: two gaps closed so the agy-incident protections work for anyone, not just this machine: the **recovery recipe** for the symlinked-dest truncation is now inlined in `references/multi-agent-portability.md` (it previously pointed at a private session memory — useless to other users), and the shell-level backstop ships as sourceable [`scripts/agy-shell-guard.zsh`](scripts/agy-shell-guard.zsh).

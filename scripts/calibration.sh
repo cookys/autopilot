@@ -31,8 +31,8 @@
 #               print a JSON object containing {"verdict":"pass"|"fail"} on the
 #               last line (or anywhere extractable with the last-JSON heuristic).
 #
-#               TRUST NOTE (internal tool): --panel-cmd value executes as shell
-#               via eval.  Callers must treat this as a trusted-caller interface
+#               TRUST NOTE (internal tool): --panel-cmd value executes as shell (bash -c)
+#               via bash -c.  Callers must treat this as a trusted-caller interface
 #               — only pass panel-cmd values from the same trust boundary as
 #               this script.
 #
@@ -83,7 +83,7 @@ SUBCOMMANDS:
               record false-passes.  Panel cmd reads diff on stdin, writes
               JSON containing {"verdict":"pass"|"fail"} to stdout.
 
-              TRUST NOTE: --panel-cmd executes as shell via eval.  This is
+              TRUST NOTE: --panel-cmd executes as shell (bash -c).  This is
               an internal tool; panel-cmd must come from the same trust
               boundary as this script.
 
@@ -379,7 +379,10 @@ cmd_run_known_bad() {
 
     # Run panel command with diff on stdin; capture stdout
     local panel_out
-    panel_out="$(eval "$panel_cmd" < "$diff_file" 2>/dev/null)" || true
+    # bash -c (not eval-in-current-shell): the command still executes as
+    # shell per the TRUST NOTE contract, but cannot mutate this script's
+    # variables/state. Trusted-caller interface — never pass untrusted input.
+    panel_out="$(bash -c "$panel_cmd" < "$diff_file" 2>/dev/null)" || true
     # Extract panel verdict from last JSON object containing "verdict" key
     local panel_verdict
     panel_verdict="$(printf '%s' "$panel_out" | grep -o '"verdict":"[^"]*"' | tail -1 | cut -d'"' -f4)"

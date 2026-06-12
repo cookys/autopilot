@@ -65,6 +65,7 @@ Declares a new node in the tree.
 | `question` | string or null | The decision question this node addresses |
 | `options` | array | Candidate answer strings (may be empty) |
 | `evidence_pointers` | array | Evidence pointer strings — see §5 |
+| `title` | string | OPTIONAL, informational only — human-readable node label. The index fold ignores it; readers of the raw log benefit |
 
 > **CRITICAL — top-level field rule**: `question`, `options`, and
 > `evidence_pointers` are read from the event **top level** by the index fold
@@ -75,6 +76,10 @@ Declares a new node in the tree.
 
 Marks the node as handed off to a delegate agent. No required payload beyond
 the envelope.
+
+| Payload field | Type | Notes |
+|---------------|------|-------|
+| `delegate` | string | OPTIONAL, informational only — which delegate class/agent received the work. The index fold ignores it |
 
 ### 3.4 `doa_decision`
 

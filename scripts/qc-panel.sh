@@ -370,22 +370,10 @@ collect_lines "MISSED"   "$A_Q3" "$B_Q3" > "$MISSED_FILE"
 lines_to_json_array() {
   local file="$1"
   [ -f "$file" ] || { printf '[]'; return; }
-  local json="["
-  local first=1
-  while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
-    # escape backslash and double-quote
-    local escaped
-    escaped="$(printf '%s' "$line" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-    if [ "$first" = "1" ]; then
-      json="$json\"$escaped\""
-      first=0
-    else
-      json="$json,\"$escaped\""
-    fi
-  done < "$file"
-  json="$json]"
-  printf '%s' "$json"
+  # jq -R reads raw lines and produces RFC-8259-safe JSON strings (handles
+  # backslash, quote, AND control characters like tab — sed escaping missed
+  # those and could emit malformed JSON).
+  jq -R -s 'split("\n") | map(select(length > 0))' "$file" | jq -c .
 }
 
 # Build JSON arrays — used in the verdict artifact and as synthesizer fallback
@@ -436,8 +424,12 @@ if printf '%s' "$SYNTH_PROMPT" | "$CLAUDE_BIN" -p --model "$SYNTH_MODEL" > "$SYN
 
   SYNTH_JSON="$(extract_last_json "$(cat "$SYNTH_OUT")")"
   if [ -n "$SYNTH_JSON" ]; then
-    local_v="$(printf '%s' "$SYNTH_JSON" | grep -o '"verdict":"[^"]*"' | cut -d'"' -f4)"
-    [ -n "$local_v" ] && SYNTH_VERDICT="$local_v"
+    local_v="$(printf '%s' "$SYNTH_JSON" | jq -r '.verdict // empty' 2>/dev/null)"
+    # Guard: only the two contract values may reach the assembled JSON —
+    # anything else (multi-token, stray quote) keeps the deterministic fallback.
+    case "$local_v" in
+      pass|fail) SYNTH_VERDICT="$local_v" ;;
+    esac
 
     # Extract dissents array (simple: take the bracket contents)
     local_d="$(printf '%s' "$SYNTH_JSON" | python3 -c '

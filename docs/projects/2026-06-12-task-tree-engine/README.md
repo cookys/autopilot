@@ -1,6 +1,6 @@
 # Task-Tree Engine v1 — delegated orchestration core
 
-> **Status**: In progress (Phase 5 of research-to-ship — execution per dev-flow)
+> **Status**: Complete (2026-06-12) — execution state lives in [`tree/events.jsonl`](tree/events.jsonl); read via `scripts/tree.sh report 2026-06-12-task-tree-engine <node>`. Shadow calibration ongoing; graduation = Board decision (see BACKLOG checkpoint)
 > **Branch**: `feat/task-tree-engine`
 > **Plan**: [`docs/plans/2026-06-12-task-tree-engine.md`](../../plans/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
 > **Spec**: [`docs/plans/2026-06-12-task-tree-engine-design-spec.md`](../../plans/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)

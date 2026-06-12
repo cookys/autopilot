@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.17.1 — qc-panel node-scope rule + tree-by-default for CEO L-tasks
+
+**Headline**: closes the two operational gaps the v2.17.0 dogfood surfaced. (1) QC-panel judges now get an explicit **node-scope rule** — judge the node's own question/claims, never project-lifecycle steps (merge / gates / archiving) — fixing the systematic `fail` verdicts both live calibration samples showed on mid-flight nodes; calibration sampling becomes signal instead of a known artifact. (2) `tree.sh init` becomes the **default** in ceo-agent L-size project setup (Board directive 2026-06-12) so shadow calibration samples and the audit trail accumulate on every CEO L-ship; TaskCreate remains authoritative — zero authority change.
+
+### Fixed
+- `scripts/qc-panel.sh` — `SCOPE_RULE` injected into both judge prompts (Claude + Gemini) and the synthesizer's pass definition: out-of-scope lifecycle items never count as goals/extras/misses. Verified live: re-running the v2.17.0 `p0-impl` report under the rule flips the panel verdict fail → pass, matching the authoritative reviewer.
+
+### Changed
+- `skills/ceo-agent/SKILL.md` Execution 3.c2 — `tree.sh init` + root-node emit is now part of mandatory L-1 project setup (skip only on explicit Board instruction); new anti-pattern row: archive (L-5.5) before final node verdicts.
+- `skills/ceo-agent/references/tree-adapter.md` §9 — default-for-CEO-L note + **close-out ordering** rule: archived trees (`_archive/`) are read-only, emit all final verdicts before the archive move.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (prompt text + skill prose only; no schema change)
+
 ## v2.17.0 — resolve-dispatch tree-role integration (`--tree`)
 
 **Headline**: `scripts/resolve-dispatch.sh` now resolves task-tree roles. A new `--tree` context flag switches to the Amendment-11 tree table (sub-orchestrator→opus, planner/researcher/implementer→sonnet, judge/synthesizer→haiku) while the legacy table stays **byte-identical** — the `implementer`-key conflict (opus legacy vs sonnet tree) is resolved by context, not by renaming, so the role vocabulary stays shared with `scripts/resolve-doa.sh`. Closes the BACKLOG item deferred at v2.16.0 ship (R1 Fix 3). First ship dogfooding the ceo-agent tree adapter in dual-run shadow mode on a real task.

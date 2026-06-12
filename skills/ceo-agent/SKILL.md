@@ -244,6 +244,10 @@ When encountering these, pause and propose:
    a. Create project dir (docs/projects/YYYY-MM-DD-<name>/)     ← MANDATORY, not optional
    b. Write README.md with OKR, phases, success criteria
    c. Update INDEX.md
+   c2. `scripts/tree.sh init <proj>` + emit root node — tree dual-run (shadow) is
+      the DEFAULT for CEO L-size tasks (Board directive 2026-06-12: accumulate
+      calibration samples + audit trail; TaskCreate stays authoritative, zero
+      authority change). Skip only if the Board says so for this task.
    d. Create feature branch
    e. **Scope Completeness Audit** (MANDATORY before phase TaskCreate):
       TaskCreate "L-1.5: Scope completeness audit" as the FIRST task. Walk the
@@ -409,3 +413,4 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.sh fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event; a bare Read is a KR1 violation |
 | Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
 | Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |
+| Archive the project (L-5.5) before emitting final node verdicts | `tree.sh` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |

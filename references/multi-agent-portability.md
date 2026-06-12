@@ -2,7 +2,7 @@
 
 How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-06-11 (agy headless dispatch empirical against `agy` 1.0.5; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
+Last verified: 2026-06-12 (P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
 
 ---
 
@@ -152,6 +152,42 @@ that mentions `/goal` always states the non-CC fallback inline.
 | `/loop` | Re-runs a prompt or slash command on a time interval (or self-paced); stops when you stop it or the work is judged done. | [scheduled-tasks docs](https://code.claude.com/docs/en/scheduled-tasks#run-a-prompt-repeatedly-with-%2Floop) | `project-config-template/loop.md` — unattended babysit of `next` / `debug` / `quality-pipeline`. | Manual: re-invoke the skill each cycle. |
 | `Monitor` | Tool that watches a condition / long-running process and re-invokes the agent on change. | CC tool (present in this build, `claude 2.1.161`) | `finish-flow` / `quality-pipeline` CI-polling — wait on a CI run without busy-looping. | Manual: poll `gh run watch` / re-check by hand. |
 | Nested dispatch | Subagents can spawn their own subagents, max depth 5. Requires **CC v2.1.172+** ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)"). Empirically verified 2026-06-11 on 2.1.172: a subagent gets `Agent` by default (no frontmatter needed) AND an explicit `tools:` allowlist containing `Agent` is honored; children get `Agent` but not `Task`; `subagent_type: Explore` works at depth 2 and its child has no Edit/Write (but does carry `Agent` — depth caps are contract-level). Negative on v2.1.170 (grants stripped — server-side rollout). OpenCode / Codex / Antigravity: ❌ no documented equivalent (unverified-by-absence; spike before asserting otherwise). | [CC changelog v2.1.172](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md) + nest-probe spikes 2026-06-11 | Handoff ENUMs stay canonical; an agent whose `tools:` includes `Agent` MAY self-consume a `PARALLEL_DISPATCH` / `SEQUENTIAL_DISPATCH` handoff. Policy (canonical statement in `agents/README.md` § Orchestration): autopilot self-caps at **depth ≤ 2**. Review-integrity rules at any depth: `references/blind-dispatch.md` § Nested dispatch. | Hand the Handoff ENUM back to the calling skill — the skill-layer round-trip in `agents/README.md` § Orchestration works on every platform. |
+| Native task persistence (`TaskCreate`/`TaskList`) | **Session-scoped, not global** — empirically verified 2026-06-12 (CC 2.1.x): tasks persist as durable JSON (`~/.claude/tasks/<session-id>/<n>.json`, one file per task, `blocks`/`blockedBy` dependency fields, `.lock` sidecar) and survive session end; but a **fresh session's `TaskList` cannot see them** (headless probe: session A created `p0a-probe-tte-20260612` → file on disk → fresh session B `TaskList` = empty). Cross-session access exists ONLY by re-attaching to the lineage: `claude -p --resume <session-id>` saw the probe task. No global/project-scoped task list surface found (`claude --help` has `--session-id`/`--resume`/`--fork-session`, nothing task-scoped). | Spike 2026-06-12 (task-tree-engine P0a), `claude 2.1.175` | Tree engine (`scripts/tree.sh`, files+bash) stays the cross-session source of truth; TaskCreate mirror is a within-session-lineage accelerator only (P6 adapter). Forcing-function TaskCreates (dev-flow L-1.x) are per-session by design — unaffected. | The tree itself IS the fallback — `docs/projects/<proj>/tree/events.jsonl` is plain files, readable by any agent. |
+
+**`agy -p` judge mode — VIABLE (spike 2026-06-12, task-tree-engine P0b, agy 1.0.7).** Role prompt
+(`.opencode/agent-bodies/reviewer.body.md`) + a real 112-line diff → Gemini 3.5 Flash (Medium)
+produced a schema-conformant verdict JSON (`{verdict, confidence, findings[], achieved[], missed[]}`)
+with sane findings, twice. Operational caveats for P4's `qc-panel.sh`: (1) **stdout mode is
+narration-polluted** — agentic "I will…" lines precede the JSON; extract the last JSON object or use
+file-write mode; (2) **file-write mode** ("WRITE verdict to ./verdict.json, final stdout = DONE") is
+the clean plumbing — but needs `--print-timeout 8m` (4m timed out once); (3) `--dangerously-skip-permissions`
+is required even for read-only judging (without it, `-p` hangs silently waiting on permission) — so
+judge runs go in a **throwaway dir containing ONLY the intended inputs**; the judge empirically wanders
+(listed dir, read its own output file, tried git); (4) it's a full agentic loop, not a pure LLM call —
+same lesson as the implementer spike. Amendment-3 fallback (two Claude sessions from independent
+conversation roots) NOT needed.
+
+<details><summary>Spike raw evidence (2026-06-12)</summary>
+
+P0a — probe task on disk after session A exited, fresh session B sees nothing, resume sees it:
+
+```
+$ grep -rl "p0a-probe-tte-20260612" ~/.claude/tasks/
+/home/cookys/.claude/tasks/6995afc6-2f09-4598-88df-61c54782c97d/1.json
+$ claude -p --model haiku 'Use the TaskList tool and output its raw result verbatim...'
+NO_TASKS_VISIBLE
+$ claude -p --model haiku --resume 6995afc6-2f09-4598-88df-61c54782c97d '...TaskList...'
+#1 [pending] p0a-probe-tte-20260612
+```
+
+P0b — file-write-mode verdict head (full JSON was jq-valid; run dir `/tmp/p0b-judge2/`, ephemeral):
+
+```
+{"verdict": "pass", "confidence": 1.0, "findings": [{"severity": "suggestion",
+ "file": "scripts/install-antigravity.sh:88", ...}], "achieved": [5 items], "missed": [2 items]}
+```
+
+</details>
 
 **`/goal` × autopilot Stop hooks — coexist, no conflict.** The official docs state "`/goal` and a
 Stop hook both fire after every turn." autopilot's own Stop hooks (`cost-tracker`,

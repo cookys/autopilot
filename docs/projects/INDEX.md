@@ -6,7 +6,9 @@
 
 ## 進行中 (In Progress)
 
-_None._
+| Date | Project | Target version | Branch |
+|------|---------|----------------|--------|
+| 2026-06-12 | [task-tree-engine](2026-06-12-task-tree-engine/README.md) | v2.16.0 | `feat/task-tree-engine` |
 
 ## 已完成 (Completed)
 

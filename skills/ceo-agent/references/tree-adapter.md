@@ -187,8 +187,9 @@ Per `references/model-routing.md` §"Tree roles":
 All values are factory defaults, locally calibratable. Per-tier token spend
 appears in `scripts/calibration.sh report` (P5) so routing economy is auditable.
 
-Use `scripts/resolve-dispatch.sh` for the actual model/mode JSON; do NOT
-hardcode model names in skill prompts.
+Use `scripts/resolve-dispatch.sh --role <role> --tree` for the actual
+model/mode JSON (the `--tree` flag selects the tree table above; `manager`
+refuses with exit 3 by design); do NOT hardcode model names in skill prompts.
 
 ---
 

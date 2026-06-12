@@ -64,9 +64,18 @@ Based on benchmark (2026-04-13, 90 runs, 10 real cases, 6 providers):
 
 > **Source**: R1 Amendment 11 (Board directive, 2026-06-12 dialectic).
 > Extends this file; does not change existing roles above.
-> Consumed by `scripts/resolve-doa.sh` (role → DOA preset).
-> `scripts/resolve-dispatch.sh` integration is deferred — see `docs/BACKLOG.md`
-> ("resolve-dispatch.sh tree-role integration").
+> Consumed by `scripts/resolve-doa.sh` (role → DOA preset) and
+> `scripts/resolve-dispatch.sh --tree` (role → model/mode JSON, v2.17.0).
+> Role vocabulary is shared between both scripts (same bare role names).
+
+```bash
+scripts/resolve-dispatch.sh --role implementer --tree
+# {"model":"sonnet","mode":"default","agent":"","table":"tree","source":"default"}
+scripts/resolve-dispatch.sh --role manager --tree
+# MANAGER_NOT_DISPATCHABLE (exit 3) — Amendment 11 enforced at the tool layer
+```
+Project overrides for tree roles use `tree:<role>` rows in
+`.claude/model-routing-config.md` (legacy bare-role rows never collide).
 
 All values below are **factory defaults, locally calibratable**.
 Per-tier token spend lands in the calibration report (P5 — `scripts/calibration.sh report`)

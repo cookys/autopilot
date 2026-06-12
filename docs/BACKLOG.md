@@ -156,11 +156,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix (Board review meeting; not a code task)
 - **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
 
-### resolve-dispatch.sh tree-role integration
-- **Trigger**: before P6 tree-adapter activation, OR when any skill needs model dispatch (model/mode) for tree roles (manager, sub-orchestrator, implementer, judge, synthesizer, etc.).
-- **Context**: Amendment 11 (2026-06-12) shipped the tree-role tier table in `references/model-routing.md`. The existing `implementer` role key in `resolve-dispatch.sh` conflicts with the new tree-implementer tier (tree-implementer maps to sonnet-class OR flash-class hetero, while the existing implementer maps to opus). The `resolve-doa.sh` script handles DOA presets for tree roles; `resolve-dispatch.sh` integration (model/mode dispatch) is deferred because the conflict and the per-role dispatch logic need design before P6 dogfood.
+### `.opencode/skills/` mirror is a stale manual snapshot (no sync script)
+- **Trigger**: next OpenCode-facing ship, OR a user reports OpenCode skill behavior diverging from CC (e.g. ceo-agent tree adapter missing under OpenCode).
+- **Context**: 2026-06-12 tree-role-dispatch P2 consumers sweep found `.opencode/skills/*` are tracked **copies** last synced 2026-05-22 (`bf0c637`) with no sync script (only agent bodies have `sync-agent-bodies.sh`). All skill edits since — including the entire v2.16.0 ceo-agent tree adapter — are absent from the mirror. Either add a `sync-opencode-skills.sh` (+ `--check` in pre-commit, like agent bodies) or document the mirror as point-in-time and regenerate per OpenCode release.
 - **Effort**: S
-- **Source**: R1 review round 1 Fix 3 (2026-06-12); `references/model-routing.md` §Tree roles.
+- **Source**: 2026-06-12 tree-role-dispatch P2 sweep.
 
 ### agy install symlinked-dest self-copy truncation — guard install script + upstream report
 - **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check `ls -la ~/.gemini/config/plugins/` for symlinks first), OR next S-size hardening slot.
@@ -173,6 +173,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)
+
+- **resolve-dispatch.sh tree-role integration** — ✅ shipped v2.17.0 (project `docs/projects/2026-06-12-tree-role-dispatch/`): `--tree` context flag (role vocabulary shared with `resolve-doa.sh`), `manager` refusal exit 3, `tree:<role>` override rows, sanitization + env seam parity with resolve-doa. Date 2026-06-12.
 
 - **agents/_bodies/*.body.md surface as dispatchable agents with NO tool allowlist** — ✅ fixed by relocating bodies out of the CC agent scan path, date 2026-06-11.
 - **Nested subagent (depth=5) integration** — ✅ shipped v2.14.0 (project `docs/projects/2026-06-11-nested-dispatch-integration/`). Both triggers fired 2026-06-11: CC v2.1.172 changelog ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)") + nest-probe green (explicit grant honored; children get `Agent` not `Task`; v2.1.170 negatives were server-side rollout lag). Landed with two upgrades over the original proposal: blind-dispatch rule is **context-indexed** ("verdict dispatch only from depth 0" — closes the fixer→verify-my-fix hole), and depth ≤ 2 policy has a single canonical home (`agents/README.md` § Orchestration). See CHANGELOG v2.14.0.

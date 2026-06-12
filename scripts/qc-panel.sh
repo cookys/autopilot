@@ -140,22 +140,29 @@ estimate_tokens_str() {
 # extract_last_json: grab the last {...} block from a string (handles narrative pollution)
 extract_last_json() {
   printf '%s' "$1" | python3 -c '
-import sys, json, re
+import sys, json
 text = sys.stdin.read()
-# Find all {...} candidates; pick the last valid JSON
-matches = list(re.finditer(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)?\}", text, re.DOTALL))
-for m in reversed(matches):
-    try:
-        json.loads(m.group())
-        print(m.group())
-        sys.exit(0)
-    except Exception:
-        pass
-# fallback: return the last braces-delimited line
+# Scan for the LAST parseable JSON object at any nesting depth: try every
+# "{" as a start and use raw_decode (regex approaches cap at fixed depth).
+decoder = json.JSONDecoder()
+best = None
+for i, ch in enumerate(text):
+    if ch == "{":
+        try:
+            obj, _ = decoder.raw_decode(text[i:])
+            best = json.dumps(obj)
+        except Exception:
+            pass
+if best is not None:
+    print(best)
+    sys.exit(0)
+# No parseable JSON anywhere: make the degradation VISIBLE, then emit the
+# last brace-line so the caller falls back to the deterministic verdict.
+print("qc-panel: extract_last_json found no parseable JSON; deterministic fallback will be used", file=sys.stderr)
 lines = [l.strip() for l in text.splitlines() if l.strip().startswith("{")]
 if lines:
     print(lines[-1])
-' 2>/dev/null || true
+' || true
 }
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -182,6 +189,9 @@ done
 # ── Preconditions ─────────────────────────────────────────────────────────────
 [ -n "$REPORT_FILE" ]  || die "--report is required"
 [ -r "$REPORT_FILE" ]  || die "report file not readable: $REPORT_FILE"
+# A corrupt report must be a loud precondition failure, not a silent skip —
+# the skip path exits 0 with no calibration sample (Amendment 4 bypass).
+jq -e . "$REPORT_FILE" >/dev/null 2>&1 || die "report file is not valid JSON: $REPORT_FILE"
 [ -n "$ARTIFACTS_RAW" ] || die "--artifacts is required"
 
 # Validate --proj and --node: reject values not matching ^[A-Za-z0-9][A-Za-z0-9._-]*$

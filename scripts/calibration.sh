@@ -195,6 +195,11 @@ cmd_report() {
   # Self-report-baseline counter (reported separately; excluded from graduation)
   local self_report_count=0
 
+  # Known-bad synthetic counters (subset of reviewer-baseline; broken out so
+  # the Board can see agreement-rate composition before graduation)
+  local known_bad_count=0
+  local known_bad_agreed=0
+
   if [ -f "$SAMPLES_FILE" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       [ -z "$line" ] && continue
@@ -219,6 +224,16 @@ cmd_report() {
       sample_count=$((sample_count + 1))
       [ "$agreed_val" = "true" ] && agreed_count=$((agreed_count + 1))
       [ -n "$tok" ] && token_total=$((token_total + tok))
+
+      # Known-bad synthetic subset breakout (source: "known-bad:<name>")
+      local src
+      src="$(printf '%s' "$line" | grep -o '"source":"[^"]*"' | cut -d'"' -f4)"
+      case "$src" in
+        known-bad:*)
+          known_bad_count=$((known_bad_count + 1))
+          [ "$agreed_val" = "true" ] && known_bad_agreed=$((known_bad_agreed + 1))
+          ;;
+      esac
 
       # false-pass-on-critical: panel=pass, authoritative=fail, class=critical
       if [ "$pv" = "pass" ] && [ "$av" = "fail" ] && [ "$cls" = "critical" ]; then
@@ -250,6 +265,10 @@ cmd_report() {
   if [ "$sample_count" -gt 0 ]; then
     agreement_rate="$(awk "BEGIN { printf \"%.4f\", $agreed_count / $sample_count }")"
   fi
+
+  # Known-bad subset rate
+  local known_bad_rate="null"
+  [ "$known_bad_count" -gt 0 ] && known_bad_rate="$(awk "BEGIN { printf \"%.4f\", $known_bad_agreed / $known_bad_count }")"
 
   # Per-class breakdown
   local crit_rate="null" maj_rate="null" min_rate="null"
@@ -294,6 +313,8 @@ cmd_report() {
   printf '{
   "sample_count": %d,
   "self_report_sample_count": %d,
+  "known_bad_sample_count": %d,
+  "known_bad_agreement_rate": %s,
   "agreement_rate": %s,
   "false_pass_on_critical": %d,
   "per_class": {
@@ -309,7 +330,8 @@ cmd_report() {
   }
 }
 ' \
-    "$sample_count" "$self_report_count" "$agreement_rate" \
+    "$sample_count" "$self_report_count" \
+    "$known_bad_count" "$known_bad_rate" "$agreement_rate" \
     "$false_pass_on_critical" \
     "$crit_total" "$crit_agreed" "$crit_rate" "$crit_false_pass" \
     "$maj_total"  "$maj_agreed"  "$maj_rate"  "$maj_false_pass" \

@@ -341,4 +341,11 @@ else
   fail "M4: no model records written by stub"
 fi
 
+# ── R3: corrupt (non-JSON) report file → exit 2, never a silent skip ─────────
+BAD_REPORT="$TEST_TMP/bad-report.json"
+printf 'this is { not valid json\n' > "$BAD_REPORT"
+"$SCRIPT" --report "$BAD_REPORT" --artifacts "$ARTIFACT" \
+  --out "$TEST_TMP/bad-out" >/dev/null 2>&1; BAD_EXIT=$?
+assert_eq "2" "$BAD_EXIT" "R3: corrupt report file exits 2 (precondition), not silent skip"
+
 finalize_test

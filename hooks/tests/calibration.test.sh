@@ -182,4 +182,18 @@ assert_eq "1" "$RKB_EXIT" "run-known-bad without --panel-cmd exits 1"
   --baseline bad-value 2>/dev/null; BL_EXIT=$?
 assert_eq "1" "$BL_EXIT" "invalid --baseline exits 1"
 
+# ── 16. report: known-bad subset broken out from overall agreement ────────────
+KB_DIR="$TEST_TMP/kb-breakout"
+CALIBRATION_DATA_DIR="$KB_DIR" "$SCRIPT" add-sample --panel-verdict fail \
+  --authoritative-verdict fail --class critical --source "known-bad:01-test" >/dev/null 2>&1
+CALIBRATION_DATA_DIR="$KB_DIR" "$SCRIPT" add-sample --panel-verdict pass \
+  --authoritative-verdict pass --source "real-review-1" >/dev/null 2>&1
+KB_REPORT="$(CALIBRATION_DATA_DIR="$KB_DIR" "$SCRIPT" report 2>/dev/null)"
+assert_eq "$(printf '%s' "$KB_REPORT" | jq -r '.known_bad_sample_count')" "1" \
+  "report: known_bad_sample_count counts only known-bad-sourced samples"
+assert_eq "$(printf '%s' "$KB_REPORT" | jq -r '.known_bad_agreement_rate')" "1.0000" \
+  "report: known_bad_agreement_rate computed over the subset"
+assert_eq "$(printf '%s' "$KB_REPORT" | jq -r '.sample_count')" "2" \
+  "report: known-bad samples still count in overall reviewer-baseline total"
+
 finalize_test

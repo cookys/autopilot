@@ -36,11 +36,12 @@ scripts/tree.sh board-status <proj>
 
 | Output | Mode | Meaning |
 |--------|------|---------|
-| `{"present":true,...}` | **Post-signoff (active)** | Tree is authoritative for decisions |
+| `.active == true` | **Post-signoff (active)** | Tree is authoritative for decisions (`present` AND `decision == "graduate"`) |
+| `.present == true`, `.active == false` | **Dual-run (shadow)** | A signoff event exists but its decision was not "graduate" (extend/abort) — recorded, NOT activating |
 | `null` / error | **Dual-run (shadow)** | Tree records in parallel; TaskCreate stays authoritative |
 
 > **Non-CC fallback**: if `scripts/tree.sh` is not available, scan the event log directly:
-> `jq 'select(.type=="board_signoff")' docs/projects/<proj>/tree/events.jsonl`
+> `jq 'select(.type=="board_signoff" and .decision=="graduate")' docs/projects/<proj>/tree/events.jsonl`
 > — non-empty output = post-signoff, empty/missing = shadow.
 
 **Dual-run mode**: emit lifecycle events as normal (§4), but continue using

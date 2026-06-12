@@ -43,8 +43,6 @@
 #   1  usage / validation error
 #   2  data store write failure
 #
-# shellcheck disable=SC2317  # functions referenced via variable
-
 set -uo pipefail
 
 # ── Graduation criteria (DATA — locally calibratable) ────────────────────────
@@ -123,11 +121,6 @@ append_sample() {
   }
 }
 
-# Extract the last JSON object from a string (handles narrative-polluted output)
-extract_last_json() {
-  printf '%s' "$1" | grep -o '{[^}]*}' | tail -1
-}
-
 # ── add-sample ────────────────────────────────────────────────────────────────
 
 cmd_add_sample() {
@@ -156,6 +149,11 @@ cmd_add_sample() {
 
   if [ -n "$outcome" ]; then
     case "$outcome" in ok|defect-found) ;; *) die "add-sample: --outcome must be ok or defect-found" ;; esac
+  fi
+  if [ -n "$tokens" ]; then
+    case "$tokens" in
+      ''|*[!0-9]*) die "add-sample: --tokens must be a non-negative integer" ;;
+    esac
   fi
   if [ -n "$class" ]; then
     case "$class" in critical|major|minor) ;; *) die "add-sample: --class must be critical|major|minor" ;; esac

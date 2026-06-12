@@ -15,7 +15,8 @@
 #   report <proj> <node>               Print node report JSON
 #   escalations <proj>                 List open escalations as JSON array
 #   fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
-#   board-status <proj>                Print board_signoff index object ({present,ts,authorized_by} or null)
+#   board-status <proj>                Print board_signoff index object or null;
+#                                      gate on .active (present AND decision=="graduate")
 #
 # Event envelope (minimal, validated by emit):
 #   schema_version  (integer)
@@ -459,7 +460,10 @@ cmd_rebuild_index() {
       elif $ev.type == "manager_raw_read" then
         .nodes[$ev.node].raw_reads = ((.nodes[$ev.node].raw_reads // []) + [$ev.ts])
       elif $ev.type == "board_signoff" then
-        .board_signoff = {present: true, ts: $ev.ts, authorized_by: ($ev.authorized_by // null)}
+        .board_signoff = {present: true, ts: $ev.ts,
+                          authorized_by: ($ev.authorized_by // null),
+                          decision: ($ev.decision // null),
+                          active: (($ev.decision // "") == "graduate")}
       else .
       end
     ) |
@@ -474,7 +478,6 @@ cmd_rebuild_index() {
     } |
 
     # Ensure board_signoff defaults to null when no event was seen
-    if .board_signoff == null then . else . end |
     .board_signoff //= null
     ')"
 
@@ -673,7 +676,9 @@ cmd_board_status() {
   local index_file; index_file="$(proj_index_file "$proj")"
   [ -f "$index_file" ] || { log_err "index not found after rebuild attempt"; exit 1; }
 
-  # Print the board_signoff index object (null when absent)
+  # Print the board_signoff index object (null when absent). The authority
+  # gate is the .active field: present AND decision=="graduate". A signoff
+  # event with any other decision (abort/extend) is recorded but NOT active.
   jq -r '.board_signoff' "$index_file"
 }
 
@@ -682,7 +687,7 @@ cmd_board_status() {
 # ---------------------------------------------------------------------------
 
 show_help() {
-  sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------------------

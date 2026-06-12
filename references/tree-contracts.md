@@ -191,7 +191,7 @@ the P6 adapter post-signoff activation is blocked.**
 | Payload field | Type | Required | Notes |
 |---------------|------|----------|-------|
 | `authorized_by` | string | yes | The Board identity granting signoff (e.g. user handle or role) |
-| `decision` | string | yes | Must be `"graduate"` — the only accepted decision value |
+| `decision` | string | yes | The Board's decision. ONLY `"graduate"` activates post-signoff mode; any other value (e.g. `"extend"`, `"abort"`) is recorded but the gate's `active` field stays `false`. Per-type emit validation is not yet wired (tree.sh validates the envelope only), so enforcement lives in the index fold + `board-status` consumers — gate on `.active`, never on `.present` alone |
 | `scope` | string | no | Optional human-readable scope qualifier (e.g. `"p5-graduation-criteria-met"`) |
 
 The full event envelope (§2 — `schema_version`, `ts`, `node`, `type`) is required
@@ -212,7 +212,9 @@ Example:
 ```
 
 The index fold records this event at the top level as
-`board_signoff: {present: true, ts, authorized_by}` (or `null` when absent).
+`board_signoff: {present: true, ts, authorized_by, decision, active}` (or
+`null` when absent). `active` is `true` only when `decision == "graduate"` —
+it is THE authority-gate field; `present` alone is not sufficient.
 Use `scripts/tree.sh board-status <proj>` to inspect.
 
 ---
@@ -330,7 +332,7 @@ read `index.json` directly.
 | `events_hash` | string | SHA256 of all valid complete events (determinism signal) |
 | `event_count` | integer | Number of valid complete events processed |
 | `truncated_tail` | object or null | Tombstone for a partial last line; see §7 |
-| `board_signoff` | object or null | `{present: true, ts, authorized_by}` when a `board_signoff` event exists; `null` otherwise. Use `tree.sh board-status <proj>` to read. |
+| `board_signoff` | object or null | `{present: true, ts, authorized_by, decision, active}` when a `board_signoff` event exists; `null` otherwise. `active` = (`decision == "graduate"`) is the authority gate. Use `tree.sh board-status <proj>` to read. |
 | `nodes` | object | Map of `node_id → node_state` |
 | `escalations` | array | Top-level list of all escalation objects (open and resolved) |
 | `decisions` | array | Top-level list of all decision forks (open and resolved) |

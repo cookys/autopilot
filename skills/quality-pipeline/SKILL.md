@@ -44,7 +44,7 @@ All scripts: `<script> --help` for usage; deterministic exit codes; JSON output 
 
 ### Shadow QC panel (task-tree engine)
 
-When `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MAY run `scripts/qc-panel.sh` in parallel with the authoritative reviewer. The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
+When `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MUST run `scripts/qc-panel.sh` in parallel with the authoritative reviewer (Amendment 4: a silently-dead shadow fails the gate). The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
 
 ```
 IF docs/projects/<proj>/tree/ exists AND node report has verdict != null:

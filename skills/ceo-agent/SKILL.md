@@ -345,9 +345,10 @@ this project. Check at startup and at each phase boundary.
 scripts/tree.sh board-status <proj>
 ```
 - `null` output (or error) → **dual-run (shadow)**: emit lifecycle events; TaskCreate stays authoritative.
-- `{"present":true,...}` → **post-signoff (active)**: decisions flow from `scripts/tree.sh next-decision`.
+- `.active == true` (present AND `decision == "graduate"`) → **post-signoff (active)**: decisions flow from `scripts/tree.sh next-decision`.
+- `.present == true` but `.active == false` (e.g. decision was extend/abort) → stay in **dual-run**; the signoff is recorded but does not activate.
 
-> Non-CC fallback: `jq 'select(.type=="board_signoff")' docs/projects/<proj>/tree/events.jsonl` (empty = shadow).
+> Non-CC fallback: `jq 'select(.type=="board_signoff" and .decision=="graduate")' docs/projects/<proj>/tree/events.jsonl` (empty = shadow).
 
 **Post-signoff decision loop** (replaces TaskCreate-driven loop):
 1. `scripts/tree.sh next-decision <proj>` → compact JSON `{node, question, options[], evidence_pointers[]}`. This is the manager's ONLY default input.

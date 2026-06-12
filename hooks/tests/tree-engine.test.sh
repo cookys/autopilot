@@ -489,6 +489,18 @@ assert_eq "$BS_PRESENT" "true" "board-status: index.board_signoff.present=true"
 BS_AUTH="$(jq -r '.board_signoff.authorized_by' "$PROJECTS/bsig/tree/index.json")"
 assert_eq "$BS_AUTH" "board" "board-status: index.board_signoff.authorized_by=board"
 
+# 10.3b decision=="graduate" → active=true (the authority-gate field)
+BS_ACTIVE="$(jq -r '.board_signoff.active' "$PROJECTS/bsig/tree/index.json")"
+assert_eq "$BS_ACTIVE" "true" "board-status: decision=graduate sets active=true"
+
+# 10.3c a non-graduate decision is recorded but NOT active (gate stays closed)
+tree init bsig2 2>/dev/null
+EXTEND_EV="{\"schema_version\":1,\"ts\":\"2026-07-01T12:00:00Z\",\"node\":\"root\",\"type\":\"board_signoff\",\"authorized_by\":\"board\",\"decision\":\"extend\"}"
+tree emit bsig2 root "$EXTEND_EV" 2>/dev/null
+BS2="$(tree board-status bsig2 2>/dev/null)"
+assert_contains "$BS2" '"present": true' "board-status: extend decision still recorded (present=true)"
+assert_eq "$(printf '%s' "$BS2" | jq -r '.active')" "false" "board-status: extend decision does NOT activate (active=false)"
+
 # 10.4 board-status auto-rebuilds when index is stale (like other read subcommands)
 rm -f "$PROJECTS/bsig/tree/index.json"
 BS_REBUILT="$(tree board-status bsig 2>/dev/null)"

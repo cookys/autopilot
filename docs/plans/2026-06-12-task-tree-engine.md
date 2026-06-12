@@ -126,6 +126,19 @@ These amend the phases above; where they conflict, amendments win.
 8. **depth policy**: no revision in v1 — manager(0) → sub-orchestrator(1) → worker(2) already fits depth ≤ 2. If P6 dogfood demonstrates a real depth-3 need, propose a named bound (≤3) + escalation rule as a separate Board decision. The spec's "needs revision" note is superseded by this.
 9. **KR1 anti-gaming**: KR1 is measured by post-hoc transcript audit (retro-style scan of the manager session for work-product reads outside `fetch --raw`), performed by the P6 reviewer — not self-reported. P4 shadow period also logs a manager-read **before-baseline** so P6 reports a delta, not an absolute claim.
 10. **Dependency map updated**: P0 ∥ P1 → {P2 ∥ P3} → P4 → P5 → P6 → P7.
+11. **Model-routing economy (Board directive)**: the top-tier model (Fable-class) is reserved for the **manager at depth 0 and explicit escalations only** — it is never dispatched as a delegate. Routing table ships in P3 alongside DOA presets (extends `references/model-routing.md` / `resolve-dispatch.sh`, same config-override pattern):
+
+    | Tree role | Default tier | Rationale |
+    |---|---|---|
+    | Manager (depth 0) | **Fable-class** | Smallest context by design (decision-shaped only); highest per-token leverage |
+    | Fable escalation triggers | — | ONLY: top-fork adjudication, panel-dissent arbitration, DOA setting/changes, Board interface. Everything else never reaches Fable |
+    | Sub-orchestrator (depth 1) | opus/sonnet-class | Absorbs sub-decisions; DOA-bounded |
+    | Planner / researcher | sonnet-class | Existing routing default unchanged |
+    | Implementer | sonnet-class or hetero flash-class (Gemini) | Cost arbitrage proven (`references/hetero-dispatch.md`); closed-spec tasks |
+    | QC panel judges | **flash/haiku-class, cross-family** | PoLL evidence: panels of small judges beat a single large judge at ~1/7 cost — cheap judges are the design, not a compromise |
+    | Synthesizer | deterministic script + haiku-class pass | Merge is mechanical; judgment already happened |
+
+    Factory defaults, locally calibratable like every other number (calibration report includes per-tier token spend so the routing itself is auditable).
 
 ## Review log
 

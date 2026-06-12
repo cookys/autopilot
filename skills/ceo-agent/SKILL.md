@@ -375,6 +375,7 @@ See `references/model-routing.md` §"Tree roles".
 | [`references/tree-contracts.md`](../../references/tree-contracts.md) | Event schemas, node report contract, invariants |
 | [`scripts/tree.sh`](../../scripts/tree.sh) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw`, `board-status` |
 | [`scripts/resolve-doa.sh`](../../scripts/resolve-doa.sh) | Role/tier → DOA preset JSON |
+| [`scripts/check-node-report.sh`](../../scripts/check-node-report.sh) | Validate a delegate's node report before accepting it: schema + evidence-pointer resolution + artifact sha256 |
 
 ## Anti-patterns
 

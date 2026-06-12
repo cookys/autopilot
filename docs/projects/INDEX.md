@@ -8,12 +8,12 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-06-12 | [task-tree-engine](2026-06-12-task-tree-engine/README.md) | v2.16.0 | `feat/task-tree-engine` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-12 | [task-tree-engine](_archive/2026-06-12-task-tree-engine/README.md) | v2.16.0 | [`569a8b2`](../../../../commit/569a8b2) | [plan](../plans/2026-06-12-task-tree-engine.md) |
 | 2026-06-11 | agy-incident-knowledge (S-size; recovery recipe inlined + sourceable shell guard — no project dir, see CHANGELOG) | v2.15.3 | [`56c7c2a`](../../../../commit/56c7c2a) | (CHANGELOG entry) |
 | 2026-06-11 | agy-export-then-install (S-size; structural workaround — agy never sees the live repo — no project dir, see CHANGELOG) | v2.15.2 | [`a2c89de`](../../../../commit/a2c89de) | (CHANGELOG entry) |
 | 2026-06-11 | agy-install-guard (S-size; data-loss preflight in install-antigravity scripts after the symlink self-copy incident — no project dir, see CHANGELOG) | v2.15.1 | [`cc0e0cf`](../../../../commit/cc0e0cf) | (CHANGELOG entry) |

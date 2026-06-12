@@ -1,6 +1,6 @@
 # Plan — Task-Tree Engine v1 (delegated orchestration core)
 
-> **Status**: Draft — pending dialectic review (R2S Phase 3)
+> **Status**: ✅ Shipped in v2.16.0 — merged as 569a8b2 (2026-06-12)
 > **Owner**: CEO mode (involvement 3), Board = user
 > **Branch**: `feat/task-tree-engine` (off develop, created at R2S Phase 4)
 > **Frame**: research-to-ship; Phase 0 spec `2026-06-12-task-tree-engine-design-spec.md` (approved); Phase 1 survey folded in below.

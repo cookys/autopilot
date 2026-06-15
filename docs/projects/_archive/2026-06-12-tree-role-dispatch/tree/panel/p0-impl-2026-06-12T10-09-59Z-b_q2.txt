@@ -1,9 +1,0 @@
-EXTRA: Added a calibration vocabulary bridge in `scripts/qc-panel.sh` to map free-form verdicts (e.g., "approved", "approve", "lgtm" to "pass"; "fail", "rejected", "reject" to "fail") before judges are run, along with corresponding integration tests in `hooks/tests/qc-panel.test.sh`.
-EXTRA: Implemented input validation in `scripts/qc-panel.sh` to fail with a named `VERDICT_UNMAPPABLE` liveness error (exiting 1) on stderr for unmappable verdicts.
-EXTRA: Implemented regex-safe role name escaping (specifically handling dot characters) in grep patterns inside `scripts/resolve-dispatch.sh` beyond the stated basic sanitization.
-EXTRA: Added resilience hardening in `scripts/resolve-dispatch.sh` to ensure malformed override files fall back gracefully to defaults and print a warning rather than crashing.
-EXTRA: Added support for the `MODEL_ROUTING_CONFIG_OVERRIDE` environment variable seam in `scripts/resolve-dispatch.sh` to facilitate testing of override paths.
-EXTRA: Created a detailed project README at `docs/projects/2026-06-12-tree-role-dispatch/README.md` detailing OKRs, design decisions, a phases table, and an L-1.5 scope audit.
-EXTRA: Created a task-tree dogfooding tracking and dual-run shadow setup, including `tree/events.jsonl` and node reports.
-EXTRA: Documented and added a dedicated tree roles section to `project-config-template/model-routing-config.md`.
-EXTRA: Discovered and documented a new backlog item in `docs/BACKLOG.md` regarding the stale `.opencode/skills/` manual snapshot mirror.

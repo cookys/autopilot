@@ -86,6 +86,13 @@ emit_preset_json() {
     cloud-high-trust)
       r="autonomous"; rev="autonomous"; ext="logged"; irr="escalate"
       ;;
+    cloud-cautious)
+      # Like cloud-high-trust but escalates external actions (push, PR comment,
+      # open issue) too — for projects touching production systems / sensitive
+      # data where outward-facing actions warrant a human gate, while local
+      # reversible work (edit, commit, test) stays autonomous.
+      r="autonomous"; rev="autonomous"; ext="escalate"; irr="escalate"
+      ;;
     local-low-trust)
       r="autonomous"; rev="escalate"; ext="escalate"; irr="escalate"
       ;;

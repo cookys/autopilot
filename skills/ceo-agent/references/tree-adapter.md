@@ -248,6 +248,15 @@ finish-flow L-5.5 moves the project under `_archive/` the tree is **read-only**.
 Emit every node's final `verdict` (including the closing node's) BEFORE the
 archive move (2026-06-12 dogfood divergence).
 
+**Panel artifact hygiene**: a qc-panel run writes a per-run verdict `.json` plus
+six raw judge transcripts (`<node>-<ts>-[ab]_q<n>.txt`) under `tree/panel/`.
+**Only the verdict JSON and the calibration sample are tracked** — the raw judge
+`.txt` are tertiary work product (the manager isn't even meant to read them
+directly under KR1) and are gitignored (`docs/projects/**/tree/panel/*_q[0-9].txt`).
+qc-panel normally writes them to a temp dir anyway; do not hand-copy them into a
+committed project tree. This keeps tree-by-default from dumping ~20 disposable
+LLM transcripts into every L-ship's project dir.
+
 After init, emit the root node:
 ```bash
 scripts/tree.sh emit <proj> root \

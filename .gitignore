@@ -19,3 +19,8 @@ skill-creator-workspace/results/*/2026-05-14_154034/
 docs/projects/**/tree/index.*
 # Ephemeral flock sidecar created by tree.sh locked_append.
 docs/projects/**/tree/events.jsonl.lock
+# QC-panel raw judge transcripts (tree/panel/<node>-<ts>-[ab]_q<n>.txt) are
+# tertiary work product — the manager isn't even meant to read them directly
+# (KR1). Only the per-run verdict JSON + the calibration sample carry the
+# auditable signal, and those stay tracked. ** so _archive/<proj>/ is covered.
+docs/projects/**/tree/panel/*_q[0-9].txt

@@ -1,9 +1,0 @@
-EXTRA: Created comprehensive project README (`docs/projects/2026-06-12-tree-role-dispatch/README.md`) with OKR, design decision rationale, phases table, and L-1.5 scope completeness audit — substantially beyond the implementation requirement.
-
-EXTRA: Initialized task-tree dogfood tracking (`docs/projects/2026-06-12-tree-role-dispatch/tree/events.jsonl` with 7 events and a node_report JSON artifact) — not part of stated P0-P2 deliverables, part of "dual-run shadow mode" experiment.
-
-EXTRA: Added regex-safe `ROLE_RE="${ROLE//./\\.}"` escaping for dot characters in role names before interpolating into `grep -iE` patterns — defensive hardening beyond the stated input-sanitization scope.
-
-EXTRA: Extended `project-config-template/model-routing-config.md` with new "Tree roles" section documenting the `tree:<role>` override syntax and example rows — template documentation beyond P2 "docs reconciliation."
-
-EXTRA: Discovered and documented a NEW BACKLOG item (`.opencode/skills/ mirror is a stale manual snapshot`) during the P2 "consumers sweep" — widened scope by identifying a sibling maintenance gap.

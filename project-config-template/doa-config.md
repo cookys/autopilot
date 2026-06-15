@@ -105,6 +105,12 @@ this file in your project's `.claude/doa-config.md`:
 The `--role` + `--tier` pair is matched against override rows first; if no row matches,
 the model-tier → preset default mapping applies.
 
+**Which `.claude/doa-config.md` is read?** Resolution order:
+`$DOA_CONFIG_OVERRIDE` → `$PWD/.claude/doa-config.md` → `$REPO_ROOT/.claude/doa-config.md`.
+Under a plugin install, `REPO_ROOT` is the autopilot install dir — so "your project's"
+config is found via the current working directory (`$PWD`), i.e. the project you are
+actually working in. Set `$DOA_CONFIG_OVERRIDE` only to force a specific file.
+
 ## Fail-Closed Guarantee
 
 Unknown role **or** unknown model tier → all four action classes resolve to `escalate`

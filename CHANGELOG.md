@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.17.2 — remove `.opencode/skills/` leftover (drift surface, not a mirror)
+
+**Headline**: deletes the 16 tracked `.opencode/skills/*` copies. They were a `bf0c637` (2026-05-22) leftover that the multi-agent-portability-correction plan already decided to remove (step 24) but never executed — OpenCode discovers all 19 skills through the canonical `.agents/skills/ → ../skills` symlink, which `preflight-portability.sh` check #11 verifies live (`opencode debug skill`). The copies had silently drifted (14/16 stale, 3 skills missing) because nothing kept them in sync, and a sync script would only have perpetuated the duplication the architecture was built to avoid. No behavior change: the README already points OpenCode users at `.agents/skills/`.
+
+### Removed
+- `.opencode/skills/` (16 skill copies) — redundant with the `.agents/skills/` symlink; eliminates the drift-surface class entirely.
+
+### Verified
+- `scripts/preflight-portability.sh` → 12/12 post-deletion, incl. check #11 (OpenCode discovers skills via `.agents/skills/`) and #8 (symlink resolves).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (restores the copies; harmless but reintroduces the drift surface)
+
 ## v2.17.1 — qc-panel node-scope rule + tree-by-default for CEO L-tasks
 
 **Headline**: closes the two operational gaps the v2.17.0 dogfood surfaced. (1) QC-panel judges now get an explicit **node-scope rule** — judge the node's own question/claims, never project-lifecycle steps (merge / gates / archiving) — fixing the systematic `fail` verdicts both live calibration samples showed on mid-flight nodes; calibration sampling becomes signal instead of a known artifact. (2) `tree.sh init` becomes the **default** in ceo-agent L-size project setup (Board directive 2026-06-12) so shadow calibration samples and the audit trail accumulate on every CEO L-ship; TaskCreate remains authoritative — zero authority change.

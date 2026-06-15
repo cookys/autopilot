@@ -162,12 +162,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: 2026-06-12 tree-role-dispatch pre-merge review (🔵 Suggestion 2).
 
-### `.opencode/skills/` mirror is a stale manual snapshot (no sync script)
-- **Trigger**: next OpenCode-facing ship, OR a user reports OpenCode skill behavior diverging from CC (e.g. ceo-agent tree adapter missing under OpenCode).
-- **Context**: 2026-06-12 tree-role-dispatch P2 consumers sweep found `.opencode/skills/*` are tracked **copies** last synced 2026-05-22 (`bf0c637`) with no sync script (only agent bodies have `sync-agent-bodies.sh`). All skill edits since — including the entire v2.16.0 ceo-agent tree adapter — are absent from the mirror. Either add a `sync-opencode-skills.sh` (+ `--check` in pre-commit, like agent bodies) or document the mirror as point-in-time and regenerate per OpenCode release.
-- **Effort**: S
-- **Source**: 2026-06-12 tree-role-dispatch P2 sweep.
-
 ### agy install symlinked-dest self-copy truncation — guard install script + upstream report
 - **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check `ls -la ~/.gemini/config/plugins/` for symlinks first), OR next S-size hardening slot.
 - **Context**: 2026-06-11 incident, **mechanism CONFIRMED by sandboxed repro same day** (repro spike ✅ done): `agy plugin install` follows a symlinked destination `~/.gemini/config/plugins/<name>` and self-copies — open+truncate "dest" (= source through the symlink), read back empty, write 0 bytes, file after file. Sandbox: symlinked dest → 1497 files zeroed + `.git/HEAD` destroyed. Incident = legacy symlink from the 5/29 agy-1.0.1 era; the first (failed) install truncated 55 files before dying on read-only `.git` object `008efd…` (same object in sandbox — deterministic walk); uninstall/reinstall exonerated (all 4 sandbox control phases clean). Hazard + guards documented in `references/multi-agent-portability.md` § agy spike.
@@ -179,6 +173,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)
+
+- **`.opencode/skills/` stale mirror** — ✅ RESOLVED v2.17.2 by **deletion, not a sync script**. The 2026-06-12 entry mischaracterized it as a mirror needing sync; investigation found `.opencode/skills/*` was a `bf0c637` (2026-05-22) leftover the portability-correction plan already decided to remove (`docs/plans/2026-05-22-multi-agent-portability-correction.md` step 24: "把 `.opencode/skills/*` 整個目錄移除", rationale §I1 "多一條 = 多一條 drift surface"). OpenCode discovers all 19 skills via the `.agents/skills/ → ../skills` symlink — confirmed live by `preflight-portability.sh` check #11 (`opencode debug skill`) post-deletion. Building a sync script would have perpetuated the duplication the architecture was designed to avoid. Date 2026-06-15.
 
 - **resolve-dispatch.sh tree-role integration** — ✅ shipped v2.17.0 (project `docs/projects/2026-06-12-tree-role-dispatch/`): `--tree` context flag (role vocabulary shared with `resolve-doa.sh`), `manager` refusal exit 3, `tree:<role>` override rows, sanitization + env seam parity with resolve-doa. Date 2026-06-12.
 

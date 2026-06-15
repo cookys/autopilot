@@ -46,6 +46,21 @@ identity and full reasoning capability. Factory default for these model tiers.
 | external (tier 3) | logged |
 | irreversible (tier 4) | escalate |
 
+### `cloud-cautious`
+
+Like `cloud-high-trust`, but **escalates `external` actions too** (push, PR comment,
+open issue, send notification). Intended for projects that touch production systems
+or sensitive data, where any outward-facing action warrants a human gate — while
+local reversible work (edit, commit on feature branch, run tests) stays autonomous.
+Not a default for any model tier; select it explicitly via a Project Override row.
+
+| Action class | Policy |
+|-------------|--------|
+| read_only (tier 1) | autonomous |
+| reversible (tier 2) | autonomous |
+| external (tier 3) | escalate |
+| irreversible (tier 4) | escalate |
+
 ### `local-low-trust`
 
 Intended for local/flash-class models (flash-tier, haiku-tier, local LLMs) where

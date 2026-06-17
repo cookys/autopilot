@@ -41,3 +41,28 @@ if ! ./scripts/sync-agent-bodies.sh --check >/dev/null 2>&1; then
   echo "  ./scripts/sync-agent-bodies.sh && git add .opencode/agent-bodies/" >&2
   exit 1
 fi
+
+# --- blind-dispatch.md issue-ref anti-rot grep (P1) ---
+# The "Clarifying questions survive auto-approve" subsection cites the two codex
+# issues that establish the auto-approve-vs-question distinction. If a reword
+# drops them, the claim loses its provenance. Keep this assertion in lockstep
+# with that subsection.
+if ! grep -q 'issues/10187' references/blind-dispatch.md || ! grep -q 'issues/2138' references/blind-dispatch.md; then
+  echo "pre-commit: references/blind-dispatch.md lost a required issue ref (#10187 and/or #2138)" >&2
+  exit 1
+fi
+
+# --- canonical cross-file invariant check (P2) ---
+# Guards invariants the byte-for-byte mirror checks can't see (files intentionally
+# not byte-equal): repeated severity vocabulary + reviewer→code-review reference anchor.
+if ! ./scripts/check-canonical-invariants.sh >/dev/null 2>&1; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-commit: canonical cross-file invariant broken" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  ./scripts/check-canonical-invariants.sh >&2 || true
+  echo "" >&2
+  echo "To fix: restore the missing phrase/anchor, OR if you reworded a guarded rule," >&2
+  echo "update the inline seed table in scripts/check-canonical-invariants.sh in the" >&2
+  echo "SAME commit (see the script header's same-commit ritual)." >&2
+  exit 1
+fi

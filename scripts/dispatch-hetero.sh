@@ -25,15 +25,32 @@
 #
 # OUTPUT: one JSON object on stdout (agent stdout goes to a log file, never
 # stdout — keeps the JSON parseable):
-#   { "status": "committed" | "no_commit" | "dirty" | "precondition_failed",
+#   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
+#               | "precondition_failed",
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null" }
 #
-# EXIT: 0 = agent committed and left a clean tree (worktree removed unless
-#           --keep-worktree; the branch survives for review/merge)
-#       1 = agent ran but produced no commit, or left a dirty tree
-#           (worktree KEPT for inspection — clean up with `git worktree remove`)
+# OUTCOME states (the no-commit case is split by HOW the worker ended so a legit
+# no-op task is not confused with a stalled/paused one — see
+# references/hetero-dispatch.md § "Outcome states"):
+#   committed          — new commit + clean tree + agent exit 0 → success.
+#   dirty              — new commit but tree left uncommitted-dirty → failure.
+#   no_op              — exit 0, no new commit → agent legitimately judged
+#                        nothing was needed; NOT a failure of the dispatch.
+#   question_suspected — timeout or non-zero exit, no new commit → worker likely
+#                        paused on a clarifying question (auto-approve does NOT
+#                        silence the model's own question — see
+#                        references/blind-dispatch.md § "Clarifying questions
+#                        survive auto-approve") or otherwise stalled.
+#   CLI-agnostic: reuses the git read + the already-captured AGENT_EXIT, adds
+#   ZERO stream parsing.
+#
+# EXIT: 0 = committed (new commit + clean tree + agent exit 0; worktree removed
+#           unless --keep-worktree; the branch survives for review/merge)
+#       1 = ran but did not yield a reviewable clean commit — one of: dirty,
+#           no_op, question_suspected (worktree KEPT for inspection — clean up
+#           with `git worktree remove`)
 #       2 = precondition failure (nothing was created)
 
 set -uo pipefail
@@ -115,16 +132,35 @@ if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
 fi
 
-if [ "$HEAD_SHA" != "$BASE_SHA" ] && [ -z "$DIRTY" ]; then
-  if [ "$KEEP" = "0" ]; then
-    git worktree remove --force "$WT" >/dev/null 2>&1 && WT=""
+if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+  # --- a new commit exists ---
+  if [ -n "$DIRTY" ]; then
+    # committed but left the tree dirty → failure regardless of exit code
+    emit "dirty" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"
+    exit 1
+  elif [ "$AGENT_EXIT" -ne 0 ]; then
+    # clean commit but the worker exited non-zero — NOT scored success (KR1):
+    # the abnormal exit means the run can't be trusted as a clean implementation.
+    emit "failure" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"
+    exit 1
+  else
+    # new commit + clean tree + agent exit 0 → the only success path
+    if [ "$KEEP" = "0" ]; then
+      git worktree remove --force "$WT" >/dev/null 2>&1 && WT=""
+    fi
+    emit "committed" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" ""
+    exit 0
   fi
-  emit "committed" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" ""
-  exit 0
-elif [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  emit "dirty" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"
-  exit 1
 else
-  emit "no_commit" "" 0 0 0 "$WT" "agent produced no commit (agent exit $AGENT_EXIT); worktree kept"
-  exit 1
+  # --- no new commit: split by HOW the worker ended ---
+  if [ "$AGENT_EXIT" -eq 0 ]; then
+    # clean exit, nothing committed → agent legitimately decided nothing was needed
+    emit "no_op" "" 0 0 0 "$WT" "agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"
+    exit 1
+  else
+    # timeout or non-zero exit, nothing committed → likely paused on a clarifying
+    # question (auto-approve does not silence the model's own question) or stalled
+    emit "question_suspected" "" 0 0 0 "$WT" "agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"
+    exit 1
+  fi
 fi

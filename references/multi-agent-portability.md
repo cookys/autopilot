@@ -17,6 +17,7 @@ Last verified: 2026-06-12 (P0 spikes: CC task persistence on `claude` 2.1.175 + 
 | Plugin env vars | `CLAUDE_PLUGIN_ROOT` (in hook commands; [issue #27145](https://github.com/anthropics/claude-code/issues/27145)) | none injected; plugins receive `{ project, client, $, directory, worktree }` as context argument ([docs](https://opencode.ai/docs/plugins/)) | `CODEX_HOME` (defaults to `~/.codex/`); **no** `CODEX_PLUGIN_ROOT` | unverified — `agy plugin validate/install` don't reveal runtime hook env injection (would need to observe a hook process spawned by agy) |
 | Plugin CLI | n/a (loaded at install) | n/a (auto-discovered) | n/a | `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — verified agy 1.0.1. `validate <path>` + `install <path>` both exit `[ok]` on this repo. |
 | Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | n/a (no per-event hook surface beyond MCP server lifecycle) | imports Claude Code `hooks.json`; runtime event-firing behavior unverified |
+| **Capability tier** | **full-plugin** (skills + agents + hooks load natively) | **full-plugin** (skills via `.agents/skills/`, agent bodies via `{file:..}`, plugin hooks in-process) | **instruction-tier** (skills discovered; no autopilot hook/agent runtime — methodology travels as prompt/skill text) | **instruction-tier** (skills do NOT load in `-p`; methodology must travel inside the prompt — see § agy spike; interactive-mode untested) |
 
 ### Things explicitly NOT verified
 
@@ -32,6 +33,13 @@ Empirical `agy` 1.0.1 testing (2026-05-29) overturned earlier claims in this doc
 - **`agy plugin validate <path>` EXISTS** and exits `[ok]` on this repo (16 skills / 5 agents / 25 hooks processed). The earlier "not in the subcommand list" claim came from a possibly-stale [deepwiki](https://deepwiki.com/google-antigravity/antigravity-cli/2-getting-started) source. The original PM commit's `agy plugin validate .` instruction was correct.
 - **Root `plugin.json` is required by `agy plugin validate`** — removing it yields `Error: missing plugin.json`. So root `plugin.json` is NOT merely npm/GitHub metadata (as a later edit claimed) — it has a real consumer.
 - `agy plugin` full subcommand set (verified): `validate, install, uninstall, list, enable, disable, import, link`.
+
+### Headless auto-approve flags — corrections (2026-06-17 survey)
+
+The capability tier above hinges on whether a platform can run a worker non-interactively; that requires a real auto-approve flag. Two corrections from the survey, each tagged with its verification state per `[[feedback_spike-before-assert]]` — assert only what's cited or run:
+
+- **Gemini `--yolo` / `--approval-mode=yolo` — REAL.** Present in the Gemini CLI source (`config.ts` approval-mode handling) but **omitted from the headless-mode docs**, so prior autopilot notes that only listed `--dangerously-skip-permissions` (Claude) and agy's flag were incomplete. This is the Gemini-CLI analogue of CC's `--dangerously-skip-permissions`. *Caveat (P1): like every auto-approve flag, it suppresses tool-authorization prompts only — NOT the model's own clarifying question (see [`blind-dispatch.md`](blind-dispatch.md) § "Clarifying questions survive auto-approve").*
+- **`kiro-cli chat --classic` subcommand form — UNVERIFIED.** Seen referenced but not confirmed against a real `kiro-cli` run or an official doc URL. **Do not encode in code or rely on the `--classic` form** until a spike or a doc citation confirms it. Spike candidate, not a fact.
 
 ### Verified by Spike (Phase 3, OpenCode 1.15.10)
 

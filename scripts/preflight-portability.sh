@@ -117,6 +117,40 @@ check_validate_skills() {
   "$REPO/scripts/validate.sh" >/dev/null 2>&1
 }
 
+# ─── 8b. adapter targets CARRY the invariant, not merely resolve ───
+# Hardening beyond check #8 (symlink resolves): for each adapter that points at a
+# shared file, assert the RESOLVED target actually CONTAINS a named invariant — a
+# stubbed/empty/wrong-content file that still resolves must FAIL. Modeled after
+# ponytail tests/gemini-extension.test.js ("contextFileName resolves to a file that
+# carries the rules"). ≥2 seeded (adapter-target, phrase) pairs so a single stubbed
+# assertion can't be the whole check. Each skill is reached THROUGH the .agents/skills
+# symlink (the cross-platform adapter), and its SKILL.md must carry its own
+# `name:` frontmatter value.
+check_adapter_targets_carry_invariant() {
+  local base="$REPO/.agents/skills"
+  [ -d "$base" ] || { echo "  (.agents/skills not resolvable)"; return 1; }
+  # seed table: skill dir → the exact frontmatter line its SKILL.md must contain
+  local -a seeds=(
+    "dev-flow|name: dev-flow"
+    "quality-pipeline|name: quality-pipeline"
+  )
+  local pair skill phrase target ok=0
+  for pair in "${seeds[@]}"; do
+    skill="${pair%%|*}"
+    phrase="${pair##*|}"
+    target="$base/$skill/SKILL.md"
+    if [ ! -f "$target" ]; then
+      echo "  adapter target missing: .agents/skills/$skill/SKILL.md"
+      ok=1; continue
+    fi
+    if ! grep -Fq -- "$phrase" "$target"; then
+      echo "  adapter target resolves but lacks invariant: $skill/SKILL.md missing '$phrase'"
+      ok=1
+    fi
+  done
+  return "$ok"
+}
+
 # ─── 10. OpenCode plugin getPluginVersion test (if opencode installed) ───
 check_opencode_plugin_version() {
   if ! command -v opencode >/dev/null 2>&1; then
@@ -163,6 +197,7 @@ run_check "session-start.sh emits additional_context envelope when env unset" ch
 run_check "sync-version.js --check: canonical & mirrors in sync" check_sync_version
 run_check "sync-agent-bodies.sh --check: agent-bodies/ in sync with agents/" check_sync_agent_bodies
 run_check ".agents/skills symlink resolves to ../skills (target exists)" check_agents_skills_symlink
+run_check ".agents/skills adapter targets CARRY their name: invariant (≥2 seeds)" check_adapter_targets_carry_invariant
 run_check "scripts/validate.sh: all skills pass structural validation" check_validate_skills
 run_check "OpenCode plugin getPluginVersion returns real version" check_opencode_plugin_version
 run_check "OpenCode discovers autopilot skills via .agents/skills/" check_opencode_skill_discovery

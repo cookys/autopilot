@@ -26,7 +26,25 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}`. Exit 0 = committed + clean tree (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but `no_commit` / `dirty` (worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+JSON to stdout: `{status, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}`. Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+
+### Outcome states
+
+The no-commit case is **split by how the worker ended** so a legitimate no-op task is not confused with a stalled/paused one. The split is CLI-agnostic — it reads git artifacts + the already-captured `AGENT_EXIT`, with **zero stream parsing** (no `--output-format` / no question-mark heuristic; a heuristic on the assistant stream would be scrape-equivalent and is out of scope).
+
+| `status` | Condition | Meaning | Exit |
+|----------|-----------|---------|------|
+| `committed` | new commit + clean tree + agent exit 0 | **success** — the only path that returns 0; branch is ready for review/merge | 0 |
+| `failure` | new commit + clean tree but agent **exit ≠ 0** | the worker left a commit but ended abnormally; **not** scored success (a non-zero exit is never `committed`) | 1 |
+| `dirty` | new commit but tree left uncommitted-dirty | the worker committed then kept editing; not a reviewable clean state | 1 |
+| `no_op` | **no** new commit + agent **exit 0** | the agent legitimately judged nothing was needed; not a dispatch failure | 1 |
+| `question_suspected` | **no** new commit + (timeout **or** exit ≠ 0) | the worker likely **paused on a clarifying question** (auto-approve / `--dangerously-skip-permissions` does *not* silence the model's own question — see [`blind-dispatch.md`](blind-dispatch.md) § "Clarifying questions survive auto-approve") or otherwise stalled | 1 |
+
+The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.
+
+### Deferred — stream-json "live question" rail (spike-gated, NOT built)
+
+A richer signal — a *live* "the model is asking a question" event from `--output-format stream-json` — is **deferred behind an existence spike, not committed**. `claude -p --output-format stream-json` is known to emit `assistant` / `tool_use` / `tool_result` / `result`; whether any of `claude` / `codex exec` / `gemini -p` emits a **machine-distinguishable** "asking a question" event is unverified. **Before any parser code**, a spike must capture real runs and answer "does the event even exist." If it does not, the rail is invalid (a question-mark heuristic would be scrape-equivalent) and stays unbuilt. Recorded sample files are the spike deliverable; any future parser is tested against the recording, never a live CLI. Tracked in the plan's §8, not here.
 
 After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then merge or discard the branch.
 

@@ -154,6 +154,32 @@ assert_eq "0" "$EXIT"                                   "bad preset name: exit c
 assert_contains "$OUT" '"preset":"fail-closed-default"' "bad preset name: fail-closed"
 assert_contains "$OUT" '"source":"fail-closed-default"' "bad preset name: source=fail-closed-default"
 
+# ── 14b. cwd resolution — $PWD/.claude/doa-config.md read when no env override ─
+# Plugin-usage path: REPO_ROOT is the install dir, so the CONSUMING project's
+# config must be found via cwd. Run with DOA_CONFIG_OVERRIDE unset, cd'd into a
+# temp project that has its own .claude/doa-config.md.
+CWD_PROJ="$TEST_TMP/cwd-proj"
+mkdir -p "$CWD_PROJ/.claude"
+cat > "$CWD_PROJ/.claude/doa-config.md" <<'CWDEOF'
+## Project Override
+
+| Role | Model tier | Preset |
+|------|-----------|--------|
+| implementer | sonnet | local-low-trust |
+CWDEOF
+
+OUT="$(cd "$CWD_PROJ" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                                "cwd resolution: exit code"
+assert_contains "$OUT" '"preset":"local-low-trust"'  "cwd resolution: project config honoured"
+assert_contains "$OUT" '"source":"project"'          "cwd resolution: source=project"
+
+# Negative: cwd has no .claude/doa-config.md → falls through to default mapping
+NO_CFG_DIR="$TEST_TMP/cwd-no-config"
+mkdir -p "$NO_CFG_DIR"
+OUT="$(cd "$NO_CFG_DIR" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT"                                 "cwd resolution (no config): exit code"
+assert_contains "$OUT" '"source":"default"'           "cwd resolution (no config): falls back to default"
+
 # ── 15. Input sanitization — shell-special chars rejected with exit 2 ──────
 # Pipe in role value: 'implementer|judge' should not match the grep -iE pattern
 OUT="$(bash "$SCRIPT" --role 'implementer|judge' --tier sonnet 2>&1)"; EXIT=$?

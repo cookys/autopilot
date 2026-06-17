@@ -7,7 +7,10 @@
 #   scripts/resolve-doa.sh implementer sonnet          # positional args
 #
 # Order of precedence:
-#   1. .claude/doa-config.md (project override) — first matching (role, tier) row
+#   1. Project override config — first matching (role, tier) row. The config file
+#      is itself resolved by: $DOA_CONFIG_OVERRIDE → $PWD/.claude/doa-config.md
+#      (the CONSUMING project's cwd, what matters under a plugin install) →
+#      $REPO_ROOT/.claude/doa-config.md (autopilot's own repo, for dogfooding).
 #   2. project-config-template/doa-config.md defaults (tier → preset mapping)
 #   3. Fail-closed: unknown role or unknown tier → all actions escalate
 #
@@ -86,6 +89,13 @@ emit_preset_json() {
     cloud-high-trust)
       r="autonomous"; rev="autonomous"; ext="logged"; irr="escalate"
       ;;
+    cloud-cautious)
+      # Like cloud-high-trust but escalates external actions (push, PR comment,
+      # open issue) too — for projects touching production systems / sensitive
+      # data where outward-facing actions warrant a human gate, while local
+      # reversible work (edit, commit, test) stays autonomous.
+      r="autonomous"; rev="autonomous"; ext="escalate"; irr="escalate"
+      ;;
     local-low-trust)
       r="autonomous"; rev="escalate"; ext="escalate"; irr="escalate"
       ;;
@@ -125,8 +135,20 @@ tier_to_preset() {
 #   | Role | Model tier | Preset |
 #   | implementer | sonnet | cloud-high-trust |
 # Match is case-insensitive on both role and tier columns.
-
-PROJECT_CONFIG="${DOA_CONFIG_OVERRIDE:-$REPO_ROOT/.claude/doa-config.md}"
+#
+# Config resolution precedence:
+#   1. $DOA_CONFIG_OVERRIDE          — explicit caller override (highest)
+#   2. $PWD/.claude/doa-config.md    — the CONSUMING project's config (cwd)
+#   3. $REPO_ROOT/.claude/doa-config.md — autopilot's own repo (dogfooding)
+# When autopilot runs as a plugin, REPO_ROOT is the plugin install dir, NOT the
+# project being worked on — so cwd ($PWD) is what carries the project override.
+if [[ -n "${DOA_CONFIG_OVERRIDE:-}" ]]; then
+  PROJECT_CONFIG="$DOA_CONFIG_OVERRIDE"
+elif [[ -f "$PWD/.claude/doa-config.md" ]]; then
+  PROJECT_CONFIG="$PWD/.claude/doa-config.md"
+else
+  PROJECT_CONFIG="$REPO_ROOT/.claude/doa-config.md"
+fi
 
 if [[ -f "$PROJECT_CONFIG" ]]; then
   # Escape dots before regex interpolation: sanitization allows '.', and an

@@ -161,6 +161,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: v2.17.0 review found override-config column values flow into printf-built JSON in both resolve-* scripts. resolve-dispatch.sh got allowlist validation on extracted model/mode (warn + fall back to defaults); resolve-doa.sh has the same vector on its Preset column — though its `emit_preset_json` maps unknown presets to fail-closed, the `role`/`tier` echo-back fields are sanitized at entry, so exploitability is lower still. Verify and, if needed, apply the same `valid_token` pattern for symmetry.
 - **Effort**: S
 - **Source**: 2026-06-12 tree-role-dispatch pre-merge review (🔵 Suggestion 2).
+- **2026-06-15 note**: `resolve-doa.sh` was touched by the cwd-config-resolution fix (`fix/resolve-doa-cwd-project-config`). The Preset-column vector was re-reviewed and **consciously deferred** — the new code only changed config-path resolution (`$PWD` is never used as a regex/pattern), and the unknown-preset → fail-closed mapping still holds, so risk is unchanged and low. Allowlist symmetry remains open.
 
 ### agy install symlinked-dest self-copy truncation — guard install script + upstream report
 - **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check `ls -la ~/.gemini/config/plugins/` for symlinks first), OR next S-size hardening slot.

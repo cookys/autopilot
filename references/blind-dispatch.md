@@ -37,6 +37,41 @@ check.
 | **Fixer dispatch** | ❌ No | A fixer is NOT a reviewer — it needs the specific findings to act on; blinding the fixer forces it to re-derive the problem and slows the loop |
 | **Domain-expert handoff** (`NEEDS_DOMAIN_EXPERT`) | ❌ No | A domain expert receives the full reviewer report by design — the handoff IS the context |
 
+## Clarifying questions survive auto-approve
+
+A separate blind spot from prior-verdict leakage, but it lands in the same
+re-/blind-dispatch territory: **auto-approve flags do not silence the model's
+own clarifying question.** `--dangerously-skip-permissions` (Claude Code),
+`--approval-mode yolo` / `--yolo` (Gemini), and codex's auto-approve all
+suppress *tool-authorization* prompts only — "may I run this command / edit
+this file". They do **not** suppress the model deciding it lacks enough
+information and asking the human a question. In an interactive session a human
+answers; in a non-interactive `-p` / headless worker there is no human, so the
+worker blocks on its own question until `--print-timeout` fires, then dies with
+no caller-visible signal about *why*.
+
+Evidence, stated at its real confidence level (do not over-claim):
+
+- **Confirmed for codex**: auto-approve is documented as ignored on clarifying
+  questions — the worker still stops and re-prompts (20-25 prompts observed).
+  See codex issues [#10187](https://github.com/openai/codex/issues/10187) and
+  [#2138](https://github.com/openai/codex/issues/2138).
+- **Expected (asserted, not yet observed) for Claude Code** under
+  `-p --dangerously-skip-permissions` — autopilot's primary hetero-dispatch
+  target. The mechanism is the same (auto-approve is a permissions concept, a
+  clarifying question is a turn-completion concept — orthogonal), but autopilot
+  has **not** yet captured a real run hanging on it. Treat as "expected, confirm
+  with a real run," not "autopilot has hung on this."
+
+**How the caller reads it**: a hetero worker that stops without a commit on a
+timeout or non-zero exit is surfaced as `QUESTION_SUSPECTED` by
+[`scripts/dispatch-hetero.sh`](../scripts/dispatch-hetero.sh) (vs `no_op` for a
+clean exit-0-no-commit). That signal is the cheap, CLI-agnostic stand-in for
+"the worker probably paused on a question" — see
+[`hetero-dispatch.md`](hetero-dispatch.md) § "Outcome states". No stream
+parsing is involved; the signal is derived from exit status + git artifacts
+only.
+
 ## Three Red Lines lens
 
 The blinding rule does not contradict any of the Three Red Lines:

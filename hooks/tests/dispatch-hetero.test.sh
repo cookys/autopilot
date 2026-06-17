@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # dispatch-hetero.sh integration test — exercises the full worktree flow with a
-# PATH-stubbed fake `agy` (no network, no real Antigravity needed). Covers:
+# PATH-stubbed fake `agy` (no network, no real Antigravity, NO live LLM). Covers:
 # preconditions (exit 2), committed path (exit 0, worktree auto-removed,
-# branch survives), no_commit path (exit 1, worktree kept).
+# branch survives), and the four no-/abnormal-commit outcomes split by exit code:
+#   (a) exit 0 + commit          → success     (status committed, exit 0)
+#   (b) non-zero exit + commit   → failure     (status failure,   exit 1)
+#   (c) exit 0 + no commit       → no_op        (status no_op,      exit 1)
+#   (d) timeout/non-zero + none  → QUESTION_SUSPECTED (status question_suspected, exit 1)
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
@@ -27,10 +31,27 @@ echo "self-report: DONE"
 EOF
 chmod +x "$STUB_OK"
 
-# --- stub agy: does nothing (agent produced no commit) ---
+# --- stub agy (c): clean exit, no commit → no_op ---
 STUB_NOOP="$TEST_TMP/agy-noop"
-printf '#!/usr/bin/env bash\necho "did nothing"\n' > "$STUB_NOOP"
+printf '#!/usr/bin/env bash\necho "did nothing"\nexit 0\n' > "$STUB_NOOP"
 chmod +x "$STUB_NOOP"
+
+# --- stub agy (d): non-zero exit (proxy for timeout/stall), no commit → question_suspected ---
+STUB_QUESTION="$TEST_TMP/agy-question"
+printf '#!/usr/bin/env bash\necho "Which file should I edit?"\nexit 124\n' > "$STUB_QUESTION"
+chmod +x "$STUB_QUESTION"
+
+# --- stub agy (b): commits cleanly then exits non-zero → failure (NOT success) ---
+STUB_FAIL_COMMIT="$TEST_TMP/agy-fail-commit"
+cat > "$STUB_FAIL_COMMIT" <<'EOF'
+#!/usr/bin/env bash
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: committed then errored"
+echo "post-commit error" >&2
+exit 3
+EOF
+chmod +x "$STUB_FAIL_COMMIT"
 
 # 1. --help exits 0 and mentions the worktree rail
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; HELP_EXIT=$?
@@ -88,14 +109,30 @@ KEEP_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$KEEP_WT/ok.txt" "kept worktree present on success"
 git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
 
-# 6. no_commit path: stub does nothing → exit 1, worktree KEPT for inspection
+# 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "no_commit exit code"
-assert_contains "$OUT" '"status": "no_commit"' "no_commit status"
+assert_eq "1" "$EXIT" "no_op exit code"
+assert_contains "$OUT" '"status": "no_op"' "no_op status (exit 0, no commit)"
 KEPT_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
-assert_neq "" "$KEPT_WT" "no_commit keeps worktree path in JSON"
+assert_neq "" "$KEPT_WT" "no_op keeps worktree path in JSON"
 assert_file_exists "$KEPT_WT/.git" "kept worktree exists on disk"
-# cleanup the kept worktree so the sandbox tears down cleanly
 git -C "$SBX" worktree remove --force "$KEPT_WT" >/dev/null 2>&1 || true
+
+# 7 (case d). question_suspected: stub exits non-zero (proxy for timeout/stall) with no commit
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/question --prompt-file "$PROMPT" --agy-bin "$STUB_QUESTION" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "question_suspected exit code"
+assert_contains "$OUT" '"status": "question_suspected"' "question_suspected status (non-zero exit, no commit)"
+assert_contains "$OUT" "clarifying question" "question_suspected error hints at the cause"
+assert_not_contains "$OUT" '"status": "no_op"' "abnormal-exit no-commit is NOT collapsed into no_op"
+Q_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+git -C "$SBX" worktree remove --force "$Q_WT" >/dev/null 2>&1 || true
+
+# 8 (case b). failure: stub commits cleanly but exits non-zero → NOT scored success (KR1)
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/failcommit --prompt-file "$PROMPT" --agy-bin "$STUB_FAIL_COMMIT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "failure (clean commit + non-zero exit) exit code"
+assert_contains "$OUT" '"status": "failure"' "failure status"
+assert_not_contains "$OUT" '"status": "committed"' "non-zero exit with clean commit is NEVER committed/success"
+F_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+git -C "$SBX" worktree remove --force "$F_WT" >/dev/null 2>&1 || true
 
 finalize_test

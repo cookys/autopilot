@@ -75,6 +75,15 @@ assert_eq "1" "$EXIT" "reference-rename exit code"
 assert_contains "$OUT" "lost the referenced heading" "reference-rename names the structural break"
 cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md" "$SBX/skills/quality-pipeline/references/code-review.md"
 
+# 5b. reference negative (superset rename): rename '## Invocation' → '## Invocation Steps'
+#     which CONTAINS the old substring — substring-only match would give false EXIT 0.
+#     With the -Fx (exact-line) fix this must correctly return EXIT 1.
+sed -i 's|^## Invocation$|## Invocation Steps|' "$SBX/skills/quality-pipeline/references/code-review.md"
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "reference-superset-rename exit code"
+assert_contains "$OUT" "lost the referenced heading" "reference-superset-rename names the structural break"
+cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md" "$SBX/skills/quality-pipeline/references/code-review.md"
+
 # 6. environment error: a seeded path missing → exit 2 (distinct from a broken invariant)
 rm "$SBX/agents/reviewer.md"
 OUT="$("$SCRIPT" 2>&1)"; EXIT=$?

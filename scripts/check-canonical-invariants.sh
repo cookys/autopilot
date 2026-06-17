@@ -94,7 +94,7 @@ check_reference() {
     echo "      anchor: $anchor_in_referrer" >&2
     broke=1
   fi
-  if ! grep -Fq -- "$heading_in_canonical" "$canonical_file"; then
+  if ! grep -Fxq -- "$heading_in_canonical" "$canonical_file"; then
     bad "reference[$label]: $canonical_file lost the referenced heading (structural rename/deletion)"
     echo "      heading: $heading_in_canonical" >&2
     broke=1

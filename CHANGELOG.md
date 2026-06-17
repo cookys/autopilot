@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.18.0 — dispatch outcome signals + canonical-invariant gate (tmuxai/ponytail absorptions)
+
+**Headline**: absorbs two cross-agent-orchestration learnings without adopting their mechanisms. From **tmuxai** (a TUI-scrape orchestrator we explicitly chose *not* to emulate): hetero dispatch now emits caller-readable outcome signals instead of a black-box timeout — `dispatch-hetero.sh` splits the no-commit case into `no_op` (exit 0, agent legitimately did nothing) vs `question_suspected` (timeout/non-zero, likely paused on a clarifying question that auto-approve never suppresses), and `AGENT_EXIT==0` is now required for `committed` (closing a blind spot where a non-zero exit with a clean commit scored success) — all from git artifacts, zero stream parsing, agy path byte-for-byte unchanged. From **ponytail** (a 13-platform skill-distribution): a `check-canonical-invariants.sh` gate enforces cross-file rule invariants by test, not discipline — `repeat` mode (a phrase must co-exist verbatim across files) and `reference` mode (a referenced anchor must still exist, exact-line) — wired blocking into pre-commit. `preflight-portability.sh` now asserts adapter targets *carry* their rules (≥2 seeded `name:` invariants), not merely resolve.
+
+### Added
+- `scripts/check-canonical-invariants.sh` — two-mode canonical-invariant gate (repeat + reference, inline seed table, same-commit update ritual); pre-commit blocking. Catches structural drift (anchor rename/deletion); body-reword stays a human-review concern by design.
+- `references/blind-dispatch.md` — "clarifying questions survive auto-approve" gotcha (codex-confirmed #10187/#2138; Claude `-p` expected-not-yet-observed); pre-commit grep asserts the issue refs persist.
+- `references/multi-agent-portability.md` — capability `Tier` column (full-plugin vs instruction-tier); flag corrections (Gemini `--yolo` REAL/doc-omitted; `kiro-cli chat --classic` UNVERIFIED).
+
+### Changed
+- `scripts/dispatch-hetero.sh` — four outcomes (`committed`/`failure`/`no_op`/`question_suspected`) + `AGENT_EXIT==0` in the success condition; agy invocation unchanged.
+- `scripts/preflight-portability.sh` — 12→13 checks; new content-carrying adapter assertion.
+
+### Verified
+- New tests: `hooks/tests/{check-canonical-invariants,preflight-adapter-invariant,dispatch-hetero}.test.sh` — repeat-delete/reference-rename(superset)→exit 1, four-outcome split, adapter-stub→exit 1. Full suite green; `validate.sh` 19/19. Independent acceptance audit caught + fixed a `grep -F` substring false-pass in the reference gate (`-Fq`→`-Fxq`).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (scripts + docs + tests; no schema/version-data change beyond the bump)
+
 ## v2.17.2 — remove `.opencode/skills/` leftover (drift surface, not a mirror)
 
 **Headline**: deletes the 16 tracked `.opencode/skills/*` copies. They were a `bf0c637` (2026-05-22) leftover that the multi-agent-portability-correction plan already decided to remove (step 24) but never executed — OpenCode discovers all 19 skills through the canonical `.agents/skills/ → ../skills` symlink, which `preflight-portability.sh` check #11 verifies live (`opencode debug skill`). The copies had silently drifted (14/16 stale, 3 skills missing) because nothing kept them in sync, and a sync script would only have perpetuated the duplication the architecture was built to avoid. No behavior change: the README already points OpenCode users at `.agents/skills/`.

@@ -47,6 +47,26 @@
 #   - autopilot:reviewer
 #   - superpowers:code-reviewer
 
+## Doc Drift Audit
+# Ordered preference for HOW autopilot:doc-sync runs its doc↔code drift audit.
+# First available entry wins.
+#
+# Recognized entries:
+#   - workflow:<path>            # a Claude-Code `Workflow` script the project ships
+#                                # (CC-only fast path; skipped when the Workflow tool
+#                                #  is unavailable, e.g. OpenCode / Codex / Antigravity)
+#   - <project:skill-name>       # a project-specific doc-audit skill, if any
+#   - native                     # built-in: doc-sync fans out subagents itself
+#                                #  (portable; works on every platform)
+#
+# Example (Claude-Code project shipping codeforge-style workflows):
+#   - workflow:.claude/workflows/doc-drift-scoped.js
+#   - workflow:.claude/workflows/doc-code-drift-audit.js
+#   - native
+#
+# Example (portable / no Workflow tool — or omit this chain entirely):
+#   - native
+
 ## Methodology Preferences
 # Ordered preference for methodology skills that orchestrator skills (ceo-agent,
 # dev-flow Session Rules, finish-flow) dispatch when domain-specific methodology

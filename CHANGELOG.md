@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.19.0 — doc-sync skill (doc↔code drift audit)
+
+**Headline**: New `autopilot:doc-sync` skill — an on-demand doc↔code drift audit that finds WRONG / STALE / MISSING documentation claims, adversarially verifies each to kill false positives, and reports (graded by severity, report-only — never edits). Closes a real gap: autopilot previously had only a 25-line manual `post-feature-doc-sync.md` checklist and no automated drift detection. Born from a codeforge audit that found 48 confirmed drift items in a mature repo.
+
+### Added
+- **`skills/doc-sync/SKILL.md`** — dispatcher + methodology skill. Two modes: **scoped** (cheap, audits only docs for the modules a diff touched — the L-size default) and **full** (whole-repo sweep across domains — periodic / big-change, OFFER-only). Method: per-domain find → adversarial verify → grade. Portable: default `native` subagent fan-out, with a Claude-Code `Workflow`-tool fast path when the project ships one (capability-gated; never a hard dependency, so it runs on OpenCode / Codex / Antigravity too).
+- **`project-config-template/doc-drift-config.md`** — per-project domain definitions (docs↔code slices), preferred-auditor pointer, staleness threshold, fix policy.
+
+### Changed
+- **`project-config-template/dispatch-config.md`** — new `## Doc Drift Audit` preference chain (`workflow:<path>` CC fast-path → project skill → `native`).
+- **`skills/finish-flow/SKILL.md`** — L-5.4 (Post-Merge Review) now invokes `autopilot:doc-sync` (scoped) when a change touched user-facing behavior / 3+ modules; OFFER full for large ships. Still 6 sub-tasks (folded into L-5.4, not a new sub-task).
+- **`skills/dev-flow/references/post-feature-doc-sync.md`** — points to the new automated `doc-sync` skill alongside the manual checklist.
+
+### Fix policy (documented in the skill, not auto-applied)
+- User-facing docs → always correct to code reality. Specs → pure STALE fixed in place; genuine design-target-not-yet-built kept + marked `NOT YET IMPLEMENTED` + BACKLOG.
+
 ## v2.18.0 — dispatch outcome signals + canonical-invariant gate (tmuxai/ponytail absorptions)
 
 **Headline**: absorbs two cross-agent-orchestration learnings without adopting their mechanisms. From **tmuxai** (a TUI-scrape orchestrator we explicitly chose *not* to emulate): hetero dispatch now emits caller-readable outcome signals instead of a black-box timeout — `dispatch-hetero.sh` splits the no-commit case into `no_op` (exit 0, agent legitimately did nothing) vs `question_suspected` (timeout/non-zero, likely paused on a clarifying question that auto-approve never suppresses), and `AGENT_EXIT==0` is now required for `committed` (closing a blind spot where a non-zero exit with a clean commit scored success) — all from git artifacts, zero stream parsing, agy path byte-for-byte unchanged. From **ponytail** (a 13-platform skill-distribution): a `check-canonical-invariants.sh` gate enforces cross-file rule invariants by test, not discipline — `repeat` mode (a phrase must co-exist verbatim across files) and `reference` mode (a referenced anchor must still exist, exact-line) — wired blocking into pre-commit. `preflight-portability.sh` now asserts adapter targets *carry* their rules (≥2 seeded `name:` invariants), not merely resolve.

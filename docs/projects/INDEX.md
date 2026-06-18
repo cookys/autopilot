@@ -13,6 +13,7 @@
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-18 | [doc-sync-skill](2026-06-18-doc-sync-skill/README.md) | v2.19.0 | (this ship) | (self-contained in README) |
 | 2026-06-17 | dispatch-signal-and-sync (tmuxai/ponytail absorptions; no project dir — plan-tracked, survey→2-round dialectic→CEO delegated build) | v2.18.0 | [`5ae34d5`](../../../../commit/5ae34d5) | [plan](../plans/2026-06-17-tmuxai-ponytail-absorptions.md) |
 | 2026-06-12 | [tree-role-dispatch](_archive/2026-06-12-tree-role-dispatch/README.md) | v2.17.0 | [`58c05d3`](../../../../commit/58c05d3) | (self-contained in README) |
 | 2026-06-12 | [task-tree-engine](_archive/2026-06-12-task-tree-engine/README.md) | v2.16.0 | [`569a8b2`](../../../../commit/569a8b2) | [plan](../plans/2026-06-12-task-tree-engine.md) |

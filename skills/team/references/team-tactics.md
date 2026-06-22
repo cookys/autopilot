@@ -46,6 +46,17 @@ List each candidate phase's expected file changes, then assess overlap:
 - Server + SDK both modify proto definitions or shared types
 - Different features all need `main.cpp` initialization order changes
 
+## Dispatched-Subagent Return Contract
+
+Every dispatched implementer subagent returns exactly ONE status. The orchestrator routes on it — never silently absorbs a non-DONE result.
+
+| Status | Meaning | Orchestrator Action |
+|--------|---------|---------------------|
+| `DONE` | Work complete, acceptance criteria met. | Proceed to review / integration. |
+| `DONE_WITH_CONCERNS` | Work complete, but implementer flags risks / uncertainties. | Proceed, but surface the concerns to review — do NOT silently absorb them (carry forward any 🟠 Major / 🟡 Minor concerns). |
+| `NEEDS_CONTEXT` | Blocked on missing input/context the orchestrator CAN supply. | Supply the missing context and re-dispatch. |
+| `BLOCKED` | Cannot proceed; obstacle is outside what re-context can fix. | **Re-scope the task OR escalate up the chain** — this escalation path is explicit and mandatory, never a silent drop. |
+
 ## Manual Dependency Graph (When No Bootstrap Data)
 
 ```

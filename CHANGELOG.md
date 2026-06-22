@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.21.0 — `/l3 /l4 /l5` CEO front-door + dispatched foreman
+
+**Headline**: CEO mode gains a terse front-door. `/l3 /l4 /l5 <goal>` enter `ceo-agent` with the four startup questions pre-filled and set the execution posture — `/l3` runs inline, `/l4` dispatches **one background, worktree-isolated `sub-orchestrator` foreman** that runs dev-flow unattended while the CEO holds a **depth-0 control loop** (budget cap → `TaskStop` + escalate; outcome→action table; merge-back; worktree GC) and the **authoritative qc verdict**, and `/l5` adds a heterogeneous (agy/Gemini) implementer via the already-built `dispatch-hetero.sh`. The depth-0 kill+reap mechanism was verified empirically by the P0 spike. Deferred behind their own gates: full `role × task-type` routing table, engines beyond Claude+Gemini, tree-engine coordinator, multi-node fleet.
+
+### Added
+- **`skills/l3`, `skills/l4`, `skills/l5`** — thin slash-command front-doors into `ceo-agent` (skills 20 → 23).
+- **`skills/ceo-agent/references/level-front-door.md`** — full front-door + dispatched-foreman semantics: topology (CEO depth-0 → foreman depth-1 → impl/review depth-2, depth-3 escalates), the P0-verified background-`Agent` + `TaskStop` kill + worktree-reap mechanism, depth-0 control loop, outcome→action table, qc@depth-0 vs foreman first-pass, run-summary ledger.
+
+### Changed
+- **`scripts/dispatch-hetero.sh`** — outcome + precondition JSON now carry `runner`/`model` **engine provenance** (`runner` always `"agy"`, `model` echoes `--model`) for the caller's run-summary ledger. Doc-synced: `references/hetero-dispatch.md`, `CLAUDE.md` inventory.
+- **`skills/ceo-agent/SKILL.md`** — new "/lN front-door & dispatched foreman" pointer section.
+- **`skills/team/references/team-tactics.md`** — new "Dispatched-Subagent Return Contract" section: a 4-value status enum (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) with the orchestrator's action per status (BLOCKED → re-scope/escalate, never a silent drop). Shipped as the **`/l4` dogfood payload** of this release.
+
+### Fixed
+- **`scripts/resolve-doa.sh`** — apply the `valid_token` (`^[A-Za-z0-9._-]+$`) allowlist to the override-config **Preset column** before it reaches the `printf`-built JSON, mirroring the v2.17.0 `resolve-dispatch.sh` hardening; an invalid token warns to stderr and falls through to defaults. Shipped as the **`/l5` (hetero/Gemini) dogfood payload** of this release.
+- **`hooks/tests/check-readme-parity.test.sh`** — the EN↔zh skills-badge drift negative test hardcoded the old count (`skills-20-`), silently no-opping its drift injection after a count bump; wildcarded to `skills-[0-9]+-` so it self-maintains.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.20.0`
+
 ## v2.20.0 — doc-sync gains a deterministic gate (Layer 1)
 
 **Headline**: `autopilot:doc-sync` is now a **two-layer** system. Layer 1 is a deterministic gate — zero-variance checks that *always* catch their class, so it's a **reliable stopping condition** and gate-able in CI. The shipped baseline (`scripts/doc-drift-gate.py`) does links + code-fence balance; projects extend it with their own mechanizable checks (version-sync, CLI-surface-vs-docs, roadmap-consistency — see codeforge's `scripts/check-doc-drift.py`). Layer 2 is the existing LLM sweep, reframed as **discovery** (non-deterministic — never loop it to zero). Converging workflow: when the LLM sweep finds a mechanizable drift class, demote it into the gate. This resolves the core flaw of an LLM-only design — a "clean" sweep only means *this sample* found nothing, never that nothing exists (proven by codeforge's 7-round non-convergent trajectory).

@@ -27,6 +27,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "precondition_failed",
+#     "runner": "agy", "model": "...",   # engine provenance (model = --model)
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null" }
@@ -72,15 +73,15 @@ emit() { # status commit files ins del worktree error
   [ -n "${2:-}" ] && commit_json="\"$2\""
   [ -n "${6:-}" ] && wt_json="\"$(json_escape "$6")\""
   [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
-  printf '{ "status": "%s", "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
-    "$1" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
+  printf '{ "status": "%s", "runner": "agy", "model": "%s", "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
+    "$1" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json"
 }
 
 die_precondition() {
-  printf '{ "status": "precondition_failed", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
-    "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
+  printf '{ "status": "precondition_failed", "runner": "agy", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
+    "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
   exit 2
 }
 

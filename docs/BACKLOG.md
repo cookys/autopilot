@@ -195,4 +195,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **agents/_bodies/*.body.md surface as dispatchable agents with NO tool allowlist** — ✅ fixed by relocating bodies out of the CC agent scan path, date 2026-06-11.
 - **Nested subagent (depth=5) integration** — ✅ shipped v2.14.0 (project `docs/projects/2026-06-11-nested-dispatch-integration/`). Both triggers fired 2026-06-11: CC v2.1.172 changelog ("Sub-agents can now spawn their own sub-agents (up to 5 levels deep)") + nest-probe green (explicit grant honored; children get `Agent` not `Task`; v2.1.170 negatives were server-side rollout lag). Landed with two upgrades over the original proposal: blind-dispatch rule is **context-indexed** ("verdict dispatch only from depth 0" — closes the fixer→verify-my-fix hole), and depth ≤ 2 policy has a single canonical home (`agents/README.md` § Orchestration). See CHANGELOG v2.14.0.
 
+### sync-version.js: omitting `--disabled-count` silently drops the "N disabled" hook fragment
+- **Trigger**: next version bump via `scripts/sync-version.js`, or next time the hook description format changes.
+- **Context**: `disabledCount` defaults to `0` when `--disabled-count` is omitted, so a bump that forgets the flag rewrites "H hooks (D default-on, O opt-in, X disabled)" → "H hooks (D' default-on, O opt-in)" — silently clobbering the `disabled` tally and miscomputing default-on (D'=H−O). Hit 2026-06-22 during the v2.20.0 bump; worked around by hand-editing the version string in the mirrors instead of running the script.
+- **Fix**: PRESERVE the existing disabled-count (parse it from the current description) when `--disabled-count` is omitted, rather than defaulting to 0 — same principle as not clobbering counts you weren't asked to change. Until fixed: always pass `--disabled-count <N>` matching current (currently 5).
+- **Effort**: Fix (S)
+- **Source**: retro 2026-06-22 (codeforge doc-drift-system session); workaround in autopilot v2.20.0 bump.
+
 Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth). Last pruned 2026-06-02: v2.7.5 test-suite + v2.7.6 hook-polish items A/B/C.

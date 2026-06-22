@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/version-2.7.0-E8A838?style=flat-square" alt="v2.7.0">
   <img src="https://img.shields.io/badge/skills-16-4A90D9?style=flat-square" alt="16 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-14-6B8E6B?style=flat-square" alt="14 Hooks">
+  <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -367,7 +367,7 @@ Claude Code plugin 安裝時會 **pin 到特定 commit**。`/plugin update` 不�
 **為什麼是 plugin，不是複製 skill？**
 複製的 skill 幾週內就會 drift。Plugin 是 single source of truth — 更新一次，所有人透過 `/plugin update` 取得。
 
-**為什麼 16 個 skill + 14 個 hook？**
+**為什麼 16 個 skill + 20 個 hook？**
 v2.0 移除了 4 個跟 `superpowers` 重疊的 skill（debug、test-strategy、team、profiling），預設 `superpowers` 永遠存在。v2.7.0 把它們以 standalone fallback 形式補回（每支 body 內加 `## Coexistence with Superpowers` 段說明關係），讓 autopilot 在沒 `superpowers` 的情況下也能跑。當 `superpowers` 已安裝時，`.claude/dispatch-config.md` chain 讓 orchestrator runtime 偏好 superpowers 對應 skill；autopilot 的 skill 留在 catalog 作為 standalone fallback。v2.2 新增 `think-tank-dialectic` 作為**不同工具**（不是升級版）用於不可逆決策。v2.5 新增 14 個 hook 用於 runtime 強制執行 — 以前只寫在 markdown 規則裡的紀律。Hook 和 skill 服務不同層次：skill 在對話時定規則；hook 在 tool-call 時強制執行。
 
 **為什麼用 `!`command`` 注入，不用設定檔？**
@@ -453,24 +453,24 @@ Autopilot **不會** runtime 偵測 voltagent。`:debugger` 和 `:planner` 由 c
 
 ## Hooks
 
-Autopilot 自帶 **14 個 hook**（v2.5.0 引入），在 Claude Code runtime 層強制開發紀律 — 不需要靠自律。
+Autopilot 自帶 **20 個 hook**（最初 14 個於 v2.5.0 引入，之後成長），在 Claude Code runtime 層強制開發紀律 — 不需要靠自律。分為 **8 個 default-on** + **7 個 opt-in** + **5 個已停用**（見下）。權威數字由 [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) 從 `hooks.json` + `settings.example.json` 推導（執行它即可重建這些清單，`--check` 擋漂移）。
 
 ### Tier A — 預設啟用（8 個 hook）
 
-安裝 plugin 後自動啟用。所有都是非破壞性且對任何專案安全。
+安裝 plugin 後自動啟用（wired 在 `hooks.json`）。所有都是非破壞性且對任何專案安全。tool-event hook 改讀 session transcript 而非 stdin（upstream stdin pipe 壞掉，#6305）。
 
 | Hook | 事件 | 功能 |
 |------|------|------|
-| **large-file-warner** | PreToolUse/Read | 500KB 警告、2MB 硬擋，指定 `offset`/`limit` 則跳過 |
-| **suggest-compact** | PostToolUse/Write\|Edit | 計算 session tool call 次數，50 次提醒 `/compact`，之後每 25 次 |
-| **cost-tracker** | Stop | 記錄 token 用量 + 估算 USD 成本到 `~/.claude/metrics/costs.jsonl` |
+| **state-checkpoint** | PreCompact | compaction 前把 transcript 最後 20 輪寫到 `~/.autopilot/compaction-state.md` |
+| **session-start** | SessionStart | session priming：印出跨 session resume hint + intent-capture 健康狀態 |
+| **intent-capture** | PostToolUse/* | 記錄 per-cwd intent 檔供跨 session resume hint |
+| **reload-watch** | PostToolUse/* | 偵測磁碟上 catalog 漂移，注入 `/reload-plugins` 提醒 |
 | **audit-log** | PostToolUse/Bash | 記錄 bash 命令並自動 redact secret |
-| **session-summary** | Stop | 寫 git status + 最近 commit 到 `~/.claude/sessions/` |
 | **log-error** | PostToolUse/* | 偵測 tool output 中的錯誤關鍵字，寫入 `~/.claude/error-log.md` |
-| **commit-secret-scan** | PreToolUse/Bash | 掃描 staged 內容的 API key/token，發現就硬擋 `git commit` |
-| **branch-protection** | PreToolUse/Bash | 擋 `main`/`master` 的 force push 和直接 commit（anchored regex，env 可覆寫） |
+| **failure-escalation** | PostToolUse/Bash | 追蹤 session 內連續 Bash 失敗，升級給 user |
+| **suggest-compact** | PostToolUse/Write\|Edit | 計算 session tool call 次數，50 次提醒 `/compact`，之後每 25 次 |
 
-### Tier B — 可選啟用（6 個 hook）
+### Tier B — 可選啟用（7 個 hook）
 
 從 [`settings.example.json`](settings.example.json) 複製到你的 `settings.json` 即可個別啟用。
 
@@ -482,6 +482,10 @@ Autopilot 自帶 **14 個 hook**（v2.5.0 引入），在 Claude Code runtime �
 | **test-runner** | PostToolUse/Write\|Edit | 編輯後自動跑 sibling test（vitest/jest） |
 | **design-quality** | PostToolUse/Write\|Edit | 警告 generic template UI 模式 |
 | **mcp-health** | PreToolUse + PostToolUseFailure | 不健康 MCP server 的指數退避 |
+
+### 已停用 — 有 code 但哪都沒 wire（5 個 hook）
+
+存在於 `hooks/` 但 `hooks.json` 和 `settings.example.json` 都沒註冊，由 v2.7.4 disable batch 停用。兩種原因：**PreToolUse blocker**（`large-file-warner`、`commit-secret-scan`、`branch-protection`）卡在 upstream stdin fix（[#6305](https://github.com/anthropics/claude-code/issues/6305)）——transcript pivot 救不了（tool 還沒跑、沒 transcript entry）；**Stop-event hook**（`cost-tracker`、`session-summary`）非 stdin 問題，需各自重新驗證。重啟計畫見 [`docs/BACKLOG.md`](docs/BACKLOG.md)「Re-enable v2.7.4 disabled hooks」。
 
 ---
 

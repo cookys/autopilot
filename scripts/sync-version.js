@@ -2,19 +2,23 @@
 /**
  * sync-version — autopilot release manifest sync (v2.7.3+)
  *
- * Updates version + hook/skill counts across:
+ * Updates version (everywhere) + the description's skill/hook-count FRAGMENTS across:
  *   - .claude-plugin/plugin.json       (canonical for Claude Code)
  *   - plugin.json                      (root mirror for non-Claude tools)
  *   - .claude-plugin/marketplace.json
- *   - hooks/hooks.json (description line, paren-wrapped version)
- *   - hooks/README.md (header count)
- *   - README.md (badges: version, hooks)
+ *   - README.md (version badge only)
+ *
+ * NOT owned here (single source of truth = scripts/check-hook-inventory.js, which
+ * derives counts + tier membership from real wiring): the README hooks badge,
+ * hooks/README.md tier tables, and whether the description's hook NUMBERS are
+ * actually correct. sync-version mirrors the canonical fragment verbatim; the
+ * numbers' correctness is check-hook-inventory's --check job.
  *
  * USAGE:
- *   node scripts/sync-version.js --version 2.7.3 --hook-count 19 \
- *     --skill-count 16 --opt-in-count 7
- *   node scripts/sync-version.js --version 2.7.3 --hook-count 19 \
- *     --skill-count 16 --opt-in-count 7 --dry-run
+ *   node scripts/sync-version.js --version 2.7.3 --hook-count 20 \
+ *     --skill-count 20 --opt-in-count 7 --disabled-count 5
+ *   node scripts/sync-version.js --version 2.7.3 --hook-count 20 \
+ *     --skill-count 20 --opt-in-count 7 --disabled-count 5 --dry-run
  *   node scripts/sync-version.js --check    # pre-commit gate: read canonical,
  *                                           # exit 1 if any tracked file drifts
  *
@@ -41,13 +45,14 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 
 // === CLI parse ===
 function parseArgs(argv) {
-  const args = { dryRun: false, check: false, optInCount: 7 }; // default 7 = current Tier B count
+  const args = { dryRun: false, check: false, optInCount: 7, disabledCount: 0 }; // defaults: Tier B = 7, disabled = 0
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--version' || a === '-v') args.version = argv[++i];
     else if (a === '--hook-count' || a === '-H') args.hookCount = parseInt(argv[++i], 10);
     else if (a === '--skill-count' || a === '-S') args.skillCount = parseInt(argv[++i], 10);
     else if (a === '--opt-in-count' || a === '-O') args.optInCount = parseInt(argv[++i], 10);
+    else if (a === '--disabled-count' || a === '-X') args.disabledCount = parseInt(argv[++i], 10);
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--check') args.check = true;
     else if (a === '--help' || a === '-h') { printUsage(); process.exit(0); }
@@ -69,10 +74,14 @@ function deriveArgsFromCanonical() {
     console.error(`error: canonical version invalid: ${version}`);
     process.exit(2);
   }
-  // Description: "... N lifecycle skills + 3 methodology agents + H hooks (D default-on, O opt-in) ..."
+  // Description: "... N lifecycle skills + 3 methodology agents + H hooks (D default-on, O opt-in[, X disabled]) ..."
+  // The "disabled" tier is optional (3-tier model since the hook-inventory
+  // reconciliation). Hook-count SEMANTICS (do these numbers match real wiring +
+  // tier membership) are owned by scripts/check-hook-inventory.js; sync-version
+  // only mirrors the canonical description fragment verbatim into the manifests.
   const desc = canonical.description || '';
   const skillMatch = desc.match(/(\d+) lifecycle skills/);
-  const hookMatch = desc.match(/(\d+) hooks \((\d+) default-on, (\d+) opt-in\)/);
+  const hookMatch = desc.match(/(\d+) hooks \((\d+) default-on, (\d+) opt-in(?:, (\d+) disabled)?\)/);
   if (!skillMatch || !hookMatch) {
     console.error(`error: canonical description not in expected format: ${desc}`);
     process.exit(2);
@@ -83,6 +92,7 @@ function deriveArgsFromCanonical() {
     hookCount: parseInt(hookMatch[1], 10),
     optInCount: parseInt(hookMatch[3], 10),
     defaultOnCount: parseInt(hookMatch[2], 10),
+    disabledCount: hookMatch[4] !== undefined ? parseInt(hookMatch[4], 10) : 0,
     dryRun: false,
     check: true,
   };
@@ -93,21 +103,28 @@ function printUsage() {
 
 USAGE:
   node scripts/sync-version.js \\
-    --version <V> --hook-count <N> --skill-count <M> [--opt-in-count <K>] [--dry-run] [--help]
+    --version <V> --hook-count <N> --skill-count <M> [--opt-in-count <K>] [--disabled-count <X>] [--dry-run] [--help]
 
 ARGS:
-  --version       new semver string (e.g. "2.7.3")
-  --hook-count    total hooks (Tier A + Tier B; e.g. 19)
-  --skill-count   total skills (currently 16)
-  --opt-in-count  Tier B count (default 7); default-on count is computed
-                  as (hook-count - opt-in-count)
-  --dry-run       print proposed changes, write nothing
-  --help          this message
+  --version        new semver string (e.g. "2.7.3")
+  --hook-count     total hooks (default-on + opt-in + disabled; e.g. 20)
+  --skill-count    total skills (currently 20)
+  --opt-in-count   Tier B / opt-in count (default 7)
+  --disabled-count shipped-but-disabled count (default 0); default-on is the
+                   remainder = hook-count − opt-in-count − disabled-count
+  --dry-run        print proposed changes, write nothing
+  --help           this message
+
+NOTE: hook-count NUMBERS + tier membership are validated against real wiring by
+  scripts/check-hook-inventory.js (--check). sync-version only mirrors the
+  canonical description fragment + version badges; it does not own the hooks badge
+  or hooks/README.md (those are check-hook-inventory's).
 
 OUTPUT:
-  Modifies .claude-plugin/plugin.json, .claude-plugin/marketplace.json,
-  hooks/hooks.json, hooks/README.md. Two-pass design: validates ALL files
-  in memory before writing ANY file. On pass-1 fail → nothing written.`);
+  Modifies .claude-plugin/plugin.json, plugin.json, .claude-plugin/marketplace.json
+  (version + description fragments) and README.md (version badge only). Two-pass
+  design: validates ALL files in memory before writing ANY file. On pass-1 fail →
+  nothing written.`);
 }
 
 function validateArgs(a) {
@@ -117,11 +134,14 @@ function validateArgs(a) {
   if (!Number.isInteger(a.hookCount) || a.hookCount < 1 || a.hookCount > 100) errs.push(`--hook-count must be integer 1-100, got ${a.hookCount}`);
   if (!Number.isInteger(a.skillCount) || a.skillCount < 1 || a.skillCount > 100) errs.push(`--skill-count must be integer 1-100, got ${a.skillCount}`);
   if (!Number.isInteger(a.optInCount) || a.optInCount < 0 || a.optInCount >= a.hookCount) errs.push(`--opt-in-count must be integer 0..hook-count-1, got ${a.optInCount}`);
+  if (!Number.isInteger(a.disabledCount) || a.disabledCount < 0 || a.disabledCount >= a.hookCount) errs.push(`--disabled-count must be integer 0..hook-count-1, got ${a.disabledCount}`);
+  // default-on is the remainder of the 3-tier split (total − opt-in − disabled).
+  if (errs.length === 0 && a.hookCount - a.optInCount - a.disabledCount < 1) errs.push(`default-on count (hook-count − opt-in − disabled) must be ≥ 1, got ${a.hookCount - a.optInCount - a.disabledCount}`);
   if (errs.length) {
     errs.forEach(e => console.error(`error: ${e}`));
     process.exit(2);
   }
-  a.defaultOnCount = a.hookCount - a.optInCount;
+  a.defaultOnCount = a.hookCount - a.optInCount - a.disabledCount;
 }
 
 // === Per-file edit plan ===
@@ -131,14 +151,23 @@ function buildEditPlan(args) {
   const H = args.hookCount;
   const D = args.defaultOnCount;
   const O = args.optInCount;
+  const X = args.disabledCount;
   const S = args.skillCount;
+
+  // Mirror the canonical hook-count fragment verbatim (3-tier when disabled > 0,
+  // else 2-tier). The numbers themselves are validated against real wiring by
+  // scripts/check-hook-inventory.js — here they are just a mirrored string.
+  const hookFragTo = X > 0
+    ? `${H} hooks (${D} default-on, ${O} opt-in, ${X} disabled)`
+    : `${H} hooks (${D} default-on, ${O} opt-in)`;
+  const hookFragFind = /\b\d+ hooks \(\d+ default-on, \d+ opt-in(?:, \d+ disabled)?\)/g;
 
   return [
     {
       file: '.claude-plugin/plugin.json',
       replacements: [
         { find: /"version":\s*"[^"]+"/g, to: `"version": "${V}"`, expectAfter: 1, label: 'version field' },
-        { find: /\b\d+ hooks \(\d+ default-on, \d+ opt-in\)/g, to: `${H} hooks (${D} default-on, ${O} opt-in)`, expectAfter: 1, label: 'description hook-count fragment' },
+        { find: hookFragFind, to: hookFragTo, expectAfter: 1, label: 'description hook-count fragment' },
         { find: /\b\d+ lifecycle skills\b/g, to: `${S} lifecycle skills`, expectAfter: 1, label: 'description skill-count fragment' },
       ],
       // Post-edit guard: file contains exactly 1 line with new version
@@ -152,7 +181,7 @@ function buildEditPlan(args) {
       file: 'plugin.json',
       replacements: [
         { find: /"version":\s*"[^"]+"/g, to: `"version": "${V}"`, expectAfter: 1, label: 'version field' },
-        { find: /\b\d+ hooks \(\d+ default-on, \d+ opt-in\)/g, to: `${H} hooks (${D} default-on, ${O} opt-in)`, expectAfter: 1, label: 'description hook-count fragment' },
+        { find: hookFragFind, to: hookFragTo, expectAfter: 1, label: 'description hook-count fragment' },
         { find: /\b\d+ lifecycle skills\b/g, to: `${S} lifecycle skills`, expectAfter: 1, label: 'description skill-count fragment' },
       ],
       verifyPatterns: [
@@ -163,41 +192,27 @@ function buildEditPlan(args) {
       file: '.claude-plugin/marketplace.json',
       replacements: [
         { find: /"version":\s*"[^"]+"/g, to: `"version": "${V}"`, expectAfter: 1, label: 'version field' },
-        { find: /\b\d+ hooks \(\d+ default-on, \d+ opt-in\)/g, to: `${H} hooks (${D} default-on, ${O} opt-in)`, expectAfter: 1, label: 'description hook-count fragment' },
+        { find: hookFragFind, to: hookFragTo, expectAfter: 1, label: 'description hook-count fragment' },
         { find: /\b\d+ skills \+ 3 methodology agents/g, to: `${S} skills + 3 methodology agents`, expectAfter: 1, label: 'description skill-count fragment' },
       ],
       verifyPatterns: [
         { regex: new RegExp(`"version":\\s*"${escapeRegex(V)}"`, 'g'), expect: 1, label: `JSON "version": "${V}"` },
       ],
     },
-    // hooks/hooks.json — intentionally omitted. Its description references the
-    // v2.7.4 disable-batch event (a historical marker), not the plugin version.
-    // Syncing it would conflate version semantics. The hook count there reflects
-    // currently-enabled hooks, not total; tracked manually until disable batch ends.
+    // hooks/hooks.json — intentionally omitted (its description is a historical marker, not the version).
+    // hooks/README.md — intentionally omitted: hook counts + tier membership there are owned by
+    //   scripts/check-hook-inventory.js (derived from real wiring), NOT mirrored from the version blurb.
     {
-      file: 'hooks/README.md',
-      replacements: [
-        // Header line evolved to include "originally" + " plus `session-start.sh` SessionStart priming."
-        // Match the count + the "(originally D Tier A default-on + O Tier B opt-in)" parenthetical
-        { find: /\b\d+ Claude Code hooks for runtime enforcement of development discipline \(originally \d+ Tier A default-on \+ \d+ Tier B opt-in\)/g, to: `${H} Claude Code hooks for runtime enforcement of development discipline (originally ${D} Tier A default-on + ${O} Tier B opt-in)`, expectAfter: 1, label: 'header hook-count line' },
-      ],
-      verifyPatterns: [
-        { regex: new RegExp(`${H} Claude Code hooks for runtime enforcement`, 'g'), expect: 1, label: `header has new count ${H}` },
-      ],
-    },
-    {
-      // README.md badges — version badge + hooks badge
-      // Format: badge/version-X.Y.Z-... and badge/hooks-N-...
+      // README.md badges — version badge only. The hooks badge is owned by
+      // scripts/check-hook-inventory.js (--check asserts it == derived total),
+      // so sync-version no longer writes it (single source of truth for hook counts).
       file: 'README.md',
       replacements: [
         { find: /badge\/version-\d+\.\d+\.\d+-/g, to: `badge/version-${V}-`, expectAfter: 1, label: 'version badge' },
         { find: /alt="v\d+\.\d+\.\d+"/g, to: `alt="v${V}"`, expectAfter: 1, label: 'version badge alt' },
-        { find: /badge\/hooks-\d+-/g, to: `badge/hooks-${H}-`, expectAfter: 1, label: 'hooks badge' },
-        { find: /alt="\d+ Hooks"/g, to: `alt="${H} Hooks"`, expectAfter: 1, label: 'hooks badge alt' },
       ],
       verifyPatterns: [
         { regex: new RegExp(`badge/version-${escapeRegex(V)}-`, 'g'), expect: 1, label: `version badge has ${V}` },
-        { regex: new RegExp(`badge/hooks-${H}-`, 'g'), expect: 1, label: `hooks badge has ${H}` },
       ],
     },
   ];
@@ -294,7 +309,7 @@ function atomicWrite(file, content) {
   const editPlan = buildEditPlan(args);
 
   const mode = args.check ? '— CHECK (no writes; exit 1 on drift)' : args.dryRun ? '— DRY RUN' : '';
-  console.log(`sync-version v${args.version} (hooks=${args.hookCount} = ${args.defaultOnCount} Tier A + ${args.optInCount} Tier B, skills=${args.skillCount}) ${mode}\n`);
+  console.log(`sync-version v${args.version} (hooks=${args.hookCount} = ${args.defaultOnCount} default-on + ${args.optInCount} opt-in + ${args.disabledCount} disabled, skills=${args.skillCount}) ${mode}\n`);
 
   // PASS 1 — compute all in memory, validate every replacement, abort if any fail
   console.log('=== PASS 1: validate ===');

@@ -26,12 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### hook inventory reconciliation (4 mutually-inconsistent sources of truth)
-- **Trigger**: next time touching the hooks layer, the README Hooks section, or the plugin's "N hooks" count — OR before any release that changes hooks.
-- **Context**: A 2026-06-22 doc-sync (scoped) surfaced that four sources disagree on what hooks exist and which are default-on: (1) `hooks/hooks.json` wires **8** default-on scripts (audit-log, failure-escalation, intent-capture, log-error, reload-watch, session-start, state-checkpoint, suggest-compact; **no PreToolUse hooks at all**); (2) `README.md` Tier A lists **8** but with different membership (large-file-warner, cost-tracker, session-summary, commit-secret-scan, branch-protection are in README, NOT in hooks.json), Tier B lists 6 rows; README total still says "**14 hooks** / 8 default-on / 6 opt-in" (pre-v2.5-expansion); (3) `plugin.json` + `CLAUDE.md` description say "**19 hooks (12 default-on, 7 opt-in)**"; (4) `settings.example.json` opt-in lives under `hooks-opt-in-examples`. `hooks/` has ~20 implementation scripts (excl. `-lib`/`.test`/`capture-payload`/`_transcript-timing-probe`). The "19" plausibly counts script files; the "12 default-on" does NOT match hooks.json's 8. NOT caused by the v2.18.0/v2.19.0 ships — pre-existing drift since the hooks grew past v2.5.0's 14.
-- **Proposed**: establish ONE source of truth for the hook inventory (likely `hooks/hooks.json` + the `hooks-opt-in-examples` block = the only *active* wiring), reconcile the canonical count and README Tier A/B lists to it (or document why a script exists but isn't wired). Do NOT flip README numbers without rebuilding the lists — a half-fix creates a 5th wrong version. Possibly add a `preflight-portability` check asserting plugin.json's hook count == actual wired hooks so this can't silently re-drift.
-- **Effort**: Fix (if "active wiring is truth" holds) → L (if the 19-vs-8 gap means hooks are wired through a mechanism not in hooks.json and needs investigation first).
-- **Source**: 2026-06-22 doc-sync scoped run (skill-count/doc-sync domain finding #3, finder + self-verified against hooks.json/settings.example.json).
+### zh-TW skill-count is stale ("16 個 skill")
+- **Trigger**: next time touching `README.zh-TW.md`, OR when the skill count changes, OR a zh-TW doc-sync pass.
+- **Context**: 2026-06-22 hook-inventory reconciliation touched `README.zh-TW.md` L370 ("為什麼 16 個 skill + 20 個 hook？") to fix the hook count and noticed the **skill** count there still says "16" while English README + CLAUDE.md + plugin.json all say "20 skills". zh-TW is lagging (its hooks badge was even staler at 14 before this fix). Scoped OUT of the hook reconciliation deliberately — separate skill-count drift, not a hook issue. zh-TW likely has broader translation lag worth a dedicated sweep.
+- **Proposed**: a zh-TW sync pass (skill count 16→20 at minimum; audit the rest vs README.md). Consider a skill-count `check-*` assertion analogous to the new hook one.
+- **Effort**: S (skill-count line) → Fix (full zh-TW staleness sweep).
+- **Source**: 2026-06-22 hook-inventory reconciliation (adjacent finding, consciously deferred to stay scoped).
 
 ### subagent-driven-development: explicit BLOCKED / incomplete-return handling
 - **Trigger**: next time a dispatched implementer subagent returns **incomplete / blocked** (NEEDS_CONTEXT, partial, gave up) and the orchestrator mishandles it (proceeds as if done, or stalls silently).
@@ -132,13 +132,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Don't forget**: re-enable 完同步 CHANGELOG + `hooks/README.md` 對應 section
 - **Source**: 2026-05-14 v2.7.4 disable batch ship（`c5e5a4c`）；2026-06-02 v2.8.0 transcript pivot + v2.8.1 suggest-compact re-enable
 
-### Hook tally is stale across multiple docs (12 default-on no longer true)
-- **Trigger**: next time the hooks layer is audited, OR a user asks "how many hooks ship default-on"
-- **Context**: 2026-06-02 v2.8.1 dialectic surfaced that the "default-on" tally is wrong in several places and uses inconsistent bases. After the v2.7.4 disable batch + v2.8.0 pivot + v2.8.1, `hooks.json` actually wires only ~7 default-on (state-checkpoint + intent-capture/reload-watch/audit-log/log-error/failure-escalation + suggest-compact), but: CLAUDE.md L9 says "19 hooks (12 default-on, 7 opt-in)"; hooks/README.md L3 mirrors "12 Tier A + 7 Tier B"; hooks/README.md `## Tier A — Default-On (12 hooks)` table still lists v2.7.4-disabled hooks (large-file-warner, cost-tracker, session-summary, commit-secret-scan, branch-protection) as if active; hooks/README.md `## Tier B — Opt-In (6 hooks)` header vs the "7 opt-in" claim; README.md L565 says "8 default-on Tier A + 6 opt-in" (devteam-absorb narrative, a *historical* count — likely should stay). v2.8.1 deliberately did NOT half-fix this (focus-as-subtraction) to avoid introducing a new contradiction mid-batch; it only fixed the suggest-compact-specific rows.
-- **Action**: one pass that derives the real default-on set from `hooks.json`, reconciles CLAUDE.md L9 + hooks/README.md L3/L86-header/L138-header to match, and decides whether README.md L565's historical count is left as-is (recommend yes, with a "(at v2.5.0)" qualifier).
-- **Effort**: S (doc-only, but touch-count is the trap — grep every tally string first)
-- **Source**: 2026-06-02 v2.8.1 hook-followups dialectic R2 (Architect + Inverter new_concerns)
-
 ### Investigate `/reload-plugins` hook count discrepancy
 - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics
 - **Context**: 2026-05-14 v2.7.2 post-reload 觀察 `/reload-plugins` 回報「11 hooks」但 hooks.json 實際 13 entries (1 PreCompact + 1 SessionStart + 3 PreToolUse + 6 PostToolUse + 2 Stop)。差 2 — 可能忽略 SessionStart 或 PreCompact runtime hook count。Live functionality OK（intent-capture 確認 firing post-reload）
@@ -181,6 +174,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)
+
+- **hook inventory reconciliation (4 inconsistent sources) + "Hook tally is stale (12 default-on)"** — ✅ RESOLVED 2026-06-22 (these were two entries, 2026-06-22 + 2026-06-02, describing the **same** drift; folded into one fix). Established a single source of truth: `scripts/check-hook-inventory.js` derives the canonical tally from real wiring — **8 default-on** (`hooks.json`) + **7 opt-in** (`settings.example.json` `hooks-opt-in-examples`) + **5 disabled** (`hooks/*.{js,sh}` wired nowhere = v2.7.4 batch) = **20 total**. The 4 canonical descriptions (`.claude-plugin/plugin.json`, root `plugin.json`, `marketplace.json`, `CLAUDE.md`) now read `20 hooks (8 default-on, 7 opt-in, 5 disabled)`; README.md + README.zh-TW.md + hooks/README.md tier tables rebuilt to correct **membership** (they had listed the 5 disabled hooks as Tier-A default-on while omitting the 5 actually-wired — a count-only check would have missed it). `check-hook-inventory.js --check` asserts counts AND per-tier membership, wired into `preflight-portability.sh` (#11). `sync-version.js` was de-coupled from hook-count ownership (3-tier-aware fragment mirror; `--disabled-count`; README hooks badge + hooks/README ceded to the new script); its 6-test suite + AGENTS.md updated. Historical counts (README "v2.5 added 14 hooks", devteam-absorb narrative) deliberately left as period-accurate. Residual: zh-TW skill-count "16" (separate drift, new backlog entry above).
 
 - **`.opencode/skills/` stale mirror** — ✅ RESOLVED v2.17.2 by **deletion, not a sync script**. The 2026-06-12 entry mischaracterized it as a mirror needing sync; investigation found `.opencode/skills/*` was a `bf0c637` (2026-05-22) leftover the portability-correction plan already decided to remove (`docs/plans/2026-05-22-multi-agent-portability-correction.md` step 24: "把 `.opencode/skills/*` 整個目錄移除", rationale §I1 "多一條 = 多一條 drift surface"). OpenCode discovers all 19 skills via the `.agents/skills/ → ../skills` symlink — confirmed live by `preflight-portability.sh` check #11 (`opencode debug skill`) post-deletion. Building a sync script would have perpetuated the duplication the architecture was designed to avoid. Date 2026-06-15.
 

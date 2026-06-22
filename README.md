@@ -8,10 +8,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.19.0-E8A838?style=flat-square" alt="v2.19.0">
+  <img src="https://img.shields.io/badge/version-2.19.1-E8A838?style=flat-square" alt="v2.19.1">
   <img src="https://img.shields.io/badge/skills-20-4A90D9?style=flat-square" alt="20 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-19-6B8E6B?style=flat-square" alt="19 Hooks">
+  <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -434,7 +434,7 @@ See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/iss
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 20 skills + 14 hooks?**
+**Why 20 skills + 20 hooks?**
 v2.0 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with `superpowers` skills, on the assumption that `superpowers` was always installed. v2.7.0 restores them as standalone fallbacks (with explicit `## Coexistence with Superpowers` sections in their bodies explaining the relationship) so autopilot works without `superpowers`. When `superpowers` IS installed, `.claude/dispatch-config.md` chains let orchestrators prefer the superpowers equivalent for runtime delegation; the autopilot skill stays in the catalog as the standalone fallback. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
 
 **Why `!`command`` injection, not config files?**
@@ -520,24 +520,24 @@ Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are 
 
 ## Hooks
 
-Autopilot ships **14 hooks** (shipped in v2.5.0) that enforce development discipline at the Claude Code runtime layer — no self-discipline required.
+Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on**, **7 opt-in**, and **5 shipped-but-disabled** (see below). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
 
 ### Tier A — Default-On (8 hooks)
 
-These activate automatically when the plugin is installed. All are non-destructive and safe for any project.
+Registered in [`hooks/hooks.json`](hooks/hooks.json) — these activate automatically when the plugin is installed. All are non-destructive and safe for any project. Tool-event hooks read the session transcript rather than stdin (upstream stdin pipe is broken, #6305).
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
-| **large-file-warner** | PreToolUse/Read | Warns at 500KB, hard blocks at 2MB. Bypasses if `offset`/`limit` specified |
-| **suggest-compact** | PostToolUse/Write\|Edit | Counts tool calls per session; suggests `/compact` at 50, then every 25 |
-| **cost-tracker** | Stop | Logs token usage + estimated USD cost to `~/.claude/metrics/costs.jsonl` |
+| **state-checkpoint** | PreCompact | Extracts the last 20 turns from the transcript to `~/.autopilot/compaction-state.md` before a compaction |
+| **session-start** | SessionStart | Primes the session: prints resume hint + intent-capture health |
+| **intent-capture** | PostToolUse/* | Records a per-cwd intent file for cross-session resume hints |
+| **reload-watch** | PostToolUse/* | Detects on-disk catalog drift and injects a `/reload-plugins` reminder |
 | **audit-log** | PostToolUse/Bash | Logs bash commands with auto secret redaction |
-| **session-summary** | Stop | Writes git status + recent commits to `~/.claude/sessions/` |
 | **log-error** | PostToolUse/* | Detects error keywords in tool output, appends to `~/.claude/error-log.md` |
-| **commit-secret-scan** | PreToolUse/Bash | Scans staged content for API keys/tokens. Hard blocks `git commit` if found |
-| **branch-protection** | PreToolUse/Bash | Blocks force push and direct commits on `main`/`master` (anchored regex, env override) |
+| **failure-escalation** | PostToolUse/Bash | Tracks consecutive Bash failures per session; escalates to the user |
+| **suggest-compact** | PostToolUse/Write\|Edit | Counts tool calls per session; suggests `/compact` at 50, then every 25 |
 
-### Tier B — Opt-In (6 hooks)
+### Tier B — Opt-In (7 hooks)
 
 Enable individually by copying entries from [`settings.example.json`](settings.example.json) to your `settings.json`.
 
@@ -550,15 +550,27 @@ Enable individually by copying entries from [`settings.example.json`](settings.e
 | **design-quality** | PostToolUse/Write\|Edit | Warns on generic template UI patterns |
 | **mcp-health** | PreToolUse + PostToolUseFailure | Exponential backoff for unhealthy MCP servers |
 
+### Shipped but Disabled (5 hooks)
+
+These hooks exist as code under `hooks/` but are **wired nowhere** — not in `hooks.json`, not in `settings.example.json`. They are the **PreToolUse / Stop-event** hooks parked by the v2.7.4 disable batch: PreToolUse hooks can't recover their input via the transcript pivot (the tool hasn't run yet), so they stay blocked on the upstream stdin fix ([#6305](https://github.com/anthropics/claude-code/issues/6305)); the Stop-event hooks need separate re-verification. Re-enable plan + recipe live in [`docs/BACKLOG.md`](docs/BACKLOG.md) ("Re-enable v2.7.4 disabled hooks").
+
+| Hook | Event | Why disabled |
+|------|-------|-------------|
+| **large-file-warner** | PreToolUse/Read | PreToolUse — needs upstream stdin fix (#6305) |
+| **commit-secret-scan** | PreToolUse/Bash | PreToolUse — needs upstream stdin fix (#6305) |
+| **branch-protection** | PreToolUse/Bash | PreToolUse — needs upstream stdin fix (#6305) |
+| **cost-tracker** | Stop | Stop-event — needs separate re-verification |
+| **session-summary** | Stop | Stop-event — needs separate re-verification |
+
 ### Secret Detection
 
-`commit-secret-scan` and `audit-log` share a unified secret pattern module (`hooks/_shared/secret-patterns.js`) covering: OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API, Slack, Stripe tokens + inline `--token`/`password`/`Authorization` patterns.
+When enabled, `commit-secret-scan` (currently disabled, see above) and the active `audit-log` share a unified secret pattern module (`hooks/_shared/secret-patterns.js`) covering: OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API, Slack, Stripe tokens + inline `--token`/`password`/`Authorization` patterns.
 
 ### Override
 
 - **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
-- **Custom protected branches**: set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
-- **Disable cost tracking**: set `autopilot.costTracker = false`
+- **Custom protected branches** (when `branch-protection` is re-enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
+- **Disable cost tracking** (when `cost-tracker` is re-enabled): set `autopilot.costTracker = false`
 
 ---
 

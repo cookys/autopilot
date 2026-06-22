@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-06-22 | [ceo-fleet-autonomy](2026-06-22-ceo-fleet-autonomy/README.md) — `/l3 /l4 /l5` CEO front-door + dispatched sub-orchestrator foreman (context-hygiene/unattended); 3-round dialectic-reviewed | v2.21.0 (tentative) | `feat/ceo-fleet-autonomy` |
 
 ## 已完成 (Completed)
 

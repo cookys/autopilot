@@ -2,14 +2,14 @@
 
 <p align="center">
   <strong>Standalone-capable 的 Claude Code 生命週期編排，與 Superpowers 並存。</strong><br>
-  16 個 skill，涵蓋生命週期管理、策略決策、方法論和品質閘門。<br>
+  20 個 skill，涵蓋生命週期管理、策略決策、方法論和品質閘門。<br>
   獨立運作；若已安裝 Superpowers 則優雅委派戰術執行給它。
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
   <img src="https://img.shields.io/badge/version-2.7.0-E8A838?style=flat-square" alt="v2.7.0">
-  <img src="https://img.shields.io/badge/skills-16-4A90D9?style=flat-square" alt="16 Skills">
+  <img src="https://img.shields.io/badge/skills-20-4A90D9?style=flat-square" alt="20 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -35,7 +35,7 @@ Claude Code 本身 —— 即使你裝了內建的 `superpowers` plugin —— �
 
 ## 解決方案
 
-Autopilot 提供 **16 個 skill**，涵蓋生命週期編排、策略智慧、方法論和品質閘門。獨立運作；與選用的 `superpowers` plugin 並存（見下方 [Superpowers Coexistence](#superpowers-coexistence)）。
+Autopilot 提供 **20 個 skill**，涵蓋生命週期編排、策略智慧、方法論和品質閘門。獨立運作；與選用的 `superpowers` plugin 並存（見下方 [Superpowers Coexistence](#superpowers-coexistence)）。
 
 | Skill | 做什麼 | 並存對象 |
 |-------|--------|---------|
@@ -244,7 +244,7 @@ Think Tank 組成：
 /plugin install autopilot@autopilot
 ```
 
-完成。16 個 skill 立即可用：`autopilot:dev-flow`、`autopilot:survey` 等。
+完成。20 個 skill 立即可用：`autopilot:dev-flow`、`autopilot:survey` 等。
 
 ---
 
@@ -367,7 +367,7 @@ Claude Code plugin 安裝時會 **pin 到特定 commit**。`/plugin update` 不�
 **為什麼是 plugin，不是複製 skill？**
 複製的 skill 幾週內就會 drift。Plugin 是 single source of truth — 更新一次，所有人透過 `/plugin update` 取得。
 
-**為什麼 16 個 skill + 20 個 hook？**
+**為什麼 20 個 skill + 20 個 hook？**
 v2.0 移除了 4 個跟 `superpowers` 重疊的 skill（debug、test-strategy、team、profiling），預設 `superpowers` 永遠存在。v2.7.0 把它們以 standalone fallback 形式補回（每支 body 內加 `## Coexistence with Superpowers` 段說明關係），讓 autopilot 在沒 `superpowers` 的情況下也能跑。當 `superpowers` 已安裝時，`.claude/dispatch-config.md` chain 讓 orchestrator runtime 偏好 superpowers 對應 skill；autopilot 的 skill 留在 catalog 作為 standalone fallback。v2.2 新增 `think-tank-dialectic` 作為**不同工具**（不是升級版）用於不可逆決策。v2.5 新增 14 個 hook 用於 runtime 強制執行 — 以前只寫在 markdown 規則裡的紀律。Hook 和 skill 服務不同層次：skill 在對話時定規則；hook 在 tool-call 時強制執行。
 
 **為什麼用 `!`command`` 注入，不用設定檔？**
@@ -426,7 +426,7 @@ Autopilot v2.4.0 內建 **3 個 read-only 方法論 agent**，把三條紅線紀
 
 ## 推薦搭配
 
-Autopilot **方法論和生命週期層面自給自足** — 單獨安裝 autopilot 就能拿到所有 16 skills + 3 methodology agents。如果需要**角色特化**（語言專家、DB 管理員、Kubernetes 專家、前端設計師等），我們推薦搭配 voltagent 使用：
+Autopilot **方法論和生命週期層面自給自足** — 單獨安裝 autopilot 就能拿到所有 20 skills + 3 methodology agents。如果需要**角色特化**（語言專家、DB 管理員、Kubernetes 專家、前端設計師等），我們推薦搭配 voltagent 使用：
 
 ```
 /plugin install voltagent@...

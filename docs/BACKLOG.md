@@ -26,12 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### zh-TW skill-count is stale ("16 個 skill")
-- **Trigger**: next time touching `README.zh-TW.md`, OR when the skill count changes, OR a zh-TW doc-sync pass.
-- **Context**: 2026-06-22 hook-inventory reconciliation touched `README.zh-TW.md` L370 ("為什麼 16 個 skill + 20 個 hook？") to fix the hook count and noticed the **skill** count there still says "16" while English README + CLAUDE.md + plugin.json all say "20 skills". zh-TW is lagging (its hooks badge was even staler at 14 before this fix). Scoped OUT of the hook reconciliation deliberately — separate skill-count drift, not a hook issue. zh-TW likely has broader translation lag worth a dedicated sweep.
-- **Proposed**: a zh-TW sync pass (skill count 16→20 at minimum; audit the rest vs README.md). Consider a skill-count `check-*` assertion analogous to the new hook one.
-- **Effort**: S (skill-count line) → Fix (full zh-TW staleness sweep).
-- **Source**: 2026-06-22 hook-inventory reconciliation (adjacent finding, consciously deferred to stay scoped).
+### README.zh-TW.md broader staleness sweep + no skill/hook-count guard for zh-TW
+- **Trigger**: next time touching `README.zh-TW.md`, OR a zh-TW doc-sync pass.
+- **Context**: 2026-06-22 fixed the concrete **skill-count** drift (6 stale "16" → "20") and **hook-count** drift (badge 14 → 20, Tier-B 6 → 7) in `README.zh-TW.md`. Two residuals remain: (1) **broader translation lag** — zh-TW lagged badly on both counts, so the rest of the file likely has other stale claims vs `README.md` worth a full diff-sweep; (2) **no guard** — `sync-version.js` only syncs `README.md` (version badge + EN description fragments), NOT zh-TW, and `check-hook-inventory.js` checks zh-TW hook counts but nothing checks zh-TW **skill** counts. So zh-TW can silently re-drift.
+- **Proposed**: a zh-TW ↔ README.md diff-sweep; consider a skill-count `check-*` assertion (analogous to `check-hook-inventory.js`) that also covers zh-TW, OR fold zh-TW badges into a sync gate.
+- **Effort**: Fix (sweep) + S (guard, if wanted).
+- **Source**: 2026-06-22 hook-inventory reconciliation follow-up (skill/hook counts fixed; sweep + guard deferred).
 
 ### subagent-driven-development: explicit BLOCKED / incomplete-return handling
 - **Trigger**: next time a dispatched implementer subagent returns **incomplete / blocked** (NEEDS_CONTEXT, partial, gave up) and the orchestrator mishandles it (proceeds as if done, or stalls silently).

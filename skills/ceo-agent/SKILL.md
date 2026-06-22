@@ -142,6 +142,25 @@ Requires CC v2.1.139+. Full behavior + fallbacks:
 [`references/multi-agent-portability.md` §7](../../references/multi-agent-portability.md).
 For unattended *interval* re-runs (vs converge-until-done), see `project-config-template/loop.md`.
 
+### Terse front-door — `/l3 /l4 /l5` and the dispatched foreman (Claude Code)
+
+`/l3 /l4 /l5 <goal>` are thin slash-command skills that enter CEO mode with the
+four startup questions **pre-filled** (OKR from goal; involvement=just-results;
+scope=Hold; no-go=none) and set the execution posture:
+
+- **`/l3`** — CEO executes **inline** on this thread (the "全權處理" behavior as one command).
+- **`/l4`** — CEO dispatches **ONE background, worktree-isolated `sub-orchestrator` foreman**
+  (depth 1) that runs dev-flow; the CEO holds the **depth-0 control loop** (budget
+  cap → `TaskStop` + escalate; outcome→action table; merge-back; worktree GC) and
+  the **authoritative qc verdict** (depth-0 re-dispatch reading artifacts, distinct
+  from the foreman's first-pass qc).
+- **`/l5`** — `/l4` with the implementer leaf-dispatched to agy/Gemini via `dispatch-hetero.sh`.
+
+Overrides: `-x <csv>` (no-go), `--expand` (scope), `--solo` (autonomy without offload
+— also the degradation fallback when the foreman can't start). Full semantics
+(topology, the P0-verified kill+reap mechanism, run-summary ledger):
+[`references/level-front-door.md`](references/level-front-door.md).
+
 ## Startup
 
 Confirm four things after receiving user's goal:

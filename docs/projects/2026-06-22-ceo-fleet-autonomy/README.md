@@ -55,7 +55,7 @@
 | Phase | Status | Commit |
 |-------|--------|--------|
 | P0 spike | ✅ **PASS** (2026-06-22) — depth-0 kill+reap verified empirically (`TaskStop` force-kills a mid-run `run_in_background` foreman; worktree at `.claude/worktrees/agent-<id>`; unchanged auto-cleans, changed → `remove --force`). `/l4` ships unattended. | (this commit) |
-| P1 v1 machine + sugar | ⬜ Pending | — |
+| P1 v1 machine + sugar | 🟡 **Built (impl done; dogfood pending restart)** (2026-06-22) — `/l3 /l4 /l5` skills + `level-front-door.md` (foreman + depth-0 control loop + outcome→action table + qc@depth-0 + run-summary ledger); `dispatch-hetero.sh` `runner`/`model` provenance; ceo-agent wired; release surfaces synced (v2.21.0, skills 20→23); all 16/16 preflight checks pass. Dogfood `/l4` (criteria 3-6) needs a CC restart — new skills cache at session start. | (this commit) |
 | P2+ deferred | ⬜ Gated | — |
 
 ## Review Loop History

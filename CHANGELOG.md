@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.20.0 — doc-sync gains a deterministic gate (Layer 1)
+
+**Headline**: `autopilot:doc-sync` is now a **two-layer** system. Layer 1 is a deterministic gate — zero-variance checks (links, code-fence balance, version-sync, CLI-surface-vs-docs, roadmap-consistency) that *always* catch their class, so it's a **reliable stopping condition** and gate-able in CI. Layer 2 is the existing LLM sweep, reframed as **discovery** (non-deterministic — never loop it to zero). Converging workflow: when the LLM sweep finds a mechanizable drift class, demote it into the gate. This resolves the core flaw of an LLM-only design — a "clean" sweep only means *this sample* found nothing, never that nothing exists (proven by codeforge's 7-round non-convergent trajectory).
+
+### Added
+- **`scripts/doc-drift-gate.py`** — portable, project-agnostic Layer-1 baseline: internal-link resolution + code-fence balance over a configurable doc set, zero-config, zero-false-positive (skips placeholders, GitHub-relative conventions, extensionless targets). Projects adopt + extend with project-specific checks. Exit 0/1 → CI-gate-able.
+- **`project-config-template/doc-drift-config.md`** — new `gate_command` field (the project-local Layer-1 command doc-sync runs first).
+
+### Changed
+- **`skills/doc-sync/SKILL.md`** — new "Two layers" section: deterministic gate (run FIRST, reliable) vs LLM discovery (non-deterministic, don't loop-to-zero); the demote-into-gate convergence loop; bootstrapping guidance. Description updated.
+
 ## v2.19.1 — hook inventory single source of truth
 
 **Headline**: Reconciled four mutually-inconsistent hook tallies into one derived source of truth. Before: `plugin.json`/`CLAUDE.md` said "19 hooks (12 default-on, 7 opt-in)", README badges said 19/14, README Tier-A tables listed the 5 *disabled* hooks as default-on while omitting the 5 actually-wired ones, and the zh-TW badge said 14. After: every doc reads **20 hooks (8 default-on, 7 opt-in, 5 disabled)**, derived mechanically from real wiring (`hooks.json` + `settings.example.json`) by the new `scripts/check-hook-inventory.js`, which gates both counts AND per-tier membership.

@@ -4,10 +4,12 @@ description: >
   Audit docs against actual code and find drift (wrong / stale / missing claims), report-only.
   Use when: "do the docs match the code", "check for doc drift", "audit docs vs code", "did
   this change make docs stale", "doc-sync", "文件跟 code 同步嗎", "查文件有沒有過時",
-  "對照文件與實作", post-merge doc verification, periodic doc accuracy sweep. Two modes —
-  scoped (cheap, the modules this diff touched) and full (expensive, whole-repo). Not for:
-  WRITING docs from scratch, fixing a single known typo, or build/test correctness
-  (→ quality-pipeline). Report-only — surfaces findings; you triage + fix.
+  "對照文件與實作", post-merge doc verification, periodic doc accuracy sweep. Two layers:
+  a deterministic gate (reliable — links/fences/version/CLI-surface/roadmap; the real stopping
+  condition, gate-able in CI) + an LLM sweep for discovery (scoped per-diff / full whole-repo;
+  non-deterministic, never loop to zero). Not for: WRITING docs from scratch, fixing a single
+  known typo, or build/test correctness (→ quality-pipeline). Report-only — surfaces findings;
+  you triage + fix; mechanizable findings get demoted into the deterministic gate.
 ---
 
 # Doc-Sync (Doc↔Code Drift Audit)
@@ -24,15 +26,57 @@ If no `doc-drift-config.md` above, derive domains on the fly (see Domains) and t
 a config would make future runs sharper. Template:
 [`project-config-template/doc-drift-config.md`](../../project-config-template/doc-drift-config.md).
 
-## Two modes — pick by trigger and cost
+## Two layers — deterministic gate + LLM discovery
+
+Doc-sync has **two layers with different reliability**. Use both; don't confuse their roles.
+
+**Layer 1 — deterministic gate (RELIABLE; this is the stopping condition).** A project-local
+script of zero-variance checks that *always* catch their class (links resolve, code-fences
+balance, version strings agree, every CLI subcommand appears in the docs, roadmap tables
+don't contradict). **Run this FIRST**, every time:
+
+```
+<gate_command from .claude/doc-drift-config.md>   # e.g. python3 scripts/check-doc-drift.py
+```
+
+Green = those classes are *genuinely* clean. This is gate-able (CI, pre-merge) because it has
+no false negatives within its classes. If `gate_command` isn't configured, see "Bootstrapping
+the gate" below.
+
+**Layer 2 — LLM sweep (DISCOVERY; NOT a gate).** The scoped/full agent sweep below. It finds
+**new** drift *classes* the deterministic gate doesn't cover yet (semantic claims, prose
+nuance). It is **non-deterministic** — a "clean" sweep only means *this sample* found nothing,
+never that nothing exists.
+
+> ⚠️ **Do not loop the LLM sweep to zero.** It does not converge: non-deterministic finders
+> sample a different slice each round (latent errors surface stochastically), and the fixes
+> themselves introduce new drift. Chasing literal-0 burns tokens without terminating. The
+> reliable answer to "are the docs in sync?" is **Layer 1 green**, not "the sweep found nothing."
+
+**The loop that DOES converge:** every time the LLM sweep finds a *mechanizable* class, **demote
+it into Layer 1** (add a check to the gate script). Over time the gate covers more, the sweep
+finds less, and the system tightens. That is the intended workflow.
+
+## Layer 2 modes — pick by trigger and cost
 
 | Mode | Cost | When |
 |------|------|------|
 | **scoped** | cheap (~1–3 agents) | **Default.** End of L-size work / post-merge. Audits only the docs describing the modules *this diff* touched. Pass a base ref (default `main`/`develop`). |
 | **full** | EXPENSIVE (many agents/tokens) | Whole-repo sweep across all domains. OFFER (don't auto-run) when a change touches user-facing behavior OR 3+ modules; or periodically (e.g. >30 days since last). |
 
-Never run either as a blocking per-commit gate. It is a doc-sync aid, orthogonal to
-build/test correctness (those belong to `quality-pipeline`).
+Layer 2 is never a blocking per-commit gate — it's a discovery aid, orthogonal to build/test
+correctness (those belong to `quality-pipeline`). Layer 1 *is* gate-able.
+
+## Bootstrapping the gate (Layer 1)
+
+If the project has no `gate_command` yet: start one. **Universal checks** (work in any repo,
+zero config) — internal-link resolution + code-fence balance — are the baseline; add
+**project-specific** checks as the LLM sweep discovers mechanizable classes (version-sync,
+CLI-surface-vs-docs, roadmap-consistency, etc.). Autopilot ships a generic baseline at
+[`scripts/doc-drift-gate.py`](../../scripts/doc-drift-gate.py) (links + fences over a
+configurable doc set) you can adopt and extend; the codeforge repo's `scripts/check-doc-drift.py`
+is a 5-check reference that adds the project-specific classes on top. Wire your gate into CI +
+the `quality-pipeline` doc step.
 
 ## Dispatch (portable; first available wins)
 

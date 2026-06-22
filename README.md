@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.19.1-E8A838?style=flat-square" alt="v2.19.1">
+  <img src="https://img.shields.io/badge/version-2.20.0-E8A838?style=flat-square" alt="v2.20.0">
   <img src="https://img.shields.io/badge/skills-20-4A90D9?style=flat-square" alt="20 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -48,7 +48,7 @@ Autopilot ships **20 skills** covering lifecycle orchestration, strategic intell
 | **research-to-ship** | Pinned participatory pipeline: research best-practice → plan → dialectic loop review → project → dev-flow, with a human gate between each phase. Delegates to survey/think-tank-dialectic/project-lifecycle/dev-flow | — (no equivalent) |
 | **quality-pipeline** | Unified quality gate: test → scan → completeness → review | `superpowers:verification-before-completion` (partial) |
 | **finish-flow** | Size-aware closing forcing function — TaskCreates discrete L-5 / H-9 / Fix / S-Lite sub-tasks so nothing gets silently compressed | — (no equivalent) |
-| **doc-sync** | Doc↔code drift audit (WRONG / STALE / MISSING claims, adversarially verified, report-only). Scoped (cheap, per-diff) + full (whole-repo) modes; native dispatch with CC `Workflow` fast-path. Wired into finish-flow L-5.4 | — (no equivalent) |
+| **doc-sync** | Doc↔code drift detection, two layers: a **deterministic gate** (links/fences/version/CLI-surface/roadmap — reliable, gate-able in CI; baseline `scripts/doc-drift-gate.py`) + an **LLM sweep** for discovery (scoped per-diff / full whole-repo; non-deterministic, never loop-to-zero). Mechanizable findings demote into the gate. Wired into finish-flow L-5.4 | — (no equivalent) |
 | **project-lifecycle** | Plan → bootstrap → structure → archive | `superpowers:finishing-a-development-branch` (partial) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **retro** | Engineering retrospective from git history | — (no equivalent) |

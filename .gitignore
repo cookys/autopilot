@@ -25,3 +25,4 @@ docs/projects/**/tree/events.jsonl.lock
 # (KR1). Only the per-run verdict JSON + the calibration sample carry the
 # auditable signal, and those stay tracked. ** so _archive/<proj>/ is covered.
 docs/projects/**/tree/panel/*_q[0-9].txt
+__pycache__/

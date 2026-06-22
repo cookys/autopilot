@@ -43,6 +43,18 @@
 #   - workflow:.claude/workflows/doc-code-drift-audit.js  # CC-only fast path (full)
 #   - native                                           # portable default
 
+## Deterministic gate (Layer 1 — the RELIABLE stopping condition)
+# A project-local command of zero-variance checks doc-sync runs FIRST, every time.
+# Green = those drift classes are genuinely clean (gate-able in CI / pre-merge),
+# unlike the non-deterministic LLM sweep. Start from autopilot's generic baseline
+# (links + fences) and EXTEND with project-specific checks (version-sync,
+# CLI-surface-vs-docs, roadmap-consistency) as the LLM sweep finds mechanizable
+# classes — that demote-into-gate loop is what makes the system converge.
+#
+#   gate_command: python3 scripts/check-doc-drift.py
+#
+# Baseline (any repo, no config): python3 <autopilot>/scripts/doc-drift-gate.py [ROOTS...]
+
 ## Staleness threshold (optional)
 # Days since last full sweep before doc-sync offers a full run. Default 30.
 # Tracked in .claude/doc-audit-state.json (last_full_audit).

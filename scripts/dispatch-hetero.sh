@@ -48,8 +48,8 @@
 #
 # EXIT: 0 = committed (new commit + clean tree + agent exit 0; worktree removed
 #           unless --keep-worktree; the branch survives for review/merge)
-#       1 = ran but did not yield a reviewable clean commit — one of: dirty,
-#           no_op, question_suspected (worktree KEPT for inspection — clean up
+#       1 = ran but did not yield a reviewable clean commit — one of: failure,
+#           dirty, no_op, question_suspected (worktree KEPT for inspection — clean up
 #           with `git worktree remove`)
 #       2 = precondition failure (nothing was created)
 

@@ -55,8 +55,11 @@ CEO (depth 0, this session)
 ```
 
 - **Foreman = `sub-orchestrator`, NOT `manager`.** `manager` is non-dispatchable
-  by tool-enforced invariant (`scripts/resolve-dispatch.sh` exit 3, Amendment 11).
-  Resolve the foreman's model with `scripts/resolve-dispatch.sh --role sub-orchestrator`.
+  by tool-enforced invariant (`scripts/resolve-dispatch.sh --tree --role manager`
+  exit 3, Amendment 11). Resolve the foreman's model with
+  `scripts/resolve-dispatch.sh --tree --role sub-orchestrator` (→ `opus`). The
+  `--tree` flag is **required** — `sub-orchestrator` lives only in the task-tree
+  role table; without `--tree` the command exits 1 "unknown role".
 - **The foreman runs dev-flow's phases INLINE at depth 1** (planning + gating it
   does itself). It only **leaf-dispatches** the implementer and the first-pass
   reviewer to **depth-2 workers**. It does NOT dispatch plan/qc as further
@@ -97,8 +100,12 @@ foreman dispatch in a guard it owns:
 - Pick a wall-clock deadline and a round cap before dispatch (a small fixed
   default, e.g. 30 min / 3 rounds, scaled to task size). **Token-estimate budget
   is deferred** (needs a counting source — Open Q3).
-- `Monitor` can arm the deadline; the wall-clock itself is plain depth-0 timing
-  (no new primitive).
+- `Monitor` arms the deadline by emitting on a timer, not via a built-in clock —
+  e.g. `Monitor(command: "sleep 1800; echo DEADLINE_HIT", timeout_ms: 1900000)`;
+  when the `DEADLINE_HIT` event fires you `TaskStop` the foreman if still running.
+  (Cancel the guard with `TaskStop <monitor-id>` once the foreman returns normally,
+  else it fires a harmless stale event at the cap.) The wall-clock itself is plain
+  depth-0 timing (no new primitive).
 - **On timeout or cap-hit → `TaskStop <agentId>` then escalate.** Fail-closed:
   a hit cap is an escalation, never a silent continue. This is also the
   **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
@@ -106,9 +113,12 @@ foreman dispatch in a guard it owns:
 ### 2. Outcome → action table
 
 Every foreman / `dispatch-hetero.sh` outcome maps to a defined action — no
-outcome is a silent no-op. (Outcome vocabulary is `dispatch-hetero.sh`'s set;
-see [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md)
-§ "Outcome states".)
+outcome is a silent no-op. The first six rows are `dispatch-hetero.sh`'s outcome
+vocabulary (see [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md)
+§ "Outcome states"); the final `killed` row is **not** a script status — it is the
+CEO's own state after calling `TaskStop <agentId>` at the budget cap (§1), and on
+the native `/l4` path an `Agent()` dispatch failure surfaces as a tool error, not
+a JSON outcome.
 
 | Outcome | Depth-0 action |
 |---------|----------------|
@@ -117,8 +127,8 @@ see [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md)
 | `dirty` | Escalate (worker committed then left the tree dirty — not reviewable). |
 | `failure` | Escalate (clean commit but abnormal exit — run not trustworthy). |
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
-| `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). |
-| `killed` (budget cap) | Escalate (see §1). |
+| `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). For `/l5` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
+| `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
 
 ### 3. qc@depth-0 is THE gate
 
@@ -134,9 +144,17 @@ real gates — one gate (depth 0) + one self-check (foreman). The run-summary le
 
 `dispatch-hetero.sh` (and the foreman pattern) deliberately **never merge** — they
 branch off a pinned base and only remove the worktree on success. After the
-**authoritative qc verdict passes at depth 0**, the CEO merges the foreman's
-branch into live `develop`. On conflict (base moved during a long run):
-**rebase-retry once, else escalate** — never auto-resolve unattended.
+**authoritative qc verdict passes at depth 0**, the CEO integrates the foreman's
+commit. **Mind the base**: the foreman worktree branches off the *tracked* base
+(`develop`), NOT the CEO's checked-out HEAD (see Gotchas). When the CEO is on a
+feature branch, a two-dot `git diff <feature>..<foreman-branch>` shows phantom
+deletions of the absent feature work, and a plain `git merge` drags the base's
+history in — so **`git cherry-pick <foreman-commit>`** (the isolated commit) is the
+correct integration when the touched files don't overlap the feature work
+(empirically the case in the P1.f dogfood). Use a real branch merge only when the
+foreman built on the CEO's actual HEAD (STEP-0 bootstrap, Gotchas). On conflict
+(base moved during a long run): **rebase/cherry-pick-retry once, else escalate** —
+never auto-resolve unattended.
 
 ### 5. Worktree GC
 
@@ -151,7 +169,12 @@ git worktree prune
 ```
 
 - For the `/l5` agy path, the worktree path is in the outcome JSON (`worktree`
-  field).
+  field) and the branch in the `branch` field — reap **both**:
+  `git worktree remove --force <worktree>` (if non-null) **and**
+  `git branch -D <branch>` (`git worktree remove` does NOT delete the branch, so a
+  non-success hetero dispatch leaves a stale branch otherwise). On a `committed`
+  outcome the worktree is already auto-removed (`worktree: null`); after the
+  depth-0 cherry-pick, still `git branch -D <branch>` to clear the integrated branch.
 - For a killed native Claude foreman, the path is deterministic
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory
@@ -180,9 +203,14 @@ one row per step:
 - **New skills aren't dispatchable until a Claude Code restart** — the plugin
   caches skills at session start. After adding `/l3 /l4 /l5`, restart before the
   dogfood run.
-- **Worktree base ≠ HEAD.** If the foreman must build on the CEO's latest, do the
-  STEP-0 merge bootstrap (memory `worktree-dispatch-gotchas`); otherwise it
-  branches off the pinned base.
+- **Worktree base ≠ HEAD.** `Agent(isolation:"worktree")` branches the foreman off
+  the *tracked* base (`develop`), NOT the CEO's checked-out HEAD — so it does **not**
+  see uncommitted or feature-branch-only work (this bites self-referential runs:
+  in the P1.f dogfood a `/l5` foreman ran develop's *pre-feature* `dispatch-hetero.sh`).
+  If the foreman must build on the CEO's latest, prefix its prompt with **STEP 0**:
+  `git merge <current-HEAD-sha>` (git objects are shared across worktrees) + verify a
+  sentinel file from your HEAD exists + **STOP, don't recreate** on failure. Otherwise
+  it branches off the pinned base and you integrate via cherry-pick (§4).
 - **`git worktree prune` alone is a no-op** on an on-disk worktree — `remove
   --force` first.
 - **Cross-platform**: `/lN`, `Agent(run_in_background)`, `TaskStop`, and `Monitor`

@@ -25,8 +25,10 @@ assert_contains "$OUT" "in parity" "clean mirror reports parity"
 node "$SCRIPT" --help >/dev/null 2>&1
 assert_eq "0" "$?" "--help exit 0"
 
-# 3. badge VALUE drift: zh-TW skills badge falls behind EN (the exact 20→16 regression)
-sed -i 's#badge/skills-20-#badge/skills-16-#' "$SBX/README.zh-TW.md"
+# 3. badge VALUE drift: zh-TW skills badge falls behind EN (the original 20→16 regression
+# class). Wildcard the current count so the negative case self-maintains across count bumps
+# (a hardcoded old count silently no-ops the drift injection — caught at v2.21.0, skills 20→23).
+sed -i -E 's#badge/skills-[0-9]+-#badge/skills-0-#' "$SBX/README.zh-TW.md"
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "skills badge drift exit 1"
 assert_contains "$OUT" "skills" "badge drift names the skills badge"

@@ -20,7 +20,7 @@ dev-flow, while the CEO holds the **depth-0 control loop** and the
 
 1. Invoke `autopilot:ceo-agent` with the four startup questions **pre-filled**
    (same presets as `/l3`: OKR from `<goal>`; involvement=3 just-results;
-   scope=Hold via `--expand`; no-go=none via `-x <csv>`).
+   scope=Hold (override: `--expand` → Expand); no-go=none (override: `-x <csv>`)).
 2. Execution posture: **offload**. Dispatch the foreman and run the depth-0
    control loop exactly per
    [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md):

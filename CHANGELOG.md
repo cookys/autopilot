@@ -35,6 +35,11 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Changed
 - **`scripts/dispatch-hetero.sh`** — outcome + precondition JSON now carry `runner`/`model` **engine provenance** (`runner` always `"agy"`, `model` echoes `--model`) for the caller's run-summary ledger. Doc-synced: `references/hetero-dispatch.md`, `CLAUDE.md` inventory.
 - **`skills/ceo-agent/SKILL.md`** — new "/lN front-door & dispatched foreman" pointer section.
+- **`skills/team/references/team-tactics.md`** — new "Dispatched-Subagent Return Contract" section: a 4-value status enum (`DONE` / `DONE_WITH_CONCERNS` / `NEEDS_CONTEXT` / `BLOCKED`) with the orchestrator's action per status (BLOCKED → re-scope/escalate, never a silent drop). Shipped as the **`/l4` dogfood payload** of this release.
+
+### Fixed
+- **`scripts/resolve-doa.sh`** — apply the `valid_token` (`^[A-Za-z0-9._-]+$`) allowlist to the override-config **Preset column** before it reaches the `printf`-built JSON, mirroring the v2.17.0 `resolve-dispatch.sh` hardening; an invalid token warns to stderr and falls through to defaults. Shipped as the **`/l5` (hetero/Gemini) dogfood payload** of this release.
+- **`hooks/tests/check-readme-parity.test.sh`** — the EN↔zh skills-badge drift negative test hardcoded the old count (`skills-20-`), silently no-opping its drift injection after a count bump; wildcarded to `skills-[0-9]+-` so it self-maintains.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`

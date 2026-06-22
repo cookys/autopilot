@@ -103,15 +103,23 @@ Sugar pre-fills the 4 CEO startup questions (OKR from goal; involvement from lev
 
 ## Open questions (for the plan)
 
-0. **SPIKE (mandatory, Phase 0) — depth-0 kill of a native-`Agent` Claude foreman.** Round-3
-   convergent finding (Architect + Ops): the depth-0 control loop is verified for the agy
-   subprocess path (`dispatch-hetero.sh --print-timeout` + exit semantics) but the `/l4`
-   *default* foreman is a native `Agent` sub-orchestrator, and a caller-side wall-clock
-   kill of it is UNVERIFIED. Spike: can the CEO dispatch the foreman with
-   `run_in_background: true`, arm a `Monitor`/deadline, and `TaskStop` it at the cap +
-   discover its worktree to reap? If not buildable, `/l4` degrades to `--solo` (attended)
-   and only the agy path gets the unattended guard. This gates the "unattended" claim for
-   the Claude-foreman path — do it first.
+0. ~~SPIKE — depth-0 kill of a native-`Agent` Claude foreman~~ — **DONE 2026-06-22: PASS.**
+   Empirically verified (spike dispatched a real background sub-orchestrator and force-killed
+   it mid-run):
+   - `Agent(run_in_background: true, isolation: "worktree")` returns an `agentId` usable as a
+     `TaskStop` task_id.
+   - `TaskStop <agentId>` **force-kills a mid-run agent** (verified: target was on its 2nd
+     work item; status returned `killed`).
+   - The foreman's worktree is at a **deterministic, discoverable path**:
+     `.claude/worktrees/agent-<agentId>` (created `locked` — so reap needs `--force`).
+   - On kill, an **unchanged** worktree **auto-cleans** (no leak). A **changed** worktree is
+     kept (Agent contract "auto-cleaned if unchanged") → reap via `git worktree remove
+     --force .claude/worktrees/agent-<id>` + `git branch -D worktree-agent-<id>` + `prune`.
+   ⇒ The depth-0 control loop is mechanically buildable: dispatch background + isolation →
+   note wall-clock → at cap `TaskStop` → worktree auto-cleans or `remove --force`. **`/l4`
+   ships unattended; the `--solo` degradation is the fallback, not the default.** The
+   wall-clock itself is depth-0 timing logic (no new primitive); `Monitor` can arm the
+   deadline. Provenance/budget/merge-back proceed as specified in Phase 1.
 
 
 1. ~~Phase 0 blocking spike~~ — **REFRAMED (Round-2 correction)**: hetero is NOT blocked

@@ -53,7 +53,7 @@
 
 | Phase | Status | Commit |
 |-------|--------|--------|
-| P0 spike | ⬜ Pending | — |
+| P0 spike | ✅ **PASS** (2026-06-22) — depth-0 kill+reap verified empirically (`TaskStop` force-kills a mid-run `run_in_background` foreman; worktree at `.claude/worktrees/agent-<id>`; unchanged auto-cleans, changed → `remove --force`). `/l4` ships unattended. | (this commit) |
 | P1 v1 machine + sugar | ⬜ Pending | — |
 | P2+ deferred | ⬜ Gated | — |
 

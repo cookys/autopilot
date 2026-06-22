@@ -89,6 +89,29 @@ agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "
 - On kill: an **unchanged** worktree **auto-cleans** (Agent contract
   "auto-cleaned if unchanged" — no leak). A **changed** worktree is **kept**.
 
+#### Worktree base = `origin/develop`, NOT the CEO's HEAD (verified)
+
+`Agent(isolation:"worktree")` always branches the new worktree from the repo's
+**default/integration branch (`origin/develop` = `origin/HEAD`)** — never the
+CEO's checked-out HEAD or current branch, and the `Agent` tool exposes **no base
+parameter** to change this. Verified twice (2026-06-22): a foreman dispatched
+from `feat@1048fd1` landed on `origin/develop@689dbea`; a probe with a HEAD-only
+sentinel commit found the sentinel **absent** in the worktree.
+
+⇒ **Base-currency decision the CEO makes BEFORE dispatch** (`git rev-parse HEAD`
+vs `git merge-base --is-ancestor HEAD origin/develop`):
+
+| CEO's state | Foreman brief STEP 0 |
+|-------------|----------------------|
+| Task is independent of any un-merged CEO work (HEAD already on/reachable-from `origin/develop`) | **none** — the clean `origin/develop` base is correct. |
+| Task must build on the CEO's un-merged work (feature-branch-only or self-referential — e.g. exercising tooling that lives only on this branch) | **`git reset --hard <CEO-HEAD-sha>`** as the foreman's literal STEP 0. Git objects are shared across worktrees, so `<CEO-HEAD-sha>` always resolves; the throwaway worktree branch is then exactly the CEO's state. Verify a sentinel file from your HEAD exists, and **STOP (don't recreate)** if the reset fails. |
+
+This is why the P1.f dogfood's `/l5` foreman ran the *pre-feature* `dispatch-hetero.sh`
+(its develop base lacked the branch-only P1 work) — the self-referential case above,
+which the STEP-0 reset prevents. After a STEP-0 foreman commits, its branch =
+`CEO-HEAD + foreman-commit(s)`; integrate by cherry-picking the foreman commit(s)
+(§4).
+
 ## Depth-0 control loop (owned by the CEO, NOT the foreman)
 
 The control loop is enforced at **depth 0** — the child cannot be trusted to
@@ -203,14 +226,11 @@ one row per step:
 - **New skills aren't dispatchable until a Claude Code restart** — the plugin
   caches skills at session start. After adding `/l3 /l4 /l5`, restart before the
   dogfood run.
-- **Worktree base ≠ HEAD.** `Agent(isolation:"worktree")` branches the foreman off
-  the *tracked* base (`develop`), NOT the CEO's checked-out HEAD — so it does **not**
-  see uncommitted or feature-branch-only work (this bites self-referential runs:
-  in the P1.f dogfood a `/l5` foreman ran develop's *pre-feature* `dispatch-hetero.sh`).
-  If the foreman must build on the CEO's latest, prefix its prompt with **STEP 0**:
-  `git merge <current-HEAD-sha>` (git objects are shared across worktrees) + verify a
-  sentinel file from your HEAD exists + **STOP, don't recreate** on failure. Otherwise
-  it branches off the pinned base and you integrate via cherry-pick (§4).
+- **Worktree base = `origin/develop`, NOT the CEO's HEAD.** See the canonical
+  treatment + the base-currency STEP-0 decision table under "Dispatching the
+  foreman" above. Short form: independent task → clean develop base is fine;
+  build-on-un-merged-CEO-work → foreman STEP 0 = `git reset --hard <CEO-HEAD-sha>`
+  (shared objects), verify a sentinel, STOP on failure; integrate via cherry-pick (§4).
 - **`git worktree prune` alone is a no-op** on an on-disk worktree — `remove
   --force` first.
 - **Cross-platform**: `/lN`, `Agent(run_in_background)`, `TaskStop`, and `Monitor`

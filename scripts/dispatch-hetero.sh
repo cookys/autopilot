@@ -112,15 +112,26 @@ fi
 
 # --- isolated worktree (the non-skippable safety rail) ---
 WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
-git worktree add --quiet "$WT" -b "$BRANCH" "$BASE" || die_precondition "git worktree add failed"
+if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
+  # `git worktree add -b` creates the branch ref BEFORE the dir, so the ref leaks
+  # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
+  git branch -D "$BRANCH" >/dev/null 2>&1 || true
+  die_precondition "git worktree add failed"
+fi
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
+
+# Interrupt during the long agy run orphans worktree + branch with no JSON. Trap
+# INT/TERM to reap both, then DISARM once agy returns (the keep/remove logic below
+# owns the worktree from that point — a clean exit must not trip this).
+trap 'git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # --- run the agent (its stdout/stderr go to LOG, never our stdout) ---
 ( cd "$WT" && "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" \
     --model "$MODEL" --dangerously-skip-permissions \
     --print-timeout "$TIMEOUT" ) >"$LOG" 2>&1
 AGENT_EXIT=$?
+trap - INT TERM
 
 # --- verify by artifacts, never by self-report ---
 HEAD_SHA="$(git -C "$WT" rev-parse HEAD)"

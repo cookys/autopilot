@@ -26,7 +26,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### subagent-driven-development: explicit BLOCKED / incomplete-return handling
+### ✅ DONE (2026-06-22, `e96998d` via /l4 dogfood) — subagent-driven-development: explicit BLOCKED / incomplete-return handling
+- **Resolution**: `skills/team/references/team-tactics.md` gained a `## Dispatched-Subagent Return Contract` section — 4-value status enum (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED) + orchestrator action per status, BLOCKED→re-scope/escalate explicit. No separate spec-reviewer rebuilt (reviewer.md already covers spec-compliance, as the original note required). Landed as the `/l4` dogfood payload for `ceo-fleet-autonomy`.
 - **Trigger**: next time a dispatched implementer subagent returns **incomplete / blocked** (NEEDS_CONTEXT, partial, gave up) and the orchestrator mishandles it (proceeds as if done, or stalls silently).
 - **Context**: From the superpowers-parity survey (2026-06-04). superpowers' `subagent-driven-development` has (a) a two-stage **spec-compliance → code-quality** review ORDER and (b) explicit dispatched-subagent return-status handling (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED). Light design found (a) is **already covered** — `agents/reviewer.md` v2.12.1/v2.12.3 folded claim-completeness / "claimed but missing: decompose / claim-scope = unit of done" into the reviewer, which IS spec-compliance within `quality-pipeline`. The residue is (b): a documented status-enum + escalation for incomplete implementer returns, landing in `skills/team/references/team-tactics.md`. Today this works ad-hoc (the orchestrator sees an incomplete return and re-dispatches); formalizing is nice-to-have, not biting.
 - **Proposed**: add a short "dispatched-subagent return contract" to team-tactics (status enum + BLOCKED→re-scope/escalate path). Do NOT rebuild a separate spec-reviewer (reviewer already does it).
@@ -149,12 +150,20 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix (Board review meeting; not a code task)
 - **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
 
-### resolve-doa.sh override-row preset-column injection (sibling of v2.17.0 fix)
+### ✅ DONE (2026-06-22, `b274439` via /l5 hetero dogfood) — resolve-doa.sh override-row preset-column injection (sibling of v2.17.0 fix)
+- **Resolution**: `scripts/resolve-doa.sh` gained `valid_token() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }` (byte-identical to the `resolve-dispatch.sh` sibling), guarding the override `preset_val` before `emit_preset_json` — invalid token → stderr warning + fall-through to defaults. Implemented by **Gemini 3.5 Flash (High)** via `dispatch-hetero.sh` and passed an adversarial depth-0 qc (injection/quoting/condition-sense all verified). Landed as the `/l5` dogfood payload for `ceo-fleet-autonomy`.
 - **Trigger**: next time `scripts/resolve-doa.sh` is touched for any reason.
 - **Context**: v2.17.0 review found override-config column values flow into printf-built JSON in both resolve-* scripts. resolve-dispatch.sh got allowlist validation on extracted model/mode (warn + fall back to defaults); resolve-doa.sh has the same vector on its Preset column — though its `emit_preset_json` maps unknown presets to fail-closed, the `role`/`tier` echo-back fields are sanitized at entry, so exploitability is lower still. Verify and, if needed, apply the same `valid_token` pattern for symmetry.
 - **Effort**: S
 - **Source**: 2026-06-12 tree-role-dispatch pre-merge review (🔵 Suggestion 2).
 - **2026-06-15 note**: `resolve-doa.sh` was touched by the cwd-config-resolution fix (`fix/resolve-doa-cwd-project-config`). The Preset-column vector was re-reviewed and **consciously deferred** — the new code only changed config-path resolution (`$PWD` is never used as a regex/pattern), and the unknown-preset → fail-closed mapping still holds, so risk is unchanged and low. Allowlist symmetry remains open.
+
+### /l4 /l5 foreman: optional STEP-0 base-bootstrap (build worktree on CEO HEAD)
+- **Trigger**: next time a `/l4`/`/l5` run must build on the CEO's feature-branch HEAD (not yet on `develop`) — especially a **self-referential** change that modifies the dispatch tooling the foreman itself runs.
+- **Context**: 2026-06-22 `ceo-fleet-autonomy` P1.f dogfood empirically confirmed the worktree-base-≠-HEAD gotcha is sharper than documented: `Agent(isolation:worktree)` branches the foreman off the **tracked base (`develop`)**, NOT the CEO's checked-out HEAD. Two bites observed: (1) merge-back must be a **cherry-pick of the isolated commit**, not a branch merge (two-dot diff shows phantom deletions of absent feature work); (2) the `/l5` foreman ran the **pre-P1 `dispatch-hetero.sh`** (develop's copy lacks the `runner`/`model` JSON), so e2e provenance flow-through couldn't be exercised through the foreman — it bit the very feature being dogfooded. `level-front-door.md` already documents the gotcha + the STEP-0 merge-bootstrap remedy; this item is to make that bootstrap a **first-class option** (e.g. a `--from-head` flag that seeds the foreman worktree from CEO HEAD) rather than a manual ritual.
+- **Proposed**: `/l4`/`/l5` flag to bootstrap the foreman worktree on CEO HEAD; until then, merge to `develop` before dogfooding self-referential tooling changes (which L-5 finish-flow does anyway).
+- **Effort**: S (flag + STEP-0 merge in the foreman brief) — verify against the `Agent` worktree base semantics first.
+- **Source**: 2026-06-22 ceo-fleet-autonomy P1.f dogfood finding.
 
 ### agy install symlinked-dest self-copy truncation — guard install script + upstream report
 - **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check `ls -la ~/.gemini/config/plugins/` for symlinks first), OR next S-size hardening slot.

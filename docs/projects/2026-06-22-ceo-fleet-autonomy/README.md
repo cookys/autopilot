@@ -55,8 +55,29 @@
 | Phase | Status | Commit |
 |-------|--------|--------|
 | P0 spike | ✅ **PASS** (2026-06-22) — depth-0 kill+reap verified empirically (`TaskStop` force-kills a mid-run `run_in_background` foreman; worktree at `.claude/worktrees/agent-<id>`; unchanged auto-cleans, changed → `remove --force`). `/l4` ships unattended. | (this commit) |
-| P1 v1 machine + sugar | 🟡 **Built (impl done; dogfood pending restart)** (2026-06-22) — `/l3 /l4 /l5` skills + `level-front-door.md` (foreman + depth-0 control loop + outcome→action table + qc@depth-0 + run-summary ledger); `dispatch-hetero.sh` `runner`/`model` provenance; ceo-agent wired; release surfaces synced (v2.21.0, skills 20→23); all 16/16 preflight checks pass. Dogfood `/l4` (criteria 3-6) needs a CC restart — new skills cache at session start. | (this commit) |
+| P1 v1 machine + sugar | ✅ **Built + dogfooded** (2026-06-22) — `/l3 /l4 /l5` skills + `level-front-door.md` (foreman + depth-0 control loop + outcome→action table + qc@depth-0 + run-summary ledger); `dispatch-hetero.sh` `runner`/`model` provenance; ceo-agent wired; release surfaces synced (v2.21.0, skills 20→23); all 16/16 preflight checks pass. **P1.f dogfood PASS — all 6 criteria verified** (see below). | `e96998d` (/l4) + `b274439` (/l5) |
 | P2+ deferred | ⬜ Gated | — |
+
+### P1.f dogfood result (2026-06-22) — all 6 criteria ✅
+
+Three real dispatched runs at depth 0 (this session, post-`/clear` = the clean-state test):
+
+- **`/l4`** (all-Claude) on goal *"add dispatched-subagent return contract → `team-tactics.md`"*: foreman (`aaa9be74…`, opus, bg+worktree) ran dev-flow inline, leaf-dispatched impl+review to depth-2 Claude workers, committed; depth-0 ran the **authoritative qc** (sonnet reviewer) reading the branch diff → pass; cherry-picked → `e96998d`; worktree reaped. ~105s.
+- **`/l5`** (hetero) on goal *"`resolve-doa.sh` preset-column allowlist symmetry"*: foreman (`a137d1d6…`, opus, bg+worktree) leaf-dispatched impl to **Gemini 3.5 Flash (High)** via `dispatch-hetero.sh` → committed (`8fa6a96`, +8/-2); depth-0 authoritative qc (sonnet, **adversarial** — injection/quoting/condition-sense) → pass; cherry-picked → `b274439`; all worktrees reaped. ~7min.
+- **criterion-4 micro-test** (`ae9239de…`): deliberate 75s cap on a slow read-only foreman → `Monitor` guard fired → `TaskStop` force-killed it **mid-work** (status `killed`) → escalated (fail-closed, not silent) → worktree auto-cleaned.
+
+| # | Criterion | Verdict | Evidence |
+|---|-----------|---------|----------|
+| 1 | depth-0 wall-clock-kill spike | ✅ | P0 (prior session) + re-confirmed by the micro-test kill |
+| 2 | `/lN` invokable, pre-fills 4 startup Qs on a clean goal | ✅ | both `/l4` and `/l5` ran with **no Q&A** on a fresh `/clear` session |
+| 3 | foreman depth-1 → impl/review leaf-dispatch depth-2; authoritative qc **re-dispatched at depth 0**, distinct from foreman first-pass | ✅ | both ledgers show foreman first-pass (non-authoritative) **and** a separate depth-0 reviewer verdict |
+| 4 | depth-0 budget cap, fail-closed → escalate | ✅ | micro-test: cap hit → `TaskStop` → `killed` mid-work → escalate; not a silent stall |
+| 5 | no worktree leak | ✅ | after every run `git worktree list` = main only; `/l4` reaped via `remove --force`, `/l5` foreman + micro-test auto-cleaned, hetero `/tmp` worktree auto-removed on success |
+| 6 | provenance `runner`/`model` per step | ✅ (with caveat) | `dispatch-hetero.sh:76/83` emits `runner`/`model` on the **shipped** branch; ledger records per-step provenance. *Caveat below.* |
+
+**Key finding — worktree base ≠ CEO HEAD (sharper than documented).** `Agent(isolation:worktree)` branches the foreman off the **tracked base (`develop`)**, not the CEO's checked-out feature-branch HEAD. Two consequences observed empirically:
+1. Merge-back had to be a **cherry-pick of the isolated commit**, not a branch merge (a two-dot `diff` showed phantom deletions of the absent P1 work). Clean only because both target files were byte-identical across `develop` and the feature HEAD.
+2. The `/l5` foreman ran the **pre-P1 `dispatch-hetero.sh`** (develop's copy, which lacks the `runner`/`model` JSON fields), so criterion-6 provenance came from the script default + agent log rather than flowing through the JSON. **Criterion 6 holds on shipped code**, but the e2e flow-through can't be exercised by a foreman until the P1 work is on `develop` — i.e. it bites **self-referential changes** (modifying the very tooling the foreman runs). `level-front-door.md` already documents the gotcha + the STEP-0 merge-bootstrap remedy; the dogfood confirms it and pins down this self-reference edge. → candidate BACKLOG: optional STEP-0 base-bootstrap (build foreman worktree on CEO HEAD) for `/l4`/`/l5`.
 
 ## Review Loop History
 

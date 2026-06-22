@@ -4,7 +4,7 @@
 **狀態：** ✅ Shipped in v2.7.2 — merged to develop as `670cc23` on 2026-05-14 (implementation: `6780a2b`)
 **Size：** L
 **Branch：** `feat/v2.7.2-context-handoff-hardening`
-**Project doc：** [`docs/projects/2026-05-14-context-handoff-hardening/README.md`](../projects/2026-05-14-context-handoff-hardening/README.md)
+**Project doc：** [`do../projects/_archive/2026-05-14-context-handoff-hardening/README.md`](../projects/_archive/2026-05-14-context-handoff-hardening/README.md)
 
 ---
 
@@ -29,7 +29,7 @@ autopilot 既有對策（`hooks/state-checkpoint.sh` PreCompact hook，inspired 
 
 `/loop` / `/powerloop` survey 出 powerloop 的「fresh conversation 靠 .note.md 接力」設計後，user 問能否 backport 解 compact-drop-state 痛點。研究後發現 Claude Code **無** 80% threshold hook、`count_tokens` API 是 read-only on messages、settings.json **無** compact 開關。
 
-初版設計（3-layer：UserPromptSubmit + count_tokens + PreCompact exit 2 + SessionStart auto-rehydrate TaskList）被 3-reviewer think-tank **REJECT**（詳見 [project README §Review Background](../projects/2026-05-14-context-handoff-hardening/README.md#review-background)）。
+初版設計（3-layer：UserPromptSubmit + count_tokens + PreCompact exit 2 + SessionStart auto-rehydrate TaskList）被 3-reviewer think-tank **REJECT**（詳見 [project README §Review Background](../projects/_archive/2026-05-14-context-handoff-hardening/README.md#review-background)）。
 
 Architect 替代設計：**hook 自己撈 transcript，不靠 LLM 合規**。本 plan 採納。
 
@@ -341,7 +341,7 @@ Plan v2 寫的「parallel commits」是錯的（會 hooks.json merge conflict）
 
 - **tanweai/pua session-restore.sh** — 既有 `state-checkpoint.sh` header 已 credit。本改動延伸同精神（PreCompact 寫 sibling-file handoff）但加 hook-self-extract（pua 原版仍靠 LLM）。
 - **claude-powerloop-plugin v0.4.0+** — 「state 在 file、conversation 是 fresh」設計啟發；本 plan 不直接搬 architecture（autopilot 是 session-driven 非 cron），但「handoff doc 必須不靠 LLM 合規」是同精神。已在 v2.7.1 README Inspired By 段 credit。
-- **3-reviewer think-tank（Architect/QA/Ops）** — 否決原 3-layer 提案、推導本 plan 採納的 Architect 替代設計。Review log 在 [project README §Review Background](../projects/2026-05-14-context-handoff-hardening/README.md#review-background)。
+- **3-reviewer think-tank（Architect/QA/Ops）** — 否決原 3-layer 提案、推導本 plan 採納的 Architect 替代設計。Review log 在 [project README §Review Background](../projects/_archive/2026-05-14-context-handoff-hardening/README.md#review-background)。
 
 ---
 

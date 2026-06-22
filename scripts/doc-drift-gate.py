@@ -21,7 +21,11 @@ import os
 import re
 import sys
 
-DEFAULT_EXCLUDES = [".git", "target", "node_modules", "_archive", ".venv"]
+# Excludes generated/mirror trees: .opencode/agent-bodies and agents/_bodies are
+# stripped copies of agents/*.md (their relative links are correct at the SOURCE
+# depth, not the mirror's — check the source, not the generated copy).
+DEFAULT_EXCLUDES = [".git", "target", "node_modules", "_archive", ".venv",
+                    ".opencode", "_bodies"]
 
 
 def _md_files(roots, excludes):

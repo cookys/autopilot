@@ -132,6 +132,14 @@ check_readme_parity() {
   node "$REPO/scripts/check-readme-parity.js" >/dev/null 2>&1
 }
 
+# ─── 16. doc-drift gate (Layer 1 baseline): internal links + code-fence balance ───
+# The deterministic half of autopilot:doc-sync (skills/doc-sync/SKILL.md "Two layers").
+# Zero-variance: a green run means those drift classes are genuinely clean, so it is
+# gate-able here. The LLM sweep (Layer 2) is discovery only, never a gate.
+check_doc_drift() {
+  python3 "$REPO/scripts/doc-drift-gate.py" "$REPO" >/dev/null 2>&1
+}
+
 # ─── 8b. adapter targets CARRY the invariant, not merely resolve ───
 # Hardening beyond check #8 (symlink resolves): for each adapter that points at a
 # shared file, assert the RESOLVED target actually CONTAINS a named invariant — a
@@ -216,6 +224,7 @@ run_check ".agents/skills adapter targets CARRY their name: invariant (≥2 seed
 run_check "scripts/validate.sh: all skills pass structural validation" check_validate_skills
 run_check "hook inventory: doc counts + tier membership match wiring" check_hook_inventory
 run_check "README parity: README.md ↔ README.zh-TW.md badges + sections" check_readme_parity
+run_check "doc-drift gate: internal links resolve + code-fences balance" check_doc_drift
 run_check "OpenCode plugin getPluginVersion returns real version" check_opencode_plugin_version
 run_check "OpenCode discovers autopilot skills via .agents/skills/" check_opencode_skill_discovery
 run_check "OpenCode agent body resolves without frontmatter leak" check_opencode_agent_body_clean

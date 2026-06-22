@@ -675,7 +675,7 @@ The `hooks/README.md` "v2.7.4 disable batch" section header is retained as an **
 
 ### Review Loop（L-size dogfood）
 
-3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](docs/projects/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](docs/plans/2026-05-14-context-handoff-hardening.md)。
+3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](docs/projects/_archive/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](docs/plans/2026-05-14-context-handoff-hardening.md)。
 
 ### Rollback
 
@@ -791,7 +791,7 @@ v2.0's rule-setter model (autopilot sets rules, Superpowers executes tactics) re
 ### Plan + project tracking
 
 - Plan: [`docs/plans/2026-05-14-superpowers-coexistence.md`](docs/plans/2026-05-14-superpowers-coexistence.md)
-- Project: [`docs/projects/2026-05-14-superpowers-coexistence/README.md`](docs/projects/2026-05-14-superpowers-coexistence/README.md)
+- Project: [`docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md`](docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md)
 - Review loop: r1 (3 parallel reviewers, approve-with-revisions) + r2 (single focused reviewer, approve-with-minor-revisions). See plan §9 for findings.
 
 ---

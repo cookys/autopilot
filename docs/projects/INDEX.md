@@ -8,12 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-06-22 | [ceo-fleet-autonomy](2026-06-22-ceo-fleet-autonomy/README.md) — `/l3 /l4 /l5` CEO front-door + dispatched sub-orchestrator foreman (context-hygiene/unattended); 3-round dialectic-reviewed | v2.21.0 (tentative) | `feat/ceo-fleet-autonomy` |
+| _None._ | | | |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-22 | [ceo-fleet-autonomy](2026-06-22-ceo-fleet-autonomy/README.md) — `/l3 /l4 /l5` CEO front-door + dispatched sub-orchestrator foreman (context-hygiene/unattended); 3-round dialectic + P1.f dogfood (6/6) + 2-round L-5 dialectic | v2.21.0 | [`010556a`](../../../../commit/010556a) | [plan](../plans/2026-06-22-ceo-fleet-autonomy.md) |
 | 2026-06-22 | [doc-sync-gate](2026-06-22-doc-sync-gate/README.md) | v2.20.0 | (this ship) | (self-contained in README) |
 | 2026-06-18 | [doc-sync-skill](2026-06-18-doc-sync-skill/README.md) | v2.19.0 | (this ship) | (self-contained in README) |
 | 2026-06-17 | dispatch-signal-and-sync (tmuxai/ponytail absorptions; no project dir — plan-tracked, survey→2-round dialectic→CEO delegated build) | v2.18.0 | [`5ae34d5`](../../../../commit/5ae34d5) | [plan](../plans/2026-06-17-tmuxai-ponytail-absorptions.md) |

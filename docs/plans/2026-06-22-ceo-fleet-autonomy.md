@@ -1,8 +1,9 @@
 # Design Spec v2 — CEO autonomy front-door & dispatched foreman
 
-> **Status**: Design spec v2 (brainstorm output, 2026-06-22), revised after Round-1
-> dialectic review (Architect/Ops/Skeptic, all NEEDS_REWORK — findings verified true
-> against the repo). Pre-plan; NO code until approved + planned.
+> **Status**: ✅ **Shipped in v2.21.0 — merged as `010556a`** (2026-06-22). P1 built +
+> P1.f dogfood PASS (6/6 criteria; `/l4` all-Claude + `/l5` hetero/Gemini + criterion-4
+> micro-test) + 2-round L-5 dialectic (converged). Design spec v2 below preserved for the
+> *why* (brainstorm output, revised after Round-1 dialectic — Architect/Ops/Skeptic).
 > **Scope decision (user, 乙)**: ship the terse `/l3 /l4 /l5` interface in v1 (it IS the
 > user's core pain), but with a SIMPLE machine underneath; gate the complex machinery
 > (capability routing, tree-engine foreman, foreign engines) behind evidence.

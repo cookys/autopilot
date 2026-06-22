@@ -79,6 +79,9 @@ if ! [[ "$MODEL_TIER" =~ ^[A-Za-z0-9._-]+$ ]]; then
   exit 2
 fi
 
+# Override-row column values flow into printf-built JSON; allowlist them.
+valid_token() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }
+
 # ── Preset → action-policy tables ────────────────────────────────────────────
 # Presets are canonical; project overrides can only select a preset by name.
 
@@ -160,8 +163,11 @@ if [[ -f "$PROJECT_CONFIG" ]]; then
   if [[ -n "$row" ]]; then
     preset_val="$(printf '%s' "$row" | awk -F'|' '{print $4}' | tr -d ' *')"
     if [[ -n "$preset_val" ]]; then
-      emit_preset_json "$preset_val" "$ROLE" "$MODEL_TIER" "project"
-      exit 0
+      if valid_token "$preset_val"; then
+        emit_preset_json "$preset_val" "$ROLE" "$MODEL_TIER" "project"
+        exit 0
+      fi
+      echo "warning: ignoring override row for ${ROLE}/${MODEL_TIER} (preset must match [A-Za-z0-9._-]+); using defaults" >&2
     fi
   fi
 fi

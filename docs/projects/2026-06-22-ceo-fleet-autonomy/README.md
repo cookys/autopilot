@@ -55,21 +55,22 @@
 | Phase | Status | Commit |
 |-------|--------|--------|
 | P0 spike | ✅ **PASS** (2026-06-22) — depth-0 kill+reap verified empirically (`TaskStop` force-kills a mid-run `run_in_background` foreman; worktree at `.claude/worktrees/agent-<id>`; unchanged auto-cleans, changed → `remove --force`). `/l4` ships unattended. | (this commit) |
-| P1 v1 machine + sugar | ✅ **Built + dogfooded** (2026-06-22) — `/l3 /l4 /l5` skills + `level-front-door.md` (foreman + depth-0 control loop + outcome→action table + qc@depth-0 + run-summary ledger); `dispatch-hetero.sh` `runner`/`model` provenance; ceo-agent wired; release surfaces synced (v2.21.0, skills 20→23); all 16/16 preflight checks pass. **P1.f dogfood PASS — 6/6 criteria, two with documented caveats** (criterion 2: `/l3` not directly exercised; criterion 6: e2e provenance flow-through not exercised — see below). | `e96998d` (/l4) + `b274439` (/l5) |
+| P1 v1 machine + sugar | ✅ **Built + dogfooded** (2026-06-22) — `/l3 /l4 /l5` skills + `level-front-door.md` (foreman + depth-0 control loop + outcome→action table + qc@depth-0 + run-summary ledger); `dispatch-hetero.sh` `runner`/`model` provenance; ceo-agent wired; release surfaces synced (v2.21.0, skills 20→23); all 16/16 preflight checks pass. **P1.f dogfood PASS — 6/6 criteria** (all three `/lN` exercised; criterion 6 retains one documented caveat: e2e provenance flow-through, see below). | `e96998d` (/l4) + `b274439` (/l5) |
 | P2+ deferred | ⬜ Gated | — |
 
-### P1.f dogfood result (2026-06-22) — 6/6 criteria (criteria 2 & 6 with documented caveats)
+### P1.f dogfood result (2026-06-22) — 6/6 criteria (criterion 6 retains one documented caveat)
 
 Three real dispatched runs at depth 0 (this session, post-`/clear` = the clean-state test):
 
 - **`/l4`** (all-Claude) on goal *"add dispatched-subagent return contract → `team-tactics.md`"*: foreman (`aaa9be74…`, opus, bg+worktree) ran dev-flow inline, leaf-dispatched impl+review to depth-2 Claude workers, committed; depth-0 ran the **authoritative qc** (sonnet reviewer) reading the branch diff → pass; cherry-picked → `e96998d`; worktree reaped. ~105s.
 - **`/l5`** (hetero) on goal *"`resolve-doa.sh` preset-column allowlist symmetry"*: foreman (`a137d1d6…`, opus, bg+worktree) leaf-dispatched impl to **Gemini 3.5 Flash (High)** via `dispatch-hetero.sh` → committed (`8fa6a96`, +8/-2); depth-0 authoritative qc (sonnet, **adversarial** — injection/quoting/condition-sense) → pass; cherry-picked → `b274439`; all worktrees reaped. ~7min.
 - **criterion-4 micro-test** (`ae9239de…`): deliberate 75s cap on a slow read-only foreman → `Monitor` guard fired → `TaskStop` force-killed it **mid-work** (status `killed`) → escalated (fail-closed, not silent) → worktree auto-cleaned.
+- **`/l3`** (inline, follow-up 2026-06-22): invoked on a clean goal (this README's criterion-2 update) — front-door loaded, pre-filled the 4 startup Qs (involvement=3 / scope=Hold / no-go=none), executed **inline with no Q&A round**. Closes criterion 2 for the inline path.
 
 | # | Criterion | Verdict | Evidence |
 |---|-----------|---------|----------|
 | 1 | depth-0 wall-clock-kill spike | ✅ | P0 (prior session) + re-confirmed by the micro-test kill |
-| 2 | `/lN` invokable, pre-fills 4 startup Qs on a clean goal | ✅ (caveat) | `/l4` and `/l5` ran with **no Q&A** on a fresh `/clear` session; **`/l3` not directly exercised** (inline-only path, structurally identical presets — low risk; follow-up dogfood candidate) |
+| 2 | `/lN` invokable, pre-fills 4 startup Qs on a clean goal | ✅ | all three exercised on clean goals with **no Q&A** — `/l4` + `/l5` on a fresh `/clear` session; **`/l3` directly dogfooded** (this follow-up: loaded inline, pre-filled involvement=3/scope=Hold/no-go=none, executed without a startup Q&A round) |
 | 3 | foreman depth-1 → impl/review leaf-dispatch depth-2; authoritative qc **re-dispatched at depth 0**, distinct from foreman first-pass | ✅ | both ledgers show foreman first-pass (non-authoritative) **and** a separate depth-0 reviewer verdict |
 | 4 | depth-0 budget cap, fail-closed → escalate | ✅ | micro-test: cap hit → `TaskStop` → `killed` mid-work → escalate; not a silent stall |
 | 5 | no worktree leak | ✅ | after every run `git worktree list` = main only; `/l4` reaped via `remove --force`, `/l5` foreman + micro-test auto-cleaned, hetero `/tmp` worktree auto-removed on success |

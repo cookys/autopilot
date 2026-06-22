@@ -125,6 +125,13 @@ check_hook_inventory() {
   node "$REPO/scripts/check-hook-inventory.js" --check >/dev/null 2>&1
 }
 
+# ─── 15. README parity: README.md ↔ README.zh-TW.md badges + section count ───
+# Catches the zh-TW translation silently falling behind the EN README (stale badge
+# numbers / a section added to one file only).
+check_readme_parity() {
+  node "$REPO/scripts/check-readme-parity.js" >/dev/null 2>&1
+}
+
 # ─── 8b. adapter targets CARRY the invariant, not merely resolve ───
 # Hardening beyond check #8 (symlink resolves): for each adapter that points at a
 # shared file, assert the RESOLVED target actually CONTAINS a named invariant — a
@@ -208,6 +215,7 @@ run_check ".agents/skills symlink resolves to ../skills (target exists)" check_a
 run_check ".agents/skills adapter targets CARRY their name: invariant (≥2 seeds)" check_adapter_targets_carry_invariant
 run_check "scripts/validate.sh: all skills pass structural validation" check_validate_skills
 run_check "hook inventory: doc counts + tier membership match wiring" check_hook_inventory
+run_check "README parity: README.md ↔ README.zh-TW.md badges + sections" check_readme_parity
 run_check "OpenCode plugin getPluginVersion returns real version" check_opencode_plugin_version
 run_check "OpenCode discovers autopilot skills via .agents/skills/" check_opencode_skill_discovery
 run_check "OpenCode agent body resolves without frontmatter leak" check_opencode_agent_body_clean

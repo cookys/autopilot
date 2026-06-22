@@ -52,7 +52,7 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 
 - `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
 - Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
-- Interrupt trap: `scripts/dispatch-hetero.sh` installs an INT/TERM trap that automatically self-reaps its worktree and branch if the run is interrupted mid-agy, and disarms once agy returns.
+- Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
 
 ## Role-prompt reuse (engine-neutral bodies)
 

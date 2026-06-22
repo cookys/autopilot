@@ -26,7 +26,7 @@
 # OUTPUT: one JSON object on stdout (agent stdout goes to a log file, never
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
-#               | "precondition_failed",
+#               | "failure" | "precondition_failed",
 #     "runner": "agy", "model": "...",   # engine provenance (model = --model)
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -121,9 +121,13 @@ fi
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
 
-# Interrupt during the long agy run orphans worktree + branch with no JSON. Trap
-# INT/TERM to reap both, then DISARM once agy returns (the keep/remove logic below
-# owns the worktree from that point — a clean exit must not trip this).
+# A TERM during the long agy run (OOM-killer, kill, programmatic stop) orphans the
+# worktree + branch with no JSON. Trap it to reap both, then DISARM once agy returns
+# (the keep/remove logic below owns the worktree from that point — a clean exit must
+# not trip this). NOTE: a Ctrl-C (INT to the process group) does NOT reach this trap —
+# agy takes the INT and dies, the parent continues to the question_suspected path
+# (worktree kept for inspection); the INT here only covers a parent-only INT. Verified
+# empirically 2026-06-22.
 trap 'git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # --- run the agent (its stdout/stderr go to LOG, never our stdout) ---

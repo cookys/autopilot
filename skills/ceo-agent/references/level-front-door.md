@@ -98,8 +98,10 @@ parameter** to change this. Verified twice (2026-06-22): a foreman dispatched
 from `feat@1048fd1` landed on `origin/develop@689dbea`; a probe with a HEAD-only
 sentinel commit found the sentinel **absent** in the worktree.
 
-⇒ **Base-currency decision the CEO makes BEFORE dispatch** (`git rev-parse HEAD`
-vs `git merge-base --is-ancestor HEAD origin/develop`):
+⇒ **Base-currency decision the CEO makes BEFORE dispatch** — run
+`git merge-base --is-ancestor HEAD origin/develop`: **exit 0** = HEAD is already in
+`origin/develop` (no un-merged work → clean develop base is fine, no STEP-0);
+**exit 1** = HEAD has commits not yet on develop (→ STEP-0 reset, see table):
 
 | CEO's state | Foreman brief STEP 0 |
 |-------------|----------------------|

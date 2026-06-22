@@ -45,6 +45,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-06-22 | hook inventory single source of truth — `check-hook-inventory.js` derives 20 hooks (8 default-on / 7 opt-in / 5 disabled) from real wiring + gates counts AND tier membership; reconciled 4 canonical descriptions + README/hooks-README tables/badges; sync-version de-coupled from hook counts; + doc/-vs-docs/ ongoing-maintenance path leak fix + stray sweep | v2.19.1 | [`d875caf`](../../../../commit/d875caf) |
 | 2026-06-15 | remove `.opencode/skills/` leftover (drift surface, not a mirror — OpenCode uses `.agents/skills/` symlink; portability-correction step 24 finally executed) | v2.17.2 | [`187a37c`](../../../../commit/187a37c) |
 | 2026-06-12 | qc-panel node-scope rule (judges judge the node, not project lifecycle — fixes systematic shadow-fail) + tree-by-default in ceo-agent L-size setup + archive-ordering rule | v2.17.1 | [`1e833bd`](../../../../commit/1e833bd) |
 | 2026-06-04 | standalone-fallback fix (think-tank-dialectic no longer hard-depends on voltagent) + brainstorm Phase-0 wiring + debug 3-fix architecture gate + reviewer→CC-native `/security-review` pointer; subagent-driven + writing-skills RED-phase CEO-deferred to BACKLOG ([plan](../plans/2026-06-04-internalize-superpowers-trio.md)) | v2.13.1 | [`c0d00d8`](../../../../commit/c0d00d8) |

@@ -3,6 +3,7 @@
 > **Plan / design spec**: [`docs/plans/2026-06-22-ceo-fleet-autonomy.md`](../../plans/2026-06-22-ceo-fleet-autonomy.md)
 > (brainstorm output, converged through 3 rounds of Architect/Ops/Skeptic dialectic review).
 > **Branch**: `feat/ceo-fleet-autonomy` · **Target version**: v2.21.0 (tentative)
+> **▶ RESUMING?** Read [`HANDOFF.md`](./HANDOFF.md) first — self-contained resume note (P0 done, continue at P1).
 
 ## Project Goal
 

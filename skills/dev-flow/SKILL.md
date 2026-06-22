@@ -214,7 +214,7 @@ If yes → re-evaluate as L-size:
 3. Implement fix
 4. Quality gate (per project config, or: lint + test)
 5. Commit with **detailed message**: root cause + what was wrong + how it's fixed
-6. **Write ongoing-maintenance entry** — append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md`:
+6. **Write ongoing-maintenance entry** — append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config so you don't create a stray sibling tree):
    `| MM-DD | commit_hash | fix(area): 根因 → 修法 (跨 N 模組) |`
 7. Merge to develop
 8. Cleanup: delete fix branch

@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.19.1 — hook inventory single source of truth
+
+**Headline**: Reconciled four mutually-inconsistent hook tallies into one derived source of truth. Before: `plugin.json`/`CLAUDE.md` said "19 hooks (12 default-on, 7 opt-in)", README badges said 19/14, README Tier-A tables listed the 5 *disabled* hooks as default-on while omitting the 5 actually-wired ones, and the zh-TW badge said 14. After: every doc reads **20 hooks (8 default-on, 7 opt-in, 5 disabled)**, derived mechanically from real wiring (`hooks.json` + `settings.example.json`) by the new `scripts/check-hook-inventory.js`, which gates both counts AND per-tier membership.
+
+### Added
+- **`scripts/check-hook-inventory.js`** — single source of truth for the hook tally. Derives default-on (`hooks.json`), opt-in (`settings.example.json` `hooks-opt-in-examples`), and disabled (`hooks/*.{js,sh}` wired in neither) from real wiring. Default run prints the canonical lists (regeneration oracle); `--check` asserts every doc agrees on counts **and** per-tier membership — catching the count-blind failure class (a disabled hook listed as Tier-A default-on while the headline number still "looks right"). Wired into `preflight-portability.sh` (now 14 checks).
+- **README.md / README.zh-TW.md / hooks/README.md** — new "Shipped but Disabled (5 hooks)" section documenting the 5 v2.7.4-parked hooks (PreToolUse blockers gated on upstream #6305; Stop-event hooks pending separate re-verification).
+
+### Fixed
+- **Hook counts across `.claude-plugin/plugin.json`, root `plugin.json`, `.claude-plugin/marketplace.json`, `CLAUDE.md`** — `19 (12 default-on, 7 opt-in)` → `20 (8 default-on, 7 opt-in, 5 disabled)`.
+- **README.md + hooks/README.md Tier-A tables** — rebuilt to the **correct** 8 default-on members (state-checkpoint, session-start, intent-capture, reload-watch, audit-log, log-error, failure-escalation, suggest-compact); the 5 disabled hooks moved out of default-on. Tier-B header 6 → 7. README badges 19/14 → 20. zh-TW Tier-B 6 → 7.
+
+### Changed
+- **`scripts/sync-version.js`** — de-coupled from hook-count *ownership*. It now mirrors the canonical description's hook fragment verbatim (3-tier aware via `--disabled-count`; default-on = hook-count − opt-in − disabled) but no longer writes the README hooks badge or `hooks/README.md` — those belong to `check-hook-inventory.js`. Its 6-scenario test suite + sandbox lib + AGENTS.md bump recipe updated accordingly. `sync-version.js --check` and `check-hook-inventory.js --check` are now orthogonal gates.
+- **`CLAUDE.md` + `AGENTS.md`** — scripts inventory + verification sections document the new script and the sync-version ownership split.
+- **`docs/BACKLOG.md`** — the 2026-06-22 "hook inventory reconciliation" and 2026-06-02 "Hook tally is stale" entries (same drift, two records) resolved and folded; new entry logs the residual zh-TW skill-count "16" staleness (separate, deferred).
+
+### Not changed (deliberate)
+- Period-accurate historical counts left as-is: README "v2.5 added 14 hooks", the devteam-absorb narrative "14 of devteam's 15 hooks (8 default-on Tier A + 6 opt-in Tier B)", and CHANGELOG history.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.19.0 — doc-sync skill (doc↔code drift audit)
 
 **Headline**: New `autopilot:doc-sync` skill — an on-demand doc↔code drift audit that finds WRONG / STALE / MISSING documentation claims, adversarially verifies each to kill false positives, and reports (graded by severity, report-only — never edits). Closes a real gap: autopilot previously had only a 25-line manual `post-feature-doc-sync.md` checklist and no automated drift detection. Born from a codeforge audit that found 48 confirmed drift items in a mature repo.

@@ -30,21 +30,23 @@ assert_neq "$ORIG" "" "original version parseable from sandbox canonical"
 # hardcoded `--skill-count 16` here was never updated). Parse the same fragments
 # sync-version.js itself matches.
 SKILLS=$(grep -oE '[0-9]+ lifecycle skills' "$SANDBOX/.claude-plugin/plugin.json" | head -1 | grep -oE '^[0-9]+')
-HFRAG=$(grep -oE '[0-9]+ hooks \([0-9]+ default-on, [0-9]+ opt-in\)' "$SANDBOX/.claude-plugin/plugin.json" | head -1)
+# 3-tier fragment: "H hooks (D default-on, O opt-in[, X disabled])". Disabled optional.
+HFRAG=$(grep -oE '[0-9]+ hooks \([0-9]+ default-on, [0-9]+ opt-in(, [0-9]+ disabled)?\)' "$SANDBOX/.claude-plugin/plugin.json" | head -1)
 HOOKS=$(printf '%s' "$HFRAG" | grep -oE '^[0-9]+')
 OPTIN=$(printf '%s' "$HFRAG" | grep -oE '[0-9]+ opt-in' | grep -oE '^[0-9]+')
+DISABLED=$(printf '%s' "$HFRAG" | grep -oE '[0-9]+ disabled' | grep -oE '^[0-9]+'); DISABLED=${DISABLED:-0}
 assert_neq "$SKILLS" "" "skill-count parseable from sandbox canonical"
 assert_neq "$HOOKS" "" "hook-count parseable from sandbox canonical"
 assert_neq "$OPTIN" "" "opt-in-count parseable from sandbox canonical"
 
 # Forward bump
-node "$SCRIPT" --version 9.9.9 --hook-count "$HOOKS" --skill-count "$SKILLS" --opt-in-count "$OPTIN" >/dev/null 2>&1
+node "$SCRIPT" --version 9.9.9 --hook-count "$HOOKS" --skill-count "$SKILLS" --opt-in-count "$OPTIN" --disabled-count "$DISABLED" >/dev/null 2>&1
 assert_exit_code "$?" 0 "forward bump succeeded"
 node "$SCRIPT" --check >/dev/null 2>&1
 assert_exit_code "$?" 0 "mirrors in sync after forward bump"
 
 # Reverse bump back to original
-node "$SCRIPT" --version "$ORIG" --hook-count "$HOOKS" --skill-count "$SKILLS" --opt-in-count "$OPTIN" >/dev/null 2>&1
+node "$SCRIPT" --version "$ORIG" --hook-count "$HOOKS" --skill-count "$SKILLS" --opt-in-count "$OPTIN" --disabled-count "$DISABLED" >/dev/null 2>&1
 assert_exit_code "$?" 0 "reverse bump succeeded"
 
 # Byte-identity check across all 5 tracked files

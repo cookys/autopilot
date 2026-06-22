@@ -19,7 +19,7 @@ for f in "${TRACKED[@]}"; do
   BEFORE["$f"]=$(sha1sum "$f" | awk '{print $1}')
 done
 
-out=$(node "$SCRIPT" --version 9.9.9 --hook-count 19 --skill-count 16 --opt-in-count 7 --dry-run 2>&1)
+out=$(node "$SCRIPT" --version 9.9.9 --hook-count 20 --skill-count 20 --opt-in-count 7 --disabled-count 5 --dry-run 2>&1)
 ec=$?
 
 assert_exit_code "$ec" 0 "dry-run exits 0"

@@ -6,6 +6,7 @@ node_modules/
 .claude/knowledge/
 .claude/settings.local.json
 .claude/next-state.json
+.claude/agents/
 .context/
 .in_use/
 hooks/hooks.json.capture-backup

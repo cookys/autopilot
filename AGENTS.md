@@ -32,7 +32,8 @@ Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `
 ## Testing (spec)
 
 - **Skill structure**: `scripts/validate.sh` validates every `SKILL.md` has the required YAML frontmatter (`name`, `description`) and structure.
-- **Version manifest sync**: `node scripts/sync-version.js --check` (read-only) verifies all mirrors (root `plugin.json`, `README.md` badges, etc.) match the canonical `.claude-plugin/plugin.json`. Run before any commit that touches version metadata.
+- **Version manifest sync**: `node scripts/sync-version.js --check` (read-only) verifies the version mirrors (root `plugin.json`, `marketplace.json`, `README.md` version badge) + the description's skill/hook fragments match the canonical `.claude-plugin/plugin.json`. Run before any commit that touches version metadata.
+- **Hook inventory drift**: `node scripts/check-hook-inventory.js --check` (read-only) is the single source of truth for the hook tally — it derives default-on/opt-in/disabled from real wiring (`hooks.json` + `settings.example.json`) and asserts every doc agrees on counts AND tier membership. Run it (no flag) to print the canonical lists when editing the hook docs.
 - **Hooks runtime smoke test**: `CLAUDE_PLUGIN_ROOT=$(pwd) node hooks/intent-capture.js < /dev/null` should write to `~/.autopilot/intent/` without throwing.
 - **Pre-commit gate**: After running `scripts/install-hooks.sh` once per clone, `git commit` runs `sync-version.js --check` automatically. Drift blocks the commit.
 
@@ -40,7 +41,7 @@ Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `
 
 - **No build step for production**. Skills, agents, hooks ship as source. Claude Code loads them at plugin install time.
 - **OpenCode plugin** (`.opencode/plugins/autopilot.ts`) is loaded by Bun in-process — no compilation, but `@opencode-ai/plugin` types are needed at edit time (see `.opencode/package.json`).
-- **Version bump**: `node scripts/sync-version.js --version X.Y.Z --hook-count N --skill-count M --opt-in-count K` propagates the new version to all mirrors atomically (two-pass; fail-loud on regex drift).
+- **Version bump**: `node scripts/sync-version.js --version X.Y.Z --hook-count N --skill-count M --opt-in-count K --disabled-count X` propagates the new version + description fragments to all mirrors atomically (two-pass; fail-loud on regex drift). `--disabled-count` defaults to 0; default-on = hook-count − opt-in − disabled. Hook-count correctness itself is gated separately by `check-hook-inventory.js --check`.
 - **Dev mode for Claude Code**: `scripts/dev-setup.sh` replaces the installed plugin cache with a symlink to your local clone. Edits take effect immediately.
 
 ## PR Guidelines (spec)

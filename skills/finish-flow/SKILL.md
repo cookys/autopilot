@@ -84,7 +84,7 @@ After all 6 completed → mark the parent L-5 task (from L-1) completed.
 |---|---------|-----------------------------------|
 | F.1 | Quality gate | Invoke `autopilot:quality-pipeline --size S`. Output: zero failures. |
 | F.2 | Commit with detailed message | Commit must state root cause + what was wrong + how it's fixed. Output: `git log -1 --format=%B` showing all three. |
-| F.3 | Ongoing-maintenance entry | Append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md`: `| MM-DD | commit_hash | fix(area): 根因 → 修法 |`. Output: `tail -1` of that file. |
+| F.3 | Ongoing-maintenance entry | Append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config first so you don't create a stray sibling tree): `| MM-DD | commit_hash | fix(area): 根因 → 修法 |`. Output: `tail -1` of that file. |
 | F.4 | Merge to develop | `git checkout develop && git merge --no-ff fix/<name>`. Output: merge commit hash. |
 | F.5 | Delete fix branch | `git branch -d fix/<name>`. Output: `git branch` confirming deletion. |
 

@@ -39,6 +39,7 @@ No `lint` / `tsc` / `pytest` — skip those steps when finish-flow / quality-pip
 
 - **Projects**: `docs/projects/YYYY-MM-DD-<name>/` with `README.md`
 - **Project index**: `docs/projects/INDEX.md`
+- **Ongoing-maintenance** (S/Fix audit trail): `docs/projects/ongoing-maintenance/YYYY-MM.md` — **note the `docs/` (plural)**. The dev-flow/finish-flow skill bodies default this to `doc/` (singular, the generic consumer template); autopilot's tree is `docs/`, so resolve to this path. (A 2026-06-22 Fix leaked a stray `doc/` dir by following the unqualified skill default.)
 - **Plans**: `docs/plans/YYYY-MM-DD-<name>.md`
 - **Backlog**: autopilot has no `BACKLOG.md`. Deferred items go into the originating plan's `Out of Scope` section or the next plan's `Background`. If a dedicated backlog becomes necessary, add `docs/BACKLOG.md` and update this file.
 

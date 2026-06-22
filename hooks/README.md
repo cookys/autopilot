@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-19 Claude Code hooks for runtime enforcement of development discipline (originally 12 Tier A default-on + 7 Tier B opt-in) plus `session-start.sh` SessionStart priming.
+20 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **7 opt-in** (Tier B, copied from `settings.example.json`) + **5 shipped-but-disabled** (parked by the v2.7.4 batch — see "Disabled" below). The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin pipe is broken upstream — transcript pivot (v2.8.0)
 
@@ -116,24 +116,20 @@ hooks/
 | `1` | Warning (context injection) | branch-protection (mutations) |
 | `2` | Hard block | large-file-warner, branch-protection, commit-secret-scan, config-protection, mcp-health |
 
-## Tier A — Default-On (12 hooks)
+## Tier A — Default-On (8 hooks)
 
 Registered in `hooks.json`. Active for all autopilot users.
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
-| large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
-| suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Nudges at 50, then every 25 (**unbounded**: 50, 75, 100, 125, …). Opt-out: `AUTOPILOT_SUGGEST_COMPACT=false`. Re-enabled v2.8.1 |
-| cost-tracker | Stop | — | JSONL to `~/.claude/metrics/costs.jsonl`. Opt-out: `AUTOPILOT_COST_TRACKER=false` |
-| audit-log | PostToolUse | Bash | Appends to `~/.claude/bash-commands.log`. Uses `_shared/secret-patterns.js` |
-| session-summary | Stop | — | Writes to `~/.claude/sessions/{date}-{sid}.md` |
-| log-error | PostToolUse | .* | Detects error keywords, appends to `~/.claude/error-log.md` |
-| commit-secret-scan | PreToolUse | Bash | Scans `git diff --cached`. Uses `_shared/secret-patterns.js` |
-| branch-protection | PreToolUse | Bash | Default: `^(main\|master)$`. Override: `AUTOPILOT_PROTECTED_BRANCHES` env |
-| failure-escalation | PostToolUse | Bash | Tracks consecutive Bash failures per session; escalates to user (was undocumented in README pre-v2.7.2) |
-| reload-watch | PostToolUse | .* | Detects on-disk catalog drift (`installed_plugins.json`, `dispatch-config.md`, `settings.local.json`); injects `/reload-plugins` reminder. Idempotent state at `~/.claude/plugins/.reload-watch-state.json` (v2.7.1) |
 | state-checkpoint | PreCompact | * | Node JSONL parser extracts last 20 user/assistant turns from `transcript_path`, writes verbatim to `~/.autopilot/compaction-state.md` (no LLM compliance dependency); JSONL log at `~/.autopilot/.state-checkpoint.log` (rotate 1MB); visible failure diag inline + stderr (v2.7.2) |
+| session-start | SessionStart | startup\|clear\|compact | `session-start.sh` priming: prints cross-session resume hint (reads intent-capture file) + `⚠ intent-capture hook disabled` warning when the self-disable flag is active |
 | intent-capture | PostToolUse | .* | Per-cwd intent file at `~/.autopilot/intent/<sha1(realpath(cwd))>.json` for cross-session resume hint (read by `session-start.sh`). Tier A but env opt-out via `AUTOPILOT_INTENT_CAPTURE=false`. Circuit breaker: 10 consecutive fails → `~/.autopilot/intent-capture.disabled` flag (auto-clears at 24h or plugin version bump; manual clear: `rm` the flag) (v2.7.2) |
+| reload-watch | PostToolUse | .* | Detects on-disk catalog drift (`installed_plugins.json`, `dispatch-config.md`, `settings.local.json`); injects `/reload-plugins` reminder. Idempotent state at `~/.claude/plugins/.reload-watch-state.json` (v2.7.1) |
+| audit-log | PostToolUse | Bash | Appends to `~/.claude/bash-commands.log`. Uses `_shared/secret-patterns.js` |
+| log-error | PostToolUse | .* | Detects error keywords, appends to `~/.claude/error-log.md` |
+| failure-escalation | PostToolUse | Bash | Tracks consecutive Bash failures per session; escalates to user (was undocumented in README pre-v2.7.2) |
+| suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Nudges at 50, then every 25 (**unbounded**: 50, 75, 100, 125, …). Opt-out: `AUTOPILOT_SUGGEST_COMPACT=false`. Re-enabled v2.8.1 |
 
 ### Hook order on PostToolUse
 
@@ -181,9 +177,9 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
 
-## Tier B — Opt-In (6 hooks)
+## Tier B — Opt-In (7 hooks)
 
-Not in `hooks.json`. Enable by copying from `settings.example.json`.
+Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`).
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
@@ -194,6 +190,23 @@ Not in `hooks.json`. Enable by copying from `settings.example.json`.
 | test-runner | PostToolUse | Write\|Edit | Runs sibling vitest/jest test. Timeout: 60s |
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap) |
+
+## Disabled — Shipped but Wired Nowhere (5 hooks)
+
+Present as code under `hooks/` but registered **neither** in `hooks.json` **nor** in `settings.example.json`. Parked by the v2.7.4 disable batch and not yet re-enabled. Two distinct reasons:
+
+- **PreToolUse blockers** (`large-file-warner`, `commit-secret-scan`, `branch-protection`): blocked on the upstream stdin pipe fix ([#6305](https://github.com/anthropics/claude-code/issues/6305)). The transcript pivot can't recover their input because the tool hasn't run yet — there is no transcript entry to read.
+- **Stop-event hooks** (`cost-tracker`, `session-summary`): not a stdin problem (Stop events are env-driven); they need their own separate re-verification before re-enabling.
+
+| Hook | Event | Behavior (when enabled) | Blocked on |
+|------|-------|-------------------------|-----------|
+| large-file-warner | PreToolUse/Read | >500KB warn, >2MB block. Bypasses if offset/limit set | #6305 stdin |
+| commit-secret-scan | PreToolUse/Bash | Scans `git diff --cached`. Uses `_shared/secret-patterns.js` | #6305 stdin |
+| branch-protection | PreToolUse/Bash | Default `^(main\|master)$`; override `AUTOPILOT_PROTECTED_BRANCHES` | #6305 stdin |
+| cost-tracker | Stop | JSONL to `~/.claude/metrics/costs.jsonl`. Opt-out `AUTOPILOT_COST_TRACKER=false` | Stop-event re-verify |
+| session-summary | Stop | Writes to `~/.claude/sessions/{date}-{sid}.md` | Stop-event re-verify |
+
+Re-enable plan + verification recipe: [`../docs/BACKLOG.md`](../docs/BACKLOG.md) → "Re-enable v2.7.4 disabled hooks once upstream stdin-pipe lands".
 
 ## Secret Patterns
 

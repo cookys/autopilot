@@ -152,12 +152,16 @@ run_hook() {
 #
 # Echoes the sandbox script's full path. Caller can pass it to `node`.
 #
-# Files mirrored (must match the editPlan in scripts/sync-version.js):
+# Files mirrored. sync-version's editPlan writes only the first four (version
+# everywhere + description fragments; README.md = version badge only). README.md +
+# hooks/README.md are still copied so round-trip / dry-run can assert byte-identity
+# — the hooks badge + hooks/README tier tables are owned by check-hook-inventory.js,
+# NOT sync-version, so they must stay untouched:
 #   - .claude-plugin/plugin.json   (canonical)
 #   - plugin.json                  (root mirror)
 #   - .claude-plugin/marketplace.json
-#   - README.md                    (version + hooks badges)
-#   - hooks/README.md              (hook-count header)
+#   - README.md                    (version badge; hooks badge NOT sync-version's)
+#   - hooks/README.md              (untouched by sync-version; byte-identity guard)
 setup_sync_version_sandbox() {
   local sandbox="$1"
   mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks"

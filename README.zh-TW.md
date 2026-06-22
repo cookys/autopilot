@@ -239,12 +239,67 @@ Think Tank 組成：
 
 ## 安裝
 
+### Claude Code（主要）
+
 ```bash
 /plugin marketplace add cookys/autopilot
 /plugin install autopilot@autopilot
 ```
 
 完成。20 個 skill 立即可用：`autopilot:dev-flow`、`autopilot:survey` 等。
+
+### OpenCode（`.agents/skills/` 自動掃描）
+
+把 repo clone 到任何地方；OpenCode 原生 skill scanner 會從 cwd 抓取 `.agents/skills/`。
+
+```bash
+git clone https://github.com/cookys/autopilot.git
+cd autopilot
+./scripts/setup-symlinks.sh                          # 確保 .agents/skills/ symlink 可解析（Linux/macOS/WSL 上為 no-op）
+cd .opencode && npm install                          # @opencode-ai/plugin 型別（除非要編輯 TS plugin 否則可選）
+cd ..
+opencode debug skill | grep autopilot                # 驗證 autopilot skills 被發現
+```
+
+Agents（`autopilot-reviewer`、`autopilot-debugger`、`autopilot-planner`）透過 `.opencode/opencode.json` 自動載入。
+
+### Codex（OpenAI）
+
+與 OpenCode 用同一個 `.agents/skills/` symlink — Codex 的 skill scanner 會從 cwd 往上找 `<repo>/.agents/skills/`。per-repo 使用無需額外設定。
+
+跨 repo 全域可用，見 `platforms/codex/config.toml.example`。
+
+### Antigravity（`agy`）
+
+`agy` 把 autopilot 當作 Claude Code 來源的 plugin 匯入（對 agy 1.0.1 驗證過 — 沒有鬆散的 skills-dir 掃描；舊的 `~/.gemini/antigravity/skills/` 方式已被取代）。
+
+```bash
+./scripts/install-antigravity.sh                     # agy plugin validate → install → list
+agy plugin list | grep autopilot                     # 驗證已註冊
+# 移除：agy plugin uninstall autopilot
+```
+
+### Windows
+
+Repo 追蹤的 symlink（`.agents/skills/`）需要在 clone **之前**啟用 Developer Mode + `core.symlinks=true`：
+
+```powershell
+git config --global core.symlinks true               # 一次性、系統層級
+# 啟用 Developer Mode：Settings -> Privacy & security -> For developers
+git clone https://github.com/cookys/autopilot.git
+cd autopilot
+.\scripts\setup-symlinks.ps1
+```
+
+沒有這些設定，symlink 會變成內含目標路徑的純文字檔 — `setup-symlinks.ps1` 會偵測並嘗試修復，但修復仍需 Developer Mode。
+
+### 跨平台 pre-commit gate
+
+```bash
+./scripts/install-hooks.sh                           # 每個 clone 一次性
+```
+
+啟用 `.githooks/pre-commit`，它會跑 `sync-version.js --check` 和 `sync-agent-bodies.sh --check`，在 version-manifest 漂移與 agent-body 漂移到達 remote 前抓出來。
 
 ---
 
@@ -487,14 +542,26 @@ Autopilot 自帶 **20 個 hook**（最初 14 個於 v2.5.0 引入，之後成長
 
 存在於 `hooks/` 但 `hooks.json` 和 `settings.example.json` 都沒註冊，由 v2.7.4 disable batch 停用。兩種原因：**PreToolUse blocker**（`large-file-warner`、`commit-secret-scan`、`branch-protection`）卡在 upstream stdin fix（[#6305](https://github.com/anthropics/claude-code/issues/6305)）——transcript pivot 救不了（tool 還沒跑、沒 transcript entry）；**Stop-event hook**（`cost-tracker`、`session-summary`）非 stdin 問題，需各自重新驗證。重啟計畫見 [`docs/BACKLOG.md`](docs/BACKLOG.md)「Re-enable v2.7.4 disabled hooks」。
 
+### Secret 偵測
+
+啟用時，`commit-secret-scan`（目前停用，見上）與運作中的 `audit-log` 共用統一的 secret pattern module（`hooks/_shared/secret-patterns.js`），涵蓋：OpenAI、Anthropic、GitHub（PAT/OAuth/App）、AWS、Google API、Slack、Stripe token + inline `--token`/`password`/`Authorization` 樣式。
+
+### 覆寫
+
+- **停用某個 Tier A hook**：在 `settings.json` 設 `autopilot.<hookName> = false`
+- **自訂保護分支**（當 `branch-protection` 重新啟用時）：設 `AUTOPILOT_PROTECTED_BRANCHES` env var 或 settings 的 `autopilot.protectedBranches`
+- **停用成本追蹤**（當 `cost-tracker` 重新啟用時）：設 `autopilot.costTracker = false`
+
 ---
 
 ## 靈感來源
 
+- **Task-tree engine 既有技術（v2.16.0）** — externalized-state 基底及其護欄吸收已發表的教訓而非重蹈覆轍：append-only event log + 在 read-modify-write node 檔案上的 derived index（Steve Yegge 的 [Beads](https://github.com/steveyegge/beads) postmortem；TaskMaster schema/concurrency 事故報告 — 2026-06-12 調研的社群 issue-tracker 報告，調研時無單一 canonical URL）、每事件 `schema_version` 搭配 lazy migration（[LangGraph](https://github.com/langchain-ai/langgraph) 的 versioned-state 教訓；[Temporal](https://temporal.io) 的 history-evolvability 模型）、以及便宜的跨家族 judge panel 勝過單一大 judge（PoLL 結果 — [Verga et al. 2024, "Replacing Judges with Juries"](https://arxiv.org/abs/2404.18796)）。這些來源的所有量化門檻都當作待本地校準的 factory default，絕不作為理據。
 - **[gstack](https://github.com/garry-t/gstack)** — Garry Tan 為 Claude Code 打造的 skill 套件。CEO agent 的認知模式（Bezos 的 two-way door、Munger 的反向思維、Jobs 的減法聚焦）、Boil the Lake 完整性原則、以及範圍模式系統，都改編自 gstack 的 `plan-ceo-review` skill。
 - **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk 的 18 位思想家多人格審議 skill。`think-tank-dialectic` 的強制機制（Dissent Quota、>70% 同意時的 Counterfactual Trigger、Problem Restate Gate、作為一級 verdict section 的 Minority Report、Epistemic Diversity Scorecard）改編自 Council 的 7 步協議和 agent frontmatter 慣例。最關鍵的 meta 洞察——*每個思考風格都必須攜帶自己的熔斷機制*——來自觀察到 Council 的 18 個 agent 100% 都有 `Grounding Protocol` section 帶自我限制的 hard rules。
 - **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li 在 Council 基礎上擴展的 6 審議室、31 位思想家版本。`think-tank-dialectic` 的 Hegelian Arc 結構（Thesis → Antithesis → Synthesis，強制提出非折中的 synthesis proposal）、Adaptive Depth Gate、Tacit Knowledge Extraction 協議（Polanyi 隱性知識）、以及「不同工具，不是更好的工具」這個關鍵定位框架，都改編自 Agora 的 8 步審議協議和 `/forge` 工程審議室的 verdict template。
 - **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung 為 Claude Code 打造的 12-agent + 15-hook 工程團隊 plugin。`v2.4.0` methodology agents（`reviewer` / `debugger` / `planner`）吸收了 devteam P7/P9/P10 框架的三條紅線紀律（closure / fact-driven / exhaustiveness）、六要素 Task Prompt 契約、evidence-first debug 方法論、PUA 壓力模式觸發、以及 read-only 方法論 agent 的物理工具限制模式。`v2.5.0` hooks 層吸收了 devteam 15 個 hook 中的 14 個（8 個 default-on Tier A + 6 個 opt-in Tier B），並根據 Ship A review 調整：anchored branch-protection regex（C1 修正）、統一 secret-patterns module（mi1 修正）、cost-tracker opt-out、8/8 Tier A 測試覆蓋。autopilot 負責方法論層、voltagent 負責角色特化層的分工，是對 devteam 一體化設計的刻意發散——保持和 voltagent 角色 agent 生態系的正交。
+- **[claude-powerloop-plugin](https://github.com/elct9620/claude-powerloop-plugin)** — Aotokitsuruya 的 cron-loop Plan/Execute/Review/Sample plugin（Apache-2.0）。`references/blind-dispatch.md` 的 outcome-blinding 原則（round-2+ reviewer re-dispatch 必須剝離先前判決以防 quality-gate 自我繞過）與 leaky-vs-blind prompt 範例組來自 powerloop `skills/powerloop/examples/blind-dispatch.md`。powerloop 用在多 session cron loop，autopilot 限定在 `quality-pipeline` Re-review Loop 與 `audit` Phase 4 verification 的 session-driven re-dispatch。
 
 ---
 
@@ -557,12 +624,6 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<舊版本>
 ## 起源
 
 從 100+ 個 AI 驅動開發專案實戰提煉。
-
-## Inspired By
-
-- **[claude-powerloop-plugin](https://github.com/elct9620/claude-powerloop-plugin)** — Aotokitsuruya 的 cron-loop Plan/Execute/Review/Sample plugin（Apache-2.0）。`references/blind-dispatch.md` 的 outcome-blinding 原則（round-2+ reviewer re-dispatch 必須剝離先前判決以防 quality-gate 自我繞過）與 leaky-vs-blind prompt 範例組來自 powerloop `skills/powerloop/examples/blind-dispatch.md`。powerloop 用在多 session cron loop，autopilot 限定在 `quality-pipeline` Re-review Loop 與 `audit` Phase 4 verification 的 session-driven re-dispatch。
-
-> 完整來源清單見 EN [README §Inspired By](README.md#inspired-by) — gstack / Council of High Intelligence / Agora / my-claude-devteam / task-tree engine prior art（Beads、TaskMaster、Temporal、LangGraph、PoLL，v2.16.0）在 zh-TW 尚未 backfill。Deferred until next zh-TW-touching release（trigger：下次任何 zh-TW 文件更動的 release-bump，順手翻譯這 4 條 credit）。
 
 ## License
 

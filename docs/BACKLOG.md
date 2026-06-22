@@ -26,12 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### README.zh-TW.md broader staleness sweep + no skill/hook-count guard for zh-TW
-- **Trigger**: next time touching `README.zh-TW.md`, OR a zh-TW doc-sync pass.
-- **Context**: 2026-06-22 fixed the concrete **skill-count** drift (6 stale "16" → "20") and **hook-count** drift (badge 14 → 20, Tier-B 6 → 7) in `README.zh-TW.md`. Two residuals remain: (1) **broader translation lag** — zh-TW lagged badly on both counts, so the rest of the file likely has other stale claims vs `README.md` worth a full diff-sweep; (2) **no guard** — `sync-version.js` only syncs `README.md` (version badge + EN description fragments), NOT zh-TW, and `check-hook-inventory.js` checks zh-TW hook counts but nothing checks zh-TW **skill** counts. So zh-TW can silently re-drift.
-- **Proposed**: a zh-TW ↔ README.md diff-sweep; consider a skill-count `check-*` assertion (analogous to `check-hook-inventory.js`) that also covers zh-TW, OR fold zh-TW badges into a sync gate.
-- **Effort**: Fix (sweep) + S (guard, if wanted).
-- **Source**: 2026-06-22 hook-inventory reconciliation follow-up (skill/hook counts fixed; sweep + guard deferred).
+### No automated guard for README.zh-TW.md drift
+- **Trigger**: next time touching `README.zh-TW.md`, OR when EN `README.md` structure/counts change.
+- **Context**: 2026-06-22 did a full zh-TW ↔ README.md structural sweep — fixed skill count (6× "16"→"20"), hook count (badge 14→20, Tier-B 6→7), backfilled the gutted Install section (5 missing platform subsections), the Hooks Secret-Detection + Override subsections, and consolidated the split/duplicated Inspired By (added the task-tree entry; removed the now-fired deferral note). Both files are now at 52 ##/### sections (structural parity). **Residual = no guard**: `sync-version.js` syncs only `README.md` (version badge + EN description fragments), and `check-hook-inventory.js` checks zh-TW **hook** badge/headers but nothing checks zh-TW **skill** count or section parity. So zh-TW can silently re-drift on the next EN-only edit.
+- **Proposed**: a `check-readme-parity` (or extend an existing `check-*`) asserting zh-TW skills/hooks badges == EN + section-header count parity; OR fold zh-TW badges into the sync-version gate. Keep period-accurate historical counts (e.g. "v2.5 新增 14 個 hook") excluded.
+- **Effort**: S.
+- **Source**: 2026-06-22 zh-TW staleness sweep (sweep done; recurrence-guard deferred).
 
 ### subagent-driven-development: explicit BLOCKED / incomplete-return handling
 - **Trigger**: next time a dispatched implementer subagent returns **incomplete / blocked** (NEEDS_CONTEXT, partial, gave up) and the orchestrator mishandles it (proceeds as if done, or stalls silently).

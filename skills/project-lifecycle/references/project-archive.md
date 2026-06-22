@@ -2,7 +2,7 @@
 # Project Archive
 
 > **Trigger**: L-size project completed (after `finishing-a-development-branch`)
-> **S-size tasks do not use this flow** — S audit trail lives in `doc/projects/ongoing-maintenance/`
+> **S-size tasks do not use this flow** — S audit trail lives in `doc/projects/ongoing-maintenance/` (or the project-configured projects path — e.g. `docs/` plural)
 
 ## Eligibility Check (before archiving)
 

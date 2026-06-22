@@ -1,22 +1,25 @@
-# HANDOFF — ceo-fleet-autonomy (resume at Phase 1)
+# HANDOFF — ceo-fleet-autonomy (resume at P1.f dogfood → L-5)
 
-> Self-contained resume note for a FRESH session (post `/clear`). Read this + the plan,
-> then continue the L workflow at **P1**. Everything below is already committed.
+> Self-contained resume note for a FRESH session (post `/clear` or restart). Read this
+> + the plan, then run the **dogfood** and **finish-flow**. P1 build is committed.
 
 ## TL;DR
 
-- **Branch**: `feat/ceo-fleet-autonomy` (off `develop`). Commits so far: `7a2786c` bootstrap → `10b6cab` P0 spike.
-- **Status**: brainstorm → 3-round dialectic review (converged, APPROVE) → L-bootstrap → **P0 spike DONE (PASS)**. Next = **P1** (the build).
-- **Plan / design spec**: [`docs/plans/2026-06-22-ceo-fleet-autonomy.md`](../../plans/2026-06-22-ceo-fleet-autonomy.md) — read it first; it's the source of truth (3-round-reviewed).
-- **Project README**: [`./README.md`](./README.md) — goal / 6 success criteria / scope boundary / phases / review history.
-- **Size**: L. dev-flow context-continuation (don't re-size). Tasks already exist (#1 L-1.5, #2 L-1.6, #3 P0 ✅done, #4 P1, #5 P2+, #6 L-5 finish-flow).
+- **Branch**: `feat/ceo-fleet-autonomy` (off `develop`, local-only unless pushed). Commits: `7a2786c` bootstrap → `10b6cab` P0 spike → `db16c82` **P1 build (v2.21.0)**.
+- **Status**: brainstorm → 3-round dialectic (APPROVE) → L-bootstrap → P0 spike PASS → **P1 BUILT + committed**. Next = **P1.f dogfood** then **L-5 finish-flow**.
+- **P1 is built**: `/l3 /l4 /l5` skills (now registered), `skills/ceo-agent/references/level-front-door.md` (the machine), `dispatch-hetero.sh` runner/model provenance, release surfaces synced (skills 20→23, v2.21.0). All deterministic gates green (validate 23/23, preflight 16/16, sync-version/readme-parity/hook-inventory). criterion 6 (provenance) empirically verified; criteria 2-5 await the dogfood.
+- **Plan / design spec**: [`docs/plans/2026-06-22-ceo-fleet-autonomy.md`](../../plans/2026-06-22-ceo-fleet-autonomy.md) — source of truth.
+- **Project README**: [`./README.md`](./README.md) — goal / 6 success criteria / scope boundary / progress.
+- **Size**: L. dev-flow context-continuation (don't re-size).
 
 ## Resume procedure
 
-1. `git checkout feat/ceo-fleet-autonomy` (confirm on it).
-2. Read the plan doc + this README's success criteria.
-3. Do **L-1.6 skill routing** (task #2) + finish **L-1.5 scope audit** (task #1) if not done — they gate P1.
-4. Execute **P1** (task #4). Then **L-5 = finish-flow** (task #6).
+1. `git checkout feat/ceo-fleet-autonomy` (confirm on it; HEAD should be `db16c82` or later).
+2. Read `level-front-door.md` (the depth-0 control loop you'll execute) + the README success criteria.
+3. **P1.f dogfood**: run `/l4` (or `/l5`) on a SMALL real goal, executing the depth-0 control loop per `level-front-door.md`. Verify the 6 criteria — esp. the depth-0 qc gate distinct from the foreman first-pass; a budget-hit → escalate path; no worktree leak (`git worktree list` clean after); provenance in the run-summary ledger. Record the result in README progress.
+4. **L-5 = finish-flow** (quality gate + dialectic review per user pref + merge to develop --no-ff + preflight-release.sh + learn + branch cleanup).
+
+> Note: the `/l3 /l4 /l5` skills already registered in the build session (no restart strictly required), but a fresh session is the cleaner test of criterion 2 ("invokable on a clean goal").
 
 ## What's LOCKED (don't re-litigate — these survived 3 review rounds)
 

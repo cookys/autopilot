@@ -16,7 +16,11 @@ autopilot (`--show-wide`): ~⅓–⅖ of "wide" tasks are genuinely independent 
 components, hook+test pairs); the rest are theme-cascades (file-disjoint but coupled). Net
 genuine width ≈ **15–25%** — at/above the gate. Decision: **reopen Phase L, scoped to batch
 independent-unit parallelism** (NOT arbitrary feature fan-out), with the file-disjointness gate
-as authorizer. **Next: S1 guard (ship-regardless + Tier-2 prerequisite), then Phase L.**
+as authorizer. **S1 SHIPPED 2026-06-23** (`f21346e` on develop): `scripts/check-disjointness.sh`
+(validate=authoritative artifact-rail / propose=advisory) + 36-assertion test + fixed-cap-3 docs +
+the mandatory depth-0 reviewer files-only carve-out. Built via `/l4` foreman; depth-0 authoritative
+qc PASS + 2 over-strict fixes (quotepath / two-dot head) independently re-verified. **Next: Phase L
+(conditional Tier-2 batch dispatch) — not yet started.**
 
 ## OKR
 

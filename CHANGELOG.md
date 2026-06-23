@@ -24,6 +24,15 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.21.1 — Worktree-base correction: `worktree.baseRef` supersedes the STEP-0 reset
+
+**Headline**: A baseRef spike (CC 2.1.186) corrected a stale invariant in the `/l4 /l5` front-door docs. `Agent(isolation:"worktree")` was documented as exposing **no base parameter**; in fact CC's **`worktree.baseRef` setting** (`fresh`|`head`, added 2.1.133) selects the native worktree base. Empirically re-verified 2.1.186 with a sentinel-commit probe: `worktree.baseRef:"head"` forks the foreman from the CEO's **local HEAD**, and it takes effect **in-session, no restart** (read from any settings tier incl. project-local `.claude/settings.local.json`). The `git reset --hard <CEO-HEAD-sha>` STEP-0 dance is now the **portable fallback** (non-CC, or when the setting can't be set), not the primary fix. Separately: the `/l5` hetero impl uses its own `git worktree add --base` mechanism — untouched by `worktree.baseRef` — and must be passed `--base "$(git rev-parse HEAD)"` to build on un-merged work.
+
+### Fixed
+- `skills/ceo-agent/references/level-front-door.md` worktree-base section + base-currency decision table + Gotchas: corrected "no base parameter" → `worktree.baseRef` (`fresh`|`head`); made `worktree.baseRef:"head"` the primary Claude-Code build-on-un-merged-work path and the `git reset` STEP-0 a portable fallback.
+- `level-front-door.md` `/l5` topology bullet: documented that `dispatch-hetero.sh`'s `--base` (default local `develop`) is a **separate** mechanism `worktree.baseRef` does not reach; added the `--base "$(git rev-parse HEAD)"` forcing function.
+- Empirical basis: in-session sentinel-probe spike (CC 2.1.186) — default `fresh` → sentinel absent (`origin/develop`); `worktree.baseRef:"head"` → sentinel present (CEO local HEAD).
+
 ## v2.21.0 — `/l3 /l4 /l5` CEO front-door + dispatched foreman
 
 **Headline**: CEO mode gains a terse front-door. `/l3 /l4 /l5 <goal>` enter `ceo-agent` with the four startup questions pre-filled and set the execution posture — `/l3` runs inline, `/l4` dispatches **one background, worktree-isolated `sub-orchestrator` foreman** that runs dev-flow unattended while the CEO holds a **depth-0 control loop** (budget cap → `TaskStop` + escalate; outcome→action table; merge-back; worktree GC) and the **authoritative qc verdict**, and `/l5` adds a heterogeneous (agy/Gemini) implementer via the already-built `dispatch-hetero.sh`. The depth-0 kill+reap mechanism was verified empirically by the P0 spike. Deferred behind their own gates: full `role × task-type` routing table, engines beyond Claude+Gemini, tree-engine coordinator, multi-node fleet.

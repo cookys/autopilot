@@ -8,12 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-06-23 | [l4-l5-dep-graph-fanout](2026-06-23-l4-l5-dep-graph-fanout/README.md) — `/l4 /l5` width fan-out: **DESCOPED** by 2-round dialectic to a go/no-go spike (S0: task-supply + semantic-miss) + a ship-regardless result-validating disjointness guard (S1); Tier-2 fan-out (Phase L) conditional on both S0 gates | (TBD — gated on S0) | `feat/l4-l5-dep-graph-fanout` |
+| _(none in progress)_ | | | |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-23 | [l4-l5-dep-graph-fanout](_archive/2026-06-23-l4-l5-dep-graph-fanout/README.md) — `/l4 /l5` width fan-out: research → S0.a **fleet-measured** (built portable probe + zero-dep ingest endpoint; 6 machines / 6-of-7 measurable repos over the d2 gate) → **descope overturned** → **S1** result-validating file-disjointness gate (`check-disjointness.sh`) + **Phase L** Tier-2 batch engine (`dispatch-batch.sh`: all-or-nothing / merge-conflict→serial-collapse / single-base / setsid-verified kill-trap / Amdahl telemetry). Also fixed a qc-gate SIGPIPE bug. `/l5` hetero-parallel → BACKLOG; Amdahl auto-tune → won't-do | (no version bump) | [`577ba8d`](../../../../commit/577ba8d) (Phase L) · [`f21346e`](../../../../commit/f21346e) (S1) | [plan](../plans/2026-06-23-l4-l5-dep-graph-fanout.md) |
 | 2026-06-23 | qc-gate-forcing-function (config-driven anti-skip pre-push gate — protected-path pushes need a `QC-Verdict: PASS` trailer or `.qc/<sha>.verdict.json`; `resolve-qc-gate.sh` + per-project `qc-gate-config.md`; no project dir, see CHANGELOG) | v2.22.0 | [`84d0f29`](../../../../commit/84d0f29) | (CHANGELOG entry) |
 | 2026-06-22 | [ceo-fleet-autonomy](2026-06-22-ceo-fleet-autonomy/README.md) — `/l3 /l4 /l5` CEO front-door + dispatched sub-orchestrator foreman (context-hygiene/unattended); 3-round dialectic + P1.f dogfood (6/6) + 2-round L-5 dialectic; **v2.21.1 follow-up**: baseRef spike corrected the worktree-base invariant (`worktree.baseRef:"head"` supersedes the STEP-0 reset; `/l5 --base` is a separate mechanism) | v2.21.0 → v2.21.1 | [`010556a`](../../../../commit/010556a) | [plan](../plans/2026-06-22-ceo-fleet-autonomy.md) |
 | 2026-06-22 | [doc-sync-gate](2026-06-22-doc-sync-gate/README.md) | v2.20.0 | (this ship) | (self-contained in README) |

@@ -1,8 +1,12 @@
 // transcript-reader-lib.js — recover the latest tool event from the Claude Code
 // session transcript JSONL, for tool-event hooks that cannot read stdin.
 //
-// WHY: Claude Code PreToolUse/PostToolUse hooks get no stdin pipe (opening
-// /dev/stdin throws ENXIO — verified across 2.1.128→2.1.159; upstream #6305).
+// WHY: opening the /dev/stdin PATH throws ENXIO in the Bun-spawned hook
+// environment (verified across 2.1.128→2.1.159; upstream #6305). The payload IS
+// delivered on fd 0 — read it directly (fs.readFileSync(0), verified 2.1.186),
+// which is the fix the PreToolUse blockers use. This transcript route remains
+// the recovery path for PostToolUse hooks that need tool_response/is_error
+// fields (absent pre-run) and as a fallback when fd 0 is empty.
 // PostToolUse hooks can instead reconstruct the stdin-equivalent payload
 // ({tool_name, tool_input, tool_response, is_error}) from the transcript, which
 // Claude Code writes incrementally during the session.
@@ -120,7 +124,8 @@ function readLatestToolEvent({ env, homedir } = {}) {
 // otherwise. Returns { tool_name, tool_input, tool_response, is_error, source }.
 // source ∈ 'stdin' | 'transcript' | 'none'. Never throws (fail-open → 'none').
 function getToolEvent({ stdin, env, homedir } = {}) {
-  // 1. stdin path (currently broken upstream, but future-proof + test-friendly)
+  // 1. injected stdin value (callers read fd 0 directly — that works; this is the
+  //    fast path when the caller already has the payload + keeps the lib test-friendly)
   if (typeof stdin === 'string' && stdin.trim()) {
     try {
       const input = JSON.parse(stdin);

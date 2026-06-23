@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.22.0-E8A838?style=flat-square" alt="v2.22.0">
+  <img src="https://img.shields.io/badge/version-2.23.0-E8A838?style=flat-square" alt="v2.23.0">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -509,7 +509,7 @@ Autopilot **不會** runtime 偵測 voltagent。`:debugger` 和 `:planner` 由 c
 
 ## Hooks
 
-Autopilot 自帶 **20 個 hook**（最初 14 個於 v2.5.0 引入，之後成長），在 Claude Code runtime 層強制開發紀律 — 不需要靠自律。分為 **8 個 default-on** + **7 個 opt-in** + **5 個已停用**（見下）。權威數字由 [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) 從 `hooks.json` + `settings.example.json` 推導（執行它即可重建這些清單，`--check` 擋漂移）。
+Autopilot 自帶 **20 個 hook**（最初 14 個於 v2.5.0 引入，之後成長），在 Claude Code runtime 層強制開發紀律 — 不需要靠自律。分為 **8 個 default-on** + **11 個 opt-in** + **1 個已停用**（見下）。權威數字由 [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) 從 `hooks.json` + `settings.example.json` 推導（執行它即可重建這些清單，`--check` 擋漂移）。
 
 ### Tier A — 預設啟用（8 個 hook）
 
@@ -526,31 +526,37 @@ Autopilot 自帶 **20 個 hook**（最初 14 個於 v2.5.0 引入，之後成長
 | **failure-escalation** | PostToolUse/Bash | 追蹤 session 內連續 Bash 失敗，升級給 user |
 | **suggest-compact** | PostToolUse/Write\|Edit | 計算 session tool call 次數，50 次提醒 `/compact`，之後每 25 次 |
 
-### Tier B — 可選啟用（7 個 hook）
+### Tier B — 可選啟用（11 個 hook）
 
 從 [`settings.example.json`](settings.example.json) 複製到你的 `settings.json` 即可個別啟用。
 
 | Hook | 事件 | 功能 |
 |------|------|------|
+| **branch-protection** | PreToolUse/Bash | 硬擋保護分支（預設 `main\|master`）上的直接 commit / force-push |
+| **commit-secret-scan** | PreToolUse/Bash | staged 變更含 secret 時硬擋 `git commit` |
+| **large-file-warner** | PreToolUse/Read | 500KB 警告、2MB 硬擋 Read（用 offset/limit 繞過） |
 | **config-protection** | PreToolUse/Write\|Edit | 擋對 linter/formatter config 的修改 |
+| **session-summary** | Stop | session 結束時把 cwd / git status / 近期 commit 追加到 `~/.claude/sessions/{date}-{sid}.md` |
 | **check-console** | Stop | 警告修改過的 JS/TS 檔案中的 `console.log` |
 | **accumulator** + **batch-format** | PostToolUse + Stop | session 結束時批量 Prettier + tsc |
 | **test-runner** | PostToolUse/Write\|Edit | 編輯後自動跑 sibling test（vitest/jest） |
 | **design-quality** | PostToolUse/Write\|Edit | 警告 generic template UI 模式 |
 | **mcp-health** | PreToolUse + PostToolUseFailure | 不健康 MCP server 的指數退避 |
 
-### 已停用 — 有 code 但哪都沒 wire（5 個 hook）
+> 上面三個 **PreToolUse** blocker 加上 **session-summary** 原本被 v2.7.4 停用，因為在 Bun-spawn 的 hook 環境裡開啟 `/dev/stdin` **路徑**會 ENXIO（[#6305](https://github.com/anthropics/claude-code/issues/6305)）。改成**直接讀 fd 0**（`fs.readFileSync(0)`）就拿得到 payload——已在 Claude Code 2.1.186 端到端驗證。PreToolUse blocker 以 opt-in 出貨而非 default-on，是因為硬擋 commit/read 是 per-project 的政策決定。
 
-存在於 `hooks/` 但 `hooks.json` 和 `settings.example.json` 都沒註冊，由 v2.7.4 disable batch 停用。兩種原因：**PreToolUse blocker**（`large-file-warner`、`commit-secret-scan`、`branch-protection`）卡在 upstream stdin fix（[#6305](https://github.com/anthropics/claude-code/issues/6305)）——transcript pivot 救不了（tool 還沒跑、沒 transcript entry）；**Stop-event hook**（`cost-tracker`、`session-summary`）非 stdin 問題，需各自重新驗證。重啟計畫見 [`docs/BACKLOG.md`](docs/BACKLOG.md)「Re-enable v2.7.4 disabled hooks」。
+### 已停用 — 有 code 但哪都沒 wire（1 個 hook）
+
+`cost-tracker`（Stop）存在於 `hooks/` 但哪都沒 wire。它的卡點**不是** stdin（fd 0 通）：Claude Code 2.1.186 的 **Stop payload 不帶 token-`usage` 欄位**，所以這 hook 永遠在 0 tokens 早退、什麼都不寫。要重啟用得改成從 transcript（Stop payload 裡有 `transcript_path`）加總 usage，不只是修讀法。見 [`docs/BACKLOG.md`](docs/BACKLOG.md)「Re-enable v2.7.4 disabled hooks」。
 
 ### Secret 偵測
 
-啟用時，`commit-secret-scan`（目前停用，見上）與運作中的 `audit-log` 共用統一的 secret pattern module（`hooks/_shared/secret-patterns.js`），涵蓋：OpenAI、Anthropic、GitHub（PAT/OAuth/App）、AWS、Google API、Slack、Stripe token + inline `--token`/`password`/`Authorization` 樣式。
+啟用時，`commit-secret-scan`（opt-in，見上）與運作中的 `audit-log` 共用統一的 secret pattern module（`hooks/_shared/secret-patterns.js`），涵蓋：OpenAI、Anthropic、GitHub（PAT/OAuth/App）、AWS、Google API、Slack、Stripe token + inline `--token`/`password`/`Authorization` 樣式。
 
 ### 覆寫
 
 - **停用某個 Tier A hook**：在 `settings.json` 設 `autopilot.<hookName> = false`
-- **自訂保護分支**（當 `branch-protection` 重新啟用時）：設 `AUTOPILOT_PROTECTED_BRANCHES` env var 或 settings 的 `autopilot.protectedBranches`
+- **自訂保護分支**（當 `branch-protection` 啟用時）：設 `AUTOPILOT_PROTECTED_BRANCHES` env var 或 settings 的 `autopilot.protectedBranches`
 - **停用成本追蹤**（當 `cost-tracker` 重新啟用時）：設 `autopilot.costTracker = false`
 
 ---

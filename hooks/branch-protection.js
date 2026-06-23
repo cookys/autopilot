@@ -33,7 +33,13 @@ function getCurrentBranch() {
 }
 
 try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+  // Read fd 0 directly — opening the '/dev/stdin' PATH throws ENXIO in the
+  // Bun-spawned hook environment (verified 2.1.186), but fd 0 carries the payload.
+  // Same fallback chain as failure-escalation.js. #6305.
+  let raw;
+  try { raw = fs.readFileSync(0, 'utf8'); }
+  catch { raw = fs.readFileSync('/dev/stdin', 'utf8'); }
+  const input = JSON.parse(raw);
   const toolInput = input.tool_input || {};
   const command = String(toolInput.command || '');
 

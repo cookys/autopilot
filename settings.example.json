@@ -13,6 +13,36 @@
   "hooks-opt-in-examples": {
     "PreToolUse": [
       {
+        "//": "branch-protection: hard-blocks direct commits / force-push on protected branches (autopilot.protectedBranches, default main|master)",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/branch-protection.js"
+          }
+        ]
+      },
+      {
+        "//": "commit-secret-scan: hard-blocks git commit when staged changes contain secrets",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/commit-secret-scan.js"
+          }
+        ]
+      },
+      {
+        "//": "large-file-warner: warns at 500KB, hard-blocks Read at 2MB (bypass with offset/limit)",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/large-file-warner.js"
+          }
+        ]
+      },
+      {
         "//": "config-protection: blocks edits to linter/formatter config files",
         "matcher": "Write|Edit",
         "hooks": [
@@ -80,6 +110,16 @@
       }
     ],
     "Stop": [
+      {
+        "//": "session-summary: appends cwd / git status / recent commits to ~/.claude/sessions/{date}-{sid}.md at session end",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-summary.js"
+          }
+        ]
+      },
       {
         "//": "check-console: warns about console.log in modified files",
         "matcher": "",

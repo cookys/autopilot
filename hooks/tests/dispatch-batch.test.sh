@@ -177,6 +177,27 @@ LEAK_WT="$(git -C "$R6" worktree list | grep -c integ || true)"
 assert_eq "0" "$LEAK_WT" "merge-back leaves no integration worktree"
 
 # ════════════════════════════════════════════════════════════════════════════
+# 6b. MERGE-BACK — base worktree is DIRTY → base_advance_failed (FAIL LOUD).
+#     Regression for the silent-no-op 🔴: the dirty base ff-merge fails; the old
+#     `|| true` swallowed it and still printed "merged" + exit 0, so the caller
+#     would GC the unit branches as shipped while the base never moved.
+# ════════════════════════════════════════════════════════════════════════════
+R6b="$TEST_TMP/r6b"; mkrepo "$R6b"
+mkunit "$R6b" ui  run6b "src/ui/a.ts"  "ui change"
+mkunit "$R6b" api run6b "src/api/b.ts" "api change"
+cat > "$TEST_TMP/units6b.jsonl" <<EOF
+{"id":"ui","scope":"src/ui/**","base":"main"}
+{"id":"api","scope":"src/api/**","base":"main"}
+EOF
+BASE_BEFORE="$(git -C "$R6b" rev-parse main)"
+echo "uncommitted local change" >> "$R6b/src/ui/a.ts"   # dirty the base worktree (main is checked out here)
+OUT="$("$SCRIPT" merge-back --repo "$R6b" --units "$TEST_TMP/units6b.jsonl" --run-id run6b --base main)"; EXIT=$?
+assert_eq "1" "$EXIT" "merge-back dirty base → exit 1 (not a false success)"
+assert_contains "$OUT" '"verdict": "base_advance_failed"' "dirty base → base_advance_failed verdict"
+assert_not_contains "$OUT" '"verdict": "merged"' "dirty base must NOT report merged"
+assert_eq "$BASE_BEFORE" "$(git -C "$R6b" rev-parse main)" "dirty base: base ref unchanged (merged nothing)"
+
+# ════════════════════════════════════════════════════════════════════════════
 # 7. MERGE-BACK — injected CONFLICT → serial_collapse, merges NOTHING.
 #    Two units edit the SAME line of the SAME file: each is FILES-disjoint within
 #    its own declared scope (so verify passes — files-only), but the merge

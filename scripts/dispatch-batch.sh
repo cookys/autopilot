@@ -153,6 +153,10 @@ parse_units() {
         ;;
     esac
     [ -n "$id" ] || err_usage "unit with empty id in $UNITS_FILE"
+    # id becomes a git branch component (unit-<id>-<run-id>) and a JSON value — a
+    # char outside this set would yield an invalid branch name AND corrupt the
+    # hand-rolled JSON (e.g. an embedded quote). Fail closed on bad generator output.
+    case "$id" in *[!A-Za-z0-9._-]*) err_usage "unit id '$id' has characters outside [A-Za-z0-9._-] (must be a valid git branch component)" ;; esac
     [ -n "$scope" ] || err_usage "unit '$id' has empty scope in $UNITS_FILE"
     # normalise scope: trim each comma-field, drop blanks
     local norm="" g
@@ -434,10 +438,22 @@ if [ "$MODE" = merge-back ]; then
         | awk -v b="refs/heads/$BASE" '
             /^worktree /{w=$2}
             /^branch /{if($2==b) print w}')"
+  advance_err=""
   if [ -n "$base_wt" ] && [ -d "$base_wt" ]; then
-    git -C "$base_wt" merge --ff-only "$integ_sha" >/dev/null 2>&1 || true
+    advance_err="$(git -C "$base_wt" merge --ff-only "$integ_sha" 2>&1 >/dev/null)" || true
   else
-    git -C "$REPO" update-ref "refs/heads/$BASE" "$integ_sha" "$base_sha" >/dev/null 2>&1 || true
+    advance_err="$(git -C "$REPO" update-ref "refs/heads/$BASE" "$integ_sha" "$base_sha" 2>&1 >/dev/null)" || true
+  fi
+  # FAIL LOUD: report "merged" ONLY if the base ref ACTUALLY advanced to integ_sha.
+  # The previous `|| true` swallowed a failed ff-merge (dirty base worktree) or a
+  # stale-CAS update-ref race and still printed "merged" + exit 0 — the caller
+  # would then GC the unit branches as shipped while the base never moved (work
+  # unrecoverable). The ref-moved invariant is the only trustworthy success signal.
+  new_base_sha="$(git -C "$REPO" rev-parse --verify --quiet "refs/heads/$BASE" 2>/dev/null || true)"
+  if [ "$new_base_sha" != "$integ_sha" ]; then
+    printf '{ "mode": "merge-back", "run_id": "%s", "base": "%s", "verdict": "base_advance_failed", "reason": "units committed cleanly but the base ref did NOT advance to the integration tip (dirty base worktree / non-fast-forward / concurrent base move). Merged NOTHING — escalate: resolve the base worktree, then re-run merge-back. Do NOT GC the unit branches.", "base_worktree": "%s", "detail": "%s", "merged": [] }\n' \
+      "$(json_escape "$RUN_ID")" "$(json_escape "$BASE")" "$(json_escape "${base_wt:-<direct-ref-update>}")" "$(json_escape "$advance_err")"
+    exit 1
   fi
   merged_lines="$(printf '%s' "$merged_ok" | tr ',' '\n')"
   printf '{ "mode": "merge-back", "run_id": "%s", "base": "%s", "verdict": "merged", "merge_commit": "%s", "merged": %s }\n' \
@@ -511,6 +527,11 @@ if [ "$MODE" = reap ]; then
   reaped=""
   reap_one_pgid() { # <pgid> <id>
     local pgid="$1" id="$2"
+    # Reject non-numeric and pgid<=1: `kill -- -0` targets the CALLER's own process
+    # group (reaping the orchestrator + this script) and `-1` is "every process" —
+    # a corrupt pgid file must never become a self/ system kill. Only legit groups.
+    case "$pgid" in ''|*[!0-9]*) return 0 ;; esac
+    [ "$pgid" -gt 1 ] 2>/dev/null || return 0
     # Only the negative-pgid form signals the whole GROUP. Guard a bogus/dead pgid.
     if kill -0 "-$pgid" 2>/dev/null; then
       kill -TERM "-$pgid" 2>/dev/null || true

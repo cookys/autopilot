@@ -295,8 +295,8 @@ CEO depth-0 loop (clock owner)
 ├─ 6. dispatch-batch.sh verify  → per-unit outcome table + ALL-OR-NOTHING verdict
 │        any non-committed OR undeclared touch ⇒ TaskStop survivors, GC worktrees, ESCALATE
 ├─ 7. qc@depth-0 over the COMBINED diff (the files-only carve-out — review cross-unit coupling)
-├─ 8. dispatch-batch.sh merge-back  → merged | serial_collapse (re-run named ids as ONE serial unit)
-└─ 9. telemetry t_review_done; GC all unit worktrees + branches
+├─ 8. dispatch-batch.sh merge-back  → merged | serial_collapse (re-run named ids serial) | base_advance_failed (fix base worktree, re-run; do NOT GC)
+└─ 9. telemetry t_review_done; GC all unit worktrees + branches (ONLY on `merged`)
 ```
 
 ### Outcome → action table (width layer)
@@ -310,6 +310,7 @@ single-unit table. **ALL-OR-NOTHING governs the batch verdict.**
 | `committed` but **undeclared touch** (disjoint:false) | **whole batch aborts** — `TaskStop` any survivors, GC, escalate. |
 | `no_op` / `dirty` / `failure` (any non-committed) | **whole batch aborts** — same. |
 | batch `merge-back` → `serial_collapse` | re-run the named `serial_collapse_ids` as **ONE Tier-1 serial unit** (width collapses to 1 for those ids). **Never** auto-resolve; **never** a coordinated round-2 re-dispatch (breaches blind-dispatch). |
+| batch `merge-back` → `base_advance_failed` | units committed cleanly but the base ref did NOT move (dirty base worktree / non-ff / concurrent base move). **Merged nothing — do NOT GC the unit branches** (work is still recoverable). Resolve the base worktree, then re-run `merge-back`. |
 
 ### Authorization = the disjointness gate, at two points
 

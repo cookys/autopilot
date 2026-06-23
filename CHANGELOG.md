@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — QC-panel refute pass (shadow) + no-silent-caps disclosure clause
+## v2.24.0 — QC-panel refute pass (shadow) + no-silent-caps disclosure clause
 
 **Headline**: Two adjudicated review-discipline upgrades. (1) `scripts/qc-panel.sh` gains a 4th question shape — a **refute pass** that turns the panel's skepticism on itself: for each candidate `MISSED:` finding, the OTHER cross-family judge tries to refute it, and a miss survives only by explicitly defeating refutation (`default-refuted-if-uncertain`). It is **SHADOW / non-gating** — the authoritative verdict is unchanged (any non-empty `MISSED:` still fails exactly as before); the result rides alongside as `refute_shadow` and into the calibration sample for feed-forward measurement, and may only become gating after `calibration.sh` / `run-known-bad` proves it does not false-suppress critical findings. (2) A shared **no-silent-caps** clause — *any bounded coverage (top-N / per-segment / sampled / skipped-on-timeout) MUST be disclosed in the verdict; an undisclosed bound is a defect* — added to the reviewer and audit output contracts, generalizing `skills/doc-sync`'s existing "a clean sweep only means this sample found nothing" ethos.
 

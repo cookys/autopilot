@@ -25,8 +25,14 @@ telemetry/reap) — all-or-nothing, merge-conflict→serial-collapse, single-bas
 cross-run telemetry, SIGTERM-to-pgroup parallel-kill (setsid-verified) + depth-0 control-loop prose.
 Built via `/l4` foreman; depth-0 qc found + fixed a 🔴 (merge-back silent no-op on dirty base →
 fail-loud `base_advance_failed`) + 2 🟡, independently re-verified (80 assertions, 48 files green).
-**ALL PHASES DONE (S0→S1→Phase L). Remaining: BACKLOG only** (/l5 hetero-parallel deferred; carve-out
-canonical-seed; glob brace/char-class; Amdahl cap-tuning needs real-run data).
+**ALL PHASES DONE (S0→S1→Phase L).** Follow-ups resolved 2026-06-23: carve-out canonical-seed
+**done** (`check-canonical-invariants` repeat#2 pins "The disjointness gate certifies files only,
+not behavior." across both docs); glob brace/char-class **done** (now fail-loud "unsupported glob
+syntax" instead of a silent literal under-match). **BACKLOG**: only `/l5` hetero-parallel (rails
+built, unwired — fire on concrete repeated need). **WON'T-DO**: Amdahl cap auto-tuning — the data
+to drive it (enough parallel runs to tune statistically) will likely never accumulate given how
+thin wide task-supply is; fixed-cap-3 is the honest permanent default, telemetry stays as
+observability only.
 
 ## OKR
 

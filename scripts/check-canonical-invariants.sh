@@ -120,6 +120,16 @@ check_repeat "severity-vocab" \
   "skills/quality-pipeline/_base/prohibited-behaviors.md" \
   "skills/quality-pipeline/references/code-review.md"
 
+# repeat #2 — the /l4 /l5 width-fan-out disjointness carve-out. This single sentence is
+# LOAD-BEARING: it states the gate certifies FILES ONLY (not behavior), so the green
+# disjointness stamp must never shrink the depth-0 qc. If either doc drops/rewords it the
+# safety invariant silently erodes. Reword ritual: change the sentence here AND in both
+# files in one commit.
+check_repeat "disjointness-carve-out" \
+  "The disjointness gate certifies files only, not behavior." \
+  "references/blind-dispatch.md" \
+  "skills/ceo-agent/references/level-front-door.md"
+
 # reference #1 — reviewer.md REFERENCES code-review.md's Invocation section (it does not
 # repeat the body). Assert reviewer.md still names the canonical anchor AND the heading
 # still exists in code-review.md. Catches a structural rename/deletion of "## Invocation".

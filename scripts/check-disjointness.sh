@@ -130,6 +130,15 @@ json_array_from_lines() {
 # matches everything below it (an allowlist of a dir owns its subtree).
 glob_match() {
   local path="$1" glob="$2"
+  # Brace `{a,b}` and char-class `[a-z]` are NOT supported: the translator escapes
+  # them to literals, so such a glob would SILENTLY match only the literal text
+  # (under-match) instead of the intended set. Reject loudly so the caller splits
+  # the scope into explicit globs rather than getting a confusing false "undeclared
+  # touch". (Fail-closed direction either way, but a clear error beats a silent miss.)
+  case "$glob" in
+    *'{'*|*'}'*|*'['*|*']'*)
+      err_usage "unsupported glob syntax in '$glob': brace {a,b} / char-class [a-z] are not supported (they match literally, not as a set) — split the scope into separate explicit globs" ;;
+  esac
   # A trailing-slash or bare-dir form: normalise `dir/` → `dir` so the subtree
   # rule below applies uniformly.
   glob="${glob%/}"

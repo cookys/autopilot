@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### `/l5` hetero-parallel width fan-out (machinery built, deliberately unwired)
+- **Trigger**: a **concrete, repeated** need to fan a single batch out across multiple *heterogeneous* (agy/Gemini) workers in parallel — i.e. real `/l5` task-supply where the cost-arbitrage of a second engine actually pays, AND the base-correctness + engine-variance risks are acceptable for that workload.
+- **Context**: Phase L shipped `/l4` homogeneous (Claude) batch fan-out. The deterministic rails for the hetero-parallel path **already exist** — `dispatch-batch.sh reap` is the SIGTERM-to-pgroup parallel-kill trap built for shell-dispatched workers (setsid-verified), and `dispatch-hetero.sh` is the single-unit hetero dispatcher. What's unbuilt is the loop that fans `dispatch-hetero.sh` across N units under `dispatch-batch.sh`'s verify/merge-back/reap. It was **cut at plan time** (the weakest leg: base-correctness × engine-variance × *rarest* task-supply — speculative on speculative). S0.a then confirmed wide task-supply is already thin even homogeneously, so this is one-day-to-wire-IF-needed, not a gap. `/l4` homogeneous is the value path.
+- **Effort**: S (wire existing rails) — only if the trigger fires.
+- **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
+
 ### ✅ DONE (2026-06-22, `e96998d` via /l4 dogfood) — subagent-driven-development: explicit BLOCKED / incomplete-return handling
 - **Resolution**: `skills/team/references/team-tactics.md` gained a `## Dispatched-Subagent Return Contract` section — 4-value status enum (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED) + orchestrator action per status, BLOCKED→re-scope/escalate explicit. No separate spec-reviewer rebuilt (reviewer.md already covers spec-compliance, as the original note required). Landed as the `/l4` dogfood payload for `ceo-fleet-autonomy`.
 - **Trigger**: next time a dispatched implementer subagent returns **incomplete / blocked** (NEEDS_CONTEXT, partial, gave up) and the orchestrator mishandles it (proceeds as if done, or stalls silently).

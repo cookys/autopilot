@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.22.0 — Anti-skip qc-gate forcing function (config-driven)
+
+**Headline**: A configurable forcing function that makes "merged/pushed without a qc gate" a **loud, deliberate, logged** act instead of a silent default — born from a real miss where doc fixes were merged to develop before the qc reviewer ran. Strength is **per-project**, resolved like every other autopilot gate (`.claude/<thing>-config.md` override + template default + a `resolve-*.sh` script). A `.githooks/pre-push` hook refuses to push a commit range touching a **protected path** (`skills/agents/scripts/references/hooks/`) without **review evidence** (a `QC-Verdict: PASS` git trailer or a `.qc/<sha>.verdict.json` artifact). `mode: block | warn | off` per project; fail-closed to `block`; `git push --no-verify` is the deliberate, logged bypass. A hook enforces evidence *existence*, never *quality* — the goal is to flip the default, not seal it. Sibling of DOA: DOA governs *dispatch authority*, qc-gate governs *merge/push review*.
+
+### Added
+- `scripts/resolve-qc-gate.sh` — resolves `{mode, protected_paths, evidence, source}` JSON from `.claude/qc-gate-config.md` (cwd → repo → template), garbage/missing → `block` fail-closed.
+- `project-config-template/qc-gate-config.md` — shipped default (`block`, protected paths, `trailer` evidence) + field reference.
+- `.githooks/pre-push` — the enforcer; consults `resolve-qc-gate.sh`, blocks/warns per `mode`. Degrades open (exit 0) if the resolver is absent.
+
+### Changed
+- `scripts/install-hooks.sh` — header now lists `pre-push` (auto-installed via the existing `.githooks/*` glob + chmod).
+- `skills/finish-flow/SKILL.md` L-5.3 (+ F.4/H-9.3) — merge commit MUST carry the `QC-Verdict: PASS (reviewer <id>, <date>)` trailer once the pre-merge gate passes.
+- `skills/quality-pipeline/SKILL.md` — scripts table row: on PASS, stamp the landing commit with the trailer.
+- `CLAUDE.md` — scripts-inventory row for `resolve-qc-gate.sh`.
+
+### Note
+- This very change was landed THROUGH the gate (dogfood): qc reviewer ran on the diff, then the merge commit carried the `QC-Verdict` trailer.
+
 ## v2.21.1 — Worktree-base correction: `worktree.baseRef` supersedes the STEP-0 reset
 
 **Headline**: A baseRef spike (CC 2.1.186) corrected a stale invariant in the `/l4 /l5` front-door docs. `Agent(isolation:"worktree")` was documented as exposing **no base parameter**; in fact CC's **`worktree.baseRef` setting** (`fresh`|`head`, added 2.1.133) selects the native worktree base. Empirically re-verified 2.1.186 with a sentinel-commit probe: `worktree.baseRef:"head"` forks the foreman from the CEO's **local HEAD**, and it takes effect **in-session, no restart** (read from any settings tier incl. project-local `.claude/settings.local.json`). The `git reset --hard <CEO-HEAD-sha>` STEP-0 dance is now the **portable fallback** (non-CC, or when the setting can't be set), not the primary fix. Separately: the `/l5` hetero impl uses its own `git worktree add --base` mechanism — untouched by `worktree.baseRef` — and must be passed `--base "$(git rev-parse HEAD)"` to build on un-merged work.

@@ -4,6 +4,9 @@
 # Sets `git config core.hooksPath .githooks` (local to this clone) so the
 # scripts in .githooks/ run on their git events:
 #   - pre-commit : version/agent-body drift gate (blocks the commit on drift)
+#   - pre-push   : qc-gate anti-skip forcing function — blocks/warns a push whose
+#                  range touches a protected path without QC-Verdict evidence
+#                  (strength per .claude/qc-gate-config.md → scripts/resolve-qc-gate.sh)
 #   - post-merge : release-ritual advisory (prints merge SHA + preflight status
 #                  when a merge lands on develop/main; never blocks, never commits)
 #

@@ -39,6 +39,7 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/diff-since-last-round.sh`](../../scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint (dispatcher-only) | Re-review Loop short-circuit decision |
 | [`scripts/qc-panel.sh`](../../scripts/qc-panel.sh) | Cross-family interrogation panel (shadow mode, task-tree engine) | Shadow QC panel section below |
 | [`scripts/calibration.sh`](../../scripts/calibration.sh) | Panel verdict sample store + agreement report | Shadow QC panel section below |
+| [`scripts/resolve-qc-gate.sh`](../../scripts/resolve-qc-gate.sh) | Per-project anti-skip gate strength (`block`/`warn`/`off`) for the `.githooks/pre-push` enforcer | On PASS, stamp the landing/merge commit with `QC-Verdict: PASS (reviewer <id>, <date>)` so the pre-push gate is satisfied |
 
 All scripts: `<script> --help` for usage; deterministic exit codes; JSON output where applicable. If a user project ships its own script with the same contract, prefer the project version.
 

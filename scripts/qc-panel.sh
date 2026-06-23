@@ -29,6 +29,28 @@
 #   Q2  "What was done BEYOND the stated goals (extras/scope-creep)?"
 #   Q3  "What goals were NOT achieved?"
 #
+# REFUTE PASS (Q4 — SHADOW, NON-GATING until calibrated):
+#   A 4th question shape that turns the panel's skepticism on the panel ITSELF.
+#   All of Q1–Q3 interrogate the IMPLEMENTER; nothing checks whether the panel's
+#   OWN misses are real before they cost a fix round (see project memories
+#   verify-reviewer-claims, delegate-selftest-false-green — reviewer findings are
+#   non-authoritative). For each candidate MISSED: line, the OTHER cross-family
+#   judge (the one that did NOT raise it: B refutes A's misses, A refutes B's)
+#   attempts to REFUTE it — argue it is wrong / already satisfied by the artifacts
+#   / out of scope per SCOPE_RULE.  UNCERTAINTY COUNTS AGAINST THE FINDING
+#   (default-refuted-if-uncertain): a miss SURVIVES only by explicitly defeating
+#   refutation; anything else (REFUTED / UNCERTAIN / no clear verdict) is refuted.
+#
+#   🔴 NON-GATING: the refute result NEVER alters `verdict`. The authoritative
+#   verdict logic is UNCHANGED — any non-empty MISSED still fails exactly as
+#   before.  The refute outcome is emitted ALONGSIDE as the shadow field
+#   `refute_shadow:{refuted_misses[],survived_misses[]}` and rides into the
+#   calibration sample (--source refute=…) for feed-forward measurement only.
+#   It stays SHADOW / non-gating UNTIL it graduates via scripts/calibration.sh /
+#   run-known-bad: it may become authoritative ONLY after the calibration harness
+#   shows it does not false-suppress critical findings (calibration.sh
+#   GRAD_* data block: min samples, min agreement, false_pass_on_critical == 0).
+#
 # SYNTHESIZER:
 #   1. Deterministic script merge (jq) of 6 judge outputs → achieved/extras/missed
 #   2. One haiku-class model pass → {verdict: pass|fail, dissents[], extras[]}
@@ -52,6 +74,10 @@
 #     "extras":   [],
 #     "judges":   { "a_q1": <file>, "a_q2": <file>, "a_q3": <file>,
 #                   "b_q1": <file>, "b_q2": <file>, "b_q3": <file> },
+#     "refute_shadow": {          # SHADOW / non-gating — does NOT affect verdict
+#       "refuted_misses":  [],    # candidate misses the other judge defeated
+#       "survived_misses": []     # misses that survived refutation (real, kept)
+#     },
 #     "token_estimate": <n>,
 #     "skipped_reason": null | "null-verdict"
 #   }
@@ -103,6 +129,19 @@ SCOPE_RULE="Scope rule: judge ONLY the node whose report appears in the context 
 Q1="What goals were achieved? Cite specific evidence from the report and artifacts. List each achieved goal on its own line prefixed 'ACHIEVED:'."
 Q2="What was done BEYOND the stated goals (extras, scope creep, unrequested changes)? Be specific. List each on its own line prefixed 'EXTRA:'."
 Q3="What goals were NOT achieved? What is still missing or incomplete? List each on its own line prefixed 'MISSED:'."
+# Q4 — REFUTE pass (SHADOW, non-gating). The literal token __MISS__ is replaced
+# (via string substitution, NOT printf — a miss line may contain a '%') with the
+# single candidate miss being challenged. The judge must try to REFUTE it;
+# uncertainty counts AGAINST the finding (default-refuted-if-uncertain) —
+# survival requires an explicit SURVIVES verdict, anything else is REFUTED.
+Q4_TEMPLATE="Another reviewer claims the following is a MISSED goal of THIS node: __MISS__
+
+Your job is to REFUTE this claim if you can. Using ONLY the node report and artifacts in the context above, decide whether the claim is wrong — e.g. the goal is actually satisfied by the artifacts, the claim is out of scope per the scope rule, or it misreads the node's deliverables.
+
+Default to REFUTED when uncertain: a reviewer's miss must EARN its survival. Output exactly ONE line, one of:
+  REFUTED: <one-sentence reason the claimed miss is wrong / already satisfied / out of scope>
+  UNCERTAIN: <why you cannot confirm the miss is real>
+  SURVIVES: <evidence the miss is genuinely real and in scope>"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 die()           { printf 'qc-panel.sh: %s\n' "$*" >&2; exit 2; }
@@ -355,6 +394,65 @@ run_judge_b() {
   return 0
 }
 
+# ── Refute runners (Q4 SHADOW pass) ───────────────────────────────────────────
+# Same binary recipes as the judge runners, but the question is the per-miss
+# refute template (filled with one candidate miss) and the raw response is
+# returned on stdout for the caller to classify. These are NON-GATING and are
+# tolerant of failure: a refute call that errors leaves the miss to survive
+# (fail-closed toward the existing verdict — a dead refute pass never suppresses
+# a finding). Refute tokens are accounted into TOKEN_TOTAL like any other call.
+
+refute_with_judge_a() {
+  local miss="$1"
+  local question prompt
+  question="${Q4_TEMPLATE//__MISS__/$miss}"
+  prompt="$(printf 'You are a code review judge. Review the following context and answer the question.\n\n%s\n\nQUESTION: %s\n\nCONTEXT:\n' "$SCOPE_RULE" "$question")"
+  TOKEN_TOTAL=$((TOKEN_TOTAL + $(estimate_tokens_str "$prompt") + CTX_TOKENS))
+  local out
+  out="$({ printf '%s' "$prompt"; cat "$CONTEXT_FILE"; } | "$CLAUDE_BIN" -p --model "$JUDGE_A_MODEL" 2>/dev/null)" || out=""
+  TOKEN_TOTAL=$((TOKEN_TOTAL + ${#out} / 4))
+  printf '%s' "$out"
+}
+
+refute_with_judge_b() {
+  local miss="$1"
+  local question prompt judge_dir
+  question="${Q4_TEMPLATE//__MISS__/$miss}"
+  judge_dir="$(mktemp -d -t "qc-refute-b-XXXXXX")"
+  cp "$CONTEXT_FILE" "$judge_dir/context.txt"
+  prompt="$(printf 'You are a code review judge. Review context.txt and answer this question:\n\n%s\n\nQUESTION: %s\n\nWRITE your answer to ./verdict.txt then output only the word DONE.\n' "$SCOPE_RULE" "$question")"
+  TOKEN_TOTAL=$((TOKEN_TOTAL + $(estimate_tokens_str "$prompt") + CTX_TOKENS))
+  local agy_out
+  agy_out="$(cd "$judge_dir" && "$AGY_BIN" -p "$prompt" \
+      --model "$JUDGE_B_MODEL" \
+      --dangerously-skip-permissions \
+      --print-timeout 8m 2>/dev/null)" || true
+  local out=""
+  if [ -f "$judge_dir/verdict.txt" ] && [ -s "$judge_dir/verdict.txt" ]; then
+    out="$(cat "$judge_dir/verdict.txt")"
+  else
+    out="$agy_out"
+  fi
+  TOKEN_TOTAL=$((TOKEN_TOTAL + ${#out} / 4))
+  rm -rf "$judge_dir"
+  printf '%s' "$out"
+}
+
+# classify_refutation: map a refute response to refuted|survived.
+# default-refuted-if-uncertain — a miss SURVIVES only on an explicit SURVIVES
+# verdict; REFUTED, UNCERTAIN, an empty/failed response, or anything ambiguous
+# all count AGAINST the finding (it is treated as refuted).
+classify_refutation() {
+  local resp="$1"
+  # First decisive token wins; scan case-insensitively.
+  local first
+  first="$(printf '%s' "$resp" | grep -ioE 'REFUTED|UNCERTAIN|SURVIVES' | head -1 | tr '[:lower:]' '[:upper:]')"
+  case "$first" in
+    SURVIVES) printf 'survived' ;;
+    *)        printf 'refuted'  ;;
+  esac
+}
+
 # ── Dispatch 6 judge calls ─────────────────────────────────────────────────────
 JUDGE_FAILURES=0
 
@@ -387,6 +485,14 @@ MISSED_FILE="$WORK_DIR/missed.txt"
 collect_lines "ACHIEVED" "$A_Q1" "$B_Q1" > "$ACHIEVED_FILE"
 collect_lines "EXTRA"    "$A_Q2" "$B_Q2" > "$EXTRAS_FILE"
 collect_lines "MISSED"   "$A_Q3" "$B_Q3" > "$MISSED_FILE"
+
+# Per-judge MISSED provenance — refute-pass ONLY (the combined MISSED_FILE above
+# is the gating input and is left untouched). A judge's own miss must be
+# challenged by the OTHER family, so we keep the two sources separate here.
+A_MISSED_FILE="$WORK_DIR/missed_a.txt"
+B_MISSED_FILE="$WORK_DIR/missed_b.txt"
+collect_lines "MISSED" "$A_Q3" > "$A_MISSED_FILE"
+collect_lines "MISSED" "$B_Q3" > "$B_MISSED_FILE"
 
 # Build JSON arrays from collected lines
 lines_to_json_array() {
@@ -487,6 +593,50 @@ else
   # SYNTH_VERDICT already = DETERMINISTIC_VERDICT
 fi
 
+# ── Refute pass (Q4 — SHADOW, NON-GATING) ─────────────────────────────────────
+# For each candidate MISSED line, the OTHER cross-family judge tries to refute
+# it: judge A's misses are challenged by judge B, judge B's by judge A. A miss
+# SURVIVES only on an explicit SURVIVES verdict (default-refuted-if-uncertain).
+# This computes a shadow field ONLY — it NEVER touches SYNTH_VERDICT or the
+# gating logic above. Stays shadow until graduated via scripts/calibration.sh.
+REFUTED_LINES="$WORK_DIR/refuted.txt"
+SURVIVED_LINES="$WORK_DIR/survived.txt"
+: > "$REFUTED_LINES"
+: > "$SURVIVED_LINES"
+
+# Refute judge A's misses with judge B.
+if [ -s "$A_MISSED_FILE" ]; then
+  while IFS= read -r miss; do
+    [ -z "$miss" ] && continue
+    if [ "$(classify_refutation "$(refute_with_judge_b "$miss")")" = "survived" ]; then
+      printf '%s\n' "$miss" >> "$SURVIVED_LINES"
+    else
+      printf '%s\n' "$miss" >> "$REFUTED_LINES"
+    fi
+  done < "$A_MISSED_FILE"
+fi
+# Refute judge B's misses with judge A.
+if [ -s "$B_MISSED_FILE" ]; then
+  while IFS= read -r miss; do
+    [ -z "$miss" ] && continue
+    if [ "$(classify_refutation "$(refute_with_judge_a "$miss")")" = "survived" ]; then
+      printf '%s\n' "$miss" >> "$SURVIVED_LINES"
+    else
+      printf '%s\n' "$miss" >> "$REFUTED_LINES"
+    fi
+  done < "$B_MISSED_FILE"
+fi
+
+REFUTED_JSON="$(lines_to_json_array "$REFUTED_LINES")"
+SURVIVED_JSON="$(lines_to_json_array "$SURVIVED_LINES")"
+# Count non-empty lines. `grep -c` exits 1 on zero matches, which would make a
+# `|| printf 0` fallback DOUBLE-emit ("0\n0") and corrupt the source tag — use a
+# single deterministic line count instead.
+count_nonempty() { grep -c '.' "$1" 2>/dev/null; :; }
+REFUTED_COUNT="$(count_nonempty "$REFUTED_LINES")"; REFUTED_COUNT="${REFUTED_COUNT:-0}"
+SURVIVED_COUNT="$(count_nonempty "$SURVIVED_LINES")"; SURVIVED_COUNT="${SURVIVED_COUNT:-0}"
+REFUTE_SHADOW_JSON="$(printf '{"refuted_misses":%s,"survived_misses":%s}' "$REFUTED_JSON" "$SURVIVED_JSON")"
+
 # ── Write verdict artifact (Amendment 4 liveness part a) ─────────────────────
 TS="$(now_iso)"
 TS_SAFE="$(printf '%s' "$TS" | tr ':' '-')"
@@ -509,11 +659,15 @@ JUDGES_JSON="$(printf '{"a_q1":"%s","a_q2":"%s","a_q3":"%s","b_q1":"%s","b_q2":"
   "${NODE_LABEL}-${TS_SAFE}-b_q2.txt" \
   "${NODE_LABEL}-${TS_SAFE}-b_q3.txt")"
 
-VERDICT_JSON="$(printf '{"status":"ok","verdict":"%s","dissents":%s,"extras":%s,"judges":%s,"token_estimate":%d,"skipped_reason":null}\n' \
+# refute_shadow rides alongside verdict — it is SHADOW / non-gating and does
+# NOT influence the "verdict" field above (which stays the existing any-MISSED
+# fail logic, exactly as before this pass existed).
+VERDICT_JSON="$(printf '{"status":"ok","verdict":"%s","dissents":%s,"extras":%s,"judges":%s,"refute_shadow":%s,"token_estimate":%d,"skipped_reason":null}\n' \
   "$SYNTH_VERDICT" \
   "$SYNTH_DISSENTS" \
   "$SYNTH_EXTRAS" \
   "$JUDGES_JSON" \
+  "$REFUTE_SHADOW_JSON" \
   "$TOKEN_TOTAL")"
 
 printf '%s\n' "$VERDICT_JSON" > "$VERDICT_FILE" || die_liveness "failed to write verdict artifact: $VERDICT_FILE"
@@ -531,7 +685,18 @@ CALIBRATION_ARGS=(
   --baseline self-report
   --tokens "$TOKEN_TOTAL"
 )
-[ -n "${NODE_ID:-}" ] && CALIBRATION_ARGS+=(--source "node:$NODE_ID")
+# Ride the refute SHADOW result into the sample's --source field so a later
+# `calibration.sh report` (or run-known-bad replay) can measure how often the
+# refute pass would have SUPPRESSED a miss that the authoritative verdict held
+# real — the graduation gate for making it gating. Format is a stable,
+# JSON-safe (no quotes/braces) tail: "refute=refuted:N,survived:M,gating_misses:K".
+# gating_misses is the count the UNCHANGED verdict logic acted on.
+REFUTE_SRC_TAG="refute=refuted:${REFUTED_COUNT},survived:${SURVIVED_COUNT},gating_misses:${MISSED_COUNT}"
+if [ -n "${NODE_ID:-}" ]; then
+  CALIBRATION_ARGS+=(--source "node:$NODE_ID $REFUTE_SRC_TAG")
+else
+  CALIBRATION_ARGS+=(--source "$REFUTE_SRC_TAG")
+fi
 
 if ! "$CALIBRATION_SH" add-sample "${CALIBRATION_ARGS[@]}"; then
   die_liveness "calibration.sh add-sample failed (liveness assertion: panel run must produce a sample)"

@@ -171,6 +171,12 @@ so downstream consumers can confirm the scan ran rather than being silently skip
 
 Mixed task-driven and scope-creep changes inflate review time, break `git blame` / bisect attribution, and (especially in C++) risk silent behavior changes from "harmless" refactors. Cheaper to push back at review than revert after merge.
 
+## No silent caps — disclose every bound
+
+**Any bounded coverage — top-N, per-segment, sampled, or skipped-on-timeout — MUST be DISCLOSED in the verdict. An undisclosed bound is a defect.** If the review read only the first N files of a large diff, judged one partition of a fanned-out audit, sampled a subset, or dropped work because a tool timed out, that limit belongs in the report (in `### ✅ Verified Clean` or the `### Summary`), stated as *what was NOT covered*. A reader who believes a partial sweep was exhaustive is worse off than one told the scope up front.
+
+This **generalizes the `skills/doc-sync` ethos** to the reviewer/audit output contract: doc-sync already holds that its non-deterministic LLM sweep is bounded — *"a 'clean' sweep only means this sample found nothing, never that nothing exists"* — and never lets a clean sample masquerade as proof of absence. The same honesty applies to any review or audit that bounds its own coverage: name the bound, don't let it pass silently.
+
 ## 4-Tier Severity
 
 | Severity | Definition | Action |
@@ -286,6 +292,12 @@ scripts/calibration.sh add-sample \
 `scripts/calibration.sh report` computes agreement rate, false-pass-on-critical, sample_count, and graduation status **exclusively over `baseline==reviewer` samples** (records lacking the field count as reviewer for backward compat). `self_report_sample_count` is printed separately.
 
 The calibration report exposes the data the Board needs for the P5→active decision (Amendment 6). No authority shifts before graduation criteria are met.
+
+### Finding-survival (refute pass) — SHADOW / non-gating until calibrated
+
+The panel's Q1–Q3 shapes all interrogate the **implementer**; nothing checks whether the panel's **own** `MISSED:` findings are real before they cost a fix round. Two standing project memories (`verify-reviewer-claims`, `delegate-selftest-false-green`) hold that reviewer findings are non-authoritative — a finding is a claim to check, not an order to obey. `qc-panel.sh` adds a 4th question shape, the **refute pass**: for each candidate miss, the **other** cross-family judge (the one that did NOT raise it) attempts to refute it — wrong / already satisfied by the artifacts / out of scope per the scope rule. **Uncertainty counts AGAINST the finding** (`default-refuted-if-uncertain`): a miss **survives only by explicitly defeating refutation**.
+
+🔴 **This is SHADOW only — non-gating until it graduates.** The authoritative verdict is **unchanged**: the panel still fails on any non-empty `MISSED:` exactly as before. The refute result rides **alongside** as `refute_shadow:{refuted_misses[],survived_misses[]}` in the panel JSON and into the calibration sample's `--source` tag (`refute=refuted:N,survived:M,gating_misses:K`) — it does **not** alter `verdict`. A refute pass that suppressed a true critical would be worse than the bug it fixes, so it feeds **calibration only**. It may become authoritative **only after** `scripts/calibration.sh` (`run-known-bad`) shows it does not false-suppress critical findings — the same `GRAD_*` graduation criteria block that gates the panel itself (min samples, min agreement, `false_pass_on_critical == 0`).
 
 ## See Also
 

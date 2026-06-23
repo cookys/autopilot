@@ -5,13 +5,18 @@
 **Plan**: [`docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md`](../../plans/2026-06-23-l4-l5-dep-graph-fanout.md)
 **Origin**: `research-to-ship l4` — Phase 1 research (3 agents) + baseRef spike (v2.21.1, shipped)
 + 2-round Architect/Ops/Skeptic dialectic (**CONVERGED → DESCOPED**).
-**Status**: **S0.a REOPENED 2026-06-23.** Autopilot-only read was 9–13% (→ would FAIL the gate),
-but autopilot is a biased sample (single-threaded plugin/docs repo). A portable fleet probe was
-built (`scripts/measure-task-width.sh` + `task-width-fleet.sh` + `task-width-ingest.py`); first
-cross-repo run shows **measurable repos (real feature-merge history) mostly CLEAR the gate at
-depth-2 (autopilot 42%, cado-nfs 46%, codeforge 75%)** — descope no longer safe to assume. n is
-still tiny (2–3 measurable) + numbers are an upper bound. **Collecting more measurable repos
-across the fleet before the Tier-2 go/no-go.** S1 guard still ship-regardless.
+**Status**: **S0.a CONCLUDED 2026-06-23 → DESCOPE OVERTURNED → Phase L REOPENED (scoped to
+batch parallelism).** Autopilot-only read was 9–13% (would FAIL), but autopilot is a biased
+sample. Built a portable fleet probe (`measure-task-width.sh` + `task-width-fleet.sh` +
+`task-width-ingest.py`) and collected **6 machines / 37 distinct repos / 7 measurable**: at the
+layout-appropriate depth (d2) **6/7 clear the 20% gate** (cado-nfs 46, autopilot 42, codeforge
+40, PEACE 38, hangar 31, codepower 30; TWGameProject 6 = the miss). Semantic spot-check on
+autopilot (`--show-wide`): ~⅓–⅖ of "wide" tasks are genuinely independent **batch** work
+(universal-hooks = 14 independent hooks, quality-pipeline = 8 independent scripts, task-tree
+components, hook+test pairs); the rest are theme-cascades (file-disjoint but coupled). Net
+genuine width ≈ **15–25%** — at/above the gate. Decision: **reopen Phase L, scoped to batch
+independent-unit parallelism** (NOT arbitrary feature fan-out), with the file-disjointness gate
+as authorizer. **Next: S1 guard (ship-regardless + Tier-2 prerequisite), then Phase L.**
 
 ## OKR
 
@@ -81,6 +86,18 @@ width-1, and ship the safety guard that's valuable regardless of that answer.
   SP-trio internalization) — not dependency-graph fan-out. **Conclusion: the wide regime is too
   rare to justify Tier-2; the descope holds — ship S1 guard only.** Raw data:
   `/tmp/.../scratchpad/s0a-substantive.txt` (regenerable from the merge log).
+- **Fleet S0.a concluded → reopen (2026-06-23)** — collected the metric across the fleet via the
+  ingest endpoint: 6 machines, 37 distinct repos (46 dup clones deduped), **7 measurable**. At the
+  layout-appropriate depth-2, 6/7 clear the 20% gate (the miss = TWGameProject, a Unity repo whose
+  merges are monolithic scene/asset changes). The d1/d2/d3 spread is wide (d1 1/7, d2 6/7, d3 7/7)
+  — the verdict rides on per-repo layout, so d2 is the honest row for these `src/<module>` app/game
+  repos. Semantic `--show-wide` on autopilot: genuine independent **batch** tasks exist (14-hook
+  Ship B, 8-script quality-pipeline hardening, task-tree components) alongside theme-cascade false
+  positives → discounted genuine width ≈ 15–25%. **The cheap descope is dead.** Reopened Phase L,
+  but the data also re-shapes it: the win is **batch independent-unit parallelism**, exactly what
+  the deterministic file-disjointness gate authorizes — so S1 (the guard) is now load-bearing, not
+  just nice-to-have. The methodology lesson: a tool measured on its own (atypical) repo under-reads;
+  measure on the population the feature actually serves.
 - **Cross-repo reopen (2026-06-23)** — the autopilot-only S0.a was rejected as a biased sample
   (a plugin/docs repo is single-threaded by nature). Built a portable fleet probe and ran it on
   the local repo set: of 9 distinct repos only 2–3 are *measurable* (real feature-merge history;

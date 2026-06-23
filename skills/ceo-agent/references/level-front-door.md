@@ -102,6 +102,7 @@ so the supply is real, but the authorization must be mechanical).
   failure mode (disjoint-file semantic coupling) WORSE by inducing reviewer
   rubber-stamping — the depth-0 qc (§3) must review the *combined* diff for cross-unit
   coupling exactly as hard as it would a single-unit diff.
+  The disjointness gate certifies files only, not behavior.
 - **Tier-2 batch engine (Phase L) is the parallel-dispatch / merge-back control loop**
   built on top of this gate — see "Phase L: width fan-out control loop" below and
   [`references/batch-dispatch.md`](../../../references/batch-dispatch.md). The shell

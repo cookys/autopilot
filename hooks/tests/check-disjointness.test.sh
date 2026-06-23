@@ -149,4 +149,12 @@ assert_eq "2" "$EXIT" "unknown mode → exit 2"
 OUT="$("$SCRIPT" validate --repo "$TEST_TMP/not-a-repo" --allow "x" --range abc 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-git repo → exit 2"
 
+# 13. UNSUPPORTED GLOB SYNTAX (brace / char-class) → loud exit 2, not a silent under-match.
+OUT="$("$SCRIPT" validate --repo "$SBX" --allow "src/{ui,api}/**" --range "$BASE..$H1" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "brace glob {a,b} → exit 2 (unsupported, fail loud)"
+assert_contains "$OUT" "unsupported glob syntax" "brace glob names the reason"
+OUT="$("$SCRIPT" propose --unit "ui=src/ui/**" --unit "x=src/[abc].ts" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "char-class glob [a-z] in propose → exit 2 (unsupported, fail loud)"
+assert_contains "$OUT" "unsupported glob syntax" "char-class names the reason"
+
 finalize_test

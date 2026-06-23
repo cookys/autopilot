@@ -174,6 +174,7 @@ stamp **induces rubber-stamping** and makes that failure mode worse, not better.
 So when reviewing a fanned-out batch, the depth-0 qc reviews the **combined** diff
 for cross-unit coupling *exactly as hard* as it would a single-unit diff — the gate
 narrows nothing about the reviewer's job.
+The disjointness gate certifies files only, not behavior.
 
 ## Dispatcher pre-flight checklist
 

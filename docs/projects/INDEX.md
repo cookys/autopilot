@@ -14,6 +14,7 @@
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-23 | qc-gate-forcing-function (config-driven anti-skip pre-push gate — protected-path pushes need a `QC-Verdict: PASS` trailer or `.qc/<sha>.verdict.json`; `resolve-qc-gate.sh` + per-project `qc-gate-config.md`; no project dir, see CHANGELOG) | v2.22.0 | [`84d0f29`](../../../../commit/84d0f29) | (CHANGELOG entry) |
 | 2026-06-22 | [ceo-fleet-autonomy](2026-06-22-ceo-fleet-autonomy/README.md) — `/l3 /l4 /l5` CEO front-door + dispatched sub-orchestrator foreman (context-hygiene/unattended); 3-round dialectic + P1.f dogfood (6/6) + 2-round L-5 dialectic; **v2.21.1 follow-up**: baseRef spike corrected the worktree-base invariant (`worktree.baseRef:"head"` supersedes the STEP-0 reset; `/l5 --base` is a separate mechanism) | v2.21.0 → v2.21.1 | [`010556a`](../../../../commit/010556a) | [plan](../plans/2026-06-22-ceo-fleet-autonomy.md) |
 | 2026-06-22 | [doc-sync-gate](2026-06-22-doc-sync-gate/README.md) | v2.20.0 | (this ship) | (self-contained in README) |
 | 2026-06-18 | [doc-sync-skill](2026-06-18-doc-sync-skill/README.md) | v2.19.0 | (this ship) | (self-contained in README) |

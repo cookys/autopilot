@@ -102,10 +102,16 @@ so the supply is real, but the authorization must be mechanical).
   failure mode (disjoint-file semantic coupling) WORSE by inducing reviewer
   rubber-stamping — the depth-0 qc (§3) must review the *combined* diff for cross-unit
   coupling exactly as hard as it would a single-unit diff.
-- **Width is OFF until Tier-2 ships.** This section documents the gate + the cap; the
-  actual parallel-dispatch / merge-back control loop is a **separate later phase**. Until
-  then `/l4 /l5` runs the width-1 path; the gate is still useful standalone (it validates
-  even a single unit's commit against its declared scope).
+- **Tier-2 batch engine (Phase L) is the parallel-dispatch / merge-back control loop**
+  built on top of this gate — see "Phase L: width fan-out control loop" below and
+  [`references/batch-dispatch.md`](../../../references/batch-dispatch.md). The shell
+  rails ([`scripts/dispatch-batch.sh`](../../../scripts/dispatch-batch.sh)) own the
+  deterministic half (plan / verify / merge-back / telemetry / reap); the depth-0 LLM
+  loop (below) owns the Agent-tool dispatch the shell cannot call. Width applies to the
+  **`/l4` homogeneous path** (Claude foreman + Claude Agent-tool workers); `/l5` hetero
+  parallel is BACKLOG. Default remains the **width-1 path** until the foreman decomposes
+  a task into ≥2 disjointness-passing units; the gate is still useful standalone (it
+  validates even a single unit's commit against its declared scope).
 
 ### Dispatching the foreman (the P0-verified mechanism)
 
@@ -268,6 +274,80 @@ git worktree prune
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory
   `worktree-dispatch-gotchas`).
+
+## Phase L: width fan-out control loop (the depth-0 loop driving `dispatch-batch.sh`)
+
+When the foreman decomposes a round into **≥2 file-disjoint units** (fixed cap 3,
+`/l4` homogeneous only), the **depth-0 loop** — NOT the foreman, NOT a shell script —
+drives the batch. The deterministic git/artifact/merge/telemetry/reap rails live in
+[`scripts/dispatch-batch.sh`](../../../scripts/dispatch-batch.sh) (full contract:
+[`references/batch-dispatch.md`](../../../references/batch-dispatch.md)); the loop below
+is the harness-only half a shell cannot do (it holds N `agentId`s and uses
+`Agent`/`Monitor`/`TaskStop`, which are **not shell-callable**).
+
+```
+CEO depth-0 loop (clock owner)
+├─ 1. dispatch-batch.sh plan  → ENFORCE single-base; collision-safe branches; advisory propose
+├─ 2. telemetry t_dispatch    → start the Amdahl clock
+├─ 3. Agent(run_in_background, isolation:"worktree") ×N  → hold N agentIds (one per unit)
+├─ 4. Monitor for all-N completion (or budget cap → TaskStop ALL + escalate)
+├─ 5. telemetry t_all_committed
+├─ 6. dispatch-batch.sh verify  → per-unit outcome table + ALL-OR-NOTHING verdict
+│        any non-committed OR undeclared touch ⇒ TaskStop survivors, GC worktrees, ESCALATE
+├─ 7. qc@depth-0 over the COMBINED diff (the files-only carve-out — review cross-unit coupling)
+├─ 8. dispatch-batch.sh merge-back  → merged | serial_collapse (re-run named ids serial) | base_advance_failed (fix base worktree, re-run; do NOT GC)
+└─ 9. telemetry t_review_done; GC all unit worktrees + branches (ONLY on `merged`)
+```
+
+### Outcome → action table (width layer)
+
+Each unit's `verify` status maps to a defined depth-0 action — extends the §2
+single-unit table. **ALL-OR-NOTHING governs the batch verdict.**
+
+| Unit `verify` status | Depth-0 action |
+|----------------------|----------------|
+| `committed` + disjoint-clean | merge-eligible — but the **batch** merges only if **every** unit qualifies. |
+| `committed` but **undeclared touch** (disjoint:false) | **whole batch aborts** — `TaskStop` any survivors, GC, escalate. |
+| `no_op` / `dirty` / `failure` (any non-committed) | **whole batch aborts** — same. |
+| batch `merge-back` → `serial_collapse` | re-run the named `serial_collapse_ids` as **ONE Tier-1 serial unit** (width collapses to 1 for those ids). **Never** auto-resolve; **never** a coordinated round-2 re-dispatch (breaches blind-dispatch). |
+| batch `merge-back` → `base_advance_failed` | units committed cleanly but the base ref did NOT move (dirty base worktree / non-ff / concurrent base move). **Merged nothing — do NOT GC the unit branches** (work is still recoverable). Resolve the base worktree, then re-run `merge-back`. |
+
+### Authorization = the disjointness gate, at two points
+
+- **Plan-time (advisory):** `dispatch-batch.sh plan` runs `check-disjointness propose`
+  over the declared scopes → `advisory_disjoint`. **Logged, never the clamp** — the LLM
+  is never the gate.
+- **Verify-time (authoritative):** `dispatch-batch.sh verify` runs `check-disjointness
+  validate` over **git artifacts** per unit. Fail-closed.
+- **Single-base-per-batch** is enforced at `plan` (mixed base ⇒ "not a valid
+  decomposition"). All siblings fork ONE integration point.
+
+### Reaping width workers — TWO different kill primitives
+
+- **`/l4` homogeneous (Agent-tool workers):** reaped by **`TaskStop <agentId>`** — the
+  same primitive as the single-foreman budget cap (§1), applied to each held agentId. On
+  batch abort, `TaskStop` **every** survivor, then GC their worktrees
+  (`.claude/worktrees/agent-<agentId>`, `--force`; unchanged ones auto-clean). This is the
+  homogeneous path that ships.
+- **Shell-dispatched (hetero) workers:** reaped by `dispatch-batch.sh reap` (SIGTERM to the
+  worker process **group** — `--abort` for the whole batch, `--unit <id>` for one stalled
+  unit). This rail exists for the BACKLOG `/l5` parallel path; it is **not** how `/l4`
+  homogeneous workers are killed.
+
+### Amdahl telemetry — emitted by the depth-0 loop (named clock owner)
+
+The depth-0 loop (the only component that sees all of dispatch → all-committed →
+review-done) emits `t_dispatch / t_all_committed / t_review_done` via
+`dispatch-batch.sh telemetry`. `telemetry report` is **cross-run** tuning of the width
+cap over time — **never a within-run gate** (a single run never blocks on its own
+serial-fraction).
+
+> 🔴 **The S1 carve-out is intact and LOAD-BEARING here.** `verify` (and the `propose`
+> advisory) certify **files, not behavior**. Step 7's depth-0 qc reviews the **combined**
+> diff for cross-unit semantic coupling **exactly as hard as a single-unit diff** —
+> file-disjointness is not a behavior clearance, and a green batch verify must never induce
+> reviewer rubber-stamping. This is the dominant failure mode the width cap is designed
+> around; do not omit it.
 
 ## Run-summary ledger
 

@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _None._ | | | |
+| 2026-06-23 | [l4-l5-dep-graph-fanout](2026-06-23-l4-l5-dep-graph-fanout/README.md) — `/l4 /l5` width fan-out: **DESCOPED** by 2-round dialectic to a go/no-go spike (S0: task-supply + semantic-miss) + a ship-regardless result-validating disjointness guard (S1); Tier-2 fan-out (Phase L) conditional on both S0 gates | (TBD — gated on S0) | `feat/l4-l5-dep-graph-fanout` |
 
 ## 已完成 (Completed)
 

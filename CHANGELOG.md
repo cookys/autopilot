@@ -32,6 +32,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - `skills/ceo-agent/references/level-front-door.md` worktree-base section + base-currency decision table + Gotchas: corrected "no base parameter" → `worktree.baseRef` (`fresh`|`head`); made `worktree.baseRef:"head"` the primary Claude-Code build-on-un-merged-work path and the `git reset` STEP-0 a portable fallback.
 - `level-front-door.md` `/l5` topology bullet: documented that `dispatch-hetero.sh`'s `--base` (default local `develop`) is a **separate** mechanism `worktree.baseRef` does not reach; added the `--base "$(git rev-parse HEAD)"` forcing function.
 - Empirical basis: in-session sentinel-probe spike (CC 2.1.186) — default `fresh` → sentinel absent (`origin/develop`); `worktree.baseRef:"head"` → sentinel present (CEO local HEAD).
+- `level-front-door.md`: added a **"Visibility & control surface"** subsection — a matrix of what CC displays + what's connectable per dispatch kind. Key asymmetry made explicit: `/l4` foreman (native Agent) is shown + controllable via `TaskList`/`TaskGet`/`TaskOutput`/`TaskStop`/`Monitor`; Workflow has the `/workflows` live tree but no worktree isolation / no hetero; the `/l5` hetero leaf is a **Bash subprocess outside the subagent surface** — only `tail -f <agent_log>` + git artifacts, no live CC display.
 
 ## v2.21.0 — `/l3 /l4 /l5` CEO front-door + dispatched foreman
 

@@ -24,24 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.23.0 — Re-enable the 3 PreToolUse blocker hooks via the `/dev/stdin`→fd-0 fix
+## v2.23.0 — Re-enable the parked hooks via the `/dev/stdin`→fd-0 fix (and pin the one real data-gap)
 
-**Headline**: The v2.7.4 batch disabled `branch-protection`, `commit-secret-scan`, and `large-file-warner` believing PreToolUse hooks "get no stdin" — and the project spent months treating them as permanently blocked on upstream #6305. A fresh end-to-end spike on Claude Code **2.1.186** found the diagnosis was too broad: it's only the **`/dev/stdin` PATH open** that throws ENXIO in the Bun-spawned hook environment — the payload **is** delivered on **file descriptor 0**. Reading fd 0 directly (`fs.readFileSync(0)`, the same fallback chain `failure-escalation.js` already used) recovers it. All three hooks now read fd 0 and are shipped **opt-in** in `settings.example.json` (Tier B) — opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call. Verified e2e against live 2.1.186 (a real PreToolUse hook returning exit 2 blocked the tool; allow path passes) and by a new `reenabled-blockers.test.sh` (block + allow, both directions, all three).
+**Headline**: The v2.7.4 batch disabled `branch-protection`, `commit-secret-scan`, `large-file-warner`, `session-summary`, and `cost-tracker` believing the hooks "get no stdin" — and the project spent months treating the PreToolUse ones as permanently blocked on upstream #6305. A fresh end-to-end spike on Claude Code **2.1.186** found the diagnosis was too broad: it's only the **`/dev/stdin` PATH open** that throws ENXIO in the Bun-spawned hook environment — the payload **is** delivered on **file descriptor 0** (true for PreToolUse *and* Stop). Reading fd 0 directly (`fs.readFileSync(0)`, the fallback chain `failure-escalation.js` already used) recovers it. **4 hooks re-enabled opt-in**: the 3 PreToolUse blockers + `session-summary`. The 5th, `cost-tracker`, stays disabled — but for the *correct* reason: fd 0 works, yet the 2.1.186 Stop payload carries **no `usage` field**, so it would always early-exit at 0 tokens; re-enabling needs a transcript-sum rewrite, not a stdin fix. Shipped opt-in (not default-on) because hard-blocking commits/reads is a per-project policy call. Verified e2e against live 2.1.186 (a real PreToolUse hook returning exit 2 blocked the tool; Stop probe showed the payload shape) + `reenabled-blockers.test.sh`.
 
 ### Added
-- `hooks/tests/reenabled-blockers.test.sh` — positive block/allow regression coverage for the 3 re-enabled hooks (49 test files total).
+- `hooks/tests/reenabled-blockers.test.sh` — positive block/allow regression for the 4 re-enabled hooks (PreToolUse blockers block+allow both directions; session-summary writes its md). 49 test files total.
 
 ### Changed
-- `branch-protection`, `commit-secret-scan`, `large-file-warner`: read fd 0 (`fs.readFileSync(0)`) with a `/dev/stdin` fallback instead of opening the broken path.
-- `settings.example.json`: 3 new opt-in PreToolUse entries. Hook tally membership shifts **disabled 5→2, opt-in 7→10** (default-on still 8, total still 20); reconciled across the 4 canonical descriptions, README.md / README.zh-TW.md / hooks/README.md tier tables, and `check-hook-inventory.test.sh`.
+- `branch-protection`, `commit-secret-scan`, `large-file-warner`, `session-summary`, `cost-tracker`: read fd 0 (`fs.readFileSync(0)`) with a `/dev/stdin` fallback instead of opening the broken path.
+- `settings.example.json`: 4 new opt-in entries (3 PreToolUse + session-summary/Stop). Hook tally membership shifts **disabled 5→1, opt-in 7→11** (default-on still 8, total still 20); reconciled across the 4 canonical descriptions, README.md / README.zh-TW.md / hooks/README.md tier tables, and `check-hook-inventory.test.sh`.
 - `transcript-reader-lib.js`: comment corrected — the transcript route is a recovery/fallback, not the only option; fd 0 works.
 
 ### Fixed
 - The "PreToolUse hooks are permanently unrecoverable" claim (BACKLOG + hooks/README) was over-broad: only the `/dev/stdin` path is broken, not fd 0.
 
+### Known limitation
+- `cost-tracker` remains disabled: the Claude Code 2.1.186 Stop payload has no token-`usage` field (keys: session_id, transcript_path, cwd, permission_mode, effort, stop_hook_active, last_assistant_message, background_tasks, session_crons). A transcript-sum rewrite is tracked in BACKLOG.
+
 ### Rollback
 - Maintainer: `git revert <merge-sha>`
-- User-side: remove the 3 PreToolUse entries from your `settings.json` (they are opt-in; default installs are unaffected).
+- User-side: remove the new entries from your `settings.json` (they are opt-in; default installs are unaffected).
 
 ## v2.22.0 — Anti-skip qc-gate forcing function (config-driven)
 

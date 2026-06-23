@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# reenabled-blockers.test.sh — positive block/allow behavior for the three
-# PreToolUse hooks re-enabled (opt-in) by the /dev/stdin → fd-0 read fix.
+# reenabled-blockers.test.sh — positive block/allow behavior for the hooks
+# re-enabled (opt-in) by the /dev/stdin → fd-0 read fix: the three PreToolUse
+# blockers + session-summary (Stop).
 #
 # These hooks were parked by the v2.7.4 disable batch because opening the
 # '/dev/stdin' PATH throws ENXIO in the Bun-spawned hook environment (#6305).
@@ -61,4 +62,17 @@ run_hook "commit-secret-scan.js" '{"tool_input":{"command":"git commit -m x"}}'
 assert_exit_code "$__RUN_EXIT" "0" "commit-secret-scan allows a clean commit"
 
 cd "$START_PWD"
+
+# ---- session-summary: Stop (fd-0 read; content discarded, writes from git+env) ----
+# run_hook sandboxes HOME to $HOOK_HOME, so the summary lands under the sandbox.
+run_hook "session-summary.js" '{"session_id":"sstest","hook_event_name":"Stop"}'
+assert_exit_code "$__RUN_EXIT" "0" "session-summary exits 0"
+SESS_DIR="$HOOK_HOME/.claude/sessions"
+if compgen -G "$SESS_DIR/*.md" >/dev/null; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  assert_contains "$(cat "$SESS_DIR"/*.md)" "Git Status" "session-summary writes a session md with git status"
+else
+  fail "session-summary did not write a session md under $SESS_DIR"
+fi
+
 finalize_test

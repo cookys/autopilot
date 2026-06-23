@@ -111,6 +111,16 @@
     ],
     "Stop": [
       {
+        "//": "session-summary: appends cwd / git status / recent commits to ~/.claude/sessions/{date}-{sid}.md at session end",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-summary.js"
+          }
+        ]
+      },
+      {
         "//": "check-console: warns about console.log in modified files",
         "matcher": "",
         "hooks": [

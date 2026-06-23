@@ -42,7 +42,7 @@ assert_eq "0" "$?" "--help exit 0"
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default print exit 0"
 assert_contains "$OUT" "default-on (8)" "default print shows 8 default-on"
-assert_contains "$OUT" "disabled   (2)" "default print shows 2 disabled"
+assert_contains "$OUT" "disabled   (1)" "default print shows 1 disabled"
 assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
 
 # 4. MEMBERSHIP drift (headline class): plant a disabled hook in the Tier-A table.

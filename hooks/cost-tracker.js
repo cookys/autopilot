@@ -25,8 +25,19 @@ function getRate(model) {
   return PRICING.sonnet; // default
 }
 
+// ⚠️ STILL DISABLED (2026-06-23, v2.23.0): the read below was fixed to fd 0,
+// but the Stop-event payload on Claude Code 2.1.186 carries NO `usage`/`model`
+// fields (keys: session_id, transcript_path, cwd, permission_mode, effort,
+// stop_hook_active, last_assistant_message, background_tasks, session_crons).
+// So this hook would always hit the 0-tokens early-exit and write nothing.
+// Re-enabling needs a rewrite that sums usage from the transcript (via the
+// `transcript_path` in the Stop payload), NOT just a stdin fix. Left disabled.
 try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+  // Read fd 0 (the '/dev/stdin' PATH ENXIOs; fd 0 carries the payload).
+  let raw;
+  try { raw = fs.readFileSync(0, 'utf8'); }
+  catch { raw = fs.readFileSync('/dev/stdin', 'utf8'); }
+  const input = JSON.parse(raw);
 
   // Check opt-out via env (settings.json injects as env vars for hooks)
   if (process.env.AUTOPILOT_COST_TRACKER === 'false') process.exit(0);

@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-20 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **10 opt-in** (Tier B, copied from `settings.example.json`) + **2 shipped-but-disabled** (Stop-event hooks awaiting re-verification — see "Disabled" below). The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+20 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **11 opt-in** (Tier B, copied from `settings.example.json`) + **1 shipped-but-disabled** (`cost-tracker` — Stop payload has no usage; see "Disabled" below). The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -25,22 +25,23 @@ transcript JSONL** via [`transcript-reader-lib.js`](transcript-reader-lib.js)
 | log-error | PostToolUse .* | `tool_response` + `is_error` → error-log.md |
 | failure-escalation | PostToolUse .* | Bash `is_error` → escalation counter |
 
-**Re-enabled via fd-0 read (opt-in):** the v2.7.4 PreToolUse blockers were NOT
-permanently unrecoverable — they only needed to read fd 0 instead of the
-`/dev/stdin` path. Now shipped opt-in in `settings.example.json` (Tier B):
+**Re-enabled via fd-0 read (opt-in):** the v2.7.4 PreToolUse blockers + `session-summary`
+were NOT permanently unrecoverable — they only needed to read fd 0 instead of the
+`/dev/stdin` path (fd 0 carries the payload on Stop too — verified 2.1.186). Now
+shipped opt-in in `settings.example.json` (Tier B):
 
 | Hook | Event | Fix |
 |------|-------|-----|
 | large-file-warner | PreToolUse Read | `fs.readFileSync(0)` + `/dev/stdin` fallback |
 | branch-protection | PreToolUse Bash | `fs.readFileSync(0)` + `/dev/stdin` fallback |
 | commit-secret-scan | PreToolUse Bash | `fs.readFileSync(0)` + `/dev/stdin` fallback |
+| session-summary | Stop | `fs.readFileSync(0)` (content discarded; needs only git + env) |
 
-**Still disabled — follow-up candidates (not in this pivot's scope):**
+**Still disabled — `cost-tracker` (data gap, NOT stdin):**
 
 | Hook | Event | Note |
 |------|-------|------|
-| cost-tracker | Stop | Stop event + needs usage data; not a tool-event — separate |
-| session-summary | Stop | Stop event; env-driven — separate verification |
+| cost-tracker | Stop | fd 0 works, but the 2.1.186 Stop payload has **no `usage` field** → always 0-token early-exit. Needs a transcript-sum rewrite (`transcript_path` is in the payload). |
 
 > `suggest-compact` (PostToolUse `Write\|Edit`) was re-enabled in **v2.8.1** — it only counts tool calls (no `tool_name` needed, so no transcript recovery), the matcher does the filtering. The one fix was isolating the broken `/dev/stdin` read so the counter increments under ENXIO. See the Tier A table below.
 
@@ -95,9 +96,9 @@ hooks/
   state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier B (opt-in)
   suggest-compact.js       # Tier A
-  cost-tracker.js          # disabled (Stop-event, awaiting re-verify)
+  cost-tracker.js          # disabled (Stop payload has no usage)
   audit-log.js             # Tier A
-  session-summary.js       # disabled (Stop-event, awaiting re-verify)
+  session-summary.js       # Tier B (opt-in)
   log-error.js             # Tier A
   commit-secret-scan.js    # Tier B (opt-in)
   branch-protection.js     # Tier B (opt-in)
@@ -181,7 +182,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
 
-## Tier B — Opt-In (10 hooks)
+## Tier B — Opt-In (11 hooks)
 
 Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`).
 
@@ -191,6 +192,7 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 | commit-secret-scan | PreToolUse | Bash | Hard-blocks `git commit` when `git diff --cached` contains secrets (`_shared/secret-patterns.js`) |
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
 | config-protection | PreToolUse | Write\|Edit | Blocks linter/formatter config edits |
+| session-summary | Stop | — | Appends cwd / git status / recent commits to `~/.claude/sessions/{date}-{sid}.md` |
 | check-console | Stop | — | Warns about `console.log` in modified JS/TS |
 | accumulator | PostToolUse | Write\|Edit | Collects edited file paths for batch-format |
 | batch-format | Stop | — | Prettier + tsc on accumulated files. Timeout: 300s |
@@ -198,16 +200,15 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap) |
 
-> The three PreToolUse blockers were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. They ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
+> The three PreToolUse blockers + `session-summary` were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
 
-## Disabled — Shipped but Wired Nowhere (2 hooks)
+## Disabled — Shipped but Wired Nowhere (1 hook)
 
-Present as code under `hooks/` but registered **neither** in `hooks.json` **nor** in `settings.example.json`. Both are **Stop-event** hooks parked by the v2.7.4 disable batch — not a stdin problem (Stop events are env-driven); they need their own separate re-verification before re-enabling.
+`cost-tracker` is present as code but registered **neither** in `hooks.json` **nor** in `settings.example.json`. Its blocker is **not** stdin (fd 0 works): the Claude Code 2.1.186 Stop payload carries **no `usage` field**, so the hook always hits its 0-token early-exit and writes nothing. Re-enabling needs a rewrite that sums usage from the transcript (`transcript_path` is in the Stop payload).
 
 | Hook | Event | Behavior (when enabled) | Blocked on |
 |------|-------|-------------------------|-----------|
-| cost-tracker | Stop | JSONL to `~/.claude/metrics/costs.jsonl`. Opt-out `AUTOPILOT_COST_TRACKER=false` | Stop-event re-verify |
-| session-summary | Stop | Writes to `~/.claude/sessions/{date}-{sid}.md` | Stop-event re-verify |
+| cost-tracker | Stop | JSONL to `~/.claude/metrics/costs.jsonl`. Opt-out `AUTOPILOT_COST_TRACKER=false` | Stop payload has no `usage` — needs transcript-sum rewrite |
 
 Re-enable plan + verification recipe: [`../docs/BACKLOG.md`](../docs/BACKLOG.md) → "Re-enable v2.7.4 disabled hooks once upstream stdin-pipe lands".
 

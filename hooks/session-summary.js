@@ -25,8 +25,12 @@ function getSessionId() {
 }
 
 try {
-  // Consume stdin
-  fs.readFileSync('/dev/stdin', 'utf8');
+  // Consume stdin — read fd 0 (opening the '/dev/stdin' PATH ENXIOs in the
+  // Bun-spawned hook env; fd 0 carries the payload, verified 2.1.186). The
+  // content is discarded; this hook only needs git + env. If the read throws,
+  // fall open so the summary still writes.
+  try { fs.readFileSync(0, 'utf8'); }
+  catch { try { fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* fd-0/stdin empty — proceed */ } }
 
   const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
   fs.mkdirSync(sessionsDir, { recursive: true });

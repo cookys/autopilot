@@ -44,7 +44,11 @@ touches_protected() { # range
 has_evidence() { # range
   local range="$1"
   if [ "$EVIDENCE" = "trailer" ] || [ "$EVIDENCE" = "either" ]; then
-    git log "$range" --format=%B 2>/dev/null | grep -qiE '^[[:space:]]*QC-Verdict:[[:space:]]*PASS' && return 0
+    # here-string, NOT `git log | grep -q`: under `set -o pipefail` grep -q closes
+    # the pipe on its first match and git log gets SIGPIPE (141), which pipefail
+    # surfaces as the pipeline's exit → the `&& return 0` silently misfires and a
+    # legitimately-trailered push is racily blocked. Buffer first, then match.
+    grep -qiE '^[[:space:]]*QC-Verdict:[[:space:]]*PASS' <<< "$(git log "$range" --format=%B 2>/dev/null)" && return 0
   fi
   if [ "$EVIDENCE" = "artifact" ] || [ "$EVIDENCE" = "either" ]; then
     local sha

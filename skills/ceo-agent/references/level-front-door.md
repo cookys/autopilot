@@ -96,6 +96,24 @@ agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "
 - On kill: an **unchanged** worktree **auto-cleans** (Agent contract
   "auto-cleaned if unchanged" — no leak). A **changed** worktree is **kept**.
 
+#### Visibility & control surface — NOT uniform across the three dispatch kinds
+
+What Claude Code can *display* and what the CEO can *connect to* differs sharply by
+dispatch kind. This asymmetry bites: the `/l5` hetero leaf falls **out** of the native
+subagent surface entirely.
+
+| Dispatch | CC displays it? | Connectable surface | Liveness signal |
+|----------|-----------------|---------------------|-----------------|
+| `/l4` foreman (native `Agent`, background) | ✅ shown as a running subagent | `TaskList` / `TaskGet` / `TaskOutput` / `TaskStop` / `Monitor` (the depth-0 loop already uses `Monitor`+`TaskStop`) | live via the Task\* tools |
+| Workflow tool (`parallel`/`pipeline`/`agent`) | ✅✅ `/workflows` live progress tree | the script's own control flow + `/workflows` | richest — but **no worktree isolation by default, cannot shell out to a non-Claude engine** (not a host for the hetero leaf) |
+| `/l5` hetero leaf (`dispatch-hetero.sh` → `agy`) | ❌ a **Bash subprocess**, not a CC subagent | none — outside the subagent/workflow surface | only `tail -f <agent_log>` (the JSON `agent_log` path); verdict by **artifacts + final JSON**, never self-report |
+
+⇒ **Want "see it + control it" → `/l4` (or Workflow for visible Claude-only orchestration).
+The moment the leaf becomes a heterogeneous engine (`/l5`), that leaf is invisible to CC**
+— only its log file + git artifacts exist. A *live* "model is asking a question" stream from
+agy is the deferred `stream-json` rail (spike-gated, NOT built — see
+[`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md) § "Deferred").
+
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
 By default `Agent(isolation:"worktree")` branches the new worktree from the repo's

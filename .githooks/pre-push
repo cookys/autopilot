@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# pre-push — qc-gate anti-skip forcing function.
+#
+# Blocks (or warns on) a push whose commit range touches a PROTECTED path without
+# review evidence (a `QC-Verdict: PASS` trailer or a `.qc/<sha>.verdict.json`
+# artifact). Strength is per-project config, resolved by scripts/resolve-qc-gate.sh
+# (mode: block|warn|off). The goal: make "pushed without a qc gate" a loud,
+# deliberate act (push refused, or `--no-verify` bypass) instead of a silent default.
+#
+# git feeds pushed refs on stdin as: <local_ref> <local_sha> <remote_ref> <remote_sha>
+#
+# A hook enforces the EXISTENCE of review evidence, never its QUALITY; --no-verify
+# can bypass. That is acceptable — the point is to flip the default, not seal it.
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+RESOLVE="$REPO_ROOT/scripts/resolve-qc-gate.sh"
+[ -x "$RESOLVE" ] || exit 0   # no resolver → don't block (degrade open)
+
+MODE="$("$RESOLVE" --field mode 2>/dev/null || echo block)"
+[ "$MODE" = "off" ] && exit 0
+
+PATHS_CSV="$("$RESOLVE" --field protected_paths 2>/dev/null || echo 'skills/,agents/,scripts/,references/,hooks/')"
+EVIDENCE="$("$RESOLVE" --field evidence 2>/dev/null || echo trailer)"
+IFS=',' read -r -a PROTECTED <<< "$PATHS_CSV"
+
+ZERO_RE='^0+$'   # all-zero sha = branch create (no remote sha) or delete
+violations=""
+
+touches_protected() { # range
+  local range="$1" f
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    for p in "${PROTECTED[@]}"; do
+      p="${p#"${p%%[![:space:]]*}"}"; p="${p%"${p##*[![:space:]]}"}"  # trim (defensive; resolver also normalizes)
+      [ -z "$p" ] && continue
+      case "$f" in "$p"*) return 0 ;; esac
+    done
+  done < <(git diff --name-only "$range" 2>/dev/null)
+  return 1
+}
+
+has_evidence() { # range
+  local range="$1"
+  if [ "$EVIDENCE" = "trailer" ] || [ "$EVIDENCE" = "either" ]; then
+    git log "$range" --format=%B 2>/dev/null | grep -qiE '^[[:space:]]*QC-Verdict:[[:space:]]*PASS' && return 0
+  fi
+  if [ "$EVIDENCE" = "artifact" ] || [ "$EVIDENCE" = "either" ]; then
+    local sha
+    while IFS= read -r sha; do
+      [ -f "$REPO_ROOT/.qc/${sha}.verdict.json" ] && return 0
+    done < <(git rev-list "$range" 2>/dev/null)
+  fi
+  return 1
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "${local_sha:-}" ] && continue
+  echo "$local_sha" | grep -qE "$ZERO_RE" && continue   # branch delete → nothing to gate
+
+  if echo "${remote_sha:-}" | grep -qE "$ZERO_RE"; then
+    # new remote branch: gate the commits not already on the default remote branch.
+    # If origin/HEAD doesn't resolve, range = whole branch history; ANY historical
+    # QC-Verdict trailer then satisfies it (wider window — acceptable: --no-verify is
+    # the escape hatch and the goal is to flip the default, not seal it).
+    base="$(git rev-parse --verify --quiet origin/HEAD 2>/dev/null || true)"
+    if [ -n "$base" ]; then range="${base}..${local_sha}"; else range="$local_sha"; fi
+  else
+    range="${remote_sha}..${local_sha}"
+  fi
+
+  # empty range (nothing new) → skip
+  [ -n "$(git rev-list -n1 "$range" 2>/dev/null)" ] || continue
+
+  if touches_protected "$range"; then
+    if ! has_evidence "$range"; then
+      violations="${violations}  • ${local_ref:-HEAD} (${range}) touches a protected path with no QC-Verdict evidence\n"
+    fi
+  fi
+done
+
+[ -z "$violations" ] && exit 0
+
+printf '\n\033[1mqc-gate: protected-path push without review evidence\033[0m\n' >&2
+printf '%b' "$violations" >&2
+printf '\nProtected: %s\nEvidence required: %s (mode=%s)\n' "$PATHS_CSV" "$EVIDENCE" "$MODE" >&2
+printf 'Fix: run the qc gate (quality-pipeline / reviewer), then add a trailer to the landing commit:\n' >&2
+printf '     QC-Verdict: PASS (reviewer <id>, %s)\n' "$(date +%Y-%m-%d 2>/dev/null || echo YYYY-MM-DD)" >&2
+printf 'Deliberate bypass (logged by git): git push --no-verify\n\n' >&2
+
+if [ "$MODE" = "warn" ]; then
+  printf '\033[33m(mode=warn — allowing the push)\033[0m\n\n' >&2
+  exit 0
+fi
+exit 1

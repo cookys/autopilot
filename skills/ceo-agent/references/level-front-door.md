@@ -70,6 +70,13 @@ CEO (depth 0, this session)
 - **`/l5`** is identical except the implementer worker is replaced by a
   `scripts/dispatch-hetero.sh` call (impl → agy/Gemini). Everything else — the
   depth-0 control loop, qc@depth-0, worktree GC — is unchanged.
+  - **Its base is a SEPARATE mechanism from the foreman's.** `dispatch-hetero.sh`
+    creates its own `git worktree add --base <ref>` (default local `develop`) — it
+    does **not** use the native Agent worktree, so `worktree.baseRef` does **not**
+    reach it. When the hetero impl must build on the foreman's (or CEO's) un-merged
+    state, the foreman MUST pass **`--base "$(git rev-parse HEAD)"`** explicitly; the
+    default `develop` ref otherwise forks from a stale base. Two mechanisms, two knobs:
+    `worktree.baseRef` for the native foreman worktree, `--base` for the hetero impl.
 
 ### Dispatching the foreman (the P0-verified mechanism)
 
@@ -89,30 +96,40 @@ agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "
 - On kill: an **unchanged** worktree **auto-cleans** (Agent contract
   "auto-cleaned if unchanged" — no leak). A **changed** worktree is **kept**.
 
-#### Worktree base = `origin/develop`, NOT the CEO's HEAD (verified)
+#### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
-`Agent(isolation:"worktree")` always branches the new worktree from the repo's
-**default/integration branch (`origin/develop` = `origin/HEAD`)** — never the
-CEO's checked-out HEAD or current branch, and the `Agent` tool exposes **no base
-parameter** to change this. Verified twice (2026-06-22): a foreman dispatched
-from `feat@1048fd1` landed on `origin/develop@689dbea`; a probe with a HEAD-only
-sentinel commit found the sentinel **absent** in the worktree.
+By default `Agent(isolation:"worktree")` branches the new worktree from the repo's
+**default/integration branch (`origin/develop` = `origin/HEAD`)** — never the CEO's
+checked-out HEAD or current branch. Verified twice (2026-06-22) and re-confirmed
+2026-06-23 (CC 2.1.186): a probe with a HEAD-only sentinel commit found the sentinel
+**absent** in a default worktree.
+
+There is **no per-call base parameter** on the `Agent` tool, but the base IS
+selectable via the **`worktree.baseRef` setting** (`fresh` | `head`; added CC 2.1.133,
+empirically re-verified 2.1.186 — takes effect **in-session, no restart**, read from
+any settings tier incl. project-local `.claude/settings.local.json`):
+- `fresh` (default) → `origin/<default>` (= `origin/develop`): a clean tree matching
+  the remote, ignoring un-pushed CEO commits.
+- `head` → the CEO's **local HEAD**, carrying un-pushed commits — verified: with
+  `worktree.baseRef:"head"` the same sentinel probe found the CEO-HEAD sentinel
+  **present** in the worktree.
 
 ⇒ **Base-currency decision the CEO makes BEFORE dispatch** — run
-`git merge-base --is-ancestor HEAD origin/develop`: **exit 0** = HEAD is already in
-`origin/develop` (no un-merged work → clean develop base is fine, no STEP-0);
-**exit 1** = HEAD has commits not yet on develop (→ STEP-0 reset, see table):
+`git merge-base --is-ancestor HEAD origin/develop`: **exit 0** = HEAD already in
+`origin/develop` (no un-merged work → keep default `fresh`); **exit 1** = HEAD has
+commits not yet on develop (→ the foreman must build on them, see table):
 
-| CEO's state | Foreman brief STEP 0 |
-|-------------|----------------------|
-| Task is independent of any un-merged CEO work (HEAD already on/reachable-from `origin/develop`) | **none** — the clean `origin/develop` base is correct. |
-| Task must build on the CEO's un-merged work (feature-branch-only or self-referential — e.g. exercising tooling that lives only on this branch) | **`git reset --hard <CEO-HEAD-sha>`** as the foreman's literal STEP 0. Git objects are shared across worktrees, so `<CEO-HEAD-sha>` always resolves; the throwaway worktree branch is then exactly the CEO's state. Verify a sentinel file from your HEAD exists, and **STOP (don't recreate)** if the reset fails. |
+| CEO's state | How to set the foreman's base |
+|-------------|-------------------------------|
+| Task is independent of any un-merged CEO work (HEAD already on/reachable-from `origin/develop`) | **none** — default `fresh` (`origin/develop`) is correct. |
+| Task must build on the CEO's un-merged work (feature-branch-only or self-referential — e.g. exercising tooling that lives only on this branch) | **Primary (Claude Code):** set `worktree.baseRef:"head"` (project-local settings) before dispatch — the foreman worktree then branches from the CEO's local HEAD directly. The setting is **session-global**, so every worktree dispatched while it is set shares that base (fine for parallel siblings, which fork the same integration point). **Portable fallback** (non-CC, or when you can't set the setting): `git reset --hard <CEO-HEAD-sha>` as the foreman's literal STEP 0 — git objects are shared across worktrees so `<CEO-HEAD-sha>` always resolves; verify a sentinel from your HEAD exists and **STOP (don't recreate)** if the reset fails. |
 
-This is why the P1.f dogfood's `/l5` foreman ran the *pre-feature* `dispatch-hetero.sh`
-(its develop base lacked the branch-only P1 work) — the self-referential case above,
-which the STEP-0 reset prevents. After a STEP-0 foreman commits, its branch =
-`CEO-HEAD + foreman-commit(s)`; integrate by cherry-picking the foreman commit(s)
-(§4).
+Historically (before the `worktree.baseRef` discovery) the P1.f dogfood's `/l5`
+foreman ran the *pre-feature* `dispatch-hetero.sh` because its develop base lacked
+the branch-only P1 work — the self-referential case above, now cleanly handled by
+`worktree.baseRef:"head"` (the `git reset` STEP-0 is the portable fallback). After the
+foreman commits on top of the CEO's HEAD, integrate by cherry-picking the foreman
+commit(s) (§4).
 
 ## Depth-0 control loop (owned by the CEO, NOT the foreman)
 
@@ -228,11 +245,14 @@ one row per step:
 - **New skills aren't dispatchable until a Claude Code restart** — the plugin
   caches skills at session start. After adding `/l3 /l4 /l5`, restart before the
   dogfood run.
-- **Worktree base = `origin/develop`, NOT the CEO's HEAD.** See the canonical
-  treatment + the base-currency STEP-0 decision table under "Dispatching the
-  foreman" above. Short form: independent task → clean develop base is fine;
-  build-on-un-merged-CEO-work → foreman STEP 0 = `git reset --hard <CEO-HEAD-sha>`
-  (shared objects), verify a sentinel, STOP on failure; integrate via cherry-pick (§4).
+- **Worktree base default = `origin/develop`, NOT the CEO's HEAD — but selectable via
+  `worktree.baseRef`.** See the canonical treatment + the base-currency decision table
+  under "Dispatching the foreman" above. Short form: independent task → default `fresh`
+  is fine; build-on-un-merged-CEO-work → set `worktree.baseRef:"head"` (CC; in-session,
+  no restart) or the portable `git reset --hard <CEO-HEAD-sha>` STEP-0 fallback (verify
+  a sentinel, STOP on failure); integrate via cherry-pick (§4). The `/l5` hetero impl is
+  a **separate mechanism** — `worktree.baseRef` doesn't reach it; pass
+  `--base "$(git rev-parse HEAD)"` to `dispatch-hetero.sh` instead.
 - **`git worktree prune` alone is a no-op** on an on-disk worktree — `remove
   --force` first.
 - **Cross-platform**: `/lN`, `Agent(run_in_background)`, `TaskStop`, and `Monitor`

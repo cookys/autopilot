@@ -42,15 +42,16 @@ assert_eq "0" "$?" "--help exit 0"
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default print exit 0"
 assert_contains "$OUT" "default-on (8)" "default print shows 8 default-on"
-assert_contains "$OUT" "disabled   (5)" "default print shows 5 disabled"
+assert_contains "$OUT" "disabled   (2)" "default print shows 2 disabled"
 assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
 
 # 4. MEMBERSHIP drift (headline class): plant a disabled hook in the Tier-A table.
 #    Counts elsewhere stay correct — only the membership check catches this.
-sed -i 's/\*\*state-checkpoint\*\*/**branch-protection**/' "$SBX/README.md"
+#    Uses cost-tracker (still disabled; branch-protection became opt-in in the fd-0 re-enable).
+sed -i 's/\*\*state-checkpoint\*\*/**cost-tracker**/' "$SBX/README.md"
 OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "membership drift exit 1"
-assert_contains "$OUT" "branch-protection" "membership drift names the disabled hook"
+assert_contains "$OUT" "cost-tracker" "membership drift names the disabled hook"
 assert_contains "$OUT" "Tier-A" "membership drift identifies the Tier-A placement"
 restore "README.md"
 

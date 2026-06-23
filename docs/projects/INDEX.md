@@ -50,6 +50,7 @@ Small batches that bump the version but don't warrant a project README. Source o
 
 | Date | Ship | Version | Merge |
 |------|------|---------|-------|
+| 2026-06-23 | re-enable the 3 PreToolUse blocker hooks (`branch-protection` / `commit-secret-scan` / `large-file-warner`) via the **`/dev/stdin`→fd-0** fix — the months-old "PreToolUse stdin permanently broken / blocked on #6305" diagnosis was over-broad: only the `/dev/stdin` PATH open ENXIOs, fd 0 carries the payload (e2e-verified 2.1.186). Shipped **opt-in**; tally membership disabled 5→2 / opt-in 7→10; + `reenabled-blockers.test.sh` (49 test files) | v2.23.0 | (this ship) |
 | 2026-06-22 | hook inventory single source of truth — `check-hook-inventory.js` derives 20 hooks (8 default-on / 7 opt-in / 5 disabled) from real wiring + gates counts AND tier membership; reconciled 4 canonical descriptions + README/hooks-README tables/badges; sync-version de-coupled from hook counts; + doc/-vs-docs/ ongoing-maintenance path leak fix + stray sweep | v2.19.1 | [`d875caf`](../../../../commit/d875caf) |
 | 2026-06-15 | remove `.opencode/skills/` leftover (drift surface, not a mirror — OpenCode uses `.agents/skills/` symlink; portability-correction step 24 finally executed) | v2.17.2 | [`187a37c`](../../../../commit/187a37c) |
 | 2026-06-12 | qc-panel node-scope rule (judges judge the node, not project lifecycle — fixes systematic shadow-fail) + tree-by-default in ceo-agent L-size setup + archive-ordering rule | v2.17.1 | [`1e833bd`](../../../../commit/1e833bd) |

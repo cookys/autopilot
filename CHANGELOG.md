@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.23.0 — Re-enable the 3 PreToolUse blocker hooks via the `/dev/stdin`→fd-0 fix
+
+**Headline**: The v2.7.4 batch disabled `branch-protection`, `commit-secret-scan`, and `large-file-warner` believing PreToolUse hooks "get no stdin" — and the project spent months treating them as permanently blocked on upstream #6305. A fresh end-to-end spike on Claude Code **2.1.186** found the diagnosis was too broad: it's only the **`/dev/stdin` PATH open** that throws ENXIO in the Bun-spawned hook environment — the payload **is** delivered on **file descriptor 0**. Reading fd 0 directly (`fs.readFileSync(0)`, the same fallback chain `failure-escalation.js` already used) recovers it. All three hooks now read fd 0 and are shipped **opt-in** in `settings.example.json` (Tier B) — opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call. Verified e2e against live 2.1.186 (a real PreToolUse hook returning exit 2 blocked the tool; allow path passes) and by a new `reenabled-blockers.test.sh` (block + allow, both directions, all three).
+
+### Added
+- `hooks/tests/reenabled-blockers.test.sh` — positive block/allow regression coverage for the 3 re-enabled hooks (49 test files total).
+
+### Changed
+- `branch-protection`, `commit-secret-scan`, `large-file-warner`: read fd 0 (`fs.readFileSync(0)`) with a `/dev/stdin` fallback instead of opening the broken path.
+- `settings.example.json`: 3 new opt-in PreToolUse entries. Hook tally membership shifts **disabled 5→2, opt-in 7→10** (default-on still 8, total still 20); reconciled across the 4 canonical descriptions, README.md / README.zh-TW.md / hooks/README.md tier tables, and `check-hook-inventory.test.sh`.
+- `transcript-reader-lib.js`: comment corrected — the transcript route is a recovery/fallback, not the only option; fd 0 works.
+
+### Fixed
+- The "PreToolUse hooks are permanently unrecoverable" claim (BACKLOG + hooks/README) was over-broad: only the `/dev/stdin` path is broken, not fd 0.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: remove the 3 PreToolUse entries from your `settings.json` (they are opt-in; default installs are unaffected).
+
 ## v2.22.0 — Anti-skip qc-gate forcing function (config-driven)
 
 **Headline**: A configurable forcing function that makes "merged/pushed without a qc gate" a **loud, deliberate, logged** act instead of a silent default — born from a real miss where doc fixes were merged to develop before the qc reviewer ran. Strength is **per-project**, resolved like every other autopilot gate (`.claude/<thing>-config.md` override + template default + a `resolve-*.sh` script). A `.githooks/pre-push` hook refuses to push a commit range touching a **protected path** (`skills/agents/scripts/references/hooks/`) without **review evidence** (a `QC-Verdict: PASS` git trailer or a `.qc/<sha>.verdict.json` artifact). `mode: block | warn | off` per project; fail-closed to `block`; `git push --no-verify` is the deliberate, logged bypass. A hook enforces evidence *existence*, never *quality* — the goal is to flip the default, not seal it. Sibling of DOA: DOA governs *dispatch authority*, qc-gate governs *merge/push review*.

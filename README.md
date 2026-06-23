@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.22.0-E8A838?style=flat-square" alt="v2.22.0">
+  <img src="https://img.shields.io/badge/version-2.23.0-E8A838?style=flat-square" alt="v2.23.0">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -521,7 +521,7 @@ Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are 
 
 ## Hooks
 
-Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on**, **7 opt-in**, and **5 shipped-but-disabled** (see below). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
+Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on**, **10 opt-in**, and **2 shipped-but-disabled** (see below). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
 
 ### Tier A — Default-On (8 hooks)
 
@@ -538,12 +538,15 @@ Registered in [`hooks/hooks.json`](hooks/hooks.json) — these activate automati
 | **failure-escalation** | PostToolUse/Bash | Tracks consecutive Bash failures per session; escalates to the user |
 | **suggest-compact** | PostToolUse/Write\|Edit | Counts tool calls per session; suggests `/compact` at 50, then every 25 |
 
-### Tier B — Opt-In (7 hooks)
+### Tier B — Opt-In (10 hooks)
 
 Enable individually by copying entries from [`settings.example.json`](settings.example.json) to your `settings.json`.
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
+| **branch-protection** | PreToolUse/Bash | Hard-blocks direct commits / force-push on protected branches (`main\|master` by default) |
+| **commit-secret-scan** | PreToolUse/Bash | Hard-blocks `git commit` when staged changes contain secrets |
+| **large-file-warner** | PreToolUse/Read | Warns at 500KB, hard-blocks Read at 2MB (bypass with offset/limit) |
 | **config-protection** | PreToolUse/Write\|Edit | Blocks edits to linter/formatter config files |
 | **check-console** | Stop | Warns about `console.log` in modified JS/TS files |
 | **accumulator** + **batch-format** | PostToolUse + Stop | Batch Prettier + tsc on all edited files at session end |
@@ -551,26 +554,25 @@ Enable individually by copying entries from [`settings.example.json`](settings.e
 | **design-quality** | PostToolUse/Write\|Edit | Warns on generic template UI patterns |
 | **mcp-health** | PreToolUse + PostToolUseFailure | Exponential backoff for unhealthy MCP servers |
 
-### Shipped but Disabled (5 hooks)
+> The three **PreToolUse** blockers above were parked by the v2.7.4 disable batch because opening the `/dev/stdin` **path** throws ENXIO in the Bun-spawned hook environment ([#6305](https://github.com/anthropics/claude-code/issues/6305)). v2.x re-enables them (opt-in): reading **fd 0 directly** (`fs.readFileSync(0)`) delivers the payload — verified end-to-end on Claude Code 2.1.186 (block + allow, both directions). They ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
 
-These hooks exist as code under `hooks/` but are **wired nowhere** — not in `hooks.json`, not in `settings.example.json`. They are the **PreToolUse / Stop-event** hooks parked by the v2.7.4 disable batch: PreToolUse hooks can't recover their input via the transcript pivot (the tool hasn't run yet), so they stay blocked on the upstream stdin fix ([#6305](https://github.com/anthropics/claude-code/issues/6305)); the Stop-event hooks need separate re-verification. Re-enable plan + recipe live in [`docs/BACKLOG.md`](docs/BACKLOG.md) ("Re-enable v2.7.4 disabled hooks").
+### Shipped but Disabled (2 hooks)
+
+These hooks exist as code under `hooks/` but are **wired nowhere** — not in `hooks.json`, not in `settings.example.json`. Both are **Stop-event** hooks that need separate re-verification (not the PreToolUse stdin issue). Re-enable plan + recipe live in [`docs/BACKLOG.md`](docs/BACKLOG.md) ("Re-enable v2.7.4 disabled hooks").
 
 | Hook | Event | Why disabled |
 |------|-------|-------------|
-| **large-file-warner** | PreToolUse/Read | PreToolUse — needs upstream stdin fix (#6305) |
-| **commit-secret-scan** | PreToolUse/Bash | PreToolUse — needs upstream stdin fix (#6305) |
-| **branch-protection** | PreToolUse/Bash | PreToolUse — needs upstream stdin fix (#6305) |
 | **cost-tracker** | Stop | Stop-event — needs separate re-verification |
 | **session-summary** | Stop | Stop-event — needs separate re-verification |
 
 ### Secret Detection
 
-When enabled, `commit-secret-scan` (currently disabled, see above) and the active `audit-log` share a unified secret pattern module (`hooks/_shared/secret-patterns.js`) covering: OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API, Slack, Stripe tokens + inline `--token`/`password`/`Authorization` patterns.
+When enabled, `commit-secret-scan` (opt-in, see above) and the active `audit-log` share a unified secret pattern module (`hooks/_shared/secret-patterns.js`) covering: OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API, Slack, Stripe tokens + inline `--token`/`password`/`Authorization` patterns.
 
 ### Override
 
 - **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
-- **Custom protected branches** (when `branch-protection` is re-enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
+- **Custom protected branches** (when `branch-protection` is enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
 - **Disable cost tracking** (when `cost-tracker` is re-enabled): set `autopilot.costTracker = false`
 
 ---

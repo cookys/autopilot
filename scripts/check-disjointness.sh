@@ -305,18 +305,26 @@ case "$RANGE" in
   *..*)
     git -C "$REPO" rev-parse --verify --quiet "${RANGE%%..*}" >/dev/null \
       || err_usage "base ref not found in range: ${RANGE%%..*}"
-    NAME_ONLY="$(git -C "$REPO" diff --name-only "$RANGE")"
+    git -C "$REPO" rev-parse --verify --quiet "${RANGE##*..}" >/dev/null \
+      || err_usage "head ref not found in range: ${RANGE##*..}"
+    # NOTE: a two-dot A..B range over a DIVERGED branch (a unit forked off the
+    # base while the base advanced) reports base-side changes as PHANTOM
+    # undeclared touches. For forked branches use a single SHA (the primary
+    # per-unit own-commit path) or a three-dot A...B (merge-base) range — both
+    # accepted here. core.quotepath=false so non-ASCII paths arrive as real bytes
+    # (else an in-allowlist unicode file fails to match itself → false exit 1).
+    NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --name-only "$RANGE")"
     ;;
   *)
     git -C "$REPO" rev-parse --verify --quiet "$RANGE^{commit}" >/dev/null \
       || err_usage "commit not found: $RANGE"
     if git -C "$REPO" rev-parse --verify --quiet "${RANGE}^" >/dev/null 2>&1; then
       # has a parent → its own diff
-      NAME_ONLY="$(git -C "$REPO" diff --name-only "${RANGE}^" "$RANGE")"
+      NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --name-only "${RANGE}^" "$RANGE")"
     else
       # root commit (no parent) → diff vs the empty tree
       EMPTY_TREE="$(git -C "$REPO" hash-object -t tree /dev/null)"
-      NAME_ONLY="$(git -C "$REPO" diff --name-only "$EMPTY_TREE" "$RANGE")"
+      NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --name-only "$EMPTY_TREE" "$RANGE")"
     fi
     ;;
 esac

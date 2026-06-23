@@ -71,9 +71,17 @@ MODE="$(read_field mode "$DEF_MODE")"
 PATHS="$(read_field protected_paths "$DEF_PATHS")"
 EVIDENCE="$(read_field evidence "$DEF_EVIDENCE")"
 
+# Normalize the CSV: strip whitespace around commas + ends, so the natural human
+# spacing `skills/, agents/` does NOT yield a leading-space element that the hook's
+# prefix match would silently never match (fail-OPEN). Consumers get clean CSV.
+PATHS="$(printf '%s' "$PATHS" | sed -E 's/[[:space:]]*,[[:space:]]*/,/g; s/^[[:space:]]+//; s/[[:space:]]+$//')"
+
 # --- validate enums; fall back fail-closed on garbage ---
 case "$MODE" in block|warn|off) ;; *) MODE="$DEF_MODE" ;; esac
 case "$EVIDENCE" in trailer|artifact|either) ;; *) EVIDENCE="$DEF_EVIDENCE" ;; esac
+
+# JSON-safe the only user-controlled value that reaches the JSON form (escape \ and ").
+json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
@@ -87,4 +95,4 @@ if [[ -n "$FIELD" ]]; then
 fi
 
 printf '{ "mode": "%s", "protected_paths": "%s", "evidence": "%s", "source": "%s" }\n' \
-  "$MODE" "$PATHS" "$EVIDENCE" "$SOURCE"
+  "$MODE" "$(json_escape "$PATHS")" "$EVIDENCE" "$SOURCE"

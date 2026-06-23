@@ -40,7 +40,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - `CLAUDE.md` — scripts-inventory row for `resolve-qc-gate.sh`.
 
 ### Note
-- This very change was landed THROUGH the gate (dogfood): qc reviewer ran on the diff, then the merge commit carried the `QC-Verdict` trailer.
+- Dogfood: this change is landed THROUGH the gate — the qc reviewer ran on the diff (caught a fail-OPEN CSV-spacing bug, fixed before merge), and the merge commit carries the `QC-Verdict: PASS` trailer.
 
 ## v2.21.1 — Worktree-base correction: `worktree.baseRef` supersedes the STEP-0 reset
 

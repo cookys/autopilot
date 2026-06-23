@@ -71,7 +71,7 @@ After all 6 completed → mark the parent L-5 task (from L-1) completed.
 |---|---------|-----------------------------------|
 | H-9.1 | Verify fix addresses the incident | State the root cause in one sentence and point to the specific code change that addresses it. Output: root cause + file:line of the fix. |
 | H-9.2 | Quality gate | Invoke `autopilot:quality-pipeline`. Output: zero test failures, zero blocking review findings. |
-| H-9.3 | Merge to main (--no-ff) | `git checkout main && git merge --no-ff hotfix/<name>`. Output: merge commit hash. |
+| H-9.3 | Merge to main (--no-ff) | `git checkout main && git merge --no-ff hotfix/<name>`. Merge commit MUST carry the `QC-Verdict: PASS (reviewer <id>, <date>)` trailer (see L-5.3 — the `pre-push` qc-gate enforces it). Output: merge commit hash + trailer. |
 | H-9.4 | Post-incident learn (MANDATORY) | Invoke `autopilot:learn`. Record: incident, root cause, detection method, fix, prevention. Output: knowledge entry path. |
 | H-9.5 | Delete hotfix branch | `git branch -d hotfix/<name>` (or remote cleanup if pushed). Output: `git branch` confirming deletion. |
 | H-9.6 | Session end | Verify completion, staging reflects the hotfix, any follow-ups recorded in BACKLOG. Output: pass/fail summary. |
@@ -85,7 +85,7 @@ After all 6 completed → mark the parent L-5 task (from L-1) completed.
 | F.1 | Quality gate | Invoke `autopilot:quality-pipeline --size S`. Output: zero failures. |
 | F.2 | Commit with detailed message | Commit must state root cause + what was wrong + how it's fixed. Output: `git log -1 --format=%B` showing all three. |
 | F.3 | Ongoing-maintenance entry | Append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config first so you don't create a stray sibling tree): `| MM-DD | commit_hash | fix(area): 根因 → 修法 |`. Output: `tail -1` of that file. |
-| F.4 | Merge to develop | `git checkout develop && git merge --no-ff fix/<name>`. Output: merge commit hash. |
+| F.4 | Merge to develop | `git checkout develop && git merge --no-ff fix/<name>`. Merge commit MUST carry the `QC-Verdict: PASS (reviewer <id>, <date>)` trailer (see L-5.3 — the `pre-push` qc-gate enforces it). Output: merge commit hash + trailer. |
 | F.5 | Delete fix branch | `git branch -d fix/<name>`. Output: `git branch` confirming deletion. |
 
 ### S-size — S-Lite Session End (3 sub-tasks)

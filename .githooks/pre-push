@@ -33,6 +33,7 @@ touches_protected() { # range
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     for p in "${PROTECTED[@]}"; do
+      p="${p#"${p%%[![:space:]]*}"}"; p="${p%"${p##*[![:space:]]}"}"  # trim (defensive; resolver also normalizes)
       [ -z "$p" ] && continue
       case "$f" in "$p"*) return 0 ;; esac
     done
@@ -59,7 +60,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   echo "$local_sha" | grep -qE "$ZERO_RE" && continue   # branch delete → nothing to gate
 
   if echo "${remote_sha:-}" | grep -qE "$ZERO_RE"; then
-    # new remote branch: gate the commits not already on the default remote branch
+    # new remote branch: gate the commits not already on the default remote branch.
+    # If origin/HEAD doesn't resolve, range = whole branch history; ANY historical
+    # QC-Verdict trailer then satisfies it (wider window — acceptable: --no-verify is
+    # the escape hatch and the goal is to flip the default, not seal it).
     base="$(git rev-parse --verify --quiet origin/HEAD 2>/dev/null || true)"
     if [ -n "$base" ]; then range="${base}..${local_sha}"; else range="$local_sha"; fi
   else

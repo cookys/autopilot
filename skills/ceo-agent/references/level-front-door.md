@@ -78,6 +78,35 @@ CEO (depth 0, this session)
     default `develop` ref otherwise forks from a stale base. Two mechanisms, two knobs:
     `worktree.baseRef` for the native foreman worktree, `--base` for the hetero impl.
 
+### Width — fixed cap 3, disjointness-gated
+
+The default `/l4 /l5` topology is **width 1** (one implementer worker per round).
+**Fixed cap 3** is the ceiling: the foreman may fan out to **at most 3** parallel
+implementer workers in a single round, and **only** when the work decomposes into
+**file-disjoint independent units** that pass a **deterministic** gate — never on
+LLM judgment alone (S0.a fleet evidence: ~15-25% of tasks split into ≥4 such units,
+so the supply is real, but the authorization must be mechanical).
+
+- **The gate is `scripts/check-disjointness.sh`, not a vibe.** Each unit declares an
+  allowlist (the planner six-element `Scope:` — element 2, "exact file paths and
+  modules to touch"). Pre-dispatch, `propose` mode advisory-checks the declared
+  allowlists for overlap (**advisory only — never the clamp**). Post-commit, `validate`
+  mode reads GIT ARTIFACTS (`git diff --name-only <range>`, never agent self-report —
+  same artifact-rail as `dispatch-hetero.sh`) and **fails closed** (exit 1) if a
+  worker's actual commit touched any file **outside** its declared allowlist.
+- **🔴 Depth-0 reviewer carve-out (MANDATORY — do not omit).** The disjointness gate
+  certifies **FILES ONLY, not behavior**: semantic coupling — shared types, import
+  edges, call-order invariants — between two file-disjoint units is **invisible** to a
+  file-path check and remains the **reviewer's to catch**. The green disjointness stamp
+  must NEVER be read as a behavior clearance. Omitting this carve-out makes the dominant
+  failure mode (disjoint-file semantic coupling) WORSE by inducing reviewer
+  rubber-stamping — the depth-0 qc (§3) must review the *combined* diff for cross-unit
+  coupling exactly as hard as it would a single-unit diff.
+- **Width is OFF until Tier-2 ships.** This section documents the gate + the cap; the
+  actual parallel-dispatch / merge-back control loop is a **separate later phase**. Until
+  then `/l4 /l5` runs the width-1 path; the gate is still useful standalone (it validates
+  even a single unit's commit against its declared scope).
+
 ### Dispatching the foreman (the P0-verified mechanism)
 
 The foreman is a native `Agent` dispatched in the background with worktree

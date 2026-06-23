@@ -154,6 +154,27 @@ to re-derive the problem before fixing — wasted budget, slower loop. The
 blinding rule is specifically about **reviewer-role re-dispatch**, not
 fixer dispatch.
 
+## Disjointness gate ≠ reviewer clearance (the carve-out)
+
+`/l4 /l5` width fan-out authorizes batch parallelism with a **deterministic
+file-disjointness gate** (`scripts/check-disjointness.sh`, default **fixed cap 3**):
+each parallel unit declares an allowlist, and the gate reads git artifacts to fail
+closed if any unit's actual commit touches a file outside its declared scope.
+
+> **🔴 The gate certifies FILES ONLY, not behavior.** Semantic coupling — shared
+> types, import edges, call-order invariants — between two **file-disjoint** units
+> is invisible to a file-path check and remains **the reviewer's to catch.**
+
+This carve-out is load-bearing for review integrity: a green disjointness stamp is
+**not** a behavior clearance, and must never be allowed to shrink the depth-0 qc.
+The dominant failure mode of width fan-out is precisely *disjoint-file semantic
+coupling* (unit A renames a type, unit B imports the old name — zero file overlap,
+broken build). If the reviewer treats "files are disjoint ⇒ probably fine" the green
+stamp **induces rubber-stamping** and makes that failure mode worse, not better.
+So when reviewing a fanned-out batch, the depth-0 qc reviews the **combined** diff
+for cross-unit coupling *exactly as hard* as it would a single-unit diff — the gate
+narrows nothing about the reviewer's job.
+
 ## Dispatcher pre-flight checklist
 
 Before sending any **re-dispatch** prompt (round 2+ for the same agent role

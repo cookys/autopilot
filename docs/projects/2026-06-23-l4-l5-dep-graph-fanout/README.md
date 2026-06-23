@@ -19,8 +19,14 @@ independent-unit parallelism** (NOT arbitrary feature fan-out), with the file-di
 as authorizer. **S1 SHIPPED 2026-06-23** (`f21346e` on develop): `scripts/check-disjointness.sh`
 (validate=authoritative artifact-rail / propose=advisory) + 36-assertion test + fixed-cap-3 docs +
 the mandatory depth-0 reviewer files-only carve-out. Built via `/l4` foreman; depth-0 authoritative
-qc PASS + 2 over-strict fixes (quotepath / two-dot head) independently re-verified. **Next: Phase L
-(conditional Tier-2 batch dispatch) — not yet started.**
+qc PASS + 2 over-strict fixes (quotepath / two-dot head) independently re-verified. **PHASE L
+SHIPPED 2026-06-23** (`577ba8d` on develop): `scripts/dispatch-batch.sh` (plan/verify/merge-back/
+telemetry/reap) — all-or-nothing, merge-conflict→serial-collapse, single-base-per-batch, Amdahl
+cross-run telemetry, SIGTERM-to-pgroup parallel-kill (setsid-verified) + depth-0 control-loop prose.
+Built via `/l4` foreman; depth-0 qc found + fixed a 🔴 (merge-back silent no-op on dirty base →
+fail-loud `base_advance_failed`) + 2 🟡, independently re-verified (80 assertions, 48 files green).
+**ALL PHASES DONE (S0→S1→Phase L). Remaining: BACKLOG only** (/l5 hetero-parallel deferred; carve-out
+canonical-seed; glob brace/char-class; Amdahl cap-tuning needs real-run data).
 
 ## OKR
 

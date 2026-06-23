@@ -109,7 +109,7 @@ function tallyNums(text) {
   const total = text.match(/(\d+)\s*hooks?/i) || text.match(/hooks-(\d+)/);
   const don = text.match(/(\d+)\s*default-on/i) || text.match(/預設啟用[（(](\d+)/);
   const opt = text.match(/(\d+)\s*opt-in/i) || text.match(/可選啟用[（(](\d+)/);
-  const dis = text.match(/(\d+)\s*disabled/i);
+  const dis = text.match(/(\d+)\s*(?:shipped-but-)?disabled/i);
   return {
     total: total ? +total[1] : null,
     defaultOn: don ? +don[1] : null,
@@ -179,6 +179,10 @@ function runCheck(inv) {
   checkTally(errors, 'README.md', /hooks-\d+-/, inv, ['total']);
   checkHeaderCount(errors, 'README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
   checkHeaderCount(errors, 'README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
+  // Intro PROSE tally (the "N default-on, M opt-in, K shipped-but-disabled" sentence) —
+  // distinct from the badge/headers; a stale number here escaped both gates once (v2.23.0).
+  checkTally(errors, 'README.md', /shipped-but-disabled\*\* \(see below\)/, inv, ['defaultOn', 'optIn', 'disabled']);
+  checkTally(errors, 'hooks/README.md', /shipped-but-disabled\*\* \(`cost-tracker`/, inv, ['defaultOn', 'optIn', 'disabled']);
   checkTally(errors, 'README.zh-TW.md', /hooks-\d+-/, inv, ['total']);
   checkTally(errors, 'README.zh-TW.md', /預設啟用[（(]\d+/, inv, ['defaultOn']);
   checkTally(errors, 'README.zh-TW.md', /可選啟用[（(]\d+/, inv, ['optIn']);

@@ -124,7 +124,8 @@ function readLatestToolEvent({ env, homedir } = {}) {
 // otherwise. Returns { tool_name, tool_input, tool_response, is_error, source }.
 // source ∈ 'stdin' | 'transcript' | 'none'. Never throws (fail-open → 'none').
 function getToolEvent({ stdin, env, homedir } = {}) {
-  // 1. stdin path (currently broken upstream, but future-proof + test-friendly)
+  // 1. injected stdin value (callers read fd 0 directly — that works; this is the
+  //    fast path when the caller already has the payload + keeps the lib test-friendly)
   if (typeof stdin === 'string' && stdin.trim()) {
     try {
       const input = JSON.parse(stdin);

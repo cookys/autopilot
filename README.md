@@ -521,7 +521,7 @@ Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are 
 
 ## Hooks
 
-Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on**, **10 opt-in**, and **2 shipped-but-disabled** (see below). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
+Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on**, **11 opt-in**, and **1 shipped-but-disabled** (see below). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
 
 ### Tier A — Default-On (8 hooks)
 

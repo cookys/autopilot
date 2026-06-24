@@ -11,7 +11,7 @@
 | Phase | Size | Deliverable / Goal | Status |
 |---|---|---|---|
 | **Phase 1** | S | Port `risk-counter.sh` & `toggle-payload-capture.sh` to JS | Completed |
-| **Phase 2** | S | Port `session-start.sh` to JS | Pending |
+| **Phase 2** | S | Port `session-start.sh` to JS | Completed |
 | **Phase 3** | S | Port `doc-drift-gate.py` to JS | Pending |
 | **Phase 4** | L | Port `check-node-report.sh` to JS | Pending |
 | **Phase 5** | H | Port `tree.sh` to JS with atomic self-healing flock | Pending |

@@ -1,0 +1,9 @@
+Looking at the stated goal: **"Port session-start.sh to pure Node.js hooks/session-start.js and replace original with thin wrapper."**
+
+The expected deliverables are:
+- `hooks/session-start.js` (Node.js port) ✓
+- `hooks/session-start.sh` (wrapper) ✓
+
+Comparing to actual artifact_paths:
+
+EXTRA: **hooks/tests/session-start.test.sh** — Comprehensive test suite covering base context, compaction state recovery (TTL expiry), custom config.json handling, intent resume hints, hostname matching, disabled-flag warnings, wrapper delegation, and fail-open behavior. Not mentioned in the stated goal.

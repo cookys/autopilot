@@ -209,7 +209,7 @@ try {
     addError("missing required field: verdict");
   } else {
     const verdict = reportJson.verdict;
-    if (verdict !== null && (typeof verdict !== 'string' || verdict === '')) {
+    if (typeof verdict !== 'string' || verdict === '') {
       addError("field 'verdict' must be a non-empty string");
     }
   }

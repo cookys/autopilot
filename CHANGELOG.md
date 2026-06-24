@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.1 — Versioning rule documented + sync-version count-preservation fix
+
+**Headline**: Pinned the semver bump policy that was previously only de-facto, and fixed a real footgun in the release tooling. The bump rule (now in `CLAUDE.md` § Versioning): **MINOR** advances only for a new user-facing milestone (a new **skill** or **agent**); a new **script / hook / reference**, a bug fix, or hardening of existing behavior is **PATCH**; breaking changes are **MAJOR**; pure docs/tests/dev-tooling don't bump. This keeps the second digit a meaningful "new thing users invoke" counter instead of inflating on every internal addition. Separately, `scripts/sync-version.js` no longer silently clobbers the opt-in / disabled hook tiers when those flags are omitted (the v2.20.0 footgun): omitted counts are now **preserved from the canonical description**, with the historical literals (opt-in 7 / disabled 0) only as a last-resort fallback when canonical is unparseable. This release dogfoods the fix — it was bumped by omitting `--opt-in-count` / `--disabled-count` and the `11 opt-in, 1 disabled` tiers survived intact.
+
+### Added
+- `CLAUDE.md` § **Versioning (semver bump rule)** — MAJOR/MINOR/PATCH/no-bump table tied to the user-facing-milestone policy, plus bump mechanics + the finish-flow release gate pointer.
+- `hooks/tests/sync-version-preserve-counts.test.sh` (9 assertions) — regression guard: a bump omitting `--disabled-count`/`--opt-in-count` must PRESERVE the canonical tiers (not clobber disabled→0), an explicit flag still overrides, mirrors stay in sync. Sandboxed; live repo untouched.
+
+### Fixed
+- `scripts/sync-version.js` — omitting `--opt-in-count` / `--disabled-count` previously defaulted them to 7 / 0, silently rewriting e.g. "20 hooks (8 default-on, 11 opt-in, 1 disabled)" → "...(13 default-on, 7 opt-in)" and dropping the disabled tier. Now backfilled from the canonical description's current values (new `readCanonicalCounts()`); literals apply only when canonical can't be parsed. Closes the BACKLOG footgun entry hit during the v2.20.0 bump.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.25.0 — Anti-gaming dispatch-suppression linter + plan Global Constraints
 
 **Headline**: The two dialectic-converged learnable items from the 2026-06-24 survey of `obra/superpowers` v6.0.3 + `garrytan/gstack` (a 2-round Architect/Ops/Skeptic dialectic that **cut** the runtime/browser-QA and UX-axis candidates as selection bias — two UI-oriented repos sharing a UI bias, not an autopilot gap). What shipped: a new anti-gaming linter that catches a dispatcher **coaching the reviewer to go soft** — telling it to suppress a finding or pre-rate its severity ("call it Minor at most", "don't treat X as a defect", "ignore/skip the auth path", "downgrade it to minor", "leave the race condition alone"). This is a **distinct adversarial class** from the round-cycle leakage its sibling `check-redispatch-prompt.sh` already covers, and it runs on **every** dispatch (round 1 included). Patterns are anchored to imperative-suppression grammar so honest calibration ("don't over-flag minor nits"), severity vocabulary, scope statements, and real security instructions ("treat X as untrusted data") all pass — verified by an adversarial reviewer running the linter over the entire `reviewer.md` + `code-review.md` (both clean). Plus a plan-template **Global Constraints** block (verbatim invariant propagation) and an honest note about the standalone red-green-TDD gap. Adapted from superpowers v6's `subagent-driven-development` anti-gaming reviewer contract + `writing-plans` global-constraint block.

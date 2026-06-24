@@ -75,6 +75,21 @@ Unified across all skills and agents:
 
 If you see "Important" anywhere in a severity context, that's a leftover from the old vocabulary — fix it. The dialectic skills (`think-tank`, `think-tank-dialectic`) use a separate **risk** tagging vocabulary (`critical / important / minor`, lowercase) which is intentionally distinct.
 
+## Versioning (semver bump rule)
+
+The version (canonical in `.claude-plugin/plugin.json`, mirrored by `scripts/sync-version.js`) follows a **user-facing-milestone** semver policy. The second digit advances ONLY for a new user-facing surface — not for every addition.
+
+| Bump | When | Examples |
+|------|------|----------|
+| **MAJOR** (`X.0.0`) | Breaking / incompatible change to a surface consumers rely on | Removed or renamed skill; a skill `description:` change that shifts routing incompatibly; config-schema break; removed hook/script a consumer depends on |
+| **MINOR** (`x.Y.0`) | A **new user-facing milestone**: a new **skill** or a new **agent** | New `skills/<name>/` skill; new `agents/<role>.md` methodology agent |
+| **PATCH** (`x.y.Z`) | **Everything else that changes shipped code**: new **script**, new **hook**, new **reference doc**, a bug fix or hardening of existing behavior (**including fixes to release tooling like `sync-version.js`**), a regex/contract tweak | `check-dispatch-suppression.sh` (new script) → patch; re-enabling a hook → patch; a reviewer-prompt fix → patch; the `sync-version.js` count-preservation fix (v2.25.1) → patch |
+| **(no bump)** | Changes touching **only docs or tests** — no shipped code behavior changes. Fold into the next release | Adding a `hooks/tests/*.test.sh`; a `docs/BACKLOG.md` / `docs/projects/` edit; a typo/wording fix in a doc |
+
+Rationale: a new script/hook/reference is real work but it is **not** a new user-facing capability the way a skill or agent is — bundling those under PATCH keeps the second digit meaningful as a "new thing users invoke" counter, instead of inflating it on every internal addition. The PATCH-vs-no-bump line is **code vs not-code**: if the change alters the behavior of any shipped code (a skill, hook, script, or the release tooling itself), it's at least a PATCH; reserve no-bump for changes that touch only docs or tests. (Borderline: a commit that is mostly tests plus a trivial incidental code touch — e.g. adding a `--help` line — may ride as no-bump if the code touch isn't itself the point; when the code fix *is* the point, it's a PATCH.)
+
+Mechanics: bump via `scripts/sync-version.js --version <V> --hook-count <N> --skill-count <M>` (opt-in/disabled counts are preserved from canonical when omitted). A version bump triggers the finish-flow L-5.5 release gate (`scripts/preflight-release.sh`: CHANGELOG entry + INDEX row + mirror parity).
+
 ## Coexistence with superpowers
 
 Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`README.md`](README.md#superpowers-coexistence).

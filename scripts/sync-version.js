@@ -45,7 +45,12 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 
 // === CLI parse ===
 function parseArgs(argv) {
-  const args = { dryRun: false, check: false, optInCount: 7, disabledCount: 0 }; // defaults: Tier B = 7, disabled = 0
+  // optInCount / disabledCount intentionally start UNSET. When a flag is omitted
+  // the write path backfills from the canonical description's CURRENT value
+  // (see readCanonicalCounts) instead of clobbering to a hardcoded default — that
+  // silent clobber was the v2.20.0 footgun. Only if canonical is unparseable do
+  // the historical literal defaults (opt-in 7, disabled 0) apply as last resort.
+  const args = { dryRun: false, check: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--version' || a === '-v') args.version = argv[++i];
@@ -59,6 +64,28 @@ function parseArgs(argv) {
     else { console.error(`unknown arg: ${a}`); printUsage(); process.exit(2); }
   }
   return args;
+}
+
+// Read the CURRENT opt-in / disabled counts from the canonical description so an
+// omitted --opt-in-count / --disabled-count PRESERVES them rather than silently
+// clobbering to a hardcoded default (the v2.20.0 footgun: a bump that forgot
+// --disabled-count rewrote "20 hooks (8 default-on, 7 opt-in, 5 disabled)" →
+// "...(13 default-on, 7 opt-in)", dropping the disabled tier and miscomputing
+// default-on — tiers shown are the v2.20.0-era split; current is 11 opt-in /
+// 1 disabled). Returns null if canonical is missing / description unparseable —
+// callers then fall back to the historical literal defaults.
+function readCanonicalCounts() {
+  try {
+    const canonical = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, '.claude-plugin/plugin.json'), 'utf8'));
+    const m = (canonical.description || '').match(/(\d+) hooks \((\d+) default-on, (\d+) opt-in(?:, (\d+) disabled)?\)/);
+    if (!m) return null;
+    return {
+      optInCount: parseInt(m[3], 10),
+      disabledCount: m[4] !== undefined ? parseInt(m[4], 10) : 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // === --check mode: derive args from canonical (.claude-plugin/plugin.json + hooks.json) ===
@@ -303,6 +330,13 @@ function atomicWrite(file, content) {
     // --check mode: derive everything from canonical, run pass-1 only, exit 1 on drift
     args = deriveArgsFromCanonical();
   } else {
+    // Backfill omitted optional counts from the canonical CURRENT values so a bump
+    // that only changes --version can't silently clobber the opt-in / disabled
+    // tiers (v2.20.0 footgun). Fall back to historical literals only if canonical
+    // can't be parsed.
+    const current = readCanonicalCounts();
+    if (args.optInCount === undefined) args.optInCount = current ? current.optInCount : 7;
+    if (args.disabledCount === undefined) args.disabledCount = current ? current.disabledCount : 0;
     validateArgs(args);
   }
 
@@ -355,7 +389,9 @@ function atomicWrite(file, content) {
         console.error(makeDiff(r.before, r.after));
       }
       console.error(`\nFix: edit .claude-plugin/plugin.json (canonical) then run:`);
-      console.error(`  node scripts/sync-version.js --version ${args.version} --hook-count ${args.hookCount} --skill-count ${args.skillCount} --opt-in-count ${args.optInCount}`);
+      // opt-in / disabled counts are preserved from canonical when omitted, so the
+      // safe-by-default invocation needs only version + the two required counts.
+      console.error(`  node scripts/sync-version.js --version ${args.version} --hook-count ${args.hookCount} --skill-count ${args.skillCount}`);
       process.exit(1);
     }
     console.log('\nAll mirrors in sync with canonical. ✓');

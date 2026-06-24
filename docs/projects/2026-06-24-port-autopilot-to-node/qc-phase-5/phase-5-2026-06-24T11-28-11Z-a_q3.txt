@@ -1,0 +1,27 @@
+看著這份 phase-5 node report，我來檢視是否達成問題陳述的目標。
+
+**Node 問題**: "Port tree.sh to pure Node.js scripts/tree.js and replace the original wrapper."
+
+**檢視達成情況**：
+
+✓ **scripts/tree.js 完整實作** (897 行)
+  - 所有 8 個 subcommand 已實作：init, emit, rebuild-index, next-decision, report, escalations, fetch, board-status
+  - 原子自癒鎖機制：token-based ownership verification + PID/TTL 檢查 + recovery mutex
+  - 事件信封驗證、truncated tail 處理、原子 JSON 寫入、project name 驗證
+
+✓ **scripts/tree.sh 轉換為 wrapper** (3 行)
+  - 純粹委派給 Node.js 實作
+
+✓ **功能特性已移植**
+  - 鎖機制比原 bash 版本更堅實（原版依賴 util-linux flock，新版用原子檔案建立，跨平台更友善）
+  - CRLF 處理、環境變數覆蓋、外部事件驗證器支援都在
+
+✓ **README 狀態已更新** (Phase 5: Completed)
+
+✓ **向後相容性維持** (wrapper 確保現有呼用端不受影響)
+
+---
+
+根據 evidence pointer 和 artifact 的檢驗，所有問題陳述要求的交付項目都已達成。verdict = "pass"、confidence = 1.0 有據可查。
+
+**MISSED: (無)**

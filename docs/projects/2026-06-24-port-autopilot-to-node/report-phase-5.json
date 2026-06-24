@@ -1,0 +1,27 @@
+{
+  "node": "phase-5",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "Port tree.sh to pure Node.js scripts/tree.js and replace the original wrapper.",
+  "evidence_pointers": [
+    "scripts/tree.js:1-897",
+    "scripts/tree.sh:1-3",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-5.diff:1-100"
+  ],
+  "artifact_paths": [
+    {
+      "path": "scripts/tree.js",
+      "sha256": "575fea3b6c4096870caf54fec098514b44c2c12622518f8a05a0d4eb4916703a"
+    },
+    {
+      "path": "scripts/tree.sh",
+      "sha256": "806580bd942bdc35dc00b90efa6261fa1c6bda182e2209bf20b0dd447dc7cfcd"
+    },
+    {
+      "path": "docs/projects/2026-06-24-port-autopilot-to-node/phase-5.diff",
+      "sha256": "c7a1e7902ac186a45c00e6b77e403e610ca44ba4a56aca3bcbe318779b0dd782"
+    }
+  ],
+  "doa_log": [],
+  "escalations": []
+}

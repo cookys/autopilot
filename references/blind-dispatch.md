@@ -225,6 +225,34 @@ Not acceptable (despite seeming innocuous):
   of round 2+ still nudges the SubAgent toward over-search. Send the prompt
   as if it were a first-pass; the dispatcher tracks the cycle, not the agent
 
+## Anti-gaming pre-flight — no suppression / no severity-coaching (EVERY dispatch)
+
+The leaky-phrase checklist above is **round-2+ only** (re-dispatch leakage). This is a
+**different, orthogonal class** that applies to **every** dispatch including round 1: a
+dispatcher must not **coach the reviewer to go soft** — telling it what to ignore, or
+**pre-rating** a finding's severity. A prompt can be perfectly blind-safe yet still say
+"if you find a null-deref, call it Minor at most" — and the reviewer, primed, ships the flaw.
+
+Forbidden in any dispatch prompt:
+
+- Telling the reviewer to ignore / not report something ("don't flag the error handling",
+  "ignore the auth path", "skip the concurrency cases").
+- **Pre-rating** a finding's severity ("call it Minor at most", "treat that as a suggestion",
+  "rate the null-deref low").
+
+Acceptable (must NOT be confused with the above — honest calibration, not coaching):
+
+- Stating the severity *vocabulary* the reviewer should grade with ("grade each finding
+  critical / major / minor / suggestion").
+- Honest don't-over-flag calibration ("don't over-flag — minor style nits destroy trust") and
+  scope statements ("minor formatting is out of scope for this pass").
+
+Linted by [`scripts/check-dispatch-suppression.sh`](../scripts/check-dispatch-suppression.sh)
+(sibling of `check-redispatch-prompt.sh`; runs on **any** dispatch prompt, exit 1 ⇒ coaching
+found ⇒ strip and re-dispatch). The patterns are anchored to **imperative-suppression grammar**
+("(call|rate|mark|treat) it (as) (at most) &lt;severity&gt;", "do not (flag|report|treat)") — NOT
+bare severity-word proximity — so the honest-calibration prose above does not trip it.
+
 ## Nested dispatch (subagents spawning subagents)
 
 > Claude Code v2.1.172+ lets subagents spawn their own subagents (depth ≤ 5;

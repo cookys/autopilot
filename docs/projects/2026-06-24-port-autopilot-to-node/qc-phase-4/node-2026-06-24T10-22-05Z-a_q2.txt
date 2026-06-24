@@ -1,0 +1,3 @@
+EXTRA: CRLF → LF normalization added for text files before computing line counts and sha256 checksums (getProcessedBuffer + isTextFile functions). The original bash version computed sha256 and line counts directly on raw files without normalization.
+
+EXTRA: Explicit text file detection (isTextFile function) based on file extension patterns and null-byte scanning, determining when to apply line-ending normalization. The original bash version did not distinguish text from binary files in this way.

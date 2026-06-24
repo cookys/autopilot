@@ -1,0 +1,1 @@
+EXTRA: scripts/check-node-report.js adds text-file detection plus CRLF-to-LF normalization before sha256 checks/content-hash comparisons, changing checksum semantics beyond a straight port of the shell script's raw sha256sum behavior.

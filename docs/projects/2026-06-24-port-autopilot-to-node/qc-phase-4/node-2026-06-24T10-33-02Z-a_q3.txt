@@ -1,0 +1,36 @@
+**ANALYSIS:**
+
+The node report claims **verdict: pass** for porting `check-node-report.sh` to Node.js and replacing the wrapper.
+
+Examining the deliverables:
+
+**Goal: Port check-node-report.sh to pure Node.js**
+- ✅ `scripts/check-node-report.js` created (532 lines)
+- ✅ All functionality ported:
+  - Schema validation (node, verdict, confidence, arrays)
+  - Evidence pointer resolution (sha256, file:line-range with SHA anchor)
+  - Moved-file detection via content-hash matching
+  - Basename heuristic fallback (degraded mode)
+  - Artifact sha256 verification
+  - CRLF normalization, line counting
+  - Exit codes (0/1/2)
+  - JSON error/warning output
+- ✅ CLI interface preserved (`--help`, `--repo`)
+- ✅ Pure Node.js (no jq/bash dependency; uses stdlib + git CLI)
+
+**Goal: Replace the original wrapper**
+- ✅ `scripts/check-node-report.sh` reduced to 4-line delegator
+- ✅ Delegates via `exec node "$(dirname "$0")/check-node-report.js" "$@"`
+- ✅ Preserves calling interface
+
+**Evidence pointer validation:**
+- All three pointers resolvable (JS file exists at lines 1–532; wrapper at 1–4; diff present)
+
+**Assessment:**
+The port is **functionally complete**. No TODOs, FIXMEs, or feature gaps observed. Node.js version implements all validation paths from the bash original, including edge cases (moved files, degraded matching, @HEAD warnings). The wrapper is thin and correct. The verdict "pass / 1.0 confidence" appears justified.
+
+---
+
+**MISSED:**
+
+(none detected)

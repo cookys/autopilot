@@ -1,0 +1,22 @@
+MISSED: (none — all goals achieved)
+
+**根據審查：**
+
+報告題目明確要求「Port check-node-report.sh to pure Node.js scripts/check-node-report.js and replace the original wrapper」，兩項任務均已完成：
+
+1. **Node.js 移植完成**
+   - scripts/check-node-report.js 包含完整實作（531 行）
+   - 涵蓋所有原 bash 版本的功能：
+     - 完整的 CLI 參數解析（--help, --repo）
+     - JSON 結構驗證
+     - 兩種 evidence pointer 類型支援（file: 和 sha256:）
+     - 檔案移動檢測（Mode A 內容雜湊、Mode B 基礎檔名啟發式）
+     - artifact 校驗和驗證
+     - CRLF 標準化
+     - 適當的錯誤/警告處理和退出碼
+
+2. **包裝器替換完成**
+   - scripts/check-node-report.sh 從 609 行縮減為 4 行純包裝器
+   - 正確委派至 Node.js 實作（`exec node "$(dirname "$0")/check-node-report.js" "$@"`）
+
+artifact_paths 和 evidence_pointers 都有記錄，差異文件完整保存。

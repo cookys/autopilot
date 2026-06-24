@@ -1,0 +1,2 @@
+MISSED: The Node port does not preserve the original raw SHA-256 behavior for artifact verification and moved-file content matching; it normalizes text files before hashing, so it can report different validity than the shell script and does not strictly verify the provided sha256 values.
+MISSED: The replacement wrapper does not preserve the original `check-node-report.sh --help` CLI contract because delegated help now advertises `check-node-report.js`/`node scripts/check-node-report.js` usage instead of the wrapper command.

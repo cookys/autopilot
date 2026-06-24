@@ -1,0 +1,5 @@
+ACHIEVED: Ported check-node-report.sh bash implementation (609 lines) to pure Node.js as scripts/check-node-report.js (532 lines), with complete feature parity including schema validation (node, verdict, confidence, evidence_pointers, artifact_paths, doa_log, escalations fields), evidence pointer resolution (sha256: format and file:line-range[@sha] anchors), moved-file content-hash detection, and artifact SHA256 verification.
+
+ACHIEVED: Replaced the original shell wrapper with a thin delegation wrapper (4 lines) that executes the Node.js implementation via `exec node "$(dirname "$0")/check-node-report.js" "$@"`, maintaining backward-compatible CLI interface (same arguments: `<report.json>` and `--repo <path>`).
+
+ACHIEVED: Preserved fail-closed error handling, JSON output schema (`{valid, errors, warnings}`), and exit code contract (0 for valid, 1 for invalid, 2 for usage errors) across the port.

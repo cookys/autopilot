@@ -1,0 +1,1 @@
+EXTRA: Added text-file detection and CRLF-to-LF normalization before line counting and SHA-256 comparisons, changing validator semantics beyond a straight shell-to-Node port.

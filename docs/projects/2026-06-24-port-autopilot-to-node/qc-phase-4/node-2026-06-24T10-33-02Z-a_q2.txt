@@ -1,0 +1,27 @@
+# 質詢回覆：Extras（超出目標範圍的工作）
+
+經檢視提供的 node report 及所有 artifacts，我未發現超出既定目標的額外工作。
+
+**既定目標：**
+- Port check-node-report.sh to pure Node.js (scripts/check-node-report.js)
+- Replace the original wrapper
+
+**實際交付內容：**
+1. ✓ `scripts/check-node-report.js` — faithful port of 609-line bash script to 531-line Node.js implementation
+2. ✓ `scripts/check-node-report.sh` — reduced to a 4-line wrapper delegating to Node.js version
+
+**未發現的 extras：**
+- 無新增驗證規則
+- 無新增命令行選項
+- 無新增輸出格式
+- 無功能增強
+- 無架構改變
+
+Node.js 實作與原始 bash 版本在邏輯上等價，包括：
+- 參數解析
+- Schema 驗證
+- Evidence pointer 解析與文件移動檢測
+- Artifact SHA256 驗證
+- JSON 輸出格式
+
+**結論：** 無 extras。此為嚴格的功能性遷移，未超出目標範圍。

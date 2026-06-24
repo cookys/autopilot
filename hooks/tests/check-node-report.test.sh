@@ -537,6 +537,49 @@ HEAD_WARN_COUNT="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | length')"
 assert_neq "$HEAD_WARN_COUNT" "0" "@HEAD anchor warning count > 0"
 
 # ---------------------------------------------------------------------------
+# TEST 16b: CRLF artifact sha256 verification (both raw and normalized)
+# ---------------------------------------------------------------------------
+CRLF_ART="$TEST_TMP/crlf-art.txt"
+printf 'line 1\r\nline 2\r\n' > "$CRLF_ART"
+
+# Raw sha256 of the CRLF file:
+RAW_SHA="$(sha256sum "$CRLF_ART" | awk '{print $1}')"
+# CRLF-normalized (LF only) content: "line 1\nline 2\n"
+NORM_SHA="$(printf 'line 1\nline 2\n' | sha256sum | awk '{print $1}')"
+
+# 16b.1: Validator succeeds with raw SHA
+CRLF_RAW_REPORT="$(make_report \
+  ".artifact_paths = [{\"path\": \"$CRLF_ART\", \"sha256\": \"$RAW_SHA\"}]" \
+  '.evidence_pointers = ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]')"
+run_validator "$CRLF_RAW_REPORT"
+assert_exit_code "$__RUN_EXIT" "0" "CRLF artifact raw SHA validation exits 0"
+CRLF_RAW_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$CRLF_RAW_VALID" "true" "CRLF artifact raw SHA is valid"
+
+# 16b.2: Validator succeeds with CRLF-normalized SHA
+CRLF_NORM_REPORT="$(make_report \
+  ".artifact_paths = [{\"path\": \"$CRLF_ART\", \"sha256\": \"$NORM_SHA\"}]" \
+  '.evidence_pointers = ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]')"
+run_validator "$CRLF_NORM_REPORT"
+assert_exit_code "$__RUN_EXIT" "0" "CRLF artifact normalized SHA validation exits 0"
+CRLF_NORM_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$CRLF_NORM_VALID" "true" "CRLF artifact normalized SHA is valid"
+
+# ---------------------------------------------------------------------------
+# TEST 16c: CLI usage and help displays check-node-report.sh contract
+# ---------------------------------------------------------------------------
+# Run with --help
+run_validator --help
+assert_contains "$__RUN_STDOUT" "check-node-report.sh" "--help stdout prints check-node-report.sh"
+assert_not_contains "$__RUN_STDOUT" "check-node-report.js" "--help stdout does not print check-node-report.js"
+
+# Run with usage error (no arguments)
+run_validator
+assert_exit_code "$__RUN_EXIT" "2" "no arguments exits 2"
+assert_contains "$__RUN_STDERR" "check-node-report.sh" "usage error prints check-node-report.sh"
+assert_not_contains "$__RUN_STDERR" "check-node-report.js" "usage error does not print check-node-report.js"
+
+# ---------------------------------------------------------------------------
 # TEST 16: bash -n clean; shellcheck clean (if installed)
 # ---------------------------------------------------------------------------
 bash -n "$SCRIPT" 2>/dev/null

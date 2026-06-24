@@ -18,7 +18,7 @@ Usage:
 
 Subcommands:
   init <proj>                        Create tree/ dir + empty events.jsonl
-  emit <proj> <node-id> <event-json> Validate + append one JSONL event under flock
+  emit <proj> <node-id> <event-json> Validate + append one JSONL event under lock
   rebuild-index <proj>               Fold events → index.json (deterministic, idempotent)
   next-decision <proj>               Print highest-priority pending decision (compact JSON)
   report <proj> <node>               Print node report JSON
@@ -43,12 +43,10 @@ File locations (per project):
   docs/projects/<proj>/tree/events.jsonl.lock — flock sidecar
   docs/projects/<proj>/tree/index.json     — derived, gitignored, rebuildable
 
-flock notes:
-  Linux (util-linux flock): flock -x -w <timeout> <lockfile> <cmd>
-  macOS (BSD flock): flock -x -w <timeout> <fd> — slightly different API.
-  This script uses the Linux form. On macOS, install util-linux flock via
-  homebrew (brew install util-linux). The fd-based macOS shlock is NOT used
-  here. Document in your deployment notes if running on macOS.
+locking notes:
+  This script implements a custom cross-platform atomic locking mechanism using
+  exclusive file creation ('wx' mode) with self-healing lock recovery and PID/TTL
+  verification. It provides safe concurrency control on Linux, macOS, and Windows.
 
 Exit codes:
   0  success
@@ -132,7 +130,7 @@ function acquireLock(lockFile, timeoutMs = 10000) {
       fs.writeSync(fd, lockData);
       fs.closeSync(fd);
       fd = null;
-      return;
+      return token;
     } catch (err) {
       if (fd !== null) {
         try { fs.closeSync(fd); } catch (_) {}
@@ -152,7 +150,7 @@ function acquireLock(lockFile, timeoutMs = 10000) {
         const isLocal = existing.hostname === os.hostname() && existing.cwd === process.cwd();
         let isAlive = true;
         if (isLocal && existing.pid) {
-          isAlive = isProcessAlive(existing.pid);
+          isAlive = isProcessAlive(parseInt(existing.pid, 10));
         }
         
         const isStale = (Date.now() - existing.ts > 10000) || !isAlive;
@@ -168,9 +166,44 @@ function acquireLock(lockFile, timeoutMs = 10000) {
           ? `Stale lock detected (token: ${existing.token || 'unknown'}, pid: ${existing.pid}). Overwriting.`
           : 'Corrupt lockfile detected. Quarantining.';
         console.error(`[LockRecovery] ${msg}`);
+        
+        const recoveryLock = lockFile + '.recovery';
+        let recFd = null;
         try {
-          fs.unlinkSync(lockFile);
-        } catch (unlinkErr) {}
+          recFd = fs.openSync(recoveryLock, 'wx');
+          fs.writeSync(recFd, JSON.stringify({ pid: process.pid, ts: Date.now() }));
+          fs.closeSync(recFd);
+          recFd = null;
+
+          let stillStale = false;
+          try {
+            const recheckContent = fs.readFileSync(lockFile, 'utf8');
+            const recheckExisting = JSON.parse(recheckContent);
+            const isLocalRe = recheckExisting.hostname === os.hostname() && recheckExisting.cwd === process.cwd();
+            let isAliveRe = true;
+            if (isLocalRe && recheckExisting.pid) {
+              isAliveRe = isProcessAlive(parseInt(recheckExisting.pid, 10));
+            }
+            stillStale = (Date.now() - recheckExisting.ts > 10000) || !isAliveRe;
+          } catch (readErr) {
+            stillStale = true;
+          }
+
+          if (stillStale) {
+            try {
+              fs.unlinkSync(lockFile);
+            } catch (_) {}
+          }
+        } catch (recErr) {
+          // Recovery mutex locked by someone else, wait and retry
+        } finally {
+          if (recFd !== null) {
+            try { fs.closeSync(recFd); } catch (_) {}
+          }
+          try {
+            fs.unlinkSync(recoveryLock);
+          } catch (_) {}
+        }
         continue;
       }
     }
@@ -181,20 +214,30 @@ function acquireLock(lockFile, timeoutMs = 10000) {
   throw new Error(`Lock timeout on ${lockFile}`);
 }
 
-function releaseLock(lockFile) {
+function releaseLock(lockFile, token) {
   try {
-    fs.unlinkSync(lockFile);
+    if (!fs.existsSync(lockFile)) {
+      return;
+    }
+    const content = fs.readFileSync(lockFile, 'utf8');
+    const existing = JSON.parse(content);
+    if (existing.token === token) {
+      fs.unlinkSync(lockFile);
+    } else {
+      console.warn(`[LockRelease] Ignored release of lock ownership. Current owner token is different (local: ${token}, file: ${existing.token}).`);
+    }
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      throw err;
+      console.error(`[LockRelease] Error releasing lock: ${err.message}`);
     }
   }
 }
 
 function lockedAppend(eventsFile, line) {
   const lockFile = eventsFile + '.lock';
+  let token = null;
   try {
-    acquireLock(lockFile);
+    token = acquireLock(lockFile);
   } catch (err) {
     console.error(`tree.sh: could not acquire lock on ${lockFile} within 10s — append aborted (no unlocked write)`);
     process.exit(1);
@@ -206,7 +249,7 @@ function lockedAppend(eventsFile, line) {
     console.error(`tree.sh: append failed (write error) for ${eventsFile} — event NOT recorded`);
     process.exit(1);
   } finally {
-    releaseLock(lockFile);
+    releaseLock(lockFile, token);
   }
 }
 

@@ -433,7 +433,7 @@ v2.0 移除了 4 個跟 `superpowers` 重疊的 skill（debug、test-strategy、
 
 **跟 Superpowers 怎麼共存？**
 
-Autopilot 是 rule-setter（定規則的人），Superpowers 是 executor（執行的人）。兩者透過三層觸發設計共存：
+Autopilot 本身可獨立運作,並在 Superpowers 安裝時與之共存:autopilot 的 orchestrator 透過 `.claude/dispatch-config.md` chain 把戰術執行委派給 Superpowers,未安裝時則 fall through 到 autopilot 自家 fallback skill。(歷史上 v2.0–v2.6 是「定規則 / 執行者」之分;自 v2.7.0 起 autopilot 也能完全 standalone。)兩者透過三層觸發設計共存:
 
 ```
 Layer 1 — CLAUDE.md 路由表（專案層級）

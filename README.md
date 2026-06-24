@@ -445,7 +445,7 @@ In the Claude Code world, "configuration" is natural language. A markdown file r
 
 **How does it work with Superpowers?**
 
-Autopilot is the rule-setter; Superpowers is the executor. They coexist through a layered triggering design:
+Autopilot is standalone-capable and coexists with Superpowers when it's installed: autopilot's orchestrators delegate tactical execution to Superpowers via `.claude/dispatch-config.md` chains, and fall through to autopilot's own fallback skills when it isn't. (Historically — v2.0–v2.6 — this was「rule-setter / executor」; since v2.7.0 autopilot runs fully standalone too.) They coexist through a layered triggering design:
 
 ```
 Layer 1 — CLAUDE.md routing table (project-level)

@@ -30,6 +30,7 @@ never invent one).
 ## 0. Context / thesis        — why now; what prior decision/research this builds on
 ## 1. Problem                 — the actual user goal (not the artifact)
 ## 2. OKR / KRs               — measurable success
+## 2.5 Global Constraints     — verbatim-propagated invariants (see § below); copied UNCHANGED into every implementer + reviewer dispatch
 ## 3. File-structure map      — files touched + responsibility (discipline #1)
 ## 4. Phases                  — bite-sized, each with a dev-flow size + acceptance (discipline #2/#3)
 ## 5. Test / validation       — what proves it; what is human-gated vs script-gated
@@ -38,6 +39,30 @@ never invent one).
 ## 8. Open questions          — only the Board (user) can answer
 ## Review log                 — R0 author + any dialectic rounds
 ```
+
+## Global Constraints (§2.5 — verbatim propagation)
+
+Plan-level invariants that **every** downstream implementer and reviewer must honour *identically*:
+version floors, dependency limits, exact named values, a forbidden API, a required interface shape.
+The point is **verbatim propagation** — these are copied UNCHANGED into each dispatch prompt, so an
+implementer and its reviewer can never diverge on a value (the classic "implementer used 2.4, reviewer
+assumed 2.6" fix-round). State each as a flat, quotable line:
+
+```markdown
+## 2.5 Global Constraints (copied verbatim into every dispatch)
+- Node ≥ 20.10 (do not use APIs added after 20.10).
+- All new scripts emit on stderr + exit codes; NO new JSON-schema scripts this plan.
+- The on-disk event log format is frozen — append-only, never rewrite a prior line.
+```
+
+Two rules:
+- **Single canonical statement.** The block lives once, in the plan's §2.5; dispatches *quote* it, they
+  do not paraphrase it (paraphrase = drift). This is the same "no second canonical statement" rule the
+  rest of autopilot follows.
+- **Interfaces are an expansion of the six-element `input`/`output`, not a parallel block.** When a task
+  consumes a producer task's output, name that contract inside the task's existing `input`/`output`
+  elements ("consumes the `{id}` JSON from task 3 / produces the allowlist task 5 reads") — do **not**
+  open a separate Interfaces section that would restate it and drift.
 
 ## Boundaries
 - **Authoring vs decomposition**: this template authors the *plan*; `agents/planner.md` decomposes an

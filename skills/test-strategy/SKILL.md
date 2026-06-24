@@ -13,6 +13,7 @@ Differences worth knowing:
 
 - **TDD ≠ test-strategy.** `superpowers:test-driven-development` focuses on the「先寫測試再寫實作」red-green-refactor cycle. **autopilot:test-strategy** covers test pyramid, baseline 守則, failure investigation funnel — orthogonal scope.
 - If you want both, use them together: TDD as the *coding loop*, test-strategy as the *strategy frame*. `.claude/dispatch-config.md`'s `## Testing methodology` chain controls orchestrator preference.
+- **Standalone limitation (be honest about it).** When `superpowers` is NOT installed, the red-green-refactor *coding loop* has **no native autopilot equivalent** — this skill is the strategy frame, not a TDD substitute. For TDD specifically, install `superpowers` (`test-driven-development`) or run the red-green cycle manually. (autopilot deliberately does not ship a `tdd` skill: that loop is superpowers' lane, and duplicating it would violate the skill-proliferation discipline.)
 
 <!-- Project-specific config (test commands, framework, conventions) -->
 !`cat .claude/test-strategy-config.md 2>/dev/null || echo "No project-specific test config found. Using generic defaults."`

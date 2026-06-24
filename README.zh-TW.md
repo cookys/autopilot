@@ -115,6 +115,8 @@ Autopilot 支援三種部署情境：
 
 Autopilot 完全 standalone 運作。Orchestrator fall through 到 autopilot 自家 fallback skill（`autopilot:debug`、`autopilot:test-strategy`、`autopilot:team`、`autopilot:profiling`）+ `native` 並行派發（在一個 response 內發出多個 `Task` tool call）。
 
+> **一個 standalone 缺口要知道**：red-green-refactor 的 **TDD coding loop** 沒有原生 autopilot skill —— `autopilot:test-strategy` 是*正交*的（test pyramid / baseline / failure funnel),不是 TDD 替代品。要 TDD 請裝 `superpowers`（`test-driven-development`),或手動跑 red-green 循環。
+
 不需要建立 `.claude/dispatch-config.md` — [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md) 頂部記載的預設行為就符合此情境。
 
 ### C. 你 user-level 有 `superpowers`，但某專案想 pure-autopilot
@@ -566,11 +568,12 @@ Autopilot 自帶 **20 個 hook**（最初 14 個於 v2.5.0 引入，之後成長
 ## 靈感來源
 
 - **Task-tree engine 既有技術（v2.16.0）** — externalized-state 基底及其護欄吸收已發表的教訓而非重蹈覆轍：append-only event log + 在 read-modify-write node 檔案上的 derived index（Steve Yegge 的 [Beads](https://github.com/steveyegge/beads) postmortem；TaskMaster schema/concurrency 事故報告 — 2026-06-12 調研的社群 issue-tracker 報告，調研時無單一 canonical URL）、每事件 `schema_version` 搭配 lazy migration（[LangGraph](https://github.com/langchain-ai/langgraph) 的 versioned-state 教訓；[Temporal](https://temporal.io) 的 history-evolvability 模型）、以及便宜的跨家族 judge panel 勝過單一大 judge（PoLL 結果 — [Verga et al. 2024, "Replacing Judges with Juries"](https://arxiv.org/abs/2404.18796)）。這些來源的所有量化門檻都當作待本地校準的 factory default，絕不作為理據。
-- **[gstack](https://github.com/garry-t/gstack)** — Garry Tan 為 Claude Code 打造的 skill 套件。CEO agent 的認知模式（Bezos 的 two-way door、Munger 的反向思維、Jobs 的減法聚焦）、Boil the Lake 完整性原則、以及範圍模式系統，都改編自 gstack 的 `plan-ceo-review` skill。
+- **[gstack](https://github.com/garrytan/gstack)** — Garry Tan 為 Claude Code 打造的 skill 套件。CEO agent 的認知模式（Bezos 的 two-way door、Munger 的反向思維、Jobs 的減法聚焦）、Boil the Lake 完整性原則、以及範圍模式系統，都改編自 gstack 的 `plan-ceo-review` skill。
 - **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk 的 18 位思想家多人格審議 skill。`think-tank-dialectic` 的強制機制（Dissent Quota、>70% 同意時的 Counterfactual Trigger、Problem Restate Gate、作為一級 verdict section 的 Minority Report、Epistemic Diversity Scorecard）改編自 Council 的 7 步協議和 agent frontmatter 慣例。最關鍵的 meta 洞察——*每個思考風格都必須攜帶自己的熔斷機制*——來自觀察到 Council 的 18 個 agent 100% 都有 `Grounding Protocol` section 帶自我限制的 hard rules。
 - **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li 在 Council 基礎上擴展的 6 審議室、31 位思想家版本。`think-tank-dialectic` 的 Hegelian Arc 結構（Thesis → Antithesis → Synthesis，強制提出非折中的 synthesis proposal）、Adaptive Depth Gate、Tacit Knowledge Extraction 協議（Polanyi 隱性知識）、以及「不同工具，不是更好的工具」這個關鍵定位框架，都改編自 Agora 的 8 步審議協議和 `/forge` 工程審議室的 verdict template。
 - **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung 為 Claude Code 打造的 12-agent + 15-hook 工程團隊 plugin。`v2.4.0` methodology agents（`reviewer` / `debugger` / `planner`）吸收了 devteam P7/P9/P10 框架的三條紅線紀律（closure / fact-driven / exhaustiveness）、六要素 Task Prompt 契約、evidence-first debug 方法論、PUA 壓力模式觸發、以及 read-only 方法論 agent 的物理工具限制模式。`v2.5.0` hooks 層吸收了 devteam 15 個 hook 中的 14 個（8 個 default-on Tier A + 6 個 opt-in Tier B），並根據 Ship A review 調整：anchored branch-protection regex（C1 修正）、統一 secret-patterns module（mi1 修正）、cost-tracker opt-out、8/8 Tier A 測試覆蓋。autopilot 負責方法論層、voltagent 負責角色特化層的分工，是對 devteam 一體化設計的刻意發散——保持和 voltagent 角色 agent 生態系的正交。
 - **[claude-powerloop-plugin](https://github.com/elct9620/claude-powerloop-plugin)** — Aotokitsuruya 的 cron-loop Plan/Execute/Review/Sample plugin（Apache-2.0）。`references/blind-dispatch.md` 的 outcome-blinding 原則（round-2+ reviewer re-dispatch 必須剝離先前判決以防 quality-gate 自我繞過）與 leaky-vs-blind prompt 範例組來自 powerloop `skills/powerloop/examples/blind-dispatch.md`。powerloop 用在多 session cron loop，autopilot 限定在 `quality-pipeline` Re-review Loop 與 `audit` Phase 4 verification 的 session-driven re-dispatch。
+- **[superpowers](https://github.com/obra/superpowers)** — obra（Jesse Vincent）的 agentic-skills 框架,autopilot 與之共存。`scripts/check-dispatch-suppression.sh`(反作弊 dispatch-prompt linter —— dispatcher 不得誘導 reviewer 壓制或預先定 finding 的 severity)與 `references/plan-template.md` 的逐字 **Global Constraints** 傳遞,改編自 superpowers v6 的 `subagent-driven-development` 反作弊 reviewer 契約與 `writing-plans` global-constraint block(2026-06-24 對照 v6.0.3 調研)。
 
 ---
 

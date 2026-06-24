@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _(none in progress)_ | | | |
+| 2026-06-24 | [gstack-superpowers-learnings](2026-06-24-gstack-superpowers-learnings/README.md) — dispatch-suppression check (E1) + plan Global Constraints (E2) + standalone-TDD doc-honesty (E3) | v2.25.0 | `feat/v2.25.0-dispatch-suppression` |
 
 ## 已完成 (Completed)
 

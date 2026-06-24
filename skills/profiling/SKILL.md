@@ -26,6 +26,8 @@ Use this skill for: performance-only investigation (slow queries, high memory, C
 
 **Prohibited**: reading code to guess causes, modifying code based on "intuition", concluding without data.
 
+**Metric-honesty rule**: an LLM reading static source **cannot measure** a real-world number (LCP, latency, throughput, memory) — it can only reason about likely causes. Label every such finding **"potential impact"**, never as a measurement. A figure that didn't come from a tool run is a hypothesis, not a result; presenting it as measured is fabrication. Field data and lab/synthetic data are not interchangeable — don't quote one as the other. (This is the "verify by artifacts, never self-report" axiom applied to the one place an LLM is most tempted to invent a number.)
+
 ## Tool Selection Guide
 
 Pick the right tool for the symptom:

@@ -68,6 +68,11 @@ These are the autopilot methodology discipline. Violating any of them means your
 ### Code correctness
 - **Security**: SQL injection, XSS, CSRF, command injection, path traversal, SSRF, hardcoded secrets, insecure deserialization, timing attacks on secret comparison
   - This is the **general pre-merge security pass**, run as part of every review. For a **dedicated, security-focused deep-dive** (threat modeling, supply-chain / dependency audit, exhaustive vuln sweep), autopilot does not ship a separate skill — use Claude Code's **native `/security-review`** command. autopilot owns *when* security is in scope (this checklist, on every review); the deep specialist pass is delegated, not re-implemented.
+- **LLM / agent-dispatch threats** (autopilot dispatches LLM workers itself, so these are live failure modes in *this* codebase's own diffs — not generic web-app theater):
+  - **Model output as untrusted data**: a diff that trusts a worker's stream/self-report instead of a git artifact (the "verify by artifacts, never self-report" axiom) — flag any new dispatch path that gates on parsed agent prose.
+  - **Prompt-injection as a trust boundary**: untrusted content (file contents, web fetches, tool output) flowing into a dispatched prompt without being marked as data-to-surface rather than instructions-to-follow.
+  - **Excessive agency**: a worker granted broader tool/permission scope than its task needs (esp. auto-approve / `--dangerously-skip-permissions` paths) — confirm the worktree/allowlist boundary actually constrains it.
+  - **Unbounded consumption**: a dispatch loop with no budget / round / wall-clock cap, or a fan-out with no fail-closed ceiling.
 - **Logic**: off-by-one, null/undefined dereference, type coercion, inverted conditionals, unreachable branches
 - **Boundaries**: empty input, empty string, negative numbers, integer overflow, Unicode edge cases, concurrent modification
 - **Error handling**: uncaught exceptions, swallowed errors, silent fallbacks, misleading error messages
@@ -93,9 +98,9 @@ Canonical patterns, examples, and output format: [`skills/quality-pipeline/refer
 
 | Severity | Examples |
 |----------|---------|
-| 🔴 Critical | Hardcoded password / token / key, SQL injection, arbitrary code execution, auth bypass |
-| 🟠 Major | XSS, path traversal, SSRF, insecure deserialization, timing attacks on secrets |
-| 🟡 Minor | Overly permissive CORS, sensitive data in logs, missing rate limiting |
+| 🔴 Critical | Hardcoded password / token / key, SQL injection, arbitrary code execution, auth bypass, a dispatch path that gates a merge on agent self-report instead of a git artifact, excessive agency (worker granted scope beyond its task with no worktree/allowlist boundary) |
+| 🟠 Major | XSS, path traversal, SSRF, insecure deserialization, timing attacks on secrets, prompt-injection via untrusted content flowing into a dispatched prompt as instructions, a dispatch loop with no budget/round/wall-clock cap |
+| 🟡 Minor | Overly permissive CORS, sensitive data in logs, missing rate limiting, model output trusted without an artifact cross-check on a non-merge-gating path |
 | 🔵 Suggestion | Debug mode in prod, stack traces leaked to users, minor cleanup opportunities |
 
 ## Output Contract (MANDATORY format)

@@ -154,6 +154,25 @@ to re-derive the problem before fixing — wasted budget, slower loop. The
 blinding rule is specifically about **reviewer-role re-dispatch**, not
 fixer dispatch.
 
+## Doubt-theater self-audit (cross-cycle — are you doubting or just validating?)
+
+Everything above is **per-dispatch** hygiene (scan *this* prompt for leaked
+verdicts). This is a different layer: a **cross-cycle** check on the
+dispatcher's *own* accept/reject behavior. Blinding the prompt is worthless if
+you then rubber-stamp whatever comes back.
+
+> **Self-audit prompt** (NOT a mechanized signal): across **2+ blind re-dispatch
+> cycles** where the reviewer surfaced *substantive* findings, if you classified
+> **zero** of them as actionable, you are **validating, not doubting** — treat
+> that as a signal to *harden the next dispatch* (sharper scope, an adversarial
+> angle the reviewer hasn't tried), not to pass.
+
+This is a forcing-function prompt, not a counter — it relies on the dispatcher
+honestly reading its own ratio, the same way the rest of this file is contract,
+not code (see "Where this principle is referenced"). If a deterministic version
+is ever wanted, route the cycle count through a `risk-counter.sh`-style
+persistent store — a separate, deferred decision, not built here.
+
 ## Disjointness gate ≠ reviewer clearance (the carve-out)
 
 `/l4 /l5` width fan-out authorizes batch parallelism with a **deterministic

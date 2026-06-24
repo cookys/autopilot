@@ -26,10 +26,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### `check-redispatch-prompt.sh` has no test (pre-existing gap)
-- **Trigger**: next time `check-redispatch-prompt.sh`'s patterns are edited, OR an idle batch to close test-coverage gaps.
-- **Context**: surfaced by the v2.25.0 Ops dialectic — the round-2+ leaky-phrase linter (`scripts/check-redispatch-prompt.sh`) ships with **zero test coverage** (its new sibling `check-dispatch-suppression.sh` got a 16-assertion test). Editing its regex is unprotected. Mirror `hooks/tests/check-dispatch-suppression.test.sh`: positive (leaky phrase caught) + negative (honest re-dispatch prompt passes) fixtures, auto-discovered by `run.sh`.
-- **Effort**: S.
+### ✅ DONE (2026-06-24, this ship) — `check-redispatch-prompt.sh` had no test (pre-existing gap)
+- **Resolution**: added `hooks/tests/check-redispatch-prompt.test.sh` (21 assertions, auto-discovered by `run.sh`) mirroring the `check-dispatch-suppression.test.sh` sibling — **single-trigger** positives (each leaky marker independently guarded, so a regression in one detector can't hide behind a co-occurring marker), honest-prompt negatives, and the 0/1/2 usage contract. Also added a minimal `-h|--help` block to the script so it conforms to the CLAUDE.md inventory invariant "All scripts respond to `--help`" (it previously fell through to exit 2). Pre-commit reviewer verified the guards are non-tautological.
+- **Trigger** (original): next time `check-redispatch-prompt.sh`'s patterns are edited, OR an idle batch to close test-coverage gaps.
+- **Context** (original): surfaced by the v2.25.0 Ops dialectic — the round-2+ leaky-phrase linter shipped with **zero test coverage** (its sibling `check-dispatch-suppression.sh` got a 16-assertion test). Editing its regex was unprotected.
+- **Effort**: S (done).
 - **Source**: 2026-06-24 v2.25.0 ship (`05d02e4`) Ops review.
 
 ### Depth-0 loop hardening — content-fingerprint no-progress + hook backpressure (from loop-engineering study)
@@ -46,8 +47,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ### qc-panel refute pass — graduate from shadow to gating (calibration-gated)
 - **Trigger**: `scripts/calibration.sh report` over accumulated refute-shadow samples shows the refute pass does **not** false-suppress critical/`MISSED:` findings (meets the existing graduation-criteria data block). Until then it stays shadow.
-- **Context**: v2.24.0 shipped the refute pass as **shadow / non-gating** — it emits `refute_shadow` + rides into the calibration `--source` tag but never alters `verdict` (a refute pass that suppresses a true critical is worse than the bug it fixes). Graduation = wire the survived/refuted result into the authoritative verdict, but only after calibration proves it safe. Also fold in the depth-0 reviewer 🔵: add a regression assertion to `hooks/tests/qc-panel.test.sh` that a stubbed refute judge returning `REFUTED` for a real miss still yields `verdict=fail` (locks the non-gating invariant mechanically before any graduation can silently break it).
-- **Effort**: S (the test) now + L (graduation) when the trigger fires.
+- **Context**: v2.24.0 shipped the refute pass as **shadow / non-gating** — it emits `refute_shadow` + rides into the calibration `--source` tag but never alters `verdict` (a refute pass that suppresses a true critical is worse than the bug it fixes). Graduation = wire the survived/refuted result into the authoritative verdict, but only after calibration proves it safe. ✅ The non-gating regression assertion landed 2026-06-24 (this ship): `hooks/tests/qc-panel.test.sh` Test 19 stubs a cross-family refute judge that REFUTES every real miss and asserts `verdict` stays `fail` + `survived_misses:[]` + non-empty `refuted_misses` — locking the invariant mechanically before any graduation can silently break it. **Remaining = the L graduation itself** (wire survived/refuted into the authoritative verdict), still calibration-gated.
+- **Effort**: ~~S (the test) now~~ done + L (graduation) when the trigger fires.
 - **Source**: 2026-06-24 v2.24.0 ship (`77214a1`) + depth-0 qc 🔵 (reviewer `a4162329`).
 
 ### `/l5` hetero-parallel width fan-out (machinery built, deliberately unwired)

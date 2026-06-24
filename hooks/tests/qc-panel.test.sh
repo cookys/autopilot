@@ -175,7 +175,7 @@ fi
 if [ -f "${VERDICT_FILE:-}" ]; then
   VERDICT_VAL="$(grep -o '"verdict":"[^"]*"' "$VERDICT_FILE" | cut -d'"' -f4)"
   # With MISSED items present, deterministic merge → fail
-  assert_eq "fail" "$VERDICT_VAL" "verdict is fail when missed goals present"
+  assert_eq "$VERDICT_VAL" "fail" "verdict is fail when missed goals present"
 fi
 
 # ── Test 7: non-verdict-bearing report → skipped, exit 0 ─────────────────────
@@ -429,6 +429,111 @@ if [ -f "$PROMPT_RECORD" ]; then
     "scope rule preamble present in prompt"
 else
   fail "scope-rule test: no prompts recorded by stub"
+fi
+
+# ── Test 19: refute pass is SHADOW / NON-GATING — REFUTED misses never flip ───
+# Locks the v2.24.0 invariant mechanically (BACKLOG): even when the cross-family
+# refute judge REFUTES every real miss, the authoritative verdict MUST stay
+# `fail`. A refute pass that could suppress a true critical is worse than the bug
+# it fixes — graduation from shadow is calibration-gated, so this guards the
+# non-gating contract before any graduation can silently break it.
+
+# claude stub: detects the Q4 refute prompt FIRST (it would otherwise misroute on
+# the synth/Q3 branches), then synth → deterministic fail, then the Q1/Q2/Q3 shapes.
+REFUTE_CLAUDE="$TEST_TMP/claude-refute"
+cat > "$REFUTE_CLAUDE" <<'STUB'
+#!/usr/bin/env bash
+PROMPT="$(cat)"
+if printf '%s' "$PROMPT" | grep -q "REFUTE this claim"; then
+  printf 'REFUTED: the claimed miss is out of scope\n'
+elif printf '%s' "$PROMPT" | grep -q "synthesis judge"; then
+  printf '{"verdict":"fail","dissents":[],"extras":[]}\n'
+elif printf '%s' "$PROMPT" | grep -q "NOT achieved"; then
+  printf 'MISSED: goal-3 not completed\n'
+elif printf '%s' "$PROMPT" | grep -q "BEYOND"; then
+  printf 'EXTRA: extra logging\n'
+else
+  printf 'ACHIEVED: goal-1 done\n'
+fi
+STUB
+chmod +x "$REFUTE_CLAUDE"
+
+# agy stub: refute prompt arrives as $2; refute branch first, then Q-shapes.
+REFUTE_AGY="$TEST_TMP/agy-refute"
+cat > "$REFUTE_AGY" <<'STUB'
+#!/usr/bin/env bash
+PROMPT="${2:-}"
+if printf '%s' "$PROMPT" | grep -q "REFUTE this claim"; then
+  printf 'REFUTED: the claimed miss is out of scope (agy)\n' > ./verdict.txt
+elif printf '%s' "$PROMPT" | grep -q "NOT achieved"; then
+  printf 'MISSED: goal-3 not completed (agy)\n' > ./verdict.txt
+elif printf '%s' "$PROMPT" | grep -q "BEYOND"; then
+  printf 'EXTRA: extra logging (agy)\n' > ./verdict.txt
+else
+  printf 'ACHIEVED: goal-1 done (agy)\n' > ./verdict.txt
+fi
+printf 'DONE\n'
+STUB
+chmod +x "$REFUTE_AGY"
+
+REFUTE_REPORT="$TEST_TMP/refute-report.json"
+cat > "$REFUTE_REPORT" <<'EOF'
+{
+  "node": "refute-node",
+  "verdict": "pass",
+  "confidence": 0.9,
+  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "artifact_paths": [],
+  "doa_log": [],
+  "escalations": []
+}
+EOF
+
+REFUTE_CAL_DIR="$TEST_TMP/calibration-refute"
+REFUTE_OUT_DIR="$TEST_TMP/refute-panel-out"
+mkdir -p "$REFUTE_OUT_DIR"
+QC_CLAUDE_BIN="$REFUTE_CLAUDE" QC_AGY_BIN="$REFUTE_AGY" \
+  CALIBRATION_DATA_DIR="$REFUTE_CAL_DIR" \
+  "$SCRIPT" --report "$REFUTE_REPORT" --artifacts "$ARTIFACT" \
+  --out "$REFUTE_OUT_DIR" --node refute-node >/dev/null 2>&1
+REFUTE_EXIT=$?
+assert_eq "0" "$REFUTE_EXIT" "refute scenario exits 0"
+
+REFUTE_VERDICT_FILE=""
+for _f in "$REFUTE_OUT_DIR"/refute-node-*.json; do
+  case "$_f" in *skipped*) continue ;; esac
+  [ -f "$_f" ] && REFUTE_VERDICT_FILE="$_f" && break
+done
+assert_file_exists "${REFUTE_VERDICT_FILE:-/nonexistent}" "refute: verdict artifact written"
+
+if [ -f "${REFUTE_VERDICT_FILE:-}" ]; then
+  RV_CONTENT="$(cat "$REFUTE_VERDICT_FILE")"
+  RV_VERDICT="$(printf '%s' "$RV_CONTENT" | grep -o '"verdict":"[^"]*"' | head -1 | cut -d'"' -f4)"
+  # THE invariant: misses were all REFUTED, yet the authoritative verdict holds fail.
+  assert_eq "$RV_VERDICT" "fail" "NON-GATING: verdict stays fail though every miss was refuted"
+  assert_contains "$RV_CONTENT" '"refute_shadow":' "refute_shadow field present"
+  assert_contains "$RV_CONTENT" '"survived_misses":[]' "survived_misses empty (all refuted)"
+  # refuted_misses must carry the refuted candidate(s) — not silently dropped.
+  REFUTED_ARR="$(printf '%s' "$RV_CONTENT" | python3 -c '
+import sys, json
+try:
+    d = json.loads(sys.stdin.read())
+    print(len(d.get("refute_shadow", {}).get("refuted_misses", [])))
+except Exception:
+    print(0)
+' 2>/dev/null || echo 0)"
+  if [ "${REFUTED_ARR:-0}" -ge 1 ]; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "refute: refuted_misses should be non-empty, got count=$REFUTED_ARR"
+  fi
+fi
+
+# The shadow result rides into the calibration sample's source tag (survived:0).
+assert_file_exists "$REFUTE_CAL_DIR/samples.jsonl" "refute: calibration sample landed"
+if [ -f "$REFUTE_CAL_DIR/samples.jsonl" ]; then
+  assert_contains "$(tail -1 "$REFUTE_CAL_DIR/samples.jsonl")" "survived:0" \
+    "refute: calibration source tag records survived:0"
 fi
 
 finalize_test

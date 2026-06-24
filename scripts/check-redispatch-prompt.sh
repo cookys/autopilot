@@ -15,6 +15,28 @@
 
 set -euo pipefail
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<'USAGE'
+check-redispatch-prompt.sh — leaky-phrase linter for round-2+ re-dispatch prompts.
+
+Enforces the dispatcher pre-flight checklist in references/blind-dispatch.md: a
+re-dispatched reviewer/auditor prompt must NOT leak round-cycle meta-signal
+(round numbers, prior-finding anchors, fixer-applied markers, severity glyphs,
+quoted-code excerpts). Sibling of check-dispatch-suppression.sh (anti-gaming).
+
+Usage:
+  scripts/check-redispatch-prompt.sh <prompt-file>     # exit 1 if leaky
+  scripts/check-redispatch-prompt.sh -                 # read prompt from stdin
+  echo "..." | scripts/check-redispatch-prompt.sh -    # same
+
+Exit codes:
+  0  prompt is blind-safe
+  1  prompt contains one or more leaky phrases (listed on stderr)
+  2  usage error
+USAGE
+  exit 0
+fi
+
 if [[ $# -ne 1 ]]; then
   echo "usage: $0 <prompt-file>|-" >&2
   exit 2

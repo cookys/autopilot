@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### `check-redispatch-prompt.sh` has no test (pre-existing gap)
+- **Trigger**: next time `check-redispatch-prompt.sh`'s patterns are edited, OR an idle batch to close test-coverage gaps.
+- **Context**: surfaced by the v2.25.0 Ops dialectic — the round-2+ leaky-phrase linter (`scripts/check-redispatch-prompt.sh`) ships with **zero test coverage** (its new sibling `check-dispatch-suppression.sh` got a 16-assertion test). Editing its regex is unprotected. Mirror `hooks/tests/check-dispatch-suppression.test.sh`: positive (leaky phrase caught) + negative (honest re-dispatch prompt passes) fixtures, auto-discovered by `run.sh`.
+- **Effort**: S.
+- **Source**: 2026-06-24 v2.25.0 ship (`05d02e4`) Ops review.
+
 ### Depth-0 loop hardening — content-fingerprint no-progress + hook backpressure (from loop-engineering study)
 - **Trigger (a)** content-fingerprint: a real case where a foreman/dispatch loop **runs busy but makes no actual progress** (same diff / same verdict across rounds) and the **round cap (3)** lets it burn most of a budget before tripping — i.e. the crude round cap proves too loose. **Trigger (b)** backpressure: only if the `/loop` + event-driven harness integration ([[project_harness-integration-direction]]) is actually built out into an event/webhook-fed loop.
 - **Context**: 2026-06-24 study of `maxmilian/loop-engineering` found autopilot already embodies all 7 of its loop principles (verify-by-artifact, machine-checkable done, budget/escalation exits, filesystem-as-memory via `tree.sh`, semi-autonomous DOA gate). The ONE grdually-coarse spot: autopilot's depth-0 has a **wall-clock stall detector** (hung foreman trips the clock, `level-front-door.md:207`) + round cap + WTF cap, but no **loop-fingerprinting** (content/state unchanged across N cycles ⇒ break EARLY, before the round cap). And hook **rate-limiting/backpressure** (webhook-storm guard) is a non-gap today (tool-event + self-paced triggers) that becomes relevant only if event-driven `/loop` deepens.

@@ -1,7 +1,7 @@
 # Plan — Learnable items from gstack + superpowers v6 (and the standalone TDD gap)
 
 **Date**: 2026-06-24
-**Status**: CONVERGED v2 (post-dialectic Round 1 — Architect/Ops/Skeptic independently convergent)
+**Status**: ✅ Shipped in v2.25.0 — merged as `05d02e4` (E1+E2+E3; L2/L3 cut as selection bias)
 **Source**: verified survey of `obra/superpowers` v6.0.3 (2026-06-18) + `garrytan/gstack` (2026-06-21), GitHub-API-confirmed.
 
 > **Round-1 dialectic verdict (unanimous):** same thin-slice shape as the prior two same-genre studies. The

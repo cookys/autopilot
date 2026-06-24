@@ -8,12 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-06-24 | [gstack-superpowers-learnings](2026-06-24-gstack-superpowers-learnings/README.md) — dispatch-suppression check (E1) + plan Global Constraints (E2) + standalone-TDD doc-honesty (E3) | v2.25.0 | `feat/v2.25.0-dispatch-suppression` |
+| _(none in progress)_ | | | |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-06-24 | [gstack-superpowers-learnings](_archive/2026-06-24-gstack-superpowers-learnings/README.md) — L-size; dialectic-converged learnings from `obra/superpowers` v6.0.3 + `garrytan/gstack`: E1 `check-dispatch-suppression.sh` anti-gaming linter (+ test) + E2 plan-template Global Constraints + E3 standalone-TDD doc-honesty; **cut** L2 runtime-QA / L3 UX-axis (selection bias). Also bundles the `superpowers:code-reviewer` stale-ref fix + a 4-facet doc-staleness sweep | v2.25.0 | [`05d02e4`](../../../../commit/05d02e4) | [plan](../plans/2026-06-24-gstack-superpowers-learnings.md) |
 | 2026-06-24 | qc-refute-shadow-and-no-silent-caps (L-size; CC-Workflow learnings adjudicated → 2 adopted: `qc-panel.sh` shadow refute pass — cross-family self-refutation, `default-refuted-if-uncertain`, **non-gating until calibration graduates it** — + a shared no-silent-caps disclosure clause across reviewer/audit contracts generalizing doc-sync; dispatched via `/l4` foreman; no project dir, see CHANGELOG) | v2.24.0 | (this ship) | (CHANGELOG entry) |
 | 2026-06-23 | [l4-l5-dep-graph-fanout](_archive/2026-06-23-l4-l5-dep-graph-fanout/README.md) — `/l4 /l5` width fan-out: research → S0.a **fleet-measured** (built portable probe + zero-dep ingest endpoint; 6 machines / 6-of-7 measurable repos over the d2 gate) → **descope overturned** → **S1** result-validating file-disjointness gate (`check-disjointness.sh`) + **Phase L** Tier-2 batch engine (`dispatch-batch.sh`: all-or-nothing / merge-conflict→serial-collapse / single-base / setsid-verified kill-trap / Amdahl telemetry). Also fixed a qc-gate SIGPIPE bug. `/l5` hetero-parallel → BACKLOG; Amdahl auto-tune → won't-do | (no version bump) | [`577ba8d`](../../../../commit/577ba8d) (Phase L) · [`f21346e`](../../../../commit/f21346e) (S1) | [plan](../plans/2026-06-23-l4-l5-dep-graph-fanout.md) |
 | 2026-06-23 | qc-gate-forcing-function (config-driven anti-skip pre-push gate — protected-path pushes need a `QC-Verdict: PASS` trailer or `.qc/<sha>.verdict.json`; `resolve-qc-gate.sh` + per-project `qc-gate-config.md`; no project dir, see CHANGELOG) | v2.22.0 | [`84d0f29`](../../../../commit/84d0f29) | (CHANGELOG entry) |

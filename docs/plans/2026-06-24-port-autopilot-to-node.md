@@ -49,6 +49,9 @@ The target is to move all JSON validation, file-locking, panel synthesis, and st
 - **Fail-Closed vs. Fail-Open Boundaries**: 
   - **Critical path scripts** (e.g., `check-node-report.js`, `tree.js`) MUST Fail Closed: any error/malformation/pointer resolution failure aborts with a non-zero exit code.
   - **Non-critical/telemetry scripts** (e.g., `risk-counter.js`, `toggle-payload-capture.js`, `session-start.js`) MUST Fail Open: exceptions are caught, warning messages are printed to stderr, and they exit with code 0 to prevent blockages of the core agent loops in restricted environments.
+- **Windows CRLF Safe-Harbor**: Checksum calculations and text processors must normalize line endings (`replace(/\r\n/g, '\n')`) for text/markdown files only (using extension/UTF-8 guards to prevent corruption of binary assets) before computing hashes.
+- **Canonical LF Output**: Keep all generated repo text output canonical LF. Do NOT use `os.EOL` as it expands to CRLF on Windows.
+- **Safe Process Existence Check**: In `isProcessAlive()`, treat `EPERM` (permission denied) as "alive/unknown" instead of dead/stale.
 
 ---
 
@@ -112,31 +115,45 @@ The target is to move all JSON validation, file-locking, panel synthesis, and st
 ### Phase 5: Port `tree.sh` (Task Tree Engine) · Effort H
 * **Tree Engine (`scripts/tree.js`)**:
   - Implement subcommands: `init`, `emit`, `rebuild-index`, `next-decision`, `report`, `escalations`, `fetch`, `board-status`.
-  - **Cross-Platform File Locking**: Implement a self-healing hybrid locking loop in JS:
+  - **Cross-Platform File Locking**: Implement a robust self-healing hybrid locking loop in JS using process existence, hostname, workspace keys, and random tokens:
     ```javascript
     function acquireLock(lockFile, timeoutMs = 5000) {
       const start = Date.now();
-      const lockData = JSON.stringify({ pid: process.pid, ts: start });
+      const token = crypto.randomUUID();
+      const lockData = JSON.stringify({
+        pid: process.pid,
+        ts: start,
+        hostname: os.hostname(),
+        cwd: process.cwd(),
+        token: token
+      });
       while (Date.now() - start < timeoutMs) {
         try {
-          // Attempt exclusive write
+          // Attempt exclusive write (wx)
           const fd = fs.openSync(lockFile, 'wx');
           fs.writeFileSync(fd, lockData);
           fs.closeSync(fd);
           return;
         } catch (err) {
           if (err.code !== 'EEXIST') throw err;
-          // Lockfile exists: check for stale lock (PID dead or timeout exceeded)
+          // Lockfile exists: verify if stale (PID dead / timeout exceeded)
           try {
             const existing = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
-            const isAlive = existing.pid ? isProcessAlive(existing.pid) : false;
+            const isLocal = existing.hostname === os.hostname() && existing.cwd === process.cwd();
+            let isAlive = true;
+            if (isLocal && existing.pid) {
+              isAlive = isProcessAlive(existing.pid);
+            }
             const isStale = (Date.now() - existing.ts > 10000) || !isAlive;
             if (isStale) {
+              // Attempt to recover lock safely (quarantine/warning logging instead of silent unlink)
+              console.warn(`[LockRecovery] Stale lock detected (token: ${existing.token}). Overwriting.`);
               fs.unlinkSync(lockFile);
               continue; // retry immediate acquisition
             }
           } catch (readErr) {
-            // Unparseable/empty lockfile is treated as stale
+            // Unparseable/empty lockfile is treated as stale/corrupted and quarantined
+            console.warn(`[LockRecovery] Corrupt lockfile detected. Quarantining.`);
             try { fs.unlinkSync(lockFile); } catch (e) {}
           }
           // Sleep 50ms (synchronous loop delay)
@@ -147,7 +164,13 @@ The target is to move all JSON validation, file-locking, panel synthesis, and st
       throw new Error("Lock timeout");
     }
     function isProcessAlive(pid) {
-      try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (err) {
+        // EPERM means process exists but we lack permission to signal it
+        return err.code === 'EPERM';
+      }
     }
     ```
   - Event appending and JSONL parsing.
@@ -198,6 +221,12 @@ The target is to move all JSON validation, file-locking, panel synthesis, and st
 * **Risk 3: Environment variables mapping**
   - *What guarantees failure*: Missing key environment seams (like `QC_CLAUDE_BIN` or `QC_AGY_BIN`) inside Node's `child_process.spawn`.
   - *Mitigation*: Explicitly inherit `process.env` in all child process executions.
+* **Risk 4: Concurrency race during stale lock recovery**
+  - *What guarantees failure*: A naive "read lock, decide stale, unlink" can race when two concurrent processes both decide a lock is stale and both try to unlink and recreate it simultaneously.
+  - *Mitigation*: Include a random token in lock metadata. When a stale lock is detected, the reclaiming process must use a recovery mutex (such as a temporary lock folder/file) to serialize the unlink-and-reclaim sequence.
+* **Risk 5: Binary asset corruption during CRLF normalization**
+  - *What guarantees failure*: A blanket regex replace of `\r\n` to `\n` across arbitrary files can corrupt binary assets (images, PDFs) in the repository.
+  - *Mitigation*: Use strict extension guards (only target `.md`, `.json`, `.js`, `.sh`, `.txt`) and verify the content is valid UTF-8 before applying CRLF normalization.
 
 ---
 
@@ -239,3 +268,16 @@ The target is to move all JSON validation, file-locking, panel synthesis, and st
     - Wrap process checks in platform-specific logic and fall back safely.
     - Cap the lock TTL at 10 seconds.
     - Verify regex parity with explicit test patterns in `doc-drift-gate.test.js`.
+* **R2/R3 (2026-06-24)**: Dialectic review via Codex GPT-5.5 (thinking = xhigh).
+  - **Round 3 (Thesis vs. Antithesis)**:
+    - *Lock Metadata*: PID-only ownership is vulnerable across different hosts or directories in multi-agent environments. Lock data needs detailed context (hostname, cwd, token).
+    - *OS Process Probing*: `process.kill(pid, 0)` behavior throws `EPERM` on Windows/Unix if permission restricts signaling, which shouldn't be misread as stale.
+    - *Lock Recovery Race*: Naive stale check unlinking is prone to race conditions if two processes try to recover the lock at the same time.
+    - *Binary Corruption*: Blanket CRLF replacement can corrupt non-text files (images, zip, PDFs) in the repository.
+    - *Console/Quarantine logging*: Silent stale-lock deletion hides concurrency defects.
+  - **Round 3 Synthesis**:
+    - Expand lock JSON metadata to include `hostname`, `cwd`, and a random `token` UUID.
+    - Wrap `isProcessAlive` to safely treat `EPERM` as "process is alive."
+    - Require extension/UTF-8 guards for CRLF normalization.
+    - Output warnings and quarantine corrupted locks instead of silent deletion.
+    - Standardize text output to canonical LF; avoid `os.EOL` to prevent CRLF injection on Windows.

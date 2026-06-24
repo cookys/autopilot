@@ -15,5 +15,5 @@
 | **Phase 3** | S | Port `doc-drift-gate.py` to JS | Completed |
 | **Phase 4** | L | Port `check-node-report.sh` to JS | Completed |
 | **Phase 5** | H | Port `tree.sh` to JS with atomic self-healing flock | Completed |
-| **Phase 6** | H | Port `qc-panel.sh` to JS with robust last-json parsing | Pending |
-| **Phase 7** | S | E2E validation & clean up old scripts | Pending |
+| **Phase 6** | H | Port `qc-panel.sh` to JS with robust last-json parsing | Completed |
+| **Phase 7** | S | E2E validation & clean up old scripts | Completed |

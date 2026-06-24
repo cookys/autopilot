@@ -1,0 +1,27 @@
+{
+  "node": "phase-7",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "E2E validation & clean up old scripts.",
+  "evidence_pointers": [
+    "docs/projects/2026-06-24-port-autopilot-to-node/README.md:1-20",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-7.diff:1-30",
+    "scripts/qc-panel.js:290-310"
+  ],
+  "artifact_paths": [
+    {
+      "path": "docs/projects/2026-06-24-port-autopilot-to-node/README.md",
+      "sha256": "6b08d88e5492033e49a2f213bb118d1d2cab945c0075321c92fbd5399e858160"
+    },
+    {
+      "path": "docs/projects/2026-06-24-port-autopilot-to-node/phase-7.diff",
+      "sha256": "dadca3950851124ac9bf1257780f450488d8b0dfa3be6a9fbb7e0bc790b1c7a4"
+    },
+    {
+      "path": "scripts/qc-panel.js",
+      "sha256": "da1cbed9e8b289f23748a1b3288a7feb003cad194d5cd2c0fa410616f3de1846"
+    }
+  ],
+  "doa_log": [],
+  "escalations": []
+}

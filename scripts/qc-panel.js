@@ -294,7 +294,7 @@ async function main() {
       let childArgs = [];
 
       if (isCodex) {
-        childBin = agyBin;
+        childBin = agyBaseName === 'codex' ? agyBin : 'codex';
         childArgs = [
           'exec',
           '--model', judgeBModel,
@@ -428,7 +428,7 @@ async function main() {
       let childArgs = [];
 
       if (isCodex) {
-        childBin = agyBin;
+        childBin = agyBaseName === 'codex' ? agyBin : 'codex';
         childArgs = [
           'exec',
           '--model', judgeBModel,

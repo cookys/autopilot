@@ -1,8 +1,19 @@
 #!/usr/bin/env node
 /**
  * cost-tracker — Stop
- * Logs session token usage + estimated cost to ~/.claude/metrics/costs.jsonl.
- * Opt-out: set autopilot.costTracker = false in settings.json.
+ * Logs per-session token usage + estimated cost to ~/.claude/metrics/costs.jsonl.
+ * Opt-out: set AUTOPILOT_COST_TRACKER=false (or autopilot.costTracker=false in
+ * settings.json, injected as that env var).
+ *
+ * The Stop hook fires once per assistant turn, but the 2.1.186 Stop payload has
+ * NO usage field — so usage is summed from the transcript (`transcript_path` in
+ * the payload). Because the transcript is cumulative and Stop fires per turn, a
+ * per-session cursor (~/.claude/metrics/.cursors/<session>.json) tracks how many
+ * assistant turns were already logged, and only NEW turns are appended each Stop.
+ * Summing every row in costs.jsonl then yields the true session cost with no
+ * double-count. See cost-tracker-lib.js for the aggregation.
+ *
+ * Fail-open: any error → exit 0, write nothing (a metrics hook must never block).
  */
 
 'use strict';
@@ -10,66 +21,81 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { parseAssistantTurns, aggregateSince } = require('./cost-tracker-lib');
+const { resolveTranscriptPath } = require('./transcript-reader-lib');
 
-// Model pricing (USD per 1M tokens) — update when Anthropic changes pricing
-const PRICING = {
-  haiku:  { input: 0.8,  output: 4 },
-  sonnet: { input: 3,    output: 15 },
-  opus:   { input: 15,   output: 75 },
-};
-
-function getRate(model) {
-  const m = String(model || '').toLowerCase();
-  if (m.includes('haiku'))  return PRICING.haiku;
-  if (m.includes('opus'))   return PRICING.opus;
-  return PRICING.sonnet; // default
+function sanitizeSession(s) {
+  return String(s || 'unknown').replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown';
 }
 
-// ⚠️ STILL DISABLED (2026-06-23, v2.23.0): the read below was fixed to fd 0,
-// but the Stop-event payload on Claude Code 2.1.186 carries NO `usage`/`model`
-// fields (keys: session_id, transcript_path, cwd, permission_mode, effort,
-// stop_hook_active, last_assistant_message, background_tasks, session_crons).
-// So this hook would always hit the 0-tokens early-exit and write nothing.
-// Re-enabling needs a rewrite that sums usage from the transcript (via the
-// `transcript_path` in the Stop payload), NOT just a stdin fix. Left disabled.
 try {
-  // Read fd 0 (the '/dev/stdin' PATH ENXIOs; fd 0 carries the payload).
+  // Read fd 0 (the '/dev/stdin' PATH ENXIOs in this env; fd 0 carries the payload).
   let raw;
   try { raw = fs.readFileSync(0, 'utf8'); }
   catch { raw = fs.readFileSync('/dev/stdin', 'utf8'); }
   const input = JSON.parse(raw);
 
-  // Check opt-out via env (settings.json injects as env vars for hooks)
+  // Opt-out (settings.json injects autopilot.costTracker as this env var).
   if (process.env.AUTOPILOT_COST_TRACKER === 'false') process.exit(0);
 
-  const usage = input.usage || input.metadata?.usage || {};
-  const inputTokens = Number(usage.input_tokens || 0);
-  const outputTokens = Number(usage.output_tokens || 0);
+  const session = input.session_id || process.env.CLAUDE_CODE_SESSION_ID ||
+    process.env.CLAUDE_SESSION_ID || 'unknown';
 
-  if (inputTokens === 0 && outputTokens === 0) process.exit(0);
+  // Locate the transcript: payload field first, then UUID glob fallback. The
+  // glob keys on session_id (the UUID == transcript filename) — prefer the
+  // payload's session_id (what `session` above uses) over the env var, else a
+  // payload with session_id but an unusable transcript_path silently loses its
+  // metrics when CLAUDE_CODE_SESSION_ID is unset.
+  let tpath = input.transcript_path;
+  if (!tpath || !fs.existsSync(tpath)) {
+    tpath = resolveTranscriptPath({
+      sessionId: input.session_id || process.env.CLAUDE_CODE_SESSION_ID,
+    });
+  }
+  if (!tpath) process.exit(0);
 
-  const model = input.model || process.env.CLAUDE_MODEL || 'sonnet';
-  const rate = getRate(model);
-  const costUsd = (inputTokens * rate.input + outputTokens * rate.output) / 1_000_000;
+  let transcript;
+  try { transcript = fs.readFileSync(tpath, 'utf8'); } catch { process.exit(0); }
+
+  const turns = parseAssistantTurns(transcript);
+  if (turns.length === 0) process.exit(0);
 
   const metricsDir = path.join(os.homedir(), '.claude', 'metrics');
-  fs.mkdirSync(metricsDir, { recursive: true });
+  const cursorDir = path.join(metricsDir, '.cursors');
+  fs.mkdirSync(cursorDir, { recursive: true });
+  const cursorFile = path.join(cursorDir, `${sanitizeSession(session)}.json`);
 
-  const entry = {
-    ts: new Date().toISOString(),
-    session: process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || 'unknown',
-    model,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    cost_usd: Math.round(costUsd * 10000) / 10000,
-    cwd: process.cwd(),
-  };
+  let processed = 0;
+  try { processed = Number(JSON.parse(fs.readFileSync(cursorFile, 'utf8')).turns) || 0; }
+  catch { /* first run for this session → 0 */ }
 
-  fs.appendFileSync(
-    path.join(metricsDir, 'costs.jsonl'),
-    JSON.stringify(entry) + '\n'
-  );
+  const { totalTurns, deltas } = aggregateSince(turns, processed);
 
+  // Always advance the cursor (covers the no-new-turns and shrink/re-baseline
+  // cases) so a stuck cursor never re-logs. The cursor read→write + costs.jsonl
+  // append are unlocked; correctness relies on the Stop hook firing serially per
+  // session (it does — one Stop per assistant turn). Per-session cursor files
+  // mean different sessions never contend.
+  const ts = new Date().toISOString();
+  fs.writeFileSync(cursorFile, JSON.stringify({ turns: totalTurns, ts }));
+
+  if (deltas.length === 0) process.exit(0); // nothing new since last Stop
+
+  const cwd = input.cwd || process.cwd();
+  const rows = deltas.map((d) => JSON.stringify({
+    ts,
+    session,
+    model: d.model,
+    input_tokens: d.input,
+    output_tokens: d.output,
+    cache_read_tokens: d.cacheRead,
+    cache_write_tokens: d.cacheWrite,
+    turns: d.turns,
+    cost_usd: d.cost_usd,
+    cwd,
+  })).join('\n') + '\n';
+
+  fs.appendFileSync(path.join(metricsDir, 'costs.jsonl'), rows);
   process.exit(0);
 } catch (e) {
   process.stderr.write(`cost-tracker error: ${e.message}\n`);

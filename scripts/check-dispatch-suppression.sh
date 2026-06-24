@@ -52,15 +52,16 @@ PATTERNS=$(cat <<'EOF'
 # "call it Minor", "rate the null-deref low", "mark this trivial", "treat that as a suggestion".
 # NOTE the verb set EXCLUDES "grade" — "grade each finding critical/major/minor" is the legit
 # instruction to use the vocabulary, not to pre-rate a specific finding.
-(call|rate|mark|score|keep|downgrade|treat)[[:space:]]+(it|this|that|them|the[[:space:]]+[a-z][a-z-]*([[:space:]]+[a-z][a-z-]*){0,2})[[:space:]]+(as[[:space:]]+)?(a[[:space:]]+|an[[:space:]]+)?(at[[:space:]]+(most|worst)[[:space:]]+|no[[:space:]]+more[[:space:]]+than[[:space:]]+|only[[:space:]]+)?(critical|major|minor|suggestion|trivial|cosmetic|low|nit)\b
+(call|rate|mark|score|keep|downgrade|treat)[[:space:]]+(it|this|that|them|the[[:space:]]+[a-z][a-z-]*([[:space:]]+[a-z][a-z-]*){0,2})[[:space:]]+(as[[:space:]]+|to[[:space:]]+)?(a[[:space:]]+|an[[:space:]]+)?(at[[:space:]]+(most|worst)[[:space:]]+|no[[:space:]]+more[[:space:]]+than[[:space:]]+|only[[:space:]]+)?(critical|major|minor|suggestion|trivial|cosmetic|low|nit)\b
 # "...at most a minor" / "at worst a suggestion"
 \bat[[:space:]]+(most|worst)[[:space:]]+(a[[:space:]]+|an[[:space:]]+)?(minor|suggestion|trivial|cosmetic|nit|note|low)\b
 # --- suppressing a defect outright ("don't flag the X as a bug", "do not report this issue") ---
 # anchored to a DEFECT object so honest scope statements don't trip; "over-flag" has the "over-"
 # prefix so "don't over-flag" never matches "don'?t flag".
 (do[[:space:]]+not|don'?t|never|no[[:space:]]+need[[:space:]]+to)[[:space:]]+(flag|report|raise|surface|count|treat|mention)[^.]{0,45}(as[[:space:]]+)?(a[[:space:]]+|an[[:space:]]+)?(defect|bug|issue|problem|finding|blocker|vuln|critical|major)\b
-# --- "ignore the <area>" (telling the reviewer to skip a surface) ---
-\bignore[[:space:]]+(the[[:space:]]+|any[[:space:]]+|all[[:space:]]+)?[a-z][a-z -]*(path|case|cases|error|handling|section|module|check|branch|finding|issue)\b
+# --- "ignore / skip the <area>" + "leave the <area> alone" (skip a surface) ---
+\b(ignore|skip)[[:space:]]+(the[[:space:]]+|any[[:space:]]+|all[[:space:]]+)?[a-z][a-z -]*(path|case|cases|error|handling|section|module|check|branch|finding|issue)\b
+\bleave[[:space:]]+(the[[:space:]]+)?[a-z][a-z -]*(alone|as[[:space:]]+is)\b
 # --- "don't worry about / don't bother with <X>" ---
 (don'?t|do[[:space:]]+not)[[:space:]]+(worry[[:space:]]+about|bother[[:space:]]+with|sweat)[[:space:]]+
 EOF

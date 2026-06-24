@@ -6,7 +6,7 @@
 
 > **Final goal**: ship the 2 dialectic-converged learnable items from the gstack/superpowers v6 survey, plus the standalone-TDD doc-honesty fix.
 > **Success criteria**:
-> 1. `scripts/check-dispatch-suppression.sh` exists, exit 0 clean / 1 finding / 2 usage, emits `{clean, findings[]}` JSON; **caught** = a coaching prompt ("call it Minor at most"), **passed** = a legit review prompt incl reviewer.md's own "don't over-flag minor nits" calibration language (verified by `hooks/tests/check-dispatch-suppression.test.sh`, wired into `hooks/tests/run.sh`, exit 0).
+> 1. `scripts/check-dispatch-suppression.sh` exists; machine contract is the **exit code** (0 clean / 1 finding / 2 usage) with plaintext `COACHING:`/`CLEAN:` markers on stderr (matching its sibling `check-redispatch-prompt.sh`, not a JSON emitter); **caught** = a coaching prompt ("call it Minor at most"), **passed** = a legit review prompt incl reviewer.md's own "don't over-flag minor nits" calibration language (verified by `hooks/tests/check-dispatch-suppression.test.sh`, wired into `hooks/tests/run.sh`, exit 0).
 > 2. `references/blind-dispatch.md` references the suppression check as an every-dispatch pre-flight (additive; pinned anchors intact; canonical-invariants gate green).
 > 3. `references/plan-template.md` has a verbatim-propagated **Global Constraints** section (one canonical statement; Interfaces folded into existing input/output).
 > 4. `skills/test-strategy/SKILL.md` Coexistence + README scenario B state the standalone-no-native-TDD limitation.

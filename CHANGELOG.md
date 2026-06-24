@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.2 — cost-tracker re-enabled (transcript-sum); zero disabled hooks
+
+**Headline**: The last shipped-but-disabled hook, `cost-tracker`, is fixed and re-enabled (opt-in) — autopilot now has **zero disabled hooks** (8 default-on + 12 opt-in). The blocker was never stdin (fd 0 works): the Claude Code 2.1.186 Stop payload simply carries no `usage` field, so the old hook always early-exited at 0 tokens. The rewrite reads `transcript_path` from the Stop payload and sums per-turn `message.usage` from the transcript. Because the Stop hook fires once per assistant turn and the transcript is cumulative, it keeps a per-session cursor (`~/.claude/metrics/.cursors/<session>.json`) and logs only the turns added since the last Stop — so summing all rows in `costs.jsonl` equals the true session cost with no double-count. Cost is **cache-aware** (cache reads billed at 0.1×, 5-minute cache writes at 1.25× the model's input rate), which matters because cache-read tokens dominate a real autopilot session by ~40:1. Opt-out unchanged: `AUTOPILOT_COST_TRACKER=false`.
+
+### Added
+- `hooks/cost-tracker-lib.js` — pure, testable usage/cost aggregation (`parseAssistantTurns` / `aggregateSince` / cache-aware `costOf`), separated from the hook's IO so the cursor-delta math is unit-tested.
+- `hooks/cost-tracker.test.js` (10 L1 unit tests) — parse/skip-malformed, model-substring pricing (incl. unknown→sonnet default), cache multipliers, cursor delta, shrink/re-baseline (no double-count), and an integration check that per-Stop deltas sum to the one-shot total.
+
+### Changed
+- `cost-tracker` moved disabled → **opt-in** in `settings.example.json` (Stop). Hook tally: opt-in 11→12, disabled 1→0 (total still 20). Reconciled across the 4 canonical descriptions, README.md / README.zh-TW.md / hooks/README.md tier tables, and `check-hook-inventory.js`'s prose-tally assertions (re-anchored off the removed "shipped-but-disabled" sentence).
+
+### Fixed
+- `cost-tracker` no longer no-ops: it read a `usage` field the Stop payload doesn't have. Now sums from the transcript via `transcript_path`. End-to-end verified against a real 287-turn transcript (cold-cursor full sum + per-turn delta + no-new-turn no-op + opt-out + fail-open).
+- `hooks/tests/sync-version-preserve-counts.test.sh` + `hooks/tests/check-hook-inventory.test.sh`: de-coupled from the live disabled count (was hardcoded to 1 / required a non-zero disabled tier) so they survive disabled→0.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: remove the `cost-tracker` Stop entry from your `settings.json` (it's opt-in — default installs are unaffected). Optional cleanup: `rm -rf ~/.claude/metrics/.cursors/`.
+
 ## v2.25.1 — Versioning rule documented + sync-version count-preservation fix
 
 **Headline**: Pinned the semver bump policy that was previously only de-facto, and fixed a real footgun in the release tooling. The bump rule (now in `CLAUDE.md` § Versioning): **MINOR** advances only for a new user-facing milestone (a new **skill** or **agent**); a new **script / hook / reference**, a bug fix, or hardening of existing behavior is **PATCH**; breaking changes are **MAJOR**; pure docs/tests/dev-tooling don't bump. This keeps the second digit a meaningful "new thing users invoke" counter instead of inflating on every internal addition. Separately, `scripts/sync-version.js` no longer silently clobbers the opt-in / disabled hook tiers when those flags are omitted (the v2.20.0 footgun): omitted counts are now **preserved from the canonical description**, with the historical literals (opt-in 7 / disabled 0) only as a last-resort fallback when canonical is unparseable. This release dogfoods the fix — it was bumped by omitting `--opt-in-count` / `--disabled-count` and the `11 opt-in, 1 disabled` tiers survived intact.

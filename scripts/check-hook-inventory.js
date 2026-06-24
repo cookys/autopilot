@@ -179,10 +179,11 @@ function runCheck(inv) {
   checkTally(errors, 'README.md', /hooks-\d+-/, inv, ['total']);
   checkHeaderCount(errors, 'README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
   checkHeaderCount(errors, 'README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
-  // Intro PROSE tally (the "N default-on, M opt-in, K shipped-but-disabled" sentence) —
-  // distinct from the badge/headers; a stale number here escaped both gates once (v2.23.0).
-  checkTally(errors, 'README.md', /shipped-but-disabled\*\* \(see below\)/, inv, ['defaultOn', 'optIn', 'disabled']);
-  checkTally(errors, 'hooks/README.md', /shipped-but-disabled\*\* \(`cost-tracker`/, inv, ['defaultOn', 'optIn', 'disabled']);
+  // Intro PROSE tally (the "N default-on … M opt-in" sentence) — distinct from the
+  // badge/headers; a stale number here escaped both gates once (v2.23.0). Anchored on
+  // the "opt-in" clause so it survives the disabled tier going to zero (v2.25.2).
+  checkTally(errors, 'README.md', /opt-in\*\* \(zero disabled/, inv, ['defaultOn', 'optIn']);
+  checkTally(errors, 'hooks/README.md', /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
   checkTally(errors, 'README.zh-TW.md', /hooks-\d+-/, inv, ['total']);
   checkTally(errors, 'README.zh-TW.md', /預設啟用[（(]\d+/, inv, ['defaultOn']);
   checkTally(errors, 'README.zh-TW.md', /可選啟用[（(]\d+/, inv, ['optIn']);

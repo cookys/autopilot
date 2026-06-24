@@ -10,6 +10,14 @@ SANDBOX="$TEST_TMP/sandbox"
 SCRIPT=$(setup_sync_version_sandbox "$SANDBOX")
 CANON="$SANDBOX/.claude-plugin/plugin.json"
 
+# Seed a synthetic NON-ZERO disabled tier into the sandbox canonical + both JSON
+# mirrors so this regression guard does not depend on the live repo having a
+# disabled hook — it legitimately may not (cost-tracker was re-enabled, disabled→0
+# in v2.25.2). Total stays 20 (8+7+5); skills fragment untouched.
+for f in "$CANON" "$SANDBOX/plugin.json" "$SANDBOX/.claude-plugin/marketplace.json"; do
+  sed -i -E 's/[0-9]+ hooks \([0-9]+ default-on, [0-9]+ opt-in(, [0-9]+ disabled)?\)/20 hooks (8 default-on, 7 opt-in, 5 disabled)/' "$f"
+done
+
 # Parse the fixture's CURRENT tier counts (count-agnostic — survives live count drift).
 HFRAG=$(grep -oE '[0-9]+ hooks \([0-9]+ default-on, [0-9]+ opt-in(, [0-9]+ disabled)?\)' "$CANON" | head -1)
 HOOKS=$(printf '%s' "$HFRAG" | grep -oE '^[0-9]+')

@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.1-E8A838?style=flat-square" alt="v2.25.1">
+  <img src="https://img.shields.io/badge/version-2.25.2-E8A838?style=flat-square" alt="v2.25.2">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -525,7 +525,7 @@ Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are 
 
 ## Hooks
 
-Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on**, **11 opt-in**, and **1 shipped-but-disabled** (see below). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
+Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on** and **12 opt-in** (zero disabled — `cost-tracker` was re-enabled opt-in in v2.25.2). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
 
 ### Tier A — Default-On (8 hooks)
 
@@ -542,12 +542,13 @@ Registered in [`hooks/hooks.json`](hooks/hooks.json) — these activate automati
 | **failure-escalation** | PostToolUse/Bash | Tracks consecutive Bash failures per session; escalates to the user |
 | **suggest-compact** | PostToolUse/Write\|Edit | Counts tool calls per session; suggests `/compact` at 50, then every 25 |
 
-### Tier B — Opt-In (11 hooks)
+### Tier B — Opt-In (12 hooks)
 
 Enable individually by copying entries from [`settings.example.json`](settings.example.json) to your `settings.json`.
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
+| **cost-tracker** | Stop | Sums per-turn token usage from the transcript → `~/.claude/metrics/costs.jsonl` (cache-aware cost; opt-out `AUTOPILOT_COST_TRACKER=false`) |
 | **branch-protection** | PreToolUse/Bash | Hard-blocks direct commits / force-push on protected branches (`main\|master` by default) |
 | **commit-secret-scan** | PreToolUse/Bash | Hard-blocks `git commit` when staged changes contain secrets |
 | **large-file-warner** | PreToolUse/Read | Warns at 500KB, hard-blocks Read at 2MB (bypass with offset/limit) |
@@ -560,14 +561,6 @@ Enable individually by copying entries from [`settings.example.json`](settings.e
 | **mcp-health** | PreToolUse + PostToolUseFailure | Exponential backoff for unhealthy MCP servers |
 
 > The three **PreToolUse** blockers + **session-summary** were parked by the v2.7.4 disable batch because opening the `/dev/stdin` **path** throws ENXIO in the Bun-spawned hook environment ([#6305](https://github.com/anthropics/claude-code/issues/6305)). They re-enable (opt-in) by reading **fd 0 directly** (`fs.readFileSync(0)`) — verified end-to-end on Claude Code 2.1.186. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
-
-### Shipped but Disabled (1 hook)
-
-`cost-tracker` (Stop) exists as code under `hooks/` but is **wired nowhere**. Its blocker is **not** stdin (fd 0 works): the Claude Code 2.1.186 **Stop payload carries no token-`usage` field**, so the hook would always early-exit at 0 tokens and write nothing. Re-enabling needs a rewrite that sums usage from the transcript (`transcript_path` is in the Stop payload), not just a read fix. See [`docs/BACKLOG.md`](docs/BACKLOG.md) ("Re-enable v2.7.4 disabled hooks").
-
-| Hook | Event | Why disabled |
-|------|-------|-------------|
-| **cost-tracker** | Stop | Stop payload has no `usage` — needs a transcript-sum rewrite |
 
 ### Secret Detection
 

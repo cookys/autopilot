@@ -111,6 +111,16 @@
     ],
     "Stop": [
       {
+        "//": "cost-tracker: sums per-turn token usage from the transcript → ~/.claude/metrics/costs.jsonl (cache-aware cost). Opt-out: AUTOPILOT_COST_TRACKER=false / autopilot.costTracker=false",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
+          }
+        ]
+      },
+      {
         "//": "session-summary: appends cwd / git status / recent commits to ~/.claude/sessions/{date}-{sid}.md at session end",
         "matcher": "",
         "hooks": [

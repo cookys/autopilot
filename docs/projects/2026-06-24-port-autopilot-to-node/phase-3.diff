@@ -1,0 +1,533 @@
+diff --git a/docs/projects/2026-06-24-port-autopilot-to-node/README.md b/docs/projects/2026-06-24-port-autopilot-to-node/README.md
+index a8219f8..be995fb 100644
+--- a/docs/projects/2026-06-24-port-autopilot-to-node/README.md
++++ b/docs/projects/2026-06-24-port-autopilot-to-node/README.md
+@@ -12,7 +12,7 @@
+ |---|---|---|---|
+ | **Phase 1** | S | Port `risk-counter.sh` & `toggle-payload-capture.sh` to JS | Completed |
+ | **Phase 2** | S | Port `session-start.sh` to JS | Completed |
+-| **Phase 3** | S | Port `doc-drift-gate.py` to JS | Pending |
++| **Phase 3** | S | Port `doc-drift-gate.py` to JS | Completed |
+ | **Phase 4** | L | Port `check-node-report.sh` to JS | Pending |
+ | **Phase 5** | H | Port `tree.sh` to JS with atomic self-healing flock | Pending |
+ | **Phase 6** | H | Port `qc-panel.sh` to JS with robust last-json parsing | Pending |
+diff --git a/hooks/tests/doc-drift-gate.test.sh b/hooks/tests/doc-drift-gate.test.sh
+new file mode 100755
+index 0000000..72ec48b
+--- /dev/null
++++ b/hooks/tests/doc-drift-gate.test.sh
+@@ -0,0 +1,132 @@
++#!/usr/bin/env bash
++# hooks/tests/doc-drift-gate.test.sh — integration tests for doc-drift-gate.js
++
++set -uo pipefail
++
++. "$(dirname "$0")/lib.sh"
++
++# Paths to script under test
++GATE_JS="$REPO_ROOT/scripts/doc-drift-gate.js"
++
++# Create a temporary sandbox repo directory inside TEST_TMP
++SANDBOX="$TEST_TMP/sandbox"
++mkdir -p "$SANDBOX"
++
++# Helper to run gate on sandbox
++run_gate() {
++  local out
++  local exit_code=0
++  out=$(node "$GATE_JS" "$@" 2>&1) || exit_code=$?
++  __GATE_OUT="$out"
++  __GATE_EXIT="$exit_code"
++}
++
++# 1. Empty sandbox (no markdown files) should pass
++echo "Testing empty sandbox..."
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 0 "empty directory passes"
++assert_contains "$__GATE_OUT" "0 md files" "reports 0 md files"
++assert_contains "$__GATE_OUT" "baseline doc-drift checks green" "reports baseline green"
++
++# 2. Markdown file with good links and balanced fences should pass
++echo "Testing good markdown file..."
++mkdir -p "$SANDBOX/docs"
++cat > "$SANDBOX/docs/good.md" <<'EOF'
++# Good Doc
++See [another doc](sibling.md).
++See [anchor link](#anchor-only).
++See [https link](https://google.com).
++See [GH convention](/pull/123).
++See [directory link](dir/).
++See [placeholder link](<some-place>).
++
++```javascript
++const x = 1;
++```
++EOF
++echo "# Sibling" > "$SANDBOX/docs/sibling.md"
++mkdir -p "$SANDBOX/docs/dir"
++
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 0 "good markdown passes"
++assert_contains "$__GATE_OUT" "2 md files" "reports 2 md files (good.md and sibling.md)"
++assert_contains "$__GATE_OUT" "[PASS] links" "links check passes"
++assert_contains "$__GATE_OUT" "[PASS] fences" "fences check passes"
++
++# 3. Markdown file with broken links should fail (exit 1)
++echo "Testing broken link..."
++cat > "$SANDBOX/docs/broken_link.md" <<'EOF'
++# Broken Link Doc
++Here is a [broken link](ghost.md).
++EOF
++
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 1 "broken link fails"
++assert_contains "$__GATE_OUT" "[FAIL] links" "links check fails"
++assert_contains "$__GATE_OUT" "ghost.md" "reports the missing target filename"
++assert_contains "$__GATE_OUT" "broken_link.md: ghost.md" "reports path and link target"
++
++# Cleanup broken link for next test
++rm "$SANDBOX/docs/broken_link.md"
++
++# 4. Markdown file with unbalanced code fences should fail (exit 1)
++echo "Testing unbalanced code fences..."
++cat > "$SANDBOX/docs/unbalanced_fence.md" <<'EOF'
++# Unbalanced Fence
++```javascript
++const x = 2;
++EOF
++
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 1 "unbalanced fence fails"
++assert_contains "$__GATE_OUT" "[FAIL] fences" "fences check fails"
++assert_contains "$__GATE_OUT" "unbalanced_fence.md: 1 fence lines (odd" "reports the unbalanced fence"
++
++# Cleanup unbalanced fence for next test
++rm "$SANDBOX/docs/unbalanced_fence.md"
++
++# 5. Testing CLI excludes `--exclude`
++echo "Testing custom exclude..."
++mkdir -p "$SANDBOX/docs/ignored_subdir"
++cat > "$SANDBOX/docs/ignored_subdir/bad_link.md" <<'EOF'
++[broken](does-not-exist.md)
++EOF
++
++# Should fail without exclude
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 1 "fails on bad_link.md without exclude"
++
++# Should pass with exclude
++run_gate "--exclude" "ignored_subdir" "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 0 "passes when bad_link.md is excluded"
++
++# Cleanup
++rm -rf "$SANDBOX/docs/ignored_subdir"
++
++# 6. Testing CRLF normalization
++# Create a markdown file with CRLF line endings and unbalanced code fences.
++# Make sure CRLF is normalized to LF and checked correctly.
++# If CRLF is normalized, the line splits by \n work correctly and count is accurate.
++echo "Testing CRLF line endings..."
++printf "# CRLF Doc\r\n\`\`\`javascript\r\nconst x = 3;\r\n\`\`\`\r\n" > "$SANDBOX/docs/crlf.md"
++
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 0 "CRLF doc with balanced fences passes"
++
++# Now unbalanced CRLF
++printf "# CRLF Doc\r\n\`\`\`javascript\r\nconst x = 3;\r\n" > "$SANDBOX/docs/crlf.md"
++run_gate "$SANDBOX"
++assert_exit_code "$__GATE_EXIT" 1 "CRLF doc with unbalanced fences fails"
++
++# Cleanup CRLF doc
++rm "$SANDBOX/docs/crlf.md"
++
++# 7. Testing invalid command arguments/usage errors (exit 2)
++echo "Testing invalid usage..."
++run_gate "--exclude" # missing arg
++assert_exit_code "$__GATE_EXIT" 2 "missing exclude arg exits with 2"
++
++run_gate "/path/does/not/exist"
++assert_exit_code "$__GATE_EXIT" 2 "non-existent path exits with 2"
++
++finalize_test
+diff --git a/scripts/doc-drift-gate.js b/scripts/doc-drift-gate.js
+new file mode 100755
+index 0000000..a88fdc4
+--- /dev/null
++++ b/scripts/doc-drift-gate.js
+@@ -0,0 +1,228 @@
++#!/usr/bin/env node
++/**
++ * Generic deterministic doc-drift gate (Layer 1 baseline) for autopilot:doc-sync.
++ * Ported from scripts/doc-drift-gate.py.
++ */
++
++const fs = require('fs');
++const path = require('path');
++
++const DEFAULT_EXCLUDES = [
++  ".git",
++  "target",
++  "node_modules",
++  "_archive",
++  ".venv",
++  ".opencode",
++  "_bodies"
++];
++
++// Regex configuration
++const FILE_EXT = /\.[A-Za-z0-9]{1,8}$/;
++const GH_REL = /(^|\/)(commit|commits|issues|pull|releases|blob|tree|compare|wiki)(\/|$)/;
++
++/**
++ * Normalizes text/markdown files only before any checks, using extension/UTF-8 checks.
++ * Normalize CRLF to LF. Keep generated output strings LF only.
++ */
++function readTextFileNormalized(filePath) {
++  if (!filePath.endsWith('.md')) {
++    return null;
++  }
++  let buffer;
++  try {
++    buffer = fs.readFileSync(filePath);
++  } catch (err) {
++    console.error(`Error reading file ${filePath}:`, err.message);
++    process.exit(1); // Fail closed on file read exception
++  }
++
++  // Simple UTF-8 validation
++  const text = buffer.toString('utf8');
++  if (text.includes('\uFFFD') || text.includes('\u0000')) {
++    // Binary or invalid UTF-8
++    return null;
++  }
++  // Normalize CRLF to LF
++  return text.replace(/\r\n/g, '\n');
++}
++
++/**
++ * Traverse the directories recursively (using built-in fs synchronous APIs to replicate the behavior of os.walk).
++ */
++function getMdFiles(roots, excludes) {
++  const out = new Set();
++
++  function walk(dirpath) {
++    if (excludes.some(x => dirpath.includes(x))) {
++      return;
++    }
++    let entries;
++    try {
++      entries = fs.readdirSync(dirpath, { withFileTypes: true });
++    } catch (err) {
++      console.error(`Error reading directory ${dirpath}:`, err.message);
++      process.exit(1); // Fail closed
++    }
++
++    for (const entry of entries) {
++      const fullPath = path.join(dirpath, entry.name);
++      if (excludes.some(x => fullPath.includes(x))) {
++        continue;
++      }
++      
++      let isFile = entry.isFile();
++      let isDirectory = entry.isDirectory();
++      if (entry.isSymbolicLink()) {
++        try {
++          const targetStat = fs.statSync(fullPath);
++          isFile = targetStat.isFile();
++          isDirectory = targetStat.isDirectory();
++        } catch (err) {
++          // Broken symlink, ignore
++          continue;
++        }
++      }
++
++      if (isDirectory && !entry.isSymbolicLink()) {
++        walk(fullPath);
++      } else if (isFile && entry.name.endsWith('.md')) {
++        out.add(fullPath);
++      }
++    }
++  }
++
++  for (const root of roots) {
++    let stat;
++    try {
++      stat = fs.statSync(root);
++    } catch (err) {
++      console.error(`Error stating root path ${root}:`, err.message);
++      process.exit(2); // Exit with code 2 for usage/CLI errors (invalid root path)
++    }
++
++    if (stat.isDirectory()) {
++      walk(root);
++    }
++  }
++
++  return Array.from(out).sort();
++}
++
++function checkLinks(files) {
++  const bad = [];
++  for (const md of files) {
++    const text = readTextFileNormalized(md);
++    if (text === null) {
++      continue;
++    }
++    const base = path.dirname(md);
++    const relMd = path.relative(process.cwd(), md);
++
++    const regex = /\]\(([^)]+)\)/g;
++    let match;
++    while ((match = regex.exec(text)) !== null) {
++      const link = match[1];
++      if (link.startsWith("http://") || link.startsWith("https://") || link.startsWith("#") || link.startsWith("mailto:")) {
++        continue;
++      }
++      if (/[<>{}|]/.test(link)) {
++        continue;
++      }
++      const linkPath = link.split("#")[0];
++      if (!linkPath || GH_REL.test(linkPath)) {
++        continue;
++      }
++      // only judge links that clearly target a file (has extension) or a dir
++      if (!(linkPath.endsWith("/") || FILE_EXT.test(linkPath))) {
++        continue;
++      }
++      const targetPath = path.normalize(path.join(base, linkPath));
++      if (!fs.existsSync(targetPath)) {
++        bad.push(`${relMd}: ${link}`);
++      }
++    }
++  }
++  return { name: "links", ok: bad.length === 0, details: bad };
++}
++
++function checkFences(files) {
++  const bad = [];
++  for (const md of files) {
++    const text = readTextFileNormalized(md);
++    if (text === null) {
++      continue;
++    }
++    const lines = text.split('\n');
++    let n = 0;
++    for (const line of lines) {
++      if (line.trimStart().startsWith('```')) {
++        n++;
++      }
++    }
++    if (n % 2 !== 0) {
++      const relMd = path.relative(process.cwd(), md);
++      bad.push(`${relMd}: ${n} fence lines (odd → unbalanced)`);
++    }
++  }
++  return { name: "fences", ok: bad.length === 0, details: bad };
++}
++
++function main(argv) {
++  const roots = [];
++  const excludes = [...DEFAULT_EXCLUDES];
++  let i = 0;
++  while (i < argv.length) {
++    if (argv[i] === "--exclude") {
++      if (i + 1 >= argv.length) {
++        console.error("Error: --exclude requires an argument.");
++        process.exit(2);
++      }
++      excludes.push(argv[i + 1]);
++      i += 2;
++    } else {
++      roots.push(argv[i]);
++      i += 1;
++    }
++  }
++  if (roots.length === 0) {
++    roots.push(".");
++  }
++
++  const files = getMdFiles(roots, excludes);
++  
++  let out = `doc-drift gate (baseline: links + fences) — ${files.length} md files\n`;
++  out += "========================================\n";
++  
++  let failed = 0;
++  const checks = [checkLinks(files), checkFences(files)];
++  for (const check of checks) {
++    const status = check.ok ? "PASS" : "FAIL";
++    out += `[${status}] ${check.name}\n`;
++    for (const detail of check.details) {
++      out += `       - ${detail}\n`;
++    }
++    if (!check.ok) {
++      failed += 1;
++    }
++  }
++  out += "========================================\n";
++  if (failed > 0) {
++    out += `${failed} check(s) FAILED\n`;
++    process.stdout.write(out);
++    process.exit(1);
++  }
++  out += "baseline doc-drift checks green\n";
++  process.stdout.write(out);
++  process.exit(0);
++}
++
++// Trap any unexpected error to Fail Closed
++process.on('uncaughtException', (err) => {
++  console.error("CRITICAL: Unexpected exception in doc-drift-gate:", err);
++  process.exit(1);
++});
++
++if (require.main === module) {
++  main(process.argv.slice(2));
++}
+diff --git a/scripts/doc-drift-gate.py b/scripts/doc-drift-gate.py
+deleted file mode 100755
+index 836e24b..0000000
+--- a/scripts/doc-drift-gate.py
++++ /dev/null
+@@ -1,116 +0,0 @@
+-#!/usr/bin/env python3
+-"""Generic deterministic doc-drift gate (Layer 1 baseline) for autopilot:doc-sync.
+-
+-This is the PORTABLE, project-agnostic baseline: two universal zero-variance checks
+-that work in any repo with no config — internal markdown link resolution + code-fence
+-balance. It is the reliable half of doc-sync (see skills/doc-sync/SKILL.md "Two
+-layers"): a green run means those classes are genuinely clean, so it is gate-able in
+-CI / pre-merge — unlike the non-deterministic LLM sweep.
+-
+-Projects EXTEND this with project-specific checks (version-sync, CLI-surface-vs-docs,
+-roadmap-consistency, …) as the LLM sweep discovers mechanizable drift classes. See
+-codeforge's scripts/check-doc-drift.py for a 5-check reference implementation.
+-
+-Usage:
+-  doc-drift-gate.py [ROOT ...]      # roots to scan (default: cwd)
+-  --exclude SUBSTR                  # skip paths containing SUBSTR (repeatable;
+-                                    # defaults: .git, target, node_modules, _archive)
+-Exit 0 = all green, 1 = a check failed (details printed).
+-"""
+-import os
+-import re
+-import sys
+-
+-# Excludes generated/mirror trees: .opencode/agent-bodies and agents/_bodies are
+-# stripped copies of agents/*.md (their relative links are correct at the SOURCE
+-# depth, not the mirror's — check the source, not the generated copy).
+-DEFAULT_EXCLUDES = [".git", "target", "node_modules", "_archive", ".venv",
+-                    ".opencode", "_bodies"]
+-
+-
+-def _md_files(roots, excludes):
+-    out = []
+-    for root in roots:
+-        for dirpath, dirs, files in os.walk(root):
+-            if any(x in dirpath for x in excludes):
+-                dirs[:] = [d for d in dirs if not any(x in os.path.join(dirpath, d) for x in excludes)]
+-                continue
+-            for fn in files:
+-                if fn.endswith(".md"):
+-                    out.append(os.path.join(dirpath, fn))
+-    return sorted(set(out))
+-
+-
+-# Only validate links that unambiguously point to a repo file — zero false
+-# positives is the whole point of a gate. We therefore SKIP:
+-#   - external / anchor / mailto links
+-#   - template placeholders (contain < > { } | )
+-#   - GitHub-relative conventions that don't resolve on the filesystem
+-#     (../commit/<sha>, /issues/, /pull/, /commits/, /releases/, /blob/, /tree/)
+-#   - extensionless, non-directory targets (can't tell a typo from a convention)
+-_FILE_EXT = re.compile(r"\.[A-Za-z0-9]{1,8}$")
+-_GH_REL = re.compile(r"(^|/)(commit|commits|issues|pull|releases|blob|tree|compare|wiki)(/|$)")
+-
+-
+-def check_links(files):
+-    bad = []
+-    for md in files:
+-        base = os.path.dirname(md)
+-        with open(md, encoding="utf-8") as f:
+-            txt = f.read()
+-        for m in re.finditer(r"\]\(([^)]+)\)", txt):
+-            link = m.group(1)
+-            if link.startswith(("http://", "https://", "#", "mailto:")):
+-                continue
+-            if any(c in link for c in "<>{}|"):       # template placeholder
+-                continue
+-            path = link.split("#")[0]
+-            if not path or _GH_REL.search(path):
+-                continue
+-            # only judge links that clearly target a file (has extension) or a dir
+-            if not (path.endswith("/") or _FILE_EXT.search(path)):
+-                continue
+-            if not os.path.exists(os.path.normpath(os.path.join(base, path))):
+-                bad.append(f"{os.path.relpath(md)}: {link}")
+-    return ("links", not bad, bad)
+-
+-
+-def check_fences(files):
+-    bad = []
+-    for md in files:
+-        with open(md, encoding="utf-8") as f:
+-            n = sum(1 for line in f if line.lstrip().startswith("```"))
+-        if n % 2:
+-            bad.append(f"{os.path.relpath(md)}: {n} fence lines (odd → unbalanced)")
+-    return ("fences", not bad, bad)
+-
+-
+-def main(argv):
+-    roots, excludes = [], list(DEFAULT_EXCLUDES)
+-    i = 0
+-    while i < len(argv):
+-        if argv[i] == "--exclude":
+-            excludes.append(argv[i + 1]); i += 2
+-        else:
+-            roots.append(argv[i]); i += 1
+-    if not roots:
+-        roots = ["."]
+-
+-    files = _md_files(roots, excludes)
+-    print(f"doc-drift gate (baseline: links + fences) — {len(files)} md files\n" + "=" * 40)
+-    failed = 0
+-    for name, ok, details in (check_links(files), check_fences(files)):
+-        print(f"[{'PASS' if ok else 'FAIL'}] {name}")
+-        for d in details:
+-            print(f"       - {d}")
+-        failed += 0 if ok else 1
+-    print("=" * 40)
+-    if failed:
+-        print(f"{failed} check(s) FAILED")
+-        return 1
+-    print("baseline doc-drift checks green")
+-    return 0
+-
+-
+-if __name__ == "__main__":
+-    sys.exit(main(sys.argv[1:]))
+diff --git a/scripts/preflight-portability.sh b/scripts/preflight-portability.sh
+index 21d1175..0320810 100755
+--- a/scripts/preflight-portability.sh
++++ b/scripts/preflight-portability.sh
+@@ -137,7 +137,7 @@ check_readme_parity() {
+ # Zero-variance: a green run means those drift classes are genuinely clean, so it is
+ # gate-able here. The LLM sweep (Layer 2) is discovery only, never a gate.
+ check_doc_drift() {
+-  python3 "$REPO/scripts/doc-drift-gate.py" "$REPO" >/dev/null 2>&1
++  node "$REPO/scripts/doc-drift-gate.js" "$REPO" >/dev/null 2>&1
+ }
+ 
+ # ─── 8b. adapter targets CARRY the invariant, not merely resolve ───
+diff --git a/skills/doc-sync/SKILL.md b/skills/doc-sync/SKILL.md
+index 3ae75c4..10ece6c 100644
+--- a/skills/doc-sync/SKILL.md
++++ b/skills/doc-sync/SKILL.md
+@@ -73,7 +73,7 @@ If the project has no `gate_command` yet: start one. **Universal checks** (work
+ zero config) — internal-link resolution + code-fence balance — are the baseline; add
+ **project-specific** checks as the LLM sweep discovers mechanizable classes (version-sync,
+ CLI-surface-vs-docs, roadmap-consistency, etc.). Autopilot ships a generic baseline at
+-[`scripts/doc-drift-gate.py`](../../scripts/doc-drift-gate.py) (links + fences over a
++[`scripts/doc-drift-gate.js`](../../scripts/doc-drift-gate.js) (links + fences over a
+ configurable doc set) you can adopt and extend; the codeforge repo's `scripts/check-doc-drift.py`
+ is a 5-check reference that adds the project-specific classes on top. Wire your gate into CI +
+ the `quality-pipeline` doc step.

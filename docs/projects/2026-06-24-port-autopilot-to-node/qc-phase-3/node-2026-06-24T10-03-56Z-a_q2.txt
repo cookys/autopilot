@@ -1,0 +1,17 @@
+Looking at the stated goals against the delivered artifacts:
+
+**Stated goals:**
+1. Port doc-drift-gate.py to doc-drift-gate.js
+2. Delete the original Python file
+3. Update preflight-portability.sh
+4. Write integration tests
+
+**Artifacts delivered:**
+- scripts/doc-drift-gate.js ✓ (goal 1)
+- scripts/preflight-portability.sh ✓ (goal 3)
+- hooks/tests/doc-drift-gate.test.sh ✓ (goal 4)
+- skills/doc-sync/SKILL.md ✗ (NOT in stated goals)
+
+The evidence pointers cite only the first two files, but the artifact list includes a fourth file that wasn't mentioned in the goals.
+
+EXTRA: Updated/documented `skills/doc-sync/SKILL.md` with references to the new JavaScript implementation, bootstrapping guidance, and integration instructions. The goal did not include updating skill documentation — only porting the script itself, updating the shell integration point, and writing tests.

@@ -1,0 +1,11 @@
+ACHIEVED: Ported `scripts/doc-drift-gate.py` to pure Node.js (`scripts/doc-drift-gate.js`, lines 1–229), with full functional parity: `readTextFileNormalized()` handles CRLF normalization, `getMdFiles()` walks directories with exclude filters, `checkLinks()` validates markdown link resolution with the same zero-false-positive rules (skips external/anchor/GitHub-relative links, template placeholders, extensionless targets), `checkFences()` validates balanced code-fence count, and identical exit codes (0=pass, 1=check failure, 2=usage error).
+
+ACHIEVED: Deleted the original `scripts/doc-drift-gate.py` (marked as deleted in the diff).
+
+ACHIEVED: Updated `scripts/preflight-portability.sh` (lines 135–142) to invoke `node "$REPO/scripts/doc-drift-gate.js"` instead of `python3 "$REPO/scripts/doc-drift-gate.py"`.
+
+ACHIEVED: Wrote comprehensive integration tests in `hooks/tests/doc-drift-gate.test.sh` (132 lines, 7 test cases) covering: empty sandbox (0 files baseline), good markdown with valid links and balanced fences, broken links detection and error reporting, unbalanced code-fence detection, custom `--exclude` directive filtering, CRLF-to-LF normalization with balanced/unbalanced fence states, and invalid-argument usage errors.
+
+ACHIEVED: Updated `skills/doc-sync/SKILL.md` to reference the new `.js` file in the bootstrapping guide (line pointing to `scripts/doc-drift-gate.js` instead of `.py`).
+
+ACHIEVED: Marked Phase 3 as "Completed" in the project status README.

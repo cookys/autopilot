@@ -1,0 +1,3 @@
+EXTRA: Updated `skills/doc-sync/SKILL.md` to point from `scripts/doc-drift-gate.py` to `scripts/doc-drift-gate.js`, a doc/skill reference update not listed in the Phase 3 goals.
+EXTRA: Added and tested new CLI usage-error semantics: missing `--exclude` and non-existent root paths now exit 2, beyond the original gate's documented 0/1 outcomes and the requested port/update/test work.
+EXTRA: Added extra input filtering in `scripts/doc-drift-gate.js` that skips `.md` files containing replacement characters or NUL bytes instead of simply reading UTF-8 markdown like the Python script.

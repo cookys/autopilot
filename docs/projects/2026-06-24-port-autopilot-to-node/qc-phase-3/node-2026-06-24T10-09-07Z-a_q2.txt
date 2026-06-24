@@ -1,0 +1,1 @@
+EXTRA: Updated `skills/doc-sync/SKILL.md` lines 73–76 to correct the documentation reference from `scripts/doc-drift-gate.py` to `scripts/doc-drift-gate.js` (not requested in the original goal).

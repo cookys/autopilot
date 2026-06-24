@@ -28,7 +28,9 @@ dev-flow, while the CEO holds the **depth-0 control loop** and the
      dev-flow inline, impl/review leaf-dispatched to depth-2 workers.
    - Depth-0 control loop the CEO owns: budget cap (rounds + wall-clock,
      fail-closed → `TaskStop` + escalate), outcome→action table, **qc@depth-0**
-     (authoritative, reads artifacts — distinct from the foreman's first-pass qc),
+     (authoritative — a **fan-out of ≥3 adversarial reviewers** over the branch
+     diff, synthesized + fix-before-integrate; **NOT a CEO self-read**; distinct
+     from the foreman's first-pass qc),
      merge-back owned by depth 0 (conflict → rebase-once-else-escalate), worktree
      GC (`git worktree remove --force`).
    - Record the **run-summary ledger** (step → runner/model → verdict → artifact)

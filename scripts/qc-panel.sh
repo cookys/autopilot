@@ -369,10 +369,19 @@ run_judge_b() {
   TOKEN_TOTAL=$((TOKEN_TOTAL + prompt_tokens + CTX_TOKENS))
 
   local agy_out
-  agy_out="$(cd "$judge_dir" && "$AGY_BIN" -p "$prompt" \
-      --model "$JUDGE_B_MODEL" \
-      --dangerously-skip-permissions \
-      --print-timeout 8m 2>/dev/null)" || true
+  if [ "$(basename "$AGY_BIN")" = "codex" ] || [[ "$JUDGE_B_MODEL" == *"gpt-5.5"* ]]; then
+    agy_out="$(cd "$judge_dir" && codex exec --model "$JUDGE_B_MODEL" \
+        --dangerously-bypass-approvals-and-sandbox \
+        --dangerously-bypass-hook-trust \
+        -c "thinking=\"xhigh\"" \
+        -c "shell_environment_policy.inherit=all" \
+        <<< "$prompt" 2>/dev/null)" || true
+  else
+    agy_out="$(cd "$judge_dir" && "$AGY_BIN" -p "$prompt" \
+        --model "$JUDGE_B_MODEL" \
+        --dangerously-skip-permissions \
+        --print-timeout 8m 2>/dev/null)" || true
+  fi
 
   if [ -f "$verdict_target" ] && [ -s "$verdict_target" ]; then
     cp "$verdict_target" "$outfile"
@@ -423,10 +432,19 @@ refute_with_judge_b() {
   prompt="$(printf 'You are a code review judge. Review context.txt and answer this question:\n\n%s\n\nQUESTION: %s\n\nWRITE your answer to ./verdict.txt then output only the word DONE.\n' "$SCOPE_RULE" "$question")"
   TOKEN_TOTAL=$((TOKEN_TOTAL + $(estimate_tokens_str "$prompt") + CTX_TOKENS))
   local agy_out
-  agy_out="$(cd "$judge_dir" && "$AGY_BIN" -p "$prompt" \
-      --model "$JUDGE_B_MODEL" \
-      --dangerously-skip-permissions \
-      --print-timeout 8m 2>/dev/null)" || true
+  if [ "$(basename "$AGY_BIN")" = "codex" ] || [[ "$JUDGE_B_MODEL" == *"gpt-5.5"* ]]; then
+    agy_out="$(cd "$judge_dir" && codex exec --model "$JUDGE_B_MODEL" \
+        --dangerously-bypass-approvals-and-sandbox \
+        --dangerously-bypass-hook-trust \
+        -c "thinking=\"xhigh\"" \
+        -c "shell_environment_policy.inherit=all" \
+        <<< "$prompt" 2>/dev/null)" || true
+  else
+    agy_out="$(cd "$judge_dir" && "$AGY_BIN" -p "$prompt" \
+        --model "$JUDGE_B_MODEL" \
+        --dangerously-skip-permissions \
+        --print-timeout 8m 2>/dev/null)" || true
+  fi
   local out=""
   if [ -f "$judge_dir/verdict.txt" ] && [ -s "$judge_dir/verdict.txt" ]; then
     out="$(cat "$judge_dir/verdict.txt")"

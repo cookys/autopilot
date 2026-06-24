@@ -1,0 +1,22 @@
+{
+  "node": "phase-1",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "Port risk-counter.sh and toggle-payload-capture.sh to pure Node.js and replace the original entrypoints with thin shell wrappers.",
+  "evidence_pointers": [
+    "scripts/risk-counter.js:1-141",
+    "scripts/toggle-payload-capture.js:1-115",
+    "scripts/risk-counter.sh:1-24",
+    "scripts/toggle-payload-capture.sh:1-29"
+  ],
+  "artifact_paths": [
+    "scripts/risk-counter.js",
+    "scripts/toggle-payload-capture.js",
+    "scripts/risk-counter.sh",
+    "scripts/toggle-payload-capture.sh",
+    "hooks/tests/risk-counter.test.sh",
+    "hooks/tests/toggle-payload-capture.test.sh"
+  ],
+  "doa_log": [],
+  "escalations": []
+}

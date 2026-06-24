@@ -1,0 +1,19 @@
+Based on my review of the node report, evidence pointers, and artifacts:
+
+The question asked for:
+1. Port risk-counter.sh to pure Node.js
+2. Port toggle-payload-capture.sh to pure Node.js  
+3. Replace the original entrypoints with thin shell wrappers
+
+**All goals were achieved:**
+
+- ✓ `scripts/risk-counter.js` — complete Node.js port with all commands (status, reset, increment, threshold-hit, path)
+- ✓ `scripts/toggle-payload-capture.js` — complete Node.js port with all commands (enable, disable, status)
+- ✓ `scripts/risk-counter.sh` — converted to a thin wrapper delegating to the Node.js version
+- ✓ `scripts/toggle-payload-capture.sh` — converted to a thin wrapper delegating to the Node.js version
+- ✓ Test coverage provided for both implementations
+- ✓ Error handling and fail-open behavior implemented consistently
+
+The report verdict of "pass" with confidence 1.0, no escalations, and no DOA issues confirms full completion.
+
+**MISSED:** _(none)_

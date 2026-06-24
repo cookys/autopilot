@@ -73,7 +73,7 @@ If the project has no `gate_command` yet: start one. **Universal checks** (work 
 zero config) — internal-link resolution + code-fence balance — are the baseline; add
 **project-specific** checks as the LLM sweep discovers mechanizable classes (version-sync,
 CLI-surface-vs-docs, roadmap-consistency, etc.). Autopilot ships a generic baseline at
-[`scripts/doc-drift-gate.py`](../../scripts/doc-drift-gate.py) (links + fences over a
+[`scripts/doc-drift-gate.js`](../../scripts/doc-drift-gate.js) (links + fences over a
 configurable doc set) you can adopt and extend; the codeforge repo's `scripts/check-doc-drift.py`
 is a 5-check reference that adds the project-specific classes on top. Wire your gate into CI +
 the `quality-pipeline` doc step.

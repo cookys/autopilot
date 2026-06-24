@@ -137,7 +137,7 @@ check_readme_parity() {
 # Zero-variance: a green run means those drift classes are genuinely clean, so it is
 # gate-able here. The LLM sweep (Layer 2) is discovery only, never a gate.
 check_doc_drift() {
-  python3 "$REPO/scripts/doc-drift-gate.py" "$REPO" >/dev/null 2>&1
+  node "$REPO/scripts/doc-drift-gate.js" "$REPO" >/dev/null 2>&1
 }
 
 # ─── 8b. adapter targets CARRY the invariant, not merely resolve ───

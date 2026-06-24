@@ -5,7 +5,7 @@
 # of the dogfood plan (handoff-d1-d2-dogfood.md).
 
 ## Code Review
-- superpowers:code-reviewer
+- superpowers:requesting-code-review
 - autopilot:reviewer
 
 ## Parallel Dispatch

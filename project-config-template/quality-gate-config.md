@@ -9,7 +9,7 @@
 
 ## Code Review
 # Default: dispatch `autopilot:reviewer` (ships with autopilot — no extra plugin needed).
-# For preference chains (e.g., adding superpowers:code-reviewer as fallback when
+# For preference chains (e.g., adding superpowers:requesting-code-review as fallback when
 # autopilot:reviewer is not loaded mid-session), see `.claude/dispatch-config.md`
 # (template: project-config-template/dispatch-config.md).
 # If `superpowers` is NOT installed, just leave autopilot:reviewer as the only entry.

@@ -72,7 +72,7 @@ autopilot:dev-flow 設定 session rules：
   → 測試：     superpowers:test-driven-development + autopilot:test-strategy（互補）
   → Profiling: autopilot:profiling（無 superpowers 對應）
   → Team：     autopilot:team（allocation）+ superpowers:dispatching-parallel-agents（dispatch）
-  → Review：   autopilot:reviewer → superpowers:code-reviewer（fallback）
+  → Review：   autopilot:reviewer → superpowers:requesting-code-review（fallback）
 ```
 
 歷史上這曾被定位為「定規則，Superpowers 執行」（v2.0-v2.6）；v2.7.0 在保留該模型（當 superpowers 已安裝時）的同時，讓 autopilot 也能作為 standalone plugin 運作。各情境 UX 見下方 [Superpowers Coexistence](#superpowers-coexistence)。
@@ -92,7 +92,7 @@ Autopilot 支援三種部署情境：
 ```markdown
 ## Code Review
 - autopilot:reviewer
-- superpowers:code-reviewer
+- superpowers:requesting-code-review
 
 ## Parallel Dispatch
 - superpowers:dispatching-parallel-agents
@@ -108,6 +108,8 @@ Autopilot 支援三種部署情境：
 - autopilot:test-strategy
 - superpowers:test-driven-development
 ```
+
+> **superpowers ≥ v5.1.0 注意**：獨立的 `superpowers:code-reviewer` agent 已移除，併入 **`requesting-code-review`** / **`receiving-code-review`** skills（對照 `obra/superpowers` v6.0.3,2026-06 確認）。上面 chain 用現行名稱;`autopilot:reviewer` 仍是方法論紀律的主要 reviewer,此 fallback 為選用。
 
 ### B. 你**沒裝** `superpowers`
 
@@ -125,7 +127,7 @@ Autopilot 完全 standalone 運作。Orchestrator fall through 到 autopilot 自
     "superpowers:systematic-debugging",
     "superpowers:test-driven-development",
     "superpowers:dispatching-parallel-agents",
-    "superpowers:code-reviewer"
+    "superpowers:requesting-code-review"
   ]
 }
 ```

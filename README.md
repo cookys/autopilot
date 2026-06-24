@@ -76,7 +76,7 @@ Methodology dispatch (per .claude/dispatch-config.md):
   → Testing:    superpowers:test-driven-development + autopilot:test-strategy (complementary)
   → Profiling:  autopilot:profiling (no superpowers equivalent)
   → Team:       autopilot:team (allocation) + superpowers:dispatching-parallel-agents (dispatch)
-  → Review:     autopilot:reviewer → superpowers:code-reviewer (fallback)
+  → Review:     autopilot:reviewer → superpowers:requesting-code-review (fallback)
 ```
 
 This was historically positioned as「sets the rules; Superpowers executes」(v2.0-v2.6); v2.7.0 preserves that model when superpowers is installed while making autopilot also work as a standalone plugin. See [Superpowers Coexistence](#superpowers-coexistence) for per-scenario UX.
@@ -96,7 +96,7 @@ Recommended default. autopilot's orchestrators delegate tactical execution to su
 ```markdown
 ## Code Review
 - autopilot:reviewer
-- superpowers:code-reviewer
+- superpowers:requesting-code-review
 
 ## Parallel Dispatch
 - superpowers:dispatching-parallel-agents
@@ -112,6 +112,8 @@ Recommended default. autopilot's orchestrators delegate tactical execution to su
 - autopilot:test-strategy
 - superpowers:test-driven-development
 ```
+
+> **superpowers ≥ v5.1.0 note**: the standalone `superpowers:code-reviewer` agent was removed and folded into the **`requesting-code-review`** / **`receiving-code-review`** skills (verified against `obra/superpowers` v6.0.3, 2026-06). Chains above use the current name; `autopilot:reviewer` remains the methodology-disciplined primary, so this fallback is optional.
 
 ### B. You do NOT have `superpowers` installed
 
@@ -129,7 +131,7 @@ Use `.claude/settings.json`'s `disabledSkills` to hard-cut superpowers skills pe
     "superpowers:systematic-debugging",
     "superpowers:test-driven-development",
     "superpowers:dispatching-parallel-agents",
-    "superpowers:code-reviewer"
+    "superpowers:requesting-code-review"
   ]
 }
 ```

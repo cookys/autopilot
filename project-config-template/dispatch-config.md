@@ -36,7 +36,7 @@
 #
 # Recognized entries:
 #   - autopilot:reviewer                # autopilot's built-in methodology-disciplined reviewer
-#   - superpowers:code-reviewer         # only if `superpowers` plugin installed
+#   - superpowers:requesting-code-review         # only if `superpowers` plugin installed
 #   - <your-project-reviewer>           # project-specific reviewer agent, if any
 #
 # Example (default — autopilot only):
@@ -45,7 +45,7 @@
 # Example (superpowers installed, used as fallback when autopilot:reviewer not
 # yet loaded mid-session):
 #   - autopilot:reviewer
-#   - superpowers:code-reviewer
+#   - superpowers:requesting-code-review
 
 ## Doc Drift Audit
 # Ordered preference for HOW autopilot:doc-sync runs its doc↔code drift audit.

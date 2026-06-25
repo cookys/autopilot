@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _(none in progress)_ | | | |
+| 2026-06-26 | [test-integrity-l1](2026-06-26-test-integrity-l1/README.md) — executed-set invariance (run the collector, fail if the set of actually-executing tests shrinks) + real out-of-commit override provenance. **NOT STARTED — handoff doc; write per-runner design spec first.** Follows P1a/L0 (v2.25.6) | (PATCH) | _(not branched)_ |
 
 ## 已完成 (Completed)
 

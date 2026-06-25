@@ -1,0 +1,37 @@
+preflight-portability — autopilot v2.7.3+ acceptance gate
+
+[1] intent-capture.js returns version with CLAUDE_PLUGIN_ROOT
+  ✓ intent-capture.js returns version with CLAUDE_PLUGIN_ROOT
+[2] intent-capture.js returns 'unknown' without env var, no throw
+  ✓ intent-capture.js returns 'unknown' without env var, no throw
+[3] intent-capture.js works from symlinked path (no throw)
+  ✓ intent-capture.js works from symlinked path (no throw)
+[4] session-start.sh emits hookSpecificOutput envelope when env set
+  ✓ session-start.sh emits hookSpecificOutput envelope when env set
+[5] session-start.sh emits additional_context envelope when env unset
+  ✓ session-start.sh emits additional_context envelope when env unset
+[6] sync-version.js --check: canonical & mirrors in sync
+  ✓ sync-version.js --check: canonical & mirrors in sync
+[7] sync-agent-bodies.sh --check: agent-bodies/ in sync with agents/
+  ✓ sync-agent-bodies.sh --check: agent-bodies/ in sync with agents/
+[8] .agents/skills symlink resolves to ../skills (target exists)
+  ✓ .agents/skills symlink resolves to ../skills (target exists)
+[9] .agents/skills adapter targets CARRY their name: invariant (≥2 seeds)
+  ✓ .agents/skills adapter targets CARRY their name: invariant (≥2 seeds)
+[10] scripts/validate.sh: all skills pass structural validation
+  ✓ scripts/validate.sh: all skills pass structural validation
+[11] hook inventory: doc counts + tier membership match wiring
+  ✓ hook inventory: doc counts + tier membership match wiring
+[12] README parity: README.md ↔ README.zh-TW.md badges + sections
+  ✓ README parity: README.md ↔ README.zh-TW.md badges + sections
+[13] doc-drift gate: internal links resolve + code-fences balance
+  ✓ doc-drift gate: internal links resolve + code-fences balance
+[14] OpenCode plugin getPluginVersion returns real version
+  ✓ OpenCode plugin getPluginVersion returns real version
+[15] OpenCode discovers autopilot skills via .agents/skills/
+  ✓ OpenCode discovers autopilot skills via .agents/skills/
+[16] OpenCode agent body resolves without frontmatter leak
+  ✓ OpenCode agent body resolves without frontmatter leak
+
+✅ ALL CHECKS PASSED (16/16)
+

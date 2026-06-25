@@ -1,0 +1,3 @@
+EXTRA: `scripts/qc-panel.js` was functionally changed to invoke `codex` when a gpt-5.5 model is selected even if `QC_AGY_BIN` is not `codex`.
+
+EXTRA: The README also marked Phase 6 as `Completed`, which belongs to another node rather than Phase 7.

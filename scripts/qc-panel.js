@@ -239,7 +239,23 @@ async function main() {
       const promptTokens = estimateTokensStr(prompt);
       tokenTotal += promptTokens + ctxTokens;
 
-      const child = spawn(claudeBin, ['-p', '--model', judgeAModel], {
+      const isA_Codex = (path.basename(claudeBin) === 'codex') || judgeAModel.includes('gpt-5.5');
+      let childBin = claudeBin;
+      let childArgs = [];
+      if (isA_Codex) {
+        childBin = path.basename(claudeBin) === 'codex' ? claudeBin : 'codex';
+        childArgs = [
+          'exec',
+          '--model', judgeAModel,
+          '--dangerously-bypass-approvals-and-sandbox',
+          '--dangerously-bypass-hook-trust',
+          '-c', 'thinking="xhigh"',
+          '-c', 'shell_environment_policy.inherit=all'
+        ];
+      } else {
+        childArgs = ['-p', '--model', judgeAModel];
+      }
+      const child = spawn(childBin, childArgs, {
         stdio: ['pipe', 'pipe', 'ignore']
       });
 
@@ -375,7 +391,23 @@ async function main() {
       const promptTokens = estimateTokensStr(prompt);
       tokenTotal += promptTokens + ctxTokens;
 
-      const child = spawn(claudeBin, ['-p', '--model', judgeAModel], {
+      const isRefute_Codex = (path.basename(claudeBin) === 'codex') || judgeAModel.includes('gpt-5.5');
+      let childBin = claudeBin;
+      let childArgs = [];
+      if (isRefute_Codex) {
+        childBin = path.basename(claudeBin) === 'codex' ? claudeBin : 'codex';
+        childArgs = [
+          'exec',
+          '--model', judgeAModel,
+          '--dangerously-bypass-approvals-and-sandbox',
+          '--dangerously-bypass-hook-trust',
+          '-c', 'thinking="xhigh"',
+          '-c', 'shell_environment_policy.inherit=all'
+        ];
+      } else {
+        childArgs = ['-p', '--model', judgeAModel];
+      }
+      const child = spawn(childBin, childArgs, {
         stdio: ['pipe', 'pipe', 'ignore']
       });
 
@@ -564,7 +596,23 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
       const promptTokens = estimateTokensStr(prompt);
       tokenTotal += promptTokens;
 
-      const child = spawn(claudeBin, ['-p', '--model', synthModel], {
+      const isSynth_Codex = (path.basename(claudeBin) === 'codex') || synthModel.includes('gpt-5.5');
+      let childBin = claudeBin;
+      let childArgs = [];
+      if (isSynth_Codex) {
+        childBin = path.basename(claudeBin) === 'codex' ? claudeBin : 'codex';
+        childArgs = [
+          'exec',
+          '--model', synthModel,
+          '--dangerously-bypass-approvals-and-sandbox',
+          '--dangerously-bypass-hook-trust',
+          '-c', 'thinking="xhigh"',
+          '-c', 'shell_environment_policy.inherit=all'
+        ];
+      } else {
+        childArgs = ['-p', '--model', synthModel];
+      }
+      const child = spawn(childBin, childArgs, {
         stdio: ['pipe', 'pipe', 'ignore']
       });
 

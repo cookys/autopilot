@@ -4,22 +4,32 @@
   "confidence": 1.0,
   "question": "E2E validation & clean up old scripts.",
   "evidence_pointers": [
-    "docs/projects/2026-06-24-port-autopilot-to-node/README.md:1-20",
+    "docs/projects/2026-06-24-port-autopilot-to-node/README.md:21-31",
     "docs/projects/2026-06-24-port-autopilot-to-node/phase-7.diff:1-30",
-    "scripts/qc-panel.js:290-310"
+    "scripts/qc-panel.js:290-310",
+    "docs/projects/2026-06-24-port-autopilot-to-node/e2e-tests.log:1-388",
+    "docs/projects/2026-06-24-port-autopilot-to-node/preflight.log:1-20"
   ],
   "artifact_paths": [
     {
       "path": "docs/projects/2026-06-24-port-autopilot-to-node/README.md",
-      "sha256": "6b08d88e5492033e49a2f213bb118d1d2cab945c0075321c92fbd5399e858160"
+      "sha256": "73fed5c78def13e6477b9c95cea73cc2d5a275aad39a631b747ba174ac424e02"
     },
     {
       "path": "docs/projects/2026-06-24-port-autopilot-to-node/phase-7.diff",
-      "sha256": "dadca3950851124ac9bf1257780f450488d8b0dfa3be6a9fbb7e0bc790b1c7a4"
+      "sha256": "69080c194a7a186b56f51e77e4f38c4a565c24617810d28f8c10238cd603c240"
     },
     {
       "path": "scripts/qc-panel.js",
-      "sha256": "da1cbed9e8b289f23748a1b3288a7feb003cad194d5cd2c0fa410616f3de1846"
+      "sha256": "53b4505a1b5cddcebe8131a0f389a34524322d331a40be35775c5574aa0c49b1"
+    },
+    {
+      "path": "docs/projects/2026-06-24-port-autopilot-to-node/e2e-tests.log",
+      "sha256": "69a783ee8d922af8e4c206a8a1412a9c539794b713a2c1f722f0ed1f1c8db973"
+    },
+    {
+      "path": "docs/projects/2026-06-24-port-autopilot-to-node/preflight.log",
+      "sha256": "eae75960731f0d343592993db8ae44fd62f656b868038de5eccffd1c367d26e5"
     }
   ],
   "doa_log": [],

@@ -1,0 +1,1 @@
+EXTRA: Modified `scripts/qc-panel.js` so Judge B/Codex paths invoke `codex` when the model implies Codex/GPT-5.5 but `QC_AGY_BIN` is not `codex`; this functional dispatch change is beyond the stated phase-7 goal of E2E validation and old-script cleanup.

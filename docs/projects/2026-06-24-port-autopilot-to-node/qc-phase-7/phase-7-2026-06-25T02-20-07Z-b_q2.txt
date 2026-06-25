@@ -1,0 +1,1 @@
+EXTRA: Modified `scripts/qc-panel.js` judge runner behavior so Codex-mode Judge B/refute calls use the `codex` binary when `QC_AGY_BIN` is not already `codex`; that functional runtime change goes beyond the stated phase-7 goal of E2E validation and old-script cleanup.

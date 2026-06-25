@@ -1,0 +1,2 @@
+MISSED: Clean up old scripts is not demonstrated; the phase-7 diff only marks statuses complete and changes scripts/qc-panel.js, with no removal or retirement of old scripts shown.
+MISSED: E2E validation is incomplete because preflight.log explicitly lists manual verification still required for Claude Code restart/session context, Claude Code tool-use intent capture, and agy skills list.

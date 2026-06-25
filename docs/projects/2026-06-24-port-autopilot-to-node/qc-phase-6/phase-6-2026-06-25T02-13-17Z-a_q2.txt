@@ -1,0 +1,5 @@
+EXTRA: Added Codex execution support for Judge A and synthesizer paths when `QC_CLAUDE_BIN` is `codex` or model contains `gpt-5.5`, beyond a direct shell-to-Node port.
+
+EXTRA: Added improved Codex binary fallback logic for Judge B/refute paths, choosing `codex` when `QC_AGY_BIN` is not itself `codex` but the model implies Codex usage.
+
+EXTRA: Created `docs/projects/2026-06-24-port-autopilot-to-node/phase-6.diff` as a project diff artifact in addition to the requested script port and wrapper replacement.

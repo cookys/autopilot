@@ -1,0 +1,9 @@
+ACHIEVED: Phase 7 was marked completed for “E2E validation & clean up old scripts” in the project phase table (`README.md` shows Phase 7 status `Completed`; `phase-7.diff` changes Phase 7 from `Pending` to `Completed`).
+
+ACHIEVED: E2E validation passed: `e2e-tests.log` reports `81` Node tests passed, `0` failed, and `✅ ALL TESTS PASSED (57 test files)`.
+
+ACHIEVED: Preflight validation passed: `preflight.log` shows all 16 portability checks succeeded and ends with `✅ ALL CHECKS PASSED (16/16)`.
+
+ACHIEVED: Old script cleanup was documented: `README.md` adds “Cleanup Details,” listing deleted `scripts/doc-drift-gate.py` and wrapped legacy shell entrypoints delegating to Node.js equivalents.
+
+ACHIEVED: Phase-7 cleanup included fixing `qc-panel.js` Codex execution paths: `phase-7.diff` and `scripts/qc-panel.js` show Codex-mode child process selection now uses `codex` when the configured binary is not already `codex`.

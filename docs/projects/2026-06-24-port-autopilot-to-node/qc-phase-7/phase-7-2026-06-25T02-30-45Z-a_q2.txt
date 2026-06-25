@@ -1,0 +1,5 @@
+EXTRA: Modified `scripts/qc-panel.js` to add Codex execution support/fallback for Judge A, refute Judge A, and synthesizer paths.
+
+EXTRA: Modified `scripts/qc-panel.js` Judge B/refute paths to invoke `codex` when the model name contains `gpt-5.5`, even if `QC_AGY_BIN` is not `codex`.
+
+EXTRA: Added Phase 6 artifacts/reports (`phase-6.diff`, `report-phase-6.json`) as part of the Phase 7 diff, which belong to another node.

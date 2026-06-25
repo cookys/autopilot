@@ -1,0 +1,2 @@
+MISSED: E2E validation is not shown as completed; the artifacts include no test, validation, or command output demonstrating end-to-end execution.
+MISSED: Cleanup of old scripts is not shown; the diff does not remove, replace, or otherwise clean up legacy shell/python scripts.

@@ -1,0 +1,1 @@
+MISSED: Clean up old scripts is not evidenced; the diff shows no removal or cleanup of legacy shell/python scripts.

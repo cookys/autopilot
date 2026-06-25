@@ -1,0 +1,2 @@
+ACHIEVED: Phase 7's stated deliverable, "E2E validation & clean up old scripts," is reported as achieved: the node report identifies `phase-7` with `verdict: "pass"` and that exact question, and the README row for Phase 7 shows `Completed` while `phase-7.diff` changes the Phase 7 row from `Pending` to `Completed`.
+ACHIEVED: The phase-7 artifact includes the related QC panel cleanup/fix in both Codex Judge B execution paths: `phase-7.diff` and `scripts/qc-panel.js` change `childBin` from always using `agyBin` to `agyBaseName === 'codex' ? agyBin : 'codex'`.

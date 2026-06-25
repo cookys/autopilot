@@ -1,0 +1,1 @@
+EXTRA: Changed `scripts/qc-panel.js` Codex child-process binary selection to run `codex` when `QC_AGY_BIN`/`agyBin` is not itself `codex`, a behavior fix beyond the stated Phase 7 goal of E2E validation and old-script cleanup.

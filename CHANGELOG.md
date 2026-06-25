@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.4 — finish-flow L-size branch cleanup (close the leak)
+
+**Headline**: Fixed a flow defect that left a `feat/*` branch behind after every L-size ship. `finish-flow`'s **L-5** closing sequence had no branch-deletion sub-task — unlike Fix (`F.5`) and Hotfix (`H-9.5`), which delete theirs — so L-ships silently accumulated stale local **and** remote branches (discovered when a cleanup found `feat/task-tree-engine`, `feat/tree-role-dispatch`, `feat/l4-l5-dep-graph-fanout` and others never removed). This is a workflow gap, not a git setting: git does not auto-delete a local branch on merge, and GitHub's "auto-delete head branch" only fires on PR merges (this repo merges directly).
+
+### Added
+- `finish-flow` **L-5.7 "Delete merged branch (local + remote)"** sub-task — mirrors `F.5`/`H-9.5`: verify merged, then `git branch -d` + `git push origin --delete` (if pushed), with `git branch` + `git ls-remote` confirmation. L-5 is now **7 sub-tasks**.
+
+### Changed
+- `F.5` / `H-9.5` hardened to delete the **remote** branch too (`git push origin --delete`), not only the local one — remote branches were accumulating as well.
+- Synced the L-5 sub-task count (6→7) across the references in `dev-flow` (the `L-5:` parent-task TaskCreate + the L-5 section) and `ceo-agent`. H-size remains 6.
+
 ## v2.25.3 — Pure-Node.js core: jq/python3-free runtime + validation scripts
 
 **Headline**: Ported autopilot's core runtime and validation scripts to **pure Node.js**, removing the `jq` and `python3` dependencies from the runtime and preflight paths so the engine runs flawlessly in dependency-minimal sandboxes (e.g. Antigravity/`agy`). Seven scripts were rewritten — `risk-counter`, `toggle-payload-capture`, `session-start` (hook), `doc-drift-gate` (was `.py`), `check-node-report`, `tree` (the task-tree engine), and `qc-panel` — and their shell/python originals deleted (no wrapper shims; `hooks.json` and all wiring now point at the `.js` entrypoints). All 57 hook test files and the 16-check portability preflight pass with `jq`/`python3` stubbed to fail.

@@ -420,7 +420,7 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | Say "handle errors" without specifics | Name the error, trigger, recovery, and user impact |
 | Drift from chosen scope mode mid-execution | Commit to the mode; raise Board Decision if mode itself needs changing |
 | Decide without thinking through failure modes | Inversion reflex — always ask "what would make this fail?" |
-| Stop at "ready for PR, your call" at L-5 | Merge to develop is within DOA; invoke `finish-flow` and execute all 6 sub-tasks autonomously |
+| Stop at "ready for PR, your call" at L-5 | Merge to develop is within DOA; invoke `finish-flow` and execute all 7 sub-tasks autonomously |
 | Inline L-5 / H-9 closing steps "because CEO is fast" | Speed does not mean skipping — invoke `finish-flow`; the TaskCreate forcing function IS the speed discipline |
 | Skip `autopilot:learn` at L-5.6 / H-9.4 "nothing notable" | Evaluate the 5 learn-trigger questions first; for H-size, learn is unconditional MANDATORY |
 | Skip the L-1.5 Scope Completeness Audit "because the task is obvious" | Scope holes are invisible until after you've shipped the wrong deliverable; the audit is cheap and the alternative is not |

@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.7 — L1 test-integrity gate (executed-set invariance)
+
+**Headline**: L1 layer for `check-test-integrity.sh` — the semantic half L0 (diff-text-only) can't see. L1 RUNS the test collector on base vs head and fails (`executed_set_shrink`) if the set of tests that **actually execute** shrinks — catching additions-only / out-of-test-path gaming L0 misses (`test.only`/`fit`, module `pytestmark=skip`, `collect_ignore`, runner-config exclusions, go build-tag drops, jest/vitest `testPathIgnorePatterns`). Per-runner: **pytest / jest / vitest / go** (RUN-not-collect — verified `--collect-only` lists skipped tests, so execution/report status is the only honest signal). Best-effort (runs only when a runner is detected); default stays `warn`, `block` opt-in. Strictly additive to L0 (the 70 L0 assertions are unchanged). Converged through a 4-round gpt-5.5 adversarial design loop + a 3-round impl review + an independent depth-0 adversarial harness.
+
+### Added
+- L1 layer in `scripts/check-test-integrity.sh` (additive): two-sided `git worktree` collection with env-scrub + pgroup-killed timeout + always-cleanup; per-runner detection (`marker_present`+`tool_available` matrix), collection commands, normalized test-ids, and status→executed mapping; `executed_set_shrink` by exact set-diff (no fuzzy rename matching — a renamed test id is a documented false-positive requiring depth-0 override, per the deliberate spec decision); base-vs-head failure classification (`unavailable`/`collection_failed`(`reporter_failed`/`build_failed`/`timeout`/`module_path_changed`)/`runner_disappeared`); JS empty/broken-report and go multi-package build-failure both **fail closed**.
+- New CLI flags: `--no-l1`, `--l1-timeout`, `--l1-runner`, `--l1-worktree-dir`, `--l1-verdict-file`, `--assert-worker-dead <pgid>`. New JSON fields: `l1`, `l1_runners[]` (backward-compatible with the L0 schema).
+- Override verdict-verification plumbing (changeset-digest + dropped-digest bound, out-of-commit channel) — **built but inert in `block` mode** (see Known limitation).
+- `hooks/tests/check-test-integrity-l1.test.sh` — 58 L1 acceptance assertions (per-runner shrink/ok, broken-runner, multi-package build-fail, override inertness).
+- Design spec: `docs/projects/2026-06-26-test-integrity-l1/design-spec.md` (v4, with the 4-round review history).
+
+### Changed
+- `scripts/check-test-integrity.sh` description + CLAUDE.md inventory row + `skills/quality-pipeline/references/test-integrity-gate.md` updated to document the L1 layer. Two L0-test assertions isolated with `--no-l1` (L0-scoped cases that L1 now legitimately augments; no L0 assertion removed or loosened).
+
+### Known limitation
+- **Block-mode override HONORING is DEFERRED** (ruling: ship detection + warn + block-hard-fail now). A block-mode `executed_set_shrink` is a hard fail with NO honored override until a worker **descendant-containment** mechanism stronger than pgid-emptiness lands. Reason: in the linked-worktree `/l5` dispatch model a same-user worker can forge the override channel, and `--assert-worker-dead <pgid>` doesn't stop a `setsid`-escaped descendant — this is honestly out of threat model for a same-user shell until `dispatch-hetero.sh` is hardened (own-session + tree-sweep reap on all exit paths). Refusing a forgeable waiver is fail-safe. See design-spec §8.3.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.25.6 — L0 test-integrity gate (anti-gaming forcing function)
 
 **Headline**: A new deterministic, git-artifact-based quality-pipeline gate that stops a delegated implementer from gaming tests to go green — by deleting / skipping / soloing / weakening existing tests or escaping the test surface. Born from the `delegate-selftest-false-green` lesson. Default `warn` (shadow→calibrate→gate); `block` is opt-in per project for `/l5` hetero dispatch.

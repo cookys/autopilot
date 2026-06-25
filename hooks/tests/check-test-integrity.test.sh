@@ -43,7 +43,7 @@ echo "def test_first(): assert True" > tests/first_test.py
 git add tests/first_test.py
 git commit -qm "weaken assertion"
 
-run_integrity
+run_integrity --no-l1
 assert_exit_code "$__EXIT_CODE" 0 "default warn mode exits 0 on violation"
 assert_contains "$__OUTPUT" '"kind": "deleted_line"' "detects deleted_line"
 assert_contains "$__OUTPUT" '"ok": true' "ok is true in warn mode"
@@ -309,7 +309,7 @@ git commit -qm "config block mode"
 git mv tests/first_test.py tests/first_new_test.py
 git commit -qm "rename to valid test path"
 
-run_integrity
+run_integrity --no-l1
 assert_exit_code "$__EXIT_CODE" 0 "rename to a valid test path is OK"
 assert_contains "$__OUTPUT" '"ok": true' "ok is true for valid rename"
 

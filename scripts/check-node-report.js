@@ -503,11 +503,14 @@ try {
         continue;
       }
 
-      const processedArtBuffer = getProcessedBuffer(artPath, rawArtBuffer);
-      const actualNormalizedSha = sha256(processedArtBuffer);
+      // Artifact integrity is byte-exact: compare the RAW sha256 only, matching
+      // the shell's `sha256sum`. Accepting a CRLF-normalized hash too would
+      // fail-open — a CR-byte change/tamper on a text artifact whose report
+      // records the LF-normalized hash would slip past the checksum (verdict
+      // reject→pass). A checksum gate must catch any byte change.
       const actualRawSha = sha256(rawArtBuffer);
-      if (actualRawSha !== artSha && actualNormalizedSha !== artSha) {
-        addError(`sha256 mismatch for ${artPath}: expected ${artSha}, got ${actualNormalizedSha} (artifact_paths[${j}])`);
+      if (actualRawSha !== artSha) {
+        addError(`sha256 mismatch for ${artPath}: expected ${artSha}, got ${actualRawSha} (artifact_paths[${j}])`);
       }
     }
   }

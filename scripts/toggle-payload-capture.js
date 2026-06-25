@@ -105,7 +105,7 @@ try {
       console.log("Capture mode: DISABLED");
     }
   } else {
-    console.error(`Usage: $0 enable|disable|status`);
+    console.error(`Usage: toggle-payload-capture.js enable|disable|status`);
     process.exit(1);
   }
 } catch (err) {

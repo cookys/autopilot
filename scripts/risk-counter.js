@@ -131,7 +131,7 @@ try {
   } else if (cmd === 'path') {
     console.log(stateFile);
   } else {
-    console.error(`usage: $0 {status|reset|increment --event <kind>|threshold-hit|path}`);
+    console.error(`usage: risk-counter.js {status|reset|increment --event <kind>|threshold-hit|path}`);
     process.exit(2);
   }
 } catch (err) {

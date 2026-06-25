@@ -629,8 +629,8 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<old-version>
 
 | Branch | Purpose | `plugin.json` version |
 |--------|---------|----------------------|
-| `main` | Stable releases, tagged (e.g. `v1.4.5`) | Matches latest tag |
-| `develop` | Next version development | Next major/minor (e.g. `2.0.0`) |
+| `main` | Stable releases, tagged (e.g. `v2.7.1`) | Matches latest tag |
+| `develop` | Next version development | Next major/minor (e.g. `2.26.0`) |
 
 When developing: checkout `develop`, symlink points to it, `/reload-plugins` picks up changes. Remember to bump `plugin.json` version before tagging a release.
 

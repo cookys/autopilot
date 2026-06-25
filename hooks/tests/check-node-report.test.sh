@@ -537,17 +537,20 @@ HEAD_WARN_COUNT="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | length')"
 assert_neq "$HEAD_WARN_COUNT" "0" "@HEAD anchor warning count > 0"
 
 # ---------------------------------------------------------------------------
-# TEST 16b: CRLF artifact sha256 verification (both raw and normalized)
+# TEST 16b: CRLF artifact sha256 verification — RAW bytes only (matches the shell
+# `sha256sum` contract). The artifact integrity check is byte-exact: a CRLF-only
+# normalized hash that does NOT match the raw bytes must be REJECTED, not accepted
+# (accepting it would fail-open — a CR-byte change would slip past the checksum).
 # ---------------------------------------------------------------------------
 CRLF_ART="$TEST_TMP/crlf-art.txt"
 printf 'line 1\r\nline 2\r\n' > "$CRLF_ART"
 
 # Raw sha256 of the CRLF file:
 RAW_SHA="$(sha256sum "$CRLF_ART" | awk '{print $1}')"
-# CRLF-normalized (LF only) content: "line 1\nline 2\n"
+# CRLF-normalized (LF only) content: "line 1\nline 2\n" — does NOT match raw bytes
 NORM_SHA="$(printf 'line 1\nline 2\n' | sha256sum | awk '{print $1}')"
 
-# 16b.1: Validator succeeds with raw SHA
+# 16b.1: Validator succeeds with the RAW SHA (byte-exact match)
 CRLF_RAW_REPORT="$(make_report \
   ".artifact_paths = [{\"path\": \"$CRLF_ART\", \"sha256\": \"$RAW_SHA\"}]" \
   '.evidence_pointers = ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]')"
@@ -556,14 +559,15 @@ assert_exit_code "$__RUN_EXIT" "0" "CRLF artifact raw SHA validation exits 0"
 CRLF_RAW_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
 assert_eq "$CRLF_RAW_VALID" "true" "CRLF artifact raw SHA is valid"
 
-# 16b.2: Validator succeeds with CRLF-normalized SHA
+# 16b.2: Validator REJECTS a normalized SHA that doesn't match the raw bytes
+# (raw-only contract — no CRLF-normalization fail-open).
 CRLF_NORM_REPORT="$(make_report \
   ".artifact_paths = [{\"path\": \"$CRLF_ART\", \"sha256\": \"$NORM_SHA\"}]" \
   '.evidence_pointers = ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]')"
 run_validator "$CRLF_NORM_REPORT"
-assert_exit_code "$__RUN_EXIT" "0" "CRLF artifact normalized SHA validation exits 0"
+assert_exit_code "$__RUN_EXIT" "1" "CRLF artifact normalized SHA (≠ raw) validation exits 1"
 CRLF_NORM_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
-assert_eq "$CRLF_NORM_VALID" "true" "CRLF artifact normalized SHA is valid"
+assert_eq "$CRLF_NORM_VALID" "false" "CRLF artifact normalized SHA (≠ raw) is invalid"
 
 # ---------------------------------------------------------------------------
 # TEST 16c: CLI usage and help advertise the actual .js entrypoint (the .sh was

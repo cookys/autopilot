@@ -617,7 +617,7 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<舊版本>
 
 | Branch | 用途 | `plugin.json` version |
 |--------|------|----------------------|
-| `main` | 穩定發佈，打 tag（如 `v1.4.5`） | 對應最新 tag |
+| `main` | 穩定發佈，打 tag（如 `v2.7.1`） | 對應最新 tag |
 | `develop` | 下一版開發中 | 下一個主/次版號（如 `2.0.0`） |
 
 開發時：checkout `develop`，symlink 指向它，`/reload-plugins` 即時生效。發佈前記得 bump `plugin.json` version 再打 tag。

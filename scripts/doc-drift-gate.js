@@ -40,7 +40,9 @@ function readTextFileNormalized(filePath) {
   // Simple UTF-8 validation
   const text = buffer.toString('utf8');
   if (text.includes('\uFFFD') || text.includes('\u0000')) {
-    // Binary or invalid UTF-8
+    // Binary or invalid UTF-8: skip, but DISCLOSE it (no-silent-caps) — a non-UTF-8
+    // .md with a broken link would otherwise pass the gate unchecked.
+    console.error(`[WARN] doc-drift-gate: skipped non-UTF-8 .md (unchecked): ${filePath}`);
     return null;
   }
   // Normalize CRLF to LF
@@ -168,7 +170,25 @@ function checkFences(files) {
   return { name: "fences", ok: bad.length === 0, details: bad };
 }
 
+const HELP = `doc-drift-gate.js — deterministic doc-drift gate (links + code-fence balance).
+
+Usage:
+  scripts/doc-drift-gate.js [root ...] [--exclude <dir-substring> ...]
+
+  root        one or more paths to scan for .md files (default: ".")
+  --exclude   add a directory-name substring to the skip list (repeatable)
+
+Exit codes:
+  0  no drift found
+  1  drift found (broken intra-repo link or unbalanced code fence) / read error
+  2  usage error
+`;
+
 function main(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    process.stdout.write(HELP);
+    process.exit(0);
+  }
   const roots = [];
   const excludes = [...DEFAULT_EXCLUDES];
   let i = 0;

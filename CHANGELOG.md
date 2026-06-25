@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.5 — scope-creep forcing function + OpenCode preflight retry
+
+**Headline**: Two fixes revived from a long-lived branch (`fix/scope-creep-gate-forcing-function`, written 2026-06-05/10) and re-landed on current develop. (1) The S→L **scope-creep gate** in `dev-flow` and `ceo-agent` becomes a real forcing function: an `S-scope-gate` **TaskCreate** created at S-start (which the system-reminder surfaces before every tool use) replaces the old passive "self-check after every commit" markdown — passive bullets get mentally compressed into "I know this", which is exactly the failure mode. The L-side gets a distinct **L-scope-expansion → Board Decision** path (a doubled estimate or new subsystem maps to DOA "Resources 2x+", which the CEO cannot approve unilaterally). (2) The OpenCode skill-discovery preflight check now retries (3×) to absorb a cold-start false negative. The branch's third commit (a now-obsolete BACKLOG nested-subagent proposal, superseded by the v2.14.0 ✅ entry) was dropped.
+
+### Added
+- `dev-flow` / `ceo-agent`: **`S-scope-gate` TaskCreate** at S-start — a pending task that surfaces the three S→L indicators (≥3 commits / ≥3 modules / features beyond goal) before every commit. S creates exactly one TaskCreate (intentionally minimal vs L's infra). New anti-pattern table rows guard against skipping it, evaluating it only at task-end, or a CEO approving L-scope expansion unilaterally.
+
+### Changed
+- `dev-flow` / `ceo-agent` **Scope Creep Detection**: split into two explicit escalation paths — S→L (enforced by the TaskCreate) and L-scope-expansion (Board Decision, mapped to the existing DOA "Resources 2x+ / Scope expansion" entries). CEO mode provides no exemption. S Workflow renumbered (4→5 steps) to add the pre-commit scope evaluation.
+
+### Fixed
+- `scripts/preflight-portability.sh` — `check_opencode_skill_discovery()` now retries up to 3× (1s apart) before failing. OpenCode's first cold invocation can return a partial skill listing before discovery finishes indexing `.agents/skills/`, which intermittently failed the gate as a false negative (documented flake).
+
 ## v2.25.4 — finish-flow L-size branch cleanup (close the leak)
 
 **Headline**: Fixed a flow defect that left a `feat/*` branch behind after every L-size ship. `finish-flow`'s **L-5** closing sequence had no branch-deletion sub-task — unlike Fix (`F.5`) and Hotfix (`H-9.5`), which delete theirs — so L-ships silently accumulated stale local **and** remote branches (discovered when a cleanup found `feat/task-tree-engine`, `feat/tree-role-dispatch`, `feat/l4-l5-dep-graph-fanout` and others never removed). This is a workflow gap, not a git setting: git does not auto-delete a local branch on merge, and GitHub's "auto-delete head branch" only fires on PR merges (this repo merges directly).

@@ -20,8 +20,8 @@
 #  16. bash -n clean; shellcheck clean (if installed)
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/check-node-report.sh"
-assert_file_exists "$SCRIPT" "check-node-report.sh exists"
+SCRIPT="$REPO_ROOT/scripts/check-node-report.js"
+assert_file_exists "$SCRIPT" "check-node-report.js exists"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,7 +31,7 @@ assert_file_exists "$SCRIPT" "check-node-report.sh exists"
 run_validator() {
   local stdout_file="$TEST_TMP/.vc.stdout.$$"
   local stderr_file="$TEST_TMP/.vc.stderr.$$"
-  bash "$SCRIPT" "$@" >"$stdout_file" 2>"$stderr_file"
+  node "$SCRIPT" "$@" >"$stdout_file" 2>"$stderr_file"
   __RUN_EXIT=$?
   __RUN_STDOUT=$(cat "$stdout_file")
   __RUN_STDERR=$(cat "$stderr_file")
@@ -579,19 +579,7 @@ assert_exit_code "$__RUN_EXIT" "2" "no arguments exits 2"
 assert_contains "$__RUN_STDERR" "check-node-report.sh" "usage error prints check-node-report.sh"
 assert_not_contains "$__RUN_STDERR" "check-node-report.js" "usage error does not print check-node-report.js"
 
-# ---------------------------------------------------------------------------
-# TEST 16: bash -n clean; shellcheck clean (if installed)
-# ---------------------------------------------------------------------------
-bash -n "$SCRIPT" 2>/dev/null
-assert_exit_code "$?" "0" "bash -n check-node-report.sh is clean"
-
-if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "$SCRIPT" 2>/dev/null
-  assert_exit_code "$?" "0" "shellcheck check-node-report.sh is clean"
-else
-  # sc not installed; skip (not a failure)
-  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
-fi
+# (wrapper tests removed since wrapper is deleted)
 
 # Also bash -n this test file itself
 bash -n "$0" 2>/dev/null

@@ -12,15 +12,15 @@
 #   8. bash -n clean; shellcheck clean (if installed); every subcommand --help exits 0.
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/tree.sh"
-assert_file_exists "$SCRIPT" "tree.sh exists"
+SCRIPT="$REPO_ROOT/scripts/tree.js"
+assert_file_exists "$SCRIPT" "tree.js exists"
 
 # All tests use an isolated projects dir in TEST_TMP
 PROJECTS="$TEST_TMP/projects"
 mkdir -p "$PROJECTS"
 
-# Helper: run tree.sh with sandboxed projects dir
-tree() { TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" "$@"; }
+# Helper: run tree.js with sandboxed projects dir
+tree() { TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" "$@"; }
 
 # Helper: emit a minimal valid event for a given proj/node
 emit_event() {
@@ -122,7 +122,7 @@ for i in $(seq 1 8); do
     for j in $(seq 1 25); do
       SEQ=$(( (i - 1) * 25 + j ))
       EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"n${i}x${j}\",\"type\":\"node_created\",\"seq\":$SEQ}"
-      TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" emit conc "n${i}x${j}" "$EV" 2>/dev/null
+      TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" emit conc "n${i}x${j}" "$EV" 2>/dev/null
     done
   ) &
 done
@@ -172,7 +172,7 @@ VICTIM_PID=""
 (
   for j in $(seq 1 "$VICTIM_TOTAL"); do
     EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"victim${j}\",\"type\":\"node_created\"}"
-    TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" emit crash "victim${j}" "$EV" 2>/dev/null
+    TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" emit crash "victim${j}" "$EV" 2>/dev/null
   done
 ) &
 VICTIM_PID=$!
@@ -198,7 +198,7 @@ assert_eq "$VICTIM_MIDRUN" "1" "crash: kill -9 landed mid-run (victim wrote $VIC
 # Meanwhile emit 20 survivor events from a different "emitter"
 for k in $(seq 1 20); do
   EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"survivor${k}\",\"type\":\"node_created\"}"
-  TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" emit crash "survivor${k}" "$EV" 2>/dev/null
+  TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" emit crash "survivor${k}" "$EV" 2>/dev/null
 done
 
 # 4.1 Log is parseable (rebuild does not fail)
@@ -363,17 +363,7 @@ assert_eq "$(printf '%s' "$LAST_FETCH3" | jq -r '.type')" "manager_raw_read" "fe
 # ─────────────────────────────────────────────────────────────────────────────
 
 # 8.1 bash -n clean
-bash -n "$SCRIPT" 2>/dev/null; BASH_N_EXIT=$?
-assert_eq "$BASH_N_EXIT" "0" "bash -n tree.sh is clean"
-
-# 8.2 shellcheck clean (if installed)
-if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "$SCRIPT" 2>/dev/null; SC_EXIT=$?
-  assert_eq "$SC_EXIT" "0" "shellcheck tree.sh is clean"
-else
-  # Note: shellcheck not installed; skipping (not a failure)
-  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
-fi
+# (wrapper bash/shellcheck validation removed)
 
 # 8.3 All subcommands + top-level --help exit 0
 for sub in --help help -h init emit rebuild-index next-decision report escalations fetch board-status; do
@@ -386,7 +376,7 @@ tree bogus-command 2>/dev/null; UNK_EXIT=$?
 assert_eq "$UNK_EXIT" "2" "unknown subcommand exits 2"
 
 # 8.5 Top-level with no args exits 2
-TREE_PROJECTS_DIR="$PROJECTS" bash "$SCRIPT" 2>/dev/null; NO_CMD_EXIT=$?
+TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" 2>/dev/null; NO_CMD_EXIT=$?
 assert_eq "$NO_CMD_EXIT" "2" "no-subcommand exits 2"
 
 # 8.6 Path-traversal / invalid project names are rejected BEFORE any file op.

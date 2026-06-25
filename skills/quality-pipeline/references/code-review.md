@@ -271,13 +271,13 @@ Condition: `docs/projects/<proj>/tree/` exists AND the review target is a verdic
 | What runs | How | Authority |
 |-----------|-----|-----------|
 | Authoritative reviewer | Existing flow (this doc) | Authoritative — findings drive fixes |
-| `scripts/qc-panel.sh` | In parallel with authoritative reviewer | Shadow only — no fix action; informs calibration |
+| `scripts/qc-panel.js` | In parallel with authoritative reviewer | Shadow only — no fix action; informs calibration |
 
-**Amendment 4 liveness (binding)**: every panel run MUST produce (a) a verdict artifact JSON in `docs/projects/<proj>/tree/panel/` AND (b) a calibration sample via `scripts/calibration.sh add-sample`. If either fails, `qc-panel.sh` exits non-zero — a silently-dead shadow fails the gate.
+**Amendment 4 liveness (binding)**: every panel run MUST produce (a) a verdict artifact JSON in `docs/projects/<proj>/tree/panel/` AND (b) a calibration sample via `scripts/calibration.sh add-sample`. If either fails, `qc-panel.js` exits non-zero — a silently-dead shadow fails the gate.
 
 **Baseline separation (M2 binding)**:
 
-- `qc-panel.sh`'s internal `calibration.sh add-sample` call uses `--baseline self-report`. This records the panel's verdict against the node report's own verdict (worker self-report). It is **liveness-only** — not counted in graduation math.
+- `qc-panel.js`'s internal `calibration.sh add-sample` call uses `--baseline self-report`. This records the panel's verdict against the node report's own verdict (worker self-report). It is **liveness-only** — not counted in graduation math.
 - After both the authoritative reviewer verdict AND the panel verdict are available, the dispatcher adds a **second sample** with `--baseline reviewer`. This is the **graduation-bearing** sample:
 
 ```sh
@@ -295,7 +295,7 @@ The calibration report exposes the data the Board needs for the P5→active deci
 
 ### Finding-survival (refute pass) — SHADOW / non-gating until calibrated
 
-The panel's Q1–Q3 shapes all interrogate the **implementer**; nothing checks whether the panel's **own** `MISSED:` findings are real before they cost a fix round. Two standing project memories (`verify-reviewer-claims`, `delegate-selftest-false-green`) hold that reviewer findings are non-authoritative — a finding is a claim to check, not an order to obey. `qc-panel.sh` adds a 4th question shape, the **refute pass**: for each candidate miss, the **other** cross-family judge (the one that did NOT raise it) attempts to refute it — wrong / already satisfied by the artifacts / out of scope per the scope rule. **Uncertainty counts AGAINST the finding** (`default-refuted-if-uncertain`): a miss **survives only by explicitly defeating refutation**.
+The panel's Q1–Q3 shapes all interrogate the **implementer**; nothing checks whether the panel's **own** `MISSED:` findings are real before they cost a fix round. Two standing project memories (`verify-reviewer-claims`, `delegate-selftest-false-green`) hold that reviewer findings are non-authoritative — a finding is a claim to check, not an order to obey. `qc-panel.js` adds a 4th question shape, the **refute pass**: for each candidate miss, the **other** cross-family judge (the one that did NOT raise it) attempts to refute it — wrong / already satisfied by the artifacts / out of scope per the scope rule. **Uncertainty counts AGAINST the finding** (`default-refuted-if-uncertain`): a miss **survives only by explicitly defeating refutation**.
 
 🔴 **This is SHADOW only — non-gating until it graduates.** The authoritative verdict is **unchanged**: the panel still fails on any non-empty `MISSED:` exactly as before. The refute result rides **alongside** as `refute_shadow:{refuted_misses[],survived_misses[]}` in the panel JSON and into the calibration sample's `--source` tag (`refute=refuted:N,survived:M,gating_misses:K`) — it does **not** alter `verdict`. A refute pass that suppressed a true critical would be worse than the bug it fixes, so it feeds **calibration only**. It may become authoritative **only after** `scripts/calibration.sh` (`run-known-bad`) shows it does not false-suppress critical findings — the same `GRAD_*` graduation criteria block that gates the panel itself (min samples, min agreement, `false_pass_on_critical == 0`).
 

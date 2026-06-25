@@ -73,14 +73,6 @@ assert_contains "$__RUN_STDOUT" "⚠ intent-capture hook disabled" "contains dis
 # Clean up warning flag
 rm -f "$HOOK_HOME/.autopilot/intent-capture.disabled"
 
-# 8. Verify shell wrapper delegation
-# The shell wrapper hooks/session-start.sh should run node hooks/session-start.js
-# Let's write the compaction recovery file again to check if delegating works
-echo "WrapperTestRecoveryContent" > "$HOOK_HOME/.autopilot/compaction-state.md"
-run_hook session-start.sh
-assert_exit_code "$__RUN_EXIT" 0 "wrapper exits 0"
-assert_contains "$__RUN_STDOUT" "WrapperTestRecoveryContent" "wrapper output contains compaction state content"
-
 # 9. Test Fail-Open Posture (corrupt config.json / syntax error handling or unexpected crashes)
 # Write a broken JSON to config.json
 echo "invalid json content" > "$HOOK_HOME/.autopilot/config.json"

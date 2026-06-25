@@ -73,7 +73,7 @@ try {
     console.log("Then in fresh claude, run any tool. Captures land at:");
     console.log("  ~/.autopilot/payloads/<ts>-<pid>-<marker>.json");
     console.log("");
-    console.log(`Done? Run: scripts/toggle-payload-capture.sh disable`);
+    console.log(`Done? Run: scripts/toggle-payload-capture.js disable`);
   } else if (cmd === 'disable') {
     if (!fs.existsSync(backup)) {
       console.error(`ERROR: no backup found (${backup}) — nothing to restore.`);

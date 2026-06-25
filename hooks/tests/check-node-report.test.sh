@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-node-report.test.sh — integration tests for scripts/check-node-report.sh.
+# check-node-report.test.sh — integration tests for scripts/check-node-report.js.
 #
 # Test matrix (references/tree-contracts.md §4 + Amendment 2):
 #   1. --help exits 0
@@ -566,18 +566,20 @@ CRLF_NORM_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
 assert_eq "$CRLF_NORM_VALID" "true" "CRLF artifact normalized SHA is valid"
 
 # ---------------------------------------------------------------------------
-# TEST 16c: CLI usage and help displays check-node-report.sh contract
+# TEST 16c: CLI usage and help advertise the actual .js entrypoint (the .sh was
+# deleted in the port — the help/usage name must match the real file, not a name
+# that no longer exists on disk).
 # ---------------------------------------------------------------------------
 # Run with --help
 run_validator --help
-assert_contains "$__RUN_STDOUT" "check-node-report.sh" "--help stdout prints check-node-report.sh"
-assert_not_contains "$__RUN_STDOUT" "check-node-report.js" "--help stdout does not print check-node-report.js"
+assert_contains "$__RUN_STDOUT" "check-node-report.js" "--help stdout prints check-node-report.js"
+assert_not_contains "$__RUN_STDOUT" "check-node-report.sh" "--help stdout does not print the deleted check-node-report.sh"
 
 # Run with usage error (no arguments)
 run_validator
 assert_exit_code "$__RUN_EXIT" "2" "no arguments exits 2"
-assert_contains "$__RUN_STDERR" "check-node-report.sh" "usage error prints check-node-report.sh"
-assert_not_contains "$__RUN_STDERR" "check-node-report.js" "usage error does not print check-node-report.js"
+assert_contains "$__RUN_STDERR" "check-node-report.js" "usage error prints check-node-report.js"
+assert_not_contains "$__RUN_STDERR" "check-node-report.sh" "usage error does not print the deleted check-node-report.sh"
 
 # (wrapper tests removed since wrapper is deleted)
 

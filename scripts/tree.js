@@ -8,13 +8,13 @@ const { execSync } = require('child_process');
 
 const SCHEMA_VERSION = 1;
 
-const HELP_STRING = `tree.sh — append-only JSONL task-tree CLI.
+const HELP_STRING = `tree.js — append-only JSONL task-tree CLI.
 
 Single state-owning entrypoint for the task-tree engine (P1).
 All mutation goes through this script; consumers read via subcommands.
 
 Usage:
-  scripts/tree.sh <subcommand> [args]
+  scripts/tree.js <subcommand> [args]
 
 Subcommands:
   init <proj>                        Create tree/ dir + empty events.jsonl
@@ -61,7 +61,7 @@ function usageError(msg) {
 }
 
 function logErr(msg) {
-  console.error(`tree.sh: ${msg}`);
+  console.error(`tree.js: ${msg}`);
 }
 
 function showHelp() {
@@ -247,14 +247,14 @@ function lockedAppend(eventsFile, line) {
   try {
     token = acquireLock(lockFile);
   } catch (err) {
-    console.error(`tree.sh: could not acquire lock on ${lockFile} within 10s — append aborted (no unlocked write)`);
+    console.error(`tree.js: could not acquire lock on ${lockFile} within 10s — append aborted (no unlocked write)`);
     process.exit(1);
   }
 
   try {
     fs.appendFileSync(eventsFile, line + '\n');
   } catch (err) {
-    console.error(`tree.sh: append failed (write error) for ${eventsFile} — event NOT recorded`);
+    console.error(`tree.js: append failed (write error) for ${eventsFile} — event NOT recorded`);
     process.exit(1);
   } finally {
     releaseLock(lockFile, token);
@@ -339,7 +339,7 @@ function parseEventsFile(eventsFile) {
       JSON.parse(line);
       validLines.push(line);
     } catch (e) {
-      console.error(`tree.sh: rebuild-index: skipping invalid JSON on line ${lineNum}: ${line.slice(0, 80)}`);
+      console.error(`tree.js: rebuild-index: skipping invalid JSON on line ${lineNum}: ${line.slice(0, 80)}`);
     }
   }
   
@@ -529,7 +529,7 @@ function atomicWriteJson(filePath, data) {
     fs.renameSync(tempPath, filePath);
   } catch (err) {
     try { fs.unlinkSync(tempPath); } catch (_) {}
-    console.error(`tree.sh: failed to write temp index (disk full?) — index NOT replaced`);
+    console.error(`tree.js: failed to write temp index (disk full?) — index NOT replaced`);
     process.exit(1);
   }
 }

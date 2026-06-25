@@ -31,7 +31,7 @@ const scriptDir = __dirname;
 const repoRoot = path.resolve(scriptDir, '..');
 
 function printUsage() {
-  console.log(`qc-panel.sh — QC interrogation panel (task-tree engine P4)
+  console.log(`qc-panel.js — QC interrogation panel (task-tree engine P4)
 
   --report     <node-report.json>    required
   --artifacts  <path>[,<path>...]    required
@@ -63,11 +63,11 @@ function estimateTokensStr(str) {
 
 function validatePathComponent(name, label) {
   if (name.includes('..')) {
-    console.error(`qc-panel.sh: invalid ${label}: contains ".." path traversal: ${name}`);
+    console.error(`qc-panel.js: invalid ${label}: contains ".." path traversal: ${name}`);
     process.exit(2);
   }
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
-    console.error(`qc-panel.sh: invalid ${label}: must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (got: ${name})`);
+    console.error(`qc-panel.js: invalid ${label}: must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (got: ${name})`);
     process.exit(2);
   }
 }
@@ -101,18 +101,18 @@ async function main() {
       printUsage();
       process.exit(0);
     } else {
-      console.error(`qc-panel.sh: unknown argument: ${arg}`);
+      console.error(`qc-panel.js: unknown argument: ${arg}`);
       process.exit(2);
     }
   }
 
   // Preconditions
   if (!reportFile) {
-    console.error("qc-panel.sh: --report is required");
+    console.error("qc-panel.js: --report is required");
     process.exit(2);
   }
   if (!fs.existsSync(reportFile) || !fs.statSync(reportFile).isFile()) {
-    console.error(`qc-panel.sh: report file not readable: ${reportFile}`);
+    console.error(`qc-panel.js: report file not readable: ${reportFile}`);
     process.exit(2);
   }
 
@@ -121,12 +121,12 @@ async function main() {
     const content = fs.readFileSync(reportFile, 'utf8');
     reportJson = JSON.parse(content);
   } catch (e) {
-    console.error(`qc-panel.sh: report file is not valid JSON: ${reportFile}`);
+    console.error(`qc-panel.js: report file is not valid JSON: ${reportFile}`);
     process.exit(2);
   }
 
   if (!artifactsRaw) {
-    console.error("qc-panel.sh: --artifacts is required");
+    console.error("qc-panel.js: --artifacts is required");
     process.exit(2);
   }
 
@@ -137,7 +137,7 @@ async function main() {
     if (proj && nodeId) {
       outDir = path.join(repoRoot, 'docs', 'projects', proj, 'tree', 'panel');
     } else {
-      console.error("qc-panel.sh: --out is required unless both --proj and --node are set");
+      console.error("qc-panel.js: --out is required unless both --proj and --node are set");
       process.exit(2);
     }
   }
@@ -145,7 +145,7 @@ async function main() {
   try {
     fs.mkdirSync(outDir, { recursive: true });
   } catch (e) {
-    console.error(`qc-panel.sh: cannot create output dir: ${outDir}`);
+    console.error(`qc-panel.js: cannot create output dir: ${outDir}`);
     process.exit(2);
   }
 
@@ -160,7 +160,7 @@ async function main() {
     } else if (['fail', 'rejected', 'reject'].includes(lowerVerdict)) {
       nodeVerdictCal = 'fail';
     } else {
-      console.error(`qc-panel.sh: liveness failure: VERDICT_UNMAPPABLE: node report verdict '${nodeVerdict}' has no pass/fail mapping for calibration (pass|approved|approve|lgtm → pass; fail|rejected|reject → fail). Fix the node report verdict or extend the map.`);
+      console.error(`qc-panel.js: liveness failure: VERDICT_UNMAPPABLE: node report verdict '${nodeVerdict}' has no pass/fail mapping for calibration (pass|approved|approve|lgtm → pass; fail|rejected|reject → fail). Fix the node report verdict or extend the map.`);
       process.exit(1);
     }
   }
@@ -272,7 +272,7 @@ async function main() {
       child.stdin.on('error', () => {});
 
       child.on('error', (err) => {
-        console.error(`qc-panel.sh: judge A Q${qnum} failed to start: ${err.message}`);
+        console.error(`qc-panel.js: judge A Q${qnum} failed to start: ${err.message}`);
         fs.writeFileSync(outfile, JSON.stringify({ judge: 'a', q: qnum, error: 'judge_failed' }) + '\n');
         reject(err);
       });
@@ -284,7 +284,7 @@ async function main() {
 
       child.on('close', (code) => {
         if (code !== 0) {
-          console.error(`qc-panel.sh: judge A Q${qnum} failed`);
+          console.error(`qc-panel.js: judge A Q${qnum} failed`);
           fs.writeFileSync(outfile, JSON.stringify({ judge: 'a', q: qnum, error: 'judge_failed' }) + '\n');
           reject(new Error(`judge A Q${qnum} exited with code ${code}`));
         } else {
@@ -304,7 +304,7 @@ async function main() {
         judgeDir = fs.mkdtempSync(path.join(os.tmpdir(), `qc-judge-b-q${qnum}-`));
         fs.copyFileSync(contextFile, path.join(judgeDir, 'context.txt'));
       } catch (e) {
-        console.error(`qc-panel.sh: failed to set up judge B Q${qnum} dir: ${e.message}`);
+        console.error(`qc-panel.js: failed to set up judge B Q${qnum} dir: ${e.message}`);
         fs.writeFileSync(outfile, JSON.stringify({ judge: 'b', q: qnum, error: 'judge_failed' }) + '\n');
         return reject(e);
       }
@@ -358,7 +358,7 @@ async function main() {
       }
 
       child.on('error', (err) => {
-        console.error(`qc-panel.sh: judge B Q${qnum} failed to start: ${err.message}`);
+        console.error(`qc-panel.js: judge B Q${qnum} failed to start: ${err.message}`);
         fs.writeFileSync(outfile, JSON.stringify({ judge: 'b', q: qnum, error: 'judge_failed' }) + '\n');
         try { fs.rmSync(judgeDir, { recursive: true, force: true }); } catch (_) {}
         reject(err);
@@ -385,7 +385,7 @@ async function main() {
           tokenTotal += respTokens;
           resolve();
         } else {
-          console.error(`qc-panel.sh: judge B Q${qnum} produced no output`);
+          console.error(`qc-panel.js: judge B Q${qnum} produced no output`);
           fs.writeFileSync(outfile, JSON.stringify({ judge: 'b', q: qnum, error: 'judge_failed' }) + '\n');
           reject(new Error(`judge B Q${qnum} produced no output`));
         }
@@ -549,7 +549,7 @@ async function main() {
   ]);
 
   if (judgeFailures > 0) {
-    console.error(`qc-panel.sh: liveness failure: ${judgeFailures} judge call(s) failed`);
+    console.error(`qc-panel.js: liveness failure: ${judgeFailures} judge call(s) failed`);
     process.exit(1);
   }
 
@@ -636,7 +636,7 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
       child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       child.on('error', (err) => {
-        console.error(`qc-panel.sh: synthesizer model call failed; using deterministic majority verdict (${deterministicVerdict})`);
+        console.error(`qc-panel.js: synthesizer model call failed; using deterministic majority verdict (${deterministicVerdict})`);
         resolve(null);
       });
 
@@ -645,7 +645,7 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
 
       child.on('close', (code) => {
         if (code !== 0) {
-          console.error(`qc-panel.sh: synthesizer model call failed; using deterministic majority verdict (${deterministicVerdict})`);
+          console.error(`qc-panel.js: synthesizer model call failed; using deterministic majority verdict (${deterministicVerdict})`);
           resolve(null);
         } else {
           const respTokens = estimateTokensStr(out);
@@ -832,7 +832,7 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
   try {
     fs.writeFileSync(verdictFile, verdictJsonStr);
   } catch (e) {
-    console.error(`qc-panel.sh: liveness failure: failed to write verdict artifact: ${verdictFile}`);
+    console.error(`qc-panel.js: liveness failure: failed to write verdict artifact: ${verdictFile}`);
     process.exit(1);
   }
 
@@ -856,7 +856,7 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
       env: process.env
     });
   } catch (e) {
-    console.error(`qc-panel.sh: liveness failure: calibration.sh add-sample failed (liveness assertion: panel run must produce a sample)`);
+    console.error(`qc-panel.js: liveness failure: calibration.sh add-sample failed (liveness assertion: panel run must produce a sample)`);
     process.exit(1);
   }
 
@@ -865,6 +865,6 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
 }
 
 main().catch((err) => {
-  console.error(`qc-panel.sh: liveness failure: unexpected error: ${err.message}`);
+  console.error(`qc-panel.js: liveness failure: unexpected error: ${err.message}`);
   process.exit(1);
 });

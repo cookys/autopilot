@@ -19,19 +19,19 @@ function printStderr(str) {
 }
 
 function printUsage() {
-  printStderr("usage: check-node-report.sh <report.json> [--repo <path>]");
-  printStderr("       check-node-report.sh --help");
+  printStderr("usage: check-node-report.js <report.json> [--repo <path>]");
+  printStderr("       check-node-report.js --help");
 }
 
 function printHelp() {
-  const helpText = `check-node-report.sh — Node report contract validator.
+  const helpText = `check-node-report.js — Node report contract validator.
 
 Schema-validates a node report JSON file against the contract defined in
 references/tree-contracts.md §4, then resolves every evidence_pointer and
 verifies artifact sha256 values.
 
 Usage:
-  check-node-report.sh <report.json> [--repo <path>]
+  check-node-report.js <report.json> [--repo <path>]
 
 Arguments:
   <report.json>   Path to the node report JSON file to validate.
@@ -129,18 +129,18 @@ for (let i = 0; i < args.length; i++) {
     process.exit(0);
   } else if (arg === '--repo') {
     if (i + 1 >= args.length) {
-      printStderr("check-node-report.sh: --repo requires a path argument");
+      printStderr("check-node-report.js: --repo requires a path argument");
       process.exit(2);
     }
     repoPath = args[i + 1];
     i++;
   } else if (arg.startsWith('-')) {
-    printStderr(`check-node-report.sh: unknown option: ${arg}`);
+    printStderr(`check-node-report.js: unknown option: ${arg}`);
     printUsage();
     process.exit(2);
   } else {
     if (reportFile !== null) {
-      printStderr(`check-node-report.sh: unexpected argument: ${arg}`);
+      printStderr(`check-node-report.js: unexpected argument: ${arg}`);
       printUsage();
       process.exit(2);
     }
@@ -149,13 +149,13 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!reportFile) {
-  printStderr("check-node-report.sh: <report.json> is required");
+  printStderr("check-node-report.js: <report.json> is required");
   printUsage();
   process.exit(2);
 }
 
 if (!fs.existsSync(reportFile) || !fs.statSync(reportFile).isFile()) {
-  printStderr(`check-node-report.sh: report file not found: ${reportFile}`);
+  printStderr(`check-node-report.js: report file not found: ${reportFile}`);
   process.exit(2);
 }
 
@@ -165,7 +165,7 @@ try {
   try {
     fileContent = fs.readFileSync(reportFile, 'utf8');
   } catch (e) {
-    printStderr(`check-node-report.sh: error reading report file: ${e.message}`);
+    printStderr(`check-node-report.js: error reading report file: ${e.message}`);
     process.exit(2);
   }
 

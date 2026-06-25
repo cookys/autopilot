@@ -1,6 +1,6 @@
 # Plan — Port Autopilot Core Scripts to Node.js (Pure JS Refactor)
 
-> Status: Proposal (R0)  
+> Status: ✅ Shipped in v2.25.3 — merged as 3d48c7e  
 > Owner: Tech Lead  
 > Branch: `feat/port-autopilot-to-node`  
 > Frame: Phase 2 (Write the Plan) of `research-to-ship`

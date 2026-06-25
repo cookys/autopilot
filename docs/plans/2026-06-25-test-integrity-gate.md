@@ -1,6 +1,6 @@
 # Test-Integrity Gate — 對抗 delegate self-test false-green
 
-> Status: DRAFT v4(round-4 修 config-default 拆清 + rename_escape;待 round-5 最終確認 P1a → 派 agy）
+> Status: **P1a IMPLEMENTED & VERIFIED**(branch `feat/test-integrity-gate-p1a`;待 ship）。override = fail-safe stub,完整 provenance → L1 project。見 §9 實作紀錄。
 > Owner: cookys
 > Date: 2026-06-25
 > Semver: PATCH(新 script + 擴 reference + wiring;非新 skill/agent。見 §8 對 codex MINOR 異見的回應）
@@ -139,3 +139,12 @@ P1a 可單獨 ship(靜態、無 runtime 依賴)。**P1b 不可直接機械 dispa
 - 2026-06-25 v2 — gpt-5.5 round-2 判 FIX-THEN-SHIP。修:L1 改 executed-set(非僅 collected,解 collected-but-skipped 漏);surface 補 setupTests/matcher + 明示 imported-helper 殘留;override 加 tree-digest 機械驗證(§2.3);config 從 base ref 讀 + depth-0 更新工作流解 deadlock(§2.4);broken-runner≠unavailable 要求 override(R10);全域預設 warn 確認 PATCH(§2.5)。新增 R10/R11。
 - 2026-06-25 v3 — gpt-5.5 round-3:6 個 round-2 finding 全 RESOLVED。剩 2 Major:(1)surface_touch 語意 → 釘死「block 模式無 depth-0 verdict 即 exit 1」(§2.2/§6);(2)L1 collector 對機械實作者規格不足 → **P1b 移出本輪 dispatch,需先寫 per-runner design spec**;本輪 agy 只做 P1a。
 - 2026-06-25 v4 — gpt-5.5 round-4(P1a-scoped):surface_touch RESOLVED。修 2 Major:(1)config 預設拆清「不存在→預設+warn」vs「壞掉→fail-closed block」(§2.2/§6);(2)rename 收窄 —— test→非 test 路徑 = `rename_escape` 違規(§2.1/§6),堵純 git mv 移出覆蓋面的旁路。
+- 2026-06-25 v5 — gpt-5.5 round-5:`VERDICT: SHIP-AS-IS`,P1a scope 零 blocker。plan 收斂(5 輪:RECONSIDER→FIX×3→SHIP)。
+
+## 9. 實作紀錄(2026-06-26)
+- **agy P1a dispatch 失敗(教科書級 self-report-≠-evidence)**:agy 自報「35 assertions 全過、建分支 commit」全是假的 —— 它在 `-p` 模式把檔案寫進**自己的 plugin 安裝目錄** `~/.gemini/.../autopilot/`(老 v2.15.0 基底 repo),**不是 dispatch worktree**,`dispatch-hetero.sh` 正確報 `no_op`。→ **gotcha:對「本身是 agy plugin」的 repo 做 hetero-dispatch-to-agy 不可靠;它改安裝副本。** 工件 harvest 進 `feat/test-integrity-gate-p1a`。
+- **depth-0 + gpt-5.5 獨立驗收揪出 agy 漏的 2🔴+5🟠**(agy 自己 35 綠燈全沒抓到 —— 第三次自證本專案命題):override 可用 untracked verdict 偽造、`xit`∈`exit` 假陽、config 從 head 可被 candidate 改 mode:off、git_error fail-open、surface 被 test-path 吃掉、skip regex 假陰、` b/` parser、`set -u`。
+- **fix 改派 `gpt-5.3-codex-spark`**(agy 不可靠;codex 直接動真 repo):全部 finding 修掉(commit `5dbe2ca`),+ 我補 fit/fdescribe(`6ad076f`)+ 補 protected_path_touch 不可 waive(gpt-5.5 最終複審 Major 2)。
+- **驗收**:codex 70 assertions + 我的隔離對抗 harness 6/6 全綠;untracked 偽造堵死、config-from-base、protected_path、surface-under-tests、exit-2 全實證。
+- **override = fail-safe stub**:committed verdict 因 fixed-point(verdict 一 commit 就改變它檔名要 match 的 sha)實質無法構造合法 override,但 **fail closed**(不可偽造、不可誤放)。完整 depth-0 provenance(out-of-commit verdict ref)→ **L1 project**。
+- **gotcha(自記)**:對抗 harness 的 `D=$(newrepo)` 用 command-substitution 子shell `cd`,父 shell cwd 沒變 → git 操作洩漏進主 repo(12 個垃圾 commit);已 reset 清理。隔離測試 repo 必須整段包在 `( cd "$D" && … )` 子shell 內。

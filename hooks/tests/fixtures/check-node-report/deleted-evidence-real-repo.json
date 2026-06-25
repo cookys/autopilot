@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "node": "fixture/real-repo-deleted-evidence",
+  "verdict": "approved",
+  "confidence": 0.9,
+  "evidence_pointers": [
+    "scripts/check-node-report.sh:1-3@d7cc8f655aebcb9534a2719775b00f32143b003c"
+  ],
+  "artifact_paths": [],
+  "doa_log": [],
+  "escalations": []
+}

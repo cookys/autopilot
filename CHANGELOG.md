@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.6 — L0 test-integrity gate (anti-gaming forcing function)
+
+**Headline**: A new deterministic, git-artifact-based quality-pipeline gate that stops a delegated implementer from gaming tests to go green — by deleting / skipping / soloing / weakening existing tests or escaping the test surface. Born from the `delegate-selftest-false-green` lesson. Default `warn` (shadow→calibrate→gate); `block` is opt-in per project for `/l5` hetero dispatch.
+
+### Added
+- `scripts/check-test-integrity.sh` — L0 static gate. `validate --range <base>..<head>`: test-path **additions-only** (`deleted_line` catches in-place assertion weakening + deletion), skip/solo-marker denylist (`xit`/`.only`/`fit`/`fdescribe`/`@pytest.mark.skip`/`t.Skipf`/`#[ignore]`/…), `rename_escape` (test→non-test path), `surface_touch` (conftest/fixtures/runner-config/CI — independent of test-path), and **non-waivable** `protected_path_touch`/`malformed_config`/`git_error`. **Config read from the trusted base ref** so a candidate's in-diff `mode:off`/bogus `test_paths` is ignored. JSON; exit 0/1/2.
+- `project-config-template/test-integrity-config.md` — per-project `mode`/`test_paths`/`surface_paths` overrides.
+- `skills/quality-pipeline/references/test-integrity-gate.md` + wiring (SKILL Available Scripts + Sub-step References + CLAUDE.md inventory).
+
+### Changed
+- quality-pipeline gains the test-integrity gate as a post-impl / pre-merge step.
+
+### Known limitation
+- The override (`.qc/<sha>.verdict.json`) is a **fail-safe stub**: committed-only (untracked forgery rejected), but a legitimate override is currently unconstructable (commit-SHA↔filename fixed-point). It fails closed. Full depth-0 override provenance **and** the L1 executed-set/collection-invariance layer are deferred to a follow-up **L1 project**.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.25.5 — scope-creep forcing function + OpenCode preflight retry
 
 **Headline**: Two fixes revived from a long-lived branch (`fix/scope-creep-gate-forcing-function`, written 2026-06-05/10) and re-landed on current develop. (1) The S→L **scope-creep gate** in `dev-flow` and `ceo-agent` becomes a real forcing function: an `S-scope-gate` **TaskCreate** created at S-start (which the system-reminder surfaces before every tool use) replaces the old passive "self-check after every commit" markdown — passive bullets get mentally compressed into "I know this", which is exactly the failure mode. The L-side gets a distinct **L-scope-expansion → Board Decision** path (a doubled estimate or new subsystem maps to DOA "Resources 2x+", which the CEO cannot approve unilaterally). (2) The OpenCode skill-discovery preflight check now retries (3×) to absorb a cold-start false negative. The branch's third commit (a now-obsolete BACKLOG nested-subagent proposal, superseded by the v2.14.0 ✅ entry) was dropped.

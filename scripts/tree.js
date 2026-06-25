@@ -112,7 +112,29 @@ function isProcessAlive(pid) {
   }
 }
 
-function acquireLock(lockFile, timeoutMs = 10000) {
+// A lock is stale ONLY when its owner is gone — never merely because it is old.
+// For a LOCAL owner (same host+cwd) we check the PID directly: a live owner is
+// NEVER stale, so a slow-but-alive holder is never robbed of its lock (matches
+// flock semantics — block until release/death, then fail-closed on timeout). A
+// pure wall-clock TTL is reserved for CROSS-HOST owners whose liveness we cannot
+// probe, and is deliberately generous + decoupled from the acquire timeout.
+const CROSS_HOST_STALE_TTL_MS = 60000;
+function isLockStale(lock) {
+  if (!lock || typeof lock !== 'object') return true; // corrupt → recover
+  const isLocal = lock.hostname === os.hostname() && lock.cwd === process.cwd();
+  if (isLocal) {
+    return lock.pid ? !isProcessAlive(parseInt(lock.pid, 10)) : true;
+  }
+  return (Date.now() - Number(lock.ts || 0)) > CROSS_HOST_STALE_TTL_MS;
+}
+
+// Block ms without burning CPU. A spin loop pegs a core and induces the very
+// append-delays that used to trip the stale-lock steal; flock waits in-kernel.
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function acquireLock(lockFile, timeoutMs = Number(process.env.TREE_LOCK_TIMEOUT_MS) || 10000) {
   const start = Date.now();
   const token = crypto.randomUUID();
 
@@ -146,15 +168,7 @@ function acquireLock(lockFile, timeoutMs = 10000) {
       try {
         const content = fs.readFileSync(lockFile, 'utf8');
         existing = JSON.parse(content);
-        
-        const isLocal = existing.hostname === os.hostname() && existing.cwd === process.cwd();
-        let isAlive = true;
-        if (isLocal && existing.pid) {
-          isAlive = isProcessAlive(parseInt(existing.pid, 10));
-        }
-        
-        const isStale = (Date.now() - existing.ts > 10000) || !isAlive;
-        if (isStale) {
+        if (isLockStale(existing)) {
           shouldRecover = true;
         }
       } catch (readErr) {
@@ -179,12 +193,7 @@ function acquireLock(lockFile, timeoutMs = 10000) {
           try {
             const recheckContent = fs.readFileSync(lockFile, 'utf8');
             const recheckExisting = JSON.parse(recheckContent);
-            const isLocalRe = recheckExisting.hostname === os.hostname() && recheckExisting.cwd === process.cwd();
-            let isAliveRe = true;
-            if (isLocalRe && recheckExisting.pid) {
-              isAliveRe = isProcessAlive(parseInt(recheckExisting.pid, 10));
-            }
-            stillStale = (Date.now() - recheckExisting.ts > 10000) || !isAliveRe;
+            stillStale = isLockStale(recheckExisting);
           } catch (readErr) {
             stillStale = true;
           }
@@ -208,8 +217,7 @@ function acquireLock(lockFile, timeoutMs = 10000) {
       }
     }
 
-    const waitTill = Date.now() + 50;
-    while (Date.now() < waitTill) {}
+    sleepMs(50);
   }
   throw new Error(`Lock timeout on ${lockFile}`);
 }
@@ -270,6 +278,8 @@ function validateEnvelope(eventJson) {
   const requiredFields = ['schema_version', 'ts', 'node', 'type'];
   const missing = [];
   for (const field of requiredFields) {
+    // Intentionally stricter than the shell's `jq has()` (which accepted a
+    // present-but-null value): a null required field is treated as missing.
     if (parsed[field] === undefined || parsed[field] === null) {
       missing.push(field);
     }
@@ -792,8 +802,9 @@ function cmdFetch(projName, nodeId, flag) {
   let missing = 0;
   for (const p of artifactPaths) {
     if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-      const content = fs.readFileSync(p, 'utf8');
-      process.stdout.write(content);
+      // Byte-exact (Buffer, no utf8 decode) — artifacts may be binary; the shell
+      // used `cat`, which never re-encodes.
+      process.stdout.write(fs.readFileSync(p));
     } else {
       logErr(`fetch: artifact not found at path: ${p}`);
       missing++;

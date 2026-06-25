@@ -218,6 +218,31 @@ done < "$PROJECTS/crash/tree/events.jsonl"
 assert_eq "$CRASH_INVALID" "0" "crash: all complete lines are valid JSON"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TEST 4b: A LIVE owner's lock is NEVER stolen — emit fails closed, not steal.
+# Regression for the shell→node port defect where a wall-clock TTL robbed a
+# slow-but-alive holder (flock has no TTL: block until release/death, then fail).
+# For a LOCAL owner staleness is decided by PID liveness ONLY, so ts:0 (ancient)
+# must STILL not trigger a steal — proving the TTL is not consulted for a live
+# local owner. TREE_LOCK_TIMEOUT_MS keeps the fail-closed wait short.
+# ─────────────────────────────────────────────────────────────────────────────
+tree init liveowner 2>/dev/null
+LO_LOCK="$PROJECTS/liveowner/tree/events.jsonl.lock"
+sleep 30 & LO_OWNER=$!
+printf '{"pid":%d,"ts":0,"hostname":"%s","cwd":"%s","token":"liveowner"}' \
+  "$LO_OWNER" "$(hostname)" "$PWD" > "$LO_LOCK"
+
+EV='{"schema_version":1,"ts":"2026-01-01T00:00:00Z","node":"n1","type":"node_created"}'
+TREE_PROJECTS_DIR="$PROJECTS" TREE_LOCK_TIMEOUT_MS=1500 node "$SCRIPT" emit liveowner n1 "$EV" 2>/dev/null
+LO_EXIT=$?
+kill "$LO_OWNER" 2>/dev/null || true
+wait "$LO_OWNER" 2>/dev/null || true
+
+assert_neq "$LO_EXIT" "0" "live-owner: emit fails closed (does NOT steal a live owner's lock)"
+assert_contains "$(cat "$LO_LOCK" 2>/dev/null)" '"token":"liveowner"' "live-owner: lock still held by the live owner (not stolen)"
+LO_WROTE="$(grep '"node":"n1"' "$PROJECTS/liveowner/tree/events.jsonl" 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq "$LO_WROTE" "0" "live-owner: no event appended under fail-closed (no unlocked write)"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TEST 5: Truncated-tail injection
 # ─────────────────────────────────────────────────────────────────────────────
 

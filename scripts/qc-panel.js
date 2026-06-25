@@ -259,8 +259,17 @@ async function main() {
         stdio: ['pipe', 'pipe', 'ignore']
       });
 
-      const outStream = fs.createWriteStream(outfile);
-      child.stdout.pipe(outStream);
+      // Buffer stdout in memory (like runJudgeB) and write it synchronously on
+      // close. Piping to a createWriteStream and resolving on 'close' WITHOUT
+      // awaiting the stream's 'finish' could read a truncated file — a dropped
+      // trailing chunk can lose a MISSED: line and flip the gating verdict to a
+      // false PASS.
+      let aOut = '';
+      child.stdout.on('data', (data) => { aOut += data.toString(); });
+
+      // A judge that exits before draining stdin emits EPIPE on the write side;
+      // swallow it so it never crashes the run mid-flight (Amendment 4 liveness).
+      child.stdin.on('error', () => {});
 
       child.on('error', (err) => {
         console.error(`qc-panel.sh: judge A Q${qnum} failed to start: ${err.message}`);
@@ -279,6 +288,7 @@ async function main() {
           fs.writeFileSync(outfile, JSON.stringify({ judge: 'a', q: qnum, error: 'judge_failed' }) + '\n');
           reject(new Error(`judge A Q${qnum} exited with code ${code}`));
         } else {
+          fs.writeFileSync(outfile, aOut);
           const respTokens = estimateTokensFile(outfile);
           tokenTotal += respTokens;
           resolve();
@@ -338,6 +348,7 @@ async function main() {
       child.stdout.on('data', (data) => {
         agyOut += data.toString();
       });
+      child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       if (isCodex) {
         child.stdin.write(prompt);
@@ -415,6 +426,7 @@ async function main() {
       child.stdout.on('data', (data) => {
         out += data.toString();
       });
+      child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       child.on('error', () => {
         resolve('');
@@ -488,6 +500,7 @@ async function main() {
       child.stdout.on('data', (data) => {
         agyOut += data.toString();
       });
+      child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       if (isCodex) {
         child.stdin.write(prompt);
@@ -620,6 +633,7 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
       child.stdout.on('data', (data) => {
         out += data.toString();
       });
+      child.stdin.on('error', () => {}); // swallow EPIPE if the judge exits early
 
       child.on('error', (err) => {
         console.error(`qc-panel.sh: synthesizer model call failed; using deterministic majority verdict (${deterministicVerdict})`);
@@ -715,12 +729,12 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
       if (synthJson.verdict === 'pass' || synthJson.verdict === 'fail') {
         synthVerdict = synthJson.verdict;
       }
-      if (Array.isArray(synthJson.dissents)) {
-        synthDissents = synthJson.dissents;
-      }
-      if (Array.isArray(synthJson.extras)) {
-        synthExtras = synthJson.extras;
-      }
+      // Match shell `.get("dissents"/"extras", [])`: once the synthesizer's JSON
+      // parses, its absent dissents/extras mean "none" ([]), NOT a fall-back to
+      // the deterministic Q2 list. The deterministic list only stands when synth
+      // JSON fails to parse (synthJson === null, handled by the initializers).
+      synthDissents = Array.isArray(synthJson.dissents) ? synthJson.dissents : [];
+      synthExtras = Array.isArray(synthJson.extras) ? synthJson.extras : [];
     }
   }
 

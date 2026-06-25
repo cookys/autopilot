@@ -52,7 +52,7 @@ status=completed` call. Combining steps into one tool call defeats the forcing f
 
 ## Size → Sub-tasks
 
-### L-size — `L-5` Completion (6 sub-tasks)
+### L-size — `L-5` Completion (7 sub-tasks)
 
 | # | Subject | Description + verification output |
 |---|---------|-----------------------------------|
@@ -62,8 +62,9 @@ status=completed` call. Combining steps into one tool call defeats the forcing f
 | L-5.4 | Post-Merge Review | Re-read critical files that were changed (pick 1–3 highest-risk) to verify merge didn't silently drop changes. **Doc-sync (conditional)**: if the change touched user-facing behavior or 3+ modules, invoke `autopilot:doc-sync` in scoped mode (base = the merge-base) to confirm docs still match the merged code; OFFER full mode for large/user-facing ships. Triage confirmed findings per doc-sync's fix policy (user docs → reality; specs → STALE-fix or mark NOT-YET-IMPLEMENTED + BACKLOG). Output: grep/diff confirming each expected change is present on develop + doc-sync drift summary (or "doc-sync skipped: no user-facing/3+ module change"). |
 | L-5.5 | Archive project | Move `doc/projects/<project>/` → `doc/projects/_archive/<project>/`. Update `doc/projects/INDEX.md` (remove from 進行中, add to 已完成 with date). **Stale-qualifier guard**: `grep -E '^\|' docs/projects/INDEX.md \| grep -Ei '\((pending\|target\|in progress\|WIP\|TBD\|draft)\)'` MUST be empty (scan **table rows only** — the `^\|` prefilter excludes section headers like `## 進行中 (In Progress)` which would otherwise false-positive under `-i`; `-i` then catches lowercase `(wip)` in a row); on hit, emit matched lines + halt. **Release-hygiene gate** (if this ship bumped the version): run `scripts/preflight-release.sh` — verifies CHANGELOG entry + INDEX row + version mirrors are consistent with canonical `.claude-plugin/plugin.json`; must exit 0. Output: `ls doc/projects/_archive/<project>/` + grep guard pass-confirmation + preflight-release pass line. |
 | L-5.6 | L Session End (full checklist) | Run the dev-flow "Session End L-Full" checklist (verify completion, update project docs, knowledge extraction via `autopilot:learn` if warranted, deferred items to BACKLOG, triggered BACKLOG pickup, staging verify). Output: pass/fail summary for each gate. |
+| L-5.7 | Delete merged branch (local + remote) | The ship is merged + archived — delete the feature branch so it doesn't accumulate. **This step exists because L-5 historically had no branch-cleanup sub-task** (unlike `F.5`/`H-9.5`), so every L-ship left its `feat/*` branch behind (local AND on `origin`). Verify it's merged first (`git branch --merged develop` lists it), then: `git branch -d <feature-branch>` (local) **and** `git push origin --delete <feature-branch>` if it was ever pushed. Skip remote delete only if the branch was never pushed. (Placed AFTER L-5.6 — unlike H's `H-9.5`-before-`H-9.6` order — intentionally: L-5.6 Session End's first check verifies merged-status, so deleting last consumes that verification. Don't "fix" the asymmetry.) Output: `git branch` + `git ls-remote --heads origin <branch>` both confirming the branch is gone. |
 
-After all 6 completed → mark the parent L-5 task (from L-1) completed.
+After all 7 completed → mark the parent L-5 task (from L-1) completed.
 
 ### H-size — Hotfix Closing (6 sub-tasks)
 
@@ -73,7 +74,7 @@ After all 6 completed → mark the parent L-5 task (from L-1) completed.
 | H-9.2 | Quality gate | Invoke `autopilot:quality-pipeline`. Output: zero test failures, zero blocking review findings. |
 | H-9.3 | Merge to main (--no-ff) | `git checkout main && git merge --no-ff hotfix/<name>`. Merge commit MUST carry the `QC-Verdict: PASS (reviewer <id>, <date>)` trailer (see L-5.3 — the `pre-push` qc-gate enforces it). Output: merge commit hash + trailer. |
 | H-9.4 | Post-incident learn (MANDATORY) | Invoke `autopilot:learn`. Record: incident, root cause, detection method, fix, prevention. Output: knowledge entry path. |
-| H-9.5 | Delete hotfix branch | `git branch -d hotfix/<name>` (or remote cleanup if pushed). Output: `git branch` confirming deletion. |
+| H-9.5 | Delete hotfix branch (local + remote) | `git branch -d hotfix/<name>` (local) **and** `git push origin --delete hotfix/<name>` if it was pushed. Output: `git branch` + `git ls-remote --heads origin hotfix/<name>` confirming both gone. |
 | H-9.6 | Session end | Verify completion, staging reflects the hotfix, any follow-ups recorded in BACKLOG. Output: pass/fail summary. |
 
 ### Fix-size — Bug Fix Wrap-up (5 sub-tasks)
@@ -86,7 +87,7 @@ After all 6 completed → mark the parent L-5 task (from L-1) completed.
 | F.2 | Commit with detailed message | Commit must state root cause + what was wrong + how it's fixed. Output: `git log -1 --format=%B` showing all three. |
 | F.3 | Ongoing-maintenance entry | Append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config first so you don't create a stray sibling tree): `| MM-DD | commit_hash | fix(area): 根因 → 修法 |`. Output: `tail -1` of that file. |
 | F.4 | Merge to develop | `git checkout develop && git merge --no-ff fix/<name>`. Merge commit MUST carry the `QC-Verdict: PASS (reviewer <id>, <date>)` trailer (see L-5.3 — the `pre-push` qc-gate enforces it). Output: merge commit hash + trailer. |
-| F.5 | Delete fix branch | `git branch -d fix/<name>`. Output: `git branch` confirming deletion. |
+| F.5 | Delete fix branch (local + remote) | `git branch -d fix/<name>` (local) **and** `git push origin --delete fix/<name>` if it was pushed. Output: `git branch` + `git ls-remote --heads origin fix/<name>` confirming both gone. |
 
 ### S-size — S-Lite Session End (3 sub-tasks)
 

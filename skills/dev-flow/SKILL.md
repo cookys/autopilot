@@ -250,9 +250,9 @@ TaskCreate: "L-1.6: Skill routing — invoke required skills for all affected co
 
 TaskCreate: "L-5: Invoke autopilot:finish-flow"
   description: MANDATORY L-size completion. Invoke autopilot:finish-flow which will
-  expand into 6 discrete sub-tasks (Final Goal Review, Pre-Merge Review, Merge,
-  Post-Merge Review, Archive, L Session End). Do not mark this completed until the
-  skill has run and all 6 sub-tasks reach completed.
+  expand into 7 discrete sub-tasks (Final Goal Review, Pre-Merge Review, Merge,
+  Post-Merge Review, Archive, L Session End, Delete merged branch). Do not mark this
+  completed until the skill has run and all 7 sub-tasks reach completed.
 ```
 
 Both parent tasks are forcing functions: they remain pending through every phase and are
@@ -419,16 +419,16 @@ If deferral passes: add to BACKLOG with context + trigger condition, mark phase 
 ### L-5. Completion (MANDATORY — via finish-flow forcing function)
 
 **Invoke `autopilot:finish-flow`.** That skill owns the L-size closing sequence. On invocation
-it TaskCreates 6 discrete sub-tasks (Final Goal Review → Pre-Merge Review → Merge → Post-Merge
-Review → Archive → L Session End), each with an explicit verification output. Every sub-task
-must be individually completed — they cannot be batched or compressed.
+it TaskCreates 7 discrete sub-tasks (Final Goal Review → Pre-Merge Review → Merge → Post-Merge
+Review → Archive → L Session End → Delete merged branch), each with an explicit verification
+output. Every sub-task must be individually completed — they cannot be batched or compressed.
 
 Why delegated: Historically L-5 was an inline 6-step list that got mentally compressed into
 "one action" and silently skipped. The `finish-flow` skill replaces passive markdown with
 active TaskCreate reminders that system-reminder surfaces until addressed. See
 `autopilot:finish-flow` for the full size → sub-tasks table.
 
-**CEO mode**: All 6 sub-tasks are within CEO DOA (tactical, reversible, local git ops). CEO
+**CEO mode**: All 7 sub-tasks are within CEO DOA (tactical, reversible, local git ops). CEO
 does not pause to ask the user between sub-tasks — execute all, then report.
 
 ### Staging Gate

@@ -779,7 +779,10 @@ def main():
     active_violations = []
     for violation in violations:
         key = (violation["file"], violation["kind"])
-        if violation["kind"] in {"git_error", "malformed_config"}:
+        # Non-waivable kinds: hard structural / integrity violations that an
+        # override verdict must NEVER be able to suppress (defends against a
+        # future-functional override waiving protected-path edits — gpt-5.5 re-review).
+        if violation["kind"] in {"git_error", "malformed_config", "protected_path_touch"}:
             active_violations.append(violation)
             continue
         if key in waiver_set:

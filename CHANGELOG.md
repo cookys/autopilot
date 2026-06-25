@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.26.0 — Pure-Node.js core: jq/python3-free runtime + validation scripts
+## v2.25.3 — Pure-Node.js core: jq/python3-free runtime + validation scripts
 
 **Headline**: Ported autopilot's core runtime and validation scripts to **pure Node.js**, removing the `jq` and `python3` dependencies from the runtime and preflight paths so the engine runs flawlessly in dependency-minimal sandboxes (e.g. Antigravity/`agy`). Seven scripts were rewritten — `risk-counter`, `toggle-payload-capture`, `session-start` (hook), `doc-drift-gate` (was `.py`), `check-node-report`, `tree` (the task-tree engine), and `qc-panel` — and their shell/python originals deleted (no wrapper shims; `hooks.json` and all wiring now point at the `.js` entrypoints). All 57 hook test files and the 16-check portability preflight pass with `jq`/`python3` stubbed to fail.
 

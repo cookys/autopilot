@@ -144,7 +144,7 @@ if [ "$IS_CODEX" -eq 1 ]; then
   ( cd "$WT" && codex exec --model "$MODEL" \
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
-      -c "thinking=\"xhigh\"" < "$PROMPT_FILE" ) >"$LOG" 2>&1
+      -c "model_reasoning_effort=\"xhigh\"" < "$PROMPT_FILE" ) >"$LOG" 2>&1
   AGENT_EXIT=$?
 else
   ( cd "$WT" && "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" \

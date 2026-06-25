@@ -561,6 +561,8 @@ def main():
             "solo": [
                 re.compile(r"\b(it|test|describe)\.only\b"),
                 re.compile(r"\b(it|test|describe)\.concurrent\.only\b"),
+                re.compile(r"\bfit\s*\("),
+                re.compile(r"\bfdescribe\s*\("),
             ],
         },
         "python": {

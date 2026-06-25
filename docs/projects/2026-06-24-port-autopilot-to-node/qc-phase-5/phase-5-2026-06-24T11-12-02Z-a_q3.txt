@@ -1,0 +1,25 @@
+根據報告的評估（verdict: pass, confidence: 1.0），以及 question 的陳述：
+
+> "Port tree.sh to pure Node.js scripts/tree.js and replace the original wrapper."
+
+檢查完成狀態：
+
+- ✓ **scripts/tree.js 已完整實作** — 854 行，涵蓋所有 8 個 subcommand
+  - init, emit, rebuild-index, next-decision, report, escalations, fetch, board-status
+  - 所有核心邏輯已移植：事件驗證、索引重建、truncated tail 偵測、原子化寫入、自動鎖定恢復
+  
+- ✓ **scripts/tree.sh 已轉為委派 wrapper** — 僅 3 行，正確委派至 tree.js
+
+- ✓ **README 已更新** — Phase 5 狀態標記為 Completed
+
+- ✓ **功能等效驗證**：
+  - 環境變數支援 (TREE_PROJECTS_DIR, TREE_EVENT_VALIDATOR)
+  - 退出碼一致 (0/1/2)
+  - 錯誤信息輸出到 stderr，JSON 到 stdout
+  - bash `flock` 已替換為 Node.js 原子檔案操作 + 重試機制
+
+---
+
+**MISSED:** (無)
+
+所有既定目標已達成。

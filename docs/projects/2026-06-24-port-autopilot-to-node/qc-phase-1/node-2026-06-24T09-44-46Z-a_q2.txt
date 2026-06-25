@@ -1,0 +1,5 @@
+EXTRA: hooks/tests/risk-counter.test.sh — comprehensive test suite covering reset, status, increment, threshold-hit, and fail-open behavior
+
+EXTRA: hooks/tests/toggle-payload-capture.test.sh — comprehensive test suite covering enable/disable/status lifecycle, backup integrity, and fail-open behavior
+
+**Rationale:** The stated goal was to "port [scripts] to pure Node.js and replace the original entrypoints with thin shell wrappers." The node delivered exactly that (four script files, all working correctly). The two test files exceed scope — testing and validation were not requested in the question.

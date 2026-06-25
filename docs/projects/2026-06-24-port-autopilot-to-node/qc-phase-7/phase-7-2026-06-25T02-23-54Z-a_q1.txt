@@ -1,0 +1,7 @@
+ACHIEVED: E2E test validation passed; `e2e-tests.log` shows `pass 81`, `fail 0`, and `✅ ALL TESTS PASSED (57 test files)`.
+
+ACHIEVED: Preflight portability validation passed; `preflight.log` shows all 16 acceptance checks succeeded and ends with `✅ ALL CHECKS PASSED (16/16)`.
+
+ACHIEVED: Phase 7 was marked complete in project tracking; `README.md` lists `Phase 7 | E2E validation & clean up old scripts | Completed`, and `phase-7.diff` shows Phase 7 changed from `Pending` to `Completed`.
+
+ACHIEVED: A cleanup/fix was applied to the Node QC panel path for Codex-backed judges; `phase-7.diff` changes `childBin = agyBin` to `childBin = agyBaseName === 'codex' ? agyBin : 'codex'` in both judge and refute Codex branches of `scripts/qc-panel.js`.

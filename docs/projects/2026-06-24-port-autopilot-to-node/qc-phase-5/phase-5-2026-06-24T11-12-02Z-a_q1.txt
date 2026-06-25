@@ -1,0 +1,15 @@
+**Scope:** Judging only the phase-5 node deliverables per its question: "Port tree.sh to pure Node.js scripts/tree.js and replace the original wrapper."
+
+---
+
+ACHIEVED: Pure Node.js implementation of tree.js (854 lines) with all 8 subcommands: init, emit, rebuild-index, next-decision, report, escalations, fetch, board-status — evidence: scripts/tree.js:1-854
+
+ACHIEVED: Atomic self-healing file locking system in Node.js with process-aware stale detection (isProcessAlive, acquireLock with hostname/cwd/token validation, automatic corrupt-lock recovery) — evidence: scripts/tree.js acquireLock function (lines ~110–190)
+
+ACHIEVED: Full event validation and JSONL parsing with truncated-tail detection matching original bash behavior (parseEventsFile handles partial writes, detects byte offsets, recovers complete lines) — evidence: scripts/tree.js parseEventsFile function (lines ~290–330)
+
+ACHIEVED: Index building from events via rebuildIndex (nodes, escalations, decisions, board_signoff folding with event-type branching for node_created/verdict/escalation_opened/escalation_resolved/decision_fork/decision_resolved/manager_raw_read/board_signoff) — evidence: scripts/tree.js rebuildIndex function (lines ~335–480)
+
+ACHIEVED: Original bash script replaced with 3-line wrapper delegating to Node.js — evidence: scripts/tree.sh:1-3 now reads `node "$(dirname "$0")/tree.js" "$@"`
+
+ACHIEVED: Status update in phase tracking from "Pending" to "Completed" — evidence: docs/projects/2026-06-24-port-autopilot-to-node/README.md Phase 5 row

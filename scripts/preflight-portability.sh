@@ -80,17 +80,17 @@ check_intent_capture_symlinked() {
   return 0
 }
 
-# ─── 4. session-start.sh: Claude envelope when CLAUDE_PLUGIN_ROOT set ───
+# ─── 4. session-start.js: Claude envelope when CLAUDE_PLUGIN_ROOT set ───
 check_session_start_claude_envelope() {
   local out
-  out=$(CLAUDE_PLUGIN_ROOT="$REPO" bash "$REPO/hooks/session-start.sh" 2>/dev/null) || return 1
+  out=$(CLAUDE_PLUGIN_ROOT="$REPO" node "$REPO/hooks/session-start.js" 2>/dev/null) || return 1
   echo "$out" | grep -q "hookSpecificOutput"
 }
 
-# ─── 5. session-start.sh: plain envelope when no env var ───
+# ─── 5. session-start.js: plain envelope when no env var ───
 check_session_start_plain_envelope() {
   local out
-  out=$(env -u CLAUDE_PLUGIN_ROOT bash "$REPO/hooks/session-start.sh" 2>/dev/null) || return 1
+  out=$(env -u CLAUDE_PLUGIN_ROOT node "$REPO/hooks/session-start.js" 2>/dev/null) || return 1
   echo "$out" | grep -q "additional_context"
 }
 
@@ -137,7 +137,7 @@ check_readme_parity() {
 # Zero-variance: a green run means those drift classes are genuinely clean, so it is
 # gate-able here. The LLM sweep (Layer 2) is discovery only, never a gate.
 check_doc_drift() {
-  python3 "$REPO/scripts/doc-drift-gate.py" "$REPO" >/dev/null 2>&1
+  node "$REPO/scripts/doc-drift-gate.js" "$REPO" >/dev/null 2>&1
 }
 
 # ─── 8b. adapter targets CARRY the invariant, not merely resolve ───
@@ -215,8 +215,8 @@ echo ""
 run_check "intent-capture.js returns version with CLAUDE_PLUGIN_ROOT" check_intent_capture_with_env
 run_check "intent-capture.js returns 'unknown' without env var, no throw" check_intent_capture_no_env
 run_check "intent-capture.js works from symlinked path (no throw)" check_intent_capture_symlinked
-run_check "session-start.sh emits hookSpecificOutput envelope when env set" check_session_start_claude_envelope
-run_check "session-start.sh emits additional_context envelope when env unset" check_session_start_plain_envelope
+run_check "session-start.js emits hookSpecificOutput envelope when env set" check_session_start_claude_envelope
+run_check "session-start.js emits additional_context envelope when env unset" check_session_start_plain_envelope
 run_check "sync-version.js --check: canonical & mirrors in sync" check_sync_version
 run_check "sync-agent-bodies.sh --check: agent-bodies/ in sync with agents/" check_sync_agent_bodies
 run_check ".agents/skills symlink resolves to ../skills (target exists)" check_agents_skills_symlink

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-node-report.test.sh — integration tests for scripts/check-node-report.sh.
+# check-node-report.test.sh — integration tests for scripts/check-node-report.js.
 #
 # Test matrix (references/tree-contracts.md §4 + Amendment 2):
 #   1. --help exits 0
@@ -20,8 +20,8 @@
 #  16. bash -n clean; shellcheck clean (if installed)
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/check-node-report.sh"
-assert_file_exists "$SCRIPT" "check-node-report.sh exists"
+SCRIPT="$REPO_ROOT/scripts/check-node-report.js"
+assert_file_exists "$SCRIPT" "check-node-report.js exists"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -31,7 +31,7 @@ assert_file_exists "$SCRIPT" "check-node-report.sh exists"
 run_validator() {
   local stdout_file="$TEST_TMP/.vc.stdout.$$"
   local stderr_file="$TEST_TMP/.vc.stderr.$$"
-  bash "$SCRIPT" "$@" >"$stdout_file" 2>"$stderr_file"
+  node "$SCRIPT" "$@" >"$stdout_file" 2>"$stderr_file"
   __RUN_EXIT=$?
   __RUN_STDOUT=$(cat "$stdout_file")
   __RUN_STDERR=$(cat "$stderr_file")
@@ -537,18 +537,55 @@ HEAD_WARN_COUNT="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | length')"
 assert_neq "$HEAD_WARN_COUNT" "0" "@HEAD anchor warning count > 0"
 
 # ---------------------------------------------------------------------------
-# TEST 16: bash -n clean; shellcheck clean (if installed)
+# TEST 16b: CRLF artifact sha256 verification — RAW bytes only (matches the shell
+# `sha256sum` contract). The artifact integrity check is byte-exact: a CRLF-only
+# normalized hash that does NOT match the raw bytes must be REJECTED, not accepted
+# (accepting it would fail-open — a CR-byte change would slip past the checksum).
 # ---------------------------------------------------------------------------
-bash -n "$SCRIPT" 2>/dev/null
-assert_exit_code "$?" "0" "bash -n check-node-report.sh is clean"
+CRLF_ART="$TEST_TMP/crlf-art.txt"
+printf 'line 1\r\nline 2\r\n' > "$CRLF_ART"
 
-if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "$SCRIPT" 2>/dev/null
-  assert_exit_code "$?" "0" "shellcheck check-node-report.sh is clean"
-else
-  # sc not installed; skip (not a failure)
-  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
-fi
+# Raw sha256 of the CRLF file:
+RAW_SHA="$(sha256sum "$CRLF_ART" | awk '{print $1}')"
+# CRLF-normalized (LF only) content: "line 1\nline 2\n" — does NOT match raw bytes
+NORM_SHA="$(printf 'line 1\nline 2\n' | sha256sum | awk '{print $1}')"
+
+# 16b.1: Validator succeeds with the RAW SHA (byte-exact match)
+CRLF_RAW_REPORT="$(make_report \
+  ".artifact_paths = [{\"path\": \"$CRLF_ART\", \"sha256\": \"$RAW_SHA\"}]" \
+  '.evidence_pointers = ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]')"
+run_validator "$CRLF_RAW_REPORT"
+assert_exit_code "$__RUN_EXIT" "0" "CRLF artifact raw SHA validation exits 0"
+CRLF_RAW_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$CRLF_RAW_VALID" "true" "CRLF artifact raw SHA is valid"
+
+# 16b.2: Validator REJECTS a normalized SHA that doesn't match the raw bytes
+# (raw-only contract — no CRLF-normalization fail-open).
+CRLF_NORM_REPORT="$(make_report \
+  ".artifact_paths = [{\"path\": \"$CRLF_ART\", \"sha256\": \"$NORM_SHA\"}]" \
+  '.evidence_pointers = ["sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]')"
+run_validator "$CRLF_NORM_REPORT"
+assert_exit_code "$__RUN_EXIT" "1" "CRLF artifact normalized SHA (≠ raw) validation exits 1"
+CRLF_NORM_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$CRLF_NORM_VALID" "false" "CRLF artifact normalized SHA (≠ raw) is invalid"
+
+# ---------------------------------------------------------------------------
+# TEST 16c: CLI usage and help advertise the actual .js entrypoint (the .sh was
+# deleted in the port — the help/usage name must match the real file, not a name
+# that no longer exists on disk).
+# ---------------------------------------------------------------------------
+# Run with --help
+run_validator --help
+assert_contains "$__RUN_STDOUT" "check-node-report.js" "--help stdout prints check-node-report.js"
+assert_not_contains "$__RUN_STDOUT" "check-node-report.sh" "--help stdout does not print the deleted check-node-report.sh"
+
+# Run with usage error (no arguments)
+run_validator
+assert_exit_code "$__RUN_EXIT" "2" "no arguments exits 2"
+assert_contains "$__RUN_STDERR" "check-node-report.js" "usage error prints check-node-report.js"
+assert_not_contains "$__RUN_STDERR" "check-node-report.sh" "usage error does not print the deleted check-node-report.sh"
+
+# (wrapper tests removed since wrapper is deleted)
 
 # Also bash -n this test file itself
 bash -n "$0" 2>/dev/null

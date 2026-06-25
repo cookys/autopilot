@@ -1,0 +1,2 @@
+EXTRA: Added CRLF/LF text normalization logic to the validator, including accepting normalized SHA-256 values for artifact verification and moved-file content matching; the original shell validator checked raw file hashes only.
+EXTRA: Added new tests in hooks/tests/check-node-report.test.sh for CRLF raw/normalized artifact hashes and CLI help/usage wrapper-name output, which were not requested by the stated port-and-wrapper goal.

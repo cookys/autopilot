@@ -1,0 +1,3 @@
+MISSED: The Node port does not preserve raw sha256 semantics from the original shell script: it normalizes CRLF for text files before hashing artifact_paths and moved-file candidates, so it can accept/reject checksums differently from sha256sum and does not strictly verify the file bytes it claims to verify.
+MISSED: The Node schema validation is not a faithful port of the original check-node-report.sh because it allows verdict: null, while the original required verdict to be a non-empty string.
+MISSED: The node report's evidence pointer scripts/check-node-report.sh:1-12 is invalid/stale because the delivered wrapper is only 4 lines long.

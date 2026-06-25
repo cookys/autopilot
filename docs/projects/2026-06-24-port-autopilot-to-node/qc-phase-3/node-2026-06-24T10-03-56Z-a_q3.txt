@@ -1,0 +1,14 @@
+Looking at the node report against the stated question: "Port doc-drift-gate.py to pure Node.js scripts/doc-drift-gate.js, **delete the original Python file**, update preflight-portability.sh, and write integration tests."
+
+Reviewing the evidence and artifacts:
+
+✓ `scripts/doc-drift-gate.js` — ported to Node.js, complete (229 lines)
+✓ `scripts/preflight-portability.sh:135-142` — updated with call to the new JS gate
+✓ `skills/doc-sync/SKILL.md` — updated documentation
+✓ `hooks/tests/doc-drift-gate.test.sh` — comprehensive integration tests (7 test scenarios)
+
+✗ **Deletion of original `scripts/doc-drift-gate.py` is not evidenced.** The artifact_paths list only shows the new/updated files (the `.js` file, the shell script, the skill doc, and the test file). No artifact confirms deletion of the Python file. This is explicitly part of the stated question.
+
+---
+
+MISSED: Original Python file (scripts/doc-drift-gate.py) was not deleted.

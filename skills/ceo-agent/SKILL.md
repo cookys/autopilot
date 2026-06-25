@@ -263,7 +263,7 @@ When encountering these, pause and propose:
    a. Create project dir (docs/projects/YYYY-MM-DD-<name>/)     ← MANDATORY, not optional
    b. Write README.md with OKR, phases, success criteria
    c. Update INDEX.md
-   c2. `scripts/tree.sh init <proj>` + emit root node — tree dual-run (shadow) is
+   c2. `scripts/tree.js init <proj>` + emit root node — tree dual-run (shadow) is
       the DEFAULT for CEO L-size tasks (Board directive 2026-06-12: accumulate
       calibration samples + audit trail; TaskCreate stays authoritative, zero
       authority change). Skip only if the Board says so for this task.
@@ -365,22 +365,22 @@ this project. Check at startup and at each phase boundary.
 
 **Authority gate** — before routing any decisions through the tree, run:
 ```bash
-scripts/tree.sh board-status <proj>
+scripts/tree.js board-status <proj>
 ```
 - `null` output (or error) → **dual-run (shadow)**: emit lifecycle events; TaskCreate stays authoritative.
-- `.active == true` (present AND `decision == "graduate"`) → **post-signoff (active)**: decisions flow from `scripts/tree.sh next-decision`.
+- `.active == true` (present AND `decision == "graduate"`) → **post-signoff (active)**: decisions flow from `scripts/tree.js next-decision`.
 - `.present == true` but `.active == false` (e.g. decision was extend/abort) → stay in **dual-run**; the signoff is recorded but does not activate.
 
 > Non-CC fallback: `jq 'select(.type=="board_signoff" and .decision=="graduate")' docs/projects/<proj>/tree/events.jsonl` (empty = shadow).
 
 **Post-signoff decision loop** (replaces TaskCreate-driven loop):
-1. `scripts/tree.sh next-decision <proj>` → compact JSON `{node, question, options[], evidence_pointers[]}`. This is the manager's ONLY default input.
+1. `scripts/tree.js next-decision <proj>` → compact JSON `{node, question, options[], evidence_pointers[]}`. This is the manager's ONLY default input.
 2. Adjudicate via `scripts/resolve-doa.sh`. Emit `doa_decision` event.
 3. Within DOA → emit `decision_resolved` with the `decision_id`. Beyond DOA → emit `escalation_opened`, pause for Board, emit `escalation_resolved`.
 4. Repeat until `next-decision` returns empty.
 
 **KR1 rule**: never Read work products directly on the happy path. Every artifact
-read MUST go through `scripts/tree.sh fetch <proj> <node> --raw` — this emits
+read MUST go through `scripts/tree.js fetch <proj> <node> --raw` — this emits
 a `manager_raw_read` event (the logged escalation valve). KR1 is measured by
 post-hoc transcript audit by the P6 reviewer (retro-style scan), not self-reported.
 The P4 shadow period provides the before-baseline so P6 reports a delta.
@@ -397,9 +397,9 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 |--------------------|---------|
 | [`references/tree-adapter.md`](references/tree-adapter.md) | Full adapter procedure: modes, event cheat-sheet, authority gate command, depth policy, initialization |
 | [`references/tree-contracts.md`](../../references/tree-contracts.md) | Event schemas, node report contract, invariants |
-| [`scripts/tree.sh`](../../scripts/tree.sh) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw`, `board-status` |
+| [`scripts/tree.js`](../../scripts/tree.js) | Tree CLI: `init`, `emit`, `next-decision`, `report`, `escalations`, `fetch --raw`, `board-status` |
 | [`scripts/resolve-doa.sh`](../../scripts/resolve-doa.sh) | Role/tier → DOA preset JSON |
-| [`scripts/check-node-report.sh`](../../scripts/check-node-report.sh) | Validate a delegate's node report before accepting it: schema + evidence-pointer resolution + artifact sha256 |
+| [`scripts/check-node-report.js`](../../scripts/check-node-report.js) | Validate a delegate's node report before accepting it: schema + evidence-pointer resolution + artifact sha256 |
 | [`references/model-routing.md`](../../references/model-routing.md) §Tree roles | Model routing for TREE roles — resolve via `scripts/resolve-dispatch.sh --role <role> --tree` (v2.17.0); `manager` refuses with exit 3 (never dispatched by design) |
 
 ## Anti-patterns
@@ -428,8 +428,8 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | Bump version in one file from memory without grepping | Always `grep <old-version>` across the repo first; if the grep returns N hits, the edit list must touch all N. Memory drops files (marketplace.json, README badges) silently |
 | Absorb external OSS / prior art design without crediting source | The L-1.5 `Credit / attribution` row triggers — README's `Inspired By` section is part of scope, not an afterthought caught by the user pointing it out post-merge |
 | Dispatch subagent with prompt that paraphrases a skill's methodology | The subagent must invoke the skill via the Skill tool — same as dev-flow L-1.6 enforces on the main session. Paraphrasing loses fidelity (full checklist / red-line rules / rationalization table). Every L-size dispatch prompt must include the `### SKILLS` section per `references/task-prompt-templates.md` |
-| Route decisions through `tree.sh next-decision` before `board_signoff` exists | Check the authority gate first — no `board_signoff` event = dual-run (shadow) mode; TaskCreate stays authoritative |
-| Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.sh fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event; a bare Read is a KR1 violation |
+| Route decisions through `tree.js next-decision` before `board_signoff` exists | Check the authority gate first — no `board_signoff` event = dual-run (shadow) mode; TaskCreate stays authoritative |
+| Read a work product directly when the tree is active | All artifact reads go through `scripts/tree.js fetch <proj> <node> --raw` — this emits the logged `manager_raw_read` event; a bare Read is a KR1 violation |
 | Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
 | Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |
-| Archive the project (L-5.5) before emitting final node verdicts | `tree.sh` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |
+| Archive the project (L-5.5) before emitting final node verdicts | `tree.js` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |

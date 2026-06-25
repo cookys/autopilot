@@ -31,7 +31,7 @@ The `<proj>` identifier is the project directory name under `docs/projects/`
 Before operating in tree-active mode, determine the authority level:
 
 ```bash
-scripts/tree.sh board-status <proj>
+scripts/tree.js board-status <proj>
 ```
 
 | Output | Mode | Meaning |
@@ -40,15 +40,15 @@ scripts/tree.sh board-status <proj>
 | `.present == true`, `.active == false` | **Dual-run (shadow)** | A signoff event exists but its decision was not "graduate" (extend/abort) — recorded, NOT activating |
 | `null` / error | **Dual-run (shadow)** | Tree records in parallel; TaskCreate stays authoritative |
 
-> **Non-CC fallback**: if `scripts/tree.sh` is not available, scan the event log directly:
+> **Non-CC fallback**: if `scripts/tree.js` is not available, scan the event log directly:
 > `jq 'select(.type=="board_signoff" and .decision=="graduate")' docs/projects/<proj>/tree/events.jsonl`
 > — non-empty output = post-signoff, empty/missing = shadow.
 
 **Dual-run mode**: emit lifecycle events as normal (§4), but continue using
 TaskCreate forcing functions as the authoritative decision source. The tree
-is a passive record. Do NOT route decisions through `tree.sh next-decision`.
+is a passive record. Do NOT route decisions through `tree.js next-decision`.
 
-**Post-signoff mode**: decisions flow from `tree.sh next-decision`. TaskCreate
+**Post-signoff mode**: decisions flow from `tree.js next-decision`. TaskCreate
 tasks may still exist as checkpoints but are NOT the decision authority. See
 §3 for the full post-signoff loop.
 
@@ -60,7 +60,7 @@ Repeat at each decision point:
 
 1. **Fetch next decision**:
    ```bash
-   scripts/tree.sh next-decision <proj>
+   scripts/tree.js next-decision <proj>
    ```
    Output is compact JSON: `{node, question, options[], evidence_pointers[]}`.
    This is the manager's ONLY default input. Never read work content directly.
@@ -78,11 +78,11 @@ Repeat at each decision point:
 4. **Emit the resolution** (choose one):
    ```bash
    # Decision resolved autonomously:
-   scripts/tree.sh emit <proj> <node-id> \
+   scripts/tree.js emit <proj> <node-id> \
      '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"decision_resolved","decision_id":"<id>","chosen":"<option>"}'
 
    # Escalation resolved after Board input:
-   scripts/tree.sh emit <proj> <node-id> \
+   scripts/tree.js emit <proj> <node-id> \
      '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"escalation_resolved","escalation_id":"<id>"}'
    ```
 
@@ -92,7 +92,7 @@ Repeat at each decision point:
 **KR1 rule**: the manager MUST NOT read work products directly on the happy
 path. Every out-of-band artifact read MUST go through:
 ```bash
-scripts/tree.sh fetch <proj> <node-id> --raw
+scripts/tree.js fetch <proj> <node-id> --raw
 ```
 `fetch --raw` emits a `manager_raw_read` event automatically. Any other Read
 or Bash that consumes work content is a KR1 violation visible in the retro
@@ -102,25 +102,25 @@ transcript audit (§7).
 
 ## 4. Event emission cheat-sheet
 
-Emit events via `scripts/tree.sh emit`. All payload fields are TOP-LEVEL —
+Emit events via `scripts/tree.js emit`. All payload fields are TOP-LEVEL —
 never nest under a `data` key.
 
 ### 4.1 `node_created`
 ```bash
-scripts/tree.sh emit <proj> <node-id> \
+scripts/tree.js emit <proj> <node-id> \
   '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"node_created",
     "parent":"<parent-id-or-null>","question":"<text>","options":[],"evidence_pointers":[]}'
 ```
 
 ### 4.2 `delegated`
 ```bash
-scripts/tree.sh emit <proj> <node-id> \
+scripts/tree.js emit <proj> <node-id> \
   '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"delegated"}'
 ```
 
 ### 4.3 `verdict`
 ```bash
-scripts/tree.sh emit <proj> <node-id> \
+scripts/tree.js emit <proj> <node-id> \
   '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"verdict",
     "verdict":"approved","confidence":0.9}'
 ```
@@ -128,14 +128,14 @@ scripts/tree.sh emit <proj> <node-id> \
 
 ### 4.4 `doa_decision`
 ```bash
-scripts/tree.sh emit <proj> <node-id> \
+scripts/tree.js emit <proj> <node-id> \
   '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"doa_decision",
     "action":"merge-to-develop","tier":"reversible","outcome":"autonomous"}'
 ```
 
 ### 4.5 `escalation_opened`
 ```bash
-scripts/tree.sh emit <proj> <node-id> \
+scripts/tree.js emit <proj> <node-id> \
   '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"escalation_opened",
     "escalation_id":"<id>","question":"<text>","options":["A","B"],"evidence_pointers":[]}'
 ```
@@ -146,7 +146,7 @@ under-specified.
 
 ### 4.6 `escalation_resolved`
 ```bash
-scripts/tree.sh emit <proj> <node-id> \
+scripts/tree.js emit <proj> <node-id> \
   '{"schema_version":1,"ts":"<iso>","node":"<node-id>","type":"escalation_resolved",
     "escalation_id":"<id>"}'
 ```
@@ -199,7 +199,7 @@ KR1 ("manager context correlates with decisions, not artifacts") is measured
 by **post-hoc transcript audit**, not self-reporting:
 
 - The P6 reviewer performs a retro-style scan of the manager session
-  transcript for any work-product reads outside `tree.sh fetch --raw`.
+  transcript for any work-product reads outside `tree.js fetch --raw`.
 - P4 shadow period logs a manager-read baseline so the P6 report is a
   **delta** (before vs. after), not an absolute claim.
 - Every `fetch --raw` call emits a `manager_raw_read` event in the tree;
@@ -230,11 +230,11 @@ and `docs/BACKLOG.md` "graduation Board review" entry).
 To opt a project into the tree:
 
 ```bash
-scripts/tree.sh init <proj>
+scripts/tree.js init <proj>
 ```
 
 **Default for CEO L-size tasks** (Board directive 2026-06-12): the CEO runs
-`tree.sh init` as part of L-1 project setup (SKILL.md Execution step 3.c2) so
+`tree.js init` as part of L-1 project setup (SKILL.md Execution step 3.c2) so
 shadow calibration samples and the audit trail accumulate on every L-ship.
 Skip only on explicit Board instruction for that task.
 
@@ -243,7 +243,7 @@ event. The tree immediately enters dual-run (shadow) mode. Post-signoff mode
 requires a `board_signoff` event emitted after the Board approves graduation
 (see §2).
 
-**Close-out ordering**: `tree.sh` validates project names (no `/`), so once
+**Close-out ordering**: `tree.js` validates project names (no `/`), so once
 finish-flow L-5.5 moves the project under `_archive/` the tree is **read-only**.
 Emit every node's final `verdict` (including the closing node's) BEFORE the
 archive move (2026-06-12 dogfood divergence).
@@ -259,7 +259,7 @@ LLM transcripts into every L-ship's project dir.
 
 After init, emit the root node:
 ```bash
-scripts/tree.sh emit <proj> root \
+scripts/tree.js emit <proj> root \
   '{"schema_version":1,"ts":"<iso>","node":"root","type":"node_created",
     "parent":null,"question":"<project-OKR-question>","options":[],"evidence_pointers":[]}'
 ```

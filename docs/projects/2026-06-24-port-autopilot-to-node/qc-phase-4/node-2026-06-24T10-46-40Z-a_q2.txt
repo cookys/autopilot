@@ -1,0 +1,7 @@
+Looking at the node report for phase-4, which states the goal as "Port check-node-report.sh to pure Node.js scripts/check-node-report.js and replace the original wrapper," I'll identify what went beyond that scope.
+
+**EXTRA:** CRLF-aware sha256 verification for artifact validation — the Node.js implementation adds `getProcessedBuffer()` + `normalizeTextContent()` functions that convert CRLF to LF for text files before hashing, allowing the validator to accept both raw and CRLF-normalized SHA values. The original bash implementation used `sha256sum` directly without this normalization.
+
+**EXTRA:** Test coverage for CRLF handling (TEST 16b) — two new test cases verifying the validator accepts artifacts with both raw and CRLF-normalized sha256 values.
+
+**EXTRA:** Test coverage for CLI contract opacity (TEST 16c) — verifies that `--help` output and usage errors display "check-node-report.sh" (not "check-node-report.js"), hiding the implementation detail from users.

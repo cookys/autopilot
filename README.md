@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.2-E8A838?style=flat-square" alt="v2.25.2">
+  <img src="https://img.shields.io/badge/version-2.25.3-E8A838?style=flat-square" alt="v2.25.3">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -629,8 +629,8 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<old-version>
 
 | Branch | Purpose | `plugin.json` version |
 |--------|---------|----------------------|
-| `main` | Stable releases, tagged (e.g. `v1.4.5`) | Matches latest tag |
-| `develop` | Next version development | Next major/minor (e.g. `2.0.0`) |
+| `main` | Stable releases, tagged (e.g. `v2.7.1`) | Matches latest tag |
+| `develop` | Next version development | Next major/minor (e.g. `2.26.0`) |
 
 When developing: checkout `develop`, symlink points to it, `/reload-plugins` picks up changes. Remember to bump `plugin.json` version before tagging a release.
 

@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.3 — Pure-Node.js core: jq/python3-free runtime + validation scripts
+
+**Headline**: Ported autopilot's core runtime and validation scripts to **pure Node.js**, removing the `jq` and `python3` dependencies from the runtime and preflight paths so the engine runs flawlessly in dependency-minimal sandboxes (e.g. Antigravity/`agy`). Seven scripts were rewritten — `risk-counter`, `toggle-payload-capture`, `session-start` (hook), `doc-drift-gate` (was `.py`), `check-node-report`, `tree` (the task-tree engine), and `qc-panel` — and their shell/python originals deleted (no wrapper shims; `hooks.json` and all wiring now point at the `.js` entrypoints). All 57 hook test files and the 16-check portability preflight pass with `jq`/`python3` stubbed to fail.
+
+### Added
+- `scripts/{risk-counter,toggle-payload-capture,doc-drift-gate,check-node-report,tree,qc-panel}.js` + `hooks/session-start.js` — pure-Node ports.
+- `TREE_LOCK_TIMEOUT_MS` env knob on the tree engine's lock acquire (default 10000) + a live-owner-no-steal regression test (`tree-engine.test.sh` TEST 4b).
+
+### Changed
+- Runtime + preflight no longer depend on `jq` or `python3` (`git` is still required). Tool-event wiring (`hooks.json`, `settings.example.json`) references the `.js` entrypoints.
+
+### Fixed
+- **tree.js lock mutual-exclusion** (found in pre-merge review): the stale-lock check stole a lock from a **live but slow** owner once its lock aged past a fixed 10s TTL → concurrent appends could tear the JSONL. Now a local owner's staleness is decided by **PID liveness only** (a live owner is never stale → contenders fail closed, matching `flock -w`); a wall-clock TTL applies only to cross-host owners (60s, decoupled from the acquire timeout). Busy-wait spin replaced with a kernel sleep; `fetch --raw` is now binary-safe (Buffer, no utf8 re-encode).
+- **qc-panel.js false-PASS race** (found in pre-merge review): Judge A read its stdout file before the write stream flushed → a dropped trailing chunk could lose a `MISSED:` line and flip the gating verdict to a false PASS. Now buffers stdout in memory like Judge B. Synth-omitted `dissents`/`extras` default to `[]` (shell parity); large-stdin spawns get EPIPE handlers.
+- Ported scripts now print their own `.js` name (not the deleted `.sh`) in `--help`, usage, and error prefixes.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. The deleted shell/python scripts are recoverable from history; re-pointing `hooks.json` to a `.sh` requires restoring that script too.
+
 ## v2.25.2 — cost-tracker re-enabled (transcript-sum); zero disabled hooks
 
 **Headline**: The last shipped-but-disabled hook, `cost-tracker`, is fixed and re-enabled (opt-in) — autopilot now has **zero disabled hooks** (8 default-on + 12 opt-in). The blocker was never stdin (fd 0 works): the Claude Code 2.1.186 Stop payload simply carries no `usage` field, so the old hook always early-exited at 0 tokens. The rewrite reads `transcript_path` from the Stop payload and sums per-turn `message.usage` from the transcript. Because the Stop hook fires once per assistant turn and the transcript is cumulative, it keeps a per-session cursor (`~/.claude/metrics/.cursors/<session>.json`) and logs only the turns added since the last Stop — so summing all rows in `costs.jsonl` equals the true session cost with no double-count. Cost is **cache-aware** (cache reads billed at 0.1×, 5-minute cache writes at 1.25× the model's input rate), which matters because cache-read tokens dominate a real autopilot session by ~40:1. Opt-out unchanged: `AUTOPILOT_COST_TRACKER=false`.

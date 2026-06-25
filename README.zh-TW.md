@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.2-E8A838?style=flat-square" alt="v2.25.2">
+  <img src="https://img.shields.io/badge/version-2.25.3-E8A838?style=flat-square" alt="v2.25.3">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -617,7 +617,7 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<舊版本>
 
 | Branch | 用途 | `plugin.json` version |
 |--------|------|----------------------|
-| `main` | 穩定發佈，打 tag（如 `v1.4.5`） | 對應最新 tag |
+| `main` | 穩定發佈，打 tag（如 `v2.7.1`） | 對應最新 tag |
 | `develop` | 下一版開發中 | 下一個主/次版號（如 `2.0.0`） |
 
 開發時：checkout `develop`，symlink 指向它，`/reload-plugins` 即時生效。發佈前記得 bump `plugin.json` version 再打 tag。

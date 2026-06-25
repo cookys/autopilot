@@ -1,0 +1,2 @@
+MISSED: E2E validation is not demonstrated; no artifact shows `hooks/tests/run.sh` passing without `jq`/`python3` or `agy plugin validate` succeeding.
+MISSED: Cleanup of old scripts is not demonstrated; the diff only updates README status and `qc-panel.js`, with no old script removals or cleanup evidence.

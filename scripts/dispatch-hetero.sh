@@ -73,15 +73,19 @@ emit() { # status commit files ins del worktree error
   [ -n "${2:-}" ] && commit_json="\"$2\""
   [ -n "${6:-}" ] && wt_json="\"$(json_escape "$6")\""
   [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
-  printf '{ "status": "%s", "runner": "agy", "model": "%s", "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
-    "$1" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
+  local runner="agy"
+  [ "$IS_CODEX" -eq 1 ] && runner="codex"
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
+    "$1" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json"
 }
 
 die_precondition() {
-  printf '{ "status": "precondition_failed", "runner": "agy", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
-    "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
+  local runner="agy"
+  [ "$IS_CODEX" -eq 1 ] && runner="codex"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
+    "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
   exit 2
 }
 
@@ -99,11 +103,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+IS_CODEX=0
+if [[ "$MODEL" == *"gpt-5.5"* ]]; then
+  IS_CODEX=1
+fi
+
 # --- preconditions (exit 2, nothing created) ---
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
-command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
+
+if [ "$IS_CODEX" -eq 1 ]; then
+  command -v "codex" >/dev/null 2>&1 || die_precondition "codex binary not found (install OpenAI Codex or ensure it is in PATH)"
+else
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
+fi
+
 git rev-parse --git-dir >/dev/null 2>&1 || die_precondition "not inside a git repository"
 git rev-parse --verify --quiet "$BASE" >/dev/null || die_precondition "base ref not found: $BASE"
 if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
@@ -121,20 +136,22 @@ fi
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
 
-# A TERM during the long agy run (OOM-killer, kill, programmatic stop) orphans the
-# worktree + branch with no JSON. Trap it to reap both, then DISARM once agy returns
-# (the keep/remove logic below owns the worktree from that point — a clean exit must
-# not trip this). NOTE: a Ctrl-C (INT to the process group) does NOT reach this trap —
-# agy takes the INT and dies, the parent continues to the question_suspected path
-# (worktree kept for inspection); the INT here only covers a parent-only INT. Verified
-# empirically 2026-06-22.
+# A TERM during the long run orphans the worktree + branch. Trap it to reap both.
 trap 'git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # --- run the agent (its stdout/stderr go to LOG, never our stdout) ---
-( cd "$WT" && "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" \
-    --model "$MODEL" --dangerously-skip-permissions \
-    --print-timeout "$TIMEOUT" ) >"$LOG" 2>&1
-AGENT_EXIT=$?
+if [ "$IS_CODEX" -eq 1 ]; then
+  ( cd "$WT" && codex exec --model "$MODEL" \
+      --dangerously-bypass-approvals-and-sandbox \
+      --dangerously-bypass-hook-trust \
+      -c "thinking=\"xhigh\"" < "$PROMPT_FILE" ) >"$LOG" 2>&1
+  AGENT_EXIT=$?
+else
+  ( cd "$WT" && "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" \
+      --model "$MODEL" --dangerously-skip-permissions \
+      --print-timeout "$TIMEOUT" ) >"$LOG" 2>&1
+  AGENT_EXIT=$?
+fi
 trap - INT TERM
 
 # --- verify by artifacts, never by self-report ---

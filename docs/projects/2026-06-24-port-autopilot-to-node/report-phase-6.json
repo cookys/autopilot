@@ -1,0 +1,27 @@
+{
+  "node": "phase-6",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "Port qc-panel.sh to pure Node.js scripts/qc-panel.js and replace the original wrapper.",
+  "evidence_pointers": [
+    "scripts/qc-panel.js:1-808",
+    "scripts/qc-panel.sh:1-3",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-6.diff:1-100"
+  ],
+  "artifact_paths": [
+    {
+      "path": "scripts/qc-panel.js",
+      "sha256": "37b68e5179237d0b56c5b355f2b479143c0db6f283229cade6c753a2d14b34a2"
+    },
+    {
+      "path": "scripts/qc-panel.sh",
+      "sha256": "a5498c155efe50e40dbb69183404d8b342498fcec40300e8e261f20e37d4a02d"
+    },
+    {
+      "path": "docs/projects/2026-06-24-port-autopilot-to-node/phase-6.diff",
+      "sha256": "762d04a018bdbb6556861dbc5d76f889799f68f87b24fded5aa03b307ed8fada"
+    }
+  ],
+  "doa_log": [],
+  "escalations": []
+}

@@ -14,7 +14,7 @@
 #   - path traversal in --proj/--node → exit 2 (S1)
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/qc-panel.sh"
+SCRIPT="$REPO_ROOT/scripts/qc-panel.js"
 
 # ── Isolation ────────────────────────────────────────────────────────────────
 OUT_DIR="$TEST_TMP/panel-out"
@@ -88,7 +88,7 @@ cat > "$REPORT" <<'EOF'
   "node": "test-node-1",
   "verdict": "pass",
   "confidence": 0.9,
-  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "evidence_pointers": ["scripts/tree.js:1-10@HEAD"],
   "artifact_paths": [],
   "doa_log": [],
   "escalations": []
@@ -239,7 +239,7 @@ cat > "$AGREE_REPORT" <<'EOF'
   "node": "agree-node",
   "verdict": "pass",
   "confidence": 0.95,
-  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "evidence_pointers": ["scripts/tree.js:1-10@HEAD"],
   "artifact_paths": [],
   "doa_log": [],
   "escalations": []
@@ -355,7 +355,7 @@ cat > "$APPROVED_REPORT" <<'EOF'
   "node": "approved-node",
   "verdict": "approved",
   "confidence": 0.9,
-  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "evidence_pointers": ["scripts/tree.js:1-10@HEAD"],
   "artifact_paths": [],
   "doa_log": [],
   "escalations": []
@@ -382,7 +382,7 @@ cat > "$WEIRD_REPORT" <<'EOF'
   "node": "weird-node",
   "verdict": "implemented-tests-green",
   "confidence": 0.9,
-  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "evidence_pointers": ["scripts/tree.js:1-10@HEAD"],
   "artifact_paths": [],
   "doa_log": [],
   "escalations": []
@@ -482,7 +482,7 @@ cat > "$REFUTE_REPORT" <<'EOF'
   "node": "refute-node",
   "verdict": "pass",
   "confidence": 0.9,
-  "evidence_pointers": ["scripts/tree.sh:1-10@HEAD"],
+  "evidence_pointers": ["scripts/tree.js:1-10@HEAD"],
   "artifact_paths": [],
   "doa_log": [],
   "escalations": []

@@ -35,9 +35,9 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/diff-scope-report.sh`](../../scripts/diff-scope-report.sh) | v2 scope-creep filter: whitespace-only files, files not in message, comment-only hunks, quote-style swaps | Code Review step (Scope Creep Scan) |
 | [`scripts/resolve-dispatch.sh`](../../scripts/resolve-dispatch.sh) | Per-dispatch model/mode lookup against `model-routing-config.md` | Any subagent dispatch |
 | [`scripts/verify-preexisting.sh`](../../scripts/verify-preexisting.sh) | Stash + checkout-base + run-test classification | Test Failure Investigation step |
-| [`scripts/risk-counter.sh`](../../scripts/risk-counter.sh) | Cross-round WTF-Likelihood Cap state tracking | Self-Regulation section |
+| [`scripts/risk-counter.js`](../../scripts/risk-counter.js) | Cross-round WTF-Likelihood Cap state tracking | Self-Regulation section |
 | [`scripts/diff-since-last-round.sh`](../../scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint (dispatcher-only) | Re-review Loop short-circuit decision |
-| [`scripts/qc-panel.sh`](../../scripts/qc-panel.sh) | Cross-family interrogation panel (shadow mode, task-tree engine) | Shadow QC panel section below |
+| [`scripts/qc-panel.js`](../../scripts/qc-panel.js) | Cross-family interrogation panel (shadow mode, task-tree engine) | Shadow QC panel section below |
 | [`scripts/calibration.sh`](../../scripts/calibration.sh) | Panel verdict sample store + agreement report | Shadow QC panel section below |
 | [`scripts/resolve-qc-gate.sh`](../../scripts/resolve-qc-gate.sh) | Per-project anti-skip gate strength (`block`/`warn`/`off`) for the `.githooks/pre-push` enforcer | On PASS, stamp the landing/merge commit with `QC-Verdict: PASS (reviewer <id>, <date>)` so the pre-push gate is satisfied |
 
@@ -45,11 +45,11 @@ All scripts: `<script> --help` for usage; deterministic exit codes; JSON output 
 
 ### Shadow QC panel (task-tree engine)
 
-When `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MUST run `scripts/qc-panel.sh` in parallel with the authoritative reviewer (Amendment 4: a silently-dead shadow fails the gate). Convention: `--proj` is the active project's directory name under `docs/projects/` (no auto-detection — an omitted `--proj` means the shadow silently doesn't run, so the dispatcher owns supplying it). The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
+When `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (report has non-null `verdict`), the dispatcher MUST run `scripts/qc-panel.js` in parallel with the authoritative reviewer (Amendment 4: a silently-dead shadow fails the gate). Convention: `--proj` is the active project's directory name under `docs/projects/` (no auto-detection — an omitted `--proj` means the shadow silently doesn't run, so the dispatcher owns supplying it). The existing reviewer flow REMAINS authoritative — this is shadow-only (KR5: zero behavior change for non-opted-in users; the wiring is conditional on the tree existing).
 
 ```
 IF docs/projects/<proj>/tree/ exists AND node report has verdict != null:
-  Run scripts/qc-panel.sh --report <node-report.json> \
+  Run scripts/qc-panel.js --report <node-report.json> \
       --artifacts <artifact-paths> --out <panel-out-dir> \
       --proj <proj> --node <node-id>
   Panel writes verdict artifact + appends a liveness (self-report-baseline)
@@ -148,20 +148,20 @@ Finding (Suggestion or Minor severity)
 
 ## Self-Regulation (WTF-Likelihood Cap)
 
-During fix loops, track cumulative risk via `scripts/risk-counter.sh` (persisted per repo+branch — no LLM cross-round memory required):
+During fix loops, track cumulative risk via `scripts/risk-counter.js` (persisted per repo+branch — no LLM cross-round memory required):
 
 | Event | Risk delta | Increment command |
 |-------|-----------|-------------------|
-| Fix reverted (didn't work) | +15 | `scripts/risk-counter.sh increment --event reverted` |
-| Fix touches 3+ files | +5 | `scripts/risk-counter.sh increment --event multi-file` |
-| After 10th fix in same pipeline run | +1 per add'l fix | `scripts/risk-counter.sh increment --event late-fix` |
-| Fix touches files unrelated to original change | +20 | `scripts/risk-counter.sh increment --event unrelated-files` |
-| Any other fix (just counts toward fixes total) | 0 | `scripts/risk-counter.sh increment --event fix` |
+| Fix reverted (didn't work) | +15 | `scripts/risk-counter.js increment --event reverted` |
+| Fix touches 3+ files | +5 | `scripts/risk-counter.js increment --event multi-file` |
+| After 10th fix in same pipeline run | +1 per add'l fix | `scripts/risk-counter.js increment --event late-fix` |
+| Fix touches files unrelated to original change | +20 | `scripts/risk-counter.js increment --event unrelated-files` |
+| Any other fix (just counts toward fixes total) | 0 | `scripts/risk-counter.js increment --event fix` |
 
 **Thresholds** (orthogonal to retries-per-step below):
-- Risk > 20 → **STOP** (check via `scripts/risk-counter.sh threshold-hit`; exit 1 ⇒ stop). Report: "Fix loop risk elevated. N fixes attempted, M reverted."
+- Risk > 20 → **STOP** (check via `scripts/risk-counter.js threshold-hit`; exit 1 ⇒ stop). Report: "Fix loop risk elevated. N fixes attempted, M reverted."
 - Hard cap: 30 fixes per pipeline run (separate from per-step retry cap below)
-- On STOP: list all attempted fixes, outcomes, and remaining issues; reset via `scripts/risk-counter.sh reset` only after closing the pipeline run
+- On STOP: list all attempted fixes, outcomes, and remaining issues; reset via `scripts/risk-counter.js reset` only after closing the pipeline run
 
 ## Failure Handling
 

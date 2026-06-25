@@ -1,0 +1,11 @@
+Looking at the node report for **phase-4** with the stated goal: *"Port check-node-report.sh to pure Node.js scripts/check-node-report.js and replace the original wrapper."*
+
+The deliverables match the scope:
+- ✓ Created `scripts/check-node-report.js` (532 lines) with full Node.js implementation
+- ✓ Replaced bash implementation; `scripts/check-node-report.sh` is now a 4-line wrapper delegating to the JS
+- ✓ Maintained CLI contract (help/usage text references `check-node-report.sh`, not `.js`)
+- ✓ Added CRLF artifact verification tests (TEST 16b: both raw and normalized SHA matching)
+- ✓ Added CLI contract validation tests (TEST 16c: verifies wrapper hides implementation)
+- ✓ Feature parity: schema validation, evidence pointer resolution, artifact sha256 verification, moved-file detection
+
+**No missed goals identified.** The phase appears complete per its stated scope.

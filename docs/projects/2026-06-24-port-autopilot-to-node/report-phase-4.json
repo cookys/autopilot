@@ -1,0 +1,18 @@
+{
+  "node": "phase-4",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "Port check-node-report.sh to pure Node.js scripts/check-node-report.js and replace the original wrapper.",
+  "evidence_pointers": [
+    "scripts/check-node-report.js:1-532",
+    "scripts/check-node-report.sh:1-4",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-4.diff:1-100"
+  ],
+  "artifact_paths": [
+    "scripts/check-node-report.js",
+    "scripts/check-node-report.sh",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-4.diff"
+  ],
+  "doa_log": [],
+  "escalations": []
+}

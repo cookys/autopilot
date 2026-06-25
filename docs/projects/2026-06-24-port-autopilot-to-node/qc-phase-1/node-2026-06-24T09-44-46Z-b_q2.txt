@@ -1,0 +1,2 @@
+EXTRA: Added new test scripts at hooks/tests/risk-counter.test.sh and hooks/tests/toggle-payload-capture.test.sh, beyond the requested ports and shell wrappers.
+EXTRA: Added/exercised a risk-counter path subcommand, which is not part of the stated port-and-wrapper goal.

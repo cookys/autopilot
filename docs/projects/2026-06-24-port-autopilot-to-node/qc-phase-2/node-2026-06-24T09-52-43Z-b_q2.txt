@@ -1,0 +1,1 @@
+EXTRA: Added/updated hooks/tests/session-start.test.sh with coverage for the Node hook behavior, wrapper delegation, TTL/config handling, intent resume hints, disabled-warning output, and malformed-config fail-open behavior; the stated goal only called for the Node port and thin shell wrapper.

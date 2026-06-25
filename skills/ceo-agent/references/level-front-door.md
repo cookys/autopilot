@@ -229,12 +229,28 @@ a JSON outcome.
 ### 3. qc@depth-0 is THE gate
 
 The foreman runs dev-flow → finish-flow, which has its **own** L-5 qc. That qc is
-explicitly **first-pass / non-authoritative**. The single **authoritative** gate
-is a **depth-0 re-dispatch** of the qc verdict that reads the foreman's
-**artifacts** (the branch diff), per blind-dispatch clause 1
-([`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). Not two
-real gates — one gate (depth 0) + one self-check (foreman). The run-summary ledger
-(below) must show the depth-0 gate **distinct from** the foreman's first-pass qc.
+explicitly **first-pass / non-authoritative**.
+
+The authoritative gate is a **depth-0 fan-out of ≥3 adversarial QC reviewers** —
+dispatched subagents, each with a **distinct non-overlapping lens** (e.g.
+correctness, security/faithfulness, completeness/edge-cases; for LLM-behavior or
+data-into-system changes add a domain lens), each reading the foreman's
+**artifacts** (the branch diff) and **citing `file:line`**, default-assuming
+broken until proven, per blind-dispatch clause 1
+([`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). The CEO
+**synthesizes** their findings into the pass/fail verdict and **fixes or reverts
+every real issue before integration**. Scale reviewer count to blast radius (3 for
+a small diff; 5+ for a large/risky one).
+
+**The depth-0 qc is DISPATCHED, never the CEO eyeballing the diff inline.** A
+single self-read from the CEO's own context is itself only a first-pass and does
+**not** clear the gate — the value is *independent adversarial coverage*, not a
+second opinion from the same head. (Failure mode, 2026-06 dogfood: CEO self-qc'd a
+~700-line merge instead of fanning out reviewers; caught only because the user
+flagged it.) **Hold the push/merge until the synthesis is clean.** Not two real
+gates — one **adversarial panel** (depth 0) + one self-check (foreman). The
+run-summary ledger (below) must show the depth-0 panel **distinct from** the
+foreman's first-pass qc.
 
 ### 4. Merge-back is owned by depth 0
 
@@ -360,7 +376,7 @@ one row per step:
 | plan | claude | (foreman tier) | n/a | (plan doc / inline) |
 | impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | `<branch>@<sha>` |
 | foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | (qc notes) |
-| **depth-0 qc (authoritative)** | claude | (depth-0 tier) | **pass/fail** | `git diff <base>..<branch>` |
+| **depth-0 qc panel (authoritative)** | claude ×N (≥3 lenses) | (depth-0 tier) | **pass/fail** (synthesized) | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from
   `dispatch-hetero.sh`'s outcome JSON (`runner`/`model` fields) for the `/l5`

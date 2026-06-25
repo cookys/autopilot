@@ -1,0 +1,21 @@
+根據 node 報告和 artifacts 分析：
+
+**問題**: Port check-node-report.sh to pure Node.js scripts/check-node-report.js and replace the original wrapper.
+
+**達成的目標**:
+
+ACHIEVED: 完整 port Node.js 實現 (scripts/check-node-report.js 534 行)，涵蓋原始 bash 版本的所有核心功能：schema 驗證、evidence pointer 解析、artifact sha256 驗證。
+
+ACHIEVED: 保留 shell wrapper (scripts/check-node-report.sh 簡化為 4 行)，確保外部 CLI 呼叫介面不變，維持「check-node-report.sh」的命名契約。
+
+ACHIEVED: 支援 CRLF 安全港，實作 CRLF→LF 正規化：artifacts 驗證同時接受原始和正規化後的 sha256 值（透過 getProcessedBuffer() 和雙重檢驗邏輯）。
+
+ACHIEVED: 支援原始 raw sha256 匹配模式，allowing both `actualRawSha !== artSha && actualNormalizedSha !== artSha` 邏輯，落實對不同行尾格式的容錯。
+
+ACHIEVED: 新增 TEST 16b：CRLF artifact sha256 驗證測試，驗證 raw SHA 和 CRLF-normalized SHA 皆可通過。
+
+ACHIEVED: 新增 TEST 16c：CLI usage/help contract 測試，確保 `--help` 和 usage error 輸出皆正確標示「check-node-report.sh」（非「check-node-report.js」）。
+
+ACHIEVED: 實現完整的 evidence pointer 解析邏輯（file:line-range@sha 和 sha256:hex），包含 moved-file 雙模式檢測（Mode A 基於 SHA 內容雜湊、Mode B 基於 basename 啟發式）。
+
+ACHIEVED: 維持原始 exit code 契約：0（valid）、1（invalid）、2（usage error）。

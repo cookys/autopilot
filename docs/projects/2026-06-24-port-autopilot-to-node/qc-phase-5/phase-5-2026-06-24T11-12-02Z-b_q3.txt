@@ -1,0 +1,2 @@
+MISSED: The atomic/self-healing lock goal is incomplete: the Node port replaces flock with an ad hoc lockfile whose stale-lock recovery can unlink an active lock and does not verify ownership before release, so it does not provide reliable mutual exclusion for concurrent appends.
+MISSED: The CLI help was not fully ported/updated; it still documents util-linux/macOS flock behavior even though the Node implementation no longer uses that mechanism.

@@ -1,0 +1,14 @@
+ACHIEVED: Port of check-node-report.sh validator from shell (609 lines) to pure Node.js implementation (531 lines in scripts/check-node-report.js)
+
+**Evidence:**
+
+1. **Complete Node.js rewrite** (scripts/check-node-report.js:1-532): Full implementation of node report contract validator using native Node.js modules (fs, path, crypto, child_process) with feature-complete parity:
+   - Schema validation for all required fields (node, verdict, confidence, evidence_pointers, artifact_paths, doa_log, escalations)
+   - Evidence pointer resolution with sha256: and file:line-range@ formats
+   - Moved-file detection (Mode A with content-hash, Mode B with basename heuristic)
+   - Artifact SHA256 verification
+   - Proper exit codes (0 = valid, 1 = invalid, 2 = usage error)
+
+2. **Shell wrapper replacement** (scripts/check-node-report.sh:1-4): Original 609-line shell implementation completely replaced with 4-line delegation wrapper that invokes the Node.js script via `exec node "$(dirname "$0")/check-node-report.js" "$@"`
+
+3. **Diff evidence** (docs/projects/2026-06-24-port-autopilot-to-node/phase-4.diff): Shows +531 lines (Node.js), -605 lines (original shell logic removed), net change reduces shell wrapper to 4 lines

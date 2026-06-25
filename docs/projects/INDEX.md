@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _(none in progress)_ | | | |
+| 2026-06-24 | [port-autopilot-to-node](2026-06-24-port-autopilot-to-node/README.md) — Node.js core script refactoring (removing jq/python3) | v2.25.3 | `feat/port-autopilot-to-node` |
 
 ## 已完成 (Completed)
 

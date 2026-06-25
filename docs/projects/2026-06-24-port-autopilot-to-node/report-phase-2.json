@@ -1,0 +1,17 @@
+{
+  "node": "phase-2",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "Port session-start.sh to pure Node.js hooks/session-start.js and replace original with thin wrapper.",
+  "evidence_pointers": [
+    "hooks/session-start.js:1-171",
+    "hooks/session-start.sh:1-12"
+  ],
+  "artifact_paths": [
+    "hooks/session-start.js",
+    "hooks/session-start.sh",
+    "hooks/tests/session-start.test.sh"
+  ],
+  "doa_log": [],
+  "escalations": []
+}

@@ -1,0 +1,387 @@
+════════ L1 unit tests (node --test) ════════
+✔ parseAssistantTurns: extracts model+usage in file order, skips non-assistant (16.701088ms)
+✔ parseAssistantTurns: malformed lines / empty / missing usage are skipped, never throw (1.661681ms)
+✔ parseAssistantTurns: missing model defaults to sonnet (1.04299ms)
+✔ getRate: substring match opus/haiku, default sonnet (1.079322ms)
+✔ costOf: cache-aware pricing (read 0.1x, write 1.25x of input rate) (1.151364ms)
+✔ aggregateSince: from 0 sums all turns, groups by model, sets cursor to total (7.045651ms)
+✔ aggregateSince: cursor delta — only NEW turns after a prior Stop are counted (5.392997ms)
+✔ aggregateSince: no new turns → empty deltas, cursor unchanged at total (1.016175ms)
+✔ aggregateSince: transcript shrank (cursor > total) → re-baseline, emit nothing (no double-count) (2.088377ms)
+✔ integration: per-Stop deltas reproduce the one-shot total — token fields EXACT, cost within rounding tolerance (1.797363ms)
+✔ summarizeToolInput: returns toolName when input is null/non-object (4.657926ms)
+✔ summarizeToolInput: picks file_path before other fields (0.577ms)
+✔ summarizeToolInput: falls through to pattern when file_path absent (0.438568ms)
+✔ summarizeToolInput: command for Bash (0.820341ms)
+✔ summarizeToolInput: truncates long values with ellipsis (0.802939ms)
+✔ summarizeToolInput: returns toolName when no candidate field matches (1.193105ms)
+✔ summarizeToolInput: empty-string field treated as absent (falsy) (0.777185ms)
+✔ disableFlagDecision: no_flag when mtimeMs is null (0.726192ms)
+✔ disableFlagDecision: clear_stale when age > staleHours (2.972013ms)
+✔ disableFlagDecision: clear_version when content version differs (1.257401ms)
+✔ disableFlagDecision: active when fresh + matching version (0.513935ms)
+✔ disableFlagDecision: active when content has no plugin_version field (3.250365ms)
+✔ disableFlagDecision: malformed JSON content → clear_malformed (self-heal) (0.452234ms)
+✔ disableFlagDecision: empty-but-present flag (0-byte truncate) → clear_malformed (0.32847ms)
+✔ disableFlagDecision: stale takes precedence over malformed (0.909672ms)
+✔ disableFlagDecision: null flagContentJson + fresh → active (0.495605ms)
+✔ disableFlagDecision: staleHours override honored (0.417278ms)
+✔ FAILURE_THRESHOLD has the expected production value (0.315892ms)
+✔ STALE_DISABLE_HOURS has the expected production value (0.299738ms)
+✔ truncateUtf8Safe: no-op when input within budget (6.204038ms)
+✔ truncateUtf8Safe: cuts at UTF-8 codepoint boundary (1.081711ms)
+✔ truncateUtf8Safe: legitimate U+FFFD survives (no replacement-char strip) (0.608087ms)
+✔ truncateUtf8Safe: handles ASCII-only fast path (0.630198ms)
+✔ renderContentBlocks: text block returns its text (0.643325ms)
+✔ renderContentBlocks: thinking block wrapped + capped at THINKING_BLOCK_CAP (0.648755ms)
+✔ renderContentBlocks: tool_use surfaces name (1.948014ms)
+✔ renderContentBlocks: tool_result shows byte size for string content (0.379588ms)
+✔ renderContentBlocks: tool_result shows JSON size for array content (0.480921ms)
+✔ renderContentBlocks: image block (0.494037ms)
+✔ renderContentBlocks: unknown block type still rendered (no throw) (0.415324ms)
+✔ renderContentBlocks: null / non-object blocks are skipped (0.391689ms)
+✔ extractTurn: string content turn (1.610855ms)
+✔ extractTurn: array content turn → renders via renderContentBlocks (0.329869ms)
+✔ extractTurn: returns null when message absent (0.235646ms)
+✔ extractTurn: unknown content shape → JSON stub (3.706263ms)
+✔ parseTranscriptText: filters non user/assistant records (0.808643ms)
+✔ parseTranscriptText: CRLF tolerated (0.609557ms)
+✔ parseTranscriptText: malformed JSON line counted in errors but parsing continues (0.442194ms)
+✔ parseTranscriptText: empty input → 0 turns (0.249445ms)
+✔ buildTranscriptTail: empty turns → empty body (0.412916ms)
+✔ buildTranscriptTail: newest turn exempt from PER_TURN_BUDGET (0.44254ms)
+✔ buildTranscriptTail: older turn over PER_TURN_BUDGET gets truncated (0.30246ms)
+✔ buildTranscriptTail: respects tailN slicing (0.545523ms)
+✔ emitFailure: returns failure message with reason + lastStep (0.597061ms)
+✔ emitFailure: optional stderr-like sink receives diag line (0.330238ms)
+✔ emitFailure: extraDetail included when provided (0.181646ms)
+✔ selectFailureCounter: empty list → current null, no stale (0.335614ms)
+✔ selectFailureCounter: picks freshest among fresh files (0.259046ms)
+✔ selectFailureCounter: files older than staleMs go to stale, not current (0.251381ms)
+✔ selectFailureCounter: all stale → current null, all listed stale (0.210516ms)
+✔ selectFailureCounter: staleMs override honored (0.187461ms)
+✔ selectFailureCounter: boundary — exactly staleMs old counts as fresh (0.20499ms)
+✔ compactDecision: silent below first threshold (49) (3.356129ms)
+✔ compactDecision: warns at first threshold (50) with first-level message (0.824409ms)
+✔ compactDecision: silent between thresholds (51..74) (0.579437ms)
+✔ compactDecision: warns at first interval (75) with interval-level message (0.47418ms)
+✔ compactDecision: unbounded — warns at 100 and 125, not capped at 100 (0.489647ms)
+✔ compactDecision: guards non-positive / non-integer counts (0.403346ms)
+✔ compactDecision: constants match documented behavior (4.251536ms)
+✔ wrapper: counter increments across invocations and nudges at the threshold (3763.132931ms)
+✔ wrapper: counter STILL increments when the stdin read throws (the ENXIO regression) (207.223244ms)
+✔ wrapper: AUTOPILOT_SUGGEST_COMPACT=false opts out (no counter file written) (78.140888ms)
+✔ findLatestToolEvent: returns last tool_use with matching result (7.063751ms)
+✔ findLatestToolEvent: picks the LAST tool_use even with trailing noise (1.248372ms)
+✔ findLatestToolEvent: tool_use without a result → tool_response undefined, not error (0.589343ms)
+✔ findLatestToolEvent: is_error propagates (0.839079ms)
+✔ findLatestToolEvent: richer toolUseResult overrides block content (0.69064ms)
+✔ findLatestToolEvent: empty / garbage / no-tool input → null (4.580909ms)
+✔ findLatestToolEvent: tolerates CRLF and oversized lines (34.016513ms)
+✔ resolveTranscriptPath: finds <sessionId>.jsonl under projects/* regardless of dir name (3.293753ms)
+✔ readLatestToolEvent: end-to-end via env + sandbox home; fail-open without env (4.185577ms)
+ℹ tests 81
+ℹ suites 0
+ℹ pass 81
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4323.122849
+
+════════ L2 integration tests (*.test.sh) ════════
+
+──────── hooks/tests/all-hooks-fail-open.test.sh ────────
+PASS [all-hooks-fail-open] 21 assertions
+
+──────── hooks/tests/audit-log-transcript-fallback.test.sh ────────
+PASS [audit-log-transcript-fallback] 4 assertions
+
+──────── hooks/tests/calibration.test.sh ────────
+PASS [calibration] 51 assertions
+
+──────── hooks/tests/check-canonical-invariants.test.sh ────────
+PASS [check-canonical-invariants] 15 assertions
+
+──────── hooks/tests/check-disjointness.test.sh ────────
+PASS [check-disjointness] 40 assertions
+
+──────── hooks/tests/check-dispatch-suppression.test.sh ────────
+PASS [check-dispatch-suppression] 16 assertions
+
+──────── hooks/tests/check-hook-inventory.test.sh ────────
+PASS [check-hook-inventory] 15 assertions
+
+──────── hooks/tests/check-node-report.test.sh ────────
+PASS [check-node-report] 84 assertions
+
+──────── hooks/tests/check-readme-parity.test.sh ────────
+PASS [check-readme-parity] 10 assertions
+
+──────── hooks/tests/check-redispatch-prompt.test.sh ────────
+PASS [check-redispatch-prompt] 21 assertions
+
+──────── hooks/tests/dispatch-batch.test.sh ────────
+PASS [dispatch-batch] 80 assertions
+
+──────── hooks/tests/dispatch-hetero.test.sh ────────
+PASS [dispatch-hetero] 31 assertions
+
+──────── hooks/tests/distill-consolidate.test.sh ────────
+PASS [distill-consolidate] 29 assertions
+
+──────── hooks/tests/distill-scan-incremental.test.sh ────────
+PASS [distill-scan-incremental] 9 assertions
+
+──────── hooks/tests/distill-sync-setup.test.sh ────────
+PASS [distill-sync-setup] 29 assertions
+
+──────── hooks/tests/doc-drift-gate.test.sh ────────
+Testing empty sandbox...
+Testing good markdown file...
+Testing broken link...
+Testing unbalanced code fences...
+Testing custom exclude...
+Testing CRLF line endings...
+Testing invalid usage...
+PASS [doc-drift-gate] 20 assertions
+
+──────── hooks/tests/install-antigravity-guard.test.sh ────────
+PASS [install-antigravity-guard] 22 assertions
+
+──────── hooks/tests/intent-capture-basic-write.test.sh ────────
+PASS [intent-capture-basic-write] 6 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-active.test.sh ────────
+PASS [intent-capture-disable-flag-active] 4 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-empty.test.sh ────────
+PASS [intent-capture-disable-flag-empty] 4 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-malformed.test.sh ────────
+PASS [intent-capture-disable-flag-malformed] 3 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-stale.test.sh ────────
+PASS [intent-capture-disable-flag-stale] 3 assertions
+
+──────── hooks/tests/intent-capture-disable-flag-version-mismatch.test.sh ────────
+PASS [intent-capture-disable-flag-version-mismatch] 3 assertions
+
+──────── hooks/tests/intent-capture-env-opt-out.test.sh ────────
+PASS [intent-capture-env-opt-out] 2 assertions
+
+──────── hooks/tests/intent-capture-summary-truncation.test.sh ────────
+PASS [intent-capture-summary-truncation] 3 assertions
+
+──────── hooks/tests/intent-capture-transcript-fallback.test.sh ────────
+PASS [intent-capture-transcript-fallback] 6 assertions
+
+──────── hooks/tests/preflight-adapter-invariant.test.sh ────────
+PASS [preflight-adapter-invariant] 7 assertions
+
+──────── hooks/tests/qc-gate.test.sh ────────
+PASS [qc-gate] 17 assertions
+
+──────── hooks/tests/qc-panel.test.sh ────────
+{"status":"ok","verdict":"fail","dissents":[],"extras":["added extra logging"],"judges":{"a_q1":"agree-node-2026-06-25T02-27-42Z-a_q1.txt","a_q2":"agree-node-2026-06-25T02-27-42Z-a_q2.txt","a_q3":"agree-node-2026-06-25T02-27-42Z-a_q3.txt","b_q1":"agree-node-2026-06-25T02-27-42Z-b_q1.txt","b_q2":"agree-node-2026-06-25T02-27-42Z-b_q2.txt","b_q3":"agree-node-2026-06-25T02-27-42Z-b_q3.txt"},"refute_shadow":{"refuted_misses":["goal-3 not completed"],"survived_misses":[]},"token_estimate":2105,"skipped_reason":null}
+PASS [qc-panel] 47 assertions
+
+──────── hooks/tests/reenabled-blockers.test.sh ────────
+PASS [reenabled-blockers] 14 assertions
+
+──────── hooks/tests/reload-watch-detects-mtime-change.test.sh ────────
+PASS [reload-watch-detects-mtime-change] 6 assertions
+
+──────── hooks/tests/resolve-dispatch.test.sh ────────
+PASS [resolve-dispatch] 114 assertions
+
+──────── hooks/tests/resolve-doa.test.sh ────────
+PASS [resolve-doa] 71 assertions
+
+──────── hooks/tests/risk-counter.test.sh ────────
+Testing reset...
+Testing path...
+Testing status...
+Testing increment reverted...
+Testing threshold-hit under 20...
+risk=15 threshold=20
+Testing increment multi-file...
+risk=20 threshold=20
+Testing increment late-fix...
+risk=21 threshold=20
+Testing fail-open on invalid directory...
+PASS [risk-counter] 13 assertions
+
+──────── hooks/tests/session-start.test.sh ────────
+PASS [session-start] 19 assertions
+
+──────── hooks/tests/state-checkpoint-crlf.test.sh ────────
+PASS [state-checkpoint-crlf] 4 assertions
+
+──────── hooks/tests/state-checkpoint-empty-stdin.test.sh ────────
+PASS [state-checkpoint-empty-stdin] 4 assertions
+
+──────── hooks/tests/state-checkpoint-malformed-jsonl.test.sh ────────
+PASS [state-checkpoint-malformed-jsonl] 3 assertions
+
+──────── hooks/tests/state-checkpoint-missing-transcript.test.sh ────────
+PASS [state-checkpoint-missing-transcript] 3 assertions
+
+──────── hooks/tests/state-checkpoint-newest-verbatim.test.sh ────────
+PASS [state-checkpoint-newest-verbatim] 3 assertions
+
+──────── hooks/tests/state-checkpoint-symlink-reject.test.sh ────────
+PASS [state-checkpoint-symlink-reject] 4 assertions
+
+──────── hooks/tests/state-checkpoint-thinking-only.test.sh ────────
+PASS [state-checkpoint-thinking-only] 3 assertions
+
+──────── hooks/tests/sync-version-check-clean.test.sh ────────
+PASS [sync-version-check-clean] 2 assertions
+
+──────── hooks/tests/sync-version-check-detects-drift.test.sh ────────
+PASS [sync-version-check-detects-drift] 4 assertions
+
+──────── hooks/tests/sync-version-dry-run.test.sh ────────
+PASS [sync-version-dry-run] 8 assertions
+
+──────── hooks/tests/sync-version-invalid-counts.test.sh ────────
+PASS [sync-version-invalid-counts] 5 assertions
+
+──────── hooks/tests/sync-version-invalid-version.test.sh ────────
+PASS [sync-version-invalid-version] 3 assertions
+
+──────── hooks/tests/sync-version-preserve-counts.test.sh ────────
+PASS [sync-version-preserve-counts] 9 assertions
+
+──────── hooks/tests/sync-version-round-trip.test.sh ────────
+PASS [sync-version-round-trip] 13 assertions
+
+──────── hooks/tests/toggle-payload-capture.test.sh ────────
+Testing status...
+Testing enable...
+Testing enable when already enabled...
+ERROR: capture mode already enabled (/tmp/autopilot-test-toggle-payload-capture-0J7wM4/hooks/hooks.json.capture-backup exists).
+  Run 'disable' first, or delete the backup manually.
+Testing disable...
+Testing fail-open on read error...
+PASS [toggle-payload-capture] 13 assertions
+
+──────── hooks/tests/tree-engine.test.sh ────────
+[]
+{
+  "id": "snode",
+  "status": "active",
+  "events": [
+    "2026-06-25T02:28:01Z:node_created"
+  ],
+  "report": null,
+  "doa_log": [],
+  "escalations": [],
+  "verdict": null,
+  "confidence": null,
+  "evidence_pointers": [],
+  "artifact_paths": [],
+  "parent": null,
+  "question": null,
+  "options": []
+}
+tree.sh — append-only JSONL task-tree CLI.
+
+Single state-owning entrypoint for the task-tree engine (P1).
+All mutation goes through this script; consumers read via subcommands.
+
+Usage:
+  scripts/tree.sh <subcommand> [args]
+
+Subcommands:
+  init <proj>                        Create tree/ dir + empty events.jsonl
+  emit <proj> <node-id> <event-json> Validate + append one JSONL event under lock
+  rebuild-index <proj>               Fold events → index.json (deterministic, idempotent)
+  next-decision <proj>               Print highest-priority pending decision (compact JSON)
+  report <proj> <node>               Print node report JSON
+  escalations <proj>                 List open escalations as JSON array
+  fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
+  board-status <proj>                Print board_signoff index object or null;
+                                     gate on .active (present AND decision=="graduate")
+
+Event envelope (minimal, validated by emit):
+  schema_version  (integer)
+  ts              (ISO-8601 string)
+  node            (string)
+  type            (string)
+
+Per-type event validation (beyond the 4-field envelope) is not yet wired:
+$TREE_EVENT_VALIDATOR (stdin = event JSON) is the extension point. Note
+check-node-report.sh validates NODE REPORT FILES by path — a different
+interface; it is not a drop-in event validator.
+
+File locations (per project):
+  docs/projects/<proj>/tree/events.jsonl   — append-only event log (git-tracked)
+  docs/projects/<proj>/tree/events.jsonl.lock — flock sidecar
+  docs/projects/<proj>/tree/index.json     — derived, gitignored, rebuildable
+
+locking notes:
+  This script implements a custom cross-platform atomic locking mechanism using
+  exclusive file creation ('wx' mode) with self-healing lock recovery and PID/TTL
+  verification. It provides safe concurrency control on Linux, macOS, and Windows.
+
+Exit codes:
+  0  success
+  1  logic error (event rejected, file not found, etc.)
+  2  usage / missing required argument
+
+Output: JSON to stdout for machine-readable subcommands.
+tree.sh — append-only JSONL task-tree CLI.
+
+Single state-owning entrypoint for the task-tree engine (P1).
+All mutation goes through this script; consumers read via subcommands.
+
+Usage:
+  scripts/tree.sh <subcommand> [args]
+
+Subcommands:
+  init <proj>                        Create tree/ dir + empty events.jsonl
+  emit <proj> <node-id> <event-json> Validate + append one JSONL event under lock
+  rebuild-index <proj>               Fold events → index.json (deterministic, idempotent)
+  next-decision <proj>               Print highest-priority pending decision (compact JSON)
+  report <proj> <node>               Print node report JSON
+  escalations <proj>                 List open escalations as JSON array
+  fetch <proj> <node> --raw          Print artifact content + emit manager_raw_read event
+  board-status <proj>                Print board_signoff index object or null;
+                                     gate on .active (present AND decision=="graduate")
+
+Event envelope (minimal, validated by emit):
+  schema_version  (integer)
+  ts              (ISO-8601 string)
+  node            (string)
+  type            (string)
+
+Per-type event validation (beyond the 4-field envelope) is not yet wired:
+$TREE_EVENT_VALIDATOR (stdin = event JSON) is the extension point. Note
+check-node-report.sh validates NODE REPORT FILES by path — a different
+interface; it is not a drop-in event validator.
+
+File locations (per project):
+  docs/projects/<proj>/tree/events.jsonl   — append-only event log (git-tracked)
+  docs/projects/<proj>/tree/events.jsonl.lock — flock sidecar
+  docs/projects/<proj>/tree/index.json     — derived, gitignored, rebuildable
+
+locking notes:
+  This script implements a custom cross-platform atomic locking mechanism using
+  exclusive file creation ('wx' mode) with self-healing lock recovery and PID/TTL
+  verification. It provides safe concurrency control on Linux, macOS, and Windows.
+
+Exit codes:
+  0  success
+  1  logic error (event rejected, file not found, etc.)
+  2  usage / missing required argument
+
+Output: JSON to stdout for machine-readable subcommands.
+PASS [tree-engine] 118 assertions
+
+──────── hooks/tests/validate-link-check.test.sh ────────
+PASS [validate-link-check] 6 assertions
+
+════════ Summary ════════
+✅ ALL TESTS PASSED (57 test files)

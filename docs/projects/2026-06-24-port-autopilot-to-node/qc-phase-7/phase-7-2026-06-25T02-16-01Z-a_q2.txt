@@ -1,0 +1,1 @@
+EXTRA: Modified `scripts/qc-panel.js` Codex child process selection logic in two places, changing it to invoke `codex` when `QC_AGY_BIN` is not already Codex.

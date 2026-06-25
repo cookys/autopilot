@@ -1,0 +1,1 @@
+EXTRA: Modified `scripts/qc-panel.js` Codex judge child process selection logic in two places; this is a behavioral code fix beyond E2E validation and old-script cleanup.

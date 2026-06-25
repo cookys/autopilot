@@ -1,0 +1,23 @@
+Looking at the node report and the question stated:
+
+**Question:** "Port session-start.sh to pure Node.js hooks/session-start.js and replace original with thin wrapper."
+
+**Goals required:**
+1. Port session-start.sh to pure Node.js (hooks/session-start.js)
+2. Replace original with thin wrapper
+
+**Verification against artifacts:**
+
+✓ **Node.js port complete**: The `hooks/session-start.js` artifact contains the full implementation with:
+- All original shell logic ported: compaction state recovery, per-cwd intent hints, disabled-capture warnings
+- Proper error handling and fail-open posture
+- Both output formats (CLAUDE_PLUGIN_ROOT vs non-plugin)
+- Only standard library dependencies (fs, os, path, crypto)
+
+✓ **Thin wrapper in place**: The `hooks/session-start.sh` is now a 6-line delegate that calls the Node.js file
+
+✓ **Tests confirm both work**: Test #8 explicitly validates shell wrapper delegation; test #1 validates Node.js direct invocation
+
+---
+
+**MISSED:** None — both stated goals are achieved.

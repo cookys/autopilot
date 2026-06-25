@@ -1,0 +1,1 @@
+EXTRA: Updated skills/doc-sync/SKILL.md to document and advertise the new scripts/doc-drift-gate.js baseline gate, which was not part of the stated port/delete/preflight/test goals.

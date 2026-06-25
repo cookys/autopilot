@@ -1,0 +1,13 @@
+ACHIEVED: Ported risk-counter.sh to pure Node.js at scripts/risk-counter.js with full functionality (status, reset, increment with event deltas, threshold-hit, path commands).
+
+ACHIEVED: Ported toggle-payload-capture.sh to pure Node.js at scripts/toggle-payload-capture.js with complete enable/disable/status workflow and backup/restore logic.
+
+ACHIEVED: Replaced original shell entrypoints with thin wrappers — scripts/risk-counter.sh (24 lines) and scripts/toggle-payload-capture.sh (29 lines) now delegate to Node.js implementations.
+
+ACHIEVED: Implemented fail-open error handling in both .js implementations — unexpected errors print a warning and exit(0) rather than crashing.
+
+ACHIEVED: Created comprehensive test suites — hooks/tests/risk-counter.test.sh covers reset, status, increment (all event types), threshold-hit logic, and fail-open; hooks/tests/toggle-payload-capture.test.sh covers enable, disable, status, backup/restore integrity via checksum verification, and fail-open.
+
+ACHIEVED: Maintained backward compatibility — state file location uses $AUTOPILOT_STATE_DIR env var with fallback to ~/.autopilot/state; toggle-payload-capture correctly locates hooks.json relative to script directory.
+
+ACHIEVED: Preserved event delta semantics — risk-counter.js correctly assigns increments (reverted +15, unrelated-files +20, multi-file +5, late-fix +1, fix +0).

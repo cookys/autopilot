@@ -1,0 +1,1 @@
+MISSED: Clean up old scripts is not demonstrated by the phase-7 artifacts; the diff/logs show validation evidence and a qc-panel.js fix, but no cleanup or removal of legacy scripts.

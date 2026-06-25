@@ -41,7 +41,7 @@ shipped opt-in in `settings.example.json` (Tier B):
 > `suggest-compact` (PostToolUse `Write\|Edit`) was re-enabled in **v2.8.1** — it only counts tool calls (no `tool_name` needed, so no transcript recovery), the matcher does the filtering. The one fix was isolating the broken `/dev/stdin` read so the counter increments under ENXIO. See the Tier A table below.
 
 **Always active** (stdin-tolerant / different event): state-checkpoint (PreCompact),
-session-start.sh (SessionStart), reload-watch (PostToolUse, mtime-based).
+session-start.js (SessionStart), reload-watch (PostToolUse, mtime-based).
 
 Diagnostic: [`_transcript-timing-probe.js`](_transcript-timing-probe.js) (opt-in;
 wire into a PostToolUse hook to confirm intra-cycle write timing in a fresh session).
@@ -86,7 +86,7 @@ hooks/
   _shared/
     secret-patterns.js     # Shared secret detection (used by audit-log + commit-secret-scan)
   hooks.json               # Hook registration (Tier A default-on)
-  session-start.sh         # SessionStart priming (pre-existing)
+  session-start.js         # SessionStart priming (pre-existing)
   state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
   state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier B (opt-in)
@@ -124,8 +124,8 @@ Registered in `hooks.json`. Active for all autopilot users.
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
 | state-checkpoint | PreCompact | * | Node JSONL parser extracts last 20 user/assistant turns from `transcript_path`, writes verbatim to `~/.autopilot/compaction-state.md` (no LLM compliance dependency); JSONL log at `~/.autopilot/.state-checkpoint.log` (rotate 1MB); visible failure diag inline + stderr (v2.7.2) |
-| session-start | SessionStart | startup\|clear\|compact | `session-start.sh` priming: prints cross-session resume hint (reads intent-capture file) + `⚠ intent-capture hook disabled` warning when the self-disable flag is active |
-| intent-capture | PostToolUse | .* | Per-cwd intent file at `~/.autopilot/intent/<sha1(realpath(cwd))>.json` for cross-session resume hint (read by `session-start.sh`). Tier A but env opt-out via `AUTOPILOT_INTENT_CAPTURE=false`. Circuit breaker: 10 consecutive fails → `~/.autopilot/intent-capture.disabled` flag (auto-clears at 24h or plugin version bump; manual clear: `rm` the flag) (v2.7.2) |
+| session-start | SessionStart | startup\|clear\|compact | `session-start.js` priming: prints cross-session resume hint (reads intent-capture file) + `⚠ intent-capture hook disabled` warning when the self-disable flag is active |
+| intent-capture | PostToolUse | .* | Per-cwd intent file at `~/.autopilot/intent/<sha1(realpath(cwd))>.json` for cross-session resume hint (read by `session-start.js`). Tier A but env opt-out via `AUTOPILOT_INTENT_CAPTURE=false`. Circuit breaker: 10 consecutive fails → `~/.autopilot/intent-capture.disabled` flag (auto-clears at 24h or plugin version bump; manual clear: `rm` the flag) (v2.7.2) |
 | reload-watch | PostToolUse | .* | Detects on-disk catalog drift (`installed_plugins.json`, `dispatch-config.md`, `settings.local.json`); injects `/reload-plugins` reminder. Idempotent state at `~/.claude/plugins/.reload-watch-state.json` (v2.7.1) |
 | audit-log | PostToolUse | Bash | Appends to `~/.claude/bash-commands.log`. Uses `_shared/secret-patterns.js` |
 | log-error | PostToolUse | .* | Detects error keywords, appends to `~/.claude/error-log.md` |

@@ -1,0 +1,7 @@
+ACHIEVED: Ported `scripts/tree.sh` (742 lines of bash) to `scripts/tree.js` (897 lines of Node.js) with complete feature parity — all 8 subcommands (init, emit, rebuild-index, next-decision, report, escalations, fetch, board-status) implemented with identical behavior (scripts/tree.js:1-897).
+
+ACHIEVED: Implemented robust atomic cross-platform locking with self-healing lock recovery and PID/TTL verification — `acquireLock()` function uses exclusive file creation ('wx' mode), detects stale locks by hostname/cwd/process-alive checks, implements a recovery mutex for concurrent safety, and token-based ownership verification in `releaseLock()` (scripts/tree.js:116-230).
+
+ACHIEVED: Replaced the original bash wrapper — `scripts/tree.sh` reduced from 742 lines to 3 lines, delegating to Node.js implementation via `node "$(dirname "$0")/tree.js" "$@"` (scripts/tree.sh:1-3).
+
+ACHIEVED: Updated project phase status from "Pending" to "Completed" in the project README (docs/projects/2026-06-24-port-autopilot-to-node/README.md Phase 5 status).

@@ -1,0 +1,1 @@
+MISSED: The required deletion of the original Python file (`scripts/doc-drift-gate.py`) is not shown in the report/artifacts, so that deliverable remains unverified/incomplete.

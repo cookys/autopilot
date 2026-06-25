@@ -32,7 +32,7 @@ HOOK_FILES=(
   hooks/state-checkpoint.js
   hooks/suggest-compact.js
   hooks/test-runner.js
-  hooks/session-start.sh
+  hooks/session-start.js
 )
 
 for hook in "${HOOK_FILES[@]}"; do

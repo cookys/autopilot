@@ -1,0 +1,20 @@
+{
+  "node": "phase-3",
+  "verdict": "pass",
+  "confidence": 1.0,
+  "question": "Port doc-drift-gate.py to pure Node.js scripts/doc-drift-gate.js, delete the original Python file, update preflight-portability.sh, and write integration tests.",
+  "evidence_pointers": [
+    "scripts/doc-drift-gate.js:1-229",
+    "scripts/preflight-portability.sh:135-142",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-3.diff:1-100"
+  ],
+  "artifact_paths": [
+    "scripts/doc-drift-gate.js",
+    "scripts/preflight-portability.sh",
+    "skills/doc-sync/SKILL.md",
+    "hooks/tests/doc-drift-gate.test.sh",
+    "docs/projects/2026-06-24-port-autopilot-to-node/phase-3.diff"
+  ],
+  "doa_log": [],
+  "escalations": []
+}

@@ -1,0 +1,1 @@
+EXTRA: Modified `scripts/qc-panel.js` runtime dispatch to support `codex exec` paths for Judge A, Judge B/refute, and synthesizer flows when configured for Codex/GPT-5.5 models; this is functional implementation work beyond E2E validation and old-script cleanup.

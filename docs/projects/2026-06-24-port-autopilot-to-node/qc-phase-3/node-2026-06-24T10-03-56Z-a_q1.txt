@@ -1,0 +1,13 @@
+# Review: Phase-3 Node.js Port of doc-drift-gate
+
+**ACHIEVED:** Port doc-drift-gate.py to pure Node.js in scripts/doc-drift-gate.js — artifact shows complete implementation (shebang `#!/usr/bin/env node`, functions for `readTextFileNormalized()`, `getMdFiles()`, `checkLinks()`, `checkFences()`, `main()` entry point, proper exit codes 0/1/2, and comment "Ported from scripts/doc-drift-gate.py")
+
+**ACHIEVED:** Update preflight-portability.sh to invoke the Node.js version — evidence_pointer scripts/preflight-portability.sh:135-142 shows `check_doc_drift()` function calling `node "$REPO/scripts/doc-drift-gate.js" "$REPO"` and integrated into the preflight check sequence as check #16 ("doc-drift gate: internal links resolve + code-fences balance")
+
+**ACHIEVED:** Write integration tests for doc-drift-gate.js — artifact hooks/tests/doc-drift-gate.test.sh contains 7 test cases: (1) empty sandbox, (2) good markdown with valid links/fences, (3) broken links detection, (4) unbalanced code-fence detection, (5) --exclude CLI flag, (6) CRLF normalization, (7) invalid usage (exit code 2)
+
+**ACHIEVED:** Update doc-sync skill documentation — artifact skills/doc-sync/SKILL.md updated to reference the new Node.js gate (`scripts/doc-drift-gate.js`) as the Layer 1 deterministic baseline and describes integration into the preflight-portability.sh gate
+
+---
+
+**Note:** The report artifact list does not include the original Python file `scripts/doc-drift-gate.py`, consistent with its deletion. The report verdict is `pass` with confidence 1.0 and no escalations, confirming all deliverables were completed.

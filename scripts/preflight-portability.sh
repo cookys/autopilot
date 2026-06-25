@@ -191,9 +191,16 @@ check_opencode_skill_discovery() {
     echo "  (skip: opencode not installed)"
     return 0
   fi
-  local count
-  count=$(cd "$REPO" && opencode debug skill 2>/dev/null | grep -c '"name": "dev-flow"' || true)
-  [ "$count" -ge 1 ]
+  # opencode's first cold invocation can return a partial skill listing before
+  # discovery finishes indexing .agents/skills/ — retry so a single cold-start
+  # read doesn't fail the gate (false negative). See check_opencode_agent_body_clean.
+  local count attempt
+  for attempt in 1 2 3; do
+    count=$(cd "$REPO" && opencode debug skill 2>/dev/null | grep -c '"name": "dev-flow"' || true)
+    [ "$count" -ge 1 ] && return 0
+    sleep 1
+  done
+  return 1
 }
 
 # ─── 12. OpenCode resolves agent body via {file:..} without frontmatter leak ───

@@ -259,6 +259,9 @@ When encountering these, pause and propose:
 ```
 1. Confirm OKR + involvement level + scope mode + no-go zones
 2. Size the task (S/L/H) — same criteria as dev-flow
+   IF S-size: create S-scope-gate TaskCreate BEFORE any implementation (see Scope Creep
+   Detection section). CEO mode does NOT exempt this — "I'll track scope mentally" is
+   exactly the failure mode the TaskCreate exists to prevent.
 3. IF L-size:
    a. Create project dir (docs/projects/YYYY-MM-DD-<name>/)     ← MANDATORY, not optional
    b. Write README.md with OKR, phases, success criteria
@@ -308,27 +311,50 @@ When encountering these, pause and propose:
 11. Final CEO Report with complete decision log.
 ```
 
-## Scope Creep Detection (mandatory)
+## Scope Creep Detection (mandatory forcing function)
 
-CEO must self-check after every major deliverable:
+"This is a hard gate" in passive markdown is still passive markdown. The gate requires a
+TaskCreate — see the historical rationale for L-1.6 and L-5: passive bullets get mentally
+compressed into "I know this". CEO mode provides no exemption.
+
+**S → L escalation** — create this at S-start before ANY implementation:
 
 ```
-After completing a deliverable, ask:
-  "Is the TOTAL scope still S-size, or has it grown to L?"
-
-Indicators of S→L escalation:
-  - 3+ commits already made
-  - 3+ files in different modules changed
-  - Work has been going on for 30+ minutes
-  - User asked for additional features beyond original goal
-
-If escalated to L and no project exists:
-  → STOP. Create project dir + README + INDEX entry NOW.
-  → Record all prior work as completed phases (retroactive).
-  → Continue from current phase with proper tracking.
-
-This is NOT a suggestion. This is a hard gate.
+TaskCreate: "S-scope-gate: Evaluate scope before every commit"
+  description: MANDATORY before every commit. Check all three indicators:
+    (1) Fewer than 3 commits on this task so far?
+    (2) Fewer than 3 different modules touched?
+    (3) No features added beyond original goal?
+  If ANY indicator is NO → STOP. Escalate to L:
+    - Create project dir + README + INDEX (retroactive)
+    - Record prior commits as completed phases
+    - Create L-1.6 and L-5 TaskCreates, then continue with L Workflow tracking
+  Mark ONLY when: work complete AND scope stayed S (all YES throughout),
+  OR L-escalation is complete and project tracking is in place.
 ```
+
+CEO's "Focus as subtraction" cognitive pattern is a thinking instinct — not a substitute for
+the TaskCreate. The task stays pending and surfaces before every tool use; the instinct only
+fires when the CEO thinks to invoke it. Use both.
+
+**L scope expansion** (L work grows beyond its original README scope boundary):
+
+```
+After every phase, ask: "Does remaining scope still match the README scope boundary?"
+
+Indicators:
+  - New subsystem not listed in original README phases
+  - Public API surface larger than original estimate
+  - Estimate doubled (2x+ original effort)
+
+If expanded → Board Decision required (NOT within CEO DOA):
+  → Pause. Present Board Decision with situation + options + CEO recommendation.
+  → Update README scope boundary only AFTER Board approves.
+  → Record in CEO Report decision log.
+```
+
+This maps to the existing DOA "Resources 2x+ / Scope expansion" entries — CEO cannot
+approve scope expansion unilaterally even in Hold or Selective mode.
 
 ## Circuit Breaker
 
@@ -416,6 +442,9 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | "CEO mode exempts me from project tracking" | CEO wraps dev-flow, does not skip it |
 | Scope grew from S→L but no project created | Scope creep detection gate → stop and create |
 | "I'll track it in my head" | TodoWrite is the tracking mechanism, not memory |
+| Skip S-scope-gate TaskCreate "CEO's Focus-as-subtraction instinct covers this" | Cognitive patterns fire when you think to invoke them; the TaskCreate surfaces before every tool use. Use both |
+| Evaluate S-scope-gate only at task end rather than before every commit | Task must be created at S-start; system-reminder surfaces it continuously, not just at completion |
+| L-scope expansion approved autonomously by CEO as a tactical decision | Doubled estimate or new subsystem = DOA "Resources 2x+ / Scope expansion" = Board Decision; CEO cannot approve unilaterally |
 | "Skip edge cases to save time" | Boil the Lake — completeness costs minutes with AI |
 | Say "handle errors" without specifics | Name the error, trigger, recovery, and user impact |
 | Drift from chosen scope mode mid-execution | Commit to the mode; raise Board Decision if mode itself needs changing |

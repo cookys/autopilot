@@ -164,28 +164,64 @@ Risk-escalated bug fixes stay Fix but add PR review before merge.
 
 ### Scope Creep Detection
 
-Size is evaluated once at start, but scope can grow. After every commit, self-check:
+Size is evaluated once at start, but scope can grow silently. Two escalation paths:
+
+**S → L escalation** is enforced by the `S-scope-gate` TaskCreate (created at S-start — see S
+Workflow). That task stays pending and surfaces before every tool use, forcing an explicit
+check before each commit. Passive self-checks after commits fail because memory is exactly
+what keeps failing.
+
+**L scope expansion** (L work grows beyond its original README scope boundary — new subsystems,
+unplanned API surfaces, additional stakeholder requirements mid-flight):
 
 ```
-Has the scope grown beyond original S-size?
-  - 3+ commits already made
-  - 3+ files in different modules changed
-  - User asked for additional features beyond original goal
+After every phase completion, ask:
+  "Does the REMAINING scope still match the README's scope boundary?"
 
-If yes → re-evaluate as L-size:
-  - Create project dir + README + INDEX (retroactive)
-  - Record prior commits as completed phases
-  - Continue with L Workflow tracking
+Indicators of L-scope expansion:
+  - New subsystem not listed in original README phases
+  - Public API surface larger than original estimate
+  - Estimate doubled (2x+ original effort)
+  - User added requirements beyond original OKR
+
+If expanded:
+  → STOP. This is a Board Decision (user in normal mode, CEO escalates in CEO mode).
+  → Update README scope boundary FIRST.
+  → Only proceed after explicit approval.
+  → Record in project decision log.
 ```
 
 ---
 
 ## S Workflow -- Direct Commit
 
+**Scope gate (MANDATORY before any implementation)**: Create this task at S-start:
+
+```
+TaskCreate: "S-scope-gate: Evaluate scope before every commit"
+  description: MANDATORY before every commit. Check all three indicators:
+    (1) Fewer than 3 commits on this task so far?
+    (2) Fewer than 3 different modules touched?
+    (3) No features added beyond original goal?
+  If ANY indicator is NO → STOP. Escalate to L:
+    - Create project dir + README + INDEX (retroactive)
+    - Record prior commits as completed phases
+    - Create L-1.6 and L-5 TaskCreates, then continue with L Workflow tracking
+  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),
+  OR L-escalation is complete and project tracking is in place.
+```
+
+This task stays pending and surfaces before every tool use — the forcing function that
+prevents "it was obviously S" from silently becoming a multi-module project without tracking.
+
 1. Implement
 2. Quality gate (per project config, or: lint + test)
-3. Commit to current branch (descriptive message)
-4. Cleanup: if from backlog, delete the item
+3. Evaluate S-scope-gate indicators before committing
+4. Commit to current branch (descriptive message)
+5. Cleanup: if from backlog, delete the item
+
+> Unlike L's multi-task infrastructure, S creates exactly ONE TaskCreate: the S-scope-gate.
+> Intentionally minimal — one pending task that surfaces the scope-creep check without adding L-level overhead.
 
 **S Session End (lite)**:
 
@@ -589,10 +625,15 @@ AI makes the marginal cost of completeness near-zero. When choosing between appr
 | Batch multiple finish-flow sub-tasks into one TaskCreate call | Each sub-task is its own TaskCreate — batching breaks the surface-per-tool-use mechanism |
 | Enumerate L-size phases before running the L-1.5 Scope Completeness Audit | Scope audit determines WHICH phases should exist — it runs first |
 | Skip the scope audit "because the task is obvious" | Invisible scope holes are the whole reason the audit exists; shipping an incomplete deliverable is always cheaper to prevent than to fix |
+| Skip S-scope-gate TaskCreate "because it's clearly a small task" | Scope creep is invisible at S-start — the gate exists precisely because it grows silently; always create it |
+| Create S-scope-gate but only evaluate it at task end | The task must be created at S-start so system-reminder surfaces it before EVERY commit, not just at completion |
+| L-size scope expands mid-project without Board notification | Any expansion beyond the original README scope boundary is a Board Decision — CEO/user must approve before continuing |
+| Treat L-scope expansion as a tactical decision CEO can make alone | Doubled estimate or new subsystem = Resources 2x+ = requires Board approval per DOA |
 
 ## Pre-implementation Checklist
 
 - [ ] Check for existing in-progress projects
+- [ ] S-size: S-scope-gate TaskCreate created (scope-creep forcing function — MANDATORY before any implementation)
 - [ ] Fix: `fix/` branch created, root cause confirmed
 - [ ] Fix: skill routing checked for affected module (passive — Fix stays lightweight, no
       TaskCreate; see BACKLOG for future Fix-workflow forcing function)

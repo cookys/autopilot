@@ -147,12 +147,39 @@ if [ "$IS_CODEX" -eq 1 ]; then
       -c "model_reasoning_effort=\"xhigh\"" < "$PROMPT_FILE" ) >"$LOG" 2>&1
   AGENT_EXIT=$?
 else
-  ( cd "$WT" && "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" \
+  printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini headless dispatch is BEST-EFFORT (run_command has a 10s foreground cap → long/exploratory commands background and the -p turn yields before saving; occasional cross-session path leaks). Running EDIT-ONLY with a wrapper commit. For reliability on non-trivial or build/test tasks, prefer --model gpt-5.5 (codex). See gotcha: agy-headless-dispatch-unreliable." >&2
+  # agy (Gemini) in -p print mode CANNOT reliably run a long command then commit:
+  # its run_command tool foreground-caps at 10s, backgrounds anything longer, and
+  # the single print turn yields ("you'll be notified, stop calling tools") before
+  # the commit ever runs → silent no_op/hallucination. So we run agy EDIT-ONLY and
+  # the wrapper commits its edits below. (gotcha: agy-headless-dispatch-unreliable.)
+  AGY_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+You run in ONE non-interactive turn and you CANNOT wait for any background task. Therefore
+do NOT use run_command / the shell AT ALL — no search, grep, find, ls, cat, install, build,
+test, lint, or git. ANY shell command is moved to the background and your turn ends before
+your edits are saved (that is the #1 cause of lost work here). Use ONLY your file read/edit
+tools, on the exact paths named in the task. Make all file edits, then stop. The harness
+commits your edits and a separate review verifies them — ignore any instruction below to
+run build/test or to commit.
+===
+
+"
+  ( cd "$WT" && "$AGY_BIN" -p "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" \
       --model "$MODEL" --dangerously-skip-permissions \
       --print-timeout "$TIMEOUT" ) >"$LOG" 2>&1
   AGENT_EXIT=$?
 fi
 trap - INT TERM
+
+# agy edit-only → the wrapper makes the commit (deterministic; avoids the -p yield
+# described above). Only when agy left edits but no commit; codex commits itself.
+# If agy already committed (HEAD moved) or left nothing, this is a no-op.
+if [ "$IS_CODEX" -eq 0 ] \
+   && [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
+   && [ -n "$(git -C "$WT" status --porcelain)" ]; then
+  git -C "$WT" add -A
+  git -C "$WT" -c commit.gpgsign=false commit -q -m "dispatch-hetero(agy): edits on $BRANCH" >/dev/null 2>&1
+fi
 
 # --- verify by artifacts, never by self-report ---
 HEAD_SHA="$(git -C "$WT" rev-parse HEAD)"
@@ -186,7 +213,12 @@ if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
   fi
 else
   # --- no new commit: split by HOW the worker ended ---
-  if [ "$AGENT_EXIT" -eq 0 ]; then
+  if [ -n "$DIRTY" ]; then
+    # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
+    # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
+    emit "dirty" "" 0 0 0 "$WT" "edits left uncommitted, no commit made (wrapper commit may have failed; agent exit $AGENT_EXIT); worktree kept"
+    exit 1
+  elif [ "$AGENT_EXIT" -eq 0 ]; then
     # clean exit, nothing committed → agent legitimately decided nothing was needed
     emit "no_op" "" 0 0 0 "$WT" "agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"
     exit 1

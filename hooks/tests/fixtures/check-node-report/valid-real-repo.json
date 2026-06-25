@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "node": "fixture/real-repo-valid",
+  "verdict": "approved",
+  "confidence": 0.9,
+  "evidence_pointers": [
+    "CHANGELOG.md:1-1@d7cc8f655aebcb9534a2719775b00f32143b003c"
+  ],
+  "artifact_paths": [],
+  "doa_log": [],
+  "escalations": []
+}

@@ -18,6 +18,10 @@
 #  14. Missing artifact_paths field → exit 1
 #  15. Artifact path does not exist (dangling artifact) → exit 1
 #  16. bash -n clean; shellcheck clean (if installed)
+#  17. REAL-REPO fixtures (committed, not synthetic): a valid report whose
+#      file:line@sha pointer resolves against autopilot's own git history, and a
+#      report citing the genuinely port-deleted scripts/check-node-report.sh →
+#      deleted-file error. Exercises git show + ls-files over real repo data.
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/check-node-report.js"
@@ -586,6 +590,41 @@ assert_contains "$__RUN_STDERR" "check-node-report.js" "usage error prints check
 assert_not_contains "$__RUN_STDERR" "check-node-report.sh" "usage error does not print the deleted check-node-report.sh"
 
 # (wrapper tests removed since wrapper is deleted)
+
+# ---------------------------------------------------------------------------
+# TEST 17: REAL-REPO committed fixtures (not synthetic sandboxes).
+# Validates against autopilot's OWN git history via --repo "$REPO_ROOT", closing
+# the disclosed coverage gap that all prior git-show/ls-files tests ran on
+# synthetic throwaway repos. The anchor commits are immutable (history), so the
+# fixtures are stable: line ranges are checked at the anchored commit, never the
+# drifting working tree.
+# ---------------------------------------------------------------------------
+FIXTURE_DIR="$REPO_ROOT/hooks/tests/fixtures/check-node-report"
+
+# 17a: valid report — CHANGELOG.md:1-1@<immutable-sha> resolves via git show and
+# the working tree still has CHANGELOG.md → valid, no warnings/errors.
+assert_file_exists "$FIXTURE_DIR/valid-real-repo.json" "real-repo valid fixture exists"
+run_validator "$FIXTURE_DIR/valid-real-repo.json" --repo "$REPO_ROOT"
+assert_exit_code "$__RUN_EXIT" "0" "real-repo valid fixture exits 0"
+RR_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$RR_VALID" "true" "real-repo valid fixture has valid:true"
+RR_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | length')"
+assert_eq "$RR_ERRS" "0" "real-repo valid fixture has 0 errors"
+RR_WARNS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.warnings | length')"
+assert_eq "$RR_WARNS" "0" "real-repo valid fixture has 0 warnings"
+
+# 17b: deleted-evidence report — cites scripts/check-node-report.sh, genuinely
+# deleted by the v2.25.3 Node port. git show <sha>:<path> resolves at the
+# pre-port commit; the file is gone from the working tree and a content-hash
+# search over the REAL ls-files set finds no successor → deleted-file error.
+assert_file_exists "$FIXTURE_DIR/deleted-evidence-real-repo.json" "real-repo deleted-evidence fixture exists"
+run_validator "$FIXTURE_DIR/deleted-evidence-real-repo.json" --repo "$REPO_ROOT"
+assert_exit_code "$__RUN_EXIT" "1" "real-repo deleted-evidence fixture exits 1"
+RRD_VALID="$(printf '%s' "$__RUN_STDOUT" | jq -r '.valid')"
+assert_eq "$RRD_VALID" "false" "real-repo deleted-evidence fixture has valid:false"
+RRD_ERRS="$(printf '%s' "$__RUN_STDOUT" | jq -r '.errors | join(" ")')"
+assert_contains "$RRD_ERRS" "deleted-file" "real-repo deleted-evidence error names the deleted-file class"
+assert_contains "$RRD_ERRS" "check-node-report.sh" "real-repo deleted-evidence error names the deleted path"
 
 # Also bash -n this test file itself
 bash -n "$0" 2>/dev/null

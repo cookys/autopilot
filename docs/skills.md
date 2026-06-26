@@ -2,13 +2,13 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-The full catalog of all 23 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
+The full catalog of all 24 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
 ---
 
 ## The Solution
 
-Autopilot ships **23 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
+Autopilot ships **24 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
 | Skill | What It Does | Coexists with |
 |-------|-------------|---------------|
@@ -24,6 +24,7 @@ Autopilot ships **23 skills** covering lifecycle orchestration, strategic intell
 | **finish-flow** | Size-aware closing forcing function — TaskCreates discrete L-5 / H-9 / Fix / S-Lite sub-tasks so nothing gets silently compressed | — (no equivalent) |
 | **doc-sync** | Doc↔code drift detection, two layers: a **deterministic gate** (reliable, gate-able in CI — baseline `scripts/doc-drift-gate.py` does links + code-fences; projects extend with version/CLI-surface/roadmap checks) + an **LLM sweep** for discovery (scoped per-diff / full whole-repo; non-deterministic, never loop-to-zero). Mechanizable findings demote into the gate. Wired into finish-flow L-5.4 | — (no equivalent) |
 | **project-lifecycle** | Plan → bootstrap → structure → archive | `superpowers:finishing-a-development-branch` (partial) |
+| **onboard** | Scaffold a consuming repo's `.claude/*-config.md` DI from detected reality — `scripts/project-detect.js` (mechanical facts) + `scripts/scaffold-config.js` (fills the config set, autopilot-only chains) then the skill enriches the judgment configs (skill-routing, doc-drift domains, security surfaces). The "fresh repo → autopilot-calibrated" bridge | — (no equivalent) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **retro** | Engineering retrospective from git history | — (no equivalent) |
 | **distill** | Distills recurring procedures/corrections from your conversation history into *your own* personal skills (routed to a private `@skills-dir` pack / project dirs, never into autopilot) | — (no equivalent) |

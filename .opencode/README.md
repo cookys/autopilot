@@ -4,7 +4,7 @@ Development autopilot — lifecycle orchestration for OpenCode.
 
 ## Skills
 
-23 skills covering the full development lifecycle:
+24 skills covering the full development lifecycle:
 
 - `dev-flow` — Start here before writing code (sizing, branch setup)
 - `brainstorm` — Pre-code Socratic design exploration (discovers options)

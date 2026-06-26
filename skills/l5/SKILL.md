@@ -41,11 +41,21 @@ qc-gate" pipeline is just `/l5 <goal>` — you don't re-type the roster.
    [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md);
    the deltas vs `/l4`:
    - **Impl** dispatched with `dispatch-hetero.sh --runner <implementer_runner>
-     --model <implementer_engine> --effort <implementer_effort>` (worktree-isolated,
-     artifact-verified, **cgroup-contained**). Map its outcome via the
-     **outcome→action table**; reap the worktree from the outcome JSON's `worktree`
-     field on any non-success. The run-summary impl row records
-     `runner`/`model`/`containment` straight from the outcome JSON.
+     --model <implementer_engine> --effort <implementer_effort> --base "$(git
+     rev-parse <chosen-base>)"` (worktree-isolated, artifact-verified,
+     **cgroup-contained**). Pass `--base` as an **immutable SHA**, not a ref like
+     `develop` (a ref can advance after dispatch, breaking the post-impl probe
+     range). Map its outcome via the **outcome→action table**; reap the worktree
+     from the outcome JSON's `worktree` field on any non-success. The run-summary
+     impl row records `runner`/`model`/`containment` straight from the outcome JSON.
+   - **Diff-domain telemetry** (post-impl, telemetry ONLY — routes nothing): after a
+     `committed` outcome, record the impl's dominant `work_domain` via
+     `scripts/resolve-review-loop.sh --auto-domain <base_sha>..<commit>` where
+     `base_sha` + `commit` come from the **dispatch outcome JSON** (NOT ambient
+     `HEAD` — the worktree is GC'd on success). Put `work_domain` in the
+     run-summary ledger's impl row (canonical:
+     [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+     § Run-summary ledger). It selects no engine — domain routing is BACKLOG'd.
    - **Review** (spec — if `spec_review:on` — and impl) runs the **decorrelated
      reviewer**, not homogeneous Claude: `codex exec -m <reviewer_engine> -c
      model_reasoning_effort=<reviewer_effort>` reading the spec/diff, looping until

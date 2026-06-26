@@ -141,4 +141,25 @@ assert_eq "$(json_str "$EMPTY_OUT" work_domain)" "mixed" "empty diff is mixed"
 assert_eq "$(json_num "$EMPTY_OUT" weight_classified)" "0" "empty diff gives no classified weight"
 assert_eq "$(json_num "$EMPTY_OUT" dominant_share)" "0" "empty diff gives dominant_share 0"
 
+# 11. round-2 reviewer 🔴 REGRESSION — rename whose NEW path itself looks like a
+#     numstat counts record ("1<tab>2<tab>x"). A heuristic boundary parser
+#     reinterprets that NUL path field as a phantom "1 added, 2 deleted" record and
+#     inflates/desyncs; the deterministic parser must treat it purely as a path.
+git -C "$SBX" commit -q --allow-empty -m mark-rename-lookalike
+printf 'fn z(){}\n' > "$SBX/lookalike.rs"
+R9="$(commit_head add-lookalike-src)"
+git -C "$SBX" mv "lookalike.rs" "$(printf '1\t2\tmoved.rs')"
+R10="$(commit_head rename-to-counts-lookalike)"
+OUT="$(run_probe range "$R9..$R10")"
+assert_eq "$(json_num "$OUT" weight_classified)" "0" "pure rename to a tab-counts-lookalike path adds ZERO weight (no phantom record)"
+assert_eq "$(json_str "$OUT" work_domain)" "mixed" "zero-weight rename is mixed, not inflated"
+
+# 12. rename to a tab-bearing NEW path WITH a content delta classifies by the new
+#     path (NUL path field with embedded tabs parsed whole, not split on the tab).
+git -C "$SBX" mv "$(printf '1\t2\tmoved.rs')" "$(printf 'a\tb.py')"
+printf 'def y(): pass\nextra\n' >> "$SBX/$(printf 'a\tb.py')"
+R11="$(commit_head rename-tabpath-with-delta)"
+OUT="$(run_probe range "$R10..$R11")"
+assert_eq "$(json_str "$OUT" work_domain)" "backend-cli" "tab-bearing new path .py classifies backend-cli by NEW path"
+
 finalize_test

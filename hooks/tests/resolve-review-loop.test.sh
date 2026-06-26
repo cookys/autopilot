@@ -132,6 +132,15 @@ BASE_PREFIX="$(printf '%s' "$BASE_LEGACY_PREFIX" | sed 's/ }$//')"
 assert_eq "${BASE_PREFIX}, \"work_domain\": \"${AUTO_WD}\", \"domain_source\": \"${AUTO_SOURCE}\" }" "$AUTO_JSON" "auto output is exact legacy prefix + inserted keys"
 assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 
+# 13b. round-2 reviewer 🟡 — a NON-self-referential KR2 schema lock. The prefix check
+#      above derives its baseline by stripping the new keys from the already-modified
+#      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
+#      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
+#      then work_domain, then domain_source — nothing else, nothing moved.
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":'
+ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source, in order (catches old-field drift/reorder/drop)"
+
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"
 mkdir -p "$NON_GIT_DIR"

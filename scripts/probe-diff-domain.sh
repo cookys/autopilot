@@ -20,7 +20,9 @@
 #   - Combined/merge diffs are out of scope (documented here, not handled).
 
 set -euo pipefail
-LC_ALL=C
+# Exported so child tools (awk in share()) also format numbers locale-independently
+# — a non-C locale would render dominant_share with a comma decimal (round-2 reviewer 🟠).
+export LC_ALL=C
 
 usage() {
   sed -n '2,80p' "$0" | sed 's/^# \{0,1\}//'
@@ -38,18 +40,6 @@ is_valid_domain() {
     rust|backend-cli|frontend|docs|mixed) return 0 ;;
     *) return 1 ;;
   esac
-}
-
-is_counts_token() {
-  [[ -n "$1" ]] || return 1
-  local first second rest
-  first="${1%%$'\t'*}"
-  rest="${1#*$'\t'}"
-  [[ "$rest" == "$1" ]] && return 1
-  second="${rest%%$'\t'*}"
-  [[ "$first" == "-" || "$first" =~ ^[0-9]+$ ]] || return 1
-  [[ "$second" == "-" || "$second" =~ ^[0-9]+$ ]] || return 1
-  return 0
 }
 
 is_excluded() {
@@ -130,38 +120,18 @@ case "$MODE" in
   changed)
     BASE="$(git merge-base HEAD develop 2>/dev/null || git merge-base HEAD main 2>/dev/null || git rev-parse HEAD~1)"
     DIFF_CMD=(git diff --numstat -z -M -C "${BASE}...HEAD")
-    NAME_CMD=(git diff --name-status -z -M -C "${BASE}...HEAD")
     ;;
   staged)
     DIFF_CMD=(git diff --numstat -z -M -C --cached)
-    NAME_CMD=(git diff --name-status -z -M -C --cached)
     ;;
   range)
     [[ -z "$RANGE_ARG" ]] && err_usage "range requires A..B"
     DIFF_CMD=(git diff --numstat -z -M -C "$RANGE_ARG")
-    NAME_CMD=(git diff --name-status -z -M -C "$RANGE_ARG")
     ;;
   *)
     err_usage "invalid mode: $MODE"
     ;;
 esac
-
-# Build map of rename/copy old path -> new path.
-declare -A RENAMED_TO=()
-while IFS= read -r -d '' STATUS; do
-  if [[ "$STATUS" == R* || "$STATUS" == C* ]]; then
-    if ! IFS= read -r -d '' OLD_PATH; then
-      break
-    fi
-    if ! IFS= read -r -d '' NEW_PATH; then
-      break
-    fi
-    RENAMED_TO["$OLD_PATH"]="$NEW_PATH"
-  else
-    # Consume one path to keep stream position aligned.
-    IFS= read -r -d '' _SKIP_PATH
-  fi
-done < <("${NAME_CMD[@]}")
 
 RST_RUST=0
 RST_BACKEND=0
@@ -172,58 +142,32 @@ WEIGHT_CLASSIFIED=0
 WEIGHT_EXCLUDED=0
 WEIGHT_UNCLASS=0
 
-BUFFER=""
+# Deterministic parse of `git diff --numstat -z` (format verified empirically):
+#   normal file : "added<tab>deleted<tab>path<NUL>"            (path MAY contain tabs)
+#   rename/copy : "added<tab>deleted<tab><NUL>old<NUL>new<NUL>" (old/new each a NUL field)
+# The counts token always carries exactly two leading tabs; whatever follows the
+# 2nd tab is the path (empty ⇒ rename/copy, whose NEW path is the next-but-one NUL
+# field). No heuristic boundary detection: a path that looks like "1<tab>2<tab>x"
+# is a path, never reinterpreted as a counts record (round-2 reviewer 🔴). Each
+# rename/copy is self-contained, so multi-destination copies parse independently
+# (round-2 reviewer 🟠 — no shared old→new map to collide).
+while IFS= read -r -d '' TOK; do
+  case "$TOK" in
+    *$'\t'*$'\t'*) : ;;   # well-formed counts token (≥2 tabs)
+    *) continue ;;        # malformed / stray field — skip, never miscount
+  esac
 
-while true; do
-  if [[ -n "$BUFFER" ]]; then
-    TOK="$BUFFER"
-    BUFFER=""
-  else
-    if ! IFS= read -r -d '' TOK; then
-      break
-    fi
-  fi
-
-  if ! is_counts_token "$TOK"; then
-    continue
-  fi
-
-  COUNTS="$TOK"
-  ADDED="${COUNTS%%$'\t'*}"
-  REST="${COUNTS#*$'\t'}"
+  ADDED="${TOK%%$'\t'*}"
+  REST="${TOK#*$'\t'}"          # after 1st tab: "deleted<tab>path-or-empty"
   DELETED="${REST%%$'\t'*}"
-  PATH_FIELD="${REST#*$'\t'}"
+  PATH_FIELD="${REST#*$'\t'}"   # everything after the 2nd tab = the path
 
   if [[ -z "$PATH_FIELD" ]]; then
-    if ! IFS= read -r -d '' PATH1; then
-      break
-    fi
-    if ! IFS= read -r -d '' PATH2; then
-      PATH2=""
-      HAS_PATH2=0
-    else
-      HAS_PATH2=1
-    fi
-
-    if [[ -n "${RENAMED_TO["$PATH1"]+x}" ]]; then
-      CLASSIFY_PATH="${RENAMED_TO["$PATH1"]}"
-      if [[ "$HAS_PATH2" -eq 1 ]] && is_counts_token "$PATH2"; then
-        BUFFER="$PATH2"
-      fi
-    else
-      CLASSIFY_PATH="$PATH1"
-      if [[ "$HAS_PATH2" -eq 1 ]] && ! is_counts_token "$PATH2"; then
-        BUFFER="$PATH2"
-      elif [[ "$HAS_PATH2" -eq 1 ]]; then
-        BUFFER="$PATH2"
-      fi
-    fi
+    # rename/copy: next two NUL fields are old then new; classify by the NEW path.
+    IFS= read -r -d '' _OLD_PATH || break
+    IFS= read -r -d '' CLASSIFY_PATH || break
   else
     CLASSIFY_PATH="$PATH_FIELD"
-  fi
-
-  if [[ -n "${RENAMED_TO["$CLASSIFY_PATH"]+x}" ]]; then
-    CLASSIFY_PATH="${RENAMED_TO["$CLASSIFY_PATH"]}"
   fi
 
   if [[ "$ADDED" == "-" ]]; then

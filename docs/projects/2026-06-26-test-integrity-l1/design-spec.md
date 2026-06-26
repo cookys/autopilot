@@ -575,6 +575,18 @@ fail-closed defense-in-depth when given the means to check it.
 The round-3 reviewer RULED on the override tension. This subsection is the authoritative
 ship-vs-defer boundary; everything else in §8.3 describes the deferred mechanism.
 
+> **POST-SHIP UPDATE (v2.25.8, 2026-06-26): override stays DEFERRED — an unlock attempt was REVERTED as UNSAFE.**
+> A follow-up tried to unlock block-mode honoring on a `--containment cgroup-verified` attestation
+> (dispatch-hetero runs the worker in a `systemd-run --user --scope` cgroup, reaped + verified empty).
+> gpt-5.5 adversarial review ruled **UNSAFE** with two empirically-verified escapes: (1) a same-user
+> worker can `systemd-run --user --scope` a **sibling** cgroup outside the dispatcher's scope, so the
+> cgroup reap is **not** malicious-proof (`contained:true` can be a false attestation); (2) the
+> `--l1-verdict-file` path was honored even when worker-reachable. This **vindicates the original
+> deferral**: no local-only, same-user mechanism closes the forgery hole. Re-enable needs a real
+> isolation boundary (separate UID / sandbox / blocked user systemd bus) — tracked in BACKLOG. The
+> dispatch-hetero cgroup containment shipped as **teardown hygiene only**; the gate's `--containment`
+> flag is accepted-but-advisory (does NOT unlock).
+
 **SHIPS NOW (no trust dependency — all fail-safe):**
 - **Executed-set-invariance DETECTION** (§4 + §A/§B/§C): runner-reported shrink detection, base vs head.
 - **`warn` mode** (the global default): reports a shrink in `l1`/`violations`, **exit 0**. No trust

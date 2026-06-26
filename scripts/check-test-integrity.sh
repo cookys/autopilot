@@ -63,6 +63,7 @@ L1_RUNNER=""
 L1_WORKTREE_DIR=""
 L1_VERDICT_FILE=""
 ASSERT_WORKER_DEAD=""
+CONTAINMENT_FLAG="none"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -130,6 +131,19 @@ while [[ $# -gt 0 ]]; do
       ASSERT_WORKER_DEAD="$2"
       shift 2
       ;;
+    --containment)
+      # Accepted for telemetry / forward-compat ONLY — it does NOT currently unlock
+      # block-mode override honoring. An unlock on `cgroup-verified` was reverted as
+      # UNSAFE (gpt-5.5 review 2026-06-26): a same-user worker can sibling-escape the
+      # dispatcher's cgroup via `systemd-run --user --scope`, so no local-only
+      # containment is malicious-proof. Block-mode always defers; see BACKLOG.
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --containment expects a value (currently advisory only)." >&2
+        exit 2
+      fi
+      CONTAINMENT_FLAG="$2"
+      shift 2
+      ;;
     --l1-verdict-file)
       if [[ $# -lt 2 ]]; then
         echo "Error: --l1-verdict-file expects a file path." >&2
@@ -191,7 +205,7 @@ if ! git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   exit 2
 fi
 
-python3 - "$REPO_DIR" "$RANGE" "$BASE_REF" "$HEAD_REF" "$ALLOW_ENV_CONFIG" "$NO_L1" "$L1_TIMEOUT" "$L1_RUNNER" "$L1_WORKTREE_DIR" "$L1_VERDICT_FILE" "$ASSERT_WORKER_DEAD" <<'PY'
+python3 - "$REPO_DIR" "$RANGE" "$BASE_REF" "$HEAD_REF" "$ALLOW_ENV_CONFIG" "$NO_L1" "$L1_TIMEOUT" "$L1_RUNNER" "$L1_WORKTREE_DIR" "$L1_VERDICT_FILE" "$ASSERT_WORKER_DEAD" "$CONTAINMENT_FLAG" <<'PY'
 import json
 import hashlib
 import os
@@ -1199,7 +1213,7 @@ def apply_l1_verdict_overrides(l1_runners, l1_violations, verdict_payload, defer
         return l1_runners, l1_violations, base_status
 
     if defer_override:
-        return l1_runners, l1_violations, "block-mode override deferred (awaits §8.3.4 descendant containment)"
+        return l1_runners, l1_violations, "block-mode override deferred (no local-only containment is malicious-proof against a same-user worker — sibling-scope escape + worker-reachable verdict path; needs stronger isolation, see BACKLOG / spec §8.3)"
 
     waives = verdict_payload.get("waives", [])
     if not isinstance(waives, list):
@@ -1254,6 +1268,7 @@ def run_l1_analysis(
     override_status_hint,
     rename_pairs,
     config_mode,
+    containment="none",
 ):
     if runner_filter:
         runner_order = [runner_filter]
@@ -1497,11 +1512,22 @@ def run_l1_analysis(
         l1_summary["l1_violations"] = l1_violations
         l1_summary["changeset_digest"] = changeset_digest
 
+        # Block-mode ALWAYS defers override honoring. An attempt to unlock it on a
+        # `--containment cgroup-verified` attestation was REVERTED (gpt-5.5 review
+        # 2026-06-26, ruling UNSAFE, two verified escapes): (1) a same-user worker can
+        # `systemd-run --user --scope` a SIBLING cgroup outside the dispatcher's scope,
+        # so the cgroup reap+verify is NOT malicious-proof — `contained:true` can be a
+        # false attestation; (2) the `--l1-verdict-file` path was honored even when
+        # worker-reachable (only warned). Closing this needs a STRONGER isolation
+        # boundary (separate UID / real sandbox / no user systemd bus), tracked in
+        # BACKLOG. Until then, refusing a forgeable waiver is the only safe posture.
+        # `--containment` is accepted (telemetry/forward-compat) but does NOT unlock.
+        defer_override = (config_mode == "block")
         l1_summary["l1_runners"], l1_summary["l1_violations"], verdict_msg = apply_l1_verdict_overrides(
             l1_summary["l1_runners"],
             l1_summary["l1_violations"],
             verdict_payload,
-            config_mode == "block",
+            defer_override,
             l1_summary.get("override_status", "No L1 verdict checked"),
         )
         if verdict_msg:
@@ -1535,6 +1561,7 @@ def main():
     l1_worktree_dir = sys.argv[9]
     l1_verdict_file = sys.argv[10]
     assert_worker_dead = sys.argv[11] if len(sys.argv) > 11 else ""
+    containment = sys.argv[12] if len(sys.argv) > 12 else "none"
     try:
         l1_timeout = int(l1_timeout_arg)
     except Exception:
@@ -2001,6 +2028,7 @@ def main():
             override_status,
             rename_pairs,
             config["mode"],
+            containment,
         )
     if l1_summary.get("l1_runners") is None:
         l1_summary["l1_runners"] = []

@@ -18,6 +18,10 @@
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
 #       [--model "Gemini 3.5 Flash (High)"]   # default; names from `agy models`
+#       [--runner auto|codex|agy]              # default auto: codex iff model matches
+#                                              #   *gpt*/*codex*, else agy. Explicit
+#                                              #   wins (do NOT rely on model-name luck).
+#       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--agy-bin agy]                        # alternate binary (test seam)
@@ -63,6 +67,10 @@ AGY_BIN="agy"
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
+RUNNER="auto"
+EFFORT="xhigh"
+CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
+CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
 
 usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -75,8 +83,9 @@ emit() { # status commit files ins del worktree error
   [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
   local runner="agy"
   [ "$IS_CODEX" -eq 1 ] && runner="codex"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
-    "$1" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
+  local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
+    "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json"
 }
@@ -94,6 +103,8 @@ while [ $# -gt 0 ]; do
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; shift 2 ;;
+    --runner) RUNNER="${2:-}"; shift 2 ;;
+    --effort) EFFORT="${2:-}"; shift 2 ;;
     --base) BASE="${2:-}"; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
@@ -103,10 +114,29 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Runner selection. Explicit --runner wins; `auto` detects codex from the model
+# name. The OLD bug: only `*gpt-5.5*` matched, so other codex models
+# (gpt-5.3-codex-spark, gpt-5.x-codex, …) silently fell through to the agy branch
+# — which on this repo writes its plugin install copy (no_op + false self-report,
+# memory: agy-writes-install-dir). Match the codex FAMILY, not one string.
 IS_CODEX=0
-if [[ "$MODEL" == *"gpt-5.5"* ]]; then
-  IS_CODEX=1
-fi
+case "$RUNNER" in
+  codex) IS_CODEX=1 ;;
+  agy)   IS_CODEX=0 ;;
+  auto)
+    # case-insensitive: GPT-5.5 / gpt-5.3-codex-spark / *Codex* all → codex
+    model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
+      IS_CODEX=1
+    fi
+    ;;
+  *) die_precondition "--runner must be one of auto|codex|agy (got: $RUNNER)" ;;
+esac
+
+case "$EFFORT" in
+  low|medium|high|xhigh|max) ;;
+  *) die_precondition "--effort must be one of low|medium|high|xhigh|max (got: $EFFORT)" ;;
+esac
 
 # --- preconditions (exit 2, nothing created) ---
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
@@ -136,16 +166,88 @@ fi
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
 
-# A TERM during the long run orphans the worktree + branch. Trap it to reap both.
-trap 'git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+# --- worker containment (BEST-EFFORT teardown — NOT a malicious-worker boundary) ---
+# Purpose: reap escaped descendants so a long/aborted run doesn't leak background
+# processes. A plain process-GROUP kill misses a `setsid`-escaped child; a cgroup
+# catches it (verified: setsid child stays in cgroup.procs, dies on cgroup.kill).
+# Containment tier (provenance only):
+#   cgroup  — systemd-run --user --scope; cgroup.kill reaps the subtree incl. setsid
+#             escapes; emits CONTAINMENT=cgroup + CONTAINED=1 when the scope verifies
+#             empty.
+#   setsid  — own session, reaped by session-pgroup kill (catches ordinary children,
+#             not a deliberate inner setsid). CONTAINMENT=setsid.
+#   plain   — no container available. CONTAINMENT=plain.
+# IMPORTANT — NOT malicious-proof: a same-user worker can `systemd-run --user --scope`
+# a SIBLING cgroup OUTSIDE this scope (gpt-5.5 review 2026-06-26 verified the sibling
+# survives our reap), so `contained:true` is teardown hygiene, NOT a security
+# attestation. It does NOT (and must not) unlock the L1 block-mode override — closing
+# that needs a real isolation boundary (separate UID / sandbox / no user systemd bus).
+# See BACKLOG "dispatch-hetero descendant-containment".
+SCOPE_UNIT=""; WORKER_SID=""
+HAVE_CGROUP=0
+if command -v systemd-run >/dev/null 2>&1 \
+   && systemd-run --user --scope --quiet -- true >/dev/null 2>&1; then
+  HAVE_CGROUP=1
+fi
+HAVE_SETSID=0; command -v setsid >/dev/null 2>&1 && setsid --help 2>&1 | grep -q -- --wait && HAVE_SETSID=1
+
+reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
+  if [ -n "$SCOPE_UNIT" ]; then
+    systemctl --user kill "$SCOPE_UNIT" --signal=SIGKILL >/dev/null 2>&1 || true
+    systemctl --user stop "$SCOPE_UNIT" >/dev/null 2>&1 || true
+    # verify the cgroup is gone/empty — the genuine setsid-proof containment proof
+    local i cg
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      systemctl --user is-active "$SCOPE_UNIT" >/dev/null 2>&1 || { CONTAINED=1; break; }
+      sleep 0.3
+    done
+    cg="$(systemctl --user show "$SCOPE_UNIT" -p ControlGroup --value 2>/dev/null)"
+    if [ -n "$cg" ] && [ -s "/sys/fs/cgroup${cg}/cgroup.procs" ]; then CONTAINED=0; fi
+  elif [ -n "$WORKER_SID" ]; then
+    kill -TERM "-$WORKER_SID" 2>/dev/null || true
+    local i
+    for i in 1 2 3 4 5; do kill -0 "-$WORKER_SID" 2>/dev/null || break; sleep 0.3; done
+    kill -KILL "-$WORKER_SID" 2>/dev/null || true
+    sleep 0.2
+    kill -0 "-$WORKER_SID" 2>/dev/null || CONTAINED=1   # session empty
+  fi
+}
+
+# A TERM during the long run orphans the worktree + branch AND can leave worker
+# descendants. Trap it to reap the container first, then the worktree + branch.
+trap 'reap_container; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+
+# Build the worker command line, then run it inside the strongest available
+# container. The command cd's into the worktree itself (we cannot rely on a
+# subshell cwd surviving the container boundary).
+run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
+  if [ "$HAVE_CGROUP" -eq 1 ]; then
+    SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
+    CONTAINMENT="cgroup"
+    systemd-run --user --scope --quiet --unit="$SCOPE_UNIT" -- "$@" >"$LOG" 2>&1 &
+    local rp=$!; wait "$rp"; AGENT_EXIT=$?
+  elif [ "$HAVE_SETSID" -eq 1 ]; then
+    CONTAINMENT="setsid"
+    setsid --wait "$@" >"$LOG" 2>&1 &
+    local rp=$!
+    # the setsid'd worker is its own session leader; capture its sid (= the child pgid)
+    WORKER_SID="$(ps -o pid= --ppid "$rp" 2>/dev/null | tr -d ' ' | head -1)"
+    [ -z "$WORKER_SID" ] && WORKER_SID="$rp"
+    wait "$rp"; AGENT_EXIT=$?
+  else
+    CONTAINMENT="plain"
+    "$@" >"$LOG" 2>&1
+    AGENT_EXIT=$?
+  fi
+  reap_container   # reap on the NORMAL exit path too (catch escaped survivors), set CONTAINED
+}
 
 # --- run the agent (its stdout/stderr go to LOG, never our stdout) ---
 if [ "$IS_CODEX" -eq 1 ]; then
-  ( cd "$WT" && codex exec --model "$MODEL" \
+  run_worker bash -c 'cd "$1" && exec codex exec --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
-      -c "model_reasoning_effort=\"xhigh\"" < "$PROMPT_FILE" ) >"$LOG" 2>&1
-  AGENT_EXIT=$?
+      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE"
 else
   printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini headless dispatch is BEST-EFFORT (run_command has a 10s foreground cap → long/exploratory commands background and the -p turn yields before saving; occasional cross-session path leaks). Running EDIT-ONLY with a wrapper commit. For reliability on non-trivial or build/test tasks, prefer --model gpt-5.5 (codex). See gotcha: agy-headless-dispatch-unreliable." >&2
   # agy (Gemini) in -p print mode CANNOT reliably run a long command then commit:
@@ -164,10 +266,8 @@ run build/test or to commit.
 ===
 
 "
-  ( cd "$WT" && "$AGY_BIN" -p "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" \
-      --model "$MODEL" --dangerously-skip-permissions \
-      --print-timeout "$TIMEOUT" ) >"$LOG" 2>&1
-  AGENT_EXIT=$?
+  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --dangerously-skip-permissions --print-timeout "$5"' \
+      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT"
 fi
 trap - INT TERM
 

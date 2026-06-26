@@ -646,6 +646,53 @@ assert_exit_code "$__EXIT_CODE" 1 "block-mode still hard-fails with a valid verd
 assert_contains "$__OUTPUT" '"l1": "shrink"' "verdict-in-block still returns shrink"
 assert_contains "$__OUTPUT" 'block-mode override deferred' "override status is deferred"
 
+# 13b) block-mode override stays DEFERRED even with --containment cgroup-verified.
+# An unlock on that attestation was REVERTED as UNSAFE (gpt-5.5 review 2026-06-26:
+# a same-user worker can sibling-escape the dispatcher cgroup via systemd-run, so
+# no local-only containment is malicious-proof). This locks in the safe posture.
+# Clean L1-only vector: a pure git-mv rename is L0-ok but an L1 shrink, so the exit
+# code reflects ONLY the L1 verdict path — unlike #13's pytestmark which also trips L0.
+repo="$(mkrepo l1-block-override-unlock)"
+(
+  cd "$repo"
+  mkdir -p tests .claude
+  printf "## Mode\nmode: block\n" > .claude/test-integrity-config.md
+  cat > tests/a_test.py <<'PY'
+def test_keep():
+    assert True
+PY
+  git add .claude/test-integrity-config.md tests/a_test.py
+  git commit -qm "base"
+  git mv tests/a_test.py tests/b_test.py
+  git commit -qm "rename test file (L0-ok, L1-shrink)"
+)
+base_sha=$(git -C "$repo" rev-parse HEAD~1)
+head_sha=$(git -C "$repo" rev-parse HEAD)
+base_tree=$(git -C "$repo" rev-parse "${base_sha}^{tree}")
+head_tree=$(git -C "$repo" rev-parse "${head_sha}^{tree}")
+changeset_digest=$(compute_changeset_digest "$repo" "$base_sha" "$head_sha")
+run_integrity "$repo" HEAD~1..HEAD --l1-runner pytest
+assert_exit_code "$__EXIT_CODE" 1 "rename shrink fails before any waiver"
+dropped_digest=$(extract_dropped_digest pytest)
+verdict_file="$TEST_TMP/l1-unlock-verdict.json"
+cat > "$verdict_file" <<VERDICT
+{
+  "base_sha": "${base_sha}", "head_sha": "${head_sha}",
+  "base_tree": "${base_tree}", "head_tree": "${head_tree}",
+  "changeset_digest": "${changeset_digest}",
+  "waives": [ {"file": "pytest", "kind": "executed_set_shrink", "dropped_digest": "${dropped_digest}"} ]
+}
+VERDICT
+# (1) valid verdict but containment=none → deferred (fail-safe default)
+run_with_verdict_file "$repo" HEAD~1..HEAD "$verdict_file" --l1-runner pytest
+assert_exit_code "$__EXIT_CODE" 1 "valid verdict + containment=none stays deferred"
+assert_contains "$__OUTPUT" 'block-mode override deferred' "none → deferred status"
+# (2) valid verdict + --containment cgroup-verified → STILL deferred (unlock reverted UNSAFE)
+run_with_verdict_file "$repo" HEAD~1..HEAD "$verdict_file" --l1-runner pytest --containment cgroup-verified
+assert_exit_code "$__EXIT_CODE" 1 "cgroup-verified does NOT unlock (still deferred, fail-safe)"
+assert_contains "$__OUTPUT" 'block-mode override deferred' "cgroup-verified → still deferred"
+assert_not_contains "$__OUTPUT" 'Override accepted' "no override accepted in block mode"
+
 # 14) optional Jest .only sibling-drop (all tests remain in file)
 if [ "$js_runtime_ready" -eq 1 ]; then
   repo="$(mkrepo l1-js-only)"

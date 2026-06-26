@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.8 — hetero-dispatch roster fix + review-loop automation (`/l5` config-driven)
+
+**Headline**: Three coupled hardenings of the `/l5` heterogeneous pipeline. (1) `dispatch-hetero.sh` no longer mis-routes non-`gpt-5.5` codex models to the repo-corrupting agy branch. (2) The "generation-adversarial heterogeneous" loop is now **data, not a hand-typed prompt** — a per-project engine roster makes `/l5 <goal>` run the whole `subagent plan → decorrelated reviewer loop → hetero impl → reviewer loop → qc-gate` pipeline. (3) Worker teardown reaps escaped descendants. An attempt to also unlock the L1 block-mode override on cgroup containment was **reverted as UNSAFE** after adversarial review — it stays deferred (see below).
+
+### Added
+- `scripts/resolve-review-loop.sh` + `project-config-template/review-loop-config.md` — per-project **engine roster + loop policy** (`reviewer_engine`/`reviewer_effort`/`implementer_engine`/`implementer_runner`/`loop_max_rounds`/`spec_review`/`independent_harness`/…). Same config-resolution chain as `resolve-qc-gate.sh`. `/l5` reads it instead of you re-typing the roster; the **decorrelated reviewer** (default `gpt-5.5`) replaces homogeneous-Claude review. 16 resolver assertions.
+- `dispatch-hetero.sh`: `--runner auto|codex|agy` (auto routes `*gpt*`/`*codex*` → codex) + `--effort` (per-call codex reasoning). Best-effort **worker containment** (`systemd-run --user --scope` cgroup, reaped + verified on all exit paths) emitting `containment`/`contained` provenance. 8 new dispatch-hetero assertions.
+
+### Fixed
+- **`dispatch-hetero.sh` codex-trigger bug**: the codex branch matched only `*gpt-5.5*`, so a stated implementer like `gpt-5.3-codex-spark` silently fell through to the **agy** branch — which corrupts the autopilot repo (writes its plugin install copy). Now routes the whole codex family; explicit `--runner` always wins.
+
+### Changed
+- `/l5` SKILL: resolves the roster via `resolve-review-loop.sh`; runs the decorrelated reviewer + depth-0 independent harness; documents the impl `--runner/--model/--effort` + `containment` provenance.
+
+### Reverted (kept deferred — adversarial review caught it)
+- An unlock of the **L1 block-mode test-integrity override** on a `--containment cgroup-verified` attestation was **reverted as UNSAFE** (gpt-5.5 review, two verified escapes: a same-user worker can `systemd-run --user --scope` a sibling cgroup outside the dispatcher's scope → `contained:true` is a false attestation; and the verdict-file path was honored when worker-reachable). No local-only same-user mechanism closes the forgery hole — vindicating the original deferral. The override stays deferred; the dispatch-hetero cgroup shipped as teardown hygiene only; the gate's `--containment` flag is accepted-but-advisory. Re-enable (needs a real isolation boundary: separate UID / sandbox / blocked user systemd bus) is BACKLOG'd.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.25.7 — L1 test-integrity gate (executed-set invariance)
 
 **Headline**: L1 layer for `check-test-integrity.sh` — the semantic half L0 (diff-text-only) can't see. L1 RUNS the test collector on base vs head and fails (`executed_set_shrink`) if the set of tests that **actually execute** shrinks — catching additions-only / out-of-test-path gaming L0 misses (`test.only`/`fit`, module `pytestmark=skip`, `collect_ignore`, runner-config exclusions, go build-tag drops, jest/vitest `testPathIgnorePatterns`). Per-runner: **pytest / jest / vitest / go** (RUN-not-collect — verified `--collect-only` lists skipped tests, so execution/report status is the only honest signal). Best-effort (runs only when a runner is detected); default stays `warn`, `block` opt-in. Strictly additive to L0 (the 70 L0 assertions are unchanged). Converged through a 4-round gpt-5.5 adversarial design loop + a 3-round impl review + an independent depth-0 adversarial harness.

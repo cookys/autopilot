@@ -68,12 +68,30 @@ OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --agy-bin /non
 assert_eq "2" "$EXIT" "missing binary exit code"
 assert_contains "$OUT" "not found" "missing binary error text"
 
+# 3a. bad --runner / --effort → precondition_failed, exit 2 (arg validation, no LLM)
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner bogus --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "bad --runner exit code"
+assert_contains "$OUT" "runner must be one of" "bad --runner error text"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --effort turbo --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "bad --effort exit code"
+assert_contains "$OUT" "effort must be one of" "bad --effort error text"
+
+# 3b. codex routing: a non-gpt-5.5 codex model still routes to codex (the old bug routed
+# only *gpt-5.5* to codex, so gpt-5.3-codex-spark silently fell through to the agy branch).
+# Route to codex and make codex absent (PATH without ~/.local/bin, keeping system tools);
+# the codex precondition must fire — proving routing did NOT fall through to agy.
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
+assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
+
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "committed path exit code"
 assert_contains "$OUT" '"status": "committed"' "committed status"
 assert_contains "$OUT" '"files_changed": 1' "committed diff stat"
 assert_contains "$OUT" '"worktree": null' "worktree auto-removed on success"
+assert_contains "$OUT" '"containment":' "output carries containment provenance"
+assert_contains "$OUT" '"contained": true' "worker container reaped + verified empty"
 BRANCH_EXISTS="$(git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/smoke >/dev/null && echo yes || echo no)"
 assert_eq "yes" "$BRANCH_EXISTS" "branch survives for review/merge"
 SMOKE_CONTENT="$(git -C "$SBX" show feat/smoke:ok.txt)"

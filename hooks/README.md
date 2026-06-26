@@ -119,7 +119,7 @@ hooks/
 
 ## Tier A — Default-On (8 hooks)
 
-Registered in `hooks.json`. Active for all autopilot users.
+Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project.
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
@@ -207,6 +207,14 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 - AWS (`AKIA*`), Google API (`AIza*`)
 - Slack (`xoxb-*`, `xoxp-*`), Stripe (`sk_live_*`)
 - Inline: `--token`, `password=`, `sshpass -p`, `Authorization: Bearer`
+
+When enabled, `commit-secret-scan` (opt-in) and the active `audit-log` share this module.
+
+## Override
+
+- **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
+- **Custom protected branches** (when `branch-protection` is enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
+- **Disable cost tracking** (when `cost-tracker` is re-enabled): set `autopilot.costTracker = false`
 
 ## Source
 

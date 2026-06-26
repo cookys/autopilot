@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.12 — onboarding-friendly README: slim front door, detail relocated to docs/
+
+**Headline**: `README.md` was a 651-line spec dump that buried newcomers under Superpowers-coexistence scenarios, the injection-mechanism diagram, full 20-hook Tier tables, design philosophy, and a 6-source credits block. It's now a **135-line onboarding tour** (What Is / Quick Start / What It Does, with natural-language "Try saying" triggers / A Day With Autopilot / Install / Learn More) and `README.zh-TW.md` mirrors it 1:1. All the depth was **relocated verbatim** (not summarized) into five English `docs/` files — `skills.md`, `coexistence.md`, `configuration.md`, `installation.md`, `architecture.md` — plus the hook Override/Secret-Detection operational notes moved into the canonical `hooks/README.md`. **Process**: built via `/l5` — a gpt-5.5 xhigh spec-review pass caught 3 real gaps (missing `--skill-count`, zh-TW badge not auto-bumped, an un-homed Override section) which were folded in before implementation; depth-0 ran every gate green.
+
+### Changed
+- `README.md` 651→135 lines; `README.zh-TW.md` slimmed in lockstep (parity: 6 badges + 12 sections).
+- `scripts/check-hook-inventory.js`: the hooks **body** assertions (Tier headers, intro tally, Tier-A membership) now target `hooks/README.md` (already canonical) instead of `README.md`; both READMEs keep only the `hooks-<N>` hero-badge assertion. The slim README no longer carries a hook table.
+- `hooks/tests/check-hook-inventory.test.sh`: membership-drift case #4 retargeted from `README.md` to `hooks/README.md` (swaps `failure-escalation`, the one default-on hook confined to the Tier-A block).
+- `CLAUDE.md`: the `README.md#superpowers-coexistence` anchor link → `docs/coexistence.md`.
+
+### Added
+- `docs/skills.md`, `docs/coexistence.md`, `docs/configuration.md`, `docs/installation.md`, `docs/architecture.md` — the relocated detail (English-only; both READMEs link to them).
+- `hooks/README.md`: `## Override` section (relocated `autopilot.<hookName>=false` / `AUTOPILOT_PROTECTED_BRANCHES` / `autopilot.costTracker=false`).
+
+### Fixed
+- Content-homing completeness: the README Secret-Detection + Override operational notes had no other home; relocated so nothing is lost.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.25.11 — trust-tiered review policy: deterministic review-risk + cross-family enforce
 
 **Headline**: Implements the buildable core of the trust-tiered review-policy design (`docs/plans/2026-06-26-trust-tiered-review-policy.md`, converged through a 3-round gpt-5.5 xhigh review loop). The industry/research sweep found the real lever is **decorrelated execution verification**, the cross-family panel is secondary (1→2 families is the win, more is waste), and **review depth should key on MEASURED risk, not who implemented**. `resolve-review-loop.sh` now derives a deterministic `implementation_review_risk` and emits the policy the depth-0 loop enforces; an opt-in `--enforce` hard gate blocks a high-risk change whose required cross-family decorrelation is unsatisfied. **Built via `/l5` dogfood**: codex `gpt-5.3-codex-spark` implemented it, verified by an independent depth-0 acceptance harness + a 3-round gpt-5.5 decorrelated review loop (caught a metadata-not-enforced hole + a high-risk-empty-panel hole — both fixed). Scope: hardens honest-but-weak implementers only, NOT malicious-proof.

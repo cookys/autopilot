@@ -6,7 +6,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone-capable lifecycle orchestration plugin for Claude Code. 23 skills, 3 methodology agents, 20 hooks (8 default-on, 12 opt-in, 0 disabled). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`README.md`](README.md) for the full coexistence model.
+Standalone-capable lifecycle orchestration plugin for Claude Code. 23 skills, 3 methodology agents, 20 hooks (8 default-on, 12 opt-in, 0 disabled). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`docs/coexistence.md`](docs/coexistence.md) for the full coexistence model.
 
 ## Scripts inventory (prefer over LLM judgment)
 
@@ -95,7 +95,7 @@ Mechanics: bump via `scripts/sync-version.js --version <V> --hook-count <N> --sk
 
 ## Coexistence with superpowers
 
-Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`README.md`](README.md#superpowers-coexistence).
+Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/coexistence.md`](docs/coexistence.md).
 
 ## Where context lives
 

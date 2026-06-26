@@ -168,6 +168,29 @@ function checkTierAMembership(errors, rel, inv) {
   }
 }
 
+function checkTierBMembership(errors, rel, inv) {
+  const text = fileText(rel);
+  if (text === null) { errors.push(`${rel}: not found`); return; }
+  // Tier B block = from an "Opt-In"/"可選啟用"/"Tier B" header to the next top-level
+  // "## " section header (e.g. "## Secret Patterns") or EOF. Symmetric to the Tier-A
+  // check so a renamed/dropped opt-in name can't pass green (the count-blind class, Tier B).
+  const startRe = /^#+.*(Opt-In|可選啟用|Tier B)/m;
+  const s = text.search(startRe);
+  if (s < 0) { errors.push(`${rel}: no Tier-B header found`); return; }
+  const rest = text.slice(s + 1);
+  const e = rest.search(/^## /m);
+  const block = e < 0 ? rest : rest.slice(0, e);
+
+  for (const name of inv.disabled) {
+    const re = new RegExp(`(^|[^A-Za-z0-9_-])${name}([^A-Za-z0-9_-]|$)`);
+    if (re.test(block)) errors.push(`${rel}: DISABLED hook "${name}" is listed under Tier-B opt-in (membership drift)`);
+  }
+  for (const name of inv.optIn) {
+    const re = new RegExp(`(^|[^A-Za-z0-9_-])${name}([^A-Za-z0-9_-]|$)`);
+    if (!re.test(block)) errors.push(`${rel}: opt-in hook "${name}" is MISSING from the Tier-B table`);
+  }
+}
+
 function runCheck(inv) {
   const errors = [];
   // Canonical description lines (numbers).
@@ -175,23 +198,20 @@ function runCheck(inv) {
   checkTally(errors, 'plugin.json', /"description"/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
   checkTally(errors, '.claude-plugin/marketplace.json', /"description"/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
   checkTally(errors, 'CLAUDE.md', /default-on/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
-  // README badges (total) + Tier headers (per-tier count).
+  // README badges (total) only. As of v2.25.12 the README pair is a slim onboarding
+  // surface — the hooks Tier tables + intro tally + Tier-A membership were relocated to
+  // hooks/README.md, which is now the SOLE doc whose hook BODY is asserted here. Both
+  // READMEs still carry the hooks-<N> hero badge, so the total stays pinned on them.
   checkTally(errors, 'README.md', /hooks-\d+-/, inv, ['total']);
-  checkHeaderCount(errors, 'README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
-  checkHeaderCount(errors, 'README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
-  // Intro PROSE tally (the "N default-on … M opt-in" sentence) — distinct from the
-  // badge/headers; a stale number here escaped both gates once (v2.23.0). Anchored on
-  // the "opt-in" clause so it survives the disabled tier going to zero (v2.25.2).
-  checkTally(errors, 'README.md', /opt-in\*\* \(zero disabled/, inv, ['defaultOn', 'optIn']);
-  checkTally(errors, 'hooks/README.md', /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
   checkTally(errors, 'README.zh-TW.md', /hooks-\d+-/, inv, ['total']);
-  checkTally(errors, 'README.zh-TW.md', /預設啟用[（(]\d+/, inv, ['defaultOn']);
-  checkTally(errors, 'README.zh-TW.md', /可選啟用[（(]\d+/, inv, ['optIn']);
+  // hooks/README.md — canonical hooks doc: intro PROSE tally + Tier headers + Tier-A
+  // membership (the count-blind class — 2026-06-22). A stale prose number escaped both
+  // gates once (v2.23.0); the intro-tally regex survives the disabled tier going to zero.
+  checkTally(errors, 'hooks/README.md', /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
   checkHeaderCount(errors, 'hooks/README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
   checkHeaderCount(errors, 'hooks/README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
-  // Membership (the count-blind class).
-  checkTierAMembership(errors, 'README.md', inv);
   checkTierAMembership(errors, 'hooks/README.md', inv);
+  checkTierBMembership(errors, 'hooks/README.md', inv);
 
   if (errors.length) {
     console.error('Hook inventory drift:\n');

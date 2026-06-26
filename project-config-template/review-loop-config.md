@@ -61,6 +61,29 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
 
+### Risk-tiered review depth (v2.25.11 — emitted by `resolve-review-loop.sh`, not config keys)
+
+`resolve-review-loop.sh` derives a deterministic **`implementation_review_risk`** from runtime
+inputs (NOT just who implemented — source-trust is one input, per the design's category-error
+correction). Pass them as flags; the resolver emits the policy the depth-0 loop enforces.
+
+| Input flag | Default | Effect |
+|------------|---------|--------|
+| `--source-trust high\|low` | derived (known cloud family ⇒ high, else low) | low ⇒ high risk |
+| `--diff-lines N` | 0 | `>150` ⇒ high risk |
+| `--protected-path 0\|1` | 0 | 1 ⇒ high risk |
+| `--oracle-available 0\|1` | 1 | 0 (no executable oracle) ⇒ high risk |
+| `--security-surface 0\|1` | 0 | 1 ⇒ high risk |
+
+Emitted fields: `review_risk` (low/high), `required_review_families` (1 low / 2 high — PROVISIONAL,
+calibrate before flipping the panel default), `l1_required` (decorrelated execution oracle required),
+`cross_family_required`, `cross_family_satisfied` (an **unknown-family** panel member never satisfies
+it — fail-closed). The cross-family overlap message escalates **WARNING** (low risk) → **ERROR**
+(high risk). **`--enforce`** turns the resolver into an opt-in hard gate: exit 3 (JSON still emitted)
+when a high-risk change's required cross-family decorrelation is unsatisfied (incl. an empty panel at
+high risk). Default stays exit-0 data mode — the resolver REPORTS, the depth-0 loop / pre-push gate
+ENFORCES (same pattern as `resolve-doa`/`resolve-qc-gate`). Full design: [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../docs/plans/2026-06-26-trust-tiered-review-policy.md).
+
 ## Gotchas (carried from the test-integrity-l1 ship)
 
 - **`agy` as implementer — works now via the v2.25.9 anchor fix.** agy `-p` ignores process

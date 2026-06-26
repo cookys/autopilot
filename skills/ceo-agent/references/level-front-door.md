@@ -259,6 +259,16 @@ else a depth-0 second-look. A panelist returning `no_verdict` (empty/stdout-drop
 **fail-closed** — treated as "did not clear", never as a pass. Full rule:
 [`skills/quality-pipeline/references/code-review.md`](../../quality-pipeline/references/code-review.md) § "Panel aggregation".
 
+**Provenance + risk (v2.25.11).** The policy is inert without authoritative implementer
+provenance at review time — persist a **dispatch manifest** {engine, family, tier, runner,
+worktree/artifact id} alongside the diff (the `dispatch-hetero.sh` outcome JSON already carries
+`runner`/`model`/`containment`); **missing/unverifiable manifest ⇒ fail-closed to the strictest
+tier**. Pass the diff's risk inputs (size, protected-path, oracle-available, security-surface) to
+`resolve-review-loop.sh`; at **high `review_risk`** the decorrelated execution oracle (`l1_required`)
+and a cross-family panel are mandatory — enforce with `resolve-review-loop.sh --enforce` (exit 3 on
+an unsatisfied high-risk gate). This hardens HONEST-but-WEAK implementers only — NOT a malicious
+worker (see the test-integrity isolation BACKLOG).
+
 **The depth-0 qc is DISPATCHED, never the CEO eyeballing the diff inline.** A
 single self-read from the CEO's own context is itself only a first-pass and does
 **not** clear the gate — the value is *independent adversarial coverage*, not a

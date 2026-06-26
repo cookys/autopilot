@@ -1,6 +1,6 @@
 # Cross-family QC panel for /l5 (v2.25.9)
 
-> **Status**: design → awaiting approval. Branch `feat/v2.25.9-cross-family-qc-panel`.
+> **Status**: ✅ Shipped in v2.25.9 — merged as `3b97bd0`.
 
 ## Problem
 

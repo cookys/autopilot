@@ -153,4 +153,32 @@ assert_not_contains "$OUT" '"status": "committed"' "non-zero exit with clean com
 F_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 git -C "$SBX" worktree remove --force "$F_WT" >/dev/null 2>&1 || true
 
+# 9. agy directive carries the ABSOLUTE worktree anchor (v2.25.9 fix).
+# agy -p ignores process cwd; without an absolute-path anchor in the prompt it invents a
+# scratch project and the worktree is left untouched (no_op). The script must PREPEND
+# "Your ABSOLUTE working directory is: <worktree>" so agy edits in place. This stub runs IN
+# the worktree (the script cd's there) and asserts the -p prompt names its own PWD.
+ANCHOR_OUT="$TEST_TMP/anchor-capture"
+STUB_ANCHOR="$TEST_TMP/agy-anchor"
+cat > "$STUB_ANCHOR" <<'EOF'
+#!/usr/bin/env bash
+prompt=""
+while [ $# -gt 0 ]; do case "$1" in -p) prompt="$2"; shift 2 ;; *) shift ;; esac; done
+if printf '%s' "$prompt" | grep -qF "ABSOLUTE working directory is: $PWD"; then
+  echo ANCHOR_OK > __ANCHOR_OUT__
+else
+  echo "ANCHOR_MISSING(pwd=$PWD)" > __ANCHOR_OUT__
+fi
+echo anchored > anchored.txt
+git add anchored.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: anchor"
+EOF
+sed -i "s#__ANCHOR_OUT__#$ANCHOR_OUT#g" "$STUB_ANCHOR"
+chmod +x "$STUB_ANCHOR"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/anchor --prompt-file "$PROMPT" --agy-bin "$STUB_ANCHOR" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "anchor stub committed → exit 0"
+assert_contains "$OUT" '"status": "committed"' "anchor flow committed"
+assert_file_exists "$ANCHOR_OUT" "anchor capture file written"
+assert_eq "ANCHOR_OK" "$(cat "$ANCHOR_OUT" 2>/dev/null)" "agy directive injects absolute worktree anchor (Your ABSOLUTE working directory is: <wt>)"
+
 finalize_test

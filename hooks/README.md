@@ -108,6 +108,7 @@ hooks/
   test-runner.js           # Tier B (opt-in)
   design-quality.js        # Tier B (opt-in)
   mcp-health.js            # Tier B (opt-in)
+  version-drift-check.js   # Tier B (opt-in) — dev-clone behind-upstream advisory (SessionStart)
 ```
 
 ## Exit Code Convention
@@ -198,6 +199,7 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 | test-runner | PostToolUse | Write\|Edit | Runs sibling vitest/jest test. Timeout: 60s |
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap) |
+| version-drift-check | SessionStart | startup\|clear\|compact | Dev mode only: warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent for release/non-git installs |
 
 > The three PreToolUse blockers + `session-summary` were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
 

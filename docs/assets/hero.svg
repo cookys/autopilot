@@ -108,7 +108,7 @@
         <rect width="118" height="36" rx="18" fill="#141b2e" stroke="#6B8E6B" stroke-opacity="0.55"/>
         <rect width="118" height="36" rx="18" fill="url(#chipSheen)" opacity="0.35"/>
         <circle cx="20" cy="18" r="4.5" fill="#6B8E6B"/>
-        <text x="34" y="23" class="chip-text" fill="#e6ebf5">20 hooks</text>
+        <text x="34" y="23" class="chip-text" fill="#e6ebf5">21 hooks</text>
       </g>
       <g transform="translate(492 0)">
         <rect width="168" height="36" rx="18" fill="#141b2e" stroke="#E8A838" stroke-opacity="0.58"/>

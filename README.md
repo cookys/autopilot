@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.16-E8A838?style=flat-square" alt="v2.25.16">
+  <img src="https://img.shields.io/badge/version-2.25.14-E8A838?style=flat-square" alt="v2.25.14">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-21-6B8E6B?style=flat-square" alt="21 Hooks">
@@ -42,7 +42,7 @@ Claude Code is great at writing code. Autopilot makes it great at **running the 
 - **Closes the loop** — finishes cleanly, archives the project, and captures the lessons for next time.
 - **Adapts to your repo** — drop a markdown file in `.claude/` and the same skills speak your project's build commands, conventions, and gotchas.
 
-It's a single Claude Code plugin — **23 skills, 3 methodology agents, 21 hooks, zero dependencies**. It works on its own, and plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It's a single Claude Code plugin — **23 skills, 3 methodology agents, 21 hooks, zero dependencies**. It works fully on its own — the standalone core of cookys's assumed **autopilot + codeforge + mnemos** ecosystem — and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > New here? This page is the 5-minute tour. Everything deeper lives in **[Learn More](#learn-more)**.
 

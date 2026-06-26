@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.16-E8A838?style=flat-square" alt="v2.25.16">
+  <img src="https://img.shields.io/badge/version-2.25.14-E8A838?style=flat-square" alt="v2.25.14">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-21-6B8E6B?style=flat-square" alt="21 Hooks">
@@ -42,7 +42,7 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 - **收尾閉環** —— 乾淨收工、歸檔專案、把教訓記下來供下次使用。
 - **適應你的 repo** —— 在 `.claude/` 放一個 markdown 檔，同一批 skill 就會講你專案的 build 指令、慣例與坑。
 
-它是單一 Claude Code plugin —— **23 個 skill、3 個方法論 agent、21 個 hook、零相依**。可獨立運作，也能與 [`superpowers`](docs/coexistence.md) plugin 並存。
+它是單一 Claude Code plugin —— **23 個 skill、3 個方法論 agent、21 個 hook、零相依**。可完全獨立運作 —— 是 Cookys 假定的 **autopilot + codeforge + mnemos** 生態系的獨立核心 —— 若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 第一次來？這頁是 5 分鐘導覽。更深的內容都在 **[Learn More](#learn-more)**。
 

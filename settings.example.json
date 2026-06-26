@@ -11,6 +11,18 @@
 
   "//opt-in-hooks": "Copy individual hook entries below into your settings.json hooks section to enable them",
   "hooks-opt-in-examples": {
+    "SessionStart": [
+      {
+        "//": "version-drift-check: in dev mode, warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent for release/marketplace users.",
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/version-drift-check.js"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "//": "branch-protection: hard-blocks direct commits / force-push on protected branches (autopilot.protectedBranches, default main|master)",

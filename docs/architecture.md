@@ -24,7 +24,7 @@ Claude Code on its own — even with `superpowers` if you've installed it — le
 **Why a plugin, not copy-paste skills?**
 Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
 
-**Why 23 skills + 20 hooks?**
+**Why 23 skills + 21 hooks?**
 v2.0 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with `superpowers` skills, on the assumption that `superpowers` was always installed. v2.7.0 restores them as standalone fallbacks (with explicit `## Coexistence with Superpowers` sections in their bodies explaining the relationship) so autopilot works without `superpowers`. When `superpowers` IS installed, `.claude/dispatch-config.md` chains let orchestrators prefer the superpowers equivalent for runtime delegation; the autopilot skill stays in the catalog as the standalone fallback. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
 
 **Why `!`command`` injection, not config files?**

@@ -63,9 +63,20 @@ Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-
 
 ---
 
-## Known Limitation
+## Updating
 
-Claude Code plugins are **pinned to a specific commit** at install time. `/plugin update` may not detect new versions. To get the latest:
+**First pick your path** — the right method depends on whether you keep a local clone:
+
+| You have… | Update with | Notes |
+|-----------|-------------|-------|
+| **a local clone** (dev mode, [below](#development)) | `git pull --ff-only` (shell), then `/reload-plugins` (Claude Code) | **Recommended for tracking latest** — no reinstall, pulls apply instantly |
+| **release / marketplace only** (no clone) | clean reinstall ([below](#release--marketplace-reinstall-no-clone)) | `/plugin update` may not detect new versions |
+
+> **Why not just `/plugin update`?** Claude Code pins a plugin to its install-time commit, and `/plugin update` often does **not** detect new versions ([anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462)). Dev mode sidesteps this entirely: your clone *is* the plugin, so `git pull --ff-only` (then `/reload-plugins` in Claude Code) is the whole update. If you want to follow autopilot closely, set up [dev mode](#development) once and updating becomes a one-liner.
+
+### Release / marketplace reinstall (no clone)
+
+Until #31462 is fixed, the reliable way to pull a new release without a clone is a clean reinstall:
 
 ```bash
 /plugin uninstall autopilot@autopilot
@@ -74,15 +85,18 @@ Claude Code plugins are **pinned to a specific commit** at install time. `/plugi
 /plugin install autopilot@autopilot
 ```
 
-See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462) for details.
+### Dev-mode update (recommended for latest)
 
----
-
-## Update (marketplace users)
+After the one-time [dev-mode setup](#development):
 
 ```bash
-/plugin update autopilot@autopilot
+cd ~/projects/autopilot && git pull --ff-only   # shell; then run /reload-plugins in Claude Code
+# or: ./scripts/dev-update.sh                    # pulls + prints the /reload-plugins reminder
 ```
+
+(`/reload-plugins` is a Claude Code slash command, not a shell command — run it in the Claude session after the pull.)
+
+Enable the opt-in `version-drift-check` hook (`settings.example.json` → `SessionStart`) to get a one-line nudge at session start when your clone has fallen behind its git upstream.
 
 ---
 
@@ -103,7 +117,7 @@ cd ~/projects/autopilot
 
 Dev mode symlinks the plugin cache to your local clone. Edits to `skills/` take effect immediately after `/reload-plugins` — no reinstall needed.
 
-Push/pull works normally across machines. Each machine runs step 1 once, then `dev-setup.sh` once.
+Push/pull works normally across machines. Each machine runs step 1 once, then `dev-setup.sh` once. To update later: `git pull --ff-only` then `/reload-plugins` (or `./scripts/dev-update.sh`) — see [Updating](#updating).
 
 > **Note:** Dev mode sets `version: "dev"` in the plugin registry. To revert to the release version, run `/plugin update autopilot@autopilot`.
 

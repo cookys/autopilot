@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "2.25.15",
+  "version": "2.25.16",
   "description": "Development autopilot — 23 lifecycle skills + 3 methodology agents + 21 hooks (8 default-on, 13 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
   "author": {
     "name": "TWGS Team"

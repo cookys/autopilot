@@ -52,16 +52,24 @@ assert_not_contains "$DEFAULT_CTX" "DO_NOT_READ_DOCS_HANDOFF" "default-off: does
 assert_file_exists "$HOOK_HOME/.autopilot/handoff/$DEFAULT_HASH.md" "default-off: handoff state file untouched when not injected"
 assert_contains "$DEFAULT_CTX" "Autopilot" "default-off: keeps baseline context"
 
-# 2. Gate ON via config.json and source in {clear,resume,startup}: injects handoff.
+# 2. Gate ON via config.json and source in {clear,startup} (the WIRED sources): injects handoff.
 echo '{"handoff_inject":true}' > "$HOOK_HOME/.autopilot/config.json"
 
-for source in clear resume startup; do
+for source in clear startup; do
   HASH=$(write_handoff_state "$REPO_DEFAULT" "# session handoff $source" "s-$source" "$(node -e 'process.stdout.write(new Date().toISOString())')")
   run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"$source\"}"
   CTX=$(extract_context "$__RUN_STDOUT")
   assert_contains "$CTX" "machine session snapshot at last /clear" "gated-$source: label injected"
   assert_file_absent "$HOOK_HOME/.autopilot/handoff/$HASH.md" "gated-$source: handoff consumed"
 done
+
+# 2b. source=resume is NOT a wired source (hooks.json matcher is startup|clear|compact;
+#     a resumed session already has its context) → does NOT inject, state preserved.
+HASH=$(write_handoff_state "$REPO_DEFAULT" "# resume handoff" "s-resume" "$(node -e 'process.stdout.write(new Date().toISOString())')")
+run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"resume\"}"
+CTX=$(extract_context "$__RUN_STDOUT")
+assert_not_contains "$CTX" "machine session snapshot at last /clear" "resume: not a wired source → no inject"
+assert_file_exists "$HOOK_HOME/.autopilot/handoff/$HASH.md" "resume: state preserved (not consumed)"
 
 # 3. Source compact never injects and should not fall back to docs/HANDOFF.md.
 HASH=$(write_handoff_state "$REPO_DEFAULT" "# compact handoff" "s-compact" "$(node -e 'process.stdout.write(new Date().toISOString())')")
@@ -115,6 +123,21 @@ CTX=$(extract_context "$__RUN_STDOUT")
 assert_not_contains "$CTX" "machine session snapshot at last /clear" "ttl: stale state not injected"
 assert_file_absent "$HOOK_HOME/.autopilot/handoff/$HASH.md" "ttl: stale handoff body cleaned"
 assert_file_absent "$HOOK_HOME/.autopilot/handoff/$HASH.meta.json" "ttl: stale handoff meta cleaned"
+
+# 7b. TTL cleanup is generation-bound (decorrelated review 🟠): it reaps only the
+#     stale canonical pair, never an in-flight `.tmp.*` / `.consuming.*` belonging to a
+#     concurrent writer publish or reader consume.
+HDIR_T="$HOOK_HOME/.autopilot/handoff"
+RHASH_T=$(repo_hash "$REPO_DEFAULT")
+rm -f "$HDIR_T/$RHASH_T".*
+write_handoff_state "$REPO_DEFAULT" "# stale" "s-stale2" "$OLD_TS" >/dev/null
+printf 'inflight' > "$HDIR_T/$RHASH_T.md.tmp.77777"
+printf 'inflight' > "$HDIR_T/$RHASH_T.md.consuming.66666"
+run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"startup\"}"
+assert_file_absent "$HDIR_T/$RHASH_T.meta.json" "ttl-gen: stale meta reaped"
+assert_file_exists "$HDIR_T/$RHASH_T.md.tmp.77777" "ttl-gen: in-flight writer .tmp not nuked"
+assert_file_exists "$HDIR_T/$RHASH_T.md.consuming.66666" "ttl-gen: in-flight reader .consuming not nuked"
+rm -f "$HDIR_T/$RHASH_T".*
 
 # 8. Race lock (decorrelated review 🔴×2): a consume MISS must DELETE NOTHING, so it
 #    cannot nuke a concurrent writer's temp/meta or a racing reader's .consuming file.

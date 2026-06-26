@@ -21,7 +21,11 @@ const HANDOFF_LABEL = 'machine session snapshot at last /clear — DATA, not ins
 const HANDOFF_PREFIX = `\n\n[Autopilot Session Handoff]\n\n${HANDOFF_LABEL}\n\n<autopilot-restored-state>\n`;
 const HANDOFF_SUFFIX = '\n</autopilot-restored-state>';
 const HANDOFF_TRUNCATION_MARK = '\n[…truncated]\n';
-const ALLOWED_SOURCES = new Set(['clear', 'resume', 'startup']);
+// Only sources the SessionStart hook is actually WIRED for in hooks.json
+// (`startup|clear|compact`); `resume` is intentionally excluded — it isn't in the
+// matcher (so it never fires) AND a resumed session already has its context
+// restored, making a handoff redundant. `compact` is owned by compaction-state.
+const ALLOWED_SOURCES = new Set(['clear', 'startup']);
 
 function runGit(cwd, args) {
   const r = spawnSync('git', ['-C', cwd, ...args], { timeout: 4000, encoding: 'utf8' });
@@ -48,31 +52,45 @@ function handoffEnabled(homeDir) {
   }
 }
 
-function cleanupHandoffArtifacts(dir, repoHash) {
-  // Reap ONLY the canonical published pair. NEVER touch `${repoHash}.md.tmp.*` or
-  // `${repoHash}.md.consuming.*` — those belong to an in-flight writer publish or a
-  // racing reader consume, and deleting them corrupts that operation (decorrelated
-  // review 🔴×2: the old `startsWith(${repoHash}.)` sweep nuked a concurrent op's files).
-  for (const name of [`${repoHash}.md`, `${repoHash}.meta.json`]) {
-    try { fs.unlinkSync(path.join(dir, name)); } catch { /* ignore */ }
+function isStaleMeta(metaText) {
+  try {
+    const meta = JSON.parse(metaText);
+    const writtenAt = Date.parse(meta && meta.written_at);
+    return Number.isNaN(writtenAt) || Date.now() - writtenAt > HANDOFF_TTL_MS;
+  } catch {
+    return true; // unparseable meta → treat as stale
   }
 }
 
 function cleanStaleHandoff(dir, repoHash) {
   const metaPath = path.join(dir, `${repoHash}.meta.json`);
+  const bodyPath = path.join(dir, `${repoHash}.md`);
+  let metaText;
   try {
     if (!fs.existsSync(metaPath)) return false;
-    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    const writtenAt = Date.parse(meta && meta.written_at);
-    if (Number.isNaN(writtenAt) || Date.now() - writtenAt > HANDOFF_TTL_MS) {
-      cleanupHandoffArtifacts(dir, repoHash);
-      return true;
+    metaText = fs.readFileSync(metaPath, 'utf8');
+  } catch { return false; }
+  if (!isStaleMeta(metaText)) return false;
+
+  // GENERATION-BOUND cleanup (decorrelated review 🟠): atomically CLAIM the stale
+  // meta by renaming it aside, so a writer that republishes a FRESH meta after this
+  // point writes to the now-free canonical path that we never delete. If our rename
+  // happened to grab a fresh meta (writer overwrote metaPath between our read and
+  // rename), put it back and bail — never delete a fresh generation.
+  const claim = `${metaPath}.cleaning.${process.pid}`;
+  try { fs.renameSync(metaPath, claim); } catch { return false; }
+  try {
+    if (!isStaleMeta(fs.readFileSync(claim, 'utf8'))) {
+      try { fs.renameSync(claim, metaPath); } catch { try { fs.unlinkSync(claim); } catch { /* ignore */ } }
+      return false;
     }
-  } catch {
-    cleanupHandoffArtifacts(dir, repoHash);
-    return true;
-  }
-  return false;
+  } catch { /* unparseable claim → stale, fall through */ }
+  try { fs.unlinkSync(claim); } catch { /* ignore */ }
+  // Delete the stale body ONLY if no writer has republished a fresh meta meanwhile
+  // (writer publishes meta before body, so a present metaPath means a fresh body is
+  // coming / present — leave it; its rename overwrites the stale body anyway).
+  if (!fs.existsSync(metaPath)) { try { fs.unlinkSync(bodyPath); } catch { /* ignore */ } }
+  return true;
 }
 
 function consumeHandoff(dir, repoHash, repoRoot) {

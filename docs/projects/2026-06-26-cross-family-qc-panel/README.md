@@ -53,10 +53,10 @@
 | Phase | Status | Commit |
 |-------|--------|--------|
 | P0 | ✅ done (anchor fix + test 43-assert + multi-file & concurrency verified) | b456163 |
-| P1 | ✅ done (qc_panel schema + resolver + 24-assert test + doc corrections) | (this commit) |
-| P2 | in_progress | |
-| P3 | pending | |
-| P4 | pending | |
+| P1 | ✅ done (qc_panel schema + resolver + 24-assert test + doc corrections) | d274aa3 |
+| P2 | ✅ done (dispatch-review.sh + 21-assert test + real-agy e2e) | 1950269 |
+| P3 | ✅ done (union-on-verified-critical in code-review.md + level-front-door wiring + reviewer.md pointer) | (this commit) |
+| P4 | in_progress | |
 
 ## Decisions
 

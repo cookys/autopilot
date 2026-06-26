@@ -242,6 +242,23 @@ broken until proven, per blind-dispatch clause 1
 every real issue before integration**. Scale reviewer count to blast radius (3 for
 a small diff; 5+ for a large/risky one).
 
+**Disjoint-family panel (when `review-loop-config.md` sets a `qc_panel`).** By
+default the ≥3 reviewers are Claude subagents (homogeneous — diverse *lenses*, one
+*family*). For `/l5` (heterogeneous implementer) that is a decorrelation hole: if
+the implementer is OpenAI (`gpt-5.3-codex-spark`), a same-family reviewer shares its
+blind spots. So resolve the panel from `scripts/resolve-review-loop.sh` (`qc_panel`)
+and dispatch a **disjoint-family** set — Claude/Opus via the native Agent tool,
+non-Claude vendors via **`scripts/dispatch-review.sh --runner codex|agy`** (read-only;
+the agy/Gemini track is verified — agy's write bug is implementer-only). The panel
+must span **≥1 family different from the implementer's** (the resolver warns on
+overlap). Synthesis is **`union-on-verified-critical`**: any single panelist's
+**verified** Critical blocks the gate — **never a majority vote** (a blind-spot catch
+is seen by only one track; majority would suppress exactly what decorrelation surfaces);
+"verified" = reproduce via the `independent_harness` (execution) for executable claims,
+else a depth-0 second-look. A panelist returning `no_verdict` (empty/stdout-drop) is
+**fail-closed** — treated as "did not clear", never as a pass. Full rule:
+[`skills/quality-pipeline/references/code-review.md`](../../quality-pipeline/references/code-review.md) § "Panel aggregation".
+
 **The depth-0 qc is DISPATCHED, never the CEO eyeballing the diff inline.** A
 single self-read from the CEO's own context is itself only a first-pass and does
 **not** clear the gate — the value is *independent adversarial coverage*, not a

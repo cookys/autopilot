@@ -177,6 +177,15 @@ Mixed task-driven and scope-creep changes inflate review time, break `git blame`
 
 This **generalizes the `skills/doc-sync` ethos** to the reviewer/audit output contract: doc-sync already holds that its non-deterministic LLM sweep is bounded — *"a 'clean' sweep only means this sample found nothing, never that nothing exists"* — and never lets a clean sample masquerade as proof of absence. The same honesty applies to any review or audit that bounds its own coverage: name the bound, don't let it pass silently.
 
+## Panel aggregation (multi-reviewer / disjoint-family qc)
+
+When the authoritative qc is a **panel** of reviewers (the depth-0 `≥3` fan-out, or a `qc_panel` of disjoint vendor families — see [`skills/ceo-agent/references/level-front-door.md`](../../ceo-agent/references/level-front-door.md) § "qc@depth-0"), the verdicts combine by **`union-on-verified-critical`**, NOT majority vote:
+
+- **Any single panelist's _verified_ Critical/Major blocks the gate.** A correlated-blind-spot catch is, by definition, seen by only ONE reviewer (often the cross-family one). A **majority vote would suppress exactly the finding the panel exists to surface** — so majority is **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → falls back to `union-on-verified-critical`).
+- **"Verified" gates the union, not raw count.** Before a single-track finding blocks, reproduce it: an **executable** claim goes through the `independent_harness` (run the case — execution is the decorrelation ceiling, zero shared LLM lineage); a non-executable claim (design/spec-fit) gets a depth-0 second-look. This keeps one noisy reviewer from false-blocking while never letting a real single-track Critical through.
+- **A panelist that returns no verdict is FAIL-CLOSED.** An empty / unparseable reviewer result (e.g. `dispatch-review.sh` `status:no_verdict` from an agy stdout-drop) counts as **"did not clear"**, never as a silent pass. Re-dispatch or treat as a blocking unknown.
+- **Decorrelate by _family_, not just by lens.** N reviewers from one vendor share failure modes; the panel must span **≥1 family different from the implementer's** (`resolve-review-loop.sh` warns on overlap). Grounding: PoLL (a panel of disjoint families beats a single large judge AND cuts intra-model bias) + self-preference/familiarity bias in same-family judges.
+
 ## 4-Tier Severity
 
 | Severity | Definition | Action |

@@ -88,4 +88,3 @@ This is a Claude Code native mechanism; autopilot doesn't need a config flag for
 ### Migration note (v2.6.0 → v2.7.0)
 
 If you upgrade from v2.6.0 and previously **removed** `debug`, `test-strategy`, `team`, or `profiling` entries from your `CLAUDE.md` skill routing tables (expecting these skills to remain absent), be aware they're back as fallback skills in v2.7.0 and may now trigger on the corresponding keywords. To suppress: add them to `.claude/settings.json`'s `disabledSkills`.
-

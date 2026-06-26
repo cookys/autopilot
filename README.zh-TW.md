@@ -112,7 +112,7 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 
 ### 其他平台
 
-Autopilot 可攜：**OpenCode**、**Codex**、**Antigravity（`agy`）** 透過 `.agents/skills/` 發現 skill，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
+Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 skill，**Antigravity（`agy`）** 則將 repo 作為 Claude Code-source plugin 匯入，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
 
 ## Learn More
 

@@ -133,4 +133,3 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 | Strategic choice (should we? how big? what first?) | `think-tank` — internal multi-role debate |
 | User wants outcome, not involvement | `ceo-agent` — autonomous execution |
 | User wants to participate | `dev-flow` — guided workflow with checkpoints |
-

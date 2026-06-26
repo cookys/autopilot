@@ -108,4 +108,3 @@ Add to your project's `.claude/settings.json` so team members get prompted to in
   }
 }
 ```
-

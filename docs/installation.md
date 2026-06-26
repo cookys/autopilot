@@ -133,4 +133,3 @@ rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<old-version>
 | `develop` | Next version development | Next major/minor (e.g. `2.26.0`) |
 
 When developing: checkout `develop`, symlink points to it, `/reload-plugins` picks up changes. Remember to bump `plugin.json` version before tagging a release.
-

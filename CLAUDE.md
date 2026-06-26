@@ -6,7 +6,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone-capable lifecycle orchestration plugin for Claude Code. 23 skills, 3 methodology agents, 20 hooks (8 default-on, 12 opt-in, 0 disabled). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`README.md`](README.md) for the full coexistence model.
+Standalone-capable lifecycle orchestration plugin for Claude Code. 23 skills, 3 methodology agents, 20 hooks (8 default-on, 12 opt-in, 0 disabled). Works alone; delegates to `superpowers` when installed via `.claude/dispatch-config.md` chains. See [`docs/coexistence.md`](docs/coexistence.md) for the full coexistence model.
 
 ## Scripts inventory (prefer over LLM judgment)
 

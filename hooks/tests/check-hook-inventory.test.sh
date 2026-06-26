@@ -73,7 +73,17 @@ assert_eq "1" "$EXIT" "tier-header count drift exit 1"
 assert_contains "$OUT" "hooks/README.md" "tier-header drift names the file"
 restore "hooks/README.md"
 
-# 7. post-restore clean re-check → exit 0 (restores held)
+# 7. TIER-B MEMBERSHIP drift (v2.25.12 — symmetric to case 4 for the opt-in tier):
+#    rename an opt-in hook in hooks/README.md's Tier-B block. Counts stay correct;
+#    only the Tier-B membership check catches the now-missing opt-in name.
+sed -i 's/cost-tracker/ghost-hook/g' "$SBX/hooks/README.md"
+OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "tier-B membership drift exit 1"
+assert_contains "$OUT" "cost-tracker" "tier-B membership drift names the missing opt-in hook"
+assert_contains "$OUT" "Tier-B" "tier-B membership drift identifies the Tier-B placement"
+restore "hooks/README.md"
+
+# 8. post-restore clean re-check → exit 0 (restores held)
 node "$SCRIPT" --check >/dev/null 2>&1
 assert_eq "0" "$?" "post-restore clean --check exit 0"
 

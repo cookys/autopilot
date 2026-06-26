@@ -119,7 +119,7 @@ hooks/
 
 ## Tier A — Default-On (8 hooks)
 
-Registered in `hooks.json`. Active for all autopilot users.
+Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project.
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|

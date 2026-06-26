@@ -112,7 +112,7 @@ Without Autopilot, Claude starts grep-ing the codebase immediately — no plan, 
 
 ### Other platforms
 
-Autopilot is portable: **OpenCode**, **Codex**, and **Antigravity (`agy`)** discover the skills via `.agents/skills/`, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
+Autopilot is portable: **OpenCode** and **Codex** discover the skills via `.agents/skills/`, **Antigravity (`agy`)** imports the repo as a Claude Code-source plugin, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
 
 ## Learn More
 

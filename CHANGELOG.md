@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.11 — trust-tiered review policy: deterministic review-risk + cross-family enforce
+
+**Headline**: Implements the buildable core of the trust-tiered review-policy design (`docs/plans/2026-06-26-trust-tiered-review-policy.md`, converged through a 3-round gpt-5.5 xhigh review loop). The industry/research sweep found the real lever is **decorrelated execution verification**, the cross-family panel is secondary (1→2 families is the win, more is waste), and **review depth should key on MEASURED risk, not who implemented**. `resolve-review-loop.sh` now derives a deterministic `implementation_review_risk` and emits the policy the depth-0 loop enforces; an opt-in `--enforce` hard gate blocks a high-risk change whose required cross-family decorrelation is unsatisfied. **Built via `/l5` dogfood**: codex `gpt-5.3-codex-spark` implemented it, verified by an independent depth-0 acceptance harness + a 3-round gpt-5.5 decorrelated review loop (caught a metadata-not-enforced hole + a high-risk-empty-panel hole — both fixed). Scope: hardens honest-but-weak implementers only, NOT malicious-proof.
+
+### Added
+- `resolve-review-loop.sh` risk-tiered fields: deterministic `review_risk` (low/high) from `--source-trust`/`--diff-lines`/`--protected-path`/`--oracle-available`/`--security-surface` (source-trust is ONE input, not the key); emits `required_review_families`, `l1_required`, `cross_family_required`, `cross_family_satisfied`. `family_id` fail-closed: an unknown-family panel member never satisfies cross-family. Cross-family overlap escalates WARNING(low)→ERROR(high).
+- `resolve-review-loop.sh --enforce`: opt-in hard gate (exit 3, JSON still emitted) when a high-risk change's required cross-family decorrelation is unsatisfied (incl. an empty panel at high risk). Default stays exit-0 data mode (resolver reports, caller enforces — same as resolve-doa/resolve-qc-gate). +8 resolver assertions (53 total).
+
+### Changed
+- `code-review.md` Panel aggregation: terminal verdict states (`verified` / `unverified-nonblocking` / `unverified-blocking` — `warn`/`off` may suppress blocking but never relabel unverified as verified) + cross-family fail-closed-on-unknown + `l1_required` mandatory at high risk. `review-loop-config.md` documents the risk inputs/fields/`--enforce`. `level-front-door.md` qc@depth-0 adds the dispatch-manifest provenance precondition (missing ⇒ fail-closed strictest).
+
 ## v2.25.10 — quality-pipeline routes hard/flaky test failures to test-strategy
 
 **Headline**: Closes the one genuine missing routing edge found by the 2026-06-26 methodology-completeness inventory: `quality-pipeline`'s test step classified failures (`verify-preexisting.sh`) but never tapped `test-strategy`'s failure-investigation methodology. Now, an INTRODUCED failure that is clustered (≥3), flaky/intermittent, or not-obvious-from-the-diff routes to `autopilot:test-strategy` (funnel / baseline / regression scoping) before blind patching; a single obvious failure still fixes directly. (The inventory confirmed no orphan skills and that entry-point skills are correctly standalone — this was the only cross-cutting edge worth wiring; the `team`→`dev-flow` "gap" was deliberately NOT wired, per the recorded thin-slice parallelization non-goal.)

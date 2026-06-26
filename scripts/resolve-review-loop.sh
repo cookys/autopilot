@@ -298,7 +298,11 @@ if [[ "$AUTO_DOMAIN" -eq 1 && "$DOMAIN_SOURCE" != "explicit" ]]; then
   AUTO_DIFF_BYTES=""
   if AUTO_DIFF_BYTES="$(probe_diff_bytes "$AUTO_RANGE")"; then
     AUTO_DIFF_BYTES="${AUTO_DIFF_BYTES//$'\n'/}"
-    AUTO_OUT="$(bash "$SCRIPT_DIR/probe-diff-domain.sh" "$AUTO_RANGE" 2>/dev/null)"
+    # `|| AUTO_OUT=""` is defensive: this script has no `set -e` today (a probe
+    # failure already falls through to mixed/none via the -n guard below), but the
+    # explicit reset future-proofs against a later `set -e` killing the resolver
+    # instead of preserving its exit code (round-3 reviewer 🟠).
+    AUTO_OUT="$(bash "$SCRIPT_DIR/probe-diff-domain.sh" "$AUTO_RANGE" 2>/dev/null)" || AUTO_OUT=""
     if [[ "$AUTO_DIFF_BYTES" -gt 0 && -n "$AUTO_OUT" ]]; then
       AUTO_PARSED="$(probe_field_str "$AUTO_OUT" work_domain)"
       AUTO_WEIGHT_CLASSIFIED="$(probe_field_num "$AUTO_OUT" weight_classified)"

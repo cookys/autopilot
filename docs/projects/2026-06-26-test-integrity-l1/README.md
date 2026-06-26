@@ -1,6 +1,6 @@
 # Test-Integrity Gate — L1 (executed-set invariance + real override)
 
-> **Status: NOT STARTED — this is a HANDOFF doc.** A fresh session should read this top-to-bottom, then run `dev-flow` (L-size) to start. P1a (L0) already SHIPPED in v2.25.6.
+> **Status: ✅ SHIPPED & MERGED — v2.25.7 (`a6b75bb`).** L1 executed-set invariance is live. The override block-mode HONORING stayed deferred (an unlock was later attempted in v2.25.8 and REVERTED as unsafe). **For the current resume point + what's next, read [`HANDOFF.md`](HANDOFF.md)** (this README below is the original pre-build handoff, kept for history).
 > Created: 2026-06-26 · Owner: cookys
 
 ## TL;DR for the next session

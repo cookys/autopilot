@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _(none)_ | | | |
+| 2026-06-26 | [trust-tiered-review-policy](2026-06-26-trust-tiered-review-policy/README.md) — deterministic `review_risk` scoring + cross-family `--enforce` gate in `resolve-review-loop.sh` + risk-tiered contracts (built via /l5 dogfood: codex impl + 3-round gpt-5.5 review loop) | v2.25.11 | feat/v2.25.11-trust-tiered-review-policy |
 
 ## 已完成 (Completed)
 

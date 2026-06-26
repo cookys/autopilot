@@ -7,6 +7,12 @@
 # Usage:
 #   scripts/resolve-review-loop.sh                 # emit resolved config JSON
 #   scripts/resolve-review-loop.sh --field reviewer_engine   # one raw field (for shell)
+#   Risk inputs (optional): --source-trust high|low --diff-lines N --protected-path 0|1
+#     --oracle-available 0|1 --security-surface 0|1  (drive deterministic review_risk)
+#   --enforce  # OPT-IN hard gate: exit 3 (still emits JSON/field) when the policy says BLOCK
+#              # — a high-risk change whose required cross-family decorrelation is unsatisfied.
+#              # Default (no --enforce) stays exit-0 data mode like resolve-doa/resolve-qc-gate;
+#              # the resolver REPORTS, the caller (depth-0 loop / pre-push) ENFORCES.
 #
 # Order of precedence (first existing file wins):
 #   1. $REVIEW_LOOP_CONFIG_OVERRIDE
@@ -47,9 +53,21 @@ DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
 DEF_QC_AGG="union-on-verified-critical"
 
 FIELD=""
+SOURCE_TRUST=""
+DIFF_LINES=0
+PROTECTED_PATH=0
+ORACLE_AVAILABLE=1
+SECURITY_SURFACE=0
+ENFORCE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --field) FIELD="${2:-}"; shift 2 ;;
+    --source-trust) SOURCE_TRUST="${2:-}"; shift 2 ;;
+    --diff-lines) DIFF_LINES="${2:-}"; shift 2 ;;
+    --protected-path) PROTECTED_PATH="${2:-}"; shift 2 ;;
+    --oracle-available) ORACLE_AVAILABLE="${2:-}"; shift 2 ;;
+    --security-surface) SECURITY_SURFACE="${2:-}"; shift 2 ;;
+    --enforce) ENFORCE=1; shift ;;
     -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -131,6 +149,14 @@ case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
 # (it would suppress a single-track blind-spot catch — the whole point of a panel). Any
 # unknown value (including "majority") falls back to the safe union default.
 case "$QC_AGG" in union-on-verified-critical|unanimous-ship) ;; *) QC_AGG="$DEF_QC_AGG" ;; esac
+# Family family and CLI-derived review-risk controls:
+case "$DIFF_LINES" in
+  ''|*[!0-9]*) DIFF_LINES=0 ;;
+  *) : ;;
+esac
+case "$PROTECTED_PATH" in 0|1) ;; *) PROTECTED_PATH=0 ;; esac
+case "$ORACLE_AVAILABLE" in 0|1) ;; *) ORACLE_AVAILABLE=1 ;; esac
+case "$SECURITY_SURFACE" in 0|1) ;; *) SECURITY_SURFACE=0 ;; esac
 
 # Decorrelation overlap warning (ADVISORY, stderr — never alters output / exit code):
 # if NO panel member is a different family from the implementer, the panel can't catch the
@@ -143,8 +169,61 @@ for _m in "${QC_PANEL[@]}"; do
   # family under an unrecognized codename) — else it would mask a real overlap.
   [[ "$_mf" != "unknown" && "$_mf" != "$IMPL_FAMILY" ]] && { _diff_family=1; break; }
 done
-if [[ ${#QC_PANEL[@]} -gt 0 && $_diff_family -eq 0 ]]; then
-  printf 'resolve-review-loop: WARNING — qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$IMPL_FAMILY" >&2
+
+# Derive source trust from implementer family when not explicitly set:
+# trusted vendors are OpenAI/Anthropic/Google; unknown or custom stacks default to low trust.
+case "$SOURCE_TRUST" in
+  high|low) ;;
+  *)
+    case "$IMPL_FAMILY" in
+      openai|anthropic|google) SOURCE_TRUST="high" ;;
+      *) SOURCE_TRUST="low" ;;
+    esac
+    ;;
+esac
+
+# Deterministic risk computation:
+# high iff source trust is low, diff lines > 150, protected-path, security-surface, or oracle disabled.
+if [[ "$SOURCE_TRUST" == "low" || "$DIFF_LINES" -gt 150 || "$PROTECTED_PATH" -eq 1 || "$SECURITY_SURFACE" -eq 1 || "$ORACLE_AVAILABLE" -eq 0 ]]; then
+  REVIEW_RISK="high"
+  REQUIRED_REVIEW_FAMILIES=2
+  L1_REQUIRED="true"
+else
+  REVIEW_RISK="low"
+  REQUIRED_REVIEW_FAMILIES=1
+  L1_REQUIRED="false"
+fi
+
+# Cross-family review is required whenever L2 review runs (a non-empty panel) AND always at
+# high risk — an EMPTY panel at high risk is itself a violation (no reviewers at all, let alone
+# cross-family), so it must be required+unsatisfied so --enforce blocks it (gpt-5.5 round-2).
+if [[ ${#QC_PANEL[@]} -gt 0 || "$REVIEW_RISK" == "high" ]]; then
+  CROSS_FAMILY_REQUIRED="true"
+else
+  CROSS_FAMILY_REQUIRED="false"
+fi
+if [[ "$_diff_family" -eq 1 ]]; then
+  CROSS_FAMILY_SATISFIED="true"
+else
+  CROSS_FAMILY_SATISFIED="false"
+fi
+
+if [[ "$CROSS_FAMILY_REQUIRED" == "true" && "$CROSS_FAMILY_SATISFIED" == "false" ]]; then
+  _cross_severity="WARNING"
+  [[ "$REVIEW_RISK" == "high" ]] && _cross_severity="ERROR"
+  printf 'resolve-review-loop: %s — cross-family: qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$_cross_severity" "$IMPL_FAMILY" >&2
+fi
+
+# --enforce (opt-in hard gate; default emits data exit-0 like the resolve-* siblings).
+# The resolver normally REPORTS and the caller (depth-0 loop / pre-push) ENFORCES. With
+# --enforce, a caller can use the resolver itself AS the gate: exit 3 when the policy says
+# BLOCK — i.e. a high-risk change whose required cross-family decorrelation is unsatisfied
+# (the gpt-5.5-flagged hole: high-risk + cross_family_required + !satisfied must not pass).
+# JSON / --field is still emitted so the gate also gets the data; only the exit code differs.
+ENFORCE_EXIT=0
+if [[ "$ENFORCE" == "1" && "$CROSS_FAMILY_REQUIRED" == "true" \
+      && "$CROSS_FAMILY_SATISFIED" == "false" && "$REVIEW_RISK" == "high" ]]; then
+  ENFORCE_EXIT=3
 fi
 
 if [[ -n "$FIELD" ]]; then
@@ -161,14 +240,21 @@ if [[ -n "$FIELD" ]]; then
     independent_harness) printf '%s\n' "$HARNESS" ;;
     qc_panel) printf '%s\n' "${QC_PANEL[*]}" ;;
     qc_panel_aggregation) printf '%s\n' "$QC_AGG" ;;
+    review_risk) printf '%s\n' "$REVIEW_RISK" ;;
+    required_review_families) printf '%s\n' "$REQUIRED_REVIEW_FAMILIES" ;;
+    l1_required) printf '%s\n' "$L1_REQUIRED" ;;
+    cross_family_required) printf '%s\n' "$CROSS_FAMILY_REQUIRED" ;;
+    cross_family_satisfied) printf '%s\n' "$CROSS_FAMILY_SATISFIED" ;;
     source) printf '%s\n' "$SOURCE" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
-  exit 0
+  exit "$ENFORCE_EXIT"
 fi
 
-printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "source": "%s" }\n' \
+printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "source": "%s" }\n' \
   "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
   "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
   "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
-  "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$SOURCE"
+  "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
+  "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$SOURCE"
+exit "$ENFORCE_EXIT"

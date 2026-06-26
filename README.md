@@ -1,10 +1,12 @@
-<h1 align="center">Autopilot</h1>
-
-<p align="center">
-  <strong>Standalone-capable lifecycle orchestration for Claude Code that coexists with Superpowers.</strong><br>
-  23 skills covering lifecycle management, strategic decisions, methodology, and quality gates.<br>
-  Works standalone; gracefully delegates tactical execution to Superpowers when installed.
-</p>
+<div align="center">
+  <table border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
+      <td width="24"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — standalone-capable lifecycle orchestration for Claude Code that coexists with Superpowers" height="180"></td>
+    </tr>
+  </table>
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
@@ -87,22 +89,12 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 `dev-flow` is the front door. It sizes the task and routes it — small things go straight through the gate, large things become a tracked project:
 
-```
- You: "Add WebSocket compression"
-    │
-    ▼
- dev-flow  ── sizes the task ──┐
-    │                          │
-    ├─ S (small) ─→ implement ─→ quality-pipeline ─→ commit
-    │                          │
-    └─ L (large) ─→ plan + project + branch
-            │        ├─ implement phase ─→ quality-pipeline (per phase)
-            │        ├─ needs research? ──→ survey
-            │        ├─ strategic call?  ──→ think-tank
-            │        └─ archive project + learn (capture lessons)
-            ▼
-        finish-flow  ── clean close, nothing skipped
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/flow.light.svg">
+    <img alt="A day with Autopilot: dev-flow sizes the task and routes it — small tasks go straight through the quality gate to commit; large tasks become a tracked project with a quality gate each phase, then finish-flow closes cleanly. Without Autopilot, the AI greps the codebase immediately — no plan, no phases, no quality gates." src="docs/assets/flow.svg" width="100%">
+  </picture>
+</p>
 
 Without Autopilot, Claude starts grep-ing the codebase immediately — no plan, no phases, no quality gates. With it, the discipline is automatic.
 

@@ -1,0 +1,376 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1000" width="100%" height="100%">
+  <defs>
+    <!-- Background Grid -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#1E293B" opacity="0.4" />
+    </pattern>
+
+    <!-- Markers for Arrowheads -->
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EF4444" />
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#3B82F6" />
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8B5CF6" />
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10B981" />
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#D97706" />
+    </marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#A855F7" />
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#14B8A6" />
+    </marker>
+
+    <!-- CSS Keyframe Animations -->
+    <style>
+      text {
+        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        user-select: none;
+      }
+      @keyframes dash-red { to { stroke-dashoffset: -30; } }
+      @keyframes dash-blue { to { stroke-dashoffset: -30; } }
+      @keyframes dash-purple { to { stroke-dashoffset: -30; } }
+      @keyframes dash-violet { to { stroke-dashoffset: -30; } }
+      @keyframes dash-teal { to { stroke-dashoffset: -30; } }
+
+      .flow-dots-red {
+        stroke: #FECACA;
+        stroke-width: 2.5;
+        stroke-dasharray: 6, 9;
+        animation: dash-red 1.2s linear infinite;
+      }
+      .flow-dots-blue {
+        stroke: #BFDBFE;
+        stroke-width: 2.5;
+        stroke-dasharray: 6, 9;
+        animation: dash-blue 1.2s linear infinite;
+      }
+      .flow-dots-purple {
+        stroke: #E9D5FF;
+        stroke-width: 2.5;
+        stroke-dasharray: 6, 9;
+        animation: dash-purple 1.2s linear infinite;
+      }
+      .flow-dots-violet {
+        stroke: #F5F3FF;
+        stroke-width: 2.5;
+        stroke-dasharray: 6, 9;
+        animation: dash-violet 1.2s linear infinite;
+      }
+      .flow-dots-teal {
+        stroke: #CCFBF1;
+        stroke-width: 2.5;
+        stroke-dasharray: 6, 9;
+        animation: dash-teal 1.2s linear infinite;
+      }
+
+      .line-bg-red { stroke: #EF4444; stroke-width: 2; opacity: 0.3; stroke-linecap: round; }
+      .line-bg-blue { stroke: #3B82F6; stroke-width: 2; opacity: 0.3; stroke-linecap: round; }
+      .line-bg-purple { stroke: #8B5CF6; stroke-width: 2; opacity: 0.3; stroke-linecap: round; }
+      .line-bg-violet { stroke: #A855F7; stroke-width: 2; opacity: 0.3; stroke-linecap: round; }
+      .line-bg-teal { stroke: #14B8A6; stroke-width: 2; opacity: 0.3; stroke-linecap: round; }
+      .line-bg-amber { stroke: #D97706; stroke-width: 2; opacity: 0.3; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <!-- Deep Slate Background -->
+  <rect width="1200" height="1000" fill="#0B0F19" />
+  <rect width="1200" height="1000" fill="url(#grid)" />
+
+  <!-- Diagram Title Banner -->
+  <g>
+    <rect x="425" y="15" width="350" height="46" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1.5" />
+    <text x="600" y="44" font-size="18" font-weight="bold" fill="#F8FAFC" text-anchor="middle">自主開發助手的一天：開發流程對比</text>
+  </g>
+
+  <!-- ==================== LEFT COLUMN: TRADITIONAL CHAOTIC MODE ==================== -->
+  <!-- Left Column Panel Container -->
+  <rect x="30" y="80" width="300" height="880" rx="16" fill="#1B1317" stroke="#3F1B24" stroke-width="1.5" />
+  
+  <!-- Left Panel Header Badge -->
+  <g>
+    <rect x="65" y="94" width="230" height="34" rx="6" fill="#2D171E" stroke="#EF4444" stroke-width="1.2" />
+    <text x="180" y="116" font-size="16" font-weight="bold" fill="#FCA5A5" text-anchor="middle">傳統智慧編碼助手模式</text>
+  </g>
+
+  <!-- Left Connectors -->
+  <path d="M 180,220 L 180,304" class="line-bg-red" marker-end="url(#arrow-red)" />
+  <path d="M 180,220 L 180,298" class="flow-dots-red" />
+
+  <path d="M 180,390 L 180,484" class="line-bg-red" marker-end="url(#arrow-red)" />
+  <path d="M 180,390 L 180,478" class="flow-dots-red" />
+
+  <path d="M 180,570 L 180,664" class="line-bg-red" marker-end="url(#arrow-red)" />
+  <path d="M 180,570 L 180,658" class="flow-dots-red" />
+
+  <path d="M 180,750 L 180,834" class="line-bg-red" marker-end="url(#arrow-red)" />
+  <path d="M 180,750 L 180,828" class="flow-dots-red" />
+
+  <!-- Left Box 1: Request -->
+  <g>
+    <rect x="55" y="150" width="250" height="70" rx="8" fill="#251219" stroke="#F43F5E" stroke-width="1.5" />
+    <text x="180" y="178" font-size="16" font-weight="bold" fill="#FCA5A5" text-anchor="middle">提出需求</text>
+    <text x="180" y="201" font-size="13" fill="#FDA4AF" text-anchor="middle">例如：「加雙向連線壓縮」</text>
+  </g>
+
+  <!-- Left Box 2: Grep/Edit -->
+  <g>
+    <rect x="55" y="310" width="250" height="80" rx="8" fill="#251219" stroke="#EF4444" stroke-width="1.5" />
+    <!-- Warning Icon -->
+    <g transform="translate(74, 350)">
+      <path d="M 0,-10 L 10,8 L -10,8 Z" fill="#EF4444" />
+      <path d="M 0,-4 L 0,1 M 0,4 L 0,5" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+    <text x="188" y="344" font-size="16" font-weight="bold" fill="#FECACA" text-anchor="middle">立即搜尋與修改程式碼</text>
+    <text x="188" y="369" font-size="13" fill="#F87171" text-anchor="middle">直接進行全文檢索與修改</text>
+  </g>
+
+  <!-- Left Box 3: Unplanned -->
+  <g>
+    <rect x="55" y="490" width="250" height="80" rx="8" fill="#251219" stroke="#EF4444" stroke-width="1.5" />
+    <!-- Warning Icon -->
+    <g transform="translate(74, 530)">
+      <path d="M 0,-10 L 10,8 L -10,8 Z" fill="#EF4444" />
+      <path d="M 0,-4 L 0,1 M 0,4 L 0,5" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+    <text x="188" y="524" font-size="16" font-weight="bold" fill="#FECACA" text-anchor="middle">無計劃開發與分階段</text>
+    <text x="188" y="549" font-size="13" fill="#F87171" text-anchor="middle">無法應對複雜的代碼結構</text>
+  </g>
+
+  <!-- Left Box 4: No Quality Gate -->
+  <g>
+    <rect x="55" y="670" width="250" height="80" rx="8" fill="#251219" stroke="#EF4444" stroke-width="1.5" />
+    <!-- Warning Icon -->
+    <g transform="translate(74, 710)">
+      <path d="M 0,-10 L 10,8 L -10,8 Z" fill="#EF4444" />
+      <path d="M 0,-4 L 0,1 M 0,4 L 0,5" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+    <text x="188" y="704" font-size="16" font-weight="bold" fill="#FECACA" text-anchor="middle">未經品質驗證直接提交</text>
+    <text x="188" y="729" font-size="13" fill="#F87171" text-anchor="middle">完全跳過測試與安全檢查</text>
+  </g>
+
+  <!-- Left Box 5: Failure -->
+  <g>
+    <rect x="55" y="840" width="250" height="80" rx="8" fill="#3D151E" stroke="#EF4444" stroke-width="2" />
+    <!-- Error/Stop Icon -->
+    <g transform="translate(74, 880)">
+      <circle cx="0" cy="0" r="10" fill="#EF4444" />
+      <path d="M -5,-5 L 5,5 M 5,-5 L -5,5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" />
+    </g>
+    <text x="188" y="874" font-size="16" font-weight="bold" fill="#F87171" text-anchor="middle">系統損壞與部署失敗</text>
+    <text x="188" y="899" font-size="13" fill="#FCA5A5" text-anchor="middle">極易引入錯誤並造成維護災難</text>
+  </g>
+
+  <!-- Divider Line between columns -->
+  <line x1="345" y1="80" x2="345" y2="960" stroke="#1E293B" stroke-width="2" stroke-dasharray="8,8" />
+
+  <!-- ==================== RIGHT COLUMN: AUTOPILOT SECURE MODE ==================== -->
+  <!-- Right Column Panel Container -->
+  <rect x="360" y="80" width="810" height="880" rx="16" fill="#0F1524" stroke="#1E2E4F" stroke-width="1.5" />
+
+  <!-- Right Panel Header Badge -->
+  <g>
+    <rect x="525" y="94" width="410" height="34" rx="6" fill="#121A30" stroke="#3B82F6" stroke-width="1.2" />
+    <text x="730" y="116" font-size="16" font-weight="bold" fill="#60A5FA" text-anchor="middle">自主開發助手模式 (規劃與品質管控)</text>
+  </g>
+
+  <!-- Right Connectors -->
+  <!-- Prompt to Splitter -->
+  <path d="M 730,220 L 730,264" class="line-bg-blue" marker-end="url(#arrow-blue)" />
+  <path d="M 730,220 L 730,258" class="flow-dots-blue" />
+
+  <!-- Splitter to S1 -->
+  <path d="M 570,350 L 570,404" class="line-bg-blue" marker-end="url(#arrow-blue)" />
+  <path d="M 570,350 L 570,398" class="flow-dots-blue" />
+
+  <!-- Splitter to L1 -->
+  <path d="M 890,350 L 890,404" class="line-bg-purple" marker-end="url(#arrow-purple)" />
+  <path d="M 890,350 L 890,398" class="flow-dots-purple" />
+
+  <!-- S-path vertical connections -->
+  <path d="M 570,480 L 570,514" class="line-bg-blue" marker-end="url(#arrow-emerald)" />
+  <path d="M 570,480 L 570,508" class="flow-dots-blue" />
+
+  <path d="M 570,590 L 570,624" class="line-bg-blue" marker-end="url(#arrow-blue)" />
+  <path d="M 570,590 L 570,618" class="flow-dots-blue" />
+
+  <!-- L-path vertical connections -->
+  <path d="M 890,480 L 890,514" class="line-bg-purple" marker-end="url(#arrow-purple)" />
+  <path d="M 890,480 L 890,508" class="flow-dots-purple" />
+
+  <path d="M 890,590 L 890,624" class="line-bg-purple" marker-end="url(#arrow-purple)" />
+  <path d="M 890,590 L 890,618" class="flow-dots-purple" />
+
+  <!-- Connections from L2 to Survey & Think-tank -->
+  <!-- To Survey -->
+  <path d="M 1016,545 L 1025,545 L 1025,522.5 L 1034,522.5" class="line-bg-amber" marker-start="url(#arrow-amber)" marker-end="url(#arrow-amber)" />
+  <!-- To Think-tank -->
+  <path d="M 1016,565 L 1025,565 L 1025,612.5 L 1034,612.5" class="line-bg-amber" marker-start="url(#arrow-amber)" marker-end="url(#arrow-amber)" />
+
+  <!-- S3 and L3 to finish-flow -->
+  <path d="M 570,700 L 570,744" class="line-bg-violet" marker-end="url(#arrow-violet)" />
+  <path d="M 570,700 L 570,738" class="flow-dots-violet" />
+
+  <path d="M 890,700 L 890,744" class="line-bg-violet" marker-end="url(#arrow-violet)" />
+  <path d="M 890,700 L 890,738" class="flow-dots-violet" />
+
+  <!-- finish-flow to Delivery -->
+  <path d="M 730,830 L 730,864" class="line-bg-teal" marker-end="url(#arrow-teal)" />
+  <path d="M 730,830 L 730,858" class="flow-dots-teal" />
+
+  <!-- Right Prompt Box -->
+  <g>
+    <rect x="580" y="150" width="300" height="70" rx="8" fill="#131F3A" stroke="#3B82F6" stroke-width="1.5" />
+    <text x="730" y="178" font-size="16" font-weight="bold" fill="#BFDBFE" text-anchor="middle">提出需求</text>
+    <text x="730" y="201" font-size="13" fill="#93C5FD" text-anchor="middle">例如：「加雙向連線壓縮」</text>
+  </g>
+
+  <!-- Right Task Router (dev-flow front door) -->
+  <g>
+    <rect x="540" y="270" width="380" height="80" rx="8" fill="#171A3B" stroke="#6366F1" stroke-width="2" />
+    <!-- Fork Icon -->
+    <g transform="translate(565, 310)">
+      <path d="M 0,-12 L 0,-2 C -6,-2 -12,4 -12,10 M 0,-2 C 6,-2 12,4 12,10 M 0,-12 L 0,-14" stroke="#A5B4FC" stroke-width="2" stroke-linecap="round" fill="none" />
+      <circle cx="0" cy="-14" r="3" fill="#6366F1" />
+      <circle cx="-12" cy="10" r="3" fill="#A5B4FC" />
+      <circle cx="12" cy="10" r="3" fill="#A5B4FC" />
+    </g>
+    <text x="740" y="302" font-size="18" font-weight="bold" fill="#C7D2FE" text-anchor="middle">開發流程任務分流器</text>
+    <text x="740" y="328" font-size="13" fill="#A5B4FC" text-anchor="middle">自動評估複雜度，路由至對應流程</text>
+  </g>
+
+  <!-- S-path label -->
+  <text x="570" y="385" font-size="16" font-weight="bold" fill="#60A5FA" text-anchor="middle">小型任務流程</text>
+
+  <!-- S1: Implementation -->
+  <g>
+    <rect x="450" y="410" width="240" height="70" rx="8" fill="#0C182A" stroke="#3B82F6" stroke-width="1.5" />
+    <!-- Document Icon -->
+    <g transform="translate(472, 445)">
+      <rect x="-10" y="-12" width="20" height="24" rx="2" fill="none" stroke="#60A5FA" stroke-width="1.5" />
+      <line x1="-6" y1="-6" x2="6" y2="-6" stroke="#60A5FA" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="-6" y1="-1" x2="2" y2="-1" stroke="#60A5FA" stroke-width="1.5" stroke-linecap="round" />
+      <line x1="-6" y1="4" x2="4" y2="4" stroke="#60A5FA" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+    <text x="580" y="438" font-size="16" font-weight="bold" fill="#F1F5F9" text-anchor="middle">獨立進行程式碼實作</text>
+    <text x="580" y="462" font-size="13" fill="#94A3B8" text-anchor="middle">快速且精確地寫入目標檔案</text>
+  </g>
+
+  <!-- S2: Quality Gate -->
+  <g>
+    <rect x="450" y="520" width="240" height="70" rx="8" fill="#062823" stroke="#10B981" stroke-width="2" />
+    <!-- Shield Icon -->
+    <g transform="translate(472, 555)">
+      <path d="M 0,-10 C 5,-10 9,-8 9,-2 C 9,5 4,9 0,11 C -4,9 -9,5 -9,-2 C -9,-8 -5,-10 0,-10 Z" fill="#10B981" opacity="0.3" stroke="#10B981" stroke-width="1.5" />
+      <path d="M -4,0 L -1,3 L 4,-2" stroke="#A7F3D0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+    </g>
+    <text x="580" y="548" font-size="16" font-weight="bold" fill="#A7F3D0" text-anchor="middle">通過品質安全閘門</text>
+    <text x="580" y="572" font-size="13" fill="#6EE7B7" text-anchor="middle">執行自動測試與代碼審查</text>
+  </g>
+
+  <!-- S3: Commit -->
+  <g>
+    <rect x="450" y="630" width="240" height="70" rx="8" fill="#0C182A" stroke="#3B82F6" stroke-width="1.5" />
+    <!-- Commit/Node Icon -->
+    <g transform="translate(472, 665)">
+      <circle cx="0" cy="0" r="6" stroke="#60A5FA" stroke-width="2" fill="none" />
+      <line x1="-12" y1="0" x2="-6" y2="0" stroke="#60A5FA" stroke-width="2" />
+      <line x1="6" y1="0" x2="12" y2="0" stroke="#60A5FA" stroke-width="2" />
+    </g>
+    <text x="580" y="658" font-size="16" font-weight="bold" fill="#F1F5F9" text-anchor="middle">提交與合併代碼</text>
+    <text x="580" y="682" font-size="13" fill="#94A3B8" text-anchor="middle">確保變更記錄完整且乾淨</text>
+  </g>
+
+  <!-- L-path label -->
+  <text x="890" y="385" font-size="16" font-weight="bold" fill="#C084FC" text-anchor="middle">大型專案流程</text>
+
+  <!-- L1: Init & Plan -->
+  <g>
+    <rect x="770" y="410" width="240" height="70" rx="8" fill="#0F142D" stroke="#8B5CF6" stroke-width="1.5" />
+    <!-- Plan Folder Icon -->
+    <g transform="translate(792, 445)">
+      <rect x="-10" y="-8" width="20" height="17" rx="2" fill="none" stroke="#C084FC" stroke-width="1.5" />
+      <path d="M -10,-4 L -4,-4 L -2,-8 L 4,-8 L 6,-4 L 10,-4" stroke="#C084FC" stroke-width="1.5" stroke-linecap="round" fill="none" />
+    </g>
+    <text x="900" y="438" font-size="16" font-weight="bold" fill="#F1F5F9" text-anchor="middle">專案初始化與規劃</text>
+    <text x="900" y="462" font-size="13" fill="#94A3B8" text-anchor="middle">擬定專案計劃與進度追蹤</text>
+  </g>
+
+  <!-- L2: Phase Iteration -->
+  <g>
+    <rect x="770" y="520" width="240" height="70" rx="8" fill="#0F142D" stroke="#8B5CF6" stroke-width="2" />
+    <!-- Loop/Arrow Icon -->
+    <g transform="translate(792, 555)">
+      <circle cx="0" cy="0" r="8" stroke="#C084FC" stroke-width="1.5" fill="none" stroke-dasharray="20, 6" />
+      <path d="M 6,-5 L 9,-8 L 5,-9" stroke="#C084FC" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+    </g>
+    <text x="900" y="548" font-size="16" font-weight="bold" fill="#E9D5FF" text-anchor="middle">分階段實作與驗證</text>
+    <text x="900" y="572" font-size="13" fill="#D8B4FE" text-anchor="middle">每個階段均需通過品質閘門</text>
+  </g>
+
+  <!-- L3: Archive & Lessons -->
+  <g>
+    <rect x="770" y="630" width="240" height="70" rx="8" fill="#0F142D" stroke="#8B5CF6" stroke-width="1.5" />
+    <!-- Archive Box Icon -->
+    <g transform="translate(792, 665)">
+      <rect x="-10" y="-10" width="20" height="20" rx="2" fill="none" stroke="#C084FC" stroke-width="1.5" />
+      <line x1="-10" y1="-3" x2="10" y2="-3" stroke="#C084FC" stroke-width="1.5" />
+      <rect x="-3" y="1" width="6" height="4" rx="1" fill="none" stroke="#C084FC" stroke-width="1.5" />
+    </g>
+    <text x="900" y="658" font-size="16" font-weight="bold" fill="#F1F5F9" text-anchor="middle">專案結案歸檔與記錄</text>
+    <text x="900" y="682" font-size="13" fill="#94A3B8" text-anchor="middle">專案歸檔並自動記錄開發教訓</text>
+  </g>
+
+  <!-- Survey: Technical Research (Vertical Stack Layout to prevent text clipping) -->
+  <g>
+    <rect x="1040" y="485" width="120" height="75" rx="6" fill="#251C12" stroke="#D97706" stroke-width="1.5" />
+    <!-- Magnifying Glass Icon -->
+    <circle cx="1098" cy="503" r="4" stroke="#F59E0B" stroke-width="1.5" fill="none" />
+    <line x1="1101" y1="506" x2="1105" y2="510" stroke="#F59E0B" stroke-width="1.5" stroke-linecap="round" />
+    <text x="1100" y="528" font-size="16" font-weight="bold" fill="#FCD34D" text-anchor="middle">自主技術調研</text>
+    <text x="1100" y="548" font-size="13" fill="#FDE68A" text-anchor="middle">探索業界實踐</text>
+  </g>
+
+  <!-- Think-tank: Strategic Debate (Vertical Stack Layout to prevent text clipping) -->
+  <g>
+    <rect x="1040" y="575" width="120" height="75" rx="6" fill="#251C12" stroke="#D97706" stroke-width="1.5" />
+    <!-- Chat Bubbles Icon -->
+    <g transform="translate(1096, 591)">
+      <rect x="-6" y="-6" width="9" height="7" rx="1.5" fill="none" stroke="#F59E0B" stroke-width="1.2" />
+      <rect x="-1" y="-2" width="9" height="7" rx="1.5" fill="#251C12" stroke="#F59E0B" stroke-width="1.2" />
+    </g>
+    <text x="1100" y="618" font-size="16" font-weight="bold" fill="#FCD34D" text-anchor="middle">決策思維辯論</text>
+    <text x="1100" y="638" font-size="13" fill="#FDE68A" text-anchor="middle">評估各方案利弊</text>
+  </g>
+
+  <!-- Convergence (finish-flow) -->
+  <g>
+    <rect x="550" y="750" width="360" height="80" rx="8" fill="#201130" stroke="#A855F7" stroke-width="2" />
+    <!-- Checkmark Circle Icon -->
+    <g transform="translate(575, 790)">
+      <circle cx="0" cy="0" r="10" stroke="#DDD6FE" stroke-width="1.5" fill="none" />
+      <path d="M -5,-1 L -1,3 L 5,-3" stroke="#DDD6FE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+    </g>
+    <text x="745" y="782" font-size="18" font-weight="bold" fill="#F5F3FF" text-anchor="middle">標準安全收尾流程</text>
+    <text x="745" y="808" font-size="13" fill="#DDD6FE" text-anchor="middle">乾淨收尾、安全復原、一步不漏</text>
+  </g>
+
+  <!-- Delivery Box -->
+  <g>
+    <rect x="550" y="870" width="360" height="70" rx="8" fill="#052420" stroke="#14B8A6" stroke-width="2" />
+    <!-- Rocket Icon -->
+    <g transform="translate(575, 905)">
+      <path d="M 0,-10 C 2,-5 5,-2 5,3 L -5,3 C -5,-2 -2,-5 0,-10 Z" fill="none" stroke="#99F6E4" stroke-width="1.5" />
+      <path d="M -3,3 L -5,8 L -2,6 M 3,3 L 5,8 L 2,6 M 0,3 L 0,8" stroke="#99F6E4" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+    <text x="745" y="900" font-size="18" font-weight="bold" fill="#CCFBF1" text-anchor="middle">成功部署與高品質交付</text>
+    <text x="745" y="924" font-size="13" fill="#99F6E4" text-anchor="middle">程式碼庫整潔，系統穩定上線</text>
+  </g>
+</svg>

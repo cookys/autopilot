@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">Autopilot pixel-art starfighter icon</title>
+  <desc id="desc">A retro pixel-art starfighter flying itself on a locked autopilot path, with an AUTO readout, guidance rails, dotted flight path, and blinking autopilot light.</desc>
+  <style>
+    svg { background: transparent; }
+    .path { animation: pathStep 900ms steps(1, end) infinite; }
+    .lamp { animation: lampBlink 1200ms steps(1, end) infinite; }
+    .flameA { animation: flameA 220ms steps(1, end) infinite; }
+    .flameB { animation: flameB 220ms steps(1, end) infinite; }
+    @keyframes pathStep {
+      0%, 49% { transform: translateY(0); opacity: 1; }
+      50%, 100% { transform: translateY(16px); opacity: .72; }
+    }
+    @keyframes lampBlink {
+      0%, 74% { opacity: 1; }
+      75%, 100% { opacity: .45; }
+    }
+    @keyframes flameA {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: .35; }
+    }
+    @keyframes flameB {
+      0%, 49% { opacity: .35; }
+      50%, 100% { opacity: 1; }
+    }
+  </style>
+
+  <!-- Sparse 8-bit starfield. -->
+  <g fill="#c6d0ea" opacity=".8">
+    <rect x="40" y="48" width="8" height="8"/>
+    <rect x="448" y="40" width="8" height="8"/>
+    <rect x="88" y="120" width="8" height="8"/>
+    <rect x="408" y="128" width="8" height="8"/>
+    <rect x="32" y="256" width="8" height="8"/>
+    <rect x="456" y="288" width="8" height="8"/>
+    <rect x="72" y="416" width="8" height="8"/>
+    <rect x="424" y="424" width="8" height="8"/>
+  </g>
+  <g fill="#5a67d8" opacity=".65">
+    <rect x="112" y="72" width="8" height="8"/>
+    <rect x="384" y="80" width="8" height="8"/>
+    <rect x="48" y="344" width="8" height="8"/>
+    <rect x="456" y="360" width="8" height="8"/>
+  </g>
+
+  <!-- Pixel AUTO HUD, drawn from block letters. -->
+  <g id="auto-readout">
+    <rect x="152" y="16" width="208" height="72" fill="#10172e"/>
+    <rect x="136" y="32" width="16" height="40" fill="#10172e"/>
+    <rect x="360" y="32" width="16" height="40" fill="#10172e"/>
+    <rect x="152" y="16" width="208" height="8" fill="#5a67d8"/>
+    <rect x="152" y="80" width="208" height="8" fill="#5a67d8"/>
+    <rect x="136" y="32" width="8" height="40" fill="#5a67d8"/>
+    <rect x="368" y="32" width="8" height="40" fill="#5a67d8"/>
+
+    <g fill="#e8a838">
+      <!-- A -->
+      <rect x="168" y="32" width="36" height="12"/>
+      <rect x="168" y="44" width="12" height="48"/>
+      <rect x="192" y="44" width="12" height="48"/>
+      <rect x="180" y="56" width="12" height="12"/>
+      <!-- U -->
+      <rect x="216" y="32" width="12" height="48"/>
+      <rect x="240" y="32" width="12" height="48"/>
+      <rect x="228" y="80" width="12" height="12"/>
+      <!-- T -->
+      <rect x="264" y="32" width="36" height="12"/>
+      <rect x="276" y="44" width="12" height="48"/>
+      <!-- O -->
+      <rect x="312" y="32" width="36" height="12"/>
+      <rect x="312" y="44" width="12" height="36"/>
+      <rect x="336" y="44" width="12" height="36"/>
+      <rect x="312" y="80" width="36" height="12"/>
+    </g>
+  </g>
+
+  <!-- Locked heading rails and predicted dotted flight path. -->
+  <g id="guidance" class="path">
+    <g fill="#5a67d8" opacity=".88">
+      <rect x="184" y="96" width="16" height="16"/>
+      <rect x="184" y="128" width="16" height="16"/>
+      <rect x="184" y="160" width="16" height="16"/>
+      <rect x="312" y="96" width="16" height="16"/>
+      <rect x="312" y="128" width="16" height="16"/>
+      <rect x="312" y="160" width="16" height="16"/>
+    </g>
+    <g fill="#e8a838">
+      <rect x="248" y="96" width="16" height="16"/>
+      <rect x="248" y="128" width="16" height="16" opacity=".82"/>
+      <rect x="248" y="160" width="16" height="16" opacity=".62"/>
+    </g>
+  </g>
+
+  <!-- Pixel starfighter silhouette and hull. -->
+  <g id="starfighter">
+    <!-- Drop pixels / outline. -->
+    <g fill="#11172e">
+      <rect x="240" y="112" width="32" height="32"/>
+      <rect x="224" y="144" width="64" height="32"/>
+      <rect x="208" y="176" width="96" height="32"/>
+      <rect x="192" y="208" width="128" height="96"/>
+      <rect x="176" y="304" width="160" height="48"/>
+      <rect x="192" y="352" width="128" height="32"/>
+
+      <rect x="160" y="208" width="32" height="48"/>
+      <rect x="128" y="240" width="64" height="48"/>
+      <rect x="96" y="272" width="96" height="48"/>
+      <rect x="80" y="304" width="112" height="32"/>
+      <rect x="64" y="336" width="112" height="16"/>
+      <rect x="96" y="352" width="64" height="16"/>
+
+      <rect x="320" y="208" width="32" height="48"/>
+      <rect x="320" y="240" width="64" height="48"/>
+      <rect x="320" y="272" width="96" height="48"/>
+      <rect x="320" y="304" width="112" height="32"/>
+      <rect x="336" y="336" width="112" height="16"/>
+      <rect x="352" y="352" width="64" height="16"/>
+
+      <rect x="128" y="336" width="48" height="64"/>
+      <rect x="112" y="368" width="32" height="16"/>
+      <rect x="336" y="336" width="48" height="64"/>
+      <rect x="368" y="368" width="32" height="16"/>
+
+      <rect x="208" y="384" width="32" height="32"/>
+      <rect x="272" y="384" width="32" height="32"/>
+    </g>
+
+    <!-- Main metal. -->
+    <g fill="#c6d0ea">
+      <rect x="248" y="128" width="16" height="16"/>
+      <rect x="232" y="144" width="48" height="32"/>
+      <rect x="216" y="176" width="80" height="32"/>
+      <rect x="208" y="208" width="96" height="80"/>
+      <rect x="224" y="288" width="64" height="64"/>
+      <rect x="208" y="352" width="96" height="16"/>
+    </g>
+
+    <!-- Shaded hull side pixels. -->
+    <g fill="#2b335c">
+      <rect x="192" y="224" width="16" height="80"/>
+      <rect x="304" y="224" width="16" height="80"/>
+      <rect x="176" y="304" width="48" height="32"/>
+      <rect x="288" y="304" width="48" height="32"/>
+      <rect x="192" y="368" width="32" height="16"/>
+      <rect x="288" y="368" width="32" height="16"/>
+    </g>
+
+    <!-- Indigo wing armor. -->
+    <g fill="#5a67d8">
+      <rect x="160" y="224" width="32" height="32"/>
+      <rect x="128" y="256" width="64" height="32"/>
+      <rect x="96" y="288" width="80" height="32"/>
+      <rect x="80" y="320" width="80" height="16"/>
+      <rect x="128" y="336" width="32" height="16"/>
+
+      <rect x="320" y="224" width="32" height="32"/>
+      <rect x="320" y="256" width="64" height="32"/>
+      <rect x="336" y="288" width="80" height="32"/>
+      <rect x="352" y="320" width="80" height="16"/>
+      <rect x="352" y="336" width="32" height="16"/>
+    </g>
+
+    <!-- Bright nose and centerline. -->
+    <g fill="#f8f0d8">
+      <rect x="248" y="112" width="16" height="16"/>
+      <rect x="240" y="144" width="32" height="16"/>
+      <rect x="240" y="176" width="32" height="16"/>
+      <rect x="240" y="208" width="32" height="96"/>
+      <rect x="240" y="320" width="32" height="32"/>
+    </g>
+
+    <!-- Autopilot cockpit and square glow. -->
+    <g class="lamp">
+      <rect x="224" y="192" width="64" height="16" fill="#11172e"/>
+      <rect x="232" y="208" width="48" height="16" fill="#5ff2a0" opacity=".35"/>
+      <rect x="240" y="192" width="32" height="32" fill="#5ff2a0"/>
+      <rect x="248" y="200" width="16" height="16" fill="#e8a838"/>
+    </g>
+
+    <!-- Autopilot lock chevrons stamped on the wings. -->
+    <g fill="#e8a838">
+      <rect x="144" y="288" width="16" height="16"/>
+      <rect x="160" y="304" width="16" height="16"/>
+      <rect x="128" y="304" width="16" height="16"/>
+      <rect x="352" y="304" width="16" height="16"/>
+      <rect x="368" y="288" width="16" height="16"/>
+      <rect x="384" y="304" width="16" height="16"/>
+    </g>
+
+    <!-- Engine housings. -->
+    <g fill="#11172e">
+      <rect x="208" y="384" width="32" height="16"/>
+      <rect x="272" y="384" width="32" height="16"/>
+    </g>
+    <g fill="#2b335c">
+      <rect x="216" y="384" width="16" height="16"/>
+      <rect x="280" y="384" width="16" height="16"/>
+    </g>
+
+    <!-- First frame reads as twin thrusters; animation only flickers opacity. -->
+    <g class="flameA" fill="#e8a838">
+      <rect x="208" y="400" width="32" height="32"/>
+      <rect x="272" y="400" width="32" height="32"/>
+      <rect x="224" y="432" width="16" height="16"/>
+      <rect x="272" y="432" width="16" height="16"/>
+    </g>
+    <g class="flameB" fill="#f25c2e">
+      <rect x="216" y="400" width="16" height="48"/>
+      <rect x="280" y="400" width="16" height="48"/>
+      <rect x="216" y="448" width="16" height="16"/>
+      <rect x="280" y="448" width="16" height="16"/>
+    </g>
+  </g>
+</svg>

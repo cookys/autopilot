@@ -1,10 +1,12 @@
-<h1 align="center">Autopilot</h1>
-
-<p align="center">
-  <strong>可獨立運作的 Claude Code 生命週期編排，與 Superpowers 並存。</strong><br>
-  23 個 skill，涵蓋生命週期管理、策略決策、方法論與品質閘門。<br>
-  獨立運作；當 Superpowers 已安裝時，優雅地將戰術執行委派給它。
-</p>
+<div align="center">
+  <table border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
+      <td width="24"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — 可獨立運作的 Claude Code 生命週期編排，與 Superpowers 並存" height="180"></td>
+    </tr>
+  </table>
+</div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
@@ -87,22 +89,12 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 
 `dev-flow` 是前門。它判斷任務大小並分流 —— 小事直接過閘門，大事變成被追蹤的專案：
 
-```
- 你：「Add WebSocket compression」
-    │
-    ▼
- dev-flow  ── 判斷任務大小 ──┐
-    │                        │
-    ├─ S (小) ─→ 實作 ───────→ quality-pipeline ─→ commit
-    │                        │
-    └─ L (大) ─→ plan + 專案 + 分支
-            │      ├─ 實作各 phase ─→ quality-pipeline（每個 phase）
-            │      ├─ 需要調研？ ──→ survey
-            │      ├─ 策略決策？ ──→ think-tank
-            │      └─ 歸檔專案 + learn（記錄教訓）
-            ▼
-        finish-flow  ── 乾淨收尾，一步不漏
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/flow.zh-TW.light.svg">
+    <img alt="Autopilot 的一天：dev-flow 判斷任務大小並分流 —— 小事直接過品質閘門到 commit；大事變成被追蹤的專案，每個 phase 都過品質閘門，最後 finish-flow 乾淨收尾。沒有 Autopilot 時，AI 會立刻 grep 程式碼 —— 沒計畫、沒分 phase、沒品質閘門。" src="docs/assets/flow.zh-TW.svg" width="100%">
+  </picture>
+</p>
 
 沒有 Autopilot 時，Claude 會立刻開始 grep 程式碼 —— 沒有 plan、沒有 phase、沒有品質閘門。有了它，紀律是自動的。
 

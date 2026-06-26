@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">Autopilot hero banner</title>
+  <desc id="desc">Animated dark hero banner for the Autopilot Claude Code lifecycle orchestration plugin.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="0.52" stop-color="#141a2b"/>
+      <stop offset="1" stop-color="#1b2138"/>
+    </linearGradient>
+    <radialGradient id="aura" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(825 128) rotate(34) scale(420 170)">
+      <stop offset="0" stop-color="#5A67D8" stop-opacity="0.42"/>
+      <stop offset="0.42" stop-color="#4A90D9" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#0d1117" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wordGradient" x1="50" y1="0" x2="640" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e6ebf5"/>
+      <stop offset="0.28" stop-color="#e6ebf5"/>
+      <stop offset="0.43" stop-color="#5A67D8"/>
+      <stop offset="0.52" stop-color="#E8A838"/>
+      <stop offset="0.62" stop-color="#4A90D9"/>
+      <stop offset="0.82" stop-color="#e6ebf5"/>
+      <stop offset="1" stop-color="#e6ebf5"/>
+      <animateTransform attributeName="gradientTransform" type="translate" values="-260 0;260 0;-260 0" dur="8s" repeatCount="indefinite"/>
+    </linearGradient>
+    <linearGradient id="pathGradient" x1="700" y1="104" x2="1130" y2="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5A67D8"/>
+      <stop offset="0.44" stop-color="#4A90D9"/>
+      <stop offset="0.74" stop-color="#7C9E8C"/>
+      <stop offset="1" stop-color="#E8A838"/>
+    </linearGradient>
+    <linearGradient id="chipSheen" x1="0" y1="0" x2="220" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+      <animateTransform attributeName="gradientTransform" type="translate" values="-220 0;220 0" dur="6.5s" repeatCount="indefinite"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.35 0 0 0 0 0.40 0 0 0 0 0.85 0 0 0 0.55 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="craftGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.91 0 0 0 0 0.66 0 0 0 0 0.22 0 0 0 0.85 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <path id="flightPathMotion" d="M700 104 C778 42 858 118 930 76 S1042 38 1130 82"/>
+    <style><![CDATA[
+      .font { font-family: -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
+      .wordmark { font-size: 84px; font-weight: 850; letter-spacing: 0; }
+      .tagline { font-size: 19px; font-weight: 500; letter-spacing: 0; }
+      .chip-text { font-size: 14px; font-weight: 700; letter-spacing: 0; }
+      .micro { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+      .grid-line { stroke: #8b95ad; stroke-opacity: 0.12; stroke-width: 1; }
+      .twinkle { transform-box: fill-box; transform-origin: center; animation: pulse 4.8s ease-in-out infinite; }
+      .twinkle.slow { animation-duration: 6.4s; }
+      .twinkle.fast { animation-duration: 3.8s; }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.25; transform: scale(0.82); }
+        45% { opacity: 0.95; transform: scale(1.08); }
+      }
+    ]]></style>
+  </defs>
+
+  <rect x="8" y="8" width="1184" height="284" rx="30" fill="url(#bg)" stroke="#2a3358" stroke-opacity="0.72"/>
+  <rect x="8" y="8" width="1184" height="284" rx="30" fill="url(#aura)"/>
+  <g opacity="0.55">
+    <path class="grid-line" d="M64 57H1136"/>
+    <path class="grid-line" d="M64 108H1136"/>
+    <path class="grid-line" d="M64 159H1136"/>
+    <path class="grid-line" d="M64 210H1136"/>
+    <path class="grid-line" d="M154 34V266"/>
+    <path class="grid-line" d="M304 34V266"/>
+    <path class="grid-line" d="M454 34V266"/>
+    <path class="grid-line" d="M604 34V266"/>
+    <path class="grid-line" d="M754 34V266"/>
+    <path class="grid-line" d="M904 34V266"/>
+    <path class="grid-line" d="M1054 34V266"/>
+  </g>
+
+  <g class="font">
+    <text x="76" y="112" class="wordmark" fill="#5A67D8" opacity="0.24" filter="url(#softGlow)">Autopilot</text>
+    <text x="76" y="112" class="wordmark" fill="url(#wordGradient)">Autopilot</text>
+    <text x="78" y="154" class="tagline" fill="#e6ebf5" opacity="0.92">Lifecycle orchestration for Claude Code &#8212; you describe it, it runs the whole job.</text>
+    <text x="80" y="56" class="micro" fill="#E8A838" opacity="0.88">Claude Code plugin</text>
+
+    <g transform="translate(78 205)">
+      <g>
+        <rect width="118" height="36" rx="18" fill="#141b2e" stroke="#4A90D9" stroke-opacity="0.55"/>
+        <rect width="118" height="36" rx="18" fill="url(#chipSheen)" opacity="0.45"/>
+        <circle cx="20" cy="18" r="4.5" fill="#4A90D9"/>
+        <text x="34" y="23" class="chip-text" fill="#e6ebf5">23 skills</text>
+      </g>
+      <g transform="translate(136 0)">
+        <rect width="198" height="36" rx="18" fill="#141b2e" stroke="#7C9E8C" stroke-opacity="0.55"/>
+        <rect width="198" height="36" rx="18" fill="url(#chipSheen)" opacity="0.38"/>
+        <circle cx="20" cy="18" r="4.5" fill="#7C9E8C"/>
+        <text x="34" y="23" class="chip-text" fill="#e6ebf5">3 methodology agents</text>
+      </g>
+      <g transform="translate(354 0)">
+        <rect width="118" height="36" rx="18" fill="#141b2e" stroke="#6B8E6B" stroke-opacity="0.55"/>
+        <rect width="118" height="36" rx="18" fill="url(#chipSheen)" opacity="0.35"/>
+        <circle cx="20" cy="18" r="4.5" fill="#6B8E6B"/>
+        <text x="34" y="23" class="chip-text" fill="#e6ebf5">20 hooks</text>
+      </g>
+      <g transform="translate(492 0)">
+        <rect width="168" height="36" rx="18" fill="#141b2e" stroke="#E8A838" stroke-opacity="0.58"/>
+        <rect width="168" height="36" rx="18" fill="url(#chipSheen)" opacity="0.34"/>
+        <circle cx="20" cy="18" r="4.5" fill="#E8A838"/>
+        <text x="34" y="23" class="chip-text" fill="#e6ebf5">zero dependencies</text>
+      </g>
+    </g>
+  </g>
+
+  <g>
+    <use xlink:href="#flightPathMotion" fill="none" stroke="#8b95ad" stroke-opacity="0.28" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="7 11"/>
+    <use xlink:href="#flightPathMotion" fill="none" stroke="url(#pathGradient)" stroke-width="3.2" stroke-linecap="round" stroke-dasharray="12 20" opacity="0.82">
+      <animate attributeName="stroke-dashoffset" values="0;-64" dur="3.8s" repeatCount="indefinite"/>
+    </use>
+    <g filter="url(#craftGlow)">
+      <animateMotion dur="10s" repeatCount="indefinite" rotate="auto" calcMode="spline" keyTimes="0;0.5;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1">
+        <mpath xlink:href="#flightPathMotion"/>
+      </animateMotion>
+      <circle cx="-9" cy="0" r="10" fill="#E8A838" opacity="0.16"/>
+      <path d="M-10 -7 L17 0 L-10 7 L-4 0 Z" fill="#e6ebf5"/>
+      <path d="M-4 0 L-12 -3 L-9 0 L-12 3 Z" fill="#E8A838"/>
+    </g>
+  </g>
+
+  <g>
+    <circle class="twinkle slow" cx="713" cy="79" r="2.4" fill="#E8A838"/>
+    <circle class="twinkle" cx="800" cy="62" r="2.8" fill="#4A90D9" style="animation-delay: .7s;"/>
+    <circle class="twinkle fast" cx="957" cy="66" r="2.3" fill="#7C9E8C" style="animation-delay: 1.2s;"/>
+    <circle class="twinkle slow" cx="1098" cy="149" r="2.6" fill="#E8A838" style="animation-delay: 2.1s;"/>
+    <circle class="twinkle" cx="1018" cy="222" r="2.2" fill="#5A67D8" style="animation-delay: 1.8s;"/>
+    <circle class="twinkle fast" cx="760" cy="237" r="2.1" fill="#6B8E6B" style="animation-delay: .3s;"/>
+  </g>
+
+  <g opacity="0.75" filter="url(#softGlow)">
+    <circle cx="1130" cy="82" r="5" fill="#E8A838"/>
+    <circle cx="700" cy="104" r="4.5" fill="#5A67D8"/>
+  </g>
+</svg>

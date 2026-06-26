@@ -17,7 +17,10 @@
 #
 # Output: JSON {reviewer_engine, reviewer_effort, reviewer_runner,
 #   implementer_engine, implementer_effort, implementer_runner,
-#   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness, source}
+#   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
+#   qc_panel (array), qc_panel_aggregation, source}
+# (qc_panel = disjoint-family terminal gate; warns on stderr if the panel shares the
+#  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.)
 #
 # Exit codes: 0 success / 2 usage.
 
@@ -38,6 +41,10 @@ DEF_MAX_ROUNDS="5"
 DEF_CONVERGE="SHIP-AS-IS"
 DEF_SPEC_REVIEW="on"
 DEF_HARNESS="on"
+# Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
+# Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
+DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
+DEF_QC_AGG="union-on-verified-critical"
 
 FIELD=""
 while [[ $# -gt 0 ]]; do
@@ -60,6 +67,8 @@ elif [[ -r "$REPO_ROOT/project-config-template/review-loop-config.md" ]]; then
   CONFIG="$REPO_ROOT/project-config-template/review-loop-config.md"; SOURCE="template"
 fi
 
+json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
 read_field() { # key default
   local key="$1" def="$2" val=""
   if [[ -n "$CONFIG" ]]; then
@@ -81,6 +90,34 @@ MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
 HARNESS="$(read_field independent_harness "$DEF_HARNESS")"
+QC_PANEL_RAW="$(read_field qc_panel "$DEF_QC_PANEL")"
+QC_AGG="$(read_field qc_panel_aggregation "$DEF_QC_AGG")"
+
+# Map an engine name → vendor family (for the decorrelation overlap warning).
+family_of() {
+  local e; e="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$e" in
+    *gpt*|*codex*|*o1*|*o3*|*o4*)            echo openai ;;
+    *claude*|*opus*|*sonnet*|*haiku*)        echo anthropic ;;
+    *gemini*|*flash*|*bison*)                echo google ;;
+    *)                                       echo unknown ;;
+  esac
+}
+
+# Parse qc_panel (comma list) → trimmed array + a JSON array string.
+QC_PANEL=(); QC_PANEL_JSON="["
+_first=1
+IFS=',' read -ra _parts <<< "$QC_PANEL_RAW"
+for _p in "${_parts[@]}"; do
+  _p="$(printf '%s' "$_p" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  [[ -z "$_p" ]] && continue
+  QC_PANEL+=("$_p")
+  [[ $_first -eq 0 ]] && QC_PANEL_JSON+=", "
+  QC_PANEL_JSON+="\"$(json_escape "$_p")\""
+  _first=0
+done
+QC_PANEL_JSON+="]"
+[[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
 # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
 case "$REV_RUNNER" in codex|auto|agy) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
@@ -90,8 +127,22 @@ case "$IMPL_RUNNER" in auto|codex|agy) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; e
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
 [[ "$MAX_ROUNDS" =~ ^[0-9]+$ ]] || MAX_ROUNDS="$DEF_MAX_ROUNDS"
+# Aggregation enum: union-on-verified-critical is the safe default; majority is FORBIDDEN
+# (it would suppress a single-track blind-spot catch — the whole point of a panel). Any
+# unknown value (including "majority") falls back to the safe union default.
+case "$QC_AGG" in union-on-verified-critical|unanimous-ship) ;; *) QC_AGG="$DEF_QC_AGG" ;; esac
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+# Decorrelation overlap warning (ADVISORY, stderr — never alters output / exit code):
+# if NO panel member is a different family from the implementer, the panel can't catch the
+# implementer's family-correlated blind spots.
+IMPL_FAMILY="$(family_of "$IMPL_ENGINE")"
+_diff_family=0
+for _m in "${QC_PANEL[@]}"; do
+  [[ "$(family_of "$_m")" != "$IMPL_FAMILY" ]] && { _diff_family=1; break; }
+done
+if [[ ${#QC_PANEL[@]} -gt 0 && $_diff_family -eq 0 ]]; then
+  printf 'resolve-review-loop: WARNING — qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$IMPL_FAMILY" >&2
+fi
 
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
@@ -105,13 +156,16 @@ if [[ -n "$FIELD" ]]; then
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
     independent_harness) printf '%s\n' "$HARNESS" ;;
+    qc_panel) printf '%s\n' "${QC_PANEL[*]}" ;;
+    qc_panel_aggregation) printf '%s\n' "$QC_AGG" ;;
     source) printf '%s\n' "$SOURCE" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
-printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "source": "%s" }\n' \
+printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "source": "%s" }\n' \
   "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
   "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
-  "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" "$SOURCE"
+  "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
+  "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$SOURCE"

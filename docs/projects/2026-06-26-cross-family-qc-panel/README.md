@@ -52,9 +52,9 @@
 
 | Phase | Status | Commit |
 |-------|--------|--------|
-| P0 | in_progress (anchor edited; validation+test pending) | |
-| P1 | pending | |
-| P2 | pending | |
+| P0 | ✅ done (anchor fix + test 43-assert + multi-file & concurrency verified) | b456163 |
+| P1 | ✅ done (qc_panel schema + resolver + 24-assert test + doc corrections) | (this commit) |
+| P2 | in_progress | |
 | P3 | pending | |
 | P4 | pending | |
 

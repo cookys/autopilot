@@ -30,6 +30,19 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
+- qc_panel: gpt-5.5, claude-opus, gemini-flash
+- qc_panel_aggregation: union-on-verified-critical
+
+> **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a
+> **disjoint-family** panel (OpenAI / Anthropic / Google), distinct from the inner-loop
+> `reviewer_engine`. The point is that ≥1 panel family differs from the **implementer's**
+> family, so a bug the implementer+its-family-reviewer jointly miss is caught by a different
+> vendor (PoLL, arXiv 2404.18796). The resolver WARNS if the panel shares the implementer
+> family. Gemini joins read-only via `dispatch-review.sh --runner agy` (agy review is verified
+> working — agy's write bug is implementer-only). Aggregation is **`union-on-verified-critical`**:
+> any panelist's *verified* Critical blocks; a panelist's empty/no-verdict is fail-closed (NOT a
+> pass); **majority vote is forbidden** (it would suppress the single-track blind-spot catch that
+> is the whole reason for a panel).
 
 ## Field reference
 
@@ -45,12 +58,21 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
+| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
+| `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
 
 ## Gotchas (carried from the test-integrity-l1 ship)
 
-- **`agy` is unreliable for the autopilot repo itself** — it writes its plugin
-  install copy, not the worktree ([[project_agy-writes-install-dir]]). For this
-  repo set `implementer_runner: codex` / `implementer_engine: gpt-5.3-codex-spark`.
+- **`agy` as implementer — works now via the v2.25.9 anchor fix.** agy `-p` ignores process
+  cwd (Antigravity-CLI #231/#133/#253), so a relative-path prompt made it invent a scratch
+  project under `~/.gemini/antigravity-cli/scratch/` and leave the worktree untouched (the old
+  `no_op`). `dispatch-hetero.sh` now PREPENDS an absolute-worktree anchor to the agy directive,
+  so agy edits in place — verified single- and multi-file, and 3-way concurrent
+  ([[project_agy-writes-install-dir]]). So `implementer_runner: agy` is viable again (cost
+  arbitrage / a Gemini-family generator). Caveats: agy stays EDIT-ONLY (run_command 10s cap →
+  it can't run build/test mid-turn; the harness commits, the panel verifies), and Docker
+  headless auth is still broken (#223/#479) so run agy on an interactively-authed host. `codex`/
+  `gpt-5.3-codex-spark` remains the default for tasks where the agent must run build/test itself.
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

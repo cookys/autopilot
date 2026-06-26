@@ -55,6 +55,11 @@ Chain: survey output → feed into think-tank → Decision Brief → (optional e
 | **Ops/SRE** | `voltagent-infra:sre-engineer` | Deploy complexity, monitoring, rollback, resource usage |
 | **Customer Advocate** | `voltagent-biz:customer-success-manager` | User needs, pain points, retention impact |
 
+> **voltagent is optional — degrade gracefully (autopilot is standalone-capable).** The `voltagent-*`
+> subagent_type values are preferred, not required. If no `voltagent-*` agents are installed
+> (autopilot ships only `reviewer`/`debugger`/`planner`), dispatch each role via `general-purpose`
+> with the inline role prompt (this panel MUST run with zero voltagent agents present).
+
 ### Quick Mode (3 Roles)
 
 Small decisions don't need 6 roles. Pick the 3 most relevant:

@@ -20,10 +20,10 @@ Each agent's system prompt enforces the autopilot methodology:
 
 ## Dispatch boundary — who calls which agent
 
-Autopilot methodology agents and voltagent role agents **coexist without conflict** because they have different dispatch entry points:
+Autopilot methodology agents and any role-specialist agents you've installed **coexist without conflict** because they have different dispatch entry points:
 
 - **Autopilot skills** (`quality-pipeline`, `dev-flow`, `ceo-agent`, `finish-flow`, ...) dispatch autopilot methodology agents to carry Three Red Lines discipline into skill invocations — `:debugger` and `:planner` are named directly by their consumer skills; the reviewer is selected via the `.claude/dispatch-config.md` `## Code Review` chain with `autopilot:reviewer` as the default fallback when the chain is unset or no chain entry is dispatchable.
-- **Direct user invocation** — when you reach for a reviewer or debugger yourself via the `Agent` tool, voltagent's role agents (`voltagent-qa-sec:code-reviewer`, `voltagent-qa-sec:debugger`, etc.) are usually the better primary choice because they have broader domain coverage (Go / Rust / PostgreSQL / Kubernetes specialization).
+- **Direct user invocation** — when you reach for a reviewer or debugger yourself via the `Agent` tool, a role-specialist agent (if you've installed one) may be the better primary choice for domain depth (for example, Go / Rust / PostgreSQL / Kubernetes specialization).
 
 Two different workflows, two different dispatch paths, zero overlap in practice.
 
@@ -32,7 +32,7 @@ Two different workflows, two different dispatch paths, zero overlap in practice.
 | Layer | Ownership | When it runs |
 |-------|-----------|--------------|
 | **Methodology** | autopilot (this plugin) | Dispatched automatically by autopilot skills to enforce Three Red Lines |
-| **Role** | voltagent (companion plugin) | Invoked directly by user when domain expertise matters more than discipline uniformity |
+| **Role** | a role-specialist plugin you bring (optional) | Invoked directly by user when domain expertise matters more than discipline uniformity |
 | **Project** | `<project>/.claude/agents/` | Project-specific agents (e.g., `twgs-reviewer` with TWGameServer active constraints) extend or replace the layers above |
 
 Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are named directly by their consumer skills; the reviewer is selected via the `.claude/dispatch-config.md` `## Code Review` chain with `autopilot:reviewer` as the default fallback when the chain is unset or no chain entry is dispatchable. If you want a reviewer not in the chain for a one-off task, invoke it explicitly via the `Agent` tool — that is a user-layer choice on top of the chain mechanism.

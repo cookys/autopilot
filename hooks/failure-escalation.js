@@ -125,7 +125,7 @@ function escalationMessage(count) {
 
 Consecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.
 
-Consider invoking superpowers:systematic-debugging if you haven't already.`;
+Consider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.`;
   }
 
   if (count === 3) {

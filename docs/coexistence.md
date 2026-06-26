@@ -34,7 +34,7 @@ Autopilot supports three deployment scenarios:
 
 ### A. You have `superpowers` installed (user-level or marketplace)
 
-Recommended default. autopilot's orchestrators delegate tactical execution to superpowers via `.claude/dispatch-config.md` chains.
+If you also have `superpowers`, autopilot's orchestrators delegate tactical execution to superpowers via `.claude/dispatch-config.md` chains.
 
 `.claude/dispatch-config.md` example (paste into your project):
 

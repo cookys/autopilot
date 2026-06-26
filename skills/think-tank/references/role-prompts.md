@@ -25,6 +25,12 @@ Output: 3-5 bullet concerns from your perspective, your recommendation (approve/
 
 ---
 
+> **voltagent is optional — degrade gracefully (autopilot is standalone-capable).** The `voltagent-*`
+> role entries are preferred dispatch targets, not required dependencies. If no `voltagent-*` agents are
+> installed (autopilot ships only `reviewer`/`debugger`/`planner`), dispatch each role as
+> `general-purpose` and inline the relevant role prompt from this document. The panel MUST run with
+> zero voltagent agents present.
+
 ## Role 1: Chief Architect
 
 **subagent_type**: `voltagent-qa-sec:architect-reviewer`

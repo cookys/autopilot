@@ -8,7 +8,7 @@ This page covers *why* Autopilot is built the way it is: the problem it solves, 
 
 ## The Problem
 
-Claude Code on its own — even with the built-in `superpowers` plugin if you've installed it — leaves several layers unaddressed:
+Claude Code on its own — even with `superpowers` if you've installed it — leaves several layers unaddressed:
 
 - **Lifecycle management** — no task sizing, no project tracking, no session start/end discipline
 - **Strategic decisions** — no multi-perspective debate, no dual-agent research
@@ -77,34 +77,30 @@ The three agents carry autopilot's **Three Red Lines** into the agent layer:
 2. **Fact-driven** — every claim cites `file_path:line_number`; "probably" / "likely" are violations
 3. **Exhaustiveness** — full checklists run; clean items explicitly listed; silent omission is a violation
 
-See [`agents/README.md`](../agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / voltagent role / project-specific" layer cake.
+See [`agents/README.md`](../agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / role / project-specific" layer cake.
 
 ---
 
 ## Recommended Companions
 
-Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 23 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
+Autopilot is **self-sufficient for methodology and lifecycle** — you get all 23 skills + 3 methodology agents when you install autopilot alone. The assumed ecosystem baseline is cookys's own `autopilot` + `codeforge` + `mnemos` trio (standalone from third-party plugins), not a third-party stack. For **role specialization**, autopilot is out of scope and expects you to bring your own role-agent plugin if you want one (a voltagent-style catalog works if installed).
 
-```
-/plugin install voltagent@...
-```
-
-Autopilot and voltagent are **orthogonal by design**:
+Autopilot and role-specialist plugins are **orthogonal by design**:
 
 | Layer | What it does | Where to look |
 |-------|-------------|---------------|
 | **Methodology** | Three Red Lines discipline, evidence-first debugging, Seven-Element dispatch + six-element Planner decomposition contract, lifecycle orchestration | autopilot (this plugin) |
-| **Role** | Language experts, infra specialists, domain experts (80+ agents) | voltagent |
+| **Role** | Language experts, infra specialists, domain experts (80+ agents) | a role-specialist plugin you bring (optional) |
 | **Project** | Your tech stack's pitfalls, team conventions, domain-specific agents | `<project>/.claude/agents/` |
 
 **Dispatch boundary:**
 
 - Going through an **autopilot skill** (`quality-pipeline`, `dev-flow`, `ceo-agent`) auto-dispatches autopilot methodology agents — `:debugger` and `:planner` named directly by their consumer skills, reviewer selected via the `.claude/dispatch-config.md` `## Code Review` chain (defaults to `autopilot:reviewer` when chain unset or no entry dispatchable) — to carry methodology discipline into every invocation
-- **Directly invoking an agent** via the `Agent` tool — voltagent's role agents (`voltagent-qa-sec:code-reviewer`, `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`, etc.) are usually the better primary choice because they have broader domain coverage
+- **Directly invoking an agent** via the `Agent` tool — a role-specialist agent you've installed may be the better primary choice when domain depth matters more than tooling uniformity
 
 Two workflows, two dispatch paths, zero overlap in practice.
 
-Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are named directly by their consumer skills; the reviewer is selected via the `.claude/dispatch-config.md` `## Code Review` chain with `autopilot:reviewer` as the default fallback when the chain is unset or no chain entry is dispatchable. If you want a reviewer not in the chain for a one-off task, invoke it explicitly via the `Agent` tool — that is a user-layer choice on top of the chain mechanism.
+Autopilot does **not** runtime-detect role-specialist plugins. `:debugger` and `:planner` are named directly by their consumer skills; the reviewer is selected via the `.claude/dispatch-config.md` `## Code Review` chain with `autopilot:reviewer` as the default fallback when the chain is unset or no chain entry is dispatchable. If you want a reviewer not in the chain for a one-off task, invoke it explicitly via the `Agent` tool — that is a user-layer choice on top of the chain mechanism.
 
 ---
 

@@ -7,4 +7,4 @@
 # | Role | subagent_type | Use Case |
 # |------|--------------|----------|
 # | server-dev | `general-purpose` | C++ server changes |
-# | sdk-dev | `voltagent-lang:typescript-pro` | TypeScript SDK changes |
+# | sdk-dev | `<role-plugin>:typescript-pro` | TypeScript SDK changes |

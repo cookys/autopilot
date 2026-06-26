@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-20 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **12 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+21 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **13 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -88,6 +88,7 @@ hooks/
   hooks.json               # Hook registration (Tier A default-on)
   session-start.js         # SessionStart priming (pre-existing)
   state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
+  session-handoff.js       # Tier B (opt-in) — SessionEnd, auto-writes docs/HANDOFF.md on /clear
   state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier B (opt-in)
   suggest-compact.js       # Tier A
@@ -178,7 +179,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
 
-## Tier B — Opt-In (12 hooks)
+## Tier B — Opt-In (13 hooks)
 
 Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`).
 
@@ -190,6 +191,7 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
 | config-protection | PreToolUse | Write\|Edit | Blocks linter/formatter config edits |
 | session-summary | Stop | — | Appends cwd / git status / recent commits to `~/.claude/sessions/{date}-{sid}.md` |
+| session-handoff | SessionEnd | — | On `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes/updates `docs/HANDOFF.md` in the repo cwd from the transcript (idempotent overwrite). Does nothing otherwise. Fail-open; parses the transcript itself (no LLM dependency). Opt-in because it writes into your repo |
 | check-console | Stop | — | Warns about `console.log` in modified JS/TS |
 | accumulator | PostToolUse | Write\|Edit | Collects edited file paths for batch-format |
 | batch-format | Stop | — | Prettier + tsc on accumulated files. Timeout: 300s |

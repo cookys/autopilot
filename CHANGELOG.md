@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.13 — diff-domain telemetry for /l5 (measure-now, route-later)
+
+**Headline**: `/l5` now records a deterministic **`work_domain`** for each implementation diff, so per-project per-domain model performance becomes measurable — the prerequisite for any future domain-aware engine routing. It routes **nothing**: a new `scripts/probe-diff-domain.sh` classifies a `git diff --numstat -z -M -C` into `rust` / `backend-cli` / `frontend` / `docs` / `mixed` (enumerated extension map, explicit exclude list, ties/binary/deletion/degenerate cases pinned, LLM-free), and `resolve-review-loop.sh` gains `--domain`/`--auto-domain` that append exactly two telemetry keys (`work_domain`, `domain_source`) to its JSON without touching any pre-existing field or engine choice. **Process**: dogfooded via `/l5` — heterogeneous implementer (`codex gpt-5.3-codex-spark`, cgroup-contained worktree dispatch) → 4-round decorrelated `gpt-5.5` xhigh review loop (1🔴+2🟠+2🟡 → 1🟠+1🟡 → 1🟠+1🟡 → SHIP-AS-IS) + an independent depth-0 adversarial harness. The 🔴 (a numstat-`z` rename path that looked like a counts record caused phantom double-counting) was caught by the decorrelated reviewer after the local green passed — fixed with a deterministic NUL state-machine parse. All domain **routing** is deferred to `docs/BACKLOG.md` behind explicit prerequisites (thin evidence: one exam, n=15).
+
+### Added
+- `scripts/probe-diff-domain.sh` — deterministic, LLM-free diff-domain telemetry probe (numstat-`z -M -C` NUL parse, enumerated classifier, inline exclude list, `> 0.5` dominant-share with ties→`mixed`, binary/deletion/rename-by-new-path handled). JSON + `--help`.
+- `resolve-review-loop.sh` `--domain <d>` (enum-validated) / `--auto-domain [range]` (shells the probe) → two appended telemetry keys `work_domain` + `domain_source` (`explicit|auto|none`); pre-existing output is a byte-exact prefix; non-git/empty/probe-fail ⇒ `mixed`/`none`, exit code unchanged.
+- `work_domain` column in the `/l5` run-summary ledger (`level-front-door.md`); `/l5` records it post-impl from the dispatch-outcome `base..commit` range (telemetry only).
+
+### Changed
+- Docs: `CLAUDE.md` inventory row for the probe + resolver two-key note; `review-loop-config.md` documents both keys as emitted telemetry; `BACKLOG.md` records the deferred domain-routing entry with its 5 prerequisites.
+
 ## v2.25.12 — onboarding-friendly README: slim front door, detail relocated to docs/
 
 **Headline**: `README.md` was a 651-line spec dump that buried newcomers under Superpowers-coexistence scenarios, the injection-mechanism diagram, full 20-hook Tier tables, design philosophy, and a 6-source credits block. It's now a **135-line onboarding tour** (What Is / Quick Start / What It Does, with natural-language "Try saying" triggers / A Day With Autopilot / Install / Learn More) and `README.zh-TW.md` mirrors it 1:1. All the depth was **relocated verbatim** (not summarized) into five English `docs/` files — `skills.md`, `coexistence.md`, `configuration.md`, `installation.md`, `architecture.md` — plus the hook Override/Secret-Detection operational notes moved into the canonical `hooks/README.md`. **Process**: built via `/l5` — a gpt-5.5 xhigh spec-review pass caught 3 real gaps (missing `--skill-count`, zh-TW badge not auto-bumped, an un-homed Override section) which were folded in before implementation; depth-0 ran every gate green.

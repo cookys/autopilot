@@ -1,0 +1,10 @@
+{
+  "name": "@demo/relay",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter @demo/relay build",
+    "test": "pnpm --filter @demo/relay test",
+    "test:ci": "pnpm --filter @demo/relay test:ci",
+    "typecheck": "pnpm --filter @demo/relay typecheck"
+  }
+}

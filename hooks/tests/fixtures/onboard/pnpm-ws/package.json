@@ -1,0 +1,14 @@
+{
+  "name": "@demo/mono",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:ci": "pnpm -r test:ci",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}

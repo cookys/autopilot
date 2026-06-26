@@ -1,0 +1,10 @@
+{
+  "name": "@demo/shared",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter @demo/shared build",
+    "test": "pnpm --filter @demo/shared test",
+    "test:ci": "pnpm --filter @demo/shared test:ci",
+    "typecheck": "pnpm --filter @demo/shared typecheck"
+  }
+}

@@ -1,0 +1,2 @@
+{ "name": "root", "private": true, "workspaces": { "packages": ["packages/*"] },
+  "scripts": { "build": "npm run -ws build", "test": "npm run -ws test" } }

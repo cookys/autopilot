@@ -34,8 +34,11 @@ assert_eq "1" "$EXIT" "skills badge drift exit 1"
 assert_contains "$OUT" "skills" "badge drift names the skills badge"
 restore "README.zh-TW.md"
 
-# 4. badge MISSING in one file (rename the hooks badge in zh only)
-sed -i 's#badge/hooks-20-#badge/HOOKSGONE-20-#' "$SBX/README.zh-TW.md"
+# 4. badge MISSING in one file (rename the hooks badge in zh only).
+# Count-agnostic (the hooks count changes over releases — a hardcoded `hooks-20`
+# silently no-ops this drift injection once the real badge moves, the same trap the
+# skills-drift case above guards against; hooks 20→21 at v2.25.14 hit exactly this).
+sed -i -E 's#badge/hooks-([0-9]+)-#badge/HOOKSGONE-\1-#' "$SBX/README.zh-TW.md"
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "missing-badge exit 1"
 assert_contains "$OUT" "hooks" "missing badge is named"

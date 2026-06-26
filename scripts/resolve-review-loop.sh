@@ -17,7 +17,8 @@
 #
 # Output: JSON {reviewer_engine, reviewer_effort, reviewer_runner,
 #   implementer_engine, implementer_effort, implementer_runner,
-#   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness, source}
+#   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
+#   review_diff_scope, source}
 #
 # Exit codes: 0 success / 2 usage.
 
@@ -38,6 +39,18 @@ DEF_MAX_ROUNDS="5"
 DEF_CONVERGE="SHIP-AS-IS"
 DEF_SPEC_REVIEW="on"
 DEF_HARNESS="on"
+# review_diff_scope: how much the per-round reviewer reads.
+#   full                  — re-read the whole base..HEAD diff every round (safe; cost
+#                           grows O(n) with the accumulating diff). DEFAULT.
+#   incremental-mitigated — read prev-round..HEAD, but ALSO re-read the full content of
+#                           files touched this round + a standing invariants list, do a
+#                           full re-read every few rounds / on critical-path touches, and
+#                           ALWAYS a final full base..HEAD review before merge. Cheaper on
+#                           long loops; only safe WITH those mitigations (naive
+#                           incremental-only misses cross-file regressions). Architect-
+#                           reviewed 2026-06-26; pairs with independent_harness running the
+#                           FULL suite, not just touched-file tests.
+DEF_DIFF_SCOPE="full"
 
 FIELD=""
 while [[ $# -gt 0 ]]; do
@@ -81,6 +94,7 @@ MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
 HARNESS="$(read_field independent_harness "$DEF_HARNESS")"
+DIFF_SCOPE="$(read_field review_diff_scope "$DEF_DIFF_SCOPE")"
 
 # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
 case "$REV_RUNNER" in codex|auto|agy) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
@@ -89,6 +103,7 @@ case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_E
 case "$IMPL_RUNNER" in auto|codex|agy) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
+case "$DIFF_SCOPE" in full|incremental-mitigated) ;; *) DIFF_SCOPE="$DEF_DIFF_SCOPE" ;; esac
 [[ "$MAX_ROUNDS" =~ ^[0-9]+$ ]] || MAX_ROUNDS="$DEF_MAX_ROUNDS"
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
@@ -105,13 +120,14 @@ if [[ -n "$FIELD" ]]; then
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
     independent_harness) printf '%s\n' "$HARNESS" ;;
+    review_diff_scope) printf '%s\n' "$DIFF_SCOPE" ;;
     source) printf '%s\n' "$SOURCE" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
-printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "source": "%s" }\n' \
+printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "review_diff_scope": "%s", "source": "%s" }\n' \
   "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
   "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
-  "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" "$SOURCE"
+  "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" "$DIFF_SCOPE" "$SOURCE"

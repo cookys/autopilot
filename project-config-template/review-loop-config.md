@@ -30,6 +30,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
+- review_diff_scope: full
 
 ## Field reference
 
@@ -45,6 +46,21 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
+| `review_diff_scope` | how much the per-round reviewer reads (cost vs regression-catching) | `full` (re-read whole `base..HEAD` each round — safe, O(n) cost growth) `\| incremental-mitigated` (read `prev..HEAD` + full content of files-touched + invariants list + periodic/critical-path full re-read + **mandatory final full review before merge**) |
+
+## When to use `incremental-mitigated` (architect-reviewed 2026-06-26)
+
+Default is `full`. Switch to `incremental-mitigated` only for **long** loops (many rounds,
+large accumulating diff) where the reviewer cost grows O(n) re-reading the whole diff each
+round. The naive "only the incremental diff" is **unsafe** — it can't prove earlier fixes
+still hold and misses cross-file regressions in untouched files (the exact class this loop
+catches). So it is only allowed WITH all of: re-read the full content of every file touched
+this round; carry a standing invariants/prior-findings checklist; do a full `base..HEAD`
+re-read every 3–5 rounds or whenever a fix touches shared/critical logic (classifiers,
+schemas, fixtures, harness control flow); and ALWAYS a final full `base..HEAD` review before
+merge. Real-world lesson (2026-06-26): a too-narrow per-round test/review scope let a
+stale-fixture regression in an *untouched* test file slip to the final full sweep — so pair
+this with `independent_harness: on` running the **FULL** suite, not just touched-file tests.
 
 ## Gotchas (carried from the test-integrity-l1 ship)
 

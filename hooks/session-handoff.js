@@ -3,6 +3,19 @@
  * session-handoff — SessionEnd hook (Node.js, opt-in / Tier B)
  *
  * Reworked to write machine handoff state only under ~/.autopilot (no repo writes).
+ *
+ * Behaviour notes (so a stale-looking handoff isn't mistaken for "the hook never fired"):
+ *   - FIRES on /clear and logout. /clear triggers BOTH SessionEnd (reason: clear, this
+ *     writer) and SessionStart (source: clear, the reader/inject half). Confirmed by docs
+ *     + the .session-handoff.log trail — every invocation logs exactly one status line.
+ *   - The .session-handoff.log `ts` is UTC (ISO `…Z`). At +08:00 a 07:33 local write
+ *     shows as `23:33Z`, which reads like a yesterday/stale entry — it isn't. Compare
+ *     against UTC, not wall-clock.
+ *   - Reader is CONSUME-ONCE: after SessionStart injects the body it deletes it, so
+ *     ~/.autopilot/handoff/ being empty post-inject is NORMAL, not evidence of no-fire.
+ *   - "No visible effect" is usually a legit skip: a cleared session with no meaningful
+ *     work logs `no_handoff_needed` (needs user_turns >= MIN_USER_TURNS OR
+ *     tool_calls >= MIN_TOOL_CALLS OR a dirty/active repo) and writes nothing.
  */
 
 'use strict';

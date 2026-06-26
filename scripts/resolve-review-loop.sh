@@ -25,7 +25,8 @@
 #   implementer_engine, implementer_effort, implementer_runner,
 #   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
 #   qc_panel (array), qc_panel_aggregation, review_risk, required_review_families,
-#   l1_required, cross_family_required, cross_family_satisfied, review_diff_scope, source}
+#   l1_required, cross_family_required, cross_family_satisfied, review_diff_scope, source,
+#   work_domain, domain_source}
 # (qc_panel = disjoint-family terminal gate; warns on stderr if the panel shares the
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
@@ -73,6 +74,10 @@ PROTECTED_PATH=0
 ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
 ENFORCE=0
+DWORK_DOMAIN="mixed"
+DOMAIN_SOURCE="none"
+AUTO_DOMAIN=0
+AUTO_RANGE="changed"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --field) FIELD="${2:-}"; shift 2 ;;
@@ -81,6 +86,26 @@ while [[ $# -gt 0 ]]; do
     --protected-path) PROTECTED_PATH="${2:-}"; shift 2 ;;
     --oracle-available) ORACLE_AVAILABLE="${2:-}"; shift 2 ;;
     --security-surface) SECURITY_SURFACE="${2:-}"; shift 2 ;;
+    --domain)
+      DOMAIN_OVERRIDE="${2:-}"
+      case "$DOMAIN_OVERRIDE" in
+        rust|backend-cli|frontend|docs|mixed) : ;;
+        *) echo "invalid --domain: $DOMAIN_OVERRIDE" >&2; exit 2 ;;
+      esac
+      DWORK_DOMAIN="$DOMAIN_OVERRIDE"
+      DOMAIN_SOURCE="explicit"
+      shift 2
+      ;;
+    --auto-domain)
+      AUTO_DOMAIN=1
+      shift
+      if [[ "${1:-}" != --* && "${1:-}" != "" && ( "$1" == *..* || "$1" == *...* ) ]]; then
+        AUTO_RANGE="$1"
+        shift
+      else
+        AUTO_RANGE="changed"
+      fi
+      ;;
     --enforce) ENFORCE=1; shift ;;
     -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -242,6 +267,51 @@ if [[ "$ENFORCE" == "1" && "$CROSS_FAMILY_REQUIRED" == "true" \
   ENFORCE_EXIT=3
 fi
 
+probe_diff_bytes() {
+  local mode="$1" base=""
+  case "$mode" in
+    changed)
+      if ! base="$(git merge-base HEAD develop 2>/dev/null || git merge-base HEAD main 2>/dev/null || git rev-parse HEAD~1)"; then
+        return 1
+      fi
+      git diff --numstat -z -M -C "${base}...HEAD" | wc -c
+      ;;
+    staged)
+      git diff --numstat -z -M -C --cached | wc -c
+      ;;
+    *)
+      git diff --numstat -z -M -C "$mode" | wc -c
+      ;;
+  esac
+}
+
+probe_field_str() {
+  local json="$1" key="$2"
+  printf '%s' "$json" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n1
+}
+probe_field_num() {
+  local json="$1" key="$2"
+  printf '%s' "$json" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\\([0-9]\\+\\).*/\\1/p" | head -n1
+}
+
+if [[ "$AUTO_DOMAIN" -eq 1 && "$DOMAIN_SOURCE" != "explicit" ]]; then
+  AUTO_DIFF_BYTES=""
+  if AUTO_DIFF_BYTES="$(probe_diff_bytes "$AUTO_RANGE")"; then
+    AUTO_DIFF_BYTES="${AUTO_DIFF_BYTES//$'\n'/}"
+    AUTO_OUT="$(bash "$SCRIPT_DIR/probe-diff-domain.sh" "$AUTO_RANGE" 2>/dev/null)"
+    if [[ "$AUTO_DIFF_BYTES" -gt 0 && -n "$AUTO_OUT" ]]; then
+      AUTO_PARSED="$(probe_field_str "$AUTO_OUT" work_domain)"
+      AUTO_WEIGHT_CLASSIFIED="$(probe_field_num "$AUTO_OUT" weight_classified)"
+      AUTO_WEIGHT_EXCLUDED="$(probe_field_num "$AUTO_OUT" weight_excluded)"
+      AUTO_WEIGHT_UNCLASSIFIED="$(probe_field_num "$AUTO_OUT" weight_unclassified)"
+      if [[ -n "$AUTO_PARSED" && -n "$AUTO_WEIGHT_CLASSIFIED" && -n "$AUTO_WEIGHT_EXCLUDED" && -n "$AUTO_WEIGHT_UNCLASSIFIED" ]]; then
+        DWORK_DOMAIN="$AUTO_PARSED"
+        DOMAIN_SOURCE="auto"
+      fi
+    fi
+  fi
+fi
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;
@@ -263,15 +333,17 @@ if [[ -n "$FIELD" ]]; then
     cross_family_satisfied) printf '%s\n' "$CROSS_FAMILY_SATISFIED" ;;
     review_diff_scope) printf '%s\n' "$DIFF_SCOPE" ;;
     source) printf '%s\n' "$SOURCE" ;;
+    work_domain) printf '%s\n' "$DWORK_DOMAIN" ;;
+    domain_source) printf '%s\n' "$DOMAIN_SOURCE" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"
 fi
 
-printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s" }\n' \
+printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s" }\n' \
   "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
   "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
   "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
   "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
-  "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE"
+  "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE"
 exit "$ENFORCE_EXIT"

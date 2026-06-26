@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.14-E8A838?style=flat-square" alt="v2.25.14">
+  <img src="https://img.shields.io/badge/version-2.25.15-E8A838?style=flat-square" alt="v2.25.15">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-21-6B8E6B?style=flat-square" alt="21 Hooks">
@@ -42,7 +42,7 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 - **收尾閉環** —— 乾淨收工、歸檔專案、把教訓記下來供下次使用。
 - **適應你的 repo** —— 在 `.claude/` 放一個 markdown 檔，同一批 skill 就會講你專案的 build 指令、慣例與坑。
 
-它是單一 Claude Code plugin —— **23 個 skill、3 個方法論 agent、20 個 hook、零相依**。可獨立運作，也能與 [`superpowers`](docs/coexistence.md) plugin 並存。
+它是單一 Claude Code plugin —— **23 個 skill、3 個方法論 agent、21 個 hook、零相依**。可獨立運作，也能與 [`superpowers`](docs/coexistence.md) plugin 並存。
 
 > 第一次來？這頁是 5 分鐘導覽。更深的內容都在 **[Learn More](#learn-more)**。
 
@@ -140,7 +140,7 @@ Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 sk
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** —— 20 個 runtime 強制 hook（8 預設啟用、12 可選啟用） | [hooks/README.md](hooks/README.md) |
+| **Hooks** —— 21 個 runtime 強制 hook（8 預設啟用、13 可選啟用） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

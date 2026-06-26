@@ -88,9 +88,20 @@ See [references/code-review.md](references/code-review.md) "Shadow QC panel" sub
 Follow references/test-policy.md
   → failure? → classify via `scripts/verify-preexisting.sh '<test-cmd>'`
               → PRE_EXISTING / INTRODUCED / NO_FAILURE / INCONCLUSIVE
-              → fix per test-policy → re-run tests
+              → INTRODUCED + (≥3 failures OR flaky/intermittent OR root cause not
+                obvious from the diff) → invoke `autopilot:test-strategy` for the
+                failure-investigation funnel (baseline / regression scoping / flaky
+                systemic handling) BEFORE patching blindly
+              → otherwise: fix per test-policy → re-run tests
   → pass? → continue
 ```
+
+> **Why route to test-strategy** (added v2.25.10): the classifier tells you *whose* failure it
+> is, not *why* it fails or whether it's flaky-systemic. A cluster of INTRODUCED failures or an
+> intermittent one is exactly where test-strategy's funnel (test-pyramid placement, baseline
+> 守則, regression scoping) prevents whack-a-mole patching. A single obvious INTRODUCED failure
+> with a clear diff cause does NOT need it — fix directly. This is the cross-cutting routing edge
+> that was missing (2026-06-26 methodology inventory).
 
 > **Long-running / CI-backed test commands (Claude Code only, capability-gated):** when the
 > test command is a remote CI run or a multi-minute build, prefer the **`Monitor`** tool over

@@ -24,6 +24,13 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.10 — quality-pipeline routes hard/flaky test failures to test-strategy
+
+**Headline**: Closes the one genuine missing routing edge found by the 2026-06-26 methodology-completeness inventory: `quality-pipeline`'s test step classified failures (`verify-preexisting.sh`) but never tapped `test-strategy`'s failure-investigation methodology. Now, an INTRODUCED failure that is clustered (≥3), flaky/intermittent, or not-obvious-from-the-diff routes to `autopilot:test-strategy` (funnel / baseline / regression scoping) before blind patching; a single obvious failure still fixes directly. (The inventory confirmed no orphan skills and that entry-point skills are correctly standalone — this was the only cross-cutting edge worth wiring; the `team`→`dev-flow` "gap" was deliberately NOT wired, per the recorded thin-slice parallelization non-goal.)
+
+### Changed
+- `skills/quality-pipeline/SKILL.md` Tests step — conditional routing to `autopilot:test-strategy` on hard/flaky INTRODUCED failures.
+
 ## v2.25.9 — heterogeneous decorrelation: agy restored as implementer + cross-family qc panel
 
 **Headline**: Two coupled `/l5` decorrelation upgrades. (1) **`agy`/Gemini works as a heterogeneous implementer again** — the long-standing "agy can't write to the worktree" blocker was not a vendor wall but a relative-path prompt interacting with agy ignoring process cwd (it invented a `~/.gemini/.../scratch/` project = the old `no_op`). `dispatch-hetero.sh` now prepends an absolute-worktree anchor so agy edits in place (verified single-/multi-file + 3-way concurrent). (2) The authoritative depth-0 qc gate becomes a configurable **disjoint-family panel** (`qc_panel`, default OpenAI/Anthropic/Google) aggregated **`union-on-verified-critical`** (majority forbidden — it would suppress the single-track blind-spot catch a panel exists to surface), with a new **read-only** `dispatch-review.sh` putting Gemini-via-agy into the panel (agy's write bug is implementer-only; read-only review is verified — it caught a planted bug).

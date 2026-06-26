@@ -32,6 +32,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - independent_harness: on
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_aggregation: union-on-verified-critical
+- review_diff_scope: full
 
 > **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a
 > **disjoint-family** panel (OpenAI / Anthropic / Google), distinct from the inner-loop
@@ -60,6 +61,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
 | `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
+| `review_diff_scope` | how much the per-round reviewer reads (cost vs regression-catching) | `full` (re-read whole `base..HEAD` each round — safe, O(n) cost growth) `\| incremental-mitigated` (read `prev..HEAD` + full content of files-touched + invariants list + periodic/critical-path full re-read + **mandatory final full review before merge**) |
 
 ### Risk-tiered review depth (v2.25.11 — emitted by `resolve-review-loop.sh`, not config keys)
 
@@ -83,6 +85,20 @@ it — fail-closed). The cross-family overlap message escalates **WARNING** (low
 when a high-risk change's required cross-family decorrelation is unsatisfied (incl. an empty panel at
 high risk). Default stays exit-0 data mode — the resolver REPORTS, the depth-0 loop / pre-push gate
 ENFORCES (same pattern as `resolve-doa`/`resolve-qc-gate`). Full design: [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../docs/plans/2026-06-26-trust-tiered-review-policy.md).
+
+## When to use `incremental-mitigated` (architect-reviewed 2026-06-26)
+
+Default is `full`. Switch to `incremental-mitigated` only for **long** loops (many rounds,
+large accumulating diff) where the reviewer cost grows O(n) re-reading the whole diff each
+round. The naive "only the incremental diff" is **unsafe** — it can't prove earlier fixes
+still hold and misses cross-file regressions in untouched files (the exact class this loop
+catches). So it is only allowed WITH all of: re-read the full content of every file touched
+this round; carry a standing invariants/prior-findings checklist; do a full `base..HEAD`
+re-read every 3–5 rounds or whenever a fix touches shared/critical logic (classifiers,
+schemas, fixtures, harness control flow); and ALWAYS a final full `base..HEAD` review before
+merge. Real-world lesson (2026-06-26): a too-narrow per-round test/review scope let a
+stale-fixture regression in an *untouched* test file slip to the final full sweep — so pair
+this with `independent_harness: on` running the **FULL** suite, not just touched-file tests.
 
 ## Gotchas (carried from the test-integrity-l1 ship)
 

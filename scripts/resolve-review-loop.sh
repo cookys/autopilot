@@ -24,9 +24,11 @@
 # Output: JSON {reviewer_engine, reviewer_effort, reviewer_runner,
 #   implementer_engine, implementer_effort, implementer_runner,
 #   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
-#   qc_panel (array), qc_panel_aggregation, source}
+#   qc_panel (array), qc_panel_aggregation, review_risk, required_review_families,
+#   l1_required, cross_family_required, cross_family_satisfied, review_diff_scope, source}
 # (qc_panel = disjoint-family terminal gate; warns on stderr if the panel shares the
-#  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.)
+#  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
+#  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
 #
 # Exit codes: 0 success / 2 usage.
 
@@ -51,6 +53,18 @@ DEF_HARNESS="on"
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
 DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
 DEF_QC_AGG="union-on-verified-critical"
+# review_diff_scope: how much the per-round reviewer reads.
+#   full                  — re-read the whole base..HEAD diff every round (safe; cost
+#                           grows O(n) with the accumulating diff). DEFAULT.
+#   incremental-mitigated — read prev-round..HEAD, but ALSO re-read the full content of
+#                           files touched this round + a standing invariants list, do a
+#                           full re-read every few rounds / on critical-path touches, and
+#                           ALWAYS a final full base..HEAD review before merge. Cheaper on
+#                           long loops; only safe WITH those mitigations (naive
+#                           incremental-only misses cross-file regressions). Architect-
+#                           reviewed 2026-06-26; pairs with independent_harness running the
+#                           FULL suite, not just touched-file tests.
+DEF_DIFF_SCOPE="full"
 
 FIELD=""
 SOURCE_TRUST=""
@@ -110,6 +124,7 @@ SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
 HARNESS="$(read_field independent_harness "$DEF_HARNESS")"
 QC_PANEL_RAW="$(read_field qc_panel "$DEF_QC_PANEL")"
 QC_AGG="$(read_field qc_panel_aggregation "$DEF_QC_AGG")"
+DIFF_SCOPE="$(read_field review_diff_scope "$DEF_DIFF_SCOPE")"
 
 # Map an engine name → vendor family (for the decorrelation overlap warning).
 family_of() {
@@ -144,6 +159,7 @@ case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_E
 case "$IMPL_RUNNER" in auto|codex|agy) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
+case "$DIFF_SCOPE" in full|incremental-mitigated) ;; *) DIFF_SCOPE="$DEF_DIFF_SCOPE" ;; esac
 [[ "$MAX_ROUNDS" =~ ^[0-9]+$ ]] || MAX_ROUNDS="$DEF_MAX_ROUNDS"
 # Aggregation enum: union-on-verified-critical is the safe default; majority is FORBIDDEN
 # (it would suppress a single-track blind-spot catch — the whole point of a panel). Any
@@ -245,16 +261,17 @@ if [[ -n "$FIELD" ]]; then
     l1_required) printf '%s\n' "$L1_REQUIRED" ;;
     cross_family_required) printf '%s\n' "$CROSS_FAMILY_REQUIRED" ;;
     cross_family_satisfied) printf '%s\n' "$CROSS_FAMILY_SATISFIED" ;;
+    review_diff_scope) printf '%s\n' "$DIFF_SCOPE" ;;
     source) printf '%s\n' "$SOURCE" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"
 fi
 
-printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "source": "%s" }\n' \
+printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s" }\n' \
   "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
   "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
   "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
   "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
-  "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$SOURCE"
+  "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE"
 exit "$ENFORCE_EXIT"

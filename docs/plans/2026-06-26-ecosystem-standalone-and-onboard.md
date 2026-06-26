@@ -1,6 +1,9 @@
 # Plan — Ecosystem-standalone premise + `autopilot:onboard` skill
 
-> **Status**: Draft (R0) — awaiting Board approval before implementation.
+> **Status**: **Approved (R1)** — Board approved 2026-06-26. Resolved: v1 skill = **full** (scaffold +
+> CLAUDE.md reconcile + memory seed, Option 2); engine = **mixed** (P1/P4/P5 docs+skill via `/l4` all-Claude;
+> P2/P3 mechanical scripts via `/l5` Gemini); skill name = `onboard`. Impl venue = autopilot-rooted session
+> post-restart (see §8). Ready to execute P0.
 > **Owner**: cookys (Board) · **Branch**: `feat/ecosystem-standalone-onboard` (off `develop`)
 > **Frame**: positioning recalibration (B, mostly docs/emphasis) + one net-new skill with 2 scripts (A, FEATURE).
 > **Origin**: surfaced while onboarding the `hangar-bridge` repo to autopilot DI (2026-06-26). That repo's
@@ -80,10 +83,10 @@ Per AGENTS.md "scripts for mechanical work, skill for judgment":
 **Golden output = hangar-bridge `.claude/`** (the 9 `*-config.md`, docs skeleton, reconciled CLAUDE.md,
 seeded memory). Fixture the detect-JSON for hangar-bridge and assert scaffold reproduces it.
 
-**Open: scope of the skill's CLAUDE.md reconcile.** Option 1: skill only scaffolds `.claude/` + docs
-skeleton, leaves CLAUDE.md/memory to the human (smaller, deterministic). Option 2: skill also does the
-prose reconcile + memory seed (full parity with the hand-built run, but judgment-heavy / less testable).
-**Recommend Option 1 for v1**, with the reconcile/seed as a documented follow-on step in the skill body.
+**Resolved (Board 2026-06-26): Option 2 — full.** The skill scaffolds `.claude/` + docs skeleton AND does the
+CLAUDE.md prose reconcile + memory seed, for full parity with the hand-built hangar-bridge run. The
+judgment-heavy parts (reconcile/seed) live in the skill body; keep the deterministic detect/scaffold scripts
+separately fixture-tested so the testable core stays testable even though the prose steps are skill-driven.
 
 ### (B) Premise flip — surgical, triage-gated
 
@@ -97,6 +100,10 @@ prose reconcile + memory seed (full parity with the hand-built run, but judgment
    the positioning sentences, not the relocated tables).
 
 ## 4. Phasing (each phase = independent commit; TDD where code)
+
+**Engine per phase (Board 2026-06-26):** P1/P4/P5 (docs + skill body — touch autopilot's own dispatch rails,
+want all-Claude trust) → **`/l4`**. P2/P3 (pure mechanical scripts) → **`/l5`** Gemini (cost-arbitrage +
+decorrelation). P0/P6 are depth-0 CEO work (triage gate / dogfood), no leaf engine.
 
 - **P0 — Audit & triage** *(no code)*: produce `docs/plans/.../triage-superpowers-footprint.md` (keep/flip
   table over the 40 files). Gate: Board confirms the flip-set before any edit.
@@ -148,10 +155,10 @@ work target is the **autopilot repo** (dev clone just fast-forwarded to **2.25.1
 ⇒ **Recommended impl venue**: restart Claude Code in `~/projects/autopilot`, confirm the plugin is the dev
 clone, then `/l5` per-phase from there. The plan + branch are already in place on `feat/ecosystem-standalone-onboard`.
 
-## 9. Open questions (for Board)
+## 9. Open questions — RESOLVED (Board 2026-06-26)
 
-1. Skill name: `onboard` vs `project-init` vs `di-init`? (Plan assumes `onboard`.)
-2. v1 skill scope: scaffold-only (Option 1) vs scaffold + CLAUDE.md-reconcile + memory-seed (Option 2)?
-3. Run impl as `/l5` (hetero Gemini implementer) as requested, or `/l4` (all-Claude) — given the work edits
-   autopilot's own dispatch rails, a homogeneous run may be easier to trust for P1/P5. (Hetero still fine for
-   the mechanical P2/P3 scripts.)
+1. ~~Skill name~~ → **`onboard`**.
+2. ~~v1 scope~~ → **Option 2 (full)**: scaffold + CLAUDE.md reconcile + memory seed (§3A).
+3. ~~Engine~~ → **mixed**: P1/P4/P5 `/l4` (all-Claude), P2/P3 `/l5` (Gemini). See §4.
+
+No open questions remain — plan is execution-ready (start at P0).

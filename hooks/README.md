@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-21 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **13 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+22 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **14 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -180,7 +180,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
 
-## Tier B — Opt-In (13 hooks)
+## Tier B — Opt-In (14 hooks)
 
 Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`).
 

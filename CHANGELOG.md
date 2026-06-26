@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.0 — `autopilot:onboard` + ecosystem-standalone premise + install/update-UX
+
+**Headline**: One branch, three strands, landing as the 24th skill. **(A) `autopilot:onboard`** — the "fresh repo → autopilot-calibrated repo" bridge that was missing (project-lifecycle bootstraps tracking docs from a plan, nothing scaffolded the `.claude/*-config.md` DI): **detect** a repo's mechanical reality → **scaffold** the config set with ecosystem-standalone (autopilot-only) chains → **enrich** the judgment configs. **(B) Ecosystem-standalone premise flip** — autopilot's documented default is now autopilot + `codeforge` + `mnemos` standalone; `superpowers` consistently optional (no longer "built-in"/"recommended default"/"Superpowers executes"); voltagent de-assumed as a peer. **(C) Install/update-UX** — a single "Updating" decision branch in `docs/installation.md`, the opt-in `version-drift-check` SessionStart hook, and `dev-update.sh`. Skills 23 → **24**; hooks 21 → **22** (this branch's `version-drift-check`, opt-in).
+
+### Added
+- **`skills/onboard/SKILL.md`** (24th skill) — judgment layer over the two scripts: maps domain keywords → skills, derives doc⇄code drift domains, names security surfaces, optional CLAUDE.md reconcile + memory seed. Ecosystem-standalone by default.
+- **`scripts/project-detect.js`** — pure-Node read-only repo detector → JSON (package manager, commands + `lint_is_noop`, per-package coverage thresholds, doc convention, workspace/packages, `default_branch` only when target is the git top-level, protected paths, project paths, `installed_plugins.superpowers`). Path-traversal + symlink-escape guarded; never throws out of main. 83 assertions / 9 fixture shapes; golden-exact vs hangar-bridge.
+- **`scripts/scaffold-config.js`** — mechanical `.claude/` scaffolder (7 filled configs + 2 `TODO(onboard)` skeletons), autopilot-only chains, `.gitignore` runtime-state block (keeps `*-config.md` tracked; warns on a pre-existing wholesale `.claude/` ignore). Idempotent; `--force`/`--dry-run`. 47 assertions.
+- **`hooks/version-drift-check.js`** (opt-in, SessionStart) — dev-mode advisory when the autopilot clone is behind its git upstream (no network; fail-open). + **`scripts/dev-update.sh`**.
+
+### Changed
+- **Premise flip**: `hooks/session-start.js`, `hooks/failure-escalation.js`, `.claude/dispatch-config.md`, `docs/coexistence.md`, `docs/architecture.md`, `project-config-template/team-config.md`, `agents/README.md`, `skills/think-tank/{SKILL.md,references/role-prompts.md}`, README + zh-TW + CLAUDE.md (trio baseline).
+- **Install/update**: `docs/installation.md` "Known Limitation" + "Update" folded into one "Updating" decision section; `dev-setup.sh` completion message points at the dev-mode update one-liner.
+- Counts propagated: 24 skills / 22 hooks (8 default-on, 14 opt-in) across every surface; version 2.25.16 → 2.26.0 (new skill = MINOR).
+
+### Process
+- `/l5` with a gpt-5.5 xhigh decorrelated review loop on every phase. P2 (detector): 8 review rounds caught real path-traversal + symlink-escape vulnerabilities + edge cases. P3 (scaffolder): 4 rounds. Holistic whole-branch pre-merge review (gpt-5.5) caught a gitignore-shadow gap + a stale doc-drift-gate reference. Rebased onto a fast-moving develop (which shipped v2.25.13–v2.25.16 concurrently); merge reconciled the new opt-in hook → 22.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot@v2.25.16`. The onboard scripts only WRITE into an explicit `<target>`.
+
 ## v2.25.16 — update-checker: "what's new" on version bump (default-on, fixes opt-in discovery)
 
 **Headline**: Solves a real adoption gap — when autopilot updates and adds a new **opt-in** feature, the user's `settings.json` is unchanged, so the feature has ~0 discovery (CHANGELOG is pull-only). A new **default-on** behavior folded into `session-start.js` now announces a version bump **once** per bump: on a SessionStart `startup`/`clear`, it compares the current `plugin.json` version against a `~/.autopilot/last-seen-version` high-watermark, and if it advanced, injects a capped, CHANGELOG-driven "what's new + where to enable new opt-in features" notice, then atomically advances the watermark. Default-on (an opt-in discovery tool can't bootstrap), but **bounded and safe**: counts toward the existing 10k `additionalContext` cap, fires only on a real bump (no steady-state noise), the user-mention instruction is **conditional** (skipped for exact/JSON/machine-readable output), and it's opt-out-able. No repo writes, no network, no settings-introspection. **Process**: `/l5` dogfood — 3-round gpt-5.5 **spec-review** (design converged before code: 4🟠+2🟡 → 2🟠 → SHIP) → codex `gpt-5.3-codex-spark` hetero impl → 2-round gpt-5.5 **impl-review** (3🟠 default-on edge cases — stale-lock-wedge / empty-CHANGELOG-throw / instruction-truncation — caught + fixed) + independent depth-0 harness.

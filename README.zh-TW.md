@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/version-2.26.0-E8A838?style=flat-square" alt="v2.26.0">
   <img src="https://img.shields.io/badge/skills-24-4A90D9?style=flat-square" alt="24 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-21-6B8E6B?style=flat-square" alt="21 Hooks">
+  <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -42,7 +42,7 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 - **收尾閉環** —— 乾淨收工、歸檔專案、把教訓記下來供下次使用。
 - **適應你的 repo** —— 在 `.claude/` 放一個 markdown 檔，同一批 skill 就會講你專案的 build 指令、慣例與坑。
 
-它是單一 Claude Code plugin —— **24 個 skill、3 個方法論 agent、21 個 hook、零相依**。可完全獨立運作 —— 是 Cookys 假定的 **autopilot + codeforge + mnemos** 生態系的獨立核心 —— 若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它是單一 Claude Code plugin —— **24 個 skill、3 個方法論 agent、22 個 hook、零相依**。可完全獨立運作 —— 是 Cookys 假定的 **autopilot + codeforge + mnemos** 生態系的獨立核心 —— 若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 第一次來？這頁是 5 分鐘導覽。更深的內容都在 **[Learn More](#learn-more)**。
 
@@ -140,7 +140,7 @@ Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 sk
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** —— 21 個 runtime 強制 hook（8 預設啟用、13 可選啟用） | [hooks/README.md](hooks/README.md) |
+| **Hooks** —— 22 個 runtime 強制 hook（8 預設啟用、14 可選啟用） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

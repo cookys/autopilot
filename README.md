@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/version-2.26.0-E8A838?style=flat-square" alt="v2.26.0">
   <img src="https://img.shields.io/badge/skills-24-4A90D9?style=flat-square" alt="24 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-21-6B8E6B?style=flat-square" alt="21 Hooks">
+  <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -42,7 +42,7 @@ Claude Code is great at writing code. Autopilot makes it great at **running the 
 - **Closes the loop** — finishes cleanly, archives the project, and captures the lessons for next time.
 - **Adapts to your repo** — drop a markdown file in `.claude/` and the same skills speak your project's build commands, conventions, and gotchas.
 
-It's a single Claude Code plugin — **24 skills, 3 methodology agents, 21 hooks, zero dependencies**. It works fully on its own — the standalone core of cookys's assumed **autopilot + codeforge + mnemos** ecosystem — and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It's a single Claude Code plugin — **24 skills, 3 methodology agents, 22 hooks, zero dependencies**. It works fully on its own — the standalone core of cookys's assumed **autopilot + codeforge + mnemos** ecosystem — and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > New here? This page is the 5-minute tour. Everything deeper lives in **[Learn More](#learn-more)**.
 
@@ -140,7 +140,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** — 21 runtime-enforcement hooks (8 default-on, 13 opt-in) | [hooks/README.md](hooks/README.md) |
+| **Hooks** — 22 runtime-enforcement hooks (8 default-on, 14 opt-in) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

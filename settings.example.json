@@ -151,6 +151,18 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "//": "session-handoff: on /clear (or logout) auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript) and, if so, writes/updates docs/HANDOFF.md in the repo cwd from the transcript. Does nothing when nothing meaningful happened. OPT-IN because it writes into your repo. Thresholds: AUTOPILOT_HANDOFF_MIN_USER_TURNS (3) / AUTOPILOT_HANDOFF_MIN_TOOL_CALLS (12)",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.js"
+          }
+        ]
+      }
     ]
   }
 }

@@ -117,4 +117,53 @@ assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EPCFG" bash "$SCRIPT" --securi
 assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EPCFG" bash "$SCRIPT" --security-surface 1 --field cross_family_satisfied)" "high-risk empty panel: cross_family_satisfied false"
 assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EPCFG" bash "$SCRIPT" --enforce --security-surface 1 >/dev/null 2>&1; echo $?)" "--enforce blocks high-risk EMPTY panel (no reviewers at all)"
 
+# 12. probe telemetry fields + invalid --domain enum
+assert_eq "mixed" "$(bash "$SCRIPT" --field work_domain)" "--field work_domain"
+assert_eq "none" "$(bash "$SCRIPT" --field domain_source)" "--field domain_source"
+assert_eq "2" "$(bash "$SCRIPT" --domain nope >/dev/null 2>&1; echo $?)" "--domain invalid returns usage exit 2"
+
+# 13. --auto-domain inserts exactly two keys at JSON tail (legacy output is unchanged prefix)
+BASE_JSON="$(bash "$SCRIPT")"
+AUTO_JSON="$(bash "$SCRIPT" --auto-domain HEAD..HEAD)"
+AUTO_WD="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field work_domain)"
+AUTO_SOURCE="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field domain_source)"
+BASE_LEGACY_PREFIX="$(printf '%s' "$BASE_JSON" | sed 's/, "work_domain": "[^"]*", "domain_source": "[^"]*" }$/ }/')"
+BASE_PREFIX="$(printf '%s' "$BASE_LEGACY_PREFIX" | sed 's/ }$//')"
+assert_eq "${BASE_PREFIX}, \"work_domain\": \"${AUTO_WD}\", \"domain_source\": \"${AUTO_SOURCE}\" }" "$AUTO_JSON" "auto output is exact legacy prefix + inserted keys"
+assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
+
+# 13b. round-2 reviewer 🟡 — a NON-self-referential KR2 schema lock. The prefix check
+#      above derives its baseline by stripping the new keys from the already-modified
+#      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
+#      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
+#      then work_domain, then domain_source — nothing else, nothing moved.
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":'
+ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source, in order (catches old-field drift/reorder/drop)"
+
+# 14. non-git / empty / probe-failure paths:
+NON_GIT_DIR="$TEST_TMP/not-a-repo"
+mkdir -p "$NON_GIT_DIR"
+NON_GIT_OUT="$(cd "$NON_GIT_DIR" && bash "$SCRIPT" --auto-domain 2>&1)"; NON_GIT_EXIT=$?
+assert_eq "0" "$NON_GIT_EXIT" "non-git --auto-domain keeps resolver exit code"
+assert_contains "$NON_GIT_OUT" '"work_domain": "mixed"' "non-git --auto-domain yields mixed"
+assert_contains "$NON_GIT_OUT" '"domain_source": "none"' "non-git --auto-domain yields domain_source none"
+
+RL_REPO="$TEST_TMP/repo-auto"
+mkdir -p "$RL_REPO"
+git -C "$RL_REPO" init -q -b main
+git -C "$RL_REPO" config user.email t@t
+git -C "$RL_REPO" config user.name t
+git -C "$RL_REPO" commit --allow-empty -q -m base
+BASE_COMMIT="$(git -C "$RL_REPO" rev-parse HEAD)"
+EMPTY_AUTO="$(cd "$RL_REPO" && bash "$SCRIPT" --auto-domain "$BASE_COMMIT..$BASE_COMMIT")"
+assert_contains "$EMPTY_AUTO" '"work_domain": "mixed"' "empty auto-range returns mixed"
+assert_contains "$EMPTY_AUTO" '"domain_source": "none"' "empty auto-range returns domain_source none"
+
+# 15. --enforce and core review fields stay unchanged with --auto-domain
+assert_eq "$(bash "$SCRIPT" --field review_risk)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field review_risk)" "auto-domain does not alter review_risk"
+assert_eq "$(bash "$SCRIPT" --field cross_family_required)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field cross_family_required)" "auto-domain does not alter cross_family_required"
+assert_eq "$(bash "$SCRIPT" --field cross_family_satisfied)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field cross_family_satisfied)" "auto-domain does not alter cross_family_satisfied"
+assert_eq "$(bash "$SCRIPT" --enforce --security-surface 1 >/dev/null 2>&1; echo $?)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --enforce --security-surface 1 >/dev/null 2>&1; echo $?)" "no-routing invariant for --enforce with auto-domain"
+
 finalize_test

@@ -398,16 +398,24 @@ serial-fraction).
 The foreman returns — and the CEO records in the final CEO Report — a ledger with
 one row per step:
 
-| step | runner | model | verdict | artifact |
-|------|--------|-------|---------|----------|
-| plan | claude | (foreman tier) | n/a | (plan doc / inline) |
-| impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | `<branch>@<sha>` |
-| foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | (qc notes) |
-| **depth-0 qc panel (authoritative)** | claude ×N (≥3 lenses) | (depth-0 tier) | **pass/fail** (synthesized) | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
+| step | runner | model | verdict | work_domain | artifact |
+|------|--------|-------|---------|-------------|----------|
+| plan | claude | (foreman tier) | n/a | — | (plan doc / inline) |
+| impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | backend-cli | `<branch>@<sha>` |
+| foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | — | (qc notes) |
+| **depth-0 qc panel (authoritative)** | claude ×N (≥3 lenses) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from
   `dispatch-hetero.sh`'s outcome JSON (`runner`/`model` fields) for the `/l5`
   path, or is `claude`/`<worker tier>` for the native `/l4` path.
+- **`work_domain`** (impl row only) is **telemetry, never a routing input** — the
+  deterministic dominant domain of the impl diff from
+  `scripts/resolve-review-loop.sh --auto-domain <base>..<commit>` (the `base` +
+  `commit` fields from `dispatch-hetero.sh`'s outcome JSON — `base` is the
+  immutable SHA passed via `--base`; NOT ambient `HEAD`, which the worktree GC on
+  success would break). Values: `rust` \| `backend-cli` \| `frontend` \| `docs` \|
+  `mixed`. It records what kind of work ran so per-domain model performance can be
+  measured later; it selects no engine. See `scripts/probe-diff-domain.sh`.
 - The ledger makes success criterion #3 (depth-0 gate distinct from first-pass)
   and #6 (provenance present) verifiable from the report alone.
 

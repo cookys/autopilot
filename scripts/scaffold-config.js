@@ -268,9 +268,29 @@ function writeOrSkipFile(filePath, relativeName, content, state) {
   state.written.push(relativeName);
 }
 
+// A pre-existing WHOLESALE `.claude/` ignore shadows the generated *-config.md, and
+// git CANNOT re-include a file under a fully-excluded parent (a `!.claude/*-config.md`
+// negation is silently inert — same gotcha as distill-sync-setup). Detect + warn; we
+// cannot auto-fix without rewriting the user's intent.
+function claudeDirWholesaleIgnored(gitignoreText) {
+  return gitignoreText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .some((l) => /^!?\/?\.claude\/?$/.test(l) && !l.startsWith('!'));
+}
+
 function updateGitignore(targetDir, dryRun) {
   const gitignorePath = path.join(targetDir, '.gitignore');
   let current = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+  if (claudeDirWholesaleIgnored(current)) {
+    console.warn(
+      '.gitignore WARNING: a wholesale `.claude/` ignore rule is present — the generated ' +
+      '`.claude/*-config.md` will stay UNTRACKED, and git cannot re-include them under a ' +
+      'fully-excluded parent. Replace `.claude/` with the specific runtime-state paths ' +
+      '(`.claude/tasks/`, `.claude/*-state.json`, `.claude/knowledge/`, `.claude/.qc/`) so ' +
+      'the configs are tracked.'
+    );
+  }
   if (current.includes(GITIGNORE_MARKER)) {
     return false;
   }

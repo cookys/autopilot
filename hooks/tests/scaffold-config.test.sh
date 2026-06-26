@@ -125,6 +125,17 @@ SUMMARY4="$(printf '%s\n' "$OUT4" | tail -n 1)"
 assert_contains "$(query_json "$SUMMARY4" "written")" "quality-gate-config.md" "forced run should rewrite hand-edited file"
 assert_not_contains "$(cat "$TARGET/.claude/quality-gate-config.md")" "# hand edit" "forced run overwrites hand edit"
 
+# --- pre-existing wholesale `.claude/` ignore → WARNING (configs would be untracked) ---
+WS_TARGET="$TEST_TMP/wholesale-ignore"; mkdir -p "$WS_TARGET"
+printf '.claude/\nnode_modules/\n' > "$WS_TARGET/.gitignore"
+WS_ERR="$(node "$SCRIPT" "$WS_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
+assert_contains "$WS_ERR" "wholesale" "warns when target already ignores .claude/ wholesale"
+# control: a target WITHOUT a wholesale ignore emits no such warning
+NOWS_TARGET="$TEST_TMP/no-wholesale"; mkdir -p "$NOWS_TARGET"
+printf 'node_modules/\n' > "$NOWS_TARGET/.gitignore"
+NOWS_ERR="$(node "$SCRIPT" "$NOWS_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
+assert_not_contains "$NOWS_ERR" "wholesale" "no false warning when .claude/ not pre-ignored"
+
 # --- --dry-run does not write ---
 DRY_TARGET="$TEST_TMP/dry-run-target"
 mkdir -p "$DRY_TARGET"

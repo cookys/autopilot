@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.25.11-E8A838?style=flat-square" alt="v2.25.11">
+  <img src="https://img.shields.io/badge/version-2.25.12-E8A838?style=flat-square" alt="v2.25.12">
   <img src="https://img.shields.io/badge/skills-23-4A90D9?style=flat-square" alt="23 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-20-6B8E6B?style=flat-square" alt="20 Hooks">
@@ -22,627 +22,111 @@
 
 ---
 
-## The Problem
+## What Is Autopilot?
 
-Claude Code on its own — even with the built-in `superpowers` plugin if you've installed it — leaves several layers unaddressed:
+Claude Code is great at writing code. Autopilot makes it great at **running the whole job** — so you describe what you want and it handles the discipline around the code:
 
-- **Lifecycle management** — no task sizing, no project tracking, no session start/end discipline
-- **Strategic decisions** — no multi-perspective debate, no dual-agent research
-- **Quality gates** — no unified pipeline enforcing test → scan → completeness → review
-- **Methodology discipline** — evidence-first debugging, test pyramid baselines, team allocation, performance profiling all need explicit frames
-- **Self-improvement** — no knowledge capture, no retrospectives, no "what's next?" recommendations
-- **Project-specific context** — no mechanism to inject your project's tools, conventions, and known gotchas
+- **Sizes the task and plans it** — a one-line fix and a multi-module feature get different treatment, automatically.
+- **Runs quality gates** — tests, completeness scan (no stubs/TODOs), and code review before anything merges.
+- **Closes the loop** — finishes cleanly, archives the project, and captures the lessons for next time.
+- **Adapts to your repo** — drop a markdown file in `.claude/` and the same skills speak your project's build commands, conventions, and gotchas.
 
-## The Solution
+It's a single Claude Code plugin — **23 skills, 3 methodology agents, 20 hooks, zero dependencies**. It works on its own, and plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
-Autopilot ships **23 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](#superpowers-coexistence) below).
+> New here? This page is the 5-minute tour. Everything deeper lives in **[Learn More](#learn-more)**.
 
-| Skill | What It Does | Coexists with |
-|-------|-------------|---------------|
-| **dev-flow** | Sizes tasks (S/L/H), sets session rules for config injection and quality gates, manages project tracking | `superpowers:writing-plans` (planning) |
-| **survey** | Dual-agent research (researcher + skeptic) | — (no equivalent) |
-| **brainstorm** | Pre-code Socratic design exploration — discovers options when none exist yet, surfaces 2-3 approaches, gates implementation until a design is approved | `superpowers:brainstorming` (internalized) |
-| **think-tank** | 6-role debate for strategic decisions | `superpowers:brainstorming` (different level — requirements exploration) |
-| **think-tank-dialectic** | Hegelian dialectic for irreversible / high-stakes decisions with LOW consensus. 4 职能 + 2 adversarial roles (Popper falsifier + Munger inverter). NOT a "better think-tank" — a different tool for a different situation | — (no equivalent) |
-| **ceo-agent** | Autonomous execution with CEO-level judgment | — (no equivalent) |
-| **l3 / l4 / l5** | Terse CEO front-doors that pre-fill the four startup questions and set execution posture: `/l3` runs inline, `/l4` dispatches one background worktree-isolated `sub-orchestrator` foreman with a depth-0 control loop + authoritative qc, `/l5` adds a heterogeneous (agy/Gemini) implementer | — (no equivalent) |
-| **research-to-ship** | Pinned participatory pipeline: research best-practice → plan → dialectic loop review → project → dev-flow, with a human gate between each phase. Delegates to survey/think-tank-dialectic/project-lifecycle/dev-flow | — (no equivalent) |
-| **quality-pipeline** | Unified quality gate: test → scan → completeness → review | `superpowers:verification-before-completion` (partial) |
-| **finish-flow** | Size-aware closing forcing function — TaskCreates discrete L-5 / H-9 / Fix / S-Lite sub-tasks so nothing gets silently compressed | — (no equivalent) |
-| **doc-sync** | Doc↔code drift detection, two layers: a **deterministic gate** (reliable, gate-able in CI — baseline `scripts/doc-drift-gate.py` does links + code-fences; projects extend with version/CLI-surface/roadmap checks) + an **LLM sweep** for discovery (scoped per-diff / full whole-repo; non-deterministic, never loop-to-zero). Mechanizable findings demote into the gate. Wired into finish-flow L-5.4 | — (no equivalent) |
-| **project-lifecycle** | Plan → bootstrap → structure → archive | `superpowers:finishing-a-development-branch` (partial) |
-| **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
-| **retro** | Engineering retrospective from git history | — (no equivalent) |
-| **distill** | Distills recurring procedures/corrections from your conversation history into *your own* personal skills (routed to a private `@skills-dir` pack / project dirs, never into autopilot) | — (no equivalent) |
-| **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |
-| **audit** | Systematic comparison between implementations | — (no equivalent) |
-| **debug** | Evidence-first debugging methodology (tool → log → code) with Three Red Lines | `superpowers:systematic-debugging` (broader hypothesis-driven framing) |
-| **test-strategy** | Test pyramid, baseline 守則, failure investigation funnel — **not** TDD (orthogonal scope) | `superpowers:test-driven-development` (coding loop, complementary not equivalent) |
-| **team** | Team allocation decisions: when to組隊, role selection, dependency analysis | `superpowers:dispatching-parallel-agents` (dispatch mechanism — the verb to autopilot:team's noun) |
-| **profiling** | Evidence-first performance profiling (only methodology entry point in the ecosystem) | — (no superpowers equivalent) |
+## Quick Start
 
-### Coexistence Model — autopilot is standalone-capable, Superpowers is optional
-
-Autopilot works fully without `superpowers`. If you also have `superpowers` installed, autopilot's orchestrator skills (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank{,-dialectic}`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to.
-
-```
-autopilot:dev-flow sets session rules:
-  → "When debugging, read .claude/debug-config.md for project context"
-  → "Before committing, run autopilot:quality-pipeline"
-  → "On session end, update project tracking"
-
-Methodology dispatch (per .claude/dispatch-config.md):
-  → Debugging:  superpowers:systematic-debugging (if installed) → autopilot:debug
-  → Testing:    superpowers:test-driven-development + autopilot:test-strategy (complementary)
-  → Profiling:  autopilot:profiling (no superpowers equivalent)
-  → Team:       autopilot:team (allocation) + superpowers:dispatching-parallel-agents (dispatch)
-  → Review:     autopilot:reviewer → superpowers:requesting-code-review (fallback)
+```bash
+/plugin marketplace add cookys/autopilot
+/plugin install autopilot@autopilot
 ```
 
-This was historically positioned as「sets the rules; Superpowers executes」(v2.0-v2.6); v2.7.0 preserves that model when superpowers is installed while making autopilot also work as a standalone plugin. See [Superpowers Coexistence](#superpowers-coexistence) for per-scenario UX.
-
----
-
-## Superpowers Coexistence
-
-Autopilot supports three deployment scenarios:
-
-### A. You have `superpowers` installed (user-level or marketplace)
-
-Recommended default. autopilot's orchestrators delegate tactical execution to superpowers via `.claude/dispatch-config.md` chains.
-
-`.claude/dispatch-config.md` example (paste into your project):
-
-```markdown
-## Code Review
-- autopilot:reviewer
-- superpowers:requesting-code-review
-
-## Parallel Dispatch
-- superpowers:dispatching-parallel-agents
-- native
-
-## Methodology Preferences
-
-### Debugging
-- superpowers:systematic-debugging
-- autopilot:debug
-
-### Testing methodology
-- autopilot:test-strategy
-- superpowers:test-driven-development
-```
-
-> **superpowers ≥ v5.1.0 note**: the standalone `superpowers:code-reviewer` agent was removed and folded into the **`requesting-code-review`** / **`receiving-code-review`** skills (verified against `obra/superpowers` v6.0.3, 2026-06). Chains above use the current name; `autopilot:reviewer` remains the methodology-disciplined primary, so this fallback is optional.
-
-### B. You do NOT have `superpowers` installed
-
-Autopilot runs fully standalone. Orchestrators fall through to autopilot's own fallback skills (`autopilot:debug`, `autopilot:test-strategy`, `autopilot:team`, `autopilot:profiling`) and `native` parallel dispatch (multiple `Task` tool calls in one response).
-
-> **One standalone gap to know**: the red-green-refactor **TDD coding loop** has no native autopilot skill — `autopilot:test-strategy` is *orthogonal* (test pyramid / baseline / failure funnel), not a TDD substitute. For TDD specifically, install `superpowers` (`test-driven-development`) or run the red-green cycle by hand.
-
-No `.claude/dispatch-config.md` needed — the defaults documented at the top of [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md) match this scenario.
-
-### C. You have `superpowers` user-level but want pure-autopilot in a specific project
-
-Use `.claude/settings.json`'s `disabledSkills` to hard-cut superpowers skills per-project:
-
-```jsonc
-{
-  "disabledSkills": [
-    "superpowers:systematic-debugging",
-    "superpowers:test-driven-development",
-    "superpowers:dispatching-parallel-agents",
-    "superpowers:requesting-code-review"
-  ]
-}
-```
-
-This is a Claude Code native mechanism; autopilot doesn't need a config flag for it.
-
-### Migration note (v2.6.0 → v2.7.0)
-
-If you upgrade from v2.6.0 and previously **removed** `debug`, `test-strategy`, `team`, or `profiling` entries from your `CLAUDE.md` skill routing tables (expecting these skills to remain absent), be aware they're back as fallback skills in v2.7.0 and may now trigger on the corresponding keywords. To suppress: add them to `.claude/settings.json`'s `disabledSkills`.
-
----
-
-## Key Features
-
-### Three Modes of Operation
-
-Autopilot provides three distinct cognitive modes for different situations:
-
-**`dev-flow` — Guided Development (default)**
-
-The entry point for all development tasks. Evaluates task size and routes accordingly:
+That's it. Now **just talk to Claude** — Autopilot's skills trigger on what you say:
 
 ```
-You: "Add WebSocket compression"
-
-Claude (with dev-flow):
-  1. Size assessment: L (crosses network + protocol + client modules)
-  2. → Creates plan, project directory, feature branch
-  3. → Implements phase by phase, quality gate each phase
-  4. → Archives project on completion
-
-Claude (without dev-flow):
-  → Starts grep-ing the codebase immediately
-  → No plan, no phases, no quality gates
+You: "I'm starting on WebSocket compression"   → sizes it, sets up a plan + branch + quality gates
+You: "quick fix for the null check in auth"    → fast path, still gated before commit
+You: "what should I work on next?"             → scans your projects and ranks them
+You: "搞定這個重構，你決定"                       → full autonomous CEO mode
 ```
 
-dev-flow also handles the session lifecycle — health checks on startup, knowledge review, goal alignment on context continuation. You don't invoke these separately; dev-flow absorbs them.
+No commands to memorize — say it in your own words and the right skill steps in.
 
-**`ceo-agent` — Autonomous Execution**
+## What It Does
 
-When you want outcomes, not involvement. The agent becomes CEO; you become the Board.
+23 skills, grouped by what you're trying to do. Each one triggers from natural language — the **Try saying** lines are real triggers.
 
-```
-You: "CEO mode. Handle the reconnect system. Level 3, you decide everything."
+### ✍️ Build code
 
-CEO startup:
-  1. OKR — concrete success criteria (not vague "make it work")
-  2. Involvement level — how often to report (every step / phase / just results)
-  3. Scope mode — Expand / Selective / Hold / Reduce
-  4. No-go zones — what's absolutely off-limits
+`dev-flow` (start here — sizes & routes the task) · `quality-pipeline` (test → scan → review) · `finish-flow` (clean closing sequence, nothing skipped).
 
-Then: autonomous execution within DOA (Delegation of Authority)
-```
+> **Try saying:** *"let's implement X"* · *"quick fix for Y"* · *"is this ready to commit?"*
 
-The CEO agent applies 10 cognitive patterns from great CEOs (Bezos's two-way doors, Munger's inversion reflex, Jobs's focus as subtraction) and follows the Boil the Lake principle — AI makes completeness nearly free, so always choose the complete implementation over shortcuts.
+### 🧭 Make decisions
 
-CEO cannot self-audit. Like corporate governance, quality-pipeline and code-review run independently.
+`survey` (dual-agent industry research) · `think-tank` (6-role debate) · `brainstorm` (pre-code design exploration) · `think-tank-dialectic` (irreversible, high-stakes calls).
 
-**`think-tank` — Multi-Perspective Debate**
+> **Try saying:** *"what do others use for X?"* · *"should we rewrite or patch?"* · *"要辯論一下"*
 
-For strategic decisions where a single perspective isn't enough. 6 roles debate in parallel:
+### 🤖 Full autopilot
 
-```
-You: "Should we rewrite the auth system or patch it?"
+`ceo-agent` (you set the goal, it executes) · `/l3` `/l4` `/l5` (terse front-doors: inline → background foreman → heterogeneous engine).
 
-Think Tank assembles:
-  - CTO (technical feasibility)
-  - Product Director (user impact)
-  - QA Lead (risk assessment)
-  - Security Architect (threat model)
-  - Customer Advocate (user experience)
-  - Operations (deployment/maintenance)
+> **Try saying:** *"CEO mode, handle it"* · *"全權處理"* · *"/l4 ship the reconnect system"*
 
-Output: Decision Brief with consensus, dissenting views, and recommendation
-```
+### 📈 Improve over time
 
-### How They Work Together
+`learn` (capture lessons) · `retro` (git-history retrospective) · `next` (what to do next) · `distill` (turn your repeated workflows into personal skills) · plus `debug` · `profiling` · `test-strategy` · `audit` · `doc-sync`.
+
+> **Try saying:** *"record this for next time"* · *"回顧這週"* · *"what's the highest priority?"*
+
+**→ Full catalog of all 23 skills, the three cognitive modes, and how they compose: [docs/skills.md](docs/skills.md).**
+
+## A Day With Autopilot
+
+`dev-flow` is the front door. It sizes the task and routes it — small things go straight through the gate, large things become a tracked project:
 
 ```
- user task
+ You: "Add WebSocket compression"
     │
     ▼
- dev-flow ──────────────────────────────────────────────┐
-    │                                                    │
-    ├─ S (small): implement → quality-pipeline → commit   │
-    │                                                    │
-    └─ L (large): project-lifecycle (bootstrap)          │
-         │         → per-phase implement                 │
-         │         → quality-pipeline per phase           │
-         │         → project-lifecycle (archive)          │
-         │                                               │
-         ├─ needs research? ──→ survey                   │
-         ├─ strategic decision? ──→ think-tank            │
-         ├─ user says "handle it"? ──→ ceo-agent         │
-         │                                               │
-         └─ session end ──→ learn (capture knowledge)    │
-                            retro (periodic review)      │
-                                                         │
- what's next? ──→ next (scan → rank → recommend)         │
-                                                         │
- ◄───────────────────────────────────────────────────────┘
+ dev-flow  ── sizes the task ──┐
+    │                          │
+    ├─ S (small) ─→ implement ─→ quality-pipeline ─→ commit
+    │                          │
+    └─ L (large) ─→ plan + project + branch
+            │        ├─ implement phase ─→ quality-pipeline (per phase)
+            │        ├─ needs research? ──→ survey
+            │        ├─ strategic call?  ──→ think-tank
+            │        └─ archive project + learn (capture lessons)
+            ▼
+        finish-flow  ── clean close, nothing skipped
 ```
 
-### Skill Boundaries
-
-| Decision Type | Use This |
-|--------------|----------|
-| Technical choice (X library vs Y) | `survey` — external research with dual perspective |
-| Strategic choice (should we? how big? what first?) | `think-tank` — internal multi-role debate |
-| User wants outcome, not involvement | `ceo-agent` — autonomous execution |
-| User wants to participate | `dev-flow` — guided workflow with checkpoints |
-
----
+Without Autopilot, Claude starts grep-ing the codebase immediately — no plan, no phases, no quality gates. With it, the discipline is automatic.
 
 ## Install
 
-### Claude Code (primary)
+**Claude Code** (primary) — the two commands above. All 23 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
-```bash
-/plugin marketplace add cookys/autopilot
-/plugin install autopilot@autopilot
-```
+### Other platforms
 
-All 23 skills available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+Autopilot is portable: **OpenCode**, **Codex**, and **Antigravity (`agy`)** discover the skills via `.agents/skills/`, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
 
-### OpenCode (`.agents/skills/` auto-scan)
+## Learn More
 
-Clone the repo anywhere; OpenCode native skill scanner picks up `.agents/skills/` from cwd.
+The deep material, moved out of this page so it stays an onboarding tour:
 
-```bash
-git clone https://github.com/cookys/autopilot.git
-cd autopilot
-./scripts/setup-symlinks.sh                          # ensure .agents/skills/ symlink resolves (no-op on Linux/macOS/WSL)
-cd .opencode && npm install                          # for @opencode-ai/plugin types (optional unless editing the TS plugin)
-cd ..
-opencode debug skill | grep autopilot                # verify autopilot skills discovered
-```
-
-Agents (`autopilot-reviewer`, `autopilot-debugger`, `autopilot-planner`) load via `.opencode/opencode.json` automatically.
-
-### Codex (OpenAI)
-
-Same `.agents/skills/` symlink as OpenCode — Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed for per-repo usage.
-
-For global availability across repos, see `platforms/codex/config.toml.example`.
-
-### Antigravity (`agy`)
-
-`agy` imports autopilot as a Claude Code-source plugin (verified against agy 1.0.1 — there is no loose skills-dir scan; the older `~/.gemini/antigravity/skills/` approach was superseded).
-
-```bash
-./scripts/install-antigravity.sh                     # agy plugin validate → install → list
-agy plugin list | grep autopilot                     # verify it's registered
-# remove with: agy plugin uninstall autopilot
-```
-
-### Windows
-
-Repo-tracked symlinks (`.agents/skills/`) require Developer Mode + `core.symlinks=true` **before** cloning:
-
-```powershell
-git config --global core.symlinks true               # one-time, system-wide
-# Enable Developer Mode: Settings -> Privacy & security -> For developers
-git clone https://github.com/cookys/autopilot.git
-cd autopilot
-.\scripts\setup-symlinks.ps1
-```
-
-Without these, symlinks materialise as plain text files containing the target path — `setup-symlinks.ps1` will detect and try to repair, but Developer Mode is still required for the repair.
-
-### Cross-platform pre-commit gate
-
-```bash
-./scripts/install-hooks.sh                           # one-time per clone
-```
-
-Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-agent-bodies.sh --check` to catch version-manifest drift and agent-body drift before they reach the remote.
-
----
-
-## Cross-Repository Configuration (Injection)
-
-Skills work out of the box with sensible defaults. For project-specific behavior, drop a markdown file into your project's `.claude/` directory — the skill reads it at invocation time via Claude Code's `!`command`` preprocessor.
-
-### How Injection Works
-
-```
-┌─────────────────────────────────┐
-│  Plugin (shared, read-only)     │   Autopilot skills live here.
-│  ~/.claude/plugins/cache/       │   Same for all projects.
-│  autopilot/skills/dev-flow/     │
-│           └── SKILL.md ─────────┼──┐
-└─────────────────────────────────┘  │
-                                     │  At invocation, SKILL.md runs:
-                                     │  !`cat .claude/dev-flow-config.md`
-                                     │
-┌─────────────────────────────────┐  │
-│  Your Project (per-repo)        │  │
-│  my-project/.claude/            │◄─┘  Reads from YOUR project's
-│    ├── dev-flow-config.md       │     .claude/ directory
-│    ├── quality-gate-config.md   │
-│    ├── skill-routing.md         │     These files are plain markdown.
-│    └── team-config.md           │     No schema. No YAML. Natural language.
-└─────────────────────────────────┘
-```
-
-The `!`command`` syntax is a Claude Code preprocessor — it runs a shell command and inlines the output into the skill body *before* the LLM sees it. This means:
-
-- **No config file?** Silent pass-through — the skill works normally without extra noise. Zero friction.
-- **Config is natural language.** A markdown file is more expressive than YAML — you can write rules, exceptions, and rationale in prose.
-- **Config is project-local.** Each repo has its own `.claude/` directory. The same autopilot plugin adapts to a C++ game server, a React app, or a Rust CLI — all through different config files.
-- **Session rules inject config for ALL activities.** dev-flow sets rules like "when debugging, read `.claude/debug-config.md`" — so even Superpowers' debugging skill gets your project context.
-
-### Available Config Files
-
-| Config File | Customizes | Template |
-|-------------|-----------|----------|
-| `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules | [template](project-config-template/dev-flow-config.md) |
-| `.claude/finish-flow-config.md` | L-5 / H-9 closing sequence overrides (merge target, archive proc, per-size quality gate) | [template](project-config-template/finish-flow-config.md) |
-| `.claude/quality-gate-config.md` | Test, scan, and review commands | [template](project-config-template/quality-gate-config.md) |
-| `.claude/project-lifecycle-config.md` | Project paths, bootstrap/archive scripts | [template](project-config-template/project-lifecycle-config.md) |
-| `.claude/next-config.md` | Work source paths for the next skill | [template](project-config-template/next-config.md) |
-| `.claude/team-config.md` | Team role templates for your tech stack | [template](project-config-template/team-config.md) |
-| `.claude/test-strategy-config.md` | Test commands, pyramid ratios, coverage thresholds | [template](project-config-template/test-strategy-config.md) |
-| `.claude/debug-config.md` | Project-specific debug tools and log paths | [template](project-config-template/debug-config.md) |
-| `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](project-config-template/profiling-config.md) |
-| `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](project-config-template/skill-routing.md) |
-| `.claude/model-routing-config.md` | Subagent model/mode per role (planner, reviewer, etc.) | [template](project-config-template/model-routing-config.md) |
-| `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](project-config-template/loop.md) |
-
-### Example: C++ Game Server Config
-
-```markdown
-# Dev Flow — TWGameServer Config
-
-## Size Rules
-- **S**: single module, no interface change → direct commit
-- **L**: 3+ modules, public interface, Feature Flag → plan + project + PR
-
-## Quality Gate
-- S: `node .claude/scripts/quality-pipeline.js --size S`
-- L: `node .claude/scripts/quality-pipeline.js --size L` per phase
-
-## Build & Deploy
-- Build: `../deploy/scripts/dev.sh build`
-- Build+Restart: `../deploy/scripts/dev.sh br`
-
-## Special Rules
-- Commit 前必須跑 E2E if 改了遊戲邏輯
-- Proto 改動要重編譯 SDK
-```
-
-### Example: Skill Routing
-
-```markdown
-# Skill Routing
-
-| Keyword | Invoke |
-|---------|--------|
-| MJ / mahjong | `twgs-game-dev` → references/mj.md |
-| crash / core dump | `twgs-debug` |
-| proto / protobuf | `twgs-protobuf` |
-| stress / 10K | `twgs-stress-test` |
-```
-
-This lets autopilot's `dev-flow` automatically invoke your project's domain-specific skills when it encounters relevant keywords — bridging the generic workflow layer with project-specific knowledge.
-
----
-
-## Team Setup
-
-Add to your project's `.claude/settings.json` so team members get prompted to install:
-
-```jsonc
-{
-  "extraKnownMarketplaces": {
-    "autopilot": {
-      "source": { "source": "github", "repo": "cookys/autopilot" }
-    }
-  }
-}
-```
-
----
-
-## Known Limitation
-
-Claude Code plugins are **pinned to a specific commit** at install time. `/plugin update` may not detect new versions. To get the latest:
-
-```bash
-/plugin uninstall autopilot@autopilot
-/plugin marketplace remove autopilot
-/plugin marketplace add cookys/autopilot
-/plugin install autopilot@autopilot
-```
-
-See [anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462) for details.
-
----
-
-## Design Philosophy
-
-**Why a plugin, not copy-paste skills?**
-Copy-pasted skills drift within weeks. A plugin gives you a single source of truth — update once, everyone gets it via `/plugin update`.
-
-**Why 23 skills + 20 hooks?**
-v2.0 removed 4 skills (debug, test-strategy, team, profiling) that overlapped with `superpowers` skills, on the assumption that `superpowers` was always installed. v2.7.0 restores them as standalone fallbacks (with explicit `## Coexistence with Superpowers` sections in their bodies explaining the relationship) so autopilot works without `superpowers`. When `superpowers` IS installed, `.claude/dispatch-config.md` chains let orchestrators prefer the superpowers equivalent for runtime delegation; the autopilot skill stays in the catalog as the standalone fallback. v2.2 added `think-tank-dialectic` as a different tool (not an upgrade) for irreversible decisions. v2.5 added 14 hooks for runtime enforcement — discipline that was previously only in markdown rules. Hooks and skills serve different layers: skills set rules at conversation time; hooks enforce them at tool-call time.
-
-**Why `!`command`` injection, not config files?**
-In the Claude Code world, "configuration" is natural language. A markdown file read at invocation time is more expressive than YAML, requires no schema, and degrades gracefully when absent.
-
-**How does it work with Superpowers?**
-
-Autopilot is standalone-capable and coexists with Superpowers when it's installed: autopilot's orchestrators delegate tactical execution to Superpowers via `.claude/dispatch-config.md` chains, and fall through to autopilot's own fallback skills when it isn't. (Historically — v2.0–v2.6 — this was「rule-setter / executor」; since v2.7.0 autopilot runs fully standalone too.) They coexist through a layered triggering design:
-
-```
-Layer 1 — CLAUDE.md routing table (project-level)
-  "新功能規劃 → autopilot:dev-flow"
-  "技術調研 → autopilot:survey"
-  Maps project context to skills. Written by the user.
-
-Layer 2 — using-superpowers skill (session-level)
-  "Check skills BEFORE any response. Even 1% chance = invoke."
-  This is what makes skill triggering work. Without it,
-  the model answers directly and never checks skills.
-
-Layer 3 — Skill description (skill-level)
-  "Use when: 'compare X with Y', 'check X against Y'..."
-  User-intent trigger phrases help the model match
-  the user's words to the right skill.
-```
-
-All three layers must work together. Layer 2 (Superpowers' `using-superpowers`) creates the *habit* of checking skills; Layer 1 (CLAUDE.md) provides project-specific routing; Layer 3 (descriptions) provides the semantic match. Autopilot never dispatches to or wraps Superpowers skills — they share the session, not a call chain.
-
-**Why do descriptions use quoted trigger phrases?**
-
-Skill descriptions serve Layer 3 — they're the last-mile match between user intent and skill selection. We write them in user-intent language (`"what should I work on"`, `"get it done"`, `"let's debate this"`) rather than internal mechanics (`"global work recommender"`, `"autonomous execution mode"`) because the model matches user messages against descriptions. The closer the description mirrors what users actually say, the more reliable the trigger.
-
----
-
-## Methodology Agents
-
-Autopilot ships **three read-only methodology agents** (v2.4.0) that carry Three Red Lines discipline into agent-level execution. Autopilot skills dispatch them automatically; you rarely invoke them directly.
-
-| Agent | Purpose | Model | Dispatched by |
-|-------|---------|-------|---------------|
-| **`autopilot:reviewer`** | Pre-commit / pre-merge review, security audit, plan critique. Severity-tiered findings with `file:line` citations and `✅ Verified Clean` section | opus | `quality-pipeline`, `ceo-agent`, `finish-flow` |
-| **`autopilot:debugger`** | Evidence-first root-cause analysis. 5-phase methodology with PUA trigger on 2+ failures. Produces `Proposed Fix` as diff, never applies patches | opus | `quality-pipeline` (round-trip), `ceo-agent`, `dev-flow` |
-| **`autopilot:planner`** | Six-element Task Prompt decomposition for L-size work (goal / scope / input / output / acceptance / boundaries). Cannot write code | sonnet | `dev-flow`, `think-tank` |
-
-All three are **physically read-only** — their `tools` frontmatter excludes `Edit` and `Write`, so Claude Code mechanically prevents them from patching files. They produce findings, proposals, or plans, and hand off to the calling skill via a unified `### Handoff` section with an enum-based `Next consumer` field.
-
-The three agents carry autopilot's **Three Red Lines** into the agent layer:
-
-1. **Closure** — every finding has impact + fix direction, no open-ended output
-2. **Fact-driven** — every claim cites `file_path:line_number`; "probably" / "likely" are violations
-3. **Exhaustiveness** — full checklists run; clean items explicitly listed; silent omission is a violation
-
-See [`agents/README.md`](agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / voltagent role / project-specific" layer cake.
-
----
-
-## Recommended Companions
-
-Autopilot is **self-sufficient for methodology and lifecycle** — install autopilot alone and you get all 23 skills + 3 methodology agents. For **role-specialized work** (language experts, database admins, Kubernetes specialists, frontend designers), we recommend installing voltagent alongside:
-
-```
-/plugin install voltagent@...
-```
-
-Autopilot and voltagent are **orthogonal by design**:
-
-| Layer | What it does | Where to look |
-|-------|-------------|---------------|
-| **Methodology** | Three Red Lines discipline, evidence-first debugging, Seven-Element dispatch + six-element Planner decomposition contract, lifecycle orchestration | autopilot (this plugin) |
-| **Role** | Language experts, infra specialists, domain experts (80+ agents) | voltagent |
-| **Project** | Your tech stack's pitfalls, team conventions, domain-specific agents | `<project>/.claude/agents/` |
-
-**Dispatch boundary:**
-
-- Going through an **autopilot skill** (`quality-pipeline`, `dev-flow`, `ceo-agent`) auto-dispatches autopilot methodology agents — `:debugger` and `:planner` named directly by their consumer skills, reviewer selected via the `.claude/dispatch-config.md` `## Code Review` chain (defaults to `autopilot:reviewer` when chain unset or no entry dispatchable) — to carry methodology discipline into every invocation
-- **Directly invoking an agent** via the `Agent` tool — voltagent's role agents (`voltagent-qa-sec:code-reviewer`, `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`, etc.) are usually the better primary choice because they have broader domain coverage
-
-Two workflows, two dispatch paths, zero overlap in practice.
-
-Autopilot does **not** runtime-detect voltagent. `:debugger` and `:planner` are named directly by their consumer skills; the reviewer is selected via the `.claude/dispatch-config.md` `## Code Review` chain with `autopilot:reviewer` as the default fallback when the chain is unset or no chain entry is dispatchable. If you want a reviewer not in the chain for a one-off task, invoke it explicitly via the `Agent` tool — that is a user-layer choice on top of the chain mechanism.
-
----
-
-## Hooks
-
-Autopilot ships **20 hooks** (the original 14 landed in v2.5.0; the set has grown since) that enforce development discipline at the Claude Code runtime layer — no self-discipline required. They split into **8 default-on** and **12 opt-in** (zero disabled — `cost-tracker` was re-enabled opt-in in v2.25.2). The canonical tally is derived mechanically from `hooks/hooks.json` + `settings.example.json` by [`scripts/check-hook-inventory.js`](scripts/check-hook-inventory.js) (run it to regenerate these lists; `--check` gates drift in CI).
-
-### Tier A — Default-On (8 hooks)
-
-Registered in [`hooks/hooks.json`](hooks/hooks.json) — these activate automatically when the plugin is installed. All are non-destructive and safe for any project. Tool-event hooks read the session transcript rather than stdin (upstream stdin pipe is broken, #6305).
-
-| Hook | Event | What It Does |
-|------|-------|-------------|
-| **state-checkpoint** | PreCompact | Extracts the last 20 turns from the transcript to `~/.autopilot/compaction-state.md` before a compaction |
-| **session-start** | SessionStart | Primes the session: prints resume hint + intent-capture health |
-| **intent-capture** | PostToolUse/* | Records a per-cwd intent file for cross-session resume hints |
-| **reload-watch** | PostToolUse/* | Detects on-disk catalog drift and injects a `/reload-plugins` reminder |
-| **audit-log** | PostToolUse/Bash | Logs bash commands with auto secret redaction |
-| **log-error** | PostToolUse/* | Detects error keywords in tool output, appends to `~/.claude/error-log.md` |
-| **failure-escalation** | PostToolUse/Bash | Tracks consecutive Bash failures per session; escalates to the user |
-| **suggest-compact** | PostToolUse/Write\|Edit | Counts tool calls per session; suggests `/compact` at 50, then every 25 |
-
-### Tier B — Opt-In (12 hooks)
-
-Enable individually by copying entries from [`settings.example.json`](settings.example.json) to your `settings.json`.
-
-| Hook | Event | What It Does |
-|------|-------|-------------|
-| **cost-tracker** | Stop | Sums per-turn token usage from the transcript → `~/.claude/metrics/costs.jsonl` (cache-aware cost; opt-out `AUTOPILOT_COST_TRACKER=false`) |
-| **branch-protection** | PreToolUse/Bash | Hard-blocks direct commits / force-push on protected branches (`main\|master` by default) |
-| **commit-secret-scan** | PreToolUse/Bash | Hard-blocks `git commit` when staged changes contain secrets |
-| **large-file-warner** | PreToolUse/Read | Warns at 500KB, hard-blocks Read at 2MB (bypass with offset/limit) |
-| **config-protection** | PreToolUse/Write\|Edit | Blocks edits to linter/formatter config files |
-| **session-summary** | Stop | Appends cwd / git status / recent commits to `~/.claude/sessions/{date}-{sid}.md` |
-| **check-console** | Stop | Warns about `console.log` in modified JS/TS files |
-| **accumulator** + **batch-format** | PostToolUse + Stop | Batch Prettier + tsc on all edited files at session end |
-| **test-runner** | PostToolUse/Write\|Edit | Auto-runs sibling test files on edit (vitest/jest) |
-| **design-quality** | PostToolUse/Write\|Edit | Warns on generic template UI patterns |
-| **mcp-health** | PreToolUse + PostToolUseFailure | Exponential backoff for unhealthy MCP servers |
-
-> The three **PreToolUse** blockers + **session-summary** were parked by the v2.7.4 disable batch because opening the `/dev/stdin` **path** throws ENXIO in the Bun-spawned hook environment ([#6305](https://github.com/anthropics/claude-code/issues/6305)). They re-enable (opt-in) by reading **fd 0 directly** (`fs.readFileSync(0)`) — verified end-to-end on Claude Code 2.1.186. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
-
-### Secret Detection
-
-When enabled, `commit-secret-scan` (opt-in, see above) and the active `audit-log` share a unified secret pattern module (`hooks/_shared/secret-patterns.js`) covering: OpenAI, Anthropic, GitHub (PAT/OAuth/App), AWS, Google API, Slack, Stripe tokens + inline `--token`/`password`/`Authorization` patterns.
-
-### Override
-
-- **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
-- **Custom protected branches** (when `branch-protection` is enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
-- **Disable cost tracking** (when `cost-tracker` is re-enabled): set `autopilot.costTracker = false`
-
----
-
-## Inspired By
-
-- **Task-tree engine prior art (v2.16.0)** — the externalized-state substrate and its guardrails absorb published lessons rather than reinventing failures: append-only event log + derived index over read-modify-write node files (Steve Yegge's [Beads](https://github.com/steveyegge/beads) postmortem; TaskMaster schema/concurrency incident reports — community issue-tracker reports surveyed 2026-06-12; no single canonical URL recorded at survey time), per-event `schema_version` with lazy migrations ([LangGraph](https://github.com/langchain-ai/langgraph)'s versioned-state lesson; [Temporal](https://temporal.io)'s history-evolvability model), and cheap cross-family judge panels over a single large judge (the PoLL result — [Verga et al. 2024, "Replacing Judges with Juries"](https://arxiv.org/abs/2404.18796)). All quantitative thresholds from these sources are treated as factory defaults pending local calibration, never as justification.
-- **[gstack](https://github.com/garrytan/gstack)** — Garry Tan's skill suite for Claude Code. The CEO agent's cognitive patterns (Bezos doors, Munger inversion, Jobs subtraction), Boil the Lake completeness principle, and scope mode system are adapted from gstack's `plan-ceo-review` skill.
-- **[Council of High Intelligence](https://github.com/0xNyk/council-of-high-intelligence)** — 0xNyk's 18-thinker multi-persona deliberation skill. The `think-tank-dialectic` skill's enforcement mechanisms (Dissent Quota, Counterfactual Trigger at >70%, Problem Restate Gate, Minority Report as first-class verdict section, Epistemic Diversity Scorecard) are adapted from Council's 7-step protocol and agent frontmatter conventions. The key meta-insight — *every thinking style must carry its own fail-safe* — comes from observing that 100% of Council's 18 agents have a `Grounding Protocol` section with self-constraining hard rules.
-- **[Agora](https://github.com/geekjourneyx/agora)** — Professor Li's 6-room, 31-thinker extension of Council. The `think-tank-dialectic` skill's Hegelian Arc structure (Thesis → Antithesis → Synthesis with forced non-compromise synthesis proposal), Adaptive Depth Gate, Tacit Knowledge Extraction protocol (Polanyi), and "different tool, not better tool" framing are adapted from Agora's 8-step deliberation protocol and the `/forge` engineering room's verdict template.
-- **[my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam)** — NYCU-Chung's 12-agent + 15-hook engineering team plugin for Claude Code. The `v2.4.0` methodology agents (`reviewer` / `debugger` / `planner`) absorb the Three Red Lines discipline (closure / fact-driven / exhaustiveness), six-element Task Prompt contract, evidence-first debug methodology, PUA stress-mode trigger, and physical tool-restriction pattern (read-only methodology agents) from devteam's P7/P9/P10 framework. The `v2.5.0` hooks layer absorbs 14 of devteam's 15 hooks (8 default-on Tier A + 6 opt-in Tier B) with Ship A review adjustments: anchored branch-protection regex (C1 fix), unified secret-patterns module (mi1 fix), cost-tracker opt-out, and 8/8 Tier A testing coverage. The layered split — autopilot owns methodology, voltagent owns role specialization — is a deliberate divergence from devteam's all-in-one approach to stay orthogonal to the voltagent role-agent ecosystem.
-- **[claude-powerloop-plugin](https://github.com/elct9620/claude-powerloop-plugin)** — Aotokitsuruya's cron-loop Plan/Execute/Review/Sample plugin for Claude Code (Apache-2.0). The `references/blind-dispatch.md` outcome-blinding principle (round-2+ reviewer re-dispatch must strip prior verdicts to prevent quality-gate self-bypass) and the leaky-vs-blind prompt example pair are adapted from powerloop's `skills/powerloop/examples/blind-dispatch.md`. powerloop applies the discipline in a multi-session cron loop; autopilot scopes it to session-driven re-dispatch under `quality-pipeline` Re-review Loop and `audit` Phase 4 verification.
-- **[superpowers](https://github.com/obra/superpowers)** — obra's (Jesse Vincent) agentic-skills framework that autopilot coexists with. `scripts/check-dispatch-suppression.sh` (the anti-gaming dispatch-prompt linter — a dispatcher must not coach the reviewer to suppress or pre-rate a finding) and `references/plan-template.md`'s verbatim **Global Constraints** propagation are adapted from superpowers v6's `subagent-driven-development` anti-gaming reviewer contract and `writing-plans` global-constraint block (surveyed 2026-06-24 against v6.0.3).
-
----
-
-## Development
-
-To contribute or customize skills locally:
-
-```bash
-# 1. Install once via the normal flow (required)
-/plugin marketplace add cookys/autopilot
-/plugin install autopilot@autopilot
-
-# 2. Clone and switch to dev mode
-git clone git@github.com:cookys/autopilot.git ~/projects/autopilot
-cd ~/projects/autopilot
-./scripts/dev-setup.sh
-```
-
-Dev mode symlinks the plugin cache to your local clone. Edits to `skills/` take effect immediately after `/reload-plugins` — no reinstall needed.
-
-Push/pull works normally across machines. Each machine runs step 1 once, then `dev-setup.sh` once.
-
-> **Note:** Dev mode sets `version: "dev"` in the plugin registry. To revert to the release version, run `/plugin update autopilot@autopilot`.
-
-### Cache directory layout
-
-The plugin cache lives at `~/.claude/plugins/cache/autopilot/autopilot/`. Each entry is either a versioned directory (snapshot from install/update) or a symlink to a local clone:
-
-```
-~/.claude/plugins/cache/autopilot/autopilot/
-├── develop -> ~/projects/autopilot   # symlink — live edits, /reload-plugins to sync
-└── 2.0.0                             # snapshot — created by install or reload
-```
-
-**Symlink naming**: The cache directory name does not need to be a semver string. You can use semantic names like `develop`, `nightly`, or `local` to distinguish dev symlinks from release snapshots. Claude Code resolves the symlink and reads `plugin.json` inside for the actual version.
-
-**Stale cache cleanup**: After upgrading, old version directories may linger. Remove them manually:
-
-```bash
-rm -rf ~/.claude/plugins/cache/autopilot/autopilot/<old-version>
-```
-
-### Branch workflow
-
-| Branch | Purpose | `plugin.json` version |
-|--------|---------|----------------------|
-| `main` | Stable releases, tagged (e.g. `v2.7.1`) | Matches latest tag |
-| `develop` | Next version development | Next major/minor (e.g. `2.26.0`) |
-
-When developing: checkout `develop`, symlink points to it, `/reload-plugins` picks up changes. Remember to bump `plugin.json` version before tagging a release.
-
-## Update (marketplace users)
-
-```bash
-/plugin update autopilot@autopilot
-```
-
-## [Changelog](CHANGELOG.md)
-
-## Origin
+| Topic | Doc |
+|-------|-----|
+| **All 23 skills** + three modes + how they compose | [docs/skills.md](docs/skills.md) |
+| **Superpowers coexistence** — three scenarios, migration | [docs/coexistence.md](docs/coexistence.md) |
+| **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
+| **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
+| **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
+| **Hooks** — 20 runtime-enforcement hooks (8 default-on, 12 opt-in) | [hooks/README.md](hooks/README.md) |
+| **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 Distilled from 100+ completed projects using AI-driven development.
 

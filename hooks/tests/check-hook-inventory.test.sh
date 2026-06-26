@@ -48,13 +48,16 @@ assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
 # 4. MEMBERSHIP drift (headline class): swap a default-on hook OUT of the Tier-A
 #    table for a non-default-on one (cost-tracker is opt-in since v2.25.2). Counts
 #    elsewhere stay correct — only the membership check catches the gap (the
-#    displaced default-on hook is now MISSING from Tier-A).
-sed -i 's/\*\*state-checkpoint\*\*/**cost-tracker**/' "$SBX/README.md"
+#    displaced default-on hook is now MISSING from Tier-A). As of v2.25.12 the asserted
+#    hooks doc is hooks/README.md (README is now a slim onboarding page with no Tier
+#    table); failure-escalation lives only inside the Tier-A block, so a global swap
+#    cleanly evicts it from that block.
+sed -i 's/failure-escalation/cost-tracker/g' "$SBX/hooks/README.md"
 OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "membership drift exit 1"
-assert_contains "$OUT" "state-checkpoint" "membership drift names the displaced default-on hook"
+assert_contains "$OUT" "failure-escalation" "membership drift names the displaced default-on hook"
 assert_contains "$OUT" "Tier-A" "membership drift identifies the Tier-A placement"
-restore "README.md"
+restore "hooks/README.md"
 
 # 5. COUNT drift: canonical default-on count wrong in the description
 sed -i 's/8 default-on/9 default-on/' "$SBX/.claude-plugin/plugin.json"

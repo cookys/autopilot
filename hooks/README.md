@@ -208,6 +208,14 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 - Slack (`xoxb-*`, `xoxp-*`), Stripe (`sk_live_*`)
 - Inline: `--token`, `password=`, `sshpass -p`, `Authorization: Bearer`
 
+When enabled, `commit-secret-scan` (opt-in) and the active `audit-log` share this module.
+
+## Override
+
+- **Disable a Tier A hook**: set `autopilot.<hookName> = false` in `settings.json`
+- **Custom protected branches** (when `branch-protection` is enabled): set `AUTOPILOT_PROTECTED_BRANCHES` env var or `autopilot.protectedBranches` in settings
+- **Disable cost tracking** (when `cost-tracker` is re-enabled): set `autopilot.costTracker = false`
+
 ## Source
 
 Ported from [NYCU-Chung/my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam) v1.1.0 (MIT) with adjustments from Ship A review:

@@ -175,22 +175,18 @@ function runCheck(inv) {
   checkTally(errors, 'plugin.json', /"description"/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
   checkTally(errors, '.claude-plugin/marketplace.json', /"description"/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
   checkTally(errors, 'CLAUDE.md', /default-on/, inv, ['total', 'defaultOn', 'optIn', 'disabled']);
-  // README badges (total) + Tier headers (per-tier count).
+  // README badges (total) only. As of v2.25.12 the README pair is a slim onboarding
+  // surface — the hooks Tier tables + intro tally + Tier-A membership were relocated to
+  // hooks/README.md, which is now the SOLE doc whose hook BODY is asserted here. Both
+  // READMEs still carry the hooks-<N> hero badge, so the total stays pinned on them.
   checkTally(errors, 'README.md', /hooks-\d+-/, inv, ['total']);
-  checkHeaderCount(errors, 'README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
-  checkHeaderCount(errors, 'README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
-  // Intro PROSE tally (the "N default-on … M opt-in" sentence) — distinct from the
-  // badge/headers; a stale number here escaped both gates once (v2.23.0). Anchored on
-  // the "opt-in" clause so it survives the disabled tier going to zero (v2.25.2).
-  checkTally(errors, 'README.md', /opt-in\*\* \(zero disabled/, inv, ['defaultOn', 'optIn']);
-  checkTally(errors, 'hooks/README.md', /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
   checkTally(errors, 'README.zh-TW.md', /hooks-\d+-/, inv, ['total']);
-  checkTally(errors, 'README.zh-TW.md', /預設啟用[（(]\d+/, inv, ['defaultOn']);
-  checkTally(errors, 'README.zh-TW.md', /可選啟用[（(]\d+/, inv, ['optIn']);
+  // hooks/README.md — canonical hooks doc: intro PROSE tally + Tier headers + Tier-A
+  // membership (the count-blind class — 2026-06-22). A stale prose number escaped both
+  // gates once (v2.23.0); the intro-tally regex survives the disabled tier going to zero.
+  checkTally(errors, 'hooks/README.md', /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
   checkHeaderCount(errors, 'hooks/README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
   checkHeaderCount(errors, 'hooks/README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
-  // Membership (the count-blind class).
-  checkTierAMembership(errors, 'README.md', inv);
   checkTierAMembership(errors, 'hooks/README.md', inv);
 
   if (errors.length) {

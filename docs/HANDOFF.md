@@ -1,70 +1,52 @@
-# Session Handoff — 2026-06-02
+# Session Handoff — 2026-06-26 (review-decorrelation arc)
 
-> Next session: **read this file, then run the Verification Checklist below and report pass/fail.**
-> Invoke: `讀 docs/HANDOFF.md 然後跑驗證`.
-
-## TL;DR of what shipped this session
-
-Three ships, all merged to `develop` and pushed (origin/develop @ `7a528ff`):
-
-| Version | Project | Merge | What |
-|---------|---------|-------|------|
-| v2.7.7 | skill-leverage-extraction | `a4c5db6` | dev-flow 645→618, retro 225→130 (passive leaf → references/) |
-| v2.7.7 | level-3 doc-rot batch | `2b5f6ed` | authored 2 missing canonical refs + hardened `validate.sh` link-check |
-| **v2.8.0** | **hook-transcript-pivot** | `e6c7f25` | **the main one — see verification below** |
-
-Plus: orphaned-plans triaged into INDEX; memories written (`project_skill-refactor-rules`, `project_hook-transcript-pivot`).
+> Resuming after `/clear`: read this, run the Verification block, then `/next` (or pick a follow-up below).
+> Memory to load: [[project_trust-tiered-review-policy]], [[project_agy-writes-install-dir]].
 
 ## Repo state (expected)
-- Branch `develop`, clean, synced with origin (`7a528ff` or later).
-- Canonical version `2.8.0` (`.claude-plugin/plugin.json`); `node scripts/sync-version.js --check` → green.
-- Plugin is **dev-linked**: `~/.claude/plugins/cache/autopilot/autopilot/dev → /home/cookys/projects/autopilot`.
-- No in-progress projects in `docs/projects/INDEX.md`.
 
-## ⭐ PRIMARY verification — did the v2.8.0 hook pivot actually activate?
+- Branch `develop`, **clean, synced with origin @ `d412564`** (pushed this session).
+- Canonical version **2.25.11** (`.claude-plugin/plugin.json`); `node scripts/sync-version.js --check` → green.
+- No in-progress projects (all archived). `bash hooks/tests/run.sh` → 61 test files pass (suite is slow, ~2-3 min).
 
-**Context**: Claude Code doesn't pipe stdin to PostToolUse hooks (ENXIO, #6305). v2.8.0 makes those hooks recover tool data from the session transcript JSONL instead. This **requires a full Claude Code restart** to take effect (PostToolUse dispatch inits at process boot; `/reload-plugins` does NOT re-init it — known finding in BACKLOG). The user was asked to restart between sessions — so if you're reading this in a fresh session, the pivot should be live.
+## What shipped this session (one long /next → … run)
 
-Run these and report:
+| Version | What | Merge |
+|---------|------|-------|
+| **v2.25.9** | agy restored as hetero **implementer** (`dispatch-hetero.sh` absolute-worktree anchor) + cross-family **`qc_panel`** terminal gate + `union-on-verified-critical` + read-only **`scripts/dispatch-review.sh`** | `3b97bd0` |
+| **v2.25.10** | `quality-pipeline` test-fail → routes to `test-strategy` (methodology-inventory edge) | direct |
+| **v2.25.11** | **trust-tiered review policy**: `resolve-review-loop.sh` deterministic `review_risk` + `--enforce` hard gate + `family_id` fail-closed + risk contracts | `6a51f2e` |
+| (merge) | integrated another machine's `review_diff_scope` policy (hand-resolved conflict; both kept) | `d412564` |
 
-```bash
-# 1. intent-capture last_tool should be a REAL tool name, not <unknown>
-cat ~/.autopilot/intent/*.json 2>/dev/null | grep -E '"last_tool"|"last_tool_source"'
-#    PASS: "last_tool": "Bash"/"Read"/... and "last_tool_source": "transcript"
-#    FAIL: "last_tool": "<unknown>"  (pivot not active → see Diagnosis)
+Design doc (gpt-5.5-converged, the *why*): [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](plans/2026-06-26-trust-tiered-review-policy.md).
 
-# 2. audit-log should now exist and contain recent commands (it NEVER existed pre-v2.8.0)
-tail -3 ~/.claude/bash-commands.log 2>/dev/null || echo "MISSING — audit-log not firing"
+## The big idea (so you don't re-derive)
 
-# 3. confirm the live plugin is v2.8.0 with the new lib
-grep -m1 '"version"' ~/.claude/plugins/cache/autopilot/autopilot/dev/.claude-plugin/plugin.json
-test -f ~/.claude/plugins/cache/autopilot/autopilot/dev/hooks/transcript-reader-lib.js && echo "lib present"
-```
+**Execution-grounded verification is the PRIMARY lever; the cross-family LLM panel is SECONDARY.** Cross-family 1→2 families is the win, >2 is waste. Review *depth* keys on **measured risk**, NOT source-trust (keying off `resolve-doa` was a category error caught by gpt-5.5). Honest-but-weak scope only — NOT malicious-proof. The decorrelated gpt-5.5 review loop caught real holes my own green missed at BOTH design and impl stages — keep using it for non-trivial work.
 
-**If FAIL (still `<unknown>` / no bash-commands.log):** diagnose, don't assume.
-- Confirm a TRUE restart happened (not just `/reload-plugins`). Check the current session transcript is being written: `ls -t ~/.claude/projects/-home-cookys-projects-autopilot/*.jsonl | head -1`.
-- Manually exercise the path: with the latest transcript present, run
-  `node ~/projects/autopilot/hooks/intent-capture.js </dev/null` in a sandbox HOME (see `project_hook-transcript-pivot` memory for the isolated-HOME recipe) and inspect the written intent file.
-- If transcript HAS the tool but the hook returns `<unknown>`, the bug is in path discovery / parsing → check `CLAUDE_CODE_SESSION_ID` is set in the hook env and `transcript-reader-lib.js resolveTranscriptPath`.
-- If the live PostToolUse hook simply isn't firing at all → the dispatch-boot issue; confirm full restart.
+## Open follow-ups (none urgent; pick via `/next` or BACKLOG)
 
-**Optional definitive timing proof** (only if you want the intra-cycle race nailed): wire `hooks/_transcript-timing-probe.js` into a PostToolUse hook (its header has the recipe), fresh session, run `echo PROBE_MARKER_ONE`, check `~/.autopilot/timing-probe.log` tracks it.
+- **Future-gated (designed, deliberately unbuilt)**: shadow-calibration to flip the `qc_panel` default 3→1-2 (needs telemetry + promotion metrics); local-runner enforcement (no local runner exists); real mutation/differential oracle machinery (contract only). All in the design doc §3.3/§4/§6 + BACKLOG.
+- **L1 test-integrity block-mode override re-enable** — still BACKLOG'd behind a real isolation boundary (no local-only mechanism is malicious-proof; same lesson as cgroup containment).
+- **agy read-only sandbox** — BACKLOG: when Antigravity ships a read-only `-p` mode, tighten `dispatch-review.sh`'s agy path.
+- `dispatch-review.sh` agy path isolation rests on scratch-cwd + agy-ignores-cwd, not a hard sandbox (residual, documented).
 
-## SECONDARY checks (fast sanity)
+## Verification (run on resume)
+
 ```bash
 cd ~/projects/autopilot
-bash scripts/validate.sh | tail -1                 # All skills valid
-bash hooks/tests/run.sh 2>&1 | tail -2             # 29 test files pass
-node --test hooks/transcript-reader.test.js 2>&1 | grep -E 'pass|fail' | tail -2   # 9 pass
-git status -sb | head -1                            # clean, synced
+git status -sb | head -1                          # clean, synced @ d412564
+node scripts/sync-version.js --check              # mirrors green, 2.25.11
+bash scripts/resolve-review-loop.sh | python3 -c 'import sys,json;d=json.load(sys.stdin);print("risk",d["review_risk"],"xfam_req",d["cross_family_required"],"diff_scope",d["review_diff_scope"])'
+bash scripts/resolve-review-loop.sh --enforce --security-surface 1 >/dev/null 2>&1; echo "enforce high-risk default-panel exit=$? (0=satisfied)"
+bash hooks/tests/resolve-review-loop.test.sh 2>/dev/null | tail -1   # 53 assertions
 ```
 
-## Open follow-ups (in BACKLOG, none urgent)
-- **suggest-compact** — PostToolUse Write|Edit, recoverable via the same transcript pivot; deferred (not done). Easy next win if wanted.
-- **cost-tracker / session-summary** — Stop events, env-driven; NOT the tool-event-stdin problem → separate verification before re-enabling.
-- **PreToolUse hooks** (large-file-warner, branch-protection, commit-secret-scan) — **permanently unrecoverable** by the transcript approach (tool hasn't run). Leave disabled unless upstream #6305 is fixed.
-- **`.opencode/agent-bodies/*.body.md` relative-link depth bug** — generated artifact, low severity, BACKLOG entry with trigger.
-- **stdin pipe upstream #6305** — still broken at 2.1.159; re-probe on any Claude Code update.
+## Gotchas carried forward
 
-## Environment caveat (important)
-This session ran in a calibration sandbox. Before `dev-setup.sh` was re-run, the plugin symlink pointed at `/tmp/swe-calibrate-…`, NOT this repo. It was re-pointed to `/home/cookys/projects/autopilot` at session end. If hooks behave oddly, re-verify the symlink target (PRIMARY check #3).
+- **agy as implementer works** via the absolute-worktree anchor (relative-path prompt was the old bug). agy as read-only reviewer needs `script -qec` capture (plain pipe = 0 bytes). gemini-cli is dead → agy is the only Gemini access. ([[project_agy-writes-install-dir]])
+- **Don't trust an implementer's own green** — depth-0 builds an INDEPENDENT acceptance harness; the decorrelated gpt-5.5 review is the qc of record.
+- **`resolve-review-loop.sh` is a DATA emitter (exit-0)**; enforcement lives in the caller (`--enforce` opt-in gate or the depth-0 loop). Don't make resolvers exit non-zero by default.
+- Push may need `git fetch` first — a second machine pushes to `develop` (it added `review_diff_scope`). Merge, hand-resolve the review-loop files (keep both sides), re-verify.
+
+## Reply preference: 正體中文 (per [[feedback_reply-in-traditional-chinese]]).

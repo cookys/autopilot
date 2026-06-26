@@ -73,9 +73,23 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 
 ### 🤖 全自動
 
-`ceo-agent`（你定目標，它執行）· `/l3` `/l4` `/l5`（簡潔前門：inline → 背景 foreman → 異質引擎）。
+`ceo-agent`（你定目標，它執行）· `/l3` `/l4` `/l5`（簡潔前門，預填 CEO 啟動四問，一行就把目標送出去）。三者的差別在**實作在哪裡跑**：
+
+| | 在哪裡跑 | 何時用 |
+|---|---|---|
+| **`/l3`** | inline，這條 thread 上 | 全自主，但你想盯著它跑 |
+| **`/l4`** | 一個背景、worktree 隔離的 **foreman** | 想把長時間自主跑的工作 offload — 你的 context 保持乾淨，權威品質判定握在 depth 0 |
+| **`/l5`** | 同 `/l4`，但**實作交給不同引擎**（agy / Gemini） | 成本套利，或讓一個去相關化的第二引擎做機械式實作 |
+
+```
+/l3 fix the flaky reconnect test, you decide     # inline
+/l4 ship the WebSocket reconnect system          # offload 給背景 foreman
+/l5 migrate the config loader to the new schema  # foreman + 異質實作引擎
+```
 
 > **Try saying：** *「CEO 模式，幫我處理」* · *「全權處理」* · *「/l4 把重連系統做掉」*
+
+**→ 各級行為、預設值、override flags（`--expand` / `-x` / `--solo`）與完整範例：[docs/skills.md](docs/skills.md)。**
 
 ### 📈 自我改進
 

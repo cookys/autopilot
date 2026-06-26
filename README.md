@@ -73,9 +73,23 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 ### 🤖 Full autopilot
 
-`ceo-agent` (you set the goal, it executes) · `/l3` `/l4` `/l5` (terse front-doors: inline → background foreman → heterogeneous engine).
+`ceo-agent` (you set the goal, it executes) · `/l3` `/l4` `/l5` (terse front-doors that pre-fill the CEO startup so one line ships the goal). They escalate **where the work runs**:
+
+| | Runs where | Reach for it when |
+|---|---|---|
+| **`/l3`** | inline, on this thread | full autonomy, but you want to watch it happen |
+| **`/l4`** | one background, worktree-isolated **foreman** | a long run you'd rather offload — your context stays clean, the authoritative quality verdict is held at depth 0 |
+| **`/l5`** | `/l4`, but the **implementer is a different engine** (agy / Gemini) | cost-arbitrage, or a decorrelated second engine doing the mechanical coding |
+
+```
+/l3 fix the flaky reconnect test, you decide     # inline
+/l4 ship the WebSocket reconnect system          # offload to a background foreman
+/l5 migrate the config loader to the new schema  # foreman + heterogeneous implementer
+```
 
 > **Try saying:** *"CEO mode, handle it"* · *"全權處理"* · *"/l4 ship the reconnect system"*
+
+**→ Per-level behaviour, presets, override flags (`--expand` / `-x` / `--solo`), and full examples: [docs/skills.md](docs/skills.md).**
 
 ### 📈 Improve over time
 

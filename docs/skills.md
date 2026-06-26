@@ -98,6 +98,33 @@ Think Tank assembles:
 Output: Decision Brief with consensus, dissenting views, and recommendation
 ```
 
+### L3 / L4 / L5 — CEO Front-Door Ladder
+
+`/l3`, `/l4`, `/l5` are **terse front-doors into `ceo-agent`**. Each pre-fills the four CEO startup questions — involvement = just-results (full autonomy, notify on done), scope = Hold, no-go = none — so a single line ships the goal without the startup Q&A. They differ only in **where the implementation runs**; the depth-0 control loop and every quality gate are identical, nothing is skipped.
+
+| Level | Command | Where it runs | Reach for it when |
+|-------|---------|---------------|-------------------|
+| **L3** | `/l3 <goal>` | **Inline** on this thread. The CEO executes the goal itself, escalating only at the DOA boundary. | You want full autonomy but want to watch it happen on the current thread. (Also the `--solo` fallback engine for L4/L5.) |
+| **L4** | `/l4 <goal>` | **One background, worktree-isolated foreman** (a sub-orchestrator at depth 1) runs dev-flow unattended and returns a verdict. The CEO keeps the depth-0 control loop and the **authoritative qc** — a fan-out of ≥3 adversarial reviewers over the branch diff, *not* a CEO self-read. | A long autonomous run you'd rather offload — your context stays clean; merge-back and worktree GC are owned at depth 0. |
+| **L5** | `/l5 <goal>` | Identical to L4, but the **implementer is leaf-dispatched to a heterogeneous engine** (agy / Gemini via `dispatch-hetero.sh`), and review can run on a **decorrelated** engine (default `gpt-5.5`). The engine roster is **data** (`.claude/review-loop-config.md`), not a hand-typed prompt. | Cost-arbitrage, or you want a decorrelated second engine doing the mechanical coding and a different vendor family reviewing it. |
+
+**Examples**
+
+```
+/l3 fix the flaky reconnect test, you decide          # inline, full autonomy
+/l4 ship the WebSocket reconnect system                # offload to a background foreman
+/l4 --expand harden the auth layer -x payments         # scope=Expand, payments off-limits
+/l5 migrate the config loader to the new schema        # hetero implementer + decorrelated review
+```
+
+**Override flags** (all three levels):
+
+- `--expand` → scope = Expand (default is Hold — touch only what the goal names).
+- `-x <csv>` → no-go zones, e.g. `-x payments,auth` (default none).
+- `--solo` (L4 / L5 only) → fall back to the L3 inline engine. This is also the automatic degradation when the foreman returns `precondition_failed`.
+
+The escalation is **inline → offloaded → offloaded + decorrelated engine**. Start at L3; reach for L4 when you want it off your thread; reach for L5 when a second engine adds cost-arbitrage or decorrelation value. For the depth-0 control loop, outcome→action table, and run-summary ledger, see the [ceo-agent front-door semantics](../skills/ceo-agent/references/level-front-door.md). For the L5 roster/loop config, see [`review-loop-config.md`](../project-config-template/review-loop-config.md).
+
 ### How They Work Together
 
 ```

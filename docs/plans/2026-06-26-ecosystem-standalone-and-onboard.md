@@ -162,3 +162,22 @@ clone, then `/l5` per-phase from there. The plan + branch are already in place o
 3. ~~Engine~~ → **mixed**: P1/P4/P5 `/l4` (all-Claude), P2/P3 `/l5` (Gemini). See §4.
 
 No open questions remain — plan is execution-ready (start at P0).
+
+## 10. Execution log — COMPLETE (2026-06-27)
+
+All phases shipped on `feat/ecosystem-standalone-onboard` (off develop, unpushed):
+
+| Phase | Commit | Outcome |
+|-------|--------|---------|
+| P0 | `820b178` | Triage doc (`triage-superpowers-footprint.md`); FLIP set = 8 surfaces, Board-approved |
+| P1 | `3ffe666` | Premise flip (12 surfaces); `/l5` hetero + gpt-5.5 2-round → SHIP. Engine overridden to `/l5`+gpt-5.5 (was `/l4`) by Board |
+| P1.5 | `d728d44` | **(interleaved)** install/update-UX feedback → `version-drift-check` hook + `dev-update.sh` + `docs/installation.md` restructure; v2.25.13 |
+| P2 | `e259613` | `project-detect.js` + 9 fixtures + 83-assert test; golden-exact vs hangar-bridge; gpt-5.5 8-round (caught path-traversal + symlink escape) |
+| P3 | `1cb6286` | `scaffold-config.js` + 45-assert test; reproduces golden mechanical values; gpt-5.5 4-round |
+| P4 | `0d2bf2a` | `skills/onboard/SKILL.md` (judgment layer); depth-0 + gpt-5.5 3-round |
+| P5 | `fe7159a` | Wire-in: skill 23→24 all surfaces + v2.26.0 + CHANGELOG + INDEX; gates green |
+| P6 | (no commit) | Dogfood: throwaway pnpm-workspace repo end-to-end (detect→scaffold→invariants→idempotency all ✓) + hangar-bridge golden comparison (read-only; mechanical values match value-for-value). One expected judgment diff: scaffold includes `packages/e2e/src/` in protected_paths (mechanical superset), golden human-narrowed to the 3 security-carrying trees — the skill's step-3 enrichment narrows it. |
+
+**KR status**: KR1 ✓ (golden mechanical repro) · KR2 ✓ (detect+scaffold fixture-tested, ≥3 shapes — shipped 9) · KR3 ✓ (no superpowers-first default; trio named) · KR4 ✓ (all gates green, version bumped, mirrors synced) · KR5 ✓ (zero history lost in B).
+
+**Remaining**: branch unpushed; the `autopilot:onboard` SKILL is not dispatchable until a Claude Code restart (plugin caches skills at session start) — the scripts work from the CLI immediately. Final acceptance review (multi-perspective on P1 flip-set + skill design, §5) optional before merge.

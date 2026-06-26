@@ -137,4 +137,31 @@ run_hook "$HOOK" "$payload"
 assert_exit_code "$__RUN_EXIT" "0" "garbage-transcript: fail-open exit 0"
 assert_file_absent "$REPO_GARB/docs/HANDOFF.md" "garbage-transcript+clean: nothing written"
 
+# ====================================================================
+# 8. Marker-guard (depth-0 review fix): a HAND-WRITTEN HANDOFF.md (no AUTO-GENERATED
+#    marker) is NEVER clobbered — auto handoff lands in docs/HANDOFF.auto.md instead.
+# ====================================================================
+REPO_MANUAL="$TEST_TMP/repo-manual"
+mkgit "$REPO_MANUAL"
+mkdir -p "$REPO_MANUAL/docs"
+printf '# MY HAND-WRITTEN HANDOFF\n\nCritical context I do NOT want lost.\n' > "$REPO_MANUAL/docs/HANDOFF.md"
+( cd "$REPO_MANUAL" && git add -A && git commit -qm base )
+printf 'dirty\n' > "$REPO_MANUAL/newfile.txt"   # dirty trigger
+payload="{\"reason\":\"clear\",\"cwd\":\"$REPO_MANUAL\",\"transcript_path\":\"$SUBSTANTIVE\",\"session_id\":\"s8\"}"
+run_hook "$HOOK" "$payload"
+assert_exit_code "$__RUN_EXIT" "0" "marker-guard: exit 0"
+assert_contains "$(cat "$REPO_MANUAL/docs/HANDOFF.md")" "MY HAND-WRITTEN HANDOFF" "marker-guard: manual HANDOFF.md preserved (not clobbered)"
+assert_file_exists "$REPO_MANUAL/docs/HANDOFF.auto.md" "marker-guard: auto handoff lands in HANDOFF.auto.md sidecar"
+assert_contains "$(cat "$REPO_MANUAL/docs/HANDOFF.auto.md")" "AUTO-GENERATED" "marker-guard: sidecar carries the auto marker"
+
+# 9. A prior AUTO file (carries the marker) is overwritten IN PLACE — no sidecar.
+REPO_AUTO="$TEST_TMP/repo-auto"
+mkgit "$REPO_AUTO"
+printf 'dirty\n' > "$REPO_AUTO/newfile.txt"
+payload="{\"reason\":\"clear\",\"cwd\":\"$REPO_AUTO\",\"transcript_path\":\"$SUBSTANTIVE\",\"session_id\":\"s9\"}"
+run_hook "$HOOK" "$payload"   # absent → writes HANDOFF.md in place
+assert_file_exists "$REPO_AUTO/docs/HANDOFF.md" "marker-guard: absent → writes HANDOFF.md in place"
+run_hook "$HOOK" "$payload"   # existing carries marker → overwrite in place, NO sidecar
+assert_file_absent "$REPO_AUTO/docs/HANDOFF.auto.md" "marker-guard: prior-auto file overwritten in place (no sidecar)"
+
 finalize_test

@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.14 — opt-in auto-handoff on /clear (SessionEnd hook)
+
+**Headline**: A new **opt-in** `session-handoff` hook automates the recurring "do I need to write a handoff before I `/clear`?" decision. On `SessionEnd` with `reason: clear` (or `logout`) it parses the transcript itself (reusing `state-checkpoint-lib`), DECIDES whether meaningful work happened — dirty tree / commits-this-session / a touched active project / a substantive transcript — and only then writes `docs/HANDOFF.md` (repo state, recent commits, last action, inferred next step). If nothing meaningful happened it writes nothing; that *is* the automated "no handoff needed" answer. **Marker-guard**: a hand-written `HANDOFF.md` (no `AUTO-GENERATED` marker) is **never clobbered** — the auto handoff lands in `docs/HANDOFF.auto.md` instead; only an absent or prior-auto file is overwritten in place. Fail-open, opt-in only (wired in `settings.example.json`, never default-on — it writes into your repo). **Process**: `/l4` dogfood — a background worktree-isolated foreman built the hook + 21-assertion test; depth-0 review caught the manual-HANDOFF clobber footgun (confirmed by an adversarial smoke that destroyed a hand-written file) and added the marker-guard + 6 more assertions before merge.
+
+### Added
+- `hooks/session-handoff.js` — opt-in `SessionEnd` hook: decide-if-needed (dirty / commits / active-project / substantive-transcript) → write/update `docs/HANDOFF.md` (marker-guarded to `HANDOFF.auto.md` for manual files), fail-open, transcript-parse via `state-checkpoint-lib`, `~/.autopilot/.session-handoff.log` (600) diagnostics.
+- `hooks/tests/session-handoff.test.sh` — 27 assertions (decide-if-needed paths, reason gate, non-git, fail-open on garbage/missing transcript, idempotency, marker-guard preserve+sidecar).
+
+### Changed
+- Hook inventory 20→**21** (opt-in 12→**13**): `settings.example.json` opt-in block, `hooks/README.md` tier table, count mirrors.
+
 ## v2.25.13 — diff-domain telemetry for /l5 (measure-now, route-later)
 
 **Headline**: `/l5` now records a deterministic **`work_domain`** for each implementation diff, so per-project per-domain model performance becomes measurable — the prerequisite for any future domain-aware engine routing. It routes **nothing**: a new `scripts/probe-diff-domain.sh` classifies a `git diff --numstat -z -M -C` into `rust` / `backend-cli` / `frontend` / `docs` / `mixed` (enumerated extension map, explicit exclude list, ties/binary/deletion/degenerate cases pinned, LLM-free), and `resolve-review-loop.sh` gains `--domain`/`--auto-domain` that append exactly two telemetry keys (`work_domain`, `domain_source`) to its JSON without touching any pre-existing field or engine choice. **Process**: dogfooded via `/l5` — heterogeneous implementer (`codex gpt-5.3-codex-spark`, cgroup-contained worktree dispatch) → 4-round decorrelated `gpt-5.5` xhigh review loop (1🔴+2🟠+2🟡 → 1🟠+1🟡 → 1🟠+1🟡 → SHIP-AS-IS) + an independent depth-0 adversarial harness. The 🔴 (a numstat-`z` rename path that looked like a counts record caused phantom double-counting) was caught by the decorrelated reviewer after the local green passed — fixed with a deterministic NUL state-machine parse. All domain **routing** is deferred to `docs/BACKLOG.md` behind explicit prerequisites (thin evidence: one exam, n=15).

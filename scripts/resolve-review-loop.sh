@@ -138,7 +138,10 @@ case "$QC_AGG" in union-on-verified-critical|unanimous-ship) ;; *) QC_AGG="$DEF_
 IMPL_FAMILY="$(family_of "$IMPL_ENGINE")"
 _diff_family=0
 for _m in "${QC_PANEL[@]}"; do
-  [[ "$(family_of "$_m")" != "$IMPL_FAMILY" ]] && { _diff_family=1; break; }
+  _mf="$(family_of "$_m")"
+  # An 'unknown' family does NOT count as cross-family (it could be the implementer's
+  # family under an unrecognized codename) — else it would mask a real overlap.
+  [[ "$_mf" != "unknown" && "$_mf" != "$IMPL_FAMILY" ]] && { _diff_family=1; break; }
 done
 if [[ ${#QC_PANEL[@]} -gt 0 && $_diff_family -eq 0 ]]; then
   printf 'resolve-review-loop: WARNING — qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$IMPL_FAMILY" >&2

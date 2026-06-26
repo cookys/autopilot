@@ -62,6 +62,11 @@ XCFG="$TEST_TMP/xfam.md"
 printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: gpt-5.5, claude-opus\n' > "$XCFG"
 XWARN="$(REVIEW_LOOP_CONFIG_OVERRIDE="$XCFG" bash "$SCRIPT" 2>&1 >/dev/null)"
 assert_not_contains "$XWARN" "shares the implementer family" "cross-family panel → no warn"
+# an UNKNOWN-family member must NOT suppress the warn (it could be the impl family in disguise)
+UCFG="$TEST_TMP/ufam.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: gpt-5.5, some-unknown-model\n' > "$UCFG"
+UWARN="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UCFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+assert_contains "$UWARN" "shares the implementer family" "unknown-family member does not mask the overlap warn"
 # output JSON still valid regardless of warning
 assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$FCFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "warn does not change exit code"
 

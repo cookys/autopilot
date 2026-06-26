@@ -11,9 +11,12 @@
 # pseudo-TTY. EMPTY / unparseable capture is treated FAIL-CLOSED (status:no_verdict) —
 # an empty agy reply must NEVER be read as SHIP-AS-IS.
 #
-# This script NEVER writes the repo, creates no worktree, runs no git mutation — it is
-# read-only by construction. Verdict synthesis (union-on-verified-critical) stays at
-# depth 0; this only obtains ONE panelist's verdict.
+# Read-only posture: the diff under review is UNTRUSTED (a malicious diff could carry a
+# prompt-injection). So the codex path runs under `--sandbox read-only` (NOT a sandbox
+# bypass — the reviewer never needs to write/exec), and the agy path (no upstream
+# read-only mode) is dispatched from a throwaway scratch cwd, never the repo. This script
+# itself creates no worktree and runs no git mutation. Verdict synthesis
+# (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
 #   scripts/dispatch-review.sh --runner codex|agy --model <name> --diff-file <file>
@@ -78,30 +81,45 @@ HDR
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
+  # READ-ONLY sandbox: a reviewer never writes/execs, and the diff is untrusted (injection).
   # codex stdout is delivered normally under a pipe.
   "$CODEX_BIN" exec --model "$MODEL" \
-      --dangerously-bypass-approvals-and-sandbox \
+      --sandbox read-only \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
 else
   AGY_BIN="${BIN:-agy}"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   # agy -p drops stdout under a non-TTY pipe (#76/#408) → capture through a pseudo-TTY.
   RUN_SH="$(mktemp -t dispatch-review-agy-XXXXXX)"
+  AGY_CWD="$(mktemp -d -t dispatch-review-agycwd-XXXXXX)"  # scratch cwd, NEVER the repo
   {
     printf '#!/usr/bin/env bash\n'
+    printf 'cd %q || exit 9\n' "$AGY_CWD"
     printf 'exec %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true
-  rm -f "$RUN_SH"
+  rm -rf "$RUN_SH" "$AGY_CWD"
   # strip carriage returns the pseudo-TTY inserts
   tr -d '\r' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
 fi
 
-# --- parse verdict (fail-closed) ---
-VERDICT="$(grep -aoE 'VERDICT:[[:space:]]*(SHIP-AS-IS|FIX-THEN-SHIP)' "$RAW_LOG" 2>/dev/null | head -1 | grep -aoE 'SHIP-AS-IS|FIX-THEN-SHIP' | head -1)"
-FINDINGS="$(grep -aoE 'FINDINGS:.*' "$RAW_LOG" 2>/dev/null | head -1 | sed -E 's/^FINDINGS:[[:space:]]*//')"
+# --- parse verdict (fail-closed AND fail-toward-block) ---
+# Only consider lines that START with VERDICT: (ignoring leading whitespace), so prose
+# that merely mentions a token mid-sentence ("not a VERDICT: SHIP-AS-IS situation") is
+# ignored. Resolve CONSERVATIVELY: any FIX-THEN-SHIP among the verdict lines blocks; SHIP
+# only when a SHIP line exists and NO FIX line does. Never let an explained reply flip a
+# block into a ship.
+VLINES="$(grep -aE '^[[:space:]]*VERDICT:[[:space:]]*(SHIP-AS-IS|FIX-THEN-SHIP)' "$RAW_LOG" 2>/dev/null)"
+if printf '%s' "$VLINES" | grep -qaE 'FIX-THEN-SHIP'; then
+  VERDICT="FIX-THEN-SHIP"
+elif printf '%s' "$VLINES" | grep -qaE 'SHIP-AS-IS'; then
+  VERDICT="SHIP-AS-IS"
+else
+  VERDICT=""
+fi
+FINDINGS="$(grep -aE '^[[:space:]]*FINDINGS:' "$RAW_LOG" 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*FINDINGS:[[:space:]]*//')"
 
 if [[ "$VERDICT" != "SHIP-AS-IS" && "$VERDICT" != "FIX-THEN-SHIP" ]]; then
   # EMPTY or unparseable capture — FAIL-CLOSED. Never silently treated as a pass.

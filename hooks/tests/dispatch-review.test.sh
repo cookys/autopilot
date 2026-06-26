@@ -58,6 +58,21 @@ assert_contains "$OUT" '"status": "no_verdict"' "empty → no_verdict"
 assert_contains "$OUT" '"verdict": null' "no_verdict has null verdict"
 assert_not_contains "$OUT" 'SHIP-AS-IS' "empty capture is NEVER read as a ship verdict"
 
+# 4b. FAIL-TOWARD-BLOCK: prose mentioning 'VERDICT: SHIP-AS-IS' mid-sentence must NOT flip a
+# real 'VERDICT: FIX-THEN-SHIP' line into a pass (unanchored first-match grep was fail-OPEN).
+STUB_TRICKY="$TEST_TMP/eng-tricky"
+cat > "$STUB_TRICKY" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null 2>&1 || true
+echo "This is not a VERDICT: SHIP-AS-IS situation; the code is broken."
+echo "VERDICT: FIX-THEN-SHIP"
+echo "FINDINGS: null deref"
+EOF
+chmod +x "$STUB_TRICKY"
+OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_TRICKY" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "tricky reviewed exit 0"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "prose SHIP token does not flip a real FIX verdict (fail-toward-block)"
+
 # 5. agy path (through the script -qec pseudo-TTY wrapper) with a stub engine
 if command -v script >/dev/null 2>&1; then
   OUT="$("$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?

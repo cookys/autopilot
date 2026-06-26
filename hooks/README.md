@@ -88,7 +88,7 @@ hooks/
   hooks.json               # Hook registration (Tier A default-on)
   session-start.js         # SessionStart priming (pre-existing)
   state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
-  session-handoff.js       # Tier B (opt-in) — SessionEnd, auto-writes docs/HANDOFF.md on /clear
+  session-handoff.js       # Tier B (opt-in) — SessionEnd, writes a machine handoff to ~/.autopilot on /clear (no repo writes)
   state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier B (opt-in)
   suggest-compact.js       # Tier A
@@ -191,7 +191,7 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
 | config-protection | PreToolUse | Write\|Edit | Blocks linter/formatter config edits |
 | session-summary | Stop | — | Appends cwd / git status / recent commits to `~/.claude/sessions/{date}-{sid}.md` |
-| session-handoff | SessionEnd | — | On `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes/updates `docs/HANDOFF.md` in the repo cwd from the transcript (idempotent overwrite). Does nothing otherwise. Fail-open; parses the transcript itself (no LLM dependency). Opt-in because it writes into your repo |
+| session-handoff | SessionEnd | — | On `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes a machine handoff snapshot to `~/.autopilot/handoff/<repo-hash>.md` (NEVER into the repo — `docs/HANDOFF.md` is untouched) via temp→atomic-rename. Does nothing otherwise. Fail-open; parses the transcript itself (no LLM). **Auto-inject** is a separate **default-off** reader gate in `session-start.js` (`AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true`) that injects the snapshot once (atomic consume-once, <10k cap, on resume/clear/startup) and suppresses the thin intent hint. Opt-in both halves |
 | check-console | Stop | — | Warns about `console.log` in modified JS/TS |
 | accumulator | PostToolUse | Write\|Edit | Collects edited file paths for batch-format |
 | batch-format | Stop | — | Prettier + tsc on accumulated files. Timeout: 300s |

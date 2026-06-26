@@ -116,4 +116,24 @@ assert_not_contains "$CTX" "machine session snapshot at last /clear" "ttl: stale
 assert_file_absent "$HOOK_HOME/.autopilot/handoff/$HASH.md" "ttl: stale handoff body cleaned"
 assert_file_absent "$HOOK_HOME/.autopilot/handoff/$HASH.meta.json" "ttl: stale handoff meta cleaned"
 
+# 8. Race lock (decorrelated review 🔴×2): a consume MISS must DELETE NOTHING, so it
+#    cannot nuke a concurrent writer's temp/meta or a racing reader's .consuming file.
+HDIR="$HOOK_HOME/.autopilot/handoff"
+RHASH=$(repo_hash "$REPO_DEFAULT")
+NOW_TS=$(node -e "process.stdout.write(new Date().toISOString());")
+# 8a. writer mid-publish: fresh META present, BODY absent (writer publishes meta, then body).
+rm -f "$HDIR/$RHASH".*
+node -e "const fs=require('fs');fs.writeFileSync(process.argv[1],JSON.stringify({repo_root:process.argv[2],written_at:process.argv[3],session_id:'w',body_bytes:5}));" "$HDIR/$RHASH.meta.json" "$(cd "$REPO_DEFAULT" && pwd -P)" "$NOW_TS"
+printf 'tmpbd' > "$HDIR/$RHASH.md.tmp.99999"
+run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"clear\"}"
+CTX=$(extract_context "$__RUN_STDOUT")
+assert_not_contains "$CTX" "machine session snapshot at last /clear" "race: body-absent injects nothing"
+assert_file_exists "$HDIR/$RHASH.meta.json" "race: writer META not nuked on consume-miss"
+assert_file_exists "$HDIR/$RHASH.md.tmp.99999" "race: writer TEMP body not nuked on consume-miss"
+# 8b. reader/reader: a rival's .consuming.<pid> present, canonical body already gone.
+rm -f "$HDIR/$RHASH".*
+printf 'rival' > "$HDIR/$RHASH.md.consuming.88888"
+run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"clear\"}"
+assert_file_exists "$HDIR/$RHASH.md.consuming.88888" "race: rival reader's .consuming not nuked"
+
 finalize_test

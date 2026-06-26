@@ -154,7 +154,7 @@
     ],
     "SessionEnd": [
       {
-        "//": "session-handoff: on /clear (or logout) auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript) and, if so, writes/updates docs/HANDOFF.md in the repo cwd from the transcript. Does nothing when nothing meaningful happened. OPT-IN because it writes into your repo. Thresholds: AUTOPILOT_HANDOFF_MIN_USER_TURNS (3) / AUTOPILOT_HANDOFF_MIN_TOOL_CALLS (12)",
+        "//": "session-handoff (writer): on /clear (or logout) auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript) and, if so, writes a machine handoff snapshot to ~/.autopilot/handoff/<repo-hash>.md (NOT into your repo — docs/HANDOFF.md is never touched). Does nothing otherwise. Fail-open. To ALSO auto-inject that snapshot into the next session, enable the reader gate (default OFF): env AUTOPILOT_HANDOFF_INJECT=1 OR ~/.autopilot/config.json {\"handoff_inject\":true} — the existing session-start hook then injects it once (consume-once) on a resume/clear/startup. Thresholds: AUTOPILOT_HANDOFF_MIN_USER_TURNS (3) / AUTOPILOT_HANDOFF_MIN_TOOL_CALLS (12)",
         "matcher": "",
         "hooks": [
           {

@@ -49,14 +49,13 @@ function handoffEnabled(homeDir) {
 }
 
 function cleanupHandoffArtifacts(dir, repoHash) {
-  if (!fs.existsSync(dir)) return;
-  try {
-    for (const entry of fs.readdirSync(dir)) {
-      if (entry === `${repoHash}.md` || entry.startsWith(`${repoHash}.`)) {
-        try { fs.unlinkSync(path.join(dir, entry)); } catch { /* ignore */ }
-      }
-    }
-  } catch { /* ignore */ }
+  // Reap ONLY the canonical published pair. NEVER touch `${repoHash}.md.tmp.*` or
+  // `${repoHash}.md.consuming.*` — those belong to an in-flight writer publish or a
+  // racing reader consume, and deleting them corrupts that operation (decorrelated
+  // review 🔴×2: the old `startsWith(${repoHash}.)` sweep nuked a concurrent op's files).
+  for (const name of [`${repoHash}.md`, `${repoHash}.meta.json`]) {
+    try { fs.unlinkSync(path.join(dir, name)); } catch { /* ignore */ }
+  }
 }
 
 function cleanStaleHandoff(dir, repoHash) {
@@ -187,10 +186,12 @@ function run() {
         const repoHash = crypto.createHash('sha1').update(repoRoot).digest('hex');
         const handoffDir = path.join(homeDir, '.autopilot', 'handoff');
         if (!cleanStaleHandoff(handoffDir, repoHash)) {
+          // On a consume miss (no handoff / writer still mid-publish / a racing
+          // reader already won the rename) inject nothing and DELETE NOTHING —
+          // a blunt cleanup here would nuke the concurrent writer's temp body or
+          // the racing reader's `.consuming` file (decorrelated review 🔴×2).
+          // Genuine orphans are reaped by the TTL path (cleanStaleHandoff).
           handoffInjected = consumeHandoff(handoffDir, repoHash, repoRoot) || '';
-          if (!handoffInjected) {
-            cleanupHandoffArtifacts(handoffDir, repoHash);
-          }
         }
       }
     }

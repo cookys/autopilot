@@ -39,4 +39,35 @@ assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field loop_
 assert_eq "my-local-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_engine)" "valid override value is honored"
 assert_eq "override" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field source)" "override source reported"
 
+# 7. qc_panel (v2.25.9): default array + aggregation default
+OUT="$(bash "$SCRIPT")"
+assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash"]' "default qc_panel array emitted"
+assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "default aggregation"
+assert_eq "gpt-5.5 claude-opus gemini-flash" "$(bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
+
+# 8. aggregation: majority (and any garbage) → falls back to the safe union default
+PCFG="$TEST_TMP/panel.md"
+printf -- '- qc_panel: a-model , b-model,c-model \n- qc_panel_aggregation: majority\n' > "$PCFG"
+assert_eq "union-on-verified-critical" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PCFG" bash "$SCRIPT" --field qc_panel_aggregation)" "majority aggregation rejected → union default"
+# panel trims whitespace around comma-separated members
+assert_eq "a-model b-model c-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PCFG" bash "$SCRIPT" --field qc_panel)" "panel members trimmed"
+
+# 9. family-overlap warning fires when the panel shares the implementer family (advisory stderr, output unchanged)
+FCFG="$TEST_TMP/fam.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: gpt-5.5, gpt-5-codex\n' > "$FCFG"
+WARN="$(REVIEW_LOOP_CONFIG_OVERRIDE="$FCFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+assert_contains "$WARN" "shares the implementer family" "all-OpenAI panel vs OpenAI implementer → warn"
+# cross-family panel: NO warning
+XCFG="$TEST_TMP/xfam.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: gpt-5.5, claude-opus\n' > "$XCFG"
+XWARN="$(REVIEW_LOOP_CONFIG_OVERRIDE="$XCFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+assert_not_contains "$XWARN" "shares the implementer family" "cross-family panel → no warn"
+# an UNKNOWN-family member must NOT suppress the warn (it could be the impl family in disguise)
+UCFG="$TEST_TMP/ufam.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: gpt-5.5, some-unknown-model\n' > "$UCFG"
+UWARN="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UCFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+assert_contains "$UWARN" "shares the implementer family" "unknown-family member does not mask the overlap warn"
+# output JSON still valid regardless of warning
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$FCFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "warn does not change exit code"
+
 finalize_test

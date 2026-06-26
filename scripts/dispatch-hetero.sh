@@ -249,13 +249,21 @@ if [ "$IS_CODEX" -eq 1 ]; then
       --dangerously-bypass-hook-trust \
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE"
 else
-  printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini headless dispatch is BEST-EFFORT (run_command has a 10s foreground cap → long/exploratory commands background and the -p turn yields before saving; occasional cross-session path leaks). Running EDIT-ONLY with a wrapper commit. For reliability on non-trivial or build/test tasks, prefer --model gpt-5.5 (codex). See gotcha: agy-headless-dispatch-unreliable." >&2
+  printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at 10s so the agent cannot RUN build/test/git mid-turn (the -p turn yields first). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
   # agy (Gemini) in -p print mode CANNOT reliably run a long command then commit:
   # its run_command tool foreground-caps at 10s, backgrounds anything longer, and
   # the single print turn yields ("you'll be notified, stop calling tools") before
   # the commit ever runs → silent no_op/hallucination. So we run agy EDIT-ONLY and
   # the wrapper commits its edits below. (gotcha: agy-headless-dispatch-unreliable.)
   AGY_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Your ABSOLUTE working directory is: $WT
+Every file path in the task below resolves UNDER this directory. Convert every relative
+path to absolute by prefixing it with '$WT/', and read/write ONLY absolute paths under
+'$WT'. The files to edit ALREADY EXIST there. NEVER create a project, NEVER use a scratch
+directory, NEVER use ~/.gemini, NEVER initialise a new git repo — edit the existing files
+in place at '$WT'. (agy -p does not honor the process cwd, so this absolute anchor is the
+only thing that points your edits at the real worktree instead of an invented scratch dir.)
+
 You run in ONE non-interactive turn and you CANNOT wait for any background task. Therefore
 do NOT use run_command / the shell AT ALL — no search, grep, find, ls, cat, install, build,
 test, lint, or git. ANY shell command is moved to the background and your turn ends before

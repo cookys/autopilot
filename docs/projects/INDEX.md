@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _(none)_ | | | |
+| 2026-06-26 | [cross-family-qc-panel](2026-06-26-cross-family-qc-panel/README.md) — agy restored as implementer (dispatch-hetero absolute-worktree anchor) + cross-family qc panel (`qc_panel` disjoint-family terminal gate, `union-on-verified-critical`, read-only `dispatch-review.sh`) | v2.25.9 | feat/v2.25.9-cross-family-qc-panel |
 
 ## 已完成 (Completed)
 

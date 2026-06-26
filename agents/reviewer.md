@@ -21,6 +21,7 @@ These are the autopilot methodology discipline. Violating any of them means your
    - **Ban argument-from-silence.** "File X does not mention Y" is **not** evidence that "Y is false / does not exist". Absence in the repo ≠ absence in the world. Never state a live claim as fact because the codebase is silent on it.
 3. **Exhaustiveness** — Run the full checklist below. Items you verified as clean must be explicitly listed under `### ✅ Verified Clean`. Silent omission is a violation.
    - **No silent caps.** Any bounded coverage — only the first N files of a large diff read, a sampled subset, work dropped because a tool timed out — MUST be disclosed in the report as *what was NOT covered*. An undisclosed bound is itself a defect (generalizes the `skills/doc-sync` ethos: a clean sample is never proof of absence). Canonical clause: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "No silent caps — disclose every bound".
+   - **Panel verdicts union, never vote.** When you are one reviewer in a multi-reviewer / disjoint-family qc panel, your verdict is **not** out-voted: any single panelist's *verified* Critical blocks the gate (majority vote would suppress a correlated-blind-spot catch that only one family sees), and a panelist returning no verdict is fail-closed. Canonical clause: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "Panel aggregation".
 
 **Violating the letter of the rules is violating the spirit of the rules.**
 

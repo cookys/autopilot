@@ -37,7 +37,7 @@ The no-commit case is **split by how the worker ended** so a legitimate no-op ta
 | `committed` | new commit + clean tree + agent exit 0 | **success** — the only path that returns 0; branch is ready for review/merge | 0 |
 | `failure` | new commit + clean tree but agent **exit ≠ 0** | the worker left a commit but ended abnormally; **not** scored success (a non-zero exit is never `committed`) | 1 |
 | `dirty` | new commit but tree left uncommitted-dirty | the worker committed then kept editing; not a reviewable clean state | 1 |
-| `no_op` | **no** new commit + agent **exit 0** | the agent legitimately judged nothing was needed; not a dispatch failure | 1 |
+| `no_op` | **no** new commit + agent **exit 0** | the agent legitimately judged nothing was needed; not a dispatch failure. **(agy/Gemini, pre-v2.25.9: a `no_op` here usually meant agy invented a scratch project instead of editing the worktree — agy `-p` ignores process cwd. Fixed v2.25.9: the agy directive now PREPENDS an absolute-worktree anchor, so agy edits in place — verified single- and multi-file. A `no_op` from agy now means what it says.)** | 1 |
 | `question_suspected` | **no** new commit + (timeout **or** exit ≠ 0) | the worker likely **paused on a clarifying question** (auto-approve / `--dangerously-skip-permissions` does *not* silence the model's own question — see [`blind-dispatch.md`](blind-dispatch.md) § "Clarifying questions survive auto-approve") or otherwise stalled | 1 |
 
 The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.

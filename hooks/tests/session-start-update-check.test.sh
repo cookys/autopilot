@@ -269,4 +269,38 @@ assert_contains "$CTX14" "- v5.0.3: En-dash headline" "dash variants: em dash pa
 assert_contains "$CTX14" "- v5.0.2: Mid-dash headline" "dash variants: en dash parsed"
 assert_contains "$CTX14" "- v5.0.1: Hyphen headline" "dash variants: ascii dash parsed"
 
+# 13. (impl-review 🟠) EMPTY/missing CHANGELOG must still advance the watermark, not throw.
+set_plugin_root "$PLUGIN_ROOT" "6.1.0"
+set_last_seen "6.0.0"
+set_changelog "$PLUGIN_ROOT" ""
+run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
+assert_eq "$__RUN_EXIT" "0" "empty-changelog: exit 0 (no throw)"
+assert_eq "$(read_last_seen "$HOOK_HOME/.autopilot/last-seen-version")" "6.1.0" "empty-changelog: watermark still advanced"
+
+# 14. (impl-review 🟠) the protective instruction is NEVER truncated, even with 5 max-length headlines.
+set_plugin_root "$PLUGIN_ROOT" "7.5.0"
+set_last_seen "7.0.0"
+LONG=$(printf 'X%.0s' $(seq 1 200))
+set_changelog "$PLUGIN_ROOT" $'## v7.5.0 — '"$LONG"$'\n## v7.4.0 — '"$LONG"$'\n## v7.3.0 — '"$LONG"$'\n## v7.2.0 — '"$LONG"$'\n## v7.1.0 — '"$LONG"$'\n## v7.0.5 — '"$LONG"
+run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
+CTX_LONG=$(extract_context "$__RUN_STDOUT")
+assert_contains "$CTX_LONG" "SKIP the mention and continue" "long-headlines: protective instruction survives the budget clamp"
+
+# 15. (impl-review 🟠) stale lock dir is reaped (not wedged forever); a fresh lock is respected.
+set_plugin_root "$PLUGIN_ROOT" "8.2.0"
+set_changelog "$PLUGIN_ROOT" $'## v8.2.0 — Stale lock recovery'
+set_last_seen "8.1.0"
+mkdir -p "$HOOK_HOME/.autopilot/.update-check.lock"
+touch -d "5 minutes ago" "$HOOK_HOME/.autopilot/.update-check.lock"
+run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
+CTX_STALE=$(extract_context "$__RUN_STDOUT")
+assert_contains "$CTX_STALE" "[Autopilot updated: v8.1.0 → v8.2.0]" "stale-lock: orphan lock reaped, notice emitted"
+# fresh lock (recent mtime) → respected, no notice
+set_last_seen "8.1.0"
+mkdir -p "$HOOK_HOME/.autopilot/.update-check.lock"
+run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
+CTX_FRESH=$(extract_context "$__RUN_STDOUT")
+assert_not_contains "$CTX_FRESH" "[Autopilot updated:" "fresh-lock: respected (no double-inject)"
+rmdir "$HOOK_HOME/.autopilot/.update-check.lock" 2>/dev/null || true
+
 finalize_test

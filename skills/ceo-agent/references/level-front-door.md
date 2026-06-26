@@ -410,9 +410,10 @@ one row per step:
   path, or is `claude`/`<worker tier>` for the native `/l4` path.
 - **`work_domain`** (impl row only) is **telemetry, never a routing input** — the
   deterministic dominant domain of the impl diff from
-  `scripts/resolve-review-loop.sh --auto-domain <base_sha>..<commit>` (the range
-  from `dispatch-hetero.sh`'s outcome JSON, NOT ambient `HEAD` — the worktree is
-  GC'd on success). Values: `rust` \| `backend-cli` \| `frontend` \| `docs` \|
+  `scripts/resolve-review-loop.sh --auto-domain <base>..<commit>` (the `base` +
+  `commit` fields from `dispatch-hetero.sh`'s outcome JSON — `base` is the
+  immutable SHA passed via `--base`; NOT ambient `HEAD`, which the worktree GC on
+  success would break). Values: `rust` \| `backend-cli` \| `frontend` \| `docs` \|
   `mixed`. It records what kind of work ran so per-domain model performance can be
   measured later; it selects no engine. See `scripts/probe-diff-domain.sh`.
 - The ledger makes success criterion #3 (depth-0 gate distinct from first-pass)

@@ -50,9 +50,11 @@ qc-gate" pipeline is just `/l5 <goal>` — you don't re-type the roster.
      impl row records `runner`/`model`/`containment` straight from the outcome JSON.
    - **Diff-domain telemetry** (post-impl, telemetry ONLY — routes nothing): after a
      `committed` outcome, record the impl's dominant `work_domain` via
-     `scripts/resolve-review-loop.sh --auto-domain <base_sha>..<commit>` where
-     `base_sha` + `commit` come from the **dispatch outcome JSON** (NOT ambient
-     `HEAD` — the worktree is GC'd on success). Put `work_domain` in the
+     `scripts/resolve-review-loop.sh --auto-domain <base>..<commit>` where the
+     `base` + `commit` fields come from the **dispatch outcome JSON** (`base` is
+     the immutable SHA you passed via `--base $(git rev-parse …)`, so it is a
+     stable range endpoint — NOT ambient `HEAD`, which is wrong because the
+     worktree is GC'd on success). Put `work_domain` in the
      run-summary ledger's impl row (canonical:
      [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
      § Run-summary ledger). It selects no engine — domain routing is BACKLOG'd.

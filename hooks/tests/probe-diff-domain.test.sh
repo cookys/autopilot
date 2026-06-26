@@ -162,4 +162,22 @@ R11="$(commit_head rename-tabpath-with-delta)"
 OUT="$(run_probe range "$R10..$R11")"
 assert_eq "$(json_str "$OUT" work_domain)" "backend-cli" "tab-bearing new path .py classifies backend-cli by NEW path"
 
+# 13. round-2 reviewer 🟡 — COPY record parse lock via WEIGHT CONSERVATION. `-M -C`
+#     may emit a copy record (counts + old + NEW NUL fields — same wire shape as a
+#     rename) for an identical-content new file when the source is touched in the same
+#     commit; the destination carries a tab to also exercise NUL-path parsing on the
+#     copy path. git's copy-vs-add choice (and a pure copy's 0/0 counts) is not
+#     portable, so we assert the DETERMINISTIC invariant that holds either way: the
+#     probe's total accounted weight equals an INDEPENDENT git numstat sum — catching
+#     both the round-1 phantom-inflation 🔴 and any dropped record, for whatever git emits.
+printf 'def shared():\n    return 1\n    # padding\n    # padding\n' > "$SBX/shared.py"
+R12="$(commit_head add-copy-source)"
+cp "$SBX/shared.py" "$SBX/$(printf 'cp\tied.rs')"     # identical-content copy to a tab-bearing .rs path
+printf '    # touch source\n' >> "$SBX/shared.py"      # touch source so -C can attribute the copy
+R13="$(commit_head copy-to-tab-rs)"
+OUT="$(run_probe range "$R12..$R13")"
+GIT_TOTAL="$(cd "$SBX" && git diff --numstat -M -C "$R12..$R13" | awk -F'\t' '{a=($1=="-")?0:$1; d=($2=="-")?0:$2; s+=a+d} END{print s+0}')"
+PROBE_TOTAL=$(( $(json_num "$OUT" weight_classified) + $(json_num "$OUT" weight_excluded) + $(json_num "$OUT" weight_unclassified) ))
+assert_eq "$PROBE_TOTAL" "$GIT_TOTAL" "copy/rename record parse conserves total weight (no phantom inflation, no dropped record)"
+
 finalize_test

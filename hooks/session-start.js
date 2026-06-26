@@ -85,11 +85,25 @@ function cleanStaleHandoff(dir, repoHash) {
       return false;
     }
   } catch { /* unparseable claim → stale, fall through */ }
+  // Capture the stale generation before discarding the claimed meta.
+  let staleGen = null;
+  try { staleGen = JSON.parse(fs.readFileSync(claim, 'utf8')).gen; } catch { /* none */ }
   try { fs.unlinkSync(claim); } catch { /* ignore */ }
-  // Delete the stale body ONLY if no writer has republished a fresh meta meanwhile
-  // (writer publishes meta before body, so a present metaPath means a fresh body is
-  // coming / present — leave it; its rename overwrites the stale body anyway).
-  if (!fs.existsSync(metaPath)) { try { fs.unlinkSync(bodyPath); } catch { /* ignore */ } }
+  // Delete the body ONLY if it is the SAME generation as the stale meta (decorrelated
+  // review 🟠 — close the body-deletion TOCTOU): claim it by rename, hash-check against
+  // staleGen, and put it BACK if a writer republished a fresh body (different hash).
+  if (typeof staleGen === 'string') {
+    const bodyClaim = `${bodyPath}.cleaning.${process.pid}`;
+    try {
+      fs.renameSync(bodyPath, bodyClaim);
+      const h = crypto.createHash('sha1').update(fs.readFileSync(bodyClaim, 'utf8')).digest('hex');
+      if (h === staleGen) { try { fs.unlinkSync(bodyClaim); } catch { /* ignore */ } }
+      else { try { fs.renameSync(bodyClaim, bodyPath); } catch { try { fs.unlinkSync(bodyClaim); } catch { /* ignore */ } } }
+    } catch { /* no body / lost the race → nothing to delete */ }
+  } else if (!fs.existsSync(metaPath)) {
+    // Gen-less / corrupt meta (legacy): best-effort delete only if no fresh meta reappeared.
+    try { fs.unlinkSync(bodyPath); } catch { /* ignore */ }
+  }
   return true;
 }
 
@@ -112,6 +126,13 @@ function consumeHandoff(dir, repoHash, repoRoot) {
 
     const body = fs.readFileSync(consumingPath, 'utf8');
     if (typeof meta.body_bytes === 'number' && Buffer.byteLength(body, 'utf8') !== meta.body_bytes) {
+      return null;
+    }
+    // Generation binding (decorrelated review 🟠): only accept a body whose hash
+    // matches THIS meta's `gen`. A torn read (we claimed an OLD body while a writer
+    // published a fresh meta) mismatches → return null and DON'T delete the meta, so
+    // the fresh body that writer is about to publish gets consumed next time.
+    if (typeof meta.gen === 'string' && crypto.createHash('sha1').update(body).digest('hex') !== meta.gen) {
       return null;
     }
     try { fs.unlinkSync(metaPath); } catch { /* ignore */ }

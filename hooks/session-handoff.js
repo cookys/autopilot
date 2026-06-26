@@ -291,6 +291,11 @@ function publishAtomic(bodyPath, metaPath, content, meta) {
       written_at: ts,
       session_id: input.session_id || '',
       body_bytes: Buffer.byteLength(content, 'utf8'),
+      // Generation id binding meta↔body: the sha1 of THIS body. A reader/TTL only
+      // ever injects or deletes a body whose hash matches its meta's `gen`, so a
+      // fresh body published mid-race (different hash) is never injected-as-stale
+      // nor wrongly deleted (decorrelated review 🟠 — meta+body must be one generation).
+      gen: crypto.createHash('sha1').update(content).digest('hex'),
     };
 
     if (!fs.existsSync(HANDOFF_DIR)) fs.mkdirSync(HANDOFF_DIR, { recursive: true, mode: 0o700 });

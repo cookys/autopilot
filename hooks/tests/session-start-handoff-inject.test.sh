@@ -26,7 +26,9 @@ write_handoff_state() {
   meta_file="$handoff_dir/$hash.meta.json"
 
   printf '%s' "$body" > "$body_file"
-  node -e "const fs = require('fs'); const meta = { repo_root: process.argv[1], written_at: process.argv[2], session_id: process.argv[3], body_bytes: fs.statSync(process.argv[5]).size }; fs.writeFileSync(process.argv[4], JSON.stringify(meta));" \
+  # Mirror the real writer: meta carries `gen` = sha1(body) so the reader's
+  # generation binding is exercised.
+  node -e "const fs = require('fs'); const crypto = require('crypto'); const content = fs.readFileSync(process.argv[5]); const meta = { repo_root: process.argv[1], written_at: process.argv[2], session_id: process.argv[3], body_bytes: content.length, gen: crypto.createHash('sha1').update(content).digest('hex') }; fs.writeFileSync(process.argv[4], JSON.stringify(meta));" \
     "$repo_root" \
     "$written_at" \
     "$session_id" \
@@ -158,5 +160,17 @@ rm -f "$HDIR/$RHASH".*
 printf 'rival' > "$HDIR/$RHASH.md.consuming.88888"
 run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"clear\"}"
 assert_file_exists "$HDIR/$RHASH.md.consuming.88888" "race: rival reader's .consuming not nuked"
+
+# 8c. Generation binding (decorrelated review 🟠): a body whose hash does NOT match the
+#     meta's `gen` (a torn read — old body under a fresh meta) is NOT injected, and the
+#     meta is PRESERVED for the matching body still to come.
+rm -f "$HDIR/$RHASH".*
+printf 'fresh body content for gen' > "$HDIR/$RHASH.md"
+node -e "const fs=require('fs');fs.writeFileSync(process.argv[1],JSON.stringify({repo_root:process.argv[2],written_at:process.argv[3],session_id:'g',body_bytes:99,gen:'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'}));" "$HDIR/$RHASH.meta.json" "$(cd "$REPO_DEFAULT" && pwd -P)" "$NOW_TS"
+run_hook "$HOOK" "{\"reason\":\"clear\",\"cwd\":\"$REPO_DEFAULT\",\"source\":\"clear\"}"
+CTX=$(extract_context "$__RUN_STDOUT")
+assert_not_contains "$CTX" "machine session snapshot at last /clear" "gen: body not matching meta.gen is not injected"
+assert_file_exists "$HDIR/$RHASH.meta.json" "gen: mismatched-gen meta preserved for the matching body"
+rm -f "$HDIR/$RHASH".*
 
 finalize_test

@@ -56,7 +56,7 @@
 | P1 | ✅ done (qc_panel schema + resolver + 24-assert test + doc corrections) | d274aa3 |
 | P2 | ✅ done (dispatch-review.sh + 21-assert test + real-agy e2e) | 1950269 |
 | P3 | ✅ done (union-on-verified-critical in code-review.md + level-front-door wiring + reviewer.md pointer) | (this commit) |
-| P4 | in_progress | |
+| P4 | ✅ done (CLAUDE.md inventory + CHANGELOG v2.25.9 + version sync + INDEX; preflight-release 5/5) | (this commit) |
 
 ## Decisions
 

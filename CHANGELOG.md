@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.25.9 — heterogeneous decorrelation: agy restored as implementer + cross-family qc panel
+
+**Headline**: Two coupled `/l5` decorrelation upgrades. (1) **`agy`/Gemini works as a heterogeneous implementer again** — the long-standing "agy can't write to the worktree" blocker was not a vendor wall but a relative-path prompt interacting with agy ignoring process cwd (it invented a `~/.gemini/.../scratch/` project = the old `no_op`). `dispatch-hetero.sh` now prepends an absolute-worktree anchor so agy edits in place (verified single-/multi-file + 3-way concurrent). (2) The authoritative depth-0 qc gate becomes a configurable **disjoint-family panel** (`qc_panel`, default OpenAI/Anthropic/Google) aggregated **`union-on-verified-critical`** (majority forbidden — it would suppress the single-track blind-spot catch a panel exists to surface), with a new **read-only** `dispatch-review.sh` putting Gemini-via-agy into the panel (agy's write bug is implementer-only; read-only review is verified — it caught a planted bug).
+
+### Added
+- `scripts/dispatch-review.sh` — READ-ONLY heterogeneous reviewer dispatch (sibling of `dispatch-hetero.sh`): diff-as-text-in-prompt + `script -qec` pseudo-TTY capture (agy stdout-drop #76/#408) + `VERDICT:` parse; **empty → `no_verdict` fail-closed** (never a silent pass); no worktree, no git mutation. `--runner codex|agy`. 21 test assertions; verified end-to-end with real agy.
+- `review-loop-config.md` / `resolve-review-loop.sh`: **`qc_panel`** (disjoint-family terminal gate, default `gpt-5.5, claude-opus, gemini-flash`) + **`qc_panel_aggregation`** (`union-on-verified-critical`); resolver emits the panel as a JSON array, rejects `majority`, and WARNS if the panel shares the implementer's vendor family. +9 resolver assertions.
+- `code-review.md` "Panel aggregation" canonical section (union-on-verified-critical; verified-gates-the-union via `independent_harness`; no-verdict fail-closed; decorrelate by family not just lens — PoLL/self-preference grounding). Wired into `level-front-door.md` qc@depth-0 + `agents/reviewer.md` pointer.
+
+### Fixed
+- **`dispatch-hetero.sh` agy `no_op`**: agy `-p` ignores process cwd, so a relative-path prompt made it write to a scratch project and leave the worktree untouched. The agy directive now prepends `Your ABSOLUTE working directory is: <worktree>` + a scratch/project prohibition → agy edits in place. Restores `implementer_runner: agy` as viable (supersedes the v2.25.8-era "don't chase agy" verdict, which was an over-correction from a relative-path bench). +2 dispatch-hetero assertions (anchor-injection capture).
+
+### Changed
+- agy `no_op`/"unreliable" narrative corrected across `references/hetero-dispatch.md`, the `review-loop-config.md` gotcha, and `docs/BACKLOG.md` (agy CAN implement now; stays EDIT-ONLY for the run_command-10s reason, not a write wall). Docker remains a non-solution (headless auth broken, #223/#479) — run agy on an interactively-authed host.
+
 ## v2.25.8 — hetero-dispatch roster fix + review-loop automation (`/l5` config-driven)
 
 **Headline**: Three coupled hardenings of the `/l5` heterogeneous pipeline. (1) `dispatch-hetero.sh` no longer mis-routes non-`gpt-5.5` codex models to the repo-corrupting agy branch. (2) The "generation-adversarial heterogeneous" loop is now **data, not a hand-typed prompt** — a per-project engine roster makes `/l5 <goal>` run the whole `subagent plan → decorrelated reviewer loop → hetero impl → reviewer loop → qc-gate` pipeline. (3) Worker teardown reaps escaped descendants. An attempt to also unlock the L1 block-mode override on cgroup containment was **reverted as UNSAFE** after adversarial review — it stays deferred (see below).

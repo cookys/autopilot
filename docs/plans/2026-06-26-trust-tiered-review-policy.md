@@ -7,7 +7,7 @@
 > split, cross-family hard at every risk, no-oracle→human-escalation in table, qc_panel promotion
 > metrics, family_id canonicalization + fail-closed-on-unknown). **Round 3: SHIP-AS-IS** (0🔴/0🟠;
 > 2🟡+1🔵 residuals → §6 pre-build TODOs). Decorrelated reviewer = gpt-5.5 xhigh (≠ Claude author).
-> Design APPROVED for build; implementation gated on §6.
+> Design APPROVED + **IMPLEMENTED in v2.25.11** (merged 6a51f2e); §6 TODOs folded into the impl. Buildable core shipped; shadow-calibration + local-runner enforcement remain future-gated.
 > **Scope**: how `/l4`/`/l5` (and the qc panel) should choose verification effort + reviewer
 > family as a function of WHO implemented. Supersedes the implicit "fixed 3-family qc_panel"
 > emphasis shipped in v2.25.9.

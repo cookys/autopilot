@@ -22,6 +22,15 @@
   <a href="README.md">English</a> &nbsp;|&nbsp; <b>正體中文</b>
 </p>
 
+<p align="center">
+  <b>Claude Code 負責寫程式，Autopilot 確保它真的交付得出去。</b><br>
+  判斷大小、規劃、測試、審查、收尾 —— 全自動。別再盯著它做那些無聊的部分。
+</p>
+
+<p align="center">
+  <sub>提煉自 100+ 個使用 AI 驅動開發完成的專案。</sub>
+</p>
+
 ---
 
 ## What Is Autopilot?
@@ -36,6 +45,19 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 它是單一 Claude Code plugin —— **23 個 skill、3 個方法論 agent、20 個 hook、零相依**。可獨立運作，也能與 [`superpowers`](docs/coexistence.md) plugin 並存。
 
 > 第一次來？這頁是 5 分鐘導覽。更深的內容都在 **[Learn More](#learn-more)**。
+
+## A Day With Autopilot
+
+`dev-flow` 是前門。它判斷任務大小並分流 —— 小事直接過閘門，大事變成被追蹤的專案：
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/flow.zh-TW.light.svg">
+    <img alt="Autopilot 的一天：dev-flow 判斷任務大小並分流 —— 小事直接過品質閘門到 commit；大事變成被追蹤的專案，每個 phase 都過品質閘門，最後 finish-flow 乾淨收尾。沒有 Autopilot 時，AI 會立刻 grep 程式碼 —— 沒計畫、沒分 phase、沒品質閘門。" src="docs/assets/flow.zh-TW.svg" width="100%">
+  </picture>
+</p>
+
+沒有 Autopilot 時，Claude 會立刻開始 grep 程式碼 —— 沒有 plan、沒有 phase、沒有品質閘門。有了它，紀律是自動的。
 
 ## Quick Start
 
@@ -99,19 +121,6 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你�
 
 **→ 全部 23 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/skills.md](docs/skills.md)。**
 
-## A Day With Autopilot
-
-`dev-flow` 是前門。它判斷任務大小並分流 —— 小事直接過閘門，大事變成被追蹤的專案：
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/flow.zh-TW.light.svg">
-    <img alt="Autopilot 的一天：dev-flow 判斷任務大小並分流 —— 小事直接過品質閘門到 commit；大事變成被追蹤的專案，每個 phase 都過品質閘門，最後 finish-flow 乾淨收尾。沒有 Autopilot 時，AI 會立刻 grep 程式碼 —— 沒計畫、沒分 phase、沒品質閘門。" src="docs/assets/flow.zh-TW.svg" width="100%">
-  </picture>
-</p>
-
-沒有 Autopilot 時，Claude 會立刻開始 grep 程式碼 —— 沒有 plan、沒有 phase、沒有品質閘門。有了它，紀律是自動的。
-
 ## Install
 
 **Claude Code**（主要）—— 上面那兩行指令。23 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
@@ -133,8 +142,6 @@ Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 sk
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
 | **Hooks** —— 20 個 runtime 強制 hook（8 預設啟用、12 可選啟用） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
-
-提煉自 100+ 個使用 AI 驅動開發完成的專案。
 
 ## License
 

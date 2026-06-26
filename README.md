@@ -22,6 +22,15 @@
   <b>English</b> &nbsp;|&nbsp; <a href="README.zh-TW.md">正體中文</a>
 </p>
 
+<p align="center">
+  <b>Claude Code writes the code. Autopilot makes sure it ships.</b><br>
+  Sized, planned, tested, reviewed, and closed out — automatically. Stop babysitting the boring parts.
+</p>
+
+<p align="center">
+  <sub>Distilled from 100+ completed AI-development projects.</sub>
+</p>
+
 ---
 
 ## What Is Autopilot?
@@ -36,6 +45,19 @@ Claude Code is great at writing code. Autopilot makes it great at **running the 
 It's a single Claude Code plugin — **23 skills, 3 methodology agents, 20 hooks, zero dependencies**. It works on its own, and plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > New here? This page is the 5-minute tour. Everything deeper lives in **[Learn More](#learn-more)**.
+
+## A Day With Autopilot
+
+`dev-flow` is the front door. It sizes the task and routes it — small things go straight through the gate, large things become a tracked project:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/flow.light.svg">
+    <img alt="A day with Autopilot: dev-flow sizes the task and routes it — small tasks go straight through the quality gate to commit; large tasks become a tracked project with a quality gate each phase, then finish-flow closes cleanly. Without Autopilot, the AI greps the codebase immediately — no plan, no phases, no quality gates." src="docs/assets/flow.svg" width="100%">
+  </picture>
+</p>
+
+Without Autopilot, Claude starts grep-ing the codebase immediately — no plan, no phases, no quality gates. With it, the discipline is automatic.
 
 ## Quick Start
 
@@ -99,19 +121,6 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 **→ Full catalog of all 23 skills, the three cognitive modes, and how they compose: [docs/skills.md](docs/skills.md).**
 
-## A Day With Autopilot
-
-`dev-flow` is the front door. It sizes the task and routes it — small things go straight through the gate, large things become a tracked project:
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/flow.light.svg">
-    <img alt="A day with Autopilot: dev-flow sizes the task and routes it — small tasks go straight through the quality gate to commit; large tasks become a tracked project with a quality gate each phase, then finish-flow closes cleanly. Without Autopilot, the AI greps the codebase immediately — no plan, no phases, no quality gates." src="docs/assets/flow.svg" width="100%">
-  </picture>
-</p>
-
-Without Autopilot, Claude starts grep-ing the codebase immediately — no plan, no phases, no quality gates. With it, the discipline is automatic.
-
 ## Install
 
 **Claude Code** (primary) — the two commands above. All 23 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
@@ -133,8 +142,6 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
 | **Hooks** — 20 runtime-enforcement hooks (8 default-on, 12 opt-in) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
-
-Distilled from 100+ completed projects using AI-driven development.
 
 ## License
 

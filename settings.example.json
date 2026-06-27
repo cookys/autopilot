@@ -9,20 +9,9 @@
     "protectedBranches": "main|master"
   },
 
-  "//opt-in-hooks": "Copy individual hook entries below into your settings.json hooks section to enable them",
+  "//opt-in-hooks": "Copy individual hook entries below into your settings.json hooks section to enable them.",
+  "//opt-in-hooks-PLUGIN-ROOT-WARNING": "IMPORTANT: ${CLAUDE_PLUGIN_ROOT} does NOT expand in a user/project settings.json — it resolves ONLY inside the plugin's own hooks.json. If you copy an entry below, replace ${CLAUDE_PLUGIN_ROOT} with the plugin's actual install path (and note that path CHANGES on every plugin update, so this wiring is fragile). Hooks that must survive updates are wired in the plugin's hooks.json with a runtime opt-in gate instead — e.g. session-handoff + version-drift-check (enable via ~/.autopilot/config.json), which is why they are no longer listed here.",
   "hooks-opt-in-examples": {
-    "SessionStart": [
-      {
-        "//": "version-drift-check: in dev mode, warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent for release/marketplace users.",
-        "matcher": "startup|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/version-drift-check.js"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "//": "branch-protection: hard-blocks direct commits / force-push on protected branches (autopilot.protectedBranches, default main|master)",
@@ -160,18 +149,6 @@
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/batch-format.js",
             "timeout": 300000
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "//": "session-handoff (writer): on /clear (or logout) auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript) and, if so, writes a machine handoff snapshot to ~/.autopilot/handoff/<repo-hash>.md (NOT into your repo — docs/HANDOFF.md is never touched). Does nothing otherwise. Fail-open. To ALSO auto-inject that snapshot into the next session, enable the reader gate (default OFF): env AUTOPILOT_HANDOFF_INJECT=1 OR ~/.autopilot/config.json {\"handoff_inject\":true} — the existing session-start hook then injects it once (consume-once) on a clear/startup. Thresholds: AUTOPILOT_HANDOFF_MIN_USER_TURNS (3) / AUTOPILOT_HANDOFF_MIN_TOOL_CALLS (12)",
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.js"
           }
         ]
       }

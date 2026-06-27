@@ -96,7 +96,9 @@ cd ~/projects/autopilot && git pull --ff-only   # shell; then run /reload-plugin
 
 (`/reload-plugins` is a Claude Code slash command, not a shell command — run it in the Claude session after the pull.)
 
-Enable the opt-in `version-drift-check` hook (`settings.example.json` → `SessionStart`) to get a one-line nudge at session start when your clone has fallen behind its git upstream.
+The `version-drift-check` hook gives a one-line nudge at session start when your clone has fallen behind its git upstream. As of v2.26.1 it is wired default-on in the plugin's `hooks.json` (silent for everyone except a dev clone behind upstream), so **dev-mode users get it automatically — no settings change needed**. (It moved out of `settings.example.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
+
+To enable the **session-handoff** snapshot feature (write a machine handoff on `/clear`/logout and auto-inject it into the next session), set `~/.autopilot/config.json` to `{"handoff_inject": true}` (or `export AUTOPILOT_HANDOFF_INJECT=1`). Both the writer and reader are wired default-on in `hooks.json` but stay inert until this single switch is set.
 
 ---
 

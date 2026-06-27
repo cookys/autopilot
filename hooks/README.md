@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-22 Claude Code hooks for runtime enforcement of development discipline: **8 default-on** (Tier A, wired in `hooks.json`) + **14 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+22 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A, wired in `hooks.json`) + **12 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. (Two Tier-A hooks ship wired-but-inert by design: `session-handoff` no-ops unless handoff is enabled via `~/.autopilot/config.json`; `version-drift-check` is silent for everyone except a dev clone behind upstream. They live in Tier A because `${CLAUDE_PLUGIN_ROOT}` only expands inside `hooks.json`, never in a user's `settings.json` — the Tier-B copy-paste route left their script path unresolved.) The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -88,7 +88,7 @@ hooks/
   hooks.json               # Hook registration (Tier A default-on)
   session-start.js         # SessionStart priming (pre-existing)
   state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
-  session-handoff.js       # Tier B (opt-in) — SessionEnd, writes a machine handoff to ~/.autopilot on /clear (no repo writes)
+  session-handoff.js       # Tier A (default-on wiring, inert unless handoff enabled) — SessionEnd, writes a machine handoff to ~/.autopilot on /clear (no repo writes)
   state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier B (opt-in)
   suggest-compact.js       # Tier A
@@ -108,7 +108,7 @@ hooks/
   test-runner.js           # Tier B (opt-in)
   design-quality.js        # Tier B (opt-in)
   mcp-health.js            # Tier B (opt-in)
-  version-drift-check.js   # Tier B (opt-in) — dev-clone behind-upstream advisory (SessionStart)
+  version-drift-check.js   # Tier A (default-on, silent outside dev clone) — behind-upstream advisory (SessionStart)
 ```
 
 ## Exit Code Convention
@@ -119,9 +119,9 @@ hooks/
 | `1` | Warning (context injection) | branch-protection (mutations) |
 | `2` | Hard block | large-file-warner, branch-protection, commit-secret-scan, config-protection, mcp-health |
 
-## Tier A — Default-On (8 hooks)
+## Tier A — Default-On (10 hooks)
 
-Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project.
+Registered in `hooks.json`. Active for all autopilot users. All are non-destructive and safe for any project. (Two are wired here but **inert by default** — `session-handoff` no-ops unless handoff is enabled, `version-drift-check` is silent outside a behind-upstream dev clone — yet they MUST be wired in `hooks.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
@@ -133,6 +133,8 @@ Registered in `hooks.json`. Active for all autopilot users. All are non-destruct
 | log-error | PostToolUse | .* | Detects error keywords, appends to `~/.claude/error-log.md` |
 | failure-escalation | PostToolUse | Bash | Tracks consecutive Bash failures per session; escalates to user (was undocumented in README pre-v2.7.2) |
 | suggest-compact | PostToolUse | Write\|Edit | Counter at `/tmp/claude-tool-count-{sid}`. Nudges at 50, then every 25 (**unbounded**: 50, 75, 100, 125, …). Opt-out: `AUTOPILOT_SUGGEST_COMPACT=false`. Re-enabled v2.8.1 |
+| session-handoff | SessionEnd | — | **Inert unless enabled** (`AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true` — same switch as the reader). When enabled, on `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes a machine handoff snapshot to `~/.autopilot/handoff/<repo-hash>.md` (NEVER into the repo — `docs/HANDOFF.md` is untouched) via temp→atomic-rename. Fail-open; parses the transcript itself (no LLM). The **reader/inject** half (default-off gate) lives in `session-start.js`: injects the snapshot once (atomic consume-once, <10k cap) and suppresses the thin intent hint. Wired in `hooks.json` (not Tier B) so `${CLAUDE_PLUGIN_ROOT}` resolves |
+| version-drift-check | SessionStart | startup\|clear\|compact | **Dev-clone only** — warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent no-op for release / marketplace / non-git installs. Wired in `hooks.json` (not Tier B) so `${CLAUDE_PLUGIN_ROOT}` resolves |
 
 ### Hook order on PostToolUse
 
@@ -180,9 +182,9 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
 
-## Tier B — Opt-In (14 hooks)
+## Tier B — Opt-In (12 hooks)
 
-Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`).
+Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`) — but note `${CLAUDE_PLUGIN_ROOT}` does **not** expand in your `settings.json`; replace it with the plugin's real install path (which changes on every update). Hooks needing update-stable wiring belong in `hooks.json` with a runtime gate instead (see `session-handoff` / `version-drift-check` in Tier A).
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|
@@ -192,14 +194,12 @@ Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
 | config-protection | PreToolUse | Write\|Edit | Blocks linter/formatter config edits |
 | session-summary | Stop | — | Appends cwd / git status / recent commits to `~/.claude/sessions/{date}-{sid}.md` |
-| session-handoff | SessionEnd | — | On `/clear` or logout: auto-decides if meaningful work happened (dirty tree / commits since session start / active project touched / substantive transcript — ≥`AUTOPILOT_HANDOFF_MIN_USER_TURNS` (3) user turns or ≥`AUTOPILOT_HANDOFF_MIN_TOOL_CALLS` (12) tool calls) and, if so, writes a machine handoff snapshot to `~/.autopilot/handoff/<repo-hash>.md` (NEVER into the repo — `docs/HANDOFF.md` is untouched) via temp→atomic-rename. Does nothing otherwise. Fail-open; parses the transcript itself (no LLM). **Auto-inject** is a separate **default-off** reader gate in `session-start.js` (`AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true`) that injects the snapshot once (atomic consume-once, <10k cap, on clear/startup) and suppresses the thin intent hint. Opt-in both halves |
 | check-console | Stop | — | Warns about `console.log` in modified JS/TS |
 | accumulator | PostToolUse | Write\|Edit | Collects edited file paths for batch-format |
 | batch-format | Stop | — | Prettier + tsc on accumulated files. Timeout: 300s |
 | test-runner | PostToolUse | Write\|Edit | Runs sibling vitest/jest test. Timeout: 60s |
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap) |
-| version-drift-check | SessionStart | startup\|clear\|compact | Dev mode only: warns if your autopilot clone is behind its git upstream (no network — uses last fetch). Silent for release/non-git installs |
 
 > The three PreToolUse blockers + `session-summary` were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
 

@@ -19,6 +19,23 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js"
+          },
+          {
+            "//": "version-drift-check: dev-clone-only advisory (silent no-op for release/marketplace users). Wired here — NOT in settings.example.json — because ${CLAUDE_PLUGIN_ROOT} only expands inside the plugin's own hooks.json, never in a user's settings.json.",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/version-drift-check.js"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "//": "session-handoff (writer): OPT-IN behaviour gated at runtime — no-ops unless handoff is enabled (env AUTOPILOT_HANDOFF_INJECT=1 OR ~/.autopilot/config.json {\"handoff_inject\":true}); the SAME switch enables the session-start reader/inject half. Wired here — NOT in settings.example.json — because ${CLAUDE_PLUGIN_ROOT} only expands inside the plugin's own hooks.json, never in a user's settings.json (so the old copy-into-settings.json instruction produced a literal unresolved path).",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.js"
           }
         ]
       }

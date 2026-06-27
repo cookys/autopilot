@@ -214,6 +214,22 @@ function renderHandoff({ timestamp, branch, statusSb, recentCommits, lastAssista
   return lines.join('\n');
 }
 
+// Runtime opt-in gate. The writer is wired default-on in hooks.json (so
+// ${CLAUDE_PLUGIN_ROOT} resolves — it does NOT expand in a user's settings.json),
+// but stays OPT-IN by no-opping unless handoff is enabled. SAME switch as the
+// session-start reader/inject half: writing a snapshot nobody injects is wasted work.
+function handoffEnabled() {
+  if (process.env.AUTOPILOT_HANDOFF_INJECT === '1') return true;
+  const configFile = path.join(STATE_DIR, 'config.json');
+  try {
+    if (!fs.existsSync(configFile)) return false;
+    const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+    return cfg && cfg.handoff_inject === true;
+  } catch {
+    return false;
+  }
+}
+
 function publishAtomic(bodyPath, metaPath, content, meta) {
   const pid = process.pid;
   const tmpMeta = `${metaPath}.tmp.${pid}`;
@@ -246,6 +262,11 @@ function publishAtomic(bodyPath, metaPath, content, meta) {
     const transcriptPath = input.transcript_path || '';
     const payloadCwd = input.cwd || process.cwd();
     const repoRoot = resolveRepoRoot(payloadCwd);
+
+    if (!handoffEnabled()) {
+      appendLog({ ts, status: 'skip_disabled', reason });
+      return process.exit(0);
+    }
 
     if (!ACT_REASONS.has(reason)) {
       appendLog({ ts, status: 'skip_reason', reason });

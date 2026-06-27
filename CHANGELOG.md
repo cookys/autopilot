@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.3 — opt-in CHANGELOG release-hygiene gate
+
+**Headline**: Closes the accuracy gap the v2.25.16 runtime update-checker left open — the runtime surfaces whatever CHANGELOG headline exists on a version bump, but nothing *forced* a change to the opt-in hook set to be described as opt-in. New `scripts/check-optin-changelog.js` (wired as `preflight-release.sh` check #6) fails the release-hygiene gate when the `hooks/opt-in-manifest.json` opt-in set changes vs the previous release **unless** the current version's CHANGELOG section contains the literal `opt-in` and names every added/removed stem alongside it. PATCH (new script; no new user-facing surface; opt-in set unchanged this release so the gate is inert here).
+
+### Added
+- **`scripts/check-optin-changelog.js`** — deterministic, pure-Node (no deps) gate. **Tag-free baseline**: walks first-parent `.claude-plugin/plugin.json` history to the boundary-parent of the current version's run (robust to a manifest change decoupled from the version-bump commit, and to non-monotonic/revert histories → flagged **ambiguous, fail-closed** with a `--base-ref` remedy). **No-baseline is fail-closed** (not a silent pass) except the legitimate pre-v2.26.2 bootstrap where the manifest predates introduction; `--allow-no-baseline` is the explicit escape hatch. **CommonMark-aware section scan**: version heading matched with a word boundary (so `v2.26.3` never matches `v2.26.30` or a `-alpha` prerelease), fenced-code and HTML-comment masking (inline comment spans stripped so a real heading sharing a comment line still terminates), 0–3-space ATX tolerance. **Co-location**: each changed stem must appear with hook-name word boundaries inside a list-item/paragraph block that *also* contains `opt-in` (a mention in a Rollback note or a neighbouring bullet does not count). Exit `0` pass/inert, `1` violation/fail-closed, `2` usage.
+- **`hooks/tests/check-optin-changelog.test.sh`** — 41 assertions (file fixtures + real-git temp repos): unchanged/added/removed, missing-`opt-in`-token, boundary collision, prerelease/fenced/comment no-bleed, uncommitted-version fail-closed, ambiguous-history, bootstrap, usage.
+
+### Changed
+- **`scripts/preflight-release.sh`** — added check #6 (`opt-in change is named in the CHANGELOG`). Run it **after** committing the version bump (the gate fail-closes when the canonical version is not yet in first-parent history).
+- **`CLAUDE.md`** — Scripts inventory row for `check-optin-changelog.js`. Version mirrors 2.26.2 → 2.26.3.
+
+### Process
+- `/l5` dogfood: spec → 1-round gpt-5.5 xhigh decorrelated spec-review (6 findings folded) → `gpt-5.3-codex-spark` hetero impl (worktree-isolated, cgroup-contained) → depth-0 independent adversarial harness → **4-round** decorrelated gpt-5.5 xhigh impl-review (R1 4 findings / R2 2 / R3 2 → **SHIP-AS-IS**). The decorrelated reviewer caught false-pass holes (adjacent-bullet credit leak, prerelease/fenced heading bleed, uncommitted-version baseline, CommonMark fence-length + inline-comment-on-heading) that both the implementer's own green and the depth-0 harness initially missed.
+
 ## v2.26.2 — all 12 opt-in hooks now enable-able (off the broken settings.json copy-paste route)
 
 **Headline**: Completes the v2.26.1 fix for the whole opt-in catalog. `${CLAUDE_PLUGIN_ROOT}` expands only inside the plugin's own `hooks.json`, so the `settings.example.json` "copy this entry into your settings.json" route left every opt-in hook's script path literal and unlaunchable. All 12 remaining opt-in hooks (branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health, accumulator, test-runner, design-quality, cost-tracker, session-summary, check-console, batch-format) are now wired in `hooks.json` (token resolves + auto-tracks the install path on update) behind a **default-OFF** runtime gate, enabled via `~/.autopilot/config.json` instead of copy-paste. Tier counts unchanged (10 default-on / 12 opt-in / 0 disabled). PATCH (mechanism change, no new user-facing surface).

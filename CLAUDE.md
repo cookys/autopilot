@@ -73,6 +73,18 @@ If you replace an LLM-judgment step with a script, **wire it in**:
 
 Without all three, the script is dead code: future sessions won't discover it.
 
+### Language choice (sh vs js vs py)
+
+There is **no "everything must be JS" mandate** — the v2.25.3 `port-autopilot-to-node` ship was a *scoped* port of the 7 scripts on the **agy-sandbox runtime path** that used `jq`/`python3`, not a repo-wide migration. Pick per script:
+
+| Script touches… | Use | Why |
+|-----------------|-----|-----|
+| JSON parsing/mutation, file-locking, panel synthesis, or **runs inside a dep-minimal sandbox** (agy `-p`, headless dispatch) | **Node (`.js`)**, built-ins only, Node ≥ 20.10 | agy/restricted sandboxes don't guarantee `jq`/`python3`; Node is first-class on all four target platforms. Removes the host-environment assumption. |
+| Pure git-artifact glue (`git diff`/`grep`/`sed`), a dev/CI-time gate that **never runs in the agy sandbox** | **Bash (`.sh`)** is fine | Shell is the right tool for git-artifact work; porting it is churn with zero portability payoff. |
+| A standalone always-on service never on any agent's runtime path (e.g. `task-width-ingest.py`) | whatever fits | Not sandbox-constrained; don't rewrite for uniformity's sake. |
+
+Rule of thumb: **if it parses JSON or could run under agy, write it in Node; otherwise shell is fine.** When in doubt, prefer Node for anything new that returns structured output.
+
 ## Severity vocabulary
 
 Unified across all skills and agents:

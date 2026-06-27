@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.1 — opt-in hooks that referenced `${CLAUDE_PLUGIN_ROOT}` in `settings.example.json` were unusable
+
+**Headline**: `${CLAUDE_PLUGIN_ROOT}` expands **only inside the plugin's own `hooks.json`** — never in a user's or project's `settings.json` (confirmed against the Claude Code hooks docs + reproduced locally). Every opt-in hook in `settings.example.json` told users to *copy* a `node ${CLAUDE_PLUGIN_ROOT}/hooks/<x>.js` command into their `settings.json`, where the token stays literal and the hook silently fails to launch. This release fixes the two hooks most affected by moving them into `hooks.json` (where the token resolves **and** auto-tracks the install path across plugin updates) behind a runtime opt-in gate; documents the systemic trap for the rest; and BACKLOGs the full migration. Counts: 22 hooks, **8 → 10 default-on**, **14 → 12 opt-in** (the two moved, semantics unchanged). PATCH (rewiring shipped hooks, no new user-facing surface).
+
+### Changed
+- **`hooks/hooks.json`** — `version-drift-check` (SessionStart) + `session-handoff` writer (new SessionEnd block) moved here from `settings.example.json`. `version-drift-check` was already silent for everyone but a behind-upstream dev clone, so default-on is correct. `session-handoff` stays opt-in via a **runtime gate**.
+- **`hooks/session-handoff.js`** — added `handoffEnabled()` early gate: no-ops (`skip_disabled`) unless `AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true` — the **same** switch that enables the session-start reader/inject half (writing a snapshot nobody injects is wasted work).
+- **`settings.example.json`** — removed the two now-relocated entries; added a prominent `${CLAUDE_PLUGIN_ROOT}`-does-not-expand-in-settings.json warning so the remaining 12 copy-paste opt-in entries are no longer silently misleading (replace the token with the real install path; note it changes on update).
+- **Docs** — `hooks/README.md` (tier tables 8/14 → 10/12, two rows moved Tier B → Tier A with inert-by-default notes, file-tree tags, Tier-B copy-paste caveat), `docs/installation.md` (version-drift-check now automatic; session-handoff enable-via-config), `CLAUDE.md` count line; version mirrors via `sync-version.js` (2.26.0 → 2.26.1).
+
+### Fixed
+- A dev clone's `.claude/settings.local.json` no longer needs the absolute-path SessionEnd workaround (the original symptom); removed to avoid double-firing now that the writer is in `hooks.json`.
+
+### Known / BACKLOG
+- The other 12 Tier-B opt-in hooks share the same `${CLAUDE_PLUGIN_ROOT}`-in-`settings.json` defect when copied verbatim. Full migration (wire-in-`hooks.json` + per-hook runtime gate, or a single enable-list config) is BACKLOGd — most are genuine per-project policy toggles, so the design is non-trivial and out of this PATCH's approved scope.
+
+### Hook-order semantics reminder
+- The new SessionEnd block is independent of other matcher blocks; no cross-matcher ordering is claimed. `version-drift-check` runs in the same `startup|clear|compact` SessionStart block as `session-start.js` (intra-matcher order: `session-start` then `version-drift-check`).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side: `/plugin update autopilot@v2.26.0`. No new sibling files created.
+
 ## v2.26.0 — `autopilot:onboard` + ecosystem-standalone premise + install/update-UX
 
 **Headline**: One branch, three strands, landing as the 24th skill. **(A) `autopilot:onboard`** — the "fresh repo → autopilot-calibrated repo" bridge that was missing (project-lifecycle bootstraps tracking docs from a plan, nothing scaffolded the `.claude/*-config.md` DI): **detect** a repo's mechanical reality → **scaffold** the config set with ecosystem-standalone (autopilot-only) chains → **enrich** the judgment configs. **(B) Ecosystem-standalone premise flip** — autopilot's documented default is now autopilot + `codeforge` + `mnemos` standalone; `superpowers` consistently optional (no longer "built-in"/"recommended default"/"Superpowers executes"); voltagent de-assumed as a peer. **(C) Install/update-UX** — a single "Updating" decision branch in `docs/installation.md`, the opt-in `version-drift-check` SessionStart hook, and `dev-update.sh`. Skills 23 → **24**; hooks 21 → **22** (this branch's `version-drift-check`, opt-in).

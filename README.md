@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.26.2-E8A838?style=flat-square" alt="v2.26.2">
+  <img src="https://img.shields.io/badge/version-2.26.3-E8A838?style=flat-square" alt="v2.26.3">
   <img src="https://img.shields.io/badge/skills-24-4A90D9?style=flat-square" alt="24 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
@@ -41,6 +41,7 @@ Claude Code is great at writing code. Autopilot makes it great at **running the 
 - **Runs quality gates** — tests, completeness scan (no stubs/TODOs), and code review before anything merges.
 - **Closes the loop** — finishes cleanly, archives the project, and captures the lessons for next time.
 - **Adapts to your repo** — drop a markdown file in `.claude/` and the same skills speak your project's build commands, conventions, and gotchas.
+- **Survives `/clear`** *(opt-in)* — snapshots where you left off and restores it into the next session, so a context reset never loses the thread.
 
 It's a single Claude Code plugin — **24 skills, 3 methodology agents, 22 hooks, zero dependencies**. It works fully on its own — the standalone core of cookys's assumed **autopilot + codeforge + mnemos** ecosystem — and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
@@ -140,7 +141,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** — 22 runtime-enforcement hooks (8 default-on, 14 opt-in) | [hooks/README.md](hooks/README.md) |
+| **Hooks** — 22 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

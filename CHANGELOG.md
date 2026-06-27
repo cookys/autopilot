@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.3 — hetero engines can now READ the repo instead of guessing (`dispatch-explore.sh`)
+
+**Headline**: A new third sibling in the hetero-dispatch family, [`scripts/dispatch-explore.sh`](scripts/dispatch-explore.sh), lets a non-Claude engine (codex/GPT, agy/Gemini) **read the trusted repo** and answer grounded — the posture `dispatch-hetero.sh` (write) and `dispatch-review.sh` (review a diff fed as text) both deliberately avoid. Born from a real failure this session: when asked to explore autopilot's capabilities for landing-page copy, both engines **silently read nothing and guessed** — a map-only agy confidently "fact-checked" the real 24 skills down to an invented 23 and declared an existing skill missing. Two read recipes were diagnosed and baked in so no caller rediscovers them, plus a fail-loud probe that turns "the engine guessed" into a hard error instead of a plausible lie.
+
+### Added
+- [`scripts/dispatch-explore.sh`](scripts/dispatch-explore.sh) — read-the-repo hetero dispatch. **codex** read recipe: detect `bwrap` → `--sandbox read-only` if present, else `--dangerously-bypass-approvals-and-sandbox` (+ loud stderr note; bypass is acceptable here — repo trusted, read-only intent — but NEVER in `dispatch-review.sh`'s untrusted-diff path), always `-C <repo>`. **agy** read recipe: prompt PREPENDS `Your ABSOLUTE working directory is <repo>` + an absolute-path read-list (agy `-p` ignores process cwd), captured via `script -qec` pseudo-TTY, prompt right after `-p` / `--model` last. **Fail-loud read probe**: a fresh unguessable token is written to a repo sentinel; the engine must echo it on a `READ-PROBE:` line or `status:read_failed` (exit 3) and the guessed body is **withheld** — same fail-closed stance as "verify by artifacts, never self-report." Verified end-to-end: codex + agy both `explored` (grounded answer), a non-reading binary correctly `read_failed`. JSON `{runner, model, status, read_probe, sandbox, raw_log}`; exit 0/3/2.
+
+### Changed
+- [`references/hetero-dispatch.md`](references/hetero-dispatch.md) — new "Reading the repo" section documenting the silent-guess trap, the two read recipes (table), and the fail-loud probe.
+- `CLAUDE.md` scripts inventory — added the `dispatch-explore.sh` row.
+
 ## v2.26.2 — all 12 opt-in hooks now enable-able (off the broken settings.json copy-paste route)
 
 **Headline**: Completes the v2.26.1 fix for the whole opt-in catalog. `${CLAUDE_PLUGIN_ROOT}` expands only inside the plugin's own `hooks.json`, so the `settings.example.json` "copy this entry into your settings.json" route left every opt-in hook's script path literal and unlaunchable. All 12 remaining opt-in hooks (branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health, accumulator, test-runner, design-quality, cost-tracker, session-summary, check-console, batch-format) are now wired in `hooks.json` (token resolves + auto-tracks the install path on update) behind a **default-OFF** runtime gate, enabled via `~/.autopilot/config.json` instead of copy-paste. Tier counts unchanged (10 default-on / 12 opt-in / 0 disabled). PATCH (mechanism change, no new user-facing surface).

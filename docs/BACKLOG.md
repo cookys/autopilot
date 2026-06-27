@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Migrate the remaining 12 Tier-B opt-in hooks off the `${CLAUDE_PLUGIN_ROOT}`-in-settings.json route
+- **Trigger**: next time touching the opt-in hook catalog, OR a user reports a Tier-B opt-in hook "did nothing" after copying it from `settings.example.json`.
+- **Context**: `${CLAUDE_PLUGIN_ROOT}` expands ONLY inside the plugin's own `hooks.json`, never in a user's `settings.json` (confirmed vs CC hooks docs + reproduced). v2.26.1 fixed `version-drift-check` + `session-handoff` (moved to `hooks.json` + runtime gate) and added a warning for the rest, but the other 12 opt-in hooks still ship a copy-paste command that leaves the script path literal/unlaunched. Clean fix = wire them in `hooks.json` + a per-hook runtime gate (or a single enable-list config); non-trivial because most are genuine per-project policy toggles (branch-protection, commit-secret-scan, test-runner, …) that must stay user-decidable.
+- **Effort**: L
+- **Source**: v2.26.1 (`f77bbb7`); discovered during the session-handoff/update-checker question that surfaced the systemic defect.
+
 ### update-checker release-hygiene gate — require a CHANGELOG `opt-in` mention when the opt-in set changes
 - **Trigger**: a release adds/removes an **opt-in** hook AND its CHANGELOG entry does not name the hook / say `opt-in` (i.e. the next time the runtime update-checker would surface an opt-in change with an unhelpful headline), OR an idle pass to tighten release hygiene.
 - **Context**: the v2.25.16 update-checker (runtime) surfaces CHANGELOG headlines on a version bump, but nothing *forces* a new opt-in feature to be described as opt-in in that headline. The spec-review (R1-🟡 #6) proposed a `preflight-release.sh` gate: when `check-hook-inventory.js` detects the opt-in set changed vs the previous release, require the current CHANGELOG entry to mention `opt-in` + the new hook name(s). Deliberately **deferred** from the v2.25.16 ship — it needs a previous-release inventory baseline to diff against (non-trivial), and the runtime feature works without it (it shows the headline regardless). Runtime stays dumb; this is the accuracy nudge.

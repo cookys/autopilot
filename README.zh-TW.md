@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.26.2-E8A838?style=flat-square" alt="v2.26.2">
+  <img src="https://img.shields.io/badge/version-2.26.3-E8A838?style=flat-square" alt="v2.26.3">
   <img src="https://img.shields.io/badge/skills-24-4A90D9?style=flat-square" alt="24 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
@@ -23,26 +23,37 @@
 </p>
 
 <p align="center">
-  <b>Claude Code 負責寫程式，Autopilot 確保它真的交付得出去。</b><br>
-  判斷大小、規劃、測試、審查、收尾 —— 全自動。別再盯著它做那些無聊的部分。
+  <b>你終端機裡的 AI 專案負責人。</b><br>
+  Claude Code 負責寫程式，Autopilot 規劃它、委派它、用第二個引擎審查它、並記住學到的東西 —— 讓你不必盯著每一步就能交付。
 </p>
 
 <p align="center">
   <sub>提煉自 100+ 個使用 AI 驅動開發完成的專案。</sub>
 </p>
 
+```text
+# autopilot 的可選 pre-push hook：
+❯ git push
+[autopilot] completeness scan …  ✗ TODO stub in auth.py:42
+[autopilot] tests …              ✗ 1 skipped (payment flow)
+[autopilot] review …             ⚠ unhandled error path
+push blocked — fix it, or override with a reason
+```
+
 ---
 
 ## What Is Autopilot?
 
-Claude Code 很會寫程式，Autopilot 讓它**把整件事跑完** —— 你描述想要什麼，它負責處理程式碼周邊的紀律：
+Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那些你本來得自己動手的規劃、檢查、決策與記憶：
 
-- **判斷任務大小並規劃** —— 一行小修正和跨模組大功能會自動得到不同對待。
-- **執行品質閘門** —— 合併前先跑測試、完整性掃描（無 stub/TODO）、程式碼審查。
-- **收尾閉環** —— 乾淨收工、歸檔專案、把教訓記下來供下次使用。
-- **適應你的 repo** —— 在 `.claude/` 放一個 markdown 檔，同一批 skill 就會講你專案的 build 指令、慣例與坑。
+- **給它目標，拿回結果** —— `/l3` `/l4` `/l5` 和 `ceo-agent` 能把一個任務從頭跑到尾（判斷大小、規劃、實作、審查、收尾），只在真正該你拍板的決策點才停下來問。
+- **第二個引擎來吵你的 code** —— 審查可以跑在**不同的**模型家族（GPT、Gemini）上，所以更多 bug 在使用者看到之前就被抓到，而不是被寫它的同一個模型蓋章放行。
+- **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
+- **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它是單一 Claude Code plugin —— **24 個 skill、3 個方法論 agent、22 個 hook、零相依**。可完全獨立運作 —— 是 Cookys 假定的 **autopilot + codeforge + mnemos** 生態系的獨立核心 —— 若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它是單一 Claude Code plugin —— **24 個 skill、3 個方法論 agent、22 個 hook、零相依**。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+
+> 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
 > 第一次來？這頁是 5 分鐘導覽。更深的內容都在 **[Learn More](#learn-more)**。
 
@@ -140,7 +151,7 @@ Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 sk
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** —— 22 個 runtime 強制 hook（8 預設啟用、14 可選啟用） | [hooks/README.md](hooks/README.md) |
+| **Hooks** —— 22 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

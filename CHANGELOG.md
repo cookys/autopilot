@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.26.3 — opt-in CHANGELOG release-hygiene gate
+## v2.26.4 — opt-in CHANGELOG release-hygiene gate
 
 **Headline**: Closes the accuracy gap the v2.25.16 runtime update-checker left open — the runtime surfaces whatever CHANGELOG headline exists on a version bump, but nothing *forced* a change to the opt-in hook set to be described as opt-in. New `scripts/check-optin-changelog.js` (wired as `preflight-release.sh` check #6) fails the release-hygiene gate when the `hooks/opt-in-manifest.json` opt-in set changes vs the previous release **unless** the current version's CHANGELOG section contains the literal `opt-in` and names every added/removed stem alongside it. PATCH (new script; no new user-facing surface; opt-in set unchanged this release so the gate is inert here).
 
@@ -34,10 +34,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Changed
 - **`scripts/preflight-release.sh`** — added check #6 (`opt-in change is named in the CHANGELOG`). Run it **after** committing the version bump (the gate fail-closes when the canonical version is not yet in first-parent history).
-- **`CLAUDE.md`** — Scripts inventory row for `check-optin-changelog.js`. Version mirrors 2.26.2 → 2.26.3.
+- **`CLAUDE.md`** — Scripts inventory row for `check-optin-changelog.js` + the sh-vs-js script-language criterion ("When adding a new script"). Version mirrors 2.26.3 → 2.26.4.
 
 ### Process
 - `/l5` dogfood: spec → 1-round gpt-5.5 xhigh decorrelated spec-review (6 findings folded) → `gpt-5.3-codex-spark` hetero impl (worktree-isolated, cgroup-contained) → depth-0 independent adversarial harness → **4-round** decorrelated gpt-5.5 xhigh impl-review (R1 4 findings / R2 2 / R3 2 → **SHIP-AS-IS**). The decorrelated reviewer caught false-pass holes (adjacent-bullet credit leak, prerelease/fenced heading bleed, uncommitted-version baseline, CommonMark fence-length + inline-comment-on-heading) that both the implementer's own green and the depth-0 harness initially missed.
+
+## v2.26.3 — hetero engines can now READ the repo instead of guessing (`dispatch-explore.sh`)
+
+**Headline**: A new third sibling in the hetero-dispatch family, [`scripts/dispatch-explore.sh`](scripts/dispatch-explore.sh), lets a non-Claude engine (codex/GPT, agy/Gemini) **read the trusted repo** and answer grounded — the posture `dispatch-hetero.sh` (write) and `dispatch-review.sh` (review a diff fed as text) both deliberately avoid. Born from a real failure this session: when asked to explore autopilot's capabilities for landing-page copy, both engines **silently read nothing and guessed** — a map-only agy confidently "fact-checked" the real 24 skills down to an invented 23 and declared an existing skill missing. Two read recipes were diagnosed and baked in so no caller rediscovers them, plus a fail-loud probe that turns "the engine guessed" into a hard error instead of a plausible lie.
+
+### Added
+- [`scripts/dispatch-explore.sh`](scripts/dispatch-explore.sh) — read-the-repo hetero dispatch. **codex** read recipe: detect `bwrap` → `--sandbox read-only` if present, else `--dangerously-bypass-approvals-and-sandbox` (+ loud stderr note; bypass is acceptable here — repo trusted, read-only intent — but NEVER in `dispatch-review.sh`'s untrusted-diff path), always `-C <repo>`. **agy** read recipe: prompt PREPENDS `Your ABSOLUTE working directory is <repo>` + an absolute-path read-list (agy `-p` ignores process cwd), captured via `script -qec` pseudo-TTY, prompt right after `-p` / `--model` last. **Fail-loud read probe**: a fresh unguessable token is written to a repo sentinel; the engine must echo it on a `READ-PROBE:` line or `status:read_failed` (exit 3) and the guessed body is **withheld** — same fail-closed stance as "verify by artifacts, never self-report." Verified end-to-end: codex + agy both `explored` (grounded answer), a non-reading binary correctly `read_failed`. JSON `{runner, model, status, read_probe, sandbox, raw_log}`; exit 0/3/2.
+
+### Changed
+- [`references/hetero-dispatch.md`](references/hetero-dispatch.md) — new "Reading the repo" section documenting the silent-guess trap, the two read recipes (table), and the fail-loud probe.
+- `CLAUDE.md` scripts inventory — added the `dispatch-explore.sh` row.
 
 ## v2.26.2 — all 12 opt-in hooks now enable-able (off the broken settings.json copy-paste route)
 

@@ -54,6 +54,30 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 - Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
 
+## Reading the repo — [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh)
+
+`dispatch-hetero.sh` (write) and `dispatch-review.sh` (review a diff fed as **text**) both **avoid** letting the engine read the worktree. The opposite posture — you *want* a hetero engine to **read the real repo** and answer grounded (capability discovery, broad-context review, "what does this codebase actually do") — is [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh). The repo is trusted here; reading it is the point.
+
+**Why a script — the silent-guess trap.** Each read path has one non-obvious rail that, if skipped, makes the engine **read nothing and guess instead**, then report confident wrong "facts" (a map-only agy once "fact-checked" the real 24 skills down to an invented 23, and declared an existing skill missing). Both rails are baked in:
+
+| Engine | Failure if naive | Baked-in recipe |
+|--------|------------------|-----------------|
+| **codex** | `--sandbox read-only` needs **bubblewrap** to exec the file-read commands; when `bwrap` is absent the sandbox fails *before* file access and codex falls back to guessing | detect `bwrap`: present → `--sandbox read-only`; absent → `--dangerously-bypass-approvals-and-sandbox` + a loud stderr note (bypass is OK here — repo trusted, read-only intent — but NEVER in `dispatch-review.sh`'s untrusted-diff path). Always `-C <repo>`. |
+| **agy** | `agy -p` **ignores the process cwd** (invents a `~/.gemini` scratch project), so a relative-path prompt reads nothing | the prompt PREPENDS `Your ABSOLUTE working directory is <repo>` + an explicit absolute-path read-list; output captured via `script -qec` pseudo-TTY (the #76/#408 stdout-drop rail). Correct arg order: prompt right after `-p`, `--model` LAST (a `--model` wedged before the prompt makes agy answer "I am running on \<model\>" instead of the task). |
+
+**Fail-loud read probe (the autopilot guard — never trust self-report).** Before any answer is trusted, a fresh unguessable token is written to a sentinel file in the repo and the engine is told to echo it on a `READ-PROBE:` line. No match ⇒ the engine could not read ⇒ `status:read_failed`, exit 3, and the guessed body is **withheld**, never returned as valid. This makes "the engine silently guessed" a hard error instead of a plausible-looking lie — the same fail-closed stance as Invariant 2. (`--no-probe` exists for smoke tests only.)
+
+**Read-INTENT, not write-PROOF.** Only the codex `--sandbox read-only` path (bwrap present) actually *prevents* writes; agy has no read-only mode and the codex bypass path is unsandboxed. So rather than over-claim read-only, the script snapshots `git status --porcelain` before/after and, if the engine touched any tracked or untracked(non-ignored) file, returns `status:explored_dirty` (exit 4) + a loud stderr warning — detect-by-artifact (Invariant 2) applied to "did it stay read-only." (One blind spot: writes confined to already-gitignored paths, which porcelain can't see without an unbounded `--ignored` walk — run on a clean tree.) `sudo apt install bubblewrap` upgrades the codex path to genuinely write-proof.
+
+```bash
+scripts/dispatch-explore.sh --runner codex|agy --model <name> --prompt-file <file> \
+    [--repo <dir>] [--effort xhigh] [--timeout 9m]
+# JSON: {runner, model, status: explored|explored_dirty|read_failed|precondition_failed, read_probe, sandbox, repo_modified, raw_log, error}
+# exit 0 = explored (clean) · 4 = explored_dirty (answer present but repo was written — read-intent violated) · 3 = read_failed (body withheld) · 2 = precondition
+```
+
+> Optional: `sudo apt install bubblewrap` lets codex read under its proper `--sandbox read-only` instead of the bypass — the script auto-detects and switches; nothing else changes.
+
 ## Role-prompt reuse (engine-neutral bodies)
 
 [`.opencode/agent-bodies/*.body.md`](../.opencode/agent-bodies/) are frontmatter-free role prompts generated for OpenCode — but plain markdown is engine-neutral. Feeding `reviewer.body.md` + a diff to `agy -p` yields a methodology-carrying heterogeneous reviewer with zero new files. (The directory is named for its primary consumer; this secondary use is intentional.)

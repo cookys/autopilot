@@ -26,11 +26,15 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### Migrate the remaining 12 Tier-B opt-in hooks off the `${CLAUDE_PLUGIN_ROOT}`-in-settings.json route
-- **Trigger**: next time touching the opt-in hook catalog, OR a user reports a Tier-B opt-in hook "did nothing" after copying it from `settings.example.json`.
-- **Context**: `${CLAUDE_PLUGIN_ROOT}` expands ONLY inside the plugin's own `hooks.json`, never in a user's `settings.json` (confirmed vs CC hooks docs + reproduced). v2.26.1 fixed `version-drift-check` + `session-handoff` (moved to `hooks.json` + runtime gate) and added a warning for the rest, but the other 12 opt-in hooks still ship a copy-paste command that leaves the script path literal/unlaunched. Clean fix = wire them in `hooks.json` + a per-hook runtime gate (or a single enable-list config); non-trivial because most are genuine per-project policy toggles (branch-protection, commit-secret-scan, test-runner, …) that must stay user-decidable.
+### ✅ DONE (2026-06-27, v2.26.2) — Migrate the remaining 12 Tier-B opt-in hooks off the `${CLAUDE_PLUGIN_ROOT}`-in-settings.json route
+- **Resolution (v2.26.2)**: all 12 opt-in hooks now wired in `hooks.json` (where `${CLAUDE_PLUGIN_ROOT}` resolves + auto-tracks updates) behind a default-OFF runtime gate (`hooks/_shared/opt-in.js` — `~/.autopilot/config.json {"hooks":{"<stem>":true}}` or `AUTOPILOT_HOOK_<STEM>=1`, fail-safe → never blocks a tool call when disabled). `hooks/opt-in-manifest.json` is the new opt-in SSOT; `check-hook-inventory.js` derives opt-in from it (counts unchanged 10/12/0). `settings.example.json` `hooks-opt-in-examples` removed (route was unusable). **Follow-up BACKLOG**: per-event multiplexer to avoid spawning gated-off opt-in hooks on every tool call (see entry below).
+- **Source**: v2.26.1 (`f77bbb7`) surfaced it; resolved in v2.26.2.
+
+### Per-event opt-in hook multiplexer (perf) — avoid spawning gated-off opt-in hooks on every tool call
+- **Trigger**: tool-call latency telemetry shows the gated-off opt-in hooks' `node` startup is material (heavy-session cumulative), OR next time touching hook wiring perf.
+- **Context**: v2.26.2 wires all 12 opt-in hooks in `hooks.json`, so each spawns `node` (then gate-exits ~immediately) on every matching tool call for ALL users even when disabled — in line with existing default-on hooks but additive (5 PreToolUse + 4 Stop + 3 PostToolUse). The only update-stable wiring is `hooks.json` (token must resolve), so the spawn is unavoidable without a single per-event multiplexer hook that reads the manifest + config once and dispatches only the enabled opt-in hooks.
 - **Effort**: L
-- **Source**: v2.26.1 (`f77bbb7`); discovered during the session-handoff/update-checker question that surfaced the systemic defect.
+- **Source**: v2.26.2 design tradeoff (accepted, gpt-5.5 spec-reviewed).
 
 ### update-checker release-hygiene gate — require a CHANGELOG `opt-in` mention when the opt-in set changes
 - **Trigger**: a release adds/removes an **opt-in** hook AND its CHANGELOG entry does not name the hook / say `opt-in` (i.e. the next time the runtime update-checker would surface an opt-in change with an unhelpful headline), OR an idle pass to tighten release hygiene.

@@ -10,6 +10,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('mcp-health')) process.exit(0);
 
 const CACHE_FILE = path.join(os.homedir(), '.claude', 'mcp-health-cache.json');
 const BASE_BACKOFF_MS = 30000; // 30 seconds

@@ -2,10 +2,17 @@
 /**
  * check-hook-inventory.js — single source of truth for autopilot's hook tally.
  *
- * Derives the canonical hook inventory from the ONLY two active-wiring sources:
- *   - hooks/hooks.json                     → default-on set
- *   - settings.example.json (hooks-opt-in-examples) → opt-in set
- *   - hooks/*.{js,sh} not in either        → disabled/orphaned set (shipped code,
+ * Derives the canonical hook inventory from the active-wiring sources:
+ *   - hooks/hooks.json                     → ALL wired hooks
+ *   - hooks/opt-in-manifest.json (opt_in)  → which wired hooks are OPT-IN
+ *                                            (default-off, self-gated via
+ *                                            _shared/opt-in.js). default-on = wired
+ *                                            MINUS opt-in. As of v2.26.2 every opt-in
+ *                                            hook is wired in hooks.json too (the
+ *                                            settings.example.json copy-paste route
+ *                                            was unusable — ${CLAUDE_PLUGIN_ROOT}
+ *                                            never expands in a user's settings.json).
+ *   - hooks/*.{js,sh} not wired in hooks.json → disabled/orphaned set (shipped code,
  *                                            wired nowhere; e.g. v2.7.4 disable batch
  *                                            pending upstream stdin fix #6305)
  *
@@ -66,19 +73,32 @@ function stemsFromHookBlock(eventMap) {
 
 function deriveInventory() {
   const hooksJson = readJson('hooks/hooks.json');
-  const settings = readJson('settings.example.json');
+  const manifest = readJson('hooks/opt-in-manifest.json');
 
-  const defaultOn = stemsFromHookBlock(hooksJson.hooks);
-  const optIn = stemsFromHookBlock(settings['hooks-opt-in-examples']);
+  // Everything actually wired in hooks.json.
+  const wired = stemsFromHookBlock(hooksJson.hooks);
 
-  // All real hook scripts on disk.
+  // The opt-in subset is declared in the manifest (default-off, self-gated).
+  const optInList = Array.isArray(manifest.opt_in) ? manifest.opt_in : [];
+  const optIn = new Set(optInList);
+
+  // Contract: every manifest opt-in stem MUST be wired in hooks.json. A stem listed
+  // opt-in but unwired would silently vanish from BOTH tiers (not in default-on
+  // because it's opt-in; not actually wired) — fail closed rather than miscount.
+  const unwired = optInList.filter((s) => !wired.has(s));
+  if (unwired.length) die(`opt-in-manifest.json lists hooks not wired in hooks.json: ${unwired.join(', ')}`, 2);
+
+  // Default-on = wired minus the opt-in subset.
+  const defaultOn = new Set([...wired].filter((s) => !optIn.has(s)));
+
+  // All real hook scripts on disk; disabled = on disk but wired nowhere.
   const all = new Set();
   for (const f of fs.readdirSync(HOOKS_DIR)) {
     if (!/\.(js|sh)$/.test(f)) continue;
     if (NON_HOOK.some((re) => re.test(f))) continue;
     all.add(f.replace(/\.(js|sh)$/, ''));
   }
-  const disabled = new Set([...all].filter((s) => !defaultOn.has(s) && !optIn.has(s)));
+  const disabled = new Set([...all].filter((s) => !wired.has(s)));
 
   return {
     defaultOn: [...defaultOn].sort(),
@@ -89,7 +109,7 @@ function deriveInventory() {
 }
 
 function printInventory(inv) {
-  console.log('Hook inventory (derived from hooks.json + settings.example.json):\n');
+  console.log('Hook inventory (derived from hooks.json + opt-in-manifest.json):\n');
   console.log(`  total          : ${inv.total}`);
   console.log(`  default-on (${inv.defaultOn.length}) : ${inv.defaultOn.join(', ')}`);
   console.log(`  opt-in     (${inv.optIn.length}) : ${inv.optIn.join(', ')}`);

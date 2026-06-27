@@ -100,6 +100,25 @@ The `version-drift-check` hook gives a one-line nudge at session start when your
 
 To enable the **session-handoff** snapshot feature (write a machine handoff on `/clear`/logout and auto-inject it into the next session), set `~/.autopilot/config.json` to `{"handoff_inject": true}` (or `export AUTOPILOT_HANDOFF_INJECT=1`). Both the writer and reader are wired default-on in `hooks.json` but stay inert until this single switch is set.
 
+### Enabling opt-in hooks
+
+The 12 **opt-in** hooks (Tier B — branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health, accumulator, test-runner, design-quality, cost-tracker, session-summary, check-console, batch-format) are wired in the plugin's `hooks.json` but **default-OFF**. As of v2.26.2 you enable them via `~/.autopilot/config.json` — **not** by copying anything into your `settings.json` (where `${CLAUDE_PLUGIN_ROOT}` would not expand):
+
+```json
+{ "hooks": { "branch-protection": true, "commit-secret-scan": true, "test-runner": true } }
+```
+
+A per-hook env override also works: `AUTOPILOT_HOOK_<STEM>=1` (stem upper-cased, `-`→`_`, e.g. `AUTOPILOT_HOOK_BRANCH_PROTECTION=1`). The authoritative list is [`hooks/opt-in-manifest.json`](../hooks/opt-in-manifest.json); per-hook behaviour is documented in [`hooks/README.md`](../hooks/README.md) (Tier B).
+
+**Enable vs. configure — two separate mechanisms:**
+
+| Concern | Where | Example |
+|---------|-------|---------|
+| **Enable** a hook (does it run at all) | `~/.autopilot/config.json` `hooks.<stem>` (this is the v2.26.2 gate) | `{"hooks":{"branch-protection":true}}` |
+| **Configure** an enabled hook's behaviour | Claude `settings.json` `autopilot.*` (Claude Code injects these as `AUTOPILOT_*` env vars into the hook) — or set the env var directly | `autopilot.protectedBranches`, `autopilot.costTracker` |
+
+So a hook like `branch-protection` is **enabled** in `~/.autopilot/config.json` and its protected-branch regex is **configured** via `autopilot.protectedBranches` in `settings.json` (the `autopilot.*` block is still shown in `settings.example.json`). Enabling without configuring is fine — each configurable hook has a safe default (e.g. `^(main|master)$`).
+
 ---
 
 ## Development

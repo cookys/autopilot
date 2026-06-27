@@ -24,6 +24,31 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.2 — all 12 opt-in hooks now enable-able (off the broken settings.json copy-paste route)
+
+**Headline**: Completes the v2.26.1 fix for the whole opt-in catalog. `${CLAUDE_PLUGIN_ROOT}` expands only inside the plugin's own `hooks.json`, so the `settings.example.json` "copy this entry into your settings.json" route left every opt-in hook's script path literal and unlaunchable. All 12 remaining opt-in hooks (branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health, accumulator, test-runner, design-quality, cost-tracker, session-summary, check-console, batch-format) are now wired in `hooks.json` (token resolves + auto-tracks the install path on update) behind a **default-OFF** runtime gate, enabled via `~/.autopilot/config.json` instead of copy-paste. Tier counts unchanged (10 default-on / 12 opt-in / 0 disabled). PATCH (mechanism change, no new user-facing surface).
+
+### Added
+- **`hooks/_shared/opt-in.js`** — single runtime gate. `isEnabled(stem)` is true iff `~/.autopilot/config.json` `hooks[stem] === true` OR env `AUTOPILOT_HOOK_<STEM>` is set. **Default-false, fail-safe** (any error → disabled): a gated-off PreToolUse hook exits 0 and never emits a block decision, so it can't wedge a tool call.
+- **`hooks/opt-in-manifest.json`** — declarative SSOT of which wired hooks are opt-in; `check-hook-inventory.js` derives the opt-in tier from it. Self-check: every manifest stem must be wired in `hooks.json`.
+
+### Changed
+- **`hooks/hooks.json`** — wired all 12 opt-in hooks under their correct events (new `PreToolUse` / `Stop` / `PostToolUseFailure` blocks; `accumulator`/`test-runner`/`design-quality` joined the existing `PostToolUse Write|Edit` block; `mcp-health` keeps its `pre`/`failure` mode args; timeouts preserved).
+- **12 opt-in hook scripts** — each gained an early `if (!isEnabled('<stem>')) process.exit(0)` gate (before any blocking/output logic).
+- **`scripts/check-hook-inventory.js`** — derivation reworked: `default-on = wired − opt-in-manifest`, `opt-in = manifest`, `disabled = on-disk − wired`. No longer reads `settings.example.json`. Counts/membership identical to v2.26.1.
+- **`settings.example.json`** — removed `hooks-opt-in-examples` entirely; now points at `~/.autopilot/config.json` enablement.
+- **Docs** — `hooks/README.md` (Tier B = config-enable, not copy-paste), `docs/installation.md` ("Enabling opt-in hooks" section), `CLAUDE.md` + `preflight-portability.sh` (inventory opt-in source = manifest). Version mirrors 2.26.1 → 2.26.2.
+
+### Known tradeoff (accepted; follow-up BACKLOG)
+- Wiring the opt-in hooks in `hooks.json` means they spawn `node` (then gate-exit) on every matching tool call even when disabled — in line with existing default-on hooks but additive. The only update-stable wiring requires `hooks.json` (token must resolve). A per-event multiplexer that runs only enabled opt-in hooks is BACKLOGd.
+
+### Hook-order semantics reminder
+- New `PreToolUse` (Bash/Read/Write|Edit/mcp__.*), `Stop`, and `PostToolUseFailure` matcher blocks are independent of other matcher blocks; no cross-matcher ordering is claimed. Within the `PostToolUse Write|Edit` block the deterministic order is `suggest-compact` (default-on) → `accumulator` → `test-runner` → `design-quality`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side: `/plugin update autopilot@v2.26.1`. No new sibling files created (opt-in state lives in the user's own `~/.autopilot/config.json`).
+
 ## v2.26.1 — opt-in hooks that referenced `${CLAUDE_PLUGIN_ROOT}` in `settings.example.json` were unusable
 
 **Headline**: `${CLAUDE_PLUGIN_ROOT}` expands **only inside the plugin's own `hooks.json`** — never in a user's or project's `settings.json` (confirmed against the Claude Code hooks docs + reproduced locally). Every opt-in hook in `settings.example.json` told users to *copy* a `node ${CLAUDE_PLUGIN_ROOT}/hooks/<x>.js` command into their `settings.json`, where the token stays literal and the hook silently fails to launch. This release fixes the two hooks most affected by moving them into `hooks.json` (where the token resolves **and** auto-tracks the install path across plugin updates) behind a runtime opt-in gate; documents the systemic trap for the rest; and BACKLOGs the full migration. Counts: 22 hooks, **8 → 10 default-on**, **14 → 12 opt-in** (the two moved, semantics unchanged). PATCH (rewiring shipped hooks, no new user-facing surface).

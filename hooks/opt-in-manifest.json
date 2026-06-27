@@ -1,0 +1,17 @@
+{
+  "//": "Declarative SSOT for which hooks wired in hooks.json are OPT-IN (default-off, gated by hooks/_shared/opt-in.js). check-hook-inventory.js derives the opt-in tier from this list; everything else wired in hooks.json is default-on. Enable a listed hook via ~/.autopilot/config.json {\"hooks\":{\"<stem>\":true}} or env AUTOPILOT_HOOK_<STEM_UPPER>. Every stem here MUST be wired in hooks.json AND self-gate via opt-in.js.",
+  "opt_in": [
+    "accumulator",
+    "batch-format",
+    "branch-protection",
+    "check-console",
+    "commit-secret-scan",
+    "config-protection",
+    "cost-tracker",
+    "design-quality",
+    "large-file-warner",
+    "mcp-health",
+    "session-summary",
+    "test-runner"
+  ]
+}

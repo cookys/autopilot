@@ -11,6 +11,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('session-summary')) process.exit(0);
 
 function git(args) {
   const r = spawnSync('git', args, { timeout: 3000, encoding: 'utf8' });

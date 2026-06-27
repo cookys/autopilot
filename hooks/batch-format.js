@@ -12,6 +12,9 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('batch-format')) process.exit(0);
 
 const MAX_ERROR_LINES = 30;
 

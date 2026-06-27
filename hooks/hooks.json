@@ -1,5 +1,5 @@
 {
-  "description": "Autopilot hooks. Tool-event hooks recover data from the session transcript (transcript-reader-lib) since the upstream stdin pipe is broken (#6305); see hooks/README.md. _transcript-timing-probe.js is an opt-in diagnostic (not wired).",
+  "description": "Autopilot hooks. Tool-event hooks recover data from the session transcript (transcript-reader-lib) since the upstream stdin pipe is broken (#6305); see hooks/README.md. Opt-in hooks (hooks/opt-in-manifest.json) are wired here too but self-gate via hooks/_shared/opt-in.js — default-off, enabled per ~/.autopilot/config.json {\"hooks\":{\"<stem>\":true}}. _transcript-timing-probe.js is an opt-in diagnostic (not wired).",
   "hooks": {
     "PreCompact": [
       {
@@ -40,6 +40,52 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "//": "OPT-IN (default-off, self-gated via _shared/opt-in.js): branch-protection + commit-secret-scan. Wired here so ${CLAUDE_PLUGIN_ROOT} resolves; inert until enabled in ~/.autopilot/config.json.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/branch-protection.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/commit-secret-scan.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): large-file-warner",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/large-file-warner.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): config-protection",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/config-protection.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): mcp-health pre-flight health check",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js pre"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": ".*",
@@ -72,6 +118,60 @@
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/suggest-compact.js"
+          },
+          {
+            "//": "OPT-IN (default-off, self-gated): accumulator collects edited paths for batch-format",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/accumulator.js"
+          },
+          {
+            "//": "OPT-IN (default-off, self-gated): test-runner runs sibling tests",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/test-runner.js",
+            "timeout": 60000
+          },
+          {
+            "//": "OPT-IN (default-off, self-gated): design-quality warns on generic UI patterns",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/design-quality.js",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "//": "OPT-IN (default-off): mcp-health marks a server unhealthy on MCP tool failure",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js failure"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "//": "OPT-IN (default-off, self-gated via _shared/opt-in.js): cost-tracker, session-summary, check-console, batch-format. Wired here so ${CLAUDE_PLUGIN_ROOT} resolves; inert until enabled in ~/.autopilot/config.json.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-summary.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/check-console.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/batch-format.js",
+            "timeout": 300000
           }
         ]
       }

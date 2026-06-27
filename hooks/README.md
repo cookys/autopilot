@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-22 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A, wired in `hooks.json`) + **12 opt-in** (Tier B, copied from `settings.example.json`) — zero disabled as of v2.25.2. (Two Tier-A hooks ship wired-but-inert by design: `session-handoff` no-ops unless handoff is enabled via `~/.autopilot/config.json`; `version-drift-check` is silent for everyone except a dev clone behind upstream. They live in Tier A because `${CLAUDE_PLUGIN_ROOT}` only expands inside `hooks.json`, never in a user's `settings.json` — the Tier-B copy-paste route left their script path unresolved.) The canonical tally is derived from `hooks.json` + `settings.example.json` by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+22 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A) + **12 opt-in** (Tier B) — zero disabled as of v2.25.2. As of v2.26.2 **all 22 are wired in `hooks.json`** (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 12 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -184,7 +184,15 @@ Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develo
 
 ## Tier B — Opt-In (12 hooks)
 
-Not in `hooks.json`. Enable by copying from `settings.example.json` (`hooks-opt-in-examples`) — but note `${CLAUDE_PLUGIN_ROOT}` does **not** expand in your `settings.json`; replace it with the plugin's real install path (which changes on every update). Hooks needing update-stable wiring belong in `hooks.json` with a runtime gate instead (see `session-handoff` / `version-drift-check` in Tier A).
+Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-in.js` and no-ops until you opt in. **Enable** by adding the stem to `~/.autopilot/config.json`:
+
+```json
+{ "hooks": { "branch-protection": true, "commit-secret-scan": true } }
+```
+
+Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upper-cased, `-`→`_`). The opt-in set is the SSOT list in [`opt-in-manifest.json`](opt-in-manifest.json). (Do **not** copy hook commands into your `settings.json` — `${CLAUDE_PLUGIN_ROOT}` does not expand there, which is why this route replaced the old `settings.example.json` copy-paste.)
+
+**Enabling is separate from configuring.** `~/.autopilot/config.json` only decides whether a hook *runs*. A hook's *behaviour* (e.g. `branch-protection`'s `autopilot.protectedBranches`, `cost-tracker`'s `autopilot.costTracker`) is still set in Claude `settings.json` under `autopilot.*` (Claude Code injects those as `AUTOPILOT_*` env vars) — the `autopilot.*` block remains in `settings.example.json`. Each configurable hook has a safe default, so enabling without configuring is fine.
 
 | Hook | Event | Matcher | Behavior |
 |------|-------|---------|----------|

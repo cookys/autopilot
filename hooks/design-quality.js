@@ -9,6 +9,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('design-quality')) process.exit(0);
 
 const FRONTEND_EXTS = /\.(tsx|jsx|vue|css|scss|html|svelte|astro)$/;
 

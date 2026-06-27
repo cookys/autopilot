@@ -118,7 +118,7 @@ check_validate_skills() {
 }
 
 # ─── 13. hook inventory: doc counts AND per-tier membership match wiring ───
-# Derives the canonical tally from hooks.json + settings.example.json and asserts
+# Derives the canonical tally from hooks.json + opt-in-manifest.json and asserts
 # every doc agrees on counts AND tier membership (catches the count-blind class:
 # a disabled hook listed as Tier-A default-on while the doc count is still "right").
 check_hook_inventory() {

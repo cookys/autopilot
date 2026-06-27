@@ -9,6 +9,9 @@
 
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('check-console')) process.exit(0);
 
 const EXCLUDED = [
   /\.test\.[jt]sx?$/,

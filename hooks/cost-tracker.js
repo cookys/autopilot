@@ -21,6 +21,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('cost-tracker')) process.exit(0);
+
 const { parseAssistantTurns, aggregateSince } = require('./cost-tracker-lib');
 const { resolveTranscriptPath } = require('./transcript-reader-lib');
 

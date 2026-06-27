@@ -10,6 +10,9 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('test-runner')) process.exit(0);
 
 const MAX_OUTPUT_LINES = 30;
 

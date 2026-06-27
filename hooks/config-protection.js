@@ -9,6 +9,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('config-protection')) process.exit(0);
 
 const PROTECTED_BASENAMES = new Set([
   '.eslintrc', '.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json', '.eslintrc.yaml', '.eslintrc.yml',

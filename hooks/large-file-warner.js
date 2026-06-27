@@ -7,6 +7,9 @@
 'use strict';
 
 const fs = require('fs');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('large-file-warner')) process.exit(0);
 
 const WARN_BYTES = 500 * 1024;
 const BLOCK_BYTES = 2 * 1024 * 1024;

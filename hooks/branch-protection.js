@@ -12,6 +12,9 @@
 
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('branch-protection')) process.exit(0);
 
 const DEFAULT_PROTECTED = /^(main|master)$/;
 

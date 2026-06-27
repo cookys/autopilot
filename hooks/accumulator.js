@@ -11,6 +11,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { isEnabled } = require('./_shared/opt-in');
+
+if (!isEnabled('accumulator')) process.exit(0);
 
 function getSessionId() {
   const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';

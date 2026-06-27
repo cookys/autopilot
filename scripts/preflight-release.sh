@@ -87,6 +87,11 @@ check_index_links_resolve() {
   [ "$missing" -eq 0 ]
 }
 
+# ─── 6. opt-in CHANGELOG gate: set change ⇒ named in section ───
+check_optin_changelog() {
+  node scripts/check-optin-changelog.js
+}
+
 echo "preflight-release — autopilot release-hygiene gate"
 echo ""
 
@@ -95,6 +100,7 @@ run_check "CHANGELOG.md has a '## v$VERSION' entry" check_changelog_entry
 run_check "version mirrors in sync (sync-version.js --check)" check_version_mirrors
 run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
+run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then

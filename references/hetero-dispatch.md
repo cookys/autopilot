@@ -26,7 +26,7 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, runner, model, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}` (`runner` is always `"agy"`, `model` echoes `--model` — **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}` (`runner` is `"codex"` or `"agy"` per `--runner auto|codex|agy` — `auto` routes `*gpt*`/`*codex*` → codex else agy; `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance — all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
 
 ### Outcome states
 
@@ -94,7 +94,7 @@ The guarded installer only protects its own path. For raw `agy plugin install/un
 
 ## QC panel judges ride the same recipe
 
-`scripts/qc-panel.sh` (task-tree engine P4) dispatches its Gemini judge via the same
+`scripts/qc-panel.js` (task-tree engine P4) dispatches its Gemini judge via the same
 `agy -p` plumbing this doc describes — read-only judging in a throwaway dir with only
 the intended inputs, file-write verdict, `--print-timeout 8m`,
 `--dangerously-skip-permissions`. The judge path never mutates a repo, so the worktree

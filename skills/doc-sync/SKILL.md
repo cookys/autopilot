@@ -36,7 +36,7 @@ balance, version strings agree, every CLI subcommand appears in the docs, roadma
 don't contradict). **Run this FIRST**, every time:
 
 ```
-<gate_command from .claude/doc-drift-config.md>   # e.g. python3 scripts/check-doc-drift.py
+<gate_command from .claude/doc-drift-config.md>   # e.g. node scripts/doc-drift-gate.js
 ```
 
 Green = those classes are *genuinely* clean. This is gate-able (CI, pre-merge) because it has
@@ -74,7 +74,7 @@ zero config) — internal-link resolution + code-fence balance — are the basel
 **project-specific** checks as the LLM sweep discovers mechanizable classes (version-sync,
 CLI-surface-vs-docs, roadmap-consistency, etc.). Autopilot ships a generic baseline at
 [`scripts/doc-drift-gate.js`](../../scripts/doc-drift-gate.js) (links + fences over a
-configurable doc set) you can adopt and extend; the codeforge repo's `scripts/check-doc-drift.py`
+configurable doc set) you can adopt and extend; the codeforge repo's `check-doc-drift.py`
 is a 5-check reference that adds the project-specific classes on top. Wire your gate into CI +
 the `quality-pipeline` doc step.
 

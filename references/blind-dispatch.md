@@ -170,7 +170,7 @@ you then rubber-stamp whatever comes back.
 This is a forcing-function prompt, not a counter — it relies on the dispatcher
 honestly reading its own ratio, the same way the rest of this file is contract,
 not code (see "Where this principle is referenced"). If a deterministic version
-is ever wanted, route the cycle count through a `risk-counter.sh`-style
+is ever wanted, route the cycle count through a `risk-counter.js`-style
 persistent store — a separate, deferred decision, not built here.
 
 ## Disjointness gate ≠ reviewer clearance (the carve-out)
@@ -272,7 +272,7 @@ session = depth 0, dispatched agent = depth 1, its child = depth 2.)
 |----------------|----------|-----|
 | Round-N reviewer dispatches its own **round-N+1 replacement** | ❌ **Forbidden** | The reviewer knows its own findings — any re-dispatch prompt it writes is leaky by construction, and the dispatcher-side linter never sees it. Blindness collapses |
 | **Fixer** (non-blind, holds full findings) dispatches a **verdict-producing** child ("verify my fix" sub-review) | ❌ **Forbidden** | Same collapse from the other side: the child inherits the finding context. A fixer's self-verification never substitutes for the dispatcher's blind re-review |
-| Fixer dispatches **fix-executing** children (decompose a multi-file fix) | ✅ Yes | Fixer dispatch is non-blind by design — but each child's applied fixes must be reported up so the dispatcher can increment `scripts/risk-counter.sh` (the WTF cap cannot see nested fixes otherwise) |
+| Fixer dispatches **fix-executing** children (decompose a multi-file fix) | ✅ Yes | Fixer dispatch is non-blind by design — but each child's applied fixes must be reported up so the dispatcher can increment `scripts/risk-counter.js` (the WTF cap cannot see nested fixes otherwise) |
 | Reviewer dispatches read-only **evidence gatherers** within its round (find callers, enumerate sites) | ⚠ Future only | `agents/reviewer.md` Red Lines keep the reviewer terminal ("Never call another agent") and its tool list excludes `Agent`/`Task`. Relaxing this requires an explicit Red Line revision plus an update to this row — never just a `tools:` addition. If so revised: sub-prompts must contain none of the parent's findings ("I found X — check for similar" anchors the child), and `✅ Verified Clean` is **non-delegable** — the top reviewer may not clear code it has not read. Every sub-finding is re-verified at `file:line` before inclusion |
 | Planner dispatches read-only **research children** (codebase exploration) | ✅ Yes | Planner is not a blind role and produces no verdict; children are research-only (see `agents/planner.md` § Research Children) |
 

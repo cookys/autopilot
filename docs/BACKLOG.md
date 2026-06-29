@@ -96,7 +96,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ### Depth-0 loop hardening — content-fingerprint no-progress + hook backpressure (from loop-engineering study)
 - **Trigger (a)** content-fingerprint: a real case where a foreman/dispatch loop **runs busy but makes no actual progress** (same diff / same verdict across rounds) and the **round cap (3)** lets it burn most of a budget before tripping — i.e. the crude round cap proves too loose. **Trigger (b)** backpressure: only if the `/loop` + event-driven harness integration ([[project_harness-integration-direction]]) is actually built out into an event/webhook-fed loop.
-- **Context**: 2026-06-24 study of `maxmilian/loop-engineering` found autopilot already embodies all 7 of its loop principles (verify-by-artifact, machine-checkable done, budget/escalation exits, filesystem-as-memory via `tree.sh`, semi-autonomous DOA gate). The ONE grdually-coarse spot: autopilot's depth-0 has a **wall-clock stall detector** (hung foreman trips the clock, `level-front-door.md:207`) + round cap + WTF cap, but no **loop-fingerprinting** (content/state unchanged across N cycles ⇒ break EARLY, before the round cap). And hook **rate-limiting/backpressure** (webhook-storm guard) is a non-gap today (tool-event + self-paced triggers) that becomes relevant only if event-driven `/loop` deepens.
+- **Context**: 2026-06-24 study of `maxmilian/loop-engineering` found autopilot already embodies all 7 of its loop principles (verify-by-artifact, machine-checkable done, budget/escalation exits, filesystem-as-memory via `tree.js`, semi-autonomous DOA gate). The ONE grdually-coarse spot: autopilot's depth-0 has a **wall-clock stall detector** (hung foreman trips the clock, `level-front-door.md:207`) + round cap + WTF cap, but no **loop-fingerprinting** (content/state unchanged across N cycles ⇒ break EARLY, before the round cap). And hook **rate-limiting/backpressure** (webhook-storm guard) is a non-gap today (tool-event + self-paced triggers) that becomes relevant only if event-driven `/loop` deepens.
 - **Effort**: S (fingerprint = compare round-N diff/verdict hash to round-N-1, break on match) / S (backpressure, when/if relevant).
 - **Source**: 2026-06-24 `maxmilian/loop-engineering` study (see [[project_loop-engineering-mirror]] memory).
 
@@ -203,12 +203,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
   3. 距 v2.7.4 ship 過 30 天且想主動 re-test（避免無限拖延）
   4. 跑 path (3) transcript-file pivot 前先做這個 verification — 確認還是 broken 才值得寫 L-size code
 - **Verification recipe**:
-  1. `cd ~/projects/autopilot && scripts/toggle-payload-capture.sh enable`
+  1. `cd ~/projects/autopilot && scripts/toggle-payload-capture.js enable`
   2. 新 terminal 跑：`AUTOPILOT_CAPTURE_PAYLOAD=1 claude`（用 current version OR 指定 binary path）
   3. 在 fresh claude 跑 `echo TEST_$(date +%s)` + read a small file + exit
   4. `ls ~/.autopilot/payloads/` — **要看到 4 個檔（pre-bash + post-bash + pre-read + post-star）**且 stdin_parsed 不是 null
   5. 同 transcript（最新 jsonl in `~/.claude/projects/-home-cookys-projects-*/`）grep `"stderr":"[^"]*ENXIO"` 必須 **0 hits**
-  6. `scripts/toggle-payload-capture.sh disable`
+  6. `scripts/toggle-payload-capture.js disable`
 - **Re-enable order** — remaining only (the 6 log-only PostToolUse hooks are DONE via v2.8.0/v2.8.1):
   1. **Stop-event hooks** (separate verification, NOT #6305): `cost-tracker` → `session-summary`. Re-enable each, fresh claude, confirm artifact (`~/.claude/metrics/costs.jsonl` row, `~/.claude/sessions/{date}-{sid}.md`).
   2. **PreToolUse blockers**（最後，gated on upstream stdin fix）: `large-file-warner` → `branch-protection` → `commit-secret-scan`
@@ -239,7 +239,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ### Tree-engine graduation Board review
 - **Trigger**: `~/.autopilot/calibration/samples.jsonl` reaches 50 reviewer-baseline samples OR 30 days after the first shadow run (2026-06-12), whichever comes first.
-- **Context**: Amendment 6 — Board decides graduate / extend / abort based on `scripts/calibration.sh report` output. Silence is NOT extension. P6 adapter post-signoff activation is blocked on a `board_signoff` event recorded in the project tree (see `references/tree-contracts.md` §3.12 and `scripts/tree.sh board-status`).
+- **Context**: Amendment 6 — Board decides graduate / extend / abort based on `scripts/calibration.sh report` output. Silence is NOT extension. P6 adapter post-signoff activation is blocked on a `board_signoff` event recorded in the project tree (see `references/tree-contracts.md` §3.12 and `scripts/tree.js board-status`).
 - **Effort**: Fix (Board review meeting; not a code task)
 - **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
 

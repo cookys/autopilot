@@ -152,7 +152,10 @@ function readManifestAtRef(ref) {
 function deriveVersionHistory() {
   let raw;
   try {
-    raw = execFileSync('git', ['rev-list', '--first-parent', 'HEAD'], {
+    // Scope to commits that actually touched the manifest — the version only
+    // changes there, so this drops the git-show fan-out from O(all history) to
+    // O(version bumps) without changing the derived history.
+    raw = execFileSync('git', ['rev-list', '--first-parent', 'HEAD', '--', '.claude-plugin/plugin.json'], {
       cwd: REPO,
       encoding: 'utf8',
       maxBuffer: 40 * 1024 * 1024,

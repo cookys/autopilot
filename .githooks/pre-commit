@@ -3,13 +3,16 @@
 #
 # Activated by:  scripts/install-hooks.sh  (sets core.hooksPath=.githooks)
 #
-# What it checks (Phase 0.5):
-#   - sync-version.js --check: .claude-plugin/plugin.json (canonical) vs
-#     all mirrors (plugin.json, marketplace.json, hooks/README.md, README.md).
-#     Exits 1 if any mirror drifts.
+# What it checks:
+#   - sync-version.js --check: version mirrors vs canonical plugin.json (always)
+#   - sync-agent-bodies.sh --check: agent body sync (always)
+#   - blind-dispatch.md issue-ref anti-rot grep (always)
+#   - check-canonical-invariants.sh: cross-file invariants (always)
+#   - check-readme-parity.js: EN↔zh README lockstep (change-scoped: README staged)
+#   - check-hook-inventory.js --check: hook tally + tier membership
+#       (change-scoped: hooks/ or a count-bearing mirror staged)
 #
-# Future phases will add more checks here (e.g. sync-agent-bodies.sh --check
-# in Phase 3). Each new check should be additive and fail-fast.
+# Each check is additive and fail-fast.
 
 set -euo pipefail
 
@@ -65,4 +68,40 @@ if ! ./scripts/check-canonical-invariants.sh >/dev/null 2>&1; then
   echo "update the inline seed table in scripts/check-canonical-invariants.sh in the" >&2
   echo "SAME commit (see the script header's same-commit ritual)." >&2
   exit 1
+fi
+
+# --- README EN↔zh parity check (P3, change-scoped) ---
+# Runs only when a README is staged. sync-version now syncs both badges, but a
+# hand-edit (section add, badge tweak) can still drift them — preflight-portability
+# caught this only out-of-band (stale 2.26.3 vs 2.26.4 on 2026-06-29).
+# No --diff-filter: DELETIONS must trigger too (removing a hook file or a count-bearing
+# mirror changes the inventory/parity just as much as editing one).
+STAGED="$(git diff --cached --name-only 2>/dev/null || true)"
+if echo "$STAGED" | grep -qE '^README(\.zh-TW)?\.md$'; then
+  if ! node scripts/check-readme-parity.js >/dev/null 2>&1; then
+    echo "─────────────────────────────────────────────────────────────" >&2
+    echo "pre-commit: README.md ↔ README.zh-TW.md parity drift" >&2
+    echo "─────────────────────────────────────────────────────────────" >&2
+    node scripts/check-readme-parity.js >&2 || true
+    echo "" >&2
+    echo "To fix: align badge values + section headers across both READMEs." >&2
+    exit 1
+  fi
+fi
+
+# --- hook inventory drift check (P4, change-scoped) ---
+# Runs only when hook wiring or a hook-count-bearing mirror is staged. Counts +
+# per-tier membership are derived from real wiring; this catches the count-blind
+# class (a disabled hook listed as default-on while the total still "looks right").
+if echo "$STAGED" | grep -qE '^(hooks/|README\.md$|README\.zh-TW\.md$|\.claude-plugin/|plugin\.json$)'; then
+  if ! node scripts/check-hook-inventory.js --check >/dev/null 2>&1; then
+    echo "─────────────────────────────────────────────────────────────" >&2
+    echo "pre-commit: hook inventory drift (counts or tier membership)" >&2
+    echo "─────────────────────────────────────────────────────────────" >&2
+    node scripts/check-hook-inventory.js --check >&2 || true
+    echo "" >&2
+    echo "To fix: reconcile the docs with the canonical lists from" >&2
+    echo "  node scripts/check-hook-inventory.js   (no flag prints the oracle)" >&2
+    exit 1
+  fi
 fi

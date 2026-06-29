@@ -45,7 +45,12 @@ function findTestFile(filePath) {
 }
 
 try {
-  const input = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+  // Read fd 0 directly — opening the '/dev/stdin' PATH throws ENXIO under some
+  // hook events (see hooks/README.md); fall back to the path where it works.
+  let raw;
+  try { raw = fs.readFileSync(0, 'utf8'); }
+  catch { raw = fs.readFileSync('/dev/stdin', 'utf8'); }
+  const input = JSON.parse(raw);
   const toolInput = input.tool_input || {};
   const filePath = toolInput.file_path;
 

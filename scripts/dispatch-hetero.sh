@@ -31,7 +31,8 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "agy", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy", "model": "...",   # engine provenance (model = --model)
+#     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null" }

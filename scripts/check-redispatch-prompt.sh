@@ -101,10 +101,12 @@ while IFS= read -r pat; do
 done <<< "$PATTERNS"
 
 # Also check for quoted-code excerpts. Heuristic: a fenced code block longer
-# than ~2 lines OR an indented block of 4+ consecutive code-shaped lines is
-# suspicious in a re-dispatch prompt (the original task description belongs
-# in plain prose; quoted code usually means the dispatcher copy-pasted a
-# previous finding's excerpt). This is a heuristic — flag for human review.
+# than ~2 lines is suspicious in a re-dispatch prompt (the original task
+# description belongs in plain prose; quoted code usually means the dispatcher
+# copy-pasted a previous finding's excerpt). This is a heuristic — flag for
+# human review. (Only FENCED blocks are detected; indented-block detection was
+# considered but omitted — re-dispatch prompts legitimately carry indented
+# structure, so it would over-flag.)
 fenced=$(printf '%s' "$PROMPT" | awk '
   /^[[:space:]]*```/ { in_fence = !in_fence; if (in_fence) { start = NR; lines = 0; next } else { if (lines >= 2) print "fenced-code:" start "-" NR; next } }
   in_fence { lines++ }

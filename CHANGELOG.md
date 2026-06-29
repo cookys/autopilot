@@ -24,6 +24,31 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.5 — hetero loop-review remediation (doc-drift mechanization + gate hardening)
+
+**Headline**: A dual heterogeneous-engine review (gpt-5.5 xhigh via codex + Gemini 3.5 Flash High via agy) over the whole repo, every finding cross-verified against real `path:line` and then driven to convergence through a gpt-5.5 review loop. Fixes a quality-gate hole (committed stubs slipping `completeness-scan --range`), a PreToolUse hook that ENXIO'd on `/dev/stdin`, a data-loss-prone eval cleanup, and a layer of stale operational-doc references — plus a new deterministic gate that mechanizes the stale-script-reference class so it can't recur. PATCH (hardening of existing shipped code; no new user-facing surface).
+
+### Added
+- `scripts/doc-drift-gate.js` script-ref check: flags `scripts/<name>.<ext>`, `./scripts/...`, and backticked-bare renamed refs (`` `tree.sh` `` when only `scripts/tree.js` exists) that don't resolve. Active docs only (history/tracking/templates exempt); non-backticked prose not gated (FP risk). Mechanizes the drift class below.
+- Pre-commit gate (`.githooks/pre-commit`): change-scoped `check-readme-parity.js` (README staged) + `check-hook-inventory.js --check` (hooks / count-bearing mirror staged), incl. **deletions** as triggers.
+- `scripts/sync-version.js`: `README.zh-TW.md` version badge now synced (was drifting — 2.26.3 vs 2.26.4); included only when the file exists (forks/sandboxes safe).
+
+### Fixed
+- `scripts/completeness-scan.sh --range`: stubs **committed within the range** were misclassified as pre-existing and passed; now range-introduced findings are correctly flagged.
+- `hooks/config-protection.js`, `hooks/test-runner.js`, `hooks/mcp-health.js`: read fd 0 first (the `/dev/stdin` PATH ENXIOs on PreToolUse) with a `/dev/stdin` fallback — matches the existing blocker convention.
+- `scripts/run-eval-batch.sh`: replaced the blanket `rm ~/.claude/commands/*-skill-*.md` (could delete a user's/concurrent run's files) with per-`run_eval` before/after tracking + a `flock` single-instance lock.
+- `scripts/check-optin-changelog.js`: scope `git rev-list` to commits touching the manifest (O(history) → O(version bumps)).
+- `scripts/probe-diff-domain.sh`: exclude lockfiles in subdirectories (`*/package-lock.json`, `*/go.sum`, …).
+- `scripts/dispatch-explore.sh`: signal handler exits cleanly (cleanup always returns 0).
+- Stale operational-doc references corrected to real `.js` entrypoints (`tree.sh`→`tree.js`, `qc-panel.sh`→`qc-panel.js`, `risk-counter.sh`→`risk-counter.js`, `check-node-report.sh`→`.js`, `toggle-payload-capture.sh`→`.js`) across `references/tree-contracts.md`, `references/hetero-dispatch.md`, `references/blind-dispatch.md`, `references/multi-agent-portability.md`, `docs/BACKLOG.md`; `hetero-dispatch.md` runner-schema (`agy`-only → `codex|agy` + containment fields); `multi-agent-portability.md` Antigravity self-contradiction; `AGENTS.md` hook-inventory source + `--disabled-count` + pre-commit-gate description; `hooks/README.md` opt-in mechanism + PostToolUse order.
+- `hooks/tests/check-hook-inventory.test.sh`: pre-existing breakage — sandbox never copied `hooks/opt-in-manifest.json` (a derivation input since v2.26.2) so the script ENOENT'd; also stale `8 default-on` vs current `10`. Now 18/18. (Test-only.)
+
+### Eval coverage
+- `scripts/run-eval-batch.sh` now derives the skill list and reports uncovered skills explicitly (16/24 have eval sets) instead of silently running a hardcoded 16.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.26.4 — opt-in CHANGELOG release-hygiene gate
 
 **Headline**: Closes the accuracy gap the v2.25.16 runtime update-checker left open — the runtime surfaces whatever CHANGELOG headline exists on a version bump, but nothing *forced* a change to the opt-in hook set to be described as opt-in. New `scripts/check-optin-changelog.js` (wired as `preflight-release.sh` check #6) fails the release-hygiene gate when the `hooks/opt-in-manifest.json` opt-in set changes vs the previous release **unless** the current version's CHANGELOG section contains the literal `opt-in` and names every added/removed stem alongside it. PATCH (new script; no new user-facing surface; opt-in set unchanged this release so the gate is inert here).

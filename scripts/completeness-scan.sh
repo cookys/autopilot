@@ -11,7 +11,8 @@
 #
 # Exit codes:
 #   0  clean (no new findings; pre-existing findings still allowed)
-#   1  has new (uncommitted-side) findings — gate fails
+#   1  has new findings — gate fails. "New" = uncommitted (staged/working-tree)
+#      OR, in --range mode, committed WITHIN the range (introduced after the base).
 #   2  usage / internal error
 #
 # Output: JSON to stdout. Use `jq` to consume.
@@ -41,6 +42,20 @@ case "$MODE" in
     mapfile -t FILES < <(git ls-files) ;;
   files) : ;;
 esac
+
+# In range mode, resolve the range BASE so classify_new can tell a stub that was
+# COMMITTED within the range (new — must fail the gate) from one that already
+# existed at the base (pre-existing — allowed). Without this, a committed stub
+# blames to a real SHA (not the 0000 working-tree sha) and was silently passed.
+RANGE_BASE=""
+if [[ "$MODE" == "range" ]]; then
+  if [[ "$RANGE" == *...* ]]; then
+    a="${RANGE%%...*}"; b="${RANGE##*...}"
+    RANGE_BASE="$(git merge-base "${a:-HEAD}" "${b:-HEAD}" 2>/dev/null || printf '%s' "${a:-HEAD}")"
+  elif [[ "$RANGE" == *..* ]]; then
+    RANGE_BASE="${RANGE%%..*}"
+  fi
+fi
 
 # Filter: skip binaries, lockfiles, build artefacts, the scan itself, doc-only paths
 is_scannable() {
@@ -82,7 +97,20 @@ classify_new() {
   # uncommitted lines come back as "0000000000000000000000000000000000000000".
   local sha
   sha="$(git blame --porcelain -L "${line},${line}" -- "$file" 2>/dev/null | head -1 | awk '{print $1}' || true)"
-  if [[ -z "$sha" || "$sha" =~ ^0+$ ]]; then echo "true"; else echo "false"; fi
+  if [[ -z "$sha" || "$sha" =~ ^0+$ ]]; then echo "true"; return; fi
+  # Range mode: a committed line is "new" if it was introduced WITHIN the range —
+  # i.e. its blamed commit is NOT an ancestor of the range base. (is-ancestor exit:
+  # 0 = ancestor → pre-existing; non-0/error → introduced-in-range or unresolvable →
+  # treat as new, fail-closed toward flagging.)
+  if [[ -n "$RANGE_BASE" ]]; then
+    if git merge-base --is-ancestor "$sha" "$RANGE_BASE" 2>/dev/null; then
+      echo "false"
+    else
+      echo "true"
+    fi
+    return
+  fi
+  echo "false"
 }
 
 emit_finding() {

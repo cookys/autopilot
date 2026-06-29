@@ -14,6 +14,7 @@ mkdir -p "$SBX/scripts" "$SBX/hooks" "$SBX/.claude-plugin"
 cp "$REPO_ROOT/scripts/check-hook-inventory.js" "$SBX/scripts/"
 # wiring sources (the derivation inputs)
 cp "$REPO_ROOT/hooks/hooks.json"      "$SBX/hooks/hooks.json"
+cp "$REPO_ROOT/hooks/opt-in-manifest.json" "$SBX/hooks/opt-in-manifest.json"  # opt-in tier source (v2.26.2+)
 cp "$REPO_ROOT/settings.example.json" "$SBX/settings.example.json"
 cp "$REPO_ROOT"/hooks/*.js "$SBX/hooks/" 2>/dev/null   # top-level only; NON_HOOK filter inside the script handles -lib/.test
 cp "$REPO_ROOT"/hooks/*.sh "$SBX/hooks/" 2>/dev/null
@@ -41,7 +42,7 @@ assert_eq "0" "$?" "--help exit 0"
 # 3. default print = regeneration oracle (derived counts + real names)
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default print exit 0"
-assert_contains "$OUT" "default-on (8)" "default print shows 8 default-on"
+assert_contains "$OUT" "default-on (10)" "default print shows 10 default-on"
 assert_contains "$OUT" "disabled   (0)" "default print shows 0 disabled"
 assert_contains "$OUT" "audit-log" "default print lists a real wired hook"
 
@@ -60,14 +61,14 @@ assert_contains "$OUT" "Tier-A" "membership drift identifies the Tier-A placemen
 restore "hooks/README.md"
 
 # 5. COUNT drift: canonical default-on count wrong in the description
-sed -i 's/8 default-on/9 default-on/' "$SBX/.claude-plugin/plugin.json"
+sed -i 's/10 default-on/11 default-on/' "$SBX/.claude-plugin/plugin.json"
 OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "count drift exit 1"
 assert_contains "$OUT" "defaultOn" "count drift names the field"
 restore ".claude-plugin/plugin.json"
 
 # 6. TIER-HEADER count drift in hooks/README.md
-sed -i 's/Default-On (8 hooks)/Default-On (9 hooks)/' "$SBX/hooks/README.md"
+sed -i 's/Default-On (10 hooks)/Default-On (11 hooks)/' "$SBX/hooks/README.md"
 OUT="$(node "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "tier-header count drift exit 1"
 assert_contains "$OUT" "hooks/README.md" "tier-header drift names the file"

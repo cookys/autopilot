@@ -111,10 +111,18 @@ fi
 
 RAW_LOG="$(mktemp -t dispatch-explore-log-XXXXXX)"
 PROMPT_BUILT="$(mktemp -t dispatch-explore-prompt-XXXXXX)"
-cleanup() { rm -f "$PROMPT_BUILT"; [[ -n "$SENTINEL" ]] && rm -f "$SENTINEL"; }
+# Always returns 0: the `[[ -n "$SENTINEL" ]] && …` short-circuits to status 1 when
+# SENTINEL is empty (--no-probe), which — if `set -e` is ever added, or to keep the
+# signal handler's `exit 130` unambiguous — must not leak as the handler's exit code.
+cleanup() { rm -f "$PROMPT_BUILT"; [[ -n "$SENTINEL" ]] && rm -f "$SENTINEL"; return 0; }
 # INT/TERM too, not just EXIT — a bare EXIT trap does NOT fire on a signal kill, which
 # would leave the untracked sentinel dirtying the worktree (decorrelated review, gpt-5.5).
-trap cleanup EXIT INT TERM
+# The signal handler must EXIT after cleanup: otherwise a trap that only runs cleanup
+# lets the script resume past the interruption and emit a misleading post-signal result.
+# Clear the EXIT trap first so cleanup doesn't run twice.
+on_signal() { cleanup; trap - EXIT; exit 130; }
+trap cleanup EXIT
+trap on_signal INT TERM
 
 # Write-detection (artifact-based, never trust the engine's own "I only read"):
 # the explore posture is read-INTENT, but only the codex `--sandbox read-only` path

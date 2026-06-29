@@ -19,10 +19,12 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok --model <name> --diff-file <file>
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#   grok runner: read-only by construction (scratch cwd, no --always-approve,
+#   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
 #
 # OUTPUT: one JSON object on stdout:
 #   { "runner": "agy|codex", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
@@ -49,8 +51,8 @@ done
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$RUNNER" "$MODEL" "$1"; exit 2; }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy)"
-case "$RUNNER" in codex|agy) ;; *) die_precondition "--runner must be codex or agy (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok)"
+case "$RUNNER" in codex|agy|grok) ;; *) die_precondition "--runner must be codex, agy, or grok (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -60,7 +62,8 @@ json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;
 # Build the review prompt: diff goes in as TEXT (never ask the engine to read the worktree).
 PROMPT_FILE="$(mktemp -t dispatch-review-prompt-XXXXXX)"
 RAW_LOG="$(mktemp -t dispatch-review-log-XXXXXX)"
-cleanup() { rm -f "$PROMPT_FILE"; }
+GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
+cleanup() { rm -f "$PROMPT_FILE"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; }
 trap cleanup EXIT
 {
   cat <<'HDR'
@@ -86,6 +89,41 @@ if [[ "$RUNNER" = "codex" ]]; then
   "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+elif [[ "$RUNNER" = "grok" ]]; then
+  GROK_BIN="${BIN:-grok}"
+  command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
+  # READ-ONLY by construction (the diff is untrusted): run in a SCRATCH cwd (never the
+  # repo), NO --always-approve (so it cannot auto-run/edit — Spike-verified that a pure
+  # review prompt needs no tools and does not hang without it), --disable-web-search (no
+  # external calls on an untrusted diff). --output-format plain so the VERDICT/FINDINGS
+  # come out as line-start plain text the parser matches (json wraps them in a "text"
+  # field with literal \n → parser miss). grok delivers stdout under a pipe (unlike agy),
+  # so a direct redirect captures it — no script -qec needed. (Spike 2026-06-29.)
+  GROK_CWD="$(mktemp -d -t dispatch-review-grokcwd-XXXXXX)"
+  # ENFORCED timeout (grok has no --print-timeout like agy): an auth prompt, model/tool
+  # approval prompt, network stall, or a prompt-injected tool attempt could otherwise hang
+  # the caller forever. `timeout` kills the run at $TIMEOUT (exit 124) → captured below →
+  # parser sees no verdict → fail-closed no_verdict. Never SHIP on a stall.
+  # Feed the prompt via --prompt-file (NOT -p "$(cat …)"): a large diff as a single argv
+  # arg can hit ARG_MAX before grok runs → avoidable no_verdict. PROMPT_FILE is an
+  # absolute mktemp path (grok resolves --prompt-file relative to --cwd, so it MUST be
+  # absolute — Spike-verified 2026-06-29: a relative path errored, absolute worked).
+  timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+      --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
+  GROK_RC=$?   # do NOT swallow with `|| true`: no `set -e` here, so capturing is safe
+  rm -rf "$GROK_CWD"
+  # FAIL-CLOSED on any non-zero grok exit (bad flag/model, auth, or rc=124 timeout):
+  # emit no_verdict and EXIT HERE, BEFORE the shared VERDICT parser. Critical — grok can
+  # print a partial `VERDICT: SHIP-AS-IS` line and THEN stall/fail; letting that partial
+  # output reach the parser would mark a failed/timed-out run as a SHIP (gpt-5.5 review).
+  # The partial output stays in raw_log for debugging; it is never trusted as a verdict.
+  if [ "$GROK_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+      "$RUNNER" "$(json_escape "$MODEL")" "$RAW_LOG" "$GROK_RC"
+    exit 1
+  fi
 else
   AGY_BIN="${BIN:-agy}"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"

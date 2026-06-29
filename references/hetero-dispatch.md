@@ -54,6 +54,22 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 - Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
 
+## Wired engines (runners) — how to pick one
+
+`--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):
+
+| Runner | Engine / models | Implementer | Reviewer | How to invoke / notes |
+|--------|-----------------|:-:|:-:|------|
+| `codex` | OpenAI `gpt-*`/`*codex*` | ✅ self-commits, can run build/test mid-turn | ✅ | default; `--effort` reasoning. Auto-selected for `*gpt*`/`*codex*` models. |
+| `agy` | Google Gemini (Antigravity CLI) | ✅ EDIT-ONLY (anchor hack; run_command 10s cap) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). |
+| `grok` | xAI `grok-build`, `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
+| `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | — | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. |
+
+Full per-runner usage recipes (incl. the cc-shim env setup and which models are clean) live in
+[`../project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md) § Gotchas.
+The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
+decorrelation overlap check.
+
 ## Reading the repo — [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh)
 
 `dispatch-hetero.sh` (write) and `dispatch-review.sh` (review a diff fed as **text**) both **avoid** letting the engine read the worktree. The opposite posture — you *want* a hetero engine to **read the real repo** and answer grounded (capability discovery, broad-context review, "what does this codebase actually do") — is [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh). The repo is trusted here; reading it is the point.

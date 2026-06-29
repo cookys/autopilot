@@ -158,6 +158,9 @@ family_of() {
     *gpt*|*codex*|*o1*|*o3*|*o4*)            echo openai ;;
     *claude*|*opus*|*sonnet*|*haiku*)        echo anthropic ;;
     *gemini*|*flash*|*bison*)                echo google ;;
+    *grok*|*composer*)                       echo xai ;;
+    *minimax*|*abab*)                        echo minimax ;;
+    *glm*|*zhipu*)                           echo zhipu ;;
     *)                                       echo unknown ;;
   esac
 }
@@ -178,10 +181,10 @@ QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
 # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
-case "$REV_RUNNER" in codex|auto|agy) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
+case "$REV_RUNNER" in codex|auto|agy|grok) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
-case "$IMPL_RUNNER" in auto|codex|agy) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
+case "$IMPL_RUNNER" in auto|codex|agy|grok|cc-shim) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
 case "$DIFF_SCOPE" in full|incremental-mitigated) ;; *) DIFF_SCOPE="$DEF_DIFF_SCOPE" ;; esac

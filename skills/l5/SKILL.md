@@ -87,8 +87,12 @@ qc-gate" pipeline is just `/l5 <goal>` — you don't re-type the roster.
 4. **`--solo`** → fall back to the `/l3` inline engine (also the automatic
    degradation when the foreman or hetero dispatch returns `precondition_failed`).
 
-Still deferred (NOT in v1): the full `role × task-type` routing table and engines
-beyond the configured roster (grok/others — each behind a per-engine smoke test).
-codex (`gpt-*`/`*codex*`) and agy/Gemini are wired. See
+Wired runners (set via `implementer_runner` / `reviewer_runner` in
+`.claude/review-loop-config.md`): **codex** (`gpt-*`/`*codex*`), **agy/Gemini**, **grok**
+(xAI Grok Build — `grok-build`/`grok-composer-2.5-fast`, implementer + reviewer), and
+**cc-shim** (the Claude Code CLI driving any Anthropic-compatible endpoint, e.g.
+`MiniMax-M3`/GLM — implementer only; EXPLICIT, needs `ANTHROPIC_BASE_URL`+`ANTHROPIC_AUTH_TOKEN`
+in env — see the review-loop-config Gotchas). Still deferred: the full `role × task-type`
+routing table; any further engine stays behind a per-engine smoke test. See
 [`../../references/hetero-dispatch.md`](../../references/hetero-dispatch.md) and
 [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md).

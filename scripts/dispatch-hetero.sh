@@ -18,10 +18,14 @@
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
 #       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
-#       [--runner auto|codex|agy|grok]         # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-build, grok-composer-2.5-fast
+#                                              #   cc-shim (EXPLICIT only): Claude Code CLI
+#                                              #   driving an Anthropic-compatible endpoint —
+#                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
+#                                              #   in env (e.g. MiniMax-M3, GLM-*).
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
@@ -75,7 +79,9 @@ RUNNER="auto"
 EFFORT="xhigh"
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
+IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
 
@@ -91,6 +97,7 @@ emit() { # status commit files ins del worktree error
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
@@ -102,6 +109,7 @@ die_precondition() {
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
     "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
   exit 2
@@ -131,13 +139,17 @@ done
 # memory: agy-writes-install-dir). Match the codex FAMILY, not one string.
 IS_CODEX=0
 IS_GROK=0
+IS_CCSHIM=0
 case "$RUNNER" in
-  codex) IS_CODEX=1 ;;
-  agy)   ;;
-  grok)  IS_GROK=1 ;;
+  codex)   IS_CODEX=1 ;;
+  agy)     ;;
+  grok)    IS_GROK=1 ;;
+  cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
   auto)
     # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
     # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
+    # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
+    # a bare model name must NOT silently route there.
     model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
     if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
       IS_CODEX=1
@@ -145,7 +157,7 @@ case "$RUNNER" in
       IS_GROK=1
     fi
     ;;
-  *) die_precondition "--runner must be one of auto|codex|agy|grok (got: $RUNNER)" ;;
+  *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim (got: $RUNNER)" ;;
 esac
 
 case "$EFFORT" in
@@ -160,6 +172,16 @@ esac
 
 if [ "$IS_CODEX" -eq 1 ]; then
   command -v "codex" >/dev/null 2>&1 || die_precondition "codex binary not found (install OpenAI Codex or ensure it is in PATH)"
+elif [ "$IS_CCSHIM" -eq 1 ]; then
+  command -v "claude" >/dev/null 2>&1 || die_precondition "claude binary not found (cc-shim drives the Claude Code CLI)"
+  # cc-shim is a base-url SHIM by design: without ANTHROPIC_BASE_URL it would dispatch to
+  # vanilla Claude (homogeneous, and burning the user's own quota). Require it + the token.
+  [ -n "${ANTHROPIC_BASE_URL:-}" ] || die_precondition "cc-shim requires ANTHROPIC_BASE_URL in env (point it at an Anthropic-compatible endpoint, e.g. https://api.minimax.io/anthropic)"
+  # Require ANTHROPIC_AUTH_TOKEN specifically (the bearer token the shim uses), NOT
+  # ANTHROPIC_API_KEY: the dispatch deliberately `env -u ANTHROPIC_API_KEY`s so a user's
+  # real-Anthropic key can't take precedence over the shim token — so accepting API_KEY
+  # here would pass the precondition then leave the run with no usable auth (gpt-5.5 review).
+  [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die_precondition "cc-shim requires ANTHROPIC_AUTH_TOKEN in env (the shim's bearer token; ANTHROPIC_API_KEY is intentionally NOT used — it is unset before launching claude so it cannot override the shim token)"
 elif [ "$IS_GROK" -eq 1 ]; then
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 else
@@ -232,7 +254,7 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 
 # A TERM during the long run orphans the worktree + branch AND can leave worker
 # descendants. Trap it to reap the container first, then the worktree + branch.
-trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -265,6 +287,26 @@ if [ "$IS_CODEX" -eq 1 ]; then
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE"
+elif [ "$IS_CCSHIM" -eq 1 ]; then
+  # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
+  # endpoint via ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN from the env. The MODEL (e.g.
+  # MiniMax-M3, GLM-*) is what writes the code — for an IMPLEMENTER the model matters, not
+  # the driver. Spike-verified 2026-06-29: claude -p via MiniMax-M3 edited files in cwd
+  # (clean tool_use, no reasoning leak), reading the prompt from STDIN (dodges ARG_MAX).
+  # EDIT-ONLY + wrapper-commit (same rail as agy/grok). `cd $WT` so claude works in the
+  # worktree; ANTHROPIC_API_KEY is unset so the shim token is the sole auth.
+  CCSHIM_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  CCSHIM_PROMPT_FILE="$(mktemp -t dispatch-hetero-ccshim-prompt-XXXXXX)"
+  printf '%s' "${CCSHIM_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CCSHIM_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p --model "$2" \
+      --dangerously-skip-permissions < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE"
+  rm -f "$CCSHIM_PROMPT_FILE"
 elif [ "$IS_GROK" -eq 1 ]; then
   # grok (xAI Grok Build CLI; models grok-build / grok-composer-2.5-fast). Unlike agy,
   # grok `-p` HONORS --cwd (verified Spike 2026-06-29: grok-composer-2.5-fast and
@@ -327,7 +369,7 @@ trap - INT TERM
 if [ "$IS_CODEX" -eq 0 ] \
    && [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"
+  _runner_label="agy"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"
   git -C "$WT" add -A
   git -C "$WT" -c commit.gpgsign=false commit -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
 fi

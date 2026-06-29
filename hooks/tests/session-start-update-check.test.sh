@@ -256,7 +256,7 @@ set_last_seen "4.0.2"
 run_session_start "$PLUGIN_ROOT" "$PAYLOAD"
 CTX13=$(extract_context "$__RUN_STDOUT")
 assert_eq "$__RUN_EXIT" "0" "fail-open: unreadable CHANGELOG exit 0"
-assert_contains "$CTX13" "Autopilot sets rules" "fail-open: base context still present"
+assert_contains "$CTX13" "Autopilot sets the rules" "fail-open: base context still present"
 chmod 644 "$PLUGIN_ROOT/CHANGELOG.md"
 
 # 12. em dash / en dash / ASCII dash headers all parse.

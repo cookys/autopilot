@@ -17,6 +17,14 @@
 
 . "$(dirname "$0")/lib.sh"
 
+# These four hooks are opt-in (default-off, gated by _shared/opt-in.js since v2.26.2).
+# This test verifies their block/allow BEHAVIOR, so enable them via the documented
+# ~/.autopilot/config.json switch (HOME is HOOK_HOME inside run_hook).
+mkdir -p "$HOOK_HOME/.autopilot"
+cat > "$HOOK_HOME/.autopilot/config.json" <<'JSON'
+{"hooks":{"large-file-warner":true,"branch-protection":true,"commit-secret-scan":true,"session-summary":true}}
+JSON
+
 START_PWD="$PWD"
 mkgit() { mkdir -p "$1"; cd "$1"; git init -q -b "$2"; git config user.email t@t; git config user.name t; }
 

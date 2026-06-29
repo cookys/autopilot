@@ -10,6 +10,14 @@
 
 . "$(dirname "$0")/lib.sh"
 
+# The handoff writer is opt-in (handoffEnabled gate). This test verifies the writer's
+# BEHAVIOR, so enable it via the documented ~/.autopilot/config.json switch
+# (handoff_inject; HOME is HOOK_HOME inside run_hook).
+mkdir -p "$HOOK_HOME/.autopilot"
+cat > "$HOOK_HOME/.autopilot/config.json" <<'JSON'
+{"handoff_inject":true}
+JSON
+
 mkgit() {
   mkdir -p "$1"
   ( cd "$1" && git init -q -b main && git config user.email t@t && git config user.name t )

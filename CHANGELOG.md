@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.9 — wire grok/cc-shim into the /l5 config path + how-to docs
+
+**Headline**: The v2.26.6–2.26.8 runners (grok, cc-shim) were dispatchable via `dispatch-hetero.sh`/`dispatch-review.sh` directly, but `resolve-review-loop.sh` — the resolver `/l5` reads — would **silently reset** `implementer_runner: grok`/`cc-shim` or `reviewer_runner: grok` back to the default (its enum allow-list predated them). This closes that end-to-end gap so the config values actually take effect, and documents how to use each runner where users look. PATCH (resolver fix + docs/test).
+
+### Fixed
+- `scripts/resolve-review-loop.sh`: runner enums widened — `reviewer_runner` now accepts `grok`; `implementer_runner` now accepts `grok` and `cc-shim` (were silently falling back to default). `family_of()` now recognises `xai` (grok/composer), `minimax` (minimax/abab), and `zhipu` (glm) — so the decorrelation overlap / `cross_family_satisfied` check is correct for the new engines instead of treating them all as `unknown`. +4 regression-guard test assertions (72 total).
+
+### Docs (how to use)
+- `project-config-template/review-loop-config.md`: `reviewer_runner`/`implementer_runner` field rows updated; new **Gotchas** entries for `grok` (impl + reviewer) and `cc-shim` (the full `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` env recipe, MiniMax-M3 example, M3-clean-vs-M2.x-leaks note).
+- `references/hetero-dispatch.md`: new "Wired engines (runners)" table (codex/agy/grok/cc-shim — implementer vs reviewer, how to invoke).
+- `skills/l5/SKILL.md`: the stale "grok deferred behind a smoke test" line replaced with the actual wired-runner roster.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.26.8 — cc-shim implementer (Claude Code CLI → any Anthropic-compatible model, e.g. MiniMax-M3)
 
 **Headline**: `dispatch-hetero.sh --runner cc-shim` drives the Claude Code CLI (`claude -p`) against an arbitrary Anthropic-compatible endpoint (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` from the env), making any such model an implementer — verified end-to-end with **MiniMax-M3**. Corrects an earlier category error: for an IMPLEMENTER the **model** writes the code, so a base-url shim IS a viable implementer (decorrelation by driver family matters for reviewers, not implementers). PATCH (new runner on an existing script).

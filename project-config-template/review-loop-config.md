@@ -39,8 +39,9 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 > `reviewer_engine`. The point is that ≥1 panel family differs from the **implementer's**
 > family, so a bug the implementer+its-family-reviewer jointly miss is caught by a different
 > vendor (PoLL, arXiv 2404.18796). The resolver WARNS if the panel shares the implementer
-> family. Gemini joins read-only via `dispatch-review.sh --runner agy` (agy review is verified
-> working — agy's write bug is implementer-only). Aggregation is **`union-on-verified-critical`**:
+> family (`family_of()` knows openai/anthropic/google/**xai**/**minimax**/**zhipu**). Gemini joins
+> read-only via `dispatch-review.sh --runner agy`, and **xAI via `--runner grok`** (put a
+> `grok-build`/`grok-composer-2.5-fast` in the panel for an extra disjoint family). Aggregation is **`union-on-verified-critical`**:
 > any panelist's *verified* Critical blocks; a panelist's empty/no-verdict is fail-closed (NOT a
 > pass); **majority vote is forbidden** (it would suppress the single-track blind-spot catch that
 > is the whole reason for a panel).
@@ -51,10 +52,10 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 |-------|---------|--------|
 | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
-| `reviewer_runner` | how the reviewer is invoked | `codex` (→ `codex exec -m <engine> -c model_reasoning_effort=<effort>`) |
-| `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`) |
+| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only, scratch-cwd) `\| auto` |
+| `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
-| `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy` (→ `dispatch-hetero.sh --runner`) |
+| `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
 | `loop_max_rounds` | adversarial-loop convergence cap per phase | integer (default 5) |
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
@@ -114,6 +115,32 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   it can't run build/test mid-turn; the harness commits, the panel verifies), and Docker
   headless auth is still broken (#223/#479) so run agy on an interactively-authed host. `codex`/
   `gpt-5.3-codex-spark` remains the default for tasks where the agent must run build/test itself.
+- **`grok` as implementer or reviewer (v2.26.6/2.26.7).** xAI Grok Build CLI; models
+  `grok-build` and `grok-composer-2.5-fast` (Composer 2.5 ships inside the grok CLI on the
+  Grok Build plan). Unlike agy, grok `-p` HONORS `--cwd` so no anchor hack is needed. To use:
+  `implementer_engine: grok-composer-2.5-fast` + `implementer_runner: grok`, OR put a
+  `grok-build` in `qc_panel` / set `reviewer_runner: grok`. Requires the `grok` CLI installed +
+  logged in (`grok login`). Implementer is EDIT-ONLY + wrapper-commit (like agy); reviewer is
+  read-only by construction. ([[project_grok-hetero-implementer]])
+- **`cc-shim` as implementer (v2.26.8) — Claude Code CLI → any Anthropic-compatible model.**
+  Drives `claude -p` against an arbitrary Anthropic-compatible endpoint, so models like
+  **MiniMax-M3** or **GLM** become implementers (for an IMPLEMENTER the MODEL writes the code,
+  not the driver family). To use:
+  ```
+  - implementer_engine: MiniMax-M3
+  - implementer_runner: cc-shim
+  ```
+  and **export the endpoint + token in the environment** before running `/l5` (cc-shim is
+  EXPLICIT-only and refuses to run without them, so it can never silently fall back to your real
+  Claude quota):
+  ```
+  export ANTHROPIC_BASE_URL='https://api.minimax.io/anthropic'   # the .io host; .minimaxi.com 401s
+  export ANTHROPIC_AUTH_TOKEN='<your MiniMax API key>'           # bearer token (NOT ANTHROPIC_API_KEY)
+  ```
+  Notes: `ANTHROPIC_API_KEY` is intentionally **unset** before launching `claude` so a real-Anthropic
+  key can't override the shim token — set `ANTHROPIC_AUTH_TOKEN`, not `ANTHROPIC_API_KEY`. EDIT-ONLY +
+  wrapper-commit; prompt fed via STDIN. Verified with real MiniMax-M3 (M3 is clean; M2.x leaks a
+  `thinking` block). Works for any Anthropic-compat endpoint (GLM/zai too).
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

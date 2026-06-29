@@ -17,21 +17,23 @@
 #
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
-#       [--model "Gemini 3.5 Flash (High)"]   # default; names from `agy models`
-#       [--runner auto|codex|agy]              # default auto: codex iff model matches
-#                                              #   *gpt*/*codex*, else agy. Explicit
-#                                              #   wins (do NOT rely on model-name luck).
+#       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
+#       [--runner auto|codex|agy|grok]         # default auto: *gpt*/*codex*→codex,
+#                                              #   *grok*/*composer*→grok, else agy.
+#                                              #   Explicit wins (don't rely on name luck).
+#                                              #   grok models: grok-build, grok-composer-2.5-fast
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--agy-bin agy]                        # alternate binary (test seam)
+#       [--grok-bin grok]                      # alternate binary (test seam)
 #       [--keep-worktree]                      # keep worktree even on success
 #
 # OUTPUT: one JSON object on stdout (agent stdout goes to a log file, never
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -65,11 +67,14 @@ MODEL="Gemini 3.5 Flash (High)"
 BASE="develop"
 TIMEOUT="9m"
 AGY_BIN="agy"
+GROK_BIN="grok"
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
 RUNNER="auto"
 EFFORT="xhigh"
+IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
+IS_GROK=0
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
 
@@ -83,7 +88,8 @@ emit() { # status commit files ins del worktree error
   [ -n "${6:-}" ] && wt_json="\"$(json_escape "$6")\""
   [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
   local runner="agy"
-  [ "$IS_CODEX" -eq 1 ] && runner="codex"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
@@ -93,7 +99,8 @@ emit() { # status commit files ins del worktree error
 
 die_precondition() {
   local runner="agy"
-  [ "$IS_CODEX" -eq 1 ] && runner="codex"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
     "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
   exit 2
@@ -109,6 +116,7 @@ while [ $# -gt 0 ]; do
     --base) BASE="${2:-}"; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
+    --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
@@ -121,17 +129,22 @@ done
 # — which on this repo writes its plugin install copy (no_op + false self-report,
 # memory: agy-writes-install-dir). Match the codex FAMILY, not one string.
 IS_CODEX=0
+IS_GROK=0
 case "$RUNNER" in
   codex) IS_CODEX=1 ;;
-  agy)   IS_CODEX=0 ;;
+  agy)   ;;
+  grok)  IS_GROK=1 ;;
   auto)
-    # case-insensitive: GPT-5.5 / gpt-5.3-codex-spark / *Codex* all → codex
+    # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
+    # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
     model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
     if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
       IS_CODEX=1
+    elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
+      IS_GROK=1
     fi
     ;;
-  *) die_precondition "--runner must be one of auto|codex|agy (got: $RUNNER)" ;;
+  *) die_precondition "--runner must be one of auto|codex|agy|grok (got: $RUNNER)" ;;
 esac
 
 case "$EFFORT" in
@@ -146,6 +159,8 @@ esac
 
 if [ "$IS_CODEX" -eq 1 ]; then
   command -v "codex" >/dev/null 2>&1 || die_precondition "codex binary not found (install OpenAI Codex or ensure it is in PATH)"
+elif [ "$IS_GROK" -eq 1 ]; then
+  command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -249,6 +264,25 @@ if [ "$IS_CODEX" -eq 1 ]; then
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
       -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE"
+elif [ "$IS_GROK" -eq 1 ]; then
+  # grok (xAI Grok Build CLI; models grok-build / grok-composer-2.5-fast). Unlike agy,
+  # grok `-p` HONORS --cwd (verified Spike 2026-06-29: grok-composer-2.5-fast and
+  # grok-build both created files inside --cwd, exit 0) — so NO absolute-path anchor
+  # is needed. We still run grok EDIT-ONLY + wrapper-commit (same robust rail as agy):
+  # the verdict is read from git artifacts, never from grok committing on its own.
+  # Flags are all Spike-verified present: -p/--single, --cwd, --model, --always-approve
+  # (headless tool auto-approve), --no-alt-screen (clean capture under a pipe),
+  # --output-format json. (Do NOT add unverified flags like --no-auto-update.)
+  GROK_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --cwd "$1" --model "$4" \
+      --always-approve --no-alt-screen --output-format json' \
+      _ "$WT" "$GROK_BIN" "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL"
 else
   printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at 10s so the agent cannot RUN build/test/git mid-turn (the -p turn yields first). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
   # agy (Gemini) in -p print mode CANNOT reliably run a long command then commit:
@@ -280,14 +314,15 @@ run build/test or to commit.
 fi
 trap - INT TERM
 
-# agy edit-only → the wrapper makes the commit (deterministic; avoids the -p yield
-# described above). Only when agy left edits but no commit; codex commits itself.
-# If agy already committed (HEAD moved) or left nothing, this is a no-op.
+# agy/grok run edit-only → the wrapper makes the commit (deterministic). Only fires
+# when the worker left edits but no commit; codex commits itself. If the worker
+# already committed (HEAD moved) or left nothing, this is a no-op.
 if [ "$IS_CODEX" -eq 0 ] \
    && [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
+  _runner_label="agy"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"
   git -C "$WT" add -A
-  git -C "$WT" -c commit.gpgsign=false commit -q -m "dispatch-hetero(agy): edits on $BRANCH" >/dev/null 2>&1
+  git -C "$WT" -c commit.gpgsign=false commit -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
 fi
 
 # --- verify by artifacts, never by self-report ---

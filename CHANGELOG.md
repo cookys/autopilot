@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.6 — grok hetero implementer (xAI Grok Build, 3rd dispatch family)
+
+**Headline**: `dispatch-hetero.sh` gains a `--runner grok` implementer (xAI Grok Build CLI) alongside codex/OpenAI and agy/Gemini — a genuine third vendor family for decorrelated dispatch. Models: `grok-build` and `grok-composer-2.5-fast` (Composer 2.5 ships inside the grok CLI on the Grok Build plan). Wired only after a real CLI Spike (spike-before-assert): unlike agy, grok `-p` HONORS `--cwd` (no absolute-path anchor needed), and only flags actually present in `grok --help` are used (deliberately NOT the `--no-auto-update` the survey suggested). PATCH (new runner capability on an existing script; no new user-facing skill/agent).
+
+### Added
+- `dispatch-hetero.sh --runner grok` (+ `--grok-bin` test seam): EDIT-ONLY + wrapper-commit, same git-artifact verification rail as agy (verdict from git, never self-report). `auto` routing extended: `*grok*`/`*composer*` → grok. Invocation uses Spike-verified flags only (`-p --cwd --model --always-approve --no-alt-screen --output-format json`).
+- Provenance: JSON `runner` field now reports `"grok"`; wrapper-commit message is runner-aware (`dispatch-hetero(grok|agy): …`).
+
+### Verification
+- Spike (2026-06-29, real `grok` CLI): both models created files inside `--cwd` (exit 0); full `dispatch-hetero.sh --runner grok` e2e returned `committed`, `runner:grok`, `containment:cgroup`, `contained:true`, correct edit; `auto`-routing on `grok-composer-2.5-fast` resolved to `grok`.
+
+### To use via /l5
+- Set `implementer_engine: grok-composer-2.5-fast` (or `grok-build`) + `implementer_runner: grok` in the project's `.claude/review-loop-config.md`. No further code change needed.
+
+### Not in this release (follow-ups)
+- grok as a `dispatch-review.sh` reviewer (new reviewer family); MiniMax M3 as an implementer via the CC + `ANTHROPIC_BASE_URL` shim path (different integration than grok's native CLI).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.26.5 — hetero loop-review remediation (doc-drift mechanization + gate hardening)
 
 **Headline**: A dual heterogeneous-engine review (gpt-5.5 xhigh via codex + Gemini 3.5 Flash High via agy) over the whole repo, every finding cross-verified against real `path:line` and then driven to convergence through a gpt-5.5 review loop. Fixes a quality-gate hole (committed stubs slipping `completeness-scan --range`), a PreToolUse hook that ENXIO'd on `/dev/stdin`, a data-loss-prone eval cleanup, and a layer of stale operational-doc references — plus a new deterministic gate that mechanizes the stale-script-reference class so it can't recur. PATCH (hardening of existing shipped code; no new user-facing surface).

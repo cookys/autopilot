@@ -189,7 +189,7 @@ function buildEditPlan(args) {
     : `${H} hooks (${D} default-on, ${O} opt-in)`;
   const hookFragFind = /\b\d+ hooks \(\d+ default-on, \d+ opt-in(?:, \d+ disabled)?\)/g;
 
-  return [
+  const plans = [
     {
       file: '.claude-plugin/plugin.json',
       replacements: [
@@ -243,6 +243,25 @@ function buildEditPlan(args) {
       ],
     },
   ];
+
+  // README.zh-TW.md — version badge only (mirror of README.md). check-readme-parity.js
+  // asserts the two READMEs' badges stay in lockstep; keeping zh-TW out of the sync plan
+  // let the badge drift (v2.26.3 vs 2.26.4 on 2026-06-29). Included ONLY when the file
+  // exists so minimal sandboxes / forks without a zh-TW README don't fail the bump.
+  if (fs.existsSync(path.join(REPO_ROOT, 'README.zh-TW.md'))) {
+    plans.push({
+      file: 'README.zh-TW.md',
+      replacements: [
+        { find: /badge\/version-\d+\.\d+\.\d+-/g, to: `badge/version-${V}-`, expectAfter: 1, label: 'version badge (zh-TW)' },
+        { find: /alt="v\d+\.\d+\.\d+"/g, to: `alt="v${V}"`, expectAfter: 1, label: 'version badge alt (zh-TW)' },
+      ],
+      verifyPatterns: [
+        { regex: new RegExp(`badge/version-${escapeRegex(V)}-`, 'g'), expect: 1, label: `zh-TW version badge has ${V}` },
+      ],
+    });
+  }
+
+  return plans;
 }
 
 function escapeRegex(s) {

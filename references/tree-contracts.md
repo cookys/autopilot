@@ -1,11 +1,11 @@
 # Tree Contracts — Task-Tree Engine v1
 
 Canonical schemas for the append-only JSONL event log, node report, and
-related structures. All consumers (tree.sh, check-node-report.sh, QC panel,
+related structures. All consumers (tree.js, check-node-report.js, QC panel,
 downstream skills) MUST treat this document as the single source of truth.
 
-> **Supersedes**: inline comments in scripts/tree.sh (tree.sh comments are
-> informational; any conflict with this document is a bug in tree.sh).
+> **Supersedes**: inline comments in scripts/tree.js (tree.js comments are
+> informational; any conflict with this document is a bug in tree.js).
 
 ---
 
@@ -17,7 +17,7 @@ These two domains have **zero field overlap**:
 | Domain | Owner | Lives in | Examples |
 |--------|-------|----------|---------|
 | INTENT | Human (author) | Project README / OKR docs | OKRs, scope boundary, constraints, success criteria, non-goals |
-| EXECUTION STATE | Machine (tree.sh) | `docs/projects/<proj>/tree/` | Phases, statuses, decisions, verdicts, escalations, DOA log |
+| EXECUTION STATE | Machine (tree.js) | `docs/projects/<proj>/tree/` | Phases, statuses, decisions, verdicts, escalations, DOA log |
 
 When a project opts into the tree, README templates lose any execution-status
 fields (current status, active phase, blocking items). Those fields move
@@ -27,7 +27,7 @@ exclusively into the tree's event log and derived index.
 
 ## 2. Event envelope
 
-Every event emitted via `tree.sh emit` MUST carry these four fields at the
+Every event emitted via `tree.js emit` MUST carry these four fields at the
 **top level** of the JSON object:
 
 | Field | Type | Constraint |
@@ -37,7 +37,7 @@ Every event emitted via `tree.sh emit` MUST carry these four fields at the
 | `node` | string | Node identifier; must match the `<node-id>` argument to `emit` |
 | `type` | string | One of the event types enumerated in §3 |
 
-The envelope is validated by `tree.sh emit` before appending. Events that fail
+The envelope is validated by `tree.js emit` before appending. Events that fail
 validation are rejected and nothing is written.
 
 **Single-line rule**: each event must be a single JSON line with no embedded
@@ -49,7 +49,7 @@ newlines. The JSONL format requires this for append-safe parsing.
 
 ### 3.1 `tree_initialized`
 
-Emitted exactly once by `tree.sh init`. Bootstraps the event log.
+Emitted exactly once by `tree.js init`. Bootstraps the event log.
 
 | Payload field | Type | Notes |
 |---------------|------|-------|
@@ -69,7 +69,7 @@ Declares a new node in the tree.
 
 > **CRITICAL — top-level field rule**: `question`, `options`, and
 > `evidence_pointers` are read from the event **top level** by the index fold
-> in `tree.sh`. Do NOT nest them under a `data` key. A `data`-nested object
+> in `tree.js`. Do NOT nest them under a `data` key. A `data`-nested object
 > will be silently ignored and the fields will default to `null`/`[]`.
 
 ### 3.3 `delegated`
@@ -133,7 +133,7 @@ Records the final verdict on a node. Sets node status to `"complete"`.
 
 ### 3.8 `node_report`
 
-Submits a full node report (the artifact that `check-node-report.sh` validates).
+Submits a full node report (the artifact that `check-node-report.js` validates).
 Sets the node's `report`, `artifact_paths`, `evidence_pointers`, and
 `artifact_sha256` fields in the index.
 
@@ -178,7 +178,7 @@ simultaneously (documented bulk fallback, not a bug).
 
 ### 3.11 `manager_raw_read`
 
-Emitted automatically by `tree.sh fetch <proj> <node> --raw`. Logs the fact
+Emitted automatically by `tree.js fetch <proj> <node> --raw`. Logs the fact
 that the manager explicitly fetched raw artifact content (an escalation valve
 event tracked for KR1 measurement).
 
@@ -196,7 +196,7 @@ the P6 adapter post-signoff activation is blocked.**
 | Payload field | Type | Required | Notes |
 |---------------|------|----------|-------|
 | `authorized_by` | string | yes | The Board identity granting signoff (e.g. user handle or role) |
-| `decision` | string | yes | The Board's decision. ONLY `"graduate"` activates post-signoff mode; any other value (e.g. `"extend"`, `"abort"`) is recorded but the gate's `active` field stays `false`. Per-type emit validation is not yet wired (tree.sh validates the envelope only), so enforcement lives in the index fold + `board-status` consumers — gate on `.active`, never on `.present` alone |
+| `decision` | string | yes | The Board's decision. ONLY `"graduate"` activates post-signoff mode; any other value (e.g. `"extend"`, `"abort"`) is recorded but the gate's `active` field stays `false`. Per-type emit validation is not yet wired (tree.js validates the envelope only), so enforcement lives in the index fold + `board-status` consumers — gate on `.active`, never on `.present` alone |
 | `scope` | string | no | Optional human-readable scope qualifier (e.g. `"p5-graduation-criteria-met"`) |
 
 The full event envelope (§2 — `schema_version`, `ts`, `node`, `type`) is required
@@ -220,13 +220,13 @@ The index fold records this event at the top level as
 `board_signoff: {present: true, ts, authorized_by, decision, active}` (or
 `null` when absent). `active` is `true` only when `decision == "graduate"` —
 it is THE authority-gate field; `present` alone is not sufficient.
-Use `scripts/tree.sh board-status <proj>` to inspect.
+Use `scripts/tree.js board-status <proj>` to inspect.
 
 ---
 
 ## 4. Node report schema
 
-The **node report** is the artifact validated by `scripts/check-node-report.sh`.
+The **node report** is the artifact validated by `scripts/check-node-report.js`.
 It is a JSON object (typically a standalone file, also embeddable as a
 `node_report` event payload) with these fields:
 
@@ -259,7 +259,7 @@ Points to a specific range of lines in a source file, anchored to a commit SHA.
 **Canonical text form**: `<path>:<start>-<end>@<commit-sha>`
 
 Examples:
-- `scripts/tree.sh:141-168@a1b2c3d` — lines 141–168 of tree.sh at commit `a1b2c3d`
+- `scripts/tree.js:141-168@a1b2c3d` — lines 141–168 of tree.js at commit `a1b2c3d`
 - `references/tree-contracts.md:1-10@HEAD` — first 10 lines at HEAD (only valid at HEAD; use a real SHA for stable references)
 
 Resolution rules:
@@ -288,7 +288,7 @@ Resolution rules:
 ### 5.3 Moved-file resolution
 
 When a `file:line-range` pointer's path does not exist in the working tree,
-`check-node-report.sh` operates in one of two modes depending on whether a
+`check-node-report.js` operates in one of two modes depending on whether a
 commit-SHA anchor is present:
 
 **Mode A — SHA anchor present** (`<path>:<start>-<end>@<sha>`):
@@ -318,7 +318,7 @@ degraded warning.
 **Never silently pass a moved-file case.** A `pointer_stale` or
 `pointer_degraded_basename_match` warning is the minimum required signal.
 
-**Update the script header** (`check-node-report.sh` lines 18-25) to document
+**Update the script header** (`check-node-report.js` lines 18-25) to document
 this two-mode behavior when modifying pointer resolution logic.
 
 ---
@@ -326,18 +326,18 @@ this two-mode behavior when modifying pointer resolution logic.
 ## 6. Index schema (`index.json`)
 
 `index.json` is a **derived, rebuildable** file (gitignored). It is
-reconstructed deterministically from `events.jsonl` by `tree.sh rebuild-index`.
-Its schema is informational — consumers should use `tree.sh` subcommands, not
+reconstructed deterministically from `events.jsonl` by `tree.js rebuild-index`.
+Its schema is informational — consumers should use `tree.js` subcommands, not
 read `index.json` directly.
 
 | Top-level field | Type | Notes |
 |-----------------|------|-------|
-| `schema_version` | integer | Matches `SCHEMA_VERSION` in tree.sh |
+| `schema_version` | integer | Matches `SCHEMA_VERSION` in tree.js |
 | `rebuilt_at` | string | ISO-8601 UTC timestamp of last rebuild |
 | `events_hash` | string | SHA256 of all valid complete events (determinism signal) |
 | `event_count` | integer | Number of valid complete events processed |
 | `truncated_tail` | object or null | Tombstone for a partial last line; see §7 |
-| `board_signoff` | object or null | `{present: true, ts, authorized_by, decision, active}` when a `board_signoff` event exists; `null` otherwise. `active` = (`decision == "graduate"`) is the authority gate. Use `tree.sh board-status <proj>` to read. |
+| `board_signoff` | object or null | `{present: true, ts, authorized_by, decision, active}` when a `board_signoff` event exists; `null` otherwise. `active` = (`decision == "graduate"`) is the authority gate. Use `tree.js board-status <proj>` to read. |
 | `nodes` | object | Map of `node_id → node_state` |
 | `escalations` | array | Top-level list of all escalation objects (open and resolved) |
 | `decisions` | array | Top-level list of all decision forks (open and resolved) |
@@ -404,7 +404,7 @@ contract violation and counts as a test failure in the acceptance matrix.
    Concurrent emitters are safe; a failed lock acquisition aborts the emit
    (never a silent partial write).
 3. **Index rebuildability**: `index.json` can always be reconstructed from
-   `events.jsonl` by running `tree.sh rebuild-index`. Consumers MUST NOT
+   `events.jsonl` by running `tree.js rebuild-index`. Consumers MUST NOT
    rely on the index file surviving across sessions.
 4. **Decision completeness**: escalations must carry enough information
    (`question`, `options`, `evidence_pointers`) that the manager can

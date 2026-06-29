@@ -44,7 +44,8 @@ is_valid_domain() {
 
 is_excluded() {
   case "$1" in
-    *.lock|package-lock.json|yarn.lock|pnpm-lock.yaml|Cargo.lock|go.sum|\
+    *.lock|package-lock.json|*/package-lock.json|yarn.lock|*/yarn.lock|\
+    pnpm-lock.yaml|*/pnpm-lock.yaml|Cargo.lock|*/Cargo.lock|go.sum|*/go.sum|\
     *.min.js|*.min.css|dist/*|*/dist/*|build/*|*/build/*|vendor/*|*/vendor/*|\
     node_modules/*|*/node_modules/*|*.generated.*|*.pb.go|*_pb2.py)
       return 0

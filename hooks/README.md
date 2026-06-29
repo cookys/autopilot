@@ -28,7 +28,10 @@ transcript JSONL** via [`transcript-reader-lib.js`](transcript-reader-lib.js)
 **Re-enabled via fd-0 read (opt-in):** the v2.7.4 PreToolUse blockers + `session-summary`
 were NOT permanently unrecoverable — they only needed to read fd 0 instead of the
 `/dev/stdin` path (fd 0 carries the payload on Stop too — verified 2.1.186). Now
-shipped opt-in in `settings.example.json` (Tier B):
+wired opt-in directly in `hooks.json`, default-off and self-gated at runtime via
+`_shared/opt-in.js` against `hooks/opt-in-manifest.json` (the old
+`settings.example.json` copy-paste route was unusable — `${CLAUDE_PLUGIN_ROOT}`
+does not expand in user/project `settings.json`; corrected v2.26.1–2.26.2):
 
 | Hook | Event | Fix |
 |------|-------|-----|
@@ -138,9 +141,9 @@ Registered in `hooks.json`. Active for all autopilot users. All are non-destruct
 
 ### Hook order on PostToolUse
 
-Intra-`.*` matcher order is deterministic: `intent-capture → log-error → reload-watch`. intent-capture intentionally placed before log-error so the resume hint reflects state BEFORE any error capture noise.
+Intra-`.*` matcher order is deterministic: `intent-capture → reload-watch → audit-log → log-error → failure-escalation` (per `hooks.json`). intent-capture intentionally placed before log-error so the resume hint reflects state BEFORE any error capture noise.
 
-`suggest-compact` runs in a separate `Write|Edit` matcher block, `failure-escalation` + `audit-log` in `Bash` matcher block — Claude Code may execute different matcher blocks in parallel / non-deterministic order. Only intra-matcher sequencing is guaranteed.
+`suggest-compact` runs in a separate `Write|Edit` matcher block — Claude Code may execute different matcher blocks in parallel / non-deterministic order. Only intra-matcher sequencing is guaranteed.
 
 ### Testing PreCompact: `/compact` ≠ real PreCompact
 

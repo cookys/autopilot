@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.8 — cc-shim implementer (Claude Code CLI → any Anthropic-compatible model, e.g. MiniMax-M3)
+
+**Headline**: `dispatch-hetero.sh --runner cc-shim` drives the Claude Code CLI (`claude -p`) against an arbitrary Anthropic-compatible endpoint (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` from the env), making any such model an implementer — verified end-to-end with **MiniMax-M3**. Corrects an earlier category error: for an IMPLEMENTER the **model** writes the code, so a base-url shim IS a viable implementer (decorrelation by driver family matters for reviewers, not implementers). PATCH (new runner on an existing script).
+
+### Added
+- `dispatch-hetero.sh --runner cc-shim`: EXPLICIT-only (never auto-routed). Precondition requires `ANTHROPIC_BASE_URL` + a token (else it would dispatch to vanilla Claude — homogeneous + the user's own quota). Prompt fed via STDIN (`claude -p < file`, dodges ARG_MAX); `env -u ANTHROPIC_API_KEY` so the shim token is the sole auth; EDIT-ONLY + wrapper-commit (same git-artifact rail as agy/grok); runner-aware commit message + INT/TERM-trap cleanup of the prompt temp.
+
+### Verification
+- Spike (2026-06-29, real MiniMax-M3 via `https://api.minimax.io/anthropic`): the endpoint/model/auth confirmed by a direct `/v1/messages` probe (M3 returned clean text, no `reasoning_content` leak — unlike M2.7 which did); `claude -p` edited files in cwd from a STDIN prompt; full `dispatch-hetero.sh --runner cc-shim --model MiniMax-M3` e2e returned `committed` + cgroup-contained + correct edit; the missing-base-url precondition fired correctly.
+
+### To use via /l5
+- Set `implementer_engine: MiniMax-M3` + `implementer_runner: cc-shim` in `.claude/review-loop-config.md`, and export `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in the environment. Works for any Anthropic-compatible endpoint (GLM/zai, etc.), not just MiniMax.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.26.7 — grok reviewer (dispatch-review.sh --runner grok)
 
 **Headline**: `dispatch-review.sh` gains a `--runner grok` reviewer, so a disjoint-family qc panel can include an xAI vote (the read-only sibling of v2.26.6's grok implementer). Read-only BY CONSTRUCTION on an untrusted diff: scratch `--cwd` (never the repo), no `--always-approve` (cannot auto-edit), `--disable-web-search`, `--output-format plain` so the VERDICT/FINDINGS land at line-start for the parser. PATCH (new reviewer runner on an existing script).

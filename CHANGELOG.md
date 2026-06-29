@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.7 — grok reviewer (dispatch-review.sh --runner grok)
+
+**Headline**: `dispatch-review.sh` gains a `--runner grok` reviewer, so a disjoint-family qc panel can include an xAI vote (the read-only sibling of v2.26.6's grok implementer). Read-only BY CONSTRUCTION on an untrusted diff: scratch `--cwd` (never the repo), no `--always-approve` (cannot auto-edit), `--disable-web-search`, `--output-format plain` so the VERDICT/FINDINGS land at line-start for the parser. PATCH (new reviewer runner on an existing script).
+
+### Added
+- `dispatch-review.sh --runner grok` (models `grok-build` / `grok-composer-2.5-fast`). grok delivers stdout under a pipe (unlike agy), so a direct redirect captures it — no `script -qec` pseudo-TTY needed. The existing fail-closed parser (empty/unparseable → `no_verdict`, never SHIP) covers it unchanged.
+
+### Verification
+- Spike (2026-06-29, real `grok`): caught a planted `=`-vs-`===` assignment bug (`VERDICT: FIX-THEN-SHIP` with correct findings); a clean diff returned `SHIP-AS-IS`. Normal LLM-reviewer verdict variance observed (occasional over-flag) — safely absorbed by the parser's fail-toward-block resolution.
+
+### To use
+- Add `grok-build` or `grok-composer-2.5-fast` to a project's `qc_panel` in `.claude/review-loop-config.md` (the resolver already emits the panel; the runner is now wireable).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.26.6 — grok hetero implementer (xAI Grok Build, 3rd dispatch family)
 
 **Headline**: `dispatch-hetero.sh` gains a `--runner grok` implementer (xAI Grok Build CLI) alongside codex/OpenAI and agy/Gemini — a genuine third vendor family for decorrelated dispatch. Models: `grok-build` and `grok-composer-2.5-fast` (Composer 2.5 ships inside the grok CLI on the Grok Build plan). Wired only after a real CLI Spike (spike-before-assert): unlike agy, grok `-p` HONORS `--cwd` (no absolute-path anchor needed), and only flags actually present in `grok --help` are used (deliberately NOT the `--no-auto-update` the survey suggested). PATCH (new runner capability on an existing script; no new user-facing skill/agent).

@@ -75,6 +75,7 @@ RUNNER="auto"
 EFFORT="xhigh"
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
+GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
 
@@ -231,7 +232,7 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 
 # A TERM during the long run orphans the worktree + branch AND can leave worker
 # descendants. Trap it to reap the container first, then the worktree + branch.
-trap 'reap_container; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -270,7 +271,7 @@ elif [ "$IS_GROK" -eq 1 ]; then
   # grok-build both created files inside --cwd, exit 0) — so NO absolute-path anchor
   # is needed. We still run grok EDIT-ONLY + wrapper-commit (same robust rail as agy):
   # the verdict is read from git artifacts, never from grok committing on its own.
-  # Flags are all Spike-verified present: -p/--single, --cwd, --model, --always-approve
+  # Flags are all Spike-verified present: --prompt-file, --cwd, --model, --always-approve
   # (headless tool auto-approve), --no-alt-screen (clean capture under a pipe),
   # --output-format json. (Do NOT add unverified flags like --no-auto-update.)
   GROK_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
@@ -280,9 +281,15 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
 ===
 
 "
-  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --cwd "$1" --model "$4" \
+  # Feed via --prompt-file (NOT -p "$(cat …)"): a large task prompt as a single argv arg
+  # can hit ARG_MAX before grok runs. The combined file MUST be an absolute path — grok
+  # resolves --prompt-file relative to --cwd (Spike-verified 2026-06-29). mktemp is absolute.
+  GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
+  printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec "$2" --prompt-file "$3" --cwd "$1" --model "$4" \
       --always-approve --no-alt-screen --output-format json' \
-      _ "$WT" "$GROK_BIN" "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL"
+      _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
+  rm -f "$GROK_PROMPT_FILE"
 else
   printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at 10s so the agent cannot RUN build/test/git mid-turn (the -p turn yields first). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
   # agy (Gemini) in -p print mode CANNOT reliably run a long command then commit:

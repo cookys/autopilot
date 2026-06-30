@@ -8,7 +8,7 @@ SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
 HELP_OUT="$($SCRIPT --help 2>&1)"
 HELP_RC=$?
 assert_exit_code "$HELP_RC" "0" "--help exits 0"
-assert_contains "$HELP_OUT" "subcommand" "--help prints subcommand"
+assert_contains "$HELP_OUT" "Subcommand" "--help prints subcommand"
 
 PASS_PANEL='printf '\''{"verdict":"fail"}'\'''
 PARTIAL_PASS_PANEL='COUNT_FILE='"$TEST_TMP"'/engine-qualify-sens.count; N="$(cat "$COUNT_FILE" 2>/dev/null || echo 0)"; N=$((N + 1)); printf "%s" "$N" > "$COUNT_FILE"; if [ "$N" -le 8 ]; then printf "%s" '\''{"verdict":"fail"}'\''; else printf "%s" '\''{"verdict":"pass"}'\''; fi'
@@ -37,7 +37,9 @@ assert_contains "$SENS_OUT" '"qualified":false' "qualified false on low sensitiv
 # 5) --emit-row emits engine-scorecard row accepted by record
 ROW_OUT="$($SCRIPT reviewer --engine eng-review --runner cc-shim --family openai --panel-cmd "$PASS_PANEL" --emit-row)"
 RECORD_RC=0
-printf '%s\n' "$ROW_OUT" | node "$REPO_ROOT/scripts/engine-scorecard.js" record >/tmp/engine-qualify-row.out 2>/tmp/engine-qualify-row.err || RECORD_RC=$?
+ROW_OUT_FILE="$(mktemp "$TEST_TMP/engine-qualify-row.out.XXXXXX")"
+ROW_ERR_FILE="$(mktemp "$TEST_TMP/engine-qualify-row.err.XXXXXX")"
+printf '%s\n' "$ROW_OUT" | node "$REPO_ROOT/scripts/engine-scorecard.js" record >"$ROW_OUT_FILE" 2>"$ROW_ERR_FILE" || RECORD_RC=$?
 assert_exit_code "$RECORD_RC" "0" "emit-row output is accepted by engine-scorecard record"
 assert_contains "$ROW_OUT" '"source":"unknown"' "emit-row row uses cost.source=unknown"
 assert_contains "$ROW_OUT" '"status":"qualified"' "emit-row on pass uses qualified status"

@@ -6,16 +6,18 @@
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 json_get() { # json key -> raw json value
   local json="$1" key="$2"
-  JSON_VALUE="$json" node - "$key" <<'NODE'
+  export JSON_VALUE="$json"
+  node - "$key" <<'NODE'
 const fs = require('fs');
 const payload = process.env.JSON_VALUE || '';
-const key = process.argv[1];
+const key = process.argv[2];
 if (!payload) process.exit(0);
 const parsed = JSON.parse(payload);
 const value = parsed && parsed[key];
 if (value === undefined) process.exit(0);
 process.stdout.write(JSON.stringify(value));
 NODE
+  unset JSON_VALUE
 }
 
 # 1. --help exits 0
@@ -48,6 +50,10 @@ assert_eq "1" "$(bash "$SCRIPT" --field required_review_families)" "--field requ
 assert_eq "false" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
+EMPTY_SCDIR="$TEST_TMP/empty-scorecard"
+mkdir -p "$EMPTY_SCDIR"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "--field reviewer_qualified returns false when no reviewer scorecard row"
+assert_eq "[]" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "--field fallback_ladder returns [] when no reviewer scorecard row"
 
 # 5. unknown field → exit 2
 OUT="$(bash "$SCRIPT" --field nope 2>&1)"; EXIT=$?
@@ -215,6 +221,8 @@ EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine
 QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard)"
 assert_eq "true" "$(json_get "$QUAL_OUT" reviewer_qualified)" "qualified reviewer row => reviewer_qualified true"
 assert_eq "$EXPECTED_LADDER" "$(json_get "$QUAL_OUT" fallback_ladder)" "fallback_ladder matches scorecard ladder output"
+assert_eq "true" "$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "field reviewer_qualified true for qualified row"
+assert_eq "$EXPECTED_LADDER" "$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "field fallback_ladder matches scorecard ladder output"
 
 # 18. --check-scorecard with NO matching row fail-closes as unqualified
 EMPTY_SCDIR="$TEST_TMP/check-miss"
@@ -224,5 +232,34 @@ assert_eq "false" "$(json_get "$MISS_OUT" reviewer_qualified)" "missing reviewer
 assert_eq "[]" "$(json_get "$MISS_OUT" fallback_ladder)" "missing reviewer scorecard row still emits fallback ladder"
 assert_eq "0" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard >/dev/null 2>&1; echo $?)" "missing reviewer scorecard row without --enforce exits 0"
 assert_eq "3" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "missing reviewer scorecard row with --enforce exits 3"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "field reviewer_qualified false for missing reviewer row"
+assert_eq "[]" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "field fallback_ladder [] for missing reviewer row"
+
+# 19. --check-scorecard with FAILED or EXPIRED row also fail-closes and still emits ladder
+FAILDIR="$TEST_TMP/check-failed"
+mkdir -p "$FAILDIR"
+RECFAIL_JSON="$FAILDIR/rec.json"
+cat > "$RECFAIL_JSON" <<'JSON'
+{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECFAIL_JSON" > /dev/null
+FAIL_LADDER="$(ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer)"
+FAIL_OUT="$(ENGINE_SCORECARD_DIR="$FAILDIR" bash "$SCRIPT" --check-scorecard)"
+assert_eq "false" "$(json_get "$FAIL_OUT" reviewer_qualified)" "failed reviewer row => reviewer_qualified false"
+assert_eq "$FAIL_LADDER" "$(json_get "$FAIL_OUT" fallback_ladder)" "failed row still emits fallback ladder"
+assert_eq "3" "$(ENGINE_SCORECARD_DIR="$FAILDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "failed reviewer row with --enforce exits 3"
+
+EXPDIR="$TEST_TMP/check-expired"
+mkdir -p "$EXPDIR"
+RECEXPIRED_JSON="$EXPDIR/rec.json"
+cat > "$RECEXPIRED_JSON" <<'JSON'
+{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-01-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"expired","qualified_at":"2026-01-01","expires":"2026-01-02"}
+JSON
+ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECEXPIRED_JSON" > /dev/null
+EXP_LADDER="$(ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer)"
+EXP_OUT="$(ENGINE_SCORECARD_DIR="$EXPDIR" bash "$SCRIPT" --check-scorecard)"
+assert_eq "false" "$(json_get "$EXP_OUT" reviewer_qualified)" "expired reviewer row => reviewer_qualified false"
+assert_eq "$EXP_LADDER" "$(json_get "$EXP_OUT" fallback_ladder)" "expired row still emits fallback ladder"
+assert_eq "3" "$(ENGINE_SCORECARD_DIR="$EXPDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "expired reviewer row with --enforce exits 3"
 
 finalize_test

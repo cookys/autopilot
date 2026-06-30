@@ -7,8 +7,10 @@
 # Usage:
 #   scripts/resolve-review-loop.sh                 # emit resolved config JSON
 #   scripts/resolve-review-loop.sh --field reviewer_engine   # one raw field (for shell)
+#   scripts/resolve-review-loop.sh --check-scorecard   # include reviewer_qualified + fallback_ladder
 #   Risk inputs (optional): --source-trust high|low --diff-lines N --protected-path 0|1
 #     --oracle-available 0|1 --security-surface 0|1  (drive deterministic review_risk)
+#   --check-scorecard  # include scorecard gate signal in output (opt-in, no extra keys by default)
 #   --enforce  # OPT-IN hard gate: exit 3 (still emits JSON/field) when the policy says BLOCK
 #              # — a high-risk change whose required cross-family decorrelation is unsatisfied.
 #              # Default (no --enforce) stays exit-0 data mode like resolve-doa/resolve-qc-gate;
@@ -321,31 +323,45 @@ if [[ "$AUTO_DOMAIN" -eq 1 && "$DOMAIN_SOURCE" != "explicit" ]]; then
   fi
 fi
 
+# Parse and compact JSON safely from stdin for inline injection (or emit exit non-zero).
+json_parse_array_compact() {
+  node -e 'const fs = require("fs");
+const raw = fs.readFileSync(0, "utf8").trim();
+if (!raw) process.exit(1);
+
+let parsed;
+try {
+  parsed = JSON.parse(raw);
+} catch {
+  process.exit(1);
+}
+
+if (!Array.isArray(parsed)) process.exit(1);
+process.stdout.write(JSON.stringify(parsed));'
+}
+
 # Optional scorecard qualification validation for reviewer role; default remains byte-identical
 # (no flag → no extra fields, no scorecard IO).
-REVIEWER_QUALIFIED="true"
+REVIEWER_QUALIFIED="false"
 FALLBACK_LADDER_JSON="[]"
 if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
   SCORECARD_CURRENT="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role reviewer 2>/dev/null || true)"
   SCORECARD_LADDER="$(node "$SCRIPT_DIR/engine-scorecard.js" ladder --role reviewer 2>/dev/null || true)"
-  SCORECARD_LADDER="${SCORECARD_LADDER//$'\n'/}"
-  [[ "$SCORECARD_LADDER" != "" ]] && FALLBACK_LADDER_JSON="$SCORECARD_LADDER"
+  FALLBACK_LADDER_JSON="$(printf '%s' "$SCORECARD_LADDER" | json_parse_array_compact || printf '%s' "[]")"
 
   REVIEWER_STATUS=""
   if [[ -n "$SCORECARD_CURRENT" ]]; then
-    REVIEWER_STATUS="$(printf '%s' "$SCORECARD_CURRENT" | node - "$REV_ENGINE" "$REV_RUNNER" <<'NODE' || true
-const fs = require('fs');
+    REVIEWER_STATUS="$(printf '%s' "$SCORECARD_CURRENT" | node -e 'const fs = require("fs");
 const engine = process.argv[1];
 const runner = process.argv[2];
-const raw = fs.readFileSync(0, 'utf8').trim();
-
+const raw = fs.readFileSync(0, "utf8").trim();
 if (!raw) process.exit(0);
 
 let rows;
 try {
   rows = JSON.parse(raw);
 } catch {
-  process.exit(1);
+  process.exit(0);
 }
 
 if (!Array.isArray(rows)) process.exit(0);
@@ -355,13 +371,13 @@ for (const row of rows) {
     row &&
     String(row.engine) === String(engine) &&
     String(row.runner) === String(runner) &&
-    typeof row.status === 'string'
+    typeof row.status === "string"
   ) {
     process.stdout.write(row.status);
     break;
   }
 }
-NODE
+' "$REV_ENGINE" "$REV_RUNNER" || true
 )"
   fi
 
@@ -392,6 +408,8 @@ if [[ -n "$FIELD" ]]; then
     l1_required) printf '%s\n' "$L1_REQUIRED" ;;
     cross_family_required) printf '%s\n' "$CROSS_FAMILY_REQUIRED" ;;
     cross_family_satisfied) printf '%s\n' "$CROSS_FAMILY_SATISFIED" ;;
+    reviewer_qualified) printf '%s\n' "$REVIEWER_QUALIFIED" ;;
+    fallback_ladder) printf '%s\n' "$FALLBACK_LADDER_JSON" ;;
     review_diff_scope) printf '%s\n' "$DIFF_SCOPE" ;;
     source) printf '%s\n' "$SOURCE" ;;
     work_domain) printf '%s\n' "$DWORK_DOMAIN" ;;

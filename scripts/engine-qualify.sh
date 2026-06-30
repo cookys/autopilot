@@ -51,6 +51,14 @@ extract_field() {
   printf '%s' "$1" | sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p"
 }
 
+require_arg() {
+  local opt="$1"
+  local count="$2"
+  if [ "$count" -lt 2 ]; then
+    die "missing value for $opt"
+  fi
+}
+
 action_reason() {
   if [ -z "$REASON" ]; then
     REASON="$1"
@@ -105,22 +113,27 @@ EMIT_ROW=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --engine)
+      require_arg "$1" "$#"
       ENGINE="${2:-}"
       shift 2
       ;;
     --runner)
+      require_arg "$1" "$#"
       RUNNER="${2:-}"
       shift 2
       ;;
     --family)
+      require_arg "$1" "$#"
       FAMILY="${2:-}"
       shift 2
       ;;
     --panel-cmd)
+      require_arg "$1" "$#"
       PANEL_CMD="${2:-}"
       shift 2
       ;;
     --corpus)
+      require_arg "$1" "$#"
       CORPUS="${2:-}"
       shift 2
       ;;
@@ -162,6 +175,7 @@ if [ "$CORPUS_ABS" != "$DEFAULT_CORPUS" ]; then
   TMP_ROOT="$(mktemp -d -t engine-qualify-cal-XXXXXX)"
   mkdir -p "$TMP_ROOT/scripts" "$TMP_ROOT/evals"
   cp "$CALIBRATION_SRC" "$TMP_ROOT/scripts/calibration.sh"
+  chmod +x "$TMP_ROOT/scripts/calibration.sh"
   mkdir -p "$TMP_ROOT/evals/known-bad"
   (cd "$CORPUS_ABS" && cp -R . "$TMP_ROOT/evals/known-bad")
   CALIBRATION_WORK="$TMP_ROOT"
@@ -172,8 +186,8 @@ RUN_STARTED="$(date +%s)"
 RUN_RC=0
 RUN_OUT=""
 RUN_OUT="$(
-  CALIBRATION_DATA_DIR="$CALIB_DATA_DIR" \
-    (cd "$CALIBRATION_WORK" && "$CALIBRATION_SCRIPT" run-known-bad --panel-cmd "$PANEL_CMD")
+  (cd "$CALIBRATION_WORK" && \
+    CALIBRATION_DATA_DIR="$CALIB_DATA_DIR" "$CALIBRATION_SCRIPT" run-known-bad --panel-cmd "$PANEL_CMD")
 )" || RUN_RC=$?
 RUN_ENDED="$(date +%s)"
 

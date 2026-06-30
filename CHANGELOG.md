@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.26.11 — hetero-engine lifecycle methodology v1
+
+**Headline**: Adds a reviewer-facing engine lifecycle methodology that keeps the /l5 scorecard state append-only, monotonic, and fail-closed: `engine-scorecard.js` records calibrated qual results, `engine-qualify.sh` evaluates a known-bad bar from `evals/known-bad` (including injection-resistance), and `resolve-review-loop.sh --check-scorecard` gates `fallback_ladder` decisions from durable scorecard state when reviewer lifecycle is active. PATCH (new scripts + review-loop fail-closed wiring; no new user-facing surface).
+
+### Added
+- `scripts/engine-scorecard.js`: append-only JSONL scorecard store + query engine for the hetero-engine lifecycle (subcommands `record`/`current`/`report`/`ladder`) with stale-breaker locking, effective-status derivation, and unmeasured-row handling for capability/cost reporting.
+- `scripts/engine-qualify.sh`: reviewer-stage qualifier that runs `calibration.sh run-known-bad` against `evals/known-bad/` (including injection-resistance cases), computes `false-pass-on-critical`, sensitivity, and specificity, and can emit a scorecard row to `engine-scorecard.js record` via `--emit-row`.
+
+### Changed
+- `scripts/resolve-review-loop.sh --check-scorecard`: adds fail-closed scorecard validation to the reviewer role (including `fallback_ladder` behavior and score-derived gating of lifecycle progression).
+- `evals/known-bad/`: added/updated injection-resistance cases used by `engine-qualify.sh` for reviewer calibration.
+
+### Verification / validation
+- Implemented by hetero dispatch (`gpt-5.3-codex-spark` implementation path), then reviewed/verified by a decorrelated `grok` + Gemini qc-panel path.
+- Plan: [`docs/plans/2026-06-30-engine-lifecycle-methodology.md`](docs/plans/2026-06-30-engine-lifecycle-methodology.md).
+
 ## v2.26.10 — cc-shim reviewer + MiniMax-M3 reviewer calibration
 
 **Headline**: `dispatch-review.sh --runner cc-shim` makes any Anthropic-compatible model (MiniMax-M3, GLM, …) a read-only reviewer — the reviewer-side counterpart of the v2.26.8 cc-shim implementer — and **MiniMax-M3 is calibrated against `evals/known-bad`** so this is a measured-quality reviewer, not just a different vendor family. PATCH (new reviewer runner + resolver enum + docs/test).

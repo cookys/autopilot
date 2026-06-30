@@ -292,4 +292,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix (S) — done.
 - **Source**: retro 2026-06-22 (codeforge doc-drift-system session); workaround in autopilot v2.20.0 bump.
 
+### OS-sandboxed hetero reviewer (hard isolation on untrusted diffs)
+- **Trigger**: reviewing genuinely-untrusted diffs (external PRs / supply-chain) through a hetero reviewer, OR a review host gets `bwrap` installed.
+- **Context**: `dispatch-review.sh --runner cc-shim|grok|agy` reviews an UNTRUSTED diff (prompt-injection surface) but none is a hard OS sandbox. cc-shim minimizes surface (`--tools ""` all tools off + `--setting-sources project` + `--strict-mcp-config` + `HOME`/scratch cwd + no skip-permissions; adversarially verified no tool-execution on an injection diff) but is NOT sandboxed. The only OS-sandboxed reviewer is `codex --sandbox read-only`, real ONLY with **bubblewrap (bwrap)** installed — absent on the current host, so codex degrades to bypass too. Surfaced by a gpt-5.5 review loop (v2.26.10) correctly noting surface-reduction ≠ OS sandbox. Same class as the test-integrity-L1 deferral (no local-only mechanism is malicious-proof without a real isolation boundary).
+- **Options**: (a) install `bwrap` on review hosts → codex becomes the hard-isolation reviewer (cheapest); (b) review untrusted diffs on a disposable/sandboxed host or container; (c) a `bwrap`/landlock-gated reviewer wrapper for cc-shim/grok. Until then docs cap the claim at "best-effort surface reduction, not a hard sandbox."
+- **Effort**: L (mostly ops/packaging).
+- **Source**: gpt-5.5 cc-shim-reviewer hardening loop, 2026-06-30 (v2.26.10).
+
 Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth). Last pruned 2026-06-02: v2.7.5 test-suite + v2.7.6 hook-polish items A/B/C.

@@ -52,7 +52,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 |-------|---------|--------|
 | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
-| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only, scratch-cwd) `\| auto` |
+| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (any Anthropic-compat model, e.g. MiniMax-M3 — needs the same `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env as the cc-shim implementer) `\| auto` |
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
@@ -140,7 +140,15 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   Notes: `ANTHROPIC_API_KEY` is intentionally **unset** before launching `claude` so a real-Anthropic
   key can't override the shim token — set `ANTHROPIC_AUTH_TOKEN`, not `ANTHROPIC_API_KEY`. EDIT-ONLY +
   wrapper-commit; prompt fed via STDIN. Verified with real MiniMax-M3 (M3 is clean; M2.x leaks a
-  `thinking` block). Works for any Anthropic-compat endpoint (GLM/zai too).
+  `thinking` block). Works for any Anthropic-compat endpoint (GLM/zai too). **cc-shim is also a
+  `reviewer_runner`** — read-INTENT, best-effort surface reduction on an untrusted diff (`--setting-sources
+  project` + `--strict-mcp-config` + `--tools ""` + `HOME`/scratch cwd + no skip-permissions),
+  **NOT a hard sandbox** — prefer the `codex` reviewer (`--sandbox read-only`) for guaranteed isolation.
+  **MiniMax-M3 is calibrated as a reviewer** (2026-06-30: 10/10 `evals/known-bad` caught,
+  false-pass-on-critical = 0, 3/3 clean diffs passed) → safe to put `MiniMax-M3` in `qc_panel`. **GLM-5.2** (z.ai `https://api.z.ai/api/anthropic`,
+  model `glm-5.2`): endpoint/auth verified + clean (no `thinking` leak), but as of 2026-06-30 the
+  service is **persistently 529-overloaded** so a full agentic loop did not complete — re-Spike when
+  capacity frees / on a higher tier before trusting it as implementer or reviewer.
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

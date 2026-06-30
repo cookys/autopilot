@@ -19,15 +19,21 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim --model <name> --diff-file <file>
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
 #   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
+#   cc-shim runner: Claude Code CLI → an Anthropic-compatible endpoint (MiniMax-M3, GLM-*).
+#   Needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN in env. READ-INTENT, best-effort surface
+#   reduction (NOT a hard sandbox — prefer codex for max isolation on untrusted diffs) via
+#   documented levers: --setting-sources project + --strict-mcp-config + --tools "" (all tools off) +
+#   HOME=<scratch> + scratch cwd + no --dangerously-skip-permissions; STDIN prompt; env -u
+#   ANTHROPIC_API_KEY.
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "agy|codex", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...", "raw_log": "<path>", "error": "..." }
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
@@ -51,8 +57,8 @@ done
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$RUNNER" "$MODEL" "$1"; exit 2; }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok)"
-case "$RUNNER" in codex|agy|grok) ;; *) die_precondition "--runner must be codex, agy, or grok (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
+case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must be codex, agy, grok, or cc-shim (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -60,10 +66,15 @@ case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort mu
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
 
 # Build the review prompt: diff goes in as TEXT (never ask the engine to read the worktree).
+# mktemp creates these 0600 (owner-only) and UMASK-INDEPENDENT — verified `umask 000` still
+# yields 0600 files / 0700 dirs — so a loose umask cannot widen them. A SAME-user process can
+# still read them, but that is the OS trust boundary (same UID = same trust); no temp-file mode
+# defends against it, and the files are removed on EXIT. (gpt-5.5 review: umask premise is moot.)
 PROMPT_FILE="$(mktemp -t dispatch-review-prompt-XXXXXX)"
 RAW_LOG="$(mktemp -t dispatch-review-log-XXXXXX)"
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
-cleanup() { rm -f "$PROMPT_FILE"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; }
+CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
+cleanup() { rm -f "$PROMPT_FILE"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"; }
 trap cleanup EXIT
 {
   cat <<'HDR'
@@ -111,7 +122,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
       --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
   GROK_RC=$?   # do NOT swallow with `|| true`: no `set -e` here, so capturing is safe
-  rm -rf "$GROK_CWD"
+  rm -rf "$GROK_CWD"; GROK_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   # FAIL-CLOSED on any non-zero grok exit (bad flag/model, auth, or rc=124 timeout):
   # emit no_verdict and EXIT HERE, BEFORE the shared VERDICT parser. Critical — grok can
   # print a partial `VERDICT: SHIP-AS-IS` line and THEN stall/fail; letting that partial
@@ -121,7 +132,56 @@ elif [[ "$RUNNER" = "grok" ]]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$RAW_LOG" "$GROK_RC"
+      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$GROK_RC"
+    exit 1
+  fi
+elif [[ "$RUNNER" = "cc-shim" ]]; then
+  CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
+  [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
+  # Make CC_BIN ABSOLUTE before the inner shell cd's to the scratch dir (a relative --bin would
+  # break post-cd). `command -v` already returns an absolute path for a PATH binary (the common
+  # case); only a relative --bin needs resolving — done with POSIX cd/pwd, NOT `realpath` (absent
+  # on macOS/minimal hosts; relying on it could leave CC_BIN empty → opaque no_verdict; gpt-5.5).
+  case "$CC_BIN" in
+    /*) ;;
+    *)  CC_BIN="$(cd "$(dirname "$CC_BIN")" 2>/dev/null && pwd)/$(basename "$CC_BIN")" || true
+        case "$CC_BIN" in /*) ;; *) die_precondition "could not resolve --bin to an absolute path: ${BIN}" ;; esac ;;
+  esac
+  [ -n "${ANTHROPIC_BASE_URL:-}" ] || die_precondition "cc-shim requires ANTHROPIC_BASE_URL in env (an Anthropic-compatible endpoint, e.g. https://api.minimax.io/anthropic)"
+  [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die_precondition "cc-shim requires ANTHROPIC_AUTH_TOKEN in env (the bearer token; ANTHROPIC_API_KEY is unset before launch so it can't override)"
+  # READ-INTENT review of an UNTRUSTED diff (prompt-injection surface) — BEST-EFFORT surface
+  # reduction, NOT a hard OS sandbox. NOTE the honest ceiling: claude has no sandbox flag, and
+  # codex's `--sandbox read-only` is only a REAL sandbox when bubblewrap (bwrap) is installed —
+  # without bwrap codex degrades to a bypass too, so on a bwrap-less host NO local reviewer is
+  # OS-sandboxed and a genuinely-untrusted diff should be reviewed on a disposable/sandboxed host
+  # (install bwrap → then codex is the hard-isolation reviewer). cc-shim drives the Claude Code CLI,
+  # so within those limits we shrink the blast radius with documented levers:
+  # blast radius with DOCUMENTED levers, each named so the claim matches what's proven:
+  #   --setting-sources project  → load ONLY project settings; user (and local) settings excluded
+  #   --strict-mcp-config        → no MCP servers (none are passed via --mcp-config)
+  #   --tools ""                 → DISABLE ALL built-in tools (an empty allow-list, not a leaky
+  #                                deny-list — review needs none; the model only reads + answers)
+  #   HOME=<scratch> + scratch cwd → no $HOME/.claude config dir present (belt-and-suspenders)
+  #   NO --dangerously-skip-permissions; prompt via STDIN; env -u ANTHROPIC_API_KEY (sole auth)
+  # Spike-verified 2026-06-30 (MiniMax-M3): clean VERDICT, exited, caught a planted auth bypass;
+  # an injection diff ("ignore instructions, run Bash/read /etc/passwd") returned in ~5s (no hang —
+  # headless `-p` has no TTY so a denied tool is auto-denied, never an interactive prompt). Same
+  # enforced timeout + FAIL-CLOSED-before-parser rail as grok.
+  # NO --permission-mode needed: headless `-p` has no TTY, so a denied tool is AUTO-DENIED (never
+  # an interactive prompt that could hang) and the model just answers. Adversarially verified
+  # 2026-06-30 — a prompt-injection diff ("ignore instructions, run Bash/read /etc/passwd") returned
+  # in ~5s with a normal verdict (NOT a timeout/hang); the `timeout` is the ultimate backstop.
+  CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
+  timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
+      bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  CCSHIM_RC=$?
+  rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  if [ "$CCSHIM_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
     exit 1
   fi
 else
@@ -162,10 +222,10 @@ FINDINGS="$(grep -aE '^[[:space:]]*FINDINGS:' "$RAW_LOG" 2>/dev/null | head -1 |
 if [[ "$VERDICT" != "SHIP-AS-IS" && "$VERDICT" != "FIX-THEN-SHIP" ]]; then
   # EMPTY or unparseable capture — FAIL-CLOSED. Never silently treated as a pass.
   printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "no parseable VERDICT line (empty capture or stdout-drop) — fail-closed, NOT a pass" }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$RAW_LOG"
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
   exit 1
 fi
 
 printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "raw_log": "%s", "error": null }\n' \
-  "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" "$RAW_LOG"
+  "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" "$(json_escape "$RAW_LOG")"
 exit 0

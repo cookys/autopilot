@@ -134,6 +134,10 @@ CAL_DIR4="$TEST_TMP/calibration4"
 RESULT2="$(CALIBRATION_DATA_DIR="$CAL_DIR4" "$SCRIPT" run-known-bad --panel-cmd "$ALWAYS_FAIL_CMD" 2>/dev/null)"
 FALSE_PASSES2="$(printf '%s' "$RESULT2" | grep -o '"false_passes":[0-9]*' | cut -d: -f2)"
 assert_eq "0" "$FALSE_PASSES2" "zero false passes with always-fail panel"
+RR_NO_SCORECARD_EXIT="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field reviewer_qualified >/dev/null 2>&1; echo "$?")"
+assert_eq "2" "$RR_NO_SCORECARD_EXIT" "--field reviewer_qualified without --check-scorecard exits 2"
+RR_NO_SCORECARD_LADDER_EXIT="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field fallback_ladder >/dev/null 2>&1; echo "$?")"
+assert_eq "2" "$RR_NO_SCORECARD_LADDER_EXIT" "--field fallback_ladder without --check-scorecard exits 2"
 
 # ── 12. corpus integrity: every .diff has a parseable .expected.json sidecar ──
 DIFFS_FOUND=0
@@ -164,10 +168,11 @@ done
 
 assert_eq "0" "$SIDECARS_MISSING" "all .diff files have .expected.json sidecars (missing:$SIDECARS_MISSING_FILES)"
 # At least 10 diffs in corpus
-if [ "$DIFFS_FOUND" -ge "$EXPECTED_KB" ]; then
+KB_FLOOR=12
+if [ "$DIFFS_FOUND" -ge "$KB_FLOOR" ]; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 else
-  fail "corpus: expected >= $EXPECTED_KB .diff files, found $DIFFS_FOUND"
+  fail "corpus: expected >= $KB_FLOOR .diff files, found $DIFFS_FOUND"
 fi
 
 # ── 13. add-sample validation: bad verdict → exit 1 ──────────────────────────

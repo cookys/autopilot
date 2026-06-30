@@ -408,8 +408,20 @@ if [[ -n "$FIELD" ]]; then
     l1_required) printf '%s\n' "$L1_REQUIRED" ;;
     cross_family_required) printf '%s\n' "$CROSS_FAMILY_REQUIRED" ;;
     cross_family_satisfied) printf '%s\n' "$CROSS_FAMILY_SATISFIED" ;;
-    reviewer_qualified) printf '%s\n' "$REVIEWER_QUALIFIED" ;;
-    fallback_ladder) printf '%s\n' "$FALLBACK_LADDER_JSON" ;;
+    reviewer_qualified)
+      if [[ "$CHECK_SCORECARD" -ne 1 ]]; then
+        echo "unknown field: reviewer_qualified (use --check-scorecard)" >&2
+        exit 2
+      fi
+      printf '%s\n' "$REVIEWER_QUALIFIED"
+      ;;
+    fallback_ladder)
+      if [[ "$CHECK_SCORECARD" -ne 1 ]]; then
+        echo "unknown field: fallback_ladder (use --check-scorecard)" >&2
+        exit 2
+      fi
+      printf '%s\n' "$FALLBACK_LADDER_JSON"
+      ;;
     review_diff_scope) printf '%s\n' "$DIFF_SCOPE" ;;
     source) printf '%s\n' "$SOURCE" ;;
     work_domain) printf '%s\n' "$DWORK_DOMAIN" ;;

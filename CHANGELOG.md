@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.27.0 — engine lifecycle onboarding skill
+
+**Headline**: Adds the 25th `engine-onboarding` skill as the user-facing runbook for the hetero-engine lifecycle methodology (`spike → qualify → score → roster → re-qualify`), with routing constrained to capability, decorrelation, and cost. Includes three v1 qc cleanups (calibration floor assertion, `--field` exit-2 path, and `engine-qualify` JSON parse hardening). MINOR (new user-facing skill).
+
+### Added
+- `engine-onboarding`: new user-facing skill that operationalizes the hetero-engine lifecycle sequence, including the spike/qualify/score/roster/re-qualify phases and routing behavior that only routes on capability/decorrelation/cost.
+
+### Fixed
+- QC cleanup from the v1 ship: calibration floor assertion in lifecycle qualification.
+- QC cleanup from the v1 ship: `--field` now exits with code 2 on invalid/missing input.
+- QC cleanup from the v1 ship: hardened `engine-qualify` JSON parsing against malformed payloads.
+
+### Verification / validation
+- Built and verified entirely by hetero dispatch.
+
 ## v2.26.11 — hetero-engine lifecycle methodology v1
 
 **Headline**: Adds a reviewer-facing engine lifecycle methodology that keeps the /l5 scorecard state append-only, monotonic, and fail-closed: `engine-scorecard.js` records calibrated qual results, `engine-qualify.sh` evaluates a known-bad bar from `evals/known-bad` (including injection-resistance), and `resolve-review-loop.sh --check-scorecard` gates `fallback_ladder` decisions from durable scorecard state when reviewer lifecycle is active. PATCH (new scripts + review-loop fail-closed wiring; no new user-facing surface).

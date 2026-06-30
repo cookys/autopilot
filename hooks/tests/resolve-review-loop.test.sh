@@ -4,6 +4,19 @@
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+json_get() { # json key -> raw json value
+  local json="$1" key="$2"
+  JSON_VALUE="$json" node - "$key" <<'NODE'
+const fs = require('fs');
+const payload = process.env.JSON_VALUE || '';
+const key = process.argv[1];
+if (!payload) process.exit(0);
+const parsed = JSON.parse(payload);
+const value = parsed && parsed[key];
+if (value === undefined) process.exit(0);
+process.stdout.write(JSON.stringify(value));
+NODE
+}
 
 # 1. --help exits 0
 HELP_OUT="$(bash "$SCRIPT" --help 2>&1)"; HELP_EXIT=$?
@@ -184,5 +197,32 @@ assert_eq "$(bash "$SCRIPT" --field review_risk)" "$(bash "$SCRIPT" --auto-domai
 assert_eq "$(bash "$SCRIPT" --field cross_family_required)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field cross_family_required)" "auto-domain does not alter cross_family_required"
 assert_eq "$(bash "$SCRIPT" --field cross_family_satisfied)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field cross_family_satisfied)" "auto-domain does not alter cross_family_satisfied"
 assert_eq "$(bash "$SCRIPT" --enforce --security-surface 1 >/dev/null 2>&1; echo $?)" "$(bash "$SCRIPT" --auto-domain HEAD..HEAD --enforce --security-surface 1 >/dev/null 2>&1; echo $?)" "no-routing invariant for --enforce with auto-domain"
+
+# 16. --check-scorecard is opt-in and additive (legacy output unchanged when omitted)
+BASE_OUT="$(bash "$SCRIPT")"
+assert_not_contains "$BASE_OUT" "\"reviewer_qualified\"" "no --check-scorecard output omits reviewer_qualified"
+assert_not_contains "$BASE_OUT" "\"fallback_ladder\"" "no --check-scorecard output omits fallback_ladder"
+
+# 17. --check-scorecard with a qualified reviewer row emits true + ladder from scorecard
+SCDIR="$TEST_TMP/check-ok"
+mkdir -p "$SCDIR"
+RECQUAL_JSON="$SCDIR/rec.json"
+cat > "$RECQUAL_JSON" <<'JSON'
+{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECQUAL_JSON" > /dev/null
+EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer)"
+QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard)"
+assert_eq "true" "$(json_get "$QUAL_OUT" reviewer_qualified)" "qualified reviewer row => reviewer_qualified true"
+assert_eq "$EXPECTED_LADDER" "$(json_get "$QUAL_OUT" fallback_ladder)" "fallback_ladder matches scorecard ladder output"
+
+# 18. --check-scorecard with NO matching row fail-closes as unqualified
+EMPTY_SCDIR="$TEST_TMP/check-miss"
+mkdir -p "$EMPTY_SCDIR"
+MISS_OUT="$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard)"
+assert_eq "false" "$(json_get "$MISS_OUT" reviewer_qualified)" "missing reviewer scorecard row => reviewer_qualified false"
+assert_eq "[]" "$(json_get "$MISS_OUT" fallback_ladder)" "missing reviewer scorecard row still emits fallback ladder"
+assert_eq "0" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard >/dev/null 2>&1; echo $?)" "missing reviewer scorecard row without --enforce exits 0"
+assert_eq "3" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "missing reviewer scorecard row with --enforce exits 3"
 
 finalize_test

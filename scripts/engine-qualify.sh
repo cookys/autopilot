@@ -48,7 +48,15 @@ json_escape() {
 }
 
 extract_field() {
-  printf '%s' "$1" | sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p"
+  local payload="$1"
+  local field="$2"
+  local value
+  if command -v node >/dev/null 2>&1; then
+    value="$(printf '%s' "$payload" | node -e 'const fs = require("fs"); const key = process.argv[1]; const raw = fs.readFileSync(0, "utf8").trim(); if (!raw) process.exit(0); let parsed; try { parsed = JSON.parse(raw); } catch { process.exit(0); } if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) process.exit(0); const value = parsed[key]; if (value === undefined || value === null) process.exit(0); if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") { process.stdout.write(String(value)); } else { process.stdout.write(JSON.stringify(value)); }' "$field")"
+    printf '%s' "$value"
+    return
+  fi
+  printf '%s' "$payload" | sed -n "s/.*\"$field\":\"\([^\"]*\)\".*/\1/p"
 }
 
 require_arg() {

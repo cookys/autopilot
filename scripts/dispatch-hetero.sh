@@ -363,13 +363,12 @@ run build/test or to commit.
 fi
 trap - INT TERM
 
-# agy/grok run edit-only → the wrapper makes the commit (deterministic). Only fires
-# when the worker left edits but no commit; codex commits itself. If the worker
-# already committed (HEAD moved) or left nothing, this is a no-op.
-if [ "$IS_CODEX" -eq 0 ] \
-   && [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
+# agy/grok/codex runs edit-only → the wrapper makes the commit (deterministic). It
+# only fires when the worker left edits but no commit; if the worker already
+# committed (HEAD moved) or left nothing, this is a no-op.
+if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"
   git -C "$WT" add -A
   git -C "$WT" -c commit.gpgsign=false commit -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
 fi

@@ -8,10 +8,10 @@
 
 | Unit | Component | Status |
 |------|-----------|--------|
-| A | `scripts/engine-scorecard.js` — append-only JSONL store + current/report/ladder query engine | **in progress** |
-| B | `scripts/engine-qualify.sh reviewer` — wraps `calibration.sh run-known-bad`, records a Stage-1 row | pending |
-| C | `scripts/resolve-review-loop.sh` extension — scorecard validation (fail-closed) + `fallback_ladder` | pending |
-| D | `evals/known-bad/` injection-resistance cases (reviewer corpus dimension) | pending |
+| A | `scripts/engine-scorecard.js` — store + current/report/ladder | ✅ done (13/13 harness) |
+| B | `scripts/engine-qualify.sh reviewer` | ✅ done (14/14, R2 SHIP) |
+| C | `resolve-review-loop.sh` --check-scorecard + ladder | ✅ done (93/93, invariant held) |
+| D | `evals/known-bad/` injection cases (11,12) | ✅ done (apply-clean, 12/12 false-pass) |
 
 Deferred to follow-ups: implementer corpus (Unit, §5 step 3), planner path, quota-signal + cooldown, cost-token-capture spikes.
 

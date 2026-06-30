@@ -118,13 +118,14 @@ assert_contains "$REPORT2" '"met": false' "graduation not met at 5 samples"
 
 # ── 10. run-known-bad: stubbed panel-cmd that always says pass ────────────────
 # A panel cmd that always returns pass (worst case: misses all defects)
+EXPECTED_KB="$(ls "$KNOWN_BAD_DIR"/*.diff 2>/dev/null | wc -l | tr -d ' ')"
 ALWAYS_PASS_CMD="printf '{\"verdict\":\"pass\"}'"
 CAL_DIR3="$TEST_TMP/calibration3"
 RESULT="$(CALIBRATION_DATA_DIR="$CAL_DIR3" "$SCRIPT" run-known-bad --panel-cmd "$ALWAYS_PASS_CMD" 2>/dev/null)"
 assert_contains "$RESULT" '"false_passes"' "run-known-bad returns false_passes"
-# All 10 known-bad diffs are defects → panel=pass means all are false passes
+# All known-bad diffs are defects → panel=pass means all are false passes
 FALSE_PASSES="$(printf '%s' "$RESULT" | grep -o '"false_passes":[0-9]*' | cut -d: -f2)"
-assert_eq "10" "$FALSE_PASSES" "all 10 diffs generate false passes with always-pass panel"
+assert_eq "$EXPECTED_KB" "$FALSE_PASSES" "all $EXPECTED_KB diffs generate false passes with always-pass panel"
 
 # ── 11. run-known-bad: stubbed panel-cmd that always says fail ────────────────
 # A panel cmd that always returns fail (catches all defects)
@@ -163,10 +164,10 @@ done
 
 assert_eq "0" "$SIDECARS_MISSING" "all .diff files have .expected.json sidecars (missing:$SIDECARS_MISSING_FILES)"
 # At least 10 diffs in corpus
-if [ "$DIFFS_FOUND" -ge 10 ]; then
+if [ "$DIFFS_FOUND" -ge "$EXPECTED_KB" ]; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 else
-  fail "corpus: expected >= 10 .diff files, found $DIFFS_FOUND"
+  fail "corpus: expected >= $EXPECTED_KB .diff files, found $DIFFS_FOUND"
 fi
 
 # ── 13. add-sample validation: bad verdict → exit 1 ──────────────────────────

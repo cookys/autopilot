@@ -48,8 +48,8 @@ The engine must pass each role-specific spike check before qualification:
   - implementer: one real file edit in a throwaway worktree.
   - planner: one structured six-element task decomposition.
 - **G2 e2e dispatch**:
-  - reviewer: `dispatch-review.sh` returns non-empty verdict (empty is fail-closed for that path).
-  - implementer: `dispatch-hetero.sh` returns `committed` and runs in isolation profile.
+  - reviewer: `scripts/dispatch-review.sh` returns non-empty verdict (empty is fail-closed for that path).
+  - implementer: `scripts/dispatch-hetero.sh` returns `committed` and runs in isolation profile.
   - planner: planner path returns parseable six-element plan.
 
 Failure at any gate ends the runbook for that engine.
@@ -100,7 +100,7 @@ Build stage-3 usage policy from scorecard before dispatch.
 
 1. Resolve current roster with `node scripts/engine-scorecard.js current --role <role>`.
 2. Route only on capability/decorrelation/cost.
-3. If top candidate is unavailable, expired, or unsafe by role constraints, follow ladder from `engine-scorecard.js ladder` (same role, with family-aware decorrelation inputs where relevant).
+3. If top candidate is unavailable, expired, or unsafe by role constraints, follow ladder from `node scripts/engine-scorecard.js ladder --role <role>` (same role, with family-aware decorrelation inputs where relevant).
 4. Resolve final run-time roster with:
    ```bash
    scripts/resolve-review-loop.sh --check-scorecard
@@ -122,5 +122,5 @@ No routing exception for phase/domain is allowed in this stage.
 1. Stage 0 spike with role-scoped harness and identity capture.
 2. Stage 1 reviewer qualification (`scripts/engine-qualify.sh`); only move forward if reviewer passes.
 3. Stage 2 record to scorecard (`node scripts/engine-scorecard.js record`).
-4. Stage 3 generate roster and route via fail-closed ladder (`node scripts/engine-scorecard.js current/ladder`, then `scripts/resolve-review-loop.sh --check-scorecard`).
+4. Stage 3 generate roster and route via fail-closed ladder (`node scripts/engine-scorecard.js current --role reviewer`, then `node scripts/engine-scorecard.js ladder --role reviewer`, then `scripts/resolve-review-loop.sh --check-scorecard`).
 5. Stage 4 set re-qualify expectation and TTL monitoring; restart onboarding when stale or model/version mismatch appears.

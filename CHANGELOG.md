@@ -24,6 +24,13 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.27.1 — dispatch-hetero wrapper-commit fix
+
+**Headline**: `scripts/dispatch-hetero.sh` now wrapper-commits a worker's uncommitted edits for **any** runner, not just agy/grok/cc-shim — the fallback was guarded on `[ "$IS_CODEX" -eq 0 ]` on the assumption "codex commits itself", but `gpt-5.3-codex-spark` routinely leaves edits uncommitted (HEAD at base, tree dirty, especially for net-new files), so dispatches that created new files wrongly returned `dirty`/`files_changed:0` and had to be harvested by hand (~8× in the v2.26.11/v2.27.0 full-dispatch build). Dropping the codex exclusion makes the wrapper-commit a universal fallback (safe: it only fires when HEAD hasn't moved, so a self-committing codex run is never double-committed); the existing `git add -A` already stages net-new files.
+
+### Fixed
+- `dispatch-hetero.sh`: wrapper-commit fallback fires for codex too (was `IS_CODEX`-excluded → `dirty` on net-new files); codex now gets a correct `_runner_label`. Verified end-to-end (a real codex net-new-file dispatch now returns `committed`) + a 48-assertion test. Prerequisite for a future `/l6` full-dispatch level (see BACKLOG).
+
 ## v2.27.0 — engine lifecycle onboarding skill
 
 **Headline**: Adds the 25th `engine-onboarding` skill as the user-facing runbook for the hetero-engine lifecycle methodology (`spike → qualify → score → roster → re-qualify`), with routing constrained to capability, decorrelation, and cost. Includes three v1 qc cleanups (calibration floor assertion, `--field` exit-2 path, and `engine-qualify` JSON parse hardening). MINOR (new user-facing skill).

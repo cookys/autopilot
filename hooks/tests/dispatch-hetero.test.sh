@@ -137,10 +137,10 @@ git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
 
 # 5d. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
 # HEAD unchanged; wrapper-commit must still run and produce committed outcome.
-OUT="$((
+OUT="$( (
   cd "$SBX"
   PATH="$TEST_TMP:$PATH" "$SCRIPT" --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
-) 2>&1)"; EXIT=$?
+) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "codex wrapper-commit exit code"
 assert_contains "$OUT" '"status": "committed"' "codex wrapper-commit status"
 assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"

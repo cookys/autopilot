@@ -366,12 +366,22 @@ trap - INT TERM
 # agy/grok run edit-only → the wrapper makes the commit (deterministic). Only fires
 # when the worker left edits but no commit; codex commits itself. If the worker
 # already committed (HEAD moved) or left nothing, this is a no-op.
+#
+# --no-verify is MANDATORY: this wrapper commit is a mechanical artifact-CAPTURE of the
+# edit-only worker's edits, NOT the quality gate (the contract puts verdict at depth 0 —
+# the dispatching session reviews the branch diff before any merge). Running the TARGET
+# repo's pre-commit hook here is both redundant and harmful: a hook that builds (e.g.
+# codepower's `vue-tsc -b` on staged .ts/.vue) emits untracked artifacts that leave the
+# tree dirty AND can `exit 1` to ABORT the commit — silently swallowing legitimately-correct
+# edits as a false `dirty`/`no_op`. codex doesn't hit this because it cleans its own build
+# artifacts before self-committing; the edit-only path has no such cleanup, so it must not
+# trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$IS_CODEX" -eq 0 ] \
    && [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
   _runner_label="agy"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"
   git -C "$WT" add -A
-  git -C "$WT" -c commit.gpgsign=false commit -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
+  git -C "$WT" -c commit.gpgsign=false commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
 fi
 
 # --- verify by artifacts, never by self-report ---

@@ -122,33 +122,44 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   `grok-build` in `qc_panel` / set `reviewer_runner: grok`. Requires the `grok` CLI installed +
   logged in (`grok login`). Implementer is EDIT-ONLY + wrapper-commit (like agy); reviewer is
   read-only by construction. ([[project_grok-hetero-implementer]])
-- **`cc-shim` as implementer (v2.26.8) — Claude Code CLI → any Anthropic-compatible model.**
-  Drives `claude -p` against an arbitrary Anthropic-compatible endpoint, so models like
-  **MiniMax-M3** or **GLM** become implementers (for an IMPLEMENTER the MODEL writes the code,
-  not the driver family). To use:
+- **`cc-shim` (v2.26.8 implementer / v2.26.10 reviewer) — Claude Code CLI → ANY Anthropic-compatible
+  provider, using YOUR OWN account.** This is provider-agnostic: cc-shim runs the `claude` CLI but
+  points it at a different endpoint, so the MODEL there (MiniMax, GLM/Zhipu, or any vendor that
+  exposes an Anthropic-compatible `/v1/messages` API) does the work. For an IMPLEMENTER the model
+  writes the code (driver family doesn't matter); as a REVIEWER it's a different-family vote.
+
+  **Who/what are the two env vars?** They are **Claude Code's own override knobs** (not MiniMax's,
+  not autopilot's). You supply YOUR values:
+  - `ANTHROPIC_BASE_URL` = the provider's **public** Anthropic-compatible endpoint (no secret).
+  - `ANTHROPIC_AUTH_TOKEN` = **YOUR OWN API key** for that provider (a secret — yours, per-account).
+    Set this, NOT `ANTHROPIC_API_KEY`; cc-shim deliberately unsets `ANTHROPIC_API_KEY` before launch
+    so your real-Anthropic key can't override the shim token.
+
+  To use (generic — substitute YOUR provider's endpoint + model id + key):
   ```
-  - implementer_engine: MiniMax-M3
-  - implementer_runner: cc-shim
+  # in .claude/review-loop-config.md:
+  - implementer_engine: <provider-model-id>     # e.g. MiniMax-M3, glm-5.2
+  - implementer_runner: cc-shim                  # or reviewer_runner: cc-shim
+  # in your shell, before /l5 (cc-shim is EXPLICIT-only and REFUSES to run without both,
+  # so it can never silently fall back to your real Claude quota):
+  export ANTHROPIC_BASE_URL='<your provider's Anthropic-compatible endpoint>'
+  export ANTHROPIC_AUTH_TOKEN='<your own API key for that provider>'
   ```
-  and **export the endpoint + token in the environment** before running `/l5` (cc-shim is
-  EXPLICIT-only and refuses to run without them, so it can never silently fall back to your real
-  Claude quota):
-  ```
-  export ANTHROPIC_BASE_URL='https://api.minimax.io/anthropic'   # the .io host; .minimaxi.com 401s
-  export ANTHROPIC_AUTH_TOKEN='<your MiniMax API key>'           # bearer token (NOT ANTHROPIC_API_KEY)
-  ```
-  Notes: `ANTHROPIC_API_KEY` is intentionally **unset** before launching `claude` so a real-Anthropic
-  key can't override the shim token — set `ANTHROPIC_AUTH_TOKEN`, not `ANTHROPIC_API_KEY`. EDIT-ONLY +
-  wrapper-commit; prompt fed via STDIN. Verified with real MiniMax-M3 (M3 is clean; M2.x leaks a
-  `thinking` block). Works for any Anthropic-compat endpoint (GLM/zai too). **cc-shim is also a
-  `reviewer_runner`** — read-INTENT, best-effort surface reduction on an untrusted diff (`--setting-sources
-  project` + `--strict-mcp-config` + `--tools ""` + `HOME`/scratch cwd + no skip-permissions),
-  **NOT a hard sandbox** — prefer the `codex` reviewer (`--sandbox read-only`) for guaranteed isolation.
-  **MiniMax-M3 is calibrated as a reviewer** (2026-06-30: 10/10 `evals/known-bad` caught,
-  false-pass-on-critical = 0, 3/3 clean diffs passed) → safe to put `MiniMax-M3` in `qc_panel`. **GLM-5.2** (z.ai `https://api.z.ai/api/anthropic`,
-  model `glm-5.2`): endpoint/auth verified + clean (no `thinking` leak), but as of 2026-06-30 the
-  service is **persistently 529-overloaded** so a full agentic loop did not complete — re-Spike when
-  capacity frees / on a higher tier before trusting it as implementer or reviewer.
+
+  Known endpoints (find yours in your provider's "Anthropic-compatible / Claude Code" docs — these are
+  examples, your key + region may differ):
+
+  | Provider | `ANTHROPIC_BASE_URL` | model id | notes |
+  |----------|----------------------|----------|-------|
+  | MiniMax (intl) | `https://api.minimax.io/anthropic` | `MiniMax-M3` | the `.io` host (a `.minimaxi.com` host 401'd for one intl key — use whichever your account is provisioned for); **M3 returns clean text; M2.x leaks a `thinking` block** so prefer M3 |
+  | Zhipu/GLM | `https://api.z.ai/api/anthropic` (or `https://open.bigmodel.cn/api/anthropic`) | `glm-5.2` | clean (no thinking leak); as of 2026-06-30 frequently **529-overloaded** — unproven under a full loop |
+
+  EDIT-ONLY + wrapper-commit (implementer); prompt via STDIN. **cc-shim as a `reviewer_runner`** is
+  read-INTENT best-effort surface reduction (`--setting-sources project` + `--strict-mcp-config` +
+  `--tools ""` + `HOME`/scratch cwd + no skip-permissions), **NOT a hard sandbox** — for a genuinely
+  untrusted diff prefer the `codex` reviewer with `bwrap` installed. **MiniMax-M3 is calibrated as a
+  reviewer** (2026-06-30: 10/10 `evals/known-bad` caught, false-pass-on-critical = 0, 3/3 clean) → safe
+  in a `qc_panel`. **GLM-5.2** is endpoint-verified but was 529-overloaded under load — re-Spike before trusting.
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

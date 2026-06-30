@@ -1,0 +1,5 @@
+{ "verdict": "PASS", "sha": "7e02adb3165ef8ae791783ba7e3685ec7eef5db1", "branch": "feat/engine-lifecycle-followups", "version": "2.27.0",
+  "scope": "engine-onboarding skill (25th) + 3 minor qc cleanups",
+  "gates": { "full_suite": "71/71", "validate": "25/25 skills", "preflight_release": "6/6 for v2.27.0", "version_mirrors": "in-sync", "c_invariant": "preserved" },
+  "verify": "cleanup re-verified (calibration 55, resolver 93, engine-qualify 14, --field exit-2); skill: Gemini decorrelated review + 4 path-nits fixed + all script refs resolve",
+  "method": "fully dispatched: gpt-5.3-codex-spark impl, decorrelated Gemini review" }

@@ -28,9 +28,9 @@ Execution control and ledger behavior remain as in `/l5` and
 [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md).
 
 Per-unit pipeline (authoritative flow):
-1) Resolve roster once with `scripts/resolve-review-loop.sh` and treat its output as the only source of truth.
-2) Dispatch implementation via `dispatch-hetero.sh` with immutable `--base` and outcome-driven worktree commit logic.
-3) Dispatch verification AUTHORING via `dispatch-review.sh` on a different family than the implementer engine.
+1) Resolve roster once with `../../scripts/resolve-review-loop.sh` and treat its output as the only source of truth.
+2) Dispatch implementation via `../../scripts/dispatch-hetero.sh` with immutable `--base` and outcome-driven worktree commit logic.
+3) Dispatch verification AUTHORING via `../../scripts/dispatch-review.sh` on a different family than the implementer engine.
 4) Run decorrelated review on implementation and harness outputs per resolved review fields.
 5) Depth-0 executes committed implementation + harness artifacts, runs all required checks, and compares the results.
 6) Convergence-by-verification gates continue/rework; merge only after QC-Verdict is earned.
@@ -39,6 +39,6 @@ Per-unit pipeline (authoritative flow):
 
 1. Invoke `autopilot:ceo-agent` with the same startup questions/presets as `/l3`/`/l4`/`/l5`
    (involvement=just-results, scope=Hold, no-go=none; override `-x` / `--expand` / `--solo`).
-2. No manual hardcoding of model/runner/effort: all dispatch parameters come from `resolve-review-loop.sh`.
+2. No manual hardcoding of model/runner/effort: all dispatch parameters come from `../../scripts/resolve-review-loop.sh`.
 3. Keep `/l5` posture for loop governance, isolation, and output ledger, but treat verification drafting as a first-class dispatched unit.
 4. If `--solo` is set or the foreman cannot dispatch reliably, fall back to `/l3` inline for safety.

@@ -67,7 +67,7 @@
 | P4 | Complete | Added engine-layer architecture section and CLI/src pointers. |
 | P5 | Complete | Fixed F6-F9 plus S1/S2/S5; deferred S3/S4/S6/S7 as non-ship-blocking runtime semantics. |
 | P6 | Complete | Final deterministic gates passed; full suite has 4/82 failures, all reclassified as pre-existing against session base `96d9349`; `/l5` full-diff review converged to `SHIP-AS-IS` after one reviewer-found fix. |
-| L-5 finish-flow | Pending | |
+| L-5 finish-flow | Complete | Merged to `develop` in `ce3d79e`; post-merge doc-sync drift fixed in `2b895d2`; archived under `docs/projects/_archive/2026-07-02-engine-hardening/`. |
 
 ## Review Loop History
 
@@ -78,3 +78,4 @@
 - 2026-07-02: `/l5`-style full-diff review round 2 (`gpt-5.5`, xhigh) returned `SHIP-AS-IS`, findings `none`.
 - 2026-07-02: Final deterministic gates passed after `1e928b6`: `sync-version.js --check`, `sync-codex-plugin-skills.sh --check`, `preflight-portability.sh` 17/17, `preflight-release.sh` 6/6, `validate.sh` 27/27, `check-canonical-invariants.sh`, `doc-drift-gate.js .`, `check-hook-inventory.js --check`, `completeness-scan.sh --range 96d9349..HEAD` (`clean:true`, 10 pre-existing findings), and `check-test-integrity.sh validate --range 96d9349..HEAD` (`ok:true`, warn mode).
 - 2026-07-02: Final full suite `bash hooks/tests/run.sh` ended with 4/82 failing test files: `check-optin-changelog.test.sh`, `check-test-integrity-l1.test.sh`, `check-test-integrity.test.sh`, and `dispatch-hetero.test.sh`. Each returned `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}` via `scripts/verify-preexisting.sh --base 96d934994d57aa66ac1f9cef35b6ee696fe91cfa`.
+- 2026-07-02: Post-merge doc-sync deterministic gate passed. Scoped discovery did not pass `dispatch-explore` read-probe, but its raw candidate findings were manually verified: `docs/architecture.md` misattributed `resolve-review-loop.sh` to `src/runners/`, and CLI docs/help omitted the accepted `--require-qualified-reviewer` flag. Both were fixed in `2b895d2`, with `autopilot-cli` now at 42 assertions and Codex payload mirror re-synced.

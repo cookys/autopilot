@@ -32,11 +32,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix.
 - **Source**: v2.28.1 finish-flow quality gate (`708e911` merge), full suite 78/82 with pre-existing classification.
 
-### Engine integration follow-up hardening from external architecture review
-- **Trigger**: next hardening slice after v2.28.2, OR before publishing/pushing a release that depends on the new `engine implement-review` path as a default production workflow.
-- **Context**: The archived report `docs/projects/_archive/2026-07-02-l5-l6-engine-integration/review-findings-2026-07-02.md` preserves broad follow-up findings from an intermediate HEAD. The Phase 7 scoped `/l5` review converged to `SHIP-AS-IS`, but the report identifies useful next work: F1 add a `sync-codex-plugin-skills.sh --check` drift gate and wire it into pre-commit/preflight; F2 decide whether `engine implement-review` should fail closed on unqualified reviewers by default (recommended) or only document `--require-qualified-reviewer`; F3 decide whether to retarget the release to `2.29.0` for the silently-added `harness-maintenance` skill or keep `2.28.2` with CHANGELOG errata; F4 document the `src/engine` layer in architecture/reference docs. Ride-alongs F5-F9/S1-S7 stay in the same report.
-- **Effort**: L.
-- **Source**: external architecture review archived with v2.28.2 engine integration project; see report F1-F4 and suggested commit grouping.
+### ✅ DONE (2026-07-02, v2.29.0) — Engine integration follow-up hardening from external architecture review
+- **Resolution**: Shipped F1-F4 plus feasible ride-alongs F5-F9/S1/S2/S5. `engine implement-review` now fails closed on unknown/unqualified reviewers by default, Codex package payload drift is gated by `sync-codex-plugin-skills.sh --check` in pre-commit/preflight, release metadata is retargeted to `v2.29.0`, and the engine layer/front-door docs are updated. S3/S4/S6/S7 remain deferred as non-ship-blocking runtime semantics, not backlog-triggered active work.
+- **Source**: `ce3d79e` merge + `2b895d2` post-merge doc-sync correction; archived project `docs/projects/_archive/2026-07-02-engine-hardening/README.md`.
 
 ### ✅ DONE (2026-07-01, v2.28.0) — `/l6` — full-dispatch CEO front-door
 - **Resolution**: `/l6` was shipped as the 26th skill. Recurrence was proven by cross-session manual usage + token-conservation need (not one session). The prerequisite dispatch-hetero fix shipped in v2.27.1. The entry no longer gates anything.

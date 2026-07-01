@@ -120,7 +120,7 @@ function compareFile(rel) {
   if (!source.equals(copy)) failures.push(`content ${rel}`);
 }
 
-for (const rel of ['references', 'scripts', 'project-config-template']) {
+for (const rel of ['bin', 'src', 'hooks/_shared', 'references', 'scripts', 'project-config-template']) {
   compareTree(rel);
 }
 for (const rel of [
@@ -195,6 +195,10 @@ NODE
 EXIT=$?
 assert_eq "$EXIT" "0" "Codex plugin package skill-link check exits 0"
 assert_eq "$LINK_CHECK_OUT" "package_skill_links_resolve" "Codex plugin package skill links resolve inside payload"
+
+OUT="$(node "$PLUGIN_DIR/bin/autopilot.js" --help 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "Codex plugin packaged engine CLI help exits 0"
+assert_contains "$OUT" "engine implement-review" "Codex plugin packaged engine CLI can load support modules"
 
 OUT="$(node - "$REPO_ROOT" "$PLUGIN_DIR" "$MARKETPLACE" "$MARKETPLACE_ROOT" <<'NODE'
 const fs = require('fs');

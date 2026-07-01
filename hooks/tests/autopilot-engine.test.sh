@@ -698,6 +698,37 @@ NODE
 assert_eq "0" "$EXIT" "AutopilotEngine buildImplementationArgs absolutizes prompt path"
 assert_contains "$OUT" "--prompt-file $REPO_ROOT/relative-prompt.md" "AutopilotEngine passes absolute prompt path to dispatch-hetero"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+
+try {
+  parseImplementationOutput(JSON.stringify({
+    status: 'committed',
+    runner: 'codex',
+    model: 'gpt-test',
+    branch: 'impl-branch',
+    base: 'base-sha',
+    commit: null,
+    files_changed: 1,
+    insertions: 1,
+    deletions: 0,
+    worktree: null,
+    agent_log: '/tmp/log',
+    error: null,
+    containment: 'plain',
+    contained: true,
+  }));
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementer parser committed-null process exits 0"
+assert_contains "$OUT" "status committed requires a non-empty commit" "AutopilotEngine implementer parser rejects committed outcome without commit"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -763,6 +794,64 @@ assert_contains "$OUT" "model=test-impl-model" "AutopilotEngine implementation o
 assert_contains "$OUT" "commit=impl-commit" "AutopilotEngine implementation output captures commit"
 assert_contains "$OUT" "--runner test-impl-runner --model test-impl-model --prompt-file $TEST_TMP/implementer-prompt.txt --branch impl-branch --base base-sha --effort high" "AutopilotEngine builds implementation dispatcher args from roster"
 assert_contains "$OUT" "dispatch_implementation:committed:base-sha:impl-branch:impl-commit:test-impl-runner:test-impl-model:0" "AutopilotEngine emits implementation ledger row with runner/model/base/branch/commit/exit status"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-nonzero-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        commit: 'impl-commit',
+        base: 'base-sha',
+        branch: 'impl-branch',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: 'base-sha',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine blocks nonzero committed implementation dispatch"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks nonzero committed implementation dispatch status"
+assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine reports dispatch phase for nonzero committed implementation"
+assert_contains "$OUT" "reason=implementation dispatch exited with status 1" "AutopilotEngine surfaces nonzero committed implementation exit"
+assert_contains "$OUT" "ledger=dispatch_implementation:blocked" "AutopilotEngine records nonzero committed implementation as blocked"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
 const fs = require('fs');

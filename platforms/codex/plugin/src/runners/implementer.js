@@ -75,8 +75,11 @@ function validateImplementationResult(value) {
     }
   }
 
-  if (value.commit !== null && typeof value.commit !== 'string') {
-    throw new Error('dispatch-hetero output JSON field commit must be null or string');
+  if (value.commit !== null && (typeof value.commit !== 'string' || value.commit.length === 0)) {
+    throw new Error('dispatch-hetero output JSON field commit must be null or non-empty string');
+  }
+  if (value.status === 'committed' && value.commit === null) {
+    throw new Error('dispatch-hetero output JSON status committed requires a non-empty commit');
   }
   if (!Number.isInteger(value.files_changed) || value.files_changed < 0) {
     throw new Error('dispatch-hetero output JSON field files_changed must be a non-negative integer');

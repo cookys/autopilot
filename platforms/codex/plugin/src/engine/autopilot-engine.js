@@ -73,6 +73,9 @@ function implementationResultBlocked(result) {
   }
   if (result.parseError) return result.parseError.message || String(result.parseError);
   if (!result.result) return 'implementation dispatch produced no parsed result';
+  if (result.status !== 0 && result.result.status === 'committed') {
+    return `implementation dispatch exited with status ${result.status}`;
+  }
   return null;
 }
 

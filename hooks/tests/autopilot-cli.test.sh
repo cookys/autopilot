@@ -20,6 +20,7 @@ assert_eq "0" "$EXIT" "autopilot --help exits 0"
 assert_contains "$OUT" "dispatch review" "autopilot help lists dispatch review"
 assert_contains "$OUT" "engine review-loop" "autopilot help lists engine review-loop"
 assert_contains "$OUT" "engine implement-review" "autopilot help lists engine implement-review"
+assert_contains "$OUT" "--require-qualified-reviewer" "autopilot help documents reviewer qualification default flag"
 assert_contains "$OUT" "--allow-unqualified-reviewer" "autopilot help documents reviewer qualification escape hatch"
 
 printf 'implementer loop prompt\n' > "$TEST_TMP/engine-impl-review-prompt.txt"

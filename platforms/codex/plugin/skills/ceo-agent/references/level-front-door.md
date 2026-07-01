@@ -81,8 +81,9 @@ CEO (depth 0, this session)
     foreman worktree, `--base` for the engine/hetero impl loop.
   - **Reviewer qualification fails closed by default.** `engine implement-review`
     blocks at `phase:"reviewer_qualification"` when the resolved scorecard says the
-    reviewer is absent, false, or unknown. Use `--allow-unqualified-reviewer` only as
-    an explicit emergency escape hatch and record the decision in the run summary.
+    reviewer is absent, false, or unknown. `--require-qualified-reviewer` is accepted
+    for explicitness/backward compatibility; use `--allow-unqualified-reviewer` only
+    as an explicit emergency escape hatch and record the decision in the run summary.
 
 ### Width — fixed cap 3, disjointness-gated
 

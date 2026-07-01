@@ -88,8 +88,8 @@ Autopilot's engine layer is the host-neutral execution core underneath the prose
 | Module | Responsibility |
 |--------|----------------|
 | [`bin/autopilot.js`](../bin/autopilot.js) | Public CLI front door: `dispatch review`, `engine review-loop`, `engine implement-review`, and `harness report`. |
-| [`src/engine/`](../src/engine/) | `AutopilotEngine` orchestration for roster resolution, read-only review dispatch, heterogeneous implementation dispatch, repair-loop prompting, and immutable-base verification. |
-| [`src/runners/`](../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`, `resolve-review-loop.sh`) with schema validation and parse-fail visibility. |
+| [`src/engine/`](../src/engine/) | `AutopilotEngine` orchestration plus the `resolve-review-loop.sh` wrapper for roster resolution, read-only review dispatch, heterogeneous implementation dispatch, repair-loop prompting, and immutable-base verification. |
+| [`src/runners/`](../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) with schema validation and parse-fail visibility. |
 | [`src/harness/`](../src/harness/) | Harness capability state, stale/attention reporting, and read-only capability CLI surfaces. |
 | [`src/hooks/`](../src/hooks/) | Host-neutral hook normalizers and handlers used by Claude wrappers and Codex hook probes. |
 

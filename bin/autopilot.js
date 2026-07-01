@@ -10,7 +10,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--allow-unqualified-reviewer]
+  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer|--allow-unqualified-reviewer]
   node bin/autopilot.js harness report [harness report args...]
 
 Commands:
@@ -19,6 +19,8 @@ Commands:
                     Delegate to the review-loop roster resolver.
   engine implement-review
                     Run implementer -> review -> repair through AutopilotEngine.
+                    Reviewer qualification is fail-closed by default; use
+                    --allow-unqualified-reviewer only as an explicit escape hatch.
   harness report    Emit read-only harness capability state and stale flags.
 
 Exit codes:

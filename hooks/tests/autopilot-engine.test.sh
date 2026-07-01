@@ -1,0 +1,680 @@
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+
+DIFF="$TEST_TMP/review.diff"
+printf '+const answer = 42;\n' > "$DIFF"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const calls = [];
+const engine = new AutopilotEngine({
+  clock: () => 1782864000000,
+  reviewLoopResolver(args) {
+    calls.push(['resolve', args]);
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'test-review-effort',
+        reviewer_runner: 'test-review-runner',
+        reviewer_qualified: true,
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    calls.push(['review', args]);
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP',
+        findings: 'stub finding',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`status=${result.status}`);
+console.log(`verdict=${result.verdict}`);
+console.log(`resolve_args=${calls[0][1].join(' ')}`);
+console.log(`review_args=${calls[1][1].join(' ')}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff process exits 0"
+assert_contains "$OUT" "status=reviewed" "AutopilotEngine returns reviewed status"
+assert_contains "$OUT" "verdict=FIX-THEN-SHIP" "AutopilotEngine returns review verdict"
+assert_contains "$OUT" "resolve_args=--check-scorecard" "AutopilotEngine resolves scorecard-aware roster by default"
+assert_contains "$OUT" "--runner test-review-runner --model test-review-model --diff-file $DIFF --effort test-review-effort" "AutopilotEngine builds review dispatcher args from roster"
+assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_review:reviewed" "AutopilotEngine emits dispatch ledger"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'test-review-effort',
+        reviewer_runner: 'test-review-runner',
+        reviewer_qualified: true,
+      },
+    };
+  },
+});
+
+const result = engine.resolveRoster();
+console.log(`status=${result.status}`);
+console.log(`reviewer=${result.roster && result.roster.reviewer_engine}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine resolveRoster process exits 0"
+assert_contains "$OUT" "status=resolved" "AutopilotEngine resolveRoster returns resolved status"
+assert_contains "$OUT" "reviewer=test-review-model" "AutopilotEngine resolveRoster returns roster"
+assert_contains "$OUT" "ledger=resolve_roster:resolved" "AutopilotEngine resolveRoster emits ledger"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  clock: () => Number.MAX_VALUE,
+});
+const result = engine.resolveRoster({ args: '' });
+console.log(`status=${result.status}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine resolveRoster bad-args process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine resolveRoster blocks bad args"
+assert_contains "$OUT" "reason=resolveRoster args must be an array" "AutopilotEngine resolveRoster surfaces bad args"
+assert_contains "$OUT" "ledger=resolve_roster:blocked" "AutopilotEngine resolveRoster bad args emits ledger"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  clock: () => new Date('not-a-date'),
+});
+const result = engine.resolveRoster({ args: '' });
+console.log(`status=${result.status}`);
+console.log(`started_type=${typeof result.ledger[0].started_at}`);
+console.log(`ended_type=${typeof result.ledger[0].ended_at}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine invalid-Date clock process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine tolerates invalid Date clock values"
+assert_contains "$OUT" "started_type=string" "AutopilotEngine keeps started_at as string with invalid Date clock"
+assert_contains "$OUT" "ended_type=string" "AutopilotEngine keeps ended_at as string with invalid Date clock"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+let reviewCalls = 0;
+const engine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '{bad',
+      stderr: '',
+      parseError: new Error('schema drift'),
+      result: null,
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    throw new Error('review should not run');
+  },
+});
+
+const result = engine.reviewDiff({ diffFile: diff });
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`review_calls=${reviewCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine resolve-block process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks on roster parse error"
+assert_contains "$OUT" "phase=resolve_roster" "AutopilotEngine reports resolve_roster phase"
+assert_contains "$OUT" "reason=schema drift" "AutopilotEngine surfaces parse error"
+assert_contains "$OUT" "review_calls=0" "AutopilotEngine does not dispatch review after resolve block"
+assert_contains "$OUT" "ledger=resolve_roster:blocked" "AutopilotEngine records blocked roster ledger"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+let reviewCalls = 0;
+const engine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_runner: 'test-review-runner',
+      },
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    throw new Error('review should not run');
+  },
+});
+
+const result = engine.reviewDiff({ diffFile: diff });
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`review_calls=${reviewCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine malformed-resolved-roster process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks malformed resolved roster"
+assert_contains "$OUT" "phase=resolve_roster" "AutopilotEngine reports resolve phase for malformed roster"
+assert_contains "$OUT" "reviewer_effort is required" "AutopilotEngine surfaces malformed roster reason"
+assert_contains "$OUT" "review_calls=0" "AutopilotEngine does not dispatch malformed resolved roster"
+assert_contains "$OUT" "ledger=resolve_roster:blocked" "AutopilotEngine records malformed roster in resolve ledger"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+let reviewCalls = 0;
+const engine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'test-review-effort',
+        reviewer_runner: 'test-review-runner',
+        reviewer_qualified: false,
+      },
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    throw new Error('review should not run');
+  },
+});
+
+const result = engine.reviewDiff({ diffFile: diff, requireQualifiedReviewer: true });
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`review_calls=${reviewCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine qualification-block process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks unqualified reviewer when required"
+assert_contains "$OUT" "phase=reviewer_qualification" "AutopilotEngine reports qualification phase"
+assert_contains "$OUT" "reason=reviewer is not qualified or qualification is unknown" "AutopilotEngine surfaces qualification reason"
+assert_contains "$OUT" "review_calls=0" "AutopilotEngine does not dispatch unqualified reviewer"
+assert_contains "$OUT" "ledger=resolve_roster:resolved,reviewer_qualification:blocked" "AutopilotEngine records qualification ledger"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: 'not json',
+      stderr: '',
+      parseError: new Error('no JSON object found'),
+      result: null,
+    };
+  },
+});
+
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine dispatch-block process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks on review parse error"
+assert_contains "$OUT" "phase=dispatch_review" "AutopilotEngine reports dispatch phase"
+assert_contains "$OUT" "reason=review dispatch exited with status 1" "AutopilotEngine prioritizes nonzero review exit"
+assert_contains "$OUT" "ledger=dispatch_review:blocked" "AutopilotEngine records blocked review ledger"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine();
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_runner: 'test-review-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine invalid-roster process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks partial injected roster"
+assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare phase for invalid roster"
+assert_contains "$OUT" "reviewer_effort is required" "AutopilotEngine rejects partial injected roster"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine();
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: 'bad-roster',
+  requireQualifiedReviewer: true,
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine non-object-roster process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks non-object roster before qualification"
+assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare phase for non-object roster"
+assert_contains "$OUT" "reason=review roster is required" "AutopilotEngine surfaces non-object roster reason"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+let reviewCalls = 0;
+const engine = new AutopilotEngine({
+  reviewDispatcher() {
+    reviewCalls += 1;
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'no_verdict',
+        verdict: null,
+        findings: '',
+        raw_log: '/tmp/log',
+        error: 'no verdict',
+      },
+    };
+  },
+});
+
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`review_calls=${reviewCalls}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine nonzero-review process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks nonzero review status"
+assert_contains "$OUT" "phase=dispatch_review" "AutopilotEngine reports dispatch phase for nonzero review"
+assert_contains "$OUT" "reason=review dispatch exited with status 1" "AutopilotEngine surfaces nonzero review exit"
+assert_contains "$OUT" "review_calls=1" "AutopilotEngine still records one review attempt"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'no_verdict',
+        verdict: null,
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine zero-exit-no-verdict process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks parsed non-reviewed status"
+assert_contains "$OUT" "phase=dispatch_review" "AutopilotEngine reports dispatch phase for non-reviewed status"
+assert_contains "$OUT" "reason=review dispatch result status no_verdict" "AutopilotEngine surfaces non-reviewed status"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: null,
+      signal: 'SIGTERM',
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: null,
+    };
+  },
+});
+
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine review signal process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks review signal termination"
+assert_contains "$OUT" "phase=dispatch_review" "AutopilotEngine reports dispatch phase for signal"
+assert_contains "$OUT" "reason=review dispatch terminated by signal SIGTERM" "AutopilotEngine surfaces review signal"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewDispatcher() {
+    throw new Error('dispatcher exploded');
+  },
+});
+
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine dispatcher exception process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks dispatcher exceptions"
+assert_contains "$OUT" "phase=dispatch_review" "AutopilotEngine reports dispatch phase for dispatcher exception"
+assert_contains "$OUT" "reason=dispatcher exploded" "AutopilotEngine surfaces dispatcher exception"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    throw new Error('resolver exploded');
+  },
+});
+
+const result = engine.reviewDiff({ diffFile: diff });
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine resolver-exception process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks resolver exceptions"
+assert_contains "$OUT" "phase=resolve_roster" "AutopilotEngine reports resolve phase for exception"
+assert_contains "$OUT" "reason=resolver exploded" "AutopilotEngine surfaces resolver exception"
+assert_contains "$OUT" "ledger=resolve_roster:blocked" "AutopilotEngine records resolver exception ledger"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine();
+const result = engine.reviewDiff({
+  diffFile: diff,
+  rosterArgs: '--bad',
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff bad-rosterArgs process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine reviewDiff blocks bad rosterArgs"
+assert_contains "$OUT" "phase=resolve_roster" "AutopilotEngine reports resolve phase for bad rosterArgs"
+assert_contains "$OUT" "reason=resolveRoster args must be an array" "AutopilotEngine surfaces bad rosterArgs"
+assert_contains "$OUT" "ledger=resolve_roster:blocked" "AutopilotEngine records bad rosterArgs ledger"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: null,
+      signal: 'SIGINT',
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: null,
+    };
+  },
+});
+
+const result = engine.reviewDiff({ diffFile: diff });
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine resolver signal process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks resolver signal termination"
+assert_contains "$OUT" "phase=resolve_roster" "AutopilotEngine reports resolve phase for signal"
+assert_contains "$OUT" "reason=review-loop terminated by signal SIGINT" "AutopilotEngine surfaces resolver signal"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine();
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+  extraReviewArgs: ['--runner', 'agy'],
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine conflicting-extra-args process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks conflicting extra args"
+assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare phase for conflicting args"
+assert_contains "$OUT" "cannot override --runner" "AutopilotEngine rejects reserved review arg override"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine();
+const result = engine.reviewDiff({
+  diffFile: diff,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'test-review-effort',
+    reviewer_runner: 'test-review-runner',
+  },
+  extraReviewArgs: '',
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine bad-extra-args process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks non-array extra args"
+assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare phase for bad extra args"
+assert_contains "$OUT" "extraReviewArgs must be an array" "AutopilotEngine surfaces bad extra args"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    throw new Error('resolver should not run');
+  },
+});
+const result = engine.reviewDiff({});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine missing-diff process exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks missing diffFile before resolving"
+assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare phase for missing diff"
+assert_contains "$OUT" "reason=diffFile is required" "AutopilotEngine surfaces missing diff reason"
+assert_contains "$OUT" "ledger=prepare_review:blocked" "AutopilotEngine records missing diff ledger"
+
+finalize_test

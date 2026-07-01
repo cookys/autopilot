@@ -766,6 +766,15 @@ First implementation slice:
 - `hooks/tests/review-loop-runner.test.sh` covers JSON capture, enforce-exit
   parsing, and fail-loud schema validation.
 
+Second implementation slice:
+
+- `src/engine/autopilot-engine.js` and `src/engine/index.js` introduce the first
+  `AutopilotEngine` API: a DI-friendly, read-only
+  `resolve roster -> dispatch reviewer` path with per-unit ledger entries.
+- `hooks/tests/autopilot-engine.test.sh` covers roster resolution blocks,
+  reviewer qualification blocks, dispatch parse blocks, and successful review
+  dispatch argument construction.
+
 ## 16. Risks and mitigations
 
 | Risk | Mitigation |

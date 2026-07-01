@@ -1124,6 +1124,53 @@ assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation 
 assert_contains "$OUT" "review_calls=0" "AutopilotEngine implementation loop does not dispatch review when qualification fails"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,reviewer_qualification:blocked" "AutopilotEngine implementation loop records qualification block"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/malformed-roster-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+let implementationCalls = 0;
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    implementationCalls += 1;
+    throw new Error('implementation should not dispatch with malformed roster');
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'impl-loop',
+  base: 'base-sha',
+  maxRounds: 1,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`reason=${result.reason}`);
+console.log(`implementation_calls=${implementationCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementation loop malformed roster exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine implementation loop blocks malformed injected roster"
+assert_contains "$OUT" "phase=prepare_implementation_loop" "AutopilotEngine implementation loop reports preparation phase for malformed roster"
+assert_contains "$OUT" "rounds=0" "AutopilotEngine implementation loop blocks malformed roster before round one"
+assert_contains "$OUT" "reason=implementer roster field implementer_runner is required" "AutopilotEngine implementation loop surfaces missing implementer field"
+assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation loop does not dispatch with malformed roster"
+assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine implementation loop records malformed roster as preparation block"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -1231,11 +1278,12 @@ fs.writeFileSync(path.join(repo, 'large.txt'), `${'x'.repeat(2 * 1024 * 1024)}\n
 execFileSync('git', ['add', 'large.txt'], { cwd: repo });
 execFileSync('git', ['commit', '-m', 'large'], { cwd: repo, stdio: 'ignore' });
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
-process.chdir(repo);
 
 let diffSize = 0;
+let implementationCwd = null;
 const engine = new AutopilotEngine({
-  implementationDispatcher() {
+  implementationDispatcher(_args, options) {
+    implementationCwd = options && options.cwd;
     return {
       error: null,
       status: 0,
@@ -1286,6 +1334,7 @@ const result = engine.runImplementationReviewLoop({
   promptFile: prompt,
   branch: 'large-diff',
   base,
+  cwd: repo,
   roster: {
     reviewer_engine: 'test-review-model',
     reviewer_effort: 'xhigh',
@@ -1299,11 +1348,13 @@ const result = engine.runImplementationReviewLoop({
 });
 
 console.log(`status=${result.status}`);
+console.log(`implementation_cwd=${implementationCwd}`);
 console.log(`diff_over_default_buffer=${diffSize > 1024 * 1024}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine default diff provider streams large diffs"
 assert_contains "$OUT" "status=converged" "AutopilotEngine large diff provider loop converges"
+assert_contains "$OUT" "implementation_cwd=$TEST_TMP/large-diff-repo" "AutopilotEngine implementation loop passes cwd to implementation dispatcher"
 assert_contains "$OUT" "diff_over_default_buffer=true" "AutopilotEngine default diff provider writes diff larger than spawnSync default buffer"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-repair-prompt.txt" <<'NODE'

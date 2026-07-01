@@ -38,7 +38,7 @@ codex plugin list --marketplace autopilot-local --available
 codex plugin add autopilot@autopilot-local
 ```
 
-The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install.
+The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install. Run engine commands from the target repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
 
 For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
 

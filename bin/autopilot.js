@@ -10,7 +10,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--max-rounds N] [--require-qualified-reviewer]
+  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer]
   node bin/autopilot.js harness report [harness report args...]
 
 Commands:
@@ -32,6 +32,7 @@ function parseImplementReviewArgs(rawArgs) {
     promptFile: null,
     branch: null,
     base: null,
+    cwd: null,
     maxRounds: null,
     requireQualifiedReviewer: false,
   };
@@ -63,6 +64,15 @@ function parseImplementReviewArgs(rawArgs) {
         return { error: '--base requires a value' };
       }
       output.base = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--cwd') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--cwd requires a value' };
+      }
+      output.cwd = value;
       i += 2;
       continue;
     }
@@ -134,7 +144,9 @@ if (args[0] === 'engine') {
       if (parsed.error) {
         failUsage(parsed.error);
       }
-      const result = new AutopilotEngine().runImplementationReviewLoop(parsed);
+      const result = new AutopilotEngine({
+        cwd: parsed.cwd || process.cwd(),
+      }).runImplementationReviewLoop(parsed);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

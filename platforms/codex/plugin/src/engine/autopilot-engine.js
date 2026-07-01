@@ -264,7 +264,7 @@ class AutopilotEngine {
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
-    this.cwd = options.cwd || process.cwd();
+    this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
   }
 
@@ -714,6 +714,7 @@ class AutopilotEngine {
     const promptFile = input.promptFile;
     const branch = input.branch;
     const base = input.base;
+    let loopCwd = this.cwd;
 
     if (!promptFile || typeof promptFile !== 'string') {
       const startedAt = this.now();
@@ -757,6 +758,23 @@ class AutopilotEngine {
         ledger,
       };
     }
+    if (Object.prototype.hasOwnProperty.call(input, 'cwd') && input.cwd !== undefined && input.cwd !== null) {
+      if (typeof input.cwd !== 'string' || input.cwd.length === 0) {
+        const startedAt = this.now();
+        ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+        return {
+          status: 'blocked',
+          phase: 'prepare_implementation_loop',
+          reason: 'cwd must be a non-empty string',
+          rounds: 0,
+          verdict: null,
+          roster: null,
+          resolveResult: null,
+          ledger,
+        };
+      }
+      loopCwd = path.resolve(input.cwd);
+    }
 
     let roster = input.roster || null;
     let resolveResult = null;
@@ -786,6 +804,28 @@ class AutopilotEngine {
           ledger,
         };
       }
+    }
+
+    try {
+      validateReviewRoster(roster);
+      validateImplementerRoster(roster);
+    } catch (error) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: error.message || String(error),
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      };
     }
 
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
@@ -882,7 +922,12 @@ class AutopilotEngine {
         extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
           ? input.extraImplementationArgs
           : [],
-        implementationOptions: input.implementationOptions || {},
+        implementationOptions: {
+          ...(input.implementationOptions || {}),
+          cwd: Object.prototype.hasOwnProperty.call(input.implementationOptions || {}, 'cwd')
+            ? input.implementationOptions.cwd
+            : loopCwd,
+        },
       });
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
@@ -912,7 +957,7 @@ class AutopilotEngine {
           branch: currentBranch,
           round,
           currentBase: nextBase,
-          cwd: this.cwd,
+          cwd: loopCwd,
         });
       } catch (error) {
         return {

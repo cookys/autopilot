@@ -69,3 +69,7 @@ preserve symlinks.
 
 Run `./scripts/sync-codex-plugin-skills.sh` after changing `skills/` or linked
 support files; the package test fails if the generated payload drifts.
+
+Run packaged engine commands from the target repository, or pass
+`--cwd /path/to/repo` to `engine implement-review` so implementation worktrees
+and review diffs use the intended project.

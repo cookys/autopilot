@@ -24,7 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.28.0 — /l6 full-dispatch CEO front-door
+
 ## v2.27.1 — dispatch-hetero wrapper-commit fix
+
+**Headline**: Adds `l6`, the 26th skill, as a full-dispatch CEO front-door: `/l6` is `/l5` plus verification AUTHORING as independent heterogeneous dispatch (separate engine family + independent harness), while depth-0 remains pure orchestration with authoritative QC (it executes committed artifacts and judges convergence-by-verification, never trusting a dispatched green).
+
+### Added
+- `l6`: new 26th user-facing `/l6` skill that defines full-dispatch CEO posture as `/l5` + independently-dispatched verification authoring and reviews.
+
+### Verification / validation
+- Built entirely by heterogeneous dispatch (`codex` implementation + Gemini decorrelated review), with recurrence proven by cross-session manual usage (token-conservation need), not a single one-off session.
+- Prerequisite `dispatch-hetero` fix shipped in v2.27.1.
 
 **Headline**: `scripts/dispatch-hetero.sh` now wrapper-commits a worker's uncommitted edits for **any** runner, not just agy/grok/cc-shim — the fallback was guarded on `[ "$IS_CODEX" -eq 0 ]` on the assumption "codex commits itself", but `gpt-5.3-codex-spark` routinely leaves edits uncommitted (HEAD at base, tree dirty, especially for net-new files), so dispatches that created new files wrongly returned `dirty`/`files_changed:0` and had to be harvested by hand (~8× in the v2.26.11/v2.27.0 full-dispatch build). Dropping the codex exclusion makes the wrapper-commit a universal fallback (safe: it only fires when HEAD hasn't moved, so a self-committing codex run is never double-committed); the existing `git add -A` already stages net-new files.
 

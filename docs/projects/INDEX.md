@@ -8,12 +8,12 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-07-01 | [cross-harness-engine-infrastructure](2026-07-01-cross-harness-engine-infrastructure/README.md) | v2.28.1 | `feat/v2.28.1-hook-adapter-framework` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-07-01 | [cross-harness-engine-infrastructure](_archive/2026-07-01-cross-harness-engine-infrastructure/README.md) — Phase 6 hook adapter framework: normalized hook event schema + shared normalizers, host-neutral `intent-capture`/`session-start` handlers, separate warning-only Codex hook probe with shape-only redacted telemetry/rotation, Codex marketplace version mirrors, and H2 warning capability state (no blocking Codex hooks). **Process**: CEO-inline, 15-round Codex gpt-5.5 review loop converged to SHIP-AS-IS; full suite residual failures classified pre-existing on `develop` | v2.28.1 | [`708e911`](../../../../commit/708e911) | [plan](../plans/2026-07-01-cross-harness-engine-infrastructure.md) |
 | 2026-07-01 | /l6 full-dispatch CEO front-door (`/l6` skill) | v2.28.0 | (this ship) | (CHANGELOG entry) |
 | 2026-06-30 | dispatch-hetero wrapper-commit fix — fallback now fires for codex too (was `IS_CODEX`-excluded → `dirty` on net-new files; ~8 manual harvests in the full-dispatch build); verified e2e (codex net-new-file → `committed`) + 48-assertion test. Prereq for a future `/l6` full-dispatch level. **Process**: dispatched fix + Gemini decorrelated review (its "syntax error" finding refuted by `bash -n` + 48-assertion run; folded the `$( ( … ) )` clarity hardening) | v2.27.1 | (this ship) | (CHANGELOG entry) |
 | 2026-06-30 | [engine-lifecycle-methodology v1 + `engine-onboarding` skill](2026-06-30-engine-lifecycle-methodology/README.md) | v2.27.0 | (this ship) | [plan](../plans/2026-06-30-hetero-engine-lifecycle-methodology.md) |

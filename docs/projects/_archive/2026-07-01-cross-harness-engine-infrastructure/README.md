@@ -52,7 +52,7 @@
 | P6.3 Host-neutral `session-start` extraction | Done | `src/hooks/handlers/session-start.js` composes context/output for existing wrapper. |
 | P6.4 Codex warning-only probe package | Done | Separate `platforms/codex/hook-probe/` package; main Codex package remains skills-only. |
 | P6.5 Docs, CHANGELOG, and quality gate | Done | Docs/release metadata updated; deterministic gates pass; full suite residual failures are pre-existing on `develop`. |
-| L-5 Finish-flow | In progress | Finish-flow active for commit, merge, archive, and branch cleanup. |
+| L-5 Finish-flow | Done | Finish-flow completed commit, merge, archive, release hygiene, and branch cleanup. |
 
 ## Decision Log
 

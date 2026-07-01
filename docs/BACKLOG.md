@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Pre-existing full-suite failures — repair local test harness assumptions
+- **Trigger**: next time touching `check-optin-changelog`, `check-test-integrity*`, or `dispatch-hetero` tests; OR before requiring `bash hooks/tests/run.sh` to be fully green as a merge blocker.
+- **Context**: v2.28.1 Phase 6 full-suite gate still has 4 pre-existing failing test files on `develop`: `check-optin-changelog.test.sh` (sandbox git commits hit missing user identity), `check-test-integrity-l1.test.sh` and `check-test-integrity.test.sh` (local `python3 -m pytest` unavailable / collector assumptions fail), and `dispatch-hetero.test.sh` (codex wrapper-commit section disagrees with expected status/message). All four were verified with `scripts/verify-preexisting.sh --base develop` during the Phase 6 finish-flow.
+- **Effort**: Fix.
+- **Source**: v2.28.1 finish-flow quality gate (`708e911` merge), full suite 78/82 with pre-existing classification.
+
 ### ✅ DONE (2026-07-01, v2.28.0) — `/l6` — full-dispatch CEO front-door
 - **Resolution**: `/l6` was shipped as the 26th skill. Recurrence was proven by cross-session manual usage + token-conservation need (not one session). The prerequisite dispatch-hetero fix shipped in v2.27.1. The entry no longer gates anything.
 

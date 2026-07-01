@@ -1,0 +1,28 @@
+{
+  "id": "codex",
+  "display_name": "Codex CLI",
+  "kind": "cli",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-02",
+  "verified_at": "2026-07-02",
+  "expires_at": "2026-07-16",
+  "evidence": {
+    "source": "local-probe-and-official-docs",
+    "command": "codex --version; codex plugin marketplace/add/list smoke; OpenAI Codex hooks/plugin docs check",
+    "result": "codex-cli 0.142.5; skills-only plugin packaging verified locally; official docs describe plugin-bundled lifecycle hooks, trust review, PLUGIN_ROOT, and PLUGIN_DATA"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified",
+    "repo_skills": "verified",
+    "plugin_packaging": "verified",
+    "hooks": "warning",
+    "mutation_dispatch": "unverified",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "Default Autopilot Codex package remains skills-only.",
+    "Codex plugin-bundled hooks are documented, but Autopilot only ships a separate warning-only hook probe package until payload, cwd, env, trust, and failure semantics are recorded as artifacts.",
+    "Do not put real model or effort routing policy in engine code."
+  ]
+}

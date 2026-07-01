@@ -58,6 +58,8 @@ copy_file() {
 }
 
 sync_dir "skills"
+sync_dir "bin"
+sync_dir "src"
 sync_dir "references"
 sync_dir "scripts"
 sync_dir "project-config-template"

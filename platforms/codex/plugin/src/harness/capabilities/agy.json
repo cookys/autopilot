@@ -1,0 +1,27 @@
+{
+  "id": "agy",
+  "display_name": "Antigravity CLI",
+  "kind": "cli",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-01",
+  "verified_at": "2026-07-01",
+  "expires_at": "2026-07-15",
+  "evidence": {
+    "source": "local-probe",
+    "command": "agy --version && agy models && headless smoke",
+    "result": "agy 1.0.14; headless smoke returned AUTOPILOT_AGY_SMOKE_OK"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified",
+    "skill_import": "verified",
+    "agent_import": "verified",
+    "hooks": "unverified",
+    "mutation_dispatch": "unverified",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "agy plugin list showed autopilot imported with skills and agents, not hooks.",
+    "Treat as headless worker/reviewer until hook payloads and failure semantics are probed."
+  ]
+}

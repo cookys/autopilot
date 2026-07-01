@@ -2,10 +2,13 @@
 
 const {
   AutopilotEngine,
+  buildImplementationArgs,
   buildReviewArgs,
   reviewLoopResultBlocked,
   reviewResultBlocked,
+  validateImplementerRoster,
   validateExtraReviewArgs,
+  validateExtraArgs,
   validateReviewRoster,
 } = require('./autopilot-engine');
 
@@ -21,9 +24,12 @@ const {
 
 module.exports = {
   AutopilotEngine,
+  buildImplementationArgs,
   buildReviewArgs,
   reviewLoopResultBlocked,
   reviewResultBlocked,
+  validateExtraArgs,
+  validateImplementerRoster,
   validateExtraReviewArgs,
   validateReviewRoster,
   resolveReviewLoop,

@@ -1,7 +1,15 @@
 'use strict';
 
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const { spawnSync } = require('child_process');
+
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
+const { dispatchImplementJson } = require('../runners/implementer');
+
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 function defaultNow() {
   return new Date().toISOString();
@@ -56,20 +64,16 @@ function reviewResultBlocked(result) {
   return null;
 }
 
-function validateExtraReviewArgs(extraReviewArgs) {
-  if (!Array.isArray(extraReviewArgs)) {
-    throw new TypeError('extraReviewArgs must be an array');
+function implementationResultBlocked(result) {
+  if (!result) return 'missing implementation dispatch result';
+  if (result.error) return result.error.message || String(result.error);
+  if (result.signal) return `implementation dispatch terminated by signal ${result.signal}`;
+  if (result.status === null || result.status === undefined) {
+    return `implementation dispatch exited with status ${result.status}`;
   }
-  const reserved = new Set(['--runner', '--model', '--diff-file', '--effort']);
-  for (const arg of extraReviewArgs) {
-    if (typeof arg !== 'string') {
-      throw new TypeError('extraReviewArgs must contain only strings');
-    }
-    const key = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg;
-    if (reserved.has(key)) {
-      throw new TypeError(`extraReviewArgs cannot override ${key}`);
-    }
-  }
+  if (result.parseError) return result.parseError.message || String(result.parseError);
+  if (!result.result) return 'implementation dispatch produced no parsed result';
+  return null;
 }
 
 function validateReviewRoster(roster) {
@@ -84,12 +88,45 @@ function validateReviewRoster(roster) {
   return roster;
 }
 
+function validateImplementerRoster(roster) {
+  if (!roster || typeof roster !== 'object') {
+    throw new TypeError('implementer roster is required');
+  }
+  for (const field of ['implementer_runner', 'implementer_engine', 'implementer_effort']) {
+    if (typeof roster[field] !== 'string' || roster[field].length === 0) {
+      throw new TypeError(`implementer roster field ${field} is required`);
+    }
+  }
+  return roster;
+}
+
+function validateExtraArgs(extraArgs, reservedSet, label) {
+  if (!Array.isArray(extraArgs)) {
+    throw new TypeError(`${label} must be an array`);
+  }
+  for (const arg of extraArgs) {
+    if (typeof arg !== 'string') {
+      throw new TypeError(`${label} must contain only strings`);
+    }
+    const key = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg;
+    if (reservedSet.has(key)) {
+      throw new TypeError(`extra args cannot override ${key}`);
+    }
+  }
+}
+
+function validateInteger(value, field, minimum) {
+  if (!Number.isInteger(value) || value < minimum) {
+    throw new TypeError(`${field} must be an integer >= ${minimum}`);
+  }
+}
+
 function buildReviewArgs({ roster, diffFile, extraReviewArgs = [] }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraReviewArgs(extraReviewArgs);
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort']), 'extraReviewArgs');
 
   return [
     '--runner',
@@ -104,10 +141,111 @@ function buildReviewArgs({ roster, diffFile, extraReviewArgs = [] }) {
   ];
 }
 
+function validateExtraReviewArgs(extraReviewArgs) {
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort']), 'extraReviewArgs');
+}
+
+function buildImplementationArgs({
+  roster,
+  promptFile,
+  branch,
+  base,
+  extraImplementationArgs = [],
+}) {
+  validateImplementerRoster(roster);
+  if (!promptFile || typeof promptFile !== 'string') {
+    throw new TypeError('promptFile is required');
+  }
+  if (!branch || typeof branch !== 'string') {
+    throw new TypeError('branch is required');
+  }
+  if (!base || typeof base !== 'string') {
+    throw new TypeError('base is required');
+  }
+  validateExtraArgs(extraImplementationArgs, new Set([
+    '--runner',
+    '--model',
+    '--prompt-file',
+    '--branch',
+    '--base',
+    '--effort',
+  ]), 'extraImplementationArgs');
+
+  return [
+    '--runner',
+    roster.implementer_runner,
+    '--model',
+    roster.implementer_engine,
+    '--prompt-file',
+    promptFile,
+    '--branch',
+    branch,
+    '--base',
+    base,
+    '--effort',
+    roster.implementer_effort,
+    ...extraImplementationArgs,
+  ];
+}
+
+function buildRepairBranchName({ branch, round, previousCommit }) {
+  const short = previousCommit ? previousCommit.slice(0, 7) : 'base';
+  return `${branch}-repair-r${round}-${short}`;
+}
+
+function defaultDiffProvider({ base, commit, branch, round }) {
+  const child = spawnSync('git', ['diff', `${base}..${commit}`], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (child.error) {
+    throw child.error;
+  }
+  if (child.status !== 0) {
+    throw new Error(`git diff failed with status ${child.status}`);
+  }
+  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${branch || 'branch'}-${round || 0}-`));
+  const file = path.join(diffDir, 'range.diff');
+  fs.writeFileSync(file, child.stdout || '', 'utf8');
+  return file;
+}
+
+function defaultRepairPromptWriter({
+  promptFile,
+  round,
+  base,
+  previousCommit,
+  commit,
+  review,
+}) {
+  const original = fs.readFileSync(promptFile, 'utf8');
+  const repairPrompt = [
+    '---',
+    'Repair iteration requested by /l5/l6 implementation loop.',
+    `round: ${round}`,
+    `base: ${base}`,
+    `previous_commit: ${previousCommit}`,
+    `failed_commit: ${commit}`,
+    `previous_verdict: ${review && review.verdict}`,
+    '---',
+    '',
+    original,
+  ].join('\n');
+
+  const repairDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-repair-prompt-${round || 0}-`));
+  const repairFile = path.join(repairDir, 'prompt.txt');
+  fs.writeFileSync(repairFile, repairPrompt, 'utf8');
+  return repairFile;
+}
+
 class AutopilotEngine {
   constructor(options = {}) {
     this.reviewLoopResolver = options.reviewLoopResolver || resolveReviewLoopJson;
     this.reviewDispatcher = options.reviewDispatcher || dispatchReviewJson;
+    this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
+    this.diffProvider = options.diffProvider || defaultDiffProvider;
+    this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
     this.now = createClock(options.clock);
   }
 
@@ -319,6 +457,7 @@ class AutopilotEngine {
       };
     }
     const blockedReason = reviewResultBlocked(reviewResult);
+    const parsed = reviewResult && reviewResult.result ? reviewResult.result : null;
     ledger.push(
       this.ledgerEntry('dispatch_review', blockedReason ? 'blocked' : reviewResult.result.status, startedAt, {
         runner: roster.reviewer_runner,
@@ -344,22 +483,529 @@ class AutopilotEngine {
 
     return {
       status: reviewResult.result.status,
-      verdict: reviewResult.result.verdict,
+      verdict: parsed.verdict,
       roster,
       resolveResult,
       reviewResult,
-      review: reviewResult.result,
+      review: parsed,
       reviewArgs,
       ledger,
+    };
+  }
+
+  implementTask(input = {}) {
+    const ledger = [];
+    let roster = input.roster || null;
+    let resolveResult = null;
+    let implementationArgs = null;
+
+    if (!input.promptFile || typeof input.promptFile !== 'string') {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'promptFile is required',
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+
+    if (!input.branch || typeof input.branch !== 'string') {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'branch is required',
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+
+    if (!input.base || typeof input.base !== 'string') {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'base is required',
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+
+    if (!roster) {
+      const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+        ? input.rosterArgs
+        : ['--check-scorecard'];
+      const resolved = this.resolveRoster({
+        args: rosterArgs,
+        options: input.resolverOptions || {},
+      });
+      ledger.push(...resolved.ledger);
+      resolveResult = resolved.result;
+      roster = resolved.roster;
+
+      if (resolved.status === 'blocked') {
+        return {
+          status: 'blocked',
+          phase: 'resolve_roster',
+          reason: resolved.reason,
+          roster: null,
+          resolveResult,
+          implementationResult: null,
+          implementationArgs,
+          implementation: null,
+          ledger,
+        };
+      }
+    }
+
+    try {
+      validateImplementerRoster(roster);
+    } catch (error) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: error.message || String(error),
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+
+    try {
+      implementationArgs = buildImplementationArgs({
+        roster,
+        promptFile: input.promptFile,
+        branch: input.branch,
+        base: input.base,
+        extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
+          ? input.extraImplementationArgs
+          : [],
+      });
+    } catch (error) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: error.message || String(error),
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+
+    const startedAt = this.now();
+    let implementationResult;
+    try {
+      implementationResult = this.implementationDispatcher(
+        implementationArgs,
+        input.implementationOptions || {},
+      );
+    } catch (error) {
+      implementationResult = {
+        error,
+        status: null,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        result: null,
+        parseError: null,
+      };
+    }
+    const blockedReason = implementationResultBlocked(implementationResult);
+    const parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
+    ledger.push(
+      this.ledgerEntry('dispatch_implementation', blockedReason ? 'blocked' : implementationResult.result.status, startedAt, {
+        runner: parsed ? parsed.runner : null,
+        model: parsed ? parsed.model : null,
+        base: input.base,
+        branch: input.branch,
+        commit: parsed ? parsed.commit : null,
+        exit_status: implementationResult ? implementationResult.status : null,
+      }),
+    );
+
+    if (blockedReason) {
+      return {
+        status: 'blocked',
+        phase: 'dispatch_implementation',
+        reason: blockedReason,
+        roster,
+        resolveResult,
+        implementationResult,
+        implementationArgs,
+        implementation: parsed,
+        ledger,
+      };
+    }
+
+    if (implementationResult.result.status !== 'committed') {
+      return {
+        status: 'blocked',
+        phase: 'dispatch_implementation',
+        reason: `implementation status ${implementationResult.result.status}`,
+        roster,
+        resolveResult,
+        implementationResult,
+        implementationArgs,
+        implementation: parsed,
+        ledger,
+      };
+    }
+
+    return {
+      status: implementationResult.result.status,
+      phase: 'dispatch_implementation',
+      reason: null,
+      roster,
+      resolveResult,
+      implementationResult,
+      implementationArgs,
+      implementation: parsed,
+      ledger,
+    };
+  }
+
+  runImplementationReviewLoop(input = {}) {
+    const ledger = [];
+    const promptFile = input.promptFile;
+    const branch = input.branch;
+    const base = input.base;
+
+    if (!promptFile || typeof promptFile !== 'string') {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'promptFile is required',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      };
+    }
+    if (!branch || typeof branch !== 'string') {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'branch is required',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      };
+    }
+    if (!base || typeof base !== 'string') {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'base is required',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      };
+    }
+
+    let roster = input.roster || null;
+    let resolveResult = null;
+
+    if (!roster) {
+      const resolved = this.resolveRoster({
+        args: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+          ? input.rosterArgs
+          : ['--check-scorecard'],
+        options: input.resolverOptions || {},
+      });
+      ledger.push(...resolved.ledger);
+      resolveResult = resolved.result;
+      roster = resolved.roster;
+
+      if (resolved.status === 'blocked') {
+        return {
+          status: 'blocked',
+          phase: 'resolve_roster',
+          reason: resolved.reason,
+          rounds: 0,
+          verdict: null,
+          roster: null,
+          resolveResult,
+          implementation: null,
+          review: null,
+          ledger,
+        };
+      }
+    }
+
+    const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
+    let maxRounds = roster.loop_max_rounds;
+    if (Object.prototype.hasOwnProperty.call(input, 'maxRounds') && input.maxRounds !== undefined && input.maxRounds !== null) {
+      if (typeof input.maxRounds === 'string') {
+        maxRounds = Number(input.maxRounds);
+      } else {
+        maxRounds = input.maxRounds;
+      }
+    }
+
+    try {
+      validateInteger(maxRounds, 'maxRounds', 1);
+    } catch (error) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: error.message || String(error),
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        ledger,
+      };
+    }
+
+    let convergenceVerdict = roster.loop_convergence_verdict;
+    if (Object.prototype.hasOwnProperty.call(input, 'convergenceVerdict')) {
+      convergenceVerdict = input.convergenceVerdict;
+    }
+    if (typeof convergenceVerdict !== 'string' || convergenceVerdict.length === 0) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'convergenceVerdict is required',
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        ledger,
+      };
+    }
+
+    const implementationChain = [];
+    const reviewChain = [];
+    const immutableBase = base;
+    let repairPromptFile = promptFile;
+    let nextBase = base;
+    let implementation = null;
+    let review = null;
+
+    for (let round = 1; round <= maxRounds; round += 1) {
+      const currentBranch = round === 1
+        ? branch
+        : buildRepairBranchName({
+          branch,
+          round,
+          previousCommit: nextBase,
+        });
+
+      implementation = this.implementTask({
+        promptFile: repairPromptFile,
+        branch: currentBranch,
+        base: nextBase,
+        roster,
+        extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
+          ? input.extraImplementationArgs
+          : [],
+        implementationOptions: input.implementationOptions || {},
+      });
+      ledger.push(...implementation.ledger);
+      implementationChain.push(implementation);
+      if (implementation.status !== 'committed') {
+        return {
+          status: 'blocked',
+          phase: 'dispatch_implementation',
+          reason: implementation.reason || `implementation status ${implementation.status}`,
+          rounds: round,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review: null,
+          implementationChain,
+          reviewChain,
+          ledger,
+        };
+      }
+
+      const commit = implementation.implementation.commit;
+      let diffFile;
+      try {
+        diffFile = this.diffProvider({
+          base: immutableBase,
+          commit,
+          branch: currentBranch,
+          round,
+          currentBase: nextBase,
+        });
+      } catch (error) {
+        return {
+          status: 'blocked',
+          phase: 'prepare_review',
+          reason: error.message || String(error),
+          rounds: round,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review: null,
+          implementationChain,
+          reviewChain,
+          ledger,
+        };
+      }
+
+      review = this.reviewDiff({
+        diffFile,
+        roster,
+        extraReviewArgs: input.extraReviewArgs || [],
+        reviewOptions: input.reviewOptions || {},
+        requireQualifiedReviewer,
+      });
+      ledger.push(...review.ledger);
+      reviewChain.push(review);
+      if (review.status !== 'reviewed') {
+        return {
+          status: 'blocked',
+          phase: 'dispatch_review',
+          reason: review.reason || `review status ${review.status}`,
+          rounds: round,
+          verdict: review.verdict || null,
+          roster,
+          resolveResult,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        };
+      }
+
+      if (review.verdict === convergenceVerdict) {
+        return {
+          status: 'converged',
+          phase: 'converged',
+          reason: null,
+          rounds: round,
+          verdict: review.verdict,
+          roster,
+          resolveResult,
+          base,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        };
+      }
+
+      if (round >= maxRounds) {
+        return {
+          status: 'non_converged',
+          phase: 'max_rounds',
+          reason: `reached max rounds (${maxRounds}) without convergence`,
+          rounds: round,
+          verdict: review.verdict,
+          roster,
+          resolveResult,
+          base,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        };
+      }
+
+      try {
+        repairPromptFile = this.repairPromptWriter({
+          promptFile,
+          round: round + 1,
+          base: immutableBase,
+          previousCommit: nextBase,
+          commit,
+          review,
+        });
+      } catch (error) {
+        return {
+          status: 'blocked',
+          phase: 'prepare_implementation',
+          reason: error.message || String(error),
+          rounds: round,
+          verdict: review.verdict,
+          roster,
+          resolveResult,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        };
+      }
+
+      nextBase = commit;
+    }
+
+    return {
+      status: 'non_converged',
+      phase: 'max_rounds',
+      reason: `reached max rounds (${maxRounds}) without convergence`,
+      rounds: maxRounds,
+      verdict: null,
+      roster,
+      resolveResult,
+      implementationChain,
+      reviewChain,
+      ledger,
+      base,
+      implementation,
+      review: reviewChain[reviewChain.length - 1] || null,
     };
   }
 }
 
 module.exports = {
   AutopilotEngine,
+  buildImplementationArgs,
   buildReviewArgs,
+  implementationResultBlocked,
   reviewLoopResultBlocked,
   reviewResultBlocked,
   validateExtraReviewArgs,
+  validateExtraArgs,
   validateReviewRoster,
+  validateImplementerRoster,
 };

@@ -677,4 +677,217 @@ assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare p
 assert_contains "$OUT" "reason=diffFile is required" "AutopilotEngine surfaces missing diff reason"
 assert_contains "$OUT" "ledger=prepare_review:blocked" "AutopilotEngine records missing diff ledger"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+const calls = [];
+
+const engine = new AutopilotEngine({
+  implementationDispatcher(args) {
+    calls.push(args);
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '{\"runner\":\"test-impl-runner\",\"model\":\"test-impl-model\",\"status\":\"committed\",\"commit\":\"impl-commit\",\"base\":\"base-sha\",\"branch\":\"impl-branch\",\"files_changed\":2,\"insertions\":12,\"deletions\":1,\"worktree\":\"/tmp/impl-wt\",\"agent_log\":\"/tmp/impl-log\",\"error\":null,\"containment\":\"plain\",\"contained\":true}',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        commit: 'impl-commit',
+        base: 'base-sha',
+        branch: 'impl-branch',
+        files_changed: 2,
+        insertions: 12,
+        deletions: 1,
+        worktree: '/tmp/impl-wt',
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: 'base-sha',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`runner=${result.implementation && result.implementation.runner}`);
+console.log(`model=${result.implementation && result.implementation.model}`);
+console.log(`commit=${result.implementation && result.implementation.commit}`);
+console.log(`args=${calls[0].join(' ')}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}:${entry.base}:${entry.branch}:${entry.commit}:${entry.runner}:${entry.model}:${entry.exit_status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementTask builds implementation args and ledger"
+assert_contains "$OUT" "status=committed" "AutopilotEngine implementation dispatch returns committed"
+assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine implementation dispatch phase is dispatch_implementation"
+assert_contains "$OUT" "runner=test-impl-runner" "AutopilotEngine implementation output captures runner"
+assert_contains "$OUT" "model=test-impl-model" "AutopilotEngine implementation output captures model"
+assert_contains "$OUT" "commit=impl-commit" "AutopilotEngine implementation output captures commit"
+assert_contains "$OUT" "--runner test-impl-runner --model test-impl-model --prompt-file $TEST_TMP/implementer-prompt.txt --branch impl-branch --base base-sha --effort high" "AutopilotEngine builds implementation dispatcher args from roster"
+assert_contains "$OUT" "dispatch_implementation:committed:base-sha:impl-branch:impl-commit:test-impl-runner:test-impl-model:0" "AutopilotEngine emits implementation ledger row with runner/model/base/branch/commit/exit status"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+const implCalls = [];
+const reviewCalls = [];
+const diffCalls = [];
+const repairCalls = [];
+
+const engine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        reviewer_qualified: true,
+        implementer_engine: 'test-impl-model',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 3,
+        loop_convergence_verdict: 'SHIP-AS-IS',
+        spec_review: 'off',
+        independent_harness: 'off',
+        qc_panel: [ 'test-review-model' ],
+        qc_panel_aggregation: 'majority',
+        review_risk: 'low',
+        required_review_families: 1,
+        l1_required: false,
+        cross_family_required: false,
+        cross_family_satisfied: true,
+        review_diff_scope: 'full',
+        source: 'test',
+        work_domain: 'mixed',
+        domain_source: 'none',
+      },
+    };
+  },
+  implementationDispatcher(args) {
+    implCalls.push(args);
+    const call = implCalls.length;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: call === 1 ? 'commit-1' : 'commit-2',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: '/tmp/impl-worktree',
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    reviewCalls.push(args);
+    const call = reviewCalls.length;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: call === 1 ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS',
+        findings: 'stub finding',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider({ base, commit, branch, round }) {
+    diffCalls.push({ base, commit, branch, round });
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-impl-diff-'));
+    const file = path.join(tmpDir, `${branch}-${round}.diff`);
+    fs.writeFileSync(file, `round ${round} diff`, 'utf8');
+    return file;
+  },
+  repairPromptWriter({ promptFile, round, base, previousCommit, commit, review }) {
+    repairCalls.push({ round, base, previousCommit, commit, verdict: review && review.verdict });
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-repair-prompt-'));
+    const file = path.join(tmpDir, `round-${round}-prompt.txt`);
+    fs.writeFileSync(file, `repair ${round} for ${previousCommit}\n${fs.readFileSync(promptFile, 'utf8')}`, 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'impl-loop',
+  base: 'base-sha',
+  maxRounds: 3,
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`verdict=${result.verdict}`);
+console.log(`implementation_calls=${implCalls.length}`);
+console.log(`review_calls=${reviewCalls.length}`);
+console.log(`repair_calls=${repairCalls.length}`);
+console.log(`diff_calls=${diffCalls.length}`);
+console.log(`impl1_base=${implCalls[0][implCalls[0].indexOf('--base') + 1]}`);
+console.log(`impl2_base=${implCalls[1][implCalls[1].indexOf('--base') + 1]}`);
+console.log(`review_bases=${diffCalls.map((d) => d.base).join(',')}`);
+console.log(`impl_branches=${implCalls.map((args) => args[args.indexOf('--branch') + 1]).join(',')}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine converges through repair implementation-repair-review loop"
+assert_contains "$OUT" "status=converged" "AutopilotEngine returns converged status after repair round"
+assert_contains "$OUT" "phase=converged" "AutopilotEngine converged on implementation-review loop"
+assert_contains "$OUT" "rounds=2" "AutopilotEngine returns converged round count"
+assert_contains "$OUT" "verdict=SHIP-AS-IS" "AutopilotEngine returns converged verdict"
+assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine performs two implementation dispatches for one repair cycle"
+assert_contains "$OUT" "review_calls=2" "AutopilotEngine performs two review dispatches for one repair cycle"
+assert_contains "$OUT" "repair_calls=1" "AutopilotEngine performs one repair prompt write"
+assert_contains "$OUT" "diff_calls=2" "AutopilotEngine reviews full base-to-commit diff after each implementation"
+assert_contains "$OUT" "impl2_base=commit-1" "AutopilotEngine repair dispatch uses previous commit as repair base"
+assert_contains "$OUT" "review_bases=base-sha,base-sha" "AutopilotEngine reviews against immutable original base"
+assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_implementation:committed,dispatch_review:reviewed,dispatch_implementation:committed,dispatch_review:reviewed" "AutopilotEngine logs both implementation and review dispatch units"
+
 finalize_test

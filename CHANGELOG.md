@@ -24,6 +24,30 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.28.2 — /l5 and /l6 engine implementation-review orchestration
+
+**Headline**: Adds implementation-loop orchestration to the engine path so `/l5` and `/l6` can run `implementer -> review -> repair -> review` cycles through `engine implement-review` with deterministic dispatch/result handling and ledger coverage.
+
+### Added
+- `src/runners/implementer.js`: dispatch helper for `scripts/dispatch-hetero.sh` with shape validation for implementer outcomes.
+- `src/engine/autopilot-engine.js`:
+  - `implementTask` and `runImplementationReviewLoop` for `/l5` and `/l6`-style implementation review loops.
+  - `buildImplementationArgs`, implementer roster validation, and implement/review loop argument validation.
+  - DI seams for `implementationDispatcher`, `diffProvider`, and `repairPromptWriter`.
+- `bin/autopilot.js`: new `engine implement-review` command.
+
+### Changed
+- `skills/l5` and `skills/l6` now document `engine implement-review` as the canonical `/l5` and `/l6` integration path.
+- `src/engine/index.js` now exports implementation-loop builders and implementer validation helpers alongside existing review-loop APIs.
+
+### Verification / validation
+- Focused suite updates:
+  - `hooks/tests/autopilot-engine.test.sh`
+  - `hooks/tests/autopilot-cli.test.sh`
+
+### Hook-order semantics reminder
+- unchanged
+
 ## v2.28.1 — hook adapter framework and Codex hook probe
 
 **Headline**: Adds the first host-neutral hook adapter layer for Autopilot hooks and a separate warning-only Codex hook probe package. Existing Claude hooks keep their behavior, while Codex hook payload/cwd/env/failure semantics can now be captured as artifacts before any blocking Codex hook behavior ships.

@@ -1,0 +1,16 @@
+{
+  "session_id": "codex-session-1",
+  "hook_event_name": "PostToolUse",
+  "turn_id": "turn-1",
+  "cwd": "/repo",
+  "transcript_path": "/tmp/codex-transcript.jsonl",
+  "model": "gpt-test",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo ok"
+  },
+  "tool_output": {
+    "exit_code": 0
+  }
+}

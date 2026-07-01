@@ -165,12 +165,13 @@ run_hook() {
 #   - hooks/README.md              (untouched by sync-version; byte-identity guard)
 setup_sync_version_sandbox() {
   local sandbox="$1"
-  mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks" "$sandbox/platforms/codex/plugin/.codex-plugin"
+  mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks" "$sandbox/platforms/codex/plugin/.codex-plugin" "$sandbox/platforms/codex/.agents/plugins"
   cp "$REPO_ROOT/scripts/sync-version.js"        "$sandbox/scripts/sync-version.js"
   cp "$REPO_ROOT/.claude-plugin/plugin.json"     "$sandbox/.claude-plugin/plugin.json"
   cp "$REPO_ROOT/.claude-plugin/marketplace.json" "$sandbox/.claude-plugin/marketplace.json"
   cp "$REPO_ROOT/plugin.json"                    "$sandbox/plugin.json"
   cp "$REPO_ROOT/platforms/codex/plugin/.codex-plugin/plugin.json" "$sandbox/platforms/codex/plugin/.codex-plugin/plugin.json"
+  cp "$REPO_ROOT/platforms/codex/.agents/plugins/marketplace.json" "$sandbox/platforms/codex/.agents/plugins/marketplace.json"
   cp "$REPO_ROOT/README.md"                      "$sandbox/README.md"
   cp "$REPO_ROOT/hooks/README.md"                "$sandbox/hooks/README.md"
   echo "$sandbox/scripts/sync-version.js"

@@ -1,0 +1,2 @@
+{"schema_version":1,"ts":"2026-07-01T19:48:02Z","node":"root","type":"tree_initialized","proj":"2026-07-01-cross-harness-engine-infrastructure"}
+{"schema_version":1,"ts":"2026-07-02T00:00:00.000Z","node":"root","type":"node_created","parent":null,"question":"Can Phase 6 deliver a hook adapter framework without changing existing Claude hook behavior or shipping blocking Codex hooks?","options":[],"evidence_pointers":["docs/plans/2026-07-01-cross-harness-engine-infrastructure.md","docs/projects/2026-07-01-cross-harness-engine-infrastructure/README.md"]}

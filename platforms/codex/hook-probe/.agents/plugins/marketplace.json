@@ -1,16 +1,16 @@
 {
-  "name": "autopilot-local",
+  "name": "autopilot-hook-probe-local",
   "interface": {
-    "displayName": "Autopilot Local"
+    "displayName": "Autopilot Hook Probe Local"
   },
   "plugins": [
     {
-      "name": "autopilot",
+      "name": "autopilot-hook-probe",
       "source": {
         "source": "local",
         "path": "./plugin"
       },
-      "version": "2.28.1",
+      "version": "0.1.0",
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"

@@ -151,7 +151,8 @@ NOTE: hook-count NUMBERS + tier membership are validated against real wiring by
 OUTPUT:
   Modifies .claude-plugin/plugin.json, plugin.json, .claude-plugin/marketplace.json
   (version + description fragments), platforms/codex/plugin/.codex-plugin/plugin.json
-  (version only), and README.md (version badge only). Two-pass design: validates
+  and platforms/codex/.agents/plugins/marketplace.json (version only), and README.md
+  (version badge only). Two-pass design: validates
   ALL files in memory before writing ANY file. On pass-1 fail → nothing written.`);
 }
 
@@ -249,6 +250,19 @@ function buildEditPlan(args) {
   if (fs.existsSync(path.join(REPO_ROOT, codexManifest))) {
     plans.push({
       file: codexManifest,
+      replacements: [
+        { find: /"version":\s*"[^"]+"/g, to: `"version": "${V}"`, expectAfter: 1, label: 'version field' },
+      ],
+      verifyPatterns: [
+        { regex: new RegExp(`"version":\\s*"${escapeRegex(V)}"`, 'g'), expect: 1, label: `JSON "version": "${V}"` },
+      ],
+    });
+  }
+
+  const codexMarketplace = 'platforms/codex/.agents/plugins/marketplace.json';
+  if (fs.existsSync(path.join(REPO_ROOT, codexMarketplace))) {
+    plans.push({
+      file: codexMarketplace,
       replacements: [
         { find: /"version":\s*"[^"]+"/g, to: `"version": "${V}"`, expectAfter: 1, label: 'version field' },
       ],

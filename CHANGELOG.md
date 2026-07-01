@@ -24,9 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.28.0 — /l6 full-dispatch CEO front-door
+## v2.28.1 — hook adapter framework and Codex hook probe
 
-## v2.27.1 — dispatch-hetero wrapper-commit fix
+**Headline**: Adds the first host-neutral hook adapter layer for Autopilot hooks and a separate warning-only Codex hook probe package. Existing Claude hooks keep their behavior, while Codex hook payload/cwd/env/failure semantics can now be captured as artifacts before any blocking Codex hook behavior ships.
+
+### Added
+- `src/hooks/normalize/{claude,codex}.js`: normalized hook event envelope for Claude Code and Codex payloads, backed by `schemas/hook-event.schema.json`.
+- `src/hooks/handlers/{intent-capture,session-start}.js`: first host-neutral handler helpers used by the existing Claude hook wrappers.
+- `platforms/codex/hook-probe/`: separate local Codex plugin package with warning-only `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact`, and `Stop` probe hooks.
+- Hook adapter tests for normalizers, handlers, and Codex hook probe packaging.
+
+### Changed
+- Codex capability state now distinguishes documented/plugin-bundled hook support from Autopilot gate readiness: the default Codex package remains skills-only, and the hook probe stays warning-only.
+
+### Verification / validation
+- Focused hook suites: `bash hooks/tests/run.sh intent-capture`, `bash hooks/tests/run.sh session-start`.
+- Focused package/capability suites: `bash hooks/tests/codex-plugin-package.test.sh`, `bash hooks/tests/codex-hook-probe-package.test.sh`, `bash hooks/tests/harness-capabilities.test.sh`.
+
+## v2.28.0 — /l6 full-dispatch CEO front-door
 
 **Headline**: Adds `l6`, the 26th skill, as a full-dispatch CEO front-door: `/l6` is `/l5` plus verification AUTHORING as independent heterogeneous dispatch (separate engine family + independent harness), while depth-0 remains pure orchestration with authoritative QC (it executes committed artifacts and judges convergence-by-verification, never trusting a dispatched green).
 
@@ -36,6 +51,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Verification / validation
 - Built entirely by heterogeneous dispatch (`codex` implementation + Gemini decorrelated review), with recurrence proven by cross-session manual usage (token-conservation need), not a single one-off session.
 - Prerequisite `dispatch-hetero` fix shipped in v2.27.1.
+
+## v2.27.1 — dispatch-hetero wrapper-commit fix
 
 **Headline**: `scripts/dispatch-hetero.sh` now wrapper-commits a worker's uncommitted edits for **any** runner, not just agy/grok/cc-shim — the fallback was guarded on `[ "$IS_CODEX" -eq 0 ]` on the assumption "codex commits itself", but `gpt-5.3-codex-spark` routinely leaves edits uncommitted (HEAD at base, tree dirty, especially for net-new files), so dispatches that created new files wrongly returned `dirty`/`files_changed:0` and had to be harvested by hand (~8× in the v2.26.11/v2.27.0 full-dispatch build). Dropping the codex exclusion makes the wrapper-commit a universal fallback (safe: it only fires when HEAD hasn't moved, so a self-committing codex run is never double-committed); the existing `git add -A` already stages net-new files.
 

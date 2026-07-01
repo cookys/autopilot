@@ -147,6 +147,34 @@ OUT="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXI
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 on clean payload"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check reports clean payload"
 
+PRECOMMIT_TRIGGER_OUT="$(node - "$REPO_ROOT/.githooks/pre-commit" <<'NODE'
+const fs = require('fs');
+const [precommitPath] = process.argv.slice(2);
+const text = fs.readFileSync(precommitPath, 'utf8');
+const match = text.match(/CODEX_PAYLOAD_TRIGGER_RE='([^']+)'/);
+if (!match) {
+  console.log('missing CODEX_PAYLOAD_TRIGGER_RE');
+  process.exit(1);
+}
+const trigger = new RegExp(match[1]);
+const docFiles = [
+  'docs/plans/2026-06-04-distill-consolidate.md',
+  'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
+  'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/2026-06-26-test-integrity-l1/design-spec.md',
+];
+const misses = docFiles.filter((rel) => !trigger.test(rel));
+if (misses.length > 0) {
+  console.log(misses.join('\n'));
+  process.exit(1);
+}
+console.log('precommit_codex_doc_triggers_in_sync');
+NODE
+)"
+EXIT=$?
+assert_eq "$EXIT" "0" "Codex payload docs trigger pre-commit mirror check"
+assert_eq "$PRECOMMIT_TRIGGER_OUT" "precommit_codex_doc_triggers_in_sync" "Codex payload doc triggers cover generator docs"
+
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"

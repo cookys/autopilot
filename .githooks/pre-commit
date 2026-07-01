@@ -84,7 +84,8 @@ STAGED="$(git diff --cached --name-only 2>/dev/null || true)"
 # platforms/codex/plugin/** is a committed generated payload. Any change to the
 # source payload roots must be mirrored before commit; any direct package edit
 # must match the generator output.
-if echo "$STAGED" | grep -qE '^(skills/|bin/|src/|hooks/_shared/|references/|scripts/|project-config-template/|platforms/codex/)'; then
+CODEX_PAYLOAD_TRIGGER_RE='^(skills/|bin/|src/|hooks/_shared/|references/|scripts/|project-config-template/|docs/plans/2026-06-04-distill-consolidate\.md$|docs/plans/2026-06-22-ceo-fleet-autonomy\.md$|docs/plans/2026-06-26-trust-tiered-review-policy\.md$|docs/projects/2026-06-26-test-integrity-l1/design-spec\.md$|platforms/codex/)'
+if echo "$STAGED" | grep -qE "$CODEX_PAYLOAD_TRIGGER_RE"; then
   if ! ./scripts/sync-codex-plugin-skills.sh --check >/dev/null 2>&1; then
     echo "─────────────────────────────────────────────────────────────" >&2
     echo "pre-commit: Codex plugin payload mirror drift detected" >&2

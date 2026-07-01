@@ -66,7 +66,7 @@
 | P3 | Complete | Canonical version retargeted to `2.29.0`; CHANGELOG records `harness-maintenance`; previous project tracking notes release retarget. |
 | P4 | Complete | Added engine-layer architecture section and CLI/src pointers. |
 | P5 | Complete | Fixed F6-F9 plus S1/S2/S5; deferred S3/S4/S6/S7 as non-ship-blocking runtime semantics. |
-| P6 | In progress | Focused tests and deterministic gates mostly green; `preflight-release.sh` rerun needed after version commit because opt-in baseline requires first-parent history. |
+| P6 | Complete | Final deterministic gates passed; full suite has 4/82 failures, all reclassified as pre-existing against session base `96d9349`; `/l5` full-diff review converged to `SHIP-AS-IS` after one reviewer-found fix. |
 | L-5 finish-flow | Pending | |
 
 ## Review Loop History
@@ -74,3 +74,7 @@
 - 2026-07-02: Read-only explorer audited archived F1-F9/S1-S7 against current HEAD; confirmed the report remained applicable and listed additional acceptance checks. Depth-0 implemented the fixes inline to avoid overlapping write scopes.
 - 2026-07-02: Focused tests passed: `autopilot-cli` 41 assertions, `autopilot-engine` 185, `review-runner` 25, `hook-normalizers`, `dispatch-review` 86, `codex-plugin-package` 65.
 - 2026-07-02: Deterministic gates passed: `sync-codex-plugin-skills.sh --check`, `sync-version.js --check`, `preflight-portability.sh` 17/17, `validate.sh`, `check-canonical-invariants.sh`, JS/shell syntax checks. `preflight-release.sh` was 5/6 before commit; the remaining opt-in baseline guard requires the new version to exist in first-parent history.
+- 2026-07-02: `/l5`-style full-diff review round 1 (`gpt-5.5`, xhigh) returned `FIX-THEN-SHIP`: `.githooks/pre-commit` did not trigger Codex payload mirror checks for the four doc files copied by `sync-codex-plugin-skills.sh`. Fixed in `1e928b6` by extending `CODEX_PAYLOAD_TRIGGER_RE` and adding a `codex-plugin-package` regression assertion.
+- 2026-07-02: `/l5`-style full-diff review round 2 (`gpt-5.5`, xhigh) returned `SHIP-AS-IS`, findings `none`.
+- 2026-07-02: Final deterministic gates passed after `1e928b6`: `sync-version.js --check`, `sync-codex-plugin-skills.sh --check`, `preflight-portability.sh` 17/17, `preflight-release.sh` 6/6, `validate.sh` 27/27, `check-canonical-invariants.sh`, `doc-drift-gate.js .`, `check-hook-inventory.js --check`, `completeness-scan.sh --range 96d9349..HEAD` (`clean:true`, 10 pre-existing findings), and `check-test-integrity.sh validate --range 96d9349..HEAD` (`ok:true`, warn mode).
+- 2026-07-02: Final full suite `bash hooks/tests/run.sh` ended with 4/82 failing test files: `check-optin-changelog.test.sh`, `check-test-integrity-l1.test.sh`, `check-test-integrity.test.sh`, and `dispatch-hetero.test.sh`. Each returned `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}` via `scripts/verify-preexisting.sh --base 96d934994d57aa66ac1f9cef35b6ee696fe91cfa`.

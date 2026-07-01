@@ -72,7 +72,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Verification / validation
 - Implemented by hetero dispatch (`gpt-5.3-codex-spark` implementation path), then reviewed/verified by a decorrelated `grok` + Gemini qc-panel path.
-- Plan: [`docs/plans/2026-06-30-engine-lifecycle-methodology.md`](docs/plans/2026-06-30-engine-lifecycle-methodology.md).
+- Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md).
 
 ## v2.26.10 — cc-shim reviewer + MiniMax-M3 reviewer calibration
 

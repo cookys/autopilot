@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # sync-version --dry-run: prints proposed diff, writes nothing. Verified against
-# byte-identity of ALL 5 tracked mirrors (sandboxed copy so the live repo is
+# byte-identity of all tracked mirrors (sandboxed copy so the live repo is
 # never at risk, mirroring -round-trip / -check-detects-drift).
 . "$(dirname "$0")/lib.sh"
 
@@ -11,6 +11,7 @@ TRACKED=(
   "$SANDBOX/.claude-plugin/plugin.json"
   "$SANDBOX/.claude-plugin/marketplace.json"
   "$SANDBOX/plugin.json"
+  "$SANDBOX/platforms/codex/plugin/.codex-plugin/plugin.json"
   "$SANDBOX/README.md"
   "$SANDBOX/hooks/README.md"
 )

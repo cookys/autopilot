@@ -453,7 +453,7 @@ Ship skills-only first:
 ```
 platforms/codex/plugin/
   .codex-plugin/plugin.json
-  skills -> ../../../skills
+  skills/ # generated real copy from canonical skills/
 ```
 
 Minimal manifest:
@@ -747,6 +747,24 @@ Acceptance:
 - `codex plugin` can discover/install the local package.
 - No Claude hooks load through Codex.
 - Running Codex in the Autopilot repo shows expected skills.
+
+First implementation slice:
+
+- `platforms/codex/plugin/.codex-plugin/plugin.json` defines a skills-only
+  Codex plugin manifest that tracks the canonical Autopilot version and omits
+  hooks, apps, and MCP servers.
+- `platforms/codex/plugin/skills` is a generated real directory refreshed from
+  canonical `skills/` by `scripts/sync-codex-plugin-skills.sh`, because Codex
+  install does not copy through a symlinked skill directory.
+- The same sync script also packages the support files that skill text links to
+  (`references/`, `scripts/`, `project-config-template/`, and selected docs)
+  without declaring hooks, apps, or MCP servers in the Codex manifest.
+- `platforms/codex/.agents/plugins/marketplace.json` creates an
+  `autopilot-local` marketplace entry for development installs.
+- `hooks/tests/codex-plugin-package.test.sh` validates manifest shape,
+  generated-payload freshness, no-hook posture, support-file readability, and
+  sandboxed Codex CLI marketplace discovery, install, prompt-visible skills, and
+  installed skill cache readability when `codex` is available.
 
 ### Phase 6 - Hook adapter framework
 

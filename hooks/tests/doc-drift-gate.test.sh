@@ -103,7 +103,25 @@ assert_exit_code "$__GATE_EXIT" 0 "passes when bad_link.md is excluded"
 # Cleanup
 rm -rf "$SANDBOX/docs/ignored_subdir"
 
-# 6. Testing CRLF normalization
+# 6. Generated Codex plugin payload is excluded by default. Canonical sources
+# are checked at their source paths; the generated package payload is checked by
+# codex-plugin-package.test.sh because its relative links resolve from a
+# different package root.
+echo "Testing generated Codex plugin exclude..."
+mkdir -p "$SANDBOX/platforms/codex/plugin/skills/generated"
+cat > "$SANDBOX/platforms/codex/plugin/skills/generated/bad_link.md" <<'EOF'
+[broken](does-not-exist.md)
+```
+```
+EOF
+
+run_gate "$SANDBOX"
+assert_exit_code "$__GATE_EXIT" 0 "generated Codex plugin payload is excluded by default"
+
+# Cleanup
+rm -rf "$SANDBOX/platforms"
+
+# 7. Testing CRLF normalization
 # Create a markdown file with CRLF line endings and unbalanced code fences.
 # Make sure CRLF is normalized to LF and checked correctly.
 # If CRLF is normalized, the line splits by \n work correctly and count is accurate.
@@ -121,7 +139,7 @@ assert_exit_code "$__GATE_EXIT" 1 "CRLF doc with unbalanced fences fails"
 # Cleanup CRLF doc
 rm "$SANDBOX/docs/crlf.md"
 
-# 7. Testing invalid command arguments/usage errors (exit 2)
+# 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg
 assert_exit_code "$__GATE_EXIT" 2 "missing exclude arg exits with 2"

@@ -31,6 +31,8 @@ If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or bel
 
 - Capability records live in `src/harness/capabilities/*.json`.
 - Records may contain observed versions, commands, probe results, and capability status.
+- Records may contain `auth_domains`; use it to separate driver availability
+  from native provider subscription quota and third-party provider quota.
 - Records must not contain secrets.
 - Records must not become runtime model/effort routing policy.
 - Engine code consumes capability data; it does not infer routing from harness or model names.

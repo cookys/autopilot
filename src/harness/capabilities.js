@@ -23,9 +23,11 @@ const RECORD_FIELDS = new Set([
   'expires_at',
   'evidence',
   'capabilities',
+  'auth_domains',
   'notes',
 ]);
 const EVIDENCE_FIELDS = new Set(['source', 'command', 'result']);
+const AUTH_DOMAIN_KEY_RE = /^[a-z0-9][a-z0-9_:-]*$/;
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -201,6 +203,23 @@ function validateCapabilityRecord(record, sourceFile = '<memory>') {
     }
     if (!CAPABILITY_VALUES.has(value)) {
       throw new Error(`${sourceFile}: capabilities.${capability} must be one of ${[...CAPABILITY_VALUES].join(', ')}`);
+    }
+  }
+
+  if (record.auth_domains !== undefined) {
+    if (!isPlainObject(record.auth_domains)) {
+      throw new Error(`${sourceFile}: auth_domains must be an object when present`);
+    }
+    for (const [domain, value] of Object.entries(record.auth_domains)) {
+      if (!AUTH_DOMAIN_KEY_RE.test(domain)) {
+        throw new Error(`${sourceFile}: auth_domains key must be lowercase token: ${domain}`);
+      }
+      if (typeof value !== 'string' || value.trim() === '') {
+        throw new Error(`${sourceFile}: auth_domains.${domain} must be a non-empty string`);
+      }
+      if (!CAPABILITY_VALUES.has(value)) {
+        throw new Error(`${sourceFile}: auth_domains.${domain} must be one of ${[...CAPABILITY_VALUES].join(', ')}`);
+      }
     }
   }
 

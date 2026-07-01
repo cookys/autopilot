@@ -33,6 +33,8 @@ assert_contains "$REF_BODY" "not, by itself" "governance reference separates sco
 assert_contains "$REF_BODY" "roles must not use fallback-ladder routing" "governance reference blocks ladder routing for R2-only roles"
 assert_contains "$REF_BODY" "Pick exactly one target role" "governance reference requires per-role qualification"
 assert_contains "$REF_BODY" "Do not qualify \"the model\" globally" "governance reference blocks global model qualification"
+assert_contains "$REF_BODY" "driver CLI availability" "governance reference separates driver availability"
+assert_contains "$REF_BODY" "third-party provider quota" "governance reference separates provider quota"
 assert_contains "$REF_BODY" "Promote separately" "governance reference separates scorecard/resolver/gate/maintenance promotion"
 assert_contains "$REF_BODY" "Evaluation Dimensions" "governance reference defines role evaluation dimensions"
 assert_contains "$REF_BODY" "Survey alone is never enough for H3/H4/H5" "governance reference separates survey from dispatch/gating evidence"

@@ -10,6 +10,7 @@ const report = JSON.parse(process.env.REPORT_JSON);
 console.log(`total=${report.summary.total}`);
 console.log(`stale=${report.summary.stale}`);
 console.log(`verified=${report.summary.verified}`);
+console.log(`warning=${report.summary.warning}`);
 console.log(`unverified=${report.summary.unverified}`);
 console.log(`unavailable=${report.summary.unavailable}`);
 console.log(`not_ready=${report.summary.not_ready}`);
@@ -24,8 +25,9 @@ NODE
 assert_contains "$PARSED" "total=6" "harness report loads default records"
 assert_contains "$PARSED" "stale=6" "harness report marks old records stale"
 assert_contains "$PARSED" "verified=4" "harness report counts verified records"
+assert_contains "$PARSED" "warning=1" "harness report counts warning records"
 assert_contains "$PARSED" "unverified=1" "harness report counts unverified records"
-assert_contains "$PARSED" "unavailable=1" "harness report counts unavailable records"
+assert_contains "$PARSED" "unavailable=0" "harness report counts unavailable records"
 assert_contains "$PARSED" "not_ready=6" "harness report counts records below default H3 readiness"
 assert_contains "$PARSED" "attention=6" "harness report counts stale or not-ready records"
 assert_contains "$PARSED" "has_codex=true" "harness report includes codex record"
@@ -63,6 +65,10 @@ cat > "$CUSTOM_DIR/custom.json" <<'JSON'
   },
   "capabilities": {
     "read_only_dispatch": "verified"
+  },
+  "auth_domains": {
+    "driver_cli": "verified",
+    "provider_quota": "not-applicable"
   }
 }
 JSON
@@ -73,6 +79,7 @@ assert_eq "0" "$EXIT" "harness report supports custom capability dir"
 assert_contains "$OUT" "\"total\": 1" "custom dir report loads one record"
 assert_contains "$OUT" "\"stale\": 0" "custom dir report honors fresh verified record"
 assert_contains "$OUT" "\"not_ready\": 0" "custom dir report honors required-level readiness"
+assert_contains "$OUT" "\"auth_domains\"" "custom dir report emits auth domain separation"
 
 OUT="$(node "$REPO_ROOT/bin/autopilot.js" harness report --capabilities-dir "$CUSTOM_DIR" --now 2026-07-05T00:00:00.000Z --stale-after 14d --required-level H2 --format warning)"
 EXIT=$?
@@ -255,6 +262,66 @@ OUT="$(node "$REPO_ROOT/bin/autopilot.js" harness report --capabilities-dir "$EN
 EXIT=$?
 assert_eq "1" "$EXIT" "harness report fails invalid capability values"
 assert_contains "$OUT" "capabilities.read_only_dispatch must be one of" "invalid capability enum fails closed"
+
+BAD_AUTH_DOMAIN_DIR="$TEST_TMP/capabilities-bad-auth-domain"
+mkdir -p "$BAD_AUTH_DOMAIN_DIR"
+cat > "$BAD_AUTH_DOMAIN_DIR/bad-auth-domain.json" <<'JSON'
+{
+  "id": "bad-auth-domain",
+  "display_name": "Bad Auth Domain",
+  "kind": "cli",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-01",
+  "verified_at": "2026-07-01",
+  "expires_at": "2026-08-01",
+  "evidence": {
+    "source": "test",
+    "command": "bad-auth --version",
+    "result": "bad-auth 1.0"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified"
+  },
+  "auth_domains": {
+    "DriverCLI": "verified"
+  }
+}
+JSON
+OUT="$(node "$REPO_ROOT/bin/autopilot.js" harness report --capabilities-dir "$BAD_AUTH_DOMAIN_DIR" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "harness report fails invalid auth domain keys"
+assert_contains "$OUT" "auth_domains key must be lowercase token" "invalid auth domain key fails closed"
+
+BAD_AUTH_VALUE_DIR="$TEST_TMP/capabilities-bad-auth-value"
+mkdir -p "$BAD_AUTH_VALUE_DIR"
+cat > "$BAD_AUTH_VALUE_DIR/bad-auth-value.json" <<'JSON'
+{
+  "id": "bad-auth-value",
+  "display_name": "Bad Auth Value",
+  "kind": "cli",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-01",
+  "verified_at": "2026-07-01",
+  "expires_at": "2026-08-01",
+  "evidence": {
+    "source": "test",
+    "command": "bad-auth --version",
+    "result": "bad-auth 1.0"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified"
+  },
+  "auth_domains": {
+    "driver_cli": "maybe"
+  }
+}
+JSON
+OUT="$(node "$REPO_ROOT/bin/autopilot.js" harness report --capabilities-dir "$BAD_AUTH_VALUE_DIR" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "harness report fails invalid auth domain values"
+assert_contains "$OUT" "auth_domains.driver_cli must be one of" "invalid auth domain value fails closed"
 
 DUP_DIR="$TEST_TMP/capabilities-dup"
 mkdir -p "$DUP_DIR"
@@ -480,6 +547,7 @@ SKILL="$REPO_ROOT/skills/harness-maintenance/SKILL.md"
 assert_file_exists "$SKILL" "harness-maintenance skill exists"
 SKILL_BODY="$(cat "$SKILL")"
 assert_contains "$SKILL_BODY" "node bin/autopilot.js harness report --stale-after 14d" "skill points to harness report"
+assert_contains "$SKILL_BODY" "driver availability" "skill separates driver availability from provider quota"
 assert_contains "$SKILL_BODY" "below the required harness level" "skill blocks below-level implementation from memory"
 
 finalize_test

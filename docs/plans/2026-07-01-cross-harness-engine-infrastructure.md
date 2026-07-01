@@ -5,9 +5,11 @@
 > Date: 2026-07-01.
 > Size: XL.
 > Frame: infrastructure foundation for future `/l5` and `/l6` autonomy.
-> Review constraint: Claude Code subscription is exhausted; do not use `claude`
-> or `cc-shim` for this review loop. Use Codex and agy only until Grok or
-> MiniMax direct access is available.
+> Review constraint: Anthropic subscription quota is exhausted; do not use
+> native Anthropic-backed `claude` dispatch for this review loop. `cc-shim` is
+> still valid when explicitly bound to a third-party Anthropic-compatible
+> provider token such as MiniMax/GLM, because that provider quota is separate
+> from Anthropic subscription quota.
 
 ## 0. Thesis
 
@@ -37,7 +39,8 @@ Live probe on 2026-07-01 from this checkout:
 | `agy` | present, `agy 1.0.14` | `agy models` works; live headless smoke returned `AUTOPILOT_AGY_SMOKE_OK`. |
 | `grok` | installed and authenticated | Installed 2026-07-01 via official xAI installer: `grok 0.2.77 (44e77bec3a)`. After user login, `grok models` succeeds and a headless `grok-build` smoke returned `AUTOPILOT_GROK_OK`. |
 | MiniMax direct | configured and live | Local provider defaults and a direct API probe were created under `~/.autopilot/`. After user login/configuration, MiniMax Anthropic-compatible API probe against `https://api.minimax.io/anthropic/v1/messages` with model `MiniMax-M3` returned `AUTOPILOT_MINIMAX_OK`. Secrets remain outside the repo. |
-| `claude` / `cc-shim` | intentionally unused | User stated Claude Code subscription is exhausted; do not dispatch through Claude CLI. |
+| Native Anthropic-backed `claude` | intentionally unused | User stated Anthropic subscription quota is exhausted. This does not disable the Claude Code CLI as a driver for third-party `cc-shim`. |
+| `cc-shim` | available by policy when provider-bound | Uses Claude Code CLI as driver plus explicit `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` for MiniMax/GLM/etc.; provider quota is separate from Anthropic subscription quota. |
 
 `agy plugin list` currently shows `autopilot` imported with `skills, agents`,
 not hooks. This supports the current posture: agy is safe to treat as a
@@ -96,8 +99,11 @@ Key results:
 - Do not put `.codex-plugin` at the repository root.
 - Do not route engines by domain or lifecycle phase. Keep the existing policy:
   capability, decorrelation, and cost only.
-- Do not use `claude` or `cc-shim` for this plan's review loop while the
-  subscription is exhausted.
+- Do not use native Anthropic-backed `claude` for this plan's review loop while
+  Anthropic subscription quota is exhausted.
+- Do not conflate driver availability with provider quota: `cc-shim` is allowed
+  only when explicitly bound to a third-party Anthropic-compatible endpoint and
+  token, never through default Anthropic credentials.
 
 ## 5. Architecture
 
@@ -515,9 +521,12 @@ branches, PRs, checks, and session logs.
 
 ### 11.7 MiniMax
 
-The old working path was `cc-shim`, which uses the Claude CLI as driver. Because
-this review run must not use Claude Code, the first safe MiniMax slice is a
-direct Anthropic-compatible HTTP reviewer adapter:
+One working path is `cc-shim`, which uses the Claude Code CLI as driver while
+the served model and quota come from an explicit third-party
+Anthropic-compatible provider. Anthropic subscription exhaustion blocks native
+Anthropic-backed Claude dispatch, not provider-bound `cc-shim`. The first direct
+MiniMax slice still uses an Anthropic-compatible HTTP reviewer adapter because
+it avoids CLI-driver ambiguity:
 
 ```bash
 # Requires MINIMAX_API_KEY to already exist in the parent process environment.
@@ -835,7 +844,7 @@ Governance methodology slice:
 | JS port changes shell contracts | Parse old outputs first, keep wrappers, run existing shell tests. |
 | Hook portability causes false confidence | Normalize payloads with fixtures; block only after probes. |
 | agy/grok implementers mutate wrong path | Worktree isolation plus git artifact verification; absolute cwd anchors where needed. |
-| MiniMax path burns Claude quota | Do not use `cc-shim` when Claude subscription is exhausted; build direct HTTP adapter first. |
+| MiniMax path accidentally burns Anthropic quota | `cc-shim` must require explicit `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` and unset `ANTHROPIC_API_KEY`; direct MiniMax reviewer uses `MINIMAX_API_KEY`. |
 | Skill list gets too large and descriptions truncate | Trigger evals and concise descriptions; move detail to references. |
 | Model self-report contaminates gates | Status always derives from git, process exit, parser result, and external checks. |
 
@@ -855,8 +864,9 @@ Run this plan through a non-Claude review loop:
 4. If both return `SHIP-AS-IS`, record the review result.
 5. If either returns `FIX-THEN-SHIP`, fold verified findings into R1 and rerun.
 6. Do not use `grok` until installed.
-7. Do not use MiniMax through `cc-shim` until Claude Code is available again or
-a direct HTTP adapter exists.
+7. Do not use native Anthropic-backed Claude while Anthropic subscription quota
+is exhausted. MiniMax through `cc-shim` is allowed only with explicit MiniMax
+endpoint/token env and no default Anthropic credential fallback.
 
 ## 18. R0 acceptance checklist
 
@@ -875,7 +885,10 @@ a direct HTTP adapter exists.
 Review inputs:
 
 - Diff: `git diff --no-index /dev/null docs/plans/2026-07-01-cross-harness-engine-infrastructure.md`
-- Claude Code / `cc-shim`: intentionally skipped.
+- Native Anthropic-backed Claude: intentionally skipped.
+- `cc-shim`: intentionally skipped in R0 under an over-conservative
+  interpretation of the quota constraint; corrected on 2026-07-02 to mean
+  provider-bound `cc-shim` is allowed when explicitly configured.
 - Grok: skipped because `grok` was not installed at review time. It was installed later, but auth is still pending.
 - MiniMax direct: skipped because no direct token existed in this environment.
 

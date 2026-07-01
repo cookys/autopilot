@@ -9,6 +9,10 @@ Collect these inputs before choosing an implementation level or role:
 - **Target**: harness, runner, model, provider endpoint, or orchestration surface.
 - **Role**: planner, implementer, verifier, reviewer, or orchestrator.
 - **Authority**: read-only advice, file mutation, verification authoring, merge/block gate, or delegated orchestration.
+- **Auth and quota domains**: driver CLI availability, native provider
+  subscription quota, and third-party provider quota are separate facts. A
+  Claude Code driver with a MiniMax/GLM `cc-shim` endpoint is not the same quota
+  domain as native Anthropic-backed Claude dispatch.
 - **Evidence age**: latest official docs, local CLI probe, committed probe artifact, scorecard row, and expiry date.
 - **Failure cost**: can a wrong result mutate the repo, leak secrets, merge broken code, or silently remove the human from the loop?
 
@@ -70,7 +74,8 @@ implementer, verifier, reviewer, or orchestrator.
 
 1. **Define the model/runner bundle**: runner binary/API, provider family,
    model ID, observed model version, auth path, tool permissions, and harness
-   implementation level.
+   implementation level. Record driver auth and model/provider quota
+   separately when a shim or proxy is involved.
 2. **Pick exactly one target role**. Do not qualify "the model" globally.
 3. **Run the role spike**: one representative operation plus identity capture.
    Process errors, empty parser output, permission prompts, and timeouts fail the

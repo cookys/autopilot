@@ -20,8 +20,14 @@
     "mutation_dispatch": "unverified",
     "blocking_gate": "unverified"
   },
+  "auth_domains": {
+    "provider_api_key": "verified",
+    "anthropic_subscription_quota": "not-applicable",
+    "cc_shim_provider_quota": "verified"
+  },
   "notes": [
     "Auth material lives outside the repo under user configuration/environment.",
-    "Do not route MiniMax through cc-shim while Claude Code subscription is unavailable."
+    "Direct API is the preferred reviewer path because it avoids any CLI driver ambiguity.",
+    "MiniMax via cc-shim remains a separate explicit runner path when ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN point at MiniMax; Anthropic subscription quota does not govern that provider quota."
   ]
 }

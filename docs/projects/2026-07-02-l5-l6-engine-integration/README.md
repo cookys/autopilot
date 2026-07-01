@@ -40,13 +40,16 @@
 
 | Phase | Status | Verification |
 | --- | --- | --- |
-| P0 setup | In progress | Branch from updated `develop`, README + INDEX + tree init. |
-| P1 engine implementation | Pending | `AutopilotEngine` implementer/review/repair orchestration and CLI. |
-| P2 docs/version | Pending | `/l5`/`/l6` skill docs, CHANGELOG, version mirrors. |
-| P3 quality + `/l5` loop review | Pending | Focused tests, sync checks, full feasible harness, decorrelated loop review to convergence. |
+| P0 setup | Complete | Branch from updated `develop`, README + INDEX + tree init; committed `bd65508`. |
+| P1 engine implementation | Complete | `/l5` hetero implementer commit `4a2d40e`; depth-0 hardening commit `232b2d1`; Codex payload support commit `0117f89`. |
+| P2 docs/version | Complete | `/l5`/`/l6` skill docs, CHANGELOG, version mirrors, and Codex generated payload synced to `2.28.2`. |
+| P3 quality + `/l5` loop review | In progress | Focused tests and deterministic gates passed; full suite has 4 pre-existing failures; `/l5` loop review pending. |
 | P4 finish-flow | Pending | Final review, merge to `develop`, post-merge verification, archive, branch cleanup. |
 
 ## Decision Log
 
 - 2026-07-02: Merged `origin/develop` into local `develop` before branching because local develop was `ahead 15, behind 1`; Phase 7 branch starts from `8178cc71888568ae95d5ad5075acd07ac4237e54`.
 - 2026-07-02: Scope held to Phase 7 acceptance; no new runners, no policy semantic changes, no parallel hetero fan-out.
+- 2026-07-02: First `/l5` dispatch failed because a relative prompt file was not visible after `dispatch-hetero.sh` changed into the isolated worktree. Retried with an absolute prompt path and then hardened `buildImplementationArgs()` to absolutize prompt paths.
+- 2026-07-02: Focused verification passed: `autopilot-engine` 124 assertions, `autopilot-cli` 31, `review-loop-runner` 35, `review-runner` 19, `resolve-review-loop` 93, skill validation, version sync, hook inventory, canonical invariants, preflight release, completeness scan, and test-integrity L0.
+- 2026-07-02: Full `bash hooks/tests/run.sh` result after fixing Codex payload drift: 78/82 files passed. The 4 failing files (`check-optin-changelog`, `check-test-integrity-l1`, `check-test-integrity`, `dispatch-hetero`) were all classified with `scripts/verify-preexisting.sh` as `head=fail, base=fail, verdict=PRE_EXISTING` against session start SHA `8178cc71888568ae95d5ad5075acd07ac4237e54`.

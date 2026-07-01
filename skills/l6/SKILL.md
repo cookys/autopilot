@@ -32,7 +32,8 @@ Execution control and ledger behavior remain as in `/l5` and
 Per-unit pipeline (authoritative flow):
 1) Resolve roster once with `../../scripts/resolve-review-loop.sh` and treat its output as the only source of truth.
 2) Dispatch implementation via `engine implement-review` (internally `dispatch-hetero.sh`) with immutable `--base` and
-   outcome-driven worktree commit logic.
+   outcome-driven worktree commit logic. The CLI fails closed on absent/false reviewer qualification by default; use
+   `--allow-unqualified-reviewer` only as an explicit, recorded escape hatch.
 3) Dispatch verification AUTHORING via `../../scripts/dispatch-review.sh` on a different family than the implementer engine.
 4) Run decorrelated review on implementation and harness outputs per resolved review fields.
 5) Depth-0 executes committed implementation + harness artifacts, runs all required checks, and compares the results.

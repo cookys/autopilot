@@ -364,15 +364,31 @@ function postMessages({ endpointUrl, token, model, prompt, timeoutMs, rawLog }) 
       (res) => {
         const chunks = [];
         let responseBytes = 0;
+        let responseClosed = false;
+        const failResponse = (err) => {
+          if (responseClosed) return;
+          responseClosed = true;
+          reject(err);
+          req.destroy(err);
+        };
         res.on('data', (chunk) => {
+          if (responseClosed) return;
           responseBytes += chunk.length;
           if (responseBytes > MAX_RESPONSE_BYTES) {
-            req.destroy(new Error(`response exceeded ${MAX_RESPONSE_BYTES} bytes`));
+            failResponse(new Error(`response exceeded ${MAX_RESPONSE_BYTES} bytes`));
             return;
           }
           chunks.push(chunk);
         });
+        res.on('error', (err) => {
+          failResponse(err);
+        });
+        res.on('aborted', () => {
+          failResponse(new Error('response aborted'));
+        });
         res.on('end', () => {
+          if (responseClosed) return;
+          responseClosed = true;
           const rawBody = Buffer.concat(chunks).toString('utf8');
           appendRawLog(rawLog, `[http_status=${res.statusCode}]\n`);
           appendRawLog(rawLog, redactForLog(rawBody, token));

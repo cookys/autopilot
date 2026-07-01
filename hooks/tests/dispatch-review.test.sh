@@ -228,6 +228,18 @@ const server = http.createServer((req, res) => {
     if (calls === 5) {
       response.stop_reason = 'max_tokens';
     }
+    if (calls === 6) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('x'.repeat(1024 * 1024 + 1));
+      return;
+    }
+    if (calls === 7) {
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(response));
+      }, 1500);
+      return;
+    }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(response));
   });
@@ -277,10 +289,22 @@ assert_eq "0" "$EXIT" "anthropic-compatible /v1 base-url reviewed exit 0"
 assert_not_contains "$(cat "$MOCK_LOG")" 'POST /v1/v1/messages' "anthropic-compatible /v1 base-url does not double-append /v1"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
-kill "$MOCK_PID" 2>/dev/null || true
-wait "$MOCK_PID" 2>/dev/null || true
 assert_eq "1" "$EXIT" "anthropic-compatible max_tokens exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible max_tokens → no_verdict"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "anthropic-compatible oversized response exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible oversized response → no_verdict"
+assert_contains "$OUT" 'response exceeded' "anthropic-compatible oversized response reports cap"
+assert_not_contains "$OUT" "$TEST_AUTH_TOKEN" "anthropic-compatible oversized response does not leak token"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" --timeout 1s 2>&1)"; EXIT=$?
+kill "$MOCK_PID" 2>/dev/null || true
+wait "$MOCK_PID" 2>/dev/null || true
+assert_eq "1" "$EXIT" "anthropic-compatible HTTP timeout exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible HTTP timeout → no_verdict"
+assert_contains "$OUT" 'request failed: timeout' "anthropic-compatible HTTP timeout reports timeout"
+assert_not_contains "$OUT" "$TEST_AUTH_TOKEN" "anthropic-compatible timeout does not leak token"
 
 # 8. read-only invariant: running inside a git repo mutates NOTHING
 RO="$TEST_TMP/ro-repo"; mkdir -p "$RO"

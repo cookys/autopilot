@@ -14,6 +14,14 @@ The package manifest intentionally exposes only skills. It does not declare
 Claude Code hooks, apps, or MCP servers; the extra payload exists so referenced
 support files resolve after installation.
 
+Some canonical skill bodies still describe Claude Code-only orchestration
+surfaces such as `TaskCreate`, native `Agent` dispatch, `TaskStop`, and
+`subagent_type`. Codex can read those bodies as methodology guidance, and the
+packaged support CLI/scripts work where they are host-neutral, but those
+Claude-only tool calls are not provided by the Codex package. Treat them as
+platform-specific instructions until a future harness-neutral skill-body split
+lands.
+
 ## Hook probe package
 
 `hook-probe/` is a separate Codex plugin marketplace used only for adapter
@@ -68,7 +76,8 @@ Run `./scripts/setup-symlinks.sh` after cloning on a machine that did not
 preserve symlinks.
 
 Run `./scripts/sync-codex-plugin-skills.sh` after changing `skills/` or linked
-support files; the package test fails if the generated payload drifts.
+support files; `./scripts/sync-codex-plugin-skills.sh --check` is the read-only
+drift gate used by pre-commit and `preflight-portability.sh`.
 
 Run packaged engine commands from the target repository, or pass
 `--cwd /path/to/repo` to `engine implement-review` so implementation worktrees

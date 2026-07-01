@@ -24,11 +24,12 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.28.2 — /l5 and /l6 engine implementation-review orchestration
+## v2.29.0 — /l5 and /l6 engine implementation-review orchestration
 
-**Headline**: Adds implementation-loop orchestration to the engine path so `/l5` and `/l6` can run `implementer -> review -> repair -> review` cycles through `engine implement-review` with deterministic dispatch/result handling and ledger coverage.
+**Headline**: Promotes the `/l5`/`/l6` engine implementation-review path to a release-ready minor: `engine implement-review` runs deterministic `implementer -> review -> repair -> review` cycles, reviewer qualification now fails closed by default, Codex package payload drift is gated, and the previously silent `harness-maintenance` skill is now correctly recorded as the 27th user-facing skill.
 
 ### Added
+- `harness-maintenance`: user-facing skill for auditing and refreshing cross-harness capability state. This landed code-side in the v2.28.x development series without a CHANGELOG entry; v2.29.0 repairs the semver/release record.
 - `src/runners/implementer.js`: dispatch helper for `scripts/dispatch-hetero.sh` with shape validation for implementer outcomes.
 - `src/engine/autopilot-engine.js`:
   - `implementTask` and `runImplementationReviewLoop` for `/l5` and `/l6`-style implementation review loops.
@@ -39,11 +40,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Changed
 - `skills/l5` and `skills/l6` now document `engine implement-review` as the canonical `/l5` and `/l6` integration path.
 - `src/engine/index.js` now exports implementation-loop builders and implementer validation helpers alongside existing review-loop APIs.
+- `engine implement-review` now requires a qualified reviewer by default and fails closed at `phase:"reviewer_qualification"` when scorecard qualification is absent or false. Use `--allow-unqualified-reviewer` only as an explicit escape hatch.
 
 ### Verification / validation
 - Focused suite updates:
   - `hooks/tests/autopilot-engine.test.sh`
   - `hooks/tests/autopilot-cli.test.sh`
+  - `hooks/tests/codex-plugin-package.test.sh`
+  - `hooks/tests/dispatch-review.test.sh`
+  - `hooks/tests/hook-normalizers.test.sh`
+  - `hooks/tests/review-runner.test.sh`
+
+### Fixed
+- `scripts/sync-codex-plugin-skills.sh --check`: read-only Codex payload drift check, wired into pre-commit and `preflight-portability.sh`.
+- Review/implementer runner validators now enforce their documented schemas, including review `status`/`verdict` enums, unknown-key rejection, and `precondition_failed` implementer results with empty `branch`/`base`.
+- Claude hook normalization now lets canonical cwd/session context override payload fields, keeping intent-file keys and persisted values aligned on symlinked paths or payload-session drift.
+- Anthropic-compatible review dispatch fails closed immediately on response stream errors/aborts and oversized bodies.
 
 ### Hook-order semantics reminder
 - unchanged

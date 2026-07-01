@@ -120,4 +120,74 @@ assert_eq "0" "$EXIT" "review output parser accepts pretty JSON stdout"
 assert_contains "$OUT" "reviewed" "review output parser pretty JSON status"
 assert_contains "$OUT" "SHIP-AS-IS" "review output parser pretty JSON verdict"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+try {
+  parseReviewOutput(JSON.stringify({
+    runner: 'codex',
+    model: 'gpt-5.5',
+    status: 'done',
+    verdict: 'SHIP-AS-IS',
+    findings: 'none',
+    raw_log: '/tmp/log',
+    error: null,
+  }));
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "review output parser rejects invalid status process exits 0"
+assert_contains "$OUT" "status must be one of" "review output parser rejects invalid status enum"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+try {
+  parseReviewOutput(JSON.stringify({
+    runner: 'codex',
+    model: 'gpt-5.5',
+    status: 'reviewed',
+    verdict: 'PASS',
+    findings: 'none',
+    raw_log: '/tmp/log',
+    error: null,
+  }));
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "review output parser rejects invalid verdict process exits 0"
+assert_contains "$OUT" "verdict must be one of" "review output parser rejects invalid verdict enum"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+try {
+  parseReviewOutput(JSON.stringify({
+    runner: 'codex',
+    model: 'gpt-5.5',
+    status: 'reviewed',
+    verdict: 'SHIP-AS-IS',
+    findings: 'none',
+    raw_log: '/tmp/log',
+    error: null,
+    extra: true,
+  }));
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "review output parser rejects unknown field process exits 0"
+assert_contains "$OUT" "unknown field: extra" "review output parser rejects additionalProperties drift"
+
 finalize_test

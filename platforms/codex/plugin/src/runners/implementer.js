@@ -63,14 +63,13 @@ function validateImplementationResult(value) {
   if (typeof value.model !== 'string' || value.model.length === 0) {
     throw new Error('dispatch-hetero output JSON field model must be a non-empty string');
   }
-  if (typeof value.branch !== 'string' || value.branch.length === 0) {
-    throw new Error('dispatch-hetero output JSON field branch must be a non-empty string');
-  }
-  if (typeof value.base !== 'string' || value.base.length === 0) {
-    throw new Error('dispatch-hetero output JSON field base must be a non-empty string');
-  }
-
   if (value.status !== 'precondition_failed') {
+    if (typeof value.branch !== 'string' || value.branch.length === 0) {
+      throw new Error('dispatch-hetero output JSON field branch must be a non-empty string');
+    }
+    if (typeof value.base !== 'string' || value.base.length === 0) {
+      throw new Error('dispatch-hetero output JSON field base must be a non-empty string');
+    }
     if (typeof value.containment !== 'string' || value.containment.length === 0) {
       throw new Error('dispatch-hetero output JSON field containment must be a non-empty string');
     }

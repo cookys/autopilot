@@ -81,6 +81,33 @@ See [`agents/README.md`](../agents/README.md) for dispatch boundary, unified Out
 
 ---
 
+## Engine Layer
+
+Autopilot's engine layer is the host-neutral execution core underneath the prose skills. Skills still define the methodology and decision rules; the engine layer makes the repeatable dispatch/review/harness mechanics executable and testable.
+
+| Module | Responsibility |
+|--------|----------------|
+| [`bin/autopilot.js`](../bin/autopilot.js) | Public CLI front door: `dispatch review`, `engine review-loop`, `engine implement-review`, and `harness report`. |
+| [`src/engine/`](../src/engine/) | `AutopilotEngine` orchestration for roster resolution, read-only review dispatch, heterogeneous implementation dispatch, repair-loop prompting, and immutable-base verification. |
+| [`src/runners/`](../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`, `resolve-review-loop.sh`) with schema validation and parse-fail visibility. |
+| [`src/harness/`](../src/harness/) | Harness capability state, stale/attention reporting, and read-only capability CLI surfaces. |
+| [`src/hooks/`](../src/hooks/) | Host-neutral hook normalizers and handlers used by Claude wrappers and Codex hook probes. |
+
+The central DI contract is `new AutopilotEngine({ reviewLoopResolver, reviewDispatcher, implementationDispatcher, diffProvider, repairPromptWriter, clock, cwd })`. Production uses the shell-backed defaults; tests inject fakes at these seams so loop behavior can be verified without calling live engines.
+
+`engine implement-review` is the canonical `/l5` implementation loop:
+
+1. Resolve roster with scorecard-aware `resolve-review-loop.sh --check-scorecard`.
+2. Enforce reviewer qualification by default at the CLI boundary.
+3. Dispatch implementation through `dispatch-hetero.sh` with an immutable full-SHA `--base`.
+4. Review the cumulative `<base>..<latest commit>` diff as text.
+5. If the reviewer returns `FIX-THEN-SHIP`, write a repair prompt and repeat on a per-round branch named `<branch>-repair-rN-<sha7>`.
+6. Return `converged`, `non_converged`, or `blocked`; CLI exit 0 is reserved for `converged`.
+
+Layering rule: the engine wraps the artifact-verified shell dispatchers; it does not replace their git-artifact rails. Shell owns process isolation, worktree creation, wrapper commits, raw logs, and runner-specific invocation. JS owns orchestration, schema validation, immutable endpoint checks, and deterministic ledger shape.
+
+---
+
 ## Recommended Companions
 
 Autopilot is **self-sufficient for methodology and lifecycle** — you get all 27 skills + 3 methodology agents when you install autopilot alone. The assumed ecosystem baseline is cookys's own `autopilot` + `codeforge` + `mnemos` trio (standalone from third-party plugins), not a third-party stack. For **role specialization**, autopilot is out of scope and expects you to bring your own role-agent plugin if you want one (a voltagent-style catalog works if installed).

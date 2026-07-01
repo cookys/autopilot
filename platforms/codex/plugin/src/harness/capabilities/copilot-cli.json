@@ -6,7 +6,7 @@
   "harness_level": "H0",
   "last_checked_at": "2026-07-01",
   "verified_at": null,
-  "expires_at": "2026-07-01",
+  "expires_at": "2026-07-16",
   "evidence": {
     "source": "local-probe",
     "command": "gh --version && gh extension list | rg -i copilot",
@@ -20,6 +20,6 @@
     "blocking_gate": "unverified"
   },
   "notes": [
-    "Keep at H0 until current official CLI surface and local auth are surveyed and probed."
+    "Keep at H0 until current official CLI surface and local auth are surveyed and probed; expiry is intentionally a short stale-warning TTL, not a verified capability claim."
   ]
 }

@@ -50,6 +50,9 @@ qc-gate" pipeline is just `/l5 <goal>` — you don't re-type the roster.
      range). Map its outcome via the **outcome→action table**; reap the worktree
      from the outcome JSON's `worktree` field on any non-success. The run-summary
      impl row records `runner`/`model`/`containment` straight from the outcome JSON.
+     The CLI requires a qualified reviewer by default and blocks at
+     `phase:"reviewer_qualification"` if scorecard state is absent/false; use
+     `--allow-unqualified-reviewer` only as an explicit, recorded escape hatch.
    - **Diff-domain telemetry** (post-impl, telemetry ONLY — routes nothing): after a
      `committed` outcome, record the impl's dominant `work_domain` via
      `scripts/resolve-review-loop.sh --auto-domain <base>..<commit>` where the

@@ -11,6 +11,15 @@
 # pseudo-TTY. EMPTY / unparseable capture is treated FAIL-CLOSED (status:no_verdict) —
 # an empty agy reply must NEVER be read as SHIP-AS-IS.
 #
+# VERIFIER ISOLATION (structural, MUST NOT regress): the reviewer prompt is assembled from
+# the DIFF TEXT ONLY (--diff-file). This script has NO parameter through which an
+# implementer's self-report / summary / narrative / self-verdict could reach the reviewer —
+# and it MUST stay that way. Feeding a verifier the implementer's own account of the work
+# anchors it into confirming the claim (multi-agent hallucination cascade); a decorrelated
+# reviewer must form its own first impression from the artifact. Canonical rule:
+# references/blind-dispatch.md § "Verifier isolation". Never add a "context"/"self-report"/
+# "worker-summary" input path here.
+#
 # Read-only posture: the diff under review is UNTRUSTED (a malicious diff could carry a
 # prompt-injection). So the codex path runs under `--sandbox read-only` (NOT a sandbox
 # bypass — the reviewer never needs to write/exec), and the agy path (no upstream
@@ -66,6 +75,8 @@ case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort mu
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
 
 # Build the review prompt: diff goes in as TEXT (never ask the engine to read the worktree).
+# ARTIFACTS ONLY — the prompt below contains the diff and nothing else. Do NOT interpolate an
+# implementer self-report / summary / worker verdict here (verifier isolation — see header).
 # mktemp creates these 0600 (owner-only) and UMASK-INDEPENDENT — verified `umask 000` still
 # yields 0600 files / 0700 dirs — so a loose umask cannot widen them. A SAME-user process can
 # still read them, but that is the OS trust boundary (same UID = same trust); no temp-file mode

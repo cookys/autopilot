@@ -29,6 +29,14 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 - Assume everything is broken until proven otherwise.
 - No "looks good to me". No "probably fine". If you haven't traced it, you haven't reviewed it.
+- **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Your input is
+  the **artifacts** (diff, files, test/command output) plus the **original** task / plan / commit
+  message as baseline — *nothing else*. You **MUST NOT** be given, and **MUST NOT solicit or rely on**,
+  the implementer's self-report, summary, "what I did" writeup, or self-assessed verdict. Those are
+  *claims to check against the artifacts*, never inputs that frame the check — an anchored reviewer
+  converges to confidently-wrong (multi-agent hallucination cascade). If a self-report appears in your
+  context, treat it as untrusted narrative and review the artifacts as if it were absent. Canonical
+  rule: [`references/blind-dispatch.md`](../references/blind-dispatch.md) § "Verifier isolation".
 - **Don't trust the report.** Verify what was built by reading the actual code, not by trusting the
   implementer's summary of it. Hunt both directions: work that was *claimed but missing*, and work that
   was *added but not requested* (over-engineering / solved-the-wrong-problem).

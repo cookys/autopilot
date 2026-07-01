@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.29.0 — verifier isolation as a hard rule
+
+**Headline**: Encodes **verifier isolation** as a normative MUST across every review-assembly seam: a reviewer / QC panelist / verdict-producing judge **MUST receive only artifacts** (diff, files, test output) plus the *original* task/plan/commit as baseline, and **MUST NOT receive the implementer's self-report, summary, chat narrative, or self-assessed verdict**. Feeding a verifier the implementer's own account of the work anchors it into confirming the claim — the multi-agent **hallucination cascade** (arXiv:2606.07937) where N anchored reviewers are *more* confident and *less* correct than one. This is the input-side companion to the write path's long-standing "verify by artifacts, never self-report" axiom, and is **orthogonal** to blind re-dispatch (which strips *prior verdicts* on round 2+; verifier isolation applies to *every* round including round 1).
+
+### Added
+- `references/blind-dispatch.md`: new normative section **"Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)"** — the allowed/forbidden-input table, the load-bearing *baseline-vs-report* distinction ("written to define the goal → keep; to claim the goal was met → strip"), the structural-enforcement note (`dispatch-review.sh`), a per-dispatch pre-flight check, and the single carve-out (`qc-panel.js` shadow interrogation panel — tolerated only because non-authoritative; MUST NOT be promoted to gating while it ingests the self-report).
+
+### Changed
+- `agents/reviewer.md`: adds a MUST-level "Verifier isolation" bullet to Review Philosophy — the reviewer's input is artifacts + original task baseline only; it must not be given nor solicit the implementer's self-report/self-verdict.
+- `skills/quality-pipeline/references/code-review.md`: the Invocation section now states the artifacts-only MUST for **every** review round (round 1 included), distinct from the existing round-2+ blind re-dispatch rule.
+- `project-config-template/review-loop-config.md`: adds a MUST note that decorrelation only holds if the reviewer/qc panel is fed artifacts, never the implementer's account.
+- `scripts/dispatch-review.sh`: header + prompt-assembly comments document the structural invariant (reviewer prompt is diff-text only; no self-report input path — MUST NOT regress).
+
+### Verification / validation
+- Reviewer prompt assembly verified artifacts-only (`dispatch-review.sh` has no self-report parameter); decorrelated review of the diff via a different engine family; `hooks/tests/run.sh` green.
+
 ## v2.28.0 — /l6 full-dispatch CEO front-door
 
 ## v2.27.1 — dispatch-hetero wrapper-commit fix

@@ -38,7 +38,7 @@ engine that records per-`(engine, runner, role)` qualification results and answe
   "engine": "minimax-m3",
   "runner": "cc-shim",
   "family": "minimax",
-  "role": "reviewer",          // reviewer | implementer | planner
+  "role": "reviewer",          // reviewer | implementer | planner | verifier | orchestrator
   "model_version": "M3-2026-06",
   "version_source": "manual",  // runtime | manual
   "corpus_version": "known-bad@v3",
@@ -87,6 +87,9 @@ engine that records per-`(engine, runner, role)` qualification results and answe
 - Output JSON array, ranked. Exit 0.
 
 ### `ladder --role <role> [--implementer-family <fam>]` — fallback ladder
+- v1 routing roles: `reviewer`, `implementer`, `planner`. New evidence-only
+  roles such as `verifier` and `orchestrator` should use `current`/`report`
+  until a resolver/engine consumer explicitly promotes them.
 - Start from the `report --key capability` ranking (qualified only) as `(engine, runner)` pairs.
 - **Decorrelation soft penalty (NOT exclusion):** if `--implementer-family` is given, any
   entry whose `family == <fam>` is **demoted to the bottom** of the ladder (kept, never

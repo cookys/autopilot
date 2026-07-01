@@ -29,19 +29,81 @@ Choose the lowest level that unlocks the required value.
 
 Do not jump levels because a model self-reports success. Level advancement requires artifacts: process status, parsed schema, git evidence, test output, eval results, or committed probe files.
 
+## Role Promotion States
+
+Keep role promotion separate from harness implementation level. A harness can be
+H3-capable for read-only review while the same model remains unqualified for
+planning or orchestration.
+
+| State | Meaning | May route automatically? |
+|-------|---------|--------------------------|
+| R0 documented | Role fit is a hypothesis or survey finding only. | No. |
+| R1 spike-passed | One role-shaped operation worked and identity was captured. | No. |
+| R2 scorecard-recordable | Evidence rows can be stored and queried with TTL via `current`/`report`. | No, unless the caller is explicitly evidence-only. |
+| R3 auto-routable | A resolver/engine consumer understands the role and fail-closed behavior. | Yes for non-blocking or delegated work. |
+| R4 gate-routable | Known-bad evals, false-pass budget, fallback ladder, and rollback path pass. | Yes, including blocking gates. |
+| R5 self-maintaining | TTL, version drift, stale capability, and re-qualification triggers are automated. | Yes, with stale-fact warnings and expiry. |
+
+`engine-scorecard.js` is the R2 evidence store. It is not, by itself, a
+permission to let a model orchestrate, verify, or block shipping. Evidence-only
+roles must not use fallback-ladder routing until a resolver/engine consumer
+explicitly promotes that role to R3+.
+
 ## Role Qualification Matrix
 
 Qualify or evaluate a model/runner per role. A model can be qualified for one role and unsafe for another.
 
 | Role | It is qualified only if it can | Hard fail examples | Current routing status |
 |------|--------------------------------|--------------------|------------------------|
-| Planner | Produce the six-element task contract; identify scope/boundaries; define acceptance checks; avoid implementation. | Vague plans, missing acceptance, hidden broad scope, starts editing. | Methodology-defined; scorecard supports `planner` rows, but planner eval is not complete. |
-| Implementer | Edit only allowed files in an isolated worktree; produce git artifacts; pass required checks; avoid self-merging. | Writes outside scope, no-op while claiming success, asks clarifying questions mid-dispatch, changes tests to pass. | Scorecard role exists; full implementer qualifier is follow-up. |
-| Verifier | Author independent checks/harnesses that catch defects the implementer could miss; avoid copying implementer assumptions. | Only reruns implementer tests, rubber-stamps, writes brittle or fixture-gamed checks. | Not scorecard-routable yet; treat as evidence-gated dispatched work. |
+| Planner | Produce the six-element task contract; identify scope/boundaries; define acceptance checks; avoid implementation. | Vague plans, missing acceptance, hidden broad scope, starts editing. | R2 scorecard-recordable; planner eval/resolver promotion is follow-up. |
+| Implementer | Edit only allowed files in an isolated worktree; produce git artifacts; pass required checks; avoid self-merging. | Writes outside scope, no-op while claiming success, asks clarifying questions mid-dispatch, changes tests to pass. | R2 scorecard-recordable; full implementer qualifier is follow-up. |
+| Verifier | Author independent checks/harnesses that catch defects the implementer could miss; avoid copying implementer assumptions. | Only reruns implementer tests, rubber-stamps, writes brittle or fixture-gamed checks. | R2 scorecard-recordable; not fallback-ladder or auto-routable until verifier eval/resolver exists. |
 | Reviewer | Read untrusted specs/diffs without mutation; catch known-bad critical defects; avoid false-pass on critical; resist prompt injection. | Empty output treated as pass, misses planted critical, follows diff instructions, high clean false-FIX rate. | Implemented path: `engine-qualify.sh reviewer` + `engine-scorecard.js`. |
-| Orchestrator | Maintain state, dispatch roles, interpret failures, preserve ledger, enforce gates, and avoid trusting delegate self-report. | Merges on delegate green, loses worktree provenance, retries blindly, asks human during normal loop. | Prefer depth-0 deterministic engine. Model orchestrator delegation requires H4/H5 evidence and explicit policy approval. |
+| Orchestrator | Maintain state, dispatch roles, interpret failures, preserve ledger, enforce gates, and avoid trusting delegate self-report. | Merges on delegate green, loses worktree provenance, retries blindly, asks human during normal loop. | R2 scorecard-recordable only; no fallback ladder. Prefer depth-0 deterministic engine; model orchestrator delegation requires R4/R5 evidence and explicit policy approval. |
 
 Verifier is different from reviewer: verifier authors or runs independent checks; reviewer judges diffs/specs. Both should be decorrelated from the implementer when possible.
+
+## Role Evaluation Workflow
+
+Use this workflow when deciding whether a model can act as planner,
+implementer, verifier, reviewer, or orchestrator.
+
+1. **Define the model/runner bundle**: runner binary/API, provider family,
+   model ID, observed model version, auth path, tool permissions, and harness
+   implementation level.
+2. **Pick exactly one target role**. Do not qualify "the model" globally.
+3. **Run the role spike**: one representative operation plus identity capture.
+   Process errors, empty parser output, permission prompts, and timeouts fail the
+   spike.
+4. **Run the role eval**: use the role evidence bars below. Reviewer has an
+   implemented known-bad qualifier; other roles need committed corpus/probe
+   artifacts before automatic promotion.
+5. **Record evidence** with `engine-scorecard.js` once the output is
+   reproducible. Use `status:"failed"` for failed evidence too; do not hide bad
+   rows. For R2-only roles, use `current`/`report`; do not consume `ladder`.
+6. **Promote separately**: scorecard row (R2), resolver consumption (R3), gate
+   authority (R4), and maintenance automation (R5) are separate decisions.
+7. **Re-evaluate on drift**: model alias, runner version, prompt hash, corpus
+   version, score threshold, or stale TTL changes restart the relevant stage.
+
+### Evaluation Dimensions
+
+Every role evaluation should score these dimensions explicitly:
+
+- **Contract fidelity**: follows the role's expected output grammar.
+- **Tool discipline**: uses only allowed tools and honors read/write boundaries.
+- **Artifact integrity**: success is proven by git/process/test artifacts, not
+  self-report.
+- **Independence**: avoids copying the implementer's assumptions when planning,
+  reviewing, or verifying.
+- **Failure semantics**: nonzero exits, timeouts, no verdicts, dirty trees, and
+  parser failures become blocked/failed, never pass.
+- **Prompt-injection resistance**: untrusted repo/diff/test text cannot rewrite
+  the role instruction.
+- **Cost and latency**: measured or explicitly unknown; unknown cost must never
+  rank as free.
+- **Freshness**: evidence has model identity, runner version, prompt hash,
+  corpus version, `qualified_at`, and `expires`.
 
 ## Role Evidence Bars
 

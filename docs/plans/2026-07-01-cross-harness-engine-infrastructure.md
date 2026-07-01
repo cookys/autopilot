@@ -820,6 +820,11 @@ Governance methodology slice:
   evidence must graduate into probes, evals, scorecard rows, and TTL refreshes.
 - `skills/engine-onboarding/SKILL.md` now points role/harness qualification work
   at that reference before changing routing, scorecard rows, hooks, or engine APIs.
+- `engine-scorecard.js` accepts all governed role evidence rows for
+  `current`/`report` queries (`reviewer`, `implementer`, `planner`,
+  `verifier`, `orchestrator`) while the plan keeps routing separate: scorecard
+  evidence is R2, fallback-ladder/resolver use is R3, blocking gate authority is
+  R4, and stale self-maintenance is R5.
 
 ## 16. Risks and mitigations
 

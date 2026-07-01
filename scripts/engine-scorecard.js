@@ -6,7 +6,8 @@ const os = require('os');
 const path = require('path');
 const process = require('process');
 
-const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner']);
+const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator']);
+const LADDER_ROLES = new Set(['reviewer', 'implementer', 'planner']);
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
@@ -44,14 +45,15 @@ const CONFIGURED_IDENTITY_FIELDS = [
 
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
-  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner> [--now <ISO-date>]\n\
-  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner> [--key capability|cost]\n\
+  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner|verifier|orchestrator> [--now <ISO-date>]\n\
+  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner|verifier|orchestrator> [--key capability|cost]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|planner> [--implementer-family <family>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder.\n\
   --key accepts capability (default) or cost.\n\
   --now accepts ISO date; used by current for deterministic TTL checks.\n\
   --implementer-family is optional; if provided, ladder demotes matching family entries.\n\
+  verifier/orchestrator rows are evidence-only in v1; use current/report, not ladder.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -384,6 +386,9 @@ function parseLadderArgs(args) {
 
   if (!role) failUsage('--role is required');
   if (!VALID_ROLES.has(role)) failUsage(`invalid role '${role}'`);
+  if (!LADDER_ROLES.has(role)) {
+    failUsage(`ladder is not enabled for evidence-only role '${role}'; use report`);
+  }
 
   return { role, implementerFamily };
 }

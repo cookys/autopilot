@@ -13,7 +13,16 @@
 | C | `resolve-review-loop.sh` --check-scorecard + ladder | ✅ done (93/93, invariant held) |
 | D | `evals/known-bad/` injection cases (11,12) | ✅ done (apply-clean, 12/12 false-pass) |
 
-Deferred to follow-ups: implementer corpus (Unit, §5 step 3), planner path, quota-signal + cooldown, cost-token-capture spikes.
+Follow-up extension: `engine-scorecard.js` now accepts all governed role
+evidence rows (`reviewer`, `implementer`, `planner`, `verifier`,
+`orchestrator`) for `current`/`report` evidence queries so future role evals
+have one durable store. Reviewer remains the only shipped qualifier/resolver
+gate in this implementation line; verifier/orchestrator rows are R2 evidence,
+not fallback-ladder routing, automatic routing, or blocking authority.
+
+Deferred to follow-ups: implementer corpus (Unit, §5 step 3), planner path,
+verifier/orchestrator eval harnesses and resolver consumers, quota-signal +
+cooldown, cost-token-capture spikes.
 
 ## OKR
 - **O**: turn the methodology's v1 (reviewer-role lifecycle) into working, wired autopilot code.

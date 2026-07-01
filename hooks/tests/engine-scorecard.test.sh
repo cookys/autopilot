@@ -94,6 +94,15 @@ botfam=$(node "$CLI" ladder --role reviewer --implementer-family openai | jq_get
 len=$(node "$CLI" ladder --role reviewer --implementer-family openai | arrlen)
 [ "$botfam" = "openai" ] && [ "$len" = "2" ] && ok "8: same-family demoted to bottom, still present" || bad "8: bottomfam=$botfam len=$len"
 
+# 8b: governed evidence roles are recordable/queryable, but not fallback-ladder routable yet
+reset
+echo "$(row VER r f verifier verifier-corpus@1 0.7 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
+echo "$(row ORCH r f orchestrator orchestrator-corpus@1 0.6 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
+verrole=$(node "$CLI" current --role verifier --now 2026-06-30 | jq_get 0.role)
+orchrole=$(node "$CLI" report --role orchestrator | jq_get 0.role)
+node "$CLI" ladder --role orchestrator >/dev/null 2>&1; ladder_ec=$?
+[ "$verrole" = "verifier" ] && [ "$orchrole" = "orchestrator" ] && [ "$ladder_ec" = "2" ] && ok "8b: verifier/orchestrator rows are evidence-queryable but ladder-blocked" || bad "8b: verifier=$verrole orchestrator=$orchrole ladder_exit=$ladder_ec"
+
 # 9: invalid record (bad enum) => exit 1, store unchanged
 reset
 echo "$(row A r f reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1

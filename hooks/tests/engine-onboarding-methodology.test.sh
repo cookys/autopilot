@@ -11,16 +11,30 @@ REF_BODY="$(cat "$REF")"
 
 assert_contains "$SKILL_BODY" "role-and-harness-governance.md" "engine-onboarding links governance reference"
 assert_contains "$SKILL_BODY" "planner, implementer, verifier, reviewer, or orchestrator" "engine-onboarding trigger names all governed roles"
-assert_contains "$SKILL_BODY" "Verifier and orchestrator qualification are methodology-defined but not scorecard-routable yet" "engine-onboarding records verifier/orchestrator routing caveat"
+assert_contains "$SKILL_BODY" "Scorecard can record and" "engine-onboarding records scorecard role evidence support"
+assert_contains "$SKILL_BODY" "governed role evidence rows" "engine-onboarding records governed role evidence support"
+assert_contains "$SKILL_BODY" "fallback order for route-enabled roles only" "engine-onboarding scopes ladder to route-enabled roles"
+assert_contains "$SKILL_BODY" "Verifier and orchestrator are scorecard-recordable but not fallback-ladder or auto-routable yet" "engine-onboarding records verifier/orchestrator routing caveat"
 
 for level in H0 H1 H2 H3 H4 H5; do
   assert_contains "$REF_BODY" "$level" "governance reference includes harness level $level"
+done
+
+for state in "R0 documented" "R1 spike-passed" "R2 scorecard-recordable" "R3 auto-routable" "R4 gate-routable" "R5 self-maintaining"; do
+  assert_contains "$REF_BODY" "$state" "governance reference includes role promotion state $state"
 done
 
 for role in Planner Implementer Verifier Reviewer Orchestrator; do
   assert_contains "$REF_BODY" "$role" "governance reference includes role $role"
 done
 
+assert_contains "$REF_BODY" "R2 evidence store" "governance reference names scorecard evidence state"
+assert_contains "$REF_BODY" "not, by itself" "governance reference separates scorecard evidence from permission"
+assert_contains "$REF_BODY" "roles must not use fallback-ladder routing" "governance reference blocks ladder routing for R2-only roles"
+assert_contains "$REF_BODY" "Pick exactly one target role" "governance reference requires per-role qualification"
+assert_contains "$REF_BODY" "Do not qualify \"the model\" globally" "governance reference blocks global model qualification"
+assert_contains "$REF_BODY" "Promote separately" "governance reference separates scorecard/resolver/gate/maintenance promotion"
+assert_contains "$REF_BODY" "Evaluation Dimensions" "governance reference defines role evaluation dimensions"
 assert_contains "$REF_BODY" "Survey alone is never enough for H3/H4/H5" "governance reference separates survey from dispatch/gating evidence"
 assert_contains "$REF_BODY" "must not hardcode real model IDs" "governance reference records no-hardcoded-model rule"
 assert_contains "$REF_BODY" "effort presets" "governance reference blocks hardcoded effort policy"

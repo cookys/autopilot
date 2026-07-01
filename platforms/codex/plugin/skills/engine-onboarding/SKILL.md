@@ -3,8 +3,9 @@ name: engine-onboarding
 description: >
   Onboard a new heterogeneous engine into the autopilot lifecycle. Use when: "onboard a new engine",
   "qualify gpt-X / a new model as a reviewer", "is model Y good enough", "add an implementer engine",
-  "add a planner engine", "route a model by role", "new model for review/dispatch", "新增一個引擎",
-  "驗證某模型夠不夠格", "這個 model 能不能用", "加一個 reviewer/implementer 模型".
+  "add a planner engine", "add a verifier engine", "evaluate a model as orchestrator",
+  "route a model by role", "new model for review/dispatch", "新增一個引擎",
+  "驗證某模型夠不夠格", "這個 model 能不能用", "加一個 reviewer/implementer/verifier/orchestrator 模型".
   Not for: writing new scorecard scripts, inventing new routing policies, or deciding model-family domain fit.
 ---
 
@@ -16,11 +17,12 @@ If the task is about **how far to implement a cross-harness integration** or whe
 
 ## v1 scope
 
-Reviewer end-to-end is the shipped path today.
+Reviewer end-to-end is the shipped qualifier/gate path today.
 
 - ✅ Implemented in this workflow now: `stage-0 spike` and `stage-1 reviewer qualification`, with persisted `engine-scorecard` evidence.
-- ⚠️ Implementer and planner qualification remains follow-up work in v1 (collect evidence, wire score semantics, and close gaps).
-- ⚠️ Verifier and orchestrator qualification are methodology-defined but not scorecard-routable yet. Treat them as human-reviewed evidence until the scorecard schema and eval harnesses explicitly support them.
+- ✅ Scorecard can record and `current`/`report` governed role evidence rows for `planner`, `implementer`, `verifier`, `reviewer`, and `orchestrator`.
+- ⚠️ Implementer and planner auto-qualification remains follow-up work in v1 (collect evidence, wire score semantics, and close gaps).
+- ⚠️ Verifier and orchestrator are scorecard-recordable but not fallback-ladder or auto-routable yet. Treat their rows as evidence for a human/Board-reviewed promotion until dedicated eval harnesses and resolver consumers explicitly support them.
 
 ## Governing constraint (routing-axis evidence bar)
 
@@ -37,7 +39,7 @@ If a proposal uses domain or lifecycle phase for routing, reject it before runni
 | Script | Stage | Role in the runbook |
 |--------|-------|---------------------|
 | [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer) | Runs known-bad reviewer calibration and emits a qualifying verdict row when possible. |
-| [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2/3 | `record` (append evidence row), `current` (active roster), `report` (auditable score summary), `ladder` (fallback order). |
+| [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2/3 | `record` (append evidence row), `current`/`report` (auditable evidence views), `ladder` (fallback order for route-enabled roles only). |
 | [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 | Resolves roster + fail-closed flags by reading scorecard state. |
 
 ## Reference Methodology
@@ -101,7 +103,7 @@ Record a canonical row per run and keep historical comparability.
 - Use `scripts/engine-scorecard.js record --file <row.json>` after qualified run output.
 - Row identity must include `engine`, `runner`, `family`, `role`, `model_version`, and version/cost/latency identity fields.
 - Use `node scripts/engine-scorecard.js current --role <role>` for live roster.
-- Use `report` for periodic governance and `ladder` for ordered fallback behavior.
+- Use `report` for periodic governance and `ladder` only for roles that a resolver/engine consumer has promoted to fallback routing.
 
 ## Stage 3 — roster / routing (fail-closed + fallback ladder)
 

@@ -1,0 +1,5 @@
+{ "verdict": "PASS", "sha": "75bc893082ca44e115e9a20bedab8d9e82de6a82", "version": "2.27.1",
+  "scope": "dispatch-hetero.sh wrapper-commit fires for codex (net-new files)",
+  "gates": { "affected_test": "dispatch-hetero 48", "core_tests": "scorecard 13 / qualify 14 / resolver 93 / calibration 55", "validate": "25/25", "preflight_release": "6/6", "e2e": "real codex net-new-file dispatch -> committed" },
+  "review": "Gemini decorrelated; 'syntax error' finding REFUTED (bash -n + 48-assertion run); folded the $( ( ) ) clarity hardening",
+  "note": "full run.sh not re-run: a real-engine dispatch test hung on rate-limiting; change isolated to dispatch-hetero.sh (suite was 71/71 at v2.27.0)" }

@@ -53,6 +53,14 @@ exit 3
 EOF
 chmod +x "$STUB_FAIL_COMMIT"
 
+# --- stub codex: leaves edits uncommitted; wrapper-commit must still fire on dirty worktree ---
+STUB_CODEX_UNCOMMITTED="$TEST_TMP/codex"
+cat > "$STUB_CODEX_UNCOMMITTED" <<'EOF'
+#!/usr/bin/env bash
+touch codex_uncommitted.txt
+EOF
+chmod +x "$STUB_CODEX_UNCOMMITTED"
+
 # 1. --help exits 0 and mentions the worktree rail
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; HELP_EXIT=$?
 assert_eq "0" "$HELP_EXIT" "--help exit code"
@@ -126,6 +134,18 @@ assert_contains "$OUT" '"status": "committed"' "keep-worktree committed status"
 KEEP_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$KEEP_WT/ok.txt" "kept worktree present on success"
 git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
+
+# 5d. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
+# HEAD unchanged; wrapper-commit must still run and produce committed outcome.
+OUT="$( (
+  cd "$SBX"
+  PATH="$TEST_TMP:$PATH" "$SCRIPT" --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+) 2>&1 )"; EXIT=$?
+assert_eq "0" "$EXIT" "codex wrapper-commit exit code"
+assert_contains "$OUT" '"status": "committed"' "codex wrapper-commit status"
+assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"
+assert_contains "$OUT" '"runner": "codex"' "codex wrapper-commit runner reported"
+assert_eq "dispatch-hetero(codex): edits on feat/codex-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-no-commit)" "codex wrapper-commit message"
 
 # 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?

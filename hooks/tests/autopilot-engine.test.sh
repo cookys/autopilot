@@ -685,7 +685,7 @@ const { buildImplementationArgs } = require(path.join(root, 'src', 'engine'));
 const args = buildImplementationArgs({
   promptFile: 'relative-prompt.md',
   branch: 'impl-branch',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   roster: {
     implementer_engine: 'test-impl-model',
     implementer_effort: 'high',
@@ -709,7 +709,7 @@ try {
     runner: 'codex',
     model: 'gpt-test',
     branch: 'impl-branch',
-    base: 'base-sha',
+    base: '1111111111111111111111111111111111111111',
     commit: null,
     files_changed: 1,
     insertions: 1,
@@ -739,7 +739,7 @@ const valid = {
   runner: 'codex',
   model: 'gpt-test',
   branch: 'impl-branch',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   commit: 'commit-sha',
   files_changed: 1,
   insertions: 1,
@@ -786,6 +786,85 @@ assert_eq "0" "$EXIT" "AutopilotEngine implementer dispatcher cwd test process e
 assert_contains "$OUT" "status=0" "AutopilotEngine implementer dispatcher cwd test script exits 0"
 assert_contains "$OUT" "stdout=$TEST_TMP/caller-project" "AutopilotEngine implementer dispatcher defaults to caller cwd"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-task-cwd-project" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const target = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.mkdirSync(target, { recursive: true });
+fs.writeFileSync(path.join(target, 'prompt.txt'), 'implementer prompt');
+let resolverCwd = null;
+let implementationCwd = null;
+let promptArg = null;
+
+const engine = new AutopilotEngine({
+  cwd: target,
+  reviewLoopResolver(_args, options) {
+    resolverCwd = options && options.cwd;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        implementer_engine: 'test-impl-model',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+      },
+    };
+  },
+  implementationDispatcher(args, options) {
+    implementationCwd = options && options.cwd;
+    promptArg = args[args.indexOf('--prompt-file') + 1];
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'impl-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: 'impl-commit',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: 'prompt.txt',
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+});
+console.log(`status=${result.status}`);
+console.log(`resolver_cwd=${resolverCwd}`);
+console.log(`implementation_cwd=${implementationCwd}`);
+console.log(`prompt_arg=${promptArg}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementTask engine-cwd test exits 0"
+assert_contains "$OUT" "status=committed" "AutopilotEngine implementTask engine-cwd dispatch commits"
+assert_contains "$OUT" "resolver_cwd=$TEST_TMP/implement-task-cwd-project" "AutopilotEngine implementTask uses engine cwd for roster resolver"
+assert_contains "$OUT" "implementation_cwd=$TEST_TMP/implement-task-cwd-project" "AutopilotEngine implementTask passes engine cwd to dispatcher"
+assert_contains "$OUT" "prompt_arg=$TEST_TMP/implement-task-cwd-project/prompt.txt" "AutopilotEngine implementTask resolves relative prompt from engine cwd"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -803,7 +882,7 @@ const engine = new AutopilotEngine({
       error: null,
       status: 0,
       signal: null,
-      stdout: '{\"runner\":\"test-impl-runner\",\"model\":\"test-impl-model\",\"status\":\"committed\",\"commit\":\"impl-commit\",\"base\":\"base-sha\",\"branch\":\"impl-branch\",\"files_changed\":2,\"insertions\":12,\"deletions\":1,\"worktree\":\"/tmp/impl-wt\",\"agent_log\":\"/tmp/impl-log\",\"error\":null,\"containment\":\"plain\",\"contained\":true}',
+      stdout: '{\"runner\":\"test-impl-runner\",\"model\":\"test-impl-model\",\"status\":\"committed\",\"commit\":\"impl-commit\",\"base\":\"1111111111111111111111111111111111111111\",\"branch\":\"impl-branch\",\"files_changed\":2,\"insertions\":12,\"deletions\":1,\"worktree\":\"/tmp/impl-wt\",\"agent_log\":\"/tmp/impl-log\",\"error\":null,\"containment\":\"plain\",\"contained\":true}',
       stderr: '',
       parseError: null,
       result: {
@@ -811,7 +890,7 @@ const engine = new AutopilotEngine({
         runner: 'test-impl-runner',
         model: 'test-impl-model',
         commit: 'impl-commit',
-        base: 'base-sha',
+        base: '1111111111111111111111111111111111111111',
         branch: 'impl-branch',
         files_changed: 2,
         insertions: 12,
@@ -827,7 +906,7 @@ const engine = new AutopilotEngine({
 const result = engine.implementTask({
   promptFile: prompt,
   branch: 'impl-branch',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   roster: {
     implementer_engine: 'test-impl-model',
     implementer_effort: 'high',
@@ -849,8 +928,8 @@ assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine implemen
 assert_contains "$OUT" "runner=test-impl-runner" "AutopilotEngine implementation output captures runner"
 assert_contains "$OUT" "model=test-impl-model" "AutopilotEngine implementation output captures model"
 assert_contains "$OUT" "commit=impl-commit" "AutopilotEngine implementation output captures commit"
-assert_contains "$OUT" "--runner test-impl-runner --model test-impl-model --prompt-file $TEST_TMP/implementer-prompt.txt --branch impl-branch --base base-sha --effort high" "AutopilotEngine builds implementation dispatcher args from roster"
-assert_contains "$OUT" "dispatch_implementation:committed:base-sha:impl-branch:impl-commit:test-impl-runner:test-impl-model:0" "AutopilotEngine emits implementation ledger row with runner/model/base/branch/commit/exit status"
+assert_contains "$OUT" "--runner test-impl-runner --model test-impl-model --prompt-file $TEST_TMP/implementer-prompt.txt --branch impl-branch --base 1111111111111111111111111111111111111111 --effort high" "AutopilotEngine builds implementation dispatcher args from roster"
+assert_contains "$OUT" "dispatch_implementation:committed:1111111111111111111111111111111111111111:impl-branch:impl-commit:test-impl-runner:test-impl-model:0" "AutopilotEngine emits implementation ledger row with runner/model/base/branch/commit/exit status"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-nonzero-prompt.txt" <<'NODE'
 const fs = require('fs');
@@ -875,7 +954,7 @@ const engine = new AutopilotEngine({
         runner: 'test-impl-runner',
         model: 'test-impl-model',
         commit: 'impl-commit',
-        base: 'base-sha',
+        base: '1111111111111111111111111111111111111111',
         branch: 'impl-branch',
         files_changed: 1,
         insertions: 1,
@@ -891,7 +970,7 @@ const engine = new AutopilotEngine({
 const result = engine.implementTask({
   promptFile: prompt,
   branch: 'impl-branch',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   roster: {
     implementer_engine: 'test-impl-model',
     implementer_effort: 'high',
@@ -1026,7 +1105,7 @@ const engine = new AutopilotEngine({
 const result = engine.runImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   maxRounds: 3,
 });
 console.log(`status=${result.status}`);
@@ -1054,8 +1133,53 @@ assert_contains "$OUT" "review_calls=2" "AutopilotEngine performs two review dis
 assert_contains "$OUT" "repair_calls=1" "AutopilotEngine performs one repair prompt write"
 assert_contains "$OUT" "diff_calls=2" "AutopilotEngine reviews full base-to-commit diff after each implementation"
 assert_contains "$OUT" "impl2_base=commit-1" "AutopilotEngine repair dispatch uses previous commit as repair base"
-assert_contains "$OUT" "review_bases=base-sha,base-sha" "AutopilotEngine reviews against immutable original base"
+assert_contains "$OUT" "review_bases=1111111111111111111111111111111111111111,1111111111111111111111111111111111111111" "AutopilotEngine reviews against immutable original base"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_implementation:committed,dispatch_review:reviewed,dispatch_implementation:committed,dispatch_review:reviewed" "AutopilotEngine logs both implementation and review dispatch units"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/moving-ref-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+let resolverCalls = 0;
+let implementationCalls = 0;
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    resolverCalls += 1;
+    throw new Error('resolver should not run with a moving base ref');
+  },
+  implementationDispatcher() {
+    implementationCalls += 1;
+    throw new Error('implementation should not dispatch with a moving base ref');
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'impl-loop',
+  base: 'develop',
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`resolver_calls=${resolverCalls}`);
+console.log(`implementation_calls=${implementationCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementation loop moving-ref base exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine implementation loop blocks moving base refs"
+assert_contains "$OUT" "phase=prepare_implementation_loop" "AutopilotEngine implementation loop reports preparation phase for moving base refs"
+assert_contains "$OUT" "reason=base must be a full immutable git SHA" "AutopilotEngine implementation loop explains immutable base requirement"
+assert_contains "$OUT" "rounds=0" "AutopilotEngine implementation loop blocks moving base before round one"
+assert_contains "$OUT" "resolver_calls=0" "AutopilotEngine implementation loop does not resolve roster with moving base"
+assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation loop does not dispatch implementation with moving base"
+assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine implementation loop records moving-base block"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/unqualified-loop-prompt.txt" <<'NODE'
 const fs = require('fs');
@@ -1103,7 +1227,7 @@ const engine = new AutopilotEngine({
 const result = engine.runImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   requireQualifiedReviewer: true,
 });
 console.log(`status=${result.status}`);
@@ -1144,7 +1268,7 @@ const engine = new AutopilotEngine({
 const result = engine.runImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   maxRounds: 1,
   roster: {
     reviewer_engine: 'test-review-model',
@@ -1223,7 +1347,7 @@ const engine = new AutopilotEngine({
         runner: 'test-impl-runner',
         model: 'test-impl-model',
         branch: 'cwd-loop',
-        base: 'base-sha',
+        base: '1111111111111111111111111111111111111111',
         commit: 'commit-sha',
         files_changed: 1,
         insertions: 1,
@@ -1264,7 +1388,7 @@ const engine = new AutopilotEngine({
 const result = engine.runImplementationReviewLoop({
   promptFile: 'prompt.txt',
   branch: 'cwd-loop',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   cwd: target,
 });
 console.log(`status=${result.status}`);
@@ -1538,7 +1662,7 @@ const engine = new AutopilotEngine({
 const result = engine.runImplementationReviewLoop({
   promptFile: prompt,
   branch: 'repair-loop',
-  base: 'base-sha',
+  base: '1111111111111111111111111111111111111111',
   maxRounds: 2,
   roster: {
     reviewer_engine: 'test-review-model',

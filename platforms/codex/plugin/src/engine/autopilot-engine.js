@@ -199,6 +199,10 @@ function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
 
+function isImmutableGitSha(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
+}
+
 function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`));
   const file = path.join(diffDir, 'range.diff');
@@ -567,13 +571,41 @@ class AutopilotEngine {
       };
     }
 
+    const implementationOptionsInput = input.implementationOptions || {};
+    const taskCwd = input.cwd
+      || implementationOptionsInput.cwd
+      || this.cwd
+      || process.cwd();
+    if (typeof taskCwd !== 'string' || taskCwd.length === 0) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'cwd must be a non-empty string',
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+    const resolvedTaskCwd = path.resolve(taskCwd);
+
     if (!roster) {
       const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
         ? input.rosterArgs
         : ['--check-scorecard'];
+      const resolverOptions = {
+        ...(input.resolverOptions || {}),
+        cwd: Object.prototype.hasOwnProperty.call(input.resolverOptions || {}, 'cwd')
+          ? input.resolverOptions.cwd
+          : resolvedTaskCwd,
+      };
       const resolved = this.resolveRoster({
         args: rosterArgs,
-        options: input.resolverOptions || {},
+        options: resolverOptions,
       });
       ledger.push(...resolved.ledger);
       resolveResult = resolved.result;
@@ -613,15 +645,12 @@ class AutopilotEngine {
     }
 
     try {
-      const implementationCwd = input.cwd
-        || (input.implementationOptions && input.implementationOptions.cwd)
-        || process.cwd();
       implementationArgs = buildImplementationArgs({
         roster,
         promptFile: input.promptFile,
         branch: input.branch,
         base: input.base,
-        cwd: implementationCwd,
+        cwd: resolvedTaskCwd,
         extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
           ? input.extraImplementationArgs
           : [],
@@ -644,10 +673,14 @@ class AutopilotEngine {
 
     const startedAt = this.now();
     let implementationResult;
+    const implementationOptions = {
+      ...implementationOptionsInput,
+      cwd: resolvedTaskCwd,
+    };
     try {
       implementationResult = this.implementationDispatcher(
         implementationArgs,
-        input.implementationOptions || {},
+        implementationOptions,
       );
     } catch (error) {
       implementationResult = {
@@ -756,6 +789,20 @@ class AutopilotEngine {
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'base is required',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      };
+    }
+    if (!isImmutableGitSha(base)) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'base must be a full immutable git SHA',
         rounds: 0,
         verdict: null,
         roster: null,
@@ -936,9 +983,7 @@ class AutopilotEngine {
           : [],
         implementationOptions: {
           ...(input.implementationOptions || {}),
-          cwd: Object.prototype.hasOwnProperty.call(input.implementationOptions || {}, 'cwd')
-            ? input.implementationOptions.cwd
-            : loopCwd,
+          cwd: loopCwd,
         },
       });
       ledger.push(...implementation.ledger);

@@ -42,6 +42,10 @@ OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-
 assert_eq "2" "$EXIT" "implement-review missing cwd value exits 2"
 assert_contains "$OUT" "--cwd requires a value" "implement-review validates cwd value"
 
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base develop 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "implement-review moving base ref exits 1"
+assert_contains "$OUT" "base must be a full immutable git SHA" "implement-review blocks moving base refs before dispatch"
+
 OUT="$(node "$CLI" dispatch review --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "dispatch review preserves reviewed exit 0"
 assert_contains "$OUT" '"status": "reviewed"' "dispatch review emits delegated JSON"

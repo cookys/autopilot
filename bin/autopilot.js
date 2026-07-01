@@ -3,16 +3,19 @@
 
 const { dispatchReview } = require('../src/runners/review');
 const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
+const { runHarnessCli } = require('../src/harness/cli');
 
 function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
+  node bin/autopilot.js harness report [harness report args...]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
   engine review-loop
                     Delegate to the review-loop roster resolver.
+  harness report    Emit read-only harness capability state and stale flags.
 
 Exit codes:
   Delegated commands preserve the wrapped command exit code.
@@ -70,6 +73,14 @@ if (args[0] === 'engine') {
     process.exit(1);
   }
   process.exit(result.status === null ? 1 : result.status);
+}
+
+if (args[0] === 'harness') {
+  const result = runHarnessCli(args.slice(1), {
+    stdout: process.stdout,
+    stderr: process.stderr,
+  });
+  process.exit(result.status);
 }
 
 failUsage(`unknown command: ${args.join(' ')}`);

@@ -714,6 +714,25 @@ Acceptance:
 - `node bin/autopilot.js harness report --stale-after 14d` returns machine-readable output.
 - SessionStart can inject a bounded stale-facts warning without network access.
 
+First implementation slice:
+
+- `src/harness/capabilities.js` and `src/harness/cli.js` add a read-only
+  capability-state loader, validator, stale/readiness detector, and
+  `harness report` command.
+- `src/harness/capabilities/*.json` records current local probe state for
+  Codex, agy, Grok, MiniMax direct, Claude Code, and Copilot CLI without
+  embedding runtime model/effort routing policy in engine code.
+- `skills/harness-maintenance/SKILL.md` gives Codex/Claude a stable entry point:
+  run the capability report first, then survey/spike stale, unverified, or
+  below-required-level harnesses before H3+ dispatch, hooks, gating, or
+  orchestration changes.
+- `hooks/tests/harness-capabilities.test.sh` covers default records, bounded
+  warning output, custom capability directories, invalid record failure, and
+  skill linkage.
+- `hooks/tests/skill-count-metadata.test.sh` guards public skill-count metadata
+  against the real `skills/` directory so new skills do not leave manifests or
+  README/catalog copy stale.
+
 ### Phase 5 - Codex skills-only package
 
 Deliverables:

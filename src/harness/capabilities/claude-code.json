@@ -1,0 +1,26 @@
+{
+  "id": "claude-code",
+  "display_name": "Claude Code",
+  "kind": "cli",
+  "status": "unavailable",
+  "harness_level": "H0",
+  "last_checked_at": "2026-07-01",
+  "verified_at": null,
+  "expires_at": "2026-07-01",
+  "evidence": {
+    "source": "local-probe-and-user-constraint",
+    "command": "claude --version",
+    "result": "2.1.197 (Claude Code); subscription exhausted for this workstream"
+  },
+  "capabilities": {
+    "read_only_dispatch": "unavailable",
+    "skills": "known-existing-host",
+    "hooks": "known-existing-host",
+    "mutation_dispatch": "unavailable",
+    "blocking_gate": "unavailable"
+  },
+  "notes": [
+    "Do not dispatch through claude or cc-shim while the subscription constraint is active.",
+    "Existing Claude Code plugin behavior must remain unchanged unless a phase explicitly touches Claude packaging."
+  ]
+}

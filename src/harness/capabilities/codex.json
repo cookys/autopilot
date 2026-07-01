@@ -1,0 +1,27 @@
+{
+  "id": "codex",
+  "display_name": "Codex CLI",
+  "kind": "cli",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-01",
+  "verified_at": "2026-07-01",
+  "expires_at": "2026-07-15",
+  "evidence": {
+    "source": "local-probe",
+    "command": "codex --version",
+    "result": "codex-cli 0.142.5"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified",
+    "repo_skills": "verified",
+    "plugin_packaging": "unverified",
+    "hooks": "unverified",
+    "mutation_dispatch": "unverified",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "Use skills-only integration until Codex plugin and hook semantics are probed.",
+    "Do not put real model or effort routing policy in engine code."
+  ]
+}

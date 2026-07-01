@@ -1,0 +1,25 @@
+{
+  "id": "grok",
+  "display_name": "Grok CLI",
+  "kind": "cli",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-01",
+  "verified_at": "2026-07-01",
+  "expires_at": "2026-07-15",
+  "evidence": {
+    "source": "local-probe",
+    "command": "grok --version && grok models && grok-build smoke",
+    "result": "grok 0.2.77 (44e77bec3a) [stable]; grok-build smoke returned AUTOPILOT_GROK_OK"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified",
+    "skills": "unverified",
+    "hooks": "unverified",
+    "mutation_dispatch": "unverified",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "Treat grok-build as a read-only reviewer/worker candidate until mutation containment is separately proven."
+  ]
+}

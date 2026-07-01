@@ -2,13 +2,13 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-The full catalog of all 24 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
+The full catalog of all 27 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
 ---
 
 ## The Solution
 
-Autopilot ships **24 skills** covering lifecycle orchestration, strategic intelligence, methodology, and quality gates. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
+Autopilot ships **27 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
 | Skill | What It Does | Coexists with |
 |-------|-------------|---------------|
@@ -18,13 +18,15 @@ Autopilot ships **24 skills** covering lifecycle orchestration, strategic intell
 | **think-tank** | 6-role debate for strategic decisions | `superpowers:brainstorming` (different level — requirements exploration) |
 | **think-tank-dialectic** | Hegelian dialectic for irreversible / high-stakes decisions with LOW consensus. 4 职能 + 2 adversarial roles (Popper falsifier + Munger inverter). NOT a "better think-tank" — a different tool for a different situation | — (no equivalent) |
 | **ceo-agent** | Autonomous execution with CEO-level judgment | — (no equivalent) |
-| **l3 / l4 / l5** | Terse CEO front-doors that pre-fill the four startup questions and set execution posture: `/l3` runs inline, `/l4` dispatches one background worktree-isolated `sub-orchestrator` foreman with a depth-0 control loop + authoritative qc, `/l5` adds a heterogeneous (agy/Gemini) implementer | — (no equivalent) |
+| **l3 / l4 / l5 / l6** | Terse CEO front-doors that pre-fill the four startup questions and set execution posture: `/l3` runs inline, `/l4` dispatches one background worktree-isolated `sub-orchestrator` foreman with a depth-0 control loop + authoritative qc, `/l5` adds a heterogeneous implementer, and `/l6` also delegates verification authoring | — (no equivalent) |
 | **research-to-ship** | Pinned participatory pipeline: research best-practice → plan → dialectic loop review → project → dev-flow, with a human gate between each phase. Delegates to survey/think-tank-dialectic/project-lifecycle/dev-flow | — (no equivalent) |
 | **quality-pipeline** | Unified quality gate: test → scan → completeness → review | `superpowers:verification-before-completion` (partial) |
 | **finish-flow** | Size-aware closing forcing function — TaskCreates discrete L-5 / H-9 / Fix / S-Lite sub-tasks so nothing gets silently compressed | — (no equivalent) |
 | **doc-sync** | Doc↔code drift detection, two layers: a **deterministic gate** (reliable, gate-able in CI — baseline `scripts/doc-drift-gate.js` does links + code-fences; projects extend with version/CLI-surface/roadmap checks) + an **LLM sweep** for discovery (scoped per-diff / full whole-repo; non-deterministic, never loop-to-zero). Mechanizable findings demote into the gate. Wired into finish-flow L-5.4 | — (no equivalent) |
 | **project-lifecycle** | Plan → bootstrap → structure → archive | `superpowers:finishing-a-development-branch` (partial) |
 | **onboard** | Scaffold a consuming repo's `.claude/*-config.md` DI from detected reality — `scripts/project-detect.js` (mechanical facts) + `scripts/scaffold-config.js` (fills the config set, autopilot-only chains) then the skill enriches the judgment configs (skill-routing, doc-drift domains, security surfaces). The "fresh repo → autopilot-calibrated" bridge | — (no equivalent) |
+| **engine-onboarding** | Qualify new model/runner bundles by role with spike → qualify → score → route → re-qualify evidence, including reviewer scorecard paths and planner/implementer/verifier/orchestrator methodology gates | — (no equivalent) |
+| **harness-maintenance** | Audit stale harness capability state for Codex, Claude Code, agy, Grok, MiniMax, Copilot CLI, and future harnesses before cross-harness dispatch, hook, gating, or orchestration changes | — (no equivalent) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **retro** | Engineering retrospective from git history | — (no equivalent) |
 | **distill** | Distills recurring procedures/corrections from your conversation history into *your own* personal skills (routed to a private `@skills-dir` pack / project dirs, never into autopilot) | — (no equivalent) |
@@ -99,15 +101,16 @@ Think Tank assembles:
 Output: Decision Brief with consensus, dissenting views, and recommendation
 ```
 
-### L3 / L4 / L5 — CEO Front-Door Ladder
+### L3 / L4 / L5 / L6 — CEO Front-Door Ladder
 
-`/l3`, `/l4`, `/l5` are **terse front-doors into `ceo-agent`**. Each pre-fills the four CEO startup questions — involvement = just-results (full autonomy, notify on done), scope = Hold, no-go = none — so a single line ships the goal without the startup Q&A. They differ only in **where the implementation runs**; the depth-0 control loop and every quality gate are identical, nothing is skipped.
+`/l3`, `/l4`, `/l5`, and `/l6` are **terse front-doors into `ceo-agent`**. Each pre-fills the four CEO startup questions — involvement = just-results (full autonomy, notify on done), scope = Hold, no-go = none — so a single line ships the goal without the startup Q&A. They differ only in **where the implementation and verification-authoring labor runs**; the depth-0 control loop and every quality gate are identical, nothing is skipped.
 
 | Level | Command | Where it runs | Reach for it when |
 |-------|---------|---------------|-------------------|
-| **L3** | `/l3 <goal>` | **Inline** on this thread. The CEO executes the goal itself, escalating only at the DOA boundary. | You want full autonomy but want to watch it happen on the current thread. (Also the `--solo` fallback engine for L4/L5.) |
+| **L3** | `/l3 <goal>` | **Inline** on this thread. The CEO executes the goal itself, escalating only at the DOA boundary. | You want full autonomy but want to watch it happen on the current thread. (Also the `--solo` fallback engine for L4/L5/L6.) |
 | **L4** | `/l4 <goal>` | **One background, worktree-isolated foreman** (a sub-orchestrator at depth 1) runs dev-flow unattended and returns a verdict. The CEO keeps the depth-0 control loop and the **authoritative qc** — a fan-out of ≥3 adversarial reviewers over the branch diff, *not* a CEO self-read. | A long autonomous run you'd rather offload — your context stays clean; merge-back and worktree GC are owned at depth 0. |
 | **L5** | `/l5 <goal>` | Identical to L4, but the **implementer is leaf-dispatched to a heterogeneous engine** (agy / Gemini via `dispatch-hetero.sh`), and review can run on a **decorrelated** engine (default `gpt-5.5`). The engine roster is **data** (`.claude/review-loop-config.md`), not a hand-typed prompt. | Cost-arbitrage, or you want a decorrelated second engine doing the mechanical coding and a different vendor family reviewing it. |
+| **L6** | `/l6 <goal>` | Identical to L5, but **verification authoring is also leaf-dispatched** to a heterogeneous engine. Depth 0 still executes the harness, judges convergence, and owns merge authority. | You want both implementation and verification-authoring labor offloaded while preserving a local authoritative control loop. |
 
 **Examples**
 
@@ -116,15 +119,16 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 /l4 ship the WebSocket reconnect system                # offload to a background foreman
 /l4 --expand harden the auth layer -x payments         # scope=Expand, payments off-limits
 /l5 migrate the config loader to the new schema        # hetero implementer + decorrelated review
+/l6 ship the parser rewrite                            # hetero implementer + hetero verification authoring
 ```
 
-**Override flags** (all three levels):
+**Override flags** (all four levels):
 
 - `--expand` → scope = Expand (default is Hold — touch only what the goal names).
 - `-x <csv>` → no-go zones, e.g. `-x payments,auth` (default none).
-- `--solo` (L4 / L5 only) → fall back to the L3 inline engine. This is also the automatic degradation when the foreman returns `precondition_failed`.
+- `--solo` (L4 / L5 / L6 only) → fall back to the L3 inline engine. This is also the automatic degradation when the foreman returns `precondition_failed`.
 
-The escalation is **inline → offloaded → offloaded + decorrelated engine**. Start at L3; reach for L4 when you want it off your thread; reach for L5 when a second engine adds cost-arbitrage or decorrelation value. For the depth-0 control loop, outcome→action table, and run-summary ledger, see the [ceo-agent front-door semantics](../skills/ceo-agent/references/level-front-door.md). For the L5 roster/loop config, see [`review-loop-config.md`](../project-config-template/review-loop-config.md).
+The escalation is **inline → offloaded → offloaded + decorrelated implementation → offloaded + decorrelated implementation and verification authoring**. Start at L3; reach for L4 when you want it off your thread; reach for L5 when a second engine adds cost-arbitrage or decorrelation value; reach for L6 when verification authoring should also be delegated. For the depth-0 control loop, outcome→action table, and run-summary ledger, see the [ceo-agent front-door semantics](../skills/ceo-agent/references/level-front-door.md). For the roster/loop config, see [`review-loop-config.md`](../project-config-template/review-loop-config.md).
 
 ### How They Work Together
 

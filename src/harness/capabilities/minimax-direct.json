@@ -1,0 +1,27 @@
+{
+  "id": "minimax-direct",
+  "display_name": "MiniMax Direct API",
+  "kind": "api",
+  "status": "verified",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-01",
+  "verified_at": "2026-07-01",
+  "expires_at": "2026-07-15",
+  "evidence": {
+    "source": "local-probe",
+    "command": "Anthropic-compatible messages API probe with auth from environment",
+    "result": "https://api.minimax.io/anthropic/v1/messages returned AUTOPILOT_MINIMAX_OK for MiniMax-M3"
+  },
+  "capabilities": {
+    "read_only_dispatch": "verified",
+    "anthropic_compatible_messages": "verified",
+    "skills": "unverified",
+    "hooks": "not-applicable",
+    "mutation_dispatch": "unverified",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "Auth material lives outside the repo under user configuration/environment.",
+    "Do not route MiniMax through cc-shim while Claude Code subscription is unavailable."
+  ]
+}

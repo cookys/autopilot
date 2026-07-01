@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/hook-event.schema.json",
+  "title": "HookEvent",
+  "description": "Normalized cross-harness hook event envelope for telemetry (draft, not wired).",
+  "type": "object",
+  "required": ["platform", "event", "ts"],
+  "additionalProperties": true,
+  "properties": {
+    "platform": {
+      "type": "string",
+      "description": "Harness or platform that produced the original event."
+    },
+    "event": {
+      "type": "string",
+      "description": "Normalized event type (e.g. pre_tool_use, post_tool_use, stop, compact)."
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "Session identifier from the hook payload or environment."
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in ISO-8601."
+    },
+    "cwd": {
+      "type": ["string", "null"],
+      "description": "Working directory when the hook fired."
+    },
+    "tool": {
+      "type": ["string", "null"],
+      "description": "Tool name for tool-scoped hook events."
+    },
+    "tool_input": {
+      "type": ["object", "array", "string", "number", "boolean", "null"],
+      "description": "Normalized tool input payload when available."
+    },
+    "tool_output": {
+      "type": ["object", "array", "string", "number", "boolean", "null"],
+      "description": "Normalized tool output payload when available."
+    },
+    "session": {
+      "type": ["object", "null"],
+      "description": "Normalized session metadata, including transcript paths when present."
+    },
+    "raw": {
+      "type": ["object", "array", "string", "number", "boolean", "null"],
+      "description": "Original platform payload retained for adapters that need unmapped fields."
+    }
+  }
+}

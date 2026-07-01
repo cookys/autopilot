@@ -19,12 +19,21 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible --model <name> --diff-file <file>
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
 #   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
+#   anthropic-compatible runner: direct HTTP POST to an Anthropic-compatible /v1/messages
+#   endpoint (MiniMax-M3, GLM-*, …) via dispatch-anthropic-review.js — NOT claude/cc-shim.
+#   Auth from env only: MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN
+#   for other third-party compatible endpoints. This direct runner intentionally
+#   ignores ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN; keep official Anthropic/Claude
+#   auth on separate adapter surfaces.
+#   Base URL from ANTHROPIC_COMPATIBLE_BASE_URL or AUTOPILOT_MINIMAX_BASE_URL
+#   (default https://api.minimax.io/anthropic). This path intentionally ignores
+#   generic ANTHROPIC_BASE_URL so cc-shim/Anthropic env cannot silently redirect it.
 #   cc-shim runner: Claude Code CLI → an Anthropic-compatible endpoint (MiniMax-M3, GLM-*).
 #   Needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN in env. READ-INTENT, best-effort surface
 #   reduction (NOT a hard sandbox — prefer codex for max isolation on untrusted diffs) via
@@ -33,7 +42,7 @@
 #   ANTHROPIC_API_KEY.
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...", "raw_log": "<path>", "error": "..." }
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
@@ -57,11 +66,34 @@ done
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$RUNNER" "$MODEL" "$1"; exit 2; }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
-case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must be codex, agy, grok, or cc-shim (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, or anthropic-compatible (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
+
+timeout_to_ms() {
+  local t="$1"
+  if [[ "$t" =~ ^([0-9]+)m$ ]]; then printf '%s' "$(( ${BASH_REMATCH[1]} * 60000 ))"; return; fi
+  if [[ "$t" =~ ^([0-9]+)s$ ]]; then printf '%s' "$(( ${BASH_REMATCH[1]} * 1000 ))"; return; fi
+  if [[ "$t" =~ ^[0-9]+$ ]]; then printf '%s' "$t"; return; fi
+  return 1
+}
+
+# Direct HTTP Anthropic-compatible reviewer — no CLI engine, no repo mutation.
+if [[ "$RUNNER" = "anthropic-compatible" ]]; then
+  ANTHROPIC_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js"
+  [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-review.sh"
+  command -v node >/dev/null 2>&1 || die_precondition "node binary not found: node (required for anthropic-compatible reviewer)"
+  TIMEOUT_MS="$(timeout_to_ms "$TIMEOUT")" || die_precondition "--timeout must be an integer millisecond value or use Ns/Nm syntax (got: $TIMEOUT)"
+  ANTHROPIC_ARGS=(--model "$MODEL" --diff-file "$DIFF_FILE" --timeout-ms "$TIMEOUT_MS")
+  if [[ -n "${ANTHROPIC_COMPATIBLE_BASE_URL:-}" ]]; then
+    ANTHROPIC_ARGS+=(--base-url "$ANTHROPIC_COMPATIBLE_BASE_URL")
+  elif [[ -n "${AUTOPILOT_MINIMAX_BASE_URL:-}" ]]; then
+    ANTHROPIC_ARGS+=(--base-url "$AUTOPILOT_MINIMAX_BASE_URL")
+  fi
+  exec node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}"
+fi
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
 
@@ -204,24 +236,51 @@ else
 fi
 
 # --- parse verdict (fail-closed AND fail-toward-block) ---
-# Only consider lines that START with VERDICT: (ignoring leading whitespace), so prose
-# that merely mentions a token mid-sentence ("not a VERDICT: SHIP-AS-IS situation") is
-# ignored. Resolve CONSERVATIVELY: any FIX-THEN-SHIP among the verdict lines blocks; SHIP
-# only when a SHIP line exists and NO FIX line does. Never let an explained reply flip a
-# block into a ship.
-VLINES="$(grep -aE '^[[:space:]]*VERDICT:[[:space:]]*(SHIP-AS-IS|FIX-THEN-SHIP)' "$RAW_LOG" 2>/dev/null)"
-if printf '%s' "$VLINES" | grep -qaE 'FIX-THEN-SHIP'; then
-  VERDICT="FIX-THEN-SHIP"
-elif printf '%s' "$VLINES" | grep -qaE 'SHIP-AS-IS'; then
-  VERDICT="SHIP-AS-IS"
-else
-  VERDICT=""
-fi
-FINDINGS="$(grep -aE '^[[:space:]]*FINDINGS:' "$RAW_LOG" 2>/dev/null | head -1 | sed -E 's/^[[:space:]]*FINDINGS:[[:space:]]*//')"
+# Only consider exact top-level VERDICT/FINDINGS lines outside fenced code blocks.
+# Resolve conservatively: any exact FIX-THEN-SHIP blocks; SHIP only when an exact
+# SHIP line exists and no exact FIX line does.
+VERDICT="$(awk '
+  BEGIN { in_fence=0; fix=0; ship=0 }
+  /^[[:space:]]*```/ { in_fence = !in_fence; next }
+  in_fence { next }
+  /^[[:space:]]*VERDICT:[[:space:]]*FIX-THEN-SHIP[[:space:]]*$/ { fix=1; next }
+  /^[[:space:]]*VERDICT:[[:space:]]*SHIP-AS-IS[[:space:]]*$/ { ship=1; next }
+  END {
+    if (fix) print "FIX-THEN-SHIP";
+    else if (ship) print "SHIP-AS-IS";
+  }
+' "$RAW_LOG" 2>/dev/null)"
+HAS_FINDINGS="$(awk '
+  BEGIN { in_fence=0; found=0 }
+  /^[[:space:]]*```/ { in_fence = !in_fence; next }
+  !in_fence && /^[[:space:]]*FINDINGS:/ { found=1; exit }
+  END { print found }
+' "$RAW_LOG" 2>/dev/null)"
+FINDINGS="$(awk '
+  BEGIN { in_fence=0; capture=0 }
+  /^[[:space:]]*```/ {
+    in_fence = !in_fence;
+    next;
+  }
+  capture && /^Script done on / { exit }
+  !in_fence && !capture && /^[[:space:]]*FINDINGS:/ {
+    capture=1;
+    sub(/^[[:space:]]*FINDINGS:[[:space:]]*/, "", $0);
+    if (length($0) > 0) print $0;
+    next;
+  }
+  !in_fence && capture && /^[[:space:]]*VERDICT:/ { exit }
+  capture && length($0) > 0 { print $0 }
+' "$RAW_LOG" 2>/dev/null)"
 
 if [[ "$VERDICT" != "SHIP-AS-IS" && "$VERDICT" != "FIX-THEN-SHIP" ]]; then
   # EMPTY or unparseable capture — FAIL-CLOSED. Never silently treated as a pass.
   printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "no parseable VERDICT line (empty capture or stdout-drop) — fail-closed, NOT a pass" }\n' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
+  exit 1
+fi
+if [[ "$HAS_FINDINGS" != "1" ]]; then
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "missing parseable FINDINGS line — fail-closed, NOT a pass" }\n' \
     "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
   exit 1
 fi

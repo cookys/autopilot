@@ -775,6 +775,15 @@ Second implementation slice:
   reviewer qualification blocks, dispatch parse blocks, and successful review
   dispatch argument construction.
 
+Governance methodology slice:
+
+- `skills/engine-onboarding/references/role-and-harness-governance.md` defines
+  how to choose cross-harness implementation level (H0-H5), how to qualify
+  planner/implementer/verifier/reviewer/orchestrator roles, and when survey
+  evidence must graduate into probes, evals, scorecard rows, and TTL refreshes.
+- `skills/engine-onboarding/SKILL.md` now points role/harness qualification work
+  at that reference before changing routing, scorecard rows, hooks, or engine APIs.
+
 ## 16. Risks and mitigations
 
 | Risk | Mitigation |

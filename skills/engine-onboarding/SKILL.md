@@ -12,12 +12,15 @@ description: >
 
 Use this skill when you need a concrete, role-by-role path from `spike → qualify → score → route → re-qualify` for a **new model/runner bundle**.
 
+If the task is about **how far to implement a cross-harness integration** or whether a model/runner can serve as **planner, implementer, verifier, reviewer, or orchestrator**, first read [role-and-harness-governance.md](references/role-and-harness-governance.md). Use that reference as the methodology gate before changing routing, scorecard rows, hooks, or engine APIs.
+
 ## v1 scope
 
 Reviewer end-to-end is the shipped path today.
 
 - ✅ Implemented in this workflow now: `stage-0 spike` and `stage-1 reviewer qualification`, with persisted `engine-scorecard` evidence.
 - ⚠️ Implementer and planner qualification remains follow-up work in v1 (collect evidence, wire score semantics, and close gaps).
+- ⚠️ Verifier and orchestrator qualification are methodology-defined but not scorecard-routable yet. Treat them as human-reviewed evidence until the scorecard schema and eval harnesses explicitly support them.
 
 ## Governing constraint (routing-axis evidence bar)
 
@@ -36,6 +39,12 @@ If a proposal uses domain or lifecycle phase for routing, reject it before runni
 | [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer) | Runs known-bad reviewer calibration and emits a qualifying verdict row when possible. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2/3 | `record` (append evidence row), `current` (active roster), `report` (auditable score summary), `ladder` (fallback order). |
 | [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 | Resolves roster + fail-closed flags by reading scorecard state. |
+
+## Reference Methodology
+
+| Reference | Use when |
+|-----------|----------|
+| [role-and-harness-governance.md](references/role-and-harness-governance.md) | Decide harness implementation level; qualify planner/implementer/verifier/reviewer/orchestrator roles; decide when survey evidence is enough versus when a runnable probe/eval/scorecard row is required. |
 
 ## Stage 0 — spike (3-gate)
 

@@ -757,6 +757,15 @@ Acceptance:
 - A small task can run implementer -> review -> repair through engine APIs.
 - Human is not asked unless policy exceptions fire.
 
+First implementation slice:
+
+- `src/engine/resolve-review-loop.js` and
+  `node bin/autopilot.js engine review-loop` provide the first JS boundary for
+  scorecard-aware `/l5` roster resolution while preserving the legacy shell
+  resolver contract.
+- `hooks/tests/review-loop-runner.test.sh` covers JSON capture, enforce-exit
+  parsing, and fail-loud schema validation.
+
 ## 16. Risks and mitigations
 
 | Risk | Mitigation |

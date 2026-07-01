@@ -2,13 +2,17 @@
 'use strict';
 
 const { dispatchReview } = require('../src/runners/review');
+const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
 
 function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
+  node bin/autopilot.js engine review-loop [resolve-review-loop args...]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
+  engine review-loop
+                    Delegate to the review-loop roster resolver.
 
 Exit codes:
   Delegated commands preserve the wrapped command exit code.
@@ -44,6 +48,25 @@ if (args[0] === 'dispatch') {
   }
   if (result.signal) {
     process.stderr.write(`ERROR: dispatch review terminated by signal ${result.signal}\n`);
+    process.exit(1);
+  }
+  process.exit(result.status === null ? 1 : result.status);
+}
+
+if (args[0] === 'engine') {
+  if (args[1] !== 'review-loop') {
+    failUsage(`unknown engine subcommand: ${args.slice(1).join(' ') || '<missing>'}`);
+  }
+  const result = resolveReviewLoop(args.slice(2), {
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (result.error) {
+    process.stderr.write(`ERROR: ${result.error.message}\n`);
+    process.exit(2);
+  }
+  if (result.signal) {
+    process.stderr.write(`ERROR: engine review-loop terminated by signal ${result.signal}\n`);
     process.exit(1);
   }
   process.exit(result.status === null ? 1 : result.status);

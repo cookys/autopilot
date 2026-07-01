@@ -1,0 +1,5 @@
+{ "verdict": "PASS", "sha": "d7e08c1aeb6c9f2255638b1472fe38e1558f6454", "version": "2.28.0",
+  "scope": "/l6 full-dispatch CEO front-door skill (26th)",
+  "gates": { "validate": "26/26 skills", "preflight_release": "6/6", "script_links": "all ../../scripts/", "invariant_present": "yes" },
+  "build": "ENTIRELY hetero-dispatched: codex authored SKILL.md (net-new -> committed first try, proving the v2.27.1 wrapper fix) + Gemini decorrelated review (path nit fixed)",
+  "note": "docs+skill only, no code change; full run.sh not applicable (real-engine dispatch tests hang on rate-limiting)" }

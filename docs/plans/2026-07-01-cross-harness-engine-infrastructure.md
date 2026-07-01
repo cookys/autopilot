@@ -678,8 +678,13 @@ First implementation slice after R3:
   `scripts/dispatch-review.sh` surface and preserves stdout/stderr/exit status.
 - `src/runners/review.js` provides the first JS runner module boundary for the
   future engine loop.
+- `src/runners/review.js` also exposes `dispatchReviewJson()` and
+  `parseReviewOutput()` so the future engine loop can capture and inspect
+  `reviewed` / `no_verdict` / `precondition_failed` results without scraping
+  shell output ad hoc.
 - `hooks/tests/autopilot-cli.test.sh` covers the public CLI bridge without live
   network or model calls.
+- `hooks/tests/review-runner.test.sh` covers JS capture/parse behavior.
 
 ### Phase 3 - Port implementer dispatcher
 

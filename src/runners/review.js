@@ -6,6 +6,58 @@ const { spawnSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_REVIEW = path.join(REPO_ROOT, 'scripts', 'dispatch-review.sh');
+const REVIEW_RESULT_FIELDS = ['runner', 'model', 'status', 'verdict', 'findings', 'raw_log', 'error'];
+
+function bufferToString(value) {
+  if (Buffer.isBuffer(value)) return value.toString('utf8');
+  if (typeof value === 'string') return value;
+  return '';
+}
+
+function validateReviewResult(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('review output JSON is not an object');
+  }
+  for (const field of REVIEW_RESULT_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) {
+      throw new Error(`review output JSON missing field: ${field}`);
+    }
+  }
+  return value;
+}
+
+function parseReviewOutput(stdout) {
+  const text = bufferToString(stdout);
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      return validateReviewResult(JSON.parse(trimmed));
+    } catch (_err) {
+      // Fall through to line-oriented parsing; stdout may include non-JSON preface text.
+    }
+  }
+
+  let lastParseError = null;
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (!line.startsWith('{') || !line.endsWith('}')) continue;
+    try {
+      return validateReviewResult(JSON.parse(line));
+    } catch (error) {
+      lastParseError = error;
+    }
+  }
+
+  if (lastParseError) {
+    throw lastParseError;
+  }
+  throw new Error('no JSON object found in review stdout');
+}
 
 function dispatchReview(args, options = {}) {
   const scriptPath = options.scriptPath || DISPATCH_REVIEW;
@@ -28,7 +80,52 @@ function dispatchReview(args, options = {}) {
   }
 }
 
+function dispatchReviewJson(args, options = {}) {
+  const child = dispatchReview(args, {
+    ...options,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const stdout = bufferToString(child.stdout);
+  const stderr = bufferToString(child.stderr);
+
+  if (child.error) {
+    return {
+      error: child.error,
+      status: child.status,
+      signal: child.signal,
+      stdout,
+      stderr,
+      result: null,
+      parseError: null,
+    };
+  }
+
+  try {
+    return {
+      error: child.error || null,
+      status: child.status,
+      signal: child.signal,
+      stdout,
+      stderr,
+      result: parseReviewOutput(stdout),
+      parseError: null,
+    };
+  } catch (error) {
+    return {
+      error: child.error || null,
+      status: child.status,
+      signal: child.signal,
+      stdout,
+      stderr,
+      result: null,
+      parseError: error,
+    };
+  }
+}
+
 module.exports = {
   dispatchReview,
+  dispatchReviewJson,
+  parseReviewOutput,
   DISPATCH_REVIEW,
 };

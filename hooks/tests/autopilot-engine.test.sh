@@ -765,6 +765,33 @@ const path = require('path');
 const root = process.argv[2];
 const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
 
+const parsed = parseImplementationOutput(JSON.stringify({
+  status: 'precondition_failed',
+  runner: 'codex',
+  model: 'gpt-test',
+  branch: '',
+  base: '',
+  commit: null,
+  files_changed: 0,
+  insertions: 0,
+  deletions: 0,
+  worktree: null,
+  agent_log: null,
+  error: '--branch is required',
+}));
+console.log(`status=${parsed.status}`);
+console.log(`error=${parsed.error}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementer parser precondition-empty-branch process exits 0"
+assert_contains "$OUT" "status=precondition_failed" "AutopilotEngine implementer parser accepts precondition_failed with empty branch"
+assert_contains "$OUT" "error=--branch is required" "AutopilotEngine implementer parser preserves precondition_failed error"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+
 const valid = {
   status: 'committed',
   runner: 'codex',

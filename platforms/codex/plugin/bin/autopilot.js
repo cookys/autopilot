@@ -10,7 +10,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer]
+  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--allow-unqualified-reviewer]
   node bin/autopilot.js harness report [harness report args...]
 
 Commands:
@@ -34,8 +34,10 @@ function parseImplementReviewArgs(rawArgs) {
     base: null,
     cwd: null,
     maxRounds: null,
-    requireQualifiedReviewer: false,
+    requireQualifiedReviewer: true,
   };
+  let sawRequireQualifiedReviewer = false;
+  let sawAllowUnqualifiedReviewer = false;
 
   let i = 0;
   while (i < rawArgs.length) {
@@ -90,11 +92,22 @@ function parseImplementReviewArgs(rawArgs) {
       continue;
     }
     if (arg === '--require-qualified-reviewer') {
+      sawRequireQualifiedReviewer = true;
       output.requireQualifiedReviewer = true;
       i += 1;
       continue;
     }
+    if (arg === '--allow-unqualified-reviewer') {
+      sawAllowUnqualifiedReviewer = true;
+      output.requireQualifiedReviewer = false;
+      i += 1;
+      continue;
+    }
     return { error: `unknown engine implement-review option: ${arg}` };
+  }
+
+  if (sawRequireQualifiedReviewer && sawAllowUnqualifiedReviewer) {
+    return { error: 'flags --require-qualified-reviewer and --allow-unqualified-reviewer cannot be combined' };
   }
 
   if (!output.promptFile || !output.branch || !output.base) {

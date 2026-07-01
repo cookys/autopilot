@@ -246,6 +246,7 @@ function atomicWrite(target, content, mode = 0o600) {
       env: process.env,
       hookEventName: 'PostToolUse',
       cwd,
+      sessionId,
       nowIso,
     });
     event.input_source = toolSource;

@@ -20,8 +20,10 @@ assert_eq "0" "$EXIT" "autopilot --help exits 0"
 assert_contains "$OUT" "dispatch review" "autopilot help lists dispatch review"
 assert_contains "$OUT" "engine review-loop" "autopilot help lists engine review-loop"
 assert_contains "$OUT" "engine implement-review" "autopilot help lists engine implement-review"
+assert_contains "$OUT" "--allow-unqualified-reviewer" "autopilot help documents reviewer qualification escape hatch"
 
 printf 'implementer loop prompt\n' > "$TEST_TMP/engine-impl-review-prompt.txt"
+BASE_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "implement-review missing base exits 2"
 assert_contains "$OUT" "flags --prompt-file, --branch, --base are required" "implement-review reports missing base"
@@ -45,6 +47,15 @@ assert_contains "$OUT" "--cwd requires a value" "implement-review validates cwd 
 OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base develop 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "implement-review moving base ref exits 1"
 assert_contains "$OUT" "base must be a full immutable git SHA" "implement-review blocks moving base refs before dispatch"
+
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "implement-review defaults to failing closed on unqualified reviewer"
+assert_contains "$OUT" '"phase":"reviewer_qualification"' "implement-review default blocks at reviewer qualification"
+assert_contains "$OUT" "reviewer is not qualified or qualification is unknown" "implement-review qualification block explains reason"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" --require-qualified-reviewer --allow-unqualified-reviewer 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review rejects conflicting reviewer qualification flags"
+assert_contains "$OUT" "cannot be combined" "implement-review reports conflicting reviewer qualification flags"
 
 OUT="$(node "$CLI" dispatch review --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "dispatch review preserves reviewed exit 0"

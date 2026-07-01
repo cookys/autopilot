@@ -7,6 +7,8 @@ const { spawnSync } = require('child_process');
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_REVIEW = path.join(REPO_ROOT, 'scripts', 'dispatch-review.sh');
 const REVIEW_RESULT_FIELDS = ['runner', 'model', 'status', 'verdict', 'findings', 'raw_log', 'error'];
+const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
+const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
 
 function bufferToString(value) {
   if (Buffer.isBuffer(value)) return value.toString('utf8');
@@ -22,6 +24,32 @@ function validateReviewResult(value) {
     if (!Object.prototype.hasOwnProperty.call(value, field)) {
       throw new Error(`review output JSON missing field: ${field}`);
     }
+  }
+  for (const field of Object.keys(value)) {
+    if (!REVIEW_RESULT_FIELDS.includes(field)) {
+      throw new Error(`review output JSON has unknown field: ${field}`);
+    }
+  }
+  if (typeof value.runner !== 'string' || value.runner.length === 0) {
+    throw new Error('review output JSON field runner must be a non-empty string');
+  }
+  if (typeof value.model !== 'string' || value.model.length === 0) {
+    throw new Error('review output JSON field model must be a non-empty string');
+  }
+  if (!REVIEW_STATUSES.includes(value.status)) {
+    throw new Error(`review output JSON status must be one of: ${REVIEW_STATUSES.join(', ')}`);
+  }
+  if (!REVIEW_VERDICTS.includes(value.verdict)) {
+    throw new Error('review output JSON verdict must be one of: SHIP-AS-IS, FIX-THEN-SHIP, null');
+  }
+  if (typeof value.findings !== 'string') {
+    throw new Error('review output JSON field findings must be a string');
+  }
+  if (value.raw_log !== null && (typeof value.raw_log !== 'string' || value.raw_log.length === 0)) {
+    throw new Error('review output JSON field raw_log must be null or non-empty string');
+  }
+  if (value.error !== null && (typeof value.error !== 'string' || value.error.length === 0)) {
+    throw new Error('review output JSON field error must be null or non-empty string');
   }
   return value;
 }

@@ -21,7 +21,7 @@ CEO **Involvement** enum (`ceo-agent/SKILL.md` Startup §2: 1=every-step /
 |-------|-------------------|--------|
 | `/l3 <goal>` | CEO executes **itself** on the main thread; escalates at the DOA boundary. The behavior you invoke today as "Level 3 全權處理", now an explicit command. | Claude (this session) |
 | `/l4 <goal>` | CEO dispatches **ONE sub-orchestrator "foreman"** (background + worktree-isolated) that runs dev-flow and returns a verdict + run-summary. CEO context stays clean; the run goes long unattended. | Claude (foreman + workers) |
-| `/l5 <goal>` | `/l4` **with the implementer leaf-dispatched to agy/Gemini** via `dispatch-hetero.sh` (already built — Gemini is a verified 2nd engine). | Claude foreman + Gemini impl |
+| `/l5 <goal>` | `/l4` **with the implementer loop run through** `bin/autopilot.js engine implement-review`, which internally dispatches heterogeneous implementation through `dispatch-hetero.sh` and decorrelated review through the resolved reviewer. | Claude foreman + engine-orchestrated hetero impl |
 
 ### Startup-question presets
 
@@ -67,16 +67,22 @@ CEO (depth 0, this session)
 - **Depth 3 escalates, never nests.** A worker that would need to decompose
   further returns an `[ESCALATION]` to the foreman, which escalates to depth 0.
   This keeps the run within the v1 depth-2 ceiling (`references/model-routing.md`).
-- **`/l5`** is identical except the implementer worker is replaced by a
-  `scripts/dispatch-hetero.sh` call (impl → agy/Gemini). Everything else — the
+- **`/l5`** is identical except the implementer worker is replaced by the canonical
+  `bin/autopilot.js engine implement-review` loop. That engine command internally
+  calls `scripts/dispatch-hetero.sh` for implementation rounds, then dispatches the
+  decorrelated reviewer on the cumulative immutable-base diff. Everything else — the
   depth-0 control loop, qc@depth-0, worktree GC — is unchanged.
-  - **Its base is a SEPARATE mechanism from the foreman's.** `dispatch-hetero.sh`
-    creates its own `git worktree add --base <ref>` (default local `develop`) — it
-    does **not** use the native Agent worktree, so `worktree.baseRef` does **not**
-    reach it. When the hetero impl must build on the foreman's (or CEO's) un-merged
-    state, the foreman MUST pass **`--base "$(git rev-parse HEAD)"`** explicitly; the
-    default `develop` ref otherwise forks from a stale base. Two mechanisms, two knobs:
-    `worktree.baseRef` for the native foreman worktree, `--base` for the hetero impl.
+  - **Its base is a SEPARATE mechanism from the foreman's.** The engine passes
+    `--base` through to `dispatch-hetero.sh`, which creates its own git worktree and
+    does **not** use the native Agent worktree; `worktree.baseRef` does **not** reach
+    it. When the hetero impl must build on the foreman's (or CEO's) un-merged state,
+    the foreman MUST pass **`--base "$(git rev-parse HEAD)"`** as an immutable
+    full SHA explicitly. Two mechanisms, two knobs: `worktree.baseRef` for the native
+    foreman worktree, `--base` for the engine/hetero impl loop.
+  - **Reviewer qualification fails closed by default.** `engine implement-review`
+    blocks at `phase:"reviewer_qualification"` when the resolved scorecard says the
+    reviewer is absent, false, or unknown. Use `--allow-unqualified-reviewer` only as
+    an explicit emergency escape hatch and record the decision in the run summary.
 
 ### Width — fixed cap 3, disjointness-gated
 

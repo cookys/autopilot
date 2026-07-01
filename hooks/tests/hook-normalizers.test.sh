@@ -29,6 +29,36 @@ assert.equal(claudeTool.tool, 'Bash');
 assert.deepEqual(claudeTool.tool_input, { command: 'echo ok' });
 assert.equal(claudeTool.session.transcript_path, '/tmp/claude-transcript.jsonl');
 
+const claudeCanonical = normalizeClaudeHookEvent({
+  hook_event_name: 'PostToolUse',
+  session_id: 'payload-session',
+  cwd: '/payload/repo',
+  tool_name: 'Bash',
+}, {
+  nowIso: '2026-07-02T00:00:00.000Z',
+  cwd: '/canonical/repo',
+  sessionId: 'canonical-session',
+  env: {
+    CLAUDE_CODE_SESSION_ID: 'env-session',
+  },
+});
+assert.equal(claudeCanonical.session_id, 'canonical-session');
+assert.equal(claudeCanonical.cwd, '/canonical/repo');
+
+const claudeEnvSession = normalizeClaudeHookEvent({
+  hook_event_name: 'PostToolUse',
+  session_id: 'payload-session',
+  cwd: '/payload/repo',
+  tool_name: 'Bash',
+}, {
+  nowIso: '2026-07-02T00:00:00.000Z',
+  env: {
+    CLAUDE_SESSION_ID: 'env-session',
+  },
+});
+assert.equal(claudeEnvSession.session_id, 'env-session');
+assert.equal(claudeEnvSession.cwd, '/payload/repo');
+
 const claudeStart = normalizeClaudeHookEvent(readFixture('claude-session-start.json'), {
   nowIso: '2026-07-02T00:00:00.000Z',
 });

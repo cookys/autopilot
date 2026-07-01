@@ -8,7 +8,7 @@
 > 2. The CLI exposes the same path without direct shell orchestration from the skills; verified by `bash hooks/tests/autopilot-cli.test.sh`.
 > 3. `/l5` and `/l6` skill docs name the engine CLI as the canonical path and keep direct shell scripts as compatibility fallback; verified by deterministic grep/review.
 > 4. Existing resolver/reviewer boundaries still pass; verified by `bash hooks/tests/review-loop-runner.test.sh` and `bash hooks/tests/review-runner.test.sh`.
-> 5. Version metadata is synced to `2.28.2`; verified by `node scripts/sync-version.js --check`.
+> 5. Version metadata was initially synced to `2.28.2`, then the unreleased release train was retargeted to `2.29.0` by the follow-up hardening project; verified by `node scripts/sync-version.js --check`.
 > **Scope boundary**: Include Phase 7 engine API/CLI/docs/tests/version tracking only. Exclude new runner support, new sandbox/isolation models, parallel `/l5` hetero fan-out, and changing reviewer policy semantics.
 
 ## L-1.5 Scope Completeness Audit
@@ -20,7 +20,7 @@
 | API / interface reference | Yes: exported `AutopilotEngine` methods and CLI command documented in skill docs. |
 | Config templates / examples | No config shape change; roster still comes from existing `review-loop-config.md`. |
 | CHANGELOG entry | Yes, release-worthy engine/skill behavior change. |
-| Version bump | Yes, target `2.28.2`; sync via canonical script. |
+| Version bump | Yes, initially target `2.28.2`; later retargeted to `2.29.0` before release because `harness-maintenance` is a new user-facing skill. |
 | Version sync verification | Required before commit: grep/sync-version check after bump. |
 | Migration guide / notes | Not required; shell scripts remain as fallback compatibility path. |
 | Dependent repos / external consumers | No breaking change; existing shell contracts preserved. |
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | P0 setup | Complete | Branch from updated `develop`, README + INDEX + tree init; committed `bd65508`. |
 | P1 engine implementation | Complete | `/l5` hetero implementer commit `4a2d40e`; depth-0 hardening commit `232b2d1`; Codex payload support commit `0117f89`. |
-| P2 docs/version | Complete | `/l5`/`/l6` skill docs, CHANGELOG, version mirrors, and Codex generated payload synced to `2.28.2`. |
+| P2 docs/version | Complete | `/l5`/`/l6` skill docs, CHANGELOG, version mirrors, and Codex generated payload synced; final unreleased train retargeted to `2.29.0`. |
 | P3 quality + `/l5` loop review | Complete | `/l5` full-diff loop review converged on Round 9 with `SHIP-AS-IS`; focused tests, deterministic gates, range scans, and full-suite baseline verification complete. |
 | P4 finish-flow | Complete | Merged to `develop` with QC trailer in `ca7c85e`; post-merge review/doc-sync passed; project archived under `_archive`; branch cleanup follows as L-5.7. |
 
@@ -55,3 +55,4 @@
 - 2026-07-02: `/l5` full-diff review loop ran through 9 rounds and converged with reviewer `gpt-5.5` verdict `SHIP-AS-IS`, findings `none` on range `8178cc71888568ae95d5ad5075acd07ac4237e54..HEAD`.
 - 2026-07-02: Full `bash hooks/tests/run.sh` result: 78/82 files passed. The 4 failing files (`check-optin-changelog`, `check-test-integrity-l1`, `check-test-integrity`, `dispatch-hetero`) were all classified with `scripts/verify-preexisting.sh` as `head=fail, base=fail, verdict=PRE_EXISTING` against session start SHA `8178cc71888568ae95d5ad5075acd07ac4237e54`.
 - 2026-07-02: Merged `feat/v2.28.2-engine-integration` into `develop` as `ca7c85e7112c57f9110c92488bad1448cb21e355` with `QC-Verdict: PASS (reviewer gpt-5.5, 2026-07-02)`, then archived the project directory.
+- 2026-07-02: Follow-up hardening retargeted the unreleased train from `2.28.2` to `2.29.0` because `harness-maintenance` is a user-facing skill and semver policy requires a MINOR bump for new skills.

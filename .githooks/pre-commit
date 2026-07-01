@@ -8,6 +8,8 @@
 #   - sync-agent-bodies.sh --check: agent body sync (always)
 #   - blind-dispatch.md issue-ref anti-rot grep (always)
 #   - check-canonical-invariants.sh: cross-file invariants (always)
+#   - sync-codex-plugin-skills.sh --check: Codex payload mirror
+#       (change-scoped: source payload or Codex package staged)
 #   - check-readme-parity.js: EN↔zh README lockstep (change-scoped: README staged)
 #   - check-hook-inventory.js --check: hook tally + tier membership
 #       (change-scoped: hooks/ or a count-bearing mirror staged)
@@ -77,6 +79,24 @@ fi
 # No --diff-filter: DELETIONS must trigger too (removing a hook file or a count-bearing
 # mirror changes the inventory/parity just as much as editing one).
 STAGED="$(git diff --cached --name-only 2>/dev/null || true)"
+
+# --- Codex plugin payload mirror drift check (P5, change-scoped) ---
+# platforms/codex/plugin/** is a committed generated payload. Any change to the
+# source payload roots must be mirrored before commit; any direct package edit
+# must match the generator output.
+if echo "$STAGED" | grep -qE '^(skills/|bin/|src/|hooks/_shared/|references/|scripts/|project-config-template/|platforms/codex/)'; then
+  if ! ./scripts/sync-codex-plugin-skills.sh --check >/dev/null 2>&1; then
+    echo "─────────────────────────────────────────────────────────────" >&2
+    echo "pre-commit: Codex plugin payload mirror drift detected" >&2
+    echo "─────────────────────────────────────────────────────────────" >&2
+    ./scripts/sync-codex-plugin-skills.sh --check >&2 || true
+    echo "" >&2
+    echo "To fix:" >&2
+    echo "  ./scripts/sync-codex-plugin-skills.sh && git add platforms/codex/plugin" >&2
+    exit 1
+  fi
+fi
+
 if echo "$STAGED" | grep -qE '^README(\.zh-TW)?\.md$'; then
   if ! node scripts/check-readme-parity.js >/dev/null 2>&1; then
     echo "─────────────────────────────────────────────────────────────" >&2

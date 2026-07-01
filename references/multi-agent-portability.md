@@ -2,7 +2,7 @@
 
 How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-06-12 (P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
+Last verified: 2026-07-02 (P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; agy `run_command` duration + bg-job reaping against `agy` 1.0.14 (2026-07-02, see § Update below); earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
 
 ---
 
@@ -66,6 +66,15 @@ Heterogeneous outbound dispatch — Claude Code shelling out to agy via Bash —
   3. `rm .git/index .git/ORIG_HEAD .git/FETCH_HEAD && git reset` (rebuilds the index from HEAD; working tree untouched).
   4. Restore only the zero-byte tracked files, preserving any surviving uncommitted edits: `for f in $(git diff --name-only); do [ ! -s "$f" ] && git restore -- "$f"; done`
   5. `git fsck --no-progress` to confirm (dangling objects are normal); `git fetch` to validate the rebuilt remote config.
+
+### Update — Verified by Spike (agy 1.0.14, 2026-07-02): the "run_command 10s cap" is REFUTED
+
+A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (High)) corrects a claim that had propagated into [`hetero-dispatch.md`](hetero-dispatch.md)'s engine table ("run_command 10s cap") and downstream project memory:
+
+- **Synchronous foreground commands run to completion well past 10s.** `sleep 20` and `sleep 75` both returned full stdout (epoch deltas 20s / 75s; session wall-clock ~82s). agy auto-transitions a long command to an internal managed task and waits for it (self-narrated: "it has been transitioned to a background task (task-6). I will now wait for it to complete"). The real outer bound is **`--print-timeout`** (default 5m — raise it), **not** a per-command 10s wall.
+- **What actually fails: user-managed `&`/`nohup` background jobs across *separate* `run_command` calls.** Each `run_command` is an isolated subshell whose children are reaped on exit, so "launch in bg, poll a marker file in later calls" never sees the marker (8/8 polls `NOT_YET`). You don't need that pattern — run the long task as ONE synchronous foreground command.
+- **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
+- **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
 ---
 

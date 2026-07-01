@@ -30,6 +30,10 @@ const IMPLEMENT_STATUSES = [
   'precondition_failed',
 ];
 
+function isImmutableGitSha(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
+}
+
 function bufferToString(value) {
   if (Buffer.isBuffer(value)) return value.toString('utf8');
   if (typeof value === 'string') return value;
@@ -80,6 +84,9 @@ function validateImplementationResult(value) {
   }
   if (value.status === 'committed' && value.commit === null) {
     throw new Error('dispatch-hetero output JSON status committed requires a non-empty commit');
+  }
+  if (value.status === 'committed' && !isImmutableGitSha(value.commit)) {
+    throw new Error('dispatch-hetero output JSON status committed requires a full immutable git SHA commit');
   }
   if (!Number.isInteger(value.files_changed) || value.files_changed < 0) {
     throw new Error('dispatch-hetero output JSON field files_changed must be a non-negative integer');
@@ -263,5 +270,6 @@ module.exports = {
   parseImplementationOutput,
   validateImplementationResult,
   looksLikeImplementationResult,
+  isImmutableGitSha,
   DISPATCH_HETERO,
 };

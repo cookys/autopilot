@@ -734,13 +734,44 @@ const path = require('path');
 const root = process.argv[2];
 const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
 
+try {
+  parseImplementationOutput(JSON.stringify({
+    status: 'committed',
+    runner: 'codex',
+    model: 'gpt-test',
+    branch: 'impl-branch',
+    base: '1111111111111111111111111111111111111111',
+    commit: 'not-a-sha',
+    files_changed: 1,
+    insertions: 1,
+    deletions: 0,
+    worktree: null,
+    agent_log: '/tmp/log',
+    error: null,
+    containment: 'plain',
+    contained: true,
+  }));
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementer parser bad-commit process exits 0"
+assert_contains "$OUT" "status committed requires a full immutable git SHA commit" "AutopilotEngine implementer parser rejects committed outcome with non-SHA commit"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+
 const valid = {
   status: 'committed',
   runner: 'codex',
   model: 'gpt-test',
   branch: 'impl-branch',
   base: '1111111111111111111111111111111111111111',
-  commit: 'commit-sha',
+  commit: '2222222222222222222222222222222222222222',
   files_changed: 1,
   insertions: 1,
   deletions: 0,
@@ -797,7 +828,6 @@ fs.mkdirSync(target, { recursive: true });
 fs.writeFileSync(path.join(target, 'prompt.txt'), 'implementer prompt');
 let resolverCwd = null;
 let implementationCwd = null;
-let reviewCwd = null;
 let promptArg = null;
 
 const engine = new AutopilotEngine({
@@ -837,7 +867,7 @@ const engine = new AutopilotEngine({
         model: 'test-impl-model',
         branch: 'impl-branch',
         base: '1111111111111111111111111111111111111111',
-        commit: 'impl-commit',
+        commit: '2222222222222222222222222222222222222222',
         files_changed: 1,
         insertions: 1,
         deletions: 0,
@@ -883,14 +913,14 @@ const engine = new AutopilotEngine({
       error: null,
       status: 0,
       signal: null,
-      stdout: '{\"runner\":\"test-impl-runner\",\"model\":\"test-impl-model\",\"status\":\"committed\",\"commit\":\"impl-commit\",\"base\":\"1111111111111111111111111111111111111111\",\"branch\":\"impl-branch\",\"files_changed\":2,\"insertions\":12,\"deletions\":1,\"worktree\":\"/tmp/impl-wt\",\"agent_log\":\"/tmp/impl-log\",\"error\":null,\"containment\":\"plain\",\"contained\":true}',
+      stdout: '{\"runner\":\"test-impl-runner\",\"model\":\"test-impl-model\",\"status\":\"committed\",\"commit\":\"2222222222222222222222222222222222222222\",\"base\":\"1111111111111111111111111111111111111111\",\"branch\":\"impl-branch\",\"files_changed\":2,\"insertions\":12,\"deletions\":1,\"worktree\":\"/tmp/impl-wt\",\"agent_log\":\"/tmp/impl-log\",\"error\":null,\"containment\":\"plain\",\"contained\":true}',
       stderr: '',
       parseError: null,
       result: {
         status: 'committed',
         runner: 'test-impl-runner',
         model: 'test-impl-model',
-        commit: 'impl-commit',
+        commit: '2222222222222222222222222222222222222222',
         base: '1111111111111111111111111111111111111111',
         branch: 'impl-branch',
         files_changed: 2,
@@ -928,9 +958,9 @@ assert_contains "$OUT" "status=committed" "AutopilotEngine implementation dispat
 assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine implementation dispatch phase is dispatch_implementation"
 assert_contains "$OUT" "runner=test-impl-runner" "AutopilotEngine implementation output captures runner"
 assert_contains "$OUT" "model=test-impl-model" "AutopilotEngine implementation output captures model"
-assert_contains "$OUT" "commit=impl-commit" "AutopilotEngine implementation output captures commit"
+assert_contains "$OUT" "commit=2222222222222222222222222222222222222222" "AutopilotEngine implementation output captures commit"
 assert_contains "$OUT" "--runner test-impl-runner --model test-impl-model --prompt-file $TEST_TMP/implementer-prompt.txt --branch impl-branch --base 1111111111111111111111111111111111111111 --effort high" "AutopilotEngine builds implementation dispatcher args from roster"
-assert_contains "$OUT" "dispatch_implementation:committed:1111111111111111111111111111111111111111:impl-branch:impl-commit:test-impl-runner:test-impl-model:0" "AutopilotEngine emits implementation ledger row with runner/model/base/branch/commit/exit status"
+assert_contains "$OUT" "dispatch_implementation:committed:1111111111111111111111111111111111111111:impl-branch:2222222222222222222222222222222222222222:test-impl-runner:test-impl-model:0" "AutopilotEngine emits implementation ledger row with runner/model/base/branch/commit/exit status"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-nonzero-prompt.txt" <<'NODE'
 const fs = require('fs');
@@ -954,7 +984,7 @@ const engine = new AutopilotEngine({
         status: 'committed',
         runner: 'test-impl-runner',
         model: 'test-impl-model',
-        commit: 'impl-commit',
+        commit: '2222222222222222222222222222222222222222',
         base: '1111111111111111111111111111111111111111',
         branch: 'impl-branch',
         files_changed: 1,
@@ -989,6 +1019,64 @@ assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks nonzero committe
 assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine reports dispatch phase for nonzero committed implementation"
 assert_contains "$OUT" "reason=implementation dispatch exited with status 1" "AutopilotEngine surfaces nonzero committed implementation exit"
 assert_contains "$OUT" "ledger=dispatch_implementation:blocked" "AutopilotEngine records nonzero committed implementation as blocked"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-bad-commit-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        commit: 'not-a-sha',
+        base: '1111111111111111111111111111111111111111',
+        branch: 'impl-branch',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine blocks committed implementation with non-SHA commit"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine blocks committed implementation with non-SHA commit status"
+assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine reports dispatch phase for non-SHA committed implementation"
+assert_contains "$OUT" "reason=implementation result commit must be a full immutable git SHA" "AutopilotEngine surfaces non-SHA committed implementation"
+assert_contains "$OUT" "ledger=dispatch_implementation:blocked" "AutopilotEngine records non-SHA committed implementation as blocked"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
 const fs = require('fs');
@@ -1056,7 +1144,7 @@ const engine = new AutopilotEngine({
         model: 'test-impl-model',
         branch: args[args.indexOf('--branch') + 1],
         base: args[args.indexOf('--base') + 1],
-        commit: call === 1 ? 'commit-1' : 'commit-2',
+        commit: call === 1 ? '2222222222222222222222222222222222222222' : '3333333333333333333333333333333333333333',
         files_changed: 1,
         insertions: 1,
         deletions: 0,
@@ -1133,7 +1221,7 @@ assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine performs two im
 assert_contains "$OUT" "review_calls=2" "AutopilotEngine performs two review dispatches for one repair cycle"
 assert_contains "$OUT" "repair_calls=1" "AutopilotEngine performs one repair prompt write"
 assert_contains "$OUT" "diff_calls=2" "AutopilotEngine reviews full base-to-commit diff after each implementation"
-assert_contains "$OUT" "impl2_base=commit-1" "AutopilotEngine repair dispatch uses previous commit as repair base"
+assert_contains "$OUT" "impl2_base=2222222222222222222222222222222222222222" "AutopilotEngine repair dispatch uses previous commit as repair base"
 assert_contains "$OUT" "review_bases=1111111111111111111111111111111111111111,1111111111111111111111111111111111111111" "AutopilotEngine reviews against immutable original base"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_implementation:committed,dispatch_review:reviewed,dispatch_implementation:committed,dispatch_review:reviewed" "AutopilotEngine logs both implementation and review dispatch units"
 
@@ -1308,6 +1396,7 @@ fs.mkdirSync(target, { recursive: true });
 fs.writeFileSync(path.join(target, 'prompt.txt'), 'implementer prompt');
 let resolverCwd = null;
 let implementationCwd = null;
+let reviewCwd = null;
 let promptArg = null;
 
 const engine = new AutopilotEngine({
@@ -1349,7 +1438,7 @@ const engine = new AutopilotEngine({
         model: 'test-impl-model',
         branch: 'cwd-loop',
         base: '1111111111111111111111111111111111111111',
-        commit: 'commit-sha',
+        commit: '2222222222222222222222222222222222222222',
         files_changed: 1,
         insertions: 1,
         deletions: 0,
@@ -1514,6 +1603,10 @@ fs.writeFileSync(path.join(repo, 'large.txt'), `${'x'.repeat(2 * 1024 * 1024)}\n
 execFileSync('git', ['add', 'large.txt'], { cwd: repo });
 execFileSync('git', ['commit', '-m', 'large'], { cwd: repo, stdio: 'ignore' });
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+const externalDiff = path.join(repo, 'external-diff.sh');
+fs.writeFileSync(externalDiff, '#!/usr/bin/env bash\nexit 42\n');
+fs.chmodSync(externalDiff, 0o755);
+execFileSync('git', ['config', 'diff.external', externalDiff], { cwd: repo });
 
 let diffSize = 0;
 let implementationCwd = null;
@@ -1585,12 +1678,14 @@ const result = engine.runImplementationReviewLoop({
 
 console.log(`status=${result.status}`);
 console.log(`implementation_cwd=${implementationCwd}`);
+console.log(`external_diff_configured=${fs.existsSync(externalDiff)}`);
 console.log(`diff_over_default_buffer=${diffSize > 1024 * 1024}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine default diff provider streams large diffs"
 assert_contains "$OUT" "status=converged" "AutopilotEngine large diff provider loop converges"
 assert_contains "$OUT" "implementation_cwd=$TEST_TMP/large-diff-repo" "AutopilotEngine implementation loop passes cwd to implementation dispatcher"
+assert_contains "$OUT" "external_diff_configured=true" "AutopilotEngine default diff provider test configures failing external diff"
 assert_contains "$OUT" "diff_over_default_buffer=true" "AutopilotEngine default diff provider writes diff larger than spawnSync default buffer"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-repair-prompt.txt" <<'NODE'
@@ -1625,7 +1720,7 @@ const engine = new AutopilotEngine({
         model: 'test-impl-model',
         branch: args[args.indexOf('--branch') + 1],
         base: args[args.indexOf('--base') + 1],
-        commit: implementationCalls === 1 ? 'commit-a' : 'commit-b',
+        commit: implementationCalls === 1 ? '2222222222222222222222222222222222222222' : '3333333333333333333333333333333333333333',
         files_changed: 1,
         insertions: 1,
         deletions: 0,

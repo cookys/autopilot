@@ -71,6 +71,9 @@ function implementationResultBlocked(result) {
   }
   if (result.parseError) return result.parseError.message || String(result.parseError);
   if (!result.result) return 'implementation dispatch produced no parsed result';
+  if (result.result.status === 'committed' && !isImmutableGitSha(result.result.commit)) {
+    return 'implementation result commit must be a full immutable git SHA';
+  }
   if (result.status !== 0 && result.result.status === 'committed') {
     return `implementation dispatch exited with status ${result.status}`;
   }
@@ -209,7 +212,7 @@ function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   const outFd = fs.openSync(file, 'w');
   let child;
   try {
-    child = spawnSync('git', ['diff', `${base}..${commit}`], {
+    child = spawnSync('git', ['diff', '--no-ext-diff', '--no-textconv', `${base}..${commit}`], {
       cwd: cwd || process.cwd(),
       encoding: 'utf8',
       shell: false,

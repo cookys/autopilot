@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| _(none)_ | | | |
+| 2026-07-01 | [cross-harness-engine-infrastructure](2026-07-01-cross-harness-engine-infrastructure/README.md) | v2.28.1 | `feat/v2.28.1-hook-adapter-framework` |
 
 ## 已完成 (Completed)
 

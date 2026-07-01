@@ -235,6 +235,7 @@ print('marketplace_plugins', Array.isArray(marketplace.plugins) ? marketplace.pl
 const entry = marketplace.plugins.find((plugin) => plugin && plugin.name === 'autopilot');
 print('marketplace_entry_exists', Boolean(entry));
 print('marketplace_path', entry && entry.source && entry.source.path);
+print('marketplace_version_matches', entry && entry.version === canonical.version);
 if (entry && entry.source && entry.source.path) {
   const resolvedMarketplacePath = fs.realpathSync(path.join(marketplaceRoot, entry.source.path));
   print('marketplace_path_points_to_plugin', resolvedMarketplacePath === pluginReal);
@@ -266,6 +267,7 @@ assert_contains "$OUT" "marketplace_name=autopilot-local" "Codex marketplace has
 assert_contains "$OUT" "marketplace_plugins=1" "Codex marketplace contains one plugin"
 assert_contains "$OUT" "marketplace_entry_exists=true" "Codex marketplace contains autopilot entry"
 assert_contains "$OUT" "marketplace_path=./plugin" "Codex marketplace points directly to plugin root"
+assert_contains "$OUT" "marketplace_version_matches=true" "Codex marketplace version follows canonical manifest"
 assert_contains "$OUT" "marketplace_path_points_to_plugin=true" "Codex marketplace path resolves to plugin root"
 assert_contains "$OUT" "marketplace_installation=AVAILABLE" "Codex marketplace install policy is explicit"
 assert_contains "$OUT" "marketplace_authentication=ON_INSTALL" "Codex marketplace auth policy is explicit"

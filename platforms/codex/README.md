@@ -11,6 +11,36 @@ This directory contains the Codex packaging surface for Autopilot.
 The package is intentionally skills-only. It does not declare Claude Code hooks,
 apps, or MCP servers.
 
+## Hook probe package
+
+`hook-probe/` is a separate Codex plugin marketplace used only for adapter
+development. It is not part of the default `autopilot-local` skills package.
+
+The probe package declares warning-only command hooks for `SessionStart`,
+`PreToolUse`, `PostToolUse`, `PreCompact`, and `Stop`. The hook script writes
+normalized shape-only telemetry to Codex `PLUGIN_DATA` and always exits 0. It
+records value types, key counts, and fixed field-presence booleans, but omits
+raw payloads, path values, payload key names, identifiers, and tool input/output
+values. It never returns `continue: false` and must not be used as a blocking
+gate.
+Probe telemetry is size-capped: `events.jsonl` rotates at 1 MiB and keeps one
+`.1` backup.
+
+Install it only when actively probing Codex hook payload/cwd/env/failure
+semantics:
+
+```bash
+tmp_home="$(mktemp -d)"
+trap 'rm -rf "$tmp_home"' EXIT
+mkdir -p "$tmp_home/.codex"
+HOME="$tmp_home" CODEX_HOME="$tmp_home/.codex" codex plugin marketplace add ./platforms/codex/hook-probe
+HOME="$tmp_home" CODEX_HOME="$tmp_home/.codex" codex plugin add autopilot-hook-probe@autopilot-hook-probe-local
+```
+
+Codex requires non-managed plugin hooks to be reviewed and trusted before they
+run. Use the probe output as evidence before moving any Autopilot hook from
+warning-only telemetry to behavior that influences a tool call or ship decision.
+
 ## Local install smoke
 
 ```bash

@@ -1,0 +1,9 @@
+{
+  "session_id": "codex-session-2",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "cwd": "/repo",
+  "transcript_path": "/tmp/codex-start.jsonl",
+  "model": "gpt-test",
+  "permission_mode": "plan"
+}

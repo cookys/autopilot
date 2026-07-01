@@ -40,6 +40,8 @@ const {
   FAILURE_THRESHOLD,
   STALE_DISABLE_HOURS,
 } = lib;
+const { normalizeClaudeHookEvent } = require('../src/hooks/normalize/claude');
+const { buildIntentCaptureRecord } = require('../src/hooks/handlers/intent-capture');
 
 // === Constants ===
 const STATE_DIR = path.join(os.homedir(), '.autopilot');
@@ -61,9 +63,14 @@ function getPluginVersion() {
   }
 }
 
-function getSessionId() {
-  const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
+function sanitizeSessionId(raw) {
   if (raw) return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  return null;
+}
+
+function getSessionId() {
+  const envSession = sanitizeSessionId(process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '');
+  if (envSession) return envSession;
   return crypto.createHash('sha1').update(process.cwd()).digest('hex').slice(0, 12);
 }
 
@@ -189,10 +196,12 @@ function atomicWrite(target, content, mode = 0o600) {
     let toolName = '<unknown>';
     let toolInput = {};
     let toolSource = 'stdin';
+    let rawPayload = null;
     try {
       const stdin = fs.readFileSync('/dev/stdin', 'utf8');
       if (stdin.trim()) {
         const input = JSON.parse(stdin);
+        rawPayload = input;
         toolName = input.tool_name || '<unknown>';
         toolInput = input.tool_input || {};
       }
@@ -208,6 +217,10 @@ function atomicWrite(target, content, mode = 0o600) {
         if (ev && ev.tool_name) {
           toolName = ev.tool_name;
           toolInput = ev.tool_input || {};
+          rawPayload = {
+            tool_name: toolName,
+            tool_input: toolInput,
+          };
           toolSource = 'transcript';
         }
       } catch { /* fail-open — transcript-reader is itself fail-open */ }
@@ -225,17 +238,27 @@ function atomicWrite(target, content, mode = 0o600) {
 
     const cwd = canonicalCwd();
     const sessionId = getSessionId();
-    const intent = {
-      session_id: sessionId,
-      hostname: os.hostname(),
-      last_updated: new Date().toISOString(),
-      last_tool: toolName,
-      last_tool_source: toolSource,
-      last_tool_input_summary: summarizeToolInput(toolName, toolInput),
-      tool_count_session: getToolCount(sessionId),
+    const nowIso = new Date().toISOString();
+    const event = normalizeClaudeHookEvent(rawPayload || {
+      tool_name: toolName,
+      tool_input: toolInput,
+    }, {
+      env: process.env,
+      hookEventName: 'PostToolUse',
       cwd,
-      git_branch: getGitBranch(),
-    };
+      nowIso,
+    });
+    event.input_source = toolSource;
+    event.session_id = sanitizeSessionId(event.session_id) || sessionId;
+    const intent = buildIntentCaptureRecord({
+      event,
+      fallbackSessionId: sessionId,
+      hostname: os.hostname(),
+      nowIso,
+      toolCount: getToolCount(event.session_id),
+      gitBranch: getGitBranch(),
+      summarizeToolInput,
+    });
 
     atomicWrite(intentFileFor(cwd), JSON.stringify(intent, null, 2) + '\n', 0o600);
 

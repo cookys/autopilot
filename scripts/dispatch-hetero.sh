@@ -333,12 +333,15 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
   rm -f "$GROK_PROMPT_FILE"
 else
-  printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at 10s so the agent cannot RUN build/test/git mid-turn (the -p turn yields first). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
-  # agy (Gemini) in -p print mode CANNOT reliably run a long command then commit:
-  # its run_command tool foreground-caps at 10s, backgrounds anything longer, and
-  # the single print turn yields ("you'll be notified, stop calling tools") before
-  # the commit ever runs → silent no_op/hallucination. So we run agy EDIT-ONLY and
-  # the wrapper commits its edits below. (gotcha: agy-headless-dispatch-unreliable.)
+  printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at ~10s then AUTO-BACKGROUNDS longer commands and waits (empirically a 75s command DID complete and return stdout, bounded by --print-timeout — the old 'hard 10s cap / cannot run build/test' framing is REFUTED, agy 1.0.14 2026-07-02); what stays unreliable is chaining run-long-command THEN git-commit in ONE -p turn (the turn can yield after the backgrounded task). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test AND self-commit mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
+  # agy (Gemini) in -p print mode CANNOT reliably run a long command THEN commit in
+  # one turn: run_command foreground-caps at ~10s and AUTO-BACKGROUNDS longer commands
+  # (it DOES complete them and return stdout, bounded by --print-timeout — the '10s
+  # wall / cannot run build/test' claim is REFUTED, agy 1.0.14 2026-07-02); but the
+  # single print turn can yield ("you'll be notified, stop calling tools") after the
+  # backgrounded task, before a follow-up commit runs → silent no_op/hallucination.
+  # So we run agy EDIT-ONLY and the wrapper commits its edits below; verify by
+  # artifact. (gotcha: agy-headless-dispatch-unreliable.)
   AGY_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Your ABSOLUTE working directory is: $WT
 Every file path in the task below resolves UNDER this directory. Convert every relative

@@ -140,18 +140,37 @@ function findJsonObjectCandidates(text) {
   return candidates;
 }
 
+function looksLikeImplementationResult(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return IMPLEMENT_RESULT_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(value, field));
+}
+
 function parseImplementationOutput(stdout) {
   const text = bufferToString(stdout);
   const candidates = findJsonObjectCandidates(text);
+  let lastParseError = null;
 
   for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    let parsed;
     try {
-      return validateImplementationResult(JSON.parse(candidates[i]));
+      parsed = JSON.parse(candidates[i]);
     } catch (error) {
-      // Fall through and keep scanning earlier candidates.
+      lastParseError = error;
+      continue;
+    }
+    try {
+      return validateImplementationResult(parsed);
+    } catch (error) {
+      if (looksLikeImplementationResult(parsed)) {
+        throw error;
+      }
+      lastParseError = error;
     }
   }
 
+  if (lastParseError) {
+    throw lastParseError;
+  }
   throw new Error('no JSON object found in dispatch-hetero stdout');
 }
 
@@ -224,5 +243,7 @@ module.exports = {
   dispatchImplement,
   dispatchImplementJson,
   parseImplementationOutput,
+  validateImplementationResult,
+  looksLikeImplementationResult,
   DISPATCH_HETERO,
 };

@@ -677,6 +677,27 @@ assert_contains "$OUT" "phase=prepare_review" "AutopilotEngine reports prepare p
 assert_contains "$OUT" "reason=diffFile is required" "AutopilotEngine surfaces missing diff reason"
 assert_contains "$OUT" "ledger=prepare_review:blocked" "AutopilotEngine records missing diff ledger"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { buildImplementationArgs } = require(path.join(root, 'src', 'engine'));
+
+const args = buildImplementationArgs({
+  promptFile: 'relative-prompt.md',
+  branch: 'impl-branch',
+  base: 'base-sha',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(args.join(' '));
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine buildImplementationArgs absolutizes prompt path"
+assert_contains "$OUT" "--prompt-file $REPO_ROOT/relative-prompt.md" "AutopilotEngine passes absolute prompt path to dispatch-hetero"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -889,5 +910,189 @@ assert_contains "$OUT" "diff_calls=2" "AutopilotEngine reviews full base-to-comm
 assert_contains "$OUT" "impl2_base=commit-1" "AutopilotEngine repair dispatch uses previous commit as repair base"
 assert_contains "$OUT" "review_bases=base-sha,base-sha" "AutopilotEngine reviews against immutable original base"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_implementation:committed,dispatch_review:reviewed,dispatch_implementation:committed,dispatch_review:reviewed" "AutopilotEngine logs both implementation and review dispatch units"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'prompt');
+const head = execSync('git rev-parse HEAD', { cwd: root, encoding: 'utf8' }).trim();
+let diffFile = null;
+
+const engine = new AutopilotEngine({
+  implementationDispatcher(args) {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: head,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    diffFile = args[args.indexOf('--diff-file') + 1];
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'feature/slash-branch',
+  base: head,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  },
+});
+
+console.log(`status=${result.status}`);
+console.log(`diff_exists=${fs.existsSync(diffFile)}`);
+console.log(`diff_file=${diffFile}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine default diff provider handles slash branch names"
+assert_contains "$OUT" "status=converged" "AutopilotEngine default diff provider converges"
+assert_contains "$OUT" "diff_exists=true" "AutopilotEngine default diff provider writes diff file"
+assert_contains "$OUT" "autopilot-review-loop-feature-slash-branch" "AutopilotEngine sanitizes slash branch in temp path"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-repair-prompt.txt" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'original implementation prompt');
+let implementationCalls = 0;
+let secondPromptText = '';
+let reviewCalls = 0;
+
+const engine = new AutopilotEngine({
+  implementationDispatcher(args) {
+    implementationCalls += 1;
+    if (implementationCalls === 2) {
+      secondPromptText = fs.readFileSync(args[args.indexOf('--prompt-file') + 1], 'utf8');
+    }
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: implementationCalls === 1 ? 'commit-a' : 'commit-b',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: reviewCalls === 1 ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS',
+        findings: 'line 12 still calls the shell directly',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider({ round }) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-default-repair-diff-'));
+    const file = path.join(tmpDir, `round-${round}.diff`);
+    fs.writeFileSync(file, `round ${round}`, 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'repair-loop',
+  base: 'base-sha',
+  maxRounds: 2,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 2,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  },
+});
+
+console.log(`status=${result.status}`);
+console.log(`implementation_calls=${implementationCalls}`);
+console.log(`repair_prompt_has_findings=${secondPromptText.includes('line 12 still calls the shell directly')}`);
+console.log(`repair_prompt_has_original=${secondPromptText.includes('original implementation prompt')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine default repair prompt carries review findings"
+assert_contains "$OUT" "status=converged" "AutopilotEngine default repair prompt loop converges"
+assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine default repair prompt triggers second implementation"
+assert_contains "$OUT" "repair_prompt_has_findings=true" "AutopilotEngine default repair prompt includes reviewer findings"
+assert_contains "$OUT" "repair_prompt_has_original=true" "AutopilotEngine default repair prompt preserves original task"
 
 finalize_test

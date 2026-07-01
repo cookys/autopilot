@@ -17,6 +17,8 @@ Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
   engine review-loop
                     Delegate to the review-loop roster resolver.
+  engine implement-review
+                    Run implementer -> review -> repair through AutopilotEngine.
   harness report    Emit read-only harness capability state and stale flags.
 
 Exit codes:

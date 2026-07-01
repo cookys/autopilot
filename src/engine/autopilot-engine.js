@@ -177,7 +177,7 @@ function buildImplementationArgs({
     '--model',
     roster.implementer_engine,
     '--prompt-file',
-    promptFile,
+    path.resolve(promptFile),
     '--branch',
     branch,
     '--base',
@@ -193,6 +193,10 @@ function buildRepairBranchName({ branch, round, previousCommit }) {
   return `${branch}-repair-r${round}-${short}`;
 }
 
+function tempNameSegment(value) {
+  return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
+}
+
 function defaultDiffProvider({ base, commit, branch, round }) {
   const child = spawnSync('git', ['diff', `${base}..${commit}`], {
     cwd: REPO_ROOT,
@@ -205,7 +209,7 @@ function defaultDiffProvider({ base, commit, branch, round }) {
   if (child.status !== 0) {
     throw new Error(`git diff failed with status ${child.status}`);
   }
-  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${branch || 'branch'}-${round || 0}-`));
+  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`));
   const file = path.join(diffDir, 'range.diff');
   fs.writeFileSync(file, child.stdout || '', 'utf8');
   return file;
@@ -220,6 +224,9 @@ function defaultRepairPromptWriter({
   review,
 }) {
   const original = fs.readFileSync(promptFile, 'utf8');
+  const findings = review && review.review && typeof review.review.findings === 'string'
+    ? review.review.findings
+    : '';
   const repairPrompt = [
     '---',
     'Repair iteration requested by /l5/l6 implementation loop.',
@@ -229,6 +236,9 @@ function defaultRepairPromptWriter({
     `failed_commit: ${commit}`,
     `previous_verdict: ${review && review.verdict}`,
     '---',
+    '',
+    'Reviewer findings:',
+    findings || '(no findings text provided)',
     '',
     original,
   ].join('\n');
@@ -955,7 +965,7 @@ class AutopilotEngine {
           promptFile,
           round: round + 1,
           base: immutableBase,
-          previousCommit: nextBase,
+          previousCommit: commit,
           commit,
           review,
         });
@@ -1006,6 +1016,7 @@ module.exports = {
   reviewResultBlocked,
   validateExtraReviewArgs,
   validateExtraArgs,
+  tempNameSegment,
   validateReviewRoster,
   validateImplementerRoster,
 };

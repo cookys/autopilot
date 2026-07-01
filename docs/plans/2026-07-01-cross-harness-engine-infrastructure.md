@@ -672,6 +672,15 @@ Acceptance:
 - `hooks/tests/dispatch-review.test.sh` still passes.
 - A local agy review smoke produces `reviewed` or `no_verdict` fail-closed.
 
+First implementation slice after R3:
+
+- `bin/autopilot.js dispatch review` now delegates to the hardened
+  `scripts/dispatch-review.sh` surface and preserves stdout/stderr/exit status.
+- `src/runners/review.js` provides the first JS runner module boundary for the
+  future engine loop.
+- `hooks/tests/autopilot-cli.test.sh` covers the public CLI bridge without live
+  network or model calls.
+
 ### Phase 3 - Port implementer dispatcher
 
 Deliverables:

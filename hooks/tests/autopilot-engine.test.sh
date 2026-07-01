@@ -729,6 +729,38 @@ NODE
 assert_eq "0" "$EXIT" "AutopilotEngine implementer parser committed-null process exits 0"
 assert_contains "$OUT" "status committed requires a non-empty commit" "AutopilotEngine implementer parser rejects committed outcome without commit"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+
+const valid = {
+  status: 'committed',
+  runner: 'codex',
+  model: 'gpt-test',
+  branch: 'impl-branch',
+  base: 'base-sha',
+  commit: 'commit-sha',
+  files_changed: 1,
+  insertions: 1,
+  deletions: 0,
+  worktree: null,
+  agent_log: '/tmp/log',
+  error: null,
+  containment: 'plain',
+  contained: true,
+};
+try {
+  parseImplementationOutput(`${JSON.stringify(valid)}\n{"status":"committed"`);
+  console.log('unexpected-ok');
+} catch (error) {
+  console.log(error.message);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementer parser trailing-incomplete process exits 0"
+assert_contains "$OUT" "trailing incomplete JSON object" "AutopilotEngine implementer parser rejects trailing incomplete JSON after valid result"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');

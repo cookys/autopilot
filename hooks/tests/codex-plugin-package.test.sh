@@ -215,6 +215,9 @@ function print(key, value) {
 
 print('manifest_name', manifest.name);
 print('manifest_version_matches', manifest.version === canonical.version);
+print('manifest_description_mentions_support', /support CLI\/scripts/.test(manifest.description));
+print('manifest_description_skills_only_package', /package is skills-only/.test(manifest.description));
+print('manifest_long_description_mentions_payload', /package payload bundles support CLI/.test(manifest.interface && manifest.interface.longDescription || ''));
 print('skills_path', manifest.skills);
 print('has_hooks_field', Object.prototype.hasOwnProperty.call(manifest, 'hooks'));
 print('has_apps_field', Object.prototype.hasOwnProperty.call(manifest, 'apps'));
@@ -253,6 +256,9 @@ EXIT=$?
 assert_eq "$EXIT" "0" "Codex plugin JSON inspection exits 0"
 assert_contains "$OUT" "manifest_name=autopilot" "Codex plugin manifest uses autopilot name"
 assert_contains "$OUT" "manifest_version_matches=true" "Codex plugin version follows canonical manifest"
+assert_contains "$OUT" "manifest_description_mentions_support=true" "Codex plugin manifest describes bundled support payload"
+assert_contains "$OUT" "manifest_description_skills_only_package=false" "Codex plugin manifest does not call the whole package skills-only"
+assert_contains "$OUT" "manifest_long_description_mentions_payload=true" "Codex plugin long description explains support payload"
 assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is relative"
 assert_contains "$OUT" "has_hooks_field=false" "Codex plugin does not declare hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"

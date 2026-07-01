@@ -28,7 +28,7 @@ Agents (`autopilot-reviewer`, `autopilot-debugger`, `autopilot-planner`) load vi
 Two Codex paths are supported:
 
 - **Per-repo skills**: same `.agents/skills/` symlink as OpenCode. Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed when you run Codex inside this repo.
-- **Local Codex plugin package**: `platforms/codex/plugin/` is a skills-only Codex package with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
+- **Local Codex plugin package**: `platforms/codex/plugin/` is a Codex package whose manifest exposes only skills, with bundled support payload and a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
 
 ```bash
 ./scripts/setup-symlinks.sh
@@ -38,7 +38,7 @@ codex plugin list --marketplace autopilot-local --available
 codex plugin add autopilot@autopilot-local
 ```
 
-The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`.
+The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install.
 
 For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
 

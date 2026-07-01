@@ -134,13 +134,20 @@ function findJsonObjectCandidates(text) {
     } else if (char === '}' && depth > 0) {
       depth -= 1;
       if (depth === 0 && start !== -1) {
-        candidates.push(text.slice(start, i + 1));
+        candidates.push({
+          source: text.slice(start, i + 1),
+          start,
+          end: i + 1,
+        });
         start = -1;
       }
     }
   }
 
-  return candidates;
+  return {
+    candidates,
+    trailingUnclosedStart: depth > 0 ? start : -1,
+  };
 }
 
 function looksLikeImplementationResult(value) {
@@ -150,13 +157,18 @@ function looksLikeImplementationResult(value) {
 
 function parseImplementationOutput(stdout) {
   const text = bufferToString(stdout);
-  const candidates = findJsonObjectCandidates(text);
+  const { candidates, trailingUnclosedStart } = findJsonObjectCandidates(text);
   let lastParseError = null;
+
+  const lastCandidate = candidates[candidates.length - 1];
+  if (lastCandidate && trailingUnclosedStart >= lastCandidate.end) {
+    throw new Error('trailing incomplete JSON object found in dispatch-hetero stdout');
+  }
 
   for (let i = candidates.length - 1; i >= 0; i -= 1) {
     let parsed;
     try {
-      parsed = JSON.parse(candidates[i]);
+      parsed = JSON.parse(candidates[i].source);
     } catch (error) {
       lastParseError = error;
       continue;
@@ -173,6 +185,9 @@ function parseImplementationOutput(stdout) {
 
   if (lastParseError) {
     throw lastParseError;
+  }
+  if (trailingUnclosedStart !== -1) {
+    throw new Error('incomplete JSON object found in dispatch-hetero stdout');
   }
   throw new Error('no JSON object found in dispatch-hetero stdout');
 }

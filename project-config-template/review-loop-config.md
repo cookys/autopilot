@@ -18,6 +18,14 @@ correlate — the reviewer catches what the generator's own green tests miss
 ([[feedback_delegate-selftest-false-green]]). `/l5`'s default qc is homogeneous
 Claude; set `reviewer_engine` here to make the review heterogeneous too.
 
+> **Verifier isolation (MUST).** Decorrelation only holds if the reviewer/qc panel is fed
+> **artifacts** (diff, files, test output) + the **original** task/plan — **never** the
+> implementer's self-report, summary, or self-verdict. A reviewer anchored by the implementer's
+> account converges to confidently-wrong (hallucination cascade), collapsing the whole point of a
+> different engine. The `dispatch-review.sh` reviewer path enforces this structurally (diff-text
+> only). Canonical rule: [`references/blind-dispatch.md`](../references/blind-dispatch.md)
+> § "Verifier isolation".
+
 ## Settings
 
 - reviewer_engine: gpt-5.5

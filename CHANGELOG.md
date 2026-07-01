@@ -30,6 +30,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Fixed
 - `dispatch-hetero.sh`: wrapper-commit fallback fires for codex too (was `IS_CODEX`-excluded → `dirty` on net-new files); codex now gets a correct `_runner_label`. Verified end-to-end (a real codex net-new-file dispatch now returns `committed`) + a 48-assertion test. Prerequisite for a future `/l6` full-dispatch level (see BACKLOG).
+- `dispatch-hetero.sh`: the edit-only wrapper commit now runs `--no-verify` (merged from the other machine, `cbeca0c`) — the target repo's pre-commit hook (e.g. a `vue-tsc -b` build on staged `.ts/.vue`) could emit untracked artifacts or `exit 1` and silently swallow correct edits as a false `dirty`/`no_op`. The wrapper commit is a mechanical artifact-capture, not the quality gate (verdict stays at depth 0). Combined cleanly with the universal-fallback fix above.
 
 ## v2.27.0 — engine lifecycle onboarding skill
 

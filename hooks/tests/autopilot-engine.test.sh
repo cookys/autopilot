@@ -761,6 +761,31 @@ NODE
 assert_eq "0" "$EXIT" "AutopilotEngine implementer parser trailing-incomplete process exits 0"
 assert_contains "$OUT" "trailing incomplete JSON object" "AutopilotEngine implementer parser rejects trailing incomplete JSON after valid result"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/impl-cwd-runner.sh" "$TEST_TMP/caller-project" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const script = process.argv[3];
+const caller = process.argv[4];
+const { dispatchImplement } = require(path.join(root, 'src', 'runners', 'implementer'));
+
+fs.writeFileSync(script, '#!/usr/bin/env bash\npwd\n');
+fs.chmodSync(script, 0o755);
+fs.mkdirSync(caller, { recursive: true });
+process.chdir(caller);
+
+const result = dispatchImplement([], {
+  scriptPath: script,
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+console.log(`status=${result.status}`);
+console.log(`stdout=${String(result.stdout).trim()}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementer dispatcher cwd test process exits 0"
+assert_contains "$OUT" "status=0" "AutopilotEngine implementer dispatcher cwd test script exits 0"
+assert_contains "$OUT" "stdout=$TEST_TMP/caller-project" "AutopilotEngine implementer dispatcher defaults to caller cwd"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -1032,6 +1057,73 @@ assert_contains "$OUT" "impl2_base=commit-1" "AutopilotEngine repair dispatch us
 assert_contains "$OUT" "review_bases=base-sha,base-sha" "AutopilotEngine reviews against immutable original base"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,dispatch_implementation:committed,dispatch_review:reviewed,dispatch_implementation:committed,dispatch_review:reviewed" "AutopilotEngine logs both implementation and review dispatch units"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/unqualified-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+let implementationCalls = 0;
+let reviewCalls = 0;
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        reviewer_qualified: false,
+        implementer_engine: 'test-impl-model',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 1,
+        loop_convergence_verdict: 'SHIP-AS-IS',
+      },
+    };
+  },
+  implementationDispatcher() {
+    implementationCalls += 1;
+    throw new Error('implementation should not dispatch before reviewer qualification passes');
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    throw new Error('review should not dispatch when reviewer is unqualified');
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'impl-loop',
+  base: 'base-sha',
+  requireQualifiedReviewer: true,
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`reason=${result.reason}`);
+console.log(`implementation_calls=${implementationCalls}`);
+console.log(`review_calls=${reviewCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementation loop reviewer-qualification preflight exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine implementation loop blocks unqualified reviewer"
+assert_contains "$OUT" "phase=reviewer_qualification" "AutopilotEngine implementation loop reports reviewer qualification phase"
+assert_contains "$OUT" "rounds=0" "AutopilotEngine implementation loop blocks before round one"
+assert_contains "$OUT" "reason=reviewer is not qualified or qualification is unknown" "AutopilotEngine implementation loop surfaces reviewer qualification reason"
+assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation loop does not dispatch implementation before qualification"
+assert_contains "$OUT" "review_calls=0" "AutopilotEngine implementation loop does not dispatch review when qualification fails"
+assert_contains "$OUT" "ledger=resolve_roster:resolved,reviewer_qualification:blocked" "AutopilotEngine implementation loop records qualification block"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -1116,6 +1208,103 @@ assert_eq "0" "$EXIT" "AutopilotEngine default diff provider handles slash branc
 assert_contains "$OUT" "status=converged" "AutopilotEngine default diff provider converges"
 assert_contains "$OUT" "diff_exists=true" "AutopilotEngine default diff provider writes diff file"
 assert_contains "$OUT" "autopilot-review-loop-feature-slash-branch" "AutopilotEngine sanitizes slash branch in temp path"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-large-prompt.txt" "$TEST_TMP/large-diff-repo" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const repo = process.argv[4];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'prompt');
+fs.mkdirSync(repo, { recursive: true });
+execFileSync('git', ['init'], { cwd: repo, stdio: 'ignore' });
+execFileSync('git', ['config', 'user.email', 'autopilot@example.test'], { cwd: repo });
+execFileSync('git', ['config', 'user.name', 'Autopilot Test'], { cwd: repo });
+fs.writeFileSync(path.join(repo, 'README.md'), 'base\n');
+execFileSync('git', ['add', 'README.md'], { cwd: repo });
+execFileSync('git', ['commit', '-m', 'base'], { cwd: repo, stdio: 'ignore' });
+const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+fs.writeFileSync(path.join(repo, 'large.txt'), `${'x'.repeat(2 * 1024 * 1024)}\n`);
+execFileSync('git', ['add', 'large.txt'], { cwd: repo });
+execFileSync('git', ['commit', '-m', 'large'], { cwd: repo, stdio: 'ignore' });
+const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+process.chdir(repo);
+
+let diffSize = 0;
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'large-diff',
+        base,
+        commit: head,
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    const diffFile = args[args.indexOf('--diff-file') + 1];
+    diffSize = fs.statSync(diffFile).size;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'large-diff',
+  base,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  },
+});
+
+console.log(`status=${result.status}`);
+console.log(`diff_over_default_buffer=${diffSize > 1024 * 1024}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine default diff provider streams large diffs"
+assert_contains "$OUT" "status=converged" "AutopilotEngine large diff provider loop converges"
+assert_contains "$OUT" "diff_over_default_buffer=true" "AutopilotEngine default diff provider writes diff larger than spawnSync default buffer"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-repair-prompt.txt" <<'NODE'
 const fs = require('fs');

@@ -203,7 +203,7 @@ function dispatchImplement(args, options = {}) {
   }
   try {
     return spawnSync(scriptPath, args, {
-      cwd: options.cwd || REPO_ROOT,
+      cwd: options.cwd || process.cwd(),
       env: options.env || process.env,
       shell: false,
       stdio: options.stdio || 'inherit',

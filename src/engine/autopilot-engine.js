@@ -9,8 +9,6 @@ const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..');
-
 function defaultNow() {
   return new Date().toISOString();
 }
@@ -200,21 +198,28 @@ function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
 
-function defaultDiffProvider({ base, commit, branch, round }) {
-  const child = spawnSync('git', ['diff', `${base}..${commit}`], {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-    shell: false,
-  });
+function defaultDiffProvider({ base, commit, branch, round, cwd }) {
+  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`));
+  const file = path.join(diffDir, 'range.diff');
+  const outFd = fs.openSync(file, 'w');
+  let child;
+  try {
+    child = spawnSync('git', ['diff', `${base}..${commit}`], {
+      cwd: cwd || process.cwd(),
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', outFd, 'pipe'],
+    });
+  } finally {
+    fs.closeSync(outFd);
+  }
   if (child.error) {
     throw child.error;
   }
   if (child.status !== 0) {
-    throw new Error(`git diff failed with status ${child.status}`);
+    const stderr = child.stderr ? `: ${String(child.stderr).trim()}` : '';
+    throw new Error(`git diff failed with status ${child.status}${stderr}`);
   }
-  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`));
-  const file = path.join(diffDir, 'range.diff');
-  fs.writeFileSync(file, child.stdout || '', 'utf8');
   return file;
 }
 
@@ -259,6 +264,7 @@ class AutopilotEngine {
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
+    this.cwd = options.cwd || process.cwd();
     this.now = createClock(options.clock);
   }
 
@@ -828,6 +834,29 @@ class AutopilotEngine {
       };
     }
 
+    if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
+      const startedAt = this.now();
+      ledger.push(
+        this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
+          reviewer_qualified: roster.reviewer_qualified === true,
+        }),
+      );
+      return {
+        status: 'blocked',
+        phase: 'reviewer_qualification',
+        reason: 'reviewer is not qualified or qualification is unknown',
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      };
+    }
+
     const implementationChain = [];
     const reviewChain = [];
     const immutableBase = base;
@@ -883,6 +912,7 @@ class AutopilotEngine {
           branch: currentBranch,
           round,
           currentBase: nextBase,
+          cwd: this.cwd,
         });
       } catch (error) {
         return {

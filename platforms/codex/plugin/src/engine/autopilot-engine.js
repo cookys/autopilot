@@ -1037,7 +1037,10 @@ class AutopilotEngine {
         diffFile,
         roster,
         extraReviewArgs: input.extraReviewArgs || [],
-        reviewOptions: input.reviewOptions || {},
+        reviewOptions: {
+          ...(input.reviewOptions || {}),
+          cwd: loopCwd,
+        },
         requireQualifiedReviewer,
       });
       ledger.push(...review.ledger);

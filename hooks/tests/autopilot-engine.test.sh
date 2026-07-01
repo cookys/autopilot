@@ -797,6 +797,7 @@ fs.mkdirSync(target, { recursive: true });
 fs.writeFileSync(path.join(target, 'prompt.txt'), 'implementer prompt');
 let resolverCwd = null;
 let implementationCwd = null;
+let reviewCwd = null;
 let promptArg = null;
 
 const engine = new AutopilotEngine({
@@ -1358,7 +1359,8 @@ const engine = new AutopilotEngine({
       },
     };
   },
-  reviewDispatcher() {
+  reviewDispatcher(_args, options) {
+    reviewCwd = options && options.cwd;
     return {
       error: null,
       status: 0,
@@ -1394,6 +1396,7 @@ const result = engine.runImplementationReviewLoop({
 console.log(`status=${result.status}`);
 console.log(`resolver_cwd=${resolverCwd}`);
 console.log(`implementation_cwd=${implementationCwd}`);
+console.log(`review_cwd=${reviewCwd}`);
 console.log(`prompt_arg=${promptArg}`);
 NODE
 )"; EXIT=$?
@@ -1401,6 +1404,7 @@ assert_eq "0" "$EXIT" "AutopilotEngine implementation loop cwd propagation exits
 assert_contains "$OUT" "status=converged" "AutopilotEngine implementation loop cwd propagation converges"
 assert_contains "$OUT" "resolver_cwd=$TEST_TMP/cwd-propagation-repo" "AutopilotEngine implementation loop passes cwd to roster resolver"
 assert_contains "$OUT" "implementation_cwd=$TEST_TMP/cwd-propagation-repo" "AutopilotEngine implementation loop passes cwd to implementation dispatcher"
+assert_contains "$OUT" "review_cwd=$TEST_TMP/cwd-propagation-repo" "AutopilotEngine implementation loop passes cwd to review dispatcher"
 assert_contains "$OUT" "prompt_arg=$TEST_TMP/cwd-propagation-repo/prompt.txt" "AutopilotEngine implementation loop resolves relative prompt from cwd"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-prompt.txt" <<'NODE'

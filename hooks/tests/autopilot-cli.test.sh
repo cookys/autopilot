@@ -19,6 +19,32 @@ OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "autopilot --help exits 0"
 assert_contains "$OUT" "dispatch review" "autopilot help lists dispatch review"
 assert_contains "$OUT" "engine review-loop" "autopilot help lists engine review-loop"
+assert_contains "$OUT" "engine implement-review" "autopilot help lists engine implement-review"
+
+printf 'implementer loop prompt\n' > "$TEST_TMP/engine-impl-review-prompt.txt"
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review missing base exits 2"
+assert_contains "$OUT" "flags --prompt-file, --branch, --base are required" "implement-review reports missing base"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --base base-sha 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review missing branch exits 2"
+assert_contains "$OUT" "flags --prompt-file, --branch, --base are required" "implement-review reports missing branch"
+
+OUT="$(node "$CLI" engine implement-review --branch loop-branch --base base-sha 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review missing prompt-file exits 2"
+assert_contains "$OUT" "flags --prompt-file, --branch, --base are required" "implement-review reports missing prompt-file"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base base-sha --max-rounds 0 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review invalid max-rounds exits 2"
+assert_contains "$OUT" "invalid --max-rounds value: 0" "implement-review validates max-rounds"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base base-sha --cwd 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review missing cwd value exits 2"
+assert_contains "$OUT" "--cwd requires a value" "implement-review validates cwd value"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base develop 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "implement-review moving base ref exits 1"
+assert_contains "$OUT" "base must be a full immutable git SHA" "implement-review blocks moving base refs before dispatch"
 
 OUT="$(node "$CLI" dispatch review --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "dispatch review preserves reviewed exit 0"

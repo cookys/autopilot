@@ -12,7 +12,8 @@ description: >
 # /l6 — CEO autonomy, foreman + full-dispatch verification
 
 Terse front-door into `autopilot:ceo-agent` at **Level 6**: identical to `/l5` except that
-verification AUTHORING is additionally leaf-dispatched. This includes independent harness authoring and
+verification AUTHORING is additionally leaf-dispatched through the canonical `/l5` / `engine implement-review`
+implementation-review loop. This includes independent harness authoring and
 its review loops, and the verification-writer family is constrained to differ from the implementer family.
 Depth-0 is still pure orchestration.
 
@@ -21,6 +22,7 @@ Depth-0 still executes committed artifacts, runs the mechanical checks, judges c
 and holds merge authority. A dispatched green or reviewer pass is not authoritative by itself.
 
 This mode uses existing machinery only:
+[`../../bin/autopilot.js`](../../bin/autopilot.js) (`engine implement-review`, canonical),
 [`../../scripts/dispatch-hetero.sh`](../../scripts/dispatch-hetero.sh),
 [`../../scripts/dispatch-review.sh`](../../scripts/dispatch-review.sh),
 [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh).
@@ -29,7 +31,8 @@ Execution control and ledger behavior remain as in `/l5` and
 
 Per-unit pipeline (authoritative flow):
 1) Resolve roster once with `../../scripts/resolve-review-loop.sh` and treat its output as the only source of truth.
-2) Dispatch implementation via `../../scripts/dispatch-hetero.sh` with immutable `--base` and outcome-driven worktree commit logic.
+2) Dispatch implementation via `engine implement-review` (internally `dispatch-hetero.sh`) with immutable `--base` and
+   outcome-driven worktree commit logic.
 3) Dispatch verification AUTHORING via `../../scripts/dispatch-review.sh` on a different family than the implementer engine.
 4) Run decorrelated review on implementation and harness outputs per resolved review fields.
 5) Depth-0 executes committed implementation + harness artifacts, runs all required checks, and compares the results.

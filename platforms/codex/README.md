@@ -4,12 +4,15 @@ This directory contains the Codex packaging surface for Autopilot.
 
 - `plugin/` is the Codex plugin root.
 - `plugin/skills` is a generated copy of the repository's canonical `skills/`.
-- `plugin/references`, `plugin/scripts`, `plugin/project-config-template`, and
-  selected `plugin/docs` files are generated support payload for skill links.
+- `plugin/bin`, `plugin/src`, `plugin/references`, `plugin/scripts`,
+  `plugin/project-config-template`, selected `plugin/docs` files, and
+  `plugin/hooks/_shared` are generated support payload for skill links and
+  engine CLI commands.
 - `.agents/plugins/marketplace.json` is a repo-local marketplace for development.
 
-The package is intentionally skills-only. It does not declare Claude Code hooks,
-apps, or MCP servers.
+The package manifest intentionally exposes only skills. It does not declare
+Claude Code hooks, apps, or MCP servers; the extra payload exists so referenced
+support files resolve after installation.
 
 ## Hook probe package
 
@@ -66,3 +69,7 @@ preserve symlinks.
 
 Run `./scripts/sync-codex-plugin-skills.sh` after changing `skills/` or linked
 support files; the package test fails if the generated payload drifts.
+
+Run packaged engine commands from the target repository, or pass
+`--cwd /path/to/repo` to `engine implement-review` so implementation worktrees
+and review diffs use the intended project.

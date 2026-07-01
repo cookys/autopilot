@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-02 | [`/l5` and `/l6` engine integration](2026-07-02-l5-l6-engine-integration/README.md) — Phase 7 of cross-harness engine infrastructure: `AutopilotEngine` implementation/review/repair orchestration, engine CLI front-door, `/l5`/`/l6` docs, per-unit ledger, and `/l5` loop review convergence | v2.28.2 | `feat/v2.28.2-engine-integration` |
 
 ## 已完成 (Completed)
 

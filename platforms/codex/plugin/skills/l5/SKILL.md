@@ -2,8 +2,8 @@
 name: l5
 description: >
   Terse CEO front-door — Level 5: like /l4 (background worktree-isolated foreman, depth-0 control
-  loop + authoritative qc) but the IMPLEMENTER is leaf-dispatched to a heterogeneous engine
-  (agy/Gemini) via dispatch-hetero.sh. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
+  loop + authoritative qc) but the IMPLEMENTER is orchestrated by the engine CLI and dispatched
+  through the canonical `engine implement-review` path. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
   or a decorrelated second engine doing the mechanical impl. Presets involvement=just-results,
   scope=Hold, no-go=none (override -x / --expand / --solo). Not for: all-Claude run (→ /l4), inline
   (→ /l3).
@@ -12,8 +12,9 @@ description: >
 # /l5 — CEO autonomy, foreman + hetero implementer
 
 Terse front-door into `autopilot:ceo-agent` at **Level 5**: identical to `/l4`
-except the foreman **leaf-dispatches the implementer to a heterogeneous engine**
-via [`../../scripts/dispatch-hetero.sh`](../../scripts/dispatch-hetero.sh), and the
+except the foreman **runs** the canonical implementation-review loop via
+[`../../bin/autopilot.js`](../../bin/autopilot.js) (`engine implement-review`),
+which dispatches implementation rounds through [`../../scripts/dispatch-hetero.sh`](../../scripts/dispatch-hetero.sh). The
 adversarial review can run on a **decorrelated reviewer engine** instead of
 homogeneous Claude. The engine roster + loop policy are **data, not a hand-typed
 prompt** — resolved from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)
@@ -40,9 +41,10 @@ qc-gate" pipeline is just `/l5 <goal>` — you don't re-type the roster.
    foreman + depth-0 control loop per
    [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md);
    the deltas vs `/l4`:
-   - **Impl** dispatched with `dispatch-hetero.sh --runner <implementer_runner>
-     --model <implementer_engine> --effort <implementer_effort> --base "$(git
-     rev-parse <chosen-base>)"` (worktree-isolated, artifact-verified,
+   - **Impl** dispatched with `engine implement-review` (internally invoking
+     `dispatch-hetero.sh --runner <implementer_runner> --model <implementer_engine>
+     --effort <implementer_effort> --base "$(git rev-parse <chosen-base>)"`,
+     worktree-isolated, artifact-verified,
      **cgroup-contained**). Pass `--base` as an **immutable SHA**, not a ref like
      `develop` (a ref can advance after dispatch, breaking the post-impl probe
      range). Map its outcome via the **outcome→action table**; reap the worktree

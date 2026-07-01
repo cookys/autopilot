@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.28.1-E8A838?style=flat-square" alt="v2.28.1">
+  <img src="https://img.shields.io/badge/version-2.28.2-E8A838?style=flat-square" alt="v2.28.2">
   <img src="https://img.shields.io/badge/skills-27-4A90D9?style=flat-square" alt="27 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
@@ -140,7 +140,7 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 ### Other platforms
 
-Autopilot is portable: **OpenCode** discovers skills via `.agents/skills/`, **Codex** can use `.agents/skills/` or the skills-only local package under `platforms/codex/plugin`, **Antigravity (`agy`)** imports the repo as a Claude Code-source plugin, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
+Autopilot is portable: **OpenCode** discovers skills via `.agents/skills/`, **Codex** can use `.agents/skills/` or the local package under `platforms/codex/plugin` whose manifest exposes skills with bundled support payload, **Antigravity (`agy`)** imports the repo as a Claude Code-source plugin, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
 
 ## Learn More
 

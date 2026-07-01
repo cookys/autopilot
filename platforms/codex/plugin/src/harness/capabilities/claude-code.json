@@ -1,0 +1,33 @@
+{
+  "id": "claude-code",
+  "display_name": "Claude Code",
+  "kind": "cli",
+  "status": "warning",
+  "harness_level": "H1",
+  "last_checked_at": "2026-07-02",
+  "verified_at": null,
+  "expires_at": "2026-07-16",
+  "evidence": {
+    "source": "local-probe-and-user-constraint",
+    "command": "claude --version",
+    "result": "2.1.197 (Claude Code); Anthropic subscription quota exhausted for native Anthropic-backed use, but the CLI driver itself is present"
+  },
+  "capabilities": {
+    "read_only_dispatch": "unavailable",
+    "skills": "known-existing-host",
+    "hooks": "known-existing-host",
+    "mutation_dispatch": "unavailable",
+    "blocking_gate": "unavailable",
+    "cc_shim_driver": "verified"
+  },
+  "auth_domains": {
+    "driver_cli": "verified",
+    "anthropic_subscription_quota": "unavailable",
+    "third_party_provider_quota": "not-applicable"
+  },
+  "notes": [
+    "Do not dispatch native Anthropic-backed Claude work while the subscription quota constraint is active.",
+    "cc-shim is still eligible when it is explicitly bound to a third-party Anthropic-compatible provider token such as MiniMax or GLM; that provider quota is separate from Anthropic subscription quota.",
+    "Existing Claude Code plugin behavior must remain unchanged unless a phase explicitly touches Claude packaging."
+  ]
+}

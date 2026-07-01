@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.28.1-E8A838?style=flat-square" alt="v2.28.1">
+  <img src="https://img.shields.io/badge/version-2.28.2-E8A838?style=flat-square" alt="v2.28.2">
   <img src="https://img.shields.io/badge/skills-27-4A90D9?style=flat-square" alt="27 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
@@ -140,7 +140,7 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 ### 其他平台
 
-Autopilot 可攜：**OpenCode** 透過 `.agents/skills/` 發現 skill，**Codex** 可使用 `.agents/skills/` 或 `platforms/codex/plugin` 的 skills-only local package，**Antigravity（`agy`）** 則將 repo 作為 Claude Code-source plugin 匯入，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
+Autopilot 可攜：**OpenCode** 透過 `.agents/skills/` 發現 skill，**Codex** 可使用 `.agents/skills/` 或 `platforms/codex/plugin` 的 local package（manifest 只暴露 skills，但 payload 會包含支援檔），**Antigravity（`agy`）** 則將 repo 作為 Claude Code-source plugin 匯入，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
 
 ## Learn More
 

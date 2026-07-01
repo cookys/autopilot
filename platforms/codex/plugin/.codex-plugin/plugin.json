@@ -1,7 +1,7 @@
 {
   "name": "autopilot",
-  "version": "2.28.1",
-  "description": "Autopilot methodology skills for Codex. This package is skills-only and does not load Claude Code hooks.",
+  "version": "2.28.2",
+  "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts. The manifest exposes skills only and does not load Claude Code hooks.",
   "author": {
     "name": "TWGS Team"
   },
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "Autopilot",
     "shortDescription": "Lifecycle and review-loop skills for Codex",
-    "longDescription": "Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex without loading Claude Code hook manifests. Use it for disciplined autonomous implementation loops, harness qualification, and quality gates.",
+    "longDescription": "Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The manifest declares only skills while the package payload bundles support CLI, scripts, references, templates, and shared helpers needed by those skills; it does not load Claude Code hook manifests.",
     "developerName": "TWGS Team",
     "category": "Developer Tools",
     "capabilities": [

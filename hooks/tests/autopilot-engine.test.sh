@@ -1171,6 +1171,114 @@ assert_contains "$OUT" "reason=implementer roster field implementer_runner is re
 assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation loop does not dispatch with malformed roster"
 assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine implementation loop records malformed roster as preparation block"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/cwd-propagation-repo" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const target = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.mkdirSync(target, { recursive: true });
+fs.writeFileSync(path.join(target, 'prompt.txt'), 'implementer prompt');
+let resolverCwd = null;
+let implementationCwd = null;
+let promptArg = null;
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver(_args, options) {
+    resolverCwd = options && options.cwd;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        reviewer_qualified: true,
+        implementer_engine: 'test-impl-model',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 1,
+        loop_convergence_verdict: 'SHIP-AS-IS',
+      },
+    };
+  },
+  implementationDispatcher(args, options) {
+    implementationCwd = options && options.cwd;
+    promptArg = args[args.indexOf('--prompt-file') + 1];
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'cwd-loop',
+        base: 'base-sha',
+        commit: 'commit-sha',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider({ round }) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-cwd-propagation-diff-'));
+    const file = path.join(tmpDir, `round-${round}.diff`);
+    fs.writeFileSync(file, 'diff', 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: 'prompt.txt',
+  branch: 'cwd-loop',
+  base: 'base-sha',
+  cwd: target,
+});
+console.log(`status=${result.status}`);
+console.log(`resolver_cwd=${resolverCwd}`);
+console.log(`implementation_cwd=${implementationCwd}`);
+console.log(`prompt_arg=${promptArg}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implementation loop cwd propagation exits 0"
+assert_contains "$OUT" "status=converged" "AutopilotEngine implementation loop cwd propagation converges"
+assert_contains "$OUT" "resolver_cwd=$TEST_TMP/cwd-propagation-repo" "AutopilotEngine implementation loop passes cwd to roster resolver"
+assert_contains "$OUT" "implementation_cwd=$TEST_TMP/cwd-propagation-repo" "AutopilotEngine implementation loop passes cwd to implementation dispatcher"
+assert_contains "$OUT" "prompt_arg=$TEST_TMP/cwd-propagation-repo/prompt.txt" "AutopilotEngine implementation loop resolves relative prompt from cwd"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/default-diff-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');

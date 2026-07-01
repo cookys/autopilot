@@ -151,6 +151,7 @@ function buildImplementationArgs({
   promptFile,
   branch,
   base,
+  cwd,
   extraImplementationArgs = [],
 }) {
   validateImplementerRoster(roster);
@@ -178,7 +179,7 @@ function buildImplementationArgs({
     '--model',
     roster.implementer_engine,
     '--prompt-file',
-    path.resolve(promptFile),
+    path.resolve(cwd || process.cwd(), promptFile),
     '--branch',
     branch,
     '--base',
@@ -612,11 +613,15 @@ class AutopilotEngine {
     }
 
     try {
+      const implementationCwd = input.cwd
+        || (input.implementationOptions && input.implementationOptions.cwd)
+        || process.cwd();
       implementationArgs = buildImplementationArgs({
         roster,
         promptFile: input.promptFile,
         branch: input.branch,
         base: input.base,
+        cwd: implementationCwd,
         extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
           ? input.extraImplementationArgs
           : [],
@@ -711,7 +716,7 @@ class AutopilotEngine {
 
   runImplementationReviewLoop(input = {}) {
     const ledger = [];
-    const promptFile = input.promptFile;
+    let promptFile = input.promptFile;
     const branch = input.branch;
     const base = input.base;
     let loopCwd = this.cwd;
@@ -775,16 +780,23 @@ class AutopilotEngine {
       }
       loopCwd = path.resolve(input.cwd);
     }
+    promptFile = path.resolve(loopCwd, promptFile);
 
     let roster = input.roster || null;
     let resolveResult = null;
 
     if (!roster) {
+      const resolverOptions = {
+        ...(input.resolverOptions || {}),
+        cwd: Object.prototype.hasOwnProperty.call(input.resolverOptions || {}, 'cwd')
+          ? input.resolverOptions.cwd
+          : loopCwd,
+      };
       const resolved = this.resolveRoster({
         args: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
           : ['--check-scorecard'],
-        options: input.resolverOptions || {},
+        options: resolverOptions,
       });
       ledger.push(...resolved.ledger);
       resolveResult = resolved.result;

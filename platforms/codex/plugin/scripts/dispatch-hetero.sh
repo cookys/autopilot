@@ -183,11 +183,11 @@ esac
 # NAME; we read the value via ${!name} in-script (set +x so it can't leak) and export it. ---
 if [ -n "$ENDPOINT" ]; then
   [ "$IS_CCSHIM" -eq 1 ] || die_precondition "--endpoint applies only to --runner cc-shim (got runner: $RUNNER)"
-  _ep_json="$("$SELF_DIR/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null || true)"
-  case "$_ep_json" in
-    *'"ready":true'*) : ;;
-    *) die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')" ;;
-  esac
+  # Readiness is the resolver's EXIT CODE (0=ready), NOT a grep of stdout — matching a
+  # "ready":true substring could be spoofed by attacker-controlled field content, and the
+  # exit code is the resolver's authoritative fail-closed signal (gpt-5.5 R5).
+  _ep_json="$("$SELF_DIR/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)"; _ep_rc=$?
+  [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
   _ep_url="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
   _ep_tokenv="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
   set +x

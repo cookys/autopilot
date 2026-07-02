@@ -92,6 +92,11 @@ timeout 5 bash "$DH" --branch t --base HEAD --prompt-file "$NOOP" --endpoint >/d
 timeout 5 bash "$DH" --branch t --base HEAD --prompt-file "$NOOP" --endpoint "" >/dev/null 2>&1; assert_exit_code "$?" 2 "hetero empty --endpoint exits 2"
 timeout 5 bash "$DR" --runner cc-shim --model x --diff-file "$NOOP" --endpoint >/dev/null 2>&1; assert_exit_code "$?" 2 "review dangling --endpoint exits 2 (no hang)"
 
+# 9c. exit-code readiness gate: a url with a "ready":true substring but url_unsafe (resolver
+# exits 1) must be REJECTED — the dispatcher trusts the exit code, not a stdout grep (R5)
+out="$(env -i PATH="$PATH" '''AUTOPILOT_ENDPOINT_EVIL_URL=http://evil/"ready":true''' AUTOPILOT_ENDPOINT_EVIL_TOKEN=t bash "$DH" --runner cc-shim --branch t/e --base HEAD --prompt-file "$NOOP" --endpoint evil 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "spoofed ready substring rejected via exit-code gate"
+
 # 10. JS --token-env: unset named token + fallback token set → fail-closed (no fallback)
 out="$(env -i PATH="$PATH" MINIMAX_API_KEY=shouldNotBeUsed node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env AUTOPILOT_ENDPOINT_GLM_TOKEN 2>&1)"
 assert_contains "$out" 'AUTOPILOT_ENDPOINT_GLM_TOKEN is unset' "JS --token-env fail-closed"

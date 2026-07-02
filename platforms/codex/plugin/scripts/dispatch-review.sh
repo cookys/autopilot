@@ -105,11 +105,10 @@ if [[ -n "$ENDPOINT" ]]; then
     anthropic-compatible|cc-shim) ;;
     *) die_precondition "--endpoint applies only to --runner anthropic-compatible or cc-shim (got: $RUNNER)" ;;
   esac
-  _ep_json="$("$(cd "$(dirname "$0")" && pwd)/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null || true)"
-  case "$_ep_json" in
-    *'"ready":true'*) : ;;
-    *) die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')" ;;
-  esac
+  # Readiness = the resolver's EXIT CODE (0=ready), not a stdout grep (spoofable by
+  # attacker-controlled field content); exit code is the authoritative fail-closed signal (gpt-5.5 R5).
+  _ep_json="$("$(cd "$(dirname "$0")" && pwd)/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)"; _ep_rc=$?
+  [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
   EP_URL="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
   EP_TOKEN_ENV="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
   if [[ "$RUNNER" = "cc-shim" ]]; then

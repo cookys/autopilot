@@ -93,6 +93,9 @@ assert_contains "$out" 'AUTOPILOT_ENDPOINT_GLM_TOKEN is unset' "JS --token-env f
 assert_not_contains "$out" 'shouldNotBeUsed' "JS did not use fallback token"
 out="$(env -i PATH="$PATH" node "$JS" --model x --diff-file "$NOOP" --base-url https://x/anthropic --token-env 'bad-name!' 2>&1)"
 assert_contains "$out" 'invalid --token-env' "JS rejects invalid token-env name"
+out="$(env -i PATH="$PATH" MINIMAX_API_KEY=fb node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env 2>&1)"
+assert_contains "$out" 'token-env requires' "JS dangling --token-env errors (no fallback, R3)"
+assert_not_contains "$out" 'fb' "JS dangling --token-env did not use fallback"
 
 # 11. byte-identical no-endpoint: sibling fail-if-called resolve-endpoint.sh stub (R3)
 STUBDIR="$TEST_TMP/stubdir"; mkdir -p "$STUBDIR"

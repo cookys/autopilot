@@ -87,9 +87,16 @@ function parseArgs(argv) {
       case '--base-url':
         out.baseUrl = argv[++i] || '';
         break;
-      case '--token-env':
-        out.tokenEnv = argv[++i] || '';
+      case '--token-env': {
+        // Require a non-empty value: a dangling `--token-env` (no arg) must NOT silently
+        // fall back to hostname token resolution — that would be fail-open (gpt-5.5 R3).
+        const v = argv[++i];
+        if (v === undefined || v === '') {
+          return { error: '--token-env requires a non-empty env-var NAME' };
+        }
+        out.tokenEnv = v;
         break;
+      }
       case '-h':
       case '--help':
         out.help = true;

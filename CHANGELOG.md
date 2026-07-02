@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.1 — ladder-run implementer diff hardening
+
+**Headline**: Fixes `scripts/ladder-run.sh --impl-prompt-file` so the acceptance-delegation ladder verifies the hetero implementer's returned commit, not the caller's current checkout. `dispatch-hetero.sh` removes successful worktrees by default and emits `worktree:null`; ladder-run now uses the returned `commit` field directly to build the `base..commit` diff and fails closed if that commit is not the requested branch tip or does not descend from the requested base.
+
+### Fixed
+- `scripts/ladder-run.sh`: the live implementer path now requires a returned commit SHA, verifies it is visible in the current repo, requires the returned branch to match the requested branch, requires `refs/heads/<branch>` to point to the returned commit, requires `BASE_SHA` to be an ancestor, and generates the review diff with `git diff "$BASE_SHA..$IMPL_COMMIT"`.
+- `scripts/ladder-run.test.sh`: adds regressions that run even when external `qc_metric.py` is unavailable, using a fake `dispatch-hetero.sh` that returns `status:committed`, a real branch commit, and `worktree:null`; negative cases cover stale non-tip commits and unrelated commits.
+
+### Verification
+- `bash scripts/ladder-run.test.sh` covers the `worktree:null` live implementer path before the `qc_metric.py`-dependent tests.
+
 ## v2.31.0 — raw prompt authoring dispatch split for `/l6`
 
 **Headline**: Adds `scripts/dispatch-author.sh`, a dedicated read-only raw prompt dispatch path for AUTHORING tasks (test plans, verification docs, and spec drafts), so `/l6` verification authoring runs on an uncoupled engine contract while reviewer prompt isolation stays in `dispatch-review.sh`.

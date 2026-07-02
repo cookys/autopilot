@@ -3,6 +3,7 @@
 # mode of, the write-oriented dispatch-hetero.sh). Feeds a diff as TEXT to a panel
 # engine and parses a VERDICT, so a disjoint-family qc panel can include a vendor
 # (e.g. Gemini-via-agy) that is unreliable as an implementer but fine as a reviewer.
+# For AUTHORING tasks, use sibling dispatch-author.sh (unwrapped raw-prompt dispatch).
 #
 # Why a script: the agy/Gemini read path has two non-obvious rails that MUST NOT be
 # skipped — (1) the diff goes in the PROMPT as text (agy -p ignores cwd; asking it to

@@ -24,6 +24,31 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.1 — ladder-run implementer diff hardening
+
+**Headline**: Fixes `scripts/ladder-run.sh --impl-prompt-file` so the acceptance-delegation ladder verifies the hetero implementer's returned commit, not the caller's current checkout. `dispatch-hetero.sh` removes successful worktrees by default and emits `worktree:null`; ladder-run now uses the returned `commit` field directly to build the `base..commit` diff and fails closed if that commit is not the requested branch tip or does not descend from the requested base.
+
+### Fixed
+- `scripts/ladder-run.sh`: the live implementer path now requires a returned commit SHA, verifies it is visible in the current repo, requires the returned branch to match the requested branch, requires `refs/heads/<branch>` to point to the returned commit, requires `BASE_SHA` to be an ancestor, and generates the review diff with `git diff "$BASE_SHA..$IMPL_COMMIT"`.
+- `scripts/ladder-run.test.sh`: adds regressions that run even when external `qc_metric.py` is unavailable, using a fake `dispatch-hetero.sh` that returns `status:committed`, a real branch commit, and `worktree:null`; negative cases cover stale non-tip commits and unrelated commits.
+
+### Verification
+- `bash scripts/ladder-run.test.sh` covers the `worktree:null` live implementer path before the `qc_metric.py`-dependent tests.
+
+## v2.31.0 — raw prompt authoring dispatch split for `/l6`
+
+**Headline**: Adds `scripts/dispatch-author.sh`, a dedicated read-only raw prompt dispatch path for AUTHORING tasks (test plans, verification docs, and spec drafts), so `/l6` verification authoring runs on an uncoupled engine contract while reviewer prompt isolation stays in `dispatch-review.sh`.
+
+### Added
+- `scripts/dispatch-author.sh`: peer sibling to `dispatch-review.sh` that forwards `--prompt-file` bytes directly to `codex|agy|grok|cc-shim` with shared structural rails (read-only sandboxing/capture) and no reviewer template wrapper.
+- `hooks/tests/dispatch-author.test.sh`: smoke suite for prompt-forwarding correctness and `dispatch-author` fail-closed semantics.
+
+### Changed
+- `skills/l6/SKILL.md`: verification AUTHORING rails now dispatch through `dispatch-author.sh` (instead of `dispatch-review.sh`) and capture the 2026-07-02 l6/N2 incident rationale.
+
+### Fixed
+- `/l6` guidance now avoids sending AUTHORING prompts through the reviewer wrapper that prepends `You are a code reviewer` / `Diff under review`, preventing the refusal path observed in the 2026-07-02 repro.
+
 ## v2.30.2 — dispatch-hetero: codex flag feature-detect + --codex-bin seam
 
 **Headline**: Fixes a silent-misclassification bug where `engine implement-review` (and any `dispatch-hetero.sh --runner codex`) could dispatch to a STALE codex earlier in `$PATH` — e.g. an old npm-global `@openai/codex` in an nvm node's bin, ahead of `~/.local/bin/codex` — that lacks `--dangerously-bypass-hook-trust`. The old codex exited 2 mid-run with a cryptic "unexpected argument", which dispatch-hetero MISCLASSIFIED as `question_suspected`, wasting a round with no diagnostic. Root cause: the engine runs under nvm's node, whose `$PATH` prepends the nvm bin.
@@ -49,6 +74,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Provenance
 - The resolver's first-draft structure was dispatched to a heterogeneous implementer (codex `gpt-5.3-codex-spark`) via `dispatch-hetero.sh`; depth-0 review found and fixed two real defects in that draft (token value leaked under `bash -x`; trailing-comma invalid JSON on a non-empty `missing` array) and completed the wiring/tests/docs. The design spec passed a 4-round decorrelated `gpt-5.5` review loop before implementation.
+
 ## v2.30.0 — ladder-run: the acceptance-delegation ladder harness (P2.2)
 
 **Headline**: Adds `scripts/ladder-run.sh`, the first real *measured* run of the acceptance-delegation ladder (ROADMAP P2.2). The `run` subcommand does one cycle: (1) obtain the change artifact, (2) a **decorrelated, isolated** agent renders the acceptance verdict from the diff text only (verifier isolation via `dispatch-review.sh` — the implementer's self-report never reaches the verifier), (3) emit a QC-metric event to the P2.1 store (`qc-metric-emit.js`), (4) deterministically flag the 30% cookys sample, (5) recompute the *class's* running escape/endorsement rate (via the unmodified `qc_metric.py`) and report a T0→T1→T2 promotion recommendation. The `audit` subcommand records a **later-stage escape** (a defect the in-cycle verdict passed but a stronger/later review caught) so `qc_metric.py`'s union-merge counts it as a real class escape — without this the in-cycle verifier is blind to its own escapes and the promotion gate is vacuous. Strictly additive — drives existing tools unchanged, alters no skill's behavior, records a recommendation (never auto-flips a tier), one cycle per invocation (not a scheduler).

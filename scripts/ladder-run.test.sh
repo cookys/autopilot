@@ -13,9 +13,111 @@ FAIL=0
 note() { printf '  %s\n' "$*"; }
 ok()   { printf 'ok   %s\n' "$*"; }
 bad()  { printf 'FAIL %s\n' "$*"; FAIL=1; }
-[ -f "$QC_PY" ] || { echo "SKIP ALL — qc_metric.py not found at $QC_PY"; exit 0; }
-
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+# Regression: the live implementer path must verify the implementer's returned commit,
+# not the caller's current HEAD. dispatch-hetero removes successful worktrees by default
+# and emits worktree:null, so ladder-run must use `.commit` directly.
+IMPL_SBX="$TMP/impl-repo"
+mkdir -p "$IMPL_SBX"
+git -C "$IMPL_SBX" init -q -b develop
+git -C "$IMPL_SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+IMPL_BASE="$(git -C "$IMPL_SBX" rev-parse HEAD)"
+IMPL_PROMPT="$TMP/impl-prompt.md"; echo "make one committed change" > "$IMPL_PROMPT"
+IMPL_STATE="$TMP/impl-state.json"
+cat > "$IMPL_STATE" <<'JSON'
+{ "version":1, "policy":{ "escape_rate_max":0.10, "endorsement_rate_min":0.90,
+  "min_samples":5, "t1_sample_rate":0.30, "demote_on_escape":true },
+  "classes":{ "doc-sync":{ "tier":"T0","description":"t","change_ids":[],"cycles":[] } } }
+JSON
+IMPL_BIN="$TMP/impl-bin"
+mkdir -p "$IMPL_BIN"
+cp "$LADDER" "$IMPL_BIN/ladder-run.sh"
+: > "$IMPL_BIN/qc-metric-emit.js"
+cat > "$IMPL_BIN/dispatch-hetero.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+branch=""; base=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --branch) branch="$2"; shift 2 ;;
+    --base) base="$2"; shift 2 ;;
+    *) if [ "$#" -ge 2 ] && [[ "${2:-}" != --* ]]; then shift 2; else shift; fi ;;
+  esac
+done
+[ -n "$branch" ] && [ -n "$base" ] || exit 2
+idx="$(mktemp)"
+GIT_INDEX_FILE="$idx" git read-tree "$base"
+blob="$(printf 'implemented\n' | git hash-object -w --stdin)"
+GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$blob,implemented.txt"
+tree="$(GIT_INDEX_FILE="$idx" git write-tree)"
+impl_commit="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git commit-tree "$tree" -p "$base" -m "test: implement")"
+rm -f "$idx"
+out_commit="$impl_commit"
+case "${FAKE_IMPL_MODE:-ok}" in
+  stale-tip)
+    stale_idx="$(mktemp)"
+    GIT_INDEX_FILE="$stale_idx" git read-tree "$base"
+    stale_blob="$(printf 'stale\n' | git hash-object -w --stdin)"
+    GIT_INDEX_FILE="$stale_idx" git update-index --add --cacheinfo "100644,$stale_blob,stale.txt"
+    stale_tree="$(GIT_INDEX_FILE="$stale_idx" git write-tree)"
+    out_commit="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git commit-tree "$stale_tree" -p "$base" -m "test: stale")"
+    rm -f "$stale_idx"
+    ;;
+  unrelated)
+    unrelated_idx="$(mktemp)"
+    GIT_INDEX_FILE="$unrelated_idx" git read-tree --empty
+    unrelated_blob="$(printf 'unrelated\n' | git hash-object -w --stdin)"
+    GIT_INDEX_FILE="$unrelated_idx" git update-index --add --cacheinfo "100644,$unrelated_blob,unrelated.txt"
+    unrelated_tree="$(GIT_INDEX_FILE="$unrelated_idx" git write-tree)"
+    out_commit="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git commit-tree "$unrelated_tree" -m "test: unrelated")"
+    rm -f "$unrelated_idx"
+    ;;
+esac
+git update-ref "refs/heads/$branch" "$impl_commit"
+[ "${FAKE_IMPL_MODE:-ok}" = "unrelated" ] && git update-ref "refs/heads/$branch" "$out_commit"
+printf '{ "status": "committed", "runner": "fake", "model": "fake", "branch": "%s", "base": "%s", "commit": "%s", "files_changed": 1, "insertions": 1, "deletions": 0, "worktree": null, "agent_log": "/tmp/fake", "error": null }\n' "$branch" "$base" "$out_commit"
+EOF
+chmod +x "$IMPL_BIN/dispatch-hetero.sh"
+set +e
+IMPL_OUT="$(cd "$IMPL_SBX" && "$IMPL_BIN/ladder-run.sh" run --task-class doc-sync --change-id impl-null-wt \
+  --repo testrepo --base-sha "$IMPL_BASE" --head-sha "$IMPL_BASE" --impl-prompt-file "$IMPL_PROMPT" \
+  --branch feat/impl-null-wt --state-file "$IMPL_STATE" --mock-verdict SHIP-AS-IS --dry-run 2>&1)"
+IMPL_RC=$?
+set -e
+if [ "$IMPL_RC" = "0" ] && grep -q 'DRY-RUN: would emit' <<<"$IMPL_OUT"; then
+  ok "impl path uses returned commit when dispatch-hetero emits worktree:null"
+else
+  bad "impl path failed with worktree:null returned commit (rc=$IMPL_RC): $IMPL_OUT"
+fi
+set +e
+STALE_OUT="$(cd "$IMPL_SBX" && FAKE_IMPL_MODE=stale-tip "$IMPL_BIN/ladder-run.sh" run --task-class doc-sync --change-id impl-stale-tip \
+  --repo testrepo --base-sha "$IMPL_BASE" --head-sha "$IMPL_BASE" --impl-prompt-file "$IMPL_PROMPT" \
+  --branch feat/impl-stale-tip --state-file "$IMPL_STATE" --mock-verdict SHIP-AS-IS --dry-run 2>&1)"
+STALE_RC=$?
+set -e
+if [ "$STALE_RC" != "0" ] && grep -q 'but refs/heads/feat/impl-stale-tip points to' <<<"$STALE_OUT"; then
+  ok "impl path rejects returned commits that are not the requested branch tip"
+else
+  bad "impl path accepted a stale non-tip commit (rc=$STALE_RC): $STALE_OUT"
+fi
+set +e
+UNRELATED_OUT="$(cd "$IMPL_SBX" && FAKE_IMPL_MODE=unrelated "$IMPL_BIN/ladder-run.sh" run --task-class doc-sync --change-id impl-unrelated \
+  --repo testrepo --base-sha "$IMPL_BASE" --head-sha "$IMPL_BASE" --impl-prompt-file "$IMPL_PROMPT" \
+  --branch feat/impl-unrelated --state-file "$IMPL_STATE" --mock-verdict SHIP-AS-IS --dry-run 2>&1)"
+UNRELATED_RC=$?
+set -e
+if [ "$UNRELATED_RC" != "0" ] && grep -q 'does not descend from base' <<<"$UNRELATED_OUT"; then
+  ok "impl path rejects returned commits that do not descend from base"
+else
+  bad "impl path accepted an unrelated returned commit (rc=$UNRELATED_RC): $UNRELATED_OUT"
+fi
+
+[ -f "$QC_PY" ] || {
+  echo "SKIP qc_metric-dependent ladder tests — qc_metric.py not found at $QC_PY"
+  [ "$FAIL" = "0" ] && exit 0 || exit 1
+}
+
 STORE="$TMP/events.jsonl"; : > "$STORE"
 STATE="$TMP/state.json"
 mkstate() { cat > "$STATE" <<JSON

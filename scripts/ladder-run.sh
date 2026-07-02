@@ -307,8 +307,22 @@ if [ -n "$IMPL_PROMPT" ]; then
   [ -n "$IMPL_MODEL" ] && HARGS+=(--model "$IMPL_MODEL")
   IMPL_JSON="$("$HETERO" "${HARGS[@]}")" || die "dispatch-hetero failed: $IMPL_JSON"
   [ "$(printf '%s' "$IMPL_JSON" | jq -r '.status')" = "committed" ] || die "implementer did not commit ($(printf '%s' "$IMPL_JSON" | jq -r '.status'))"
-  WT=$(printf '%s' "$IMPL_JSON" | jq -r '.worktree // empty')
-  DIFF_FILE="$(mktemp)"; git -C "${WT:-.}" diff "$BASE_SHA"..HEAD > "$DIFF_FILE"; HEAD_SHA=$(git -C "${WT:-.}" rev-parse HEAD)
+  IMPL_COMMIT=$(printf '%s' "$IMPL_JSON" | jq -r '.commit // empty')
+  [ -n "$IMPL_COMMIT" ] || die "implementer returned committed status without a commit sha"
+  git rev-parse --verify --quiet "${IMPL_COMMIT}^{commit}" >/dev/null \
+    || die "implementer returned commit not visible from this repo: $IMPL_COMMIT"
+  IMPL_COMMIT=$(git rev-parse "$IMPL_COMMIT")
+  IMPL_BRANCH=$(printf '%s' "$IMPL_JSON" | jq -r '.branch // empty')
+  [ "$IMPL_BRANCH" = "$BRANCH" ] || die "implementer returned branch '$IMPL_BRANCH' but expected '$BRANCH'"
+  BRANCH_TIP=$(git rev-parse --verify --quiet "refs/heads/${BRANCH}^{commit}") \
+    || die "implementer branch not visible from this repo: refs/heads/$BRANCH"
+  [ "$BRANCH_TIP" = "$IMPL_COMMIT" ] \
+    || die "implementer returned commit $IMPL_COMMIT but refs/heads/$BRANCH points to $BRANCH_TIP"
+  git merge-base --is-ancestor "$BASE_SHA" "$IMPL_COMMIT" \
+    || die "implementer returned commit does not descend from base: $IMPL_COMMIT (base $BASE_SHA)"
+  DIFF_FILE="$(mktemp)"
+  git diff "$BASE_SHA..$IMPL_COMMIT" > "$DIFF_FILE"
+  HEAD_SHA=$(git rev-parse "$IMPL_COMMIT")
 elif [ -n "$DIFF_FILE" ]; then
   [ -f "$DIFF_FILE" ] || die "diff file not found: $DIFF_FILE"
   echo "-- impl: using pre-produced artifact $DIFF_FILE ($(wc -l <"$DIFF_FILE") lines) --"

@@ -15,6 +15,10 @@
 #   scripts/resolve-endpoint.sh --list      # -> JSON array of ready endpoints
 #   scripts/resolve-endpoint.sh --help
 #
+# <name> is [A-Za-z0-9_] (case-insensitive; uppercased into the env-var suffix, e.g. `glm`
+# and `GLM` both map to AUTOPILOT_ENDPOINT_GLM_{URL,TOKEN}). Hyphens are NOT allowed — env
+# var names can't contain them; use `_` (e.g. `local_llama`, not `local-llama`).
+#
 # ATOMIC candidate resolution (a candidate = a url+token PAIR; bind BOTH from the
 # SAME candidate, never cross-combine a url from one with a token from another):
 #   1) autopilot-namespace — trigger: EITHER AUTOPILOT_ENDPOINT_<NAME>_URL OR _TOKEN
@@ -41,9 +45,7 @@ set +x
 ENV_NAME_RE='^[A-Za-z_][A-Za-z0-9_]*$'
 NAME_RE='^[A-Za-z0-9_]+$'
 
-usage() {
-  sed -n '2,31p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'
-}
+usage() { sed -n '2,33p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
 
 # Escapes backslash, quote, AND control chars (tab/CR/newline) so EVERY code path emits a
 # single valid JSON line. Uses awk (whole input as one record via an unlikely RS) rather than

@@ -33,7 +33,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - New `--codex-bin <path>` seam (sibling of `--agy-bin`/`--grok-bin`) to pin/override the codex binary explicitly (test seam + escape hatch for PATH ambiguity).
 
 ### Provenance
-- Root-caused empirically (instrumented the worker to log the resolved codex path/version: the engine picked `~/.nvm/.../bin/codex` 0.130.0 vs `~/.local/bin/codex` 0.142.2). Env remediation (removing the stale npm-global codex) applied on the affected machine; the code fix makes the class fail-loud everywhere. +4 dispatch-hetero test assertions (55).
+- Root-caused empirically (instrumented the worker to log the resolved codex path/version: the engine picked `~/.nvm/.../bin/codex` 0.130.0 vs `~/.local/bin/codex` 0.142.2). Env remediation (removing the stale npm-global codex) applied on the affected machine; the code fix makes the class fail-loud everywhere. The `--codex-bin` seam was further hardened over a 3-round decorrelated `gpt-5.5` review (absolutize path-form values before the worker's `cd`; validate dir resolution so a failed `cd` can't silently yield `/<basename>`). 59 dispatch-hetero test assertions.
+- **Verified e2e (2026-07-02)**: three real `bin/autopilot.js engine implement-review` dispatches confirmed the previously-broken codex implementation step now works — (1) default `gpt-5.3-codex-spark`: codex 0.142.2 ran and ACCEPTED `--dangerously-bypass-hook-trust` (the old "unexpected argument" failure mode is gone) but hit that model's usage cap; (2) `gpt-5.5` implementer, qualified reviewer: full loop — impl `committed` → review `FIX-THEN-SHIP` (a legitimate finding) → repair `no_op` → honest `blocked` (no false-green); (3) evidence-complete task: **`converged` / `SHIP-AS-IS` / exit 0** (`resolve_roster` → impl `committed` → review `reviewed`). Probes were throwaway branches; `develop` untouched.
 
 ## v2.30.1 — unified endpoint credential resolver
 

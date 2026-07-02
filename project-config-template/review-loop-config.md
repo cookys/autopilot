@@ -113,6 +113,14 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
 
 ## Gotchas (carried from the test-integrity-l1 ship)
 
+- **Implementer model rate-limits are transient, not engine failures.** A per-model usage cap
+  (e.g. "You've hit your usage limit for GPT-5.3-Codex-Spark") makes the codex worker exit
+  non-zero with no commit → dispatch-hetero reports `question_suspected` and the engine
+  `blocks`. It is NOT the flag/PATH bug (fixed v2.30.2) — check the `agent_log`: if it shows
+  codex started + accepted `--dangerously-bypass-hook-trust` then hit a usage limit, just
+  switch the implementer model (set `implementer_engine` here, or point
+  `$REVIEW_LOOP_CONFIG_OVERRIDE` at a temp config) and retry, or wait for the cap to reset.
+  Verified 2026-07-02: with `implementer_engine: gpt-5.5` the loop converged `SHIP-AS-IS`.
 - **`agy` as implementer — works now via the v2.25.9 anchor fix.** agy `-p` ignores process
   cwd (Antigravity-CLI #231/#133/#253), so a relative-path prompt made it invent a scratch
   project under `~/.gemini/antigravity-cli/scratch/` and leave the worktree untouched (the old

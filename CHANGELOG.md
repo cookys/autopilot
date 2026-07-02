@@ -38,6 +38,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Fixed
 - `/l6` guidance now avoids sending AUTHORING prompts through the reviewer wrapper that prepends `You are a code reviewer` / `Diff under review`, preventing the refusal path observed in the 2026-07-02 repro.
 
+## v2.30.1 — unified endpoint credential resolver
+
+**Headline**: Adds `scripts/resolve-endpoint.sh` — a unified `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}` convention + resolver for the env-token hetero-dispatch families (MiniMax / GLM / any Anthropic-compatible endpoint), so multiple compatible endpoints can be registered by logical name instead of colliding on one `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`. Wired additively into `dispatch-hetero.sh` / `dispatch-review.sh` (`--endpoint <name>`) and `dispatch-anthropic-review.js` (`--token-env <NAME>`) — every caller that omits the new flag is byte-identical. The OAuth-login runners (codex/agy/grok/claude) are untouched; they need no env token. (Developed as v2.29.1 from v2.29.0; retargeted to v2.30.1 on merge because the concurrent v2.30.0 ladder-run MINOR landed first.)
+
+### Added
+- `scripts/resolve-endpoint.sh` — resolves a named endpoint to **non-secret metadata only** (`base_url`, the token's env-var NAME, `token_present`/`url_safe`/`ready` booleans, `missing[]`); it NEVER prints a token value. Atomic candidate resolution (autopilot-namespace → minimax-only provider-native → generic-compatible) with no fail-open cross-combine; `url_safe` gate (https or http-loopback) folded into `ready`; fail-closed. Secret hygiene is mechanical: xtrace disabled at entry + scrubbed from `SHELLOPTS` (an inherited `bash -x` cannot leak a token), value read via `${!name-}` indirect expansion, `--list` enumerated via `compgen -v` (never by parsing `env`).
+- `hooks/tests/resolve-endpoint.test.sh` — 40 assertions incl. atomic no-fail-open, xtrace non-leak, url-safety, `--token-env` fail-closed, and a sibling-path fail-if-called stub proving the no-`--endpoint` path never calls the resolver.
+
+### Changed
+- `dispatch-hetero.sh` / `dispatch-review.sh` gain `--endpoint <name>`; `dispatch-anthropic-review.js` gains `--token-env <NAME>` (uses that var INSTEAD OF the hostname fallback — an unset named token is fail-closed, not a silent drop to `MINIMAX_API_KEY`). All additive.
+
+### Provenance
+- The resolver's first-draft structure was dispatched to a heterogeneous implementer (codex `gpt-5.3-codex-spark`) via `dispatch-hetero.sh`; depth-0 review found and fixed two real defects in that draft (token value leaked under `bash -x`; trailing-comma invalid JSON on a non-empty `missing` array) and completed the wiring/tests/docs. The design spec passed a 4-round decorrelated `gpt-5.5` review loop before implementation.
+
 ## v2.30.0 — ladder-run: the acceptance-delegation ladder harness (P2.2)
 
 **Headline**: Adds `scripts/ladder-run.sh`, the first real *measured* run of the acceptance-delegation ladder (ROADMAP P2.2). The `run` subcommand does one cycle: (1) obtain the change artifact, (2) a **decorrelated, isolated** agent renders the acceptance verdict from the diff text only (verifier isolation via `dispatch-review.sh` — the implementer's self-report never reaches the verifier), (3) emit a QC-metric event to the P2.1 store (`qc-metric-emit.js`), (4) deterministically flag the 30% cookys sample, (5) recompute the *class's* running escape/endorsement rate (via the unmodified `qc_metric.py`) and report a T0→T1→T2 promotion recommendation. The `audit` subcommand records a **later-stage escape** (a defect the in-cycle verdict passed but a stronger/later review caught) so `qc_metric.py`'s union-merge counts it as a real class escape — without this the in-cycle verifier is blind to its own escapes and the promotion gate is vacuous. Strictly additive — drives existing tools unchanged, alters no skill's behavior, records a recommendation (never auto-flips a tier), one cycle per invocation (not a scheduler).

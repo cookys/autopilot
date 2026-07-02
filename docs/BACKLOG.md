@@ -26,6 +26,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### 🔴 `engine implement-review` wrapper makes codex reject `--dangerously-bypass-hook-trust`
+- **Trigger**: next time using `bin/autopilot.js engine implement-review` with a codex implementer (blocks the whole `/l5`/`/l6` engine impl path); fix before relying on the engine CLI for hetero impl.
+- **Context**: Via the engine wrapper (`src/runners/implementer.js` `dispatchImplement` → `spawnSync(dispatch-hetero.sh, args, {env:process.env, shell:false, stdio:['ignore','pipe','pipe']})`), codex reproducibly exits 2 with `error: unexpected argument '--dangerously-bypass-hook-trust' found` (agent_log 267 bytes) → dispatch-hetero misclassifies as `question_suspected` (~274ms, files_changed 0). But running `scripts/dispatch-hetero.sh --runner auto --model gpt-5.3-codex-spark ...` DIRECTLY with the same args works (`committed`); the verbatim codex command line works; the flag is accepted by codex 0.142.2 both interactively AND under `systemd-run --user --scope`. So the defect is in the engine-wrapper invocation layer (env/stdio/cwd difference or a codex auto-update state triggered only on that path), NOT dispatch-hetero, NOT codex, NOT the command. NOT fully root-caused. Workaround used 2026-07-02: bypass the engine, dispatch impl via `dispatch-hetero.sh` directly + run the gpt-5.5 review loop at depth-0 manually.
+- **Effort**: Fix
+- **Source**: 2026-07-02 `/l5` dogfood on the endpoint-credential-resolver project (`docs/projects/2026-07-02-endpoint-credential-resolver/`); two engine runs failed identically, direct dispatch + verbatim replication + systemd-run all pass.
+
+
 ### ✅ DONE (2026-07-02, v2.29.0) — Pre-existing full-suite failures repaired
 - **Resolution**: The four residual full-suite failures from the v2.28.1/v2.29.0 train are fixed. `check-optin-changelog.test.sh` now configures repo-local git identity in its ambiguous-history sandbox; `check-test-integrity.test.sh` keeps L0 coverage isolated with `--no-l1`; `check-test-integrity-l1.test.sh` uses a hermetic fake pytest reporter so host-level pytest is not required; and `dispatch-hetero.test.sh` now covers codex wrapper-commit success including author-only identity environments. `bash hooks/tests/run.sh` is green (`82/82` test files).
 - **Source**: `f9d1590` merge + archived project `docs/projects/_archive/2026-07-02-full-suite-green/README.md`; original source was v2.28.1 finish-flow quality gate (`708e911` merge), full suite 78/82 with pre-existing classification.

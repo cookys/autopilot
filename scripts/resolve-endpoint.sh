@@ -28,8 +28,11 @@
 #   3) generic-compatible — any other name: url ANTHROPIC_COMPATIBLE_BASE_URL,
 #      token ANTHROPIC_COMPATIBLE_AUTH_TOKEN.
 #
-# JSON: {name, base_url, base_url_source, token_env, token_present, url_safe, ready,
-#        missing[], source}. ready = base_url non-empty AND token_present AND url_safe.
+# Single-<name> JSON (full object): {name, base_url, base_url_source, token_env,
+#        token_present, url_safe, ready, missing[], source}. ready = base_url non-empty
+#        AND token_present AND url_safe.
+# `--list` JSON (deliberately SLIMMER — a discovery summary, NOT the full object): an
+#        ARRAY of only-ready endpoints, each {name, base_url, source}. Never token values.
 # Exit: 0 ready · 1 not-ready · 2 usage error. Fail-closed.
 
 set -uo pipefail
@@ -45,7 +48,7 @@ set +x
 ENV_NAME_RE='^[A-Za-z_][A-Za-z0-9_]*$'
 NAME_RE='^[A-Za-z0-9_]+$'
 
-usage() { sed -n '2,33p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
+usage() { sed -n '2,36p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
 
 # Escapes backslash, quote, AND control chars (tab/CR/newline) so EVERY code path emits a
 # single valid JSON line. Uses awk (whole input as one record via an unlikely RS) rather than

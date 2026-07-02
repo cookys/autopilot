@@ -50,7 +50,7 @@ AUTOPILOT_ENDPOINT_<NAME>_TOKEN   # bearer token
   - Read the value ONLY via bash indirect expansion `${!token_env-}` — never `eval`.
   - `--list` enumerates candidate names via `compgen -v` / bash var-name expansion — **never** by parsing `env`/`printenv` (that pipes token *values*).
   - `set +x` (disable xtrace) around any statement that touches a token value, so an inherited `SHELLOPTS=xtrace` cannot leak it to stderr.
-- **`--list`**: one JSON array of every endpoint for which `ready:true`, each `{name, base_url, source}` — never token values.
+- **`--list`**: one JSON array of the ENUMERABLE `ready:true` endpoints — namespaced (`AUTOPILOT_ENDPOINT_<NAME>_*`, discovered via `compgen -v`) plus the canonical `minimax` entry; the `generic-compatible` candidate is EXCLUDED from `--list` (it matches any non-`minimax` name, so it is not enumerable — R3). Each `{name, base_url, source}`; never token values.
 - **Exit codes**: `0` ready · `1` not-ready (missing url/token, or unsafe url) · `2` usage error. Fail-closed: unknown/garbage name with nothing resolvable → exit 1, `ready:false`.
 
 ### Wiring (existing scripts — additive, backward-compatible)
@@ -87,7 +87,7 @@ New `hooks/tests/resolve-endpoint.test.sh`:
 
 ## Scope boundary
 
-**IN**: `resolve-endpoint.sh`; additive `--endpoint` wiring in the 3 dispatch scripts; tests; docs; CHANGELOG + version. **OUT**: any change to OAuth-login runners (codex/agy/grok/claude); new runners; secret-manager/keyring integration; a tracked credentials file; changing the reviewer/roster policy. No behaviour change for any current caller that doesn't pass `--endpoint`.
+**IN**: `resolve-endpoint.sh`; additive `--endpoint` wiring in the two SHELL dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) + a `--token-env` flag on `dispatch-anthropic-review.js` (R3: NOT `--endpoint` on the JS); tests; docs; CHANGELOG + version. **OUT**: any change to OAuth-login runners (codex/agy/grok/claude); new runners; secret-manager/keyring integration; a tracked credentials file; changing the reviewer/roster policy. No behaviour change for any current caller that doesn't pass `--endpoint`.
 
 ## Acceptance
 
@@ -96,8 +96,8 @@ New `hooks/tests/resolve-endpoint.test.sh`:
 3. Nothing set → exit 1, `ready:false`, no crash.
 4. **No fail-open**: partial namespaced config (url set, token unset) with a generic token also set → `ready:false` + `missing`, exit 1 (never cross-combined). Unsafe url (plaintext remote) → `ready:false`, exit 1.
 5. **No secret leak**: token value absent from resolver stdout+stderr on resolve AND `--list`, INCLUDING under `bash -x`/`SHELLOPTS=xtrace` (test-asserted).
-6. **Additive**: with a fail-if-called stub resolver on PATH, no-`--endpoint` callers of the 3 dispatch scripts behave byte-identically (stub never invoked).
-7. Named token reaches the JS runner: `dispatch-anthropic-review.js --token-env AUTOPILOT_ENDPOINT_<NAME>_TOKEN` uses that var before hostname fallback.
+6. **Additive**: with a fail-if-called `resolve-endpoint.sh` at the dispatchers' SIBLING lookup path (`$SCRIPT_DIR/`, not merely `$PATH` — R3), no-`--endpoint` callers of the two shell dispatchers behave byte-identically (stub never invoked).
+7. Named token reaches the JS runner: `dispatch-anthropic-review.js --token-env AUTOPILOT_ENDPOINT_<NAME>_TOKEN` uses that var INSTEAD OF the hostname fallback; an unset/empty named token fails closed even when a fallback token (`MINIMAX_API_KEY`) is set (R3).
 8. All new + existing focused tests green; `sync-version.js --check`, `check-hook-inventory.js --check`, `preflight-release.sh` pass.
 
 ## Revision log

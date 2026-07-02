@@ -47,11 +47,18 @@ scripts/qc-metric-emit.js \
 ### 2. publish hetero-review (`scripts/dispatch-review.sh` site)
 
 When the pre-publish heterogeneous loop catches a defect the depth-0 panel PASSED, that is
-an **escape**. **Re-emit the FULL event for the same `change_id`** (all findings, with the
-escaped one at `caught_at_stage=publish_hetero_review`). The store is append-only and the
-calculator collapses it **last-write-wins per `change_id`**, so the re-emitted record
-supersedes the depth-0 one and the change is counted exactly once (never double-counted).
-Do not emit a partial delta:
+an **escape** (escape ⇔ the panel verdict was `pass` AND the defect is caught later than
+the verdict stage — a `fail` verdict is never an escape). Emit an event for the same
+`change_id` with the escaped finding at `caught_at_stage=publish_hetero_review`. The store
+is append-only and the calculator collapses it **by union per `change_id`** (union of
+findings by id; verdict from the depth-0 record), so a change is counted exactly once, the
+escape survives any later clean re-emit in any order, and you MAY emit just the new finding
+(partial delta) — re-emitting the full event is also fine. **Keep `--stage depth0_panel`**
+(the panel gate) — do NOT set `--stage publish_hetero_review`. `verdict_stage` is the stage
+the *delegated verdict* was rendered (a stable change property, default `depth0_panel`), not
+the stage you are emitting from; the finding's `caught_at_stage` is what marks it as an
+escape. If `--stage` is omitted it defaults to `depth0_panel`, so a lone partial delta still
+measures against the right gate:
 
 ```sh
 scripts/qc-metric-emit.js \
@@ -63,8 +70,9 @@ scripts/qc-metric-emit.js \
 ```
 
 > Post-merge finds and cookys's sampled audit use `caught_at_stage` = `post_merge` /
-> `cookys_audit`. `autonomous=true` + `endorsed=true|false|null` feed the endorsement rate
-> for changes shipped without per-item review (T2).
+> `cookys_audit` (still with `verdict_stage=depth0_panel`). `autonomous=true` +
+> `endorsed=true|false|null` feed the endorsement rate for changes shipped without per-item
+> review (T2).
 
 ## Full-event form
 

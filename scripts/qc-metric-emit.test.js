@@ -79,6 +79,19 @@ test('buildEvent assembles from flags incl. lenses split', () => {
   emit.validateEvent(ev); // must be schema-valid
 });
 
+test('buildEvent defaults verdict_stage to depth0_panel (lone partial-delta safe)', () => {
+  // a publish-stage escape emitted WITHOUT --stage keeps the gate at depth0_panel, so the
+  // finding at publish_hetero_review is later than the gate → counts as an escape even
+  // when no depth0 record co-exists in the store.
+  const ev = emit.buildEvent({
+    'change-id': 'cf', repo: 'codeforge', 'base-sha': 'B', 'head-sha': 'H',
+    verdict: 'pass',
+    findings: JSON.stringify([{ id: 'mtime', severity: 'medium', lens: 'data-integrity', verified: 'real', caught_at_stage: 'publish_hetero_review' }]),
+  });
+  assert.equal(ev.verdict_stage, 'depth0_panel');
+  emit.validateEvent(ev);
+});
+
 test('main is a no-op (exit 0) when no store configured', () => {
   const errs = [];
   const rc = emit.main(['--change-id', 'c', '--repo', 'r'], {}, () => {}, (s) => errs.push(s));

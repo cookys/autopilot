@@ -16,11 +16,12 @@
 // malformed event never lands in the store, then appends one JSONL line. Schema:
 // llm-playground/qc-metrics/schema.md.
 //
-// APPEND-ONLY, LAST-WRITE-WINS: the store is a log. A change reviewed across stages may be
+// APPEND-ONLY, UNION-MERGE: the store is a log. A change reviewed across stages may be
 // re-emitted under the SAME change_id (e.g. depth0 panel, then publish hetero-review with
-// the escape added). The calculator collapses the log last-write-wins per change_id, so
-// re-emitting the FULL event for a change_id supersedes the earlier record — it is counted
-// exactly once. Re-emit the whole event, not a partial delta.
+// the escape added). The calculator collapses the log by UNION per change_id (union of
+// findings by id; verdict from the depth0 record). So a change is counted exactly once,
+// an escape recorded once survives any later clean re-emit in any order, and a later stage
+// MAY emit only its new finding (partial delta) — the denominator never evaporates.
 //
 // USAGE:
 //   Full event:
@@ -116,7 +117,12 @@ function buildEvent(opts) {
     panel_verdict: opts.verdict,
     findings: opts.findings ? JSON.parse(opts.findings) : [],
   };
-  if (opts.stage) ev.verdict_stage = opts.stage;
+  // verdict_stage is the PANEL-GATE stage (where the delegated verdict was rendered) — a
+  // STABLE property of the change, ~always depth0_panel. It is NOT the stage you are
+  // emitting from: an escape found at publish keeps verdict_stage=depth0_panel and sets the
+  // FINDING's caught_at_stage=publish_hetero_review. Defaulting here makes a lone
+  // partial-delta (no depth0 record present) still measure escapes against the right gate.
+  ev.verdict_stage = opts.stage || DEFAULT_VERDICT_STAGE;
   if (opts.escapes) ev.escapes = JSON.parse(opts.escapes);
   if ('autonomous' in opts) ev.autonomous = opts.autonomous === true || opts.autonomous === 'true';
   if ('endorsed' in opts) {

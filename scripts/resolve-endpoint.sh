@@ -95,9 +95,13 @@ resolve_single() {
   local token_present="false" url_safe="false" ready="false"
   local -a missing=()
 
+  # Trigger detection uses PRESENCE (var is SET, even if empty) via ${!name+x} — NOT
+  # non-empty. A user who exports AUTOPILOT_ENDPOINT_<NAME>_URL= (set but empty) clearly
+  # intends this endpoint; it must trigger candidate 1 and fail closed, NOT silently fall
+  # through to a generic/provider token (gpt-5.5 R2 — set-but-empty fall-through was fail-open).
   local ns_url_set=0 ns_token_set=0
-  [ -n "${!ns_url_var-}" ] && ns_url_set=1
-  token_is_present "$ns_token_var" && ns_token_set=1
+  [ -n "${!ns_url_var+x}" ] && ns_url_set=1
+  [ -n "${!ns_token_var+x}" ] && ns_token_set=1
 
   if [ "$ns_url_set" -eq 1 ] || [ "$ns_token_set" -eq 1 ]; then
     # candidate 1: autopilot-namespace (atomic — no fallthrough)

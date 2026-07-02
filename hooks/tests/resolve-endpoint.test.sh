@@ -37,6 +37,13 @@ assert_contains "$out" 'AUTOPILOT_ENDPOINT_GLM_TOKEN' "partial names missing tok
 assert_not_contains "$out" 'generictok' "partial did not grab generic token"
 jvalid "$out" && assert_eq ok ok "partial JSON valid (missing array)" || fail "partial JSON invalid: $out"
 
+# 3b. set-but-EMPTY namespaced var must trigger candidate 1 (no fall-through to generic) — R2
+out="$(env -i AUTOPILOT_ENDPOINT_GLM_URL= ANTHROPIC_COMPATIBLE_BASE_URL=https://generic.example ANTHROPIC_COMPATIBLE_AUTH_TOKEN=gtok bash "$R" glm)"; ec=$?
+assert_exit_code "$ec" 1 "set-but-empty namespaced var → not-ready"
+assert_contains "$out" '"source":"autopilot-namespace"' "set-but-empty stays namespace (no generic fall-through)"
+assert_not_contains "$out" 'generic.example' "set-but-empty did not grab generic url"
+assert_not_contains "$out" 'gtok' "set-but-empty did not grab generic token"
+
 # 4. url-safety
 out="$(env -i AUTOPILOT_ENDPOINT_X_URL=http://evil.example AUTOPILOT_ENDPOINT_X_TOKEN=t bash "$R" x)"; ec=$?
 assert_exit_code "$ec" 1 "http remote not-ready"

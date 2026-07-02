@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-02 | [endpoint-credential-resolver](2026-07-02-endpoint-credential-resolver/design-spec.md) — unified `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}` resolver (`resolve-endpoint.sh`) + additive `--endpoint`/`--token-env` wiring for env-token hetero families (MiniMax/GLM/Anthropic-compatible). Non-secret metadata only, atomic no-fail-open, xtrace-safe. Spec passed 4-round decorrelated gpt-5.5 review; codex first-draft + depth-0 bug-fix/completion. | v2.29.1 | `feat/endpoint-credential-resolver` |
 
 ## 已完成 (Completed)
 

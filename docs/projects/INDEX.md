@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-02 | [full-suite-green](2026-07-02-full-suite-green/README.md) — follow-up to make the reconciled v2.29.0 train full-suite green, close the `dispatch-hetero` wrapper-commit backlog if applicable, and rerun release/portability gates before ship readiness. | v2.29.0 | `fix/v2.29.0-full-suite-green` |
 
 ## 已完成 (Completed)
 

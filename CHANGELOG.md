@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.30.2 — dispatch-hetero: codex flag feature-detect + --codex-bin seam
+
+**Headline**: Fixes a silent-misclassification bug where `engine implement-review` (and any `dispatch-hetero.sh --runner codex`) could dispatch to a STALE codex earlier in `$PATH` — e.g. an old npm-global `@openai/codex` in an nvm node's bin, ahead of `~/.local/bin/codex` — that lacks `--dangerously-bypass-hook-trust`. The old codex exited 2 mid-run with a cryptic "unexpected argument", which dispatch-hetero MISCLASSIFIED as `question_suspected`, wasting a round with no diagnostic. Root cause: the engine runs under nvm's node, whose `$PATH` prepends the nvm bin.
+
+### Fixed
+- `dispatch-hetero.sh` now **feature-detects** codex flag support in the precondition (`codex exec --help` must advertise `--dangerously-bypass-hook-trust`); a codex that lacks it fails LOUD as `precondition_failed` (exit 2) naming the resolved path + version + remediation, instead of being dispatched and misclassified.
+- New `--codex-bin <path>` seam (sibling of `--agy-bin`/`--grok-bin`) to pin/override the codex binary explicitly (test seam + escape hatch for PATH ambiguity).
+
+### Provenance
+- Root-caused empirically (instrumented the worker to log the resolved codex path/version: the engine picked `~/.nvm/.../bin/codex` 0.130.0 vs `~/.local/bin/codex` 0.142.2). Env remediation (removing the stale npm-global codex) applied on the affected machine; the code fix makes the class fail-loud everywhere. +4 dispatch-hetero test assertions (55).
+
 ## v2.30.1 — unified endpoint credential resolver
 
 **Headline**: Adds `scripts/resolve-endpoint.sh` — a unified `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}` convention + resolver for the env-token hetero-dispatch families (MiniMax / GLM / any Anthropic-compatible endpoint), so multiple compatible endpoints can be registered by logical name instead of colliding on one `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`. Wired additively into `dispatch-hetero.sh` / `dispatch-review.sh` (`--endpoint <name>`) and `dispatch-anthropic-review.js` (`--token-env <NAME>`) — every caller that omits the new flag is byte-identical. The OAuth-login runners (codex/agy/grok/claude) are untouched; they need no env token. (Developed as v2.29.1 from v2.29.0; retargeted to v2.30.1 on merge because the concurrent v2.30.0 ladder-run MINOR landed first.)

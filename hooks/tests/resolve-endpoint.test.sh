@@ -87,6 +87,11 @@ out="$(bash "$DR" --runner codex --model x --diff-file "$NOOP" --endpoint foo 2>
 assert_exit_code "$ec" 2 "review --endpoint non-applicable runner precondition"
 assert_contains "$out" 'applies only to' "review --endpoint precondition message"
 
+# 9b. dangling / empty --endpoint must NOT hang (shift-2 infinite loop) and must exit 2 — R4
+timeout 5 bash "$DH" --branch t --base HEAD --prompt-file "$NOOP" --endpoint >/dev/null 2>&1; assert_exit_code "$?" 2 "hetero dangling --endpoint exits 2 (no hang)"
+timeout 5 bash "$DH" --branch t --base HEAD --prompt-file "$NOOP" --endpoint "" >/dev/null 2>&1; assert_exit_code "$?" 2 "hetero empty --endpoint exits 2"
+timeout 5 bash "$DR" --runner cc-shim --model x --diff-file "$NOOP" --endpoint >/dev/null 2>&1; assert_exit_code "$?" 2 "review dangling --endpoint exits 2 (no hang)"
+
 # 10. JS --token-env: unset named token + fallback token set → fail-closed (no fallback)
 out="$(env -i PATH="$PATH" MINIMAX_API_KEY=shouldNotBeUsed node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env AUTOPILOT_ENDPOINT_GLM_TOKEN 2>&1)"
 assert_contains "$out" 'AUTOPILOT_ENDPOINT_GLM_TOKEN is unset' "JS --token-env fail-closed"

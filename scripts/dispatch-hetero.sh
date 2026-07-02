@@ -35,6 +35,8 @@
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--agy-bin agy]                        # alternate binary (test seam)
 #       [--grok-bin grok]                      # alternate binary (test seam)
+#       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
+#                                              #   stale codex earlier in PATH lacking the flag)
 #       [--keep-worktree]                      # keep worktree even on success
 #   ⏳ TIMEOUT: the implementer run can take MANY minutes. Under Claude Code's Bash tool,
 #   pass a generous `timeout` — the 120s tool default SIGTERMs long runs (exit 143). Persist
@@ -79,6 +81,8 @@ BASE="develop"
 TIMEOUT="9m"
 AGY_BIN="agy"
 GROK_BIN="grok"
+CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
+                     # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
@@ -136,6 +140,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
+    --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
@@ -207,7 +212,31 @@ fi
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
 if [ "$IS_CODEX" -eq 1 ]; then
-  command -v "codex" >/dev/null 2>&1 || die_precondition "codex binary not found (install OpenAI Codex or ensure it is in PATH)"
+  # A path-form --codex-bin (contains /) is feature-detected here in the CALLER cwd but
+  # exec'd by the worker AFTER `cd "$WT"` — a RELATIVE path would resolve to a different
+  # binary (or fail) inside the worktree. Absolutize it first (POSIX cd/pwd, not realpath)
+  # so both resolve the SAME binary. A bare command name (no /) PATH-resolves consistently
+  # since the worker inherits the same PATH (gpt-5.5 review).
+  case "$CODEX_BIN" in
+    */*)
+      # Resolve the dir into a var and validate it — inlining `$(cd .. && pwd)/$(basename)`
+      # would let a FAILED cd (empty pwd) silently yield `/<basename>` because the `||` sees
+      # basename's (successful) exit, not cd's, and could then exec an unintended /codex (gpt-5.5 R2).
+      _cb_dir="$(cd "$(dirname "$CODEX_BIN")" 2>/dev/null && pwd)" || true
+      [ -n "$_cb_dir" ] || die_precondition "--codex-bin path not resolvable: $CODEX_BIN"
+      CODEX_BIN="$_cb_dir/$(basename "$CODEX_BIN")"
+      ;;
+  esac
+  command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN (install OpenAI Codex, ensure it is in PATH, or pass --codex-bin)"
+  # Feature-detect the flag the worker uses. A STALE codex earlier in PATH (e.g. an old
+  # npm-global codex in an nvm node's bin, ahead of ~/.local/bin) lacks
+  # --dangerously-bypass-hook-trust; without this check it would exit 2 mid-run with a
+  # cryptic "unexpected argument" and get MISCLASSIFIED as question_suspected. Fail loud
+  # here instead, naming the resolved path + version so the caller fixes PATH / --codex-bin.
+  if ! "$CODEX_BIN" exec --help 2>&1 | grep -q -- '--dangerously-bypass-hook-trust'; then
+    _cx_path="$(command -v "$CODEX_BIN")"; _cx_ver="$("$CODEX_BIN" --version 2>&1 | head -1)"
+    die_precondition "resolved codex ($_cx_path, $_cx_ver) does not support --dangerously-bypass-hook-trust — it is too old / the wrong binary. Update it, fix PATH so the newer codex wins, or pass --codex-bin <path>."
+  fi
 elif [ "$IS_CCSHIM" -eq 1 ]; then
   command -v "claude" >/dev/null 2>&1 || die_precondition "claude binary not found (cc-shim drives the Claude Code CLI)"
   # cc-shim is a base-url SHIM by design: without ANTHROPIC_BASE_URL it would dispatch to
@@ -319,10 +348,10 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 
 # --- run the agent (its stdout/stderr go to LOG, never our stdout) ---
 if [ "$IS_CODEX" -eq 1 ]; then
-  run_worker bash -c 'cd "$1" && exec codex exec --model "$2" \
+  run_worker bash -c 'cd "$1" && exec "$5" exec --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
-      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE"
+      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN"
 elif [ "$IS_CCSHIM" -eq 1 ]; then
   # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
   # endpoint via ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN from the env. The MODEL (e.g.

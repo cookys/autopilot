@@ -53,10 +53,16 @@ exit 3
 EOF
 chmod +x "$STUB_FAIL_COMMIT"
 
-# --- stub codex: leaves edits uncommitted; wrapper-commit must still fire on dirty worktree ---
+# --- stub codex: leaves edits uncommitted; wrapper-commit must still fire on dirty worktree.
+# Emulates a FLAG-SUPPORTING codex: answers `exec --help`/`--version` (so dispatch-hetero's
+# feature-detect precondition passes) and on the real `exec` run leaves an uncommitted edit. ---
 STUB_CODEX_UNCOMMITTED="$TEST_TMP/codex"
 cat > "$STUB_CODEX_UNCOMMITTED" <<'EOF'
 #!/usr/bin/env bash
+case "$*" in
+  *"exec --help"*) printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'; exit 0 ;;
+  *"--version"*)   echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
+esac
 touch codex_uncommitted.txt
 EOF
 chmod +x "$STUB_CODEX_UNCOMMITTED"
@@ -160,6 +166,41 @@ OUT="$( (
 assert_eq "0" "$EXIT" "codex wrapper-commit with author-only env exit code"
 assert_contains "$OUT" '"status": "committed"' "codex author-only wrapper-commit status"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-author-only" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-author-only)" "codex author-only wrapper-commit message"
+
+# 5f. feature-detect: a STALE codex (its `exec --help` lacks --dangerously-bypass-hook-trust,
+# e.g. an old npm-global codex earlier in PATH) must FAIL LOUD as precondition_failed —
+# NOT dispatch to it and get misclassified as question_suspected (root cause fixed 2026-07-02).
+STUB_CODEX_OLD="$TEST_TMP/codex-old"
+cat > "$STUB_CODEX_OLD" <<'OLDEOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"exec --help"*) echo "--dangerously-bypass-approvals-and-sandbox"; exit 0 ;;  # NO hook-trust flag
+  *"--version"*)   echo "codex-cli 0.130.0"; exit 0 ;;
+esac
+touch should_not_run.txt
+OLDEOF
+chmod +x "$STUB_CODEX_OLD"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-old --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin "$STUB_CODEX_OLD" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "stale codex → precondition_failed exit 2 (not question_suspected)"
+assert_contains "$OUT" '"status": "precondition_failed"' "stale codex status precondition_failed"
+assert_contains "$OUT" 'does not support --dangerously-bypass-hook-trust' "stale codex error names the missing flag"
+assert_file_absent "$SBX/should_not_run.txt" "stale codex never actually dispatched"
+
+# 5g. RELATIVE --codex-bin: feature-detect (caller cwd) and worker exec (inside $WT) must
+# resolve the SAME binary — a relative path is absolutized, not resolved twice (gpt-5.5 review).
+# Run from $TEST_TMP where the flag-supporting stub lives as ./codex; before the fix the
+# worker's post-`cd $WT` exec would miss it.
+OUT="$( (
+  cd "$SBX"
+  "$SCRIPT" --branch feat/codex-relbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin ../codex
+) 2>&1 )"; EXIT=$?
+assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
+assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
+
+# 5h. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unresolvable --codex-bin dir → precondition exit 2"
+assert_contains "$OUT" 'not resolvable' "unresolvable --codex-bin names the path"
 
 # 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?

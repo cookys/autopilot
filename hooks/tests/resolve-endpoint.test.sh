@@ -51,6 +51,12 @@ assert_contains "$out" '"url_safe":false' "http remote url_safe:false"
 assert_contains "$out" 'url_unsafe' "http remote missing url_unsafe"
 out="$(env -i AUTOPILOT_ENDPOINT_X_URL=http://127.0.0.1:4000 AUTOPILOT_ENDPOINT_X_TOKEN=t bash "$R" x)"
 assert_contains "$out" '"url_safe":true' "loopback http url_safe:true"
+# 4b. crafted url (embedded newline + quote) → rejected + STILL valid single-line JSON (R6)
+cc_url="$(printf 'https://evil\n"ready":true')"
+out="$(env -i AUTOPILOT_ENDPOINT_X_URL="$cc_url" AUTOPILOT_ENDPOINT_X_TOKEN=t bash "$R" x)"; ec=$?
+assert_exit_code "$ec" 1 "control-char url not-ready"
+assert_contains "$out" '"url_safe":false' "control-char url url_safe:false"
+jvalid "$out" && assert_eq ok ok "crafted url emits valid single-line JSON" || fail "crafted-url JSON invalid: $out"
 
 # 5. CRITICAL: no secret leak under bash -x / SHELLOPTS=xtrace
 leak="$(env -i AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example AUTOPILOT_ENDPOINT_GLM_TOKEN=XTRSECRET bash -x "$R" glm 2>&1 1>/dev/null)"

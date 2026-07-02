@@ -111,6 +111,9 @@ if [[ -n "$ENDPOINT" ]]; then
   [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
   EP_URL="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
   EP_TOKEN_ENV="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
+  # fail closed if extraction yielded nothing — a ready endpoint with an unparseable base_url
+  # must NOT silently fall through to the raw-env base-url/token path below (R6).
+  { [[ -n "$EP_URL" ]] && [[ -n "$EP_TOKEN_ENV" ]]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
   if [[ "$RUNNER" = "cc-shim" ]]; then
     set +x
     export ANTHROPIC_BASE_URL="$EP_URL"

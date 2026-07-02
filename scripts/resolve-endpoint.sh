@@ -45,7 +45,13 @@ usage() {
   sed -n '2,31p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'
 }
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+# Escapes backslash, quote, AND control chars (tab/CR/newline) so EVERY code path emits a
+# single valid JSON line. Uses awk (whole input as one record via an unlikely RS) rather than
+# a sed `:a;N;$!ba` slurp — that idiom silently SKIPS its substitutions on single-line input
+# (GNU sed's N-on-last-line quits) and misses quotes on later lines. awk is uniform for both.
+json_escape() {
+  printf '%s' "$1" | awk 'BEGIN{RS="\001";ORS=""}{gsub(/\\/,"\\\\");gsub(/"/,"\\\"");gsub(/\t/,"\\t");gsub(/\r/,"\\r");gsub(/\n/,"\\n");print}'
+}
 
 # json_array <element>... -> a valid JSON array of the (escaped) string elements.
 json_array() {
@@ -74,6 +80,11 @@ RESULT_SOURCE=""; RESULT_MISSING=()
 is_url_safe() {
   local url="$1"
   [ -n "$url" ] || return 1
+  # A real URL has no whitespace or control characters. Reject them so a crafted value
+  # (e.g. an embedded newline) can neither be marked ready nor break downstream parsing (R6).
+  case "$url" in
+    *[[:space:][:cntrl:]]*) return 1 ;;
+  esac
   case "$url" in
     https://*) return 0 ;;
   esac

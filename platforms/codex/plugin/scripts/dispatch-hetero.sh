@@ -190,6 +190,8 @@ if [ -n "$ENDPOINT" ]; then
   [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
   _ep_url="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
   _ep_tokenv="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
+  # fail closed if extraction yielded nothing — never silently fall through to ambient env (R6)
+  { [ -n "$_ep_url" ] && [ -n "$_ep_tokenv" ]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
   set +x
   export ANTHROPIC_BASE_URL="$_ep_url"
   export ANTHROPIC_AUTH_TOKEN="${!_ep_tokenv-}"

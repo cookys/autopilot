@@ -36,11 +36,14 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   - `buildImplementationArgs`, implementer roster validation, and implement/review loop argument validation.
   - DI seams for `implementationDispatcher`, `diffProvider`, and `repairPromptWriter`.
 - `bin/autopilot.js`: new `engine implement-review` command.
+- `references/blind-dispatch.md`: new normative verifier-isolation section: reviewers and verdict-producing judges receive artifacts plus the original task/plan baseline, never the implementer's self-report, summary, chat narrative, or self-verdict.
 
 ### Changed
 - `skills/l5` and `skills/l6` now document `engine implement-review` as the canonical `/l5` and `/l6` integration path.
 - `src/engine/index.js` now exports implementation-loop builders and implementer validation helpers alongside existing review-loop APIs.
 - `engine implement-review` now requires a qualified reviewer by default and fails closed at `phase:"reviewer_qualification"` when scorecard qualification is absent or false. Use `--allow-unqualified-reviewer` only as an explicit escape hatch.
+- `agents/reviewer.md`, `skills/quality-pipeline/references/code-review.md`, and `project-config-template/review-loop-config.md` now encode verifier isolation as a MUST for every review round, including round 1.
+- `scripts/dispatch-review.sh` now documents the structural invariant that reviewer prompt assembly is diff/artifact based and has no self-report input path.
 
 ### Verification / validation
 - Focused suite updates:
@@ -50,6 +53,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   - `hooks/tests/dispatch-review.test.sh`
   - `hooks/tests/hook-normalizers.test.sh`
   - `hooks/tests/review-runner.test.sh`
+- Reviewer prompt assembly verified artifacts-only (`dispatch-review.sh` has no self-report parameter); decorrelated review of the verifier-isolation diff ran through a different engine family.
 
 ### Fixed
 - `scripts/sync-codex-plugin-skills.sh --check`: read-only Codex payload drift check, wired into pre-commit and `preflight-portability.sh`.

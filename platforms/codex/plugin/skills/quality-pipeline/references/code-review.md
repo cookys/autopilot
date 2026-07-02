@@ -78,7 +78,18 @@ Task tool:
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
-> On round 2+ (Re-review Loop below), leave `[specific concerns]` blank or restrict it to **non-finding-derived** scope reminders only. Run `scripts/check-redispatch-prompt.sh <prompt>` before dispatching — exit 1 means the prompt is leaky per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md) and MUST be stripped.
+> **Verifier isolation (MUST — EVERY round, round 1 included).** The dispatch prompt/context MUST carry
+> **only artifacts** — the diff / changed files / test output — plus the **original** task / plan / commit
+> message as the baseline to grade against. It **MUST NOT** include the implementer's self-report, summary,
+> "what I did" writeup, or self-assessed verdict: feeding the verifier the implementer's own account of the
+> work anchors it into confirming the claim (multi-agent hallucination cascade), which is the exact failure
+> a decorrelated gate exists to prevent. `[plan/task description]` is the *specification*, not a report of
+> what was done — keep that; strip any "here's what I changed / it works / this is done" narrative. Canonical
+> rule + baseline-vs-report test: [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)
+> § "Verifier isolation". This is orthogonal to the round-2+ blind re-dispatch below (which strips *prior
+> verdicts*); both apply.
+>
+> On round 2+ (Re-review Loop below), additionally leave `[specific concerns]` blank or restrict it to **non-finding-derived** scope reminders only. Run `scripts/check-redispatch-prompt.sh <prompt>` before dispatching — exit 1 means the prompt is leaky per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md) and MUST be stripped.
 
 Whichever reviewer the chain selects, the agent (per the canonical scope statement consumed by `agents/reviewer.md` too) will:
 1. Read every file affected by the diff and the **original task / plan / commit message** as baseline. Callers / tests / config are read only when a finding depends on them.

@@ -253,6 +253,63 @@ found ⇒ strip and re-dispatch). The patterns are anchored to **imperative-supp
 ("(call|rate|mark|treat) it (as) (at most) &lt;severity&gt;", "do not (flag|report|treat)") — NOT
 bare severity-word proximity — so the honest-calibration prose above does not trip it.
 
+## Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)
+
+**HARD RULE (MUST).** A verifier — any reviewer, QC panelist, or verdict-producing
+judge — **MUST receive only artifacts**, and **MUST NOT receive the implementer's
+self-report, summary, or chat narrative.** This is **orthogonal** to blind
+re-dispatch (which strips *prior verdicts* on round 2+): verifier isolation applies to
+**every** dispatch **including round 1**, and it strips the *implementer's own account
+of what it did* — a different leak from a different source.
+
+**Why (not theater):** a verifier that reads the implementer's self-report is anchored
+by it and converges to **confidently wrong** — the multi-agent **hallucination cascade**
+(arXiv:2606.07937): reviewers fed a peer's narrative rubber-stamp its claims and a
+correlated blind spot goes unflagged, making N reviewers *more* confident and *less*
+correct than one. The implementer's "what I did / it works / here's my summary" is a
+**claim to be checked against artifacts, never an input that frames the check.** This is
+the input-side enforcement of the axiom the write path already lives by ("verify by
+artifacts, never self-report" — `dispatch-hetero.sh`, `check-disjointness.sh`,
+`check-test-integrity.sh` all read git artifacts, never the worker's stream).
+
+| Verifier input | Allowed? | Why |
+|----------------|----------|-----|
+| The diff / changed files / full file content | ✅ **Required** | The artifact under review |
+| Test output, command output, build logs (as captured facts) | ✅ Yes | Machine-produced evidence, not the implementer's prose |
+| The **original** task / plan / commit message | ✅ Yes | The baseline the verifier grades *against* — authored before/independent of the work, not a report of what was done |
+| The implementer's self-report / "what I did" writeup / summary / chat narrative | ❌ **Forbidden** | Anchors the verifier → hallucination cascade. The verifier forms its own first impression from artifacts |
+| The implementer's **own verdict** / self-assessment ("I think this is correct / done") | ❌ **Forbidden** | A self-graded pass is exactly the claim the gate exists to test independently |
+| A prior *reviewer's* findings on round 2+ | ❌ Forbidden | Covered by blind re-dispatch above (different leak, same posture) |
+
+> **Baseline vs report — the load-bearing distinction.** The *original task/plan/commit
+> message* is allowed because it is the **specification** the verifier measures against,
+> authored independently of the implementation. The *implementer's self-report* is
+> forbidden because it is the implementation's **own account of itself** — the thing
+> under test. When in doubt: "was this text written to *define* the goal, or to *claim*
+> the goal was met?" Define → keep. Claim → strip.
+
+**Where this is enforced structurally:** [`scripts/dispatch-review.sh`](../scripts/dispatch-review.sh)
+assembles the reviewer prompt from the **diff text only** (`--diff-file`) — it has no
+parameter through which a self-report could reach the reviewer, and empty/unparseable
+capture is fail-closed (never a silent pass). Any script that assembles verifier input
+MUST keep this property: pass artifacts, never the worker's account.
+
+**The one carve-out — the shadow interrogation panel.** [`scripts/qc-panel.js`](../scripts/qc-panel.js)
+deliberately feeds the node report (which *contains* the worker's verdict) to its judges,
+because its design is **interrogate-the-claim-against-artifacts**, not form-a-blind-first-impression,
+and it hardens against the cascade with a **refute pass** (`default-refuted-if-uncertain`).
+This is tolerated **only** because it is **SHADOW / non-authoritative** (calibration-bearing,
+never gating — see `skills/quality-pipeline/references/code-review.md` § "Shadow QC panel").
+🔴 **It MUST NOT be promoted to authoritative while it ingests the self-report** — graduation
+to a gating role first requires either (a) removing self-report ingestion (artifacts-only), or
+(b) calibration evidence (`scripts/calibration.sh run-known-bad`) that the refute pass does not
+false-suppress critical findings under self-report anchoring.
+
+**Pre-flight (add to the per-dispatch scan):** before dispatching **any** verifier, confirm
+the prompt/context contains **no** implementer self-report — no "here's what I did / changed /
+implemented", no "it works / tests pass / this is done" narrative, no worker-authored verdict.
+If any is present, strip it and re-assemble from artifacts + the original task baseline.
+
 ## Nested dispatch (subagents spawning subagents)
 
 > Claude Code v2.1.172+ lets subagents spawn their own subagents (depth ≤ 5;

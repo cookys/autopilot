@@ -385,7 +385,12 @@ if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
   _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"
   git -C "$WT" add -A
-  git -C "$WT" -c commit.gpgsign=false commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
+  _identity_args=()
+  if ! git -C "$WT" var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
+     || ! git -C "$WT" var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
+    _identity_args=(-c user.email=autopilot@example.invalid -c user.name=Autopilot)
+  fi
+  git -C "$WT" -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
 fi
 
 # --- verify by artifacts, never by self-report ---

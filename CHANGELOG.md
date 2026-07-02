@@ -53,10 +53,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   - `hooks/tests/dispatch-review.test.sh`
   - `hooks/tests/hook-normalizers.test.sh`
   - `hooks/tests/review-runner.test.sh`
+- Full-suite follow-up focused gates:
+  - `hooks/tests/check-optin-changelog.test.sh`
+  - `hooks/tests/check-test-integrity.test.sh`
+  - `hooks/tests/check-test-integrity-l1.test.sh`
+  - `hooks/tests/dispatch-hetero.test.sh`
 - Reviewer prompt assembly verified artifacts-only (`dispatch-review.sh` has no self-report parameter); decorrelated review of the verifier-isolation diff ran through a different engine family.
 
 ### Fixed
 - `scripts/sync-codex-plugin-skills.sh --check`: read-only Codex payload drift check, wired into pre-commit and `preflight-portability.sh`.
+- `scripts/dispatch-hetero.sh`: wrapper-commit fallback now succeeds in repos without configured git author/committer identity by using a deterministic fallback identity only when either `GIT_AUTHOR_IDENT` or `GIT_COMMITTER_IDENT` is unavailable; the fallback still stages net-new files with `git add -A` and uses `--no-verify`.
+- `hooks/tests/check-test-integrity*.test.sh`: L0 coverage now disables L1 explicitly, and L1 pytest coverage uses a hermetic fake pytest reporter so the suite no longer depends on host-level pytest installation.
+- `hooks/tests/check-optin-changelog.test.sh`: ambiguous-history sandbox now configures repo-local git identity before committing.
 - Review/implementer runner validators now enforce their documented schemas, including review `status`/`verdict` enums, unknown-key rejection, and `precondition_failed` implementer results with empty `branch`/`base`.
 - Claude hook normalization now lets canonical cwd/session context override payload fields, keeping intent-file keys and persisted values aligned on symlinked paths or payload-session drift.
 - Anthropic-compatible review dispatch fails closed immediately on response stream errors/aborts and oversized bodies.

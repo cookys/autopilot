@@ -27,6 +27,10 @@
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
 #                                              #   in env (e.g. MiniMax-M3, GLM-*).
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
+#       [--endpoint <name>]                    # cc-shim only: resolve creds via
+#                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
+#                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
+#                                              #   still used when omitted (byte-identical)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--agy-bin agy]                        # alternate binary (test seam)
@@ -77,6 +81,8 @@ BRANCH=""
 PROMPT_FILE=""
 RUNNER="auto"
 EFFORT="xhigh"
+ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
@@ -122,6 +128,7 @@ while [ $# -gt 0 ]; do
     --model) MODEL="${2:-}"; shift 2 ;;
     --runner) RUNNER="${2:-}"; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
+    --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
@@ -169,6 +176,27 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+
+# --- optional --endpoint: resolve named-endpoint creds into the cc-shim env (ADDITIVE).
+# When absent, every existing caller is byte-identical (raw ANTHROPIC_BASE_URL/
+# ANTHROPIC_AUTH_TOKEN env still used). resolve-endpoint.sh emits only the token's env
+# NAME; we read the value via ${!name} in-script (set +x so it can't leak) and export it. ---
+if [ -n "$ENDPOINT" ]; then
+  [ "$IS_CCSHIM" -eq 1 ] || die_precondition "--endpoint applies only to --runner cc-shim (got runner: $RUNNER)"
+  # Readiness is the resolver's EXIT CODE (0=ready), NOT a grep of stdout — matching a
+  # "ready":true substring could be spoofed by attacker-controlled field content, and the
+  # exit code is the resolver's authoritative fail-closed signal (gpt-5.5 R5).
+  _ep_json="$("$SELF_DIR/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)"; _ep_rc=$?
+  [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
+  _ep_url="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
+  _ep_tokenv="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
+  # fail closed if extraction yielded nothing — never silently fall through to ambient env (R6)
+  { [ -n "$_ep_url" ] && [ -n "$_ep_tokenv" ]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
+  set +x
+  export ANTHROPIC_BASE_URL="$_ep_url"
+  export ANTHROPIC_AUTH_TOKEN="${!_ep_tokenv-}"
+  unset _ep_json _ep_url _ep_tokenv
+fi
 
 if [ "$IS_CODEX" -eq 1 ]; then
   command -v "codex" >/dev/null 2>&1 || die_precondition "codex binary not found (install OpenAI Codex or ensure it is in PATH)"

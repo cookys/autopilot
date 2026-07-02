@@ -32,6 +32,9 @@
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#       [--endpoint <name>]     # anthropic-compatible/cc-shim: resolve creds via
+#                               #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*);
+#                               #   raw env still used when omitted (byte-identical)
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
 #   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
 #   anthropic-compatible runner: direct HTTP POST to an Anthropic-compatible /v1/messages
@@ -59,7 +62,7 @@
 
 set -uo pipefail
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --runner)    RUNNER="${2:-}"; shift 2 ;;
@@ -68,7 +71,8 @@ while [[ $# -gt 0 ]]; do
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
-    -h|--help)   sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
+    -h|--help)   sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -90,13 +94,45 @@ timeout_to_ms() {
 }
 
 # Direct HTTP Anthropic-compatible reviewer — no CLI engine, no repo mutation.
+# --- optional --endpoint (ADDITIVE): resolve named-endpoint creds via resolve-endpoint.sh.
+# Applies to anthropic-compatible (→ --base-url + --token-env for the JS) and cc-shim
+# (→ export ANTHROPIC_BASE_URL/AUTH_TOKEN). When absent, every existing caller is
+# byte-identical. resolve-endpoint.sh emits only the token's env NAME; the value is read
+# via ${!name} (cc-shim, set +x) or by the JS from --token-env — never printed here. ---
+EP_URL=""; EP_TOKEN_ENV=""
+if [[ -n "$ENDPOINT" ]]; then
+  case "$RUNNER" in
+    anthropic-compatible|cc-shim) ;;
+    *) die_precondition "--endpoint applies only to --runner anthropic-compatible or cc-shim (got: $RUNNER)" ;;
+  esac
+  # Readiness = the resolver's EXIT CODE (0=ready), not a stdout grep (spoofable by
+  # attacker-controlled field content); exit code is the authoritative fail-closed signal (gpt-5.5 R5).
+  _ep_json="$("$(cd "$(dirname "$0")" && pwd)/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)"; _ep_rc=$?
+  [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
+  EP_URL="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
+  EP_TOKEN_ENV="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
+  # fail closed if extraction yielded nothing — a ready endpoint with an unparseable base_url
+  # must NOT silently fall through to the raw-env base-url/token path below (R6).
+  { [[ -n "$EP_URL" ]] && [[ -n "$EP_TOKEN_ENV" ]]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
+  if [[ "$RUNNER" = "cc-shim" ]]; then
+    set +x
+    export ANTHROPIC_BASE_URL="$EP_URL"
+    export ANTHROPIC_AUTH_TOKEN="${!EP_TOKEN_ENV-}"
+  fi
+  unset _ep_json
+fi
+
 if [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js"
   [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-review.sh"
   command -v node >/dev/null 2>&1 || die_precondition "node binary not found: node (required for anthropic-compatible reviewer)"
   TIMEOUT_MS="$(timeout_to_ms "$TIMEOUT")" || die_precondition "--timeout must be an integer millisecond value or use Ns/Nm syntax (got: $TIMEOUT)"
   ANTHROPIC_ARGS=(--model "$MODEL" --diff-file "$DIFF_FILE" --timeout-ms "$TIMEOUT_MS")
-  if [[ -n "${ANTHROPIC_COMPATIBLE_BASE_URL:-}" ]]; then
+  if [[ -n "$EP_URL" ]]; then
+    # endpoint-resolved: pass the resolved url + the token's env NAME (JS reads it,
+    # INSTEAD OF its hostname fallback). Overrides the raw-env base-url logic below.
+    ANTHROPIC_ARGS+=(--base-url "$EP_URL" --token-env "$EP_TOKEN_ENV")
+  elif [[ -n "${ANTHROPIC_COMPATIBLE_BASE_URL:-}" ]]; then
     ANTHROPIC_ARGS+=(--base-url "$ANTHROPIC_COMPATIBLE_BASE_URL")
   elif [[ -n "${AUTOPILOT_MINIMAX_BASE_URL:-}" ]]; then
     ANTHROPIC_ARGS+=(--base-url "$AUTOPILOT_MINIMAX_BASE_URL")

@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.29.1 — unified endpoint credential resolver
+
+**Headline**: Adds `scripts/resolve-endpoint.sh` — a unified `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}` convention + resolver for the env-token hetero-dispatch families (MiniMax / GLM / any Anthropic-compatible endpoint), so multiple compatible endpoints can be registered by logical name instead of colliding on one `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`. Wired additively into `dispatch-hetero.sh` / `dispatch-review.sh` (`--endpoint <name>`) and `dispatch-anthropic-review.js` (`--token-env <NAME>`) — every caller that omits the new flag is byte-identical. The OAuth-login runners (codex/agy/grok/claude) are untouched; they need no env token.
+
+### Added
+- `scripts/resolve-endpoint.sh` — resolves a named endpoint to **non-secret metadata only** (`base_url`, the token's env-var NAME, `token_present`/`url_safe`/`ready` booleans, `missing[]`); it NEVER prints a token value. Atomic candidate resolution (autopilot-namespace → minimax-only provider-native → generic-compatible) with no fail-open cross-combine; `url_safe` gate (https or http-loopback) folded into `ready`; fail-closed. Secret hygiene is mechanical: xtrace disabled at entry + scrubbed from `SHELLOPTS` (an inherited `bash -x` cannot leak a token), value read via `${!name-}` indirect expansion, `--list` enumerated via `compgen -v` (never by parsing `env`).
+- `hooks/tests/resolve-endpoint.test.sh` — 40 assertions incl. atomic no-fail-open, xtrace non-leak, url-safety, `--token-env` fail-closed, and a sibling-path fail-if-called stub proving the no-`--endpoint` path never calls the resolver.
+
+### Changed
+- `dispatch-hetero.sh` / `dispatch-review.sh` gain `--endpoint <name>`; `dispatch-anthropic-review.js` gains `--token-env <NAME>` (uses that var INSTEAD OF the hostname fallback — an unset named token is fail-closed, not a silent drop to `MINIMAX_API_KEY`). All additive.
+
+### Provenance
+- The resolver's first-draft structure was dispatched to a heterogeneous implementer (codex `gpt-5.3-codex-spark`) via `dispatch-hetero.sh`; depth-0 review found and fixed two real defects in that draft (token value leaked under `bash -x`; trailing-comma invalid JSON on a non-empty `missing` array) and completed the wiring/tests/docs. The design spec passed a 4-round decorrelated `gpt-5.5` review loop before implementation.
+
 ## v2.29.0 — /l5 and /l6 engine implementation-review orchestration
 
 **Headline**: Promotes the `/l5`/`/l6` engine implementation-review path to a release-ready minor: `engine implement-review` runs deterministic `implementer -> review -> repair -> review` cycles, reviewer qualification now fails closed by default, Codex package payload drift is gated, and the previously silent `harness-maintenance` skill is now correctly recorded as the 27th user-facing skill.

@@ -71,7 +71,7 @@ EXIT: 0 = reviewed ; 1 = no_verdict ; 2 = precondition_failed`;
 }
 
 function parseArgs(argv) {
-  const out = { model: '', diffFile: '', timeoutMs: DEFAULT_TIMEOUT_MS, baseUrl: '', help: false };
+  const out = { model: '', diffFile: '', timeoutMs: DEFAULT_TIMEOUT_MS, baseUrl: '', tokenEnv: '', help: false };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
@@ -86,6 +86,9 @@ function parseArgs(argv) {
         break;
       case '--base-url':
         out.baseUrl = argv[++i] || '';
+        break;
+      case '--token-env':
+        out.tokenEnv = argv[++i] || '';
         break;
       case '-h':
       case '--help':
@@ -102,7 +105,24 @@ function isMiniMaxHostname(hostname) {
   return hostname === 'minimax.io' || hostname.endsWith('.minimax.io');
 }
 
-function resolveToken(baseUrl) {
+const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function resolveToken(baseUrl, tokenEnv) {
+  // --token-env <NAME> (from resolve-endpoint.sh): use THAT var INSTEAD OF the
+  // hostname fallback. An unset/empty named token is a fail-closed error, NOT a
+  // silent drop to MINIMAX_API_KEY/ANTHROPIC_COMPATIBLE_AUTH_TOKEN — that would
+  // reintroduce the cross-token collision this design removes (spec R2 F2).
+  if (tokenEnv) {
+    if (!ENV_NAME_RE.test(tokenEnv)) {
+      return { token: '', error: `invalid --token-env name: ${tokenEnv}` };
+    }
+    const token = process.env[tokenEnv] || '';
+    return {
+      token,
+      error: token ? '' : `missing auth token in env (--token-env ${tokenEnv} is unset/empty)`,
+    };
+  }
+
   let hostname = '';
   try {
     hostname = new URL(baseUrl).hostname.toLowerCase();
@@ -448,7 +468,7 @@ async function main() {
   if (baseUrlError) {
     diePrecondition(model, baseUrlError);
   }
-  const { token, error: tokenError } = resolveToken(baseUrl);
+  const { token, error: tokenError } = resolveToken(baseUrl, args.tokenEnv);
   if (!token) {
     diePrecondition(model, tokenError);
   }

@@ -13,6 +13,164 @@ git_id() {
   git -C "$1" config user.name t
 }
 
+install_fake_pytest() {
+  local fake_bin="$TEST_TMP/fakebin"
+  local fake_pytest="$TEST_TMP/fake-pytest.py"
+  local real_python
+  real_python="$(command -v python3)"
+  mkdir -p "$fake_bin"
+
+  cat > "$fake_pytest" <<'PY'
+import html
+import os
+import re
+import sys
+
+
+def find_report_path(argv):
+    for idx, arg in enumerate(argv):
+        if arg.startswith("--junit-xml="):
+            return arg.split("=", 1)[1]
+        if arg in {"--junit-xml", "--junitxml"} and idx + 1 < len(argv):
+            return argv[idx + 1]
+    return None
+
+
+def read_text(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+    except Exception:
+        return ""
+
+
+def collect_ignored(root):
+    ignored = set()
+    for dirpath, _, filenames in os.walk(root):
+        if "conftest.py" not in filenames:
+            continue
+        text = read_text(os.path.join(dirpath, "conftest.py"))
+        match = re.search(r"collect_ignore\s*=\s*\[([^\]]*)\]", text, flags=re.S)
+        if not match:
+            continue
+        for item in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1)):
+            ignored.add(item)
+    return ignored
+
+
+def is_test_file(name):
+    return (name.startswith("test_") and name.endswith(".py")) or name.endswith("_test.py")
+
+
+def module_available(root, module):
+    if module in {"pytest", "unittest", "os", "sys", "pathlib", "json"}:
+        return True
+    return os.path.exists(os.path.join(root, module + ".py")) or os.path.isdir(os.path.join(root, module))
+
+
+def parse_tests(root):
+    ignored = collect_ignored(root)
+    cases = []
+    errors = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in {".git", "__pycache__"}]
+        for filename in sorted(filenames):
+            if not is_test_file(filename):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, filename), root).replace(os.sep, "/")
+            if filename in ignored or rel in ignored:
+                continue
+            text = read_text(os.path.join(root, rel))
+            for module in re.findall(r"^\s*import\s+([A-Za-z_][A-Za-z0-9_]*)", text, flags=re.M):
+                if not module_available(root, module):
+                    errors.append(f"{rel}: missing module {module}")
+            decorators = []
+            for raw_line in text.splitlines():
+                stripped = raw_line.strip()
+                if stripped.startswith("@"):
+                    decorators.append(stripped)
+                    continue
+                match = re.match(r"def\s+(test_[A-Za-z0-9_]+)\s*\(", stripped)
+                if match:
+                    skipped = any(
+                        "pytest.mark.skip(" in dec
+                        or "pytest.mark.skipif(True" in dec
+                        or "pytest.mark.skipif(true" in dec
+                        for dec in decorators
+                    )
+                    classname = rel[:-3].replace("/", ".")
+                    cases.append((rel, classname, match.group(1), skipped))
+                if stripped and not stripped.startswith("#"):
+                    decorators = []
+    return cases, errors
+
+
+def write_report(path, cases, errors):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    if errors:
+        body = "\n".join(
+            f'    <error message="{html.escape(err)}">{html.escape(err)}</error>' for err in errors
+        )
+        xml = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<testsuites>\n'
+            f'<testsuite name="pytest" tests="0" errors="{len(errors)}" failures="0" skipped="0">\n'
+            f"{body}\n"
+            "</testsuite>\n"
+            "</testsuites>\n"
+        )
+    else:
+        rendered = []
+        for file_attr, classname, name, skipped in cases:
+            if skipped:
+                rendered.append(
+                    f'  <testcase classname="{html.escape(classname)}" name="{html.escape(name)}" file="{html.escape(file_attr)}"><skipped /></testcase>'
+                )
+            else:
+                rendered.append(
+                    f'  <testcase classname="{html.escape(classname)}" name="{html.escape(name)}" file="{html.escape(file_attr)}" />'
+                )
+        xml = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<testsuites>\n'
+            f'<testsuite name="pytest" tests="{len(cases)}" errors="0" failures="0" skipped="0">\n'
+            + "\n".join(rendered)
+            + "\n</testsuite>\n"
+            "</testsuites>\n"
+        )
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(xml)
+
+
+def main():
+    argv = sys.argv[1:]
+    if "--version" in argv:
+        print("pytest 999.0.0 (autopilot fake)")
+        return 0
+    report_path = find_report_path(argv)
+    if not report_path:
+        return 2
+    cases, errors = parse_tests(os.getcwd())
+    write_report(report_path, cases, errors)
+    return 2 if errors else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY
+
+  cat > "$fake_bin/python3" <<EOF
+#!/usr/bin/env bash
+if [ "\${1:-}" = "-m" ] && [ "\${2:-}" = "pytest" ]; then
+  shift 2
+  exec "$real_python" "$fake_pytest" "\$@"
+fi
+exec "$real_python" "\$@"
+EOF
+  chmod +x "$fake_bin/python3"
+  export PATH="$fake_bin:$PATH"
+}
+
 mkrepo() {
   local d="$TEST_TMP/$1"
   mkdir -p "$d"
@@ -156,6 +314,8 @@ raw = subprocess.run(
 print(hashlib.sha256(raw).hexdigest())
 PY
 }
+
+install_fake_pytest
 
 if ensure_js_runtime; then
   js_runtime_ready=1

@@ -247,7 +247,9 @@ AMBI="$FIX/ambig-repo"
 mkdir -p "$AMBI/.claude-plugin" "$AMBI/hooks" "$AMBI/scripts"
 cp "$SCRIPT" "$AMBI/scripts/check-optin-changelog.js"
 
-(cd "$AMBI" && git -c user.email=t@t -c user.name=t init -q && \
+(cd "$AMBI" && git init -q && \
+  git config user.email t@t && \
+  git config user.name t && \
   cat > .claude-plugin/plugin.json <<'EOF'
 {
   "name": "ambig",

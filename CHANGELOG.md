@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.0 — raw prompt authoring dispatch split for `/l6`
+
+**Headline**: Adds `scripts/dispatch-author.sh`, a dedicated read-only raw prompt dispatch path for AUTHORING tasks (test plans, verification docs, and spec drafts), so `/l6` verification authoring runs on an uncoupled engine contract while reviewer prompt isolation stays in `dispatch-review.sh`.
+
+### Added
+- `scripts/dispatch-author.sh`: peer sibling to `dispatch-review.sh` that forwards `--prompt-file` bytes directly to `codex|agy|grok|cc-shim` with shared structural rails (read-only sandboxing/capture) and no reviewer template wrapper.
+- `hooks/tests/dispatch-author.test.sh`: smoke suite for prompt-forwarding correctness and `dispatch-author` fail-closed semantics.
+
+### Changed
+- `skills/l6/SKILL.md`: verification AUTHORING rails now dispatch through `dispatch-author.sh` (instead of `dispatch-review.sh`) and capture the 2026-07-02 l6/N2 incident rationale.
+
+### Fixed
+- `/l6` guidance now avoids sending AUTHORING prompts through the reviewer wrapper that prepends `You are a code reviewer` / `Diff under review`, preventing the refusal path observed in the 2026-07-02 repro.
+
 ## v2.30.0 — ladder-run: the acceptance-delegation ladder harness (P2.2)
 
 **Headline**: Adds `scripts/ladder-run.sh`, the first real *measured* run of the acceptance-delegation ladder (ROADMAP P2.2). The `run` subcommand does one cycle: (1) obtain the change artifact, (2) a **decorrelated, isolated** agent renders the acceptance verdict from the diff text only (verifier isolation via `dispatch-review.sh` — the implementer's self-report never reaches the verifier), (3) emit a QC-metric event to the P2.1 store (`qc-metric-emit.js`), (4) deterministically flag the 30% cookys sample, (5) recompute the *class's* running escape/endorsement rate (via the unmodified `qc_metric.py`) and report a T0→T1→T2 promotion recommendation. The `audit` subcommand records a **later-stage escape** (a defect the in-cycle verdict passed but a stronger/later review caught) so `qc_metric.py`'s union-merge counts it as a real class escape — without this the in-cycle verifier is blind to its own escapes and the promotion gate is vacuous. Strictly additive — drives existing tools unchanged, alters no skill's behavior, records a recommendation (never auto-flips a tier), one cycle per invocation (not a scheduler).

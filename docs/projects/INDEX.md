@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-02 | engine-wrapper-codex-flag — dispatch-hetero.sh codex feature-detect (`codex exec --help` must advertise `--dangerously-bypass-hook-trust`) + `--codex-bin` seam; fixes stale-codex-in-PATH misclassification (engine under nvm node picked old npm codex 0.130.0). e2e: `engine implement-review` → committed → converged. | v2.30.2 | `fix/engine-wrapper-codex-flag` |
 
 ## 已完成 (Completed)
 

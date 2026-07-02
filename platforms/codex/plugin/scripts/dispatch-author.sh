@@ -18,8 +18,8 @@
 # other task, so only untrusted outputs are read; no repo mutation path and no
 # temp prompt reuse between invocations. For run-time parity with dispatch-review.sh:
 # - codex: --sandbox read-only + model reasoning effort + stdin prompt.
-# - agy: scratch cwd (never repo cwd) + pseudo-tty capture (`script -qec`) + CRLF
-#   stripping + AGY `--print-timeout`.
+# - agy: scratch cwd (never repo cwd) + pseudo-tty capture (`script -qec`), with
+#   fail-closed ignoring script chrome; CRLF is stripped only for content checks.
 # - grok: scratch cwd + `--prompt-file` + `--disable-web-search` + `--output-format plain`.
 # - cc-shim: baseline `--setting-sources project`, `--strict-mcp-config`, `--tools ""`,
 #   `HOME=<scratch>`, `env -u ANTHROPIC_API_KEY`; preconditions on
@@ -30,6 +30,9 @@
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout / grok/cc-shim timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
+#   shell script), which drops trailing prompt newlines. This mirrors dispatch-review
+#   and is safe for prompt semantics.
 #   ⏳ TIMEOUT: this call can run for MINUTES.
 #   DISPATCH_QUIET=1 suppresses progress notes on stderr.
 #
@@ -128,10 +131,14 @@ else
   chmod +x "$RUN_SH"
   script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true
   rm -rf "$RUN_SH"
-  tr -d '\r' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
 fi
 
-if ! grep -q '[^[:space:]]' "$RAW_LOG" 2>/dev/null; then
+# Fail-closed checks model content, not pseudo-TTY chrome.
+# `script -qec` always emits chrome lines; strip CR and those lines before
+# checking for non-whitespace output.
+if ! tr -d '\r' < "$RAW_LOG" \
+  | sed '/^Script started on /d; /^Script done on /d' \
+  | grep -q '[^[:space:]]'; then
   printf '{ "runner": "%s", "model": "%s", "status": "empty_output", "raw_log": "%s", "error": "no non-whitespace output from runner — fail-closed" }\n' \
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
   exit 1

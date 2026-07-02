@@ -90,20 +90,21 @@ assert_not_contains "$OUT" '"status": "authored"' "cc-shim missing env not autho
 # --- 7. optional: agy path can run when script(1) exists and prompt is still raw ---
 if command -v script >/dev/null 2>&1; then
   AGY_DUMP="$TEST_TMP/prompt.received.agy"
-  STUB_AGY="$TEST_TMP/runner-agy"
-  cat > "$STUB_AGY" <<EOF
+  STUB_AGY_OK="$TEST_TMP/runner-agy-ok"
+  cat > "$STUB_AGY_OK" <<EOF
 #!/usr/bin/env bash
 if [ "\$1" = "-p" ]; then
   printf '%s' "\$2" > "$AGY_DUMP"
 fi
 echo "ok from agy"
 EOF
-  chmod +x "$STUB_AGY"
+  chmod +x "$STUB_AGY_OK"
   STUB_BIN_DIR="$TEST_TMP/fake-bin"
   mkdir -p "$STUB_BIN_DIR"
-  ln -sf "$STUB_AGY" "$STUB_BIN_DIR/agy"
+  ln -sf "$STUB_AGY_OK" "$STUB_BIN_DIR/agy"
   ORIGINAL_PATH="$PATH"
   PATH="$STUB_BIN_DIR:$PATH"
+
   # Keep a shadow copy for AGY_CWD temp command assertions.
   OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
   PATH="$ORIGINAL_PATH"
@@ -112,6 +113,22 @@ EOF
   cmp -s "$PROMPT" "$AGY_DUMP"
   assert_eq "0" "$?" "agy uses exact prompt bytes"
   assert_contains "$OUT" '"status": "authored"' "agy path returns authored"
+  AGY_RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+  assert_file_exists "$AGY_RAW_LOG_PATH" "agy path raw_log exists"
+  assert_contains "$(cat "$AGY_RAW_LOG_PATH")" "ok from agy" "agy raw_log contains stub output"
+
+  # --- 7.2: agy empty-output path should fail-closed (exit 1) ---
+  STUB_AGY_EMPTY="$TEST_TMP/runner-agy-empty"
+  cat > "$STUB_AGY_EMPTY" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "$STUB_AGY_EMPTY"
+  ln -sf "$STUB_AGY_EMPTY" "$STUB_BIN_DIR/agy"
+  OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
+  assert_eq "1" "$EXIT" "agy empty-output exit 1"
+  assert_contains "$OUT" '"status": "empty_output"' "agy empty-output maps to empty_output"
+  assert_not_contains "$OUT" '"status": "authored"' "agy empty-output is not authored"
 fi
 
 finalize_test

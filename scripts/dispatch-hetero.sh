@@ -218,7 +218,14 @@ if [ "$IS_CODEX" -eq 1 ]; then
   # so both resolve the SAME binary. A bare command name (no /) PATH-resolves consistently
   # since the worker inherits the same PATH (gpt-5.5 review).
   case "$CODEX_BIN" in
-    */*) CODEX_BIN="$(cd "$(dirname "$CODEX_BIN")" 2>/dev/null && pwd)/$(basename "$CODEX_BIN")" || die_precondition "--codex-bin path not resolvable: $CODEX_BIN" ;;
+    */*)
+      # Resolve the dir into a var and validate it — inlining `$(cd .. && pwd)/$(basename)`
+      # would let a FAILED cd (empty pwd) silently yield `/<basename>` because the `||` sees
+      # basename's (successful) exit, not cd's, and could then exec an unintended /codex (gpt-5.5 R2).
+      _cb_dir="$(cd "$(dirname "$CODEX_BIN")" 2>/dev/null && pwd)" || true
+      [ -n "$_cb_dir" ] || die_precondition "--codex-bin path not resolvable: $CODEX_BIN"
+      CODEX_BIN="$_cb_dir/$(basename "$CODEX_BIN")"
+      ;;
   esac
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN (install OpenAI Codex, ensure it is in PATH, or pass --codex-bin)"
   # Feature-detect the flag the worker uses. A STALE codex earlier in PATH (e.g. an old

@@ -197,6 +197,11 @@ OUT="$( (
 assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
 
+# 5h. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unresolvable --codex-bin dir → precondition exit 2"
+assert_contains "$OUT" 'not resolvable' "unresolvable --codex-bin names the path"
+
 # 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "no_op exit code"

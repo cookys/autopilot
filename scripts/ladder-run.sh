@@ -313,9 +313,13 @@ else
   echo "-- verify: decorrelated hetero verifier ($REVIEWER_RUNNER/$REVIEWER_MODEL), diff-only --"
   set +e
   VJSON="$("$REVIEW" --runner "$REVIEWER_RUNNER" --model "$REVIEWER_MODEL" --diff-file "$DIFF_FILE")"; set -e
-  VSTATUS=$(printf '%s' "$VJSON" | jq -r '.status // "no_verdict"')
-  VERDICT_RAW=$(printf '%s' "$VJSON" | jq -r '.verdict // "null"')
-  VRUNNER=$(printf '%s' "$VJSON" | jq -r '.runner // "?"'); VMODEL=$(printf '%s' "$VJSON" | jq -r '.model // "?"')
+  # Fail-closed on empty/invalid verifier JSON: jq on empty/malformed input errors,
+  # which under `set -e` would abort BEFORE the fail-closed event is emitted. The
+  # `2>/dev/null || echo` fallbacks route empty/invalid → no_verdict → panel_verdict=fail.
+  VSTATUS=$(printf '%s' "$VJSON" | jq -r '.status // "no_verdict"' 2>/dev/null || echo "no_verdict")
+  VERDICT_RAW=$(printf '%s' "$VJSON" | jq -r '.verdict // "null"' 2>/dev/null || echo "null")
+  VRUNNER=$(printf '%s' "$VJSON" | jq -r '.runner // "?"' 2>/dev/null || echo "?")
+  VMODEL=$(printf '%s' "$VJSON" | jq -r '.model // "?"' 2>/dev/null || echo "?")
 fi
 NEEDS_HUMAN=0
 case "$VSTATUS/$VERDICT_RAW" in

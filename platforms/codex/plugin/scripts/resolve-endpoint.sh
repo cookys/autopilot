@@ -80,10 +80,12 @@ RESULT_SOURCE=""; RESULT_MISSING=()
 is_url_safe() {
   local url="$1"
   [ -n "$url" ] || return 1
-  # A real URL has no whitespace or control characters. Reject them so a crafted value
-  # (e.g. an embedded newline) can neither be marked ready nor break downstream parsing (R6).
+  # A real endpoint URL has no whitespace, control chars, double-quotes, or backslashes.
+  # Reject them so a crafted value can neither be marked ready nor break the callers'
+  # sed/JSON extraction (a `"` would let a ready URL truncate the shell-side parse — R6/R7).
   case "$url" in
     *[[:space:][:cntrl:]]*) return 1 ;;
+    *'"'*|*'\'*) return 1 ;;
   esac
   case "$url" in
     https://*) return 0 ;;

@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.30.0 — ladder-run: the acceptance-delegation ladder harness (P2.2)
+
+**Headline**: Adds `scripts/ladder-run.sh`, the first real *measured* run of the acceptance-delegation ladder (ROADMAP P2.2). The `run` subcommand does one cycle: (1) obtain the change artifact, (2) a **decorrelated, isolated** agent renders the acceptance verdict from the diff text only (verifier isolation via `dispatch-review.sh` — the implementer's self-report never reaches the verifier), (3) emit a QC-metric event to the P2.1 store (`qc-metric-emit.js`), (4) deterministically flag the 30% cookys sample, (5) recompute the *class's* running escape/endorsement rate (via the unmodified `qc_metric.py`) and report a T0→T1→T2 promotion recommendation. The `audit` subcommand records a **later-stage escape** (a defect the in-cycle verdict passed but a stronger/later review caught) so `qc_metric.py`'s union-merge counts it as a real class escape — without this the in-cycle verifier is blind to its own escapes and the promotion gate is vacuous. Strictly additive — drives existing tools unchanged, alters no skill's behavior, records a recommendation (never auto-flips a tier), one cycle per invocation (not a scheduler).
+
+Hardening (fail-closed measurement is the point of the gate): the 30% sample is keyed on `head_sha` + optional secret `$LADDER_SAMPLE_SALT` (not `change_id`) so it cannot be dodged by renaming; endorsement is compared as a fraction against the `0.90` bar (a 40% endorsement no longer reads as "> 0.90"); a `qc_metric.py` failure yields `HOLD-ERROR`/`needs_human`/exit 3 rather than a fail-open clean promote; the cycle writes ladder state first then appends the QC event last, rolling back and exiting 4 (`needs_human`) on a real-write failure so store and state stay consistent on the normal path (a hard-kill window between the two writes self-heals via the append-only store + `qc_metric.py` union-merge dedup on re-run — not an unconditional never-diverge claim); a rejected (`fail`/`needs_human`) verdict is recorded non-autonomous so it does not dilute the endorsement denominator.
+
+### Added
+- `scripts/ladder-run.sh`: the ladder-run harness — `run` (impl → isolated verify → emit → sample → per-class report) + `audit` (record a later-stage escape).
+- `scripts/ladder-run.test.sh`: self-test incl. regressions for endorsement-as-fraction, audit-counts-as-escape, sampling-not-evadable, and calculator-failure-fail-closed, via a `--mock-verdict` test seam.
+- `docs/ladder-run.md`: usage + posture (verifier isolation, agent-held acceptance with cookys as sampled co-participant, on-gate-catch vs escape + the `audit` escape path, weak-oracle caveat for diff-only doc-sync, fail-closed, non-evadable sampling).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (additive — no existing behavior to restore).
+
 ## v2.29.0 — /l5 and /l6 engine implementation-review orchestration
 
 **Headline**: Promotes the `/l5`/`/l6` engine implementation-review path to a release-ready minor: `engine implement-review` runs deterministic `implementer -> review -> repair -> review` cycles, reviewer qualification now fails closed by default, Codex package payload drift is gated, and the previously silent `harness-maintenance` skill is now correctly recorded as the 27th user-facing skill.

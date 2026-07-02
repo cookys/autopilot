@@ -98,9 +98,14 @@ outcome is unpredictable to the implementer.
   **not** fall through to a clean `PROMOTE`: it records `promotion=HOLD-ERROR`,
   `needs_human=true`, and exits `3`. A promotion is never granted on an uncomputable escape
   rate.
-- **No store/state divergence** — the QC event is emitted first, then every step after emit is
-  non-fatal so the state file is **always** written to reflect the emitted cycle. The store and
-  the ladder state never disagree about whether a cycle happened.
+- **Store/state consistency (both-or-neither on the normal path)** — the cycle computes its report
+  on a temp store (no real write), then writes **ladder state first** (single-writer, backed up) and
+  **appends the QC event to the store last**. A real-write failure rolls back and exits `4`
+  (`needs_human`) so the two never disagree on the normal path. **Residual (honest):** a hard kill
+  (SIGKILL/power-loss) *between* the state write and the store append can leave a state cycle whose
+  QC event is missing. This self-heals: the store is append-only and `qc_metric.py` union-merges by
+  `change_id`, so re-running the same change_id re-emits the event and de-dupes — no double count.
+  It is **not** an unconditional "never diverge" guarantee.
 - A `fail`/`needs_human` verdict ships nothing, so it is recorded **not** autonomous — a
   rejected change never dilutes the endorsement denominator.
 

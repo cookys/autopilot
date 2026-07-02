@@ -40,6 +40,23 @@ assert_eq "1" "$EXIT" "empty output exits 1"
 assert_contains "$OUT" '"status": "empty_output"' "empty output mapped to empty_output"
 assert_not_contains "$OUT" '"status": "precondition_failed"' "empty output is not precondition_failed"
 
+# --- 2.1: runner non-zero with output → runner_failed, exit 3 ---
+STUB_PARTIAL_FAIL="$TEST_TMP/runner-codex-partial-fail"
+cat > "$STUB_PARTIAL_FAIL" <<'EOF'
+#!/usr/bin/env bash
+echo "partial-output"
+exit 42
+EOF
+chmod +x "$STUB_PARTIAL_FAIL"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_PARTIAL_FAIL" 2>&1)"; EXIT=$?
+assert_eq "3" "$EXIT" "partial output with non-zero runner exits 3"
+assert_contains "$OUT" '"status": "runner_failed"' "non-zero runner maps to runner_failed"
+assert_contains "$OUT" '"error": "runner exited 42"' "runner_failed includes exit code"
+RUNNER_RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_file_exists "$RUNNER_RAW_LOG_PATH" "runner_failed raw_log exists"
+assert_contains "$(cat "$RUNNER_RAW_LOG_PATH")" "partial-output" "runner_failed raw_log retains partial output"
+
 # --- 3. normal output JSON parseable + raw_log path exists ---
 STUB_OK="$TEST_TMP/runner-ok"
 cat > "$STUB_OK" <<'EOF'
@@ -117,6 +134,20 @@ EOF
   assert_file_exists "$AGY_RAW_LOG_PATH" "agy path raw_log exists"
   assert_contains "$(cat "$AGY_RAW_LOG_PATH")" "ok from agy" "agy raw_log contains stub output"
 
+  STUB_AGY_FAIL="$TEST_TMP/runner-agy-fail"
+  cat > "$STUB_AGY_FAIL" <<'EOF'
+#!/usr/bin/env bash
+echo "partial from agy"
+exit 7
+EOF
+  chmod +x "$STUB_AGY_FAIL"
+  ln -sf "$STUB_AGY_FAIL" "$STUB_BIN_DIR/agy"
+  PATH="$STUB_BIN_DIR:$PATH"
+  OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
+  assert_eq "3" "$EXIT" "agy non-zero runner exits 3"
+  assert_contains "$OUT" '"status": "runner_failed"' "agy non-zero maps to runner_failed"
+  assert_contains "$OUT" '"error": "runner exited 7"' "agy runner_failed includes exit code"
+
   # --- 7.2: agy empty-output path should fail-closed (exit 1) ---
   STUB_AGY_EMPTY="$TEST_TMP/runner-agy-empty"
   cat > "$STUB_AGY_EMPTY" <<'EOF'
@@ -125,6 +156,7 @@ exit 0
 EOF
   chmod +x "$STUB_AGY_EMPTY"
   ln -sf "$STUB_AGY_EMPTY" "$STUB_BIN_DIR/agy"
+  PATH="$STUB_BIN_DIR:$PATH"
   OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
   assert_eq "1" "$EXIT" "agy empty-output exit 1"
   assert_contains "$OUT" '"status": "empty_output"' "agy empty-output maps to empty_output"

@@ -37,9 +37,9 @@
 #   DISPATCH_QUIET=1 suppresses progress notes on stderr.
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "authored|empty_output|precondition_failed", "raw_log": "<path>", "error": "..." }
+#   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "authored|empty_output|precondition_failed|runner_failed", "raw_log": "<path>", "error": "..." }
 #
-# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed.
+# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed.
 
 set -uo pipefail
 
@@ -65,6 +65,13 @@ die_precondition() {
   exit 2
 }
 
+die_runner_failed() {
+  local -r runner_exit_code="$1"
+  printf '{ "runner": "%s", "model": "%s", "status": "runner_failed", "raw_log": "%s", "error": "runner exited %s" }\n' \
+    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$runner_exit_code")"
+  exit 3
+}
+
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
 case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must be codex, agy, grok, or cc-shim (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
@@ -72,10 +79,15 @@ case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must 
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
+RUNNER_EXIT=0
 GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
-cleanup() { rm -f "$RAW_LOG"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"; [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"; }
+cleanup() {
+  [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
+  [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
+  [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
+}
 trap cleanup EXIT
 
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: ${RUNNER}/${MODEL} (effort=${EFFORT}, timeout=${TIMEOUT})" >&2
@@ -86,16 +98,22 @@ if [[ "$RUNNER" = "codex" ]]; then
   # READ-ONLY by posture only; codex is the same sandboxed runner used for
   # review in dispatch-review.sh and is the strongest default isolation option
   # available here.
+  set +e
   "$CODEX_BIN" exec --model "$MODEL" \
     --sandbox read-only \
     -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  RUNNER_EXIT=$?
+  set -e
 elif [[ "$RUNNER" = "grok" ]]; then
   GROK_BIN="${BIN:-grok}"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
   # Read-only by construction: scratch cwd, no --always-approve, no web, no editor.
   GROK_CWD="$(mktemp -d -t dispatch-author-grokcwd-XXXXXX)"
+  set +e
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
     --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
+  RUNNER_EXIT=$?
+  set -e
   rm -rf "$GROK_CWD"; GROK_CWD=""
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
@@ -111,9 +129,12 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   # BEST-EFFORT surface reduction; no local file edits. This mirrors dispatch-review.sh's
   # blast-radius controls and keeps request context constrained to prompt + auth + model.
   CCSHIM_CWD="$(mktemp -d -t dispatch-author-ccshimcwd-XXXXXX)"
+  set +e
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
     bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
     _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  RUNNER_EXIT=$?
+  set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
 else
   AGY_BIN="${BIN:-agy}"
@@ -129,8 +150,15 @@ else
       "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
-  script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true
+  set +e
+  script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1
+  RUNNER_EXIT=$?
+  set -e
   rm -rf "$RUN_SH"
+fi
+
+if [[ "$RUNNER_EXIT" -ne 0 ]]; then
+  die_runner_failed "$RUNNER_EXIT"
 fi
 
 # Fail-closed checks model content, not pseudo-TTY chrome.

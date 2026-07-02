@@ -1,6 +1,6 @@
 # Full Suite Green Follow-Up
 
-> Status: In progress
+> Status: Merged to `develop`
 > Created: 2026-07-02
 > Branch: `fix/v2.29.0-full-suite-green`
 > Session base: `d736a08e7a480a8d393e14f5098f2c50e4015adb`
@@ -44,6 +44,14 @@ Known failing tests to re-triage:
 - `scripts/sync-codex-plugin-skills.sh --check`
 - `bash scripts/validate.sh`
 - `node scripts/doc-drift-gate.js .`
+
+## Result
+
+- Full hook suite is green: `82/82` test files passed.
+- `dispatch-hetero` wrapper-commit fallback now covers net-new codex edits in repos without configured git author/committer identity.
+- L0/L1 test-integrity harnesses are deterministic on machines without host-level pytest.
+- `/l5` review converged in two rounds: round 1 found the committer-identity edge, round 2 returned `SHIP-AS-IS`.
+- Merged to `develop` in `f9d1590542f435286aa708938e302db647376d52`.
 
 ## Notes
 

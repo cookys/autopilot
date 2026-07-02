@@ -1,6 +1,6 @@
 # Design Spec — Unified autopilot endpoint credential resolver
 
-**Status**: spec (pre-impl) · **Base SHA**: `4fb7637890231ebadd24ca24ebe6f8877eef43bd` · **Version target**: `2.29.1` (PATCH — new script + hardening of existing dispatch scripts, no new user-facing skill/agent).
+**Status**: SHIPPED v2.29.1 (merge 0b3fd86) · **Base SHA**: `4fb7637890231ebadd24ca24ebe6f8877eef43bd` · **Version target**: `2.29.1` (PATCH — new script + hardening of existing dispatch scripts, no new user-facing skill/agent).
 
 ## Problem
 

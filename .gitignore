@@ -27,3 +27,6 @@ docs/projects/**/tree/events.jsonl.lock
 # auditable signal, and those stay tracked. ** so _archive/<proj>/ is covered.
 docs/projects/**/tree/panel/*_q[0-9].txt
 __pycache__/
+
+# worktree-orphan marker (never shipped)
+.orphaned_at

@@ -36,6 +36,9 @@
 #       [--agy-bin agy]                        # alternate binary (test seam)
 #       [--grok-bin grok]                      # alternate binary (test seam)
 #       [--keep-worktree]                      # keep worktree even on success
+#   ⏳ TIMEOUT: the implementer run can take MANY minutes. Under Claude Code's Bash tool,
+#   pass a generous `timeout` — the 120s tool default SIGTERMs long runs (exit 143). Persist
+#   once with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
 #
 # OUTPUT: one JSON object on stdout (agent stdout goes to a log file, never
 # stdout — keeps the JSON parseable):
@@ -197,6 +200,11 @@ if [ -n "$ENDPOINT" ]; then
   export ANTHROPIC_AUTH_TOKEN="${!_ep_tokenv-}"
   unset _ep_json _ep_url _ep_tokenv
 fi
+# Heads-up on stderr ONLY (stdout carries the JSON contract): the implementer run below can
+# take many minutes. Under Claude Code's Bash tool the 120s default timeout will SIGTERM it
+# (exit 143). Raise BASH_DEFAULT_TIMEOUT_MS (~/.claude/settings.json env) or pass a high
+# per-call timeout. Silence with DISPATCH_QUIET=1.
+[ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
 if [ "$IS_CODEX" -eq 1 ]; then
   command -v "codex" >/dev/null 2>&1 || die_precondition "codex binary not found (install OpenAI Codex or ensure it is in PATH)"

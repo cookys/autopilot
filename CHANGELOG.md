@@ -24,9 +24,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.29.1 — unified endpoint credential resolver
+## v2.30.1 — unified endpoint credential resolver
 
-**Headline**: Adds `scripts/resolve-endpoint.sh` — a unified `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}` convention + resolver for the env-token hetero-dispatch families (MiniMax / GLM / any Anthropic-compatible endpoint), so multiple compatible endpoints can be registered by logical name instead of colliding on one `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`. Wired additively into `dispatch-hetero.sh` / `dispatch-review.sh` (`--endpoint <name>`) and `dispatch-anthropic-review.js` (`--token-env <NAME>`) — every caller that omits the new flag is byte-identical. The OAuth-login runners (codex/agy/grok/claude) are untouched; they need no env token.
+**Headline**: Adds `scripts/resolve-endpoint.sh` — a unified `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}` convention + resolver for the env-token hetero-dispatch families (MiniMax / GLM / any Anthropic-compatible endpoint), so multiple compatible endpoints can be registered by logical name instead of colliding on one `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`. Wired additively into `dispatch-hetero.sh` / `dispatch-review.sh` (`--endpoint <name>`) and `dispatch-anthropic-review.js` (`--token-env <NAME>`) — every caller that omits the new flag is byte-identical. The OAuth-login runners (codex/agy/grok/claude) are untouched; they need no env token. (Developed as v2.29.1 from v2.29.0; retargeted to v2.30.1 on merge because the concurrent v2.30.0 ladder-run MINOR landed first.)
 
 ### Added
 - `scripts/resolve-endpoint.sh` — resolves a named endpoint to **non-secret metadata only** (`base_url`, the token's env-var NAME, `token_present`/`url_safe`/`ready` booleans, `missing[]`); it NEVER prints a token value. Atomic candidate resolution (autopilot-namespace → minimax-only provider-native → generic-compatible) with no fail-open cross-combine; `url_safe` gate (https or http-loopback) folded into `ready`; fail-closed. Secret hygiene is mechanical: xtrace disabled at entry + scrubbed from `SHELLOPTS` (an inherited `bash -x` cannot leak a token), value read via `${!name-}` indirect expansion, `--list` enumerated via `compgen -v` (never by parsing `env`).
@@ -37,6 +37,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Provenance
 - The resolver's first-draft structure was dispatched to a heterogeneous implementer (codex `gpt-5.3-codex-spark`) via `dispatch-hetero.sh`; depth-0 review found and fixed two real defects in that draft (token value leaked under `bash -x`; trailing-comma invalid JSON on a non-empty `missing` array) and completed the wiring/tests/docs. The design spec passed a 4-round decorrelated `gpt-5.5` review loop before implementation.
+## v2.30.0 — ladder-run: the acceptance-delegation ladder harness (P2.2)
+
+**Headline**: Adds `scripts/ladder-run.sh`, the first real *measured* run of the acceptance-delegation ladder (ROADMAP P2.2). The `run` subcommand does one cycle: (1) obtain the change artifact, (2) a **decorrelated, isolated** agent renders the acceptance verdict from the diff text only (verifier isolation via `dispatch-review.sh` — the implementer's self-report never reaches the verifier), (3) emit a QC-metric event to the P2.1 store (`qc-metric-emit.js`), (4) deterministically flag the 30% cookys sample, (5) recompute the *class's* running escape/endorsement rate (via the unmodified `qc_metric.py`) and report a T0→T1→T2 promotion recommendation. The `audit` subcommand records a **later-stage escape** (a defect the in-cycle verdict passed but a stronger/later review caught) so `qc_metric.py`'s union-merge counts it as a real class escape — without this the in-cycle verifier is blind to its own escapes and the promotion gate is vacuous. Strictly additive — drives existing tools unchanged, alters no skill's behavior, records a recommendation (never auto-flips a tier), one cycle per invocation (not a scheduler).
+
+Hardening (fail-closed measurement is the point of the gate): the 30% sample is keyed on `head_sha` + optional secret `$LADDER_SAMPLE_SALT` (not `change_id`) so it cannot be dodged by renaming; endorsement is compared as a fraction against the `0.90` bar (a 40% endorsement no longer reads as "> 0.90"); a `qc_metric.py` failure yields `HOLD-ERROR`/`needs_human`/exit 3 rather than a fail-open clean promote; the cycle writes ladder state first then appends the QC event last, rolling back and exiting 4 (`needs_human`) on a real-write failure so store and state stay consistent on the normal path (a hard-kill window between the two writes self-heals via the append-only store + `qc_metric.py` union-merge dedup on re-run — not an unconditional never-diverge claim); a rejected (`fail`/`needs_human`) verdict is recorded non-autonomous so it does not dilute the endorsement denominator.
+
+### Added
+- `scripts/ladder-run.sh`: the ladder-run harness — `run` (impl → isolated verify → emit → sample → per-class report) + `audit` (record a later-stage escape).
+- `scripts/ladder-run.test.sh`: self-test incl. regressions for endorsement-as-fraction, audit-counts-as-escape, sampling-not-evadable, and calculator-failure-fail-closed, via a `--mock-verdict` test seam.
+- `docs/ladder-run.md`: usage + posture (verifier isolation, agent-held acceptance with cookys as sampled co-participant, on-gate-catch vs escape + the `audit` escape path, weak-oracle caveat for diff-only doc-sync, fail-closed, non-evadable sampling).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>` (additive — no existing behavior to restore).
 
 ## v2.29.0 — /l5 and /l6 engine implementation-review orchestration
 

@@ -1,6 +1,6 @@
 # Design Spec — Unified autopilot endpoint credential resolver
 
-**Status**: SHIPPED v2.29.1 (merge 0b3fd86) · **Base SHA**: `4fb7637890231ebadd24ca24ebe6f8877eef43bd` · **Version target**: `2.29.1` (PATCH — new script + hardening of existing dispatch scripts, no new user-facing skill/agent).
+**Status**: SHIPPED v2.30.1 (merge 0b3fd86) · **Base SHA**: `4fb7637890231ebadd24ca24ebe6f8877eef43bd` · **Version target**: `2.30.1` (PATCH — new script + hardening of existing dispatch scripts, no new user-facing skill/agent).
 
 ## Problem
 
@@ -68,7 +68,7 @@ The two **shell** dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) gain 
 - CLAUDE.md scripts-inventory: new `resolve-endpoint.sh` row (alphabetical-by-purpose, near the other `resolve-*` rows).
 - `references/hetero-dispatch.md`: document the `--endpoint`/`AUTOPILOT_ENDPOINT_*` convention.
 - `project-config-template/review-loop-config.md` Gotchas: update the cc-shim env note to point at the new convention.
-- CHANGELOG `2.29.1` PATCH entry; `scripts/sync-version.js --version 2.29.1 --hook-count 22 --skill-count 27`.
+- CHANGELOG `2.30.1` PATCH entry; `scripts/sync-version.js --version 2.30.1 --hook-count 22 --skill-count 27`.
 
 ## Tests (no live model calls)
 

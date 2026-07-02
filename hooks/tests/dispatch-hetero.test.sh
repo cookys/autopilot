@@ -186,6 +186,17 @@ assert_contains "$OUT" '"status": "precondition_failed"' "stale codex status pre
 assert_contains "$OUT" 'does not support --dangerously-bypass-hook-trust' "stale codex error names the missing flag"
 assert_file_absent "$SBX/should_not_run.txt" "stale codex never actually dispatched"
 
+# 5g. RELATIVE --codex-bin: feature-detect (caller cwd) and worker exec (inside $WT) must
+# resolve the SAME binary — a relative path is absolutized, not resolved twice (gpt-5.5 review).
+# Run from $TEST_TMP where the flag-supporting stub lives as ./codex; before the fix the
+# worker's post-`cd $WT` exec would miss it.
+OUT="$( (
+  cd "$SBX"
+  "$SCRIPT" --branch feat/codex-relbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin ../codex
+) 2>&1 )"; EXIT=$?
+assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
+assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
+
 # 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "no_op exit code"

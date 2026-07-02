@@ -212,6 +212,14 @@ fi
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
 if [ "$IS_CODEX" -eq 1 ]; then
+  # A path-form --codex-bin (contains /) is feature-detected here in the CALLER cwd but
+  # exec'd by the worker AFTER `cd "$WT"` — a RELATIVE path would resolve to a different
+  # binary (or fail) inside the worktree. Absolutize it first (POSIX cd/pwd, not realpath)
+  # so both resolve the SAME binary. A bare command name (no /) PATH-resolves consistently
+  # since the worker inherits the same PATH (gpt-5.5 review).
+  case "$CODEX_BIN" in
+    */*) CODEX_BIN="$(cd "$(dirname "$CODEX_BIN")" 2>/dev/null && pwd)/$(basename "$CODEX_BIN")" || die_precondition "--codex-bin path not resolvable: $CODEX_BIN" ;;
+  esac
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN (install OpenAI Codex, ensure it is in PATH, or pass --codex-bin)"
   # Feature-detect the flag the worker uses. A STALE codex earlier in PATH (e.g. an old
   # npm-global codex in an nvm node's bin, ahead of ~/.local/bin) lacks

@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
   <img src="https://img.shields.io/badge/version-2.29.0-E8A838?style=flat-square" alt="v2.29.0">
-  <img src="https://img.shields.io/badge/skills-24-4A90D9?style=flat-square" alt="24 Skills">
+  <img src="https://img.shields.io/badge/skills-27-4A90D9?style=flat-square" alt="27 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -46,12 +46,12 @@ push blocked — fix it, or override with a reason
 
 Claude Code is great at writing code. Autopilot makes it **finish the job** — the planning, checking, deciding, and remembering you'd otherwise do by hand:
 
-- **Hand it the goal, get back a result** — `/l3` `/l4` `/l5` and `ceo-agent` can take a task end-to-end (sized, planned, built, reviewed, closed) and only stop to ask at the decisions that actually matter.
+- **Hand it the goal, get back a result** — `/l3` `/l4` `/l5` `/l6` and `ceo-agent` can take a task end-to-end (sized, planned, built, reviewed, closed) and only stop to ask at the decisions that actually matter.
 - **A second engine argues with your code** — reviews can run on a *different* model family (GPT, Gemini), so more bugs get caught before your users see them instead of being rubber-stamped by the same model that wrote them.
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It's a single Claude Code plugin — **24 skills, 3 methodology agents, 22 hooks, zero dependencies**. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It's a single Claude Code plugin — **27 skills, 3 methodology agents, 22 hooks, zero dependencies**. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 
@@ -90,7 +90,7 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 ## What It Does
 
-24 skills, grouped by what you're trying to do. Each one triggers from natural language — the **Try saying** lines are real triggers.
+27 skills, grouped by what you're trying to do. Each one triggers from natural language — the **Try saying** lines are real triggers.
 
 ### ✍️ Build code
 
@@ -106,18 +106,20 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 ### 🤖 Full autopilot
 
-`ceo-agent` (you set the goal, it executes) · `/l3` `/l4` `/l5` (terse front-doors that pre-fill the CEO startup so one line ships the goal). They escalate **where the work runs**:
+`ceo-agent` (you set the goal, it executes) · `/l3` `/l4` `/l5` `/l6` (terse front-doors that pre-fill the CEO startup so one line ships the goal). They escalate **where the work runs**:
 
 | | Runs where | Reach for it when |
 |---|---|---|
 | **`/l3`** | inline, on this thread | full autonomy, but you want to watch it happen |
 | **`/l4`** | one background, worktree-isolated **foreman** | a long run you'd rather offload — your context stays clean, the authoritative quality verdict is held at depth 0 |
 | **`/l5`** | `/l4`, but the **implementer is a different engine** (agy / Gemini) | cost-arbitrage, or a decorrelated second engine doing the mechanical coding |
+| **`/l6`** | `/l5`, plus **verification authoring is delegated** to a different engine | when you want implementation and verification labor offloaded, while depth 0 keeps merge authority |
 
 ```
 /l3 fix the flaky reconnect test, you decide     # inline
 /l4 ship the WebSocket reconnect system          # offload to a background foreman
 /l5 migrate the config loader to the new schema  # foreman + heterogeneous implementer
+/l6 ship the parser rewrite                      # hetero implementer + hetero verification authoring
 ```
 
 > **Try saying:** *"CEO mode, handle it"* · *"全權處理"* · *"/l4 ship the reconnect system"*
@@ -130,15 +132,15 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 > **Try saying:** *"record this for next time"* · *"回顧這週"* · *"what's the highest priority?"*
 
-**→ Full catalog of all 24 skills, the three cognitive modes, and how they compose: [docs/skills.md](docs/skills.md).**
+**→ Full catalog of all 27 skills, the three cognitive modes, and how they compose: [docs/skills.md](docs/skills.md).**
 
 ## Install
 
-**Claude Code** (primary) — the two commands above. All 24 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+**Claude Code** (primary) — the two commands above. All 27 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
 ### Other platforms
 
-Autopilot is portable: **OpenCode** and **Codex** discover the skills via `.agents/skills/`, **Antigravity (`agy`)** imports the repo as a Claude Code-source plugin, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
+Autopilot is portable: **OpenCode** discovers skills via `.agents/skills/`, **Codex** can use `.agents/skills/` or the local package under `platforms/codex/plugin` whose manifest exposes skills with bundled support payload, **Antigravity (`agy`)** imports the repo as a Claude Code-source plugin, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
 
 ## Learn More
 
@@ -146,7 +148,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 
 | Topic | Doc |
 |-------|-----|
-| **All 24 skills** + three modes + how they compose | [docs/skills.md](docs/skills.md) |
+| **All 27 skills** + three modes + how they compose | [docs/skills.md](docs/skills.md) |
 | **Superpowers coexistence** — three scenarios, migration | [docs/coexistence.md](docs/coexistence.md) |
 | **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |

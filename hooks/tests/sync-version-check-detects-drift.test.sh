@@ -20,6 +20,15 @@ ec=$?
 assert_neq "$ec" "0" "--check detects drift (non-zero exit)"
 assert_contains "$out" "DRIFT DETECTED" "drift banner present"
 
+SANDBOX_CODEX="$TEST_TMP/sandbox-codex"
+SCRIPT_CODEX=$(setup_sync_version_sandbox "$SANDBOX_CODEX")
+perl -i -pe 's/"version":\s*"[^"]+"/"version": "0.0.0-codex-drift"/' "$SANDBOX_CODEX/platforms/codex/plugin/.codex-plugin/plugin.json"
+
+out=$(node "$SCRIPT_CODEX" --check 2>&1)
+ec=$?
+assert_neq "$ec" "0" "--check detects Codex manifest drift (non-zero exit)"
+assert_contains "$out" "platforms/codex/plugin/.codex-plugin/plugin.json" "drift output names Codex manifest"
+
 # Live repo files were NOT touched.
 node "$REPO_ROOT/scripts/sync-version.js" --check >/dev/null 2>&1
 assert_exit_code "$?" 0 "live repo --check still clean (no live mutation)"

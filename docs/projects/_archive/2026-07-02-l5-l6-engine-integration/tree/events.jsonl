@@ -1,0 +1,7 @@
+{"schema_version":1,"ts":"2026-07-01T20:57:15Z","node":"root","type":"tree_initialized","proj":"2026-07-02-l5-l6-engine-integration"}
+{"schema_version":1,"ts":"2026-07-02T00:00:00Z","node":"root","type":"project_started","project":"2026-07-02-l5-l6-engine-integration","branch":"feat/v2.28.2-engine-integration","base":"8178cc71888568ae95d5ad5075acd07ac4237e54"}
+{"schema_version":1,"ts":"2026-07-02T00:00:00Z","node":"p1","type":"phase_completed","phase":"P1 engine implementation","commits":["4a2d40e","232b2d1","0117f89"]}
+{"schema_version":1,"ts":"2026-07-02T00:00:00Z","node":"p2","type":"phase_completed","phase":"P2 docs/version","version":"2.28.2"}
+{"schema_version":1,"ts":"2026-07-02T00:00:00Z","node":"p3","type":"quality_gate","focused":"pass","full_suite":"4_pre_existing_failures","pre_existing":["check-optin-changelog","check-test-integrity-l1","check-test-integrity","dispatch-hetero"]}
+{"schema_version":1,"ts":"2026-07-02T00:00:00Z","node":"p3","type":"phase_completed","phase":"P3 quality + /l5 loop review","review_rounds":9,"review_verdict":"SHIP-AS-IS","focused":"pass","deterministic":"pass","full_suite":"78/82 with 4 pre-existing failures","pre_existing":["check-optin-changelog","check-test-integrity-l1","check-test-integrity","dispatch-hetero"]}
+{"schema_version":1,"ts":"2026-07-02T00:00:00Z","node":"p4","type":"project_archived","phase":"P4 finish-flow","merge_commit":"ca7c85e7112c57f9110c92488bad1448cb21e355","archive_path":"docs/projects/_archive/2026-07-02-l5-l6-engine-integration"}

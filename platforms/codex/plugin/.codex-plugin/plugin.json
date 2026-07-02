@@ -1,0 +1,38 @@
+{
+  "name": "autopilot",
+  "version": "2.29.0",
+  "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts. The manifest exposes skills only and does not load Claude Code hooks.",
+  "author": {
+    "name": "TWGS Team"
+  },
+  "homepage": "https://github.com/cookys/autopilot",
+  "repository": "https://github.com/cookys/autopilot",
+  "license": "MIT",
+  "keywords": [
+    "autopilot",
+    "codex",
+    "skills",
+    "workflow",
+    "orchestration"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Autopilot",
+    "shortDescription": "Lifecycle and review-loop skills for Codex",
+    "longDescription": "Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The manifest declares only skills while the package payload bundles support CLI, scripts, references, templates, and shared helpers needed by those skills; it does not load Claude Code hook manifests.",
+    "developerName": "TWGS Team",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use Autopilot dev-flow for this change.",
+      "Plan this with /l5 discipline.",
+      "Check harness capability freshness."
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": []
+  }
+}

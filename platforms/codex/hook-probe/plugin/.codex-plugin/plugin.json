@@ -1,0 +1,33 @@
+{
+  "name": "autopilot-hook-probe",
+  "version": "0.1.0",
+  "description": "Warning-only Codex hook payload probe for Autopilot adapter development. It records payload shape and host semantics, and never blocks tool execution.",
+  "author": {
+    "name": "TWGS Team"
+  },
+  "homepage": "https://github.com/cookys/autopilot",
+  "repository": "https://github.com/cookys/autopilot",
+  "license": "MIT",
+  "keywords": [
+    "autopilot",
+    "codex",
+    "hooks",
+    "probe"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Autopilot Hook Probe",
+    "shortDescription": "Warning-only Codex hook payload probe",
+    "longDescription": "Records Codex hook payload shape, cwd, and environment-key presence for Autopilot adapter development. It does not ship blocking behavior.",
+    "developerName": "TWGS Team",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Probe Codex hook payloads for Autopilot adapter development."
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": []
+  }
+}

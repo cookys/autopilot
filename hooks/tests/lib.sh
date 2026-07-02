@@ -147,28 +147,31 @@ run_hook() {
 # Materialises a self-contained mini-repo so sync-version.js can be invoked
 # WITHOUT touching the live repo's manifest files. sync-version uses
 # `path.resolve(__dirname, '..')` to find REPO_ROOT, so by copying the script
-# into <sandbox-dir>/scripts/ and the 5 tracked files into the sandbox at the
+# into <sandbox-dir>/scripts/ and the tracked mirrors into the sandbox at the
 # same relative paths, the script edits the sandbox copies.
 #
 # Echoes the sandbox script's full path. Caller can pass it to `node`.
 #
-# Files mirrored. sync-version's editPlan writes only the first four (version
-# everywhere + description fragments; README.md = version badge only). README.md +
+# Files mirrored. sync-version's editPlan writes manifest versions and description
+# fragments where it owns them; README.md = version badge only. README.md +
 # hooks/README.md are still copied so round-trip / dry-run can assert byte-identity
-# — the hooks badge + hooks/README tier tables are owned by check-hook-inventory.js,
-# NOT sync-version, so they must stay untouched:
+# where appropriate — the hooks badge + hooks/README tier tables are owned by
+# check-hook-inventory.js, NOT sync-version, so they must stay untouched:
 #   - .claude-plugin/plugin.json   (canonical)
 #   - plugin.json                  (root mirror)
 #   - .claude-plugin/marketplace.json
+#   - platforms/codex/plugin/.codex-plugin/plugin.json
 #   - README.md                    (version badge; hooks badge NOT sync-version's)
 #   - hooks/README.md              (untouched by sync-version; byte-identity guard)
 setup_sync_version_sandbox() {
   local sandbox="$1"
-  mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks"
+  mkdir -p "$sandbox/.claude-plugin" "$sandbox/scripts" "$sandbox/hooks" "$sandbox/platforms/codex/plugin/.codex-plugin" "$sandbox/platforms/codex/.agents/plugins"
   cp "$REPO_ROOT/scripts/sync-version.js"        "$sandbox/scripts/sync-version.js"
   cp "$REPO_ROOT/.claude-plugin/plugin.json"     "$sandbox/.claude-plugin/plugin.json"
   cp "$REPO_ROOT/.claude-plugin/marketplace.json" "$sandbox/.claude-plugin/marketplace.json"
   cp "$REPO_ROOT/plugin.json"                    "$sandbox/plugin.json"
+  cp "$REPO_ROOT/platforms/codex/plugin/.codex-plugin/plugin.json" "$sandbox/platforms/codex/plugin/.codex-plugin/plugin.json"
+  cp "$REPO_ROOT/platforms/codex/.agents/plugins/marketplace.json" "$sandbox/platforms/codex/.agents/plugins/marketplace.json"
   cp "$REPO_ROOT/README.md"                      "$sandbox/README.md"
   cp "$REPO_ROOT/hooks/README.md"                "$sandbox/hooks/README.md"
   echo "$sandbox/scripts/sync-version.js"

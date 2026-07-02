@@ -13,6 +13,10 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const {
+  composeSessionStartContext,
+  buildSessionStartOutput,
+} = require('../src/hooks/handlers/session-start');
 
 const HANDOFF_TTL_MS = 24 * 60 * 60 * 1000;
 const EXTRA_CONTEXT_LIMIT = 10000;
@@ -521,22 +525,6 @@ function run() {
       }
     } catch { /* ignore */ }
 
-    // --- Build base context ---
-    let context = `You have **Autopilot** lifecycle skills. Before starting any task, check if one applies:\n\n| Trigger | Skill |\n|---------|-------|\n| Starting code work, "I'm working on X", quick fix, hotfix, continuing from yesterday | \`autopilot:dev-flow\` |\n| Research options, "what do others use", compare X vs Y, 業界怎麼做 | \`autopilot:survey\` |\n| Strategic decision, need perspectives, tradeoff analysis, 要辯論一下 | \`autopilot:think-tank\` |\n| Irreversible decision, genuine stalemate, Hegelian dialectic, 不可逆決策, 兩邊都有道理, 辯證一下 | \`autopilot:think-tank-dialectic\` |\n| Full delegation, "get it done", CEO mode, 搞定, 全權處理 | \`autopilot:ceo-agent\` |\n| Pre-commit/merge quality checks, "is this ready?" | \`autopilot:quality-pipeline\` |\n| Archive project, bootstrap from plan, set up tracking | \`autopilot:project-lifecycle\` |\n| Onboard a repo to autopilot, scaffold .claude config | \`autopilot:onboard\` |\n| Save a lesson, "record this", knowledge audit | \`autopilot:learn\` |\n| Retrospective, commit history analysis, 回顧 | \`autopilot:retro\` |\n| What to work on next, /next, highest priority | \`autopilot:next\` |\n| Compare two implementations, feature parity check | \`autopilot:audit\` |\n\nIf uncertain, invoke the skill — it will guide you. Autopilot sets the rules and runs them standalone.`;
-
-    if (compactionRecovery) {
-      context += compactionRecovery;
-    }
-    if (!handoffInjected && intentHint) {
-      context += intentHint;
-    }
-    if (handoffInjected) {
-      context = injectHandoffSection(context, handoffInjected);
-    }
-    if (disableWarning) {
-      context += disableWarning;
-    }
-
     let updateNotice = '';
     try {
       const currentVersionTuple = readCurrentPluginVersion(pluginRoot);
@@ -544,36 +532,29 @@ function run() {
     } catch {
       updateNotice = '';
     }
-    if (updateNotice) {
-      const updateNoticeBlock = `\n\n${updateNotice}`;
-      if (context.length + updateNoticeBlock.length < EXTRA_CONTEXT_LIMIT) {
-        context += updateNoticeBlock;
-      }
-    }
 
-    if (context.length >= EXTRA_CONTEXT_LIMIT) {
-      context = context.slice(0, EXTRA_CONTEXT_KEEP);
-    }
-
-    const output = {};
-    if (process.env.CLAUDE_PLUGIN_ROOT) {
-      output.hookSpecificOutput = {
-        hookEventName: 'SessionStart',
-        additionalContext: context,
-      };
-    } else {
-      output.additional_context = context;
-    }
+    const context = composeSessionStartContext({
+      compactionRecovery,
+      handoffInjected,
+      intentHint,
+      disableWarning,
+      updateNotice,
+      injectHandoffSection,
+      limit: EXTRA_CONTEXT_LIMIT,
+      keep: EXTRA_CONTEXT_KEEP,
+    });
+    const output = buildSessionStartOutput({
+      context,
+      claudePluginRoot: process.env.CLAUDE_PLUGIN_ROOT,
+    });
     process.stdout.write(JSON.stringify(output, null, 2).replace(/\r\n/g, '\n') + '\n');
     process.exit(0);
   } catch (err) {
     console.error(`Warning: session-start hook failed: ${err.message || err}`);
-    const fallback = {};
-    if (process.env.CLAUDE_PLUGIN_ROOT) {
-      fallback.hookSpecificOutput = { hookEventName: 'SessionStart', additionalContext: '' };
-    } else {
-      fallback.additional_context = '';
-    }
+    const fallback = buildSessionStartOutput({
+      context: '',
+      claudePluginRoot: process.env.CLAUDE_PLUGIN_ROOT,
+    });
     process.stdout.write(JSON.stringify(fallback, null, 2).replace(/\r\n/g, '\n') + '\n');
     process.exit(0);
   }

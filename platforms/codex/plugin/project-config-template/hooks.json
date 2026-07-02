@@ -1,0 +1,9 @@
+{
+  "//": "Project-level hook overrides for autopilot. Copy to your project's .claude/ directory.",
+  "//usage": "Override or extend the plugin's default hooks.json for project-specific needs.",
+  "hooks": {
+    "//PreToolUse": "Add project-specific PreToolUse hooks here",
+    "//PostToolUse": "Add project-specific PostToolUse hooks here",
+    "//Stop": "Add project-specific Stop hooks here"
+  }
+}

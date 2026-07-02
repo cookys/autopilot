@@ -147,6 +147,20 @@ assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"
 assert_contains "$OUT" '"runner": "codex"' "codex wrapper-commit runner reported"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-no-commit)" "codex wrapper-commit message"
 
+# 5e. wrapper-commit identity fallback covers author-only environments too.
+# `git commit` needs both author and committer identity; an author env alone is
+# not enough when HOME has no git config.
+AUTHOR_ONLY_HOME="$TEST_TMP/git-home-author-only"
+mkdir -p "$AUTHOR_ONLY_HOME"
+OUT="$( (
+  cd "$SBX"
+  env HOME="$AUTHOR_ONLY_HOME" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t PATH="$TEST_TMP:$PATH" \
+    "$SCRIPT" --branch feat/codex-author-only --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+) 2>&1 )"; EXIT=$?
+assert_eq "0" "$EXIT" "codex wrapper-commit with author-only env exit code"
+assert_contains "$OUT" '"status": "committed"' "codex author-only wrapper-commit status"
+assert_eq "dispatch-hetero(codex): edits on feat/codex-author-only" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-author-only)" "codex author-only wrapper-commit message"
+
 # 6 (case c). no_op path: stub exits 0 with no commit → exit 1, status no_op, worktree KEPT
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/empty --prompt-file "$PROMPT" --agy-bin "$STUB_NOOP" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "no_op exit code"

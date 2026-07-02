@@ -1,0 +1,21 @@
+{
+  "name": "autopilot-hook-probe-local",
+  "interface": {
+    "displayName": "Autopilot Hook Probe Local"
+  },
+  "plugins": [
+    {
+      "name": "autopilot-hook-probe",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "version": "0.1.0",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

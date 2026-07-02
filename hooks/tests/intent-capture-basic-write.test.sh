@@ -18,8 +18,12 @@ assert_eq "$count" "1" "one per-cwd intent file written"
 
 intent_file=$(find "$INTENT_DIR" -maxdepth 1 -name '*.json' | head -1)
 content=$(cat "$intent_file")
+expected_session="$(node -e "const crypto=require('crypto'); console.log(crypto.createHash('sha1').update(process.cwd()).digest('hex').slice(0,12));")"
+assert_contains "$content" "\"session_id\": \"$expected_session\"" "canonical fallback session id recorded"
 assert_contains "$content" '"last_tool": "Bash"' "last_tool recorded"
 assert_contains "$content" "echo test" "summary field includes command"
+assert_contains "$content" '"tool_count_session": 1' "tool count recorded"
+assert_file_exists "$HOOK_TMPDIR/claude-intent-tool-count-$expected_session" "tool counter uses canonical session id"
 
 # mode 0600 (POSIX stat for Linux + macOS)
 mode=$(stat -c '%a' "$intent_file" 2>/dev/null || stat -f '%Lp' "$intent_file" 2>/dev/null)

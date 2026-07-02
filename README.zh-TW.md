@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
   <img src="https://img.shields.io/badge/version-2.29.0-E8A838?style=flat-square" alt="v2.29.0">
-  <img src="https://img.shields.io/badge/skills-24-4A90D9?style=flat-square" alt="24 Skills">
+  <img src="https://img.shields.io/badge/skills-27-4A90D9?style=flat-square" alt="27 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
@@ -46,12 +46,12 @@ push blocked — fix it, or override with a reason
 
 Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那些你本來得自己動手的規劃、檢查、決策與記憶：
 
-- **給它目標，拿回結果** —— `/l3` `/l4` `/l5` 和 `ceo-agent` 能把一個任務從頭跑到尾（判斷大小、規劃、實作、審查、收尾），只在真正該你拍板的決策點才停下來問。
+- **給它目標，拿回結果** —— `/l3` `/l4` `/l5` `/l6` 和 `ceo-agent` 能把一個任務從頭跑到尾（判斷大小、規劃、實作、審查、收尾），只在真正該你拍板的決策點才停下來問。
 - **第二個引擎來吵你的 code** —— 審查可以跑在**不同的**模型家族（GPT、Gemini）上，所以更多 bug 在使用者看到之前就被抓到，而不是被寫它的同一個模型蓋章放行。
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它是單一 Claude Code plugin —— **24 個 skill、3 個方法論 agent、22 個 hook、零相依**。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它是單一 Claude Code plugin —— **27 個 skill、3 個方法論 agent、22 個 hook、零相依**。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -90,7 +90,7 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 ## What It Does
 
-24 個 skill，依你想做的事分組。每個都從自然語言觸發 ——「Try saying」列出的就是真正的觸發語。
+27 個 skill，依你想做的事分組。每個都從自然語言觸發 ——「Try saying」列出的就是真正的觸發語。
 
 ### ✍️ 寫程式
 
@@ -106,18 +106,20 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 ### 🤖 全自動
 
-`ceo-agent`（你定目標，它執行）· `/l3` `/l4` `/l5`（簡潔前門，預填 CEO 啟動四問，一行就把目標送出去）。三者的差別在**實作在哪裡跑**：
+`ceo-agent`（你定目標，它執行）· `/l3` `/l4` `/l5` `/l6`（簡潔前門，預填 CEO 啟動四問，一行就把目標送出去）。各級的差別在**實作在哪裡跑**：
 
 | | 在哪裡跑 | 何時用 |
 |---|---|---|
 | **`/l3`** | inline，這條 thread 上 | 全自主，但你想盯著它跑 |
 | **`/l4`** | 一個背景、worktree 隔離的 **foreman** | 想把長時間自主跑的工作 offload — 你的 context 保持乾淨，權威品質判定握在 depth 0 |
 | **`/l5`** | 同 `/l4`，但**實作交給不同引擎**（agy / Gemini） | 成本套利，或讓一個去相關化的第二引擎做機械式實作 |
+| **`/l6`** | 同 `/l5`，再把**驗證撰寫**交給不同引擎 | 想把實作與驗證撰寫都外包，但 depth 0 仍保留合併權限 |
 
 ```
 /l3 fix the flaky reconnect test, you decide     # inline
 /l4 ship the WebSocket reconnect system          # offload 給背景 foreman
 /l5 migrate the config loader to the new schema  # foreman + 異質實作引擎
+/l6 ship the parser rewrite                      # 異質實作 + 異質驗證撰寫
 ```
 
 > **Try saying：** *「CEO 模式，幫我處理」* · *「全權處理」* · *「/l4 把重連系統做掉」*
@@ -130,15 +132,15 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 > **Try saying：** *「記下來供下次使用」* · *「回顧這週」* · *「最高優先是什麼？」*
 
-**→ 全部 24 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/skills.md](docs/skills.md)。**
+**→ 全部 27 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/skills.md](docs/skills.md)。**
 
 ## Install
 
-**Claude Code**（主要）—— 上面那兩行指令。24 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
+**Claude Code**（主要）—— 上面那兩行指令。27 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
 
 ### 其他平台
 
-Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 skill，**Antigravity（`agy`）** 則將 repo 作為 Claude Code-source plugin 匯入，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
+Autopilot 可攜：**OpenCode** 透過 `.agents/skills/` 發現 skill，**Codex** 可使用 `.agents/skills/` 或 `platforms/codex/plugin` 的 local package（manifest 只暴露 skills，但 payload 會包含支援檔），**Antigravity（`agy`）** 則將 repo 作為 Claude Code-source plugin 匯入，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
 
 ## Learn More
 
@@ -146,7 +148,7 @@ Autopilot 可攜：**OpenCode** 與 **Codex** 透過 `.agents/skills/` 發現 sk
 
 | 主題 | 文件 |
 |------|------|
-| **全部 24 個 skill** + 三種模式 + 如何組合 | [docs/skills.md](docs/skills.md) |
+| **全部 27 個 skill** + 三種模式 + 如何組合 | [docs/skills.md](docs/skills.md) |
 | **Superpowers 並存** —— 三種情境、遷移 | [docs/coexistence.md](docs/coexistence.md) |
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |

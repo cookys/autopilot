@@ -1,0 +1,3 @@
+{"schema_version":1,"ts":"2026-07-01T22:17:00Z","node":"root","type":"tree_initialized","proj":"2026-07-02-engine-hardening"}
+{"schema_version":1,"ts":"2026-07-02T06:16:00Z","node":"root","type":"project_started","branch":"feat/v2.29.0-engine-hardening","target_version":"v2.29.0","source":"external architecture review follow-up"}
+{"schema_version":1,"ts":"2026-07-02T06:55:00Z","node":"p1","type":"phase_completed","phase":"P1-P5 hardening implementation","summary":"F1-F9 plus S1/S2/S5 implemented; S3/S4/S6/S7 deferred as non-ship-blocking semantics"}

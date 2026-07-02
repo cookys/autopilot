@@ -26,14 +26,20 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### ✅ DONE (2026-07-02, v2.29.0) — Pre-existing full-suite failures repaired
+- **Resolution**: The four residual full-suite failures from the v2.28.1/v2.29.0 train are fixed. `check-optin-changelog.test.sh` now configures repo-local git identity in its ambiguous-history sandbox; `check-test-integrity.test.sh` keeps L0 coverage isolated with `--no-l1`; `check-test-integrity-l1.test.sh` uses a hermetic fake pytest reporter so host-level pytest is not required; and `dispatch-hetero.test.sh` now covers codex wrapper-commit success including author-only identity environments. `bash hooks/tests/run.sh` is green (`82/82` test files).
+- **Source**: `f9d1590` merge + archived project `docs/projects/_archive/2026-07-02-full-suite-green/README.md`; original source was v2.28.1 finish-flow quality gate (`708e911` merge), full suite 78/82 with pre-existing classification.
+
+### ✅ DONE (2026-07-02, v2.29.0) — Engine integration follow-up hardening from external architecture review
+- **Resolution**: Shipped F1-F4 plus feasible ride-alongs F5-F9/S1/S2/S5. `engine implement-review` now fails closed on unknown/unqualified reviewers by default, Codex package payload drift is gated by `sync-codex-plugin-skills.sh --check` in pre-commit/preflight, release metadata is retargeted to `v2.29.0`, and the engine layer/front-door docs are updated. S3/S4/S6/S7 remain deferred as non-ship-blocking runtime semantics, not backlog-triggered active work.
+- **Source**: `ce3d79e` merge + `2b895d2` post-merge doc-sync correction; archived project `docs/projects/_archive/2026-07-02-engine-hardening/README.md`.
+
 ### ✅ DONE (2026-07-01, v2.28.0) — `/l6` — full-dispatch CEO front-door
 - **Resolution**: `/l6` was shipped as the 26th skill. Recurrence was proven by cross-session manual usage + token-conservation need (not one session). The prerequisite dispatch-hetero fix shipped in v2.27.1. The entry no longer gates anything.
 
-### `dispatch-hetero.sh` wrapper commit misses net-new files (`git add -A` fix)
-- **Trigger**: next time `dispatch-hetero.sh` is touched, OR before building the `/l5 --dispatch-verify` mode above (it is a prerequisite — removes the manual-harvest friction).
-- **Context**: The codex EDIT-ONLY wrapper commit is tracked-only (no `git add -A`), so an engine that creates **net-new files** (new script/test/corpus) leaves them untracked → outcome `status:dirty`, `files_changed:0` even though the work is in the worktree; the dispatcher must harvest by artifact (`cp` from worktree). Hit ~8× in the 2026-06-30 build (memory [[project_dispatch-hetero-untracked-newfiles]]). Fix: `git add -A` (or add the declared scope paths) before the wrapper `git commit`, so net-new files commit cleanly and the outcome is `committed`. Verify the artifact-rail invariant still holds (commit presence by git, never self-report).
-- **Effort**: PATCH (S).
-- **Source**: 2026-06-30 engine-lifecycle full-dispatch build.
+### ✅ DONE (2026-07-02, v2.29.0) — `dispatch-hetero.sh` wrapper commit captures net-new files
+- **Resolution**: The wrapper-commit fallback stages with `git add -A`, so codex edit-only runs that create net-new files produce a clean `committed` outcome instead of `dirty`/manual harvest. The v2.29.0 follow-up also hardened the same path for repos without configured author/committer identity by adding deterministic fallback identity only when either `GIT_AUTHOR_IDENT` or `GIT_COMMITTER_IDENT` is unavailable. Covered by `hooks/tests/dispatch-hetero.test.sh` (`51` assertions).
+- **Source**: `f9d1590` merge + archived project `docs/projects/_archive/2026-07-02-full-suite-green/README.md`; original source was the 2026-06-30 engine-lifecycle full-dispatch build.
 
 ### Eval plugin-arm context isolation — guard the baseline against silent self-contamination
 - **Trigger**: the first time autopilot runs an **A/B "with-skill vs without-skill" lift measurement** (i.e. an eval arm that loads the plugin vs a baseline arm that must NOT) — e.g. proving a skill/prompt actually helps, or wiring an eval into a CI quality gate. NOT before then (today's `run-eval-batch.sh` measures trigger isolation, not lift).

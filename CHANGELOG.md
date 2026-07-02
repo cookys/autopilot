@@ -24,25 +24,72 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.29.0 — verifier isolation as a hard rule
+## v2.29.0 — /l5 and /l6 engine implementation-review orchestration
 
-**Headline**: Encodes **verifier isolation** as a normative MUST across every review-assembly seam: a reviewer / QC panelist / verdict-producing judge **MUST receive only artifacts** (diff, files, test output) plus the *original* task/plan/commit as baseline, and **MUST NOT receive the implementer's self-report, summary, chat narrative, or self-assessed verdict**. Feeding a verifier the implementer's own account of the work anchors it into confirming the claim — the multi-agent **hallucination cascade** (arXiv:2606.07937) where N anchored reviewers are *more* confident and *less* correct than one. This is the input-side companion to the write path's long-standing "verify by artifacts, never self-report" axiom, and is **orthogonal** to blind re-dispatch (which strips *prior verdicts* on round 2+; verifier isolation applies to *every* round including round 1).
+**Headline**: Promotes the `/l5`/`/l6` engine implementation-review path to a release-ready minor: `engine implement-review` runs deterministic `implementer -> review -> repair -> review` cycles, reviewer qualification now fails closed by default, Codex package payload drift is gated, and the previously silent `harness-maintenance` skill is now correctly recorded as the 27th user-facing skill.
 
 ### Added
-- `references/blind-dispatch.md`: new normative section **"Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)"** — the allowed/forbidden-input table, the load-bearing *baseline-vs-report* distinction ("written to define the goal → keep; to claim the goal was met → strip"), the structural-enforcement note (`dispatch-review.sh`), a per-dispatch pre-flight check, and the single carve-out (`qc-panel.js` shadow interrogation panel — tolerated only because non-authoritative; MUST NOT be promoted to gating while it ingests the self-report).
+- `harness-maintenance`: user-facing skill for auditing and refreshing cross-harness capability state. This landed code-side in the v2.28.x development series without a CHANGELOG entry; v2.29.0 repairs the semver/release record.
+- `src/runners/implementer.js`: dispatch helper for `scripts/dispatch-hetero.sh` with shape validation for implementer outcomes.
+- `src/engine/autopilot-engine.js`:
+  - `implementTask` and `runImplementationReviewLoop` for `/l5` and `/l6`-style implementation review loops.
+  - `buildImplementationArgs`, implementer roster validation, and implement/review loop argument validation.
+  - DI seams for `implementationDispatcher`, `diffProvider`, and `repairPromptWriter`.
+- `bin/autopilot.js`: new `engine implement-review` command.
+- `references/blind-dispatch.md`: new normative verifier-isolation section: reviewers and verdict-producing judges receive artifacts plus the original task/plan baseline, never the implementer's self-report, summary, chat narrative, or self-verdict.
 
 ### Changed
-- `agents/reviewer.md`: adds a MUST-level "Verifier isolation" bullet to Review Philosophy — the reviewer's input is artifacts + original task baseline only; it must not be given nor solicit the implementer's self-report/self-verdict.
-- `skills/quality-pipeline/references/code-review.md`: the Invocation section now states the artifacts-only MUST for **every** review round (round 1 included), distinct from the existing round-2+ blind re-dispatch rule.
-- `project-config-template/review-loop-config.md`: adds a MUST note that decorrelation only holds if the reviewer/qc panel is fed artifacts, never the implementer's account.
-- `scripts/dispatch-review.sh`: header + prompt-assembly comments document the structural invariant (reviewer prompt is diff-text only; no self-report input path — MUST NOT regress).
+- `skills/l5` and `skills/l6` now document `engine implement-review` as the canonical `/l5` and `/l6` integration path.
+- `src/engine/index.js` now exports implementation-loop builders and implementer validation helpers alongside existing review-loop APIs.
+- `engine implement-review` now requires a qualified reviewer by default and fails closed at `phase:"reviewer_qualification"` when scorecard qualification is absent or false. Use `--allow-unqualified-reviewer` only as an explicit escape hatch.
+- `agents/reviewer.md`, `skills/quality-pipeline/references/code-review.md`, and `project-config-template/review-loop-config.md` now encode verifier isolation as a MUST for every review round, including round 1.
+- `scripts/dispatch-review.sh` now documents the structural invariant that reviewer prompt assembly is diff/artifact based and has no self-report input path.
 
 ### Verification / validation
-- Reviewer prompt assembly verified artifacts-only (`dispatch-review.sh` has no self-report parameter); decorrelated review of the diff via a different engine family; `hooks/tests/run.sh` green.
+- Focused suite updates:
+  - `hooks/tests/autopilot-engine.test.sh`
+  - `hooks/tests/autopilot-cli.test.sh`
+  - `hooks/tests/codex-plugin-package.test.sh`
+  - `hooks/tests/dispatch-review.test.sh`
+  - `hooks/tests/hook-normalizers.test.sh`
+  - `hooks/tests/review-runner.test.sh`
+- Full-suite follow-up focused gates:
+  - `hooks/tests/check-optin-changelog.test.sh`
+  - `hooks/tests/check-test-integrity.test.sh`
+  - `hooks/tests/check-test-integrity-l1.test.sh`
+  - `hooks/tests/dispatch-hetero.test.sh`
+- Reviewer prompt assembly verified artifacts-only (`dispatch-review.sh` has no self-report parameter); decorrelated review of the verifier-isolation diff ran through a different engine family.
+
+### Fixed
+- `scripts/sync-codex-plugin-skills.sh --check`: read-only Codex payload drift check, wired into pre-commit and `preflight-portability.sh`.
+- `scripts/dispatch-hetero.sh`: wrapper-commit fallback now succeeds in repos without configured git author/committer identity by using a deterministic fallback identity only when either `GIT_AUTHOR_IDENT` or `GIT_COMMITTER_IDENT` is unavailable; the fallback still stages net-new files with `git add -A` and uses `--no-verify`.
+- `hooks/tests/check-test-integrity*.test.sh`: L0 coverage now disables L1 explicitly, and L1 pytest coverage uses a hermetic fake pytest reporter so the suite no longer depends on host-level pytest installation.
+- `hooks/tests/check-optin-changelog.test.sh`: ambiguous-history sandbox now configures repo-local git identity before committing.
+- Review/implementer runner validators now enforce their documented schemas, including review `status`/`verdict` enums, unknown-key rejection, and `precondition_failed` implementer results with empty `branch`/`base`.
+- Claude hook normalization now lets canonical cwd/session context override payload fields, keeping intent-file keys and persisted values aligned on symlinked paths or payload-session drift.
+- Anthropic-compatible review dispatch fails closed immediately on response stream errors/aborts and oversized bodies.
+
+### Hook-order semantics reminder
+- unchanged
+
+## v2.28.1 — hook adapter framework and Codex hook probe
+
+**Headline**: Adds the first host-neutral hook adapter layer for Autopilot hooks and a separate warning-only Codex hook probe package. Existing Claude hooks keep their behavior, while Codex hook payload/cwd/env/failure semantics can now be captured as artifacts before any blocking Codex hook behavior ships.
+
+### Added
+- `src/hooks/normalize/{claude,codex}.js`: normalized hook event envelope for Claude Code and Codex payloads, backed by `schemas/hook-event.schema.json`.
+- `src/hooks/handlers/{intent-capture,session-start}.js`: first host-neutral handler helpers used by the existing Claude hook wrappers.
+- `platforms/codex/hook-probe/`: separate local Codex plugin package with warning-only `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact`, and `Stop` probe hooks.
+- Hook adapter tests for normalizers, handlers, and Codex hook probe packaging.
+
+### Changed
+- Codex capability state now distinguishes documented/plugin-bundled hook support from Autopilot gate readiness: the default Codex package remains skills-only, and the hook probe stays warning-only.
+
+### Verification / validation
+- Focused hook suites: `bash hooks/tests/run.sh intent-capture`, `bash hooks/tests/run.sh session-start`.
+- Focused package/capability suites: `bash hooks/tests/codex-plugin-package.test.sh`, `bash hooks/tests/codex-hook-probe-package.test.sh`, `bash hooks/tests/harness-capabilities.test.sh`.
 
 ## v2.28.0 — /l6 full-dispatch CEO front-door
-
-## v2.27.1 — dispatch-hetero wrapper-commit fix
 
 **Headline**: Adds `l6`, the 26th skill, as a full-dispatch CEO front-door: `/l6` is `/l5` plus verification AUTHORING as independent heterogeneous dispatch (separate engine family + independent harness), while depth-0 remains pure orchestration with authoritative QC (it executes committed artifacts and judges convergence-by-verification, never trusting a dispatched green).
 
@@ -52,6 +99,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Verification / validation
 - Built entirely by heterogeneous dispatch (`codex` implementation + Gemini decorrelated review), with recurrence proven by cross-session manual usage (token-conservation need), not a single one-off session.
 - Prerequisite `dispatch-hetero` fix shipped in v2.27.1.
+
+## v2.27.1 — dispatch-hetero wrapper-commit fix
 
 **Headline**: `scripts/dispatch-hetero.sh` now wrapper-commits a worker's uncommitted edits for **any** runner, not just agy/grok/cc-shim — the fallback was guarded on `[ "$IS_CODEX" -eq 0 ]` on the assumption "codex commits itself", but `gpt-5.3-codex-spark` routinely leaves edits uncommitted (HEAD at base, tree dirty, especially for net-new files), so dispatches that created new files wrongly returned `dirty`/`files_changed:0` and had to be harvested by hand (~8× in the v2.26.11/v2.27.0 full-dispatch build). Dropping the codex exclusion makes the wrapper-commit a universal fallback (safe: it only fires when HEAD hasn't moved, so a self-committing codex run is never double-committed); the existing `git add -A` already stages net-new files.
 
@@ -88,7 +137,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Verification / validation
 - Implemented by hetero dispatch (`gpt-5.3-codex-spark` implementation path), then reviewed/verified by a decorrelated `grok` + Gemini qc-panel path.
-- Plan: [`docs/plans/2026-06-30-engine-lifecycle-methodology.md`](docs/plans/2026-06-30-engine-lifecycle-methodology.md).
+- Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md).
 
 ## v2.26.10 — cc-shim reviewer + MiniMax-M3 reviewer calibration
 

@@ -32,7 +32,9 @@ run_integrity() {
   local range="${2:-HEAD~1..HEAD}"
   __STDOUT_FILE="$TEST_TMP/stdout.json"
   __EXIT_CODE=0
-  bash "$S" validate --range "$range" --repo "$repo" $extra_args >"$__STDOUT_FILE" 2>/dev/null || __EXIT_CODE=$?
+  # This file tests the L0 static gate. Keep L1 disabled here so assertions do
+  # not depend on whether the host machine has pytest/go/node runners installed.
+  bash "$S" validate --no-l1 --range "$range" --repo "$repo" $extra_args >"$__STDOUT_FILE" 2>/dev/null || __EXIT_CODE=$?
   __OUTPUT="$(cat "$__STDOUT_FILE")"
 }
 

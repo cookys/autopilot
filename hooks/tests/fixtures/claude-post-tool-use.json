@@ -1,0 +1,13 @@
+{
+  "session_id": "claude-session-1",
+  "hook_event_name": "PostToolUse",
+  "cwd": "/repo",
+  "transcript_path": "/tmp/claude-transcript.jsonl",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo ok"
+  },
+  "tool_output": {
+    "exit_code": 0
+  }
+}

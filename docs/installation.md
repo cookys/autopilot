@@ -25,9 +25,22 @@ Agents (`autopilot-reviewer`, `autopilot-debugger`, `autopilot-planner`) load vi
 
 ### Codex (OpenAI)
 
-Same `.agents/skills/` symlink as OpenCode — Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed for per-repo usage.
+Two Codex paths are supported:
 
-For global availability across repos, see `platforms/codex/config.toml.example`.
+- **Per-repo skills**: same `.agents/skills/` symlink as OpenCode. Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed when you run Codex inside this repo.
+- **Local Codex plugin package**: `platforms/codex/plugin/` is a Codex package whose manifest exposes only skills, with bundled support payload and a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
+
+```bash
+./scripts/setup-symlinks.sh
+./scripts/sync-codex-plugin-skills.sh
+codex plugin marketplace add ./platforms/codex
+codex plugin list --marketplace autopilot-local --available
+codex plugin add autopilot@autopilot-local
+```
+
+The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install. Run engine commands from the target repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
+
+For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
 
 ### Antigravity (`agy`)
 
@@ -71,6 +84,7 @@ Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-
 |-----------|-------------|-------|
 | **a local clone** (dev mode, [below](#development)) | `git pull --ff-only` (shell), then `/reload-plugins` (Claude Code) | **Recommended for tracking latest** — no reinstall, pulls apply instantly |
 | **release / marketplace only** (no clone) | clean reinstall ([below](#release--marketplace-reinstall-no-clone)) | `/plugin update` may not detect new versions |
+| **Codex local package** | `git pull --ff-only`, then `./scripts/sync-codex-plugin-skills.sh`, `codex plugin remove autopilot@autopilot-local`, and `codex plugin add autopilot@autopilot-local` | The repo-local marketplace points at your clone; reinstall refreshes Codex's plugin cache |
 
 > **Why not just `/plugin update`?** Claude Code pins a plugin to its install-time commit, and `/plugin update` often does **not** detect new versions ([anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462)). Dev mode sidesteps this entirely: your clone *is* the plugin, so `git pull --ff-only` (then `/reload-plugins` in Claude Code) is the whole update. If you want to follow autopilot closely, set up [dev mode](#development) once and updating becomes a one-liner.
 

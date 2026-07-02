@@ -3,6 +3,7 @@
 # mode of, the write-oriented dispatch-hetero.sh). Feeds a diff as TEXT to a panel
 # engine and parses a VERDICT, so a disjoint-family qc panel can include a vendor
 # (e.g. Gemini-via-agy) that is unreliable as an implementer but fine as a reviewer.
+# For AUTHORING tasks, use sibling dispatch-author.sh (unwrapped raw-prompt dispatch).
 #
 # Why a script: the agy/Gemini read path has two non-obvious rails that MUST NOT be
 # skipped — (1) the diff goes in the PROMPT as text (agy -p ignores cwd; asking it to
@@ -32,6 +33,10 @@
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#   ⏳ TIMEOUT: this call can run for MINUTES (codex xhigh especially). When invoking via
+#   Claude Code's Bash tool, pass a generous `timeout` — the 120s tool default SIGTERMs long
+#   runs (exit 143) even though this script's own inner timeouts are longer. Persist it once
+#   with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
 #   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
 #   anthropic-compatible runner: direct HTTP POST to an Anthropic-compatible /v1/messages
@@ -133,6 +138,12 @@ HDR
   cat "$DIFF_FILE"
   printf '\n```\n'
 } > "$PROMPT_FILE"
+
+# Heads-up on stderr ONLY (never stdout — that carries the JSON contract): the review call
+# below can take several minutes. If this is running under Claude Code's Bash tool with the
+# 120s default timeout, it will be SIGTERM'd mid-run. Raise BASH_DEFAULT_TIMEOUT_MS (~/.claude
+# /settings.json env) or pass a high per-call timeout. Silenced with DISPATCH_QUIET=1.
+[ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-review: ${RUNNER}/${MODEL} (effort=${EFFORT}) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs." >&2
 
 # --- dispatch (read-only) ---
 if [[ "$RUNNER" = "codex" ]]; then

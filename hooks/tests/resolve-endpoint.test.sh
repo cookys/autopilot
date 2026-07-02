@@ -50,6 +50,7 @@ leak="$(env -i AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example AUTOPILOT_ENDPOINT
 assert_not_contains "$leak" 'XTRSECRET' "no token leak under bash -x"
 leak2="$(env -i SHELLOPTS=xtrace AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example AUTOPILOT_ENDPOINT_GLM_TOKEN=XTRSECRET2 bash "$R" glm 2>&1 1>/dev/null)"
 assert_not_contains "$leak2" 'XTRSECRET2' "no token leak under SHELLOPTS=xtrace"
+assert_not_contains "$leak2" 'readonly' "no readonly-variable noise under SHELLOPTS=xtrace (gpt-5.5 R1)"
 
 # 6. --list
 out="$(env -i AUTOPILOT_ENDPOINT_GLM_URL=https://glm.example AUTOPILOT_ENDPOINT_GLM_TOKEN=tval MINIMAX_API_KEY=mval bash "$R" --list)"; ec=$?

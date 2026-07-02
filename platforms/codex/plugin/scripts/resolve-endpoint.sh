@@ -31,15 +31,12 @@
 set -uo pipefail
 
 # --- secret-hygiene: refuse to run traced (a token value would leak via an assignment
-# trace even though we read it through indirect expansion). Disabling xtrace and
-# scrubbing it from SHELLOPTS also protects command substitutions (which re-read
-# SHELLOPTS). Done first, before any env is touched. ---
+# trace even though we read it through indirect expansion). `set +x` disables xtrace
+# AND (bash auto-maintains SHELLOPTS) removes it from SHELLOPTS, so subshells / command
+# substitutions inherit the untraced state too — verified to defeat an inherited
+# `bash -x` and `SHELLOPTS=xtrace`. Done first, before any env is touched. (Do NOT try to
+# assign SHELLOPTS directly — it is readonly and would print a `readonly variable` error.) ---
 set +x
-if [ -n "${SHELLOPTS:-}" ] && [ "${SHELLOPTS#*xtrace}" != "$SHELLOPTS" ]; then
-  # SHELLOPTS is auto-maintained; `set +x` already removed xtrace from it. Re-assert
-  # for the paranoid case where it was exported literally into the environment.
-  export SHELLOPTS="${SHELLOPTS//xtrace/}"
-fi
 
 ENV_NAME_RE='^[A-Za-z_][A-Za-z0-9_]*$'
 NAME_RE='^[A-Za-z0-9_]+$'

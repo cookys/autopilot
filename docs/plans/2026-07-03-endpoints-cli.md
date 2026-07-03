@@ -56,3 +56,15 @@ The loader's line-parser deliberately is NOT a full `.env` parser (no sourcing/i
 
 ## Review Loop History
 - Design: 3-family hetero panel (codex/agy/grok) + depth-0 synthesis (this doc). Convergence = O3 unanimous; O2 resolved as opt-in.
+- **Impl review (decorrelated gpt-5.5 via `dispatch-review.sh`)**:
+  - R1 🟠 Major **CONFIRMED + fixed**: `set` wrote raw values → newline in `--url`/token injects an
+    extra `KEY=VALUE` credential line. Fix: reject control chars (`\x00-\x1f`) before write + test.
+  - R2 🟠 Major **PARTIALLY valid**: the VALID part (unvalidated `--url`) fixed by applying
+    `resolve-endpoint`'s `is_url_safe` grammar. The "shell-metachars execute if sourced" premise is
+    **FALSE by design** — the file is a line-parser target, NEVER sourced; a `$()`/backtick token is
+    stored + read back literally (test proves no execution on write OR loader read-back). Rejecting
+    valid token chars to defend a forbidden sourcing anti-pattern was declined. **Converged at
+    depth-0 by verification** (per `[[feedback_verify-reviewer-claims]]` / the unreachable-misread
+    lesson), not by chasing the verdict string.
+  - Full suite times out on this host (systemd/worktree tests, >10min); all directly-affected
+    tests green; 3 known host-dependent pre-existing failures unchanged.

@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [review-closeout](2026-07-04-review-closeout/README.md) — 7 verified defects (Fix-7) + structural risks R1–R3 (cross-family panel-designed) + prose optimization + l3-l6 sugar evaluation, from the 2026-07-04 whole-repo review. CEO L6. | v2.31.10 | `feat/review-closeout-v2.31.10` |
 
 ## 已完成 (Completed)
 

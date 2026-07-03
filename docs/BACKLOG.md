@@ -50,6 +50,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: 2026-07-04 review-closeout /l6 verification-authoring dogfood.
 
+### cc-shim late-flush exceeds the 3s settle-wait — probe `claude -p` flush timing / per-runner bound
+- **Trigger**: the next `empty_output` from a cc-shim (or any) authoring/review dispatch where the raw_log is later found non-empty.
+- **Context**: v2.31.10 shipped a bounded ~3s settle-wait after the grok late-flush race. Same day, a cc-shim/MiniMax-M3 authoring run was classified `empty_output` while its raw_log held a **17 KB** answer when read minutes later — the flush landed far beyond the bound even though the dispatcher waits for main-process exit first (suggests a detached child or very late buffered write in the `claude -p` path). Twice now a correct answer was harvested manually from a "failed" run. Options: probe the child/flush behavior (probe-playbook P3 applies), per-runner `SETTLE_MS`, or wait-on-descendants. Constraint: a genuinely-empty run (also observed same day, grok-build) must STILL classify empty — don't blur the two cases.
+- **Effort**: Fix
+- **Source**: 2026-07-04 quality-floor-engine critique round (MiniMax critique harvested post-hoc from an "empty" run).
+
 ### Per-event opt-in hook multiplexer — REAFFIRMED deferred (see existing entry below)
 - **Trigger**: (unchanged; see the original entry) — reaffirmed by the 2026-07-04 3-family panel: all three families independently said "not now"; the v2.31.10 tail-window read removed the O(n²) pain that was the strongest argument for doing it early. codex's design note for whenever it fires: a shared offset-cache is NOT a safe substitute (one hook advancing a shared cursor makes sibling hooks miss events — it degenerates into the multiplexer anyway).
 - **Source**: 2026-07-04 review-closeout design panel Q3.

@@ -108,7 +108,7 @@ CEO does **NOT** escalate to dialectic when:
 - User has already decided and wants ceremony (this is rubber-stamping, not deliberation)
 - Same topic was already dialectic'd in this session (Rule 2 session re-entry guard will refuse — avoid the loop)
 
-**Never invoke dialectic as the first tool** on a fresh question. Always think-tank first; escalate only if the LOW consensus signal appears.
+**Never invoke dialectic as the first tool** on a fresh question. Always think-tank first; escalate only if the LOW consensus signal appears. For the design-panel aggregation rules, see [decision-matrix.md](references/decision-matrix.md).
 
 ### Mode Switch
 

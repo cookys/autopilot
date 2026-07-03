@@ -112,6 +112,8 @@ Canonical patterns, examples, and output format: [`skills/quality-pipeline/refer
 | 🟡 Minor | Overly permissive CORS, sensitive data in logs, missing rate limiting, model output trusted without an artifact cross-check on a non-merge-gating path |
 | 🔵 Suggestion | Debug mode in prod, stack traces leaked to users, minor cleanup opportunities |
 
+An acceptance section with no demonstrated failure mode (no negative control per `references/acceptance-patterns.md`) is itself a 🟠 Major finding.
+
 ## Output Contract (MANDATORY format)
 
 Every reviewer run must produce output in this exact structure:

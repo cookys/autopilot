@@ -3,7 +3,7 @@
 - **Date**: 2026-07-03
 - **Target version**: v2.31.8 (PATCH — new CLI subcommand surface + loader overlay layer; no new skill/agent)
 - **Branch**: `feat/v2.31.8-endpoints-cli`
-- **Status**: In progress
+- **Status**: ✅ Shipped in v2.31.8 — merged as `be663af`
 
 ## Origin — heterogeneous design panel (2026-07-03)
 

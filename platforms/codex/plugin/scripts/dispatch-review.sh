@@ -87,7 +87,7 @@ die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precond
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, or anthropic-compatible (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
-[[ -n "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be readable"
+[[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
 timeout_to_ms() {
@@ -196,6 +196,15 @@ passive_capture() {
   fi
 }
 
+# Canonical "no_verdict" emitter used by the hardened parser rails.
+emit_no_verdict() {
+  local reason="$1"
+  passive_capture "no_verdict"
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "%s" }\n' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")"
+  exit 1
+}
+
 
 # Build the review prompt: diff goes in as TEXT (never ask the engine to read the worktree).
 # ARTIFACTS ONLY — the prompt below contains the diff and nothing else. Do NOT interpolate an
@@ -206,23 +215,50 @@ passive_capture() {
 # defends against it, and the files are removed on EXIT. (gpt-5.5 review: umask premise is moot.)
 PROMPT_FILE="$(mktemp -t dispatch-review-prompt-XXXXXX)"
 RAW_LOG="$(mktemp -t dispatch-review-log-XXXXXX)"
+BLOCK_FILE="$(mktemp -t dispatch-review-block-XXXXXX)"
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
-cleanup() { rm -f "$PROMPT_FILE"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"; }
+cleanup() { rm -f "$PROMPT_FILE" "$BLOCK_FILE"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"; }
 trap cleanup EXIT
+DIFF_SIZE_BYTES="$(wc -c < "$DIFF_FILE")"
+if [ "$DIFF_SIZE_BYTES" -gt 98304 ]; then
+  SIZE_WARNING="large diff (${DIFF_SIZE_BYTES} bytes) exceeds 96 KB; large diffs can trigger prompt echo, consider splitting"
+  echo "WARNING: $SIZE_WARNING" >&2
+  printf '[dispatch-review: %s]\n' "$SIZE_WARNING" >> "$RAW_LOG"
+fi
+
+NONCE=""
+NONCE_TRIES=0
+while :; do
+  NONCE="$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  if ! grep -qF "$NONCE" "$DIFF_FILE"; then
+    break
+  fi
+  NONCE_TRIES=$((NONCE_TRIES + 1))
+  if [ "$NONCE_TRIES" -ge 4 ]; then
+    die_precondition "failed to generate a non-colliding review nonce (4 attempts)"
+  fi
+done
+BEGIN="<<<AUTOPILOT-REVIEW-${NONCE}>>>"
+END="<<<AUTOPILOT-END-${NONCE}>>>"
 {
-  cat <<'HDR'
+  cat <<'EOF'
 You are a code reviewer. Review ONLY the diff below for correctness, security, and
 completeness. Do NOT edit any file, do NOT create any project, do NOT run commands.
-Output your verdict in EXACTLY this format and nothing else:
-VERDICT: <SHIP-AS-IS | FIX-THEN-SHIP>
-FINDINGS: <one finding per line, or the single word none>
+Output your verdict with NO other text, prose, or fences. Its ENTIRE output MUST begin with:
+EOF
+  printf '%s\n' "$BEGIN"
+  cat <<'EOF'
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+
+Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block.
 
 Diff under review:
 ```
-HDR
+EOF
   cat "$DIFF_FILE"
-  printf '\n```\n'
+  printf '\n```\n%s\n' "$END"
 } > "$PROMPT_FILE"
 
 # Heads-up on stderr ONLY (never stdout — that carries the JSON contract): the review call
@@ -357,60 +393,97 @@ else
   rm -rf "$RUN_SH" "$AGY_CWD"
   # strip carriage returns the pseudo-TTY inserts
   tr -d '\r' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
+  # strip script(1) wrapper lines so the parser sees the wrapped model block only
+  sed -e '/^Script started on /d' -e '/^Script done on /d' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
 fi
 
 
 
-# --- parse verdict (fail-closed AND fail-toward-block) ---
-# Only consider exact top-level VERDICT/FINDINGS lines outside fenced code blocks.
-# Resolve conservatively: any exact FIX-THEN-SHIP blocks; SHIP only when an exact
-# SHIP line exists and no exact FIX line does.
-VERDICT="$(awk '
-  BEGIN { in_fence=0; fix=0; ship=0 }
-  /^[[:space:]]*```/ { in_fence = !in_fence; next }
-  in_fence { next }
-  /^[[:space:]]*VERDICT:[[:space:]]*FIX-THEN-SHIP[[:space:]]*$/ { fix=1; next }
-  /^[[:space:]]*VERDICT:[[:space:]]*SHIP-AS-IS[[:space:]]*$/ { ship=1; next }
+# --- parse verdict (fail-closed and fail-toward-block) ---
+awk -v begin="$BEGIN" -v end="$END" '
+  BEGIN { started=0; ended=0; leading=1 }
+  {
+    sub(/\r$/, "", $0)
+    if (leading && $0 ~ /^[[:space:]]*$/) {
+      next
+    }
+    if (leading) {
+      leading=0
+      if ($0 != begin) { exit 2 }
+      started=1
+      next
+    }
+    if (!started) { next }
+    if ($0 == begin) { exit 3 }
+    if (ended) {
+      if ($0 !~ /^[[:space:]]*$/) {
+        exit 6
+      }
+      next
+    }
+    if ($0 == end) {
+      ended=1
+      next
+    }
+    print $0
+  }
   END {
-    if (fix) print "FIX-THEN-SHIP";
-    else if (ship) print "SHIP-AS-IS";
+    if (!started) { exit 4 }
+    if (!ended) { exit 5 }
   }
-' "$RAW_LOG" 2>/dev/null)"
-HAS_FINDINGS="$(awk '
-  BEGIN { in_fence=0; found=0 }
-  /^[[:space:]]*```/ { in_fence = !in_fence; next }
-  !in_fence && /^[[:space:]]*FINDINGS:/ { found=1; exit }
-  END { print found }
-' "$RAW_LOG" 2>/dev/null)"
-FINDINGS="$(awk '
-  BEGIN { in_fence=0; capture=0 }
-  /^[[:space:]]*```/ {
-    in_fence = !in_fence;
-    next;
-  }
-  capture && /^Script done on / { exit }
-  !in_fence && !capture && /^[[:space:]]*FINDINGS:/ {
-    capture=1;
-    sub(/^[[:space:]]*FINDINGS:[[:space:]]*/, "", $0);
-    if (length($0) > 0) print $0;
-    next;
-  }
-  !in_fence && capture && /^[[:space:]]*VERDICT:/ { exit }
-  capture && length($0) > 0 { print $0 }
-' "$RAW_LOG" 2>/dev/null)"
-
-if [[ "$VERDICT" != "SHIP-AS-IS" && "$VERDICT" != "FIX-THEN-SHIP" ]]; then
-  # EMPTY or unparseable capture — FAIL-CLOSED. Never silently treated as a pass.
-  passive_capture "no_verdict"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "no parseable VERDICT line (empty capture or stdout-drop) — fail-closed, NOT a pass" }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
-  exit 1
+' "$RAW_LOG" > "$BLOCK_FILE"
+PARSE_RC=$?
+if [ "$PARSE_RC" -ne 0 ]; then
+  emit_no_verdict "response did not start with the expected wrapped block"
 fi
-if [[ "$HAS_FINDINGS" != "1" ]]; then
-  passive_capture "no_verdict"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "missing parseable FINDINGS line — fail-closed, NOT a pass" }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
-  exit 1
+
+BLOCK_BYTES="$(wc -c < "$BLOCK_FILE")"
+if [ "$BLOCK_BYTES" -gt 16384 ]; then
+  emit_no_verdict "response wrapped block exceeded the fail-closed size cap"
+fi
+
+if grep -q 'diff --git' "$BLOCK_FILE" \
+  || grep -q '^@@ ' "$BLOCK_FILE" \
+  || grep -q 'Diff under review:' "$BLOCK_FILE" \
+  || grep -q '<one finding per line' "$BLOCK_FILE"; then
+  emit_no_verdict "response wrapped block contained prompt-text leakage"
+fi
+
+TOTAL_VERDICT_COUNT="$(awk 'BEGIN { c = 0 } /^VERDICT:/ { c += 1 } END { print c + 0 }' "$BLOCK_FILE")"
+FIX_VERDICT_COUNT="$(awk 'BEGIN { c = 0 } /^VERDICT: FIX-THEN-SHIP$/{ c += 1 } END { print c + 0 }' "$BLOCK_FILE")"
+SHIP_VERDICT_COUNT="$(awk 'BEGIN { c = 0 } /^VERDICT: SHIP-AS-IS$/{ c += 1 } END { print c + 0 }' "$BLOCK_FILE")"
+if [ "${TOTAL_VERDICT_COUNT:-0}" -ne 1 ] || (( FIX_VERDICT_COUNT + SHIP_VERDICT_COUNT != 1 )); then
+  emit_no_verdict "response wrapped block has no single valid anchored VERDICT line"
+fi
+
+if [ "$FIX_VERDICT_COUNT" -eq 1 ]; then
+  VERDICT="FIX-THEN-SHIP"
+elif [ "$SHIP_VERDICT_COUNT" -eq 1 ]; then
+  VERDICT="SHIP-AS-IS"
+else
+  emit_no_verdict "response wrapped block has no single valid anchored VERDICT line"
+fi
+
+HAS_FINDINGS="$(awk 'BEGIN { found = 0 } /^FINDINGS:/ { found = 1; exit } END { print found }' "$BLOCK_FILE")"
+if [ "$HAS_FINDINGS" != "1" ]; then
+  emit_no_verdict "response wrapped block missing a parseable FINDINGS line"
+fi
+FINDINGS="$(awk '
+  BEGIN { capture = 0; in_fence = 0 }
+  /^FINDINGS:/ {
+    capture = 1
+    sub(/^[[:space:]]*FINDINGS:[[:space:]]*/, "", $0)
+    if (length($0) > 0) {
+      print $0
+    }
+    next
+  }
+  !capture { next }
+  capture && /^```/ { in_fence = 1 - in_fence; next }
+  !in_fence && length($0) > 0 { print $0 }
+' "$BLOCK_FILE")"
+if [ -z "${FINDINGS:-}" ]; then
+  FINDINGS="none"
 fi
 
 printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "raw_log": "%s", "error": null }\n' \

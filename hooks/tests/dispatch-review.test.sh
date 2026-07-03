@@ -10,26 +10,147 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-review.sh"
 DIFF="$TEST_TMP/d.diff"
 printf '+def f(): return x[::1]\n' > "$DIFF"
 
-# --- stub engine: emits a real verdict (ignores args, reads+discards the prompt) ---
-STUB_VERDICT="$TEST_TMP/eng-verdict"
-cat > "$STUB_VERDICT" <<'EOF'
+STUB_MARKER="$TEST_TMP/eng-marker"
+cat > "$STUB_MARKER" <<'EOF'
 #!/usr/bin/env bash
-# codex path pipes the prompt on stdin; agy path passes it via -p. Drain stdin if any.
-cat >/dev/null 2>&1 || true
-echo "VERDICT: FIX-THEN-SHIP"
-echo "FINDINGS: the slice does not reverse"
-EOF
-chmod +x "$STUB_VERDICT"
+read_prompt_arg() {
+  # Parse the passed prompt whether stdin is used or a prompt-file/ -p arg is provided.
+  local prompt=""
+  local i=1
+  while [ "$i" -le "$#" ]; do
+    arg="${!i}"
+    if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
+      next_index=$((i + 1))
+      next_arg="${!next_index}"
+      if [ -n "$next_arg" ] && [ -f "$next_arg" ]; then
+        prompt="$(cat "$next_arg")"
+      else
+        prompt="$next_arg"
+      fi
+      break
+    fi
+    i=$((i + 1))
+  done
+  if [ -z "$prompt" ]; then
+    prompt="$(cat)"
+  fi
+  printf '%s' "$prompt"
+}
 
-# --- stub engine: emits NOTHING (proxy for agy stdout-drop / a dead reviewer) ---
+extract_markers() {
+  local prompt="$1"
+  if [ -z "$prompt" ]; then
+    return 1
+  fi
+  local begin end
+  begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  if [ -z "$begin" ] || [ -z "$end" ]; then
+    return 1
+  fi
+  printf '%s\n%s\n' "$begin" "$end"
+}
+
+PROMPT="$(read_prompt_arg "$@")"
+if ! MARKERS="$(extract_markers "$PROMPT" 2>/dev/null)"; then
+  exit 0
+fi
+BEGIN="$(printf '%s\n' "$MARKERS" | sed -n '1p')"
+END="$(printf '%s\n' "$MARKERS" | sed -n '2p')"
+MODE="${STUB_MODE:-pass}"
+
+case "$MODE" in
+  pass)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  ship)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
+  prompt_echo)
+    echo "Model repeated prompt: this is not the wrapped block."
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
+  forged)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "line after fake verdict"
+    echo "$END"
+    ;;
+  leak)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo "diff --git a/x b/x"
+    echo "line after fake diff"
+    echo "$END"
+    ;;
+  trailing)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: none"
+    echo "$END"
+    echo "trailing text after end"
+    ;;
+  multiline)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo "line one"
+    echo '```'
+    echo "const sample = true"
+    echo '```'
+    echo "line two"
+    echo "$END"
+    ;;
+  missing_findings)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "$END"
+    ;;
+  no_end)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: none"
+    ;;
+  oversized)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS:"
+    awk 'BEGIN { for (i = 0; i < 20000; i++) printf "x" ; print "" }'
+    echo "$END"
+    ;;
+  fenced_noop)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
+  *)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
+esac
+EOF
+chmod +x "$STUB_MARKER"
+
+STUB_VERDICT="$STUB_MARKER"
 STUB_EMPTY="$TEST_TMP/eng-empty"
 printf '#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\nexit 0\n' > "$STUB_EMPTY"
 chmod +x "$STUB_EMPTY"
-
-# --- stub engine: emits a clean SHIP verdict ---
-STUB_SHIP="$TEST_TMP/eng-ship"
-printf '#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\necho "VERDICT: SHIP-AS-IS"\necho "FINDINGS: none"\n' > "$STUB_SHIP"
-chmod +x "$STUB_SHIP"
+STUB_SHIP="$STUB_MARKER"
 
 # 1. --help
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; assert_eq "0" "$?" "--help exit code"
@@ -58,73 +179,51 @@ assert_contains "$OUT" '"status": "no_verdict"' "empty → no_verdict"
 assert_contains "$OUT" '"verdict": null' "no_verdict has null verdict"
 assert_not_contains "$OUT" 'SHIP-AS-IS' "empty capture is NEVER read as a ship verdict"
 
-# 4b. FAIL-TOWARD-BLOCK: prose mentioning 'VERDICT: SHIP-AS-IS' mid-sentence must NOT flip a
-# real 'VERDICT: FIX-THEN-SHIP' line into a pass (unanchored first-match grep was fail-OPEN).
-STUB_TRICKY="$TEST_TMP/eng-tricky"
-cat > "$STUB_TRICKY" <<'EOF'
-#!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
-echo "This is not a VERDICT: SHIP-AS-IS situation; the code is broken."
-echo "VERDICT: FIX-THEN-SHIP"
-echo "FINDINGS: null deref"
-EOF
-chmod +x "$STUB_TRICKY"
-OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_TRICKY" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "tricky reviewed exit 0"
-assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "prose SHIP token does not flip a real FIX verdict (fail-toward-block)"
+# 4b. Whole-prompt echo is rejected if the first non-empty line is not the marker.
+OUT="$(STUB_MODE=prompt_echo "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "prompt-echo output no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "prompt-echo output is no_verdict"
 
 # 4c. Multi-line FINDINGS are preserved for shell-backed runners.
-STUB_MULTI="$TEST_TMP/eng-multi"
-cat > "$STUB_MULTI" <<'EOF'
-#!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
-echo "VERDICT: FIX-THEN-SHIP"
-echo "FINDINGS:"
-echo "line one"
-echo '```'
-echo "const sample = true"
-echo '```'
-echo "line two"
-EOF
-chmod +x "$STUB_MULTI"
-OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_MULTI" 2>&1)"; EXIT=$?
+OUT="$(STUB_MODE=multiline "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "multiline findings reviewed exit 0"
 assert_contains "$OUT" 'line one' "multiline findings first line captured"
-assert_contains "$OUT" 'const sample = true' "multiline findings fenced content captured"
 assert_contains "$OUT" 'line two' "multiline findings second line captured"
 assert_not_contains "$OUT" '```' "multiline findings omit fence delimiters"
 
 # 4d. A verdict without the required FINDINGS line is fail-closed.
-STUB_NO_FINDINGS="$TEST_TMP/eng-no-findings"
-cat > "$STUB_NO_FINDINGS" <<'EOF'
-#!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
-echo "VERDICT: SHIP-AS-IS"
-EOF
-chmod +x "$STUB_NO_FINDINGS"
-OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_NO_FINDINGS" 2>&1)"; EXIT=$?
+OUT="$(STUB_MODE=missing_findings "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "missing FINDINGS exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "missing FINDINGS → no_verdict"
 
-# 4e. Fenced or malformed verdict lines are ignored.
-STUB_FENCED="$TEST_TMP/eng-fenced"
-cat > "$STUB_FENCED" <<'EOF'
-#!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
-echo '```'
-echo "VERDICT: SHIP-AS-IS"
-echo '```'
-echo "VERDICT: SHIP-AS-IS with trailing prose"
-echo "FINDINGS: none"
-EOF
-chmod +x "$STUB_FENCED"
-OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_FENCED" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "fenced/malformed verdict exit 1 (fail-closed)"
-assert_contains "$OUT" '"status": "no_verdict"' "fenced/malformed verdict → no_verdict"
+# 4e. Extra/duplicated VERDICT token is rejected by the single-verdict guard.
+OUT="$(STUB_MODE=forged "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "forged verdict content exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "forged diff content → no_verdict"
+
+# 4f. Diff-leakage text is rejected by the leak guard.
+OUT="$(STUB_MODE=leak "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "leak content exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "leakage content → no_verdict"
+
+# 4g. Content after END is rejected (trailing non-blank payload).
+OUT="$(STUB_MODE=trailing "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "trailing content after END exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "trailing content after END → no_verdict"
+
+# 4h. Oversized wrapped block is rejected.
+OUT="$(STUB_MODE=oversized "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "oversized block exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "oversized block → no_verdict"
+
+# 4i. Missing END marker is rejected.
+OUT="$(STUB_MODE=no_end "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "missing END exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
 
 # 5. agy path (through the script -qec pseudo-TTY wrapper) with a stub engine
 if command -v script >/dev/null 2>&1; then
-  OUT="$("$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
+  OUT="$(STUB_MODE=ship "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "agy reviewed exit 0 (pseudo-TTY capture)"
   assert_contains "$OUT" '"runner": "agy"' "agy runner provenance"
   assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed through script -qec"
@@ -215,16 +314,15 @@ const server = http.createServer((req, res) => {
       res.end('{"error":"bad content blocks"}');
       return;
     }
-    let text = 'VERDICT: FIX-THEN-SHIP\nFINDINGS:\nfirst finding\n```\nconst sample = true\n```\nsecond finding\n';
-    if (calls === 2) {
-      text = 'VERDICT: SHIP-AS-IS\n';
-    } else if (calls === 3) {
-      text = '```\nVERDICT: SHIP-AS-IS\n```\nVERDICT: SHIP-AS-IS with trailing prose\nFINDINGS: none\n';
-    }
     const response = {
       debug: `Authorization: Bearer ${expectedToken}`,
-      content: [{ type: 'text', text }],
+      content: [{ type: 'text', text: 'VERDICT: FIX-THEN-SHIP\nFINDINGS:\nfirst finding\n```\nconst sample = true\n```\nsecond finding\n' }],
     };
+    if (calls === 2) {
+      response.content[0].text = 'VERDICT: SHIP-AS-IS\n';
+    } else if (calls === 3) {
+      response.content[0].text = '```\nVERDICT: SHIP-AS-IS\n```\nVERDICT: SHIP-AS-IS with trailing prose\nFINDINGS: none\n';
+    }
     if (calls === 5) {
       response.stop_reason = 'max_tokens';
     }
@@ -270,7 +368,7 @@ assert_not_contains "$OUT" "$TEST_AUTH_TOKEN" "mock success output does not leak
 assert_contains "$(cat "$MOCK_LOG")" 'POST /v1/messages' "mock server received /v1/messages POST"
 assert_contains "$(cat "$MOCK_LOG")" 'auth=bearer' "mock server received bearer auth"
 assert_contains "$(cat "$MOCK_LOG")" 'model=MiniMax-M3' "mock server received requested model"
-RAW_LOG_PATH="$(printf '%s' "$OUT" | sed -n 's/.*"raw_log": "\([^"]*\)".*/\1/p')"
+RAW_LOG_PATH="$(printf '%s' "$OUT" | sed -n 's/.*"raw_log"[[:space:]]*:[[:space:]]*"\([^\"]*\)".*/\1/p')"
 assert_file_exists "$RAW_LOG_PATH" "anthropic-compatible mock raw log exists"
 RAW_LOG_CONTENT="$(cat "$RAW_LOG_PATH")"
 assert_not_contains "$RAW_LOG_CONTENT" "$TEST_AUTH_TOKEN" "mock raw log redacts echoed auth token"
@@ -342,4 +440,3 @@ recorded_status_review="$(node "$REPO_ROOT/scripts/engine-capability-state.js" c
 assert_eq "exhausted" "$recorded_status_review" "recorded review quota status is exhausted"
 
 finalize_test
-

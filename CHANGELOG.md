@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.11 — quality-floor engine Phase 1: the judgment-demotion ladder
+
+**Headline**: The first ship of the **quality-floor engine** — the methodology evolution from "clone cookys, remove cookys from the loop" to "make a weak orchestrating model sustain frontier-floor output quality on long tasks". Design: [`docs/plans/2026-07-04-quality-floor-engine.md`](docs/plans/2026-07-04-quality-floor-engine.md) — a **judgment-demotion ladder** (L0 script → L1 playbook match → L2 fan-out + mechanical aggregation → L3 probe-then-branch → L4 escalate + ledger), applied at DESIGN time per lifecycle stage so the weak model never self-selects a level. The design survived a **3-disjoint-family adversarial critique** (codex gpt-5.5 · agy/Gemini · MiniMax-M3) with all 13 major claims adjudicated in the plan's §9 — including dropping the R0 "ledger trends to zero" KPI that all three families independently called a Goodhart trap.
+
+### Added
+- **`references/probe-playbook.md`** (L1) — 8 diagnostic probes indexed by symptom, each with a **discriminating check** (expected-if-match / expected-if-NOT-match) and a real incident citation; no-match ⇒ mandatory escalation (never invent silently); growth rule feeds from escalations via learn/distill.
+- **`references/acceptance-patterns.md`** (L1) — 7 mechanical acceptance patterns (round-trip parity · perturbation · fidelity · idempotency · negative self-check · live-e2e · baseline classification), every instance embedding its own **negative control**; "acceptance with no demonstrated failure mode" is now a 🟠 Major reviewer finding.
+- **`scripts/adjudicate-findings.js`** + tests (L3) — validated finding-adjudication table: `UNPROBED → REPRODUCED / REFUTED / PROOF_BY_TRACE`; **REFUTED requires a mutation-validated probe** (a probe that stays green under the injected defect is vacuous); `PROOF_BY_TRACE` requires second-family confirmation; `gate --ids` fails closed unless every finding referenced by a fix dispatch is actionable. Self-dogfooded live in this ship.
+- **`skills/ceo-agent/references/decision-matrix.md`** (L2) — design-panel aggregation rules: unanimity auto-adopts ONLY across ≥2 disjoint families AND reversible decisions; irreversible ⇒ probe or escalate regardless of unanimity; panelist factual claims go to the adjudication table (this critique round: 3-for-3 families made confidently-cited wrong claims).
+- **Escalation-ledger convention** (L4) — `tree.js` events at 5 named structural emission points; finish-flow L-5.6 checklist line; KPI = demotions shipped + non-increasing escape-rate on a blind strong-model audit sample (NOT entry count). Dogfooded: 2 events emitted during this very ship.
+- Wiring: reviewer.md / planner.md / debugger.md / debug / dev-flow / quality-pipeline code-review.md / level-front-door.md / finish-flow.
+
+### Deferred (plan §7, trigger-conditioned)
+- P2: `check-escalation-coverage.js` + probe-mutation automation + retro ledger-scan. P3: orchestration eval (prereq: eval-arm isolation). P4: demotion-loop automation via distill.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.10`.
+
 ## v2.31.10 — review-closeout: 7 verified defects + structural-risk hardening (contract parity, dispatch rails, hook-layer)
 
 **Headline**: A whole-repo review (two Explore agents + depth-0 verification of every claim) found 7 concrete defects and 3 structural risks; all closed in one `/l6` run — implementation by **agy/Gemini** (codex-spark quota-exhausted mid-run, capability event recorded), design by a **3-family panel** (codex gpt-5.5 · agy/Gemini · grok/xAI), verification plan **authored by MiniMax-M3** (cc-shim) and executed at depth-0 (20 checks, incl. 6 adversarial probes MiniMax designed itself). The dogfood ALSO caught two live dispatch-rail defects the stub tests couldn't see (codex chrome-channel merge; a prompt that never demanded the closing nonce marker) — both fixed and e2e-verified against real codex.

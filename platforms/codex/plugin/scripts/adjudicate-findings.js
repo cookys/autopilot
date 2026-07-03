@@ -549,9 +549,13 @@ function main() {
 
   // Validate command-line options
   const allowed = COMMAND_ALLOWED_FLAGS[command];
+  const valueTakingOptions = new Set(['store', 'file', 'id', 'ids', 'now']);
   for (const key of Object.keys(options)) {
     if (!allowed.has(key)) {
       failUsage(`Unknown option: --${key} for command ${command}`);
+    }
+    if (valueTakingOptions.has(key) && options[key] === true) {
+      failUsage(`Option --${key} requires a value`);
     }
   }
 

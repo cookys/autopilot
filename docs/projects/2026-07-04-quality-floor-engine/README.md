@@ -16,5 +16,6 @@ demoting depth-0 judgment down the ladder (script / playbook / fan-out / probe /
 
 ## Scope boundary
 IN: P1 of the plan (docs + prose wiring; ledger rides tree.js, no new store).
-OUT (triggers in plan §7): adjudicate-findings.js, acceptance linter, orchestration eval,
-demotion-loop automation.
+IN (promoted at R1 after the 3-family critique): `scripts/adjudicate-findings.js` + tests.
+OUT (triggers in plan §7): check-escalation-coverage.js, probe-mutation automation,
+orchestration eval, demotion-loop automation.

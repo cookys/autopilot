@@ -108,7 +108,7 @@ Canonical patterns, examples, and output format: [`skills/quality-pipeline/refer
 
 An acceptance section with no demonstrated failure mode (no negative control per `references/acceptance-patterns.md`) is itself a 🟠 Major finding.
 
-**Findings feed the adjudication table** ([design](../docs/plans/2026-07-04-quality-floor-engine.md) §4.3): each finding you emit is a CLAIM that enters `scripts/adjudicate-findings.js` as `UNPROBED`; only `REPRODUCED` or second-family-confirmed `PROOF_BY_TRACE` findings are actionable for a fix dispatch. A `REFUTED` disposition requires a mutation-validated probe — a probe that stays green when the claimed defect is injected is vacuous and refutes nothing. Write findings so they are probeable: name the failure signature an executed probe should observe.
+**Findings feed the adjudication table** (design: `docs/plans/2026-07-04-quality-floor-engine.md` §4.3): each finding you emit is a CLAIM that enters `scripts/adjudicate-findings.js` as `UNPROBED`; only `REPRODUCED` or second-family-confirmed `PROOF_BY_TRACE` findings are actionable for a fix dispatch. A `REFUTED` disposition requires a mutation-validated probe — a probe that stays green when the claimed defect is injected is vacuous and refutes nothing. Write findings so they are probeable: name the failure signature an executed probe should observe.
 
 ## Output Contract (MANDATORY format)
 

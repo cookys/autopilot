@@ -1,6 +1,6 @@
 # Quality-Floor Engine — the judgment-demotion ladder
 
-**狀態**: R1 (post 3-family critique: codex gpt-5.5 · agy/Gemini · MiniMax-M3; adjudication record in §9)
+**狀態**: ✅ Phase 1 shipped in v2.31.11 — merged as 165e1b7 (R1 design; P2-P4 trigger-conditioned in §7)
 **Goal**: evolve autopilot from "clone cookys, remove cookys from the loop" to the next stage:
 **make a weak orchestrating model sustain frontier-model output quality over long-running
 tasks** — plan / implement / debug / review / re-think — by design, not by hoping the model

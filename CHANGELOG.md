@@ -24,6 +24,38 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.10 — review-closeout: 7 verified defects + structural-risk hardening (contract parity, dispatch rails, hook-layer)
+
+**Headline**: A whole-repo review (two Explore agents + depth-0 verification of every claim) found 7 concrete defects and 3 structural risks; all closed in one `/l6` run — implementation by **agy/Gemini** (codex-spark quota-exhausted mid-run, capability event recorded), design by a **3-family panel** (codex gpt-5.5 · agy/Gemini · grok/xAI), verification plan **authored by MiniMax-M3** (cc-shim) and executed at depth-0 (20 checks, incl. 6 adversarial probes MiniMax designed itself). The dogfood ALSO caught two live dispatch-rail defects the stub tests couldn't see (codex chrome-channel merge; a prompt that never demanded the closing nonce marker) — both fixed and e2e-verified against real codex.
+
+### Fixed
+- **`dispatch-review.sh` codex rail was structurally broken** (every real codex review → `no_verdict`): codex exec sends the model message to stdout and ALL chrome (prompt echo, thinking, "tokens used", message repeat) to stderr; the `2>&1` merged capture could never start with the nonce marker. Now parses **stdout only**; `raw_log` carries stdout + `--- codex stderr (chrome, not parsed) ---` + stderr on every exit path (passive quota classification intact). Verified live: gpt-5.5 at low effort → `reviewed`.
+- **Review prompt never explicitly demanded the closing END marker** — high-effort models inferred it, low-effort ones omitted it → parser exit 5 → false `no_verdict`. The prompt now states the end-with contract; prompt-contract asserted in tests.
+- **`dispatch-author.sh`/`dispatch-review.sh` empty-capture race**: grok output can flush after the main process exits — observed `empty_output` while the raw_log later held a 158-line answer. Bounded ~3s settle-wait before classifying; truly-empty still fails closed (deterministic late-flush stub test).
+- **`REVIEW_LOOP_FIELDS` had drifted 8 fields** behind `resolve-review-loop.sh` (endpoint + capability keys) — engine path now carries/validates all 29; guarded forever by a new **round-trip contract-parity test** (runs the REAL shell script, both drift directions, named keys).
+- `skills/ceo-agent/SKILL.md` DOA table: orphaned `Resources 2x+` row rejoined the table.
+- `hooks/transcript-reader-lib.js` `MAX_LINE_BYTES` (1 MB, comment said "match") now imports state-checkpoint-lib's 5 MB constant — single definition.
+- `hooks/audit-log.js`: fd-0-first stdin read (repo's own documented ENXIO fix); header matches the real `.*` matcher wiring.
+- Removed tracked dead file `hooks/state-checkpoint.sh.bak` (+ hooks/README refs; git history is the archaeology).
+- `findJsonObjectCandidates`/`isImmutableGitSha`/`bufferToString` deduplicated into **`src/lib/common.js`** (public re-exports preserved).
+- `scripts/check-test-integrity.sh`: the ~1,880-line embedded Python heredoc extracted **verbatim** to `scripts/lib/test-integrity-l1.py` (2,090→215-line shell; py_compile/lint/unit-test surface unlocked; behavior byte-identical, argv contract unchanged).
+
+### Added
+- `hooks/tests/contract-parity.test.sh` — bash↔JS contract round-trip drift gate (panel-unanimous R1 design; JSON-schema SSOT deferred to BACKLOG with trigger).
+- `hooks/tests/dispatch-explore.test.sh` — behavioral coverage for the fail-loud read-probe contract (probe-fail exit 3 + answer withheld, dirty-repo exit 4, `--no-probe`, precondition).
+- `hooks/transcript-reader-lib.js`: **bounded tail-window read** (256 KB tail + full-read fallback — kills the O(n²) per-tool-call transcript re-parse) + **once-per-session schema canary** (stderr warn + `~/.autopilot/transcript-canary.log` when a non-empty transcript parses to zero events; `AUTOPILOT_NO_CANARY=1` kill-switch) + fixture smoke tests. Panel-unanimous R3 design; per-event multiplexer stays BACKLOG'd (offset-cache alternative rejected: shared-cursor coupling).
+- `check-canonical-invariants.sh` seeds: the dev-flow/ceo-agent **S-scope-gate block** can no longer drift silently (repeat-mode lines + audit-heading reference; perturbation-probe verified).
+
+### Changed
+- `skills/l5/SKILL.md` slimmed 104→31 lines to stub parity with l3/l4/l6 (frontmatter byte-identical); `level-front-door.md` now covers **/l6** (drift found by the panel's codex member).
+- Pure dated historical narratives moved from dev-flow/ceo-agent SKILL.md to `skills/dev-flow/references/historical-rationale.md` (gates/forcing functions untouched — the settled inline rule).
+
+### Deferred (BACKLOG, trigger-conditioned)
+- Contract JSON-schema SSOT; `preflight-portability.sh` meta-smoke; `dispatch-author.sh --endpoint` parity (gap hit live when falling back to MiniMax authoring); per-event multiplexer reaffirmed-deferred.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.9`.
+
 ## v2.31.9 — cross-family qc-panel hardening of the endpoints CLI + loader
 
 **Headline**: A **disjoint-family qc panel** (gpt-5.5 / grok / MiniMax-M3 — OpenAI · xAI · MiniMax, dogfooding `dispatch-review.sh`) over the combined credential diff caught **seven** real issues that the earlier single-reviewer rounds missed — a strong argument for the cross-family panel; each vendor found *different* real defects. All fixed + regression-tested. (grok + MiniMax delivered substantive reviews; codex degraded to prompt-echo on the large diff. MiniMax explicitly confirmed "no security-critical defects". One grok finding — "absent base rejects on no-getuid" — was **empirically disproved** as a control-flow misread and locked in with a test.)

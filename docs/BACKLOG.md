@@ -53,6 +53,30 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 ### Per-event opt-in hook multiplexer — REAFFIRMED deferred (see existing entry below)
 - **Trigger**: (unchanged; see the original entry) — reaffirmed by the 2026-07-04 3-family panel: all three families independently said "not now"; the v2.31.10 tail-window read removed the O(n²) pain that was the strongest argument for doing it early. codex's design note for whenever it fires: a shared offset-cache is NOT a safe substitute (one hook advancing a shared cursor makes sibling hooks miss events — it degenerates into the multiplexer anyway).
 - **Source**: 2026-07-04 review-closeout design panel Q3.
+### distill 情節模式（episodic mode）＋ finish-flow/next 定期呼叫整合
+- **Trigger**: next time touching `skills/distill/`；OR 下一個 L 專案收尾時發現「這套流程值得留但沒有機制接住」。
+- **Context**: 首次 /distill 全量掃描（2026-07-04）實證頻率模式的兩個結構盲區：單次深方法論（≥3× 門檻永不提案）與複合命令儀式（tokenizer 只取首 token）。同期情節式蒸餾實戰（五個 skill＋RED 驗證）證明互補路徑有效。完整設計（含可直接落地的 Step 1E/2E 草稿、finish-flow L-5.6 與 /next B 級的各一行整合、驗收清單）：[`docs/plans/2026-07-04-distill-episodic-mode.md`](plans/2026-07-04-distill-episodic-mode.md)。雙模式共用 Step 3–5 管線，不加新 skill → PATCH。
+- **Effort**: S–M
+- **Source**: 2026-07-04 Fable 5 session；plan R0。
+
+### distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點
+- **Trigger**: next time touching `scripts/distill-scan.js`，OR 下一輪 /distill 再次觀察到同類噪音。
+- **Context**: 2026-07-04 首次全量掃描（761 sessions）發現兩個校準問題：(1) **friction bucket 噪音** —— 「recurring-correction candidates」樣本混入大量非使用者更正文本：`<teammate-message>` 轉發、dispatch prompt（「OUTPUT ONLY RAW JSON…」「Review this change for security…」）、session-continuation 摘要 —— `--real-only` 沒把這些注入類內容濾掉，稀釋了真實 friction 訊號；建議在抽取層排除 teammate-message 區塊/已知 dispatch-prompt 模板/continuation 標頭。(2) **複合命令儀式盲點** —— n-gram 對「單次 Bash 呼叫內的多步 pipeline」不可見：同 session 實測跑了 ≥8 次的「rewrap→encrypt→push」發布儀式完全沒出現在 trigram/bigram（每次都是一個大複合命令，tokenizer 只取首 token）；若複合命令內部的 `&&`/`;` 步驟能拆進 n-gram 流，這類儀式才可被挖掘。兩者都不影響現有計數正確性，是召回率問題。
+- **Effort**: S（friction 過濾）＋ S–M（複合命令拆解，注意別把 heredoc 內容誤拆）
+- **Source**: 2026-07-04 Fable 5 session 首次 /distill 全量掃描實測。
+
+
+### distill Step 4.5 — 高風險產出加 RED-phase 品質環（skill 產出後的「弱模型會不會照做」驗收）
+- **Trigger**: next time touching `skills/distill/` 流程段（Step 4/5 附近），OR 任何一個 distilled skill 在別的模型/機器上被回報「沒照做」。
+- **Context**: distill 產出 skill 後只有 `validate.sh`（結構驗證），沒有行為驗收 —— 但 2026-07-04 的三格矩陣實測證明：紀律型規則會被弱模型 rationalize（haiku 密碼落檔 ×4 且自評全過），**模型升級不修紀律只讓違規更優雅**（sonnet 改藏 `.password.txt`），唯有枚舉式禁令補丁能讓重測轉綠。方法論已蒸餾成獨立 skill：`~/projects/skills/skill-red-testing/SKILL.md`（六步閉環：rubric 先行 → 弱模型跑真任務 → 驗屍產出物不信自述 → 枚舉式補丁＋出處標注 → 重測 → RED-LOG）；實測數據在同 pack `RED-LOG.md`。建議落點：distill Step 4.5「(可選) 對高風險/要分享的產出跑一輪 RED」——用 headless `claude -p --model haiku`（已實測 `~/.claude/skills/` 在 headless 會載入）或 Agent tool model 覆寫，成本一次一杯 haiku。
+- **Effort**: S（流程文件一節＋一個建議 prompt 模板；不需新腳本 —— 或 M 若要把 rubric 生成也腳本化）
+- **Source**: 2026-07-04 Fable 5 session（skill pack RED-phase 三格矩陣）；`~/projects/skills/RED-LOG.md`。
+
+### distill identifier lint 開放給外部 skill pack 使用（單獨入口）
+- **Trigger**: 下次要**公開分享**任何手寫個人 skill pack（如 `~/projects/skills/`）之前；OR next time touching distill 的 lint 程式碼。
+- **Context**: distill 的 identifier lint（email/IPv4/`/home/<user>/`/FQDN/key-shapes ＋ `~/.autopilot/distill/identifiers.deny`）目前只在 distill 流程內部可用。手寫的個人 pack（本次的 teaching-materials 等五個 skill 走 self-use 豁免，含使用者自己的路徑/帳號）在公開分享前需要同一道 lint，但沒有獨立入口可呼叫。建議：把 lint 抽成可獨立執行的入口（`--path <dir>` 掃任意 skill 目錄），distill 內部改為呼叫同一入口 —— 一份實作兩處使用。
+- **Effort**: S
+- **Source**: 2026-07-04 Fable 5 session；`~/projects/skills/` pack 建立時的自用豁免決定。
 
 ### `autopilot endpoints test <name>` — live auth-roundtrip probe
 - **Trigger**: next time hardening the `endpoints` CLI, OR a user asks "is my GLM/MiniMax token actually working" and `doctor` (which only checks presence + perms, no network) isn't enough.

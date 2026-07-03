@@ -1337,6 +1337,7 @@ def run_l1_analysis(
 def is_protected_path(path):
     return (
         path == "scripts/check-test-integrity.sh"
+        or path == "scripts/lib/test-integrity-l1.py"
         or path == ".claude/test-integrity-config.md"
         or path == ".gitattributes"
         or path == ".qc"

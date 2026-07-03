@@ -31,6 +31,8 @@
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
 #                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
 #                                              #   still used when omitted (byte-identical)
+#       [--skill-mode off|prompt|native|auto]  # skill transport mode (default: off)
+#       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--agy-bin agy]                        # alternate binary (test seam)
@@ -50,7 +52,8 @@
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
-#     "worktree": "...|null", "agent_log": "..." , "error": "...|null" }
+#     "worktree": "...|null", "agent_log": "..." , "error": "...|null",
+#     "skill_mode_effective": "...", "skills_injected": [...] }
 #
 # OUTCOME states (the no-commit case is split by HOW the worker ended so a legit
 # no-op task is not confused with a stalled/paused one — see
@@ -97,6 +100,17 @@ GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TE
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
+SKILL_MODE="off"
+SKILLS=()
+EFFECTIVE_SKILL_MODE="off"
+SKILLS_INJECTED_JSON="[]"
+PACKED_PROMPT_TEMP=""
+SKILL_PACK_CONTENT_TEMP=""
+cleanup() {
+  [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+  [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
+}
+trap cleanup EXIT
 
 usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
 
@@ -112,10 +126,11 @@ emit() { # status commit files ins del worktree error
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
-    "$wt_json" "$(json_escape "${LOG:-}")" "$err_json"
+    "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON"
 }
 
 die_precondition() {
@@ -123,8 +138,9 @@ die_precondition() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s" }\n' \
-    "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s }\n' \
+    "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")" \
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON"
   exit 2
 }
 
@@ -142,6 +158,9 @@ while [ $# -gt 0 ]; do
     --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
+    --skill-mode) SKILL_MODE="${2:-}"; shift 2 ;;
+    --skill) SKILLS+=("${2:-}"); shift 2 ;;
+    --store) export ENGINE_CAPABILITY_DIR="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
   esac
@@ -180,10 +199,25 @@ case "$EFFORT" in
   *) die_precondition "--effort must be one of low|medium|high|xhigh|max (got: $EFFORT)" ;;
 esac
 
+case "$SKILL_MODE" in
+  off|prompt|native|auto) ;;
+  *) die_precondition "--skill-mode must be one of off|prompt|native|auto (got: $SKILL_MODE)" ;;
+esac
+
 # --- preconditions (exit 2, nothing created) ---
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+
+if [ "${#SKILLS[@]}" -gt 0 ]; then
+  for skill in "${SKILLS[@]}"; do
+    skill_no_ns="${skill#autopilot:}"
+    if [[ ! "$skill_no_ns" =~ ^[A-Za-z0-9._-]+$ ]]; then
+      die_precondition "invalid skill name: $skill"
+    fi
+  done
+fi
+
 
 # --- optional --endpoint: resolve named-endpoint creds into the cc-shim env (ADDITIVE).
 # When absent, every existing caller is byte-identical (raw ANTHROPIC_BASE_URL/
@@ -259,6 +293,108 @@ if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
   die_precondition "branch already exists: $BRANCH"
 fi
 
+# Resolve effective skill mode and build prompt-pack if requested
+if [[ "$SKILL_MODE" != "off" ]]; then
+  EFFECTIVE_SKILL_MODE="$SKILL_MODE"
+  local_runner="agy"
+  [ "${IS_CODEX:-0}" -eq 1 ] && local_runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && local_runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && local_runner="cc-shim"
+
+  if [[ "$SKILL_MODE" == "auto" ]]; then
+    cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
+    is_native_supported_fresh="$(node -e '
+      try {
+        const data = JSON.parse(process.argv[1]);
+        const native = data.capability.skill_transport.native;
+        if (native === "supported") {
+          const observed = Date.parse(data.observed_at);
+          const now = Date.now();
+          if (Number.isFinite(observed) && (now - observed) <= 86400 * 1000) {
+            console.log("yes");
+            process.exit(0);
+          }
+        }
+      } catch (e) {}
+      console.log("no");
+    ' "$cap_state")"
+
+    if [[ "$is_native_supported_fresh" == "yes" ]]; then
+      EFFECTIVE_SKILL_MODE="native"
+    elif [[ ${#SKILLS[@]} -gt 0 ]]; then
+      EFFECTIVE_SKILL_MODE="prompt"
+    else
+      EFFECTIVE_SKILL_MODE="off"
+    fi
+  elif [[ "$SKILL_MODE" == "native" ]]; then
+    cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
+    is_native_supported="$(node -e '
+      try {
+        const data = JSON.parse(process.argv[1]);
+        if (data.capability.skill_transport.native === "supported") {
+          console.log("yes");
+          process.exit(0);
+        }
+      } catch (e) {}
+      console.log("no");
+    ' "$cap_state")"
+
+    if [[ "$is_native_supported" != "yes" ]]; then
+      die_precondition "Native skill transport is not supported for runner $local_runner model $MODEL"
+    fi
+  fi
+
+  if [[ "$EFFECTIVE_SKILL_MODE" == "prompt" ]]; then
+    if [[ ${#SKILLS[@]} -gt 0 ]]; then
+      PACKED_PROMPT_TEMP="$(mktemp -t dispatch-hetero-packed-prompt-XXXXXX)"
+      local_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+      SKILL_PACK_CONTENT_TEMP="$(mktemp -t dispatch-hetero-skill-pack-XXXXXX)"
+
+      for skill in "${SKILLS[@]}"; do
+        skill_no_ns="${skill#autopilot:}"
+        skill_dir="$local_repo_root/skills/$skill_no_ns"
+        if [ ! -d "$skill_dir" ]; then
+          rm -f "$SKILL_PACK_CONTENT_TEMP"
+          die_precondition "skill directory does not exist: skills/$skill_no_ns for skill: $skill"
+        fi
+        skill_file="$skill_dir/SKILL.md"
+        if [ ! -f "$skill_file" ]; then
+          rm -f "$SKILL_PACK_CONTENT_TEMP"
+          die_precondition "skill file does not exist: skills/$skill_no_ns/SKILL.md for skill: $skill"
+        fi
+      done
+
+      for skill in "${SKILLS[@]}"; do
+        skill_no_ns="${skill#autopilot:}"
+        skill_file="$local_repo_root/skills/$skill_no_ns/SKILL.md"
+        printf '=== SKILL: %s ===\n' "$skill" >> "$SKILL_PACK_CONTENT_TEMP"
+        cat "$skill_file" >> "$SKILL_PACK_CONTENT_TEMP"
+        printf '\n=== END SKILL ===\n\n' >> "$SKILL_PACK_CONTENT_TEMP"
+      done
+
+      pack_size=$(wc -c < "$SKILL_PACK_CONTENT_TEMP" | tr -d ' ')
+      SKILL_PACK_MAX_BYTES=60000
+      if [ "$pack_size" -gt "$SKILL_PACK_MAX_BYTES" ]; then
+        rm -f "$SKILL_PACK_CONTENT_TEMP"
+        die_precondition "skill pack size ($pack_size bytes) exceeds budget of $SKILL_PACK_MAX_BYTES bytes"
+      fi
+
+      cat "$SKILL_PACK_CONTENT_TEMP" > "$PACKED_PROMPT_TEMP"
+      cat "$PROMPT_FILE" >> "$PACKED_PROMPT_TEMP"
+      rm -f "$SKILL_PACK_CONTENT_TEMP"
+
+      PROMPT_FILE="$PACKED_PROMPT_TEMP"
+
+      SKILLS_INJECTED_JSON="$(node -e '
+        const skills = process.argv.slice(1);
+        console.log(JSON.stringify(skills));
+      ' "${SKILLS[@]}")"
+    fi
+  fi
+else
+  EFFECTIVE_SKILL_MODE="off"
+fi
+
 # --- isolated worktree (the non-skippable safety rail) ---
 WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
 if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
@@ -319,7 +455,7 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 
 # A TERM during the long run orphans the worktree + branch AND can leave worker
 # descendants. Trap it to reap the container first, then the worktree + branch.
-trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -429,6 +565,7 @@ run build/test or to commit.
   run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --dangerously-skip-permissions --print-timeout "$5"' \
       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT"
 fi
+[ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
 trap - INT TERM
 
 # agy/grok/codex run edit-only → the wrapper makes the commit (deterministic). It fires
@@ -469,15 +606,65 @@ if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
 fi
 
+passive_capture() {
+  local status="${1:-}"
+  if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
+    (
+      local classification; classification="$("$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)"
+      if [ "$classification" = "quota_exhausted" ] || [ "$classification" = "rate_limited" ]; then
+        local quota_status="unknown" confidence="low"
+        case "$classification" in
+          quota_exhausted) quota_status="exhausted"; confidence="high" ;;
+          rate_limited)    quota_status="limited"; confidence="medium" ;;
+        esac
+        local runner="agy"
+        [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+        [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+        [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+        local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        local payload
+        payload="$(OBSERVED_AT="$observed_at" RUNNER="$runner" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" node -e '
+          const p = process.env;
+          const payload = {
+            schema_version: 1,
+            observed_at: p.OBSERVED_AT,
+            runner: p.RUNNER,
+            model: p.MODEL,
+            role: "implementer",
+            runner_version: null,
+            capability: {
+              quota: {
+                status: p.STATUS,
+                reset_at: null,
+                confidence: p.CONFIDENCE,
+                evidence: "Passive capture from dispatch failure",
+                ttl_seconds: 3600
+              }
+            }
+          };
+          console.log(JSON.stringify(payload));
+        ')"
+        local record_args=()
+        if [ -n "${ENGINE_CAPABILITY_DIR:-}" ]; then
+          record_args+=(--store "$ENGINE_CAPABILITY_DIR")
+        fi
+        echo "$payload" | node "$SELF_DIR/engine-capability-state.js" record "${record_args[@]}" >/dev/null 2>&1
+      fi
+    ) || true
+  fi
+}
+
 if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
   # --- a new commit exists ---
   if [ -n "$DIRTY" ]; then
     # committed but left the tree dirty → failure regardless of exit code
+    passive_capture "dirty"
     emit "dirty" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"
     exit 1
   elif [ "$AGENT_EXIT" -ne 0 ]; then
     # clean commit but the worker exited non-zero — NOT scored success (KR1):
     # the abnormal exit means the run can't be trusted as a clean implementation.
+    passive_capture "failure"
     emit "failure" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"
     exit 1
   else
@@ -493,16 +680,20 @@ else
   if [ -n "$DIRTY" ]; then
     # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
     # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
+    passive_capture "dirty"
     emit "dirty" "" 0 0 0 "$WT" "edits left uncommitted, no commit made (wrapper commit may have failed; agent exit $AGENT_EXIT); worktree kept"
     exit 1
   elif [ "$AGENT_EXIT" -eq 0 ]; then
     # clean exit, nothing committed → agent legitimately decided nothing was needed
+    passive_capture "no_op"
     emit "no_op" "" 0 0 0 "$WT" "agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"
     exit 1
   else
     # timeout or non-zero exit, nothing committed → likely paused on a clarifying
     # question (auto-approve does not silence the model's own question) or stalled
+    passive_capture "question_suspected"
     emit "question_suspected" "" 0 0 0 "$WT" "agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"
     exit 1
   fi
 fi
+

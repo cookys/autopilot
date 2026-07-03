@@ -1,0 +1,824 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const process = require('process');
+
+const HELP_TEXT = `Usage:
+  node scripts/engine-capability-state.js record [--file <path>] [--store <path>]
+  node scripts/engine-capability-state.js current --runner <runner> --model <model> --role <role> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js report --capability <name> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js prune [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js classify-error [--string <text>] [--file <path>] [--exit-code <code>]
+
+Options:
+  --file <path>        Read event JSON from file (for record) or classify error from file.
+  --store <path>       Override capability store directory or file.
+  --now <ISO-date>     Use this ISO-8601 UTC timestamp for deterministic tests.
+  --runner <runner>    Specify runner name.
+  --model <model>      Specify model name.
+  --role <role>        Specify role.
+  --capability <name>  Specify capability name (default: quota).
+  --string <text>      String to classify for classify-error.
+  --exit-code <code>   Exit code to classify for classify-error.
+
+Exit codes:
+  0 = success
+  1 = validation / classification error
+  2 = usage error / unknown command
+`;
+
+function usage(code) {
+  console.log(HELP_TEXT);
+  process.exit(code);
+}
+
+function failValidation(message) {
+  process.stderr.write(`ERROR: ${message}\n`);
+  process.exit(1);
+}
+
+function failUsage(message = null) {
+  if (message) process.stderr.write(`ERROR: ${message}\n`);
+  usage(2);
+}
+
+function isHelpToken(token) {
+  return token === '-h' || token === '--help' || token === 'help';
+}
+
+function expandTilde(raw) {
+  if (!raw) return raw;
+  if (raw === '~') return os.homedir();
+  if (raw.startsWith(`~${path.sep}`)) return path.join(os.homedir(), raw.slice(2));
+  return raw;
+}
+
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
+  }
+}
+
+function readTextLines(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  const raw = fs.readFileSync(filePath, 'utf8');
+  return raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+}
+
+function warnMalformedLine(lineNo, message) {
+  process.stderr.write(`WARN: malformed capability line ${lineNo}: ${message}\n`);
+}
+
+function toEventId(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
+function maxEventId(rows) {
+  let max = 0;
+  for (const row of rows) {
+    const id = toEventId(row.event_id);
+    if (id !== null && id > max) max = id;
+  }
+  return max;
+}
+
+function toDateMs(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const ms = Date.parse(String(value));
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function isValidISO8601(value) {
+  if (typeof value !== 'string') return false;
+  // A simple regex check for ISO-8601 format requiring timezone
+  const regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+  if (!regex.test(value)) return false;
+  return Number.isFinite(Date.parse(value));
+}
+
+// Validation logic matching the JSON schema exactly
+function validateEvent(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) {
+    failValidation('Event must be a JSON object');
+  }
+
+  const rootAllowed = new Set([
+    'schema_version',
+    'event_id',
+    'observed_at',
+    'runner',
+    'model',
+    'role',
+    'runner_version',
+    'capability'
+  ]);
+  for (const key of Object.keys(event)) {
+    if (!rootAllowed.has(key)) {
+      failValidation(`unknown key at event root: ${key}`);
+    }
+  }
+
+  if (event.schema_version !== 1) {
+    failValidation(`schema_version must be 1 (got ${event.schema_version})`);
+  }
+
+  if (!isValidISO8601(event.observed_at)) {
+    failValidation('observed_at must be a valid ISO-8601 UTC date string');
+  }
+
+  if (typeof event.runner !== 'string' || event.runner.trim().length === 0) {
+    failValidation('runner must be a non-empty string');
+  }
+
+  if (typeof event.model !== 'string' || event.model.trim().length === 0) {
+    failValidation('model must be a non-empty string');
+  }
+
+  if (typeof event.role !== 'string' || event.role.trim().length === 0) {
+    failValidation('role must be a non-empty string');
+  }
+
+  if (event.runner_version !== undefined && event.runner_version !== null && typeof event.runner_version !== 'string') {
+    failValidation('runner_version must be a string or null');
+  }
+
+  if (!event.capability || typeof event.capability !== 'object' || Array.isArray(event.capability)) {
+    failValidation('capability must be an object');
+  }
+
+  const capAllowed = new Set(['quota', 'skill_transport']);
+  for (const key of Object.keys(event.capability)) {
+    if (!capAllowed.has(key)) {
+      failValidation(`unknown key in capability: ${key}`);
+    }
+  }
+
+  const quota = event.capability.quota;
+  if (!quota || typeof quota !== 'object' || Array.isArray(quota)) {
+    failValidation('capability.quota must be an object');
+  }
+
+  const quotaAllowed = new Set(['status', 'reset_at', 'confidence', 'evidence', 'ttl_seconds']);
+  for (const key of Object.keys(quota)) {
+    if (!quotaAllowed.has(key)) {
+      failValidation(`unknown key in capability.quota: ${key}`);
+    }
+  }
+
+  const validStatuses = new Set(['available', 'limited', 'exhausted', 'unknown']);
+  if (!validStatuses.has(quota.status)) {
+    failValidation(`invalid quota status: ${quota.status}`);
+  }
+
+  const validConfidences = new Set(['high', 'medium', 'low']);
+  if (!validConfidences.has(quota.confidence)) {
+    failValidation(`invalid quota confidence: ${quota.confidence}`);
+  }
+
+  if (!Number.isInteger(quota.ttl_seconds) || quota.ttl_seconds < 0) {
+    failValidation('quota.ttl_seconds must be a non-negative integer');
+  }
+
+  if (quota.reset_at !== undefined && quota.reset_at !== null) {
+    if (!isValidISO8601(quota.reset_at)) {
+      failValidation('quota.reset_at must be a valid ISO-8601 UTC date string or null');
+    }
+  }
+
+  if (quota.evidence !== undefined && quota.evidence !== null && typeof quota.evidence !== 'string') {
+    failValidation('quota.evidence must be a string or null');
+  }
+
+  const skill = event.capability.skill_transport;
+  if (skill !== undefined) {
+    if (!skill || typeof skill !== 'object' || Array.isArray(skill)) {
+      failValidation('capability.skill_transport must be an object');
+    }
+
+    const skillAllowed = new Set(['native', 'prompt_pack', 'last_bench_id']);
+    for (const key of Object.keys(skill)) {
+      if (!skillAllowed.has(key)) {
+        failValidation(`unknown key in capability.skill_transport: ${key}`);
+      }
+    }
+
+    const validSkillStates = new Set(['supported', 'unsupported', 'unknown']);
+    if (!validSkillStates.has(skill.native)) {
+      failValidation(`invalid skill_transport.native state: ${skill.native}`);
+    }
+
+    if (!validSkillStates.has(skill.prompt_pack)) {
+      failValidation(`invalid skill_transport.prompt_pack state: ${skill.prompt_pack}`);
+    }
+
+    if (skill.last_bench_id !== undefined && skill.last_bench_id !== null && typeof skill.last_bench_id !== 'string') {
+      failValidation('skill_transport.last_bench_id must be a string or null');
+    }
+  }
+}
+
+// Pure-Node synchronous sleep
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, ms));
+}
+
+// Liveness probe for lock file
+function lockHolderAlive(lockFile) {
+  let content;
+  try {
+    content = fs.readFileSync(lockFile, 'utf8').trim();
+  } catch {
+    return false;
+  }
+  const pid = Number(content);
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    if (err.code === 'EPERM') return true;
+    return false;
+  }
+}
+
+// Lock strategy matching engine-scorecard.js
+function acquireLock(storeDir, lockFile) {
+  ensureDir(storeDir);
+  const deadline = Date.now() + 8000;
+  let delayMs = 5;
+
+  while (true) {
+    try {
+      const fd = fs.openSync(lockFile, 'wx');
+      fs.writeSync(fd, String(process.pid));
+      fs.closeSync(fd);
+      return;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      if (!lockHolderAlive(lockFile)) {
+        try { fs.unlinkSync(lockFile); } catch { }
+        continue;
+      }
+      if (Date.now() > deadline) {
+        throw new Error('timed out waiting for capability lock (held by a live process)');
+      }
+      sleepMs(delayMs);
+      delayMs = Math.min(delayMs * 2, 50);
+    }
+  }
+}
+
+function releaseLock(lockFile) {
+  try {
+    fs.unlinkSync(lockFile);
+  } catch {
+  }
+}
+
+function withWriteLock(storeDir, lockFile, callback) {
+  acquireLock(storeDir, lockFile);
+  try {
+    return callback();
+  } finally {
+    releaseLock(lockFile);
+  }
+}
+
+function resolveStoreConfig(options) {
+  let storeFile = process.env.ENGINE_CAPABILITY_FILE;
+  let storeDir = process.env.ENGINE_CAPABILITY_DIR;
+
+  if (options.store) {
+    const resolvedPath = path.resolve(expandTilde(options.store));
+    try {
+      if (fs.existsSync(resolvedPath)) {
+        if (!fs.statSync(resolvedPath).isDirectory()) {
+          storeFile = resolvedPath;
+          storeDir = path.dirname(storeFile);
+        } else {
+          storeDir = resolvedPath;
+          storeFile = path.join(storeDir, 'capability.jsonl');
+        }
+      } else {
+        if (resolvedPath.endsWith('.jsonl')) {
+          storeFile = resolvedPath;
+          storeDir = path.dirname(storeFile);
+        } else {
+          storeDir = resolvedPath;
+          storeFile = path.join(storeDir, 'capability.jsonl');
+        }
+      }
+    } catch {
+      if (resolvedPath.endsWith('.jsonl')) {
+        storeFile = resolvedPath;
+        storeDir = path.dirname(storeFile);
+      } else {
+        storeDir = resolvedPath;
+        storeFile = path.join(storeDir, 'capability.jsonl');
+      }
+    }
+  } else {
+    if (storeDir) {
+      storeDir = path.resolve(expandTilde(storeDir));
+      storeFile = storeFile ? path.resolve(expandTilde(storeFile)) : path.join(storeDir, 'capability.jsonl');
+    } else {
+      storeDir = path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-capability')));
+      storeFile = storeFile ? path.resolve(expandTilde(storeFile)) : path.join(storeDir, 'capability.jsonl');
+    }
+  }
+  const lockFile = path.join(storeDir, '.lock');
+  return { storeDir, storeFile, lockFile };
+}
+
+function readStoreRows(storeFile, silentWarn = false) {
+  const lines = readTextLines(storeFile);
+  const rows = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    try {
+      const row = JSON.parse(line);
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        if (!silentWarn) warnMalformedLine(i + 1, 'not an object');
+        continue;
+      }
+      rows.push(row);
+    } catch (err) {
+      if (!silentWarn) warnMalformedLine(i + 1, err.message);
+    }
+  }
+
+  return rows;
+}
+
+function appendRow(storeFile, row) {
+  const line = `${JSON.stringify(row)}\n`;
+  fs.appendFileSync(storeFile, line, { mode: 0o600 });
+}
+
+// Logic to merge events per runner, model, role
+function mergeCurrentState(rows, runner, model, role, nowMs) {
+  let mergedQuota = null;
+  let mergedSkill = null;
+
+  for (const row of rows) {
+    if (row.runner !== runner || row.model !== model || row.role !== role) {
+      continue;
+    }
+
+    // Process capability.quota
+    if (row.capability && row.capability.quota) {
+      const q = row.capability.quota;
+      const observedMs = toDateMs(row.observed_at) || nowMs;
+      const ttlMs = q.ttl_seconds * 1000;
+      const isExpired = (observedMs + ttlMs) <= nowMs;
+
+      let status = q.status;
+      let confidence = q.confidence;
+      let reset_at = q.reset_at;
+      let evidence = q.evidence;
+      let ttl_seconds = q.ttl_seconds;
+
+      // Expired medium/low quota is ignored — but must NOT `continue` (that would also
+      // skip the skill_transport in this SAME row, a real bug once a bench event carries
+      // both quota and skill_transport). Guard only the quota merge. (gpt-5.5 batch2 R2 M1)
+      const quotaIgnored = isExpired && confidence !== 'high';
+      if (isExpired && confidence === 'high') {
+        status = 'unknown'; // Expired high becomes unknown
+      }
+      if (!quotaIgnored) {
+      const candidate = {
+        status,
+        confidence,
+        reset_at,
+        evidence,
+        ttl_seconds,
+        isExpired,
+        observedMs,
+        eventId: toEventId(row.event_id) || 0
+      };
+
+      if (!mergedQuota) {
+        mergedQuota = candidate;
+      } else {
+        let overwrite = false;
+        const isRealSignal = (s) => s === 'available' || s === 'limited' || s === 'exhausted';
+        const hasValidRealSignal = isRealSignal(mergedQuota.status) && !mergedQuota.isExpired;
+
+        if (candidate.status === 'unknown' && hasValidRealSignal) {
+          overwrite = false;
+        } else {
+          if (candidate.isExpired) {
+            // If candidate is expired (high), it can only overwrite if existing is also expired and candidate has higher eventId
+            if (mergedQuota.isExpired && candidate.eventId > mergedQuota.eventId) {
+              overwrite = true;
+            }
+          } else {
+            // Candidate is NOT expired
+            if (mergedQuota.isExpired) {
+              overwrite = true; // Non-expired wins over expired
+            } else {
+              // Both non-expired
+              if (candidate.confidence === 'high') {
+                if (mergedQuota.confidence === 'high') {
+                  if (candidate.eventId > mergedQuota.eventId) {
+                    overwrite = true;
+                  }
+                } else {
+                  overwrite = true;
+                }
+              } else if (mergedQuota.confidence !== 'high') {
+                if (candidate.eventId > mergedQuota.eventId) {
+                  overwrite = true; // Newer medium/low beats older medium/low
+                }
+              }
+            }
+          }
+        }
+
+        if (overwrite) {
+          mergedQuota = candidate;
+        }
+      }
+      } // end if (!quotaIgnored)
+    }
+
+    // Process capability.skill_transport — merge PER FIELD (native and prompt_pack
+    // INDEPENDENTLY): a native-only bench must NOT clobber a prior prompt_pack result and
+    // vice versa. For each field, the latest event whose value is not 'unknown' wins;
+    // last_bench_id follows the latest skill event overall. (gpt-5.5 batch2 R2 M1)
+    if (row.capability && row.capability.skill_transport) {
+      const s = row.capability.skill_transport;
+      const eid = toEventId(row.event_id) || 0;
+      if (!mergedSkill) {
+        mergedSkill = { native: null, nativeEventId: -1, prompt_pack: null, promptEventId: -1, last_bench_id: null, eventId: -1 };
+      }
+      if (s.native !== undefined && s.native !== 'unknown' && eid > mergedSkill.nativeEventId) {
+        mergedSkill.native = s.native;
+        mergedSkill.nativeEventId = eid;
+      }
+      if (s.prompt_pack !== undefined && s.prompt_pack !== 'unknown' && eid > mergedSkill.promptEventId) {
+        mergedSkill.prompt_pack = s.prompt_pack;
+        mergedSkill.promptEventId = eid;
+      }
+      if (eid >= mergedSkill.eventId) {
+        mergedSkill.eventId = eid;
+        mergedSkill.last_bench_id = (s.last_bench_id !== undefined ? s.last_bench_id : null);
+      }
+    }
+  }
+
+  // Construct final merged output
+  const quotaStatus = mergedQuota ? mergedQuota.status : 'unknown';
+  const quotaConfidence = mergedQuota ? mergedQuota.confidence : 'low';
+  const quotaResetAt = mergedQuota ? mergedQuota.reset_at : null;
+  const quotaEvidence = mergedQuota ? mergedQuota.evidence : null;
+  const quotaTtlSeconds = mergedQuota ? mergedQuota.ttl_seconds : 0;
+
+  const skillNative = (mergedSkill && mergedSkill.native !== null) ? mergedSkill.native : 'unknown';
+  const skillPromptPack = (mergedSkill && mergedSkill.prompt_pack !== null) ? mergedSkill.prompt_pack : 'unknown';
+  const skillLastBenchId = mergedSkill ? mergedSkill.last_bench_id : null;
+
+  // We find the max event_id for this group to put as the final event_id, or just latest
+  const finalEventId = Math.max(
+    mergedQuota ? mergedQuota.eventId : 0,
+    mergedSkill ? mergedSkill.eventId : 0
+  ) || 1;
+
+  // Find observed_at from latest event, or use now ISO
+  let finalObserved = new Date(nowMs).toISOString();
+  if (mergedQuota || mergedSkill) {
+    const latestEventId = finalEventId;
+    const matchingRow = rows.find(r => toEventId(r.event_id) === latestEventId);
+    if (matchingRow) finalObserved = matchingRow.observed_at;
+  }
+
+  return {
+    schema_version: 1,
+    event_id: finalEventId,
+    observed_at: finalObserved,
+    runner,
+    model,
+    role,
+    runner_version: null,
+    capability: {
+      quota: {
+        status: quotaStatus,
+        reset_at: quotaResetAt,
+        confidence: quotaConfidence,
+        evidence: quotaEvidence,
+        ttl_seconds: quotaTtlSeconds
+      },
+      skill_transport: {
+        native: skillNative,
+        prompt_pack: skillPromptPack,
+        last_bench_id: skillLastBenchId
+      }
+    }
+  };
+}
+
+function parseCommandLineArgs(argv) {
+  const options = {};
+  const args = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg.startsWith('--')) {
+      const key = arg.slice(2);
+      if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+        options[key] = argv[++i];
+      } else {
+        options[key] = true;
+      }
+    } else {
+      args.push(arg);
+    }
+  }
+
+  return { command: args[0], options };
+}
+
+function classifyErrorContent(content) {
+  const text = String(content).toLowerCase();
+
+  // quota_exhausted: billing/quota limit hit
+  if (
+    text.includes('quota exceeded') ||
+    text.includes('exceeded your current quota') ||
+    text.includes('exceeded quota') ||
+    text.includes('usage limit') ||
+    text.includes('hit your usage limit') ||
+    text.includes('out of credits') ||
+    text.includes('credits exhausted') ||
+    text.includes('insufficient credits') ||
+    text.includes('insufficient funds') ||
+    text.includes('insufficient_funds') ||
+    text.includes('billing hard limit') ||
+    text.includes('free tier limit') ||
+    text.includes('run out of credits') ||
+    text.includes('quota limit') ||
+    text.includes('billing quota')
+  ) {
+    return 'quota_exhausted';
+  }
+
+  // rate_limited: too many requests (429)
+  if (
+    text.includes('rate limit') ||
+    text.includes('ratelimit') ||
+    text.includes('too many requests') ||
+    text.includes('429') ||
+    text.includes('request limit') ||
+    text.includes('request_limit') ||
+    text.includes('tpm limit') ||
+    text.includes('rpm limit')
+  ) {
+    return 'rate_limited';
+  }
+
+  // overloaded: provider capacity / overload (529), NOT same as quota/reset signal
+  if (
+    text.includes('overloaded') ||
+    text.includes('overload') ||
+    text.includes('529') ||
+    text.includes('service unavailable') ||
+    text.includes('temporary overload') ||
+    text.includes('capacity') ||
+    text.includes('temporarily overloaded') ||
+    text.includes('server overloaded')
+  ) {
+    return 'overloaded';
+  }
+
+  // auth_failed: bad API key / auth error
+  if (
+    text.includes('api key') ||
+    text.includes('auth') ||
+    text.includes('authentication') ||
+    text.includes('unauthorized') ||
+    text.includes('401') ||
+    text.includes('invalid key') ||
+    text.includes('credentials') ||
+    text.includes('permission denied') ||
+    text.includes('invalid_api_key') ||
+    text.includes('key not found')
+  ) {
+    return 'auth_failed';
+  }
+
+  // network_failed: timeouts, connection errors
+  if (
+    text.includes('network') ||
+    text.includes('connect') ||
+    text.includes('timeout') ||
+    text.includes('socket') ||
+    text.includes('dns') ||
+    text.includes('fetch failed') ||
+    text.includes('econnrefused') ||
+    text.includes('etimedout') ||
+    text.includes('connection timed out') ||
+    text.includes('read timeout') ||
+    text.includes('gateway timeout') ||
+    text.includes('504')
+  ) {
+    return 'network_failed';
+  }
+
+  return 'unknown';
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  if (argv.length === 0) usage(2);
+  if (isHelpToken(argv[0])) usage(0);
+
+  const { command, options } = parseCommandLineArgs(argv);
+
+  if (!command) failUsage('No subcommand specified');
+
+  const nowMs = options.now ? toDateMs(options.now) : Date.now();
+  if (options.now && nowMs === null) {
+    failUsage(`invalid --now date: ${options.now}`);
+  }
+
+  if (command === 'record') {
+    const rawInput = options.file
+      ? fs.readFileSync(options.file, 'utf8')
+      : fs.readFileSync(0, 'utf8');
+
+    let event;
+    try {
+      event = JSON.parse(rawInput);
+    } catch (err) {
+      failValidation(`record input: invalid JSON (${err.message})`);
+    }
+
+    validateEvent(event);
+
+    const { storeDir, storeFile, lockFile } = resolveStoreConfig(options);
+
+    const storedRow = { ...event };
+    delete storedRow.event_id;
+
+    const writtenRow = withWriteLock(storeDir, lockFile, () => {
+      const rows = readStoreRows(storeFile, true);
+      const assigned = maxEventId(rows) + 1;
+      const row = { ...storedRow, event_id: assigned };
+      ensureDir(storeDir);
+      appendRow(storeFile, row);
+      return row;
+    });
+
+    process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'current') {
+    if (!options.runner || !options.model || !options.role) {
+      failUsage('--runner, --model, and --role are required for current');
+    }
+
+    const { storeFile } = resolveStoreConfig(options);
+    const rows = readStoreRows(storeFile, true);
+
+    const merged = mergeCurrentState(rows, options.runner, options.model, options.role, nowMs);
+    process.stdout.write(`${JSON.stringify(merged)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'report') {
+    const capability = options.capability || 'quota';
+    if (capability !== 'quota') {
+      failUsage(`Only capability 'quota' is supported for report in Batch 1`);
+    }
+
+    const { storeFile } = resolveStoreConfig(options);
+    const rows = readStoreRows(storeFile, true);
+
+    // Group rows by runner, model, role
+    const groups = new Map();
+    for (const row of rows) {
+      const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
+      groups.set(key, { runner: row.runner, model: row.model, role: row.role });
+    }
+
+    const mergedList = [];
+    for (const { runner, model, role } of groups.values()) {
+      const merged = mergeCurrentState(rows, runner, model, role, nowMs);
+      if (merged.capability && merged.capability.quota && merged.capability.quota.status !== 'unknown') {
+        mergedList.push(merged);
+      }
+    }
+
+    // Sort by runner, model, role
+    mergedList.sort((a, b) => {
+      if (a.runner !== b.runner) return a.runner < b.runner ? -1 : 1;
+      if (a.model !== b.model) return a.model < b.model ? -1 : 1;
+      if (a.role !== b.role) return a.role < b.role ? -1 : 1;
+      return 0;
+    });
+
+    process.stdout.write(`${JSON.stringify(mergedList)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'prune') {
+    const { storeDir, storeFile, lockFile } = resolveStoreConfig(options);
+    if (!fs.existsSync(storeFile)) {
+      process.stdout.write(`Pruned 0 events (store file does not exist)\n`);
+      process.exit(0);
+    }
+
+    let prunedCount = 0;
+    withWriteLock(storeDir, lockFile, () => {
+      const rows = readStoreRows(storeFile, true);
+      const keptRows = [];
+
+      // Group rows to find the latest event for each (runner, model, role)
+      const latestEvents = new Map();
+      for (const row of rows) {
+        const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
+        const currentId = toEventId(row.event_id) || 0;
+        const existingId = latestEvents.get(key) || 0;
+        if (currentId > existingId) {
+          latestEvents.set(key, currentId);
+        }
+      }
+
+      for (const row of rows) {
+        const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
+        const currentId = toEventId(row.event_id) || 0;
+        const isLatest = latestEvents.get(key) === currentId;
+
+        let expired = false;
+        if (row.capability && row.capability.quota) {
+          const q = row.capability.quota;
+          const observedMs = toDateMs(row.observed_at) || nowMs;
+          const ttlMs = q.ttl_seconds * 1000;
+          expired = (observedMs + ttlMs) <= nowMs;
+        }
+
+        // We keep it if it is not expired OR if it is the latest event for that key
+        if (!expired || isLatest) {
+          keptRows.push(row);
+        } else {
+          prunedCount += 1;
+        }
+      }
+
+      const out = keptRows.length ? keptRows.map(r => JSON.stringify(r)).join('\n') + '\n' : '';
+      fs.writeFileSync(storeFile, out, { mode: 0o600 });
+    });
+
+    process.stdout.write(`Pruned ${prunedCount} events\n`);
+    process.exit(0);
+  }
+
+  if (command === 'classify-error') {
+    let inputString = options.string || '';
+    if (options.file) {
+      try {
+        inputString = fs.readFileSync(options.file, 'utf8');
+      } catch (err) {
+        process.stderr.write(`ERROR: failed to read file ${options.file}: ${err.message}\n`);
+        process.exit(1);
+      }
+    } else if (!options.string && options['exit-code'] === undefined) {
+      // Read from stdin if no option is specified
+      try {
+        inputString = fs.readFileSync(0, 'utf8');
+      } catch {
+        // Ignored
+      }
+    }
+
+    let classification = classifyErrorContent(inputString);
+
+    if (classification === 'unknown' && options['exit-code'] !== undefined) {
+      const ec = Number(options['exit-code']);
+      // Let's assume some common exit codes if text is unknown
+      if (ec === 124 || ec === 143) {
+        classification = 'network_failed'; // Timeout is typically network_failed
+      } else if (ec === 429) {
+        classification = 'rate_limited';
+      } else if (ec === 503 || ec === 529) {
+        classification = 'overloaded';
+      } else if (ec === 401 || ec === 403) {
+        classification = 'auth_failed';
+      }
+    }
+
+    process.stdout.write(`${classification}\n`);
+    process.exit(0);
+  }
+
+  failUsage(`unknown subcommand '${command}'`);
+}
+
+main();

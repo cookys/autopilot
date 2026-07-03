@@ -1,0 +1,4 @@
+# Expected behavior: brainstorm response asking a question, no implementation
+CONTAINS:?
+NOT_CONTAINS:diff --git
+NOT_CONTAINS:class BillingSystem

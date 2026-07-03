@@ -316,4 +316,30 @@ assert_eq "$BEFORE" "$(git -C "$RO" rev-parse HEAD)" "read-only: HEAD unchanged"
 assert_eq "" "$(git -C "$RO" status --porcelain)" "read-only: working tree clean"
 assert_eq "" "$(ls "$RO/.git/worktrees" 2>/dev/null)" "read-only: no worktree created"
 
+# 9. passive capture test: a reviewer failure that indicates quota exhaustion
+# does NOT alter the exit code (exit 1) or status (no_verdict), but records the
+# event in the capability store.
+STUB_QUOTA_FAIL_REVIEW="$TEST_TMP/eng-quota-fail-review"
+cat > "$STUB_QUOTA_FAIL_REVIEW" <<'EOF'
+#!/usr/bin/env bash
+cat >/dev/null 2>&1 || true
+echo "ERROR: OpenAI billing quota exceeded" >&2
+exit 1
+EOF
+chmod +x "$STUB_QUOTA_FAIL_REVIEW"
+
+CAP_TEST_DIR_REVIEW="$TEST_TMP/cap-store-review"
+export ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR_REVIEW"
+rm -rf "$CAP_TEST_DIR_REVIEW"
+
+OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_QUOTA_FAIL_REVIEW" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "quota failure exit code remains 1 for review"
+assert_contains "$OUT" '"status": "no_verdict"' "quota failure status remains no_verdict for review"
+
+# Verify that the event was recorded in the capability store
+assert_file_exists "$CAP_TEST_DIR_REVIEW/capability.jsonl" "capability store contains recorded review event"
+recorded_status_review="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner codex --model gpt-5.5 --role reviewer --store "$CAP_TEST_DIR_REVIEW" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+assert_eq "exhausted" "$recorded_status_review" "recorded review quota status is exhausted"
+
 finalize_test
+

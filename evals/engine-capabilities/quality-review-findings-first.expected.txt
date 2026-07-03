@@ -1,0 +1,2 @@
+# Expected behavior: review leads with findings
+TOP_LINES_MATCH:40:(Critical|Major|Minor|Suggestion|scripts/dispatch-hetero\.sh:[0-9]+|🔴|🟠|🟡|🔵)

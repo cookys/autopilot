@@ -256,4 +256,117 @@ assert_contains "$OUT" '"status": "committed"' "anchor flow committed"
 assert_file_exists "$ANCHOR_OUT" "anchor capture file written"
 assert_eq "ANCHOR_OK" "$(cat "$ANCHOR_OUT" 2>/dev/null)" "agy directive injects absolute worktree anchor (Your ABSOLUTE working directory is: <wt>)"
 
+# 10. passive capture test: a runner failure that indicates quota exhaustion
+# does NOT alter the exit code (exit 1) or status (question_suspected), but
+# records the event in the capability store.
+STUB_QUOTA_FAIL="$TEST_TMP/agy-quota-fail"
+cat > "$STUB_QUOTA_FAIL" <<'EOF'
+#!/usr/bin/env bash
+echo "ERROR: OpenAI billing quota exceeded" >&2
+exit 123
+EOF
+chmod +x "$STUB_QUOTA_FAIL"
+
+# Override store to a test directory
+CAP_TEST_DIR="$TEST_TMP/cap-store-hetero"
+export ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR"
+rm -rf "$CAP_TEST_DIR"
+
+# --runner agy is REQUIRED: without it, --model "gpt-5.5" auto-routes to codex and
+# the agy quota stub is never exercised (the whole point of this case). A non-zero
+# agy exit with no commit surfaces as question_suspected (exit propagates through the
+# script -qec wrapper — verified), and passive_capture records the quota event.
+OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --branch feat/quota-fail --prompt-file "$PROMPT" --agy-bin "$STUB_QUOTA_FAIL" --model "gpt-5.5" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "quota failure exit code remains 1"
+assert_contains "$OUT" '"status": "question_suspected"' "quota failure status remains question_suspected"
+
+# Verify that the event was recorded in the capability store
+assert_file_exists "$CAP_TEST_DIR/capability.jsonl" "capability store contains recorded event"
+recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+assert_eq "exhausted" "$recorded_status" "recorded quota status is exhausted"
+
+# 11. Omission of --skill-mode defaults to off
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-default --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "default skill mode exit code"
+assert_contains "$OUT" '"skill_mode_effective": "off"' "provenance shows off"
+assert_contains "$OUT" '"skills_injected": []' "provenance shows empty skills injected"
+
+# 12. --skill-mode prompt with repeatable --skill prepends skill contents.
+# NOTE: the capture path is BAKED into the stub (unquoted heredoc expands $TEST_TMP at
+# creation time) — the worker runs inside a systemd-run --scope where the test shell's
+# $TEST_TMP env var is NOT propagated, so a run-time "$TEST_TMP" would resolve empty.
+# Runtime vars ($#, $1, $2, $prompt) are escaped so they expand when the stub runs.
+STUB_CAPTURE_PROMPT="$TEST_TMP/agy-capture-prompt"
+cat > "$STUB_CAPTURE_PROMPT" <<EOF
+#!/usr/bin/env bash
+prompt=""
+while [ \$# -gt 0 ]; do
+  case "\$1" in
+    -p) prompt="\$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+echo "\$prompt" > "$TEST_TMP/captured_prompt.txt"
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: capture-prompt"
+exit 0
+EOF
+chmod +x "$STUB_CAPTURE_PROMPT"
+
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-prompt --prompt-file "$PROMPT" --agy-bin "$STUB_CAPTURE_PROMPT" --skill-mode prompt --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "skill prompt mode exit code"
+assert_contains "$OUT" '"skill_mode_effective": "prompt"' "effective skill mode is prompt"
+assert_contains "$OUT" '"skills_injected": ["autopilot:dev-flow"]' "skills injected array matches"
+assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
+
+# 13. --skill-mode prompt with non-existent skill fails with exit 2
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "nonexistent skill exit code"
+assert_contains "$OUT" '"status": "precondition_failed"' "nonexistent skill returns precondition_failed"
+
+# 14. --skill-mode native fails when capability state says unknown/unsupported
+CAP_NATIVE_DIR="$TEST_TMP/cap-store-native"
+rm -rf "$CAP_NATIVE_DIR"
+export ENGINE_CAPABILITY_DIR="$CAP_NATIVE_DIR"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-native-fail --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unsupported native skill exit code"
+assert_contains "$OUT" '"status": "precondition_failed"' "unsupported native skill returns precondition_failed"
+
+# 15. --skill-mode native succeeds when capability state says native is supported
+NATIVE_EVENT_JSON='{"schema_version":1,"observed_at":"2026-07-02T00:00:00Z","runner":"agy","model":"gpt-5.5","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"evidence":"test"},"skill_transport":{"native":"supported","prompt_pack":"supported"}}}'
+echo "$NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
+
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-native-pass --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode native --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "supported native skill exit code"
+assert_contains "$OUT" '"skill_mode_effective": "native"' "provenance shows native skill transport"
+
+# 16. --skill-mode auto resolves to native when supported and fresh
+FRESH_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+FRESH_NATIVE_EVENT_JSON="{\"schema_version\":1,\"observed_at\":\"$FRESH_DATE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"test\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"supported\"}}}"
+echo "$FRESH_NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
+
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-fresh --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "auto fresh exit code"
+assert_contains "$OUT" '"skill_mode_effective": "native"' "auto resolves to native when fresh"
+
+# 17. --skill-mode auto falls back to prompt when native is stale
+STALE_DATE="$(node -e 'const d = new Date(); d.setDate(d.getDate() - 2); console.log(d.toISOString())')"
+STALE_NATIVE_EVENT_JSON="{\"schema_version\":1,\"observed_at\":\"$STALE_DATE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"test\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"supported\"}}}"
+rm -rf "$CAP_NATIVE_DIR"
+echo "$STALE_NATIVE_EVENT_JSON" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
+
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-stale --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "auto stale exit code"
+assert_contains "$OUT" '"skill_mode_effective": "prompt"' "auto falls back to prompt when native is stale"
+
+# 18. --skill-mode auto resolves to off when native is stale and no skills given
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-stale-noskill --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "auto stale noskill exit code"
+assert_contains "$OUT" '"skill_mode_effective": "off"' "auto resolves to off when stale and no skills given"
+
 finalize_test
+

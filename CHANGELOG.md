@@ -24,6 +24,23 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.2 — engine capability-state layer (quota + skill-transport awareness)
+
+**Headline**: Adds an evidence-backed, local, append-only **engine capability-state layer** so `/l5`/`/l6` dispatch can become quota-aware and skill-transport-aware without changing existing behavior. New `scripts/engine-capability-state.js` (record/current/report/prune/classify-error store — flock+PID-stale-breaker, monotonic `event_id`, schema-strict, UTC-required timestamps, per-field skill_transport merge, unknown-never-clobbers-known), `scripts/probe-engine-capability.sh` (safe no-spend + operator-gated `--live-spend` runner probe, read-only), and `scripts/bench-engine-capability.sh` (native-vs-prompt-pack skill-transport bench, honest recording via isolated temp store). `dispatch-hetero.sh` gains passive quota capture (status-keyed) + a `--skill-mode off|prompt|native|auto` / `--skill <name>` bounded skill pack (path-traversal-guarded, provenance `skill_mode_effective`/`skills_injected`); `dispatch-review.sh` gains passive capture (verifier isolation preserved) and now **fail-closes on a non-zero codex exit** before the shared VERDICT parser. `resolve-review-loop.sh` consumes the state **report-only / demote-only** (demote only on `exhausted`+`high`+fresh; `unknown` never demotes; `/l4` untouched), appending `capability_state_source`/`quota_status`/`quota_reset_at`/`skill_mode_requested`/`skill_mode_effective`/`capability_warnings` as a byte-exact suffix. **Process**: `/l5` dogfood at depth-0 — hetero implementer **agy / Gemini 3.5 Flash (High)** (switched from `gpt-5.3-codex-spark` after it hit its usage cap mid-run — the very pain this layer addresses), decorrelated **gpt-5.5 xhigh** reviewer loop (Batch 1: 6 rounds / 19 findings incl. a `--skill` path-traversal fix; Batch 2/3 further rounds), authoritative depth-0 harness. Local state lives under `~/.autopilot/engine-capability/` and is never committed. v1 is report-only — no hard quota gate.
+
+### Added
+- `scripts/engine-capability-state.js`, `scripts/probe-engine-capability.sh`, `scripts/bench-engine-capability.sh`, `schemas/engine-capability-state.schema.json`, `evals/engine-capabilities/` bench fixtures.
+- `dispatch-hetero.sh` `--skill-mode`/`--skill` bounded skill-pack transport + passive quota capture; `resolve-review-loop.sh` `--capability-state on|off` report-only consumption.
+
+### Changed
+- `dispatch-review.sh`: codex path now fail-closes (`no_verdict`, exit 1) on any non-zero codex exit before parsing a possibly-partial VERDICT (previously only grok/cc-shim did).
+
+### Fixed
+- `engine-capability-state.js` merge: an expired medium/low quota no longer `continue`s past the skill_transport in the SAME row (a latent bug surfaced once bench events carry both); skill_transport now merges per field.
+
+### Verification
+- `bash hooks/tests/engine-capability-state.test.sh` / `probe-engine-capability.test.sh` / `engine-capability-bench.test.sh` / `dispatch-hetero.test.sh` / `dispatch-review.test.sh` / `resolve-review-loop.test.sh`; full suite green except the pre-existing `intent-capture-basic-write` failure (identical on clean base). Full suite must run in the FOREGROUND (background bash has a ~2min cap).
+
 ## v2.31.1 — ladder-run implementer diff hardening
 
 **Headline**: Fixes `scripts/ladder-run.sh --impl-prompt-file` so the acceptance-delegation ladder verifies the hetero implementer's returned commit, not the caller's current checkout. `dispatch-hetero.sh` removes successful worktrees by default and emits `worktree:null`; ladder-run now uses the returned `commit` field directly to build the `base..commit` diff and fails closed if that commit is not the requested branch tip or does not descend from the requested base.

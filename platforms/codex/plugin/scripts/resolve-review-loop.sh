@@ -81,6 +81,10 @@ DWORK_DOMAIN="mixed"
 DOMAIN_SOURCE="none"
 AUTO_DOMAIN=0
 AUTO_RANGE="changed"
+CAPABILITY_STATE=""
+STORE_PATH=""
+NOW_VAL=""
+SKILL_MODE_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --field) FIELD="${2:-}"; shift 2 ;;
@@ -89,6 +93,10 @@ while [[ $# -gt 0 ]]; do
     --protected-path) PROTECTED_PATH="${2:-}"; shift 2 ;;
     --oracle-available) ORACLE_AVAILABLE="${2:-}"; shift 2 ;;
     --security-surface) SECURITY_SURFACE="${2:-}"; shift 2 ;;
+    --capability-state) CAPABILITY_STATE="${2:-}"; shift 2 ;;
+    --store) STORE_PATH="${2:-}"; shift 2 ;;
+    --now) NOW_VAL="${2:-}"; shift 2 ;;
+    --skill-mode) SKILL_MODE_OVERRIDE="${2:-}"; shift 2 ;;
     --domain)
       DOMAIN_OVERRIDE="${2:-}"
       case "$DOMAIN_OVERRIDE" in
@@ -150,6 +158,25 @@ IMPL_RUNNER="$(read_field implementer_runner "$DEF_IMPL_RUNNER")"
 MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
+SKILL_MODE_REQ="$(read_field skill_mode "")"
+if [[ -n "${SKILL_MODE_OVERRIDE:-}" ]]; then
+  SKILL_MODE_REQ="$SKILL_MODE_OVERRIDE"
+fi
+[[ -z "$SKILL_MODE_REQ" ]] && SKILL_MODE_REQ="off"
+# Enum-validate (config or override could carry arbitrary text, incl. quotes that would break
+# the emitted JSON — gpt-5.5 batch3 review). Unknown → safe-default "off", same as other enums.
+case "$SKILL_MODE_REQ" in
+  off|prompt|native|auto) ;;
+  *) SKILL_MODE_REQ="off" ;;
+esac
+
+if [[ -z "$CAPABILITY_STATE" ]]; then
+  CAPABILITY_STATE="on"
+fi
+case "$CAPABILITY_STATE" in
+  off) ;;
+  *) CAPABILITY_STATE="on" ;;
+esac
 HARNESS="$(read_field independent_harness "$DEF_HARNESS")"
 QC_PANEL_RAW="$(read_field qc_panel "$DEF_QC_PANEL")"
 QC_AGG="$(read_field qc_panel_aggregation "$DEF_QC_AGG")"
@@ -389,6 +416,239 @@ for (const row of rows) {
   fi
 fi
 
+CAP_STATE_SOURCE="unknown"
+CAP_QUOTA_STATUS="unknown"
+CAP_QUOTA_RESET_AT=null
+CAP_SKILL_MODE_REQ="${SKILL_MODE_REQ:-off}"
+CAP_SKILL_MODE_EFF="$CAP_SKILL_MODE_REQ"
+CAP_WARNINGS_JSON="[]"
+
+# When capability-state consultation is explicitly OFF, the source is "none" (deliberately
+# not consulted) — distinct from "unknown" (consulted but the store had no fresh data).
+if [[ "$CAPABILITY_STATE" != "on" ]]; then
+  CAP_STATE_SOURCE="none"
+fi
+
+if [[ "$CAPABILITY_STATE" == "on" ]]; then
+  export REPO_ROOT IMPL_RUNNER IMPL_ENGINE REV_RUNNER REV_ENGINE CAPABILITY_STATE STORE_PATH NOW_VAL SKILL_MODE_REQ
+  _node_out="$(node -e '
+const cp = require("child_process");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
+
+const repoRoot = process.env.REPO_ROOT || "";
+const implRunner = process.env.IMPL_RUNNER || "";
+const implEngine = process.env.IMPL_ENGINE || "";
+const revRunner = process.env.REV_RUNNER || "";
+const revEngine = process.env.REV_ENGINE || "";
+const capabilityState = process.env.CAPABILITY_STATE || "on";
+const storePath = process.env.STORE_PATH || "";
+const nowVal = process.env.NOW_VAL || "";
+const skillModeReq = process.env.SKILL_MODE_REQ || "off";
+
+function expandTilde(raw) {
+  if (!raw) return raw;
+  if (raw === "~") return os.homedir();
+  if (raw.startsWith("~" + path.sep) || raw.startsWith("~/")) return path.join(os.homedir(), raw.slice(2));
+  return raw;
+}
+
+let storeFile = process.env.ENGINE_CAPABILITY_FILE;
+let storeDir = process.env.ENGINE_CAPABILITY_DIR;
+
+if (storePath) {
+  const resolvedPath = path.resolve(expandTilde(storePath));
+  try {
+    if (fs.existsSync(resolvedPath)) {
+      if (!fs.statSync(resolvedPath).isDirectory()) {
+        storeFile = resolvedPath;
+      } else {
+        storeDir = resolvedPath;
+        storeFile = path.join(storeDir, "capability.jsonl");
+      }
+    } else {
+      if (resolvedPath.endsWith(".jsonl")) {
+        storeFile = resolvedPath;
+      } else {
+        storeDir = resolvedPath;
+        storeFile = path.join(storeDir, "capability.jsonl");
+      }
+    }
+  } catch (e) {
+    if (resolvedPath.endsWith(".jsonl")) {
+      storeFile = resolvedPath;
+    } else {
+      storeDir = resolvedPath;
+      storeFile = path.join(storeDir, "capability.jsonl");
+    }
+  }
+} else {
+  if (storeDir) {
+    storeDir = path.resolve(expandTilde(storeDir));
+    storeFile = storeFile ? path.resolve(expandTilde(storeFile)) : path.join(storeDir, "capability.jsonl");
+  } else {
+    storeDir = path.resolve(expandTilde(path.join("~", ".autopilot", "engine-capability")));
+    storeFile = storeFile ? path.resolve(expandTilde(storeFile)) : path.join(storeDir, "capability.jsonl");
+  }
+}
+
+const storeExists = fs.existsSync(storeFile);
+// "store" ONLY when fresh matching data is actually found (set below after the queries);
+// a store that exists but yields nothing fresh must report "unknown", not hide a probe gap
+// behind a bare file-exists check (gpt-5.5 batch3 R2 Q1).
+let stateSource = "unknown";
+
+const scriptPath = path.join(repoRoot, "scripts", "engine-capability-state.js");
+
+function getCap(runner, model, role) {
+  const args = [
+    scriptPath,
+    "current",
+    "--runner", runner,
+    "--model", model,
+    "--role", role
+  ];
+  if (storePath) {
+    args.push("--store", storePath);
+  }
+  if (nowVal) {
+    args.push("--now", nowVal);
+  }
+  try {
+    const res = cp.spawnSync("node", args, { encoding: "utf8" });
+    if (res.status === 0) {
+      return JSON.parse(res.stdout);
+    }
+  } catch (e) {
+    // Ignore
+  }
+  return null;
+}
+
+const implCap = getCap(implRunner, implEngine, "implementer");
+const revCap = getCap(revRunner, revEngine, "reviewer");
+
+const implQuota = implCap && implCap.capability && implCap.capability.quota;
+const revQuota = revCap && revCap.capability && revCap.capability.quota;
+
+const implStatus = implQuota ? implQuota.status : "unknown";
+const revStatus = revQuota ? revQuota.status : "unknown";
+
+const implConfidence = implQuota ? implQuota.confidence : "low";
+const revConfidence = revQuota ? revQuota.confidence : "low";
+
+const implResetAt = implQuota ? implQuota.reset_at : null;
+const revResetAt = revQuota ? revQuota.reset_at : null;
+
+let quotaStatus = "unknown";
+if (implStatus === "exhausted" || revStatus === "exhausted") {
+  quotaStatus = "exhausted";
+} else if (implStatus === "limited" || revStatus === "limited") {
+  quotaStatus = "limited";
+} else if (implStatus === "available" || revStatus === "available") {
+  quotaStatus = "available";
+}
+
+let quotaResetAt = null;
+if (implStatus === "exhausted" && implResetAt) {
+  quotaResetAt = implResetAt;
+} else if (revStatus === "exhausted" && revResetAt) {
+  quotaResetAt = revResetAt;
+} else if (implStatus === "limited" && implResetAt) {
+  quotaResetAt = implResetAt;
+} else if (revStatus === "limited" && revResetAt) {
+  quotaResetAt = revResetAt;
+} else {
+  if (implResetAt && revResetAt) {
+    quotaResetAt = new Date(implResetAt) > new Date(revResetAt) ? implResetAt : revResetAt;
+  } else {
+    quotaResetAt = implResetAt || revResetAt || null;
+  }
+}
+
+// Q1: source is "store" only if the store existed AND a fresh matching signal was found
+// (a real quota status, or a non-unknown skill_transport field for either engine).
+const _implST = (implCap && implCap.capability && implCap.capability.skill_transport) || {};
+const _revST = (revCap && revCap.capability && revCap.capability.skill_transport) || {};
+const foundFresh = implStatus !== "unknown" || revStatus !== "unknown"
+  || (_implST.native && _implST.native !== "unknown")
+  || (_implST.prompt_pack && _implST.prompt_pack !== "unknown")
+  || (_revST.native && _revST.native !== "unknown")
+  || (_revST.prompt_pack && _revST.prompt_pack !== "unknown");
+if (storeExists && foundFresh) stateSource = "store";
+
+const warnings = [];
+
+function familyOf(engineName) {
+  const e = String(engineName).toLowerCase();
+  if (e.includes("gpt") || e.includes("codex") || e.includes("o1") || e.includes("o3") || e.includes("o4")) return "openai";
+  if (e.includes("claude") || e.includes("opus") || e.includes("sonnet") || e.includes("haiku")) return "anthropic";
+  if (e.includes("gemini") || e.includes("flash") || e.includes("bison")) return "google";
+  if (e.includes("grok") || e.includes("composer")) return "xai";
+  if (e.includes("minimax") || e.includes("abab")) return "minimax";
+  if (e.includes("glm") || e.includes("zhipu")) return "zhipu";
+  return "unknown";
+}
+
+const implFamily = familyOf(implEngine);
+const isL4 = (implFamily === "anthropic");
+
+if (!isL4) {
+  if (implStatus === "exhausted" && implConfidence === "high") {
+    warnings.push("Demoted implementer: " + implRunner + " (" + implEngine + ") is exhausted.");
+  }
+  if (revStatus === "exhausted" && revConfidence === "high") {
+    warnings.push("Demoted reviewer: " + revRunner + " (" + revEngine + ") is exhausted.");
+  }
+}
+
+const implSkill = implCap && implCap.capability && implCap.capability.skill_transport;
+const nativeStatus = implSkill ? implSkill.native : "unknown";
+const promptStatus = implSkill ? implSkill.prompt_pack : "unknown";
+
+const requestedMode = skillModeReq || "off";
+if (!isL4 && requestedMode === "native" && nativeStatus !== "supported") {
+  warnings.push("Runner " + implRunner + " (" + implEngine + ") does not support native skills (native skill transport is " + nativeStatus + ").");
+}
+
+let effectiveMode = "off";
+if (requestedMode === "off") {
+  effectiveMode = "off";
+} else if (requestedMode === "prompt") {
+  effectiveMode = "prompt";
+} else if (requestedMode === "native") {
+  effectiveMode = "native";
+} else if (requestedMode === "auto") {
+  if (nativeStatus === "supported") {
+    effectiveMode = "native";
+  } else if (promptStatus !== "unsupported") {
+    effectiveMode = "prompt";
+  } else {
+    effectiveMode = "off";
+  }
+}
+
+console.log(stateSource);
+console.log(quotaStatus);
+console.log(quotaResetAt ? JSON.stringify(quotaResetAt) : "null");  // JSON.stringify escapes safely (gpt-5.5 batch3 R2 Q2)
+console.log(requestedMode);
+console.log(effectiveMode);
+console.log(JSON.stringify(warnings));
+' 2>/dev/null)" || _node_out=""
+
+  if [[ -n "$_node_out" ]]; then
+    {
+      read -r CAP_STATE_SOURCE
+      read -r CAP_QUOTA_STATUS
+      read -r CAP_QUOTA_RESET_AT
+      read -r CAP_SKILL_MODE_REQ
+      read -r CAP_SKILL_MODE_EFF
+      read -r CAP_WARNINGS_JSON
+    } <<< "$_node_out"
+  fi
+fi
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;
@@ -426,25 +686,42 @@ if [[ -n "$FIELD" ]]; then
     source) printf '%s\n' "$SOURCE" ;;
     work_domain) printf '%s\n' "$DWORK_DOMAIN" ;;
     domain_source) printf '%s\n' "$DOMAIN_SOURCE" ;;
+    capability_state_source) printf '%s\n' "$CAP_STATE_SOURCE" ;;
+    quota_status) printf '%s\n' "$CAP_QUOTA_STATUS" ;;
+    quota_reset_at)
+      if [[ "$CAP_QUOTA_RESET_AT" == "null" ]]; then
+        printf '\n'
+      else
+        # NOT `local` — this case is at top level, not inside a function (gpt-5.5 batch3 review).
+        _t="${CAP_QUOTA_RESET_AT#\"}"
+        _t="${_t%\"}"
+        printf '%s\n' "$_t"
+      fi
+      ;;
+    skill_mode_requested) printf '%s\n' "$CAP_SKILL_MODE_REQ" ;;
+    skill_mode_effective) printf '%s\n' "$CAP_SKILL_MODE_EFF" ;;
+    capability_warnings) printf '%s\n' "$CAP_WARNINGS_JSON" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s }\n' \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s }\n' \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
-    "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON"
+    "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" \
+    "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s" }\n' \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s }\n' \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
-    "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE"
+    "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
+    "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON"
 fi
 exit "$ENFORCE_EXIT"

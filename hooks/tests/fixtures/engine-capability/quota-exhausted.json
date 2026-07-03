@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-02T00:00:00Z",
+  "runner": "codex",
+  "model": "gpt-5.5",
+  "role": "reviewer",
+  "runner_version": "codex-cli 0.142.5",
+  "capability": {
+    "quota": {
+      "status": "exhausted",
+      "reset_at": null,
+      "confidence": "high",
+      "evidence": "billing / quota limit hit",
+      "ttl_seconds": 3600
+    }
+  }
+}

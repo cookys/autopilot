@@ -15,7 +15,9 @@ if (!payload) process.exit(0);
 const parsed = JSON.parse(payload);
 const value = parsed && parsed[key];
 if (value === undefined) process.exit(0);
-process.stdout.write(JSON.stringify(value));
+// Strings are returned RAW (unquoted) so assertions can compare to a bare value
+// (e.g. assert_eq "unknown"); arrays/objects/numbers are JSON.stringify'd (e.g. "[]").
+process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value));
 NODE
   unset JSON_VALUE
 }
@@ -165,19 +167,21 @@ BASE_JSON="$(bash "$SCRIPT")"
 AUTO_JSON="$(bash "$SCRIPT" --auto-domain HEAD..HEAD)"
 AUTO_WD="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field work_domain)"
 AUTO_SOURCE="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field domain_source)"
-BASE_LEGACY_PREFIX="$(printf '%s' "$BASE_JSON" | sed 's/, "work_domain": "[^"]*", "domain_source": "[^"]*" }$/ }/')"
+BASE_JSON_STRIPPED="$(printf '%s' "$BASE_JSON" | sed -E 's/, "capability_state_source":.* }/ }/')"
+AUTO_JSON_STRIPPED="$(printf '%s' "$AUTO_JSON" | sed -E 's/, "capability_state_source":.* }/ }/')"
+BASE_LEGACY_PREFIX="$(printf '%s' "$BASE_JSON_STRIPPED" | sed 's/, "work_domain": "[^"]*", "domain_source": "[^"]*" }$/ }/')"
 BASE_PREFIX="$(printf '%s' "$BASE_LEGACY_PREFIX" | sed 's/ }$//')"
-assert_eq "${BASE_PREFIX}, \"work_domain\": \"${AUTO_WD}\", \"domain_source\": \"${AUTO_SOURCE}\" }" "$AUTO_JSON" "auto output is exact legacy prefix + inserted keys"
+assert_eq "${BASE_PREFIX}, \"work_domain\": \"${AUTO_WD}\", \"domain_source\": \"${AUTO_SOURCE}\" }" "$AUTO_JSON_STRIPPED" "auto output is exact legacy prefix + inserted keys"
 assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 
 # 13b. round-2 reviewer 🟡 — a NON-self-referential KR2 schema lock. The prefix check
 #      above derives its baseline by stripping the new keys from the already-modified
 #      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
-#      then work_domain, then domain_source — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":'
+#      then work_domain, then domain_source, and the new capability keys — nothing else, nothing moved.
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
-assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source, in order (catches old-field drift/reorder/drop)"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys, in order"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"
@@ -260,6 +264,162 @@ EXP_LADDER="$(ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-sco
 EXP_OUT="$(ENGINE_SCORECARD_DIR="$EXPDIR" bash "$SCRIPT" --check-scorecard)"
 assert_eq "false" "$(json_get "$EXP_OUT" reviewer_qualified)" "expired reviewer row => reviewer_qualified false"
 assert_eq "$EXP_LADDER" "$(json_get "$EXP_OUT" fallback_ladder)" "expired row still emits fallback ladder"
-assert_eq "3" "$(ENGINE_SCORECARD_DIR="$EXPDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "expired reviewer row with --enforce exits 3"
+# 20. capability-state report-only / demotion-only tests
+CAP_TEST_DIR="$TEST_TMP/cap-store"
+mkdir -p "$CAP_TEST_DIR"
+
+# A. Empty store test (capability state is enabled by default)
+# Omitting --capability-state (or empty store) => source: unknown, status: unknown, warnings: []
+EMPTY_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
+assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
+assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
+assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => capability_warnings is empty []"
+
+# B. --capability-state off test
+OFF_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
+assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
+assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
+assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => capability_warnings is empty []"
+
+# C. Record a fresh exhausted/high implementer event
+cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-02T20:00:00Z",
+  "runner": "auto",
+  "model": "gpt-5.3-codex-spark",
+  "role": "implementer",
+  "capability": {
+    "quota": {
+      "status": "exhausted",
+      "confidence": "high",
+      "ttl_seconds": 3600
+    }
+  }
+}
+JSON
+ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-exhausted.json" > /dev/null
+
+# D. Query fresh event (now is 2026-07-02T20:30:00Z -> within 3600s TTL)
+FRESH_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
+assert_eq "store" "$(json_get "$FRESH_OUT" capability_state_source)" "valid store query => capability_state_source is store"
+assert_eq "exhausted" "$(json_get "$FRESH_OUT" quota_status)" "fresh exhausted quota => quota_status is exhausted"
+assert_contains "$(json_get "$FRESH_OUT" capability_warnings)" "Demoted implementer" "fresh exhausted high event => demotion warning is present"
+
+# E. Query expired event (now is 2026-07-02T22:00:00Z -> past 3600s TTL)
+EXPIRED_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T22:00:00Z)"
+assert_eq "unknown" "$(json_get "$EXPIRED_OUT" quota_status)" "expired quota => quota_status is unknown"
+assert_eq "[]" "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
+
+# F. Record an unknown event and verify no demotion/warning.
+# Use an ISOLATED store — CAP_TEST_DIR already holds a fresh EXHAUSTED event for this same
+# runner/model/role (from the demotion test above), and by design an `unknown` observation
+# does NOT clobber a still-valid known signal (engine-capability-state.js J1 rule). Testing
+# "unknown => no demotion" in isolation requires a store with no prior exhausted event.
+UNK_STORE="$TEST_TMP/cap-unknown"
+cat <<'JSON' > "$TEST_TMP/event-unknown.json"
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-02T20:00:00Z",
+  "runner": "auto",
+  "model": "gpt-5.3-codex-spark",
+  "role": "implementer",
+  "capability": {
+    "quota": {
+      "status": "unknown",
+      "confidence": "high",
+      "ttl_seconds": 3600
+    }
+  }
+}
+JSON
+ENGINE_CAPABILITY_DIR="$UNK_STORE" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-unknown.json" > /dev/null
+UNK_OUT="$(ENGINE_CAPABILITY_DIR="$UNK_STORE" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
+assert_eq "unknown" "$(json_get "$UNK_OUT" quota_status)" "quota status unknown => quota_status is unknown"
+assert_eq "[]" "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
+
+# G. Native skill warning tests
+cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-02T20:00:00Z",
+  "runner": "auto",
+  "model": "gpt-5.3-codex-spark",
+  "role": "implementer",
+  "capability": {
+    "quota": {
+      "status": "available",
+      "confidence": "high",
+      "ttl_seconds": 3600
+    },
+    "skill_transport": {
+      "native": "unsupported",
+      "prompt_pack": "supported"
+    }
+  }
+}
+JSON
+ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-unsupported.json" > /dev/null
+
+# G1. Request skill mode native -> should produce warning
+SKILL_NATIVE_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
+assert_eq "native" "$(json_get "$SKILL_NATIVE_OUT" skill_mode_requested)" "skill_mode_requested matches native"
+assert_eq "native" "$(json_get "$SKILL_NATIVE_OUT" skill_mode_effective)" "skill_mode_effective matches native"
+assert_contains "$(json_get "$SKILL_NATIVE_OUT" capability_warnings)" "does not support native skills" "native skill warning is present"
+
+# G2. Request skill mode auto -> native is unsupported, but prompt_pack is supported -> should resolve to prompt and no warning
+SKILL_AUTO_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
+assert_eq "auto" "$(json_get "$SKILL_AUTO_OUT" skill_mode_requested)" "skill_mode_requested matches auto"
+assert_eq "prompt" "$(json_get "$SKILL_AUTO_OUT" skill_mode_effective)" "skill_mode_effective resolves to prompt"
+assert_eq "[]" "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
+
+# G3. Record skill support supported, request skill mode auto -> should resolve to native
+cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-02T20:00:00Z",
+  "runner": "auto",
+  "model": "gpt-5.3-codex-spark",
+  "role": "implementer",
+  "capability": {
+    "quota": {
+      "status": "available",
+      "confidence": "high",
+      "ttl_seconds": 3600
+    },
+    "skill_transport": {
+      "native": "supported",
+      "prompt_pack": "supported"
+    }
+  }
+}
+JSON
+ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-supported.json" > /dev/null
+SKILL_AUTO_OK_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
+assert_eq "native" "$(json_get "$SKILL_AUTO_OK_OUT" skill_mode_effective)" "native supported => skill_mode_effective resolves to native"
+assert_eq "[]" "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
+
+# H. L4 unchanged test
+L4_CFG="$TEST_TMP/l4-cfg.md"
+printf -- '- implementer_engine: claude-3-5-sonnet\n- implementer_runner: auto\n' > "$L4_CFG"
+cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-02T20:00:00Z",
+  "runner": "auto",
+  "model": "claude-3-5-sonnet",
+  "role": "implementer",
+  "capability": {
+    "quota": {
+      "status": "exhausted",
+      "confidence": "high",
+      "ttl_seconds": 3600
+    }
+  }
+}
+JSON
+ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-claude-exhausted.json" > /dev/null
+L4_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$L4_CFG" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
+assert_eq "[]" "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
 
 finalize_test

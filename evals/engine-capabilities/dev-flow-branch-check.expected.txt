@@ -1,0 +1,2 @@
+# Expected behavior: checks branch or session start
+CONTAINS_REGEX:(git branch|show-current|current branch|session-start-sha|session start|rev-parse HEAD|git rev-parse)

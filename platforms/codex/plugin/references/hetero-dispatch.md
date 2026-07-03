@@ -101,6 +101,20 @@ scripts/dispatch-explore.sh --runner codex|agy --model <name> --prompt-file <fil
 ## Unverified — spike before asserting
 
 - ~~agy with the autopilot plugin installed: do skills load in `-p` mode?~~ **Resolved 2026-06-11: NO** — verified negative (probe + tool-inventory; see [`multi-agent-portability.md`](multi-agent-portability.md) § agy spike). Invariant 4 ("the contract is the prompt") is therefore a necessity, not a preference. Interactive-mode loading untested.
+
+### Skill transport is now a MEASURED capability, not an assumption (v2.31.2)
+
+Because native skill loading in `-p`/`exec` is a verified negative for the current runners, autopilot no
+longer *assumes* anything about skills-inside-the-executor. `dispatch-hetero.sh --skill-mode
+off|prompt|native|auto` + `--skill <name>` makes transport explicit: **`prompt`** prepends a bounded
+skill pack (selected `SKILL.md` bodies, ≤ a byte budget, path-traversal-guarded) to the implementer
+prompt; **`native`** is a **precondition** that consults the capability store and REFUSES unless a bench
+has recorded `skill_transport.native = supported` (so it can never silently claim an unavailable
+mechanism); **`auto`** uses native only when bench-supported+fresh, else prompt, else off; **`off`**
+(default) is byte-identical to prior behavior. `scripts/bench-engine-capability.sh` is the only thing
+that may record native/prompt-pack support, and only from an actual passing bench. Reviewers
+(`dispatch-review.sh`) NEVER receive a skill pack (verifier isolation). See CLAUDE.md inventory for the
+three capability-state scripts.
 - agy `-p` exposes `define_subagent` / `invoke_subagent` / `manage_subagents` — a native subagent surface inside the headless executor. Semantics unprobed; could matter if a dispatched phase wants its own fan-out.
 - Other engines' headless equivalence (`gemini` CLI, `codex` CLI, `opencode run`): same spike shape as the agy one — prove full agentic loop + flags before writing them here.
 

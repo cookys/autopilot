@@ -1,0 +1,4 @@
+# Expected behavior: no Autopilot skill claims
+NOT_CONTAINS:S-scope-gate
+NOT_CONTAINS:L-1.6
+NOT_CONTAINS:finish-flow

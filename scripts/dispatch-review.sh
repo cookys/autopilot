@@ -147,6 +147,56 @@ fi
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
 
+passive_capture() {
+  local status="${1:-}"
+  if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${RAW_LOG:-}" ] && [ -r "${RAW_LOG}" ]; then
+    (
+      local rc=1
+      if [ "$RUNNER" = "codex" ] && [ -n "${CODEX_RC:-}" ]; then rc="$CODEX_RC"; fi
+      if [ "$RUNNER" = "grok" ] && [ -n "${GROK_RC:-}" ]; then rc="$GROK_RC"; fi
+      if [ "$RUNNER" = "cc-shim" ] && [ -n "${CCSHIM_RC:-}" ]; then rc="$CCSHIM_RC"; fi
+      
+      local classification; classification="$("$(dirname "$0")/engine-capability-state.js" classify-error --file "$RAW_LOG" --exit-code "$rc" 2>/dev/null)"
+      if [ "$classification" = "quota_exhausted" ] || [ "$classification" = "rate_limited" ]; then
+        local quota_status="unknown" confidence="low"
+        case "$classification" in
+          quota_exhausted) quota_status="exhausted"; confidence="high" ;;
+          rate_limited)    quota_status="limited"; confidence="medium" ;;
+        esac
+        local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        local payload
+        payload="$(OBSERVED_AT="$observed_at" RUNNER="$RUNNER" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" node -e '
+          const p = process.env;
+          const payload = {
+            schema_version: 1,
+            observed_at: p.OBSERVED_AT,
+            runner: p.RUNNER,
+            model: p.MODEL,
+            role: "reviewer",
+            runner_version: null,
+            capability: {
+              quota: {
+                status: p.STATUS,
+                reset_at: null,
+                confidence: p.CONFIDENCE,
+                evidence: "Passive capture from review dispatch failure",
+                ttl_seconds: 3600
+              }
+            }
+          };
+          console.log(JSON.stringify(payload));
+        ')"
+        local record_args=()
+        if [ -n "${ENGINE_CAPABILITY_DIR:-}" ]; then
+          record_args+=(--store "$ENGINE_CAPABILITY_DIR")
+        fi
+        echo "$payload" | node "$(dirname "$0")/engine-capability-state.js" record "${record_args[@]}" >/dev/null 2>&1
+      fi
+    ) || true
+  fi
+}
+
+
 # Build the review prompt: diff goes in as TEXT (never ask the engine to read the worktree).
 # ARTIFACTS ONLY — the prompt below contains the diff and nothing else. Do NOT interpolate an
 # implementer self-report / summary / worker verdict here (verifier isolation — see header).
@@ -189,7 +239,21 @@ if [[ "$RUNNER" = "codex" ]]; then
   # codex stdout is delivered normally under a pipe.
   "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
-      -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+      -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>&1
+  CODEX_RC=$?
+  # FAIL-CLOSED on any non-zero codex exit (quota/usage-limit, auth, timeout, bad flag):
+  # emit no_verdict and EXIT BEFORE the shared VERDICT parser — same rail as grok/cc-shim.
+  # Critical: codex can print a partial `VERDICT: SHIP-AS-IS` then hit a usage limit; letting
+  # that partial output reach the parser would accept a failed/quota-limited review as a real
+  # verdict (gpt-5.5 R6). Partial output stays in raw_log for debugging, never trusted.
+  if [ "$CODEX_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
+      "$CODEX_RC" >> "$RAW_LOG"
+    passive_capture "no_verdict"
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "codex exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CODEX_RC"
+    exit 1
+  fi
 elif [[ "$RUNNER" = "grok" ]]; then
   GROK_BIN="${BIN:-grok}"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
@@ -210,7 +274,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # absolute mktemp path (grok resolves --prompt-file relative to --cwd, so it MUST be
   # absolute — Spike-verified 2026-06-29: a relative path errored, absolute worked).
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
-      --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
+      --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>&1
   GROK_RC=$?   # do NOT swallow with `|| true`: no `set -e` here, so capturing is safe
   rm -rf "$GROK_CWD"; GROK_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   # FAIL-CLOSED on any non-zero grok exit (bad flag/model, auth, or rc=124 timeout):
@@ -221,6 +285,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   if [ "$GROK_RC" -ne 0 ]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    passive_capture "no_verdict"
     printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$GROK_RC"
     exit 1
@@ -264,12 +329,13 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   CCSHIM_CWD="$(mktemp -d -t dispatch-review-ccshimcwd-XXXXXX)"
   timeout "$TIMEOUT" env -u ANTHROPIC_API_KEY HOME="$CCSHIM_CWD" \
       bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
-      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+      _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>&1
   CCSHIM_RC=$?
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    passive_capture "no_verdict"
     printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
     exit 1
@@ -292,6 +358,8 @@ else
   # strip carriage returns the pseudo-TTY inserts
   tr -d '\r' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
 fi
+
+
 
 # --- parse verdict (fail-closed AND fail-toward-block) ---
 # Only consider exact top-level VERDICT/FINDINGS lines outside fenced code blocks.
@@ -333,11 +401,13 @@ FINDINGS="$(awk '
 
 if [[ "$VERDICT" != "SHIP-AS-IS" && "$VERDICT" != "FIX-THEN-SHIP" ]]; then
   # EMPTY or unparseable capture — FAIL-CLOSED. Never silently treated as a pass.
+  passive_capture "no_verdict"
   printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "no parseable VERDICT line (empty capture or stdout-drop) — fail-closed, NOT a pass" }\n' \
     "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
   exit 1
 fi
 if [[ "$HAS_FINDINGS" != "1" ]]; then
+  passive_capture "no_verdict"
   printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "missing parseable FINDINGS line — fail-closed, NOT a pass" }\n' \
     "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
   exit 1

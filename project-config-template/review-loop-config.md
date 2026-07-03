@@ -180,3 +180,17 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the
   override forgeability the implementer's green missed).
+
+## Capability-state advisory (v2.31.2 — emitted fields, not config keys)
+
+`resolve-review-loop.sh --capability-state on` (default on, **report-only / non-blocking**) consults the
+local engine capability store (`~/.autopilot/engine-capability/`, written by `scripts/probe-engine-capability.sh`
+and passive capture in the dispatch scripts) and appends advisory fields to its JSON:
+`capability_state_source` (`store`/`none`/`unknown`), `quota_status`, `quota_reset_at`, `skill_mode_requested`,
+`skill_mode_effective`, `capability_warnings[]`. A runner is **demoted only** when its quota is
+`exhausted` + `high` confidence + fresh; an `unknown` status NEVER demotes; `/l4` is untouched. This is
+v1 report-only — never a hard gate. **Skill transport**: pass `--skill-mode off|prompt|native|auto` +
+`--skill <name>` to `dispatch-hetero.sh` (implementer only — reviewers never get a skill pack); `native`
+requires a `scripts/bench-engine-capability.sh` bench to have recorded native support, else it fails
+closed. See [`references/hetero-dispatch.md`](../references/hetero-dispatch.md) § "Skill transport is now
+a MEASURED capability".

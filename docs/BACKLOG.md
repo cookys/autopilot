@@ -26,6 +26,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點
+- **Trigger**: next time touching `scripts/distill-scan.js`，OR 下一輪 /distill 再次觀察到同類噪音。
+- **Context**: 2026-07-04 首次全量掃描（761 sessions）發現兩個校準問題：(1) **friction bucket 噪音** —— 「recurring-correction candidates」樣本混入大量非使用者更正文本：`<teammate-message>` 轉發、dispatch prompt（「OUTPUT ONLY RAW JSON…」「Review this change for security…」）、session-continuation 摘要 —— `--real-only` 沒把這些注入類內容濾掉，稀釋了真實 friction 訊號；建議在抽取層排除 teammate-message 區塊/已知 dispatch-prompt 模板/continuation 標頭。(2) **複合命令儀式盲點** —— n-gram 對「單次 Bash 呼叫內的多步 pipeline」不可見：同 session 實測跑了 ≥8 次的「rewrap→encrypt→push」發布儀式完全沒出現在 trigram/bigram（每次都是一個大複合命令，tokenizer 只取首 token）；若複合命令內部的 `&&`/`;` 步驟能拆進 n-gram 流，這類儀式才可被挖掘。兩者都不影響現有計數正確性，是召回率問題。
+- **Effort**: S（friction 過濾）＋ S–M（複合命令拆解，注意別把 heredoc 內容誤拆）
+- **Source**: 2026-07-04 Fable 5 session 首次 /distill 全量掃描實測。
+
+
 ### distill Step 4.5 — 高風險產出加 RED-phase 品質環（skill 產出後的「弱模型會不會照做」驗收）
 - **Trigger**: next time touching `skills/distill/` 流程段（Step 4/5 附近），OR 任何一個 distilled skill 在別的模型/機器上被回報「沒照做」。
 - **Context**: distill 產出 skill 後只有 `validate.sh`（結構驗證），沒有行為驗收 —— 但 2026-07-04 的三格矩陣實測證明：紀律型規則會被弱模型 rationalize（haiku 密碼落檔 ×4 且自評全過），**模型升級不修紀律只讓違規更優雅**（sonnet 改藏 `.password.txt`），唯有枚舉式禁令補丁能讓重測轉綠。方法論已蒸餾成獨立 skill：`~/projects/skills/skill-red-testing/SKILL.md`（六步閉環：rubric 先行 → 弱模型跑真任務 → 驗屍產出物不信自述 → 枚舉式補丁＋出處標注 → 重測 → RED-LOG）；實測數據在同 pack `RED-LOG.md`。建議落點：distill Step 4.5「(可選) 對高風險/要分享的產出跑一輪 RED」——用 headless `claude -p --model haiku`（已實測 `~/.claude/skills/` 在 headless 會載入）或 Agent tool model 覆寫，成本一次一杯 haiku。

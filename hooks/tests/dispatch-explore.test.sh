@@ -2,6 +2,7 @@
 # dispatch-explore.sh integration test — exercises the read-probe sentinel contract
 # using a PATH-stubbed fake LLM engine (no network, no live LLM).
 . "$(dirname "$0")/lib.sh"
+export TMPDIR="$TEST_TMP"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-explore.sh"
 
@@ -90,7 +91,7 @@ chmod +x "$STUB_EXPLORE"
 
 # 1. Probe pass: stub actually reads sentinel and echoes it
 # Expected: exit 0, status "explored", read_probe "ok", answer present in raw_log
-OUT="$(STUB_MODE=pass cd "$SBX" && "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
+OUT="$(cd "$SBX" && STUB_MODE=pass "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
 EXIT=$?
 assert_eq "0" "$EXIT" "probe pass exit code"
 assert_contains "$OUT" '"status": "explored"' "probe pass status"
@@ -105,7 +106,7 @@ assert_eq "" "$(git -C "$SBX" status --porcelain)" "repo clean after probe pass"
 
 # 2. Probe fail (guessing engine): stub outputs confident answer but no probe line
 # Expected: exit 3, status "read_failed", read_probe "failed", JSON must NOT contain answer body
-OUT="$(STUB_MODE=fail_no_probe cd "$SBX" && "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
+OUT="$(cd "$SBX" && STUB_MODE=fail_no_probe "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
 EXIT=$?
 assert_eq "3" "$EXIT" "probe fail exit code"
 assert_contains "$OUT" '"status": "read_failed"' "probe fail status"
@@ -116,14 +117,14 @@ assert_not_contains "$OUT" "confident answer body" "JSON does not contain the wi
 assert_eq "" "$(git -C "$SBX" status --porcelain)" "repo clean after probe fail"
 
 # 2b. Probe fail with wrong token
-OUT="$(STUB_MODE=fail_wrong_token cd "$SBX" && "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
+OUT="$(cd "$SBX" && STUB_MODE=fail_wrong_token "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
 EXIT=$?
 assert_eq "3" "$EXIT" "wrong token exit code"
 assert_contains "$OUT" '"status": "read_failed"' "wrong token status"
 
 # 3. Dirty repo (write-intent violation)
 # Expected: exit 4, status "explored_dirty", repo_modified true
-OUT="$(STUB_MODE=dirty cd "$SBX" && "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
+OUT="$(cd "$SBX" && STUB_MODE=dirty "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" 2>&1)"
 EXIT=$?
 assert_eq "4" "$EXIT" "dirty repo exit code"
 assert_contains "$OUT" '"status": "explored_dirty"' "dirty repo status"
@@ -135,7 +136,7 @@ assert_eq "" "$(git -C "$SBX" status --porcelain)" "repo clean after manual dirt
 
 # 4. --no-probe smoke path (uses agy runner if script is available)
 if command -v script >/dev/null 2>&1; then
-  OUT="$(STUB_MODE=no_probe cd "$SBX" && "$SCRIPT" --runner agy --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" --no-probe 2>&1)"
+  OUT="$(cd "$SBX" && STUB_MODE=no_probe "$SCRIPT" --runner agy --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" --no-probe 2>&1)"
   EXIT=$?
   assert_eq "0" "$EXIT" "--no-probe exit code"
   assert_contains "$OUT" '"status": "explored"' "--no-probe status"
@@ -143,7 +144,7 @@ if command -v script >/dev/null 2>&1; then
   assert_contains "$OUT" '"runner": "agy"' "--no-probe runner agy"
 else
   # fallback to codex if script not available
-  OUT="$(STUB_MODE=no_probe cd "$SBX" && "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" --no-probe 2>&1)"
+  OUT="$(cd "$SBX" && STUB_MODE=no_probe "$SCRIPT" --runner codex --model x --prompt-file "$PROMPT_FILE" --bin "$STUB_EXPLORE" --no-probe 2>&1)"
   EXIT=$?
   assert_eq "0" "$EXIT" "--no-probe fallback exit code"
   assert_contains "$OUT" '"status": "explored"' "--no-probe fallback status"

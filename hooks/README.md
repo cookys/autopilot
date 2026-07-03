@@ -92,7 +92,6 @@ hooks/
   session-start.js         # SessionStart priming (pre-existing)
   state-checkpoint.js      # Tier A — PreCompact, Node JSONL parser (v2.7.2+)
   session-handoff.js       # Tier A (default-on wiring, inert unless handoff enabled) — SessionEnd, writes a machine handoff to ~/.autopilot on /clear (no repo writes)
-  state-checkpoint.sh.bak  # rollback artifact, v2.7.1 bash version
   large-file-warner.js     # Tier B (opt-in)
   suggest-compact.js       # Tier A
   cost-tracker.js          # Tier B (opt-in) — transcript-sum (v2.25.2)
@@ -183,7 +182,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 # 3. v2.7.1's bash state-checkpoint.sh resumes
 ```
 
-Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. `hooks/state-checkpoint.sh.bak` is preserved as in-tree archaeology, not part of the canonical rollback path.
+Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
 
 ## Tier B — Opt-In (12 hooks)
 

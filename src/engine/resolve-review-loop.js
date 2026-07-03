@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { bufferToString, findJsonObjectCandidates } = require('../lib/common');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const RESOLVE_REVIEW_LOOP = path.join(REPO_ROOT, 'scripts', 'resolve-review-loop.sh');
@@ -30,13 +31,16 @@ const REVIEW_LOOP_FIELDS = [
   'source',
   'work_domain',
   'domain_source',
+  'capability_state_source',
+  'quota_status',
+  'quota_reset_at',
+  'skill_mode_requested',
+  'skill_mode_effective',
+  'capability_warnings',
+  'reviewer_endpoint',
+  'implementer_endpoint',
 ];
 
-function bufferToString(value) {
-  if (Buffer.isBuffer(value)) return value.toString('utf8');
-  if (typeof value === 'string') return value;
-  return '';
-}
 
 function assertField(value, field, predicate, expected) {
   if (!Object.prototype.hasOwnProperty.call(value, field)) {
@@ -82,6 +86,10 @@ function validateReviewLoopConfig(value) {
     'source',
     'work_domain',
     'domain_source',
+    'capability_state_source',
+    'quota_status',
+    'skill_mode_requested',
+    'skill_mode_effective',
   ]) {
     assertField(value, field, nonEmptyString, 'a non-empty string');
   }
@@ -107,6 +115,16 @@ function validateReviewLoopConfig(value) {
   for (const field of ['l1_required', 'cross_family_required', 'cross_family_satisfied']) {
     assertField(value, field, (v) => typeof v === 'boolean', 'a boolean');
   }
+  assertField(value, 'quota_reset_at', (v) => v === null || typeof v === 'string', 'a string or null');
+  assertField(value, 'capability_warnings', Array.isArray, 'an array');
+  for (const member of value.capability_warnings) {
+    if (typeof member !== 'string') {
+      throw new Error('review-loop output JSON field capability_warnings must contain only strings');
+    }
+  }
+  for (const field of ['reviewer_endpoint', 'implementer_endpoint']) {
+    assertField(value, field, (v) => typeof v === 'string', 'a string');
+  }
 
   const hasReviewerQualified = Object.prototype.hasOwnProperty.call(value, 'reviewer_qualified');
   const hasFallbackLadder = Object.prototype.hasOwnProperty.call(value, 'fallback_ladder');
@@ -123,50 +141,6 @@ function validateReviewLoopConfig(value) {
   return value;
 }
 
-function findJsonObjectCandidates(text) {
-  const candidates = [];
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escaping = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-
-    if (inString) {
-      if (escaping) {
-        escaping = false;
-      } else if (char === '\\') {
-        escaping = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-    } else if (char === '{') {
-      if (depth === 0) start = i;
-      depth += 1;
-    } else if (char === '}' && depth > 0) {
-      depth -= 1;
-      if (depth === 0 && start !== -1) {
-        candidates.push({
-          source: text.slice(start, i + 1),
-          start,
-          end: i + 1,
-        });
-        start = -1;
-      }
-    }
-  }
-
-  return {
-    candidates,
-    trailingUnclosedStart: depth > 0 ? start : -1,
-  };
-}
 
 function looksLikeReviewLoopConfig(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;

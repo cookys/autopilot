@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * audit-log — PostToolUse/Bash
+ * audit-log — PostToolUse for all tools (matcher `.*`)
  * Logs bash commands to ~/.claude/bash-commands.log with auto secret redaction.
  * Uses _shared/secret-patterns.js for consistent redaction.
+ * Runs on PostToolUse for all tools and no-ops (exit 0) when the event carries no bash command.
  */
 
 'use strict';
@@ -17,7 +18,11 @@ try {
   // stdin pipe is broken for tool-event hooks (ENXIO; upstream #6305) — recover
   // the tool from the transcript instead. stdin-first keeps it future-proof.
   let stdin = '';
-  try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
+  try {
+    stdin = fs.readFileSync(0, 'utf8');
+  } catch {
+    try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
+  }
   const ev = getToolEvent({ stdin, env: process.env });
   const command = (ev.tool_input && ev.tool_input.command) || '';
 

@@ -24,7 +24,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const MAX_LINE_BYTES = 1024 * 1024; // skip pathological oversized lines (match state-checkpoint-lib)
+const { MAX_LINE_BYTES } = require('./state-checkpoint-lib.js');
 
 // --- pure: extract the latest tool event from transcript JSONL text ----------
 // Returns { tool_name, tool_input, tool_response, is_error, tool_use_id } for the

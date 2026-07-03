@@ -177,4 +177,32 @@ assert_exit_code "$__RUN_EXIT" "0" "add F5"
 LINE_COUNT_AFTER_ADD=$(wc -l < "$STORE")
 assert_eq "$LINE_COUNT_AFTER_ADD" "$((LINE_COUNT_BEFORE + 1))" "store line count grew by exactly 1"
 
+# --- 7. Option-argument parsing and missing value tests ---
+echo "Running option-argument parsing / missing value validation tests..."
+
+# status --store with no value fails with exit 2, naming --store, no stack trace
+run_adj "status --store"
+assert_exit_code "$__RUN_EXIT" "2" "status with missing --store value exits 2"
+assert_contains "$__RUN_STDERR" "--store" "stderr names --store"
+assert_not_contains "$__RUN_STDERR" "TypeError" "stderr has no TypeError"
+assert_not_contains "$__RUN_STDERR" "at " "stderr has no stack trace (no 'at ')"
+
+# status --store with option token as value fails with exit 2, naming --store, no stack trace
+run_adj "status --store --id F1"
+assert_exit_code "$__RUN_EXIT" "2" "status with option token as --store value exits 2"
+assert_contains "$__RUN_STDERR" "--store" "stderr names --store"
+assert_not_contains "$__RUN_STDERR" "TypeError" "stderr has no TypeError"
+assert_not_contains "$__RUN_STDERR" "at " "stderr has no stack trace (no 'at ')"
+
+# probe --id with no value fails with exit 2, naming --id, no stack trace
+run_adj "probe --store $STORE --id"
+assert_exit_code "$__RUN_EXIT" "2" "probe with missing --id value exits 2"
+assert_contains "$__RUN_STDERR" "--id" "stderr names --id"
+assert_not_contains "$__RUN_STDERR" "TypeError" "stderr has no TypeError"
+assert_not_contains "$__RUN_STDERR" "at " "stderr has no stack trace (no 'at ')"
+
+# Control case: normal invocation still works
+run_adj "status --store $STORE"
+assert_exit_code "$__RUN_EXIT" "0" "normal status invocation succeeds"
+
 finalize_test

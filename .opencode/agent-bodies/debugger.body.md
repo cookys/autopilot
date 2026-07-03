@@ -17,6 +17,8 @@ You are **read-only**. You do not apply patches. You produce a `Proposed Fix` as
 
 **No log, no stack trace, no code citation → no hypothesis.**
 
+Before designing any diagnosis, match the symptom against `references/probe-playbook.md`; entries carry discriminating checks (expected-if-match / expected-if-NOT-match); no matching entry ⇒ escalate per the quality-floor ledger convention rather than inventing silently.
+
 If you do not have concrete evidence yet, your job is to collect evidence. Not to speculate. Not to "narrow down the likely area". Evidence first, hypothesis second.
 
 Legitimate evidence sources:

@@ -31,6 +31,8 @@
 #   source scripts/load-endpoints-env.sh && autopilot_load_endpoints_env
 #   scripts/load-endpoints-env.sh            # executed: load default file, print a
 #                                            #   NON-SECRET summary (names only) to stderr
+#   scripts/load-endpoints-env.sh --init     # scaffold a mode-600 commented STUB if absent
+#                                            #   (idempotent — never overwrites)
 #   scripts/load-endpoints-env.sh --help
 #
 # Exit / return: 0 = loaded (or no file — a no-op is success) · 1 = file present but
@@ -131,10 +133,49 @@ autopilot_load_endpoints_env() {
   return 0
 }
 
+# autopilot_init_endpoints_env — idempotently scaffold a mode-600 commented STUB (no secrets)
+# at the canonical path if absent. Never clobbers an existing file. Returns 0 (created OR
+# already-present), 1 on a write failure.
+autopilot_init_endpoints_env() {
+  set +x
+  local envfile="${AUTOPILOT_ENDPOINTS_ENV:-${HOME:-}/.autopilot/endpoints.env}"
+  if [ -e "$envfile" ] || [ -L "$envfile" ]; then
+    printf 'load-endpoints-env: already exists, not overwriting: %s\n' "$envfile" >&2
+    return 0
+  fi
+  local dir; dir="$(dirname "$envfile")"
+  mkdir -p "$dir" 2>/dev/null || { printf 'load-endpoints-env: cannot create %s\n' "$dir" >&2; return 1; }
+  # umask 077 so the transient file is private from creation; chmod 600 belt-and-braces.
+  ( umask 077; cat > "$envfile" <<'STUB'
+# ~/.autopilot/endpoints.env — autopilot heterogeneous-engine credentials (mode 600).
+# ONE canonical home for Anthropic-compatible endpoint tokens (GLM / MiniMax / any compatible).
+# NEVER commit this file. Parsed SAFELY (not sourced): only `NAME=VALUE` lines with an
+# allowlisted NAME are honored; a set env var always wins. Uncomment + fill what you use.
+#
+# Prefer a SUBSCRIPTION / coding-plan token over a metered API key. OAuth-login runners
+# (codex / agy / grok) need NOTHING here — they use their own CLI login.
+#
+# Convention: AUTOPILOT_ENDPOINT_<NAME>_URL + _TOKEN  (<NAME> is [A-Za-z0-9_], your own label).
+#
+# --- GLM (Zhipu) coding plan ---
+# AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic
+# AUTOPILOT_ENDPOINT_GLM_TOKEN=
+#
+# --- MiniMax (intl) ---
+# AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic
+# AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=
+STUB
+  ) || { printf 'load-endpoints-env: cannot write %s\n' "$envfile" >&2; return 1; }
+  chmod 600 "$envfile" 2>/dev/null || true
+  printf 'load-endpoints-env: created stub %s (chmod 600; edit to add tokens)\n' "$envfile" >&2
+  return 0
+}
+
 # Executed directly (not sourced) ⇒ run against the default file + print a NON-SECRET summary.
 if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
   case "${1:-}" in
     --help|-h) sed -n '2,40p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; exit 0 ;;
+    --init) autopilot_init_endpoints_env; exit $? ;;
     "") ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac

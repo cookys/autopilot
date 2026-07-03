@@ -154,4 +154,22 @@ out="$(env -i PATH="$PATH" bash -c 'set -uo pipefail; . "'"$SH"'" && autopilot_l
 assert_contains "$out" 'RC=0' "set -u + unset HOME → clean no-op (no unbound-variable crash)"
 assert_not_contains "$out" 'unbound variable' "no unbound-variable error under set -u"
 
+# ── 14. --init scaffolds a mode-600 stub; idempotent; stub loads nothing ────
+initf="$WORK/init/endpoints.env"
+out="$(env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$initf" bash "$SH" --init 2>&1)"; ec=$?
+assert_exit_code "$ec" 0 "--init exits 0"
+assert_file_exists "$initf" "--init created the stub file"
+assert_contains "$out" 'created stub' "--init reports creation"
+mode="$(stat -c '%a' "$initf" 2>/dev/null || stat -f '%Lp' "$initf" 2>/dev/null)"
+assert_eq "600" "$mode" "--init stub is mode 600"
+# idempotent: second --init must NOT clobber and must exit 0
+printf '\n# user edit marker\n' >> "$initf"
+out2="$(env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$initf" bash "$SH" --init 2>&1)"; ec2=$?
+assert_exit_code "$ec2" 0 "--init idempotent exits 0"
+assert_contains "$out2" 'already exists' "--init does not clobber an existing file"
+assert_contains "$(cat "$initf")" 'user edit marker' "--init preserved the user edit"
+# the all-commented stub loads nothing
+loadout="$(run_sh "$initf")"
+assert_contains "$loadout" 'LOADED=[]' "commented stub loads no vars"
+
 echo "load-endpoints-env: all assertions passed"

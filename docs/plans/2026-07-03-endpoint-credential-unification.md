@@ -3,7 +3,7 @@
 - **Date**: 2026-07-03
 - **Target version**: v2.31.6 (PATCH — new loader script + additive config keys + docs; no new skill/agent)
 - **Branch**: `feat/v2.31.6-endpoint-credential-unification`
-- **Status**: In progress
+- **Status**: ✅ Shipped in v2.31.6 — merged as `e039265`
 
 ## Problem
 

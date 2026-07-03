@@ -578,6 +578,46 @@ OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB
 assert_eq "1" "$EXIT" "codex-nonzero exits 1"
 assert_contains "$OUT" '"status": "no_verdict"' "codex-nonzero status no_verdict"
 assert_contains "$OUT" "codex exited non-zero (rc=5)" "codex-nonzero error message contains exit code"
+# Regression Test 7: Prompt contract assertions (explicit closing-marker instruction)
+CAPTURED_PROMPT_FILE="$TEST_TMP/captured-prompt"
+STUB_CAPTURE="$TEST_TMP/eng-prompt-capture"
+cat > "$STUB_CAPTURE" <<'EOF'
+#!/usr/bin/env bash
+cat > "$CAPTURED_PROMPT_FILE"
+PROMPT="$(cat "$CAPTURED_PROMPT_FILE")"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "$end"
+EOF
+chmod +x "$STUB_CAPTURE"
+
+export CAPTURED_PROMPT_FILE
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "prompt-capture stub exits 0"
+
+PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
+begin_marker="$(printf '%s\n' "$PROMPT_CONTENT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end_marker="$(printf '%s\n' "$PROMPT_CONTENT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+
+assert_neq "" "$begin_marker" "begin_marker extracted"
+assert_neq "" "$end_marker" "end_marker extracted"
+
+expected_begin_block="Output your verdict with NO other text, prose, or fences. Its ENTIRE output MUST begin with:
+$begin_marker
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none"
+
+expected_end_block="and its ENTIRE output MUST end with:
+$end_marker"
+
+assert_contains "$PROMPT_CONTENT" "$expected_begin_block" "prompt contains begin-with instruction followed by BEGIN marker"
+assert_contains "$PROMPT_CONTENT" "$expected_end_block" "prompt contains end-with instruction followed by END marker"
+
+suffix_from_end_instr="${PROMPT_CONTENT#*"$expected_end_block"}"
+assert_contains "$suffix_from_end_instr" "Diff under review:" "END-marker instruction appears before Diff under review:"
 
 finalize_test
 

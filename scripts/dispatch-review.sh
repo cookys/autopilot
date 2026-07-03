@@ -271,7 +271,12 @@ EOF
 VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
 FINDINGS: one finding per line, or the single word none
 
-Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block.
+and its ENTIRE output MUST end with:
+EOF
+  printf '%s\n' "$END"
+  cat <<'EOF'
+
+Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block, with nothing after it.
 
 Diff under review:
 ```

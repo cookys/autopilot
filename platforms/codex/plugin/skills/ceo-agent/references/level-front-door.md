@@ -350,6 +350,10 @@ git worktree prune
   `git worktree list` diff (worktree base ≠ HEAD — see memory
   `worktree-dispatch-gotchas`).
 
+### Quality-floor conventions (v2.31.11)
+
+The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/2026-07-04-quality-floor-engine.md`).
+
 ## Phase L: width fan-out control loop (the depth-0 loop driving `dispatch-batch.sh`)
 
 When the foreman decomposes a round into **≥2 file-disjoint units** (fixed cap 3,

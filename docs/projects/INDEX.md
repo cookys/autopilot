@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [quality-floor-engine](2026-07-04-quality-floor-engine/README.md) — judgment-demotion ladder: probe playbook, acceptance-pattern menu, finding-adjudication protocol, escalation ledger. Weak-orchestrator quality floor. | v2.31.11 | `feat/quality-floor-engine` |
 
 ## 已完成 (Completed)
 

@@ -124,6 +124,8 @@ A reviewer finding is a *claim to check*, not a command to obey. Before acting o
 4. **No performative agreement.** Never reply "You're absolutely right!", "Great catch!", or any thanks. State the fix (`Fixed — <what changed>`) or the reasoned pushback. Actions over affect; the diff shows you heard it.
 5. **Apply fixes one at a time and re-verify** — don't batch-apply a list and assume it's green; each fix gets its own check (the re-review loop already enforces this at the round level).
 
+The mechanical form of this rule is the adjudication table (`scripts/adjudicate-findings.js`, statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`); `union-on-verified-critical`'s "verified" = actionable status in the table.
+
 ## Scope Creep / Surgical Changes Scan
 
 **Every changed line must trace directly to the stated task, plan, or commit message.**

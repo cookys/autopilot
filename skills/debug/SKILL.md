@@ -90,3 +90,4 @@ Identify the right tools for your problem category. If your project has a `debug
 - `learn` -- record debugging discoveries
 - `audit` -- systematic comparison for parity issues
 - `profiling` -- performance-specific investigation
+- [`references/probe-playbook.md`](../../references/probe-playbook.md) -- match symptom against playbook entries (discriminating checks); no match ⇒ escalate per ledger convention

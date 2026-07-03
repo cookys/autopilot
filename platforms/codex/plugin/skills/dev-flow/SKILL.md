@@ -328,7 +328,7 @@ Confirm before starting. Record in the project README:
 | PASS | "API returns <200ms for 95th percentile (measured by load test)." |
 | FAIL | "Performance is acceptable." |
 
-Any criterion without a threshold or verification method means the plan is incomplete. Do not proceed until fixed.
+Any criterion without a threshold or verification method means the plan is incomplete. Do not proceed until fixed. Select acceptance criteria from [acceptance-patterns.md](../../references/acceptance-patterns.md) for acceptance-pattern selection (referencing pattern ids and evidence including negative controls).
 
 **CEO mode**: SKIP intent confirmation -- CEO already confirmed OKR during Startup. Do not ask the user again.
 

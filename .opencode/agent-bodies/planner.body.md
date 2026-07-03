@@ -54,7 +54,7 @@ Every Task Prompt MUST contain all **six elements**. Missing any is a violation:
 2. **Scope** — exact file paths and modules to touch
 3. **Input** — upstream dependencies: schemas, API specs, data contracts, prior subtask outputs
 4. **Output** — deliverables: file list, new APIs, tests, docs
-5. **Acceptance** — how to verify completion (tests pass, behaviors observed, checks green)
+5. **Acceptance** — how to verify completion (tests pass, behaviors observed, checks green). Acceptance criteria are attached from `references/acceptance-patterns.md` (pattern ids + evidence incl. each pattern's negative control); custom criteria require a written justification and a named negative control.
 6. **Boundaries** — what the subtask must NOT touch, to prevent side effects
 
 ### Phase 3: Execution Ordering

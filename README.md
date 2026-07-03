@@ -126,6 +126,14 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 **→ Per-level behaviour, presets, override flags (`--expand` / `-x` / `--solo`), and full examples: [docs/skills.md](docs/skills.md).**
 
+### 🔌 Add another engine (optional)
+
+Claude alone is enough. But point autopilot at a **second engine family** and its review/implement pipeline gets stronger — a cross-family qc panel catches what one vendor and its same-family reviewer jointly miss, and you get a heterogeneous implementer for cost-arbitrage. **Recommended order: a subscription you already pay for ≻ a metered API key** — OAuth-login runners (`codex` / `agy` / `grok`) need no token at all; GLM / MiniMax go in one canonical mode-600 file (`~/.autopilot/endpoints.env`) and are wired declaratively in `.claude/review-loop-config.md`.
+
+> **Try saying:** *"set up a GLM reviewer"* · *"use MiniMax as the /l5 implementer"*
+
+**→ Credential placement, the subscription-≻-API-key ladder, and the copy-paste setup: [docs/installation.md](docs/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster).**
+
 ### 📈 Improve over time
 
 `learn` (capture lessons) · `retro` (git-history retrospective) · `next` (what to do next) · `distill` (turn your repeated workflows into personal skills) · plus `debug` · `profiling` · `test-strategy` · `audit` · `doc-sync`.

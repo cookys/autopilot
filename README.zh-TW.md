@@ -126,6 +126,14 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 **→ 各級行為、預設值、override flags（`--expand` / `-x` / `--solo`）與完整範例：[docs/skills.md](docs/skills.md)。**
 
+### 🔌 接上另一個引擎（選用）
+
+只用 Claude 就夠了。但把 autopilot 指向**第二個引擎家族**，它的 review／implement pipeline 會更強——跨家族 qc panel 能抓到單一廠商跟同家族 reviewer 一起漏掉的問題，還能得到一個異質 implementer 做成本套利。**建議順序：你已經在付的訂閱 ≻ 按量計費的 API key**——OAuth 登入的 runner（`codex` / `agy` / `grok`）完全不需要 token；GLM／MiniMax 則放進單一 mode-600 檔案（`~/.autopilot/endpoints.env`），並在 `.claude/review-loop-config.md` 宣告式接線。
+
+> **Try saying：** *「設一個 GLM reviewer」* · *「用 MiniMax 當 /l5 implementer」*
+
+**→ 憑證放置、subscription-≻-API-key 階梯與可直接複製的設定：[docs/installation.md](docs/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster)。**
+
 ### 📈 自我改進
 
 `learn`（記錄教訓）· `retro`（git 歷史回顧）· `next`（接下來做什麼）· `distill`（把你重複的流程變成個人 skill）· 以及 `debug` · `profiling` · `test-strategy` · `audit` · `doc-sync`。

@@ -135,6 +135,85 @@ So a hook like `branch-protection` is **enabled** in `~/.autopilot/config.json` 
 
 ---
 
+## Heterogeneous engine credentials (optional — unlocks the strong review/impl roster)
+
+Autopilot works fully standalone on Claude alone. But its **decorrelated** review-and-implement
+pipeline (`/l5` / `/l6`, `dispatch-review.sh`, the depth-0 qc panel) gets materially stronger when
+it can reach a **second engine family** — a bug your generator and its same-family reviewer jointly
+miss is caught by a different vendor ([PoLL](https://arxiv.org/abs/2404.18796)). Filling in the
+credentials below is what turns on:
+
+- a **cross-family qc panel** (an OpenAI/Google/xAI/MiniMax reviewer voting alongside Claude), and
+- a **heterogeneous implementer** for cost-arbitrage or a decorrelated second opinion.
+
+### Recommended: subscription plan ≻ API key
+
+Reach for these **in order** — a flat-rate subscription you already pay for beats a metered API key
+whose cost is unbounded per run:
+
+1. **OAuth-login CLI runners — `codex` / `agy` / `grok`.** These sign in with your own
+   ChatGPT / Gemini / Grok **subscription** and need **no env token** at all — autopilot just shells
+   out to the CLI. If you have one of these subscriptions, this is the cheapest and simplest path;
+   set `implementer_runner` / `reviewer_runner` in `.claude/review-loop-config.md` and you're done.
+2. **A coding-plan subscription token — GLM / MiniMax (via `cc-shim` / `anthropic-compatible`).**
+   For providers reached over an Anthropic-compatible endpoint, prefer their **flat-rate coding-plan
+   subscription** token (e.g. the GLM Coding Plan) over a metered key. Put it in the credential file
+   below.
+3. **A metered API key — last resort.** Same file, same slot; just be aware the cost scales with
+   usage (an adversarial loop can run many rounds).
+
+### The one canonical credential home: `~/.autopilot/endpoints.env`
+
+There is a **single** place for endpoint-token credentials — a machine-local, mode-**600** file
+(never inside any repo, so it can't leak through git). It is loaded automatically by
+`dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-anthropic-review.js` at startup.
+
+```bash
+# create it once, locked to your user only
+mkdir -p ~/.autopilot && touch ~/.autopilot/endpoints.env && chmod 600 ~/.autopilot/endpoints.env
+```
+
+Fill it with `AUTOPILOT_ENDPOINT_<NAME>_URL` + `_TOKEN` pairs (`<NAME>` is `[A-Za-z0-9_]`, your own
+logical label — `glm`, `minimax`, `local_llama`, …):
+
+```sh
+# ~/.autopilot/endpoints.env   (mode 600 — never commit; values are examples)
+# --- GLM (Zhipu) coding plan, Anthropic-compatible ---
+AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic
+AUTOPILOT_ENDPOINT_GLM_TOKEN=<your GLM coding-plan token>
+# --- MiniMax intl, Anthropic-compatible ---
+AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic
+AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=<your MiniMax token>
+```
+
+The file is parsed safely — **not** sourced/executed: only lines of the exact form
+`[export ]NAME=VALUE` with an allowlisted `NAME` are honored, symlinks and group/other-writable
+files are refused, an already-set env var always wins, and a token value is **never** printed. A
+one-off `AUTOPILOT_ENDPOINT_GLM_TOKEN=… <cmd>` still overrides the file for that run.
+(`${AUTOPILOT_ENDPOINTS_ENV}` overrides the path if you keep it elsewhere.)
+
+> **OAuth runners need nothing here.** `codex` / `agy` / `grok` authenticate through their own CLI
+> login — leave them out of this file entirely.
+
+### Wire it declaratively (no hand-typed flags)
+
+Name the endpoint once in `.claude/review-loop-config.md` and `/l5` / `/l6` pass it through
+automatically (no `--endpoint` on the command line):
+
+```
+- reviewer_runner: cc-shim
+- reviewer_endpoint: glm            # → dispatch-review.sh --endpoint glm
+- implementer_runner: cc-shim
+- implementer_endpoint: minimax     # → dispatch-hetero.sh --endpoint minimax
+```
+
+Leave a `*_endpoint` empty to use the raw `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` env instead
+(byte-identical to the pre-endpoint behaviour). See
+[`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md)
+for the full roster and the per-provider endpoint/model table.
+
+---
+
 ## Development
 
 To contribute or customize skills locally:

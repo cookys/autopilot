@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-03 | [endpoints-cli](2026-07-03-endpoints-cli/README.md) — `autopilot endpoints` CLI (`init`/`list`/`which`/`set`/`doctor`, `--json` redacted) + opt-in per-repo overlay under `~/.autopilot/endpoints.d/`. Decided by a 3-family hetero design panel (codex/agy/grok). | v2.31.8 | `feat/v2.31.8-endpoints-cli` |
 
 ## 已完成 (Completed)
 

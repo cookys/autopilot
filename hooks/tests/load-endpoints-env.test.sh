@@ -185,4 +185,45 @@ tmplout="$(run_sh "$tmplcopy")"
 assert_contains "$tmplout" 'LOADED=[]' "canonical template loads no vars (all commented)"
 assert_contains "$tmplout" 'RC=0' "canonical template parses cleanly"
 
+# ── 16. opt-in per-repo overlay: overlay overrides base (env > overlay > base) ──
+OV_REPO="$WORK/ovrepo"; mkdir -p "$OV_REPO"
+git -C "$OV_REPO" init -q >/dev/null 2>&1
+git -C "$OV_REPO" remote add origin https://example.com/acme.git
+OVKEY="$(cd "$OV_REPO" && bash "$SH" --repo-key)"
+assert_neq "" "$OVKEY" "repo-key resolves in a git repo with a remote"
+mkdir -p "$WORK/ovcreds/endpoints.d"
+OVBASE="$WORK/ovcreds/endpoints.env"
+printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=basetok\nAUTOPILOT_ENDPOINT_MINIMAX_TOKEN=mmbase\n' > "$OVBASE"; chmod 600 "$OVBASE"
+printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=overlaytok\n' > "$WORK/ovcreds/endpoints.d/$OVKEY.env"; chmod 600 "$WORK/ovcreds/endpoints.d/$OVKEY.env"
+ovout="$(cd "$OV_REPO" && env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$OVBASE" bash -c '. "'"$SH"'" && autopilot_load_endpoints_env; echo "GLM=[${AUTOPILOT_ENDPOINT_GLM_TOKEN:-}]"; echo "MM=[${AUTOPILOT_ENDPOINT_MINIMAX_TOKEN:-}]"' 2>&1)"
+assert_contains "$ovout" 'GLM=[overlaytok]' "overlay overrides base for the repo's key"
+assert_contains "$ovout" 'MM=[mmbase]' "base fills gaps the overlay does not set"
+
+# ── 17. no endpoints.d/ dir ⇒ overlay is a pure no-op (base only, zero behaviour change) ──
+mkdir -p "$WORK/noovl"; OVBASE2="$WORK/noovl/endpoints.env"
+printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=basetok\n' > "$OVBASE2"; chmod 600 "$OVBASE2"
+noovlout="$(cd "$OV_REPO" && env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$OVBASE2" bash -c '. "'"$SH"'" && autopilot_load_endpoints_env; echo "GLM=[${AUTOPILOT_ENDPOINT_GLM_TOKEN:-}]"' 2>&1)"
+assert_contains "$noovlout" 'GLM=[basetok]' "no endpoints.d dir → overlay no-op (base only)"
+
+# ── 18. a rejected overlay (world-writable) warns but falls through to base; base still loads ──
+printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=overlaytok\n' > "$WORK/ovcreds/endpoints.d/$OVKEY.env"; chmod 0666 "$WORK/ovcreds/endpoints.d/$OVKEY.env"
+ovbad="$(cd "$OV_REPO" && env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$OVBASE" bash -c '. "'"$SH"'" && autopilot_load_endpoints_env; echo "RC=$?"; echo "GLM=[${AUTOPILOT_ENDPOINT_GLM_TOKEN:-}]"' 2>&1)"
+assert_contains "$ovbad" 'group/other-writable' "world-writable overlay is refused"
+assert_contains "$ovbad" 'GLM=[basetok]' "refused overlay falls through to base"
+assert_contains "$ovbad" 'RC=0' "overlay rejection does not fail the base load"
+
+# ── 19. JS twin: repoKey parity with bash + overlay merge ──
+JSKEY="$(cd "$OV_REPO" && node -e 'const {repoKey}=require(process.argv[1]);process.stdout.write(String(repoKey(process.cwd())||""))' "$JS")"
+assert_eq "$OVKEY" "$JSKEY" "js repoKey() matches bash --repo-key (single source of truth)"
+# reset overlay to a valid (600) file for the merge check
+printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=overlaytok\n' > "$WORK/ovcreds/endpoints.d/$OVKEY.env"; chmod 600 "$WORK/ovcreds/endpoints.d/$OVKEY.env"
+jsov="$(cd "$OV_REPO" && node -e '
+  const {loadEndpointsEnv}=require(process.argv[1]);
+  const env={};
+  loadEndpointsEnv({path:process.argv[2], env, cwd:process.cwd(), warn:()=>{}});
+  console.log(JSON.stringify({glm:env.AUTOPILOT_ENDPOINT_GLM_TOKEN||"", mm:env.AUTOPILOT_ENDPOINT_MINIMAX_TOKEN||""}));
+' "$JS" "$OVBASE")"
+assert_contains "$jsov" '"glm":"overlaytok"' "js twin overlay overrides base"
+assert_contains "$jsov" '"mm":"mmbase"' "js twin base fills gaps"
+
 echo "load-endpoints-env: all assertions passed"

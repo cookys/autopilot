@@ -59,62 +59,68 @@ _autopilot_endpoints_key_allowed() {
   return 1
 }
 
-# autopilot_load_endpoints_env — parse the canonical file into the process env.
-# Sets AUTOPILOT_ENDPOINTS_LOADED to a space-separated list of KEY names actually loaded
-# (never values), for a non-secret diagnostic. Returns 0 on success/no-op, 1 on rejection.
-autopilot_load_endpoints_env() {
-  set +x
-  # ${HOME:-} — a caller under `set -u` with HOME unset (e.g. `env -i`) must not crash here.
-  local envfile="${AUTOPILOT_ENDPOINTS_ENV:-${HOME:-}/.autopilot/endpoints.env}"
-  AUTOPILOT_ENDPOINTS_LOADED=""
+# _autopilot_repo_key — a stable per-repo key for the opt-in overlay (normalized git remote
+# origin URL; fallback: a hash of the repo toplevel path). Prints the key, or nothing + returns
+# 1 when the cwd is not a git repo. MUST stay byte-identical to the JS twin's repoKey().
+_autopilot_repo_key() {
+  local url top
+  url="$(git config --get remote.origin.url 2>/dev/null)" || url=""
+  if [ -n "$url" ]; then
+    url="${url%.git}"      # strip trailing .git
+    url="${url#*://}"      # strip scheme://
+    url="${url#*@}"        # strip user@ (scp-style git@host:path)
+    url="${url//[!A-Za-z0-9]/_}"
+    printf '%s' "$url"; return 0
+  fi
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || top=""
+  if [ -n "$top" ]; then
+    printf 'path_%s' "$(printf '%s' "$top" | cksum | cut -d' ' -f1)"; return 0
+  fi
+  return 1
+}
 
-  # No file at all ⇒ nothing to do; this is the common case and a success no-op.
-  [ -e "$envfile" ] || return 0
-
+# _autopilot_endpoints_load_file <file> — perms-gate + line-parse ONE credential file into the
+# env (existing non-empty env wins). Appends loaded KEY names to _AUTOPILOT_LOADED_ACC (never
+# values). Returns 0 loaded/ok, 1 on a safety-gate rejection. Caller checks existence first.
+_autopilot_endpoints_load_file() {
+  local envfile="$1"
   # Never follow a symlink — the target could be an attacker-controlled file.
   if [ -L "$envfile" ]; then
-    printf 'load-endpoints-env: refusing symlink credential file: %s\n' "$envfile" >&2
-    return 1
+    printf 'load-endpoints-env: refusing symlink credential file: %s\n' "$envfile" >&2; return 1
   fi
   if [ ! -f "$envfile" ]; then
-    printf 'load-endpoints-env: not a regular file, skipping: %s\n' "$envfile" >&2
-    return 1
+    printf 'load-endpoints-env: not a regular file, skipping: %s\n' "$envfile" >&2; return 1
   fi
   # Ownership — bash -O is TRUE iff the file is owned by the effective uid (portable, no stat).
   if [ ! -O "$envfile" ]; then
-    printf 'load-endpoints-env: refusing credential file not owned by you: %s\n' "$envfile" >&2
-    return 1
+    printf 'load-endpoints-env: refusing credential file not owned by you: %s\n' "$envfile" >&2; return 1
   fi
   # Permission bits — GNU then BSD stat; empty ⇒ can't verify ⇒ fail closed.
   local mode
   mode="$(stat -c '%a' "$envfile" 2>/dev/null || stat -f '%Lp' "$envfile" 2>/dev/null || printf '')"
   if [ -z "$mode" ]; then
-    printf 'load-endpoints-env: cannot determine permissions, refusing: %s\n' "$envfile" >&2
-    return 1
+    printf 'load-endpoints-env: cannot determine permissions, refusing: %s\n' "$envfile" >&2; return 1
   fi
   # Force octal interpretation (leading 0). Group/other WRITE ⇒ injection vector ⇒ reject.
   if (( 0"$mode" & 022 )); then
-    printf 'load-endpoints-env: refusing group/other-writable credential file (chmod 600 %s)\n' "$envfile" >&2
-    return 1
+    printf 'load-endpoints-env: refusing group/other-writable credential file (chmod 600 %s)\n' "$envfile" >&2; return 1
   fi
   # Group/other READ ⇒ confidentiality only ⇒ warn but proceed.
   if (( 0"$mode" & 044 )); then
     printf 'load-endpoints-env: WARNING credential file is group/other-readable (chmod 600 %s recommended)\n' "$envfile" >&2
   fi
 
-  local line key val base loaded=""
+  local line key val
   # `|| [ -n "$line" ]` so a final line without a trailing newline is still processed.
   while IFS= read -r line || [ -n "$line" ]; do
-    # Strip leading whitespace.
-    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line#"${line%%[![:space:]]*}"}"          # strip leading whitespace
     [ -z "$line" ] && continue
-    case "$line" in \#*) continue ;; esac        # comment
+    case "$line" in \#*) continue ;; esac            # comment
     case "$line" in export\ *) line="${line#export }"; line="${line#"${line%%[![:space:]]*}"}" ;; esac
-    case "$line" in *=*) ;; *) continue ;; esac  # must be NAME=VALUE
+    case "$line" in *=*) ;; *) continue ;; esac      # must be NAME=VALUE
     key="${line%%=*}"
     val="${line#*=}"
-    # Reject any trailing space inside the key (`NAME =...`) — not a real assignment.
-    case "$key" in *[![:alnum:]_]*) continue ;; esac
+    case "$key" in *[![:alnum:]_]*) continue ;; esac # no trailing space / stray chars in key
     _autopilot_endpoints_key_allowed "$key" || continue
     # Strip ONE layer of matching surrounding quotes (literal — no escape processing).
     if [ "${#val}" -ge 2 ] && [ "${val:0:1}" = '"' ] && [ "${val: -1}" = '"' ]; then
@@ -122,15 +128,49 @@ autopilot_load_endpoints_env() {
     elif [ "${#val}" -ge 2 ] && [ "${val:0:1}" = "'" ] && [ "${val: -1}" = "'" ]; then
       val="${val:1:${#val}-2}"
     fi
-    # Existing non-empty env WINS — file only fills gaps.
+    # Existing non-empty env WINS — a file only fills gaps (so a base can't clobber an overlay
+    # value loaded earlier, and a shell export beats both).
     if [ -z "${!key:-}" ]; then
       export "$key=$val"
-      loaded+="${loaded:+ }$key"
+      _AUTOPILOT_LOADED_ACC="${_AUTOPILOT_LOADED_ACC:+$_AUTOPILOT_LOADED_ACC }$key"
     fi
   done < "$envfile"
-
-  AUTOPILOT_ENDPOINTS_LOADED="$loaded"
   return 0
+}
+
+# autopilot_load_endpoints_env — populate the endpoint credential env from the by-user BASE file
+# and, if the user opted into per-repo overlays, the matching OVERLAY file (loaded FIRST so it
+# wins). Precedence: process env > overlay > base. Sets AUTOPILOT_ENDPOINTS_LOADED to the loaded
+# KEY names (never values). Returns 0 on success/no-op, 1 on a BASE-file rejection (an overlay
+# rejection warns but never fails the base load).
+autopilot_load_endpoints_env() {
+  set +x
+  # ${HOME:-} — a caller under `set -u` with HOME unset (e.g. `env -i`) must not crash here.
+  local base="${AUTOPILOT_ENDPOINTS_ENV:-${HOME:-}/.autopilot/endpoints.env}"
+  AUTOPILOT_ENDPOINTS_LOADED=""; _AUTOPILOT_LOADED_ACC=""
+  local rc=0
+
+  # Opt-in per-repo overlay — ONLY if the user created the endpoints.d/ dir. When absent this is
+  # a pure no-op (no git calls, byte-identical to base-only), so overlays cost nothing by default.
+  local overlaydir; overlaydir="$(dirname "$base")/endpoints.d"
+  if [ -d "$overlaydir" ]; then
+    local key overlayfile
+    key="$(_autopilot_repo_key 2>/dev/null)" || key=""
+    if [ -n "$key" ]; then
+      overlayfile="$overlaydir/$key.env"
+      if [ -e "$overlayfile" ] || [ -L "$overlayfile" ]; then
+        _autopilot_endpoints_load_file "$overlayfile" || true   # best-effort; warns inside
+      fi
+    fi
+  fi
+
+  # Base (by-user). A missing base is the common case ⇒ success no-op.
+  if [ -e "$base" ] || [ -L "$base" ]; then
+    _autopilot_endpoints_load_file "$base" || rc=1
+  fi
+
+  AUTOPILOT_ENDPOINTS_LOADED="$_AUTOPILOT_LOADED_ACC"
+  return "$rc"
 }
 
 # autopilot_init_endpoints_env — idempotently scaffold a mode-600 commented STUB (no secrets)
@@ -173,6 +213,7 @@ if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
   case "${1:-}" in
     --help|-h) sed -n '2,40p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; exit 0 ;;
     --init) autopilot_init_endpoints_env; exit $? ;;
+    --repo-key) _autopilot_repo_key && printf '\n' || exit 1; exit 0 ;;
     "") ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
   esac

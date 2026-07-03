@@ -48,6 +48,8 @@ DEF_REV_RUNNER="codex"
 DEF_IMPL_ENGINE="gpt-5.3-codex-spark"
 DEF_IMPL_EFFORT="high"
 DEF_IMPL_RUNNER="auto"
+DEF_REV_ENDPOINT=""
+DEF_IMPL_ENDPOINT=""
 DEF_MAX_ROUNDS="5"
 DEF_CONVERGE="SHIP-AS-IS"
 DEF_SPEC_REVIEW="on"
@@ -155,6 +157,13 @@ REV_RUNNER="$(read_field reviewer_runner "$DEF_REV_RUNNER")"
 IMPL_ENGINE="$(read_field implementer_engine "$DEF_IMPL_ENGINE")"
 IMPL_EFFORT="$(read_field implementer_effort "$DEF_IMPL_EFFORT")"
 IMPL_RUNNER="$(read_field implementer_runner "$DEF_IMPL_RUNNER")"
+REV_ENDPOINT="$(read_field reviewer_endpoint "$DEF_REV_ENDPOINT")"
+IMPL_ENDPOINT="$(read_field implementer_endpoint "$DEF_IMPL_ENDPOINT")"
+# Endpoint names feed dispatch-*.sh --endpoint (→ resolve-endpoint.sh env-var suffix); allow
+# [A-Za-z0-9_] only (empty = none). A bad value → "" so it can't inject into the --endpoint
+# arg or the emitted JSON (same fail-closed stance as resolve-endpoint.sh's NAME_RE).
+[[ -z "$REV_ENDPOINT"  || "$REV_ENDPOINT"  =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid reviewer_endpoint (must be [A-Za-z0-9_]): $REV_ENDPOINT" >&2; REV_ENDPOINT=""; }
+[[ -z "$IMPL_ENDPOINT" || "$IMPL_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid implementer_endpoint (must be [A-Za-z0-9_]): $IMPL_ENDPOINT" >&2; IMPL_ENDPOINT=""; }
 MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
@@ -657,6 +666,8 @@ if [[ -n "$FIELD" ]]; then
     implementer_engine) printf '%s\n' "$IMPL_ENGINE" ;;
     implementer_effort) printf '%s\n' "$IMPL_EFFORT" ;;
     implementer_runner) printf '%s\n' "$IMPL_RUNNER" ;;
+    reviewer_endpoint) printf '%s\n' "$REV_ENDPOINT" ;;
+    implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
     loop_max_rounds) printf '%s\n' "$MAX_ROUNDS" ;;
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
@@ -707,21 +718,23 @@ if [[ -n "$FIELD" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s }\n' \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s" }\n' \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" \
-    "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON"
+    "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s }\n' \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s" }\n' \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
-    "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON"
+    "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT"
 fi
 exit "$ENFORCE_EXIT"

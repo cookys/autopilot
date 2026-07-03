@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.31.5-E8A838?style=flat-square" alt="v2.31.5">
+  <img src="https://img.shields.io/badge/version-2.31.6-E8A838?style=flat-square" alt="v2.31.6">
   <img src="https://img.shields.io/badge/skills-27-4A90D9?style=flat-square" alt="27 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
@@ -125,6 +125,14 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 > **Try saying：** *「CEO 模式，幫我處理」* · *「全權處理」* · *「/l4 把重連系統做掉」*
 
 **→ 各級行為、預設值、override flags（`--expand` / `-x` / `--solo`）與完整範例：[docs/skills.md](docs/skills.md)。**
+
+### 🔌 接上另一個引擎（選用）
+
+只用 Claude 就夠了。但把 autopilot 指向**第二個引擎家族**，它的 review／implement pipeline 會更強——跨家族 qc panel 能抓到單一廠商跟同家族 reviewer 一起漏掉的問題，還能得到一個異質 implementer 做成本套利。**建議順序：你已經在付的訂閱 ≻ 按量計費的 API key**——OAuth 登入的 runner（`codex` / `agy` / `grok`）完全不需要 token；GLM／MiniMax 則放進單一 mode-600 檔案（`~/.autopilot/endpoints.env`），並在 `.claude/review-loop-config.md` 宣告式接線。
+
+> **Try saying：** *「設一個 GLM reviewer」* · *「用 MiniMax 當 /l5 implementer」*
+
+**→ 憑證放置、subscription-≻-API-key 階梯與可直接複製的設定：[docs/installation.md](docs/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster)。**
 
 ### 📈 自我改進
 

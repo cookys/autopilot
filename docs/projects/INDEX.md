@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-03 | [endpoint-credential-unification](2026-07-03-endpoint-credential-unification/README.md) — one canonical credential home (`~/.autopilot/endpoints.env`, mode-600) + safe-load line-parser + declarative `implementer_endpoint`/`reviewer_endpoint` for `/l5`/`/l6` + value-prop docs (subscription ≻ API key) | v2.31.6 | `feat/v2.31.6-endpoint-credential-unification` |
 
 ## 已完成 (Completed)
 

@@ -67,6 +67,13 @@
 
 set -uo pipefail
 
+# Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
+# rejected/absent file = no-op → the cc-shim/anthropic precondition fires normally). Loaded
+# BEFORE any endpoint/env consumption. Contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
+_REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# shellcheck source=/dev/null
+[ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
+
 RUNNER=""; MODEL=""; DIFF_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in

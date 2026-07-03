@@ -84,6 +84,15 @@ CEO (depth 0, this session)
     reviewer is absent, false, or unknown. `--require-qualified-reviewer` is accepted
     for explicitness/backward compatibility; use `--allow-unqualified-reviewer` only
     as an explicit emergency escape hatch and record the decision in the run summary.
+  - **Named endpoints are declarative, not hand-typed.** When the resolved config
+    (`scripts/resolve-review-loop.sh`) emits a non-empty `implementer_endpoint` /
+    `reviewer_endpoint`, pass it straight through as `--endpoint <name>` to
+    `dispatch-hetero.sh` (implementer, `cc-shim`) / `dispatch-review.sh` (reviewer,
+    `cc-shim`/`anthropic-compatible`). The dispatcher resolves creds via
+    `resolve-endpoint.sh` from the canonical `~/.autopilot/endpoints.env`
+    (`AUTOPILOT_ENDPOINT_<NAME>_*`); an empty field means no `--endpoint` (raw
+    `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before). This closes the
+    old "type `--endpoint` by hand every run" gap — the project config owns it now.
 
 ### Width — fixed cap 3, disjointness-gated
 

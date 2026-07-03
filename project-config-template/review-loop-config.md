@@ -34,6 +34,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_effort: high
 - implementer_runner: auto
+- reviewer_endpoint:
+- implementer_endpoint:
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
@@ -64,6 +66,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
+| `reviewer_endpoint` | **named endpoint** for a `cc-shim`/`anthropic-compatible` REVIEWER — resolves creds via `resolve-endpoint.sh` (`AUTOPILOT_ENDPOINT_<NAME>_*`, populated from `~/.autopilot/endpoints.env`). `/l5`/`/l6` passes it as `--endpoint <name>` so you don't hand-type it. Empty = none (raw `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before) | an endpoint name `[A-Za-z0-9_]` (e.g. `glm`, `minimax`), or empty |
+| `implementer_endpoint` | same, for a `cc-shim` IMPLEMENTER (→ `dispatch-hetero.sh --endpoint`). Empty = none | an endpoint name `[A-Za-z0-9_]`, or empty |
 | `loop_max_rounds` | adversarial-loop convergence cap per phase | integer (default 5) |
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |

@@ -93,6 +93,11 @@ RUNNER="auto"
 EFFORT="xhigh"
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
+# a rejected/absent file is a no-op and the cc-shim precondition fires normally). Loaded BEFORE
+# any endpoint/env consumption. resolution contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
+# shellcheck source=/dev/null
+[ -r "$SELF_DIR/load-endpoints-env.sh" ] && . "$SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint

@@ -34,6 +34,7 @@ const https = require('https');
 const os = require('os');
 const path = require('path');
 const { URL } = require('url');
+const { loadEndpointsEnv } = require(path.join(__dirname, 'lib', 'load-endpoints-env'));
 
 let sharedRedact = (text) => String(text);
 try {
@@ -489,6 +490,12 @@ async function main() {
     printHelp();
     process.exit(0);
   }
+
+  // Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env before any
+  // token/base-url resolution. Best-effort: a rejected/absent file is a no-op and the normal
+  // "missing auth token" precondition fires. Usually dispatch-review.sh already loaded these
+  // via the shell twin, but direct invocation must honor the same one-credential-home contract.
+  loadEndpointsEnv();
 
   const rawMode = !!args.raw;
   const model = args.model;

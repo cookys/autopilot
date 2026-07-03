@@ -54,6 +54,18 @@ refactor ████████░░░░░░░░░░░░  23%  (10)
 ### Hotspot Analysis
 Top 10 most-changed files with touch count. Flag files touched >5 times as potential refactor candidates.
 
+### Review-Loop Lens (from 1f — omit entirely if `transcript.sessions == 0`)
+The hetero-engine dispatch / decorrelated-review / debate effort that git history can't see
+(reviews and harness runs aren't commits; multi-round `/l5` work is squashed into one). Show
+the transcript invocation counts (`impl_dispatch`, `review_dispatch`, `codex_exec`, agy/grok/
+explore, `hetero_dispatch_total`) and the git loop markers (`review_driven_commits`,
+`qc_verdict_commits`, `converged`, `versions`). Frame it as "commits are the iceberg tip":
+contrast the committed count (Metrics Dashboard) with the ~N hetero dispatch/review/debate
+invocations behind them. **Carry the 1f honesty caveat**: `review_dispatch` includes ad-hoc
+harness/debug runs (the git review-round / QC markers are the cleaner cycle count), and only
+local-machine transcripts are counted. Do NOT invent a "review-per-impl ratio" as if precise —
+the harness/debug noise makes it approximate; characterize, don't over-quantify.
+
 ### Ship of the Week
 The single commit (or day) with the highest net LOC change. Show commit hash, message, and stats.
 

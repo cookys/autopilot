@@ -182,29 +182,41 @@ function cmdSet(io, rest) {
     if (!token) { io.stderr.write('ERROR: --token-stdin: empty token on STDIN\n'); return { status: 2 }; }
     if (CONTROL_RE.test(token)) { io.stderr.write('ERROR: --token-stdin: token must not contain control characters (newline injection)\n'); return { status: 2 }; }
   }
-  // Target file: base, or the per-repo overlay.
-  let target;
-  if (toRepo) {
-    const key = repoKey(io.cwd);
-    if (!key) { io.stderr.write('ERROR: --repo: not inside a git repo (cannot key the overlay)\n'); return { status: 2 }; }
-    fs.mkdirSync(overlayDir(io.env), { recursive: true, mode: 0o700 });
-    target = path.join(overlayDir(io.env), `${key}.env`);
-  } else {
-    fs.mkdirSync(path.dirname(basePath(io.env)), { recursive: true, mode: 0o700 });
-    target = basePath(io.env);
+  // Target file: base, or the per-repo overlay. Every filesystem op below is wrapped so an
+  // EACCES/EISDIR/ENOENT surfaces as a clean `stderr + {status:2}` instead of an uncaught throw
+  // (the runEndpointsCli contract — panel finding). The error string carries err.code/path only,
+  // never the token value.
+  try {
+    let target;
+    if (toRepo) {
+      const key = repoKey(io.cwd);
+      if (!key) { io.stderr.write('ERROR: --repo: not inside a git repo (cannot key the overlay)\n'); return { status: 2 }; }
+      fs.mkdirSync(overlayDir(io.env), { recursive: true, mode: 0o700 });
+      target = path.join(overlayDir(io.env), `${key}.env`);
+    } else {
+      fs.mkdirSync(path.dirname(basePath(io.env)), { recursive: true, mode: 0o700 });
+      target = basePath(io.env);
+    }
+    // Refuse a symlink OR any non-regular existing target (never write through one / into a dir).
+    let st = null;
+    try { st = fs.lstatSync(target); } catch (_e) { st = null; } // absent is fine
+    if (st) {
+      if (st.isSymbolicLink()) { io.stderr.write(`ERROR: refusing to write through a symlink: ${target}\n`); return { status: 2 }; }
+      if (!st.isFile()) { io.stderr.write(`ERROR: target is not a regular file: ${target}\n`); return { status: 2 }; }
+    }
+    let content = st ? fs.readFileSync(target, 'utf8') : '';
+    const upper = name.toUpperCase();
+    const setKeys = [];
+    if (url) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_URL`, url); setKeys.push(`${upper}_URL`); }
+    if (token) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_TOKEN`, token); setKeys.push(`${upper}_TOKEN`); }
+    const prevMask = process.umask(0o077);
+    try { fs.writeFileSync(target, content); fs.chmodSync(target, 0o600); } finally { process.umask(prevMask); }
+    io.stdout.write(`endpoints: set ${setKeys.join(', ')} in ${target} (mode 600)\n`); // never echoes the token value
+    return { status: 0 };
+  } catch (err) {
+    io.stderr.write(`ERROR: endpoints set failed: ${(err && err.code) || (err && err.message) || 'io error'}\n`);
+    return { status: 2 };
   }
-  // Refuse a symlink target (never write through one).
-  try { if (fs.lstatSync(target).isSymbolicLink()) { io.stderr.write(`ERROR: refusing to write through a symlink: ${target}\n`); return { status: 2 }; } } catch (_e) { /* absent is fine */ }
-  let content = '';
-  try { content = fs.readFileSync(target, 'utf8'); } catch (_e) { content = ''; }
-  const upper = name.toUpperCase();
-  const setKeys = [];
-  if (url) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_URL`, url); setKeys.push(`${upper}_URL`); }
-  if (token) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_TOKEN`, token); setKeys.push(`${upper}_TOKEN`); }
-  const prevMask = process.umask(0o077);
-  try { fs.writeFileSync(target, content); fs.chmodSync(target, 0o600); } finally { process.umask(prevMask); }
-  io.stdout.write(`endpoints: set ${setKeys.join(', ')} in ${target} (mode 600)\n`); // never echoes the token value
-  return { status: 0 };
 }
 
 function cmdDoctor(io, jsonMode) {

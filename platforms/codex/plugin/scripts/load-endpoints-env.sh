@@ -79,10 +79,10 @@ _autopilot_repo_key() {
   return 1
 }
 
-# _autopilot_endpoints_load_file <file> — perms-gate + line-parse ONE credential file into the
-# env (existing non-empty env wins). Appends loaded KEY names to _AUTOPILOT_LOADED_ACC (never
-# values). Returns 0 loaded/ok, 1 on a safety-gate rejection. Caller checks existence first.
-_autopilot_endpoints_load_file() {
+# _autopilot_endpoints_gate_ok <file> — the perms safety gate for ONE credential file, WITHOUT
+# parsing. Returns 0 if safe to load, 1 if rejected (warns to stderr). Split from the parse so
+# the base file can be gated BEFORE any overlay is loaded (fail-closed ordering).
+_autopilot_endpoints_gate_ok() {
   local envfile="$1"
   # Never follow a symlink — the target could be an attacker-controlled file.
   if [ -L "$envfile" ]; then
@@ -109,7 +109,13 @@ _autopilot_endpoints_load_file() {
   if (( 0"$mode" & 044 )); then
     printf 'load-endpoints-env: WARNING credential file is group/other-readable (chmod 600 %s recommended)\n' "$envfile" >&2
   fi
+  return 0
+}
 
+# _autopilot_endpoints_parse_into_env <file> — line-parse ONE ALREADY-GATED credential file into
+# the env (existing non-empty env wins). Appends loaded KEY names to _AUTOPILOT_LOADED_ACC.
+_autopilot_endpoints_parse_into_env() {
+  local envfile="$1"
   local line key val
   # `|| [ -n "$line" ]` so a final line without a trailing newline is still processed.
   while IFS= read -r line || [ -n "$line" ]; do
@@ -138,17 +144,34 @@ _autopilot_endpoints_load_file() {
   return 0
 }
 
+# _autopilot_endpoints_load_file <file> — gate THEN parse (convenience for the overlay). Returns
+# 1 on a gate rejection.
+_autopilot_endpoints_load_file() {
+  _autopilot_endpoints_gate_ok "$1" || return 1
+  _autopilot_endpoints_parse_into_env "$1"
+}
+
 # autopilot_load_endpoints_env — populate the endpoint credential env from the by-user BASE file
 # and, if the user opted into per-repo overlays, the matching OVERLAY file (loaded FIRST so it
 # wins). Precedence: process env > overlay > base. Sets AUTOPILOT_ENDPOINTS_LOADED to the loaded
-# KEY names (never values). Returns 0 on success/no-op, 1 on a BASE-file rejection (an overlay
-# rejection warns but never fails the base load).
+# KEY names (never values). Returns 0 on success/no-op, 1 on a BASE-file rejection.
+#
+# FAIL-CLOSED ORDERING (panel finding, v2.31.8): the base file is GATED FIRST. If a base file is
+# PRESENT but fails the safety gate (symlink / not-owned / group-writable / unverifiable perms),
+# the credential store is in an unsafe state ⇒ load NOTHING (not even a valid overlay) and return
+# 1, so a caller seeing the rejection can trust that no secret entered the env.
 autopilot_load_endpoints_env() {
   set +x
   # ${HOME:-} — a caller under `set -u` with HOME unset (e.g. `env -i`) must not crash here.
   local base="${AUTOPILOT_ENDPOINTS_ENV:-${HOME:-}/.autopilot/endpoints.env}"
   AUTOPILOT_ENDPOINTS_LOADED=""; _AUTOPILOT_LOADED_ACC=""
-  local rc=0
+
+  # Gate the base FIRST. Present-but-rejected ⇒ fail closed, load nothing.
+  local base_present=0
+  if [ -e "$base" ] || [ -L "$base" ]; then
+    base_present=1
+    _autopilot_endpoints_gate_ok "$base" || return 1
+  fi
 
   # Opt-in per-repo overlay — ONLY if the user created the endpoints.d/ dir. When absent this is
   # a pure no-op (no git calls, byte-identical to base-only), so overlays cost nothing by default.
@@ -164,13 +187,13 @@ autopilot_load_endpoints_env() {
     fi
   fi
 
-  # Base (by-user). A missing base is the common case ⇒ success no-op.
-  if [ -e "$base" ] || [ -L "$base" ]; then
-    _autopilot_endpoints_load_file "$base" || rc=1
+  # Base values (already gated above).
+  if [ "$base_present" -eq 1 ]; then
+    _autopilot_endpoints_parse_into_env "$base"
   fi
 
   AUTOPILOT_ENDPOINTS_LOADED="$_AUTOPILOT_LOADED_ACC"
-  return "$rc"
+  return 0
 }
 
 # autopilot_init_endpoints_env — idempotently scaffold a mode-600 commented STUB (no secrets)
@@ -186,7 +209,9 @@ autopilot_init_endpoints_env() {
     return 0
   fi
   local dir; dir="$(dirname "$envfile")"
-  mkdir -p "$dir" 2>/dev/null || { printf 'load-endpoints-env: cannot create %s\n' "$dir" >&2; return 1; }
+  # -m 700 on the credential dir (matches the CLI's mkdir mode) so the endpoint filenames aren't
+  # world/group-listable; the files themselves are 600.
+  mkdir -p -m 700 "$dir" 2>/dev/null || mkdir -p "$dir" 2>/dev/null || { printf 'load-endpoints-env: cannot create %s\n' "$dir" >&2; return 1; }
   # Locate the tracked canonical template (ships in the same dir as this script).
   local selfdir template=""
   selfdir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || selfdir=""

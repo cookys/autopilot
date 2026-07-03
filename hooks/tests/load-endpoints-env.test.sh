@@ -226,4 +226,26 @@ jsov="$(cd "$OV_REPO" && node -e '
 assert_contains "$jsov" '"glm":"overlaytok"' "js twin overlay overrides base"
 assert_contains "$jsov" '"mm":"mmbase"' "js twin base fills gaps"
 
+# ── 20. FAIL-CLOSED (panel): a rejected base loads NOTHING — not even a valid overlay ──
+printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=overlaytok\n' > "$WORK/ovcreds/endpoints.d/$OVKEY.env"; chmod 600 "$WORK/ovcreds/endpoints.d/$OVKEY.env"
+chmod 0666 "$OVBASE"   # base becomes world-writable → must be rejected
+fc="$(cd "$OV_REPO" && env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$OVBASE" bash -c '. "'"$SH"'" && autopilot_load_endpoints_env; echo "RC=$?"; echo "GLM=[${AUTOPILOT_ENDPOINT_GLM_TOKEN:-}]"' 2>&1)"
+assert_contains "$fc" 'RC=1' "rejected base returns rc=1"
+assert_contains "$fc" 'GLM=[]' "rejected base loads NOTHING — not even the valid overlay (fail-closed)"
+chmod 600 "$OVBASE"
+
+# ── 21. init creates the credential dir mode 700 (panel: not world/group-listable) ──
+env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$WORK/initdir/endpoints.env" bash "$SH" --init >/dev/null 2>&1
+dmode="$(stat -c '%a' "$WORK/initdir" 2>/dev/null || stat -f '%Lp' "$WORK/initdir" 2>/dev/null)"
+assert_eq "700" "$dmode" "init creates the credential dir mode 700"
+
+# ── 22. js twin fails closed when it cannot verify perms (no getuid) — parity with shell ──
+f2="$WORK/f2.env"; printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=x\n' > "$f2"; chmod 600 "$f2"
+f2out="$(node -e 'const m=require(process.argv[1]); process.getuid=undefined; const r=m.parseEndpointsFile(process.argv[2],{warn:()=>{}}); console.log(JSON.stringify({rejected:r.rejected,reason:r.reason}))' "$JS" "$f2")"
+assert_contains "$f2out" '"rejected":true' "js twin refuses when getuid is unavailable (fail-closed parity)"
+# …but an ABSENT base is still a no-op even on no-getuid (absent short-circuits before the perms
+# check) — locks in the verified behavior (a re-review misread this as "absent rejects").
+f2abs="$(node -e 'const m=require(process.argv[1]); process.getuid=undefined; const r=m.loadEndpointsEnv({path:"/nonexistent/xyz.env",env:{},cwd:"/tmp",warn:()=>{}}); console.log(JSON.stringify(r))' "$JS")"
+assert_contains "$f2abs" '"rejected":false' "absent base is a no-op even on no-getuid (not rejected)"
+
 echo "load-endpoints-env: all assertions passed"

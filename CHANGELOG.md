@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.9 — cross-family qc-panel hardening of the endpoints CLI + loader
+
+**Headline**: A **disjoint-family qc panel** (gpt-5.5 / grok, dogfooding `dispatch-review.sh`) over the combined v2.31.6–v2.31.8 credential diff caught four real issues that the earlier single-reviewer rounds missed — a strong argument for the cross-family panel. All fixed + regression-tested. (grok delivered the substantive review; codex degraded to prompt-echo on the large diff. One additional grok finding — "absent base rejects on no-getuid" — was **empirically disproved** as a control-flow misread and locked in with a test.)
+
+### Fixed
+- **Fail-closed ordering** (flagged by BOTH families): the loader gated the base file *after* loading the overlay, so a rejected base returned `rejected:true` while overlay secrets were already in the env. Now the base is **gated first** — a present-but-rejected base loads **nothing** (not even a valid overlay), in both the shell loader and the JS twin.
+- **`endpoints set` unguarded filesystem ops**: `mkdir`/`readFile`/`writeFile`/`chmod` threw an **uncaught stack trace** on EACCES/EISDIR (e.g. a directory target) instead of the `stderr + status 2` contract. Now wrapped; also refuses a **non-regular** (not just symlink) existing target.
+- **JS twin perms fail-closed parity**: on a platform where ownership/perms can't be verified (no `getuid`), the JS twin now **refuses** (matching the shell's "cannot determine permissions, refusing") instead of warning + loading. (An *absent* base remains a no-op on all platforms — verified.)
+- **`load-endpoints-env.sh --init`** creates `~/.autopilot/` with **mode 700** (matching the CLI's `mkdir`), so endpoint filenames aren't group/world-listable (files were already 600).
+
+### Tests
+- +6 assertions: rejected-base-loads-nothing (fail-closed), init dir mode 700, JS no-getuid refuses (present) / no-ops (absent), `set` into a directory target exits 2 with no stack trace.
+
+### Rollback
+- Maintainer: `git revert <sha>`. User-side: `/plugin update autopilot @v2.31.8`.
+
 ## v2.31.8 — `autopilot endpoints` CLI + opt-in per-repo credential overlay
 
 **Headline**: The endpoint-credential system gains a control surface and a per-repo layer, decided by a **3-disjoint-family heterogeneous design panel** (codex/gpt-5.5 · agy/Gemini · grok/xAI, dogfooding the credential system as the topic). All three independently flagged the same weakness — the credential state was **too opaque** for humans and agents to inspect — and unanimously wanted a helper CLI. A new **`autopilot endpoints`** CLI (`init`/`list`/`which`/`set`/`doctor`, `--json`, token-redacted) is that surface; and an **opt-in per-repo overlay** lets the same committed endpoint name (`glm`) resolve to a different token per repo, with the secret files still living under `~/.autopilot/` (never in a repo).

@@ -98,7 +98,10 @@ function parseEndpointsFile(file, opts) {
       warn(`load-endpoints-env: WARNING credential file is group/other-readable (chmod 600 ${file} recommended)`);
     }
   } else {
-    warn('load-endpoints-env: WARNING cannot verify credential file permissions on this platform');
+    // Can't verify ownership/perms (e.g. no getuid) ⇒ fail closed, matching the shell twin's
+    // "cannot determine permissions, refusing". Credential loading is unix-first by design.
+    warn(`load-endpoints-env: refusing credential file (cannot verify permissions on this platform): ${file}`);
+    return { rejected: true, reason: 'perms-unverifiable', entries };
   }
 
   let content;
@@ -142,7 +145,13 @@ function loadEndpointsEnv(opts) {
     }
   };
 
-  // Opt-in per-repo overlay — only if the endpoints.d/ dir exists (else a pure no-op).
+  // Gate + parse the BASE FIRST. A present-but-rejected base fails closed — load NOTHING (not
+  // even a valid overlay), so `rejected:true` guarantees no secret entered `env` (panel finding).
+  const b = parseEndpointsFile(base, { warn });
+  if (b.rejected) return { loaded, rejected: true, reason: b.reason };
+
+  // Opt-in per-repo overlay — only if the endpoints.d/ dir exists (else a pure no-op). Loaded
+  // BEFORE the base values so the overlay wins.
   const overlaydir = path.join(path.dirname(base), 'endpoints.d');
   let overlayDirExists = false;
   try { overlayDirExists = fs.statSync(overlaydir).isDirectory(); } catch (_e) { overlayDirExists = false; }
@@ -155,9 +164,7 @@ function loadEndpointsEnv(opts) {
     }
   }
 
-  // Base (by-user).
-  const b = parseEndpointsFile(base, { warn });
-  if (b.rejected) return { loaded, rejected: true, reason: b.reason };
+  // Base values (already gated above).
   fill(b.entries);
   return { loaded, rejected: false };
 }

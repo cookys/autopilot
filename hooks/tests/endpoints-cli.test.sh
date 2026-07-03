@@ -93,6 +93,13 @@ tokinj="$(printf 'abc\nAUTOPILOT_ENDPOINT_EVIL_TOKEN=pwned' | env HOME="$WORK/ho
 assert_exit_code "$ec" 2 "--token-stdin with an embedded newline is rejected"
 assert_contains "$tokinj" 'control character' "explains the token newline-injection refusal"
 
+# ── 6e. set into a directory target → clean status 2, NOT an uncaught crash (panel) ──
+mkdir -p "$WORK/dirtarget"
+dtout="$(printf t | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$WORK/dirtarget" node "$CLI" endpoints set glm --url https://x --token-stdin 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "set into a directory target exits 2 (clean)"
+assert_not_contains "$dtout" 'at Object.' "no uncaught stack trace on a bad target"
+assert_not_contains "$dtout" 'at cmdSet' "no uncaught stack trace frame"
+
 # ── 7. unknown subcommand → exit 2 ──
 run bogus >/dev/null 2>&1; assert_exit_code "$?" 2 "unknown subcommand exits 2"
 

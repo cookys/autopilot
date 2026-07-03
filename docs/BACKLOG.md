@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Pre-existing full-suite failures: `autopilot-cli` (4) / `review-runner` (4) / `intent-capture-basic-write` (2)
+- **Trigger**: next full-suite-green push, OR next time touching `bin/autopilot.js` dispatch delegation / `src/runners/review.js` / intent-capture session-id fallback.
+- **Context**: classified PRE_EXISTING against develop during the v2.31.10 release (fail identically on the pre-branch base). `autopilot-cli.test.sh` + `review-runner.test.sh` failures are in the dispatch-review-through-CLI stub path (`status/verdict/findings` not parsed — plausibly stale stub fixtures from the v2.31.3 nonce wrapped-block protocol, same class the v2.31.10 sibling-test fixture repairs addressed for other files); `intent-capture-basic-write` canonical-fallback session-id assertions were already noted failing at v2.31.2. Suite otherwise green (89/93 at v2.31.10).
+- **Effort**: Fix
+- **Source**: 2026-07-04 review-closeout L-5.2 full-suite classification (develop-worktree baseline run).
+
 ### Contract JSON-schema SSOT for the bash↔JS resolver/runner contracts
 - **Trigger**: the next NEW field added to `resolve-review-loop.sh` (or a second contract-drift incident anywhere) after v2.31.10's round-trip parity tests.
 - **Context**: v2.31.10 closed the 8-field `REVIEW_LOOP_FIELDS` drift and shipped `hooks/tests/contract-parity.test.sh` (real-script round-trip, both drift directions). The 2026-07-04 3-family design panel (codex/agy/grok) unanimously ranked a JSON-schema single source of truth as the LONG-TERM fix but deferred it: parity tests are the cheapest thing that actually stops silent drift; schema SSOT costs bash-side consumption plumbing. grok's sketch: `schemas/*.schema.json` consumed by JS validators + a generator for the field lists.

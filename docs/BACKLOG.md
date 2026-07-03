@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### distill 情節模式（episodic mode）＋ finish-flow/next 定期呼叫整合
+- **Trigger**: next time touching `skills/distill/`；OR 下一個 L 專案收尾時發現「這套流程值得留但沒有機制接住」。
+- **Context**: 首次 /distill 全量掃描（2026-07-04）實證頻率模式的兩個結構盲區：單次深方法論（≥3× 門檻永不提案）與複合命令儀式（tokenizer 只取首 token）。同期情節式蒸餾實戰（五個 skill＋RED 驗證）證明互補路徑有效。完整設計（含可直接落地的 Step 1E/2E 草稿、finish-flow L-5.6 與 /next B 級的各一行整合、驗收清單）：[`docs/plans/2026-07-04-distill-episodic-mode.md`](plans/2026-07-04-distill-episodic-mode.md)。雙模式共用 Step 3–5 管線，不加新 skill → PATCH。
+- **Effort**: S–M
+- **Source**: 2026-07-04 Fable 5 session；plan R0。
+
 ### distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點
 - **Trigger**: next time touching `scripts/distill-scan.js`，OR 下一輪 /distill 再次觀察到同類噪音。
 - **Context**: 2026-07-04 首次全量掃描（761 sessions）發現兩個校準問題：(1) **friction bucket 噪音** —— 「recurring-correction candidates」樣本混入大量非使用者更正文本：`<teammate-message>` 轉發、dispatch prompt（「OUTPUT ONLY RAW JSON…」「Review this change for security…」）、session-continuation 摘要 —— `--real-only` 沒把這些注入類內容濾掉，稀釋了真實 friction 訊號；建議在抽取層排除 teammate-message 區塊/已知 dispatch-prompt 模板/continuation 標頭。(2) **複合命令儀式盲點** —— n-gram 對「單次 Bash 呼叫內的多步 pipeline」不可見：同 session 實測跑了 ≥8 次的「rewrap→encrypt→push」發布儀式完全沒出現在 trigram/bigram（每次都是一個大複合命令，tokenizer 只取首 token）；若複合命令內部的 `&&`/`;` 步驟能拆進 n-gram 流，這類儀式才可被挖掘。兩者都不影響現有計數正確性，是召回率問題。

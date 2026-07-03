@@ -26,6 +26,19 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### `autopilot endpoints test <name>` — live auth-roundtrip probe
+- **Trigger**: next time hardening the `endpoints` CLI, OR a user asks "is my GLM/MiniMax token actually working" and `doctor` (which only checks presence + perms, no network) isn't enough.
+- **Context**: the v2.31.8 `endpoints` CLI shipped `init`/`list`/`which`/`set`/`doctor`; the 3-family design panel marked `test <name>` (a tiny live `/v1/messages` roundtrip that verifies auth + prints latency) as **optional** and it was deferred to bound scope (network + real-creds + host-dependent). `doctor` covers "is it configured" but not "does the token authenticate". Reuse `dispatch-anthropic-review.js`'s HTTP client (env-only auth, redacted logs, timeout/body-cap) for a read-only probe; must never print the token; opt-in / no-network-by-default posture like `probe-engine-capability.sh --safe`.
+- **Effort**: S
+- **Source**: 2026-07-03 endpoints-cli 3-family hetero design panel (codex/agy/grok) + `docs/projects/2026-07-03-endpoints-cli/`.
+
+### Overlay repo-keying refinements (path-fallback stability / rename handling)
+- **Trigger**: a user reports a per-repo overlay "stopped applying" after moving/re-cloning a repo, OR when adding overlay support to a non-git workflow.
+- **Context**: v2.31.8 keys the opt-in overlay on the normalized git remote (stable across clones) with a **toplevel-path cksum fallback** when there's no remote. The path fallback is per-checkout-location — moving the working tree changes the key, so the overlay silently stops applying. Acceptable for v1 (remote is the common case) but document/handle: a `endpoints which` note when the active key came from the path fallback, and/or an `endpoints set --repo` warning when no remote exists.
+- **Effort**: S
+- **Source**: 2026-07-03 endpoints-cli design (self-flagged blind spot).
+
+
 ### ✅ DONE (2026-07-03, v2.31.3) — `dispatch-review.sh` prompt-echo pollution
 - **Resolution**: Shipped the fresh-nonce wrapped-block protocol for the codex/agy/grok/cc-shim runners (nonce verified absent-from-diff; marker as absolute output prefix defeats whole-prompt echo; single-block extraction; reject-guard on diff/template leakage; 16 KB oversize cap; trailing-after-END + multiple-block + missing-END ⇒ no_verdict; exactly-one-anchored-VERDICT; pre-dispatch size-guard warning). Design via a cross-family debate (codex+grok+depth-0); implemented via `/l5` hetero-impl (gpt-5.3-codex-spark, 3 rounds) + decorrelated gpt-5.5 review (3 rounds, SHIP-AS-IS) + a depth-0 independent adversarial harness. anthropic-compatible deliberately out of scope (see follow-up below). Commit: squash-merge of `b945f38` chain.
 

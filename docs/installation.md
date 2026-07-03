@@ -230,9 +230,35 @@ config is shareable, the secret stays private. **The secret layer is by-user ONL
 autopilot does **not** auto-discover a `$PWD/.claude/endpoints.env` (unlike the non-secret config
 resolvers' `cwd → repo → template` cascade), because a repo-local secret file is a commit-a-token
 footgun. Within loading, an **already-set env var wins** over the file (so a one-off
-`AUTOPILOT_ENDPOINT_X_TOKEN=… <cmd>` overrides it). If you genuinely need per-repo tokens, point
-`AUTOPILOT_ENDPOINTS_ENV` at a repo-local **gitignored** file yourself (e.g. via direnv) — an
-explicit, risk-owned opt-in rather than a default.
+`AUTOPILOT_ENDPOINT_X_TOKEN=… <cmd>` overrides it).
+
+**Per-repo tokens — the opt-in overlay.** If you want the *same* committed name (`glm`) to resolve
+to a *different* token per repo (a work key here, a personal key there), opt into the overlay:
+credentials in `~/.autopilot/endpoints.d/<repo-key>.env` are layered **over** the base for that repo
+only. Precedence is **process env > overlay > base**. The overlay files **still live under
+`~/.autopilot/`** (never in the repo — no commit-a-token footgun), and the layer is a pure no-op
+until you create the `endpoints.d/` directory. `<repo-key>` is your normalized git remote (so it's
+stable across clones); the CLI writes it for you (`endpoints set … --repo`).
+
+### The `endpoints` CLI
+
+`autopilot endpoints` is the setup + inspection surface — friendlier than hand-editing the dotfile,
+and **agent-legible** (an agent can read the non-secret state to help you set up or answer "why
+isn't `glm` resolving here?"). Tokens are **never printed** and **never read from argv** (only STDIN):
+
+```bash
+autopilot endpoints init                                   # scaffold the base file from the template
+printf '%s' "$TOKEN" | autopilot endpoints set glm \
+    --url https://api.z.ai/api/anthropic --token-stdin      # write to the by-user base
+printf '%s' "$WORK_TOKEN" | autopilot endpoints set glm \
+    --url https://api.z.ai/api/anthropic --token-stdin --repo   # …or this repo's overlay
+autopilot endpoints list --json                            # all defined endpoints (url/token present, layer)
+autopilot endpoints which --json                           # for THIS repo: what reviewer/implementer select + resolve
+autopilot endpoints doctor                                 # perms + unresolved-endpoint diagnosis (exit 1 if unhealthy)
+```
+
+(Run via `node bin/autopilot.js endpoints …` from a dev clone.) `which`/`list`/`doctor` `--json`
+give an agent a token-redacted window into the resolved state.
 
 ---
 

@@ -24,6 +24,30 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.8 — `autopilot endpoints` CLI + opt-in per-repo credential overlay
+
+**Headline**: The endpoint-credential system gains a control surface and a per-repo layer, decided by a **3-disjoint-family heterogeneous design panel** (codex/gpt-5.5 · agy/Gemini · grok/xAI, dogfooding the credential system as the topic). All three independently flagged the same weakness — the credential state was **too opaque** for humans and agents to inspect — and unanimously wanted a helper CLI. A new **`autopilot endpoints`** CLI (`init`/`list`/`which`/`set`/`doctor`, `--json`, token-redacted) is that surface; and an **opt-in per-repo overlay** lets the same committed endpoint name (`glm`) resolve to a different token per repo, with the secret files still living under `~/.autopilot/` (never in a repo).
+
+### Added
+- **`bin/autopilot.js endpoints`** (`src/endpoints/cli.js`): `init` · `list [--json]` (defined endpoints: name, url/token present, layer) · `which [--json]` (for THIS repo: which endpoints reviewer/implementer select + resolve + from which layer — the agent-legibility "merged view" that answers "why isn't `glm` resolving here?") · `set <name> --url <u> [--token-stdin] [--repo]` (idempotent upsert to base or the per-repo overlay; **token via STDIN only, never argv**; mode-600; symlink-target refused) · `doctor [--json]` (perms + unresolved-endpoint diagnosis, no network; exit 1 unhealthy). list/which/doctor **never print a token value**.
+- **Opt-in per-repo overlay** in `load-endpoints-env.sh` + the `.js` twin: `~/.autopilot/endpoints.d/<repo-key>.env` layers over the base (precedence process env > overlay > base). Secret files stay under `~/.autopilot/`. `<repo-key>` = normalized git remote (fallback toplevel-path cksum), exposed as `load-endpoints-env.sh --repo-key`; the JS `repoKey()` delegates to it (single source of truth — bash+JS keying can't drift).
+
+### Changed
+- The loader is **gated on `~/.autopilot/endpoints.d/` existing** — absent ⇒ zero git calls, byte-identical to base-only (overlays cost nothing until you opt in). Per-file gate+parse factored into `_autopilot_endpoints_load_file` / `parseEndpointsFile` for reuse by the CLI.
+- `docs/installation.md` documents the overlay + the `endpoints` CLI; CLAUDE.md inventory gains the CLI + updated loader row.
+
+### Design panel
+- codex: O1+O3, defer overlay (YAGNI). agy: O2+O3. grok: O2+O3 (distinct-names *collides* with the selection layer). Depth-0 synthesis (not majority vote): build the overlay into the CLI's model but keep it **opt-in** — absent ⇒ today's behavior (codex's YAGNI), `set --repo` ⇒ per-repo token (agy/grok). See `docs/projects/2026-07-03-endpoints-cli/`.
+
+### Tests
+- `hooks/tests/load-endpoints-env.test.sh` +8 (overlay overrides base, no-dir no-op, overlay-perms-reject→base-fallthrough, js repoKey parity, js overlay merge). `hooks/tests/endpoints-cli.test.sh` (new, ~18): no-token-leak on list/which/doctor, mode-600 writes, argv-token rejected, overlay layering in `which`, doctor exit codes, symlink-target refusal.
+
+### Deferred (BACKLOG)
+- `endpoints test <name>` live auth roundtrip (network + real creds — panel marked it optional).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.7`.
+
 ## v2.31.7 — tracked `endpoints.env.example` template + documented by-repo/by-user split
 
 **Headline**: Follow-up to v2.31.6. The credential stub is now a **tracked, GitHub-viewable canonical template** (`scripts/endpoints.env.example`) instead of being embedded only in a `--init` heredoc — matching autopilot's `settings.example.json` convention. `load-endpoints-env.sh --init` now COPIES that template (single source of truth; minimal inline fallback + warning if it's somehow absent). And the credential **layering** is now documented as a deliberate design: the SECRET (url+token) is **by-user only** (`~/.autopilot/endpoints.env`) with NO auto `$PWD/.claude/` cascade — unlike the non-secret `resolve-*` config resolvers — because a repo-local secret file is a commit-a-token footgun; the **by-repo** layer is *selection only* (the non-secret endpoint NAME in `review-loop-config.md`). Per-repo tokens remain an explicit opt-in via `AUTOPILOT_ENDPOINTS_ENV`.

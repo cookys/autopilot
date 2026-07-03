@@ -26,6 +26,91 @@ const path = require('path');
 
 const { MAX_LINE_BYTES } = require('./state-checkpoint-lib.js');
 
+// O(n^2) IO rationale: each post-tool-use hook re-reads and re-parses the entire
+// transcript JSONL. Reading only the tail window avoids parsing large files.
+// This is overridable via the env var AUTOPILOT_TAIL_WINDOW_BYTES or by modifying
+// the exported TAIL_WINDOW_BYTES constant.
+let TAIL_WINDOW_BYTES = 256 * 1024;
+
+function getTailWindowBytes(env) {
+  const e = env || process.env;
+  if (e.AUTOPILOT_TAIL_WINDOW_BYTES !== undefined) {
+    return parseInt(e.AUTOPILOT_TAIL_WINDOW_BYTES, 10);
+  }
+  return module.exports.TAIL_WINDOW_BYTES;
+}
+
+// Reads only the last windowBytes of the file at tpath, discarding the first partial line.
+function readTailWindow(tpath, windowBytes, size) {
+  const fd = fs.openSync(tpath, 'r');
+  try {
+    const buffer = Buffer.alloc(windowBytes);
+    const position = size - windowBytes;
+    let bytesRead = 0;
+    while (bytesRead < windowBytes) {
+      const read = fs.readSync(
+        fd,
+        buffer,
+        bytesRead,
+        windowBytes - bytesRead,
+        position + bytesRead
+      );
+      if (read === 0) break;
+      bytesRead += read;
+    }
+    const raw = buffer.toString('utf8', 0, bytesRead);
+    const firstNewlineIdx = raw.indexOf('\n');
+    if (firstNewlineIdx !== -1) {
+      return raw.slice(firstNewlineIdx + 1);
+    }
+    return '';
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Emits a warning to stderr and writes to the transcript-canary log if not already fired in this session.
+function triggerCanary({ env, homedir, sessionId, tpath, bytes }) {
+  try {
+    const e = env || process.env;
+    // Respect kill-switch env var AUTOPILOT_NO_CANARY=1
+    if (e.AUTOPILOT_NO_CANARY === '1') {
+      return;
+    }
+
+    const home = homedir || os.homedir();
+    const autoDir = path.join(home, '.autopilot');
+    fs.mkdirSync(autoDir, { recursive: true });
+
+    const markerPath = path.join(autoDir, `.canary-${sessionId}`);
+    try {
+      // wx flag: open for writing, fails if file exists (atomic creation check)
+      fs.writeFileSync(markerPath, '', { flag: 'wx' });
+    } catch (err) {
+      if (err && err.code === 'EEXIST') {
+        return; // Already fired in this session, stay silent
+      }
+      return;
+    }
+
+    // Write one warning line to stderr
+    process.stderr.write(`[transcript-reader-lib] WARNING: Schema canary fired. No tool events found in transcript for session ${sessionId}.\n`);
+
+    // Append one JSON line to ~/.autopilot/transcript-canary.log
+    const logPath = path.join(autoDir, 'transcript-canary.log');
+    const logLine = JSON.stringify({
+      ts: new Date().toISOString(),
+      session_id: sessionId,
+      transcript_path: tpath,
+      bytes: bytes,
+    }) + '\n';
+
+    fs.appendFileSync(logPath, logLine, 'utf8');
+  } catch {
+    // Fail-open: ignore any canary errors
+  }
+}
+
 // --- pure: extract the latest tool event from transcript JSONL text ----------
 // Returns { tool_name, tool_input, tool_response, is_error, tool_use_id } for the
 // LAST tool_use in the transcript, with its matching result; or null if none.
@@ -114,9 +199,44 @@ function readLatestToolEvent({ env, homedir } = {}) {
   if (!sessionId) return null;
   const tpath = resolveTranscriptPath({ sessionId, homedir });
   if (!tpath) return null;
-  let raw;
-  try { raw = fs.readFileSync(tpath, 'utf8'); } catch { return null; }
-  return findLatestToolEvent(raw);
+
+  let raw = null;
+  let fileSize = 0;
+  let usedTail = false;
+  const windowBytes = getTailWindowBytes(e);
+
+  try {
+    const stat = fs.statSync(tpath);
+    fileSize = stat.size;
+    if (fileSize > windowBytes) {
+      raw = readTailWindow(tpath, windowBytes, fileSize);
+      usedTail = true;
+    } else {
+      raw = fs.readFileSync(tpath, 'utf8');
+    }
+  } catch {
+    return null;
+  }
+
+  let ev = null;
+  if (raw !== null) {
+    ev = findLatestToolEvent(raw);
+  }
+
+  if (usedTail && !ev) {
+    try {
+      raw = fs.readFileSync(tpath, 'utf8');
+      ev = findLatestToolEvent(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!ev && fileSize > 0) {
+    triggerCanary({ env: e, homedir, sessionId, tpath, bytes: fileSize });
+  }
+
+  return ev;
 }
 
 // --- convenience: unified tool-event accessor for tool-event hooks ----------
@@ -146,4 +266,10 @@ function getToolEvent({ stdin, env, homedir } = {}) {
   return { tool_name: '<unknown>', tool_input: {}, tool_response: undefined, is_error: false, source: 'none' };
 }
 
-module.exports = { findLatestToolEvent, resolveTranscriptPath, readLatestToolEvent, getToolEvent };
+module.exports = {
+  findLatestToolEvent,
+  resolveTranscriptPath,
+  readLatestToolEvent,
+  getToolEvent,
+  TAIL_WINDOW_BYTES,
+};

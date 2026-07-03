@@ -163,4 +163,33 @@ EOF
   assert_not_contains "$OUT" '"status": "authored"' "agy empty-output is not authored"
 fi
 
+# Regression Test 4: grok late-flush stub
+STUB_GROK_LATE_FLUSH="$TEST_TMP/runner-grok-late-flush"
+cat > "$STUB_GROK_LATE_FLUSH" <<'EOF'
+#!/usr/bin/env bash
+( sleep 1; echo "the answer" ) &
+exit 0
+EOF
+chmod +x "$STUB_GROK_LATE_FLUSH"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_GROK_LATE_FLUSH" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "grok late-flush exits 0"
+assert_contains "$OUT" '"status": "authored"' "grok late-flush returns authored status"
+RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_file_exists "$RAW_LOG_PATH" "grok late-flush raw_log exists"
+assert_contains "$(cat "$RAW_LOG_PATH")" "the answer" "grok raw_log contains late-flushed output"
+
+# Regression Test 5: grok truly-empty stub
+STUB_GROK_EMPTY="$TEST_TMP/runner-grok-empty"
+cat > "$STUB_GROK_EMPTY" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$STUB_GROK_EMPTY"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file "$PROMPT" --bin "$STUB_GROK_EMPTY" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "grok truly-empty exits 1"
+assert_contains "$OUT" '"status": "empty_output"' "grok truly-empty maps to empty_output"
+
 finalize_test
+

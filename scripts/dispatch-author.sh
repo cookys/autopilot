@@ -171,6 +171,18 @@ fi
 # Fail-closed checks model content, not pseudo-TTY chrome.
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
+# Bounded settle-wait for late-flush
+_elapsed=0
+while [ "$_elapsed" -lt 3000 ]; do
+  if tr -d '\r' < "$RAW_LOG" \
+    | sed '/^Script started on /d; /^Script done on /d' \
+    | grep -q '[^[:space:]]'; then
+    break
+  fi
+  sleep 0.25
+  _elapsed=$((_elapsed + 250))
+done
+
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
   | grep -q '[^[:space:]]'; then

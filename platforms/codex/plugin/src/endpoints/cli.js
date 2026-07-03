@@ -102,7 +102,9 @@ function cmdInit(io) {
 }
 
 function cmdList(io, jsonMode) {
-  const layers = readLayers(io.env, io.cwd, null);
+  // Surface a perms-rejection warning in non-json mode so a silently-empty list isn't mistaken
+  // for "no endpoints configured" when the real cause is a rejected base/overlay (panel finding).
+  const layers = readLayers(io.env, io.cwd, jsonMode ? null : (m) => io.stderr.write(m + '\n'));
   const names = collectNames(layers);
   const rows = Object.values(names).map((r) => ({
     name: r.name,
@@ -124,7 +126,7 @@ function cmdList(io, jsonMode) {
 }
 
 function cmdWhich(io, jsonMode) {
-  const layers = readLayers(io.env, io.cwd, null);
+  const layers = readLayers(io.env, io.cwd, jsonMode ? null : (m) => io.stderr.write(m + '\n'));
   const names = collectNames(layers);
   const roles = ['reviewer_endpoint', 'implementer_endpoint'];
   const out = roles.map((role) => {
@@ -191,12 +193,15 @@ function cmdSet(io, rest) {
     if (toRepo) {
       const key = repoKey(io.cwd);
       if (!key) { io.stderr.write('ERROR: --repo: not inside a git repo (cannot key the overlay)\n'); return { status: 2 }; }
-      fs.mkdirSync(overlayDir(io.env), { recursive: true, mode: 0o700 });
       target = path.join(overlayDir(io.env), `${key}.env`);
     } else {
-      fs.mkdirSync(path.dirname(basePath(io.env)), { recursive: true, mode: 0o700 });
       target = basePath(io.env);
     }
+    // Ensure the holding dir is mode 700 even if it PRE-EXISTS (mkdir's mode only applies on
+    // creation, so a pre-existing ~/.autopilot at 0755 would leak endpoint filenames — panel).
+    const tdir = path.dirname(target);
+    fs.mkdirSync(tdir, { recursive: true, mode: 0o700 });
+    try { fs.chmodSync(tdir, 0o700); } catch (_e) { /* best-effort dir hardening */ }
     // Refuse a symlink OR any non-regular existing target (never write through one / into a dir).
     let st = null;
     try { st = fs.lstatSync(target); } catch (_e) { st = null; } // absent is fine
@@ -209,8 +214,18 @@ function cmdSet(io, rest) {
     const setKeys = [];
     if (url) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_URL`, url); setKeys.push(`${upper}_URL`); }
     if (token) { content = upsertLine(content, `AUTOPILOT_ENDPOINT_${upper}_TOKEN`, token); setKeys.push(`${upper}_TOKEN`); }
+    // ATOMIC write (tmp in the same dir + rename) so a crash mid-write can't leave the secret
+    // file partial/corrupt — panel finding. tmp is created mode 600 under umask 077.
     const prevMask = process.umask(0o077);
-    try { fs.writeFileSync(target, content); fs.chmodSync(target, 0o600); } finally { process.umask(prevMask); }
+    const tmp = `${target}.tmp-${process.pid}`;
+    try {
+      fs.writeFileSync(tmp, content, { mode: 0o600 });
+      fs.chmodSync(tmp, 0o600);
+      fs.renameSync(tmp, target);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch (_e2) { /* nothing to clean */ }
+      throw e;
+    } finally { process.umask(prevMask); }
     io.stdout.write(`endpoints: set ${setKeys.join(', ')} in ${target} (mode 600)\n`); // never echoes the token value
     return { status: 0 };
   } catch (err) {

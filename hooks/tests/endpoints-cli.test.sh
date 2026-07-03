@@ -100,6 +100,21 @@ assert_exit_code "$ec" 2 "set into a directory target exits 2 (clean)"
 assert_not_contains "$dtout" 'at Object.' "no uncaught stack trace on a bad target"
 assert_not_contains "$dtout" 'at cmdSet' "no uncaught stack trace frame"
 
+# ── 6f. set hardens a pre-existing 0755 credential dir to 700 (MiniMax panel) ──
+D755="$WORK/d755"; mkdir -p "$D755"; chmod 0755 "$D755"
+printf t | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$D755/endpoints.env" node "$CLI" endpoints set glm --url https://x --token-stdin >/dev/null 2>&1
+d7mode="$(stat -c '%a' "$D755" 2>/dev/null || stat -f '%Lp' "$D755" 2>/dev/null)"
+assert_eq "700" "$d7mode" "set chmods a pre-existing credential dir to 700"
+
+# ── 6g. atomic write leaves no .tmp turd + content round-trips ──
+if ls "$D755"/*.tmp-* >/dev/null 2>&1; then fail "leftover .tmp file after set (non-atomic)"; else assert_eq ok ok "no leftover .tmp after set"; fi
+env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$D755/endpoints.env" node "$CLI" endpoints list 2>/dev/null | grep -q 'glm' && assert_eq ok ok "set content round-trips (list sees glm)" || fail "set content not readable"
+
+# ── 6h. list surfaces a perms-rejection warning (non-json) instead of a silent empty list (panel) ──
+RJ="$WORK/rej.env"; printf 'AUTOPILOT_ENDPOINT_GLM_TOKEN=x\n' > "$RJ"; chmod 0666 "$RJ"
+rjout="$(env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$RJ" node "$CLI" endpoints list 2>&1)"
+assert_contains "$rjout" 'group/other-writable' "list surfaces the perms-rejection warning (not silent empty)"
+
 # ── 7. unknown subcommand → exit 2 ──
 run bogus >/dev/null 2>&1; assert_exit_code "$?" 2 "unknown subcommand exits 2"
 

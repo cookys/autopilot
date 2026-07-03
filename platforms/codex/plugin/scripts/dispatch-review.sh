@@ -105,6 +105,7 @@ timeout_to_ms() {
 # byte-identical. resolve-endpoint.sh emits only the token's env NAME; the value is read
 # via ${!name} (cc-shim, set +x) or by the JS from --token-env — never printed here. ---
 EP_URL=""; EP_TOKEN_ENV=""
+ANTHROPIC_BASE_URL=""; ANTHROPIC_TOKEN_ENV=""; TIMEOUT_MS=""
 if [[ -n "$ENDPOINT" ]]; then
   case "$RUNNER" in
     anthropic-compatible|cc-shim) ;;
@@ -123,6 +124,9 @@ if [[ -n "$ENDPOINT" ]]; then
     set +x
     export ANTHROPIC_BASE_URL="$EP_URL"
     export ANTHROPIC_AUTH_TOKEN="${!EP_TOKEN_ENV-}"
+  else
+    ANTHROPIC_BASE_URL="$EP_URL"
+    ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
   fi
   unset _ep_json
 fi
@@ -132,17 +136,16 @@ if [[ "$RUNNER" = "anthropic-compatible" ]]; then
   [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-review.sh"
   command -v node >/dev/null 2>&1 || die_precondition "node binary not found: node (required for anthropic-compatible reviewer)"
   TIMEOUT_MS="$(timeout_to_ms "$TIMEOUT")" || die_precondition "--timeout must be an integer millisecond value or use Ns/Nm syntax (got: $TIMEOUT)"
-  ANTHROPIC_ARGS=(--model "$MODEL" --diff-file "$DIFF_FILE" --timeout-ms "$TIMEOUT_MS")
   if [[ -n "$EP_URL" ]]; then
     # endpoint-resolved: pass the resolved url + the token's env NAME (JS reads it,
     # INSTEAD OF its hostname fallback). Overrides the raw-env base-url logic below.
-    ANTHROPIC_ARGS+=(--base-url "$EP_URL" --token-env "$EP_TOKEN_ENV")
+    ANTHROPIC_BASE_URL="$EP_URL"
+    ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
   elif [[ -n "${ANTHROPIC_COMPATIBLE_BASE_URL:-}" ]]; then
-    ANTHROPIC_ARGS+=(--base-url "$ANTHROPIC_COMPATIBLE_BASE_URL")
+    ANTHROPIC_BASE_URL="$ANTHROPIC_COMPATIBLE_BASE_URL"
   elif [[ -n "${AUTOPILOT_MINIMAX_BASE_URL:-}" ]]; then
-    ANTHROPIC_ARGS+=(--base-url "$AUTOPILOT_MINIMAX_BASE_URL")
+    ANTHROPIC_BASE_URL="$AUTOPILOT_MINIMAX_BASE_URL"
   fi
-  exec node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}"
 fi
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
@@ -374,6 +377,27 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     passive_capture "no_verdict"
     printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
+    exit 1
+  fi
+elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
+  ANTHROPIC_ARGS=(
+    --raw
+    --prompt-file "$PROMPT_FILE"
+    --model "$MODEL"
+    --timeout-ms "$TIMEOUT_MS"
+    --base-url "$ANTHROPIC_BASE_URL"
+  )
+  if [[ -n "$ANTHROPIC_TOKEN_ENV" ]]; then
+    ANTHROPIC_ARGS+=(--token-env "$ANTHROPIC_TOKEN_ENV")
+  fi
+  node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
+  ANTHROPIC_RC=$?
+  if [ "$ANTHROPIC_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: anthropic-compatible transport exited non-zero (rc=%s) — partial output NOT parsed]\n' \
+      "$ANTHROPIC_RC" >> "$RAW_LOG"
+    passive_capture "no_verdict"
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "anthropic-compatible transport exited non-zero (rc=%s) — fail-closed, raw output not parsed" }\n' \
+      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$ANTHROPIC_RC"
     exit 1
   fi
 else

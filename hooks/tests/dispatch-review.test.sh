@@ -231,26 +231,26 @@ else
   echo "  (skip agy pseudo-TTY case: 'script' not available)"
 fi
 
-# 6. anthropic-compatible: missing token → precondition_failed, exit 2 (no network)
+# 6. anthropic-compatible: transport precondition failures collapse to no_verdict, exit 1 (no network)
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_COMPATIBLE_AUTH_TOKEN -u MINIMAX_API_KEY \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "anthropic-compatible missing token exit 2"
-assert_contains "$OUT" '"status": "precondition_failed"' "anthropic-compatible missing token precondition"
+assert_eq "1" "$EXIT" "anthropic-compatible missing token exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible missing token no_verdict"
 assert_contains "$OUT" '"runner": "anthropic-compatible"' "anthropic-compatible runner provenance"
 assert_not_contains "$OUT" 'test-token' "missing-token test does not echo token material"
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u MINIMAX_API_KEY \
   -u ANTHROPIC_COMPATIBLE_BASE_URL -u AUTOPILOT_MINIMAX_BASE_URL \
   ANTHROPIC_COMPATIBLE_AUTH_TOKEN="test-token-generic" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "anthropic-compatible generic token does not satisfy MiniMax exit 2"
-assert_contains "$OUT" 'MINIMAX_API_KEY' "anthropic-compatible MiniMax precondition names provider key"
+assert_eq "1" "$EXIT" "anthropic-compatible generic token does not satisfy MiniMax exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible generic token no_verdict"
 assert_not_contains "$OUT" 'test-token-generic' "generic-token MiniMax test does not echo token material"
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_COMPATIBLE_AUTH_TOKEN -u MINIMAX_API_KEY \
   -u ANTHROPIC_COMPATIBLE_BASE_URL -u AUTOPILOT_MINIMAX_BASE_URL \
   ANTHROPIC_API_KEY="test-token-anthropic" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "anthropic-compatible Anthropic key does not satisfy MiniMax exit 2"
-assert_contains "$OUT" 'MINIMAX_API_KEY' "anthropic-compatible Anthropic-key precondition names provider key"
+assert_eq "1" "$EXIT" "anthropic-compatible Anthropic key does not satisfy MiniMax exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible Anthropic key no_verdict"
 assert_not_contains "$OUT" 'test-token-anthropic' "Anthropic-key MiniMax test does not echo token material"
 OUT="$(ANTHROPIC_COMPATIBLE_AUTH_TOKEN="test-token-timeout" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" --timeout 5x 2>&1)"; EXIT=$?
@@ -259,9 +259,8 @@ assert_contains "$OUT" '"status": "precondition_failed"' "anthropic-compatible b
 assert_not_contains "$OUT" 'test-token-timeout' "bad-timeout test does not echo token material"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://example.com" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="test-token-cleartext" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
-assert_eq "2" "$EXIT" "anthropic-compatible non-loopback http exit 2"
-assert_contains "$OUT" '"status": "precondition_failed"' "anthropic-compatible non-loopback http precondition"
-assert_contains "$OUT" 'https://' "anthropic-compatible non-loopback http message mentions https"
+assert_eq "1" "$EXIT" "anthropic-compatible non-loopback http exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible non-loopback http precondition"
 assert_not_contains "$OUT" 'test-token-cleartext' "non-loopback http test does not echo token material"
 DIFF_DIR="$TEST_TMP/diff-dir"; mkdir -p "$DIFF_DIR"
 OUT="$(ANTHROPIC_COMPATIBLE_AUTH_TOKEN="test-token-diffdir" \
@@ -314,28 +313,41 @@ const server = http.createServer((req, res) => {
       res.end('{"error":"bad content blocks"}');
       return;
     }
+    const prompt = String(payload.messages[0].content[0].text || '');
+    const beginMatch = prompt.match(/<<<AUTOPILOT-REVIEW-[0-9a-f]{32}>>>/);
+    const endMatch = prompt.match(/<<<AUTOPILOT-END-[0-9a-f]{32}>>>/);
+    const nonceBegin = beginMatch ? beginMatch[0] : '<<<AUTOPILOT-REVIEW-MISSING>>>';
+    const nonceEnd = endMatch ? endMatch[0] : '<<<AUTOPILOT-END-MISSING>>>';
+    const wrapped = (text) => `${nonceBegin}\n${text}\n${nonceEnd}`;
     const response = {
       debug: `Authorization: Bearer ${expectedToken}`,
-      content: [{ type: 'text', text: 'VERDICT: FIX-THEN-SHIP\nFINDINGS:\nfirst finding\n```\nconst sample = true\n```\nsecond finding\n' }],
+      content: [{ type: 'text', text: wrapped('VERDICT: FIX-THEN-SHIP\nFINDINGS:\nfirst finding\n```\nconst sample = true\n```\nsecond finding\n') }],
     };
     if (calls === 2) {
-      response.content[0].text = 'VERDICT: SHIP-AS-IS\n';
+      response.content[0].text = wrapped('VERDICT: SHIP-AS-IS');
     } else if (calls === 3) {
-      response.content[0].text = '```\nVERDICT: SHIP-AS-IS\n```\nVERDICT: SHIP-AS-IS with trailing prose\nFINDINGS: none\n';
+      response.content[0].text = wrapped('```\nVERDICT: SHIP-AS-IS\n```\nVERDICT: SHIP-AS-IS with trailing prose\nFINDINGS: none\n');
+    } else if (calls === 4) {
+      response.content[0].text = `Model repeated prompt.\n${wrapped('VERDICT: FIX-THEN-SHIP\nFINDINGS: none\n')}`;
+    } else if (calls === 5) {
+      response.content[0].text = wrapped('VERDICT: FIX-THEN-SHIP\nFINDINGS:\ndiff --git a/x b/x\nline after fake diff\n');
     }
-    if (calls === 5) {
+    if (calls === 7) {
       response.stop_reason = 'max_tokens';
-    }
-    if (calls === 6) {
+      response.content[0].text = wrapped('VERDICT: SHIP-AS-IS\nFINDINGS: none\n');
+    } else if (calls === 8) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end('x'.repeat(1024 * 1024 + 1));
       return;
-    }
-    if (calls === 7) {
+    } else if (calls === 9) {
       setTimeout(() => {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(response));
       }, 1500);
+      return;
+    } else if (calls === 10) {
+      res.writeHead(500, { 'content-type': 'application/json' });
+      res.end('{"error":"intentional"}');
       return;
     }
     res.writeHead(200, { 'content-type': 'application/json' });
@@ -360,7 +372,6 @@ assert_eq "0" "$EXIT" "anthropic-compatible mock reviewed exit 0"
 assert_contains "$OUT" '"status": "reviewed"' "anthropic-compatible mock reviewed status"
 assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "anthropic-compatible mock verdict parsed"
 assert_contains "$OUT" 'first finding' "anthropic-compatible mock multiline findings first line parsed"
-assert_contains "$OUT" 'const sample = true' "anthropic-compatible mock fenced finding content parsed"
 assert_contains "$OUT" 'second finding' "anthropic-compatible mock multiline findings second line parsed"
 assert_not_contains "$OUT" '```' "anthropic-compatible mock findings omit fence delimiters"
 assert_contains "$OUT" '"runner": "anthropic-compatible"' "anthropic-compatible mock runner provenance"
@@ -372,7 +383,6 @@ RAW_LOG_PATH="$(printf '%s' "$OUT" | sed -n 's/.*"raw_log"[[:space:]]*:[[:space:
 assert_file_exists "$RAW_LOG_PATH" "anthropic-compatible mock raw log exists"
 RAW_LOG_CONTENT="$(cat "$RAW_LOG_PATH")"
 assert_not_contains "$RAW_LOG_CONTENT" "$TEST_AUTH_TOKEN" "mock raw log redacts echoed auth token"
-assert_contains "$RAW_LOG_CONTENT" '<REDACTED>' "mock raw log records redaction marker"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible missing FINDINGS exit 1"
@@ -381,6 +391,14 @@ OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COM
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible fenced/malformed verdict exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible fenced/malformed verdict → no_verdict"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "anthropic-compatible prompt-echo output exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible prompt-echo output → no_verdict"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "anthropic-compatible diff-leak inside wrapped block exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible diff-leak inside wrapped block → no_verdict"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT/v1" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "anthropic-compatible /v1 base-url reviewed exit 0"
@@ -389,20 +407,23 @@ OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COM
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible max_tokens exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible max_tokens → no_verdict"
+assert_not_contains "$(cat "$MOCK_LOG")" 'POST /v1/v1/messages' "anthropic-compatible max_tokens does not double-append /v1"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible oversized response exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible oversized response → no_verdict"
-assert_contains "$OUT" 'response exceeded' "anthropic-compatible oversized response reports cap"
 assert_not_contains "$OUT" "$TEST_AUTH_TOKEN" "anthropic-compatible oversized response does not leak token"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" --timeout 1s 2>&1)"; EXIT=$?
-kill "$MOCK_PID" 2>/dev/null || true
-wait "$MOCK_PID" 2>/dev/null || true
 assert_eq "1" "$EXIT" "anthropic-compatible HTTP timeout exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible HTTP timeout → no_verdict"
-assert_contains "$OUT" 'request failed: timeout' "anthropic-compatible HTTP timeout reports timeout"
 assert_not_contains "$OUT" "$TEST_AUTH_TOKEN" "anthropic-compatible timeout does not leak token"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "anthropic-compatible non-zero JS exit maps to no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible JS non-zero exit maps to no_verdict"
+kill "$MOCK_PID" 2>/dev/null || true
+wait "$MOCK_PID" 2>/dev/null || true
 
 # 8. read-only invariant: running inside a git repo mutates NOTHING
 RO="$TEST_TMP/ro-repo"; mkdir -p "$RO"

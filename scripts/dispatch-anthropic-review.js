@@ -9,6 +9,8 @@
 //       [--timeout-ms <ms>]   # default 300000 (5m)
 //       [--base-url <url>]    # default ANTHROPIC_COMPATIBLE_BASE_URL,
 //                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
+//       [--prompt-file <file>] # optional: exact message body to send instead of --diff-file
+//       [--raw]               # when present, output raw model response text only
 //
 // AUTH (env only — never accepted as a CLI argument):
 //   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -20,6 +22,7 @@
 //
 // OUTPUT: one JSON object on stdout (same shape as dispatch-review.sh):
 //   { runner, model, status, verdict, findings, raw_log, error }
+// In --raw mode, outputs ONLY the raw model response text to stdout; NO review JSON.
 //
 // EXIT: 0 = reviewed ; 1 = no_verdict (HTTP/timeout/unparseable) ; 2 = precondition_failed
 
@@ -71,7 +74,16 @@ EXIT: 0 = reviewed ; 1 = no_verdict ; 2 = precondition_failed`;
 }
 
 function parseArgs(argv) {
-  const out = { model: '', diffFile: '', timeoutMs: DEFAULT_TIMEOUT_MS, baseUrl: '', tokenEnv: '', help: false };
+  const out = {
+    model: '',
+    diffFile: '',
+    promptFile: '',
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    baseUrl: '',
+    tokenEnv: '',
+    raw: false,
+    help: false,
+  };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
@@ -80,6 +92,9 @@ function parseArgs(argv) {
         break;
       case '--diff-file':
         out.diffFile = argv[++i] || '';
+        break;
+      case '--prompt-file':
+        out.promptFile = argv[++i] || '';
         break;
       case '--timeout-ms':
         out.timeoutMs = Number(argv[++i]);
@@ -97,6 +112,9 @@ function parseArgs(argv) {
         out.tokenEnv = v;
         break;
       }
+      case '--raw':
+        out.raw = true;
+        break;
       case '-h':
       case '--help':
         out.help = true;
@@ -205,6 +223,20 @@ function readDiffFile(filePath) {
     return { text: fs.readFileSync(filePath, 'utf8') };
   } catch (_err) {
     return { error: '--diff-file is required and must be readable' };
+  }
+}
+
+function readPromptFile(filePath) {
+  if (!filePath) {
+    return { error: '--prompt-file is required when --raw is used' };
+  }
+  try {
+    if (!fs.statSync(filePath).isFile()) {
+      return { error: '--prompt-file must be a readable regular file' };
+    }
+    return { text: fs.readFileSync(filePath, 'utf8') };
+  } catch (_err) {
+    return { error: '--prompt-file is required and must be readable' };
   }
 }
 
@@ -458,30 +490,68 @@ async function main() {
     process.exit(0);
   }
 
+  const rawMode = !!args.raw;
   const model = args.model;
+  const failPrecondition = (error) => {
+    if (rawMode) {
+      process.stderr.write(`${error}\n`);
+      process.exit(2);
+    }
+    diePrecondition(model || '', error);
+  };
+  const failNoVerdict = (rawLog, error) => {
+    if (rawMode) {
+      appendRawLog(rawLog, `\n[dispatch-anthropic-review: ${error}]\n`);
+      process.exit(1);
+    }
+    dieNoVerdict(model, rawLog, error);
+  };
+
   if (!model) {
-    diePrecondition('', '--model is required');
+    failPrecondition('--model is required');
   }
-  const diff = readDiffFile(args.diffFile);
-  if (diff.error) {
-    diePrecondition(model, diff.error);
+
+  if (rawMode && !args.promptFile) {
+    failPrecondition('--raw requires --prompt-file');
   }
+  // --prompt-file is the transport surface for the shell's nonce-wrapped prompt and is ONLY
+  // valid with --raw. Without --raw it would feed an arbitrary prompt to this script's own
+  // (echo-prone) parseVerdict — the exact class of gap the nonce protocol closes. Bind the two
+  // flags: the only prompt-file path is the raw passthrough; the legacy standalone path stays
+  // --diff-file-only. (depth-0 qc, gpt-5.5 anthropic-review MAJOR)
+  if (args.promptFile && !rawMode) {
+    failPrecondition('--prompt-file requires --raw (the standalone path builds its prompt from --diff-file)');
+  }
+
+  let prompt = '';
+  if (args.promptFile) {
+    const promptFile = readPromptFile(args.promptFile);
+    if (promptFile.error) {
+      failPrecondition(promptFile.error);
+    }
+    prompt = promptFile.text;
+  } else {
+    const diff = readDiffFile(args.diffFile);
+    if (diff.error) {
+      failPrecondition(diff.error);
+    }
+    prompt = buildPrompt(diff.text);
+  }
+
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
-    diePrecondition(model, '--timeout-ms must be a positive integer');
+    failPrecondition('--timeout-ms must be a positive integer');
   }
 
   const baseUrl = resolveBaseUrl(args.baseUrl);
   const baseUrlError = validateBaseUrl(baseUrl);
   if (baseUrlError) {
-    diePrecondition(model, baseUrlError);
+    failPrecondition(baseUrlError);
   }
   const { token, error: tokenError } = resolveToken(baseUrl, args.tokenEnv);
   if (!token) {
-    diePrecondition(model, tokenError);
+    failPrecondition(tokenError);
   }
   const endpointUrl = resolveEndpointUrl(baseUrl);
-  const diffText = diff.text;
-  const prompt = buildPrompt(diffText);
   const rawLog = createRawLogPath();
 
   let responseBody;
@@ -497,34 +567,33 @@ async function main() {
   } catch (err) {
     const msg = redactForLog(err && err.message ? err.message : String(err), token);
     appendRawLog(rawLog, `\n[dispatch-anthropic-review: request failed — ${msg}]\n`);
-    dieNoVerdict(model, rawLog, `request failed: ${msg}`);
+    failNoVerdict(rawLog, `request failed: ${msg}`);
   }
 
   const text = extractResponseText(responseBody);
   if (!text) {
     appendRawLog(rawLog, '\n[dispatch-anthropic-review: empty or unparseable model text]\n');
-    dieNoVerdict(model, rawLog, 'empty or unparseable model response text');
+    failNoVerdict(rawLog, 'empty or unparseable model response text');
   }
   if (isTruncatedResponse(responseBody)) {
     appendRawLog(rawLog, '\n[dispatch-anthropic-review: response stopped at max_tokens]\n');
-    dieNoVerdict(model, rawLog, 'response stopped at max_tokens — fail-closed, NOT a pass');
+    failNoVerdict(rawLog, 'response stopped at max_tokens — fail-closed, NOT a pass');
   }
 
   appendRawLog(rawLog, `\n[extracted_text]\n${redactForLog(text, token)}\n`);
+  if (rawMode) {
+    process.stdout.write(text);
+    process.exit(0);
+  }
   const { verdict, findings, hasFindings } = parseVerdict(text);
   if (verdict !== 'SHIP-AS-IS' && verdict !== 'FIX-THEN-SHIP') {
-    dieNoVerdict(
-      model,
+    failNoVerdict(
       rawLog,
       'no parseable VERDICT line (empty capture or unparseable response) — fail-closed, NOT a pass',
     );
   }
   if (!hasFindings) {
-    dieNoVerdict(
-      model,
-      rawLog,
-      'missing parseable FINDINGS line — fail-closed, NOT a pass',
-    );
+    failNoVerdict(rawLog, 'missing parseable FINDINGS line — fail-closed, NOT a pass');
   }
 
   emitResult({

@@ -26,6 +26,18 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### distill Step 4.5 — 高風險產出加 RED-phase 品質環（skill 產出後的「弱模型會不會照做」驗收）
+- **Trigger**: next time touching `skills/distill/` 流程段（Step 4/5 附近），OR 任何一個 distilled skill 在別的模型/機器上被回報「沒照做」。
+- **Context**: distill 產出 skill 後只有 `validate.sh`（結構驗證），沒有行為驗收 —— 但 2026-07-04 的三格矩陣實測證明：紀律型規則會被弱模型 rationalize（haiku 密碼落檔 ×4 且自評全過），**模型升級不修紀律只讓違規更優雅**（sonnet 改藏 `.password.txt`），唯有枚舉式禁令補丁能讓重測轉綠。方法論已蒸餾成獨立 skill：`~/projects/skills/skill-red-testing/SKILL.md`（六步閉環：rubric 先行 → 弱模型跑真任務 → 驗屍產出物不信自述 → 枚舉式補丁＋出處標注 → 重測 → RED-LOG）；實測數據在同 pack `RED-LOG.md`。建議落點：distill Step 4.5「(可選) 對高風險/要分享的產出跑一輪 RED」——用 headless `claude -p --model haiku`（已實測 `~/.claude/skills/` 在 headless 會載入）或 Agent tool model 覆寫，成本一次一杯 haiku。
+- **Effort**: S（流程文件一節＋一個建議 prompt 模板；不需新腳本 —— 或 M 若要把 rubric 生成也腳本化）
+- **Source**: 2026-07-04 Fable 5 session（skill pack RED-phase 三格矩陣）；`~/projects/skills/RED-LOG.md`。
+
+### distill identifier lint 開放給外部 skill pack 使用（單獨入口）
+- **Trigger**: 下次要**公開分享**任何手寫個人 skill pack（如 `~/projects/skills/`）之前；OR next time touching distill 的 lint 程式碼。
+- **Context**: distill 的 identifier lint（email/IPv4/`/home/<user>/`/FQDN/key-shapes ＋ `~/.autopilot/distill/identifiers.deny`）目前只在 distill 流程內部可用。手寫的個人 pack（本次的 teaching-materials 等五個 skill 走 self-use 豁免，含使用者自己的路徑/帳號）在公開分享前需要同一道 lint，但沒有獨立入口可呼叫。建議：把 lint 抽成可獨立執行的入口（`--path <dir>` 掃任意 skill 目錄），distill 內部改為呼叫同一入口 —— 一份實作兩處使用。
+- **Effort**: S
+- **Source**: 2026-07-04 Fable 5 session；`~/projects/skills/` pack 建立時的自用豁免決定。
+
 ### `autopilot endpoints test <name>` — live auth-roundtrip probe
 - **Trigger**: next time hardening the `endpoints` CLI, OR a user asks "is my GLM/MiniMax token actually working" and `doctor` (which only checks presence + perms, no network) isn't enough.
 - **Context**: the v2.31.8 `endpoints` CLI shipped `init`/`list`/`which`/`set`/`doctor`; the 3-family design panel marked `test <name>` (a tiny live `/v1/messages` roundtrip that verifies auth + prints latency) as **optional** and it was deferred to bound scope (network + real-creds + host-dependent). `doctor` covers "is it configured" but not "does the token authenticate". Reuse `dispatch-anthropic-review.js`'s HTTP client (env-only auth, redacted logs, timeout/body-cap) for a read-only probe; must never print the token; opt-in / no-network-by-default posture like `probe-engine-capability.sh --safe`.

@@ -4,6 +4,7 @@
 const { dispatchReview } = require('../src/runners/review');
 const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
 const { runHarnessCli } = require('../src/harness/cli');
+const { runEndpointsCli } = require('../src/endpoints/cli');
 const { AutopilotEngine } = require('../src/engine');
 
 function printHelp() {
@@ -12,6 +13,7 @@ function printHelp() {
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
   node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer|--allow-unqualified-reviewer]
   node bin/autopilot.js harness report [harness report args...]
+  node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -22,6 +24,8 @@ Commands:
                     Reviewer qualification is fail-closed by default; use
                     --allow-unqualified-reviewer only as an explicit escape hatch.
   harness report    Emit read-only harness capability state and stale flags.
+  endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
+                    tokens never printed, never read from argv).
 
 Exit codes:
   Delegated commands preserve the wrapped command exit code.
@@ -187,6 +191,16 @@ if (args[0] === 'harness') {
   const result = runHarnessCli(args.slice(1), {
     stdout: process.stdout,
     stderr: process.stderr,
+  });
+  process.exit(result.status);
+}
+
+if (args[0] === 'endpoints') {
+  const result = runEndpointsCli(args.slice(1), {
+    stdout: process.stdout,
+    stderr: process.stderr,
+    env: process.env,
+    cwd: process.cwd(),
   });
   process.exit(result.status);
 }

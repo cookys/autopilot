@@ -497,13 +497,13 @@ echo "$end"
 EOF
 chmod +x "$STUB_CODEX_CHROME"
 
-OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CODEX_CHROME" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CODEX_CHROME" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "codex-chrome stub exits 0"
 assert_contains "$OUT" '"status": "reviewed"' "codex-chrome reviewed status"
 assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "codex-chrome verdict parsed from stdout only"
 
 # Regression Test 6: Confirm raw_log provenance layout for codex
-RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+RAW_LOG_PATH="$(python3 -c "import json,sys; print(next((json.loads(line).get('raw_log', '') for line in sys.stdin if line.strip().startswith('{')), ''))" <<<"$OUT")"
 assert_file_exists "$RAW_LOG_PATH" "codex-chrome raw_log exists"
 RAW_LOG_CONTENT="$(cat "$RAW_LOG_PATH")"
 assert_contains "$RAW_LOG_CONTENT" "--- codex stderr (chrome, not parsed) ---" "raw_log has separator"

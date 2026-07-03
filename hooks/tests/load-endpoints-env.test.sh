@@ -159,7 +159,7 @@ initf="$WORK/init/endpoints.env"
 out="$(env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$initf" bash "$SH" --init 2>&1)"; ec=$?
 assert_exit_code "$ec" 0 "--init exits 0"
 assert_file_exists "$initf" "--init created the stub file"
-assert_contains "$out" 'created stub' "--init reports creation"
+assert_contains "$out" 'created' "--init reports creation"
 mode="$(stat -c '%a' "$initf" 2>/dev/null || stat -f '%Lp' "$initf" 2>/dev/null)"
 assert_eq "600" "$mode" "--init stub is mode 600"
 # idempotent: second --init must NOT clobber and must exit 0
@@ -171,5 +171,18 @@ assert_contains "$(cat "$initf")" 'user edit marker' "--init preserved the user 
 # the all-commented stub loads nothing
 loadout="$(run_sh "$initf")"
 assert_contains "$loadout" 'LOADED=[]' "commented stub loads no vars"
+
+# ── 15. --init copies the tracked canonical template verbatim (single source of truth) ──
+TEMPLATE="$REPO_ROOT/scripts/endpoints.env.example"
+assert_file_exists "$TEMPLATE" "canonical template scripts/endpoints.env.example exists"
+freshf="$WORK/verbatim/endpoints.env"
+env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$freshf" bash "$SH" --init >/dev/null 2>&1
+if diff -q "$TEMPLATE" "$freshf" >/dev/null 2>&1; then assert_eq ok ok "--init copies the template verbatim"; else fail "--init output differs from the canonical template"; fi
+# the tracked template is itself valid: all-commented → loads nothing (copy to 600 so the
+# repo file's own perms don't affect the perms gate)
+tmplcopy="$WORK/tmpl.env"; cp "$TEMPLATE" "$tmplcopy"; chmod 600 "$tmplcopy"
+tmplout="$(run_sh "$tmplcopy")"
+assert_contains "$tmplout" 'LOADED=[]' "canonical template loads no vars (all commented)"
+assert_contains "$tmplout" 'RC=0' "canonical template parses cleanly"
 
 echo "load-endpoints-env: all assertions passed"

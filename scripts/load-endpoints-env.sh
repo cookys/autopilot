@@ -134,8 +134,10 @@ autopilot_load_endpoints_env() {
 }
 
 # autopilot_init_endpoints_env — idempotently scaffold a mode-600 commented STUB (no secrets)
-# at the canonical path if absent. Never clobbers an existing file. Returns 0 (created OR
-# already-present), 1 on a write failure.
+# at the canonical path if absent, by COPYING the tracked canonical template
+# `endpoints.env.example` shipped alongside this script (single source of truth). If the
+# template is somehow absent (partial install) it falls back to a minimal inline stub + warns.
+# Never clobbers an existing file. Returns 0 (created OR already-present), 1 on a write failure.
 autopilot_init_endpoints_env() {
   set +x
   local envfile="${AUTOPILOT_ENDPOINTS_ENV:-${HOME:-}/.autopilot/endpoints.env}"
@@ -145,29 +147,24 @@ autopilot_init_endpoints_env() {
   fi
   local dir; dir="$(dirname "$envfile")"
   mkdir -p "$dir" 2>/dev/null || { printf 'load-endpoints-env: cannot create %s\n' "$dir" >&2; return 1; }
+  # Locate the tracked canonical template (ships in the same dir as this script).
+  local selfdir template=""
+  selfdir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || selfdir=""
+  [ -n "$selfdir" ] && [ -f "$selfdir/endpoints.env.example" ] && template="$selfdir/endpoints.env.example"
   # umask 077 so the transient file is private from creation; chmod 600 belt-and-braces.
-  ( umask 077; cat > "$envfile" <<'STUB'
-# ~/.autopilot/endpoints.env — autopilot heterogeneous-engine credentials (mode 600).
-# ONE canonical home for Anthropic-compatible endpoint tokens (GLM / MiniMax / any compatible).
-# NEVER commit this file. Parsed SAFELY (not sourced): only `NAME=VALUE` lines with an
-# allowlisted NAME are honored; a set env var always wins. Uncomment + fill what you use.
-#
-# Prefer a SUBSCRIPTION / coding-plan token over a metered API key. OAuth-login runners
-# (codex / agy / grok) need NOTHING here — they use their own CLI login.
-#
-# Convention: AUTOPILOT_ENDPOINT_<NAME>_URL + _TOKEN  (<NAME> is [A-Za-z0-9_], your own label).
-#
-# --- GLM (Zhipu) coding plan ---
-# AUTOPILOT_ENDPOINT_GLM_URL=https://api.z.ai/api/anthropic
-# AUTOPILOT_ENDPOINT_GLM_TOKEN=
-#
-# --- MiniMax (intl) ---
-# AUTOPILOT_ENDPOINT_MINIMAX_URL=https://api.minimax.io/anthropic
-# AUTOPILOT_ENDPOINT_MINIMAX_TOKEN=
+  local old_umask; old_umask="$(umask)"; umask 077
+  if [ -n "$template" ]; then
+    cp "$template" "$envfile" 2>/dev/null || { umask "$old_umask" 2>/dev/null; printf 'load-endpoints-env: cannot write %s\n' "$envfile" >&2; return 1; }
+  else
+    printf 'load-endpoints-env: WARNING canonical template endpoints.env.example not found; writing a minimal stub\n' >&2
+    cat > "$envfile" <<'STUB' || { umask "$old_umask" 2>/dev/null; printf 'load-endpoints-env: cannot write %s\n' "$envfile" >&2; return 1; }
+# ~/.autopilot/endpoints.env — mode 600. Fill AUTOPILOT_ENDPOINT_<NAME>_URL + _TOKEN (never commit).
+# See docs/installation.md § Heterogeneous engine credentials.
 STUB
-  ) || { printf 'load-endpoints-env: cannot write %s\n' "$envfile" >&2; return 1; }
+  fi
+  umask "$old_umask" 2>/dev/null || true
   chmod 600 "$envfile" 2>/dev/null || true
-  printf 'load-endpoints-env: created stub %s (chmod 600; edit to add tokens)\n' "$envfile" >&2
+  printf 'load-endpoints-env: created %s (chmod 600; edit to add tokens)\n' "$envfile" >&2
   return 0
 }
 

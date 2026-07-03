@@ -169,12 +169,15 @@ There is a **single** place for endpoint-token credentials — a machine-local, 
 `dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-anthropic-review.js` at startup.
 
 ```bash
-# create it once, locked to your user only
-mkdir -p ~/.autopilot && touch ~/.autopilot/endpoints.env && chmod 600 ~/.autopilot/endpoints.env
+# scaffold a mode-600 commented stub from the tracked template (idempotent — never clobbers):
+scripts/load-endpoints-env.sh --init
+# …or copy the template by hand:
+mkdir -p ~/.autopilot && cp scripts/endpoints.env.example ~/.autopilot/endpoints.env && chmod 600 ~/.autopilot/endpoints.env
 ```
 
-Fill it with `AUTOPILOT_ENDPOINT_<NAME>_URL` + `_TOKEN` pairs (`<NAME>` is `[A-Za-z0-9_]`, your own
-logical label — `glm`, `minimax`, `local_llama`, …):
+The canonical template is tracked at [`scripts/endpoints.env.example`](../scripts/endpoints.env.example)
+(what `--init` copies). Fill it with `AUTOPILOT_ENDPOINT_<NAME>_URL` + `_TOKEN` pairs (`<NAME>` is
+`[A-Za-z0-9_]`, your own logical label — `glm`, `minimax`, `local_llama`, …):
 
 ```sh
 # ~/.autopilot/endpoints.env   (mode 600 — never commit; values are examples)
@@ -211,6 +214,25 @@ Leave a `*_endpoint` empty to use the raw `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH
 (byte-identical to the pre-endpoint behaviour). See
 [`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md)
 for the full roster and the per-provider endpoint/model table.
+
+### by-repo vs by-user — a deliberate split
+
+Credentials are layered **on purpose**, and the split is not the same as autopilot's other
+`.claude/*-config.md` resolvers:
+
+| Layer | Holds | Scope | Where | Committable? |
+|-------|-------|-------|-------|--------------|
+| **Selection** (by-repo) | *which* endpoint — just the **name** (`glm`), non-secret | per-project | `.claude/review-loop-config.md` `reviewer_endpoint`/`implementer_endpoint` | ✅ yes — share it |
+| **Secret** (by-user) | the name → real `URL` + `TOKEN` | per-machine/user | `~/.autopilot/endpoints.env` | ❌ never in a repo |
+
+So a repo commits *"use `glm`"* and each developer's machine maps `glm` to their own token — the
+config is shareable, the secret stays private. **The secret layer is by-user ONLY, never by-repo**:
+autopilot does **not** auto-discover a `$PWD/.claude/endpoints.env` (unlike the non-secret config
+resolvers' `cwd → repo → template` cascade), because a repo-local secret file is a commit-a-token
+footgun. Within loading, an **already-set env var wins** over the file (so a one-off
+`AUTOPILOT_ENDPOINT_X_TOKEN=… <cmd>` overrides it). If you genuinely need per-repo tokens, point
+`AUTOPILOT_ENDPOINTS_ENV` at a repo-local **gitignored** file yourself (e.g. via direnv) — an
+explicit, risk-owned opt-in rather than a default.
 
 ---
 

@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.7 — tracked `endpoints.env.example` template + documented by-repo/by-user split
+
+**Headline**: Follow-up to v2.31.6. The credential stub is now a **tracked, GitHub-viewable canonical template** (`scripts/endpoints.env.example`) instead of being embedded only in a `--init` heredoc — matching autopilot's `settings.example.json` convention. `load-endpoints-env.sh --init` now COPIES that template (single source of truth; minimal inline fallback + warning if it's somehow absent). And the credential **layering** is now documented as a deliberate design: the SECRET (url+token) is **by-user only** (`~/.autopilot/endpoints.env`) with NO auto `$PWD/.claude/` cascade — unlike the non-secret `resolve-*` config resolvers — because a repo-local secret file is a commit-a-token footgun; the **by-repo** layer is *selection only* (the non-secret endpoint NAME in `review-loop-config.md`). Per-repo tokens remain an explicit opt-in via `AUTOPILOT_ENDPOINTS_ENV`.
+
+### Added
+- **`scripts/endpoints.env.example`** — the tracked canonical credential template (all-commented, loads nothing until edited). `--init` copies it verbatim.
+
+### Changed
+- `load-endpoints-env.sh --init` copies the tracked template instead of emitting an inline heredoc (DRY — one source of truth); keeps a minimal inline fallback + warning for partial installs.
+- `docs/installation.md` documents the `--init`/copy path, the tracked template, and a **by-repo vs by-user** table making the secrets-are-by-user-only decision explicit. CLAUDE.md inventory row updated (incl. `dispatch-author.sh` as the 4th wired dispatcher).
+
+### Tests
+- `hooks/tests/load-endpoints-env.test.sh` +3 assertions: template exists, `--init` copies it **verbatim** (`diff -q`), and the tracked template itself parses cleanly + loads nothing.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.31.6`.
+
 ## v2.31.6 — one canonical endpoint-credential home + declarative endpoint wiring
 
 **Headline**: Anthropic-compatible env-token engines (GLM / MiniMax / any compatible endpoint) now have **ONE** credential home and a **declarative** invoke path. Before, tokens were scattered across `AUTOPILOT_ENDPOINT_<NAME>_*`, `MINIMAX_API_KEY`, `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, and raw `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` with no documented place to put them, and `--endpoint` had to be hand-typed every run. Now a single machine-local mode-600 file — `${AUTOPILOT_ENDPOINTS_ENV:-~/.autopilot/endpoints.env}` — is the canonical home (loaded automatically by the dispatchers), and `reviewer_endpoint` / `implementer_endpoint` in `review-loop-config.md` flow through to `/l5` `/l6` so a project's engine is picked up without a flag. New user-facing docs steer to **subscription plans over metered API keys** (OAuth-login `codex`/`agy`/`grok` need no token → GLM/MiniMax coding-plan token → metered API key last).

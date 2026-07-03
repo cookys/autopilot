@@ -5,6 +5,7 @@
 . "$(dirname "$0")/lib.sh"
 
 CLI="$REPO_ROOT/bin/autopilot.js"
+SH="$REPO_ROOT/scripts/load-endpoints-env.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 BASE="$WORK/endpoints.env"
@@ -62,6 +63,35 @@ ln -s /etc/passwd "$WORK/symbase.env"
 symout="$(printf t | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$WORK/symbase.env" node "$CLI" endpoints set x --url https://x --token-stdin 2>&1)"; ec=$?
 assert_exit_code "$ec" 2 "set refuses a symlink target"
 assert_contains "$symout" 'symlink' "set explains the symlink refusal"
+
+# ── 6b. newline-injection: a value with an embedded newline is refused, file NOT corrupted ──
+INJBASE="$WORK/inj.env"
+injurl="$(printf 'https://x\nAUTOPILOT_ENDPOINT_EVIL_TOKEN=pwned')"
+injout="$(env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$INJBASE" node "$CLI" endpoints set glm --url "$injurl" 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "--url with an embedded newline is rejected"
+assert_contains "$injout" 'https://' "explains the url-grammar refusal"
+assert_file_absent "$INJBASE" "rejected injection wrote nothing (no EVIL line)"
+
+# ── 6c. --url grammar (mirrors resolve-endpoint is_url_safe): non-https + whitespace rejected ──
+env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$INJBASE" node "$CLI" endpoints set glm --url 'ftp://x' >/dev/null 2>&1; assert_exit_code "$?" 2 "non-https url rejected"
+env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$INJBASE" node "$CLI" endpoints set glm --url 'https://a b' >/dev/null 2>&1; assert_exit_code "$?" 2 "url with whitespace rejected"
+env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$INJBASE" node "$CLI" endpoints set glm --url 'http://localhost:8080/x' >/dev/null 2>&1; assert_exit_code "$?" 0 "http loopback url accepted"
+
+# ── 6d. a token WITH shell metachars is accepted + round-trips LITERALLY (never executed) ──
+# The file is a line-parser target, never sourced — so $()/;/backticks are safe to store.
+META="$WORK/meta.env"
+metatok='tok$(touch '"$WORK"'/CLIPWNED);`id`;a#b'
+printf '%s' "$metatok" | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$META" node "$CLI" endpoints set glm --url https://x --token-stdin >/dev/null 2>&1
+assert_exit_code "$?" 0 "token with shell metachars is accepted (file is never sourced)"
+assert_file_absent "$WORK/CLIPWNED" "metachar token did NOT execute on write"
+# and the loader reads it back literally, still no execution, glm resolves
+metaload="$(env -i HOME="$WORK/home" PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$META" bash -c '. "'"$SH"'" && autopilot_load_endpoints_env; echo "T=[${AUTOPILOT_ENDPOINT_GLM_TOKEN:-}]"' 2>&1)"
+assert_file_absent "$WORK/CLIPWNED" "metachar token did NOT execute on read-back either"
+assert_contains "$metaload" 'T=[tok$(touch' "loader reads the metachar token back literally"
+# token via stdin with an embedded newline is likewise refused
+tokinj="$(printf 'abc\nAUTOPILOT_ENDPOINT_EVIL_TOKEN=pwned' | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$INJBASE" node "$CLI" endpoints set glm --url https://x --token-stdin 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "--token-stdin with an embedded newline is rejected"
+assert_contains "$tokinj" 'control character' "explains the token newline-injection refusal"
 
 # ── 7. unknown subcommand → exit 2 ──
 run bogus >/dev/null 2>&1; assert_exit_code "$?" 2 "unknown subcommand exits 2"

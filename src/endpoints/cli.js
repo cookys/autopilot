@@ -15,6 +15,25 @@ const { parseEndpointsFile, repoKey } = require('../../scripts/lib/load-endpoint
 
 const SCRIPTS = path.join(__dirname, '..', '..', 'scripts');
 const NAME_RE = /^[A-Za-z0-9_]+$/;
+// A value written into the line-based env file must contain NO control chars — a `\n`/`\r`
+// would inject an extra `KEY=VALUE` credential assignment (or corrupt the file) on the next
+// line. Reject the whole ASCII control range; a real URL/token has none.
+// NOTE: the credential file is a LINE-PARSER target and is NEVER sourced by autopilot (see
+// load-endpoints-env.sh), so shell metacharacters in a value are stored + read back LITERALLY
+// and never executed. We therefore only forbid the control chars that break the line FORMAT;
+// we do not reject `$ ; # ' "` in a token (that would reject legitimate provider tokens to
+// defend against a `source`-the-file anti-pattern the design explicitly forbids).
+const CONTROL_RE = /[\x00-\x1f]/;
+
+// url grammar, mirrored from resolve-endpoint.sh is_url_safe: no whitespace/control/quote/
+// backslash, and https:// (or http:// only for loopback). Keeps `set` consistent with what
+// resolve-endpoint will accept as `ready`.
+function isUrlSafe(u) {
+  if (!u || /[\s\x00-\x1f"\\]/.test(u)) return false;
+  if (/^https:\/\//.test(u)) return true;
+  if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(u)) return true;
+  return false;
+}
 
 function basePath(env) {
   return env.AUTOPILOT_ENDPOINTS_ENV || path.join(os.homedir(), '.autopilot', 'endpoints.env');
@@ -149,7 +168,7 @@ function cmdSet(io, rest) {
   let url = null; let tokenStdin = false; let toRepo = false;
   for (let i = 1; i < rest.length; i++) {
     const a = rest[i];
-    if (a === '--url') { url = rest[++i]; if (!url) { io.stderr.write('ERROR: --url requires a value\n'); return { status: 2 }; } }
+    if (a === '--url') { url = rest[++i]; if (!url) { io.stderr.write('ERROR: --url requires a value\n'); return { status: 2 }; } if (!isUrlSafe(url)) { io.stderr.write('ERROR: --url must be https:// (or http://localhost) with no whitespace/quotes\n'); return { status: 2 }; } }
     else if (a === '--token-stdin') { tokenStdin = true; }
     else if (a === '--repo') { toRepo = true; }
     else { io.stderr.write(`ERROR: unknown endpoints set option: ${a}\n`); return { status: 2 }; }
@@ -161,6 +180,7 @@ function cmdSet(io, rest) {
     try { token = (io.readStdin ? io.readStdin() : fs.readFileSync(0, 'utf8')).replace(/\r?\n$/, ''); }
     catch (_e) { io.stderr.write('ERROR: --token-stdin: could not read a token from STDIN\n'); return { status: 2 }; }
     if (!token) { io.stderr.write('ERROR: --token-stdin: empty token on STDIN\n'); return { status: 2 }; }
+    if (CONTROL_RE.test(token)) { io.stderr.write('ERROR: --token-stdin: token must not contain control characters (newline injection)\n'); return { status: 2 }; }
   }
   // Target file: base, or the per-repo overlay.
   let target;

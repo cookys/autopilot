@@ -109,4 +109,20 @@ have a **fragmented credential surface** and a **manual-only invoke path**:
 
 ## Review Loop History
 
-(to be filled during execution)
+- **P0 (loader)**: depth-0 caught a real `set -u`/unset-`HOME` crash (the `|| true` can't
+  catch a `set -u` fatal during expansion) — surfaced by the `resolve-endpoint` `env -i`
+  regression; fixed with `${HOME:-}` + a dedicated test case.
+- **P3 (onboard link)**: the Codex plugin payload link-check caught an unresolvable
+  `../../docs/installation.md` link (installation.md isn't in the payload `DOC_FILES`, and
+  adding it cascades); fixed by referencing it as a code-span path instead.
+- **Pre-merge decorrelated review**: `dispatch-review.sh --runner codex --model gpt-5.5
+  --effort high` on the security-critical diff (`load-endpoints-env.sh` + `.js` twin +
+  `resolve-review-loop.sh`) → **VERDICT: SHIP-AS-IS, FINDINGS: none** (read from the raw log;
+  the wrapper reported `no_verdict` only because codex prompt-echoed the large diff, the
+  known v2.31.3 fail-closed guard — the substantive verdict is clean).
+- **Depth-0 authoritative qc**: adversarial pass on the loader confirmed line-parser (no
+  eval), allowlist, perms gate ordering (`-e` skips dangling symlinks before `-L`; `-L`
+  before `-f`; `-O` owner; `& 022` reject / `& 044` warn), existing-env-wins, quote-strip,
+  indirect-expansion safety (key allowlist-validated), and JS-twin parity. Full suite green
+  except 3 host-dependent pre-existing failures (autopilot-cli / review-runner /
+  intent-capture — all fail identically on clean `develop`).

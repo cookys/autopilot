@@ -45,4 +45,14 @@ OUT="$("$SCRIPT" --runner agy --model "gpt-5.5" --skill-mode prompt 2>&1)"; EXIT
 assert_eq "1" "$EXIT" "without live-spend exit code"
 assert_contains "$OUT" "ERROR: --live-spend is required" "without live-spend mentions required flag"
 
+# 7. (P6 F5) the AUTHORITATIVE bench record must NOT assert quota availability — it does not
+#    measure quota. The old hardcoded status:"available"/high poisoned the real quota signal (a
+#    bench that FAILED, incl. due to quota exhaustion, still recorded available). Guard against
+#    reintroduction at source level (the live record path needs a real runner, not unit-testable).
+#    Scope to the main `payload` block — the native-precondition pre-record (line ~126) writes to
+#    an ISOLATED throwaway temp store and is intentionally out of scope.
+MAIN_PAYLOAD="$(sed -n '/const payload = {/,/last_bench_id/p' "$SCRIPT")"
+assert_contains "$MAIN_PAYLOAD" 'status: "unknown"' "bench authoritative quota status recorded as unknown"
+assert_not_contains "$MAIN_PAYLOAD" 'status: "available"' "bench does not hardcode quota available in the authoritative record"
+
 finalize_test

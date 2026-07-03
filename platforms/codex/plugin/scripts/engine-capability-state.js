@@ -200,7 +200,7 @@ function validateEvent(event) {
       failValidation('capability.skill_transport must be an object');
     }
 
-    const skillAllowed = new Set(['native', 'prompt_pack', 'last_bench_id']);
+    const skillAllowed = new Set(['native', 'prompt_pack', 'last_bench_id', 'native_observed_at', 'prompt_pack_observed_at']);
     for (const key of Object.keys(skill)) {
       if (!skillAllowed.has(key)) {
         failValidation(`unknown key in capability.skill_transport: ${key}`);
@@ -219,12 +219,34 @@ function validateEvent(event) {
     if (skill.last_bench_id !== undefined && skill.last_bench_id !== null && typeof skill.last_bench_id !== 'string') {
       failValidation('skill_transport.last_bench_id must be a string or null');
     }
+
+    // Output-only per-field observation times: allowed on input for round-trip parity with the
+    // merged `current` output, but must satisfy the schema's nullable-string contract. (gpt-5.5 P6 F4 r3)
+    for (const k of ['native_observed_at', 'prompt_pack_observed_at']) {
+      if (skill[k] !== undefined && skill[k] !== null && typeof skill[k] !== 'string') {
+        failValidation(`skill_transport.${k} must be a string or null`);
+      }
+    }
   }
 }
 
 // Pure-Node synchronous sleep
 function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, ms));
+}
+
+// Liveness probe for a lock-file content string (a pid). Split out so the caller can
+// hold the exact content it verified and re-check it right before unlinking. (gpt-5.5 P6 F1)
+function pidStringAlive(content) {
+  const pid = Number(content);
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    if (err.code === 'EPERM') return true;
+    return false;
+  }
 }
 
 // Liveness probe for lock file
@@ -235,15 +257,7 @@ function lockHolderAlive(lockFile) {
   } catch {
     return false;
   }
-  const pid = Number(content);
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    if (err.code === 'EPERM') return true;
-    return false;
-  }
+  return pidStringAlive(content);
 }
 
 // Lock strategy matching engine-scorecard.js
@@ -260,8 +274,41 @@ function acquireLock(storeDir, lockFile) {
       return;
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
-      if (!lockHolderAlive(lockFile)) {
-        try { fs.unlinkSync(lockFile); } catch { }
+      // Read the current holder ONCE, then decide. If it is dead, re-read immediately
+      // before unlinking and only remove it when the content is unchanged — otherwise a
+      // second recoverer could unlink a lock a third process just recreated, letting two
+      // writers into the critical section. Best-effort (files have no atomic CAS); this
+      // narrows the TOCTOU window to a single readFileSync→unlink for this local,
+      // low-concurrency store. (gpt-5.5 P6 F1)
+      let holder;
+      try { holder = fs.readFileSync(lockFile, 'utf8').trim(); } catch { continue; }
+      if (!pidStringAlive(holder)) {
+        // Break a stale lock with an IDENTITY-CHECKED atomic steal. renameSync moves whatever
+        // inode is at lockFile to a unique name (only one concurrent recoverer wins; losers get
+        // ENOENT). But rename operates on whatever sits at lockFile NOW — which may be a fresh
+        // LIVE lock created between our read and the rename — so after stealing we re-check the
+        // stolen inode's content:
+        //   • still the exact dead holder we observed  → it really is the stale lock; remove it.
+        //   • anything else                            → we grabbed a lock created after our read
+        //     (possibly live); restore it with linkSync, which is atomic and FAILS if the slot was
+        //     already retaken (so we never clobber a new holder), then drop our copy and retry.
+        // We never acquire on this path; we only ever remove an inode we have proven is the dead
+        // holder. A residual restore-gap remains (a third writer can grab the free slot during
+        // rename→link restore) — but it is reachable only under compound near-simultaneous
+        // interleavings on this LOCAL single-user store, and Node built-ins offer no OS advisory
+        // lock to close it fully. Accepted as the practical floor. (gpt-5.5 P6 F1 r3)
+        const stolen = `${lockFile}.stale.${process.pid}.${process.hrtime.bigint()}`;
+        try {
+          fs.renameSync(lockFile, stolen);
+          let stolenContent = '';
+          try { stolenContent = fs.readFileSync(stolen, 'utf8').trim(); } catch { }
+          if (stolenContent === holder && !pidStringAlive(stolenContent)) {
+            fs.unlinkSync(stolen);
+          } else {
+            try { fs.linkSync(stolen, lockFile); } catch { }
+            try { fs.unlinkSync(stolen); } catch { }
+          }
+        } catch { /* lost the steal race (ENOENT) — just retry from the top */ }
         continue;
       }
       if (Date.now() > deadline) {
@@ -456,15 +503,20 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
       const s = row.capability.skill_transport;
       const eid = toEventId(row.event_id) || 0;
       if (!mergedSkill) {
-        mergedSkill = { native: null, nativeEventId: -1, prompt_pack: null, promptEventId: -1, last_bench_id: null, eventId: -1 };
+        mergedSkill = { native: null, nativeEventId: -1, nativeObservedAt: null, prompt_pack: null, promptEventId: -1, promptObservedAt: null, last_bench_id: null, eventId: -1 };
       }
       if (s.native !== undefined && s.native !== 'unknown' && eid > mergedSkill.nativeEventId) {
         mergedSkill.native = s.native;
         mergedSkill.nativeEventId = eid;
+        // Carry the observed_at of the event that actually set native, NOT the merged
+        // aggregate observed_at (which follows the latest event of ANY field). A fresh
+        // quota-only event must not make a stale native signal look fresh. (gpt-5.5 P6 F4)
+        mergedSkill.nativeObservedAt = row.observed_at || null;
       }
       if (s.prompt_pack !== undefined && s.prompt_pack !== 'unknown' && eid > mergedSkill.promptEventId) {
         mergedSkill.prompt_pack = s.prompt_pack;
         mergedSkill.promptEventId = eid;
+        mergedSkill.promptObservedAt = row.observed_at || null;
       }
       if (eid >= mergedSkill.eventId) {
         mergedSkill.eventId = eid;
@@ -517,7 +569,11 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
       skill_transport: {
         native: skillNative,
         prompt_pack: skillPromptPack,
-        last_bench_id: skillLastBenchId
+        last_bench_id: skillLastBenchId,
+        // Per-field observation times (output-only; not part of the recorded event schema).
+        // Consumers gating on freshness MUST use these, not the aggregate observed_at. (gpt-5.5 P6 F4)
+        native_observed_at: (mergedSkill && mergedSkill.native !== null) ? mergedSkill.nativeObservedAt : null,
+        prompt_pack_observed_at: (mergedSkill && mergedSkill.prompt_pack !== null) ? mergedSkill.promptObservedAt : null
       }
     }
   };
@@ -740,8 +796,14 @@ function main() {
       const rows = readStoreRows(storeFile, true);
       const keptRows = [];
 
-      // Group rows to find the latest event for each (runner, model, role)
+      // Group rows to find the latest event for each (runner, model, role), AND the latest
+      // carrier of each skill_transport field. A row can hold the latest native / prompt_pack
+      // signal while a later quota-only row has a higher event_id — pruning it purely on quota
+      // TTL expiry would silently revert that skill signal to unknown. Protect the latest
+      // carrier of each field (mirrors mergeCurrentState's per-field selection). (gpt-5.5 P6 F2)
       const latestEvents = new Map();
+      const latestNative = new Map();
+      const latestPrompt = new Map();
       for (const row of rows) {
         const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
         const currentId = toEventId(row.event_id) || 0;
@@ -749,12 +811,24 @@ function main() {
         if (currentId > existingId) {
           latestEvents.set(key, currentId);
         }
+        const st = row.capability && row.capability.skill_transport;
+        if (st) {
+          if (st.native !== undefined && st.native !== 'unknown' && currentId > (latestNative.get(key) || 0)) {
+            latestNative.set(key, currentId);
+          }
+          if (st.prompt_pack !== undefined && st.prompt_pack !== 'unknown' && currentId > (latestPrompt.get(key) || 0)) {
+            latestPrompt.set(key, currentId);
+          }
+        }
       }
 
       for (const row of rows) {
         const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
         const currentId = toEventId(row.event_id) || 0;
         const isLatest = latestEvents.get(key) === currentId;
+        const isSkillCarrier =
+          (currentId > 0 && latestNative.get(key) === currentId) ||
+          (currentId > 0 && latestPrompt.get(key) === currentId);
 
         let expired = false;
         if (row.capability && row.capability.quota) {
@@ -764,8 +838,9 @@ function main() {
           expired = (observedMs + ttlMs) <= nowMs;
         }
 
-        // We keep it if it is not expired OR if it is the latest event for that key
-        if (!expired || isLatest) {
+        // Keep it if not expired, OR it is the latest event for that key, OR it holds the
+        // latest native / prompt_pack signal for that key.
+        if (!expired || isLatest || isSkillCarrier) {
           keptRows.push(row);
         } else {
           prunedCount += 1;

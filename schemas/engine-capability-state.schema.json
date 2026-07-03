@@ -87,6 +87,16 @@
             },
             "last_bench_id": {
               "type": ["string", "null"]
+            },
+            "native_observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only (merged `current`): observed_at of the event that set `native`. Consumers gating on native freshness MUST use this, not the aggregate observed_at."
+            },
+            "prompt_pack_observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only (merged `current`): observed_at of the event that set `prompt_pack`."
             }
           }
         }

@@ -212,7 +212,10 @@ esac
 if [ "${#SKILLS[@]}" -gt 0 ]; then
   for skill in "${SKILLS[@]}"; do
     skill_no_ns="${skill#autopilot:}"
-    if [[ ! "$skill_no_ns" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    # The charset below permits '.' so it must NOT stand alone as '.' or '..': those are
+    # path segments that escape the skills/<name>/ boundary (skills/.. resolves to repo root)
+    # even though '/' is blocked. Reject them explicitly. (gpt-5.5 P6 F3)
+    if [[ ! "$skill_no_ns" =~ ^[A-Za-z0-9._-]+$ ]] || [[ "$skill_no_ns" == "." ]] || [[ "$skill_no_ns" == ".." ]]; then
       die_precondition "invalid skill name: $skill"
     fi
   done
@@ -306,9 +309,13 @@ if [[ "$SKILL_MODE" != "off" ]]; then
     is_native_supported_fresh="$(node -e '
       try {
         const data = JSON.parse(process.argv[1]);
-        const native = data.capability.skill_transport.native;
-        if (native === "supported") {
-          const observed = Date.parse(data.observed_at);
+        const st = data.capability.skill_transport;
+        // Freshness MUST be judged on the native field OWN observation time, not the
+        // aggregate observed_at (which follows the latest event of any field — a fresh
+        // quota-only event would otherwise make a stale native signal look fresh). Missing
+        // per-field timestamp ⇒ treat as not-fresh (fail-safe). (gpt-5.5 P6 F4)
+        if (st.native === "supported" && st.native_observed_at) {
+          const observed = Date.parse(st.native_observed_at);
           const now = Date.now();
           if (Number.isFinite(observed) && (now - observed) <= 86400 * 1000) {
             console.log("yes");

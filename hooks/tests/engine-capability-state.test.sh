@@ -125,6 +125,30 @@ c_unknown=$(node "$CLI" classify-error --string "some random successful or gener
 [ "$c_unknown" = "unknown" ] && ok "8: classify-error categories map correctly" || \
 bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown"
 
+# 9. (P6 F4) merged `current` exposes per-field native_observed_at — the native event's OWN
+#    time, NOT the aggregate observed_at (which follows the latest event of any field). A fresh
+#    quota-only event must not make a stale native signal look fresh.
+reset
+cat <<'JSON' | node "$CLI" record >/dev/null
+{"schema_version":1,"observed_at":"2026-06-30T00:00:00Z","runner":"agy","model":"m","role":"implementer","capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0,"reset_at":null,"evidence":null},"skill_transport":{"native":"supported","prompt_pack":"unknown"}}}
+JSON
+cat <<'JSON' | node "$CLI" record >/dev/null
+{"schema_version":1,"observed_at":"2026-07-03T00:00:00Z","runner":"agy","model":"m","role":"implementer","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":86400,"reset_at":null,"evidence":null}}}
+JSON
+cur=$(node "$CLI" current --runner agy --model m --role implementer --now 2026-07-03T01:00:00Z)
+nat_obs=$(printf '%s' "$cur" | jq_get capability.skill_transport.native_observed_at)
+top_obs=$(printf '%s' "$cur" | jq_get observed_at)
+[ "$nat_obs" = "2026-06-30T00:00:00Z" ] && [ "$top_obs" = "2026-07-03T00:00:00Z" ] \
+  && ok "9: native_observed_at tracks the native event, not the aggregate" \
+  || bad "9: nat_obs=$nat_obs top_obs=$top_obs"
+
+# 10. (P6 F2) prune keeps the latest native-signal carrier even when its quota TTL is expired
+#     and it is not the latest event for the key (else the native signal reverts to unknown).
+prune_out=$(node "$CLI" prune --now 2026-07-03T01:00:00Z)
+nat_after=$(node "$CLI" current --runner agy --model m --role implementer --now 2026-07-03T01:00:00Z | jq_get capability.skill_transport.native)
+[ "$nat_after" = "supported" ] && ok "10: prune protects the native-signal carrier row" \
+  || bad "10: native after prune=$nat_after ($prune_out)"
+
 echo "----"
 echo "engine-capability-state unit tests: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

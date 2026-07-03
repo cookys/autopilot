@@ -274,12 +274,19 @@ payload="$(OBSERVED_AT="$observed_at" RUNNER="$RUNNER" MODEL="$MODEL" MODE="$SKI
     role: "implementer",
     runner_version: "v1.0.0-bench",
     capability: {
+      // A skill-transport bench does NOT measure quota. Recording a hardcoded
+      // status:"available"/high here poisoned the quota signal — a bench that FAILED
+      // (incl. because quota was exhausted/rate-limited) still asserted available, and could
+      // overwrite a real quota_exhausted event. Record quota as unknown so the per-field
+      // "unknown never clobbers a known signal" merge leaves the real quota state intact.
+      // (Same reason this bench records ONLY the skill_transport field it tested — see below.)
+      // (gpt-5.5 P6 F5)
       quota: {
-        status: "available",
+        status: "unknown",
         reset_at: null,
-        confidence: "high",
-        evidence: "Capability bench run for " + p.MODE,
-        ttl_seconds: 86400 * 30
+        confidence: "low",
+        evidence: "Capability bench for " + p.MODE + " (skill transport only; quota not measured)",
+        ttl_seconds: 0
       },
       skill_transport: {
         native: nativeVal,

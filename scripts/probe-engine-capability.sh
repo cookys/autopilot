@@ -229,11 +229,30 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     CONFIDENCE="high"
     EVIDENCE="Live spend probe succeeded"
   else
-    # Classify error
-    RAW_ERR="$(cat "$PROBE_ERR_FILE")"
+    # Classify error. classify-error reads the file directly, so it retains full context.
     CLASSIFICATION="$(node "$STATE_CLI" classify-error --file "$PROBE_ERR_FILE" --exit-code "$PROBE_EXIT")"
-    EVIDENCE="Live spend probe failed (exit $PROBE_EXIT): $RAW_ERR"
-    
+    # Do NOT persist raw runner stderr/stdout as evidence: on auth failures it can contain API
+    # keys, tokens, or Authorization headers that would land in the on-disk capability store and
+    # in reports. Record only the non-secret classification + exit code; surface the raw
+    # diagnostic to the operator on THIS script's stderr — live-spend is operator-gated, so the
+    # operator sees it live but it is never written to the store. (gpt-5.5 P6 F6)
+    EVIDENCE="Live spend probe failed (exit $PROBE_EXIT; classified: $CLASSIFICATION)"
+    # Surface the raw diagnostic to the operator on stderr (never persisted), but redact common
+    # secret shapes first — stderr can be captured by CI/operator logs, so defense-in-depth beats
+    # trusting the runner not to echo an API key/token/Authorization header. (gpt-5.5 P6 F6 r2)
+    printf 'probe-engine-capability: live-spend runner failure (exit %s, %s). Redacted diagnostic below is NOT persisted:\n' "$PROBE_EXIT" "$CLASSIFICATION" >&2
+    # Case classes are spelled out as bracket expressions (NOT the GNU-only `I` flag) so the
+    # redaction is fully case-insensitive AND portable to BSD sed (macOS operators). The
+    # Authorization/Proxy-Authorization rules redact the REST of the line (covers `Basic <b64>`,
+    # any scheme); scheme/prefix tokens and key=value pairs are redacted regardless of length;
+    # a length-20 base64/hex fallback catches anything else. (gpt-5.5 P6 F6 r3)
+    sed -E \
+      -e 's/(([Pp][Rr][Oo][Xx][Yy]-)?[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn])([":= ]+).*/\1\3[REDACTED]/g' \
+      -e 's/([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss][Ii][Cc]|sk|pk|xai|gsk|ghp|ghs|glpat|xoxb|xoxp)[-_ ]?[A-Za-z0-9._+\/=-]{4,}/[REDACTED-TOKEN]/g' \
+      -e 's/([Aa][Pp][Ii][-_ ]?[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd])([":= ]+)[^[:space:]"]+/\1\2[REDACTED]/g' \
+      -e 's/[A-Za-z0-9+/_-]{20,}/[REDACTED-LONG]/g' \
+      "$PROBE_ERR_FILE" >&2
+
     case "$CLASSIFICATION" in
       quota_exhausted)
         STATUS="exhausted"

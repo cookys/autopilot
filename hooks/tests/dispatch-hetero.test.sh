@@ -368,5 +368,26 @@ OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-stale-noskill --prompt-fi
 assert_eq "0" "$EXIT" "auto stale noskill exit code"
 assert_contains "$OUT" '"skill_mode_effective": "off"' "auto resolves to off when stale and no skills given"
 
+# 19. (P6 F4) auto must judge native freshness on the native event's OWN observed_at, not the
+#     aggregate: a STALE native event followed by a FRESH quota-only event must resolve to
+#     prompt (native is stale), never native. Without the per-field fix the fresh quota-only
+#     event's timestamp would make the stale native signal look fresh.
+rm -rf "$CAP_NATIVE_DIR"
+F4_STALE="$(node -e 'const d=new Date();d.setDate(d.getDate()-2);console.log(d.toISOString())')"
+F4_FRESH="$(node -e 'console.log(new Date().toISOString())')"
+echo "{\"schema_version\":1,\"observed_at\":\"$F4_STALE\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"unknown\",\"confidence\":\"low\",\"ttl_seconds\":0,\"evidence\":\"t\"},\"skill_transport\":{\"native\":\"supported\",\"prompt_pack\":\"unknown\"}}}" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
+echo "{\"schema_version\":1,\"observed_at\":\"$F4_FRESH\",\"runner\":\"agy\",\"model\":\"gpt-5.5\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"evidence\":\"t\"}}}" | node "$REPO_ROOT/scripts/engine-capability-state.js" record --store "$CAP_NATIVE_DIR" >/dev/null
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-auto-f4 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode auto --model "gpt-5.5" --runner agy --skill autopilot:dev-flow 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "auto F4 exit code"
+assert_contains "$OUT" '"skill_mode_effective": "prompt"' "auto reads native_observed_at: a fresh quota-only event does not make a stale native signal look fresh"
+
+# 20. (P6 F3) reject skill names that are bare path segments (. / ..): '/' is blocked but the
+#     charset permits '.', so 'skills/..' would escape the skills/<name>/ boundary to repo root.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-dotdot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill .. 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "reject '..' skill name exit code"
+assert_contains "$OUT" "invalid skill name" "'..' skill name rejected"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-dot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill . 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "reject '.' skill name exit code"
+
 finalize_test
 

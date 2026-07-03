@@ -51,13 +51,39 @@ Base: `88afd609` (develop). Batches dispatched sequentially (dependency chain P0
 - **Tests**: full suite **86/87** (only pre-existing `intent-capture`), verified in FOREGROUND (see
   finding #4 below).
 
-## Batch 3 — P4 resolver consumption + P5 docs/config 🔄 IN PROGRESS
+## Batch 3 — P4 resolver consumption + P5 docs/config ✅ CONVERGED
 
 - P4 (agy): `resolve-review-loop.sh` capability fields (`quota_status`/`skill_mode_effective`/
   `capability_warnings`/…), report-only + demote-only-on-exhausted-high-fresh, `/l4` untouched.
 - P5 (depth-0): docs (`references/hetero-dispatch.md`, review-loop-config template), CLAUDE.md/AGENTS.md
   inventory (closes the batch1 R5 J3 finding), CHANGELOG + version bump (**PATCH** per repo semver —
-  new scripts, not a new skill/agent), BACKLOG close. Base `0482832`.
+  new scripts, not a new skill/agent), BACKLOG close. Base `0482832`. Shipped as `afeabcb` (v2.31.2).
+
+## P6 — Full quality + decorrelated whole-diff review loop (L close) ✅ SHIP-AS-IS
+
+The plan's P6 close. Deterministic gates green (validate/sync-version/doc-drift/preflight-release
+6/6/preflight-portability 17/17; full suite 86/87 — only the pre-existing environment-specific
+`intent-capture-basic-write`, untouched by this diff). Then a **decorrelated gpt-5.5 xhigh whole-diff
+review loop** (via `dispatch-review.sh`'s wrapper was echo-polluted on the 158KB diff, so the review
+ran `codex exec` directly). **5 rounds, 6 + 6 findings, ALL verified real against the code + fixed at
+depth-0**, converged to **SHIP-AS-IS**:
+
+- **R1 (6, whole diff)**: F1 lock stale-recovery TOCTOU · F2 `prune` drops the latest native-signal
+  carrier on quota-TTL expiry · F3 skill name allows `.`/`..` (one-level boundary escape) · F4
+  native-freshness judged on the aggregate `observed_at` (a fresh quota-only event makes a stale
+  native signal look fresh) · F5 bench hardcodes `quota=available/high` regardless of outcome
+  (poisons the real quota signal) · F6 live-spend probe persists raw runner stderr as evidence
+  (secret leak). Fixing F5 also resolves F2's trigger.
+- **R2–R5 (fix-diff re-reviews)**: lock made race-safe via an **identity-checked rename+link steal**
+  (residual restore-gap knowingly accepted as the Node-built-ins floor for a local single-user store,
+  rated MINOR); probe evidence stores only the classification with the operator diagnostic **redacted**
+  (portable case-insensitive brackets — Authorization rest-of-line, scheme/prefix tokens, base64
+  fallback — verified against all-caps + short Basic creds); `native_observed_at`/`prompt_pack_observed_at`
+  added to the **schema + `validateEvent`** for contract parity.
+- **Regression tests added**: state #9 (per-field `native_observed_at`) + #10 (prune protects the
+  native carrier); dispatch-hetero #19 (auto reads `native_observed_at`, not the aggregate) + #20
+  (reject `.`/`..`); bench #7 (authoritative record never hardcodes `quota=available`); probe #3/#3b
+  (no secret in store OR redacted stderr).
 
 ## Findings during the run (worth keeping)
 

@@ -84,6 +84,38 @@ else
   bad "2: live-spend status=$status confidence=$confidence"
 fi
 
+# 3. (P6 F6) a live-spend failure must NOT persist raw runner stderr (which can contain API
+#    keys / tokens on auth failures) into the capability store's evidence — only a non-secret
+#    classification. The raw diagnostic goes to the operator's stderr, never the store.
+reset
+SECRET="sk-SECRETdeadbeef0123456789TOKEN"
+cat > "$DUMMY_BIN_DIR/codex" <<EOF
+#!/usr/bin/env bash
+if [ "\$1" = "exec" ]; then
+  echo "401 Unauthorized: invalid api key $SECRET authorization failed" >&2
+  exit 1
+fi
+echo "codex-cli 1.0.0-mock"
+exit 0
+EOF
+chmod +x "$DUMMY_BIN_DIR/codex"
+
+PROBE_STDERR="$TESTDIR/probe-stderr.txt"
+bash "$PROBE_CLI" quota --runner codex --model gpt-5.5 --live-spend --store "$TESTDIR" >/dev/null 2>"$PROBE_STDERR"
+evidence=$(node "$STATE_CLI" current --runner codex --model gpt-5.5 --role reviewer --store "$TESTDIR" | jq_get capability.quota.evidence)
+if printf '%s' "$evidence" | grep -q "$SECRET"; then
+  bad "3: evidence leaked the raw runner stderr secret: $evidence"
+else
+  ok "3: live-spend failure evidence does not persist raw runner stderr (no secret leak)"
+fi
+# 3b. (P6 F6 r2) the operator-facing stderr diagnostic must also be redacted (CI/operator logs
+#     can capture it), so the secret must not appear there either.
+if grep -q "$SECRET" "$PROBE_STDERR"; then
+  bad "3b: stderr diagnostic leaked the secret: $(cat "$PROBE_STDERR")"
+else
+  ok "3b: live-spend failure stderr diagnostic is redacted (no secret leak)"
+fi
+
 # Restore PATH
 export PATH="$OLD_PATH"
 

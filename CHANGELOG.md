@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.6 — one canonical endpoint-credential home + declarative endpoint wiring
+
+**Headline**: Anthropic-compatible env-token engines (GLM / MiniMax / any compatible endpoint) now have **ONE** credential home and a **declarative** invoke path. Before, tokens were scattered across `AUTOPILOT_ENDPOINT_<NAME>_*`, `MINIMAX_API_KEY`, `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, and raw `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` with no documented place to put them, and `--endpoint` had to be hand-typed every run. Now a single machine-local mode-600 file — `${AUTOPILOT_ENDPOINTS_ENV:-~/.autopilot/endpoints.env}` — is the canonical home (loaded automatically by the dispatchers), and `reviewer_endpoint` / `implementer_endpoint` in `review-loop-config.md` flow through to `/l5` `/l6` so a project's engine is picked up without a flag. New user-facing docs steer to **subscription plans over metered API keys** (OAuth-login `codex`/`agy`/`grok` need no token → GLM/MiniMax coding-plan token → metered API key last).
+
+### Added
+- **`scripts/load-endpoints-env.sh`** (sourceable bash) + **`scripts/lib/load-endpoints-env.js`** (Node twin, built-ins only): the canonical endpoint-credential loader. Populates the allowlisted `AUTOPILOT_ENDPOINT_<NAME>_*` / `ANTHROPIC_*` / `MINIMAX_API_KEY` env vars from the one file. **LINE-PARSER, never `source`** (file contents never executed); safety gate rejects symlink / non-owner / group-other-writable, warns on group-other-readable, fail-closed when perms unverifiable; existing-env-WINS precedence; one-layer quote strip; `set +x` + never echoes a token; `${HOME:-}` so `set -u`/`env -i` can't crash it. `--init` idempotently scaffolds a commented mode-600 stub (never clobbers).
+- **`reviewer_endpoint` / `implementer_endpoint`** config keys (`review-loop-config.md` + `resolve-review-loop.sh`): validated `[A-Za-z0-9_]` (invalid → empty, fail-closed against `--endpoint`/JSON injection), emitted as two appended JSON keys + `--field`, passed to `dispatch-*.sh --endpoint` by the `/l5`/`/l6` prose.
+- **`docs/installation.md` § Heterogeneous engine credentials** — the canonical placement, copy-paste stub, subscription-≻-API-key ladder, and declarative wiring. README.md + README.zh-TW.md gain a `🔌 Add another engine` subsection linking there. `skills/onboard` step 5.5 points onboarding users at it.
+
+### Changed
+- `dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-anthropic-review.js` load `~/.autopilot/endpoints.env` at startup (best-effort — absent/rejected file = no-op; the normal cc-shim/anthropic precondition fires unchanged). The env-var convention consumed by `resolve-endpoint.sh` remains the resolution contract; the file is a persistence layer only. Legacy `MINIMAX_API_KEY` / `ANTHROPIC_COMPATIBLE_AUTH_TOKEN` become documented aliases (still honored as fallbacks).
+- Closed the CLAUDE.md-noted BACKLOG: `implementer_endpoint`/`reviewer_endpoint` config-surface wiring is done — `--endpoint` is no longer manual-only.
+
+### Fixed
+- `load-endpoints-env.sh` guards `${HOME:-}`: a dispatcher running under `set -uo pipefail` with `HOME` unset (e.g. `env -i`) previously would have aborted on an unbound-variable fatal; now it cleanly no-ops (caught by the P0 test suite + the existing `resolve-endpoint` `env -i` regression).
+
+### Tests
+- `hooks/tests/load-endpoints-env.test.sh` (new, ~22 assertions): no-code-execution, symlink/writable reject, readable warn, existing-env precedence, quote-strip, missing-file no-op, JS-twin parity, cc-shim integration (creds from file satisfy the precondition), `set -u`/unset-HOME regression, `--init` (create / mode-600 / idempotent-no-clobber / commented-stub-loads-nothing). `resolve-review-loop.test.sh` +8 endpoint assertions + schema-lockstep update.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.31.5`; optionally `rm ~/.autopilot/endpoints.env` (only a stub unless you added tokens).
+
 ## v2.31.5 — retro review-loop lens (`scripts/retro-review-loop.js`)
 
 **Headline**: `skills/retro` gains a **review-loop lens** (Step 1f) that recovers the effort git-history retro (Steps 1a–1e) structurally cannot see. For a `/l5`-heavy workflow the commit count is only half the story: the hetero-engine **dispatch / decorrelated-review / debate** effort mostly never becomes a commit (reviews, harness runs) or is SQUASHED into one (3 dispatch rounds → 1 commit). New deterministic `scripts/retro-review-loop.js` (Node, built-ins only, NO LLM) reads THIS machine's session transcripts (`~/.claude/projects/<encoded-cwd>/*.jsonl`), counting **real Bash `tool_use` invocations** by dispatch/review pattern (impl `dispatch-hetero`, `dispatch-review`, `codex exec`, agy/grok/explore, engine implement-review) — only actual tool_use command inputs, so CLAUDE.md / reference-doc content that mentions those script names never inflates it — plus git commit-message loop markers (review-round / QC-verdict / converged, counted **per-commit** via `git log -z` NUL separation). Fail-safe: a missing transcript dir yields zero counts, exit 0. **Honesty baked in**: `review_dispatch` includes ad-hoc harness/debug runs (the git review-round / QC markers are the cleaner cycle count), and only local-machine transcripts are seen; the report section is skipped when `transcript.sessions == 0`. Wired into the retro SKILL (Step 1f + Review-Loop Lens report section + `review_loop_lens` snapshot block + Step 6 delta) and the CLAUDE.md scripts inventory. Born from the 2026-07-03 observation that a 217-commit week's git retro hid ~300 hetero dispatch/review invocations behind squashed rounds.

@@ -2,7 +2,7 @@
 
 This reference outlines the mechanical aggregation rules for design-panel decisions, as established in the quality-floor engine plan.
 
-Design source: [quality-floor-engine.md](../../../docs/plans/2026-07-04-quality-floor-engine.md) §4.4
+Design source: quality-floor-engine.md (`docs/plans/2026-07-04-quality-floor-engine.md`) §4.4
 
 ## Overview
 When a design panel is fanned out, each panelist evaluates the proposed options against the defined criteria using the same options × criteria matrix. Depth-0 aggregation of these responses is strictly mechanical, applied in the following order.

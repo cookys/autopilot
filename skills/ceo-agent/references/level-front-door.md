@@ -1,6 +1,6 @@
-# Level front-door & dispatched foreman (`/l3 /l4 /l5`)
+# Level front-door & dispatched foreman (`/l3 /l4 /l5 /l6`)
 
-> Loaded by `skills/l3`, `skills/l4`, `skills/l5` and referenced from
+> Loaded by `skills/l3`, `skills/l4`, `skills/l5`, `skills/l6` and referenced from
 > `ceo-agent/SKILL.md`. The `/lN` skills are **thin** — all execution semantics
 > live here so the three front-doors stay in lockstep.
 >
@@ -10,7 +10,7 @@
 
 ## What the front-door is
 
-`/l3 /l4 /l5 <goal>` is a terse entry point into **CEO mode** (`ceo-agent`). It
+`/l3 /l4 /l5 /l6 <goal>` is a terse entry point into **CEO mode** (`ceo-agent`). It
 pre-fills the four CEO startup questions so a long run starts without a Q&A round,
 and it sets the **execution posture** (run inline vs. offload to a dispatched
 sub-orchestrator). It is a *new slash-command namespace layered over* the existing
@@ -22,6 +22,7 @@ CEO **Involvement** enum (`ceo-agent/SKILL.md` Startup §2: 1=every-step /
 | `/l3 <goal>` | CEO executes **itself** on the main thread; escalates at the DOA boundary. The behavior you invoke today as "Level 3 全權處理", now an explicit command. | Claude (this session) |
 | `/l4 <goal>` | CEO dispatches **ONE sub-orchestrator "foreman"** (background + worktree-isolated) that runs dev-flow and returns a verdict + run-summary. CEO context stays clean; the run goes long unattended. | Claude (foreman + workers) |
 | `/l5 <goal>` | `/l4` **with the implementer loop run through** `bin/autopilot.js engine implement-review`, which internally dispatches heterogeneous implementation through `dispatch-hetero.sh` and decorrelated review through the resolved reviewer. | Claude foreman + engine-orchestrated hetero impl |
+| `/l6 <goal>` | `/l5` **with the verification AUTHORING also leaf-dispatched to a heterogeneous engine** (different family than the implementer); depth-0 keeps merge authority and authoritative qc. | Claude foreman + engine-orchestrated hetero impl + hetero verifier authoring |
 
 ### Startup-question presets
 
@@ -31,7 +32,7 @@ so the run does not re-ask on a clean goal:
 | CEO startup Q | Preset from `/lN` |
 |---------------|-------------------|
 | 1. OKR / success criteria | Derived from `<goal>`. If `<goal>` has no verifiable end-state, the CEO restates one and proceeds (does **not** block on Q&A — that is the point of the front-door). |
-| 2. Involvement | `/l3 /l4 /l5` all preset **3 = just-results** (full autonomy, notify on done). |
+| 2. Involvement | `/l3 /l4 /l5 /l6` all preset **3 = just-results** (full autonomy, notify on done). |
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
 | 4. No-go zones | **none** (default DOA). Override with `-x <csv>`. |
 
@@ -41,9 +42,9 @@ so the run does not re-ask on a clean goal:
 |------|--------|
 | `-x <csv>` | No-go zones, e.g. `-x payments,auth`. |
 | `--expand` | Scope mode = Expand instead of Hold. |
-| `--solo` | `/l4`/`/l5` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4 posture. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). |
+| `--solo` | `/l4`/`/l5`/`/l6` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4/5/6 posture respectively. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). |
 
-## The foreman (`/l4` and `/l5`)
+## The foreman (`/l4`, `/l5` and `/l6`)
 
 ### Topology — the depth-2 ceiling
 
@@ -72,6 +73,9 @@ CEO (depth 0, this session)
   calls `scripts/dispatch-hetero.sh` for implementation rounds, then dispatches the
   decorrelated reviewer on the cumulative immutable-base diff. Everything else — the
   depth-0 control loop, qc@depth-0, worktree GC — is unchanged.
+- **`/l6`** is identical to `/l5` except that verification AUTHORING is also leaf-dispatched
+  to a heterogeneous engine (different family than the implementer); depth-0 remains
+  pure orchestration, keeping merge authority and authoritative qc.
   - **Its base is a SEPARATE mechanism from the foreman's.** The engine passes
     `--base` through to `dispatch-hetero.sh`, which creates its own git worktree and
     does **not** use the native Agent worktree; `worktree.baseRef` does **not** reach
@@ -94,9 +98,20 @@ CEO (depth 0, this session)
     `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before). This closes the
     old "type `--endpoint` by hand every run" gap — the project config owns it now.
 
+### Heterogeneous engine loop details (/l5 and /l6)
+
+When `/l5` or `/l6` is invoked, the foreman resolves the roster and execution parameters from `scripts/resolve-review-loop.sh` rather than hardcoding them. The loop parameters include:
+
+- **Review and implementation engines** (`reviewer_engine`, `reviewer_effort`, `reviewer_runner`, `implementer_engine`, `implementer_effort`, `implementer_runner`): Resolved dynamically; models, effort levels, and runners should never be hardcoded inline.
+- **`review_diff_scope`**: Controls what the impl-review reads each round:
+  - `full` (default) ⇒ the reviewer reads the whole `<base>..HEAD` diff every round. Safe; cost grows O(n) as the diff accumulates.
+  - `incremental-mitigated` ⇒ the reviewer reads `<prev-round>..HEAD` PLUS the full content of every file touched this round PLUS a standing invariants/prior-findings checklist; do a full `<base>..HEAD` re-read every 3–5 rounds or whenever a round touches shared/critical logic (classifiers, schemas, fixtures, harness control flow); and ALWAYS a final full `<base>..HEAD` review before merge. Use only on long loops — naive incremental-only misses cross-file regressions in untouched files. When this mode is on, `independent_harness` MUST run the FULL test suite, not just touched-file tests (real lesson 2026-06-26: a stale-fixture regression in an untouched test file slipped a too-narrow per-round scope to the final sweep). Reference driver: `resolve-review-loop.sh --field review_diff_scope`.
+- **`independent_harness:on`**: Depth-0 ALSO builds its own adversarial harness and never trusts the implementer's own green.
+- **Block-mode test-integrity override stays DEFERRED**: A block-mode `executed_set_shrink` hard-fails with no honored override (no local-only containment is malicious-proof against a same-user worker — sibling-scope escape; gpt-5.5 review 2026-06-26). Resolve a legit shrink by fixing the test or running that project in `warn`. Re-enable is BACKLOG'd behind real isolation.
+
 ### Width — fixed cap 3, disjointness-gated
 
-The default `/l4 /l5` topology is **width 1** (one implementer worker per round).
+The default `/l4 /l5 /l6` topology is **width 1** (one implementer worker per round).
 **Fixed cap 3** is the ceiling: the foreman may fan out to **at most 3** parallel
 implementer workers in a single round, and **only** when the work decomposes into
 **file-disjoint independent units** that pass a **deterministic** gate — never on
@@ -125,7 +140,7 @@ so the supply is real, but the authorization must be mechanical).
   rails ([`scripts/dispatch-batch.sh`](../../../scripts/dispatch-batch.sh)) own the
   deterministic half (plan / verify / merge-back / telemetry / reap); the depth-0 LLM
   loop (below) owns the Agent-tool dispatch the shell cannot call. Width applies to the
-  **`/l4` homogeneous path** (Claude foreman + Claude Agent-tool workers); `/l5` hetero
+  **`/l4` homogeneous path** (Claude foreman + Claude Agent-tool workers); `/l5`/`/l6` hetero
   parallel is BACKLOG. Default remains the **width-1 path** until the foreman decomposes
   a task into ≥2 disjointness-passing units; the gate is still useful standalone (it
   validates even a single unit's commit against its declared scope).
@@ -158,10 +173,10 @@ subagent surface entirely.
 |----------|-----------------|---------------------|-----------------|
 | `/l4` foreman (native `Agent`, background) | ✅ shown as a running subagent | `TaskList` / `TaskGet` / `TaskOutput` / `TaskStop` / `Monitor` (the depth-0 loop already uses `Monitor`+`TaskStop`) | live via the Task\* tools |
 | Workflow tool (`parallel`/`pipeline`/`agent`) | ✅✅ `/workflows` live progress tree | the script's own control flow + `/workflows` | richest — but **no worktree isolation by default, cannot shell out to a non-Claude engine** (not a host for the hetero leaf) |
-| `/l5` hetero leaf (`dispatch-hetero.sh` → `agy`) | ❌ a **Bash subprocess**, not a CC subagent | none — outside the subagent/workflow surface | only `tail -f <agent_log>` (the JSON `agent_log` path); verdict by **artifacts + final JSON**, never self-report |
+| `/l5`/`/l6` hetero leaf (`dispatch-hetero.sh` → `agy`) | ❌ a **Bash subprocess**, not a CC subagent | none — outside the subagent/workflow surface | only `tail -f <agent_log>` (the JSON `agent_log` path); verdict by **artifacts + final JSON**, never self-report |
 
 ⇒ **Want "see it + control it" → `/l4` (or Workflow for visible Claude-only orchestration).
-The moment the leaf becomes a heterogeneous engine (`/l5`), that leaf is invisible to CC**
+The moment the leaf becomes a heterogeneous engine (`/l5`/`/l6`), that leaf is invisible to CC**
 — only its log file + git artifacts exist. A *live* "model is asking a question" stream from
 agy is the deferred `stream-json` rail (spike-gated, NOT built — see
 [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md) § "Deferred").
@@ -239,7 +254,7 @@ a JSON outcome.
 | `dirty` | Escalate (worker committed then left the tree dirty — not reviewable). |
 | `failure` | Escalate (clean commit but abnormal exit — run not trustworthy). |
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
-| `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). For `/l5` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
+| `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
 | `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
 
 ### 3. qc@depth-0 is THE gate
@@ -260,7 +275,7 @@ a small diff; 5+ for a large/risky one).
 
 **Disjoint-family panel (when `review-loop-config.md` sets a `qc_panel`).** By
 default the ≥3 reviewers are Claude subagents (homogeneous — diverse *lenses*, one
-*family*). For `/l5` (heterogeneous implementer) that is a decorrelation hole: if
+*family*). For `/l5`/`/l6` (heterogeneous implementer) that is a decorrelation hole: if
 the implementer is OpenAI (`gpt-5.3-codex-spark`), a same-family reviewer shares its
 blind spots. So resolve the panel from `scripts/resolve-review-loop.sh` (`qc_panel`)
 and dispatch a **disjoint-family** set — Claude/Opus via the native Agent tool,
@@ -323,7 +338,7 @@ git branch -D worktree-agent-<agentId>    # for a killed native foreman
 git worktree prune
 ```
 
-- For the `/l5` agy path, the worktree path is in the outcome JSON (`worktree`
+- For the `/l5`/`/l6` agy path, the worktree path is in the outcome JSON (`worktree`
   field) and the branch in the `branch` field — reap **both**:
   `git worktree remove --force <worktree>` (if non-null) **and**
   `git branch -D <branch>` (`git worktree remove` does NOT delete the branch, so a
@@ -422,7 +437,7 @@ one row per step:
 | **depth-0 qc panel (authoritative)** | claude ×N (≥3 lenses) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from
-  `dispatch-hetero.sh`'s outcome JSON (`runner`/`model` fields) for the `/l5`
+  `dispatch-hetero.sh`'s outcome JSON (`runner`/`model` fields) for the `/l5`/`/l6`
   path, or is `claude`/`<worker tier>` for the native `/l4` path.
 - **`work_domain`** (impl row only) is **telemetry, never a routing input** — the
   deterministic dominant domain of the impl diff from
@@ -438,14 +453,14 @@ one row per step:
 ## Gotchas
 
 - **New skills aren't dispatchable until a Claude Code restart** — the plugin
-  caches skills at session start. After adding `/l3 /l4 /l5`, restart before the
+  caches skills at session start. After adding `/l3 /l4 /l5 /l6`, restart before the
   dogfood run.
 - **Worktree base default = `origin/develop`, NOT the CEO's HEAD — but selectable via
   `worktree.baseRef`.** See the canonical treatment + the base-currency decision table
   under "Dispatching the foreman" above. Short form: independent task → default `fresh`
   is fine; build-on-un-merged-CEO-work → set `worktree.baseRef:"head"` (CC; in-session,
   no restart) or the portable `git reset --hard <CEO-HEAD-sha>` STEP-0 fallback (verify
-  a sentinel, STOP on failure); integrate via cherry-pick (§4). The `/l5` hetero impl is
+  a sentinel, STOP on failure); integrate via cherry-pick (§4). The `/l5`/`/l6` hetero impl is
   a **separate mechanism** — `worktree.baseRef` doesn't reach it; pass
   `--base "$(git rev-parse HEAD)"` to `dispatch-hetero.sh` instead.
 - **`git worktree prune` alone is a no-op** on an on-disk worktree — `remove

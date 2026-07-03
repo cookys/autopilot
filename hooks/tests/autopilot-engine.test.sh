@@ -1814,4 +1814,89 @@ assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine default repair 
 assert_contains "$OUT" "repair_prompt_has_findings=true" "AutopilotEngine default repair prompt includes reviewer findings"
 assert_contains "$OUT" "repair_prompt_has_original=true" "AutopilotEngine default repair prompt preserves original task"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { validateReviewLoopConfig } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
+
+const validPayload = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'high',
+  reviewer_runner: 'codex',
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'auto',
+  loop_max_rounds: 3,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+  spec_review: 'on',
+  independent_harness: 'off',
+  qc_panel: ['test-reviewer'],
+  qc_panel_aggregation: 'union-on-verified-critical',
+  review_risk: 'low',
+  required_review_families: 1,
+  l1_required: false,
+  cross_family_required: false,
+  cross_family_satisfied: true,
+  review_diff_scope: 'full',
+  source: 'override',
+  work_domain: 'mixed',
+  domain_source: 'none',
+  // Eight new fields
+  capability_state_source: 'unknown',
+  quota_status: 'ok',
+  quota_reset_at: null,
+  skill_mode_requested: 'selective',
+  skill_mode_effective: 'selective',
+  capability_warnings: ['warning 1'],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
+};
+
+try {
+  const validated = validateReviewLoopConfig(validPayload);
+  console.log(`validated=true`);
+  console.log(`capability_state_source=${validated.capability_state_source}`);
+  console.log(`quota_status=${validated.quota_status}`);
+  console.log(`quota_reset_at=${validated.quota_reset_at}`);
+  console.log(`skill_mode_requested=${validated.skill_mode_requested}`);
+  console.log(`skill_mode_effective=${validated.skill_mode_effective}`);
+  console.log(`capability_warnings_0=${validated.capability_warnings[0]}`);
+  console.log(`reviewer_endpoint=${validated.reviewer_endpoint}`);
+  console.log(`implementer_endpoint=${validated.implementer_endpoint}`);
+} catch (err) {
+  console.log(`error=${err.message}`);
+}
+
+const payloadWithResetString = {
+  ...validPayload,
+  quota_reset_at: '2026-07-04T00:00:00Z',
+  reviewer_endpoint: 'http://reviewer',
+  implementer_endpoint: 'http://implementer',
+};
+try {
+  const validated2 = validateReviewLoopConfig(payloadWithResetString);
+  console.log(`validated2=true`);
+  console.log(`quota_reset_at2=${validated2.quota_reset_at}`);
+  console.log(`reviewer_endpoint2=${validated2.reviewer_endpoint}`);
+  console.log(`implementer_endpoint2=${validated2.implementer_endpoint}`);
+} catch (err) {
+  console.log(`error2=${err.message}`);
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "validateReviewLoopConfig validates new fields process exits 0"
+assert_contains "$OUT" "validated=true" "validateReviewLoopConfig validates payload with new fields"
+assert_contains "$OUT" "capability_state_source=unknown" "validateReviewLoopConfig carries capability_state_source"
+assert_contains "$OUT" "quota_status=ok" "validateReviewLoopConfig carries quota_status"
+assert_contains "$OUT" "quota_reset_at=null" "validateReviewLoopConfig carries quota_reset_at"
+assert_contains "$OUT" "skill_mode_requested=selective" "validateReviewLoopConfig carries skill_mode_requested"
+assert_contains "$OUT" "skill_mode_effective=selective" "validateReviewLoopConfig carries skill_mode_effective"
+assert_contains "$OUT" "capability_warnings_0=warning 1" "validateReviewLoopConfig carries capability_warnings"
+assert_contains "$OUT" "reviewer_endpoint=" "validateReviewLoopConfig carries empty reviewer_endpoint"
+assert_contains "$OUT" "implementer_endpoint=" "validateReviewLoopConfig carries empty implementer_endpoint"
+assert_contains "$OUT" "validated2=true" "validateReviewLoopConfig validates payload with string quota_reset_at"
+assert_contains "$OUT" "quota_reset_at2=2026-07-04T00:00:00Z" "validateReviewLoopConfig carries string quota_reset_at"
+assert_contains "$OUT" "reviewer_endpoint2=http://reviewer" "validateReviewLoopConfig carries string reviewer_endpoint"
+assert_contains "$OUT" "implementer_endpoint2=http://implementer" "validateReviewLoopConfig carries string implementer_endpoint"
+
 finalize_test

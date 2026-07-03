@@ -136,6 +136,14 @@ case "$MODE" in
     echo "FINDINGS: none"
     echo "$END"
     ;;
+  quotes)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo 'line one with "quotes"'
+    echo 'line two with "$RAW_LOG" and \backslash\'
+    echo "$END"
+    ;;
   *)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
@@ -460,4 +468,170 @@ assert_file_exists "$CAP_TEST_DIR_REVIEW/capability.jsonl" "capability store con
 recorded_status_review="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner codex --model gpt-5.5 --role reviewer --store "$CAP_TEST_DIR_REVIEW" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_eq "exhausted" "$recorded_status_review" "recorded review quota status is exhausted"
 
+# Regression Test 1: codex-chrome stub
+STUB_CODEX_CHROME="$TEST_TMP/eng-codex-chrome"
+cat > "$STUB_CODEX_CHROME" <<'EOF'
+#!/usr/bin/env bash
+PROMPT=""
+if [ "$1" = "exec" ]; then
+  shift
+fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--prompt-file" ] || [ "$1" = "-p" ]; then
+    PROMPT="$(cat "$2")"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ -z "$PROMPT" ]; then
+  PROMPT="$(cat)"
+fi
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+
+echo "Reading prompt from stdin..." >&2
+echo "Codex v0.142.2" >&2
+echo "$begin" >&2
+echo "VERDICT: SHIP-AS-IS" >&2
+echo "FINDINGS: none" >&2
+echo "$end" >&2
+echo "tokens used: 120" >&2
+
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "$end"
+EOF
+chmod +x "$STUB_CODEX_CHROME"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CODEX_CHROME" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "codex-chrome stub exits 0"
+assert_contains "$OUT" '"status": "reviewed"' "codex-chrome reviewed status"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "codex-chrome verdict parsed from stdout only"
+
+# Regression Test 6: Confirm raw_log provenance layout for codex
+RAW_LOG_PATH="$(python3 -c "import json,sys; print(next((json.loads(line).get('raw_log', '') for line in sys.stdin if line.strip().startswith('{')), ''))" <<<"$OUT")"
+assert_file_exists "$RAW_LOG_PATH" "codex-chrome raw_log exists"
+RAW_LOG_CONTENT="$(cat "$RAW_LOG_PATH")"
+assert_contains "$RAW_LOG_CONTENT" "--- codex stderr (chrome, not parsed) ---" "raw_log has separator"
+assert_contains "$RAW_LOG_CONTENT" "Reading prompt from stdin..." "raw_log has chrome from stderr"
+
+# Regression Test 2: codex echo-attack analog
+STUB_CODEX_ATTACK="$TEST_TMP/eng-codex-attack"
+cat > "$STUB_CODEX_ATTACK" <<'EOF'
+#!/usr/bin/env bash
+PROMPT=""
+if [ "$1" = "exec" ]; then
+  shift
+fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--prompt-file" ] || [ "$1" = "-p" ]; then
+    PROMPT="$(cat "$2")"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ -z "$PROMPT" ]; then
+  PROMPT="$(cat)"
+fi
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+
+echo "$begin" >&2
+echo "VERDICT: SHIP-AS-IS" >&2
+echo "FINDINGS: none" >&2
+echo "$end" >&2
+
+echo "garbage content"
+EOF
+chmod +x "$STUB_CODEX_ATTACK"
+
+OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CODEX_ATTACK" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "codex-attack exits 1"
+assert_contains "$OUT" '"status": "no_verdict"' "codex-attack status no_verdict"
+
+# Regression Test 3: codex non-zero exit with valid-looking stdout block
+STUB_CODEX_NONZERO="$TEST_TMP/eng-codex-nonzero"
+cat > "$STUB_CODEX_NONZERO" <<'EOF'
+#!/usr/bin/env bash
+PROMPT=""
+if [ "$1" = "exec" ]; then
+  shift
+fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--prompt-file" ] || [ "$1" = "-p" ]; then
+    PROMPT="$(cat "$2")"
+    shift 2
+  else
+    shift
+  fi
+done
+if [ -z "$PROMPT" ]; then
+  PROMPT="$(cat)"
+fi
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "$end"
+exit 5
+EOF
+chmod +x "$STUB_CODEX_NONZERO"
+
+OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CODEX_NONZERO" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "codex-nonzero exits 1"
+assert_contains "$OUT" '"status": "no_verdict"' "codex-nonzero status no_verdict"
+assert_contains "$OUT" "codex exited non-zero (rc=5)" "codex-nonzero error message contains exit code"
+# Regression Test 7: Prompt contract assertions (explicit closing-marker instruction)
+CAPTURED_PROMPT_FILE="$TEST_TMP/captured-prompt"
+STUB_CAPTURE="$TEST_TMP/eng-prompt-capture"
+cat > "$STUB_CAPTURE" <<'EOF'
+#!/usr/bin/env bash
+cat > "$CAPTURED_PROMPT_FILE"
+PROMPT="$(cat "$CAPTURED_PROMPT_FILE")"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "$end"
+EOF
+chmod +x "$STUB_CAPTURE"
+
+export CAPTURED_PROMPT_FILE
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "prompt-capture stub exits 0"
+
+PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
+begin_marker="$(printf '%s\n' "$PROMPT_CONTENT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end_marker="$(printf '%s\n' "$PROMPT_CONTENT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+
+assert_neq "" "$begin_marker" "begin_marker extracted"
+assert_neq "" "$end_marker" "end_marker extracted"
+
+expected_begin_block="Output your verdict with NO other text, prose, or fences. Its ENTIRE output MUST begin with:
+$begin_marker
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none"
+
+expected_end_block="and its ENTIRE output MUST end with:
+$end_marker"
+
+assert_contains "$PROMPT_CONTENT" "$expected_begin_block" "prompt contains begin-with instruction followed by BEGIN marker"
+assert_contains "$PROMPT_CONTENT" "$expected_end_block" "prompt contains end-with instruction followed by END marker"
+
+suffix_from_end_instr="${PROMPT_CONTENT#*"$expected_end_block"}"
+assert_contains "$suffix_from_end_instr" "Diff under review:" "END-marker instruction appears before Diff under review:"
+
+# Regression Test: multi-line findings containing double quotes/backslashes must produce valid parseable JSON.
+OUT="$(STUB_MODE=quotes DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "quotes stub exits 0"
+node -e 'JSON.parse(process.argv[1])' "$OUT"
+assert_eq "0" "$?" "emitted JSON with multi-line quotes is valid and parseable"
+
 finalize_test
+

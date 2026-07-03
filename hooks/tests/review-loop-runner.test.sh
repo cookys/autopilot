@@ -104,6 +104,14 @@ const valid = {
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 const parsed = parseReviewLoopOutput([
   '{not valid json}',
@@ -144,6 +152,14 @@ const valid = {
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 const parsed = parseReviewLoopOutput([
   'resolver preface',
@@ -203,6 +219,14 @@ const partial = {
   work_domain: 'mixed',
   domain_source: 'none',
   reviewer_qualified: false,
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 try {
   parseReviewLoopOutput(JSON.stringify(partial));
@@ -241,6 +265,14 @@ const invalid = {
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 try {
   parseReviewLoopOutput(JSON.stringify(invalid, null, 2));
@@ -279,6 +311,14 @@ const valid = {
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 const parsed = parseReviewLoopOutput(`${JSON.stringify(valid)}\nlog line with {debug braces}`);
 console.log(parsed.reviewer_engine);
@@ -313,6 +353,14 @@ const valid = {
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":"bad"}`);
@@ -351,6 +399,14 @@ const valid = {
   source: 'test',
   work_domain: 'mixed',
   domain_source: 'none',
+  capability_state_source: 'unknown',
+  quota_status: 'unknown',
+  quota_reset_at: null,
+  skill_mode_requested: 'off',
+  skill_mode_effective: 'off',
+  capability_warnings: [],
+  reviewer_endpoint: '',
+  implementer_endpoint: '',
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":`);

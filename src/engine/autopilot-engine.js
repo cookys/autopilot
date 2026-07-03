@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { isImmutableGitSha } = require('../lib/common');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
@@ -202,9 +203,6 @@ function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
 
-function isImmutableGitSha(value) {
-  return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value);
-}
 
 function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-review-loop-${tempNameSegment(branch)}-${round || 0}-`));

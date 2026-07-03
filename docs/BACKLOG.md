@@ -26,6 +26,34 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Pre-existing full-suite failures: `autopilot-cli` (4) / `review-runner` (4) / `intent-capture-basic-write` (2)
+- **Trigger**: next full-suite-green push, OR next time touching `bin/autopilot.js` dispatch delegation / `src/runners/review.js` / intent-capture session-id fallback.
+- **Context**: classified PRE_EXISTING against develop during the v2.31.10 release (fail identically on the pre-branch base). `autopilot-cli.test.sh` + `review-runner.test.sh` failures are in the dispatch-review-through-CLI stub path (`status/verdict/findings` not parsed — plausibly stale stub fixtures from the v2.31.3 nonce wrapped-block protocol, same class the v2.31.10 sibling-test fixture repairs addressed for other files); `intent-capture-basic-write` canonical-fallback session-id assertions were already noted failing at v2.31.2. Suite otherwise green (89/93 at v2.31.10).
+- **Effort**: Fix
+- **Source**: 2026-07-04 review-closeout L-5.2 full-suite classification (develop-worktree baseline run).
+
+### Contract JSON-schema SSOT for the bash↔JS resolver/runner contracts
+- **Trigger**: the next NEW field added to `resolve-review-loop.sh` (or a second contract-drift incident anywhere) after v2.31.10's round-trip parity tests.
+- **Context**: v2.31.10 closed the 8-field `REVIEW_LOOP_FIELDS` drift and shipped `hooks/tests/contract-parity.test.sh` (real-script round-trip, both drift directions). The 2026-07-04 3-family design panel (codex/agy/grok) unanimously ranked a JSON-schema single source of truth as the LONG-TERM fix but deferred it: parity tests are the cheapest thing that actually stops silent drift; schema SSOT costs bash-side consumption plumbing. grok's sketch: `schemas/*.schema.json` consumed by JS validators + a generator for the field lists.
+- **Effort**: Fix
+- **Source**: 2026-07-04 review-closeout design panel (`docs/projects/2026-07-04-review-closeout/`).
+
+### preflight-portability.sh meta-smoke test
+- **Trigger**: a preflight false-green incident (gate passes while an invariant is actually broken), OR next time adding a check to `preflight-portability.sh`.
+- **Context**: the 17-check gate itself has no test. Panel consensus (2026-07-04): meta-smoke = copy script into a sandbox tree, seed ONE violation (e.g. adapter file with wrong `name:`), assert exit != 0; full per-check decomposition is diminishing returns. Deferred to bound the v2.31.10 release; `dispatch-explore.test.sh` + anthropic mock coverage were the higher-priority gaps and shipped.
+- **Effort**: S
+- **Source**: 2026-07-04 review-closeout design panel Q2.
+
+### dispatch-author.sh `--endpoint` parity with dispatch-hetero/dispatch-review
+- **Trigger**: next time authoring is dispatched to an Anthropic-compatible endpoint (cc-shim) — the flag gap forces a manual `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` export.
+- **Context**: hit live 2026-07-04: grok(-build AND -composer) intermittently returned zero-byte output on ~90-line authoring prompts (capability event recorded), and the MiniMax fallback needed hand-wired env because `dispatch-author.sh` lacks the `--endpoint <name>` flag its two siblings have. One-flag addition + the loader mapping (`resolve-endpoint.sh` → `ANTHROPIC_*`).
+- **Effort**: S
+- **Source**: 2026-07-04 review-closeout /l6 verification-authoring dogfood.
+
+### Per-event opt-in hook multiplexer — REAFFIRMED deferred (see existing entry below)
+- **Trigger**: (unchanged; see the original entry) — reaffirmed by the 2026-07-04 3-family panel: all three families independently said "not now"; the v2.31.10 tail-window read removed the O(n²) pain that was the strongest argument for doing it early. codex's design note for whenever it fires: a shared offset-cache is NOT a safe substitute (one hook advancing a shared cursor makes sibling hooks miss events — it degenerates into the multiplexer anyway).
+- **Source**: 2026-07-04 review-closeout design panel Q3.
+
 ### `autopilot endpoints test <name>` — live auth-roundtrip probe
 - **Trigger**: next time hardening the `endpoints` CLI, OR a user asks "is my GLM/MiniMax token actually working" and `doctor` (which only checks presence + perms, no network) isn't enough.
 - **Context**: the v2.31.8 `endpoints` CLI shipped `init`/`list`/`which`/`set`/`doctor`; the 3-family design panel marked `test <name>` (a tiny live `/v1/messages` roundtrip that verifies auth + prints latency) as **optional** and it was deferred to bound scope (network + real-creds + host-dependent). `doctor` covers "is it configured" but not "does the token authenticate". Reuse `dispatch-anthropic-review.js`'s HTTP client (env-only auth, redacted logs, timeout/body-cap) for a read-only probe; must never print the token; opt-in / no-network-by-default posture like `probe-engine-capability.sh --safe`.

@@ -12,6 +12,7 @@ mkdir -p "$SBX/scripts" \
          "$SBX/agents" \
          "$SBX/references" \
          "$SBX/skills/ceo-agent/references" \
+         "$SBX/skills/dev-flow" \
          "$SBX/skills/quality-pipeline/_base" \
          "$SBX/skills/quality-pipeline/references"
 
@@ -23,6 +24,8 @@ cp "$REPO_ROOT/references/blind-dispatch.md"                          "$SBX/refe
 cp "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"       "$SBX/skills/ceo-agent/references/level-front-door.md"
 cp "$REPO_ROOT/skills/quality-pipeline/_base/prohibited-behaviors.md" "$SBX/skills/quality-pipeline/_base/prohibited-behaviors.md"
 cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md"     "$SBX/skills/quality-pipeline/references/code-review.md"
+cp "$REPO_ROOT/skills/dev-flow/SKILL.md"                              "$SBX/skills/dev-flow/SKILL.md"
+cp "$REPO_ROOT/skills/ceo-agent/SKILL.md"                             "$SBX/skills/ceo-agent/SKILL.md"
 
 SCRIPT="$SBX/scripts/check-canonical-invariants.sh"
 SEVERITY="🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion"

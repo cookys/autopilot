@@ -64,7 +64,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
+json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
 
 die_precondition() {
   printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "raw_log": null, "error": "%s" }\n' \
@@ -171,6 +171,18 @@ fi
 # Fail-closed checks model content, not pseudo-TTY chrome.
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
+# Bounded settle-wait for late-flush
+_elapsed=0
+while [ "$_elapsed" -lt 3000 ]; do
+  if tr -d '\r' < "$RAW_LOG" \
+    | sed '/^Script started on /d; /^Script done on /d' \
+    | grep -q '[^[:space:]]'; then
+    break
+  fi
+  sleep 0.25
+  _elapsed=$((_elapsed + 250))
+done
+
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
   | grep -q '[^[:space:]]'; then

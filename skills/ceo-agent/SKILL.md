@@ -234,13 +234,13 @@ Record all decisions in CEO Report for traceability. No prior approval needed, b
 | Goal change | "WS compression -> delta encoding instead" | Pivot beyond original authorization |
 | Scope expansion | "Need to refactor X first" | Resources exceed estimate |
 | Irreversible ops | Delete files/branches, force-push, drop tables | Cannot undo |
+| Resources 2x+ | Work estimate doubles original | Exceeds implied budget |
 
 **Note on merge as an "irreversible op"**: A `git merge --no-ff` into `develop` (or equivalent
 team-default branch) is considered **within CEO DOA** for L-size workflows when all pre-merge
 gates pass. This is tactical and locally reversible (`git reset --hard`). Merging to `main`
 or force-pushing is NOT within DOA. The forcing function in `autopilot:finish-flow` treats
 merge (L-5.3 / H-9.3) as an autonomous sub-task; CEO does not pause to ask before merging.
-| Resources 2x+ | Work estimate doubles original | Exceeds implied budget |
 
 When encountering these, pause and propose:
 
@@ -329,7 +329,7 @@ TaskCreate: "S-scope-gate: Evaluate scope before every commit"
     - Create project dir + README + INDEX (retroactive)
     - Record prior commits as completed phases
     - Create L-1.6 and L-5 TaskCreates, then continue with L Workflow tracking
-  Mark ONLY when: work complete AND scope stayed S (all YES throughout),
+  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),
   OR L-escalation is complete and project tracking is in place.
 ```
 

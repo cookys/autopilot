@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { bufferToString } = require('../lib/common');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_REVIEW = path.join(REPO_ROOT, 'scripts', 'dispatch-review.sh');
@@ -10,11 +11,6 @@ const REVIEW_RESULT_FIELDS = ['runner', 'model', 'status', 'verdict', 'findings'
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
 
-function bufferToString(value) {
-  if (Buffer.isBuffer(value)) return value.toString('utf8');
-  if (typeof value === 'string') return value;
-  return '';
-}
 
 function validateReviewResult(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {

@@ -179,9 +179,9 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
 #      then work_domain, then domain_source, and the new capability keys — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
-assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys, in order"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint, in order"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"
@@ -421,5 +421,25 @@ JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-claude-exhausted.json" > /dev/null
 L4_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$L4_CFG" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
 assert_eq "[]" "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
+
+# 20. reviewer_endpoint / implementer_endpoint (declarative invoke infra)
+EP_DEFAULT_OUT="$(bash "$SCRIPT")"
+assert_eq "" "$(json_get "$EP_DEFAULT_OUT" reviewer_endpoint)" "default reviewer_endpoint is empty"
+assert_eq "" "$(json_get "$EP_DEFAULT_OUT" implementer_endpoint)" "default implementer_endpoint is empty"
+
+EP_CFG="$TEST_TMP/ep-config.md"
+printf -- '- reviewer_endpoint: glm\n- implementer_endpoint: minimax\n' > "$EP_CFG"
+EP_SET_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EP_CFG" bash "$SCRIPT")"
+assert_eq "glm" "$(json_get "$EP_SET_OUT" reviewer_endpoint)" "reviewer_endpoint read from config"
+assert_eq "minimax" "$(json_get "$EP_SET_OUT" implementer_endpoint)" "implementer_endpoint read from config"
+assert_eq "glm" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EP_CFG" bash "$SCRIPT" --field reviewer_endpoint)" "--field reviewer_endpoint"
+assert_eq "minimax" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EP_CFG" bash "$SCRIPT" --field implementer_endpoint)" "--field implementer_endpoint"
+
+# invalid endpoint name (injection guard) → dropped to empty, stderr warns
+EP_BAD_CFG="$TEST_TMP/ep-bad.md"
+printf -- '- implementer_endpoint: bad;rm -rf\n' > "$EP_BAD_CFG"
+EP_BAD_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EP_BAD_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "" "$(json_get "$EP_BAD_OUT" implementer_endpoint)" "invalid implementer_endpoint dropped to empty"
+node -e 'JSON.parse(require("fs").readFileSync(0))' <<<"$EP_BAD_OUT" >/dev/null 2>&1 && assert_eq ok ok "output still valid JSON after bad endpoint" || fail "bad-endpoint JSON invalid: $EP_BAD_OUT"
 
 finalize_test

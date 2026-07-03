@@ -26,6 +26,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### `dispatch-review.sh` codex path: findings echo-pollution on large diffs + `raw_log:"%s"` unfilled
+- **Trigger**: next time running a `dispatch-review.sh --runner codex` review over a large (≳100KB) whole-diff, OR next time touching its VERDICT/findings parser.
+- **Context**: On a 158KB whole-diff P6 review, codex parroted the prompt back (the JSON `findings` field literally contained `"<one finding per line…>\nDiff under review:\n<the whole diff>"` — the prompt echo, not analysis) and the parser accepted it + emitted a possibly-spurious `verdict`; separately the JSON `raw_log` came out as the unfilled template literal `"%s"`, so the raw codex log path isn't reported. Depth-0 worked around it by running `codex exec` directly with a purpose-built review prompt (clean per-line `SEVERITY | file:line | …` findings). Real defects: (1) the parser must reject a findings body that is a verbatim echo of the diff/prompt (fail-closed `no_verdict`), and (2) `raw_log` printf substitution is broken. Until fixed, whole-diff codex reviews should split the diff or call `codex exec` directly.
+- **Effort**: Fix
+- **Source**: 2026-07-03 engine-capability-state P6 close (`3413755`); the 158KB whole-diff review echo-polluted, re-run via direct `codex exec` converged SHIP-AS-IS over 5 rounds.
+
+
 ### ✅ DONE (2026-07-02, v2.30.2) — `engine implement-review` codex-flag misclassification
 - **Resolution**: Root-caused as PATH ambiguity — the engine runs under nvm's node whose $PATH prepends the nvm bin, where a stale npm-global `@openai/codex` 0.130.0 preceded `~/.local/bin/codex` 0.142.2 and lacks `--dangerously-bypass-hook-trust`. dispatch-hetero.sh now feature-detects the flag in the precondition (fail-loud `precondition_failed` naming path+version) + adds a `--codex-bin` seam; the stale npm codex was removed on the affected machine. e2e verified (`engine implement-review` → `committed` → `converged`). +4 test assertions.
 - **Trigger**: next time using `bin/autopilot.js engine implement-review` with a codex implementer (blocks the whole `/l5`/`/l6` engine impl path); fix before relying on the engine CLI for hetero impl.

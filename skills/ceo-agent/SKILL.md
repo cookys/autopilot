@@ -329,7 +329,7 @@ TaskCreate: "S-scope-gate: Evaluate scope before every commit"
     - Create project dir + README + INDEX (retroactive)
     - Record prior commits as completed phases
     - Create L-1.6 and L-5 TaskCreates, then continue with L Workflow tracking
-  Mark ONLY when: work complete AND scope stayed S (all YES throughout),
+  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),
   OR L-escalation is complete and project tracking is in place.
 ```
 

@@ -137,6 +137,38 @@ check_reference "reviewer→code-review/Invocation" \
   "agents/reviewer.md"                               "code-review.md) Invocation §" \
   "skills/quality-pipeline/references/code-review.md" "## Invocation"
 
+# repeat #3 — S-scope-gate block invariants. Seed the TaskCreate title line, the three
+# indicator lines, and the "Mark this task ONLY when" line across dev-flow and ceo-agent.
+check_repeat "s-scope-gate-title" \
+  'TaskCreate: "S-scope-gate: Evaluate scope before every commit"' \
+  "skills/dev-flow/SKILL.md" \
+  "skills/ceo-agent/SKILL.md"
+
+check_repeat "s-scope-gate-ind1" \
+  '    (1) Fewer than 3 commits on this task so far?' \
+  "skills/dev-flow/SKILL.md" \
+  "skills/ceo-agent/SKILL.md"
+
+check_repeat "s-scope-gate-ind2" \
+  '    (2) Fewer than 3 different modules touched?' \
+  "skills/dev-flow/SKILL.md" \
+  "skills/ceo-agent/SKILL.md"
+
+check_repeat "s-scope-gate-ind3" \
+  '    (3) No features added beyond original goal?' \
+  "skills/dev-flow/SKILL.md" \
+  "skills/ceo-agent/SKILL.md"
+
+check_repeat "s-scope-gate-mark" \
+  '  Mark this task ONLY when: work is complete AND scope stayed S throughout (all YES),' \
+  "skills/dev-flow/SKILL.md" \
+  "skills/ceo-agent/SKILL.md"
+
+# reference #2 — ceo-agent references dev-flow's canonical Scope Completeness Audit heading.
+check_reference "ceo-agent→dev-flow/ScopeCompletenessAudit" \
+  "skills/ceo-agent/SKILL.md" "**Scope Completeness Audit**" \
+  "skills/dev-flow/SKILL.md" "#### Scope Completeness Audit (MANDATORY before phase TaskCreate)"
+
 echo ""
 if [ "$ENV_ERR" = "1" ]; then
   echo "❌ environment error — a seeded path is wrong (fix the seed table)" >&2

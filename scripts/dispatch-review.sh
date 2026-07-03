@@ -226,10 +226,19 @@ emit_no_verdict() {
 PROMPT_FILE="$(mktemp -t dispatch-review-prompt-XXXXXX)"
 RAW_LOG="$(mktemp -t dispatch-review-log-XXXXXX)"
 BLOCK_FILE="$(mktemp -t dispatch-review-block-XXXXXX)"
+CODEX_OUT=""
+CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
-cleanup() { rm -f "$PROMPT_FILE" "$BLOCK_FILE"; [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"; [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"; }
+cleanup() {
+  rm -f "$PROMPT_FILE" "$BLOCK_FILE"
+  [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
+  [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
+  [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
+  [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
+}
 trap cleanup EXIT
+PARSE_INPUT="$RAW_LOG"
 DIFF_SIZE_BYTES="$(wc -c < "$DIFF_FILE")"
 if [ "$DIFF_SIZE_BYTES" -gt 98304 ]; then
   SIZE_WARNING="large diff (${DIFF_SIZE_BYTES} bytes) exceeds 96 KB; large diffs can trigger prompt echo, consider splitting"
@@ -283,10 +292,17 @@ if [[ "$RUNNER" = "codex" ]]; then
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
   # READ-ONLY sandbox: a reviewer never writes/execs, and the diff is untrusted (injection).
   # codex stdout is delivered normally under a pipe.
+  CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
+  CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
   "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
-      -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>&1
+      -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"
   CODEX_RC=$?
+  # JSON-exposed raw_log path must contain the full picture for humans and passive_capture:
+  # stdout content, then the separator, then the stderr content.
+  cat "$CODEX_OUT" > "$RAW_LOG"
+  printf '\n--- codex stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$CODEX_ERR" >> "$RAW_LOG"
   # FAIL-CLOSED on any non-zero codex exit (quota/usage-limit, auth, timeout, bad flag):
   # emit no_verdict and EXIT BEFORE the shared VERDICT parser — same rail as grok/cc-shim.
   # Critical: codex can print a partial `VERDICT: SHIP-AS-IS` then hit a usage limit; letting
@@ -300,6 +316,7 @@ if [[ "$RUNNER" = "codex" ]]; then
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CODEX_RC"
     exit 1
   fi
+  PARSE_INPUT="$CODEX_OUT"
 elif [[ "$RUNNER" = "grok" ]]; then
   GROK_BIN="${BIN:-grok}"
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN"
@@ -336,6 +353,16 @@ elif [[ "$RUNNER" = "grok" ]]; then
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$GROK_RC"
     exit 1
   fi
+
+  # Bounded settle-wait for grok late-flush
+  _elapsed=0
+  while [ "$_elapsed" -lt 3000 ]; do
+    if tr -d '\r' < "$RAW_LOG" | grep -q '[^[:space:]]'; then
+      break
+    fi
+    sleep 0.25
+    _elapsed=$((_elapsed + 250))
+  done
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
@@ -462,7 +489,7 @@ awk -v begin="$BEGIN" -v end="$END" '
     if (!started) { exit 4 }
     if (!ended) { exit 5 }
   }
-' "$RAW_LOG" > "$BLOCK_FILE"
+' "$PARSE_INPUT" > "$BLOCK_FILE"
 PARSE_RC=$?
 if [ "$PARSE_RC" -ne 0 ]; then
   emit_no_verdict "response did not start with the expected wrapped block"

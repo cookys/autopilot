@@ -87,8 +87,8 @@ credential home instead of scattering shell exports: run `load-endpoints-env.sh 
 a mode-600 `~/.autopilot/endpoints.env` stub, fill in `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}`, then
 set `reviewer_endpoint` / `implementer_endpoint` in `.claude/review-loop-config.md` so `/l5`/`/l6`
 pick it up declaratively. Prefer a subscription/coding-plan token over a metered API key; OAuth-login
-runners (codex/agy/grok) need no token. Full guide:
-[`docs/installation.md` § Heterogeneous engine credentials](../../docs/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster).
+runners (codex/agy/grok) need no token. Full guide: `docs/installation.md` §
+"Heterogeneous engine credentials".
 
 ### 6. Verify
 - `ls <target>/.claude/` shows the 9 configs; `<target>/.gitignore` excludes runtime state but NOT

@@ -10,7 +10,22 @@ const path = require('path');
 const fs = require('fs');
 const root = process.argv[2];
 const isScorecard = process.argv[3] === 'true';
-const { validateReviewLoopConfig, REVIEW_LOOP_FIELDS } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
+
+// Extract REVIEW_LOOP_FIELDS from src/engine/resolve-review-loop.js
+const jsPath = path.join(root, 'src', 'engine', 'resolve-review-loop.js');
+const fileContent = fs.readFileSync(jsPath, 'utf8');
+const match = fileContent.match(/const REVIEW_LOOP_FIELDS = \s*\[([\s\S]*?)\];/);
+if (!match) {
+  console.error("Could not find REVIEW_LOOP_FIELDS in resolve-review-loop.js");
+  process.exit(2);
+}
+const REVIEW_LOOP_FIELDS = match[1]
+  .split(',')
+  .map(s => s.trim().replace(/['"]/g, ''))
+  .filter(Boolean);
+
+// Import validateReviewLoopConfig from the module
+const { validateReviewLoopConfig } = require(jsPath);
 
 const stdout = fs.readFileSync(0, 'utf8');
 let parsed;
@@ -60,54 +75,42 @@ JS
 # Case A: Normal resolve and parity validation
 NORMAL_OUT="$("$REPO_ROOT/scripts/resolve-review-loop.sh")"
 EXIT_NORMAL=$?
-assert_eq "0" "$EXIT_NORMAL" "resolve-review-loop exits 0 on normal config"
+assert_eq "$EXIT_NORMAL" "0" "resolve-review-loop exits 0 on normal config"
 
 VALIDATE_NORMAL="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$NORMAL_OUT")"
 EXIT_VALIDATE=$?
-assert_eq "0" "$EXIT_VALIDATE" "JS-side validator accepts normal config and matches fields exactly"
+assert_eq "$EXIT_VALIDATE" "0" "JS-side validator accepts normal config and matches fields exactly"
 assert_contains "$VALIDATE_NORMAL" "parity-ok" "normal validation returns parity-ok"
 
 
 # Case B: --check-scorecard resolve and parity validation
 SCORECARD_OUT="$("$REPO_ROOT/scripts/resolve-review-loop.sh" --check-scorecard)"
 EXIT_SCORECARD=$?
-assert_eq "0" "$EXIT_SCORECARD" "resolve-review-loop exits 0 with --check-scorecard"
+assert_eq "$EXIT_SCORECARD" "0" "resolve-review-loop exits 0 with --check-scorecard"
 
 VALIDATE_SCORECARD="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "true" <<< "$SCORECARD_OUT")"
 EXIT_VALIDATE_SCORECARD=$?
-assert_eq "0" "$EXIT_VALIDATE_SCORECARD" "JS-side validator accepts scorecard config and matches fields exactly"
+assert_eq "$EXIT_VALIDATE_SCORECARD" "0" "JS-side validator accepts scorecard config and matches fields exactly"
 assert_contains "$VALIDATE_SCORECARD" "parity-ok" "scorecard validation returns parity-ok"
 
 
 # Case C: Negative check - unknown key added
-TAMPERED_UNKNOWN="$(node - "$NORMAL_OUT" <<'NODE'
-const fs = require('fs');
-const obj = JSON.parse(fs.readFileSync(0, 'utf8'));
-obj.bogus_key = "unexpected_value";
-console.log(JSON.stringify(obj));
-NODE
-)"
+TAMPERED_UNKNOWN="$(node -e 'const obj = JSON.parse(process.argv[1]); obj.bogus_key = "unexpected_value"; console.log(JSON.stringify(obj));' "$NORMAL_OUT")"
 
 VALIDATE_UNKNOWN="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$TAMPERED_UNKNOWN" 2>&1)"
 EXIT_UNKNOWN=$?
 
-assert_eq "1" "$EXIT_UNKNOWN" "JS-side validator rejects unknown key"
+assert_eq "$EXIT_UNKNOWN" "1" "JS-side validator rejects unknown key"
 assert_contains "$VALIDATE_UNKNOWN" "shell emits keys unknown to JS: bogus_key" "validation error lists bogus_key"
 
 
 # Case D: Negative check - missing key
-TAMPERED_MISSING="$(node - "$NORMAL_OUT" <<'NODE'
-const fs = require('fs');
-const obj = JSON.parse(fs.readFileSync(0, 'utf8'));
-delete obj.reviewer_engine;
-console.log(JSON.stringify(obj));
-NODE
-)"
+TAMPERED_MISSING="$(node -e 'const obj = JSON.parse(process.argv[1]); delete obj.reviewer_engine; console.log(JSON.stringify(obj));' "$NORMAL_OUT")"
 
 VALIDATE_MISSING="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$TAMPERED_MISSING" 2>&1)"
 EXIT_MISSING=$?
 
-assert_eq "1" "$EXIT_MISSING" "JS-side validator rejects missing key"
+assert_eq "$EXIT_MISSING" "1" "JS-side validator rejects missing key"
 assert_contains "$VALIDATE_MISSING" "missing keys in shell output: reviewer_engine" "validation error lists missing reviewer_engine"
 
 finalize_test

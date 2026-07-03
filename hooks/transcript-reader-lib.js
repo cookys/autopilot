@@ -44,26 +44,35 @@ function getTailWindowBytes(env) {
 function readTailWindow(tpath, windowBytes, size) {
   const fd = fs.openSync(tpath, 'r');
   try {
-    const buffer = Buffer.alloc(windowBytes);
     const position = size - windowBytes;
+    const hasPreByte = position > 0;
+    const readLength = hasPreByte ? windowBytes + 1 : windowBytes;
+    const readStart = hasPreByte ? position - 1 : position;
+    const buffer = Buffer.alloc(readLength);
     let bytesRead = 0;
-    while (bytesRead < windowBytes) {
+    while (bytesRead < readLength) {
       const read = fs.readSync(
         fd,
         buffer,
         bytesRead,
-        windowBytes - bytesRead,
-        position + bytesRead
+        readLength - bytesRead,
+        readStart + bytesRead
       );
       if (read === 0) break;
       bytesRead += read;
     }
     const raw = buffer.toString('utf8', 0, bytesRead);
-    const firstNewlineIdx = raw.indexOf('\n');
-    if (firstNewlineIdx !== -1) {
-      return raw.slice(firstNewlineIdx + 1);
+    if (hasPreByte) {
+      if (raw[0] === '\n') {
+        return raw.slice(1);
+      }
+      const firstNewlineIdx = raw.indexOf('\n');
+      if (firstNewlineIdx !== -1) {
+        return raw.slice(firstNewlineIdx + 1);
+      }
+      return '';
     }
-    return '';
+    return raw;
   } finally {
     fs.closeSync(fd);
   }

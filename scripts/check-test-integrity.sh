@@ -25,6 +25,7 @@
 #   The following paths are protected and must not be modified by delegated tasks:
 #   - .qc/**
 #   - scripts/check-test-integrity.sh (this script)
+#   - scripts/lib/test-integrity-l1.py (the extracted Python engine)
 #   - .claude/test-integrity-config.md (project configuration)
 #   - .gitattributes
 

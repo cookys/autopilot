@@ -64,7 +64,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
+json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
 
 die_precondition() {
   printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "raw_log": null, "error": "%s" }\n' \

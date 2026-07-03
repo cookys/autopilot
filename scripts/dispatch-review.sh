@@ -155,7 +155,7 @@ if [[ "$RUNNER" = "anthropic-compatible" ]]; then
   fi
 fi
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
+json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
 
 passive_capture() {
   local status="${1:-}"

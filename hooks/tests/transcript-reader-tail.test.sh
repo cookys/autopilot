@@ -111,4 +111,47 @@ output=$(export AUTOPILOT_TAIL_WINDOW_BYTES=200; node -e "
 ")
 assert_contains "$output" '"tool_name":"Bash"' "found event beyond window via fallback"
 
+# Case 6: Line boundary alignment tail-read (no fallback)
+export CLAUDE_CODE_SESSION_ID="session-boundary"
+output=$(export AUTOPILOT_TAIL_WINDOW_BYTES=200; node -e "
+  const fs = require('fs');
+  const path = require('path');
+  
+  // Spy on fs.readFileSync to detect if fallback occurs
+  const originalRead = fs.readFileSync;
+  let fallbackCalled = false;
+  fs.readFileSync = function(p, opts) {
+    if (p.includes('session-boundary')) {
+      fallbackCalled = true;
+    }
+    return originalRead.call(fs, p, opts);
+  };
+  
+  const reader = require('$HOOKS_DIR/transcript-reader-lib.js');
+  
+  const noise = '{\"type\":\"system\",\"content\":\"' + 'x'.repeat(400) + '\"}\n';
+  const event1 = JSON.stringify({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }] }
+  }) + '\n';
+  const event2 = JSON.stringify({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'res' }] }
+  }) + '\n';
+  
+  // Total size of event1 + event2
+  const eventBytes = Buffer.byteLength(event1 + event2, 'utf8');
+  
+  // We write the file with noise + event1 + event2.
+  fs.writeFileSync('$PROJ_DIR/session-boundary.jsonl', noise + event1 + event2);
+  
+  // Set windowBytes exactly to eventBytes
+  process.env.AUTOPILOT_TAIL_WINDOW_BYTES = String(eventBytes);
+  
+  const ev = reader.readLatestToolEvent({ homedir: '$HOOK_HOME' });
+  console.log(JSON.stringify({ ev, fallbackCalled }));
+")
+assert_contains "$output" '"tool_name":"Bash"' "found event when aligned exactly on boundary"
+assert_contains "$output" '"fallbackCalled":false' "did not fall back to full file read"
+
 finalize_test

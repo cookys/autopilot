@@ -14,6 +14,7 @@ mode: warn
 # without triggering structural review or being denied:
 # - .qc/** (verdict files)
 # - scripts/check-test-integrity.sh (the gate script itself)
+# - scripts/lib/test-integrity-l1.py (the extracted Python engine)
 # - .claude/test-integrity-config.md (the project configuration)
 
 ## Test Paths

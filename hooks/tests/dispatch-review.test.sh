@@ -136,6 +136,14 @@ case "$MODE" in
     echo "FINDINGS: none"
     echo "$END"
     ;;
+  quotes)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo 'line one with "quotes"'
+    echo 'line two with "$RAW_LOG" and \backslash\'
+    echo "$END"
+    ;;
   *)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
@@ -618,6 +626,12 @@ assert_contains "$PROMPT_CONTENT" "$expected_end_block" "prompt contains end-wit
 
 suffix_from_end_instr="${PROMPT_CONTENT#*"$expected_end_block"}"
 assert_contains "$suffix_from_end_instr" "Diff under review:" "END-marker instruction appears before Diff under review:"
+
+# Regression Test: multi-line findings containing double quotes/backslashes must produce valid parseable JSON.
+OUT="$(STUB_MODE=quotes DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "quotes stub exits 0"
+node -e 'JSON.parse(process.argv[1])' "$OUT"
+assert_eq "0" "$?" "emitted JSON with multi-line quotes is valid and parseable"
 
 finalize_test
 

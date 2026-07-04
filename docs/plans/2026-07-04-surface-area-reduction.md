@@ -1,6 +1,6 @@
 # Plan — 表面積精煉（surface-area reduction）
 
-> Status: R1 — MiniMax-M3 對抗審查（3🔴3🟠）已裁決收編，見文末審查紀錄。交 codex 線實作。
+> Status: **CONVERGED R2** — MiniMax-M3 兩輪對抗審查：R1 六發現全數裁決收編，R2 逐條 RESOLVED → SHIP-AS-IS（殘餘三小項已折入）。交 codex 線實作。
 > Size: B 組＝S（一週內）；C 組＝M（一個 sprint）。
 > 憲法級約束（Cookys 2026-07-04 明示）：**`/l3`–`/l6` 等 slash 入口是人類肌肉記憶的
 > invoke 點，一個都不能少** —— 精煉的對象是文件與鏡像的表面積，不是入口、不是功能。
@@ -28,7 +28,7 @@ l6 的「勞務外派信任不外派」）＋粗體 MUST-READ 指向 `level-fron
 l5/l6 長出身體是對原設計的漂移，本項是回歸而非新設計；l3/l4（31/42 行）證明薄殼模式可行。
 驗收（行為探針，非文字斷言 —— R1-F1）：薄殼化後 `/l5`、`/l6` 各實際觸發一次，
 驗證 (a) 它讀了 front-door（transcript 可見）(b) immutable-base／dispatch-author 規則被遵守；
-`validate.sh` 綠；四檔合計 ≤80 行。
+`validate.sh` 綠；四檔 **body** 合計 ≤80 行（frontmatter 不計入 —— R2 殘項 1）。
 
 ### B2. think-tank-dialectic 薄殼化
 同 B1 模式：`/think-tank-dialectic` 入口與 description 保留；350 行身體遷成
@@ -60,7 +60,7 @@ symlink 因 rsync `-L` 出局的判斷維持。本項目標是「單一維護真
 
 ### C1a. Spike（先行、獨立收尾）— codex 安裝源可指向什麼？
 用真 codex CLI 驗三個候選：orphan branch／release artifact／獨立小 repo。
-產出=一頁紀錄（哪個可行＋逐字命令）。**Spike 結論出來前，C1b 不存在**（R1-F3：
+產出=一頁紀錄至 `docs/spikes/2026-07-codex-install-source.md`（哪個可行＋逐字命令；owner=接手的 codex 線 session，於 sprint 首日完成 —— R2 殘項 3）。**Spike 結論出來前，C1b 不存在**（R1-F3：
 上一版把未驗證方案直接寫進驗收，違反本 repo「不驗證不宣稱」—— 已改正）。
 Spike 全滅的誠實出路：維持 committed mirror，本項作廢，改僅追求 B 組。
 
@@ -94,7 +94,8 @@ engine=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
 `preflight-release.sh` 印出兩值＋與上一 release 的差。**軟硬門檻**（R1-F6：無門檻＝theater）：
 prose 較上一版 **+5% 以上 → preflight 輸出 WARNING 並要求 CHANGELOG 寫一行 justification**
 （不阻斷 merge，但缺 justification 時 `check-optin-changelog.js` 式的 release gate 擋）。
-先跑一次抓 baseline 再啟用門檻。
+先跑一次抓 baseline 再啟用門檻。註（R2 殘項 2）：本計畫自身屬大幅下降輪，+5% 門檻是給
+**之後**版本防回胖用的，本輪不會也不該觸發。
 
 ## 5. 審查紀錄（R1 — MiniMax-M3，2026-07-04）
 
@@ -106,3 +107,7 @@ prose 較上一版 **+5% 以上 → preflight 輸出 WARNING 並要求 CHANGELOG
 | F4 指標檔路徑深度／兩處真相 | 🟠 | ✅ 採其替代案（生成副本＋byte-parity gate） | B3 |
 | F5 frontmatter 未知欄跨平台未驗 | 🟠 | ✅ 採（兩步走） | B4 |
 | F6 量測漏巢狀＋無門檻＝theater | 🟠 | ✅ 採（find -type f 去重＋軟硬門檻 +5% justification） | §4 |
+
+**R2（同 reviewer 覆核）**：F1–F6 全數 RESOLVED；兩個 REFUTED 子點經具體辯護後 reviewer 未反駁；
+殘餘 3 小項（行數上限計法、+5% 門檻的本輪例外註記、spike owner/路徑/期限）已折入正文。
+**VERDICT: SHIP-AS-IS**（原文存 session 紀錄）。

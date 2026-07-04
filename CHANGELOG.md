@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.19 — orchestrator economy: capability-tier roles + economy-mode guidance
+
+**Headline**: Absorbs the community "premium orchestrator + tiered workers" pattern (X @diegocabezas01) as two thin slices consistent with autopilot's own routing-axis evidence (capability-tier is one of the three defensible routing keys): routing-table roles **deep-reasoner** (opus/plan — reasoning-dense consults) and **fast-worker** (sonnet/default — mechanical sub-steps), plus a front-door **Economy mode** subsection: when the session model is premium/usage-capped, even `/l3` leaf-dispatches mechanical steps to fast-worker tier and `/l4`+ is preferred — while the depth-0 trust duties (qc, artifact verification, merge authority) are never economized. The heavier parts of the community pattern were deliberately NOT imported (no pinned agent files; the official codex plugin is a BACKLOG spike as a peer-consult channel — static src review done, runtime evaluation gated on a local install).
+
+### Changed
+- `references/model-routing.md` — deep-reasoner + fast-worker rows (canonical; 4 in-skill copies regenerated via `sync-model-routing.sh`).
+- `skills/ceo-agent/references/level-front-door.md` — "Economy mode" subsection.
+- `docs/BACKLOG.md` — codex-plugin peer-consult spike entry (trigger: post-install session).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.18`.
+
 ## v2.31.18 — distill episodic mode + periodic anchors
 
 **Headline**: `distill` gains its second signal source — **episodic mode** (「趁熱把這套流程收下來」): distill the project you JUST finished while the memory is hot, via LLM retrospection (Step 1E four questions: transferable procedure / reworked steps / scripted layers / future executor → checklist granularity) and scarce sourced proposals (Step 2E, ≤3, each MUST cite its source event; optional 2E-quality RED round). Frequency mode covers the cross-week long tail; episodic covers deep hot-memory flows — the two structural blind spots of the ≥3× frequency threshold (once-only methodologies, compound-command rituals) measured in the 2026-07-04 first full scan. Products share the existing Step 3–5 pipeline unchanged (lint → human gate → commit-on-approve → sync; zero downstream regression). Two one-line periodic anchors: finish-flow L-5.6 now asks "did this project produce a transferable methodology?" (learn records lesson-facts, distill produces executable procedures), and /next B-level flags a stale-or-never-run frequency scan (`scan-state.json` mtime > 14d or missing).

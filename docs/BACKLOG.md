@@ -50,6 +50,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S(但 L 待遇 review)
 - **Source**: 2026-07-05 v2.31.18 L-5.2 review(autopilot:reviewer)兩條 Suggestion。
 
+### 官方 codex plugin(openai/codex-plugin-cc)作「同級 consult 通道」的 Spike 評估
+- **Trigger**: Cookys 完成本機安裝(`/plugin marketplace add openai/codex-plugin-cc` → `/plugin install codex@openai-codex` → `/reload-plugins` → `/codex:setup`)後的下一個 session;OR 下次需要輕量 codex consult 而 dispatch rails 顯得過重時。
+- **Context**: 2026-07-05 已做 src 靜態初評(repo 已 clone 讀過,存在性與指令面已驗):指令 `/codex:review`、`/codex:adversarial-review`(有 JSON schema 輸出)、`/codex:rescue [--background] [--model] [--effort]`(經 `codex:codex-rescue` subagent)、`/codex:transfer`(把 Claude session 移植成 codex thread)、status/result/cancel/setup;架構=**app-server broker(結構化協議,天生沒有 stdout 刮取的 late-flush 問題類)**+ 可續傳 codex thread(我們的 dispatch 是無狀態一發)+ 可選 Stop-time review gate hook(900s,與我們 qc-gate 重疊、預期關閉)。定位=**同級 consult(意見進 context)**,與 dispatch rails(勞務出 artifact、worktree 隔離、fail-closed)互補而非替代。Spike 要驗:runtime 穩定性、thread-resume 實用度、rescue 的寫入面(sandbox 預設 read-only,但 fix 流程的逃逸姿態要實測)、與 autopilot hooks 的共存;長線候選:我們的 codex 派遣 rails 改走 app-server 協議(結構化 > 流刮取,2026-07-05 late-flush 戰役的教訓)。
+- **Effort**: S(Spike)
+- **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
+
 ### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
 - **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。
 - **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）。B 組（/l3–/l6＋dialectic 薄殼化、model-routing 去重、skills.md 分層、北極星量測）已於 v2.31.16 出貨 — 憲法級約束維持：**/l3–/l6 等 slash 入口一個都不能少**。C1b=鏡像移出工作樹、`sync-codex-plugin-skills.sh` 改 release 步驟（clean-ref 生成＋checksum＋pre-publish 全驗後才挪指標＋post-publish rollback trigger — gpt-R1-G1 把關順序）。Spike 全滅的誠實出路：維持 committed mirror、本項作廢。完整設計：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md) §2。北極星量測已上線（preflight-release check 8，baseline 於 release 重新 seed）。

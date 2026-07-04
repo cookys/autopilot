@@ -142,9 +142,9 @@ Requires CC v2.1.139+. Full behavior + fallbacks:
 [`references/multi-agent-portability.md` §7](../../references/multi-agent-portability.md).
 For unattended *interval* re-runs (vs converge-until-done), see `project-config-template/loop.md`.
 
-### Terse front-door — `/l3 /l4 /l5` and the dispatched foreman (Claude Code)
+### Terse front-door — `/l3 /l4 /l5 /l6` and the dispatched foreman (Claude Code)
 
-`/l3 /l4 /l5 <goal>` are thin slash-command skills that enter CEO mode with the
+`/l3 /l4 /l5 /l6 <goal>` are thin slash-command skills that enter CEO mode with the
 four startup questions **pre-filled** (OKR from goal; involvement=just-results;
 scope=Hold; no-go=none) and set the execution posture:
 
@@ -154,7 +154,12 @@ scope=Hold; no-go=none) and set the execution posture:
   cap → `TaskStop` + escalate; outcome→action table; merge-back; worktree GC) and
   the **authoritative qc verdict** (depth-0 re-dispatch reading artifacts, distinct
   from the foreman's first-pass qc).
-- **`/l5`** — `/l4` with the implementer leaf-dispatched to agy/Gemini via `dispatch-hetero.sh`.
+- **`/l5`** — `/l4` with the implementer loop run through `bin/autopilot.js engine
+  implement-review` (internally `dispatch-hetero.sh`; engine/runner resolved from
+  `scripts/resolve-review-loop.sh`, never hardcoded).
+- **`/l6`** — `/l5` with verification AUTHORING also leaf-dispatched to a heterogeneous
+  engine (different family than the implementer, via the `dispatch-author.sh` raw-prompt
+  rail); depth-0 keeps merge authority and the authoritative qc.
 
 Overrides: `-x <csv>` (no-go), `--expand` (scope), `--solo` (autonomy without offload
 — also the degradation fallback when the foreman can't start). Full semantics
@@ -241,6 +246,9 @@ team-default branch) is considered **within CEO DOA** for L-size workflows when 
 gates pass. This is tactical and locally reversible (`git reset --hard`). Merging to `main`
 or force-pushing is NOT within DOA. The forcing function in `autopilot:finish-flow` treats
 merge (L-5.3 / H-9.3) as an autonomous sub-task; CEO does not pause to ask before merging.
+Deleting an **already-merged** feature branch during finish-flow cleanup (L-5.7 / F.5 /
+H-9.5 — merged-status verified first) is likewise within CEO DOA; the "Delete
+files/branches" escalation row above covers unmerged or protected branches.
 
 When encountering these, pause and propose:
 
@@ -279,9 +287,11 @@ When encountering these, pause and propose:
       README scope boundary reflects this coverage. Historical rationale: scope holes
       cannot be recovered by the L-5 forcing function — a phase plan that correctly
       executes an incomplete scope still ships incomplete work.
-   f. TaskCreate phase tasks (P0..PN) AND the parent "L-5: Invoke autopilot:finish-flow"
-      closing task. The parent task is the forcing function for L-5 completion and is
-      NON-OPTIONAL — missing it = failed L-1 gate.
+   f. TaskCreate phase tasks (P0..PN) AND both dev-flow parent forcing-function tasks:
+      "L-1.6: Skill routing — invoke required skills for all affected code areas" and
+      "L-5: Invoke autopilot:finish-flow". The parent tasks are the forcing functions
+      for skill routing and L-5 completion and are NON-OPTIONAL — missing either =
+      failed L-1 gate.
    CEO mode does NOT exempt project setup. "I'll track it mentally" is NOT acceptable.
 4. IF H-size:
    a. Create hotfix branch (`hotfix/<description>`).

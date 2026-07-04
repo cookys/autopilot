@@ -7,11 +7,11 @@ set -eu
 # We exclude PLAN.md, DECISIONS.md, and adjudication.jsonl since the agent creates them
 # (and might mention 2.3.0 as the old version in the plan/decisions).
 old_version_check=0
-if [ -z "$(git grep "2\.3\.0" 2>/dev/null | grep -vE "PLAN.md|DECISIONS.md|adjudication.jsonl" || true)" ]; then
+if [ -z "$(git grep "2\.3\.0" 2>/dev/null | grep -vE "PLAN.md|DECISIONS.md|adjudication.jsonl|oracle.sh" || true)" ]; then
   old_version_check=1
 else
   echo "Fail reason: The old version 2.3.0 still exists in tracked files:" >&2
-  git grep "2\.3\.0" 2>/dev/null | grep -vE "PLAN.md|DECISIONS.md|adjudication.jsonl" >&2
+  git grep "2\.3\.0" 2>/dev/null | grep -vE "PLAN.md|DECISIONS.md|adjudication.jsonl|oracle.sh" >&2
 fi
 
 # (b) All four sites contain 2.3.1

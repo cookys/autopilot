@@ -1,6 +1,6 @@
 # Plan — 表面積精煉（surface-area reduction）
 
-> Status: **CONVERGED（雙家）** — MiniMax-M3 兩輪 SHIP-AS-IS ＋ gpt-5.5 兩輪 SHIP-AS-IS（R2：G1–G5 全 RESOLVED、零新發現）。交 codex 線實作。
+> Status: **B 組 ✅ Shipped in v2.31.16 — merged as `b940209` (2026-07-04)**；C 組（C1a Spike → C1b 鏡像改生成、C2 multiplexer）留存 BACKLOG。原審查紀錄：MiniMax-M3 兩輪 SHIP-AS-IS ＋ gpt-5.5 兩輪 SHIP-AS-IS。
 > Size: B 組＝S（一週內）；C 組＝M（一個 sprint）。
 > 憲法級約束（Cookys 2026-07-04 明示）：**`/l3`–`/l6` 等 slash 入口是人類肌肉記憶的
 > invoke 點，一個都不能少** —— 精煉的對象是文件與鏡像的表面積，不是入口、不是功能。

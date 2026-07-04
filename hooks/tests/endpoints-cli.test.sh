@@ -211,12 +211,12 @@ assert_contains "$err_json" '"outcome":"auth_failed"' "test auth_failed --json c
 assert_not_contains "$err_json" "invalid-token" "test auth_failed --json does not leak token"
 
 # Test timeout path
-timeout_out="$(env AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay 2>&1)"; ec=$?
+timeout_out="$(AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay 2>&1)"; ec=$?
 assert_exit_code "$ec" 1 "test timeout exits 1"
 assert_contains "$timeout_out" "network_failed" "test timeout prints network_failed"
 assert_not_contains "$timeout_out" "delay-token" "test timeout does not leak token"
 
-timeout_json="$(env AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay --json 2>&1)"; ec=$?
+timeout_json="$(AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay --json 2>&1)"; ec=$?
 assert_exit_code "$ec" 1 "test timeout --json exits 1"
 assert_contains "$timeout_json" '"outcome":"network_failed"' "test timeout --json contains outcome:network_failed"
 assert_not_contains "$timeout_json" "delay-token" "test timeout --json does not leak token"

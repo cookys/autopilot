@@ -17,3 +17,8 @@ OUT: schema SSOT / multiplexer / domain routing (triggers not fired); distill li
 
 ## BACKLOG trigger accounting
 endpoints-test + author-endpoint + late-flush triggers FIRED this session; overlay refinement + meta-smoke batched by Board discretion (2026-07-04 "CEO 判斷能處理的就派掉").
+
+## Outcome
+All KRs delivered. Highlight: sonnet ON-arm 2/2 oracles with full adherence after the
+runner-permissions root-cause fix — campaign gate OPEN (see quality-floor pilot addendum).
+qc panel round: 5 findings fixed+verified, 5 refuted with evidence.

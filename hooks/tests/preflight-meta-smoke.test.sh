@@ -109,8 +109,9 @@ assert_neq "0" "$FAIL_EXIT" "preflight-portability exits nonzero when a violatio
 # Assert the failure names the seeded check: ".agents/skills adapter targets CARRY their name: invariant"
 assert_contains "$FAIL_OUT" "✗ .agents/skills adapter targets CARRY their name: invariant" "failure output names the seeded check"
 
-# 4. Restore the file manually
+# 4. Restore the file manually and verify byte-identical BEFORE discarding the backup
 cp "$BACKUP_FILE" "$TARGET_FILE"
+cmp -s "$TARGET_FILE" "$BACKUP_FILE" || fail "restore mismatch vs backup"
 rm -f "$BACKUP_FILE"
 
 # 5. Restore proof: byte-identical restore == pre-test state (a full rerun is the slow path)

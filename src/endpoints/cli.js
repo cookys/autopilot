@@ -369,6 +369,9 @@ const req = transport.request(
         console.log(JSON.stringify({ outcome: 'ok', latency, status: 0 }));
       } else if (statusCode === 401 || statusCode === 403) {
         console.log(JSON.stringify({ outcome: 'auth_failed', latency, status: 1 }));
+      } else if (statusCode === 408 || statusCode === 429 || statusCode >= 500) {
+        // Retryable / server-side conditions are NOT credential failures
+        console.log(JSON.stringify({ outcome: 'network_failed', http_status: statusCode, latency, status: 1 }));
       } else {
         console.log(JSON.stringify({ outcome: 'auth_failed', http_status: statusCode, latency, status: 1 }));
       }

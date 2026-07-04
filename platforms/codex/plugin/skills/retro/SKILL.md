@@ -53,7 +53,7 @@ Parse commit message prefixes (case-insensitive):
 - Everything else → Other
 
 ### Focus Score
-- Group commits by top-level directory (`src/games/`, `src/network/`, `doc/`, etc.)
+- Group commits by top-level directory (`src/games/`, `src/network/`, `docs/`, etc.)
 - Focus score = % of commits in the single most-changed directory
 - >60% = focused, 40-60% = balanced, <40% = scattered
 

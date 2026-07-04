@@ -10,6 +10,8 @@ description: >
 
 # Quality Pipeline (Unified Quality Gate)
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer pre-merge gate failures over manual debugging).
+
 **Pipeline is a dispatcher. Each step follows its reference doc.**
 
 ## Project Config (auto-injected)

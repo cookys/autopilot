@@ -23,8 +23,8 @@ Before dispatching an Agent, determine the role and look up model + mode:
 | Role | Model | Mode | Rationale |
 |------|-------|------|-----------|
 | **planner** | sonnet | plan | Analysis tasks: sonnet ≥ opus accuracy, -34% cost |
-| **reviewer** | sonnet | plan | 100% accuracy on review tasks in benchmark |
-| **debugger** | sonnet | plan | 100% accuracy on debug tasks in benchmark |
+| **reviewer** | opus | plan | Safety-critical gate: headroom over cost (2026-04 parity benchmark is stale — see Evidence); matches agents/reviewer.md frontmatter |
+| **debugger** | opus | plan | Same headroom rationale as reviewer; matches agents/debugger.md frontmatter |
 | **implementer** | opus | default | Needs full tool access + deep reasoning |
 | **test-runner** | haiku | default | Execution-focused, speed priority |
 | **researcher** | sonnet | default | Web search + synthesis, needs tools |
@@ -62,6 +62,16 @@ Based on benchmark (2026-04-13, 90 runs, 10 real cases, 6 providers):
 - Runtime constraint (mode:"plan") achieves 95-100% compliance
 - Model strength doesn't affect boundary violation rate
 - Cost: opus $0.115 → sonnet $0.074 → haiku $0.037 per run
+
+**Staleness note (2026-07-05 audit)**: the 2026-04-13 benchmark predates the current
+model generation, its raw per-task artifacts were never checked in (only this summary
+survives), and its own numbers disagree (the old table rows said "100%", this block says
+97% vs 88%, the v2.6.0 CHANGELOG says 94-98% "model choice barely matters"). Treat it as
+historical parity-at-best evidence, not a live ranking. reviewer/debugger are therefore
+routed to **opus for headroom on the safety-critical gate** (owner decision; sonnet
+remains a valid cost-arbitrage override via `.claude/model-routing-config.md`). For
+fresh reviewer evidence, run the live instrument instead: `scripts/engine-qualify.sh`
+over `evals/known-bad/` (false-pass-on-critical is the metric that matters).
 
 ---
 

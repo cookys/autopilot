@@ -9,6 +9,8 @@ description: >
 
 # Next — Work Recommender Engine
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer backlog scanning over strategic prioritization debate).
+
 Scan all work sources, present categorized results, converge to a single recommendation.
 
 ## Project Config (auto-injected)
@@ -45,16 +47,16 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 
 | Category | Source | Method |
 |----------|--------|--------|
-| **Dev** | `doc/projects/INDEX.md` | Find in-progress projects' next Phase |
-| | `doc/plans/INDEX.md` | Find plans in design stage |
-| | `doc/BACKLOG.md` | Check if trigger conditions are met |
-| | `doc/proposals/` | List pending proposals |
+| **Dev** | `docs/projects/INDEX.md` | Find in-progress projects' next Phase |
+| | `docs/plans/INDEX.md` | Find plans in design stage |
+| | `docs/BACKLOG.md` | Check if trigger conditions are met |
+| | `docs/proposals/` | List pending proposals |
 | **Maintenance** | `improvement-queue.json` | Pending items (from Phase 0) |
 | | [B] `skills/*/SKILL.md` | Skills > 200 lines |
 | | [B] MEMORY.md | > 170 lines |
 | **Knowledge** | `session-digests/` | Phase 0 results |
 | | [B] `knowledge/*.md` | `last-verified` > 30 days |
-| **Tech Debt** | `doc/BACKLOG.md` tech-debt | List all (even unmet triggers) |
+| **Tech Debt** | `docs/BACKLOG.md` tech-debt | List all (even unmet triggers) |
 | | [C] `src/` | TODO/FIXME count |
 | | [C] `git log --since="30 days ago"` | Untouched src/ subdirectories |
 

@@ -24,6 +24,31 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.0 — handoff skill + audit-decision batch: routing tiebreaks, opus reviewer, density scaling
+
+**Headline**: The 2026-07-05 dual-family skills audit (573 real sessions of transcripts mined; Claude fan-out + codex/gpt-5.5 decorrelated track) lands as a decision batch. New **`handoff` skill** (skill #28) — the single biggest transcript-evidenced gap: the user hand-drove the "寫 handoff → /clear → resume" ritual 91 times; the skill standardizes a 7-section resume doc (write + resume modes, proactive offer rule), complementing the machine-snapshot `session-handoff` hook (which had never been enabled — it is opt-in via `handoff_inject`). Reviewer/debugger routing reconciles to **opus** (the "100% accuracy" sonnet benchmark turned out ceremonial: no raw artifacts, two model generations stale, self-contradictory 100%-vs-97/88-vs-94-98; runtime paths disagreed — resolve-dispatch said sonnet while agent frontmatter ran opus). `resolve-review-loop.sh` gains **tier-scaled verification density** (`--scale-by-capability` / `density_scaling`): a low/unknown-capability implementer fail-closed gets +2 review rounds (cap 7, never below the user base), ≥2 review families, and L1 required — the lift campaigns' core lesson (mechanical contracts move behavior; prose doesn't) applied to the under-served cc-shim/weak-implementer path. Plus: `references/routing-tiebreaks.md` (6 documented ambiguity tiebreaks), the `doc/`→`docs/` default-path sweep to zero, two load-bearing rules (verifier isolation, panel aggregation) now pinned by canonical-invariant seeds (negative-tested), and /l6's depth-0 context-discipline hard rule written down.
+
+prose-justification: +1 new skill body (85 lines) + a canonical tiebreak reference + audit-driven doc reconciliation across 25 files; engine lines also rise (density scaling + 6 test cases + 3 invariant seeds).
+
+### Added
+- `skills/handoff/SKILL.md` — mid-work context-pressure handoff (write + resume modes, 7-section template: 目標/現況/已決事項/下一步/驗證方式/Read-order/陷阱; proactive offer rule). Implemented by Gemini 3.5 Flash (High) via the /l6 hetero pipeline, reviewed by gpt-5.5 xhigh.
+- `references/routing-tiebreaks.md` — canonical tiebreaks for 6 skill-routing ambiguities (ceo-agent/l3 "get it done" [found independently by BOTH audit families], audit/doc-sync, survey/think-tank, debug/test-strategy/quality-pipeline flaky 3-way, ceo-agent/research-to-ship, next/think-tank) + one-line pointers in 11 skill bodies (frontmatter `description:` untouched — routing-compat).
+- `resolve-review-loop.sh` `--scale-by-capability` flag + `density_scaling: on|off` config key — implementer capability tier from `engine-scorecard.js`; low/unknown ⇒ fail-closed density bump; default output byte-identical; +6 test cases. Implemented by Gemini 3.1 Pro (High), reviewed by gpt-5.5 (3 rounds, all findings fixed incl. the cap-never-lowers-user-base clamp).
+- 3 canonical-invariant `check_reference` seeds: reviewer→blind-dispatch/VerifierIsolation, code-review→blind-dispatch/VerifierIsolation, level-front-door→code-review/PanelAggregation — all negative-tested (seed FIRES on broken anchor).
+
+### Changed
+- **reviewer/debugger route to opus** (was sonnet) in `references/model-routing.md` + `resolve-dispatch.sh` DEFAULTS — reconciles with `agents/{reviewer,debugger}.md` frontmatter (opus since v2.4.0); Evidence section gains a staleness note pointing at `engine-qualify.sh` + `evals/known-bad/` as the live re-qualification instrument. Owner decision: safety-critical gate gets headroom over cost; sonnet stays a valid project-config override.
+- `doc/` → `docs/` default-path sweep across all skills (next, dev-flow, finish-flow, quality-pipeline, retro, project-lifecycle refs, phase0-hygiene) — `/next` in a `docs/`-convention repo (this one, PEACE) previously scanned `doc/projects/INDEX.md` and silently found nothing.
+- `skills/l6/SKILL.md` + `full-dispatch-pipeline.md` — depth-0 context-discipline hard rule: depth-0 never authors impl/verification content inline; even verification-prompt authoring is dispatched.
+- ceo-agent front-door section: `/l6` added (was omitted), `/l5` bullet corrected to the `engine implement-review` path.
+
+### Fixed
+- Severity table row order in `code-review.md` (Suggestion was listed above Minor, inverting the canonical 🔴🟠🟡🔵 order — main table fixed pre-release, the classification-guide table in the release merge); dev-flow stale "6 more discrete pending tasks" → 7; finish-flow L-5.5 internal `doc/`/`docs/` mix; ceo-agent step 3f now names the mandatory L-1.6 parent forcing-function task; ceo-agent DOA note carves out merged-branch cleanup (L-5.7/F.5/H-9.5) — resolves the contradiction with finish-flow:121.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. Note: the audit's first doc-fix batch landed as pre-release develop commits (`955f6bf` merged at `9ace4e7`) — reverting the release merge does not undo those; revert `9ace4e7` separately if needed.
+- User-side (post-marketplace): `/plugin update autopilot @v2.31.16`
+
 ## v2.31.16 — surface-area reduction B group: thin shells, one routing truth, north-star gate
 
 **Headline**: The prose surface starts shrinking without losing a single entry point. `/l3`–`/l6` become thin shells (4 bodies: 120→79 lines; frontmatter byte-identical so routing cannot shift) with level-specific long-form moved to per-level references (`skills/l5/references/hetero-impl-loop.md`, `skills/l6/references/full-dispatch-pipeline.md`); `/think-tank-dialectic`'s 337-line body migrates to `skills/think-tank/references/dialectic-mode.md` (entry + escalation judgment untouched). `references/model-routing.md` becomes the single maintenance truth — the four in-skill copies turn out to have been *symlinks* (exactly the rsync `-L`-divorced form the plan ruled out) and are now generated real files with a byte-parity pre-commit gate. A new re-runnable LLM release gate proves the wiring: all five entries headless-probed, evidence = Read-tool artifacts in the transcript, never model self-report. Constitutional constraint honored: every slash entry survives.

@@ -460,4 +460,61 @@ EP_BAD_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EP_BAD_CFG" bash "$SCRIPT" 2>/dev/nu
 assert_eq "" "$(json_get "$EP_BAD_OUT" implementer_endpoint)" "invalid implementer_endpoint dropped to empty"
 node -e 'JSON.parse(require("fs").readFileSync(0))' <<<"$EP_BAD_OUT" >/dev/null 2>&1 && assert_eq ok ok "output still valid JSON after bad endpoint" || fail "bad-endpoint JSON invalid: $EP_BAD_OUT"
 
+# 21. Default verification density scaling (feature off)
+DENS_OFF_OUT="$(bash "$SCRIPT")"
+assert_not_contains "$DENS_OFF_OUT" "capability_tier" "feature off -> no capability_tier"
+assert_not_contains "$DENS_OFF_OUT" "density_scaled" "feature off -> no density_scaled"
+assert_not_contains "$DENS_OFF_OUT" "density_source" "feature off -> no density_source"
+assert_eq "5" "$(json_get "$DENS_OFF_OUT" loop_max_rounds)" "feature off -> max rounds unchanged"
+assert_eq "2" "$(bash "$SCRIPT" --field capability_tier >/dev/null 2>&1; echo $?)" "capability_tier field fails when feature off"
+
+# 22. --scale-by-capability with no implementer row -> unknown tier, fail-closed scaling
+DENS_UNK_STORE="$TEST_TMP/dens-unk"
+mkdir -p "$DENS_UNK_STORE"
+DENS_UNK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability)"
+assert_eq "unknown" "$(json_get "$DENS_UNK_OUT" capability_tier)" "no implementer row -> unknown tier"
+assert_eq "true" "$(json_get "$DENS_UNK_OUT" density_scaled)" "unknown tier -> density_scaled true"
+assert_eq "flag" "$(json_get "$DENS_UNK_OUT" density_source)" "source is flag"
+assert_eq "7" "$(json_get "$DENS_UNK_OUT" loop_max_rounds)" "bumped max rounds (+2 default 5 = 7)"
+assert_eq "2" "$(json_get "$DENS_UNK_OUT" required_review_families)" "bumped review families to 2"
+assert_eq "true" "$(json_get "$DENS_UNK_OUT" l1_required)" "l1_required is true"
+assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field capability_tier)" "field capability_tier unknown"
+
+# 23. --scale-by-capability with qualified implementer row -> high tier, no scaling
+DENS_HIGH_STORE="$TEST_TMP/dens-high"
+mkdir -p "$DENS_HIGH_STORE"
+RECIMPL_HIGH_JSON="$DENS_HIGH_STORE/rec.json"
+cat > "$RECIMPL_HIGH_JSON" <<'JSON'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
+DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability)"
+assert_eq "high" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "qualified implementer -> high tier"
+assert_eq "false" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "high tier -> density_scaled false"
+assert_eq "5" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "high tier -> max rounds unchanged"
+assert_eq "1" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "high tier -> required_review_families unchanged"
+assert_eq "false" "$(json_get "$DENS_HIGH_OUT" l1_required)" "high tier -> l1_required unchanged"
+
+# 24. Config density_scaling: on -> scales via config (unknown tier)
+DENS_CFG="$TEST_TMP/dens-on.md"
+printf -- '- density_scaling: on\n' > "$DENS_CFG"
+DENS_CFG_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT")"
+assert_eq "unknown" "$(json_get "$DENS_CFG_OUT" capability_tier)" "config on -> unknown tier"
+assert_eq "true" "$(json_get "$DENS_CFG_OUT" density_scaled)" "config on -> scaled"
+assert_eq "config" "$(json_get "$DENS_CFG_OUT" density_source)" "source is config"
+assert_eq "7" "$(json_get "$DENS_CFG_OUT" loop_max_rounds)" "max rounds scaled"
+
+# 25. Config density_scaling: garbage -> feature off
+DENS_GARBAGE_CFG="$TEST_TMP/dens-garbage.md"
+printf -- '- density_scaling: banana\n' > "$DENS_GARBAGE_CFG"
+DENS_GARBAGE_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_GARBAGE_CFG" bash "$SCRIPT")"
+assert_not_contains "$DENS_GARBAGE_OUT" "capability_tier" "garbage config -> feature off"
+assert_not_contains "$DENS_GARBAGE_OUT" "density_scaled" "garbage config -> feature off"
+
+# 26. Cap max rounds bump to 7
+DENS_CAP_CFG="$TEST_TMP/dens-cap.md"
+printf -- '- loop_max_rounds: 6\n- density_scaling: on\n' > "$DENS_CAP_CFG"
+DENS_CAP_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_CAP_CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT")"
+assert_eq "7" "$(json_get "$DENS_CAP_OUT" loop_max_rounds)" "max rounds bumped from 6 to cap 7"
+
 finalize_test

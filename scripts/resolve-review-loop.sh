@@ -11,6 +11,7 @@
 #   Risk inputs (optional): --source-trust high|low --diff-lines N --protected-path 0|1
 #     --oracle-available 0|1 --security-surface 0|1  (drive deterministic review_risk)
 #   --check-scorecard  # include scorecard gate signal in output (opt-in, no extra keys by default)
+#   --scale-by-capability  # config: density_scaling (on|off). Increase verification density for low/unknown capability tier implementers (fail-closed). Evidence: campaign R1/R2 proved mechanical contracts move behavior.
 #   --enforce  # OPT-IN hard gate: exit 3 (still emits JSON/field) when the policy says BLOCK
 #              # — a high-risk change whose required cross-family decorrelation is unsatisfied.
 #              # Default (no --enforce) stays exit-0 data mode like resolve-doa/resolve-qc-gate;
@@ -81,6 +82,7 @@ ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
 ENFORCE=0
 CHECK_SCORECARD=0
+SCALE_BY_CAPABILITY=0
 DWORK_DOMAIN="mixed"
 DOMAIN_SOURCE="none"
 AUTO_DOMAIN=0
@@ -123,7 +125,8 @@ while [[ $# -gt 0 ]]; do
       ;;
     --check-scorecard) CHECK_SCORECARD=1; shift ;;
     --enforce) ENFORCE=1; shift ;;
-    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
+    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -192,6 +195,9 @@ HARNESS="$(read_field independent_harness "$DEF_HARNESS")"
 QC_PANEL_RAW="$(read_field qc_panel "$DEF_QC_PANEL")"
 QC_AGG="$(read_field qc_panel_aggregation "$DEF_QC_AGG")"
 DIFF_SCOPE="$(read_field review_diff_scope "$DEF_DIFF_SCOPE")"
+
+DENSITY_SCALING_CFG="$(read_field density_scaling "off")"
+case "$DENSITY_SCALING_CFG" in on|off) ;; *) DENSITY_SCALING_CFG="off" ;; esac
 
 # Map an engine name → vendor family (for the decorrelation overlap warning).
 family_of() {
@@ -286,10 +292,63 @@ else
   L1_REQUIRED="false"
 fi
 
+DENSITY_SOURCE="off"
+if [[ "$SCALE_BY_CAPABILITY" -eq 1 ]]; then
+  DENSITY_SOURCE="flag"
+elif [[ "$DENSITY_SCALING_CFG" == "on" ]]; then
+  DENSITY_SOURCE="config"
+fi
+
+CAPABILITY_TIER="unknown"
+DENSITY_SCALED="false"
+
+if [[ "$DENSITY_SOURCE" != "off" ]]; then
+  SCORECARD_IMPL="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role implementer 2>/dev/null || true)"
+  if [[ -n "$SCORECARD_IMPL" ]]; then
+    IMPL_TIER="$(printf '%s' "$SCORECARD_IMPL" | node -e '
+const fs = require("fs");
+const engine = process.argv[1];
+const runner = process.argv[2];
+const raw = fs.readFileSync(0, "utf8").trim();
+if (!raw) process.exit(0);
+let rows;
+try { rows = JSON.parse(raw); } catch { process.exit(0); }
+if (!Array.isArray(rows)) process.exit(0);
+let found = false;
+for (const row of rows) {
+  if (row && String(row.engine) === String(engine) && (String(runner) === "auto" || String(row.runner) === String(runner)) && typeof row.status === "string") {
+    if (row.status === "qualified") {
+      process.stdout.write("high");
+    } else {
+      process.stdout.write("low");
+    }
+    found = true;
+    break;
+  }
+}
+if (!found) process.stdout.write("unknown");
+' "$IMPL_ENGINE" "$IMPL_RUNNER" || true)"
+    if [[ -n "$IMPL_TIER" ]]; then
+      CAPABILITY_TIER="$IMPL_TIER"
+    fi
+  fi
+
+  if [[ "$CAPABILITY_TIER" == "low" || "$CAPABILITY_TIER" == "unknown" ]]; then
+    DENSITY_SCALED="true"
+    # Scale +2 capped at 7, but NEVER below the user-configured base — density
+    # scaling only ever increases verification density (round-3 review finding).
+    BASE_ROUNDS="$MAX_ROUNDS"
+    MAX_ROUNDS=$(( MAX_ROUNDS + 2 ))
+    [[ "$MAX_ROUNDS" -gt 7 ]] && MAX_ROUNDS=$(( BASE_ROUNDS > 7 ? BASE_ROUNDS : 7 ))
+    [[ "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]] && REQUIRED_REVIEW_FAMILIES=2
+    L1_REQUIRED="true"
+  fi
+fi
+
 # Cross-family review is required whenever L2 review runs (a non-empty panel) AND always at
-# high risk — an EMPTY panel at high risk is itself a violation (no reviewers at all, let alone
+# high risk (or scaled density) — an EMPTY panel at high risk is itself a violation (no reviewers at all, let alone
 # cross-family), so it must be required+unsatisfied so --enforce blocks it (gpt-5.5 round-2).
-if [[ ${#QC_PANEL[@]} -gt 0 || "$REVIEW_RISK" == "high" ]]; then
+if [[ ${#QC_PANEL[@]} -gt 0 || "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAMILIES" -ge 2 ]]; then
   CROSS_FAMILY_REQUIRED="true"
 else
   CROSS_FAMILY_REQUIRED="false"
@@ -302,7 +361,7 @@ fi
 
 if [[ "$CROSS_FAMILY_REQUIRED" == "true" && "$CROSS_FAMILY_SATISFIED" == "false" ]]; then
   _cross_severity="WARNING"
-  [[ "$REVIEW_RISK" == "high" ]] && _cross_severity="ERROR"
+  [[ "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAMILIES" -ge 2 ]] && _cross_severity="ERROR"
   printf 'resolve-review-loop: %s — cross-family: qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$_cross_severity" "$IMPL_FAMILY" >&2
 fi
 
@@ -314,7 +373,7 @@ fi
 # JSON / --field is still emitted so the gate also gets the data; only the exit code differs.
 ENFORCE_EXIT=0
 if [[ "$ENFORCE" == "1" && "$CROSS_FAMILY_REQUIRED" == "true" \
-      && "$CROSS_FAMILY_SATISFIED" == "false" && "$REVIEW_RISK" == "high" ]]; then
+      && "$CROSS_FAMILY_SATISFIED" == "false" && ( "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAMILIES" -ge 2 ) ]]; then
   ENFORCE_EXIT=3
 fi
 
@@ -414,7 +473,7 @@ for (const row of rows) {
   if (
     row &&
     String(row.engine) === String(engine) &&
-    String(row.runner) === String(runner) &&
+    (String(runner) === "auto" || String(row.runner) === String(runner)) &&
     typeof row.status === "string"
   ) {
     process.stdout.write(row.status);
@@ -666,6 +725,8 @@ console.log(JSON.stringify(warnings));
   fi
 fi
 
+
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;
@@ -705,6 +766,27 @@ if [[ -n "$FIELD" ]]; then
     source) printf '%s\n' "$SOURCE" ;;
     work_domain) printf '%s\n' "$DWORK_DOMAIN" ;;
     domain_source) printf '%s\n' "$DOMAIN_SOURCE" ;;
+    capability_tier)
+      if [[ "$DENSITY_SOURCE" == "off" ]]; then
+        echo "unknown field: capability_tier (feature off)" >&2
+        exit 2
+      fi
+      printf '%s\n' "$CAPABILITY_TIER"
+      ;;
+    density_scaled)
+      if [[ "$DENSITY_SOURCE" == "off" ]]; then
+        echo "unknown field: density_scaled (feature off)" >&2
+        exit 2
+      fi
+      printf '%s\n' "$DENSITY_SCALED"
+      ;;
+    density_source)
+      if [[ "$DENSITY_SOURCE" == "off" ]]; then
+        echo "unknown field: density_source (feature off)" >&2
+        exit 2
+      fi
+      printf '%s\n' "$DENSITY_SOURCE"
+      ;;
     capability_state_source) printf '%s\n' "$CAP_STATE_SOURCE" ;;
     quota_status) printf '%s\n' "$CAP_QUOTA_STATUS" ;;
     quota_reset_at)
@@ -725,8 +807,15 @@ if [[ -n "$FIELD" ]]; then
   exit "$ENFORCE_EXIT"
 fi
 
+FMT_SUFFIX=" }\n"
+ARGS_SUFFIX=()
+if [[ "$DENSITY_SOURCE" != "off" ]]; then
+  FMT_SUFFIX=", \"capability_tier\": \"%s\", \"density_scaled\": %s, \"density_source\": \"%s\" }\n"
+  ARGS_SUFFIX=("$CAPABILITY_TIER" "$DENSITY_SCALED" "$DENSITY_SOURCE")
+fi
+
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s" }\n' \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s"'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -734,15 +823,15 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s" }\n' \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s"'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

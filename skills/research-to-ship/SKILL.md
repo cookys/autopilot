@@ -12,6 +12,8 @@ description: >
 
 # research-to-ship — a topic → researched, reviewed, shipped
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer human-gated pipelines over full autonomy).
+
 A **pinned** chain that fixes the *sequence* and the *human gates*; the real work is delegated to
 existing autopilot skills. It exists because that exact sequence (best-practice research → plan →
 **always** a dialectic loop → project → dev-flow) is a recurring ritual worth one command instead of

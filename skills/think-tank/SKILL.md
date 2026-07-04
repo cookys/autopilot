@@ -10,6 +10,8 @@ description: >
 
 # Think Tank — Multi-Role Decision Brief
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer internal priority debate over external research).
+
 ## Dispatch Chains (auto-injected)
 !`cat .claude/dispatch-config.md 2>/dev/null || true`
 

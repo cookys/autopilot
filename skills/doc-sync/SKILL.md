@@ -14,6 +14,8 @@ description: >
 
 # Doc-Sync (Doc↔Code Drift Audit)
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer prose doc alignment over implementation parity).
+
 **A dispatcher + methodology for detecting documentation that no longer matches the code.**
 Report-only: it finds drift and grades it; it does **not** edit. You triage and fix per the
 policy below. Docs silently rot as code changes — this makes the rot visible on demand.

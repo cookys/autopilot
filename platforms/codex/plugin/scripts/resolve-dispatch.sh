@@ -102,8 +102,8 @@ fi
 # Default table — keep in sync with references/model-routing.md
 declare -A DEFAULTS
 DEFAULTS[planner]='{"model":"sonnet","mode":"plan","agent":"autopilot:planner"}'
-DEFAULTS[reviewer]='{"model":"sonnet","mode":"plan","agent":"autopilot:reviewer"}'
-DEFAULTS[debugger]='{"model":"sonnet","mode":"plan","agent":"autopilot:debugger"}'
+DEFAULTS[reviewer]='{"model":"opus","mode":"plan","agent":"autopilot:reviewer"}'
+DEFAULTS[debugger]='{"model":"opus","mode":"plan","agent":"autopilot:debugger"}'
 DEFAULTS[implementer]='{"model":"opus","mode":"default","agent":""}'
 DEFAULTS[test-runner]='{"model":"haiku","mode":"default","agent":""}'
 DEFAULTS[researcher]='{"model":"sonnet","mode":"default","agent":""}'

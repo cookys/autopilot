@@ -56,7 +56,7 @@ approve <N> / reject <N> / skip all
 | `skill-gap` | Confirm skill is truly unused; if so, record reminder in knowledge |
 | `repeated-error` | Analyze error pattern; if worth persisting, invoke `autopilot:learn` |
 
-**Backlog bridging**: If an approved item is M-size or larger (not a quick fix), add it to `doc/BACKLOG.md`:
+**Backlog bridging**: If an approved item is M-size or larger (not a quick fix), add it to `docs/BACKLOG.md`:
 ```markdown
 ### [Auto-detected] <title>
 - **Source**: improvement-queue <type>

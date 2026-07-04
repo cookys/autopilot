@@ -10,6 +10,8 @@ description: >
 
 # Survey -- Technology Research
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer external evidence research over internal priority debate).
+
 Two independent agents (researcher + skeptic) search in parallel, bringing different perspectives to avoid anchoring bias and recency bias.
 
 ## Trigger

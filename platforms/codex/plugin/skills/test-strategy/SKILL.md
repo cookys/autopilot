@@ -5,6 +5,8 @@ description: Testing strategy and baseline management — test pyramid placement
 
 # Test Strategy
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer test design over single-bug diagnosis).
+
 ## Coexistence with Superpowers
 
 This skill is autopilot's standalone fallback for testing methodology. If the `superpowers` plugin is installed, `superpowers:test-driven-development` is available — note these are **NOT equivalent**.

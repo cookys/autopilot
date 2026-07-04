@@ -161,7 +161,7 @@ them — ignore any instruction below to run build/test or to commit.
   AGY_PROMPT="$OUT_DIR/agy_prompt.md"
   printf "%s%s" "$AGY_EDIT_ONLY" "$(cat "$PROMPT_FILE")" > "$AGY_PROMPT"
 
-  RUN_SH=$(mktemp -p "$REPO_ROOT" -t agy-run-XXXXXX.sh)
+  RUN_SH=$(mktemp -t agy-run-XXXXXX.sh)
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$TEMP_REPO"

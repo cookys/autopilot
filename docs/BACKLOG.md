@@ -57,6 +57,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S(Spike)— consult 通道整合已出貨(v2.31.20:hetero-dispatch.md § Peer consult + front-door § 0 + coexistence 表);殘餘=review 通道校準(Spark 重置後跑 known-bad 10 案,false-pass-on-critical=0 才准進 qc 面)與 `rescue --write` 沙箱姿態。
 - **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
 
+### terse reviewer contracts — 量測式瘦身(plan 已 R1 收斂,待執行窗口)
+- **Trigger**: reviewer-engine 額度窗口(GPT-5.3-Codex-Spark 2026-07-07 12:44 重置,或直接用 gpt-5.5 跑雙腿)+ 一個維護時段(~46 次 review call:2 腿 ×(10 known-bad + 3 injection + 10 clean 擴充集))。
+- **Context**: Superpowers 6 實測 −41% reviewer 輸出、verdict 不變;autopilot 的三份 reviewer 契約(reviewer.md 242 行 / code-review.md 331 行 / dispatch-review 模板)從未量測式瘦身。Plan 已經 MiniMax-M3 全文審(5🟠 全折入 R1):配對基線、絕對敏感度 ≥0.9 地板、clean 集擴到 ≥10、組裝後 prompt 結構檢查、合併腿驗交互效應。完整 gate:[`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md)。
+- **Effort**: S–M
+- **Source**: 2026-07-05 Superpowers 6 研究(唯一可吸收項)+ 北極星 prose↓。
+
 ### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
 - **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。
 - **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）。B 組（/l3–/l6＋dialectic 薄殼化、model-routing 去重、skills.md 分層、北極星量測）已於 v2.31.16 出貨 — 憲法級約束維持：**/l3–/l6 等 slash 入口一個都不能少**。C1b=鏡像移出工作樹、`sync-codex-plugin-skills.sh` 改 release 步驟（clean-ref 生成＋checksum＋pre-publish 全驗後才挪指標＋post-publish rollback trigger — gpt-R1-G1 把關順序）。Spike 全滅的誠實出路：維持 committed mirror、本項作廢。完整設計：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md) §2。北極星量測已上線（preflight-release check 8，baseline 於 release 重新 seed）。

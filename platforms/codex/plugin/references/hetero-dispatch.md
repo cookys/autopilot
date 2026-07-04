@@ -70,6 +70,34 @@ Full per-runner usage recipes (incl. the cc-shim env setup and which models are 
 The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
 decorrelation overlap check.
 
+## Peer consult — the codex plugin channel (Claude Code only, capability-gated)
+
+When the official OpenAI codex plugin (`openai/codex-plugin-cc`) is installed AND the
+host is Claude Code, a THIRD posture exists alongside write-rails and review-rails:
+**peer consult** — a quick, repo-grounded second opinion that lands as advice in
+context, not as a verified artifact.
+
+- Channels: the `codex:codex-rescue` subagent via the Agent tool, or
+  `codex-companion.mjs task --model <m> --effort <e>` directly. Both ride a shared
+  app-server broker (structured protocol — no stdout scraping, no late-flush class;
+  threads are resumable across calls).
+- Measured profile (first-round spike, 2026-07-05, small-n): a repo-grounded
+  technical assessment returned in ~9s vs ~50s–5min for an equivalent question
+  through `dispatch-author.sh`/`dispatch-explore.sh`. Use it when the deliverable is
+  an OPINION (design sanity check, "am I missing a failure mode", second diagnosis
+  pass) and latency matters.
+- **Trust boundary (non-negotiable)**: consult output is ADVICE — it never
+  substitutes qc@depth-0, artifact verification, or the decorrelated review rails.
+  Labor (implementation, harness authoring) stays on the write/authoring rails with
+  worktree isolation and artifact verification.
+- **The plugin's own review channel is NOT integrated** (`/codex:review` is
+  model-locked to GPT-5.3-Codex-Spark with no --model flag, and has not passed the
+  `evals/known-bad` calibration bar) — see the BACKLOG entry for the gate. Keep the
+  plugin's stop-time review gate DISABLED (it overlaps autopilot's pre-push qc-gate).
+- Degradation: plugin absent / non-CC host → fall back to `dispatch-explore.sh`
+  (repo-grounded answer with read-probe) or `dispatch-author.sh` (raw authoring
+  prompt). The consult posture is optional leverage, never a dependency.
+
 ## Reading the repo — [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh)
 
 `dispatch-hetero.sh` (write) and `dispatch-review.sh` (review a diff fed as **text**) both **avoid** letting the engine read the worktree. The opposite posture — you *want* a hetero engine to **read the real repo** and answer grounded (capability discovery, broad-context review, "what does this codebase actually do") — is [`scripts/dispatch-explore.sh`](../scripts/dispatch-explore.sh). The repo is trusted here; reading it is the point.

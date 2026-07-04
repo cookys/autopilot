@@ -1,0 +1,21 @@
+
+=== PER-TASK ON-VS-OFF OUTCOMES ===
+Task ID              | Arm  | Runs  | Oracle Pass Rate  | Decoy Respected  | Fidelity OK  
+---------------------+ -----+ ------+ ------------------+ -----------------+ -------------
+t6-version-bump      | ON   | 5     | 60.0% (3/5)       | -                | -            
+t6-version-bump      | OFF  | 5     | 60.0% (3/5)       | -                | -            
+t2-extract-verbatim  | ON   | 5     | 80.0% (4/5)       | -                | 80.0% (4/5)  
+t2-extract-verbatim  | OFF  | 5     | 0.0% (0/5)        | -                | 0.0% (0/5)   
+t7-config-rename     | ON   | 5     | 60.0% (3/5)       | -                | -            
+t7-config-rename     | OFF  | 5     | 60.0% (3/5)       | -                | -            
+t8-log-redaction     | ON   | 5     | 60.0% (3/5)       | -                | -            
+t8-log-redaction     | OFF  | 5     | 60.0% (3/5)       | -                | -            
+
+=== ADHERENCE REPORT ===
+Arm  | Total Runs  | Adjudication Valid  | Patterns Named  | Probe Evidence Present  
+-----+ ------------+ --------------------+ ----------------+ ------------------------
+ON   | 20          | 0.0% (0/20)         | 65.0% (13/20)   | 0.0% (0/20)             
+OFF  | 20          | 0.0% (0/20)         | 0.0% (0/20)     | 0.0% (0/20)             
+
+Honest footer: pilot n is tiny — pipeline validation, not lift evidence.
+

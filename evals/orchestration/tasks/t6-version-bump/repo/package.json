@@ -1,0 +1,9 @@
+{
+  "name": "simple-cli",
+  "version": "2.3.0",
+  "description": "A small CLI project",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node tests/index.test.js"
+  }
+}

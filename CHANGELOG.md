@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.18 — distill episodic mode + periodic anchors
+
+**Headline**: `distill` gains its second signal source — **episodic mode** (「趁熱把這套流程收下來」): distill the project you JUST finished while the memory is hot, via LLM retrospection (Step 1E four questions: transferable procedure / reworked steps / scripted layers / future executor → checklist granularity) and scarce sourced proposals (Step 2E, ≤3, each MUST cite its source event; optional 2E-quality RED round). Frequency mode covers the cross-week long tail; episodic covers deep hot-memory flows — the two structural blind spots of the ≥3× frequency threshold (once-only methodologies, compound-command rituals) measured in the 2026-07-04 first full scan. Products share the existing Step 3–5 pipeline unchanged (lint → human gate → commit-on-approve → sync; zero downstream regression). Two one-line periodic anchors: finish-flow L-5.6 now asks "did this project produce a transferable methodology?" (learn records lesson-facts, distill produces executable procedures), and /next B-level flags a stale-or-never-run frequency scan (`scan-state.json` mtime > 14d or missing).
+
+### Changed
+- `skills/distill/SKILL.md` — Episodic mode section (1E/2E/2E-quality); description gains episodic trigger phrases (ADD-only — existing routing text byte-preserved).
+- `skills/finish-flow/SKILL.md` — L-5.6 episodic-distill evaluation question.
+- `skills/next/SKILL.md` — B-level scan-state age/missing check.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.17`.
+
 ## v2.31.17 — dispatch late-flush fix: content-driven output quiescence
 
 **Headline**: The `empty_output` misclassification that three times marked a successful hetero dispatch as failed (real answer flushed into the raw log after the runner frontend exited — delays 0.3s to minutes vs the fixed 3s/10s settle sleeps) is fixed. New `scripts/lib/output-quiescence.sh`: content-driven wait — size stable ~1s (`AUTOPILOT_STABLE_POLLS`, widened from 500ms after review flagged chunked writers) ⇒ settled; still empty after a bounded 10s grace (`AUTOPILOT_EMPTY_GRACE_MS`) ⇒ honest empty, without paying the 60s deadline (`AUTOPILOT_SETTLE_MS`); deadline caps drip-writers. The obvious fd-holder approach was tried first and **falsified live**: a sandboxed `codex exec` worker is invisible to both `/proc` fd scans and `pgrep` while still writing — no process-based signal exists, so the wait is purely content-driven (and thereby portable). `dispatch-author.sh` (all runners) + `dispatch-review.sh` codex/grok/cc-shim capture paths wired; codex branches gain the missing `timeout` wrap (parity with grok/cc-shim). Fail-closed classification and all JSON contracts unchanged.

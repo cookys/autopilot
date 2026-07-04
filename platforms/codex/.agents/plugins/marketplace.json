@@ -10,7 +10,7 @@
         "source": "local",
         "path": "./plugin"
       },
-      "version": "2.31.17",
+      "version": "2.31.18",
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"

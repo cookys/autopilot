@@ -20,6 +20,8 @@
 # - If the size is > 0 but growing, we reset stable_count and keep polling.
 # - If the file remains empty (size == 0) and the elapsed time reaches a bounded grace
 #   period (grace_ms, default 10000ms), we return 0 (honest empty, does not pay the full deadline).
+#   Precedence for grace_ms is: env var AUTOPILOT_EMPTY_GRACE_MS (operator override) > caller's 3rd arg (per-runner default) > 10000.
+#   Per-runner defaults exist because the cc-shim runner's flush profile is empirically slower than codex.
 # - If elapsed reaches deadline_ms, we return 1 (caller proceeds with its check anyway).
 #
 # Note: whitespace-only content counts as "content" for stability purposes but will still
@@ -32,7 +34,7 @@ wait_output_quiescent() {
   local target="${1:-}"
   local deadline_ms="${2:-0}"
 
-  local grace_ms="${AUTOPILOT_EMPTY_GRACE_MS:-10000}"
+  local grace_ms="${AUTOPILOT_EMPTY_GRACE_MS:-${3:-10000}}"
   local stable_polls="${AUTOPILOT_STABLE_POLLS:-4}"
   local elapsed=0
   local prev_size=-1

@@ -405,7 +405,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
       bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
       _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>&1
   CCSHIM_RC=$?
-  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \

@@ -12,6 +12,9 @@ SCRIPT="$REPO_ROOT/scripts/preflight-portability.sh"
 # already executed FOR REAL at every release (finish-flow) and in CI drift gates.
 # This meta-smoke (does the gate FAIL on a seeded violation?) is an operator/CI-nightly
 # tool: run with PREFLIGHT_META_FULL=1.
+# RECOVERY: case 2 perturbs skills/dev-flow/SKILL.md in-place (trap-restored). If the
+# process is SIGKILLed inside that window, the tracked file is left modified — visible in
+# `git status`; recover with: git checkout skills/dev-flow/SKILL.md
 if [ "${PREFLIGHT_META_FULL:-0}" != "1" ]; then
   echo "SKIP [preflight-meta-smoke] set PREFLIGHT_META_FULL=1 to run (slow; not load-safe)"
   finalize_test

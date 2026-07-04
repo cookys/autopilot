@@ -71,7 +71,7 @@ function main() {
     process.exit(2);
   }
 
-  const baseDir = process.env.REPO_ROOT || '/tmp/hetero-feat-qc2-w1b-mD56XI';
+  const baseDir = process.env.REPO_ROOT || '/tmp/hetero-feat-qc2-1b2-HJG8mr';
   let eventsPath = path.join(baseDir, 'docs/projects', project, 'tree/events.jsonl');
   if (!fs.existsSync(eventsPath)) {
     eventsPath = path.join(baseDir, 'docs/projects/_archive', project, 'tree/events.jsonl');

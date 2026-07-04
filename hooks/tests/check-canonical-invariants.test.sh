@@ -14,7 +14,10 @@ mkdir -p "$SBX/scripts" \
          "$SBX/skills/ceo-agent/references" \
          "$SBX/skills/dev-flow" \
          "$SBX/skills/quality-pipeline/_base" \
-         "$SBX/skills/quality-pipeline/references"
+         "$SBX/skills/quality-pipeline/references" \
+         "$SBX/skills/dev-flow/references" \
+         "$SBX/skills/survey/references" \
+         "$SBX/skills/think-tank/references"
 
 cp "$REPO_ROOT/scripts/check-canonical-invariants.sh" "$SBX/scripts/"
 # Mirror every seeded file at its real relative path.
@@ -26,6 +29,10 @@ cp "$REPO_ROOT/skills/quality-pipeline/_base/prohibited-behaviors.md" "$SBX/skil
 cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md"     "$SBX/skills/quality-pipeline/references/code-review.md"
 cp "$REPO_ROOT/skills/dev-flow/SKILL.md"                              "$SBX/skills/dev-flow/SKILL.md"
 cp "$REPO_ROOT/skills/ceo-agent/SKILL.md"                             "$SBX/skills/ceo-agent/SKILL.md"
+cp "$REPO_ROOT/references/model-routing.md"                           "$SBX/references/model-routing.md"
+for c in dev-flow quality-pipeline survey think-tank; do
+  cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/$c/references/model-routing.md"
+done
 
 SCRIPT="$SBX/scripts/check-canonical-invariants.sh"
 SEVERITY="🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion"
@@ -88,6 +95,38 @@ OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "reference-superset-rename exit code"
 assert_contains "$OUT" "lost the referenced heading" "reference-superset-rename names the structural break"
 cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md" "$SBX/skills/quality-pipeline/references/code-review.md"
+
+# 5c. mirror negative: hand-edit ONE generated copy → exit 1 naming it + the fix ritual
+echo "<!-- hand edit -->" >> "$SBX/skills/survey/references/model-routing.md"
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "mirror-hand-edit exit code"
+assert_contains "$OUT" "out of byte-parity" "mirror-hand-edit names the drift"
+assert_contains "$OUT" "sync-model-routing.sh" "mirror-hand-edit points at the sync script"
+cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/survey/references/model-routing.md"
+
+# 5d. mirror negative: a copy that is a symlink (even if content-identical) → exit 1
+rm "$SBX/skills/survey/references/model-routing.md"
+ln -s ../../../references/model-routing.md "$SBX/skills/survey/references/model-routing.md"
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "mirror-symlink exit code"
+assert_contains "$OUT" "symlink" "mirror-symlink names the violation"
+rm "$SBX/skills/survey/references/model-routing.md"
+cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/survey/references/model-routing.md"
+
+# 5e. lint negative: relative markdown link in the canonical → exit 1
+#     (copies resolve ../ at different depths; canonical must stay repo-root-stable)
+echo "see [other](../docs/foo.md)" >> "$SBX/references/model-routing.md"
+# keep copies byte-equal so ONLY the lint fires, not the mirror check
+for c in dev-flow quality-pipeline survey think-tank; do
+  cp "$SBX/references/model-routing.md" "$SBX/skills/$c/references/model-routing.md"
+done
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "relative-link lint exit code"
+assert_contains "$OUT" "relative markdown links" "relative-link lint names the violation"
+cp "$REPO_ROOT/references/model-routing.md" "$SBX/references/model-routing.md"
+for c in dev-flow quality-pipeline survey think-tank; do
+  cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/$c/references/model-routing.md"
+done
 
 # 6. environment error: a seeded path missing → exit 2 (distinct from a broken invariant)
 rm "$SBX/agents/reviewer.md"

@@ -26,6 +26,8 @@ Before dispatching an Agent, determine the role and look up model + mode:
 | **reviewer** | sonnet | plan | 100% accuracy on review tasks in benchmark |
 | **debugger** | sonnet | plan | 100% accuracy on debug tasks in benchmark |
 | **implementer** | opus | default | Needs full tool access + deep reasoning |
+| **deep-reasoner** | opus | plan | Reasoning-dense consults: architecture, complex debugging analysis, algorithm design — returns actionable conclusions to the orchestrator (capability-tier routing; 2026-07 orchestrator-economy absorption) |
+| **fast-worker** | sonnet | default | Mechanical sub-steps: boilerplate, bulk edits, formatting, test scaffolding — burns worker-tier tokens instead of the (possibly premium/capped) session model |
 | **test-runner** | haiku | default | Execution-focused, speed priority |
 | **researcher** | sonnet | default | Web search + synthesis, needs tools |
 | **think-tank-role** | sonnet | plan | Analysis only, no implementation |

@@ -54,8 +54,14 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Trigger**: ~~安裝後首 session~~ **已引燃並完成首輪 Spike(2026-07-05,安裝當 session)**。殘餘驗證的 trigger:GPT-5.3-Codex-Spark 額度重置(2026-07-07 12:44)後測 `/codex:review` 通道(review 子命令**鎖 Spark、無 --model 旗標** — 額度死時整條 review 通道不可用,錯誤呈現誠實不給假 verdict);以及下次需要 write-path 時測 `rescue --write` 的沙箱姿態。
 - **Context**: 2026-07-05 已做 src 靜態初評(repo 已 clone 讀過,存在性與指令面已驗):指令 `/codex:review`、`/codex:adversarial-review`(有 JSON schema 輸出)、`/codex:rescue [--background] [--model] [--effort]`(經 `codex:codex-rescue` subagent)、`/codex:transfer`(把 Claude session 移植成 codex thread)、status/result/cancel/setup;架構=**app-server broker(結構化協議,天生沒有 stdout 刮取的 late-flush 問題類)**+ 可續傳 codex thread(我們的 dispatch 是無狀態一發)+ 可選 Stop-time review gate hook(900s,與我們 qc-gate 重疊、預期關閉)。定位=**同級 consult(意見進 context)**,與 dispatch rails(勞務出 artifact、worktree 隔離、fail-closed)互補而非替代。Spike 要驗:runtime 穩定性、thread-resume 實用度、rescue 的寫入面(sandbox 預設 read-only,但 fix 流程的逃逸姿態要實測)、與 autopilot hooks 的共存;長線候選:我們的 codex 派遣 rails 改走 app-server 協議(結構化 > 流刮取,2026-07-05 late-flush 戰役的教訓)。
 - **首輪 Spike 結果(2026-07-05)**: setup 全綠(ChatGPT auth、advanced runtime);**task/consult 通道(--model gpt-5.5)9 秒完成一次 repo-grounded 技術評估**(真讀檔、結論正確 — 獨立覆核了 output-quiescence 4-poll 決策),對照 dispatch rails 同類 50s–5min:**consult 類明顯勝**(無 echo 協議、無捕獲刮取、thread 可續)。勞務類(實作+artifact 驗證)仍屬 rails。安裝副作用:在 cwd repo 寫入 `.claude/settings.json`(enabledPlugins)— 已加 .gitignore。review gate 預設關,維持關(與 qc-gate 重疊)。
-- **Effort**: S(Spike)
+- **Effort**: S(Spike)— consult 通道整合已出貨(v2.31.20:hetero-dispatch.md § Peer consult + front-door § 0 + coexistence 表);殘餘=review 通道校準(Spark 重置後跑 known-bad 10 案,false-pass-on-critical=0 才准進 qc 面)與 `rescue --write` 沙箱姿態。
 - **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
+
+### terse reviewer contracts — 量測式瘦身(plan 已 R1 收斂,待執行窗口)
+- **Trigger**: reviewer-engine 額度窗口(GPT-5.3-Codex-Spark 2026-07-07 12:44 重置,或直接用 gpt-5.5 跑雙腿)+ 一個維護時段(~46 次 review call:2 腿 ×(10 known-bad + 3 injection + 10 clean 擴充集))。
+- **Context**: Superpowers 6 實測 −41% reviewer 輸出、verdict 不變;autopilot 的三份 reviewer 契約(reviewer.md 242 行 / code-review.md 331 行 / dispatch-review 模板)從未量測式瘦身。Plan 已經 MiniMax-M3 全文審(5🟠 全折入 R1):配對基線、絕對敏感度 ≥0.9 地板、clean 集擴到 ≥10、組裝後 prompt 結構檢查、合併腿驗交互效應。完整 gate:[`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md)。
+- **Effort**: S–M
+- **Source**: 2026-07-05 Superpowers 6 研究(唯一可吸收項)+ 北極星 prose↓。
 
 ### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
 - **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。

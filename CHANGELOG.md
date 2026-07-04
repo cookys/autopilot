@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.20 — codex-plugin consult channel integrated (capability-gated) + terse-contracts 開案
+
+**Headline**: The official OpenAI codex plugin's **consult channel** becomes a first-class, capability-gated option on Claude Code hosts: `references/hetero-dispatch.md` gains a "Peer consult" posture (measured spike: ~9s repo-grounded second opinion vs ~50s–5min through the authoring/explore rails; shared app-server broker — structured protocol, resumable threads), the front-door depth-0 loop gains a §0 consult note (ADVICE only — never substitutes qc@depth-0/artifact verification/merge authority), and `docs/coexistence.md` gains the full coexistence table (review channel NOT integrated — Spark-locked + uncalibrated, gated on the known-bad bar; plugin stop-gate stays disabled — one authoritative gate). Portable degradation to `dispatch-explore/author` when the plugin is absent. Also 開案: `docs/plans/2026-07-05-terse-reviewer-contracts.md` (the one absorbable item from the Superpowers 6 study) — measured contract slimming with a paired known-bad gate, R1 after a MiniMax-M3 full-text review folded five 🟠 findings (absolute sensitivity floor, ≥10 clean-diff set, assembled-prompt structural check, combined-leg interaction test, invariant seeds).
+
+### Changed
+- `references/hetero-dispatch.md` — § Peer consult (third posture; trust boundary + degradation).
+- `skills/ceo-agent/references/level-front-door.md` — § 0. Peer consult (optional, CC+plugin only).
+- `docs/coexistence.md` — Codex Plugin Coexistence table (5 surfaces).
+- `docs/BACKLOG.md` — spike entry updated (consult shipped; review-channel calibration gate remains); terse-contracts execution entry added.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.19`.
+
 ## v2.31.19 — orchestrator economy: capability-tier roles + economy-mode guidance
 
 **Headline**: Absorbs the community "premium orchestrator + tiered workers" pattern (X @diegocabezas01) as two thin slices consistent with autopilot's own routing-axis evidence (capability-tier is one of the three defensible routing keys): routing-table roles **deep-reasoner** (opus/plan — reasoning-dense consults) and **fast-worker** (sonnet/default — mechanical sub-steps), plus a front-door **Economy mode** subsection: when the session model is premium/usage-capped, even `/l3` leaf-dispatches mechanical steps to fast-worker tier and `/l4`+ is preferred — while the depth-0 trust duties (qc, artifact verification, merge authority) are never economized. The heavier parts of the community pattern were deliberately NOT imported (no pinned agent files; the official codex plugin is a BACKLOG spike as a peer-consult channel — static src review done, runtime evaluation gated on a local install).

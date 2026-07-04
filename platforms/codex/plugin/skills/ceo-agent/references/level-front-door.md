@@ -242,6 +242,14 @@ The control loop is enforced at **depth 0** — the child cannot be trusted to
 police its own budget (fox/henhouse, Round-2 Ops 🔴 fix). The CEO wraps the
 foreman dispatch in a guard it owns:
 
+### 0. Peer consult (optional, Claude Code + codex plugin only)
+
+For quick second opinions during depth-0 judgment (design sanity, alternative
+diagnosis, "what am I missing"), the `codex:codex-rescue` subagent is a ~seconds-class
+repo-grounded consult channel (see `references/hetero-dispatch.md` § Peer consult).
+It is ADVICE only: it never substitutes qc@depth-0 (§3), artifact verification, or
+merge authority, and it is absent on non-CC hosts — never a dependency of the loop.
+
 ### 1. Budget cap (rounds + wall-clock — v1 only)
 
 - Pick a wall-clock deadline and a round cap before dispatch (a small fixed

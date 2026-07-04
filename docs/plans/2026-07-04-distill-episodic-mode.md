@@ -1,6 +1,6 @@
 # Plan — distill 情節模式（episodic mode）＋ 定期呼叫整合
 
-> Status: R0 draft — Fable 5 起草，交 codex 線實作（依 coexistence 協定：報告不動手）。
+> Status: ✅ Shipped in v2.31.18 — merged as `362f7d5` (2026-07-05, /l6)。
 > Size: S–M（distill SKILL.md 擴一節 ＋ finish-flow/next 各一行整合；無新腳本、無新 skill → PATCH）。
 > Source: 2026-07-04 首次 /distill 全量掃描的實驗結論 ＋ 同期五個手寫 skill 的情節式蒸餾實戰。
 

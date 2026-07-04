@@ -8,12 +8,12 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-07-05 | [distill-episodic](2026-07-05-distill-episodic/README.md) — episodic mode + finish-flow/next periodic anchors | v2.31.18 | `feat/v2.31.18-distill-episodic` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-07-05 | [distill-episodic](_archive/2026-07-05-distill-episodic/README.md) — **distill episodic mode**: Step 1E/2E/2E-quality second signal source (hot-memory project retrospection, sourced ≤3 proposals) sharing Step 3–5 unchanged; finish-flow L-5.6 evaluation question + /next B-level stale-scan check; description ADD-only (byte-preservation reviewer-verified). /l6: agy impl, MiniMax fidelity check, gpt-5.5 + reviewer L-5.2 zero-blocking | v2.31.18 | `362f7d5` | [plan](../plans/2026-07-04-distill-episodic-mode.md) |
 | 2026-07-05 | late-flush-fix — **dispatch late-flush `empty_output` misclassification fixed** (content-driven quiescence lib; fd/pgrep falsified against sandboxed codex worker; honest-empty negative control; codex branches timeout-wrapped). Fix-size, no project dir — trail in [ongoing-maintenance](ongoing-maintenance/2026-07.md) | v2.31.17 | `7776625` | [CHANGELOG](../../CHANGELOG.md) |
 | 2026-07-04 | [surface-area-reduction-b](_archive/2026-07-04-surface-area-reduction-b/README.md) — **surface-area B group**: /l3–/l6 thin-shelled (bodies 120→79, frontmatter byte-identical) + per-level references + 5-entry slash-probe release gate (Read-artifact evidence, all live-green); dialectic body → think-tank/references/dialectic-mode.md; model-routing single truth (4 symlink copies → generated real files + byte-parity gate); docs/skills.md 3-tier; north-star prose/engine gate in preflight-release (baseline prose=10544 engine=3185). 2-round reviewer loop → SHIP-AS-IS | v2.31.16 | `b940209` | [plan](../plans/2026-07-04-surface-area-reduction.md) |
 | 2026-07-04 | [campaign-r2](_archive/2026-07-04-campaign-r2/README.md) — **procedure-lift PERFECT separation after clean re-run** (t2: ON 5/5 vs OFF 0/5; cumulative 8/8 vs 0/8, p≈0.0001); 3 new relatable tasks (t6/t7/t8, real-incident provenance) are haiku-ceiling both arms. CORRECTION note in CHANGELOG: 15 runs auth-killed by a mid-campaign relogin were first mis-scored as failures — caught by a duration sanity sweep, re-run clean; the original "attention-slip → L0" reading withdrawn. | v2.31.15 | `c094c3b` | [report](_archive/2026-07-04-campaign-r2/r2-report.md) |

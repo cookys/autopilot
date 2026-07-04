@@ -1,1 +1,2 @@
 {"schema_version":1,"ts":"2026-07-04T12:09:45Z","node":"root","type":"tree_initialized","proj":"2026-07-04-campaign-r2"}
+{"schema_version":1,"ts":"2026-07-04T13:42:30Z","node":"root","type":"node_verdict","verdict":"pass","evidence":"R2 40/40 executed+scored: t2 lift REPLICATED (80%/0%, cumulative p~0.001); t6/t7/t8 60/60 both arms (attention-slip class -> L0 gates); suite EXIT=0; panel: codex t7 vacuous-warning REPRODUCED+fixed, m3 anchoring adopted, rest refuted; hermetic suite green"}

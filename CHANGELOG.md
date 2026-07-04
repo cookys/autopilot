@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.13 — endpoints batch + campaign gate OPEN (sonnet 2/2 with full adherence)
+
+**Headline**: The endpoints S-batch plus a CEO-discretion sweep — and the day's best data point: after fixing a harness defect (the eval runner invoked `claude -p` with no permission flags, so arms could REASON but not ACT — a sonnet transcript showed a fully correct diagnosis, including a timezone-precise refutation of the planted decoy, stalled on a permission ask), **a sonnet-class ON-arm passes 2/2 orchestration-eval oracles with FULL adherence**: real bug fixed, decoy refuted through a valid adjudication table, acceptance patterns named, probe evidence present. **The quality-floor campaign gate is OPEN.**
+
+### Added
+- **`autopilot endpoints test <name>`** — the deferred live auth-roundtrip probe: one tiny `/v1/messages` request, latency + `ok/auth_failed/network_failed/not_configured` classification, token never printed, loopback-stub tested (the CLI's only networked subcommand, labeled as such).
+- **`endpoints which/set` repo-key provenance** — `repo_key_source: remote|path-fallback`; `set --repo` warns when the overlay is keyed to a moveable checkout path.
+- **`dispatch-author.sh --endpoint <name>`** — parity with its two siblings (closes the manual `ANTHROPIC_*` export gap hit twice in real runs); additive.
+- **Per-runner settle bound** — cc-shim late-flush (observed 17 KB answer landing after the 3s bound) gets a 10s default; `AUTOPILOT_SETTLE_MS` override; truly-empty still fail-closed.
+- **`hooks/tests/preflight-meta-smoke.test.sh`** — proves the 17-check portability gate FAILS on a seeded violation (perturb→fail-named-check→restore→green, trap-protected). Default self-skip (`PREFLIGHT_META_FULL=1` to run): the full gate is minutes-long and its OpenCode checks are documented load-flaky; it already runs for real at every release. Validated EXIT=0 end-to-end on a quiet host.
+
+### Changed
+- **`docs/projects/` hygiene**: 16 legacy completed project dirs swept into `_archive/` with every reference repaired (INDEX now fully archive-linked; payload-sync manifest updated).
+- **Eval runner**: `--dangerously-skip-permissions` for cc arms (disposable temp repo + scratch HOME justify it); credential-only scratch-HOME (v2.31.12) retained.
+
+### Evidence
+- Sonnet smoke (ON arm): t1 `oracle_pass:true, decoy_respected:true, adjudication_valid:true, patterns_named:true, probe_evidence_present:true`; t2 `oracle_pass:true, fidelity_ok:true`. haiku's earlier uniform failure re-attributed to the permissions defect; its true floor unmeasured. Full addendum: archived quality-floor-completion project's `pilot-report.md`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.12`.
+
 ## v2.31.12 — quality-floor engine completed: P2-P4 + orchestration eval, in one run
 
 **Headline**: Board-directed completion of the quality-floor plan — all remaining phases (P2-P4) plus their ex-BACKLOG prerequisites shipped in a single `/l6` run. The **full test suite is green for the first time in weeks** (the 3 chronic pre-existing failures fixed), and the **orchestration-eval pipeline ran a live pilot**: 4 arms on real engines end-to-end. Honest pilot verdict: the measurement pipeline works; a haiku-class single-turn orchestrator is below the task floor in BOTH arms, so the lift campaign needs a sonnet-class tier (operator cost gate recorded in the pilot report).

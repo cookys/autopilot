@@ -55,18 +55,18 @@ assert_contains "$OUT" '"agent":"autopilot:planner"'         "legacy planner age
 assert_contains "$OUT" '"source":"default"'                  "legacy planner source=default"
 assert_not_contains "$OUT" '"table"'                         "legacy planner no table field"
 
-# reviewer → sonnet/plan
+# reviewer → opus/plan (v2.32.0: headroom on the safety-critical gate; 2026-04 parity benchmark stale)
 OUT="$(run_dispatch --role reviewer)"; EXIT=$?
 assert_eq "0" "$EXIT"                                        "legacy reviewer exit code"
-assert_contains "$OUT" '"model":"sonnet"'                    "legacy reviewer model=sonnet"
+assert_contains "$OUT" '"model":"opus"'                      "legacy reviewer model=opus"
 assert_contains "$OUT" '"mode":"plan"'                       "legacy reviewer mode=plan"
 assert_contains "$OUT" '"agent":"autopilot:reviewer"'        "legacy reviewer agent"
 assert_not_contains "$OUT" '"table"'                         "legacy reviewer no table field"
 
-# debugger → sonnet/plan
+# debugger → opus/plan (v2.32.0: same headroom rationale as reviewer)
 OUT="$(run_dispatch --role debugger)"; EXIT=$?
 assert_eq "0" "$EXIT"                                        "legacy debugger exit code"
-assert_contains "$OUT" '"model":"sonnet"'                    "legacy debugger model=sonnet"
+assert_contains "$OUT" '"model":"opus"'                      "legacy debugger model=opus"
 assert_contains "$OUT" '"mode":"plan"'                       "legacy debugger mode=plan"
 assert_contains "$OUT" '"agent":"autopilot:debugger"'        "legacy debugger agent"
 assert_not_contains "$OUT" '"table"'                         "legacy debugger no table field"

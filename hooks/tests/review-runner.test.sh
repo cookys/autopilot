@@ -7,9 +7,52 @@ printf '+def f(): return x[::1]\n' > "$DIFF"
 STUB_VERDICT="$TEST_TMP/eng-verdict"
 cat > "$STUB_VERDICT" <<'EOF'
 #!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
+read_prompt_arg() {
+  local prompt=""
+  local i=1
+  while [ "$i" -le "$#" ]; do
+    arg="${!i}"
+    if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
+      next_index=$((i + 1))
+      next_arg="${!next_index}"
+      if [ -n "$next_arg" ] && [ -f "$next_arg" ]; then
+        prompt="$(cat "$next_arg")"
+      else
+        prompt="$next_arg"
+      fi
+      break
+    fi
+    i=$((i + 1))
+  done
+  if [ -z "$prompt" ]; then
+    prompt="$(cat)"
+  fi
+  printf '%s' "$prompt"
+}
+extract_markers() {
+  local prompt="$1"
+  if [ -z "$prompt" ]; then
+    return 1
+  fi
+  local begin end
+  begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+  if [ -z "$begin" ] || [ -z "$end" ]; then
+    return 1
+  fi
+  printf '%s\n%s\n' "$begin" "$end"
+}
+PROMPT="$(read_prompt_arg "$@")"
+if ! MARKERS="$(extract_markers "$PROMPT" 2>/dev/null)"; then
+  exit 1
+fi
+BEGIN="$(printf '%s\n' "$MARKERS" | sed -n '1p')"
+END="$(printf '%s\n' "$MARKERS" | sed -n '2p')"
+
+echo "$BEGIN"
 echo "VERDICT: FIX-THEN-SHIP"
 echo "FINDINGS: parsed by JS runner"
+echo "$END"
 EOF
 chmod +x "$STUB_VERDICT"
 

@@ -41,3 +41,29 @@ real-incident provenance (documented in evals README). Raw: `r2-results.jsonl`.
   independently re-derived why it exists).
 - R3 (operator decision): mechanical-contract ON/OFF as the manipulated variable on
   t6/t7/t8 (e.g. a required grep-evidence artifact) — tests the L0 half of the thesis.
+
+## CORRECTION (same day) — 15 runs were auth-dead; clean re-analysis SUPERSEDES the above
+
+A Claude Code re-login mid-campaign killed 15/40 runs (1-2s duration, "Not logged in",
+all mis-scored as failures). Detected post-publication by a duration sanity sweep;
+the 15 slots were re-run after auth restore (all healthy). Clean data (n=5/cell, all live,
+`r2-results-clean.jsonl`):
+
+| Task | ON | OFF |
+|---|---|---|
+| **t2 extract-verbatim** | **5/5** | **0/5** — perfect separation (p≈0.004; cumulative with R1b: 8/8 vs 0/8, p≈0.0001) |
+| t6 / t7 / t8 | 5/5 | 5/5 — **ceiling for haiku, both arms** |
+
+**Retractions vs the original reading:**
+1. The "60%/60% attention-slip failures → L0-gate territory" narrative was ENTIRELY a
+   dead-run artifact — haiku aces t6/t7/t8 with or without the pack. The L0-gate thesis
+   may still be true but THIS experiment provides no evidence for it; the
+   "eval re-derived sync-version --check" flourish is withdrawn.
+2. The t2 effect is STRONGER than originally reported (perfect 5/5 vs 0/5 separation).
+3. Adherence (clean): patterns 20/20 vs 0/20; adjudication ~0 both arms (these tasks give
+   nothing to adjudicate — field is inapplicable here, not a compliance signal).
+
+**Process lesson (shipped to memory + BACKLOG'd for the scorer): run-health validation
+BEFORE scoring — any run with duration under a sanity floor is invalid, never a data point.
+Silent infrastructure failure mimicking a negative result is precisely the false-signal
+class this whole engine exists to catch; this time it caught US.**

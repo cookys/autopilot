@@ -13,19 +13,14 @@ description: >
 Terse front-door into `autopilot:ceo-agent` at **Level 3**: the CEO executes the
 goal **itself on this thread** and escalates only at the DOA boundary.
 
-## On invocation
+Hard rules:
+- Startup pre-filled, never re-asked on a clean goal: OKR from `<goal>`;
+  involvement=3 just-results; scope=Hold (`--expand` → Expand); no-go=none (`-x <csv>`).
+- Posture: **inline** — no foreman dispatch. `/l3` is also the `--solo` degradation
+  target for `/l4`/`/l5`/`/l6`.
+- The front-door changes startup ONLY — every `ceo-agent` gate (size → project setup
+  → phases → finish-flow) still applies.
 
-1. Invoke `autopilot:ceo-agent` with the four startup questions **pre-filled** (do
-   not re-ask on a clean goal):
-   - **OKR**: derived from `<goal>` (restate a verifiable end-state if the goal lacks one).
-   - **Involvement**: 3 = just-results (full autonomy, notify on done).
-   - **Scope mode**: Hold (override: `--expand` → Expand).
-   - **No-go zones**: none (override: `-x <csv>`, e.g. `-x payments,auth`).
-2. Execution posture: **inline** — no foreman dispatch. This is the `/l3` engine
-   (and the `--solo` degradation target for `/l4`/`/l5`).
-3. Then follow `ceo-agent` Execution exactly (size → project setup if L → phases →
-   finish-flow). The front-door only changes startup; it does not skip any gate.
-
-See [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
-for the full front-door semantics and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md)
-for DOA, Prime Directives, and quality gates.
+**MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(front-door semantics) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) (DOA,
+Prime Directives, quality gates).

@@ -11,45 +11,22 @@ description: >
 
 # /l6 — CEO autonomy, foreman + full-dispatch verification
 
-Terse front-door into `autopilot:ceo-agent` at **Level 6**: identical to `/l5` except that
-verification AUTHORING is additionally leaf-dispatched through the canonical `/l5` / `engine implement-review`
-implementation-review loop. This includes independent harness authoring and
-its review loops, and the verification-writer family is constrained to differ from the implementer family.
-Depth-0 is still pure orchestration.
+Terse front-door into `autopilot:ceo-agent` at **Level 6**: identical to `/l5`
+except verification AUTHORING is ALSO leaf-dispatched to a heterogeneous engine;
+depth-0 remains pure orchestration.
 
-Hard invariant: depth-0 delegates the *labor* of impl and verification authoring, but never the *trust*.
-Depth-0 still executes committed artifacts, runs the mechanical checks, judges convergence-by-verification,
-and holds merge authority. A dispatched green or reviewer pass is not authoritative by itself.
+Hard rules:
+- **Delegate the labor, never the trust**: depth-0 still EXECUTES committed
+  artifacts, runs the mechanical checks, judges convergence-by-verification, and
+  holds merge authority. A dispatched green or reviewer pass is never
+  authoritative by itself.
+- Verification authoring goes through `dispatch-author.sh` (the raw-prompt rail —
+  NOT `dispatch-review.sh`) on a DIFFERENT family than the implementer engine.
+- All dispatch parameters come from `resolve-review-loop.sh`; no manual
+  hardcoding of model/runner/effort.
+- `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
 
-This mode uses existing machinery only:
-[`../../bin/autopilot.js`](../../bin/autopilot.js) (`engine implement-review`, canonical),
-[`../../scripts/dispatch-hetero.sh`](../../scripts/dispatch-hetero.sh),
-[`../../scripts/dispatch-author.sh`](../../scripts/dispatch-author.sh),
-[`../../scripts/dispatch-review.sh`](../../scripts/dispatch-review.sh),
-[`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh).
-Execution control and ledger behavior remain as in `/l5` and
-[`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md).
-
-Per-unit pipeline (authoritative flow):
-1) Resolve roster once with `../../scripts/resolve-review-loop.sh` and treat its output as the only source of truth.
-2) Dispatch implementation via `engine implement-review` (internally `dispatch-hetero.sh`) with immutable `--base` and
-   outcome-driven worktree commit logic. The CLI fails closed on absent/false reviewer qualification by default
-   (`--require-qualified-reviewer` is accepted for explicitness/backward compatibility); use `--allow-unqualified-reviewer`
-   only as an explicit, recorded escape hatch.
-3) Dispatch verification AUTHORING via `../../scripts/dispatch-author.sh` on a different family than the implementer engine.
-4) Run decorrelated review on implementation and harness outputs per resolved review fields.
-5) Depth-0 executes committed implementation + harness artifacts, runs all required checks, and compares the results.
-6) Convergence-by-verification gates continue/rework; merge only after QC-Verdict is earned.
-
-Rationale (recorded from this repo's 2026-07-02 incident): `dispatch-review.sh` wraps prompts as
-`You are a code reviewer` + `Diff under review`, which is structurally correct for verifier isolation but
-incompatible with AUTHORING. In the N2 repro, this caused Gemini to reject spec text as "not a spec diff". Split
-authoring onto a dedicated raw-prompt rail and keep `dispatch-review.sh` for diff reviews only.
-
-## On invocation
-
-1. Invoke `autopilot:ceo-agent` with the same startup questions/presets as `/l3`/`/l4`/`/l5`
-   (involvement=just-results, scope=Hold, no-go=none; override `-x` / `--expand` / `--solo`).
-2. No manual hardcoding of model/runner/effort: all dispatch parameters come from `../../scripts/resolve-review-loop.sh`.
-3. Keep `/l5` posture for loop governance, isolation, and output ledger, but treat verification drafting as a first-class dispatched unit.
-4. If `--solo` is set or the foreman cannot dispatch reliably, fall back to `/l3` inline for safety.
+**MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
+(per-unit pipeline, machinery, authoring-rail rationale) and
+[`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(loop governance, qc@depth-0, ledger).

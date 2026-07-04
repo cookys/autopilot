@@ -11,32 +11,21 @@ description: >
 
 # /l4 — CEO autonomy, dispatched foreman
 
-Terse front-door into `autopilot:ceo-agent` at **Level 4**: the CEO dispatches
-**ONE sub-orchestrator "foreman"** (background + worktree-isolated) that runs
-dev-flow, while the CEO holds the **depth-0 control loop** and the
-**authoritative qc verdict**.
+Terse front-door into `autopilot:ceo-agent` at **Level 4**: dispatch **ONE**
+background, worktree-isolated sub-orchestrator "foreman" that runs dev-flow
+unattended; the CEO holds the **depth-0 control loop** and the **authoritative
+qc verdict**.
 
-## On invocation
+Hard rules:
+- Startup presets identical to `/l3`; engine all-Claude (hetero implementer → `/l5`).
+- **qc@depth-0 is THE gate**: a fan-out of ≥3 adversarial reviewers over the branch
+  diff, synthesized + fix-before-integrate — NEVER a CEO self-read, and distinct
+  from the foreman's first-pass qc.
+- Merge-back and worktree GC are owned by depth 0; budget cap is fail-closed
+  (`TaskStop` + escalate). Record the run-summary ledger in the final CEO Report.
+- `--solo` → the `/l3` inline engine (also the automatic degradation when the
+  foreman returns `precondition_failed`).
 
-1. Invoke `autopilot:ceo-agent` with the four startup questions **pre-filled**
-   (same presets as `/l3`: OKR from `<goal>`; involvement=3 just-results;
-   scope=Hold (override: `--expand` → Expand); no-go=none (override: `-x <csv>`)).
-2. Execution posture: **offload**. Dispatch the foreman and run the depth-0
-   control loop exactly per
-   [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md):
-   - Foreman = `sub-orchestrator` (depth 1), background + `isolation:worktree`,
-     dev-flow inline, impl/review leaf-dispatched to depth-2 workers.
-   - Depth-0 control loop the CEO owns: budget cap (rounds + wall-clock,
-     fail-closed → `TaskStop` + escalate), outcome→action table, **qc@depth-0**
-     (authoritative — a **fan-out of ≥3 adversarial reviewers** over the branch
-     diff, synthesized + fix-before-integrate; **NOT a CEO self-read**; distinct
-     from the foreman's first-pass qc),
-     merge-back owned by depth 0 (conflict → rebase-once-else-escalate), worktree
-     GC (`git worktree remove --force`).
-   - Record the **run-summary ledger** (step → runner/model → verdict → artifact)
-     in the final CEO Report.
-3. **`--solo`** → fall back to the `/l3` inline engine (also the automatic
-   degradation when the foreman returns `precondition_failed`).
-
-Engine: Claude (foreman + workers). For impl → agy/Gemini, use `/l5`.
-See [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) for DOA and quality gates.
+**MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(§ The foreman, § Depth-0 control loop, § Run-summary ledger) — dispatch mechanics,
+outcome→action table, and worktree-base rules live there, not here.

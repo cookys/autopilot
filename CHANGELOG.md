@@ -24,6 +24,28 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.16 — surface-area reduction B group: thin shells, one routing truth, north-star gate
+
+**Headline**: The prose surface starts shrinking without losing a single entry point. `/l3`–`/l6` become thin shells (4 bodies: 120→79 lines; frontmatter byte-identical so routing cannot shift) with level-specific long-form moved to per-level references (`skills/l5/references/hetero-impl-loop.md`, `skills/l6/references/full-dispatch-pipeline.md`); `/think-tank-dialectic`'s 337-line body migrates to `skills/think-tank/references/dialectic-mode.md` (entry + escalation judgment untouched). `references/model-routing.md` becomes the single maintenance truth — the four in-skill copies turn out to have been *symlinks* (exactly the rsync `-L`-divorced form the plan ruled out) and are now generated real files with a byte-parity pre-commit gate. A new re-runnable LLM release gate proves the wiring: all five entries headless-probed, evidence = Read-tool artifacts in the transcript, never model self-report. Constitutional constraint honored: every slash entry survives.
+
+prose-justification: baseline re-seeded this release; the measured prose delta vs the plan's 10,212 figure is the B3 symlink→real-file conversion becoming countable (+~440 generated lines with ONE maintenance truth), not new prose debt.
+
+### Added
+- `hooks/tests/slash-entry-probe.test.sh` — 5-entry thin-shell behavioral probe (`/l3` `/l4` `/l5` `/l6` `/think-tank-dialectic`), stream-json Read-artifact evidence; self-skips unless `AUTOPILOT_SLASH_PROBE=1`; wired as `preflight-release.sh` check 7 (release-time by LLM-cost design; loud skip `AUTOPILOT_SKIP_SLASH_PROBE=1`). All 5 entries live-verified green this release.
+- `scripts/sync-model-routing.sh` — regenerates the 4 in-skill `model-routing.md` copies from the canonical; `--check` byte-parity mode; refuses to propagate a canonical containing relative links.
+- `check-canonical-invariants.sh` **mirror mode** (byte-parity + symlink-reject for generated copies) + **relative-link lint** on the canonical; test extended to 22 assertions with hand-edit / symlink / relative-link negatives.
+- `preflight-release.sh` check 8 — **north-star surface lines** (prose↓ engine↑): prints prose/engine + delta vs `docs/metrics/surface-lines.json`; prose +5% over baseline fails the release check unless the CHANGELOG carries a `prose-justification:` line; `--update-baseline` seeds/refreshes per release.
+- `skills/l5/references/hetero-impl-loop.md`, `skills/l6/references/full-dispatch-pipeline.md` — per-level long-form (gpt-R1-G4 split: common protocol stays in `level-front-door.md`, which now routes to both).
+- `skills/think-tank/references/dialectic-mode.md` — the full dialectic execution protocol; 6 companion references moved alongside (`dialectic-brief-template.md` / `dialectic-role-prompts.md` prefixed — think-tank name collisions, contents differ).
+
+### Changed
+- `skills/{l3,l4,l5,l6}/SKILL.md` + `skills/think-tank-dialectic/SKILL.md` — thin shells: 3–5-line semantic summary (each level's non-negotiables: l5 immutable-base/artifact-verify, l6 labor-not-trust, dialectic never-first-resort/max-2-rounds) + bold MUST-READ pointer. **All frontmatter byte-identical** (verified per skill against HEAD).
+- `docs/skills.md` — catalog re-laid into three tiers: core (dev-flow / quality-pipeline / finish-flow / debug / learn / next), delegation (ceo-agent + l3–l6), pioneer (16 rows). Presentation-only; the frontmatter `tier:` field stays a separate future item gated on a two-platform unknown-field load dry-run (plan R1-F5).
+- `skills/{dev-flow,quality-pipeline,survey,think-tank}/references/model-routing.md` — symlinks → generated real files (byte-equal to canonical, enforced pre-commit).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.15`.
+
 ## v2.31.15 — campaign R2: relatable tasks; the procedure-lift REPLICATES (+80pp, p≈0.001)
 
 **Headline**: Three new eval tasks that read as ordinary dev work — release-day version bump across manifest mirrors, config-key rename with backward compatibility, secret-leaking log cleanup — each with real-incident provenance documented (t6 mirrors this plugin's own historical marketplace.json miss). The 40-run band campaign (haiku, ON/OFF × 5): **t2's procedure-lift replicated — ON 80% vs OFF 0%; cumulative across rounds ON 7/8 vs OFF 0/8 (Fisher p≈0.001)**. The three relatable tasks split 60%/60% both arms: their misses are attention/coverage slips (a forgotten fourth version site, a missed error path) — exactly the classes the ladder says to demote to L0 mechanical gates, not longer prompts. The eval independently re-derived why `sync-version.js --check` exists.

@@ -32,11 +32,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: 2026-07-04 campaign-r2 correction + Board directive "失敗都要先確認失敗原因".
 
-### 表面積精煉（B 組薄殼化一週｜C 組鏡像改發版生成一 sprint）
-- **Trigger**: 下一個維護窗口（B 組可立即）；C1 需先過 codex marketplace branch-install Spike。
-- **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）、prose 10.2k 行（負債率最高層）。Cookys 核可方向＋憲法級約束：**/l3–/l6 等 slash 入口是人類肌肉記憶 invoke 點，一個都不能少** —— 精煉=薄殼化＋去重＋鏡像改生成，非刪功能/入口（也因此避開 MAJOR）。完整設計與逐項驗收：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md)。北極星：每版 prose↓ engine↑。
-- **Effort**: B=S、C1=M（含 Spike）
-- **Source**: 2026-07-04 Fable 5 session 精煉分析（Cookys 口頭核可）。
+### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
+- **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。
+- **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）。B 組（/l3–/l6＋dialectic 薄殼化、model-routing 去重、skills.md 分層、北極星量測）已於 v2.31.16 出貨 — 憲法級約束維持：**/l3–/l6 等 slash 入口一個都不能少**。C1b=鏡像移出工作樹、`sync-codex-plugin-skills.sh` 改 release 步驟（clean-ref 生成＋checksum＋pre-publish 全驗後才挪指標＋post-publish rollback trigger — gpt-R1-G1 把關順序）。Spike 全滅的誠實出路：維持 committed mirror、本項作廢。完整設計：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md) §2。北極星量測已上線（preflight-release check 8，baseline 於 release 重新 seed）。
+- **Effort**: C1=M（含 Spike）
+- **Source**: 2026-07-04 Fable 5 session（Cookys 口頭核可）；B 組出貨 = docs/projects/2026-07-04-surface-area-reduction-b/。
 
 ### Pre-existing full-suite failures: `autopilot-cli` (4) / `review-runner` (4) / `intent-capture-basic-write` (2)
 - **ABSORBED 2026-07-04** into `docs/plans/2026-07-04-quality-floor-engine.md` §7 **P3-pre2** (Board directive: quality-floor completion run, v2.31.12 target).

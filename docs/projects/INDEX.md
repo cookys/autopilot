@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [surface-area-reduction-b](2026-07-04-surface-area-reduction-b/README.md) — B-group thin-shelling: /l3–/l6 + dialectic thin shells, model-routing dedup, skills.md tiers, north-star measurement | v2.31.16 | `feat/v2.31.16-surface-area-b` |
 
 ## 已完成 (Completed)
 

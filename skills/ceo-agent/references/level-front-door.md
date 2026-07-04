@@ -100,6 +100,10 @@ CEO (depth 0, this session)
 
 ### Heterogeneous engine loop details (/l5 and /l6)
 
+Level-specific long-form lives with each level (this section stays common-protocol only):
+`/l5` → [`../../l5/references/hetero-impl-loop.md`](../../l5/references/hetero-impl-loop.md);
+`/l6` → [`../../l6/references/full-dispatch-pipeline.md`](../../l6/references/full-dispatch-pipeline.md).
+
 When `/l5` or `/l6` is invoked, the foreman resolves the roster and execution parameters from `scripts/resolve-review-loop.sh` rather than hardcoding them. The loop parameters include:
 
 - **Review and implementation engines** (`reviewer_engine`, `reviewer_effort`, `reviewer_runner`, `implementer_engine`, `implementer_effort`, `implementer_runner`): Resolved dynamically; models, effort levels, and runners should never be hardcoded inline.

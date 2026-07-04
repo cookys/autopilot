@@ -16,6 +16,31 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
+case "${1:-}" in
+  ""|--update-baseline) ;;
+  --help|-h)
+    echo "usage: $0 [--update-baseline]"
+    echo "  (no args)          run the full release-hygiene gate — NOTE: check 7 runs 5 real"
+    echo "                     LLM slash-entry probes; skip with AUTOPILOT_SKIP_SLASH_PROBE=1"
+    echo "  --update-baseline  recompute + write docs/metrics/surface-lines.json, then exit"
+    exit 0
+    ;;
+  *)
+    echo "unknown argument: $1 (see --help)" >&2
+    exit 2
+    ;;
+esac
+
+if [ "${1:-}" = "--update-baseline" ]; then
+  V=$(grep -oE '"version":[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' .claude-plugin/plugin.json | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
+  E=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
+  mkdir -p docs/metrics
+  printf '{\n  "version": "%s",\n  "prose": %s,\n  "engine": %s,\n  "note": "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f)"\n}\n' "$V" "$P" "$E" > docs/metrics/surface-lines.json
+  echo "baseline updated: v$V prose=$P engine=$E → docs/metrics/surface-lines.json"
+  exit 0
+fi
+
 CANONICAL=".claude-plugin/plugin.json"
 CHANGELOG="CHANGELOG.md"
 INDEX="docs/projects/INDEX.md"
@@ -92,6 +117,64 @@ check_optin_changelog() {
   node scripts/check-optin-changelog.js
 }
 
+# ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
+# 5 real LLM probes (l3/l4/l5/l6/think-tank-dialectic): each entry must Read its
+# MUST-READ reference(s) — evidence is stream-json tool_use artifacts, never
+# self-report. Release-time only by design (LLM cost — plan 2026-07-04
+# surface-area-reduction B1). Skip knob: AUTOPILOT_SKIP_SLASH_PROBE=1 (loud).
+check_slash_entry_probe() {
+  if [ "${AUTOPILOT_SKIP_SLASH_PROBE:-0}" = "1" ]; then
+    echo "    SKIPPED by AUTOPILOT_SKIP_SLASH_PROBE=1 (thin-shell wiring NOT verified this release)"
+    return 0
+  fi
+  AUTOPILOT_SLASH_PROBE=1 bash hooks/tests/slash-entry-probe.test.sh
+}
+
+# ─── 8. north-star surface measurement (prose↓ engine↑) ───
+# Plan 2026-07-04 surface-area-reduction §4 (R1-F6: -type f dedup formula + a real
+# threshold, else theater). Prints prose/engine line counts + delta vs the tracked
+# baseline (docs/metrics/surface-lines.json). SOFT-HARD gate: prose +5% over baseline
+# is allowed ONLY with a CHANGELOG justification line ("prose-justification:") in the
+# current version's section — missing justification fails this release check.
+# Seed/refresh baseline: scripts/preflight-release.sh --update-baseline (run at each
+# release AFTER the gate passes, so the next release diffs against this one).
+SURFACE_BASELINE="docs/metrics/surface-lines.json"
+
+measure_surface() {
+  SURF_PROSE=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
+  SURF_ENGINE=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
+}
+
+check_north_star() {
+  measure_surface
+  if [ ! -f "$SURFACE_BASELINE" ]; then
+    echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (no baseline yet — seed with: scripts/preflight-release.sh --update-baseline)"
+    return 0
+  fi
+  local base_prose base_engine base_version
+  base_prose=$(node -e "console.log(require('./$SURFACE_BASELINE').prose)" 2>/dev/null)
+  base_engine=$(node -e "console.log(require('./$SURFACE_BASELINE').engine)" 2>/dev/null)
+  base_version=$(node -e "console.log(require('./$SURFACE_BASELINE').version)" 2>/dev/null)
+  if ! [ "$base_prose" -gt 0 ] 2>/dev/null; then
+    echo "    baseline unparseable ($SURFACE_BASELINE) — re-seed with --update-baseline" >&2
+    return 1
+  fi
+  local d_prose=$((SURF_PROSE - base_prose)) d_engine=$((SURF_ENGINE - base_engine))
+  local pct=$(( d_prose * 100 / base_prose ))
+  echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (baseline v$base_version: prose=$base_prose engine=$base_engine; Δprose=$d_prose (${pct}%), Δengine=$d_engine)"
+  local limit=$(( base_prose * 105 / 100 ))
+  if [ "$SURF_PROSE" -gt "$limit" ]; then
+    if grep -qE "prose-justification:" "$CHANGELOG"; then
+      echo "    WARNING: prose grew >+5% vs baseline — CHANGELOG justification found, allowed"
+      return 0
+    fi
+    echo "    prose grew >+5% vs baseline ($base_prose → $SURF_PROSE) with NO 'prose-justification:' line in $CHANGELOG" >&2
+    echo "    north star is prose↓ engine↑ — justify the growth in the CHANGELOG or reduce it" >&2
+    return 1
+  fi
+  return 0
+}
+
 echo "preflight-release — autopilot release-hygiene gate"
 echo ""
 
@@ -101,6 +184,8 @@ run_check "version mirrors in sync (sync-version.js --check)" check_version_mirr
 run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
+run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
+run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then

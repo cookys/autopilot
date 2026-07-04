@@ -16,6 +16,21 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
+case "${1:-}" in
+  ""|--update-baseline) ;;
+  --help|-h)
+    echo "usage: $0 [--update-baseline]"
+    echo "  (no args)          run the full release-hygiene gate — NOTE: check 7 runs 5 real"
+    echo "                     LLM slash-entry probes; skip with AUTOPILOT_SKIP_SLASH_PROBE=1"
+    echo "  --update-baseline  recompute + write docs/metrics/surface-lines.json, then exit"
+    exit 0
+    ;;
+  *)
+    echo "unknown argument: $1 (see --help)" >&2
+    exit 2
+    ;;
+esac
+
 if [ "${1:-}" = "--update-baseline" ]; then
   V=$(grep -oE '"version":[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' .claude-plugin/plugin.json | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)

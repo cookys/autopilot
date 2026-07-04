@@ -337,4 +337,3 @@ ceo-agent    → autonomous execution on the decision
 - `silent-pre-check.md` — 4-item Coordinator self-audit checklist
 - `minority-report.md` — section template and rules for preserving dissent faithfully
 - `epistemic-diversity-scorecard.md` — scorecard calculation and trust ceiling rules
-

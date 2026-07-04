@@ -1,6 +1,6 @@
 # Plan — 表面積精煉（surface-area reduction）
 
-> Status: R3 — 雙家迴圈審查中：M3 兩輪已 SHIP-AS-IS；gpt-5.5 R1（2🔴2🟠1🟡，與 M3 零重疊）已裁決收編，待 gpt-5.5 覆核。
+> Status: **CONVERGED（雙家）** — MiniMax-M3 兩輪 SHIP-AS-IS ＋ gpt-5.5 兩輪 SHIP-AS-IS（R2：G1–G5 全 RESOLVED、零新發現）。交 codex 線實作。
 > Size: B 組＝S（一週內）；C 組＝M（一個 sprint）。
 > 憲法級約束（Cookys 2026-07-04 明示）：**`/l3`–`/l6` 等 slash 入口是人類肌肉記憶的
 > invoke 點，一個都不能少** —— 精煉的對象是文件與鏡像的表面積，不是入口、不是功能。
@@ -133,3 +133,6 @@ prose 較上一版 **+5% 以上 → preflight 輸出 WARNING 並要求 CHANGELOG
 | G3 frontmatter 路由面未鎖 | 🟠 | ✅ 採（frontmatter byte-stable 驗收＋禁止語意塞 description） | B1/B2 |
 | G4 front-door 巨石化／低層讀高層規則 | 🟠 | ✅ 採（共通→front-door、層級專屬→per-level reference） | B1 |
 | G5 byte-parity 副本的相對連結風險 | 🟡 | ⚙️ 窄化採（實測今日 0 相對連結 → 降為 path-invariance lint 未來防護） | B3 |
+
+**gpt-5.5 R2 覆核**：G1–G5 全數 RESOLVED、G5 窄化被接受、零新發現。**VERDICT: SHIP-AS-IS**。
+兩家合計 11 條發現（6+5，零重疊）全數收編或有據 REFUTED —— 去相關審查的價值在本 plan 上再次實證。

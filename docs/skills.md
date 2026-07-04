@@ -2,13 +2,13 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-The full catalog of all 27 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
+The full catalog of all 28 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
 ---
 
 ## The Solution
 
-Autopilot ships **27 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
+Autopilot ships **28 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
 The catalog is layered by how central a skill is to the daily loop — **core** (the six you touch on almost every task), **delegation** (the CEO autonomy ladder), and **pioneer** (specialized / lower-frequency capabilities, each with its own owner scenario). Layering is presentation only: every skill is equally installed and invocable.
 
@@ -22,6 +22,7 @@ The catalog is layered by how central a skill is to the daily loop — **core** 
 | **debug** | Evidence-first debugging methodology (tool → log → code) with Three Red Lines | `superpowers:systematic-debugging` (broader hypothesis-driven framing) |
 | **learn** | Auto-records knowledge from failures; knowledge health audit | — (no equivalent) |
 | **next** | Scan all work sources, recommend highest-priority task | — (no equivalent) |
+| **handoff** | Mid-work context-pressure handoff: standardized resume doc (write + resume modes) so a `/clear` never loses in-flight state | — (no equivalent) |
 
 ### Delegation — the CEO autonomy ladder
 

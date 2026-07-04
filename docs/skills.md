@@ -10,7 +10,7 @@ The full catalog of all 28 skills, the three primary cognitive modes, how skills
 
 Autopilot ships **28 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
-The catalog is layered by how central a skill is to the daily loop — **core** (the six you touch on almost every task), **delegation** (the CEO autonomy ladder), and **pioneer** (specialized / lower-frequency capabilities, each with its own owner scenario). Layering is presentation only: every skill is equally installed and invocable.
+The catalog is layered by how central a skill is to the daily loop — **core** (the seven you touch on almost every task), **delegation** (the CEO autonomy ladder), and **pioneer** (specialized / lower-frequency capabilities, each with its own owner scenario). Layering is presentation only: every skill is equally installed and invocable.
 
 ### Core — the daily loop
 

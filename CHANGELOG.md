@@ -43,10 +43,10 @@ prose-justification: +1 new skill body (85 lines) + a canonical tiebreak referen
 - ceo-agent front-door section: `/l6` added (was omitted), `/l5` bullet corrected to the `engine implement-review` path.
 
 ### Fixed
-- Severity table row order in `code-review.md` (Suggestion was listed above Minor, inverting the canonical 🔴🟠🟡🔵 order); dev-flow stale "6 more discrete pending tasks" → 7; finish-flow L-5.5 internal `doc/`/`docs/` mix; ceo-agent step 3f now names the mandatory L-1.6 parent forcing-function task; ceo-agent DOA note carves out merged-branch cleanup (L-5.7/F.5/H-9.5) — resolves the contradiction with finish-flow:121.
+- Severity table row order in `code-review.md` (Suggestion was listed above Minor, inverting the canonical 🔴🟠🟡🔵 order — main table fixed pre-release, the classification-guide table in the release merge); dev-flow stale "6 more discrete pending tasks" → 7; finish-flow L-5.5 internal `doc/`/`docs/` mix; ceo-agent step 3f now names the mandatory L-1.6 parent forcing-function task; ceo-agent DOA note carves out merged-branch cleanup (L-5.7/F.5/H-9.5) — resolves the contradiction with finish-flow:121.
 
 ### Rollback
-- Maintainer: `git revert <merge-sha>`
+- Maintainer: `git revert <merge-sha>`. Note: the audit's first doc-fix batch landed as pre-release develop commits (`955f6bf` merged at `9ace4e7`) — reverting the release merge does not undo those; revert `9ace4e7` separately if needed.
 - User-side (post-marketplace): `/plugin update autopilot @v2.31.16`
 
 ## v2.31.16 — surface-area reduction B group: thin shells, one routing truth, north-star gate

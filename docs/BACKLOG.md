@@ -436,3 +436,10 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: gpt-5.5 cc-shim-reviewer hardening loop, 2026-06-30 (v2.26.10).
 
 Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth). Last pruned 2026-06-02: v2.7.5 test-suite + v2.7.6 hook-polish items A/B/C.
+
+### cross_family_satisfied 是 boolean,無法表達 required_review_families=2 的「≥2 個相異家族」語意
+
+> 來源:v2.32.0 qc panel(gpt-5.5)。**Pre-existing**(v2.25.11 risk-tier 起 required=2 與 boolean satisfied 即共存),非 density-scaling diff 引入;density scaling 沿用同一合約。
+- 現況:`CROSS_FAMILY_SATISFIED` 只表達「panel 有 ≥1 家族異於 implementer」;`required_review_families=2` 時,單一相異家族也會 satisfied=true,`--enforce` 不會擋。
+- 修法方向:改為計數制 — `families_distinct >= required_review_families` 才 satisfied;`--enforce` 同步。注意 KR:預設輸出 byte-compat(欄位值語意變更需 CHANGELOG 明示)。
+- 觸發:下次碰 `resolve-review-loop.sh` 的 enforce/panel 邏輯時;或高風險 diff 實際依賴 required=2 語意時。

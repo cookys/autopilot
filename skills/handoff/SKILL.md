@@ -78,7 +78,7 @@ Triggered by "read ...HANDOFF.md 接續" or "接手上個 session" or "resume fr
    If reality has drifted from "現況", report the drift to the user first before proceeding.
 3. Treat `已決事項(不重議)` as settled; do not reopen or litigate them.
 4. Execute `下一步` item 1 immediately; do not re-plan unless verification fails.
-5. When the work later completes, delete the consumed `HANDOFF.md` file as part of closing (finish-flow's session-end hygiene).
+5. When the work later completes, delete the consumed `HANDOFF.md` file as part of session-end cleanup (a handoff is a snapshot; a stale one misleads the next session).
 
 ## Proactive Offer Rule
 

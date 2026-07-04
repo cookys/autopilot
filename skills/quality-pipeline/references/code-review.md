@@ -215,8 +215,8 @@ When the authoritative qc is a **panel** of reviewers (the depth-0 `≥3` fan-ou
 |---------|----------|
 | Crash, data corruption, security hole | **Critical** |
 | Coding convention violation, missing error handling, resource leak risk | **Major** |
-| Better design, readability, performance suggestion | **Suggestion** |
 | Naming style, whitespace, formatting | **Minor** |
+| Better design, readability, performance suggestion | **Suggestion** |
 
 ## Re-review Loop (Critical / Major)
 

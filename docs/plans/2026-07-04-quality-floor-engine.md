@@ -1,6 +1,6 @@
 # Quality-Floor Engine — the judgment-demotion ladder
 
-**狀態**: ✅ Phase 1 shipped in v2.31.11 — merged as 165e1b7 (R1 design; P2-P4 trigger-conditioned in §7)
+**狀態**: ✅ COMPLETE — P1 v2.31.11 (165e1b7); P2-P4 + prereqs v2.31.12 (ab8f619, Board-directed one-run completion). Remaining: the P3 statistical campaign (operator cost gate, see pilot report).
 **Goal**: evolve autopilot from "clone cookys, remove cookys from the loop" to the next stage:
 **make a weak orchestrating model sustain frontier-model output quality over long-running
 tasks** — plan / implement / debug / review / re-think — by design, not by hoping the model

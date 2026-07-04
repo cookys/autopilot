@@ -26,11 +26,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### Orchestration-eval run-health gate — invalid runs must never become data points
+### Orchestration-eval failure-triage rule — every FAIL must carry a classified cause before it may be scored
 - **Trigger**: next time touching `evals/orchestration/` (runner or score.js), OR the next campaign round.
-- **Context**: 2026-07-04 R2: a mid-campaign Claude Code re-login killed 15/40 runs (1-2s, "Not logged in") which were silently scored as oracle failures — publishing a wrong "60%/60% attention-slip" conclusion until a duration sanity sweep caught it (correction shipped same day). Fix: `score.js` refuses (or quarantines with a loud count) rows under a duration sanity floor (~10s) or whose run.log matches auth-failure signatures; the runner should also emit a `health` field (auth_ok/timeout/short-run) so the scorer keys on evidence, not inference. Same class as probe-playbook P3/P5: infrastructure failure mimicking a negative result.
+- **Context**: 2026-07-04 R2: a mid-campaign Claude Code re-login killed 15/40 runs (1-2s, "Not logged in") which were silently scored as oracle failures — publishing a wrong "60%/60% attention-slip" conclusion until a duration sanity sweep caught it (correction shipped same day). Board sharpened the principle (2026-07-04): duration floors / auth-signature scans are just heuristic INSTANCES — the real rule is **no unexplained failures in the data: a FAIL row is scoreable ONLY once triaged to `capability_fail` (model attempted, oracle rejects the work) vs `infra_fail` (auth/timeout/spawn/empty — excluded from stats, loudly counted)**. Implementation: runner emits a `failure_class` field derived from run.log evidence (auth signatures, timeout status, zero-output) + oracle outcome; `score.js` REFUSES rows with `oracle_pass:false` lacking a classification, and prints an infra-excluded tally in every report (silent-cap honesty rule applies). Mirrors quality-pipeline's PRE_EXISTING/INTRODUCED discipline and adjudicate-findings' "no unverified verdicts": the same fail-closed epistemics, applied to the eval's own data pipeline.
 - **Effort**: S
-- **Source**: 2026-07-04 campaign-r2 correction (this session).
+- **Source**: 2026-07-04 campaign-r2 correction + Board directive "失敗都要先確認失敗原因".
 
 ### 表面積精煉（B 組薄殼化一週｜C 組鏡像改發版生成一 sprint）
 - **Trigger**: 下一個維護窗口（B 組可立即）；C1 需先過 codex marketplace branch-install Spike。

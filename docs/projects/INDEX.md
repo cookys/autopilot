@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [campaign](2026-07-04-campaign/README.md) — quality-floor lift campaign (5 tasks × ON/OFF × 3 reps, sonnet) + `qc_panel: all-calibrated` preset. | v2.31.14 | `feat/v2.31.14-campaign` |
 
 ## 已完成 (Completed)
 

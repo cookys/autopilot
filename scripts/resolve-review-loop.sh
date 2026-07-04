@@ -57,6 +57,8 @@ DEF_HARNESS="on"
 # Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
 DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
+# Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
+QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-build, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
 # review_diff_scope: how much the per-round reviewer reads.
 #   full                  — re-read the whole base..HEAD diff every round (safe; cost
@@ -204,6 +206,12 @@ family_of() {
     *)                                       echo unknown ;;
   esac
 }
+
+# Expand the "all-calibrated" preset to the calibrated 5-family roster if matched exactly (trimmed/case-insensitive)
+_qc_panel_norm="$(printf '%s' "$QC_PANEL_RAW" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+if [[ "$_qc_panel_norm" == "all-calibrated" ]]; then
+  QC_PANEL_RAW="$QC_ALL_CALIBRATED"
+fi
 
 # Parse qc_panel (comma list) → trimmed array + a JSON array string.
 QC_PANEL=(); QC_PANEL_JSON="["

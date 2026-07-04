@@ -5,6 +5,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EVAL_DIR="$REPO_ROOT/evals/orchestration"
+TEST_TMP=$(mktemp -d -t "orchestration-eval-test-XXXXXX")
+trap 'rm -rf "$TEST_TMP"' EXIT
 
 echo "=== Running Oracle Self-Tests ==="
 

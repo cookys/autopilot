@@ -42,7 +42,7 @@ fi
 mkdir -p "$OUT_DIR"
 
 # Create a fresh temp directory for the repository copy
-TEMP_REPO=$(mktemp -d -p "$REPO_ROOT" -t "eval-repo-${TASK_ID}-XXXXXX")
+TEMP_REPO=$(mktemp -d -t "eval-repo-${TASK_ID}-XXXXXX")
 
 # Clean up temp repo on exit unless debug is needed
 cleanup() {
@@ -115,7 +115,16 @@ TIMEOUT_LIMIT="${ORCH_TIMEOUT:-10m}"
 START_TIME=$(date +%s)
 
 # Setup scratch home for cc runner to prevent plugin loading
-SCRATCH_HOME=$(mktemp -d -p "$REPO_ROOT" -t "scratch-home-XXXXXX")
+SCRATCH_HOME=$(mktemp -d -t "orch-eval-scratch-home-XXXXXX")
+# Auth: plugins/settings stay isolated, but the claude CLI needs its login credential.
+# Copy ONLY the credential file (mode 600, deleted with the scratch home on exit) and a
+# minimal onboarding stub — nothing else from the real HOME leaks into the arm.
+if [ -f "${HOME}/.claude/.credentials.json" ]; then
+  mkdir -p "$SCRATCH_HOME/.claude"
+  cp "${HOME}/.claude/.credentials.json" "$SCRATCH_HOME/.claude/"
+  chmod 600 "$SCRATCH_HOME/.claude/.credentials.json"
+fi
+printf '{"hasCompletedOnboarding":true}\n' > "$SCRATCH_HOME/.claude.json"
 clean_scratch_home() {
   rm -rf "$SCRATCH_HOME"
 }

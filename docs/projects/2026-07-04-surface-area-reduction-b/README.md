@@ -48,11 +48,19 @@
 
 | Phase | Content | Status |
 |-------|---------|--------|
-| P1 | B1 — thin-shell l3–l6, per-level references, slash-entry-probe release gate | pending |
-| P2 | B2 — dialectic body → think-tank/references/dialectic-mode.md | pending |
-| P3 | B3 — model-routing canonical + sync script + byte-parity pre-commit gate | pending |
-| P4 | B4 step 1 — docs/skills.md three-tier layout | pending |
-| P5 | §4 — north-star measurement in preflight-release + baseline seed | pending |
+| P1 | B1 — thin-shell l3–l6 (bodies 79 lines total, frontmatter byte-identical), per-level references, slash-entry-probe release gate | ✅ done |
+| P2 | B2 — dialectic body → think-tank/references/dialectic-mode.md (6 refs alongside, 2 `dialectic-`-prefixed) | ✅ done |
+| P3 | B3 — model-routing canonical + sync-model-routing.sh + mirror/lint gates (discovery: all 4 "copies" were symlinks → real files) | ✅ done |
+| P4 | B4 step 1 — docs/skills.md three-tier layout (zero frontmatter changes) | ✅ done |
+| P5 | §4 — north-star measurement in preflight-release + baseline seeded (v2.31.15: prose=10545 engine=3185; re-seed at release) | ✅ done |
+
+## Acceptance evidence (2026-07-04)
+
+- All 5 slash entries live-probed green (`slash-entry-probe.test.sh`, artifact-level Read evidence): l3, l4, l5 (+hetero-impl-loop.md), l6 (+full-dispatch-pipeline.md), dialectic (+dialectic-mode.md).
+- Frontmatter byte-checks: all 6 touched skills BYTE-IDENTICAL (l3/l4/l5/l6/think-tank-dialectic/think-tank).
+- B3 negatives verified live: hand-edit copy → gate exit 1; symlink copy → exit 1; relative-link in canonical → exit 1; edit-canonical→sync propagates.
+- North-star negatives verified: +10% simulated growth without `prose-justification:` → release check fails.
+- Full hooks suite: 100/100 test files PASS. `validate.sh` 27/27. `check-readme-parity` green.
 
 ## Decision log
 

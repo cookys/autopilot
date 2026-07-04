@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.15 — campaign R2: relatable tasks; the procedure-lift REPLICATES (+80pp, p≈0.001)
+
+**Headline**: Three new eval tasks that read as ordinary dev work — release-day version bump across manifest mirrors, config-key rename with backward compatibility, secret-leaking log cleanup — each with real-incident provenance documented (t6 mirrors this plugin's own historical marketplace.json miss). The 40-run band campaign (haiku, ON/OFF × 5): **t2's procedure-lift replicated — ON 80% vs OFF 0%; cumulative across rounds ON 7/8 vs OFF 0/8 (Fisher p≈0.001)**. The three relatable tasks split 60%/60% both arms: their misses are attention/coverage slips (a forgotten fourth version site, a missed error path) — exactly the classes the ladder says to demote to L0 mechanical gates, not longer prompts. The eval independently re-derived why `sync-version.js --check` exists.
+
+### Added
+- `evals/orchestration/tasks/`: **t6-version-bump** (version in 4 legitimate places; zero-check oracle), **t7-config-rename** (old key keeps working + deprecation warning; new key wins; oracle drives the real tool 3 ways), **t8-log-redaction** (fresh random token per oracle run; asserts key-free logs across happy + 3 failure paths) — oracles self-tested; provenance table in the evals README ("Tuesday-afternoon jobs, not traps").
+- Campaign R2 report + raw results archived with the project.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.14`.
+
 ## v2.31.14 — lift campaign R1 executed + `qc_panel: all-calibrated` preset
 
 **Headline**: The quality-floor lift campaign ran for real — 5 tasks (3 new: vacuous-test / config-layer-decoy / pre-existing-classification, all with self-tested oracles) × ON/OFF × 3 reps on sonnet. Result, honestly: **30/30 oracle pass in BOTH arms — a ceiling effect** (sonnet is above the task set; haiku was below it), no duration signal. The real finding is about MECHANISM: the prose pack moved vocabulary (`patterns_named` 80% vs 0%) but **not protocol compliance** (`adjudication_valid` 40% vs 40% — identical); what compliance existed came from the mechanical required-artifact contract. Independent evidence for the ladder's core thesis: invest in L0/L3 mechanical contracts, not longer L1 prompt packs. R2 designs + trigger recorded in the campaign report.

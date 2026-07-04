@@ -47,6 +47,8 @@
 
 set -uo pipefail
 
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
+
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
 # absent/rejected file = no-op → the cc-shim precondition fires normally). Loaded BEFORE any
 # env consumption. Contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
@@ -138,7 +140,7 @@ if [[ "$RUNNER" = "codex" ]]; then
   # review in dispatch-review.sh and is the strongest default isolation option
   # available here.
   set +e
-  "$CODEX_BIN" exec --model "$MODEL" \
+  timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
     --sandbox read-only \
     -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
   RUNNER_EXIT=$?
@@ -204,25 +206,7 @@ fi
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
 # Bounded settle-wait for late-flush
-SETTLE_MS="${AUTOPILOT_SETTLE_MS:-}"
-if [[ -z "$SETTLE_MS" ]]; then
-  if [[ "$RUNNER" = "cc-shim" ]]; then
-    SETTLE_MS=10000
-  else
-    SETTLE_MS=3000
-  fi
-fi
-
-_elapsed=0
-while [ "$_elapsed" -lt "$SETTLE_MS" ]; do
-  if tr -d '\r' < "$RAW_LOG" \
-    | sed '/^Script started on /d; /^Script done on /d' \
-    | grep -q '[^[:space:]]'; then
-    break
-  fi
-  sleep 0.25
-  _elapsed=$((_elapsed + 250))
-done
+wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
 
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \

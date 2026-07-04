@@ -37,3 +37,22 @@ both arms; OFF arm carries length-matched neutral padding. Raw: `campaign-result
   edge; (c) score gate-compliance as the primary axis (mechanical-contract ON/OFF as the
   manipulated variable, instead of prose packs).
 - Trigger: an operator decision to spend again, informed by this report.
+
+## R1b — haiku tier (same day, post permissions-fix): FIRST MEASURABLE LIFT
+
+Same 5×2×3 design, model haiku (its earlier all-fail was the harness permissions defect;
+this is its true tier).
+
+- **Outcome: ON 12/15 (80%) vs OFF 9/15 (60%)** — the entire delta is
+  **t2-extract-verbatim: ON 3/3 vs OFF 0/3**. With the acceptance-pattern pack (A3
+  fidelity: reconstruct-and-diff, derive expectations mechanically), haiku produces
+  byte-identical extractions; without it, 0/3 (reformats during the move). Fisher exact
+  p≈0.05 at n=3/cell — suggestive, not conclusive.
+- Tier map confirmed: t4 = haiku's floor (0/3 both arms), t1/t3/t5 = haiku's ceiling
+  (100% both), t2 = the discriminating band.
+- Adherence: adjudication 26.7% vs 13.3%, probe evidence 13.3% vs 0%, patterns 100% vs 0%.
+- **Mechanism refinement**: the lift concentrated where the pack carries an OPERATIONAL
+  PROCEDURE (the fidelity check recipe) — consistent with R1's finding that vocabulary
+  alone changes nothing; procedure-shaped content is the L1 payload that works.
+- R2 design implication: more procedure-differentiable tasks (t2-class) × more reps for a
+  conclusive n; keep mechanical-contract-ON/OFF as a second manipulated variable.

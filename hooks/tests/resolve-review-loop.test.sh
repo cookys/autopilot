@@ -95,6 +95,24 @@ assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash"]' 
 assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "default aggregation"
 assert_eq "gpt-5.5 claude-opus gemini-flash" "$(bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
 
+# 7b. qc_panel preset all-calibrated
+AC_CFG="$TEST_TMP/all-calibrated.md"
+printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
+AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
+assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
+assert_not_contains "$AC_OUT" "all-calibrated" "alias string is absent from emitted JSON"
+
+# case/trim handling check
+AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
+printf -- '- qc_panel:   All-Calibrated  \n' > "$AC_CFG_CASE"
+AC_OUT_CASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG_CASE" bash "$SCRIPT")"
+assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
+
+# cross-family field computed over the expanded list
+AC_CFG_XFAM="$TEST_TMP/all-calibrated-xfam.md"
+printf -- '- implementer_engine: MiniMax-M3\n- qc_panel: all-calibrated\n' > "$AC_CFG_XFAM"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG_XFAM" bash "$SCRIPT" --field cross_family_satisfied)" "cross_family_satisfied is true when using all-calibrated preset with MiniMax-M3 implementer"
+
 # 8. aggregation: majority (and any garbage) → falls back to the safe union default
 PCFG="$TEST_TMP/panel.md"
 printf -- '- qc_panel: a-model , b-model,c-model \n- qc_panel_aggregation: majority\n' > "$PCFG"

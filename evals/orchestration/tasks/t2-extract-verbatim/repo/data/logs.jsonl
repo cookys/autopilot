@@ -1,0 +1,5 @@
+{"level": "info", "message": "Starting up"}
+{"level": "error", "message": "Failed to connect"}
+{"level": "warn", "message": "Retry count exceeded"}
+invalid-json-here
+{"level": "info", "message": "Running"}

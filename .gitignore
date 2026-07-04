@@ -30,3 +30,5 @@ __pycache__/
 
 # worktree-orphan marker (never shipped)
 .orphaned_at
+eval-repo-*/
+orch-eval-scratch-home-*/

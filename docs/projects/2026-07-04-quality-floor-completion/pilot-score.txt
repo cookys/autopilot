@@ -1,0 +1,14 @@
+---------------------+ -----+ ------+ ------------------+ -----------------+ -------------
+t1-fix-with-decoy    | ON   | 1     | 0.0% (0/1)        | 100.0% (1/1)     | -            
+t1-fix-with-decoy    | OFF  | 1     | 0.0% (0/1)        | 100.0% (1/1)     | -            
+t2-extract-verbatim  | ON   | 1     | 0.0% (0/1)        | -                | 0.0% (0/1)   
+t2-extract-verbatim  | OFF  | 1     | 0.0% (0/1)        | -                | 0.0% (0/1)   
+
+=== ADHERENCE REPORT ===
+Arm  | Total Runs  | Adjudication Valid  | Patterns Named  | Probe Evidence Present  
+-----+ ------------+ --------------------+ ----------------+ ------------------------
+ON   | 2           | 0.0% (0/2)          | 0.0% (0/2)      | 0.0% (0/2)              
+OFF  | 2           | 0.0% (0/2)          | 0.0% (0/2)      | 0.0% (0/2)              
+
+Honest footer: pilot n is tiny — pipeline validation, not lift evidence.
+

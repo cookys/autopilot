@@ -25,6 +25,8 @@ Run all six collection commands simultaneously using parallel Bash calls. Set `D
 
 Run the six collection commands — **1a** commits+stats, **1b** per-commit file breakdown, **1c** timestamps for session detection, **1d** file hotspots, **1e** project-completion delta, **1f** review-loop lens (`scripts/retro-review-loop.js --days DAYS --json` — the hetero-dispatch/review/debate effort git history can't see) — from [references/data-collection.md](references/data-collection.md), substituting `DAYS`.
 
+**1g** Escalation-ledger scan (quality-floor L4): for each project dir in `docs/projects/` and `docs/projects/_archive/` with a `tree/events.jsonl` touched in the retro window, run `node scripts/tree.js escalations <proj>` and aggregate `escalation_opened` events by `stage`/`why_not_mechanical`; report counts + recurring themes. Recurring (≥2 similar) entries are DEMOTION CANDIDATES — hand them to `skills/distill`'s demotion-drafting step.
+
 ## Step 2: Compute Metrics
 
 From the collected data, calculate:
@@ -78,7 +80,7 @@ If a previous retro JSON exists, read it for delta comparison.
 
 ## Step 4: Output Report
 
-Format the report (~1500 words) using the exact section structure in [references/report-templates.md](references/report-templates.md): Tweetable Summary, Metrics Dashboard, Hourly Distribution, Session Analysis, Commit Type Breakdown, Hotspot Analysis, **Review-Loop Lens** (from 1f — SKIP this section only when `transcript.sessions == 0`), Ship of the Week, Observations (3), Habits for Next Week (3).
+Format the report (~1500 words) using the exact section structure in [references/report-templates.md](references/report-templates.md): Tweetable Summary, Metrics Dashboard, Hourly Distribution, Session Analysis, Commit Type Breakdown, Hotspot Analysis, **Review-Loop Lens** (from 1f — SKIP this section only when `transcript.sessions == 0`), **Escalations** (counts + recurring themes from 1g), Ship of the Week, Observations (3), Habits for Next Week (3).
 
 ## Step 5: Persist Snapshot
 

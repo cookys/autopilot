@@ -52,7 +52,7 @@ partial 修正已先動手（branch `feat/v2.7.0-superpowers-coexistence` 的 wo
 | 同上 | `.claude-plugin/marketplace.json:10` `"2.5.0"` | `2.7.0` |
 | README 雙語版本徽章不同步 | `README.zh-TW.md:11` `version-2.5.0` vs `README.md:11` `version-2.6.0` | 雙語 `version-2.7.0` |
 | hooks 描述字串落後 | `hooks/hooks.json:2` `(v2.6.0)` | `(v2.7.0)` |
-| methodology-agents 專案 README 殘留 v2.5.0 ref | `docs/projects/_archive/2026-04-12-methodology-agents-ship-a/README.md:36`（**未在 _archive 下**） | 該專案實際 ship v2.4.0，可能是當年寫錯，留 historical 不動但 Phase 5 grep 須白名單 |
+| methodology-agents 專案 README 殘留 v2.5.0 ref | `docs/projects/_archive/2026-04-12-methodology-agents-ship-a/README.md:36`（撰文當時未在 _archive 下；2026-07-04 歸檔清掃後已移入） | 該專案實際 ship v2.4.0，可能是當年寫錯，留 historical 不動但 Phase 5 grep 須白名單 |
 
 ---
 

@@ -18,7 +18,7 @@ stdout1=$(CONFIG_PATH="$TMP_CONFIG" node bin/tool.js 2>/dev/null || true)
 stderr1=$(CONFIG_PATH="$TMP_CONFIG" node bin/tool.js 2>&1 >/dev/null || true)
 
 old_key_ok=0
-if [[ "$stdout1" == *"Active timeout: 5000 ms"* ]] && [ -n "$stderr1" ]; then
+if [[ "$stdout1" == *"Active timeout: 5000 ms"* ]] && printf %s "$stderr1" | grep -qiE "deprecat|timeout_ms"; then
   old_key_ok=1
 else
   echo "Fail reason: old-key config did not behave correctly (stdout: '$stdout1', stderr: '$stderr1')" >&2

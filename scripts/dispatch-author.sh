@@ -30,11 +30,15 @@
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout / grok/cc-shim timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#       [--endpoint <name>]     # cc-shim: resolve named-endpoint creds via resolve-endpoint.sh
+#                               #   (AUTOPILOT_ENDPOINT_<NAME>_*); raw env still used when omitted
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
 #   shell script), which drops trailing prompt newlines. This mirrors dispatch-review
 #   and is safe for prompt semantics.
 #   ⏳ TIMEOUT: this call can run for MINUTES.
 #   DISPATCH_QUIET=1 suppresses progress notes on stderr.
+#   AUTOPILOT_SETTLE_MS         # override the late-flush settle wait bounds in milliseconds
+#                               #   (default: 3000ms; cc-shim: 10000ms)
 #
 # OUTPUT: one JSON object on stdout:
 #   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "authored|empty_output|precondition_failed|runner_failed", "raw_log": "<path>", "error": "..." }
@@ -50,7 +54,7 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_AUTHOR_SELF_DIR/load-endpoints-env.sh" ] && . "$_AUTHOR_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 
-RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""
+RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --runner)      RUNNER="${2:-}"; shift 2 ;;
@@ -59,7 +63,8 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
-    -h|--help)     sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
+    -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -84,6 +89,33 @@ case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must 
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
+
+if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
+  die_precondition "AUTOPILOT_SETTLE_MS must be an integer millisecond value (got: $AUTOPILOT_SETTLE_MS)"
+fi
+
+EP_URL=""; EP_TOKEN_ENV=""
+if [[ -n "$ENDPOINT" ]]; then
+  case "$RUNNER" in
+    cc-shim) ;;
+    *) die_precondition "--endpoint applies only to --runner cc-shim (got: $RUNNER)" ;;
+  esac
+  # Readiness = the resolver's EXIT CODE (0=ready), not a stdout grep (spoofable by
+  # attacker-controlled field content); exit code is the authoritative fail-closed signal (gpt-5.5 R5).
+  _ep_json="$("$(cd "$(dirname "$0")" && pwd)/resolve-endpoint.sh" "$ENDPOINT" 2>/dev/null)"; _ep_rc=$?
+  [ "$_ep_rc" -eq 0 ] || die_precondition "--endpoint '$ENDPOINT' not ready: $(printf '%s' "$_ep_json" | sed -n 's/.*\("missing":\[[^]]*\]\).*/\1/p')"
+  EP_URL="$(printf '%s' "$_ep_json" | sed -n 's/.*"base_url":"\([^"]*\)".*/\1/p')"
+  EP_TOKEN_ENV="$(printf '%s' "$_ep_json" | sed -n 's/.*"token_env":"\([^"]*\)".*/\1/p')"
+  # fail closed if extraction yielded nothing — a ready endpoint with an unparseable base_url
+  # must NOT silently fall through to the raw-env base-url/token path below (R6).
+  { [[ -n "$EP_URL" ]] && [[ -n "$EP_TOKEN_ENV" ]]; } || die_precondition "--endpoint '$ENDPOINT' resolved an empty base_url/token_env"
+  if [[ "$RUNNER" = "cc-shim" ]]; then
+    set +x
+    export ANTHROPIC_BASE_URL="$EP_URL"
+    export ANTHROPIC_AUTH_TOKEN="${!EP_TOKEN_ENV-}"
+  fi
+  unset _ep_json
+fi
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 RUNNER_EXIT=0
@@ -172,8 +204,17 @@ fi
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
 # Bounded settle-wait for late-flush
+SETTLE_MS="${AUTOPILOT_SETTLE_MS:-}"
+if [[ -z "$SETTLE_MS" ]]; then
+  if [[ "$RUNNER" = "cc-shim" ]]; then
+    SETTLE_MS=10000
+  else
+    SETTLE_MS=3000
+  fi
+fi
+
 _elapsed=0
-while [ "$_elapsed" -lt 3000 ]; do
+while [ "$_elapsed" -lt "$SETTLE_MS" ]; do
   if tr -d '\r' < "$RAW_LOG" \
     | sed '/^Script started on /d; /^Script done on /d' \
     | grep -q '[^[:space:]]'; then

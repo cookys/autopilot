@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.14 — lift campaign R1 executed + `qc_panel: all-calibrated` preset
+
+**Headline**: The quality-floor lift campaign ran for real — 5 tasks (3 new: vacuous-test / config-layer-decoy / pre-existing-classification, all with self-tested oracles) × ON/OFF × 3 reps on sonnet. Result, honestly: **30/30 oracle pass in BOTH arms — a ceiling effect** (sonnet is above the task set; haiku was below it), no duration signal. The real finding is about MECHANISM: the prose pack moved vocabulary (`patterns_named` 80% vs 0%) but **not protocol compliance** (`adjudication_valid` 40% vs 40% — identical); what compliance existed came from the mechanical required-artifact contract. Independent evidence for the ladder's core thesis: invest in L0/L3 mechanical contracts, not longer L1 prompt packs. R2 designs + trigger recorded in the campaign report.
+
+### Added
+- **`qc_panel: all-calibrated`** resolver preset — expands to the calibrated 5-family roster (gpt-5.5 · claude-opus · gemini-flash · grok-build · MiniMax-M3); consumers always see the expanded list; documented in the config template ("全席審").
+- **Three orchestration-eval tasks** with mechanically-derived, self-tested oracles: `t3-vacuous-test` (candidate must make a vacuous test discriminate — oracle re-injects the bug and the strengthened test must fire), `t4-config-layer` (three-layer precedence defect + a decoy blaming the correct parser), `t5-preexisting-classification` (fix the introduced break, CLASSIFY the pre-existing one instead of chasing it).
+- Campaign artifacts: report + raw results archived with the project.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.13`.
+
 ## v2.31.13 — endpoints batch + campaign gate OPEN (sonnet 2/2 with full adherence)
 
 **Headline**: The endpoints S-batch plus a CEO-discretion sweep — and the day's best data point: after fixing a harness defect (the eval runner invoked `claude -p` with no permission flags, so arms could REASON but not ACT — a sonnet transcript showed a fully correct diagnosis, including a timezone-precise refutation of the planted decoy, stalled on a permission ask), **a sonnet-class ON-arm passes 2/2 orchestration-eval oracles with FULL adherence**: real bug fixed, decoy refuted through a valid adjudication table, acceptance patterns named, probe evidence present. **The quality-floor campaign gate is OPEN.**

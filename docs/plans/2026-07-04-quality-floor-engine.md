@@ -1,6 +1,6 @@
 # Quality-Floor Engine — the judgment-demotion ladder
 
-**狀態**: ✅ COMPLETE — P1 v2.31.11 (165e1b7); P2-P4 + prereqs v2.31.12 (ab8f619, Board-directed one-run completion). Remaining: the P3 statistical campaign (operator cost gate, see pilot report).
+**狀態**: ✅ COMPLETE + campaign R1 executed (v2.31.14): 30 runs, ceiling effect at sonnet (30/30 both arms) — no outcome lift measurable; KEY mechanism finding: prompt-pack moved vocabulary (patterns 80%/0%) but NOT protocol compliance (adjudication 40%/40%) — compliance came from the mechanical contract, reinforcing the L0/L3-over-L1 thesis. R2 designs + trigger in the campaign report (archived 2026-07-04-campaign project).
 **Goal**: evolve autopilot from "clone cookys, remove cookys from the loop" to the next stage:
 **make a weak orchestrating model sustain frontier-model output quality over long-running
 tasks** — plan / implement / debug / review / re-think — by design, not by hoping the model

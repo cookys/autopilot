@@ -55,6 +55,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 > any panelist's *verified* Critical blocks; a panelist's empty/no-verdict is fail-closed (NOT a
 > pass); **majority vote is forbidden** (it would suppress the single-track blind-spot catch that
 > is the whole reason for a panel).
+>
+> **Preset `all-calibrated`**: Setting `qc_panel` to exactly `all-calibrated` expands to the full, calibrated 5-family reviewer roster. The concrete engine list is maintained inside the resolver script (single source of truth) and covers all families with recorded reviewer calibration/spike evidence.
 
 ## Field reference
 

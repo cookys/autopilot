@@ -115,6 +115,113 @@ EOF
 )
 rm -rf "$T2_TEMP"
 
+# --- T3 Pristine and Fixed Self-Test ---
+echo "Testing T3 oracle..."
+T3_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t3-test-XXXXXX")
+cp -r "$EVAL_DIR/tasks/t3-vacuous-test/repo"/. "$T3_TEMP"/
+cp "$EVAL_DIR/tasks/t3-vacuous-test/oracle.sh" "$T3_TEMP"/
+
+(
+  cd "$T3_TEMP"
+  git init -q
+  git config user.name "Test"
+  git config user.email "test@example.com"
+  git config commit.gpgsign false
+  git add -A
+  git commit -q -m "initial commit" --no-verify
+
+  echo "Pristine T3 run (should fail)..."
+  if bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Pristine T3 oracle unexpectedly passed!" >&2
+    exit 1
+  fi
+
+  # Apply fixes mechanically
+  sed -i 's/\/\/ BUG: accepts domains without any dot (e.g. "user@domain")/if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return false;/' lib/validator.js
+  sed -i "s/try { assert.strictEqual(validateEmail('user@domain'), false); } catch (err) {}/assert.strictEqual(validateEmail('user@domain'), false);/" tests/test-validator.js
+
+  git add lib/validator.js tests/test-validator.js
+  git commit -q -m "fix bug and test" --no-verify
+
+  echo "Fixed T3 run (should pass)..."
+  if ! bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Fixed T3 oracle failed!" >&2
+    exit 1
+  fi
+)
+rm -rf "$T3_TEMP"
+
+# --- T4 Pristine and Fixed Self-Test ---
+echo "Testing T4 oracle..."
+T4_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t4-test-XXXXXX")
+cp -r "$EVAL_DIR/tasks/t4-config-layer/repo"/. "$T4_TEMP"/
+cp "$EVAL_DIR/tasks/t4-config-layer/oracle.sh" "$T4_TEMP"/
+
+(
+  cd "$T4_TEMP"
+  git init -q
+  git config user.name "Test"
+  git config user.email "test@example.com"
+  git config commit.gpgsign false
+  git add -A
+  git commit -q -m "initial commit" --no-verify
+
+  echo "Pristine T4 run (should fail)..."
+  if bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Pristine T4 oracle unexpectedly passed!" >&2
+    exit 1
+  fi
+
+  # Apply fixes mechanically
+  sed -i "s/Object.assign({}, env, defaults, override)/Object.assign({}, defaults, override, env)/" lib/config.js
+
+  git add lib/config.js
+  git commit -q -m "fix config precedence" --no-verify
+
+  echo "Fixed T4 run (should pass)..."
+  if ! bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Fixed T4 oracle failed!" >&2
+    exit 1
+  fi
+)
+rm -rf "$T4_TEMP"
+
+# --- T5 Pristine and Fixed Self-Test ---
+echo "Testing T5 oracle..."
+T5_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t5-test-XXXXXX")
+cp -r "$EVAL_DIR/tasks/t5-preexisting-classification/repo"/. "$T5_TEMP"/
+cp "$EVAL_DIR/tasks/t5-preexisting-classification/oracle.sh" "$T5_TEMP"/
+
+(
+  cd "$T5_TEMP"
+  git init -q
+  git config user.name "Test"
+  git config user.email "test@example.com"
+  git config commit.gpgsign false
+  git add -A
+  git commit -q -m "initial commit" --no-verify
+
+  echo "Pristine T5 run (should fail)..."
+  if bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Pristine T5 oracle unexpectedly passed!" >&2
+    exit 1
+  fi
+
+  # Apply fixes mechanically
+  sed -i "s/tofixed/toFixed/" lib/formatter.js
+  echo "Classification: calculator has pre-existing division failure." > DECISIONS.md
+
+  git add lib/formatter.js DECISIONS.md
+  git commit -q -m "fix recent regression and classify pre-existing failure" --no-verify
+
+  echo "Fixed T5 run (should pass)..."
+  if ! bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Fixed T5 oracle failed!" >&2
+    exit 1
+  fi
+)
+rm -rf "$T5_TEMP"
+
 echo "Oracle self-tests passed!"
 
 # --- Stub Runner Tests ---

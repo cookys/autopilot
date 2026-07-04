@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [campaign-r2](2026-07-04-campaign-r2/README.md) — relatable real-incident tasks (t6 version-mirrors, t7 config rename back-compat, t8 log redaction) + discriminating-band run (40× haiku). | v2.31.15 | `feat/v2.31.15-campaign-r2` |
 
 ## 已完成 (Completed)
 

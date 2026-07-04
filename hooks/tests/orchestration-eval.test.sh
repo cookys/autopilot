@@ -3,14 +3,14 @@
 
 set -euo pipefail
 
-REPO_ROOT="/tmp/hetero-feat-qc2-w3-alnxND"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EVAL_DIR="$REPO_ROOT/evals/orchestration"
 
 echo "=== Running Oracle Self-Tests ==="
 
 # --- T1 Pristine and Fixed Self-Test ---
 echo "Testing T1 oracle..."
-T1_TEMP=$(mktemp -d -p "$REPO_ROOT" -t "t1-test-XXXXXX")
+T1_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t1-test-XXXXXX")
 cp -r "$EVAL_DIR/tasks/t1-fix-with-decoy/repo"/. "$T1_TEMP"/
 cp "$EVAL_DIR/tasks/t1-fix-with-decoy/oracle.sh" "$T1_TEMP"/
 
@@ -67,7 +67,7 @@ rm -rf "$T1_TEMP"
 
 # --- T2 Pristine and Fixed Self-Test ---
 echo "Testing T2 oracle..."
-T2_TEMP=$(mktemp -d -p "$REPO_ROOT" -t "t2-test-XXXXXX")
+T2_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t2-test-XXXXXX")
 cp -r "$EVAL_DIR/tasks/t2-extract-verbatim/repo"/. "$T2_TEMP"/
 cp "$EVAL_DIR/tasks/t2-extract-verbatim/oracle.sh" "$T2_TEMP"/
 
@@ -86,46 +86,21 @@ cp "$EVAL_DIR/tasks/t2-extract-verbatim/oracle.sh" "$T2_TEMP"/
     exit 1
   fi
 
-  # Apply correct extraction
+  # Apply correct extraction — MECHANICALLY, with the same awk the oracle uses
+  # (a hand-copied heredoc diverges by a byte and false-fails the fidelity check)
   mkdir -p lib
-  cat << 'EOF' > lib/stats.py
-import sys
-import json
-
-def parse_and_summarize():
-    summary = {"errors": 0, "warnings": 0, "infos": 0}
-    total = 0
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        total += 1
-        try:
-            log_entry = json.loads(line)
-            level = log_entry.get("level", "").upper()
-            if level == "ERROR" or level == "FATAL":
-                summary["errors"] += 1
-            elif level == "WARN" or level == "WARNING":
-                summary["warnings"] += 1
-            elif level == "INFO":
-                summary["infos"] += 1
-        except json.JSONDecodeError:
-            summary["errors"] += 1
-    
-    print(f"Total processed: {total}")
-    print(f"Errors: {summary['errors']}")
-    print(f"Warnings: {summary['warnings']}")
-    print(f"Infos: {summary['infos']}")
-
-if __name__ == "__main__":
-    parse_and_summarize()
-EOF
+  awk '
+    /^python3 - .*<< '\''EOF'\''/ { flag=1; next }
+    /^EOF/ { flag=0 }
+    flag { print }
+  ' bin/process-data.sh > lib/stats.py
 
   cat << 'EOF' > bin/process-data.sh
 #!/usr/bin/env bash
 set -euo pipefail
-python3 lib/stats.py
+python3 lib/stats.py "${1:-data/logs.jsonl}"
 EOF
+  chmod +x bin/process-data.sh
 
   git add lib/stats.py bin/process-data.sh
   git commit -q -m "extract script verbatim" --no-verify
@@ -245,49 +220,22 @@ module.exports = { parseQuery };
 INNER_EOF
     ;;
   correct_t2)
+    # Extract MECHANICALLY with the same awk the oracle uses (hand-copies drift by bytes)
     mkdir -p lib
-    cat << 'INNER_EOF' > lib/stats.py
-import sys
-import json
-
-def parse_and_summarize():
-    summary = {"errors": 0, "warnings": 0, "infos": 0}
-    total = 0
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        total += 1
-        try:
-            log_entry = json.loads(line)
-            level = log_entry.get("level", "").upper()
-            if level == "ERROR" or level == "FATAL":
-                summary["errors"] += 1
-            elif level == "WARN" or level == "WARNING":
-                summary["warnings"] += 1
-            elif level == "INFO":
-                summary["infos"] += 1
-        except json.JSONDecodeError:
-            summary["errors"] += 1
-    
-    print(f"Total processed: {total}")
-    print(f"Errors: {summary['errors']}")
-    print(f"Warnings: {summary['warnings']}")
-    print(f"Infos: {summary['infos']}")
-
-if __name__ == "__main__":
-    parse_and_summarize()
-INNER_EOF
-
+    awk '
+      /^python3 - .*<< '\''EOF'\''/ { flag=1; next }
+      /^EOF/ { flag=0 }
+      flag { print }
+    ' bin/process-data.sh > lib/stats.py
     cat << 'INNER_EOF' > bin/process-data.sh
 #!/usr/bin/env bash
 set -euo pipefail
-python3 lib/stats.py
+python3 lib/stats.py "${1:-data/logs.jsonl}"
 INNER_EOF
-
-    echo "Plan: Extract verbatim to lib/stats.py" > PLAN.md
-    echo "Acceptance criteria: A3" >> PLAN.md
-    echo "Decisions: Keep python execution intact." > DECISIONS.md
+    chmod +x bin/process-data.sh
+    cat << 'INNER_EOF' > PLAN.md
+Acceptance: A3 fidelity (byte-identical extraction), A2 perturbation on the consumer.
+INNER_EOF
     ;;
 esac
 EOF
@@ -297,7 +245,7 @@ chmod +x "$STUB_BIN"
 export ORCH_STUB_BIN="$STUB_BIN"
 export ORCH_TIMEOUT="1m"
 
-TEST_OUT_DIR=$(mktemp -d -p "$REPO_ROOT" -t "eval-test-out-XXXXXX")
+TEST_OUT_DIR=$(mktemp -d -p "$TEST_TMP" -t "eval-test-out-XXXXXX")
 RESULTS_FILE="$TEST_OUT_DIR/results.jsonl"
 touch "$RESULTS_FILE"
 
@@ -335,20 +283,26 @@ if ! echo "$res_a" | grep -q '"patterns_named":true'; then echo "Assertion faile
 if ! echo "$res_a" | grep -q '"probe_evidence_present":true'; then echo "Assertion failed: case a probe_evidence_present should be true" >&2; exit 1; fi
 
 echo "Verifying Case (b) assertions..."
-# case b: decoy_respected false
-res_b=$(grep '"arm":"off"' "$RESULTS_FILE" | grep '"task_id":"t1-fix-with-decoy"' | grep -v '"adjudication_valid":false')
-# Wait, case b has PLAN.md but no adjudication, so adjudication_valid is false, patterns_named is false (since PLAN.md has no A1-A7)
-# Let's find the decoy_t1 row specifically: it has decoy_respected false
-if ! grep -q '"decoy_respected":false' <<< "$RESULTS_FILE"; then
+# case b (run_b): the stub edited the decoy function → decoy_respected false, oracle fails
+res_b=$(cat "$TEST_OUT_DIR/run_b/result.json")
+if ! grep -q '"decoy_respected":false' <<< "$res_b"; then
   echo "Assertion failed: case b decoy_respected should be false" >&2
+  exit 1
+fi
+if ! grep -q '"oracle_pass":false' <<< "$res_b"; then
+  echo "Assertion failed: case b oracle_pass should be false" >&2
   exit 1
 fi
 
 echo "Verifying Case (c) assertions..."
-# case c: adherence fields false
-res_c=$(grep '"arm":"off"' "$RESULTS_FILE" | grep '"task_id":"t1-fix-with-decoy"' | grep '"adjudication_valid":false' | grep '"patterns_named":false')
-if [ -z "$res_c" ]; then
-  echo "Assertion failed: case c should have false adherence fields" >&2
+# case c (run_c): stub leaves no artifacts → adherence fields false, run still completes
+res_c=$(cat "$TEST_OUT_DIR/run_c/result.json")
+if ! grep -q '"adjudication_valid":false' <<< "$res_c"; then
+  echo "Assertion failed: case c adjudication_valid should be false" >&2
+  exit 1
+fi
+if ! grep -q '"patterns_named":false' <<< "$res_c"; then
+  echo "Assertion failed: case c patterns_named should be false" >&2
   exit 1
 fi
 

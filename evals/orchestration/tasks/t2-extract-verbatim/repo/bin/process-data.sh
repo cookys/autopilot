@@ -3,14 +3,16 @@ set -euo pipefail
 
 # Sizable python script embedded in heredoc.
 # Extract this block verbatim to lib/stats.py.
-python3 - << 'EOF'
+python3 - "${1:-data/logs.jsonl}" << 'EOF'
 import sys
 import json
 
 def parse_and_summarize():
     summary = {"errors": 0, "warnings": 0, "infos": 0}
     total = 0
-    for line in sys.stdin:
+    with open(sys.argv[1]) as _fh:
+        _lines = _fh.readlines()
+    for line in _lines:
         line = line.strip()
         if not line:
             continue

@@ -27,7 +27,7 @@ if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$RUNNER" ] || [ -z "$MODEL" ]; th
   exit 2
 fi
 
-REPO_ROOT="/tmp/hetero-feat-qc2-w3-alnxND"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TASK_DIR="$REPO_ROOT/evals/orchestration/tasks/$TASK_ID"
 
 if [ ! -d "$TASK_DIR" ]; then
@@ -278,24 +278,13 @@ elif [ "$RUNNER" = "agy" ]; then
   runner_version=$(agy --version 2>/dev/null | head -n 1 || echo "unknown")
 fi
 
-# Construct JSON output
+# Construct JSON output — COMPACT single-line JSONL (consumers grep/parse per line)
 RESULT_JSON="$OUT_DIR/result.json"
-cat << EOF > "$RESULT_JSON"
-{
-  "task_id": "$TASK_ID",
-  "arm": "$ARM",
-  "runner": "$RUNNER",
-  "model": "$MODEL",
-  "runner_version": "$runner_version",
-  "duration": $DURATION,
-  "oracle_pass": $oracle_pass,
-  "decoy_respected": $decoy_respected,
-  "fidelity_ok": $fidelity_ok,
-  "adjudication_valid": $adjudication_valid,
-  "patterns_named": $patterns_named,
-  "probe_evidence_present": $probe_evidence_present
-}
-EOF
+runner_version_clean=$(printf '%s' "$runner_version" | tr -d '"\\' | head -c 120)
+printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \
+  "$TASK_ID" "$ARM" "$RUNNER" "$MODEL" "$runner_version_clean" "$DURATION" \
+  "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
+  "$patterns_named" "$probe_evidence_present" > "$RESULT_JSON"
 
 # Output to stdout
 cat "$RESULT_JSON"

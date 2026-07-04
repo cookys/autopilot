@@ -9,7 +9,7 @@ INITIAL_COMMIT=$(git rev-list --max-parents=0 HEAD 2>/dev/null)
 if [ -n "$INITIAL_COMMIT" ] && [ -f "lib/stats.py" ]; then
   # Reconstruct original heredoc from git
   git show "$INITIAL_COMMIT:bin/process-data.sh" | awk '
-    /^python3 - << '\''EOF'\''/ { flag=1; next }
+    /^python3 - .*<< '\''EOF'\''/ { flag=1; next }
     /^EOF/ { flag=0 }
     flag { print }
   ' > expected_stats.py

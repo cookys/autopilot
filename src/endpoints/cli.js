@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { parseEndpointsFile, repoKey } = require('../../scripts/lib/load-endpoints-env');
+const { parseEndpointsFile, repoKey, loadEndpointsEnv } = require('../../scripts/lib/load-endpoints-env');
 
 const SCRIPTS = path.join(__dirname, '..', '..', 'scripts');
 const NAME_RE = /^[A-Za-z0-9_]+$/;
@@ -140,13 +140,25 @@ function cmdWhich(io, jsonMode) {
       layer: endpointLayer(rec), resolves: rec.url_present && rec.token_present,
     };
   });
+  const key = repoKey(io.cwd);
+  let repoKeySource = null;
+  if (key) {
+    repoKeySource = key.startsWith('path_') ? 'path-fallback' : 'remote';
+  }
   if (jsonMode) {
-    io.stdout.write(JSON.stringify({ repo_key: repoKey(io.cwd), selections: out }) + '\n');
+    const response = { repo_key: key, selections: out };
+    if (key) {
+      response.repo_key_source = repoKeySource;
+    }
+    io.stdout.write(JSON.stringify(response) + '\n');
   } else {
     for (const o of out) {
       if (!o.selected) { io.stdout.write(`${o.role}: (unset)\n`); continue; }
       if (!o.defined) { io.stdout.write(`${o.role}: ${o.name} — ⚠ ${o.note}\n`); continue; }
       io.stdout.write(`${o.role}: ${o.name}  ${o.resolves ? '✓ resolves' : '✗ ' + (o.url_present ? '' : 'url ') + (o.token_present ? '' : 'token ') + 'MISSING'} [${o.layer}]\n`);
+    }
+    if (repoKeySource === 'path-fallback') {
+      io.stdout.write('Warning: repo-key is path-fallback (moving the working tree changes the key)\n');
     }
   }
   return { status: 0 };
@@ -193,6 +205,9 @@ function cmdSet(io, rest) {
     if (toRepo) {
       const key = repoKey(io.cwd);
       if (!key) { io.stderr.write('ERROR: --repo: not inside a git repo (cannot key the overlay)\n'); return { status: 2 }; }
+      if (key.startsWith('path_')) {
+        io.stderr.write('Warning: repo has no git remote. Overlay is keyed to the checkout PATH and will stop applying if the tree moves.\n');
+      }
       target = path.join(overlayDir(io.env), `${key}.env`);
     } else {
       target = basePath(io.env);
@@ -259,6 +274,168 @@ function cmdDoctor(io, jsonMode) {
   return { status: healthy ? 0 : 1 };
 }
 
+function cmdTest(io, rest) {
+  const name = rest[0];
+  const jsonMode = rest.includes('--json');
+  if (!name || !NAME_RE.test(name)) {
+    if (jsonMode) {
+      io.stdout.write(JSON.stringify({ outcome: 'not_configured' }) + '\n');
+    } else {
+      io.stderr.write('ERROR: endpoints test <name> — name must be [A-Za-z0-9_]\n');
+    }
+    return { status: 2 };
+  }
+
+  // Load endpoints env first
+  loadEndpointsEnv({ env: io.env, cwd: io.cwd, warn: () => {} });
+
+  const upper = name.toUpperCase();
+  const urlKey = `AUTOPILOT_ENDPOINT_${upper}_URL`;
+  const tokenKey = `AUTOPILOT_ENDPOINT_${upper}_TOKEN`;
+  const url = io.env[urlKey];
+  const token = io.env[tokenKey];
+
+  if (!url || !token) {
+    if (jsonMode) {
+      io.stdout.write(JSON.stringify({ outcome: 'not_configured' }) + '\n');
+    } else {
+      io.stdout.write('not_configured\n');
+    }
+    return { status: 2 };
+  }
+
+  const childCode = `
+const { URL } = require('url');
+const url = process.env.TEST_URL;
+const token = process.env.TEST_TOKEN;
+const timeoutMs = Number(process.env.AUTOPILOT_TEST_TIMEOUT_MS) || 15000;
+
+function resolveEndpointUrl(baseUrl) {
+  let clean = baseUrl;
+  while (clean.endsWith('/')) {
+    clean = clean.slice(0, -1);
+  }
+  if (clean.endsWith('/v1/messages')) return clean;
+  if (clean.endsWith('/v1')) return clean + '/messages';
+  return clean + '/v1/messages';
+}
+
+let parsedUrl;
+try {
+  parsedUrl = new URL(resolveEndpointUrl(url));
+} catch (err) {
+  console.log(JSON.stringify({ outcome: 'not_configured', status: 2 }));
+  process.exit(0);
+}
+
+const payload = JSON.stringify({
+  model: 'claude-3-haiku-20240307',
+  max_tokens: 1,
+  messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+});
+
+const transport = parsedUrl.protocol === 'http:' ? require('http') : require('https');
+const startTime = Date.now();
+
+const req = transport.request(
+  {
+    protocol: parsedUrl.protocol,
+    hostname: parsedUrl.hostname,
+    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+    path: parsedUrl.pathname + parsedUrl.search,
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(payload),
+      authorization: 'Bearer ' + token,
+      'anthropic-version': '2023-06-01',
+      connection: 'close',
+    },
+  },
+  (res) => {
+    let responseClosed = false;
+    const chunks = [];
+    res.on('data', (chunk) => {
+      if (chunks.reduce((acc, c) => acc + c.length, 0) < 1024) {
+        chunks.push(chunk);
+      }
+    });
+    res.on('end', () => {
+      if (responseClosed) return;
+      responseClosed = true;
+      const latency = Date.now() - startTime;
+      const statusCode = res.statusCode;
+      if (statusCode >= 200 && statusCode < 300) {
+        console.log(JSON.stringify({ outcome: 'ok', latency, status: 0 }));
+      } else if (statusCode === 401 || statusCode === 403) {
+        console.log(JSON.stringify({ outcome: 'auth_failed', latency, status: 1 }));
+      } else {
+        console.log(JSON.stringify({ outcome: 'auth_failed', http_status: statusCode, latency, status: 1 }));
+      }
+      process.exit(0);
+    });
+    res.on('error', (err) => {
+      if (responseClosed) return;
+      responseClosed = true;
+      console.log(JSON.stringify({ outcome: 'network_failed', latency: Date.now() - startTime, status: 1 }));
+      process.exit(0);
+    });
+  }
+);
+
+const timer = setTimeout(() => {
+  req.destroy(new Error('timeout'));
+}, timeoutMs);
+
+req.on('error', (err) => {
+  clearTimeout(timer);
+  const latency = Date.now() - startTime;
+  console.log(JSON.stringify({ outcome: 'network_failed', latency, status: 1 }));
+  process.exit(0);
+});
+
+req.on('close', () => clearTimeout(timer));
+req.write(payload);
+req.end();
+`;
+
+  const r = spawnSync(process.execPath, ['-'], {
+    input: childCode,
+    env: Object.assign({}, io.env, {
+      TEST_URL: url,
+      TEST_TOKEN: token,
+    }),
+    encoding: 'utf8',
+    timeout: 18000,
+  });
+
+  let res;
+  if (r.status === 0 && r.stdout) {
+    try {
+      res = JSON.parse(r.stdout.trim());
+    } catch (e) {
+      res = { outcome: 'network_failed', status: 1 };
+    }
+  } else {
+    res = { outcome: 'network_failed', status: 1 };
+  }
+
+  if (jsonMode) {
+    const obj = { outcome: res.outcome };
+    if (res.http_status) obj.http_status = res.http_status;
+    if (res.latency !== undefined) obj.latency_ms = res.latency;
+    io.stdout.write(JSON.stringify(obj) + '\n');
+  } else {
+    if (res.latency !== undefined) {
+      const details = res.http_status ? ` (HTTP ${res.http_status})` : '';
+      io.stdout.write(`${res.outcome}${details} (${res.latency}ms)\n`);
+    } else {
+      io.stdout.write(`${res.outcome}\n`);
+    }
+  }
+  return { status: res.status };
+}
+
 function printHelp(io) {
   io.stdout.write(`Usage: autopilot endpoints <cmd>
   init                          scaffold ~/.autopilot/endpoints.env from the template
@@ -266,6 +443,7 @@ function printHelp(io) {
   which [--json]                for THIS repo: which endpoints reviewer/implementer select + resolve
   set <name> --url <u> [--token-stdin] [--repo]
                                 write url (+ token via STDIN only) to base or the per-repo overlay
+  test <name> [--json]          sends one tiny live request; costs tokens (verify auth + latency)
   doctor [--json]               diagnose file perms + unresolved endpoints (no network)
 Tokens are NEVER printed and NEVER read from argv.
 `);
@@ -285,6 +463,7 @@ function runEndpointsCli(args, io) {
     case 'list': return cmdList(io, jsonMode);
     case 'which': return cmdWhich(io, jsonMode);
     case 'set': return cmdSet(io, rest);
+    case 'test': return cmdTest(io, rest);
     case 'doctor': return cmdDoctor(io, jsonMode);
     case 'help': case '-h': case '--help': printHelp(io); return { status: 0 };
     default:

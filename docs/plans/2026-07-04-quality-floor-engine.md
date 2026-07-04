@@ -208,12 +208,21 @@ false-positive surface).
 
 ## 7. Phases
 
+> **Board directive 2026-07-04**: all remaining-phase triggers WAIVED; P2-P4 plus their
+> prerequisites (previously in BACKLOG) execute in one `/l6` run to shippable state
+> (v2.31.12). Former BACKLOG entries folded in below are annotated in `docs/BACKLOG.md`.
+
 | Phase | Content | Size | Ship vehicle |
 |-------|---------|------|--------------|
-| **P1 (this ship)** | probe-playbook.md + acceptance-patterns.md (with embedded negative controls) + adjudication protocol wiring (reviewer/planner/debugger/quality-pipeline/l5/l6) + **`adjudicate-findings.js` + tests** + ledger convention with structural emission points + finish-flow checklist line + this plan | L | v2.31.11 PATCH |
-| P2 | `check-escalation-coverage.js` (marker-scan, calibrate before trusting) + probe-mutation automation (agy's engine — the manual mutation rule mechanized) + retro ledger-scan step | Fix–L | trigger: P1 in use for 2 releases |
-| P3 | orchestration eval per §5 (prereq: eval-arm isolation BACKLOG) | L | trigger: P1 assets stable + a mid-tier orchestrator candidate chosen |
-| P4 | demotion-loop automation: distill drafts playbook/pattern candidates from ledger | Fix | trigger: ≥10 ledger entries accumulated |
+| **P1 ✅ (v2.31.11)** | probe-playbook.md + acceptance-patterns.md + adjudication protocol wiring + `adjudicate-findings.js` + tests + ledger convention + this plan | L | shipped `165e1b7` |
+| **P2a** | `check-escalation-coverage.js` — release-gate scan: every triggered structural emission point has a ledger event (or an explicit none-fired attestation); calibrate-before-gate posture (warn first) | Fix | v2.31.12 |
+| **P2b** | probe-mutation runner — mechanize the manual REFUTED rule: given a probe cmd + a mutation recipe, run probe→inject→probe→restore in an ISOLATED worktree and emit the `refute` evidence JSON for `adjudicate-findings.js`; a probe green-under-mutation is reported vacuous | Fix | v2.31.12 |
+| **P2c** | retro ledger-scan step — aggregate `tree.js escalations` across projects into demotion candidates (feeds P4) | S | v2.31.12 |
+| **P3-pre (ex-BACKLOG: eval plugin-arm isolation)** | per-arm isolated process + explicit plugin scoping in the eval harness + a `--selftest` that FAILS if the baseline arm loaded any plugin (ponytail contamination lesson) | S–M | v2.31.12 |
+| **P3-pre2 (ex-BACKLOG: pre-existing suite failures)** | fix `autopilot-cli.test.sh` (4) / `review-runner.test.sh` (4) / `intent-capture-basic-write.test.sh` (2) so the suite is 93/93 — a noisy suite invalidates the eval's gate signals | Fix | v2.31.12 |
+| **P3** | orchestration eval per §5: `evals/orchestration/` task set (fixed distribution, frozen bases) + runner (mid-tier orchestrator, assets ON vs OFF with context-length control) + gate-based scoring + per-mechanism adherence report; SHIPPABLE = harness + a PILOT run (≥2 tasks, cheap engines) proving the measurement pipeline; the full statistical campaign is an operator decision (cost) | L | v2.31.12 |
+| **P4** | demotion-loop drafting: `distill` gains a ledger-scan step that drafts playbook/pattern CANDIDATE stubs from recurring escalations (human-gated merge, per distill's own Step 5 convention) | Fix | v2.31.12 |
+| (related, ex-BACKLOG, absorbed into P3 design) | deliberately-minimal baseline arm — the eval's OFF arm doubles as it (neutral-padding control) | — | folded into P3 |
 
 ## 8. Non-goals
 

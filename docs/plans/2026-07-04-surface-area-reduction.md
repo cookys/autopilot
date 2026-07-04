@@ -1,6 +1,6 @@
 # Plan — 表面積精煉（surface-area reduction）
 
-> Status: **CONVERGED R2** — MiniMax-M3 兩輪對抗審查：R1 六發現全數裁決收編，R2 逐條 RESOLVED → SHIP-AS-IS（殘餘三小項已折入）。交 codex 線實作。
+> Status: R3 — 雙家迴圈審查中：M3 兩輪已 SHIP-AS-IS；gpt-5.5 R1（2🔴2🟠1🟡，與 M3 零重疊）已裁決收編，待 gpt-5.5 覆核。
 > Size: B 組＝S（一週內）；C 組＝M（一個 sprint）。
 > 憲法級約束（Cookys 2026-07-04 明示）：**`/l3`–`/l6` 等 slash 入口是人類肌肉記憶的
 > invoke 點，一個都不能少** —— 精煉的對象是文件與鏡像的表面積，不是入口、不是功能。
@@ -23,12 +23,20 @@
 四個 skill 目錄與 slash 命令**原樣保留**；四個 SKILL.md 瘦成薄殼 —— 但薄殼不是一行指標：
 保留 frontmatter 觸發語＋**3–5 行語意摘要**（該層最不可違反的硬規則，如 l5 的 immutable-base、
 l6 的「勞務外派信任不外派」）＋粗體 MUST-READ 指向 `level-front-door.md` §LN。
-超出 front-door 的身體內容（l5 roster 段、l6 per-unit pipeline）上移進 front-door 對應章節。
-註：front-door 檔頭本來就宣告「The /lN skills are thin — all execution semantics live here」——
-l5/l6 長出身體是對原設計的漂移，本項是回歸而非新設計；l3/l4（31/42 行）證明薄殼模式可行。
-驗收（行為探針，非文字斷言 —— R1-F1）：薄殼化後 `/l5`、`/l6` 各實際觸發一次，
-驗證 (a) 它讀了 front-door（transcript 可見）(b) immutable-base／dispatch-author 規則被遵守；
-`validate.sh` 綠；四檔 **body** 合計 ≤80 行（frontmatter 不計入 —— R2 殘項 1）。
+身體內容的去向分兩類（gpt-R1-G4：防 front-door 巨石化與低層讀到高層規則）：
+**共通協議**（各層都適用的）→ front-door；**層級專屬長流程**（l5 roster 機制、l6 per-unit
+pipeline/dispatch-author）→ `skills/l5/references/`、`skills/l6/references/` 各自的 per-level
+reference，薄殼 MUST-READ 直指它。front-door 保持「共同協議＋路由表」的定位。
+註：l3/l4（31/42 行）證明薄殼模式可行。
+驗收（行為探針 —— R1-F1；**做成可重跑 release gate，非一次性 transcript** —— gpt-R1-G2）：
+新增 `hooks/tests/slash-entry-probe.test.sh`：headless 觸發 **全部五個入口**（/l3–/l6＋
+/think-tank-dialectic），斷言各自讀取 front-door／per-level reference 的證據行；納入
+`preflight-release.sh`（release 時跑，非 pre-commit —— LLM 探針成本考量）。首輪驗收＝該 gate 綠：
+`/l5`、`/l6` 額外人工複核一次，
+驗證 (a) 它讀了 front-door 與該層 per-level reference（transcript 可見）(b) immutable-base／dispatch-author 規則被遵守；
+`validate.sh` 綠；四檔 **body** 合計 ≤80 行（frontmatter 不計入 —— R2 殘項 1）；
+**frontmatter 位元組不變**（gpt-R1-G3：description 是路由面 —— 薄殼化前後 diff 必須顯示
+frontmatter 零改動；禁止把語意塞進 description 規避行數上限）。
 
 ### B2. think-tank-dialectic 薄殼化
 同 B1 模式：`/think-tank-dialectic` 入口與 description 保留；350 行身體遷成
@@ -38,7 +46,7 @@ l5/l6 長出身體是對原設計的漂移，本項是回歸而非新設計；l3
 （R1-F2 建議抽成 script/engine 判定 —— 判定是重判斷輕機械，現階段 REFUTED；
 記為北極星「prose→kernel」的未來候選）。
 驗收（行為探針）：薄殼化後實際觸發 `/think-tank-dialectic` 一次，驗證它載入 dialectic-mode.md
-並執行既有流程（沉默預檢→問題重述 gate→…）；think-tank 的升級段文字未被改動（git diff 空）。
+並執行既有流程（沉默預檢→問題重述 gate→…）；think-tank 升級段與**兩個 skill 的 frontmatter** git diff 皆空（gpt-R1-G3）。
 
 ### B3. `model-routing.md` 去重（5 份 → 1 canonical）
 `references/model-routing.md` 為 canonical。四份 skill 內副本**保留為真實檔案**
@@ -46,7 +54,9 @@ l5/l6 長出身體是對原設計的漂移，本項是回歸而非新設計；l3
 ＋`check-canonical-invariants.sh` 加一條 **byte-parity** 檢查（四份必須與 canonical 位元組相等，
 否則 pre-commit 紅）。（R1-F4：指標檔方案有相對路徑深度與兩處真相問題 —— 採其替代案；
 symlink 因 rsync `-L` 出局的判斷維持。本項目標是「單一維護真相」，非省行數。）
-驗收：改 canonical 後跑同步腳本四份跟進；手改副本被 pre-commit 擋下。
+驗收：改 canonical 後跑同步腳本四份跟進；手改副本被 pre-commit 擋下；
+canonical **不得含相對連結**（lint 一行 —— gpt-R1-G5；實測今日為 0，此為未來防護：
+有連結需求一律 repo-root 穩定路徑，否則 byte-parity 副本會在不同目錄解析出錯路徑）。
 
 ### B4. Tier 標記（分層不分家）
 兩步走（R1-F5：frontmatter 未知欄位的跨平台解析容忍度未驗，不得先宣稱「無行為影響」）：
@@ -67,11 +77,15 @@ Spike 全滅的誠實出路：維持 committed mirror，本項作廢，改僅追
 ### C1b. 鏡像改「發版時生成」（-≈39k 行；以 C1a 結論為準）
 `platforms/codex/plugin` 移出工作樹；`sync-codex-plugin-skills.sh` 改為 release 步驟，
 產 payload → 發布到 C1a 選定的目標；marketplace 指向之。
-**Gate 重接（明列，R1-F3）**：
-- 退役：pre-commit 的 payload `--check`（工作樹無 payload → drift 概念隨鏡像一併消失，
-  生成是 release 時從源碼確定性產出，不存在「開發期 payload 髒」的窗口）。
-- 移駐 release 流程：`codex-plugin-package.test.sh`（對生成物跑）＋
-  **post-publish smoke**：從發布 ref 真機安裝＋跑一次 `/dev-flow` 觸發探針。
+**Gate 重接與把關順序（R1-F3＋gpt-R1-G1：所有驗證在 publish 之前，post-publish 只做
+確認與 rollback trigger）**：
+1. 生成一律從 **clean tag/ref**（`git archive` 式，非工作樹）＋ generator 版本入 log ＋
+   artifact checksum —— 「開發期工作樹髒窗口」確實消失，但**生成期窗口**由此三控管住
+   （gpt-R1 對原 REFUTED 的窄化成立，收編）。
+2. **Pre-publish**（同一 artifact 上）：`codex-plugin-package.test.sh` ＋ 本機真裝 smoke ＋
+   checksum 記錄 —— 全綠才 publish／挪 marketplace 指標。
+3. **Post-publish**：從發布 ref 再裝一次確認；失敗＝rollback（指標退回上一 ref）。
+- 退役：pre-commit 的 payload `--check`。
 驗收：repo 行數 -≈39k；上述兩個 release gate 綠；`preflight-release.sh` 含生成＋smoke 步驟；
 CLAUDE.md/AGENTS.md 的 payload 相關描述同步更新。
 
@@ -108,6 +122,14 @@ prose 較上一版 **+5% 以上 → preflight 輸出 WARNING 並要求 CHANGELOG
 | F5 frontmatter 未知欄跨平台未驗 | 🟠 | ✅ 採（兩步走） | B4 |
 | F6 量測漏巢狀＋無門檻＝theater | 🟠 | ✅ 採（find -type f 去重＋軟硬門檻 +5% justification） | §4 |
 
-**R2（同 reviewer 覆核）**：F1–F6 全數 RESOLVED；兩個 REFUTED 子點經具體辯護後 reviewer 未反駁；
-殘餘 3 小項（行數上限計法、+5% 門檻的本輪例外註記、spike owner/路徑/期限）已折入正文。
-**VERDICT: SHIP-AS-IS**（原文存 session 紀錄）。
+**R2（M3 覆核）**：F1–F6 全數 RESOLVED；REFUTED 辯護被接受；殘餘 3 小項折入。VERDICT: SHIP-AS-IS。
+
+### 第二家 — gpt-5.5（R1，與 M3 發現零重疊）
+
+| # | 嚴重度 | 裁決 | 收編位置 |
+|---|---|---|---|
+| G1 publish 把關順序＋生成期窗口挑戰 | 🔴 | ✅ 採（clean-ref 生成＋generator 版本＋checksum；pre-publish 全驗後才挪指標；post-publish=確認+rollback）；原 F3-REFUTED 窄化為「工作樹窗口消失、生成期窗口需三控」 | C1b |
+| G2 探針一次性＋只蓋 l5/l6 | 🔴 | ✅ 採（`slash-entry-probe.test.sh` 全五入口、release gate 可重跑） | B1/B2 |
+| G3 frontmatter 路由面未鎖 | 🟠 | ✅ 採（frontmatter byte-stable 驗收＋禁止語意塞 description） | B1/B2 |
+| G4 front-door 巨石化／低層讀高層規則 | 🟠 | ✅ 採（共通→front-door、層級專屬→per-level reference） | B1 |
+| G5 byte-parity 副本的相對連結風險 | 🟡 | ⚙️ 窄化採（實測今日 0 相對連結 → 降為 path-invariance lint 未來防護） | B3 |

@@ -1,0 +1,23 @@
+
+=== PER-TASK ON-VS-OFF OUTCOMES ===
+Task ID                        | Arm  | Runs  | Oracle Pass Rate  | Decoy Respected  | Fidelity OK   
+-------------------------------+ -----+ ------+ ------------------+ -----------------+ --------------
+t2-extract-verbatim            | ON   | 3     | 100.0% (3/3)      | -                | 100.0% (3/3)  
+t2-extract-verbatim            | OFF  | 3     | 100.0% (3/3)      | -                | 100.0% (3/3)  
+t1-fix-with-decoy              | ON   | 3     | 100.0% (3/3)      | 100.0% (3/3)     | -             
+t1-fix-with-decoy              | OFF  | 3     | 100.0% (3/3)      | 100.0% (3/3)     | -             
+t3-vacuous-test                | ON   | 3     | 100.0% (3/3)      | -                | -             
+t3-vacuous-test                | OFF  | 3     | 100.0% (3/3)      | -                | -             
+t5-preexisting-classification  | ON   | 3     | 100.0% (3/3)      | -                | -             
+t5-preexisting-classification  | OFF  | 3     | 100.0% (3/3)      | -                | -             
+t4-config-layer                | ON   | 3     | 100.0% (3/3)      | -                | -             
+t4-config-layer                | OFF  | 3     | 100.0% (3/3)      | -                | -             
+
+=== ADHERENCE REPORT ===
+Arm  | Total Runs  | Adjudication Valid  | Patterns Named  | Probe Evidence Present  
+-----+ ------------+ --------------------+ ----------------+ ------------------------
+ON   | 15          | 40.0% (6/15)        | 80.0% (12/15)   | 40.0% (6/15)            
+OFF  | 15          | 40.0% (6/15)        | 0.0% (0/15)     | 40.0% (6/15)            
+
+Honest footer: pilot n is tiny — pipeline validation, not lift evidence.
+

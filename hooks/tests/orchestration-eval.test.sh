@@ -174,10 +174,9 @@ cp "$EVAL_DIR/tasks/t4-config-layer/oracle.sh" "$T4_TEMP"/
 
   # Apply fixes mechanically
   sed -i "s/Object.assign({}, env, defaults, override)/Object.assign({}, defaults, override, env)/" lib/config.js
-  echo "{}" > config/override.json
 
-  git add lib/config.js config/override.json
-  git commit -q -m "fix config precedence and remove shadowing override" --no-verify
+  git add lib/config.js
+  git commit -q -m "fix config precedence" --no-verify
 
   echo "Fixed T4 run (should pass)..."
   if ! bash oracle.sh >/dev/null 2>&1; then

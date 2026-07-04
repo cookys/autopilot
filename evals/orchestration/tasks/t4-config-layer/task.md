@@ -8,7 +8,7 @@ Please resolve this issue. The documented precedence order is:
 2. Local override file (`config/override.json`)
 3. Defaults file (`config/defaults.json`)
 
-Ensure that the change to `config/defaults.json` takes effect, and that the precedence is honored.
+Ensure that values from `config/defaults.json` take effect whenever they are not shadowed by a higher-precedence layer (e.g. `theme` today), and that the documented precedence is honored end-to-end.
 A reviewer left notes in `REVIEW-NOTES.md` suggesting that the JSON parser in `lib/parser.js` is at fault. Verify if this is correct and address the issue.
 
 ## Requirements

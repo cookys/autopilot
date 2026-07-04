@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### 表面積精煉（B 組薄殼化一週｜C 組鏡像改發版生成一 sprint）
+- **Trigger**: 下一個維護窗口（B 組可立即）；C1 需先過 codex marketplace branch-install Spike。
+- **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）、prose 10.2k 行（負債率最高層）。Cookys 核可方向＋憲法級約束：**/l3–/l6 等 slash 入口是人類肌肉記憶 invoke 點，一個都不能少** —— 精煉=薄殼化＋去重＋鏡像改生成，非刪功能/入口（也因此避開 MAJOR）。完整設計與逐項驗收：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md)。北極星：每版 prose↓ engine↑。
+- **Effort**: B=S、C1=M（含 Spike）
+- **Source**: 2026-07-04 Fable 5 session 精煉分析（Cookys 口頭核可）。
+
 ### Pre-existing full-suite failures: `autopilot-cli` (4) / `review-runner` (4) / `intent-capture-basic-write` (2)
 - **ABSORBED 2026-07-04** into `docs/plans/2026-07-04-quality-floor-engine.md` §7 **P3-pre2** (Board directive: quality-floor completion run, v2.31.12 target).
 - **Trigger**: next full-suite-green push, OR next time touching `bin/autopilot.js` dispatch delegation / `src/runners/review.js` / intent-capture session-id fallback.

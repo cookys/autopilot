@@ -206,8 +206,8 @@ When the authoritative qc is a **panel** of reviewers (the depth-0 `≥3` fan-ou
 |----------|------------|--------|
 | **Critical** | Correctness / security / data-loss | Fix immediately, before commit |
 | **Major** | Quality / maintainability / reliability | Fix immediately, before commit |
-| **Suggestion** | Improvement, does not affect correctness | Analyze, then backlog or fix (see below) |
 | **Minor** | Style, naming, cosmetic | Analyze, then backlog or fix (see below) |
+| **Suggestion** | Improvement, does not affect correctness | Analyze, then backlog or fix (see below) |
 
 **Classification guide:**
 

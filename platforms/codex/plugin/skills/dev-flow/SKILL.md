@@ -294,7 +294,7 @@ TaskCreate: "L-5: Invoke autopilot:finish-flow"
 Both parent tasks are forcing functions: they remain pending through every phase and are
 surfaced by system-reminder after each tool use. They cannot be silently skipped because
 marking them completed requires explicit work — L-1.6 requires Skill-tool invocations,
-L-5 requires invoking `autopilot:finish-flow` which itself creates 6 more discrete pending
+L-5 requires invoking `autopilot:finish-flow` which itself creates 7 more discrete pending
 tasks.
 
 **Why L-1.6 exists** (historical rationale): see references/historical-rationale.md § Why L-1.6 exists

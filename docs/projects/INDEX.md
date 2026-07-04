@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [endpoints-batch](2026-07-04-endpoints-batch/README.md) — endpoints `test` subcommand + repo-keying UX + dispatch-author `--endpoint` + cc-shim settle bound + preflight meta-smoke + legacy-dir archive sweep + P3 sonnet smoke. | v2.31.13 | `feat/v2.31.13-endpoints-batch` |
 
 ## 已完成 (Completed)
 

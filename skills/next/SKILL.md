@@ -52,6 +52,7 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 | **Maintenance** | `improvement-queue.json` | Pending items (from Phase 0) |
 | | [B] `skills/*/SKILL.md` | Skills > 200 lines |
 | | [B] MEMORY.md | > 170 lines |
+| | [B] `~/.autopilot/distill/scan-state.json` | mtime > 14 days → list "distill frequency scan overdue" under Maintenance |
 | **Knowledge** | `session-digests/` | Phase 0 results |
 | | [B] `knowledge/*.md` | `last-verified` > 30 days |
 | **Tech Debt** | `doc/BACKLOG.md` tech-debt | List all (even unmet triggers) |

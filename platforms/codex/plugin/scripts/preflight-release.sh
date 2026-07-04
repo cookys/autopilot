@@ -92,6 +92,19 @@ check_optin_changelog() {
   node scripts/check-optin-changelog.js
 }
 
+# ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
+# 5 real LLM probes (l3/l4/l5/l6/think-tank-dialectic): each entry must Read its
+# MUST-READ reference(s) — evidence is stream-json tool_use artifacts, never
+# self-report. Release-time only by design (LLM cost — plan 2026-07-04
+# surface-area-reduction B1). Skip knob: AUTOPILOT_SKIP_SLASH_PROBE=1 (loud).
+check_slash_entry_probe() {
+  if [ "${AUTOPILOT_SKIP_SLASH_PROBE:-0}" = "1" ]; then
+    echo "    SKIPPED by AUTOPILOT_SKIP_SLASH_PROBE=1 (thin-shell wiring NOT verified this release)"
+    return 0
+  fi
+  AUTOPILOT_SLASH_PROBE=1 bash hooks/tests/slash-entry-probe.test.sh
+}
+
 echo "preflight-release — autopilot release-hygiene gate"
 echo ""
 
@@ -101,6 +114,7 @@ run_check "version mirrors in sync (sync-version.js --check)" check_version_mirr
 run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
+run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then

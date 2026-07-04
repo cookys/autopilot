@@ -12,20 +12,18 @@ description: >
 # /l5 — CEO autonomy, foreman + hetero implementer
 
 Terse front-door into `autopilot:ceo-agent` at **Level 5**: identical to `/l4`
-except the foreman **runs** the canonical implementation-review loop via
-[`../../bin/autopilot.js`](../../bin/autopilot.js) (`engine implement-review`),
-which dispatches implementation rounds through [`../../scripts/dispatch-hetero.sh`](../../scripts/dispatch-hetero.sh) and decorrelated review.
+except the IMPLEMENTER is a heterogeneous engine driven through the canonical
+`engine implement-review` path (`bin/autopilot.js` → `dispatch-hetero.sh`).
 
-## On invocation
+Hard rules:
+- The roster from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)
+  is the ONLY source of truth — never hardcode model/runner/effort inline.
+- Implementation dispatch uses an **immutable base SHA**; verification is by **git
+  artifacts** (commit/diff/cleanliness), never agent self-report.
+- Review is DECORRELATED: the reviewer is a different engine family than the implementer.
+- `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 
-1. Invoke `autopilot:ceo-agent` with the four startup questions **pre-filled**
-   (same presets as `/l3`/`/l4`: OKR from `<goal>`; involvement=3 just-results;
-   scope=Hold (override: `--expand` → Expand); no-go=none (override: `-x <csv>`)).
-2. Resolve the roster and execution parameters from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh) (e.g. `reviewer_engine`, `reviewer_runner`, `implementer_engine`, `implementer_runner`, `review_diff_scope`, `independent_harness`).
-3. Execution posture: **offload with hetero impl + decorrelated review**. Run the foreman + depth-0 control loop per [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md). The main differences from `/l4`:
-   - **Implementation** is dispatched using `engine implement-review` (internally invoking `dispatch-hetero.sh` with immutable base SHA and cgroup containment).
-   - **Review** (spec and code) runs the resolved decorrelated reviewer engine instead of Claude.
-   - **Harness & telemetry** run independent verifications and capture diff-domain metrics per project config.
-4. **`--solo`** → fall back to the `/l3` inline engine (also the automatic degradation when the foreman returns `precondition_failed`).
-
-Wired runners: `codex`, `agy/Gemini`, `grok`, and `cc-shim`. See [`../../references/hetero-dispatch.md`](../../references/hetero-dispatch.md) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) for more details.
+**MUST-READ**: [`references/hetero-impl-loop.md`](references/hetero-impl-loop.md)
+(this level's loop: roster fields, harness/telemetry, wired runners) and
+[`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(§ Heterogeneous engine loop details — diff scopes, loop governance).

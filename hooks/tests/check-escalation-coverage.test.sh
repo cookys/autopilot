@@ -9,7 +9,7 @@ export TMPDIR="/tmp/hetero-feat-qc2-1b2-HJG8mr"
 # Use the sandboxed TEST_TMP as REPO_ROOT for file checks
 export REPO_ROOT="$TEST_TMP"
 
-WRAPPER="/tmp/hetero-feat-qc2-1b2-HJG8mr/scripts/check-escalation-coverage.js"
+WRAPPER="$(cd "$(dirname "$0")/../.." && pwd)/scripts/check-escalation-coverage.js"
 
 # 1. Missing project exit 2 usage
 echo "Testing missing project parameters..."

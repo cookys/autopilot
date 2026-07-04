@@ -4,6 +4,8 @@
 # shape + mode 0600.
 . "$(dirname "$0")/lib.sh"
 
+unset CLAUDE_CODE_SESSION_ID CLAUDE_SESSION_ID
+
 payload='{"session_id":"basic","tool_name":"Bash","tool_input":{"command":"echo test","description":"smoke"}}'
 run_hook intent-capture.js "$payload"
 

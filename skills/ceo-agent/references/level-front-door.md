@@ -36,6 +36,22 @@ so the run does not re-ask on a clean goal:
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
 | 4. No-go zones | **none** (default DOA). Override with `-x <csv>`. |
 
+### Economy mode — when the session model is premium or usage-capped
+
+When depth-0 runs on a scarce top-tier model, the orchestrator's spend should narrow
+to plan / decompose / synthesize / verify — the things that actually need it:
+
+- Even in `/l3` inline mode, leaf-dispatch mechanical sub-steps (boilerplate, bulk
+  edits, formatting, test scaffolding) to a **fast-worker**-tier subagent, and
+  reasoning-dense consults to a **deep-reasoner**-tier one — both are routing-table
+  roles (`references/model-routing.md`), resolved via `resolve-dispatch.sh`, never
+  hardcoded.
+- Prefer `/l4`+ so implementation labor burns worker/hetero-engine tokens instead of
+  session-model quota; `/l5`/`/l6` extend the same economics to cross-vendor engines.
+- NEVER economize the depth-0 trust duties themselves: qc@depth-0, artifact
+  verification, convergence judgment, and merge authority stay on the orchestrator
+  regardless of model economics.
+
 ### Overrides (rare)
 
 | Flag | Effect |

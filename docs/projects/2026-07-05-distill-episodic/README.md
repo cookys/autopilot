@@ -25,5 +25,5 @@
 
 | Phase | Content | Status |
 |---|---|---|
-| P1 | Impl (agy/Gemini): episodic section + 2 integration lines | pending |
-| P2 | Verification (gpt-5.5-authored checker) + decorrelated review + gates | pending |
+| P1 | Impl (agy/Gemini): episodic section + 2 integration lines | ✅ done (f95837f + r2 f24f549) |
+| P2 | Verification + review: gpt-5.5 xhigh r1 (1 Minor fixed) + MiniMax plan-fidelity (3 divergences REFUTED as excerpt artifacts) + autopilot:reviewer L-5.2 (zero blocking) + validate/suite green | ✅ done |

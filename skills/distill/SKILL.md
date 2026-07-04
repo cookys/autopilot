@@ -49,6 +49,10 @@ that cannot be expressed without a specific literal** (inherently-specific) — 
 where the user's own identifiers (their git email, their host alias) may stay. Classify each candidate's
 scope (global vs which project) from its `cwd`.
 
+## Demotion drafting (quality-floor P4)
+
+Demotion drafting (quality-floor P4): from retro's escalation aggregate (or a direct `tree.js escalations` sweep), for each recurring escalation draft a CANDIDATE stub — a `references/probe-playbook.md` entry (4 mandatory fields per its schema) if the escalation was resolved by a novel probe, or a `references/acceptance-patterns.md` addition if it was an acceptance gap. Candidates are DRAFTS: they go through this skill's existing human-gated review before merging; never auto-append to the catalogs.
+
 ## Step 3 — Review (human gate — the privacy backbone) — batch multi-select
 The gate stays, but the *friction* is collapsed: present the whole candidate list **once** and let the
 user pick which to accept in a single `AskUserQuestion` (`multiSelect: true`) instead of one

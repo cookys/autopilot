@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.12 — quality-floor engine completed: P2-P4 + orchestration eval, in one run
+
+**Headline**: Board-directed completion of the quality-floor plan — all remaining phases (P2-P4) plus their ex-BACKLOG prerequisites shipped in a single `/l6` run. The **full test suite is green for the first time in weeks** (the 3 chronic pre-existing failures fixed), and the **orchestration-eval pipeline ran a live pilot**: 4 arms on real engines end-to-end. Honest pilot verdict: the measurement pipeline works; a haiku-class single-turn orchestrator is below the task floor in BOTH arms, so the lift campaign needs a sonnet-class tier (operator cost gate recorded in the pilot report).
+
+### Added
+- **P2a `scripts/check-escalation-coverage.js`** + tests — warn-first ledger-coverage gate: triggered emission points must have `escalation_opened` events (signals-file driven, never guesses); `--gate` hardens to exit 1; archive-path fallback.
+- **P2b `scripts/probe-mutation.js`** + tests — mechanizes the REFUTED rule: probe→inject→probe→restore in an isolated detached worktree; emits `adjudicate-findings.js refute` evidence directly; vacuous probes (green under mutation) exit 1; baseline-failing/mutation-noop fail closed exit 2.
+- **P2c/P4**: `skills/retro` escalation-ledger scan step (aggregate `tree.js escalations` → demotion candidates) + `skills/distill` demotion-drafting step (playbook/pattern CANDIDATE stubs, human-gated).
+- **P3-pre**: eval-arm isolation + `--selftest` that fails if the baseline arm loaded any plugin (ponytail contamination lesson, ex-BACKLOG).
+- **P3 `evals/orchestration/`** — the weak-orchestrator lift harness: 2 hermetic pilot tasks (fix-with-decoy: planted FALSE reviewer finding + real bug; extract-verbatim: byte-fidelity), git-artifact oracles (arm-independent, asset-vocabulary-free), ON/OFF packs (length-matched padding control), cc/agy/stub runner with credential-only scratch-HOME isolation, compact-JSONL results, gate-based scoring + per-mechanism adherence report, hermetic stub test suite. **Live pilot executed** (4/4 arms, real haiku runs) — see `docs/projects/_archive/2026-07-04-quality-floor-completion/pilot-report.md`.
+
+### Fixed
+- **Suite 96/96**: `autopilot-cli.test.sh` / `review-runner.test.sh` (stale stubs from the nonce-protocol + stdout-split eras) and `intent-capture-basic-write.test.sh` (session-id fallback) — the 3 chronic pre-existing failures repaired.
+- Dispatched-implementer artifacts caught and corrected at depth-0 (5 ledger events): baked dead-worktree literals in THREE files (script env-fallback, test wrapper path, test TMPDIR — plus one more unit repeating the class), heredoc-embedded expected-content oracles (rewritten to derive expectations mechanically from git), a stdin-conflict fixture design (`python3 - <<EOF` cannot also read data from stdin — redesigned to argv), missing +x bits, pretty-vs-JSONL result format.
+
+### Deferred
+- The full P3 statistical campaign (≥5 tasks × seeds × sonnet-class) — operator cost decision; smoke-gate first (pilot report §campaign gate).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.11`.
+
 ## v2.31.11 — quality-floor engine Phase 1: the judgment-demotion ladder
 
 **Headline**: The first ship of the **quality-floor engine** — the methodology evolution from "clone cookys, remove cookys from the loop" to "make a weak orchestrating model sustain frontier-floor output quality on long tasks". Design: [`docs/plans/2026-07-04-quality-floor-engine.md`](docs/plans/2026-07-04-quality-floor-engine.md) — a **judgment-demotion ladder** (L0 script → L1 playbook match → L2 fan-out + mechanical aggregation → L3 probe-then-branch → L4 escalate + ledger), applied at DESIGN time per lifecycle stage so the weak model never self-selects a level. The design survived a **3-disjoint-family adversarial critique** (codex gpt-5.5 · agy/Gemini · MiniMax-M3) with all 13 major claims adjudicated in the plan's §9 — including dropping the R0 "ledger trends to zero" KPI that all three families independently called a Goodhart trap.

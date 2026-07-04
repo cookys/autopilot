@@ -3,7 +3,6 @@
 
 set -uo pipefail
 
-export TMPDIR="/tmp/hetero-feat-qc2-1b2-HJG8mr"
 . "$(dirname "$0")/lib.sh"
 
 # Use the sandboxed TEST_TMP as REPO_ROOT for file checks

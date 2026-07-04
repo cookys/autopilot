@@ -88,3 +88,15 @@ This is a Claude Code native mechanism; autopilot doesn't need a config flag for
 ### Migration note (v2.6.0 → v2.7.0)
 
 If you upgrade from v2.6.0 and previously **removed** `debug`, `test-strategy`, `team`, or `profiling` entries from your `CLAUDE.md` skill routing tables (expecting these skills to remain absent), be aware they're back as fallback skills in v2.7.0 and may now trigger on the corresponding keywords. To suppress: add them to `.claude/settings.json`'s `disabledSkills`.
+
+## Codex Plugin Coexistence (openai/codex-plugin-cc)
+
+Autopilot coexists with the official OpenAI codex plugin on Claude Code hosts:
+
+| Surface | Autopilot | Codex plugin | Rule |
+|---------|-----------|--------------|------|
+| Peer consult | `dispatch-explore.sh` / `dispatch-author.sh` (any host) | `codex:codex-rescue` / companion `task` (~9s, thread-resumable) | Plugin preferred on CC when installed; rails are the portable fallback |
+| Code review | qc panels + `dispatch-review.sh` (calibrated: known-bad 10/10 bar) | `/codex:review` (Spark-locked, uncalibrated) | Autopilot rails stay authoritative; plugin review channel gated on calibration (BACKLOG) |
+| Stop-time gate | `.githooks/pre-push` qc-gate (QC-Verdict trailer) | optional stop-review-gate hook | Keep the plugin's gate DISABLED — one authoritative gate, not two |
+| Write/labor | `dispatch-hetero.sh` (worktree + cgroup + artifact verify) | `rescue --write` (sandbox posture unverified) | Labor stays on autopilot rails until the plugin's write path is spiked |
+| Repo hygiene | — | plugin install writes `.claude/settings.json` in cwd | gitignored since v2.31.19+ (`.claude/settings.json`) |

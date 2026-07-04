@@ -34,7 +34,7 @@ L0 reads diff text only, so it misses gaming that is additions-only or happens o
 - **No fuzzy rename matching** — a renamed test id is a drop (documented false-positive requiring a depth-0 override); this is the main false-positive cost, justifying the `warn` default.
 - Flags: `--no-l1`, `--l1-timeout`, `--l1-runner`, `--l1-verdict-file`, `--assert-worker-dead <pgid>`. JSON adds `l1` + `l1_runners[]` (backward-compatible with L0).
 
-Full per-runner contract (detection markers, normalized test-ids, status→executed mapping, failure-classification table, override design): [`docs/projects/2026-06-26-test-integrity-l1/design-spec.md`](../../../docs/projects/2026-06-26-test-integrity-l1/design-spec.md).
+Full per-runner contract (detection markers, normalized test-ids, status→executed mapping, failure-classification table, override design): [`docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md`](../../../docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md).
 
 ## Mode Semantics
 - **`block`** — fails (exit 1) on any L0 violation/surface touch, or an L1 `executed_set_shrink`/`collection_failed`, unless waived. **Default for `/l5` hetero-impl dispatch (opt-in per project).**

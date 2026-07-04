@@ -14,7 +14,7 @@ payload **is** delivered on **file descriptor 0**. Reading fd 0 directly
 **v2.8.0 pivot** (PostToolUse): hooks recover tool data from the **session
 transcript JSONL** via [`transcript-reader-lib.js`](transcript-reader-lib.js)
 (`getToolEvent()` — fd-0/stdin-first, transcript-fallback; path discovery via
-`CLAUDE_CODE_SESSION_ID`). See spike + design: `docs/projects/2026-06-02-hook-transcript-pivot/`.
+`CLAUDE_CODE_SESSION_ID`). See spike + design: `docs/projects/_archive/2026-06-02-hook-transcript-pivot/`.
 
 **Re-enabled via transcript-reader (v2.8.0):**
 

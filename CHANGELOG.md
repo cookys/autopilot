@@ -737,7 +737,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - New CLI flags: `--no-l1`, `--l1-timeout`, `--l1-runner`, `--l1-worktree-dir`, `--l1-verdict-file`, `--assert-worker-dead <pgid>`. New JSON fields: `l1`, `l1_runners[]` (backward-compatible with the L0 schema).
 - Override verdict-verification plumbing (changeset-digest + dropped-digest bound, out-of-commit channel) — **built but inert in `block` mode** (see Known limitation).
 - `hooks/tests/check-test-integrity-l1.test.sh` — 58 L1 acceptance assertions (per-runner shrink/ok, broken-runner, multi-package build-fail, override inertness).
-- Design spec: `docs/projects/2026-06-26-test-integrity-l1/design-spec.md` (v4, with the 4-round review history).
+- Design spec: `docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md` (v4, with the 4-round review history).
 
 ### Changed
 - `scripts/check-test-integrity.sh` description + CLAUDE.md inventory row + `skills/quality-pipeline/references/test-integrity-gate.md` updated to document the L1 layer. Two L0-test assertions isolated with `--no-l1` (L0-scoped cases that L1 now legitimately augments; no L0 assertion removed or loosened).
@@ -1397,7 +1397,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 ### Notes
 - **PreToolUse hooks stay disabled — permanently unrecoverable** by this approach (the tool hasn't run, so no transcript entry exists): large-file-warner, branch-protection, commit-secret-scan.
 - **Out of scope (follow-up, BACKLOG)**: suggest-compact (PostToolUse — recoverable, deferred); cost-tracker + session-summary (Stop events, env-driven — not tool-event-stdin).
-- Project: `docs/projects/2026-06-02-hook-transcript-pivot/`. Tier counts unchanged (the re-enabled hooks were always "default-on" tier, just temporarily off).
+- Project: `docs/projects/_archive/2026-06-02-hook-transcript-pivot/`. Tier counts unchanged (the re-enabled hooks were always "default-on" tier, just temporarily off).
 
 ### Rollback
 - `git revert -m 1 <merge-sha>`. Hooks revert to disabled (v2.7.4 state); no data loss.
@@ -1418,7 +1418,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 - **retro** (225 → 130 lines): Step 1 data-collection commands → `references/data-collection.md`; Step 4 output-report templates → `references/report-templates.md`. Step 1-6 sequence kept inline.
 
 ### Notes
-- Scope-cut (refactor): think-tank-dialectic (342) and ceo-agent (335) evaluated and **rejected** as negative-ROI churn (mostly inline control flow). Project: `docs/projects/2026-06-02-skill-leverage-extraction/`.
+- Scope-cut (refactor): think-tank-dialectic (342) and ceo-agent (335) evaluated and **rejected** as negative-ROI churn (mostly inline control flow). Project: `docs/projects/_archive/2026-06-02-skill-leverage-extraction/`.
 - Deferred to BACKLOG with triggers: 4 orphaned 2026-05-14 plan docs; `_bodies/*.body.md` relative-link depth bug (generated artifact, low severity, not CI-failing).
 - Verification: `validate.sh` 16/16 (new link-check), completeness clean, **26 test files** green, `preflight-portability.sh` 12/12, `preflight-release.sh` green.
 
@@ -1466,7 +1466,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 - **`hooks/tests/all-hooks-fail-open.test.sh`** — every hook script (20 Node + 1 bash) must exit 0 on `{}` payload. The regression net for syntax errors, missing-field crashes, accidentally-required env vars across the whole hook directory.
 - **`hooks/tests/reload-watch-detects-mtime-change.test.sh`** — happy path for the third active Node hook; first-run silent init, subsequent change fires "Plugin catalog signal changed" warning.
 - **`.github/workflows/test.yml`** — Node 22 LTS Ubuntu CI running setup-symlinks → tests → sync-version --check → sync-agent-bodies --check → preflight-release → preflight-portability. Triggers on push to develop/main + PR + manual dispatch.
-- **`docs/projects/2026-06-01-test-suite-foundation/README.md`** — project tracking doc.
+- **`docs/projects/_archive/2026-06-01-test-suite-foundation/README.md`** — project tracking doc.
 
 ### Changed
 - **`hooks/state-checkpoint.js`** — wired to import from `state-checkpoint-lib.js`. `emitFailure` wrapper injects `process.stderr`; `parseTranscript` is a thin `fs.readFileSync` shim around `parseTranscriptText`; `buildTranscriptTail` shim forwards env-overridable `TRANSCRIPT_TAIL_N` / `TRANSCRIPT_BYTE_CAP` into the lib. Smoke-test parity verified.
@@ -1481,7 +1481,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ## v2.7.4 — Post-portability follow-ups (OpenCode parity + release-hygiene + agy fact correction)
 
-**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/2026-05-29-post-portability-followups](docs/projects/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
+**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/_archive/2026-05-29-post-portability-followups](docs/projects/_archive/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
 
 ### Added
 - **`scripts/preflight-release.sh`** — release-hygiene gate (5 checks): canonical version parseable, CHANGELOG entry present, version mirrors in sync, INDEX references the version, all INDEX project-README links resolve. Wired into `finish-flow` L-5.5. Prevents the doc-drift class that bit v2.7.3 (version bump with no CHANGELOG entry / colliding INDEX labels). Negative-tested (phantom version fails checks 2/3/4).
@@ -1528,7 +1528,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 - **`platforms/codex/config.toml.example`** — Codex skill-discovery example. Notes that `.agents/skills/` symlink alone is sufficient for per-repo usage.
 - **`.opencode/package.json` + `.opencode/package-lock.json`** — declares `@opencode-ai/plugin@1.15.10` so editors / `npm install` can resolve the `Plugin` type for the local TS plugin.
 - **`docs/plans/2026-05-22-multi-agent-portability-correction.md`** — 4-round dialectic-reviewed plan with Spike-results appendix (§A).
-- **`docs/projects/2026-05-22-multi-agent-portability-correction/README.md`** — project tracking doc.
+- **`docs/projects/_archive/2026-05-22-multi-agent-portability-correction/README.md`** — project tracking doc.
 - **`hooks/capture-payload.js`** (`9f56a36`) — Tier B opt-in diagnostic hook. Dumps raw stdin + CLAUDE_/AUTOPILOT_ env vars to `~/.autopilot/payloads/<ts>-<pid>-<marker>.json` when `AUTOPILOT_CAPTURE_PAYLOAD=1`. Rotation keep-50 FIFO.
 - **`scripts/toggle-payload-capture.sh`** (`7e4d2a1`) — One-shot enable/disable helper for capture-payload. Wires it into 4 matchers via jq, byte-for-byte backup + restore of `hooks.json`.
 

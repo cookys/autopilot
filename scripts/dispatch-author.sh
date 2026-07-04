@@ -206,7 +206,11 @@ fi
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
 # Bounded settle-wait for late-flush
-wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+if [[ "$RUNNER" = "cc-shim" ]]; then
+  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
+else
+  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+fi
 
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \

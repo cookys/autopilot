@@ -56,3 +56,8 @@ verifier isolation but incompatible with AUTHORING. In the N2 repro, this caused
 Gemini to reject spec text as "not a spec diff". Authoring therefore runs on the
 dedicated raw-prompt rail (`dispatch-author.sh`); `dispatch-review.sh` stays
 diff-reviews-only.
+
+## Level 6's depth-0 context discipline
+
+Depth-0 never authors implementation or verification content inline; even verification-prompt authoring is dispatched via `dispatch-author.sh`. Inline execution is restricted to `--solo` runs or a recorded `precondition_failed` fallback. This discipline ensures depth-0 acts purely as a long-running brain, preserving its context window for high-level orchestration and final quality control, while treating any inline authoring as a deviation to be recorded in the run-summary ledger.
+

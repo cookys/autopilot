@@ -2,7 +2,7 @@
 # Project Structure (L size)
 
 ```
-doc/projects/YYYY-MM-DD-xxx/
+docs/projects/YYYY-MM-DD-xxx/
 ├── README.md                        # Project description + progress (< 300 lines)
 ├── ADR.md                           # Architecture decision records (optional)
 ├── phase-0-design.md                # Initial design (optional)
@@ -94,7 +94,7 @@ Merge rules and naming conventions: [templates.md](templates.md)
 ### Minimal Project (3 phases, no ADR)
 
 ```
-doc/projects/2026-03-18-fix-reconnect/
+docs/projects/2026-03-18-fix-reconnect/
 ├── README.md
 ├── dev-info.md
 ├── phase-1-detect-stale-connections.md
@@ -105,7 +105,7 @@ doc/projects/2026-03-18-fix-reconnect/
 ### Complex Project (with design phase and sub-phases)
 
 ```
-doc/projects/2026-02-15-async-db-pool/
+docs/projects/2026-02-15-async-db-pool/
 ├── README.md
 ├── ADR.md
 ├── dev-info.md

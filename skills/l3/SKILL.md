@@ -10,6 +10,8 @@ description: >
 
 # /l3 — CEO autonomy, inline
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer explicit commands over conversational autonomy).
+
 Terse front-door into `autopilot:ceo-agent` at **Level 3**: the CEO executes the
 goal **itself on this thread** and escalates only at the DOA boundary.
 

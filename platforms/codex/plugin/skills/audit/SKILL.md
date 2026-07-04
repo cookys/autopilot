@@ -10,6 +10,8 @@ description: >
 
 # Systematic Comparison Audit
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer implementation parity over prose doc alignment).
+
 ## Project Audit Config
 !`cat .claude/audit-config.md 2>/dev/null || true`
 

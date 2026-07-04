@@ -25,6 +25,7 @@ Hard rules:
 - All dispatch parameters come from `resolve-review-loop.sh`; no manual
   hardcoding of model/runner/effort.
 - `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
+- **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.
 
 **MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
 (per-unit pipeline, machinery, authoring-rail rationale) and

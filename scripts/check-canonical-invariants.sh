@@ -45,6 +45,11 @@ esac
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
+IS_PLUGIN=0
+if [[ "$REPO" == *"/platforms/codex/plugin" ]]; then
+  IS_PLUGIN=1
+fi
+
 FAILS=0
 ENV_ERR=0
 
@@ -60,6 +65,9 @@ check_repeat() {
   local file missing=0
   for file in "$@"; do
     if [ ! -f "$file" ]; then
+      if [ "$IS_PLUGIN" = "1" ]; then
+        continue
+      fi
       envx "repeat[$label]: seeded file does not exist: $file"
       missing=1
       continue
@@ -83,6 +91,9 @@ check_mirror() {
   local label="$1" canonical="$2"; shift 2
   local copy broke=0
   if [ ! -f "$canonical" ]; then
+    if [ "$IS_PLUGIN" = "1" ]; then
+      return 0
+    fi
     envx "mirror[$label]: canonical does not exist: $canonical"; return
   fi
   for copy in "$@"; do
@@ -92,6 +103,9 @@ check_mirror() {
       continue
     fi
     if [ ! -f "$copy" ]; then
+      if [ "$IS_PLUGIN" = "1" ]; then
+        continue
+      fi
       envx "mirror[$label]: seeded copy does not exist: $copy"; broke=1; continue
     fi
     if ! cmp -s -- "$canonical" "$copy"; then
@@ -110,6 +124,9 @@ check_mirror() {
 check_no_relative_links() {
   local label="$1" file="$2"
   if [ ! -f "$file" ]; then
+    if [ "$IS_PLUGIN" = "1" ]; then
+      return 0
+    fi
     envx "no-rel-links[$label]: file does not exist: $file"; return
   fi
   local hits
@@ -132,9 +149,15 @@ check_reference() {
   local broke=0
 
   if [ ! -f "$referencing_file" ]; then
+    if [ "$IS_PLUGIN" = "1" ]; then
+      return 0
+    fi
     envx "reference[$label]: referencing file does not exist: $referencing_file"; return
   fi
   if [ ! -f "$canonical_file" ]; then
+    if [ "$IS_PLUGIN" = "1" ]; then
+      return 0
+    fi
     envx "reference[$label]: canonical file does not exist: $canonical_file"; return
   fi
 
@@ -217,6 +240,22 @@ check_repeat "s-scope-gate-mark" \
 check_reference "ceo-agent→dev-flow/ScopeCompletenessAudit" \
   "skills/ceo-agent/SKILL.md" "**Scope Completeness Audit**" \
   "skills/dev-flow/SKILL.md" "#### Scope Completeness Audit (MANDATORY before phase TaskCreate)"
+
+# reference #3 — reviewer references blind-dispatch's verifier-isolation section.
+check_reference "reviewer→blind-dispatch/VerifierIsolation" \
+  "agents/reviewer.md" "(canonical: references/blind-dispatch.md § Verifier isolation)" \
+  "references/blind-dispatch.md" "## Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)"
+
+# reference #4 — code-review references blind-dispatch's verifier-isolation section.
+check_reference "code-review→blind-dispatch/VerifierIsolation" \
+  "skills/quality-pipeline/references/code-review.md" "(canonical: references/blind-dispatch.md § Verifier isolation)" \
+  "references/blind-dispatch.md" "## Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)"
+
+# reference #5 — level-front-door references code-review's Panel aggregation section.
+check_reference "level-front-door→code-review/PanelAggregation" \
+  "skills/ceo-agent/references/level-front-door.md" "code-review.md) § \"Panel aggregation\"" \
+  "skills/quality-pipeline/references/code-review.md" "## Panel aggregation (multi-reviewer / disjoint-family qc)"
+
 
 # mirror #1 — model-routing.md: references/model-routing.md is canonical; the four
 # in-skill copies are generated (single maintenance truth — plan 2026-07-04

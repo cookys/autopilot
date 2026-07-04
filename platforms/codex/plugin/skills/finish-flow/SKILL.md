@@ -85,7 +85,7 @@ After all 7 completed → mark the parent L-5 task (from L-1) completed.
 |---|---------|-----------------------------------|
 | F.1 | Quality gate | Invoke `autopilot:quality-pipeline --size S`. Output: zero failures. |
 | F.2 | Commit with detailed message | Commit must state root cause + what was wrong + how it's fixed. Output: `git log -1 --format=%B` showing all three. |
-| F.3 | Ongoing-maintenance entry | Append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config first so you don't create a stray sibling tree): `| MM-DD | commit_hash | fix(area): 根因 → 修法 |`. Output: `tail -1` of that file. |
+| F.3 | Ongoing-maintenance entry | Append one line to `docs/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config first so you don't create a stray sibling tree): `| MM-DD | commit_hash | fix(area): 根因 → 修法 |`. Output: `tail -1` of that file. |
 | F.4 | Merge to develop | `git checkout develop && git merge --no-ff fix/<name>`. Merge commit MUST carry the `QC-Verdict: PASS (reviewer <id>, <date>)` trailer (see L-5.3 — the `pre-push` qc-gate enforces it). Output: merge commit hash + trailer. |
 | F.5 | Delete fix branch (local + remote) | `git branch -d fix/<name>` (local) **and** `git push origin --delete fix/<name>` if it was pushed. Output: `git branch` + `git ls-remote --heads origin fix/<name>` confirming both gone. |
 
@@ -96,7 +96,7 @@ After all 7 completed → mark the parent L-5 task (from L-1) completed.
 | # | Subject | Description + verification output |
 |---|---------|-----------------------------------|
 | S.1 | Retry check | Did I retry any non-trivial operation 2+ times? If yes → invoke `autopilot:learn`. Output: yes/no, and if yes, knowledge entry path. |
-| S.2 | Deferred items | Anything postponed → append to `doc/BACKLOG.md` with context + trigger condition. Output: `tail` of BACKLOG showing the new entry (or "none" if none). |
+| S.2 | Deferred items | Anything postponed → append to `docs/BACKLOG.md` with context + trigger condition. Output: `tail` of BACKLOG showing the new entry (or "none" if none). |
 | S.3 | Confirm commit on correct branch | `git log -1 --format="%H %s"` on the expected branch. Output: commit hash + branch name. |
 
 ## Enforcement Rules

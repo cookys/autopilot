@@ -2,13 +2,13 @@
 # Project Archive
 
 > **Trigger**: L-size project completed (after `finishing-a-development-branch`)
-> **S-size tasks do not use this flow** — S audit trail lives in `doc/projects/ongoing-maintenance/` (or the project-configured projects path — e.g. `docs/` plural)
+> **S-size tasks do not use this flow** — S audit trail lives in `docs/projects/ongoing-maintenance/` (or the project-configured projects path — e.g. `docs/` plural)
 
 ## Eligibility Check (before archiving)
 
 A project is eligible for archive when:
 - **100% of phases completed**, OR
-- **Core phases completed** + remaining phases explicitly recorded in `doc/BACKLOG.md` with trigger conditions
+- **Core phases completed** + remaining phases explicitly recorded in `docs/BACKLOG.md` with trigger conditions
 
 **Cannot archive if**: any incomplete phase is not accounted for in BACKLOG, or deferred items lack trigger conditions.
 
@@ -21,7 +21,7 @@ Eligibility check:
 
 ## Step 1: README Status Verification (LLM judgment)
 
-Read `doc/projects/{PROJECT}/README.md` and verify:
+Read `docs/projects/{PROJECT}/README.md` and verify:
 
 - [ ] All Phase statuses show completion (not in-progress or pending)
 - [ ] Phases moved to Backlog are marked paused with corresponding BACKLOG.md entry
@@ -55,8 +55,8 @@ The script performs: mv to `_archive/` -> update `projects/INDEX.md` (remove + a
 
 These items require judgment and must not be skipped:
 
-- [ ] **Proposals archive** — check `doc/proposals/` for related files. If found, move to `doc/proposals/_archive/` and update proposals INDEX if one exists.
-- [ ] **`~/.claude/plans/` cleanup** — check for leftover plan files from Plan Mode. Archive to `doc/plans/_archive/`.
+- [ ] **Proposals archive** — check `docs/proposals/` for related files. If found, move to `docs/proposals/_archive/` and update proposals INDEX if one exists.
+- [ ] **`~/.claude/plans/` cleanup** — check for leftover plan files from Plan Mode. Archive to `docs/plans/_archive/`.
 - [ ] **BACKLOG.md sync** — **delete** completed items (not strikethrough). Add any newly identified follow-up items with trigger conditions.
 - [ ] **Documentation sync** — run `git diff --name-only develop` and verify: if game logic/architecture/proto/skill files changed, corresponding docs are updated.
 - [ ] **MEMORY.md refresh** — update "In Progress" section (remove archived project, add any new state).
@@ -67,20 +67,20 @@ During archive, scan for orphaned or inconsistent entries across project trackin
 
 ```bash
 # Check for projects still marked Active but with all phases done:
-grep -l "in progress" doc/projects/*/README.md 2>/dev/null
+grep -l "in progress" docs/projects/*/README.md 2>/dev/null
 
 # Check for plan files that should have been archived:
-ls doc/plans/*.md 2>/dev/null | grep -v INDEX | grep -v _archive
+ls docs/plans/*.md 2>/dev/null | grep -v INDEX | grep -v _archive
 
 # Check for empty Active table entries pointing to _archive/:
-grep "_archive" doc/projects/INDEX.md 2>/dev/null
+grep "_archive" docs/projects/INDEX.md 2>/dev/null
 
 # Check for "in progress" markers that should be resolved:
-grep -rn "in progress\|In Progress\|IN PROGRESS" doc/projects/INDEX.md doc/plans/INDEX.md 2>/dev/null
+grep -rn "in progress\|In Progress\|IN PROGRESS" docs/projects/INDEX.md docs/plans/INDEX.md 2>/dev/null
 ```
 
 **For each finding:**
-- Orphaned plan file (project already archived) → move to `doc/plans/_archive/`
+- Orphaned plan file (project already archived) → move to `docs/plans/_archive/`
 - Active table entry pointing to `_archive/` → remove from Active, ensure in Archived
 - "In progress" marker on completed project → update to final status
 - Empty Active table row → remove
@@ -93,9 +93,9 @@ Auto-trigger after archive completes. Scans all work sources and recommends next
 
 | Script Error | Diagnosis | Recovery |
 |-------------|-----------|----------|
-| `Archive destination already exists` | Duplicate archive attempt or name collision | Check `doc/projects/_archive/` for existing dir. If duplicate, skip mv. If name collision, rename. |
-| `indexUpdated: false` | INDEX.md format changed or project entry not found | Manually edit `doc/projects/INDEX.md`: remove from active, add to archived section, update count. |
-| `plansArchived: []` (expected plans) | Plan filename does not contain project short name | Manually find plan in `doc/plans/`, move to `doc/plans/_archive/`, update `doc/plans/INDEX.md`. |
+| `Archive destination already exists` | Duplicate archive attempt or name collision | Check `docs/projects/_archive/` for existing dir. If duplicate, skip mv. If name collision, rename. |
+| `indexUpdated: false` | INDEX.md format changed or project entry not found | Manually edit `docs/projects/INDEX.md`: remove from active, add to archived section, update count. |
+| `plansArchived: []` (expected plans) | Plan filename does not contain project short name | Manually find plan in `docs/plans/`, move to `docs/plans/_archive/`, update `docs/plans/INDEX.md`. |
 | Script crashes (non-JSON output) | Node.js error or missing dependency | Read error message. Common fix: `node --version` check (needs 18+). If script bug, perform steps manually. |
 | Partial completion (archived=true but indexUpdated=false) | Script succeeded on mv but failed on INDEX update | Do NOT re-run script (would fail on "already exists"). Manually fix INDEX only. |
 
@@ -103,10 +103,10 @@ Auto-trigger after archive completes. Scans all work sources and recommends next
 
 If the script fails completely, perform these steps manually:
 
-1. `mv doc/projects/{PROJECT} doc/projects/_archive/`
-2. Edit `doc/projects/INDEX.md`: remove from active section, add to archived section
-3. Move matching plans: `mv doc/plans/{plan}.md doc/plans/_archive/`
-4. Edit `doc/plans/INDEX.md`: update status
+1. `mv docs/projects/{PROJECT} docs/projects/_archive/`
+2. Edit `docs/projects/INDEX.md`: remove from active section, add to archived section
+3. Move matching plans: `mv docs/plans/{plan}.md docs/plans/_archive/`
+4. Edit `docs/plans/INDEX.md`: update status
 5. Proceed with Step 3 (LLM post-processing)
 
 ## See Also

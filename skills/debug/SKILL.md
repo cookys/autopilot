@@ -5,6 +5,8 @@ description: Evidence-first debugging for correctness issues. Invoke when diagno
 
 # Evidence-First Debugging
 
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer single-bug diagnosis over baseline test design).
+
 ## Coexistence with Superpowers
 
 This skill is autopilot's standalone fallback for debugging methodology. If the `superpowers` plugin is installed, you may prefer `superpowers:systematic-debugging` — both work; `.claude/dispatch-config.md`'s `## Debugging` chain controls which one orchestrator skills (ceo-agent / finish-flow / quality-pipeline) dispatch.

@@ -18,7 +18,7 @@ Only these categories — nothing that changes compiled output:
 | Comment typos/formatting | `// retrun` → `// return`, missing period | Zero compiled output change |
 | Trailing whitespace / extra blank lines | Whitespace-only diffs | Zero compiled output change |
 | Log message text corrections | `spdlog::info("recieved")` → `spdlog::info("received")` | String literal only |
-| Markdown / documentation fixes | Typos in `doc/`, README, CLAUDE.md | Not compiled |
+| Markdown / documentation fixes | Typos in `docs/`, README, CLAUDE.md | Not compiled |
 | Unused `#include` removal | **Only if compiler confirms** no transitive dependency (the project build command passes) | Must verify — C++ headers have side effects |
 
 **Hard boundary:** If in doubt, it is ASK, not AUTO-FIX.
@@ -78,7 +78,7 @@ Task tool:
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
-> **Verifier isolation (MUST — EVERY round, round 1 included).** The dispatch prompt/context MUST carry
+> (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST — EVERY round, round 1 included).** The dispatch prompt/context MUST carry
 > **only artifacts** — the diff / changed files / test output — plus the **original** task / plan / commit
 > message as the baseline to grade against. It **MUST NOT** include the implementer's self-report, summary,
 > "what I did" writeup, or self-assessed verdict: feeding the verifier the implementer's own account of the
@@ -248,7 +248,7 @@ Classify into one of four outcomes:
 ├── S-size fix (< 5 min) → fix now, treat as Major
 ├── False positive / by-design → close with written rationale
 ├── Independent task needing more analysis → create next task with context
-└── Has clear trigger condition → add to doc/BACKLOG.md with trigger
+└── Has clear trigger condition → add to docs/BACKLOG.md with trigger
 ```
 
 ### Example Processing Table

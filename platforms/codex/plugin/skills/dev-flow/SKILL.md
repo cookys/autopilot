@@ -64,7 +64,7 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
    Check for unprocessed session digests.
 
 5. Draft plan overlap check:
-   ls doc/plans/*.md 2>/dev/null  (or project-configured path)
+   ls docs/plans/*.md 2>/dev/null  (or project-configured path)
    If draft plans exist, check if the current task overlaps with any draft plan
    (same feature, same module, or same user story).
    If overlap found:
@@ -250,7 +250,7 @@ prevents "it was obviously S" from silently becoming a multi-module project with
 3. Implement fix
 4. Quality gate (per project config, or: lint + test)
 5. Commit with **detailed message**: root cause + what was wrong + how it's fixed
-6. **Write ongoing-maintenance entry** — append one line to `doc/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config so you don't create a stray sibling tree):
+6. **Write ongoing-maintenance entry** — append one line to `docs/projects/ongoing-maintenance/YYYY-MM.md` (or the project-configured projects path — e.g. `docs/` plural; check the injected config so you don't create a stray sibling tree):
    `| MM-DD | commit_hash | fix(area): 根因 → 修法 (跨 N 模組) |`
 7. Merge to develop
 8. Cleanup: delete fix branch

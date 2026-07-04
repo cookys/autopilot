@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-04 | [quality-floor-completion](2026-07-04-quality-floor-completion/README.md) — P2-P4 + ex-BACKLOG prereqs in one /l6 run (Board directive): coverage gate, probe-mutation runner, retro ledger-scan, eval-arm isolation, suite 93/93, orchestration-eval harness + pilot, distill demotion drafting. | v2.31.12 | `feat/quality-floor-completion` |
 
 ## 已完成 (Completed)
 

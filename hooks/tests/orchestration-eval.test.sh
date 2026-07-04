@@ -222,6 +222,183 @@ cp "$EVAL_DIR/tasks/t5-preexisting-classification/oracle.sh" "$T5_TEMP"/
 )
 rm -rf "$T5_TEMP"
 
+# --- T6 Pristine and Fixed Self-Test ---
+echo "Testing T6 oracle..."
+T6_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t6-test-XXXXXX")
+cp -r "$EVAL_DIR/tasks/t6-version-bump/repo"/. "$T6_TEMP"/
+cp "$EVAL_DIR/tasks/t6-version-bump/oracle.sh" "$T6_TEMP"/
+
+(
+  cd "$T6_TEMP"
+  git init -q
+  git config user.name "Test"
+  git config user.email "test@example.com"
+  git config commit.gpgsign false
+  git add -A
+  git commit -q -m "initial commit" --no-verify
+
+  echo "Pristine T6 run (should fail)..."
+  if bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Pristine T6 oracle unexpectedly passed!" >&2
+    exit 1
+  fi
+
+  # Apply fixes mechanically
+  sed -i 's/2\.3\.0/2.3.1/g' package.json README.md docs/install.md marketplace.json
+
+  git add package.json README.md docs/install.md marketplace.json
+  git commit -q -m "bump version to 2.3.1" --no-verify
+
+  echo "Fixed T6 run (should pass)..."
+  if ! bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Fixed T6 oracle failed!" >&2
+    exit 1
+  fi
+)
+rm -rf "$T6_TEMP"
+
+# --- T7 Pristine and Fixed Self-Test ---
+echo "Testing T7 oracle..."
+T7_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t7-test-XXXXXX")
+cp -r "$EVAL_DIR/tasks/t7-config-rename/repo"/. "$T7_TEMP"/
+cp "$EVAL_DIR/tasks/t7-config-rename/oracle.sh" "$T7_TEMP"/
+
+(
+  cd "$T7_TEMP"
+  git init -q
+  git config user.name "Test"
+  git config user.email "test@example.com"
+  git config commit.gpgsign false
+  git add -A
+  git commit -q -m "initial commit" --no-verify
+
+  echo "Pristine T7 run (should fail)..."
+  if bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Pristine T7 oracle unexpectedly passed!" >&2
+    exit 1
+  fi
+
+  # Apply fixes mechanically
+  cat << 'EOF' > bin/tool.js
+const fs = require('fs');
+const path = require('path');
+
+function run() {
+  const configPath = process.env.CONFIG_PATH || path.join(__dirname, '../config.json');
+  let config = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  let timeoutMs = 30000;
+  if (config.timeout_ms !== undefined) {
+    timeoutMs = config.timeout_ms;
+  } else if (config.timeout !== undefined) {
+    console.error('Warning: "timeout" config is deprecated, use "timeout_ms" instead');
+    timeoutMs = config.timeout * 1000;
+  }
+
+  console.log(`Active timeout: ${timeoutMs} ms`);
+}
+
+if (require.main === module) {
+  run();
+}
+
+module.exports = { run };
+EOF
+
+  sed -i 's/timeout/timeout_ms/g' README.md
+
+  git add bin/tool.js README.md
+  git commit -q -m "support timeout_ms and deprecate timeout" --no-verify
+
+  echo "Fixed T7 run (should pass)..."
+  if ! bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Fixed T7 oracle failed!" >&2
+    exit 1
+  fi
+)
+rm -rf "$T7_TEMP"
+
+# --- T8 Pristine and Fixed Self-Test ---
+echo "Testing T8 oracle..."
+T8_TEMP=$(mktemp -d -p "$TEST_TMP" -t "t8-test-XXXXXX")
+cp -r "$EVAL_DIR/tasks/t8-log-redaction/repo"/. "$T8_TEMP"/
+cp "$EVAL_DIR/tasks/t8-log-redaction/oracle.sh" "$T8_TEMP"/
+
+(
+  cd "$T8_TEMP"
+  git init -q
+  git config user.name "Test"
+  git config user.email "test@example.com"
+  git config commit.gpgsign false
+  git add -A
+  git commit -q -m "initial commit" --no-verify
+
+  echo "Pristine T8 run (should fail)..."
+  PRISTINE_ERR=$(mktemp)
+  if bash oracle.sh 2> "$PRISTINE_ERR"; then
+    echo "ERROR: Pristine T8 oracle unexpectedly passed!" >&2
+    rm -f "$PRISTINE_ERR"
+    exit 1
+  fi
+  
+  if ! grep -q "plaintext API key leaked" "$PRISTINE_ERR"; then
+    echo "ERROR: Pristine T8 oracle failed for the wrong reason!" >&2
+    cat "$PRISTINE_ERR" >&2
+    rm -f "$PRISTINE_ERR"
+    exit 1
+  fi
+  rm -f "$PRISTINE_ERR"
+
+  # Apply fixes mechanically
+  cat << 'EOF' > bin/client.js
+const { callService } = require('../lib/service');
+
+function run() {
+  const apiKey = process.env.API_KEY || 'default-key';
+  const mode = process.argv[2] || 'success';
+
+  const requestPayload = {
+    url: 'https://api.example.com/v1/data',
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer [REDACTED]',
+      'Content-Type': 'application/json'
+    },
+    body: { query: 'hello' }
+  };
+
+  try {
+    const response = callService(apiKey, mode);
+    console.log(`Success: API call completed successfully. Code: ${response.status}`);
+  } catch (error) {
+    console.error(`Error: API call failed. Request: ${JSON.stringify(requestPayload)}. Error: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  run();
+}
+EOF
+
+  git add bin/client.js
+  git commit -q -m "redact API key from request payload in logs" --no-verify
+
+  echo "Fixed T8 run (should pass)..."
+  if ! bash oracle.sh >/dev/null 2>&1; then
+    echo "ERROR: Fixed T8 oracle failed!" >&2
+    exit 1
+  fi
+)
+rm -rf "$T8_TEMP"
+
 echo "Oracle self-tests passed!"
 
 # --- Stub Runner Tests ---

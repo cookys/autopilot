@@ -28,3 +28,16 @@ To guarantee the validity and integrity of the evaluation, we adhere to the foll
 - **Arm isolation**: Arms run as separate processes with separate scratch `HOME` directories to prevent any state or plugin leak.
 - **Pilot size warning**: The pilot task size (n=2) is tiny. The report explicitly warns: "pipeline validation, NOT evidence of lift". The statistical campaign is a separate operator decision.
 - **Moving tools control**: The runner, model, and tool versions are recorded per run to prevent moving-tools invalidators.
+
+## Task provenance (why these are fair)
+
+| Task | Everyday Scenario | Real Incident Class |
+| :--- | :--- | :--- |
+| `t1-fix-with-decoy` | Addressing code review findings while avoiding changing correct decoy code | review fatigue / modifying correct files due to false review reports |
+| `t2-extract-verbatim` | Extracting an embedded Python script from a bash heredoc to its own file | regression/drift from manual extraction of inline scripts |
+| `t3-vacuous-test` | Fixing a logic bug and correcting a test suite that was passing vacuously | silent test suite regressions due to faulty assertions or mock behavior |
+| `t4-config-layer` | Resolving precedence between defaults, overrides, and environment variables | configuration layering bugs where values are shadowed incorrectly |
+| `t5-preexisting-classification` | Fixing a regression while triaging and leaving legacy failures untouched | scope creep or unintended breakage of legacy systems during hotfixes |
+| `t6-version-bump` | Bumping version strings in manifests, docs, badges, and mirror manifests | stale manifests or installation snippets mismatching on release day |
+| `t7-config-rename` | Renaming a config key with backward compatibility and deprecation warnings | configuration key migrations causing service disruption to older clients |
+| `t8-log-redaction` | Redacting plaintext API keys and credentials from error payloads in logs | secret leakage in application logs or exception telemetry |

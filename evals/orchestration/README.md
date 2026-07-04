@@ -1,0 +1,30 @@
+# Orchestration-Eval Harness
+
+This directory contains the orchestration evaluation harness designed to measure the impact of the quality-floor assets on a mid-tier orchestrator's outcome quality.
+
+## Method
+
+The harness runs evaluation tasks under two experimental arms:
+1. **ON**: The orchestrator is prompted with the task description, the quality-floor assets (`ASSETS.md`), and the required-artifacts contract.
+2. **OFF**: The orchestrator is prompted with the task description, neutral padding prose (`PADDING.md`) matched to the length of the assets, and the same required-artifacts contract.
+
+By comparing the results of the two arms, we can measure the lift in outcome quality and protocol adherence due to the quality-floor assets.
+
+### Layout
+- `tasks/`: Directory containing synthetic evaluation tasks.
+  - `t1-fix-with-decoy/`: Real planted bug + decoy function claimed to be broken by a false finding in `REVIEW-NOTES.md`.
+  - `t2-extract-verbatim/`: Heredoc block extraction task.
+- `packs/`: Directory containing prompt packs for the arms.
+  - `on/ASSETS.md`: The quality-floor assets (playbook and pattern excerpts).
+  - `off/PADDING.md`: Neutral generic software-engineering prose.
+- `run-orchestration-eval.sh`: Runner script to execute an evaluation run.
+- `score.js`: Scoring script to aggregate results and output outcomes.
+
+## Honesty Rails
+
+To guarantee the validity and integrity of the evaluation, we adhere to the following honesty rails:
+- **Same oracle both arms**: The evaluation oracle (`oracle.sh`) is identical for both the ON and OFF arms, and it never mentions asset vocabulary.
+- **OFF-arm padding length-matched**: The neutral prose in `PADDING.md` is matched within ±10% of the token/word length of `ASSETS.md` to control for the context length confound.
+- **Arm isolation**: Arms run as separate processes with separate scratch `HOME` directories to prevent any state or plugin leak.
+- **Pilot size warning**: The pilot task size (n=2) is tiny. The report explicitly warns: "pipeline validation, NOT evidence of lift". The statistical campaign is a separate operator decision.
+- **Moving tools control**: The runner, model, and tool versions are recorded per run to prevent moving-tools invalidators.

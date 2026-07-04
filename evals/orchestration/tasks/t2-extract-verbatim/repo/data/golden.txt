@@ -1,0 +1,4 @@
+Total processed: 5
+Errors: 2
+Warnings: 1
+Infos: 2

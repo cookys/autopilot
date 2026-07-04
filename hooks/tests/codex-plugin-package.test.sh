@@ -127,7 +127,7 @@ for (const rel of [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/2026-06-26-test-integrity-l1/design-spec.md',
+  'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
 }
@@ -161,7 +161,7 @@ const docFiles = [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/2026-06-26-test-integrity-l1/design-spec.md',
+  'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ];
 const misses = docFiles.filter((rel) => !trigger.test(rel));
 if (misses.length > 0) {
@@ -191,7 +191,7 @@ for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
   docs/plans/2026-06-26-trust-tiered-review-policy.md \
-  docs/projects/2026-06-26-test-integrity-l1/design-spec.md
+  docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
 do
   mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"
   printf 'doc %s\n' "$rel" > "$SYNC_SANDBOX/$rel"

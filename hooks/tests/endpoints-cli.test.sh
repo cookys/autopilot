@@ -118,4 +118,126 @@ assert_contains "$rjout" 'group/other-writable' "list surfaces the perms-rejecti
 # ── 7. unknown subcommand → exit 2 ──
 run bogus >/dev/null 2>&1; assert_exit_code "$?" 2 "unknown subcommand exits 2"
 
+# ── 8. test command assertions ──
+
+# Test unconfigured name
+unconf_out="$(run test non_existent 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "test on unconfigured endpoint exits 2"
+assert_contains "$unconf_out" "not_configured" "unconfigured test prints not_configured"
+
+unconf_json="$(run test non_existent --json 2>&1)"; ec=$?
+assert_exit_code "$ec" 2 "test on unconfigured endpoint with json exits 2"
+assert_contains "$unconf_json" '"outcome":"not_configured"' "unconfigured json contains outcome"
+
+# Start stub local HTTP server
+STUB_JS="$WORK/stub_server.js"
+PORT_FILE="$WORK/port.txt"
+cat > "$STUB_JS" <<'EOF'
+const http = require('http');
+const fs = require('fs');
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const auth = req.headers.authorization || '';
+  
+  if (url.pathname === '/v1/messages' && req.method === 'POST') {
+    if (auth.includes('delay-token')) {
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: 'msg_1', content: [{ type: 'text', text: 'Delayed' }] }));
+      }, 2000);
+      return;
+    }
+    
+    if (auth.includes('valid-token')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ id: 'msg_1', content: [{ type: 'text', text: 'OK' }] }));
+      return;
+    }
+    
+    if (auth.includes('invalid-token')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { type: 'authentication_error', message: 'Invalid token' } }));
+      return;
+    }
+  }
+  res.writeHead(404);
+  res.end();
+});
+
+server.listen(0, '127.0.0.1', () => {
+  const port = server.address().port;
+  fs.writeFileSync(process.argv[2], String(port));
+});
+EOF
+
+node "$STUB_JS" "$PORT_FILE" &
+STUB_PID=$!
+# Wait for port file
+for i in {1..30}; do
+  if [ -f "$PORT_FILE" ]; then break; fi
+  sleep 0.1
+done
+PORT=$(cat "$PORT_FILE")
+
+# Update trap to cleanup the background stub server
+trap 'kill $STUB_PID 2>/dev/null; rm -rf "$WORK"' EXIT
+
+# Configure fake endpoints pointing to stub
+printf 'valid-token' | run set stubok --url "http://127.0.0.1:$PORT" --token-stdin >/dev/null
+printf 'invalid-token' | run set stuberr --url "http://127.0.0.1:$PORT" --token-stdin >/dev/null
+printf 'delay-token' | run set stubdelay --url "http://127.0.0.1:$PORT" --token-stdin >/dev/null
+
+# Test ok path
+ok_out="$(run test stubok 2>&1)"; ec=$?
+assert_exit_code "$ec" 0 "test ok exits 0"
+assert_contains "$ok_out" "ok" "test ok prints ok"
+assert_not_contains "$ok_out" "valid-token" "test ok does not leak token"
+
+ok_json="$(run test stubok --json 2>&1)"; ec=$?
+assert_exit_code "$ec" 0 "test ok --json exits 0"
+assert_contains "$ok_json" '"outcome":"ok"' "test ok --json contains outcome:ok"
+assert_not_contains "$ok_json" "valid-token" "test ok --json does not leak token"
+
+# Test auth_failed path
+err_out="$(run test stuberr 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "test auth_failed exits 1"
+assert_contains "$err_out" "auth_failed" "test auth_failed prints auth_failed"
+assert_not_contains "$err_out" "invalid-token" "test auth_failed does not leak token"
+
+err_json="$(run test stuberr --json 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "test auth_failed --json exits 1"
+assert_contains "$err_json" '"outcome":"auth_failed"' "test auth_failed --json contains outcome:auth_failed"
+assert_not_contains "$err_json" "invalid-token" "test auth_failed --json does not leak token"
+
+# Test timeout path
+timeout_out="$(AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "test timeout exits 1"
+assert_contains "$timeout_out" "network_failed" "test timeout prints network_failed"
+assert_not_contains "$timeout_out" "delay-token" "test timeout does not leak token"
+
+timeout_json="$(AUTOPILOT_TEST_TIMEOUT_MS=100 run test stubdelay --json 2>&1)"; ec=$?
+assert_exit_code "$ec" 1 "test timeout --json exits 1"
+assert_contains "$timeout_json" '"outcome":"network_failed"' "test timeout --json contains outcome:network_failed"
+assert_not_contains "$timeout_json" "delay-token" "test timeout --json does not leak token"
+
+# ── 9. repo-keying UX notes assertions ──
+
+# Test `which` shows repo_key_source in both modes:
+# Mode A: with remote (already set origin url in REPO above)
+wj_remote_json="$(cd "$REPO" && env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints which --json 2>&1)"
+assert_contains "$wj_remote_json" '"repo_key_source":"remote"' "which --json remote mode contains repo_key_source:remote"
+
+# Mode B: without remote (create a new repo under $WORK/noremote, no origin)
+NOREMOTE="$WORK/noremote"; mkdir -p "$NOREMOTE/.claude"
+git -C "$NOREMOTE" init -q >/dev/null 2>&1
+wj_noremote="$(cd "$NOREMOTE" && env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints which 2>&1)"
+assert_contains "$wj_noremote" "Warning: repo-key is path-fallback" "which non-json fallback mode prints path-fallback warning"
+wj_noremote_json="$(cd "$NOREMOTE" && env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints which --json 2>&1)"
+assert_contains "$wj_noremote_json" '"repo_key_source":"path-fallback"' "which --json fallback mode contains repo_key_source:path-fallback"
+
+# Test `set --repo` warning when no remote
+set_warn_out="$(cd "$NOREMOTE" && printf 'noremote-token' | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints set mm --url https://m --token-stdin --repo 2>&1)"
+assert_contains "$set_warn_out" "Warning: repo has no git remote. Overlay is keyed to the checkout PATH" "set --repo prints warning when no remote"
+
 echo "endpoints-cli: all assertions passed"

@@ -191,5 +191,86 @@ OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model grok-build --prompt-file
 assert_eq "1" "$EXIT" "grok truly-empty exits 1"
 assert_contains "$OUT" '"status": "empty_output"' "grok truly-empty maps to empty_output"
 
+# --- 8. --endpoint flag parity ---
+# Configure a fake endpoint via environment variables
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9999/v1"
+export AUTOPILOT_ENDPOINT_TESTEP_TOKEN="fake-token-value-12345"
+
+STUB_CC_ENV_DUMP="$TEST_TMP/runner-cc-env-dump"
+cat > "$STUB_CC_ENV_DUMP" <<'EOF'
+#!/usr/bin/env bash
+echo "BASE:$ANTHROPIC_BASE_URL"
+echo "TOKEN:$ANTHROPIC_AUTH_TOKEN"
+# We must output something so it is not treated as empty_output
+echo "dummy response"
+exit 0
+EOF
+chmod +x "$STUB_CC_ENV_DUMP"
+
+# Run cc-shim with --endpoint TESTEP
+OUT="$(unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN; DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" --bin "$STUB_CC_ENV_DUMP" --endpoint TESTEP 2>&1)"
+EXIT=$?
+assert_eq "0" "$EXIT" "cc-shim with resolved --endpoint exits 0"
+assert_contains "$OUT" '"status": "authored"' "cc-shim resolved endpoint reports authored"
+RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_file_exists "$RAW_LOG_PATH" "cc-shim raw_log exists"
+assert_contains "$(cat "$RAW_LOG_PATH")" "BASE:http://127.0.0.1:9999/v1" "cc-shim stub received ANTHROPIC_BASE_URL"
+assert_contains "$(cat "$RAW_LOG_PATH")" "TOKEN:fake-token-value-12345" "cc-shim stub received ANTHROPIC_AUTH_TOKEN"
+
+# Unknown endpoint name -> precondition_failed exit 2
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" --bin "$STUB_CC_ENV_DUMP" --endpoint UNKNOWN_EP 2>&1)"
+EXIT=$?
+assert_eq "2" "$EXIT" "unknown --endpoint exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "unknown endpoint reports precondition_failed"
+
+# Non-cc-shim with --endpoint -> precondition_failed exit 2
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" --endpoint TESTEP 2>&1)"
+EXIT=$?
+assert_eq "2" "$EXIT" "non-cc-shim with --endpoint exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "non-cc-shim endpoint reports precondition_failed"
+assert_contains "$OUT" "--endpoint applies only to --runner cc-shim" "correct runner restriction error message"
+
+# --- 9. late-flush and per-runner settle bound under cc-shim ---
+STUB_CC_LATE_FLUSH="$TEST_TMP/runner-cc-late-flush"
+cat > "$STUB_CC_LATE_FLUSH" <<'EOF'
+#!/usr/bin/env bash
+( sleep 5; echo "late response" ) &
+exit 0
+EOF
+chmod +x "$STUB_CC_LATE_FLUSH"
+
+# With default 10s wait for cc-shim, a 5s late flush should be caught and status should be authored
+OUT="$(export ANTHROPIC_BASE_URL="http://127.0.0.1:9999/v1" ANTHROPIC_AUTH_TOKEN="fake"; DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" --bin "$STUB_CC_LATE_FLUSH" 2>&1)"
+EXIT=$?
+assert_eq "0" "$EXIT" "cc-shim 5s late-flush exits 0 with 10s settle default"
+assert_contains "$OUT" '"status": "authored"' "cc-shim 5s late-flush is authored"
+RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_contains "$(cat "$RAW_LOG_PATH")" "late response" "cc-shim raw_log contains late response"
+
+# Truly-empty cc-shim -> empty_output, exit 1
+STUB_CC_EMPTY="$TEST_TMP/runner-cc-empty"
+cat > "$STUB_CC_EMPTY" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$STUB_CC_EMPTY"
+
+OUT="$(export ANTHROPIC_BASE_URL="http://127.0.0.1:9999/v1" ANTHROPIC_AUTH_TOKEN="fake"; DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" --bin "$STUB_CC_EMPTY" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "cc-shim truly-empty exits 1"
+assert_contains "$OUT" '"status": "empty_output"' "cc-shim truly-empty is empty_output"
+
+# AUTOPILOT_SETTLE_MS=500 shortens the wait, so the 5s late flush is not caught -> empty_output, exit 1
+OUT="$(export ANTHROPIC_BASE_URL="http://127.0.0.1:9999/v1" ANTHROPIC_AUTH_TOKEN="fake" AUTOPILOT_SETTLE_MS=500; DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" --bin "$STUB_CC_LATE_FLUSH" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "cc-shim 5s late-flush with 500ms settle exits 1 (fails to capture)"
+assert_contains "$OUT" '"status": "empty_output"' "cc-shim 5s late-flush with 500ms settle is empty_output"
+
+# Malformed AUTOPILOT_SETTLE_MS exits 2
+OUT="$(export ANTHROPIC_BASE_URL="http://127.0.0.1:9999/v1" ANTHROPIC_AUTH_TOKEN="fake" AUTOPILOT_SETTLE_MS=abc; DISPATCH_QUIET=1 "$SCRIPT" --runner cc-shim --model mini --prompt-file "$PROMPT" --bin "$STUB_CC_EMPTY" 2>&1)"
+EXIT=$?
+assert_eq "2" "$EXIT" "malformed AUTOPILOT_SETTLE_MS exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "malformed AUTOPILOT_SETTLE_MS reports precondition_failed"
+
 finalize_test
 

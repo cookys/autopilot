@@ -142,7 +142,9 @@ if [ "$RUNNER" = "cc" ]; then
   (
     cd "$TEMP_REPO"
     export HOME="$SCRATCH_HOME"
-    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config < "$PROMPT_FILE"
+    # --dangerously-skip-permissions: the arm runs in a DISPOSABLE temp repo with a scratch
+    # HOME (no plugins, no user settings) — without it, -p mode stalls on permission asks.
+    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions < "$PROMPT_FILE"
   ) > "$RAW_LOG" 2>&1
   RUN_EXIT=$?
 elif [ "$RUNNER" = "agy" ]; then

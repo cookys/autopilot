@@ -254,11 +254,17 @@ printf '%s' "$WORK_TOKEN" | autopilot endpoints set glm \
     --url https://api.z.ai/api/anthropic --token-stdin --repo   # …or this repo's overlay
 autopilot endpoints list --json                            # all defined endpoints (url/token present, layer)
 autopilot endpoints which --json                           # for THIS repo: what reviewer/implementer select + resolve
+autopilot endpoints test glm                               # sends one tiny live request to verify auth + latency (exit 0/1/1/2)
 autopilot endpoints doctor                                 # perms + unresolved-endpoint diagnosis (exit 1 if unhealthy)
 ```
 
-(Run via `node bin/autopilot.js endpoints …` from a dev clone.) `which`/`list`/`doctor` `--json`
+(Run via `node bin/autopilot.js endpoints …` from a dev clone.) `which`/`list`/`doctor`/`test` `--json`
 give an agent a token-redacted window into the resolved state.
+
+The `test` subcommand sends a single, minimal request with `max_tokens: 1` to verify endpoint authentication and logs the latency, without printing the token or response details.
+
+> [!NOTE]
+> If a repository has no git remote configured, the per-repo overlay fallback keys to the checkout path's checksum (reported as `repo_key_source: "path-fallback"`). Moving or renaming the checkout directory will change this key, causing the overlay settings to stop applying. For remote-tracked checkouts, the key is derived from the remote origin url and is stable across renames or new clones (`repo_key_source: "remote"`). Warning notices will be printed if you configure or query overlays in a remote-less checkout.
 
 ---
 

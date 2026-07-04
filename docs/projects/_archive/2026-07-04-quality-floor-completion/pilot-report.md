@@ -22,3 +22,20 @@ live (durations 29-109s).
 
 **Campaign gate (operator decision, cost)**: ≥5 tasks × N≥5 seeds × sonnet-class, only after
 a smoke shows the orchestrator tier can pass ≥1 task's oracle at all.
+
+## Addendum (same day, v2.31.13 batch) — smoke gate SATISFIED
+
+Root cause of the all-fail pilot found: the runner invoked `claude -p` WITHOUT permission
+flags — arms could reason but not edit (the sonnet transcript showed a fully correct
+diagnosis INCLUDING a timezone-precise refutation of the planted decoy, ending in a
+permission ask). After adding `--dangerously-skip-permissions` (justified: disposable temp
+repo + scratch HOME):
+
+- **sonnet, ON arm: 2/2 oracles PASS.** t1 full adherence — real bug fixed, decoy REFUTED
+  with a valid adjudication.jsonl, patterns named, probe evidence present. t2 byte-fidelity ✓.
+- haiku's earlier uniform failure is therefore attributable to the harness defect first;
+  its true tier-floor remains unmeasured.
+
+**Campaign gate: OPEN.** A sonnet-class orchestrator passes the oracles, so the ON-vs-OFF
+lift measurement is now meaningful. Next decision (operator, cost): the full campaign
+(≥5 tasks × N seeds × ON/OFF, per plan §5).

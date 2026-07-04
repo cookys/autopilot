@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.31.17 — dispatch late-flush fix: content-driven output quiescence
+
+**Headline**: The `empty_output` misclassification that three times marked a successful hetero dispatch as failed (real answer flushed into the raw log after the runner frontend exited — delays 0.3s to minutes vs the fixed 3s/10s settle sleeps) is fixed. New `scripts/lib/output-quiescence.sh`: content-driven wait — size stable ~1s (`AUTOPILOT_STABLE_POLLS`, widened from 500ms after review flagged chunked writers) ⇒ settled; still empty after a bounded 10s grace (`AUTOPILOT_EMPTY_GRACE_MS`) ⇒ honest empty, without paying the 60s deadline (`AUTOPILOT_SETTLE_MS`); deadline caps drip-writers. The obvious fd-holder approach was tried first and **falsified live**: a sandboxed `codex exec` worker is invisible to both `/proc` fd scans and `pgrep` while still writing — no process-based signal exists, so the wait is purely content-driven (and thereby portable). `dispatch-author.sh` (all runners) + `dispatch-review.sh` codex/grok/cc-shim capture paths wired; codex branches gain the missing `timeout` wrap (parity with grok/cc-shim). Fail-closed classification and all JSON contracts unchanged.
+
+### Added
+- `scripts/lib/output-quiescence.sh` — shared content-quiescence helper (stdout-silent, set-u-safe, coreutils-only).
+- `hooks/tests/dispatch-output-quiescence.test.sh` — 5 deterministic stub-runner cases (late-flush captured / honest-empty fast negative control / immediate / drip-writer deadline-bounded / codex timeout parity), 16 assertions, no LLM calls.
+
+### Fixed
+- `dispatch-author.sh` / `dispatch-review.sh`: late-flushed runner output no longer classified `empty_output`; live-verified on the exact previously-misclassified gpt-5.5 authoring case (now `authored`). Genuine-empty runs still classify empty (bounded grace — the BACKLOG entry's don't-blur constraint, covered by a dedicated negative-control test).
+- codex runner branches in both dispatchers are now bounded by `timeout "$TIMEOUT"` (previously unbounded).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.16`.
+
 ## v2.31.16 — surface-area reduction B group: thin shells, one routing truth, north-star gate
 
 **Headline**: The prose surface starts shrinking without losing a single entry point. `/l3`–`/l6` become thin shells (4 bodies: 120→79 lines; frontmatter byte-identical so routing cannot shift) with level-specific long-form moved to per-level references (`skills/l5/references/hetero-impl-loop.md`, `skills/l6/references/full-dispatch-pipeline.md`); `/think-tank-dialectic`'s 337-line body migrates to `skills/think-tank/references/dialectic-mode.md` (entry + escalation judgment untouched). `references/model-routing.md` becomes the single maintenance truth — the four in-skill copies turn out to have been *symlinks* (exactly the rsync `-L`-divorced form the plan ruled out) and are now generated real files with a byte-parity pre-commit gate. A new re-runnable LLM release gate proves the wiring: all five entries headless-probed, evidence = Read-tool artifacts in the transcript, never model self-report. Constitutional constraint honored: every slash entry survives.

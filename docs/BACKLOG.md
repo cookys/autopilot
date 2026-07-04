@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Orchestration-eval run-health gate — invalid runs must never become data points
+- **Trigger**: next time touching `evals/orchestration/` (runner or score.js), OR the next campaign round.
+- **Context**: 2026-07-04 R2: a mid-campaign Claude Code re-login killed 15/40 runs (1-2s, "Not logged in") which were silently scored as oracle failures — publishing a wrong "60%/60% attention-slip" conclusion until a duration sanity sweep caught it (correction shipped same day). Fix: `score.js` refuses (or quarantines with a loud count) rows under a duration sanity floor (~10s) or whose run.log matches auth-failure signatures; the runner should also emit a `health` field (auth_ok/timeout/short-run) so the scorer keys on evidence, not inference. Same class as probe-playbook P3/P5: infrastructure failure mimicking a negative result.
+- **Effort**: S
+- **Source**: 2026-07-04 campaign-r2 correction (this session).
+
 ### 表面積精煉（B 組薄殼化一週｜C 組鏡像改發版生成一 sprint）
 - **Trigger**: 下一個維護窗口（B 組可立即）；C1 需先過 codex marketplace branch-install Spike。
 - **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）、prose 10.2k 行（負債率最高層）。Cookys 核可方向＋憲法級約束：**/l3–/l6 等 slash 入口是人類肌肉記憶 invoke 點，一個都不能少** —— 精煉=薄殼化＋去重＋鏡像改生成，非刪功能/入口（也因此避開 MAJOR）。完整設計與逐項驗收：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md)。北極星：每版 prose↓ engine↑。

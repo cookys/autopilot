@@ -147,7 +147,8 @@ if [[ "$SELFTEST" -eq 1 ]]; then
   SELFTEST_TMP=$(mktemp -d -t "eval-selftest-XXXXXX")
   
   # Ensure the fixtures exist
-  SELFTEST_FIXTURE_DIR="$AUTOPILOT_DIR/evals/selftest-fixtures"
+  SELFTEST_FIXTURE_DIR=$(mktemp -d -t "autopilot-selftest-fixtures-XXXXXX")
+trap 'rm -rf "$SELFTEST_FIXTURE_DIR"' RETURN 2>/dev/null || true
   mkdir -p "$SELFTEST_FIXTURE_DIR/selftest-skill"
   
   cat << 'EOF' > "$SELFTEST_FIXTURE_DIR/selftest-skill/SKILL.md"

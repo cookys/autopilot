@@ -131,6 +131,12 @@ clean_scratch_home() {
 trap 'clean_scratch_home; cleanup' EXIT
 
 set +e
+# Provide the adjudication helper INSIDE the arm repo BEFORE the orchestrator runs —
+# the required-artifacts contract tells the agent to use it; copying it afterward made
+# adherence structurally impossible.
+mkdir -p "$TEMP_REPO/scripts"
+cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$TEMP_REPO/scripts/adjudicate-findings.js"
+
 if [ "$RUNNER" = "cc" ]; then
   # cc -> claude -p with --setting-sources project, --strict-mcp-config, scratch HOME (no plugins)
   (
@@ -140,6 +146,7 @@ if [ "$RUNNER" = "cc" ]; then
   ) > "$RAW_LOG" 2>&1
   RUN_EXIT=$?
 elif [ "$RUNNER" = "agy" ]; then
+  echo "WARNING: arm isolation is NOT enforced for the agy runner (shared ~/.gemini state); cc is the isolation-verified runner" >&2
   # agy -> absolute-path-anchor + script -qec pattern
   AGY_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Your ABSOLUTE working directory is: $TEMP_REPO
@@ -215,10 +222,6 @@ ORACLE_EXIT=1
 decoy_respected="null"
 fidelity_ok="null"
 
-# Copy adjudicate-findings.js to temp repo scripts directory so that the test or agent can run it if needed,
-# or we can run it.
-mkdir -p "$TEMP_REPO/scripts"
-cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$TEMP_REPO/scripts/adjudicate-findings.js"
 
 if [ -f "$TASK_DIR/oracle.sh" ]; then
   cp "$TASK_DIR/oracle.sh" "$TEMP_REPO/oracle.sh"
@@ -291,7 +294,7 @@ fi
 RESULT_JSON="$OUT_DIR/result.json"
 runner_version_clean=$(printf '%s' "$runner_version" | tr -d '"\\' | head -c 120)
 printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \
-  "$TASK_ID" "$ARM" "$RUNNER" "$MODEL" "$runner_version_clean" "$DURATION" \
+  "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
   "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
   "$patterns_named" "$probe_evidence_present" > "$RESULT_JSON"
 

@@ -120,7 +120,7 @@ echo "Oracle self-tests passed!"
 # --- Stub Runner Tests ---
 echo "=== Running Stub Runner Tests ==="
 
-STUB_BIN="$REPO_ROOT/evals/orchestration/stub-runner.sh"
+STUB_BIN="$TEST_TMP/stub-runner.sh"
 
 # Create the stub-runner script
 cat << 'EOF' > "$STUB_BIN"

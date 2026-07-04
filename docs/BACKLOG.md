@@ -38,6 +38,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（含兩平台 dry-run）
 - **Source**: docs/plans/2026-07-04-surface-area-reduction.md §B4；v2.31.16 收尾 deferred。
 
+### codex 宿主 slash-entry 探針入 gate(committed、可重跑)
+- **Trigger**: 下次改動 `platforms/codex/plugin` payload 產生邏輯,OR C1a Spike 動工時(兩者都會重驗安裝面)。
+- **Context**: 2026-07-05 已一次性實測:codex 0.142.2 裝 v2.31.16 payload 後五個薄殼入口全部浮現、l5 wiring probe 以 `cat` exec 事件證明 MUST-READ 連結在 plugin cache 內解析並被讀取(記錄在 `references/multi-agent-portability.md`)。缺的是把它做成 committed 可重跑 gate(`slash-entry-probe.test.sh` 的 codex 版:`codex exec -m <model>` + stderr exec-event 斷言),與 CC 版同一 self-skip 慣例。注意 quota:Spark 額度枯竭時換 `-m gpt-5.5`(capability-state 已記 2026-07-07 12:44 重置)。
+- **Effort**: S
+- **Source**: 2026-07-05 /l6 cross-harness 薄殼驗證 run。
+
 ### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
 - **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。
 - **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）。B 組（/l3–/l6＋dialectic 薄殼化、model-routing 去重、skills.md 分層、北極星量測）已於 v2.31.16 出貨 — 憲法級約束維持：**/l3–/l6 等 slash 入口一個都不能少**。C1b=鏡像移出工作樹、`sync-codex-plugin-skills.sh` 改 release 步驟（clean-ref 生成＋checksum＋pre-publish 全驗後才挪指標＋post-publish rollback trigger — gpt-R1-G1 把關順序）。Spike 全滅的誠實出路：維持 committed mirror、本項作廢。完整設計：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md) §2。北極星量測已上線（preflight-release check 8，baseline 於 release 重新 seed）。
@@ -71,7 +77,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ### cc-shim late-flush exceeds the 3s settle-wait — probe `claude -p` flush timing / per-runner bound
 - **Trigger**: the next `empty_output` from a cc-shim (or any) authoring/review dispatch where the raw_log is later found non-empty.
-- **Context**: v2.31.10 shipped a bounded ~3s settle-wait after the grok late-flush race. Same day, a cc-shim/MiniMax-M3 authoring run was classified `empty_output` while its raw_log held a **17 KB** answer when read minutes later — the flush landed far beyond the bound even though the dispatcher waits for main-process exit first (suggests a detached child or very late buffered write in the `claude -p` path). Twice now a correct answer was harvested manually from a "failed" run. Options: probe the child/flush behavior (probe-playbook P3 applies), per-runner `SETTLE_MS`, or wait-on-descendants. Constraint: a genuinely-empty run (also observed same day, grok-build) must STILL classify empty — don't blur the two cases.
+- **Context**: v2.31.10 shipped a bounded ~3s settle-wait after the grok late-flush race. Same day, a cc-shim/MiniMax-M3 authoring run was classified `empty_output` while its raw_log held a **17 KB** answer when read minutes later — the flush landed far beyond the bound even though the dispatcher waits for main-process exit first (suggests a detached child or very late buffered write in the `claude -p` path). Twice now a correct answer was harvested manually from a "failed" run. THIRD occurrence 2026-07-05, and first on the **codex** runner: `dispatch-author.sh --runner codex --model gpt-5.5` returned `empty_output` while the raw_log held the complete 4.9 KB answer (incl. end-marker) seconds later — the class is not cc-shim-specific; the dispatcher's answer-stream read vs raw_log capture diverge. Options: probe the child/flush behavior (probe-playbook P3 applies), per-runner `SETTLE_MS`, or wait-on-descendants. Constraint: a genuinely-empty run (also observed same day, grok-build) must STILL classify empty — don't blur the two cases.
 - **Effort**: Fix
 - **Source**: 2026-07-04 quality-floor-engine critique round (MiniMax critique harvested post-hoc from an "empty" run).
 

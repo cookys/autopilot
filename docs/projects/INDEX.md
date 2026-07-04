@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-05 | [distill-episodic](2026-07-05-distill-episodic/README.md) — episodic mode + finish-flow/next periodic anchors | v2.31.18 | `feat/v2.31.18-distill-episodic` |
 
 ## 已完成 (Completed)
 

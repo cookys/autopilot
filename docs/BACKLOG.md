@@ -51,8 +51,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-07-05 v2.31.18 L-5.2 review(autopilot:reviewer)兩條 Suggestion。
 
 ### 官方 codex plugin(openai/codex-plugin-cc)作「同級 consult 通道」的 Spike 評估
-- **Trigger**: Cookys 完成本機安裝(`/plugin marketplace add openai/codex-plugin-cc` → `/plugin install codex@openai-codex` → `/reload-plugins` → `/codex:setup`)後的下一個 session;OR 下次需要輕量 codex consult 而 dispatch rails 顯得過重時。
+- **Trigger**: ~~安裝後首 session~~ **已引燃並完成首輪 Spike(2026-07-05,安裝當 session)**。殘餘驗證的 trigger:GPT-5.3-Codex-Spark 額度重置(2026-07-07 12:44)後測 `/codex:review` 通道(review 子命令**鎖 Spark、無 --model 旗標** — 額度死時整條 review 通道不可用,錯誤呈現誠實不給假 verdict);以及下次需要 write-path 時測 `rescue --write` 的沙箱姿態。
 - **Context**: 2026-07-05 已做 src 靜態初評(repo 已 clone 讀過,存在性與指令面已驗):指令 `/codex:review`、`/codex:adversarial-review`(有 JSON schema 輸出)、`/codex:rescue [--background] [--model] [--effort]`(經 `codex:codex-rescue` subagent)、`/codex:transfer`(把 Claude session 移植成 codex thread)、status/result/cancel/setup;架構=**app-server broker(結構化協議,天生沒有 stdout 刮取的 late-flush 問題類)**+ 可續傳 codex thread(我們的 dispatch 是無狀態一發)+ 可選 Stop-time review gate hook(900s,與我們 qc-gate 重疊、預期關閉)。定位=**同級 consult(意見進 context)**,與 dispatch rails(勞務出 artifact、worktree 隔離、fail-closed)互補而非替代。Spike 要驗:runtime 穩定性、thread-resume 實用度、rescue 的寫入面(sandbox 預設 read-only,但 fix 流程的逃逸姿態要實測)、與 autopilot hooks 的共存;長線候選:我們的 codex 派遣 rails 改走 app-server 協議(結構化 > 流刮取,2026-07-05 late-flush 戰役的教訓)。
+- **首輪 Spike 結果(2026-07-05)**: setup 全綠(ChatGPT auth、advanced runtime);**task/consult 通道(--model gpt-5.5)9 秒完成一次 repo-grounded 技術評估**(真讀檔、結論正確 — 獨立覆核了 output-quiescence 4-poll 決策),對照 dispatch rails 同類 50s–5min:**consult 類明顯勝**(無 echo 協議、無捕獲刮取、thread 可續)。勞務類(實作+artifact 驗證)仍屬 rails。安裝副作用:在 cwd repo 寫入 `.claude/settings.json`(enabledPlugins)— 已加 .gitignore。review gate 預設關,維持關(與 qc-gate 重疊)。
 - **Effort**: S(Spike)
 - **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
 

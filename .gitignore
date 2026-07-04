@@ -32,3 +32,4 @@ __pycache__/
 .orphaned_at
 eval-repo-*/
 orch-eval-scratch-home-*/
+.claude/settings.json

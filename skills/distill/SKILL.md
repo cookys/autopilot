@@ -4,7 +4,7 @@ description: >
   Distill your recurring procedures and corrections from local conversation history into personal
   custom skills, routed into YOUR own skill dirs — never into autopilot. Use when: "/distill",
   "what do I keep redoing", "turn my repeated workflow into a skill", "提煉我的重複流程",
-  "把我反覆做的變成 skill", "我一直在重複做什麼". Not for: writing autopilot's own skills, project
+  "把我反覆做的變成 skill", "我一直在重複做什麼", "把剛做完的專案蒸餾成 skill", "趁熱把這套流程收下來", "這個專案的方法論值得留", "distill this project/session". Not for: writing autopilot's own skills, project
   planning (→ dev-flow), or git-history productivity metrics (→ retro, the commit-history sibling).
 ---
 
@@ -48,6 +48,49 @@ Name each genuinely recurring procedure; **abstract to generic steps**. **Refuse
 that cannot be expressed without a specific literal** (inherently-specific) — unless self-use scope,
 where the user's own identifiers (their git email, their host alias) may stay. Classify each candidate's
 scope (global vs which project) from its `cwd`.
+
+## Episodic mode（情節模式）— the second signal source
+
+Frequency mode scans history for what you KEEP redoing; episodic mode distills what you
+JUST finished while the memory is hot. Complementary by design — 頻率管跨週遺忘的長尾,
+情節管熱記憶的深流程. Both structural blind spots of the ≥3× frequency threshold are
+episodic territory (2026-07-04 first full scan, empirical): a once-only project-scale
+methodology never crosses the frequency bar, and compound-command rituals are invisible
+to the tokenizer (scanner recall fixes are a separate BACKLOG item — not this mode's job).
+
+Triggers: 「把剛做完的專案蒸餾成 skill」「趁熱把這套流程收下來」「這個專案的方法論值得留」,
+"distill this project/session" — or arriving from finish-flow L-5.6's evaluation question.
+
+Steps 1E–2E replace Steps 1–2 ONLY. Everything from Step 3 on (identifier lint, human
+gate, normalize-slug, write + commit-on-approve, pack sync / consolidate) is the SAME
+pipeline — episodic products get zero special handling downstream.
+
+### Step 1E — Episodic retrospection (LLM judgment, not a scan)
+
+Answer four questions about the just-finished project / long session:
+
+1. Is there ONE **transferable** end-to-end procedure here (still valid on a different topic)?
+2. Which steps got **reworked**? (every rework = one rule with a body behind it)
+3. Which parts are already scripted/templated? (the load-bearing split of a skill
+   triple: **prose carries judgment, files carry templates/scripts, pointers carry
+   artifacts** — RED-tested: templates stay immune where prose gets shot)
+4. **Who** executes this in the future (yourself / a weaker model / another harness)?
+   → sets checklist granularity: for weak models, enumerate down to mechanically
+   self-checkable items (RED's fourth law: self-assessment distortion is a function of
+   checklist granularity).
+
+### Step 2E — Propose (≤3, scarcity over volume)
+
+Each candidate MUST cite its **source event** (which rework / which decision) — not a
+frequency count. A candidate that cannot name a concrete source event is not proposed.
+Routing follows the existing rules (global → pack; project-specific → that project's
+`.claude/skills`).
+
+### Step 2E-quality (optional, recommended) — RED acceptance
+
+For products meant to be shared or executed by weaker models, run one RED round
+(headless weak model on a real task → autopsy the artifacts only → enumerated patch).
+Methodology reference (external — lives in YOUR pack, never in autopilot): skill-red-testing.
 
 ## Demotion drafting (quality-floor P4)
 

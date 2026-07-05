@@ -67,6 +67,8 @@
 
 set -uo pipefail
 
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
+
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
 # rejected/absent file = no-op → the cc-shim/anthropic precondition fires normally). Loaded
 # BEFORE any endpoint/env consumption. Contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
@@ -299,10 +301,11 @@ if [[ "$RUNNER" = "codex" ]]; then
   # codex stdout is delivered normally under a pipe.
   CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
   CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
-  "$CODEX_BIN" exec --model "$MODEL" \
+  timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"
   CODEX_RC=$?
+  wait_output_quiescent "$CODEX_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   # JSON-exposed raw_log path must contain the full picture for humans and passive_capture:
   # stdout content, then the separator, then the stderr content.
   cat "$CODEX_OUT" > "$RAW_LOG"
@@ -344,6 +347,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
       --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>&1
   GROK_RC=$?   # do NOT swallow with `|| true`: no `set -e` here, so capturing is safe
+  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   rm -rf "$GROK_CWD"; GROK_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   # FAIL-CLOSED on any non-zero grok exit (bad flag/model, auth, or rc=124 timeout):
   # emit no_verdict and EXIT HERE, BEFORE the shared VERDICT parser. Critical — grok can
@@ -359,15 +363,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
     exit 1
   fi
 
-  # Bounded settle-wait for grok late-flush
-  _elapsed=0
-  while [ "$_elapsed" -lt 3000 ]; do
-    if tr -d '\r' < "$RAW_LOG" | grep -q '[^[:space:]]'; then
-      break
-    fi
-    sleep 0.25
-    _elapsed=$((_elapsed + 250))
-  done
+
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
@@ -409,6 +405,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
       bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
       _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>&1
   CCSHIM_RC=$?
+  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
   if [ "$CCSHIM_RC" -ne 0 ]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \

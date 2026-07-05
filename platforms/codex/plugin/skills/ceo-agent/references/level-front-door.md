@@ -36,6 +36,22 @@ so the run does not re-ask on a clean goal:
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
 | 4. No-go zones | **none** (default DOA). Override with `-x <csv>`. |
 
+### Economy mode — when the session model is premium or usage-capped
+
+When depth-0 runs on a scarce top-tier model, the orchestrator's spend should narrow
+to plan / decompose / synthesize / verify — the things that actually need it:
+
+- Even in `/l3` inline mode, leaf-dispatch mechanical sub-steps (boilerplate, bulk
+  edits, formatting, test scaffolding) to a **fast-worker**-tier subagent, and
+  reasoning-dense consults to a **deep-reasoner**-tier one — both are routing-table
+  roles (`references/model-routing.md`), resolved via `resolve-dispatch.sh`, never
+  hardcoded.
+- Prefer `/l4`+ so implementation labor burns worker/hetero-engine tokens instead of
+  session-model quota; `/l5`/`/l6` extend the same economics to cross-vendor engines.
+- NEVER economize the depth-0 trust duties themselves: qc@depth-0, artifact
+  verification, convergence judgment, and merge authority stay on the orchestrator
+  regardless of model economics.
+
 ### Overrides (rare)
 
 | Flag | Effect |
@@ -225,6 +241,14 @@ commit(s) (§4).
 The control loop is enforced at **depth 0** — the child cannot be trusted to
 police its own budget (fox/henhouse, Round-2 Ops 🔴 fix). The CEO wraps the
 foreman dispatch in a guard it owns:
+
+### 0. Peer consult (optional, Claude Code + codex plugin only)
+
+For quick second opinions during depth-0 judgment (design sanity, alternative
+diagnosis, "what am I missing"), the `codex:codex-rescue` subagent is a ~seconds-class
+repo-grounded consult channel (see `references/hetero-dispatch.md` § Peer consult).
+It is ADVICE only: it never substitutes qc@depth-0 (§3), artifact verification, or
+merge authority, and it is absent on non-CC hosts — never a dependency of the loop.
 
 ### 1. Budget cap (rounds + wall-clock — v1 only)
 

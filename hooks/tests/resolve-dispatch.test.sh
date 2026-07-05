@@ -79,6 +79,20 @@ assert_contains "$OUT" '"mode":"default"'                    "legacy implementer
 assert_contains "$OUT" '"agent":""'                          "legacy implementer agent empty"
 assert_not_contains "$OUT" '"table"'                         "legacy implementer no table field (byte-stability proxy)"
 
+# deep-reasoner → opus/plan
+OUT="$(run_dispatch --role deep-reasoner)"; EXIT=$?
+assert_eq "0" "$EXIT"                                        "legacy deep-reasoner exit code"
+assert_contains "$OUT" '"model":"opus"'                      "legacy deep-reasoner model=opus"
+assert_contains "$OUT" '"mode":"plan"'                       "legacy deep-reasoner mode=plan"
+assert_not_contains "$OUT" '"table"'                         "legacy deep-reasoner no table field"
+
+# fast-worker → sonnet/default
+OUT="$(run_dispatch --role fast-worker)"; EXIT=$?
+assert_eq "0" "$EXIT"                                        "legacy fast-worker exit code"
+assert_contains "$OUT" '"model":"sonnet"'                    "legacy fast-worker model=sonnet"
+assert_contains "$OUT" '"mode":"default"'                    "legacy fast-worker mode=default"
+assert_not_contains "$OUT" '"table"'                         "legacy fast-worker no table field"
+
 # test-runner → haiku/default
 OUT="$(run_dispatch --role test-runner)"; EXIT=$?
 assert_eq "0" "$EXIT"                                        "legacy test-runner exit code"

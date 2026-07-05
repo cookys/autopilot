@@ -44,6 +44,25 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: 2026-07-05 /l6 cross-harness 薄殼驗證 run。
 
+### distill/learn 邊界句進 description(+ retro「session」詞彙鄰接註記)
+- **Trigger**: 下次修改 `skills/distill/SKILL.md` 或 `skills/learn/SKILL.md` 的 description;OR 實際觀察到一次 distill↔learn(或 distill↔retro)誤路由。
+- **Context**: v2.31.18 episodic 觸發語(「這個專案的方法論值得留」等)使 distill 的觸發面更靠近 learn 領域;「learn 記事實、distill 產程序」的邊界句目前只住在 finish-flow L-5.6 的提示裡,不在兩個 skill 自身的 description/Not-for(gap 先於本次變更存在,review 判非阻斷)。retro 的 "session analysis" 與 "distill this project/session" 詞彙鄰接、動詞相異,今日無字面碰撞。改 description = 路由面 = L 待遇。
+- **Effort**: S(但 L 待遇 review)
+- **Source**: 2026-07-05 v2.31.18 L-5.2 review(autopilot:reviewer)兩條 Suggestion。
+
+### 官方 codex plugin(openai/codex-plugin-cc)作「同級 consult 通道」的 Spike 評估
+- **Trigger**: ~~安裝後首 session~~ **已引燃並完成首輪 Spike(2026-07-05,安裝當 session)**。殘餘驗證的 trigger:GPT-5.3-Codex-Spark 額度重置(2026-07-07 12:44)後測 `/codex:review` 通道(review 子命令**鎖 Spark、無 --model 旗標** — 額度死時整條 review 通道不可用,錯誤呈現誠實不給假 verdict);以及下次需要 write-path 時測 `rescue --write` 的沙箱姿態。
+- **Context**: 2026-07-05 已做 src 靜態初評(repo 已 clone 讀過,存在性與指令面已驗):指令 `/codex:review`、`/codex:adversarial-review`(有 JSON schema 輸出)、`/codex:rescue [--background] [--model] [--effort]`(經 `codex:codex-rescue` subagent)、`/codex:transfer`(把 Claude session 移植成 codex thread)、status/result/cancel/setup;架構=**app-server broker(結構化協議,天生沒有 stdout 刮取的 late-flush 問題類)**+ 可續傳 codex thread(我們的 dispatch 是無狀態一發)+ 可選 Stop-time review gate hook(900s,與我們 qc-gate 重疊、預期關閉)。定位=**同級 consult(意見進 context)**,與 dispatch rails(勞務出 artifact、worktree 隔離、fail-closed)互補而非替代。Spike 要驗:runtime 穩定性、thread-resume 實用度、rescue 的寫入面(sandbox 預設 read-only,但 fix 流程的逃逸姿態要實測)、與 autopilot hooks 的共存;長線候選:我們的 codex 派遣 rails 改走 app-server 協議(結構化 > 流刮取,2026-07-05 late-flush 戰役的教訓)。
+- **首輪 Spike 結果(2026-07-05)**: setup 全綠(ChatGPT auth、advanced runtime);**task/consult 通道(--model gpt-5.5)9 秒完成一次 repo-grounded 技術評估**(真讀檔、結論正確 — 獨立覆核了 output-quiescence 4-poll 決策),對照 dispatch rails 同類 50s–5min:**consult 類明顯勝**(無 echo 協議、無捕獲刮取、thread 可續)。勞務類(實作+artifact 驗證)仍屬 rails。安裝副作用:在 cwd repo 寫入 `.claude/settings.json`(enabledPlugins)— 已加 .gitignore。review gate 預設關,維持關(與 qc-gate 重疊)。
+- **Effort**: S(Spike)— consult 通道整合已出貨(v2.31.20:hetero-dispatch.md § Peer consult + front-door § 0 + coexistence 表);殘餘=review 通道校準(Spark 重置後跑 known-bad 10 案,false-pass-on-critical=0 才准進 qc 面)與 `rescue --write` 沙箱姿態。
+- **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
+
+### terse reviewer contracts — 量測式瘦身(plan 已 R1 收斂,待執行窗口)
+- **Trigger**: reviewer-engine 額度窗口(GPT-5.3-Codex-Spark 2026-07-07 12:44 重置,或直接用 gpt-5.5 跑雙腿)+ 一個維護時段(~46 次 review call:2 腿 ×(10 known-bad + 3 injection + 10 clean 擴充集))。
+- **Context**: Superpowers 6 實測 −41% reviewer 輸出、verdict 不變;autopilot 的三份 reviewer 契約(reviewer.md 242 行 / code-review.md 331 行 / dispatch-review 模板)從未量測式瘦身。Plan 已經 MiniMax-M3 全文審(5🟠 全折入 R1):配對基線、絕對敏感度 ≥0.9 地板、clean 集擴到 ≥10、組裝後 prompt 結構檢查、合併腿驗交互效應。完整 gate:[`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md)。
+- **Effort**: S–M
+- **Source**: 2026-07-05 Superpowers 6 研究(唯一可吸收項)+ 北極星 prose↓。
+
 ### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
 - **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。
 - **Context**: 2026-07-04 量測：codex 鏡像 37.4k 行（repo 一半、純稅）。B 組（/l3–/l6＋dialectic 薄殼化、model-routing 去重、skills.md 分層、北極星量測）已於 v2.31.16 出貨 — 憲法級約束維持：**/l3–/l6 等 slash 入口一個都不能少**。C1b=鏡像移出工作樹、`sync-codex-plugin-skills.sh` 改 release 步驟（clean-ref 生成＋checksum＋pre-publish 全驗後才挪指標＋post-publish rollback trigger — gpt-R1-G1 把關順序）。Spike 全滅的誠實出路：維持 committed mirror、本項作廢。完整設計：[`docs/plans/2026-07-04-surface-area-reduction.md`](plans/2026-07-04-surface-area-reduction.md) §2。北極星量測已上線（preflight-release check 8，baseline 於 release 重新 seed）。
@@ -75,9 +94,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: 2026-07-04 review-closeout /l6 verification-authoring dogfood.
 
-### cc-shim late-flush exceeds the 3s settle-wait — probe `claude -p` flush timing / per-runner bound
+### ✅ DONE (2026-07-05, v2.31.17) — late-flush `empty_output` misclassification (cc-shim/codex/any runner)
 - **Trigger**: the next `empty_output` from a cc-shim (or any) authoring/review dispatch where the raw_log is later found non-empty.
-- **Context**: v2.31.10 shipped a bounded ~3s settle-wait after the grok late-flush race. Same day, a cc-shim/MiniMax-M3 authoring run was classified `empty_output` while its raw_log held a **17 KB** answer when read minutes later — the flush landed far beyond the bound even though the dispatcher waits for main-process exit first (suggests a detached child or very late buffered write in the `claude -p` path). Twice now a correct answer was harvested manually from a "failed" run. THIRD occurrence 2026-07-05, and first on the **codex** runner: `dispatch-author.sh --runner codex --model gpt-5.5` returned `empty_output` while the raw_log held the complete 4.9 KB answer (incl. end-marker) seconds later — the class is not cc-shim-specific; the dispatcher's answer-stream read vs raw_log capture diverge. Options: probe the child/flush behavior (probe-playbook P3 applies), per-runner `SETTLE_MS`, or wait-on-descendants. Constraint: a genuinely-empty run (also observed same day, grok-build) must STILL classify empty — don't blur the two cases.
+- **Context**: v2.31.10 shipped a bounded ~3s settle-wait after the grok late-flush race. Same day, a cc-shim/MiniMax-M3 authoring run was classified `empty_output` while its raw_log held a **17 KB** answer when read minutes later — the flush landed far beyond the bound even though the dispatcher waits for main-process exit first (suggests a detached child or very late buffered write in the `claude -p` path). Twice now a correct answer was harvested manually from a "failed" run. THIRD occurrence 2026-07-05, and first on the **codex** runner: `dispatch-author.sh --runner codex --model gpt-5.5` returned `empty_output` while the raw_log held the complete 4.9 KB answer (incl. end-marker) seconds later — the class is not cc-shim-specific; the dispatcher's answer-stream read vs raw_log capture diverge. Options: probe the child/flush behavior (probe-playbook P3 applies), per-runner `SETTLE_MS`, or wait-on-descendants. Constraint: a genuinely-empty run (also observed same day, grok-build) must STILL classify empty — don't blur the two cases. **RESOLVED v2.31.17**: `scripts/lib/output-quiescence.sh` content-driven wait (size-stable ~1s / empty-grace 10s / deadline 60s; fd-holder approach falsified — sandboxed codex worker invisible to /proc+pgrep); honest-empty negative control in `hooks/tests/dispatch-output-quiescence.test.sh`.
 - **Effort**: Fix
 - **Source**: 2026-07-04 quality-floor-engine critique round (MiniMax critique harvested post-hoc from an "empty" run).
 

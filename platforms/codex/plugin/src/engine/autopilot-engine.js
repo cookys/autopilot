@@ -131,10 +131,10 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
 
   const args = [
     '--runner',
@@ -154,10 +154,10 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
 }
 
 function buildImplementationArgs({

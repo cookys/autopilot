@@ -277,17 +277,6 @@ for _m in "${QC_PANEL[@]}"; do
   fi
 done
 
-# If the implementer's family is unknown, a single known reviewer family cannot prove
-# decorrelation (it might be the implementer's actual family).
-if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
-  # Compatibility bar: for required_review_families=1, the value must remain identical
-  # to the legacy behavior. For high risk (required >= 2), we strictly require >= 2
-  # distinct families to prove decorrelation from an unknown implementer.
-  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
-    _diff_family=1
-  fi
-fi
-
 # Derive source trust from implementer family when not explicitly set:
 # trusted vendors are OpenAI/Anthropic/Google; unknown or custom stacks default to low trust.
 case "$SOURCE_TRUST" in
@@ -362,6 +351,19 @@ if (!found) process.stdout.write("unknown");
     [[ "$MAX_ROUNDS" -gt 7 ]] && MAX_ROUNDS=$(( BASE_ROUNDS > 7 ? BASE_ROUNDS : 7 ))
     [[ "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]] && REQUIRED_REVIEW_FAMILIES=2
     L1_REQUIRED="true"
+  fi
+fi
+
+# If the implementer's family is unknown, a single known reviewer family cannot prove
+# decorrelation (it might be the implementer's actual family). Placed AFTER the risk AND
+# density-scaling blocks so REQUIRED_REVIEW_FAMILIES is final — referencing it earlier was
+# an unbound-variable crash under set -u (qc2-security executed repro, 2026-07-05).
+if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
+  # Compatibility bar: for required_review_families=1, the value must remain identical
+  # to the legacy behavior. For required >= 2, we strictly need >= 2 distinct known
+  # families — by pigeonhole at least one then differs from the unknown implementer.
+  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
+    _diff_family=1
   fi
 fi
 

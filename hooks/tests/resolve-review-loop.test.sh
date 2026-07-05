@@ -530,4 +530,26 @@ printf -- '- loop_max_rounds: 6\n- density_scaling: on\n' > "$DENS_CAP_CFG"
 DENS_CAP_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_CAP_CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT")"
 assert_eq "7" "$(json_get "$DENS_CAP_OUT" loop_max_rounds)" "max rounds bumped from 6 to cap 7"
 
+# 27. Unknown implementer family + single-distinct-family panel — the qc2-security crash repro.
+# Must emit JSON gracefully (no set -u abort). required=1 (low risk): legacy-compat satisfied=true.
+UNK_IMPL_CFG="$TEST_TMP/unk-impl.md"
+printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, gpt-5.3-codex-spark\n' > "$UNK_IMPL_CFG"
+UNK_LOW_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --source-trust high 2>/dev/null)"; UNK_LOW_EXIT=$?
+assert_eq "0" "$UNK_LOW_EXIT" "unknown impl + 1-family panel: exits 0 (no unbound-variable crash)"
+assert_contains "$UNK_LOW_OUT" '"cross_family_satisfied"' "unknown impl low risk: JSON emitted"
+assert_eq "true" "$(json_get "$UNK_LOW_OUT" cross_family_satisfied)" "unknown impl + 1 family at required=1: legacy-compat satisfied=true"
+
+# 28. Same config at HIGH risk (required=2): graceful JSON, satisfied=false, --enforce exit 3.
+UNK_HIGH_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"; UNK_HIGH_EXIT=$?
+assert_eq "0" "$UNK_HIGH_EXIT" "unknown impl + 1-family panel at high risk: exits 0 with JSON"
+assert_eq "false" "$(json_get "$UNK_HIGH_OUT" cross_family_satisfied)" "unknown impl + 1 family at required=2: satisfied=false"
+REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --security-surface 1 --enforce >/dev/null 2>&1; UNK_ENFORCE_EXIT=$?
+assert_eq "3" "$UNK_ENFORCE_EXIT" "unknown impl + 1 family at required=2 --enforce: exit 3 (blocks)"
+
+# 29. Unknown implementer + TWO distinct known families at required=2: pigeonhole -> satisfied=true.
+UNK2_CFG="$TEST_TMP/unk-impl-2fam.md"
+printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, claude-opus\n' > "$UNK2_CFG"
+UNK2_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK2_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"
+assert_eq "true" "$(json_get "$UNK2_OUT" cross_family_satisfied)" "unknown impl + 2 distinct families at required=2: satisfied=true (pigeonhole)"
+
 finalize_test

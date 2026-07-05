@@ -462,3 +462,4 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - 現況:`CROSS_FAMILY_SATISFIED` 只表達「panel 有 ≥1 家族異於 implementer」;`required_review_families=2` 時,單一相異家族也會 satisfied=true,`--enforce` 不會擋。
 - 修法方向:改為計數制 — `families_distinct >= required_review_families` 才 satisfied;`--enforce` 同步。注意 KR:預設輸出 byte-compat(欄位值語意變更需 CHANGELOG 明示)。
 - 觸發:下次碰 `resolve-review-loop.sh` 的 enforce/panel 邏輯時;或高風險 diff 實際依賴 required=2 語意時。
+- ✅ RESOLVED 2026-07-05 — counting semantics implemented (this commit); entry retained for history.

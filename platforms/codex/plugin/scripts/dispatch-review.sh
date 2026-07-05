@@ -13,13 +13,14 @@
 # an empty agy reply must NEVER be read as SHIP-AS-IS.
 #
 # VERIFIER ISOLATION (structural, MUST NOT regress): the reviewer prompt is assembled from
-# the DIFF TEXT ONLY (--diff-file). This script has NO parameter through which an
-# implementer's self-report / summary / narrative / self-verdict could reach the reviewer —
-# and it MUST stay that way. Feeding a verifier the implementer's own account of the work
-# anchors it into confirming the claim (multi-agent hallucination cascade); a decorrelated
-# reviewer must form its own first impression from the artifact. Canonical rule:
-# references/blind-dispatch.md § "Verifier isolation". Never add a "context"/"self-report"/
-# "worker-summary" input path here.
+# the DIFF TEXT (--diff-file) and an optional trusted baseline (--spec-file). This script has NO
+# parameter through which an implementer's self-report / summary / narrative / self-verdict
+# could reach the reviewer — and it MUST stay that way. The spec file is a TRUSTED
+# dispatcher-authored input (same trust class as the flags), NOT third-party content.
+# Feeding a verifier the implementer's own account of the work anchors it into confirming
+# the claim (multi-agent hallucination cascade); a decorrelated reviewer must form its own
+# first impression from the artifact. Canonical rule: references/blind-dispatch.md
+# § "Verifier isolation". Never add a "context"/"self-report"/"worker-summary" input path here.
 #
 # Read-only posture: the diff under review is UNTRUSTED (a malicious diff could carry a
 # prompt-injection). So the codex path runs under `--sandbox read-only` (NOT a sandbox
@@ -30,6 +31,7 @@
 #
 # USAGE:
 #   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible --model <name> --diff-file <file>
+#       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
@@ -76,12 +78,13 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --runner)    RUNNER="${2:-}"; shift 2 ;;
     --model)     MODEL="${2:-}"; shift 2 ;;
     --diff-file) DIFF_FILE="${2:-}"; shift 2 ;;
+    --spec-file) SPEC_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
@@ -97,6 +100,9 @@ die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precond
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, or anthropic-compatible (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
+if [[ -n "$SPEC_FILE" ]]; then
+  [[ -f "$SPEC_FILE" && -r "$SPEC_FILE" ]] || die_precondition "--spec-file must be a readable regular file"
+fi
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
 timeout_to_ms() {
@@ -279,6 +285,21 @@ EOF
   cat <<'EOF'
 
 Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block, with nothing after it.
+EOF
+  if [[ -n "$SPEC_FILE" ]]; then
+    cat <<'EOF'
+
+Task specification (baseline — DISPATCHER-AUTHORED, trusted):
+Grade the diff AGAINST this spec. Anything the spec explicitly declares
+out-of-scope or handled-downstream is NOT a defect — do not flag it.
+EOF
+    cat "$SPEC_FILE"
+    cat <<'EOF'
+
+--- end of specification ---
+EOF
+  fi
+  cat <<'EOF'
 
 Diff under review:
 ```

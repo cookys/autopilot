@@ -171,6 +171,8 @@ assert_contains "$OUT" '"status": "precondition_failed"' "missing runner precond
 OUT="$("$SCRIPT" --runner bogus --model x --diff-file "$DIFF" 2>&1)"; assert_eq "2" "$?" "bad runner exit 2"
 OUT="$("$SCRIPT" --runner codex --model x --diff-file /nonexistent-diff 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing diff-file exit 2"
+OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --spec-file /nonexistent-spec 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "missing spec-file exit 2"
 OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --effort turbo 2>&1)"; assert_eq "2" "$?" "bad effort exit 2"
 
 # 3. codex path: verdict parsed → reviewed, exit 0
@@ -626,6 +628,16 @@ assert_contains "$PROMPT_CONTENT" "$expected_end_block" "prompt contains end-wit
 
 suffix_from_end_instr="${PROMPT_CONTENT#*"$expected_end_block"}"
 assert_contains "$suffix_from_end_instr" "Diff under review:" "END-marker instruction appears before Diff under review:"
+
+# Regression Test 8: spec-file inclusion
+SPEC="$TEST_TMP/task.spec"
+printf 'Spec file baseline text\n' > "$SPEC"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --spec-file "$SPEC" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "spec-file prompt-capture stub exits 0"
+PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
+assert_contains "$PROMPT_CONTENT" "Task specification (baseline — DISPATCHER-AUTHORED, trusted):" "prompt contains spec header"
+assert_contains "$PROMPT_CONTENT" "Spec file baseline text" "prompt contains spec file text"
+assert_contains "$PROMPT_CONTENT" "Diff under review:" "prompt still contains Diff under review:"
 
 # Regression Test: multi-line findings containing double quotes/backslashes must produce valid parseable JSON.
 OUT="$(STUB_MODE=quotes DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

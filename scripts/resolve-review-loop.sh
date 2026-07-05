@@ -13,7 +13,8 @@
 #   --check-scorecard  # include scorecard gate signal in output (opt-in, no extra keys by default)
 #   --scale-by-capability  # config: density_scaling (on|off). Increase verification density for low/unknown capability tier implementers (fail-closed). Evidence: campaign R1/R2 proved mechanical contracts move behavior.
 #   --enforce  # OPT-IN hard gate: exit 3 (still emits JSON/field) when the policy says BLOCK
-#              # — a high-risk change whose required cross-family decorrelation is unsatisfied.
+#              # — a high-risk change whose required cross-family decorrelation is unsatisfied
+#              # (e.g. "panel spans 1 distinct famil(y/ies), 2 required").
 #              # Default (no --enforce) stays exit-0 data mode like resolve-doa/resolve-qc-gate;
 #              # the resolver REPORTS, the caller (depth-0 loop / pre-push) ENFORCES.
 #
@@ -261,12 +262,31 @@ case "$SECURITY_SURFACE" in 0|1) ;; *) SECURITY_SURFACE=0 ;; esac
 # implementer's family-correlated blind spots.
 IMPL_FAMILY="$(family_of "$IMPL_ENGINE")"
 _diff_family=0
+_distinct_families=""
+_distinct_count=0
 for _m in "${QC_PANEL[@]}"; do
   _mf="$(family_of "$_m")"
   # An 'unknown' family does NOT count as cross-family (it could be the implementer's
   # family under an unrecognized codename) — else it would mask a real overlap.
-  [[ "$_mf" != "unknown" && "$_mf" != "$IMPL_FAMILY" ]] && { _diff_family=1; break; }
+  if [[ "$_mf" != "unknown" ]]; then
+    [[ "$IMPL_FAMILY" != "unknown" && "$_mf" != "$IMPL_FAMILY" ]] && _diff_family=1
+    if [[ " $_distinct_families " != *" $_mf "* ]]; then
+      _distinct_families="$_distinct_families $_mf"
+      _distinct_count=$((_distinct_count + 1))
+    fi
+  fi
 done
+
+# If the implementer's family is unknown, a single known reviewer family cannot prove
+# decorrelation (it might be the implementer's actual family).
+if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
+  # Compatibility bar: for required_review_families=1, the value must remain identical
+  # to the legacy behavior. For high risk (required >= 2), we strictly require >= 2
+  # distinct families to prove decorrelation from an unknown implementer.
+  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
+    _diff_family=1
+  fi
+fi
 
 # Derive source trust from implementer family when not explicitly set:
 # trusted vendors are OpenAI/Anthropic/Google; unknown or custom stacks default to low trust.
@@ -353,7 +373,7 @@ if [[ ${#QC_PANEL[@]} -gt 0 || "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAM
 else
   CROSS_FAMILY_REQUIRED="false"
 fi
-if [[ "$_diff_family" -eq 1 ]]; then
+if [[ "$_diff_family" -eq 1 && "$_distinct_count" -ge "$REQUIRED_REVIEW_FAMILIES" ]]; then
   CROSS_FAMILY_SATISFIED="true"
 else
   CROSS_FAMILY_SATISFIED="false"
@@ -362,7 +382,11 @@ fi
 if [[ "$CROSS_FAMILY_REQUIRED" == "true" && "$CROSS_FAMILY_SATISFIED" == "false" ]]; then
   _cross_severity="WARNING"
   [[ "$REVIEW_RISK" == "high" || "$REQUIRED_REVIEW_FAMILIES" -ge 2 ]] && _cross_severity="ERROR"
-  printf 'resolve-review-loop: %s — cross-family: qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$_cross_severity" "$IMPL_FAMILY" >&2
+  if [[ "$_distinct_count" -lt "$REQUIRED_REVIEW_FAMILIES" ]]; then
+    printf 'resolve-review-loop: %s — cross-family: qc_panel spans %d distinct famil(y/ies), %d required. Add more diverse panel members.\n' "$_cross_severity" "$_distinct_count" "$REQUIRED_REVIEW_FAMILIES" >&2
+  else
+    printf 'resolve-review-loop: %s — cross-family: qc_panel shares the implementer family (%s); no cross-family decorrelation. Add a panel member from a different vendor.\n' "$_cross_severity" "$IMPL_FAMILY" >&2
+  fi
 fi
 
 # --enforce (opt-in hard gate; default emits data exit-0 like the resolve-* siblings).

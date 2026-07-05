@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.1 — discipline docs + honest cross-family counting + review spec channel
+
+**Headline**: The second /l6 audit batch. **`dispatch-review.sh --spec-file`** gives the review rail a dispatcher-authored spec-baseline channel (allowed by verifier-isolation — only the implementer's self-report is forbidden) and `engine implement-review` passes the unit prompt through by default (`--no-review-spec` to suppress): this removes the structural non-convergence where a spec-blind reviewer re-flags downstream-owned work every round (v2.32.0 ran 0/3 units converged; this batch, with scope declared, 3/3 converged and the reviewer's rounds caught two real defects instead). **`cross_family_satisfied` becomes a counting rule** — distinct panel families ≥ `required_review_families` AND ≥1 family differing from a KNOWN implementer family (an unknown implementer family can no longer prove decorrelation — reviewer round-2 catch); `required=1` output is unchanged, `required=2` (high-risk / density-scaled) now blocks single-family panels under `--enforce`. Plus three transcript-evidenced discipline docs: mid-run question rule (5 corrections: "一路到底不要問我"), finish-flow four-surface sweep with per-surface outputs (4 corrections: "該補的都處理了嗎"), and a user-stated requirements ledger from dev-flow scope audit into finish-flow Final Goal Review (2 corrections: "後來沒寫?").
+
+### Added
+- `scripts/dispatch-review.sh --spec-file <file>` — trusted dispatcher-authored task-spec baseline section in the reviewer prompt; "out-of-scope/handled-downstream per spec" is explicitly not a defect; missing path fails closed (exit 2); absent flag = byte-identical prompt. Trust note updated: spec is dispatcher input, the DIFF remains the only untrusted content.
+- `engine implement-review` passes the implementer prompt as the review spec by default; `--no-review-spec` opt-out; `--spec-file` rejected via extraReviewArgs (trust boundary — reviewer round-1 catch).
+- dev-flow Scope Completeness Audit: **user-stated requirements ledger** (verbatim-quoted, each mapped to a phase; unmapped = audit FAIL) → verified row-by-row at finish-flow L-5.1.
+- finish-flow L-5.6: **four-surface sweep** (skill/doc/memory/knowledge) with per-surface "updated: X / not needed: reason" outputs.
+- level-front-door "Mid-run question discipline": with front-door presets, wanting to confirm direction is not an escalation trigger; near-misses are recorded, never asked mid-run.
+
+### Changed
+- `cross_family_satisfied` counting semantics (was: any single family differing from the implementer satisfied even `required=2`). `--enforce` messages now name the distinct-family count. BACKLOG entry marked resolved.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.0`
+
 ## v2.32.0 — handoff skill + audit-decision batch: routing tiebreaks, opus reviewer, density scaling
 
 **Headline**: The 2026-07-05 dual-family skills audit (573 real sessions of transcripts mined; Claude fan-out + codex/gpt-5.5 decorrelated track) lands as a decision batch. New **`handoff` skill** (skill #28) — the single biggest transcript-evidenced gap: the user hand-drove the "寫 handoff → /clear → resume" ritual 91 times; the skill standardizes a 7-section resume doc (write + resume modes, proactive offer rule), complementing the machine-snapshot `session-handoff` hook (which had never been enabled — it is opt-in via `handoff_inject`). Reviewer/debugger routing reconciles to **opus** (the "100% accuracy" sonnet benchmark turned out ceremonial: no raw artifacts, two model generations stale, self-contradictory 100%-vs-97/88-vs-94-98; runtime paths disagreed — resolve-dispatch said sonnet while agent frontmatter ran opus). `resolve-review-loop.sh` gains **tier-scaled verification density** (`--scale-by-capability` / `density_scaling`): a low/unknown-capability implementer fail-closed gets +2 review rounds (cap 7, never below the user base), ≥2 review families, and L1 required — the lift campaigns' core lesson (mechanical contracts move behavior; prose doesn't) applied to the under-served cc-shim/weak-implementer path. Plus: `references/routing-tiebreaks.md` (6 documented ambiguity tiebreaks), the `doc/`→`docs/` default-path sweep to zero, two load-bearing rules (verifier isolation, panel aggregation) now pinned by canonical-invariant seeds (negative-tested), and /l6's depth-0 context-discipline hard rule written down.
@@ -48,7 +66,7 @@ prose-justification: +1 new skill body (85 lines) + a canonical tiebreak referen
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`. Note: the audit's first doc-fix batch landed as pre-release develop commits (`955f6bf` merged at `9ace4e7`) — reverting the release merge does not undo those; revert `9ace4e7` separately if needed.
-- User-side (post-marketplace): `/plugin update autopilot @v2.31.16`
+- User-side (post-marketplace): `/plugin update autopilot @v2.31.20`
 
 ## v2.31.20 — codex-plugin consult channel integrated (capability-gated) + terse-contracts 開案
 
@@ -100,7 +118,7 @@ prose-justification: +1 new skill body (85 lines) + a canonical tiebreak referen
 - codex runner branches in both dispatchers are now bounded by `timeout "$TIMEOUT"` (previously unbounded).
 
 ### Rollback
-- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.16`.
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.20`.
 
 ## v2.31.16 — surface-area reduction B group: thin shells, one routing truth, north-star gate
 

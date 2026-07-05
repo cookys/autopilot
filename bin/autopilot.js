@@ -11,7 +11,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer|--allow-unqualified-reviewer]
+  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
 
@@ -106,6 +106,11 @@ function parseImplementReviewArgs(rawArgs) {
     if (arg === '--allow-unqualified-reviewer') {
       sawAllowUnqualifiedReviewer = true;
       output.requireQualifiedReviewer = false;
+      i += 1;
+      continue;
+    }
+    if (arg === '--no-review-spec') {
+      output.noReviewSpec = true;
       i += 1;
       continue;
     }

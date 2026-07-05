@@ -43,6 +43,7 @@ prose-justification: +1 new skill body (85 lines) + a canonical tiebreak referen
 - ceo-agent front-door section: `/l6` added (was omitted), `/l5` bullet corrected to the `engine implement-review` path.
 
 ### Fixed
+- `preflight-release.sh` north-star check false "baseline unparseable" under `FORCE_COLOR` environments — `console.log(number)` emits ANSI color codes that break the shell `-gt` test; parser switched to `process.stdout.write(String(...))`.
 - Severity table row order in `code-review.md` (Suggestion was listed above Minor, inverting the canonical 🔴🟠🟡🔵 order — main table fixed pre-release, the classification-guide table in the release merge); dev-flow stale "6 more discrete pending tasks" → 7; finish-flow L-5.5 internal `doc/`/`docs/` mix; ceo-agent step 3f now names the mandatory L-1.6 parent forcing-function task; ceo-agent DOA note carves out merged-branch cleanup (L-5.7/F.5/H-9.5) — resolves the contradiction with finish-flow:121.
 
 ### Rollback

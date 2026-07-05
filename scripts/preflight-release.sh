@@ -152,9 +152,11 @@ check_north_star() {
     return 0
   fi
   local base_prose base_engine base_version
-  base_prose=$(node -e "console.log(require('./$SURFACE_BASELINE').prose)" 2>/dev/null)
-  base_engine=$(node -e "console.log(require('./$SURFACE_BASELINE').engine)" 2>/dev/null)
-  base_version=$(node -e "console.log(require('./$SURFACE_BASELINE').version)" 2>/dev/null)
+  # process.stdout.write(String(..)) — console.log colorizes numbers under
+  # FORCE_COLOR (ANSI codes break the -gt test → false "baseline unparseable")
+  base_prose=$(node -e "process.stdout.write(String(require('./$SURFACE_BASELINE').prose))" 2>/dev/null)
+  base_engine=$(node -e "process.stdout.write(String(require('./$SURFACE_BASELINE').engine))" 2>/dev/null)
+  base_version=$(node -e "process.stdout.write(String(require('./$SURFACE_BASELINE').version))" 2>/dev/null)
   if ! [ "$base_prose" -gt 0 ] 2>/dev/null; then
     echo "    baseline unparseable ($SURFACE_BASELINE) — re-seed with --update-baseline" >&2
     return 1

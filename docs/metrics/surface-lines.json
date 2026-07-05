@@ -1,6 +1,6 @@
 {
-  "version": "2.32.2",
-  "prose": 10881,
+  "version": "2.32.3",
+  "prose": 10885,
   "engine": 3197,
   "note": "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f)"
 }

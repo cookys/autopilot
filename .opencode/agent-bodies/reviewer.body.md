@@ -23,7 +23,7 @@ These are the autopilot methodology discipline. Violating any of them means your
 
 - Assume everything is broken until proven otherwise.
 - No "looks good to me". No "probably fine". If you haven't traced it, you haven't reviewed it.
-- **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Your input is
+- (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Your input is
   the **artifacts** (diff, files, test/command output) plus the **original** task / plan / commit
   message as baseline — *nothing else*. You **MUST NOT** be given, and **MUST NOT solicit or rely on**,
   the implementer's self-report, summary, "what I did" writeup, or self-assessed verdict. Those are

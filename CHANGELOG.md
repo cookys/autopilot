@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.1 — the REAL empty_output root cause: pipefail + grep -q (one-flag fix)
+
+**Headline**: The `empty_output` misclassification epidemic (a successful hetero dispatch marked failed) is fixed, and the root cause is one flag. `dispatch-author.sh`'s emptiness check ran `tr | sed | grep -q` under `set -o pipefail`: `grep -q` exits at the first match, upstream `tr`/`sed` take SIGPIPE/EPIPE, pipefail marks the pipeline failed, and `if !` inverts FOUND-content into "empty" — **measured 97/100 false-empty on a 6KB capture; small outputs pass, which is why every probe kept lying**. Fix: `grep -c '[^[:space:]]' > /dev/null` (reads all input; 0/100). A committed big-output regression test guards the class.
+
+> **CORRECTION (honest record)**: the v2.31.17 "content flushed late after frontend exit" narrative was a **misdiagnosis** — content was present all along; the CHECK was lying. A refutation experiment run in **zsh** (the Bash tool's outer shell) masked the bash-specific SIGPIPE behavior — cross-shell refutations must run in the target shell. A marker-aware quiescence design was explored and **reverted before merge**: `wait_output_quiescent` runs *after* the runner frontend exits, so it only ever bounds the short post-exit flush tail; a "turn-budget" deadline was the wrong model and disabling grace/stability in marker mode hung the suite on legitimate failure stubs. The v2.31.17 content-quiescence lib is unchanged (harmless; covers any genuinely-late flush).
+
+### Fixed
+- `dispatch-author.sh` final emptiness check: `grep -q` → `grep -c >/dev/null` (the actual epidemic root cause). `dispatch-review.sh`'s greps were already direct-on-file (immune) — which is why review dispatches never exhibited the bug.
+
+### Added
+- `hooks/tests/dispatch-output-quiescence.test.sh`: big-output pipefail regression case (a multi-KB capture must classify `authored`, never false-empty).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.32.0`.
+
 ## v2.32.0 — handoff skill + audit-decision batch: routing tiebreaks, opus reviewer, density scaling
 
 **Headline**: The 2026-07-05 dual-family skills audit (573 real sessions of transcripts mined; Claude fan-out + codex/gpt-5.5 decorrelated track) lands as a decision batch. New **`handoff` skill** (skill #28) — the single biggest transcript-evidenced gap: the user hand-drove the "寫 handoff → /clear → resume" ritual 91 times; the skill standardizes a 7-section resume doc (write + resume modes, proactive offer rule), complementing the machine-snapshot `session-handoff` hook (which had never been enabled — it is opt-in via `handoff_inject`). Reviewer/debugger routing reconciles to **opus** (the "100% accuracy" sonnet benchmark turned out ceremonial: no raw artifacts, two model generations stale, self-contradictory 100%-vs-97/88-vs-94-98; runtime paths disagreed — resolve-dispatch said sonnet while agent frontmatter ran opus). `resolve-review-loop.sh` gains **tier-scaled verification density** (`--scale-by-capability` / `density_scaling`): a low/unknown-capability implementer fail-closed gets +2 review rounds (cap 7, never below the user base), ≥2 review families, and L1 required — the lift campaigns' core lesson (mechanical contracts move behavior; prose doesn't) applied to the under-served cc-shim/weak-implementer path. Plus: `references/routing-tiebreaks.md` (6 documented ambiguity tiebreaks), the `doc/`→`docs/` default-path sweep to zero, two load-bearing rules (verifier isolation, panel aggregation) now pinned by canonical-invariant seeds (negative-tested), and /l6's depth-0 context-discipline hard rule written down.

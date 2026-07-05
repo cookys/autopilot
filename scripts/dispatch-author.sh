@@ -212,9 +212,11 @@ else
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
 fi
 
+# grep -c (not -q): -q exits at first match and SIGPIPEs tr/sed under pipefail — a
+# multi-KB capture then misclassifies as empty ~97% of the time (measured 2026-07-05).
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
-  | grep -q '[^[:space:]]'; then
+  | grep -c '[^[:space:]]' > /dev/null; then
   printf '{ "runner": "%s", "model": "%s", "status": "empty_output", "raw_log": "%s", "error": "no non-whitespace output from runner — fail-closed" }\n' \
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
   exit 1

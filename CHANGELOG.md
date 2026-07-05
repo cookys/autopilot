@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.32.1 — discipline docs + honest cross-family counting + review spec channel
+## v2.32.2 — discipline docs + honest cross-family counting + review spec channel
 
 **Headline**: The second /l6 audit batch. **`dispatch-review.sh --spec-file`** gives the review rail a dispatcher-authored spec-baseline channel (allowed by verifier-isolation — only the implementer's self-report is forbidden) and `engine implement-review` passes the unit prompt through by default (`--no-review-spec` to suppress): this removes the structural non-convergence where a spec-blind reviewer re-flags downstream-owned work every round (v2.32.0 ran 0/3 units converged; this batch, with scope declared, 3/3 converged and the reviewer's rounds caught two real defects instead). **`cross_family_satisfied` becomes a counting rule** — distinct panel families ≥ `required_review_families` AND ≥1 family provably differing from the implementer's (reviewer round-2 catch: with an UNKNOWN implementer family a single known reviewer family can't prove decorrelation — at `required=2` it now takes ≥2 distinct known families, which by pigeonhole guarantees ≥1 differs); `required=1` output is unchanged, `required=2` (high-risk / density-scaled) now blocks single-family panels under `--enforce`. Plus three transcript-evidenced discipline docs: mid-run question rule (5 corrections: "一路到底不要問我"), finish-flow four-surface sweep with per-surface outputs (4 corrections: "該補的都處理了嗎"), and a user-stated requirements ledger from dev-flow scope audit into finish-flow Final Goal Review (2 corrections: "後來沒寫?").
 
@@ -43,7 +43,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`
-- User-side (post-marketplace): `/plugin update autopilot @v2.32.0`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.1`
+
+## v2.32.1 — the REAL empty_output root cause: pipefail + grep -q (one-flag fix)
+
+**Headline**: The `empty_output` misclassification epidemic (a successful hetero dispatch marked failed) is fixed, and the root cause is one flag. `dispatch-author.sh`'s emptiness check ran `tr | sed | grep -q` under `set -o pipefail`: `grep -q` exits at the first match, upstream `tr`/`sed` take SIGPIPE/EPIPE, pipefail marks the pipeline failed, and `if !` inverts FOUND-content into "empty" — **measured 97/100 false-empty on a 6KB capture; small outputs pass, which is why every probe kept lying**. Fix: `grep -c '[^[:space:]]' > /dev/null` (reads all input; 0/100). A committed big-output regression test guards the class.
+
+> **CORRECTION (honest record)**: the v2.31.17 "content flushed late after frontend exit" narrative was a **misdiagnosis** — content was present all along; the CHECK was lying. A refutation experiment run in **zsh** (the Bash tool's outer shell) masked the bash-specific SIGPIPE behavior — cross-shell refutations must run in the target shell. A marker-aware quiescence design was explored and **reverted before merge**: `wait_output_quiescent` runs *after* the runner frontend exits, so it only ever bounds the short post-exit flush tail; a "turn-budget" deadline was the wrong model and disabling grace/stability in marker mode hung the suite on legitimate failure stubs. The v2.31.17 content-quiescence lib is unchanged (harmless; covers any genuinely-late flush).
+
+### Fixed
+- `dispatch-author.sh` final emptiness check: `grep -q` → `grep -c >/dev/null` (the actual epidemic root cause). `dispatch-review.sh`'s greps were already direct-on-file (immune) — which is why review dispatches never exhibited the bug.
+
+### Added
+- `hooks/tests/dispatch-output-quiescence.test.sh`: big-output pipefail regression case (a multi-KB capture must classify `authored`, never false-empty).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.32.0`.
 
 ## v2.32.0 — handoff skill + audit-decision batch: routing tiebreaks, opus reviewer, density scaling
 

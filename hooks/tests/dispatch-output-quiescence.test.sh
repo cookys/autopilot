@@ -123,4 +123,15 @@ assert_eq "$DISPATCH_EXIT" "3" "runner-timeout-parity exit"
 assert_eq "$DISPATCH_STATUS" "runner_failed" "runner-timeout-parity status"
 assert_le "$DISPATCH_ELAPSED" "10" "runner-timeout-parity bounded by timeout"
 
+# big-output-pipefail regression: THE root cause of the 2026-07-05 empty_output
+# epidemic — bash `set -o pipefail` + a piped `grep -q` early-exit SIGPIPEs the
+# upstream tr/sed on multi-KB captures, so found content is misclassified empty
+# ~97% of the time. A large payload must classify "authored", not empty.
+big_stub=$(make_stub "codex-big-output" 'head -c 6000 /dev/urandom | base64
+exit 0')
+run_dispatch "$big_stub" env
+assert_eq "$DISPATCH_EXIT" "0" "big-output-pipefail exit"
+assert_eq "$DISPATCH_STATUS" "authored" "big-output-pipefail status (must not false-empty)"
+assert_le "$DISPATCH_ELAPSED" "6" "big-output-pipefail returns promptly"
+
 finalize_test

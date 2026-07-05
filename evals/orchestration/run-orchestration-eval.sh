@@ -35,6 +35,15 @@ if [ ! -d "$TASK_DIR" ]; then
   exit 2
 fi
 
+HAS_TURNS="false"
+TURNS_TOTAL=0
+if [ -d "$TASK_DIR/turns" ]; then
+  TURNS_TOTAL=$(ls -1 "$TASK_DIR/turns"/*.md 2>/dev/null | wc -l || true)
+  if [ "$TURNS_TOTAL" -gt 0 ]; then
+    HAS_TURNS="true"
+  fi
+fi
+
 # Set output directory if not provided
 if [ -z "$OUT_DIR" ]; then
   OUT_DIR="$REPO_ROOT/evals/orchestration/runs/run-${TASK_ID}-${ARM}-${RUNNER}-$(date +%s)"
@@ -68,8 +77,11 @@ cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
 PROMPT_FILE="$OUT_DIR/prompt.md"
 
 # 1. Read task.md
-cat "$TASK_DIR/task.md" > "$PROMPT_FILE"
-printf "\n\n" >> "$PROMPT_FILE"
+> "$PROMPT_FILE"
+if [ -f "$TASK_DIR/task.md" ]; then
+  cat "$TASK_DIR/task.md" >> "$PROMPT_FILE"
+  printf "\n\n" >> "$PROMPT_FILE"
+fi
 
 # 2. Append Pack
 if [ "$ARM" = "on" ]; then
@@ -138,16 +150,57 @@ mkdir -p "$TEMP_REPO/scripts"
 cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$TEMP_REPO/scripts/adjudicate-findings.js"
 
 if [ "$RUNNER" = "cc" ]; then
-  # cc -> claude -p with --setting-sources project, --strict-mcp-config, scratch HOME (no plugins)
-  (
-    cd "$TEMP_REPO"
-    export HOME="$SCRATCH_HOME"
-    # --dangerously-skip-permissions: the arm runs in a DISPOSABLE temp repo with a scratch
-    # HOME (no plugins, no user settings) — without it, -p mode stalls on permission asks.
-    timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions < "$PROMPT_FILE"
-  ) > "$RAW_LOG" 2>&1
-  RUN_EXIT=$?
+  if [ "$HAS_TURNS" = "true" ]; then
+    TURNS_COMPLETED=0
+    RUN_EXIT=0
+    SESSION_ID=""
+    for turn_file in $(ls -1 "$TASK_DIR/turns"/*.md | sort); do
+      TURN_PROMPT="$OUT_DIR/turn_$(basename "$turn_file")"
+      if [ "$TURNS_COMPLETED" -eq 0 ]; then
+        cat "$PROMPT_FILE" "$turn_file" > "$TURN_PROMPT"
+        OUT_JSON=$(
+          cd "$TEMP_REPO"
+          export HOME="$SCRATCH_HOME"
+          timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$TURN_PROMPT" 2>>"$RAW_LOG"
+        )
+        TURN_EXIT=$?
+        echo "$OUT_JSON" >> "$RAW_LOG"
+        if [ $TURN_EXIT -ne 0 ]; then
+          RUN_EXIT=$TURN_EXIT
+          break
+        fi
+        SESSION_ID=$(echo "$OUT_JSON" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | head -n1 || true)
+      else
+        cat "$turn_file" > "$TURN_PROMPT"
+        (
+          cd "$TEMP_REPO"
+          export HOME="$SCRATCH_HOME"
+          timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --resume "$SESSION_ID" < "$TURN_PROMPT"
+        ) >> "$RAW_LOG" 2>&1
+        TURN_EXIT=$?
+        if [ $TURN_EXIT -ne 0 ]; then
+          RUN_EXIT=$TURN_EXIT
+          break
+        fi
+      fi
+      TURNS_COMPLETED=$((TURNS_COMPLETED + 1))
+    done
+  else
+    # cc -> claude -p with --setting-sources project, --strict-mcp-config, scratch HOME (no plugins)
+    (
+      cd "$TEMP_REPO"
+      export HOME="$SCRATCH_HOME"
+      # --dangerously-skip-permissions: the arm runs in a DISPOSABLE temp repo with a scratch
+      # HOME (no plugins, no user settings) — without it, -p mode stalls on permission asks.
+      timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions < "$PROMPT_FILE"
+    ) > "$RAW_LOG" 2>&1
+    RUN_EXIT=$?
+  fi
 elif [ "$RUNNER" = "agy" ]; then
+  if [ "$HAS_TURNS" = "true" ]; then
+    echo "ERROR: multi-turn not supported for agy" >&2
+    exit 2
+  fi
   echo "WARNING: arm isolation is NOT enforced for the agy runner (shared ~/.gemini state); cc is the isolation-verified runner" >&2
   # agy -> absolute-path-anchor + script -qec pattern
   AGY_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
@@ -204,11 +257,36 @@ elif [ "$RUNNER" = "stub" ]; then
     echo "ERROR: ORCH_STUB_BIN environment variable is not set for stub runner" >&2
     exit 2
   fi
-  (
-    cd "$TEMP_REPO"
-    timeout "$TIMEOUT_LIMIT" "$ORCH_STUB_BIN" "$PROMPT_FILE" < "$PROMPT_FILE"
-  ) > "$RAW_LOG" 2>&1
-  RUN_EXIT=$?
+  if [ "$HAS_TURNS" = "true" ]; then
+    TURNS_COMPLETED=0
+    RUN_EXIT=0
+    LAST_PROMPT=""
+    for turn_file in $(ls -1 "$TASK_DIR/turns"/*.md | sort); do
+      TURN_PROMPT="$OUT_DIR/turn_$(basename "$turn_file")"
+      if [ "$TURNS_COMPLETED" -eq 0 ]; then
+        cat "$PROMPT_FILE" "$turn_file" > "$TURN_PROMPT"
+      else
+        cat "$LAST_PROMPT" "$turn_file" > "$TURN_PROMPT"
+      fi
+      LAST_PROMPT="$TURN_PROMPT"
+      (
+        cd "$TEMP_REPO"
+        timeout "$TIMEOUT_LIMIT" "$ORCH_STUB_BIN" "$TURN_PROMPT" < "$TURN_PROMPT"
+      ) >> "$RAW_LOG" 2>&1
+      TURN_EXIT=$?
+      if [ $TURN_EXIT -ne 0 ]; then
+        RUN_EXIT=$TURN_EXIT
+        break
+      fi
+      TURNS_COMPLETED=$((TURNS_COMPLETED + 1))
+    done
+  else
+    (
+      cd "$TEMP_REPO"
+      timeout "$TIMEOUT_LIMIT" "$ORCH_STUB_BIN" "$PROMPT_FILE" < "$PROMPT_FILE"
+    ) > "$RAW_LOG" 2>&1
+    RUN_EXIT=$?
+  fi
 else
   echo "ERROR: Invalid runner: $RUNNER" >&2
   exit 2
@@ -295,10 +373,25 @@ fi
 # Construct JSON output — COMPACT single-line JSONL (consumers grep/parse per line)
 RESULT_JSON="$OUT_DIR/result.json"
 runner_version_clean=$(printf '%s' "$runner_version" | tr -d '"\\' | head -c 120)
-printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \
-  "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
-  "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
-  "$patterns_named" "$probe_evidence_present" > "$RESULT_JSON"
+
+run_error="false"
+if [ "${RUN_EXIT:-0}" -ne 0 ]; then
+  run_error="true"
+fi
+
+if [ "$HAS_TURNS" = "true" ]; then
+  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s,"turns":%s,"turns_completed":%s,"run_error":%s}\n' \
+    "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
+    "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
+    "$patterns_named" "$probe_evidence_present" "$TURNS_TOTAL" "$TURNS_COMPLETED" "$run_error" > "$RESULT_JSON"
+else
+  # Single-prompt tasks: result.json stays byte-identical to the pre-multi-turn
+  # schema (no turns/run_error keys) — hard compat bar, round-3 review finding.
+  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \
+    "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
+    "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
+    "$patterns_named" "$probe_evidence_present" > "$RESULT_JSON"
+fi
 
 # Output to stdout
 cat "$RESULT_JSON"

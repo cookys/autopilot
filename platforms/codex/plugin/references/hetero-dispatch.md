@@ -159,6 +159,8 @@ the intended inputs, file-write verdict, `--print-timeout 8m`,
 rail is replaced by the throwaway-dir rail; everything else (artifact-based verification,
 never trust self-report) carries over. Spike caveats: `multi-agent-portability.md` §7.
 
+For reviewer isolation, the engine supports a `--spec-file <file>` flag to pass the original task specification as a trusted baseline. This solves structural reviewer non-convergence by scoping the review against dispatcher-authored bounds, while keeping the diff itself as the only untrusted input.
+
 ## No skill yet — deliberately
 
 Two real uses so far. Per the distill philosophy (extract skills from recurring practice, not speculatively), the skill wrapper waits for recurrence — trigger tracked in [`docs/BACKLOG.md`](../docs/BACKLOG.md).

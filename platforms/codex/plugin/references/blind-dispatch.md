@@ -309,6 +309,7 @@ false-suppress critical findings under self-report anchoring.
 the prompt/context contains **no** implementer self-report — no "here's what I did / changed /
 implemented", no "it works / tests pass / this is done" narrative, no worker-authored verdict.
 If any is present, strip it and re-assemble from artifacts + the original task baseline.
+Mechanically, the spec travels via dispatch-review.sh --spec-file (dispatcher-authored, trusted); the diff remains the only untrusted input.
 
 ## Nested dispatch (subagents spawning subagents)
 

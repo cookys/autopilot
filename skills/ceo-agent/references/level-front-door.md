@@ -36,6 +36,15 @@ so the run does not re-ask on a clean goal:
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
 | 4. No-go zones | **none** (default DOA). Override with `-x <csv>`. |
 
+### Mid-run question discipline (presets active)
+
+With the front-door presets (involvement=just-results, no-go=none), "想確認一下 /
+should I continue?" is **NOT an escalation trigger**. The run stops ONLY at: a DOA
+boundary (outcome/escalation tables), an irreversible op outside DOA, or input that
+genuinely cannot be self-derived. Near-misses (差點走錯路) are **recorded** — into the
+run summary and `autopilot:learn` at session end — never asked mid-run. (Transcript
+evidence 2026-07-05: 5 explicit user corrections for stopping early.)
+
 ### Economy mode — when the session model is premium or usage-capped
 
 When depth-0 runs on a scarce top-tier model, the orchestrator's spend should narrow

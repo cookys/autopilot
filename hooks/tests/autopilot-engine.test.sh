@@ -1899,4 +1899,131 @@ assert_contains "$OUT" "quota_reset_at2=2026-07-04T00:00:00Z" "validateReviewLoo
 assert_contains "$OUT" "reviewer_endpoint2=http://reviewer" "validateReviewLoopConfig carries string reviewer_endpoint"
 assert_contains "$OUT" "implementer_endpoint2=http://implementer" "validateReviewLoopConfig carries string implementer_endpoint"
 
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { buildReviewArgs } = require(path.join(root, 'src', 'engine'));
+
+const argsWithSpec = buildReviewArgs({
+  diffFile: 'relative-diff.diff',
+  specFile: 'some-spec.md',
+  roster: {
+    reviewer_engine: 'test-rev-model',
+    reviewer_effort: 'high',
+    reviewer_runner: 'test-rev-runner',
+  },
+});
+console.log(`args_with_spec=${argsWithSpec.join(' ')}`);
+
+const argsWithoutSpec = buildReviewArgs({
+  diffFile: 'relative-diff.diff',
+  roster: {
+    reviewer_engine: 'test-rev-model',
+    reviewer_effort: 'high',
+    reviewer_runner: 'test-rev-runner',
+  },
+});
+console.log(`args_without_spec=${argsWithoutSpec.join(' ')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine buildReviewArgs process exits 0"
+assert_contains "$OUT" "--spec-file some-spec.md" "buildReviewArgs appends specFile when set"
+assert_not_contains "$OUT" "args_without_spec=.*--spec-file" "buildReviewArgs omits specFile when absent"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+let reviewArgsDefault = null;
+let reviewArgsNoSpec = null;
+
+const createEngine = (noReviewSpec) => new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'branch',
+        base: 'base',
+        commit: '1234567890123456789012345678901234567890',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    if (noReviewSpec) reviewArgsNoSpec = args;
+    else reviewArgsDefault = args;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: 'none',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider({ round }) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-default-repair-diff-'));
+    const file = path.join(tmpDir, `round-${round}.diff`);
+    fs.writeFileSync(file, `round ${round}`, 'utf8');
+    return file;
+  },
+});
+
+const roster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+const loopArgs = {
+  promptFile: path.resolve('/tmp/some-prompt.md'),
+  branch: 'repair-loop',
+  base: '1111111111111111111111111111111111111111',
+  maxRounds: 1,
+  roster,
+};
+
+createEngine(false).runImplementationReviewLoop(loopArgs);
+createEngine(true).runImplementationReviewLoop({ ...loopArgs, noReviewSpec: true });
+
+console.log(`default_has_spec=${reviewArgsDefault.includes('--spec-file')}`);
+console.log(`default_spec_value=${reviewArgsDefault[reviewArgsDefault.indexOf('--spec-file') + 1] === path.resolve('/tmp/some-prompt.md')}`);
+console.log(`no_spec_has_spec=${reviewArgsNoSpec.includes('--spec-file')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine runImplementationReviewLoop spec-file tests exit 0"
+assert_contains "$OUT" "default_has_spec=true" "runImplementationReviewLoop passes spec-file by default"
+assert_contains "$OUT" "default_spec_value=true" "runImplementationReviewLoop uses prompt file as spec file by default"
+assert_contains "$OUT" "no_spec_has_spec=false" "runImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
+
 finalize_test

@@ -252,6 +252,8 @@ Deleting an **already-merged** feature branch during finish-flow cleanup (L-5.7 
 H-9.5 — merged-status verified first) is likewise within CEO DOA; the "Delete
 files/branches" escalation row above covers unmerged or protected branches.
 
+A mid-run desire to "confirm direction" is not an escalation trigger — see level-front-door.md § "Mid-run question discipline".
+
 When encountering these, pause and propose:
 
 ```markdown

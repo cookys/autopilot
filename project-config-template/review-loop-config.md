@@ -47,7 +47,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 
 > **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a
 > **disjoint-family** panel (OpenAI / Anthropic / Google), distinct from the inner-loop
-> `reviewer_engine`. The point is that ≥1 panel family differs from the **implementer's**
+> `reviewer_engine`. The point is that the count of distinct review families in the panel is >= `required_review_families` AND ≥1 panel family differs from the **implementer's**
 > family, so a bug the implementer+its-family-reviewer jointly miss is caught by a different
 > vendor (PoLL, arXiv 2404.18796). The resolver WARNS if the panel shares the implementer
 > family (`family_of()` knows openai/anthropic/google/**xai**/**minimax**/**zhipu**). Gemini joins
@@ -75,7 +75,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
-| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
+| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
 | `review_diff_scope` | how much the per-round reviewer reads (cost vs regression-catching) | `full` (re-read whole `base..HEAD` each round — safe, O(n) cost growth) `\| incremental-mitigated` (read `prev..HEAD` + full content of files-touched + invariants list + periodic/critical-path full re-read + **mandatory final full review before merge**) |
 | `density_scaling` | increase verification density for low/unknown capability tier implementers (bump max rounds, require 2 cross-family reviewers, require l1 decorrelated oracle) — fail-closed | `on\|off` (default off) |

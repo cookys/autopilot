@@ -87,7 +87,7 @@ assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field i
 # cross-family (fail-closed), so this would be false if family_of didn't know grok.
 XFCFG="$TEST_TMP/rl-xfamily.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc_panel: grok-build\n' > "$XFCFG"
-assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
 
 # 7. qc_panel (v2.25.9): default array + aggregation default
 OUT="$(bash "$SCRIPT")"
@@ -174,6 +174,18 @@ printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: ,\n' > "$EPCFG
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EPCFG" bash "$SCRIPT" --security-surface 1 --field cross_family_required)" "high-risk empty panel: cross_family_required true"
 assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EPCFG" bash "$SCRIPT" --security-surface 1 --field cross_family_satisfied)" "high-risk empty panel: cross_family_satisfied false"
 assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EPCFG" bash "$SCRIPT" --enforce --security-surface 1 >/dev/null 2>&1; echo $?)" "--enforce blocks high-risk EMPTY panel (no reviewers at all)"
+
+# 11c. required=2 + panel spanning 1 distinct family -> satisfied=false
+R2F1CFG="$TEST_TMP/r2f1.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: claude-opus, claude-sonnet\n' > "$R2F1CFG"
+assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" bash "$SCRIPT" --security-surface 1 --field cross_family_satisfied)" "required=2 with 1 distinct non-impl family -> satisfied=false"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" bash "$SCRIPT" --security-surface 1 --enforce >/dev/null 2>&1; echo $?)" "required=2 with 1 distinct non-impl family -> enforce exits 3"
+
+# 11d. required=2 + panel spanning 2 distinct families -> satisfied=true
+R2F2CFG="$TEST_TMP/r2f2.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- qc_panel: claude-opus, gemini-flash\n' > "$R2F2CFG"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F2CFG" bash "$SCRIPT" --security-surface 1 --field cross_family_satisfied)" "required=2 with 2 distinct families -> satisfied=true"
+assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F2CFG" bash "$SCRIPT" --security-surface 1 --enforce >/dev/null 2>&1; echo $?)" "required=2 with 2 distinct families -> enforce exits 0"
 
 # 12. probe telemetry fields + invalid --domain enum
 assert_eq "mixed" "$(bash "$SCRIPT" --field work_domain)" "--field work_domain"
@@ -479,6 +491,7 @@ assert_eq "7" "$(json_get "$DENS_UNK_OUT" loop_max_rounds)" "bumped max rounds (
 assert_eq "2" "$(json_get "$DENS_UNK_OUT" required_review_families)" "bumped review families to 2"
 assert_eq "true" "$(json_get "$DENS_UNK_OUT" l1_required)" "l1_required is true"
 assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field capability_tier)" "field capability_tier unknown"
+assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field cross_family_satisfied)" "density-scaled with 1 distinct non-impl family -> satisfied=false"
 
 # 23. --scale-by-capability with qualified implementer row -> high tier, no scaling
 DENS_HIGH_STORE="$TEST_TMP/dens-high"
@@ -516,5 +529,27 @@ DENS_CAP_CFG="$TEST_TMP/dens-cap.md"
 printf -- '- loop_max_rounds: 6\n- density_scaling: on\n' > "$DENS_CAP_CFG"
 DENS_CAP_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_CAP_CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT")"
 assert_eq "7" "$(json_get "$DENS_CAP_OUT" loop_max_rounds)" "max rounds bumped from 6 to cap 7"
+
+# 27. Unknown implementer family + single-distinct-family panel — the qc2-security crash repro.
+# Must emit JSON gracefully (no set -u abort). required=1 (low risk): legacy-compat satisfied=true.
+UNK_IMPL_CFG="$TEST_TMP/unk-impl.md"
+printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, gpt-5.3-codex-spark\n' > "$UNK_IMPL_CFG"
+UNK_LOW_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --source-trust high 2>/dev/null)"; UNK_LOW_EXIT=$?
+assert_eq "0" "$UNK_LOW_EXIT" "unknown impl + 1-family panel: exits 0 (no unbound-variable crash)"
+assert_contains "$UNK_LOW_OUT" '"cross_family_satisfied"' "unknown impl low risk: JSON emitted"
+assert_eq "true" "$(json_get "$UNK_LOW_OUT" cross_family_satisfied)" "unknown impl + 1 family at required=1: legacy-compat satisfied=true"
+
+# 28. Same config at HIGH risk (required=2): graceful JSON, satisfied=false, --enforce exit 3.
+UNK_HIGH_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"; UNK_HIGH_EXIT=$?
+assert_eq "0" "$UNK_HIGH_EXIT" "unknown impl + 1-family panel at high risk: exits 0 with JSON"
+assert_eq "false" "$(json_get "$UNK_HIGH_OUT" cross_family_satisfied)" "unknown impl + 1 family at required=2: satisfied=false"
+REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --security-surface 1 --enforce >/dev/null 2>&1; UNK_ENFORCE_EXIT=$?
+assert_eq "3" "$UNK_ENFORCE_EXIT" "unknown impl + 1 family at required=2 --enforce: exit 3 (blocks)"
+
+# 29. Unknown implementer + TWO distinct known families at required=2: pigeonhole -> satisfied=true.
+UNK2_CFG="$TEST_TMP/unk-impl-2fam.md"
+printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, claude-opus\n' > "$UNK2_CFG"
+UNK2_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK2_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"
+assert_eq "true" "$(json_get "$UNK2_OUT" cross_family_satisfied)" "unknown impl + 2 distinct families at required=2: satisfied=true (pigeonhole)"
 
 finalize_test

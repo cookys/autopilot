@@ -126,14 +126,17 @@ function validateInteger(value, field, minimum) {
   }
 }
 
-function buildReviewArgs({ roster, diffFile, extraReviewArgs = [] }) {
+function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+  if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
+    throw new TypeError('extra args cannot override --spec-file');
+  }
 
-  return [
+  const args = [
     '--runner',
     roster.reviewer_runner,
     '--model',
@@ -142,12 +145,19 @@ function buildReviewArgs({ roster, diffFile, extraReviewArgs = [] }) {
     diffFile,
     '--effort',
     roster.reviewer_effort,
-    ...extraReviewArgs,
   ];
+  if (specFile && typeof specFile === 'string') {
+    args.push('--spec-file', specFile);
+  }
+  args.push(...extraReviewArgs);
+  return args;
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+  if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
+    throw new TypeError('extra args cannot override --spec-file');
+  }
 }
 
 function buildImplementationArgs({
@@ -446,6 +456,7 @@ class AutopilotEngine {
       reviewArgs = buildReviewArgs({
         roster,
         diffFile: input.diffFile,
+        specFile: input.specFile,
         extraReviewArgs: Object.prototype.hasOwnProperty.call(input, 'extraReviewArgs')
           ? input.extraReviewArgs
           : [],
@@ -1036,6 +1047,7 @@ class AutopilotEngine {
 
       review = this.reviewDiff({
         diffFile,
+        specFile: input.noReviewSpec !== true ? promptFile : undefined,
         roster,
         extraReviewArgs: input.extraReviewArgs || [],
         reviewOptions: {

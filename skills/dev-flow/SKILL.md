@@ -368,6 +368,8 @@ TaskCreate: "L-1.5: Scope completeness audit — enumerate all affected surfaces
 - Add a phase task covering it, OR
 - Document in `README.md` scope boundary why it's explicitly out-of-scope
 
+- **User-stated requirements ledger**: list EVERY requirement the user explicitly stated for this task (features, tests, docs, formats — verbatim-quote each) → map each to a phase/task. This ledger is carried to finish-flow L-5.1. An accepted requirement that maps to nothing = the audit FAILS.
+
 **Feeds into L-1.6**: The module/surface list produced here is the direct input to the
 L-1.6 Skill routing TaskCreate. Every "Source code + tests" module enumerated here must
 have its required project skills invoked before any phase starts. Do not mark L-1.5

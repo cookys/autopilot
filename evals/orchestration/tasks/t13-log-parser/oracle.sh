@@ -21,10 +21,20 @@ fi
 # fixture itself and runs the parser directly against the task's documented contract.
 tests_passed=0
 rm -f errors.json summary.json logs.txt
+# Per-run NONCE: the asserted message content cannot be inferred from any
+# candidate-visible file (run-tests.sh mirrors the fixture SHAPE but not this
+# value), so a parser that hardcodes outputs without reading logs.txt fails
+# (qc3-evals Major: output-hardcoding cheat). Also: plain prints only — an
+# escaped-quote f-string inside this single-quoted python block was a silent
+# SyntaxError that made the oracle FAIL every candidate (qc3-evals Critical).
+ORACLE_NONCE="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+export ORACLE_NONCE
 python3 - <<'PYFIX'
+import os
+nonce = os.environ['ORACLE_NONCE']
 with open('logs.txt', 'wb') as f:
     f.write(b'2026-07-06 10:00:00 INFO Service started\n')
-    f.write(b'2026-07-06 10:01:00 ERROR Database connection failed\n')
+    f.write(('2026-07-06 10:01:00 ERROR Database connection failed code=' + nonce + '\n').encode())
     # truncated ERROR line (no message parts)
     f.write(b'2026-07-06 ERROR\n')
     # binary / invalid-utf8 ERROR line
@@ -43,53 +53,50 @@ fi
 fidelity_ok=0
 if [ $tests_passed -eq 1 ]; then
   if [ -f "errors.json" ] && [ -f "summary.json" ]; then
-    if python3 -c '
-import json, sys
+    if python3 - <<'PYCHECK' >/dev/null 2>&1
+import json, os, sys
 
-# Load summary.json
+nonce = os.environ['ORACLE_NONCE']
+
 try:
     with open("summary.json", "r") as f:
         summary = json.load(f)
 except Exception as e:
-    print(f"Error loading summary.json: {e}", file=sys.stderr)
+    print("Error loading summary.json: " + str(e), file=sys.stderr)
     sys.exit(1)
 
-# Validate keys and counts
 if "parsed_errors" not in summary or "failed_lines" not in summary:
     print("Missing keys in summary.json", file=sys.stderr)
     sys.exit(1)
 
-# We expect 2 successfully parsed errors and 2 failed lines
 if summary["parsed_errors"] != 2 or summary["failed_lines"] != 2:
-    print(f"Incorrect counts in summary.json: {summary}", file=sys.stderr)
+    print("Incorrect counts in summary.json: " + str(summary), file=sys.stderr)
     sys.exit(1)
 
-# Load errors.json
 try:
     with open("errors.json", "r") as f:
         errors = json.load(f)
 except Exception as e:
-    print(f"Error loading errors.json: {e}", file=sys.stderr)
+    print("Error loading errors.json: " + str(e), file=sys.stderr)
     sys.exit(1)
 
 if not isinstance(errors, list) or len(errors) != 2:
-    print(f"Expected 2 errors in errors.json, got {len(errors) if isinstance(errors, list) else type(errors)}", file=sys.stderr)
+    print("Expected 2 errors in errors.json", file=sys.stderr)
     sys.exit(1)
 
-# Check first error
 err1 = errors[0]
-if err1.get("timestamp") != "2026-07-06 10:01:00" or err1.get("message") != "Database connection failed":
-    print(f"First error mismatch: {err1}", file=sys.stderr)
+if err1.get("timestamp") != "2026-07-06 10:01:00" or err1.get("message") != "Database connection failed code=" + nonce:
+    print("First error mismatch (nonce content not reproduced)", file=sys.stderr)
     sys.exit(1)
 
-# Check second error (huge line message)
 err2 = errors[1]
 if err2.get("timestamp") != "2026-07-06 10:04:00" or len(err2.get("message", "")) != 10000:
-    print(f"Second error mismatch: timestamp={err2.get(\"timestamp\")}, message len={len(err2.get(\"message\", \"\"))}", file=sys.stderr)
+    print("Second error mismatch", file=sys.stderr)
     sys.exit(1)
 
 print("Outputs parsed and validated successfully.")
-' >/dev/null 2>&1; then
+PYCHECK
+    then
       echo "fidelity_ok=true"
       fidelity_ok=1
     else

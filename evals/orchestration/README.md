@@ -29,6 +29,13 @@ To guarantee the validity and integrity of the evaluation, we adhere to the foll
 - **Pilot size warning**: The pilot task size (n=2) is tiny. The report explicitly warns: "pipeline validation, NOT evidence of lift". The statistical campaign is a separate operator decision.
 - **Moving tools control**: The runner, model, and tool versions are recorded per run to prevent moving-tools invalidators.
 
+## Multi-turn mode
+
+Tasks can specify a `turns/` directory containing sequential prompts (`01.md`, `02.md`, ...) instead of a single prompt. This measures long-horizon drift, evaluating if an agent can sustain constraints across multiple interventions.
+- **Contract**: Between turns, no external hints or re-injections occur. The oracle evaluates the final state against invariants.
+- **Runners**: Supported by `cc` (via `--resume` capturing the session ID from turn 1) and `stub` (by concatenating). The `agy` runner does not support multi-turn execution.
+- **Limits**: Only `cc` supports true session resumption. Note that multi-turn requires N invocations, increasing total cost by roughly N×.
+
 ## Task provenance (why these are fair)
 
 | Task | Everyday Scenario | Real Incident Class |

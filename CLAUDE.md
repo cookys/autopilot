@@ -15,6 +15,8 @@ Standalone-capable lifecycle orchestration plugin for Claude Code. 28 skills, 3 
 | Script | Purpose |
 |--------|---------|
 | [`scripts/completeness-scan.sh`](scripts/completeness-scan.sh) | Anti-stub regex (TODO/FIXME/empty-impl/DISABLED_) on staged diff; JSON output; exit 1 ⇒ new findings (quality-pipeline completeness gate). |
+| [`scripts/error-path-scan.sh`](scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error branches). JSON output; exit 0 always (advisory findings for reviewer). |
+| [`scripts/secret-scan-diff.js`](scripts/secret-scan-diff.js) | L0 attention-slip scan for secrets. JSON output; exit 1 ⇒ findings (quality-pipeline completeness gate blocking step). |
 | [`scripts/check-redispatch-prompt.sh`](scripts/check-redispatch-prompt.sh) | Leaky-phrase linter for round-2+ re-dispatch prompts; encodes `references/blind-dispatch.md` checklist. Exit 1 ⇒ strip and retry. |
 | [`scripts/check-dispatch-suppression.sh`](scripts/check-dispatch-suppression.sh) | Anti-gaming linter for **any** dispatch prompt (round-1 included; sibling of `check-redispatch-prompt.sh`). Catches a dispatcher coaching the reviewer to suppress / pre-rate a finding ("call it Minor at most", "don't treat X as a defect", "ignore the auth path"). Patterns anchored to imperative-suppression grammar so honest calibration ("don't over-flag minor nits") passes. Exit 1 ⇒ coaching found ⇒ strip and re-dispatch. Encodes `references/blind-dispatch.md` anti-gaming pre-flight. |
 | [`scripts/diff-file-list.sh`](scripts/diff-file-list.sh) | Changed-file list as a Verified Clean markdown checklist. Removes LLM-from-memory file enumeration in reviewer output. |

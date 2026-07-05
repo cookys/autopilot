@@ -2,6 +2,11 @@
 # oracle.sh for t14-constraint-horizon
 set -euo pipefail
 
+# cd into the candidate repo (runner passes it as $1 — same contract as the other oracles).
+if [ $# -ge 1 ]; then
+  cd "$1"
+fi
+
 CLI="./cli.py"
 
 if [ ! -f "$CLI" ]; then

@@ -15,3 +15,7 @@ Outputs are recorded in a single JSON line to `result.json` summarizing performa
 run-pipeline-bench.sh --task <task-id> --arm bare|pipeline --model <m> --out <dir> \
     [--reviewer-model gpt-5.5] [--reviewer-runner codex] [--max-rounds 3] [--shim]
 ```
+
+Exit codes:
+- `0`: The pipeline ran to scoring, regardless of the oracle outcome.
+- `2`: Precondition or usage error.

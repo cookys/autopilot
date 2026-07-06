@@ -36,6 +36,7 @@ chmod +x "$MOCK_REPO/evals/pipeline-bench/run-pipeline-bench.sh"
 echo "test task" > "$MOCK_REPO/evals/orchestration/tasks/t1/task.md"
 cat > "$MOCK_REPO/evals/orchestration/tasks/t1/oracle.sh" << 'EOF'
 #!/usr/bin/env bash
+cp -r "$1" "$TEST_TMP/temp_repo_snap"
 grep -q "fake diff content" foo.txt || grep -q "FAKE_AWS_KEY" foo.txt
 EOF
 chmod +x "$MOCK_REPO/evals/orchestration/tasks/t1/oracle.sh"
@@ -95,6 +96,12 @@ assert_contains "$res_pipe" '"review_verdicts":["FIX-THEN-SHIP","SHIP-AS-IS"]'
 assert_contains "$res_pipe" '"gate_blocked":false'
 assert_contains "$res_pipe" '"rounds": [{'
 assert_contains "$res_pipe" '"verbatim_string"'
+assert_contains "$res_pipe" '"advisory_findings":0'
+
+if [ -f "$TEST_TMP/temp_repo_snap/oracle.sh" ]; then
+  echo "Assertion failed: oracle.sh exists in the temp repo"
+  exit 1
+fi
 
 # 3. Secret gate block path
 OUT_SECRET="$TEST_TMP/out_secret"
@@ -115,5 +122,9 @@ mkdir -p "$TEST_TMP/rel_cwd"
   bash "$TARGET_SCRIPT" --task t1 --arm bare --model pipeline-test --out "rel_out" >/dev/null 2>&1
 )
 assert_file_exists "$TEST_TMP/rel_cwd/rel_out/result.json"
+
+# 6. Invalid --max-rounds
+bash "$TARGET_SCRIPT" --task t1 --arm bare --model pipeline-test --out "$TEST_TMP/out_invalid_rounds" --max-rounds banana >/dev/null 2>&1
+assert_exit_code $? 2 "invalid --max-rounds should exit 2"
 
 finalize_test

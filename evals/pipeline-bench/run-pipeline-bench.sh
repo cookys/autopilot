@@ -16,8 +16,10 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --task)
       if [[ "$2" == /* ]]; then
-        TASK_ID="$2"
-      elif [ -d "$2" ]; then
+        echo "ERROR: --task must not be an absolute path" >&2
+        exit 2
+      fi
+      if [ -d "$2" ]; then
         TASK_ID="$(cd "$2" && pwd)"
       elif [[ "$2" == ./* ]] || [[ "$2" == ../* ]]; then
         TASK_ID="$(pwd)/$2"
@@ -35,7 +37,14 @@ while [ $# -gt 0 ]; do
       ;;
     --reviewer-model) REVIEWER_MODEL="$2"; shift 2 ;;
     --reviewer-runner) REVIEWER_RUNNER="$2"; shift 2 ;;
-    --max-rounds) MAX_ROUNDS="$2"; shift 2 ;;
+    --max-rounds)
+      if ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: --max-rounds must be a positive integer" >&2
+        exit 2
+      fi
+      MAX_ROUNDS="$2"
+      shift 2
+      ;;
     --shim) SHIM=1; shift 1 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -99,8 +108,8 @@ cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
   git config commit.gpgsign false
   git add -A
   git commit -q -m "frozen base" --no-verify --allow-empty
-  git tag base
 )
+BASE_SHA=$(git -C "$TEMP_REPO" rev-parse HEAD)
 
 if [ "${ORCH_CC_SHIM:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
   mkdir -p "$SCRATCH_HOME/.claude"
@@ -142,7 +151,7 @@ REPS_NOTE="null"
 if [ "$ARM" = "pipeline" ]; then
   while true; do
     diff_file="$OUT_DIR/diff_${ROUNDS}.diff"
-    git -C "$TEMP_REPO" diff base..HEAD > "$diff_file"
+    git -C "$TEMP_REPO" diff $BASE_SHA..HEAD > "$diff_file"
     
     if [ ! -s "$diff_file" ]; then
       REPS_NOTE="\"no_op\""
@@ -151,17 +160,17 @@ if [ "$ARM" = "pipeline" ]; then
     
     # L0 gates
     set +e
-    ( cd "$TEMP_REPO" && node "$REPO_ROOT/scripts/secret-scan-diff.js" --range base..HEAD > /dev/null 2>&1 )
+    ( cd "$TEMP_REPO" && node "$REPO_ROOT/scripts/secret-scan-diff.js" --range $BASE_SHA..HEAD > /dev/null 2>&1 )
     SECRET_RC=$?
     
-    ( cd "$TEMP_REPO" && bash "$REPO_ROOT/scripts/error-path-scan.sh" --range base..HEAD > "$OUT_DIR/error_scan_${ROUNDS}.json" 2>/dev/null )
+    ( cd "$TEMP_REPO" && bash "$REPO_ROOT/scripts/error-path-scan.sh" --range $BASE_SHA..HEAD > "$OUT_DIR/error_scan_${ROUNDS}.json" 2>/dev/null )
     set -e
     
     if [ "$SECRET_RC" -eq 1 ]; then
       GATE_BLOCKED="true"
     fi
     
-    adv_count=$(python3 -c 'import sys, json; print(len(json.load(sys.stdin)))' < "$OUT_DIR/error_scan_${ROUNDS}.json" 2>/dev/null || echo 0)
+    adv_count=$(python3 -c 'import sys, json; print(len(json.load(sys.stdin).get("findings", [])))' < "$OUT_DIR/error_scan_${ROUNDS}.json" 2>/dev/null || echo 0)
     ADVISORY_FINDINGS=$(( ADVISORY_FINDINGS + adv_count ))
     
     if [ -n "${PIPELINE_BENCH_REVIEW_CMD:-}" ]; then
@@ -220,7 +229,7 @@ if [ "$ARM" = "pipeline" ]; then
   done
 fi
 
-changed_files=$(git -C "$TEMP_REPO" diff --name-only base..HEAD | grep -v '^$' | wc -l | tr -d ' ')
+changed_files=$(git -C "$TEMP_REPO" diff --name-only $BASE_SHA..HEAD | grep -v '^$' | wc -l | tr -d ' ')
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
@@ -229,11 +238,10 @@ ORACLE_LOG="$OUT_DIR/oracle.log"
 ORACLE_EXIT=1
 
 if [ -f "$TASK_DIR/oracle.sh" ]; then
-  cp "$TASK_DIR/oracle.sh" "$TEMP_REPO/oracle.sh"
   set +e
   (
     cd "$TEMP_REPO"
-    bash oracle.sh "$TEMP_REPO"
+    bash "$TASK_DIR/oracle.sh" "$TEMP_REPO"
   ) > "$ORACLE_LOG" 2>&1
   ORACLE_EXIT=$?
   set -e
@@ -280,8 +288,7 @@ fi
 
 RESULT_JSON="$OUT_DIR/result.json"
 
-printf '{"task_id":"%s","arm":"%s","model":"%s","reps_note":%s,"oracle_pass":%s,"duration_total_s":%s,"rounds":%s,"converged":%s,"review_verdicts":%s,"gate_blocked":%s,"advisory_findings":%s,"changed_files":%s,"tokens":%s,"run_error":%s}\n' \
-  "$TASK_ID" "$ARM" "$MODEL" "$REPS_NOTE" "$oracle_pass" "$DURATION" "$ROUNDS" "$CONVERGED" "$REVIEW_VERDICTS" "$GATE_BLOCKED" "$ADVISORY_FINDINGS" "$changed_files" "$TOKENS_JSON" "$run_error" > "$RESULT_JSON"
+TASK_ID="$TASK_ID" ARM="$ARM" MODEL="$MODEL" REPS_NOTE="$REPS_NOTE" ORACLE_PASS="$oracle_pass" DURATION="$DURATION" ROUNDS="$ROUNDS" CONVERGED="$CONVERGED" REVIEW_VERDICTS="$REVIEW_VERDICTS" GATE_BLOCKED="$GATE_BLOCKED" ADVISORY_FINDINGS="$ADVISORY_FINDINGS" CHANGED_FILES="$changed_files" TOKENS_JSON="$TOKENS_JSON" RUN_ERROR="$run_error" python3 -c 'import os, json; print(json.dumps({"task_id": os.environ["TASK_ID"], "arm": os.environ["ARM"], "model": os.environ["MODEL"], "reps_note": json.loads(os.environ["REPS_NOTE"]), "oracle_pass": json.loads(os.environ["ORACLE_PASS"]), "duration_total_s": int(os.environ["DURATION"]), "rounds": int(os.environ["ROUNDS"]), "converged": json.loads(os.environ["CONVERGED"]), "review_verdicts": json.loads(os.environ["REVIEW_VERDICTS"]), "gate_blocked": json.loads(os.environ["GATE_BLOCKED"]), "advisory_findings": int(os.environ["ADVISORY_FINDINGS"]), "changed_files": int(os.environ["CHANGED_FILES"]), "tokens": json.loads(os.environ["TOKENS_JSON"]), "run_error": json.loads(os.environ["RUN_ERROR"])}))' > "$RESULT_JSON"
 
 cat "$RESULT_JSON"
 

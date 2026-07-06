@@ -74,6 +74,20 @@ fi
 echo ""
 echo "════════ L2 integration tests (*.test.sh) ════════"
 shopt -s nullglob
+NON_EXEC=()
+for file in "$TESTS_DIR"/*.test.sh; do
+  if [ ! -x "$file" ]; then
+    NON_EXEC+=("${file#$REPO_ROOT/}")
+  fi
+done
+if [ "${#NON_EXEC[@]}" -gt 0 ]; then
+  echo "ERROR: shell test files must be executable:" >&2
+  for rel in "${NON_EXEC[@]}"; do
+    echo "   - $rel" >&2
+  done
+  shopt -u nullglob
+  exit 1
+fi
 for file in "$TESTS_DIR"/*.test.sh; do
   run_one "$file"
 done

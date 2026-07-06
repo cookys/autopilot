@@ -236,7 +236,7 @@ QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
 # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
-case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
+case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim|anthropic-compatible) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
 case "$IMPL_RUNNER" in auto|codex|agy|grok|cc-shim) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac

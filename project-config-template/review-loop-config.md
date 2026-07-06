@@ -65,7 +65,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 |-------|---------|--------|
 | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
-| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (any Anthropic-compat model, e.g. MiniMax-M3 — needs the same `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env as the cc-shim implementer) `\| auto` |
+| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| auto` |
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |

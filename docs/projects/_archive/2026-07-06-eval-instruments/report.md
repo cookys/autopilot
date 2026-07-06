@@ -103,3 +103,49 @@ haiku 在同一個任務上量到的 +80pp 提升(見 campaign R1b),在 flash �
 平均每輪 152 秒。M3 在目前所有單輪任務上全部頂到天花板——而且是在 haiku 打不滿的那個 tier 之上(haiku 在 t12/t13 上是 2/3);pack 對 M3 沒有任何可量到的幫助。cc-shim 協調器路徑本身已端到端驗證過。
 
 **誠實結論**:M3 在現有這批單輪任務上已經是 above-band(高於 haiku 能頂到的水準),用現有任務量不出它的提升空間;要問「M3 的 pack/procedure 到底有沒有用」這個問題,答案要去 t14 這種 long-horizon 任務才找得到——這也是下一步的方向,而不是再加一批更多的單輪任務。
+
+## 管線匯率實驗 (2026-07-06)
+
+新增 `evals/pipeline-bench/` 儀器,直接量測 autopilot 的核心問題:同一個模型、同一個任務,**bare 單發執行** vs **完整管線**(implementer 實作 → gpt-5.5 decorrelated review loop → L0 gates → repair,最多 3 round)之間差多少。n=3/cell。
+
+### 四維度表(model × task × arm)
+
+| Model | Task | Arm | Quality(oracle_pass) | Speed(avg s / 倍數) | Reliability(converged) |
+|---|---|---|---|---|---|
+| haiku(below bar) | t2-extract-verbatim(byte-fidelity) | bare | 0/3 | 73s / 1× | n/a |
+| haiku(below bar) | t2-extract-verbatim | pipeline | **3/3** | 204s / 2.8× | 3/3 |
+| haiku(at bar) | t12-cleanup-script(idempotency) | bare | 3/3 | 28s / 1× | n/a |
+| haiku(at bar) | t12-cleanup-script | pipeline | 3/3 | 155s / 5.5× | 1/3 |
+| haiku(borderline) | t13-log-parser | bare | 2/3 | 52s / 1× | n/a |
+| haiku(borderline) | t13-log-parser | pipeline | 2/3 | 298s / 5.7× | 0/3 |
+| MiniMax-M3(above bar) | t12-cleanup-script | bare | 3/3 | 37s / 1× | n/a |
+| MiniMax-M3(above bar) | t12-cleanup-script | pipeline | 3/3 | 241s / 6.5× | 1/3 |
+| MiniMax-M3(above bar) | t13-log-parser | bare | 3/3 | 61s / 1× | n/a |
+| MiniMax-M3(above bar) | t13-log-parser | pipeline | **2/3** | 728s / 12× | 0/3 |
+
+**Verifiability**(質性,不放進表格是因為它是 arm-level 而非 row-level 的差異):bare arm 唯一的證據是 oracle 的通過/失敗;pipeline arm 每一輪都留下 review verdict + L0 gate 結果 + git-artifact diff,可回放、可稽核。即使兩個 arm 的 quality 打平(例如 haiku/t12),pipeline 仍然多出一整條可驗證的證據鏈——這是獨立於 quality/speed/reliability 之外的真實優勢,只是這批實驗沒有把它換成一個可比較的數字。
+
+### 匯率如何隨「模型 vs 任務難度落差」縮放
+
+把上面 10 行按落差大小排列,結論很乾脈:**pipeline 的價值跟著「模型能力 vs 任務難度的落差」縮放,不是固定倍率。**
+
+- **落差大、模型 bare 直接掛掉**(haiku/t2,below bar):pipeline **救回 +100pp**(0/3→3/3),代價是 2.8× 時間。這是 pipeline 該存在的理由。
+- **落差接近零、模型本來就過關**(haiku/t12 at bar、haiku/t13 borderline、M3/t12 above bar):三個案例全部 quality 打平,**pipeline 純粹是稅**——5.5×~6.5× 時間,converged 還壓不到 2/3。
+- **落差為負、模型明顯高於任務**(M3/t13):pipeline **反而退步**(3/3→2/3),而且是 12× 時間裡最貴的一格——gpt-5.5 reviewer 在這一格從未收斂(converged 0/3),M3 的 repair loop 把一個原本會過的解法改壞了。
+
+### 對密度縮放(density-scaling)的直接意涵
+
+如果要對 review round 數/panel 大小做密度縮放,這批數字給出一個明確方向:**只對「能力低於任務門檻」的 implementer 加大 round/panel;對已經在門檻之上的模型,review loop 是浪費,甚至是傷害。**用同一套固定 round 數套用在所有模型上,等於把 haiku/t2 的救援收益,和 M3/t13 的退步損失,用同一個旋鈕綁在一起。
+
+### 誠實限制
+
+- **n=3/cell**——方向性訊號,不是定論。但 +100pp 的救援與 3/3→2/3 的退步兩者都夠大,不太可能是純噪音。
+- t13 的 haiku bare 本身就有噪音(2/3),oracle 對這個任務的鑑別力沒有 t2 那麼乾脈。
+- cc-shim runner(M3 走 Anthropic-compatible endpoint)目前沒有跨 arm 隔離,不能排除 endpoint 端狀態殘留影響某一輪的結果。
+- M3/t13 這一格的退步,可能是「這一次 reviewer churn 特別嚴重」的個案,不是「M3 加 pipeline 必然退步」的普遍律——需要更多樣本才能把兩者分開。
+
+### 教訓
+
+- **編輯限定的 implementer 需要人接手跑測試**:K3–K5 三輪各修好一件事,但都是 edit-only,沒有能力自己跑 test suite 收斂;最後是換成能執行指令的 implementer(K6,gpt-5.5/codex)才把整套 suite 跑綠。純編輯型 implementer 在「需要跑起來看」的收尾階段會卡住。
+- **enum 真相活在兩個副本裡**:`reviewer_runner` 的 `anthropic-compatible` 值同時要加進 shell 版(`scripts/resolve-review-loop.sh`,K7)和 JS 版(`src/engine/resolve-review-loop.js`,K8)的驗證清單,漏掉任何一邊都會讓另一邊靜默把值重置成 default。建議:找一個共用的 enum 來源,或至少補一條 `check-canonical-invariants.sh` 的種子斷言,讓兩邊漂移在 commit 時就被抓到。
+- **auth 掉線是靜默的**:活動中途一次 `/login` 狀態切換,悄悄殺掉 13 筆 run(全部回報 "Not logged in"、空 token、空結果),而不是明顯的錯誤。長時間無人值守的量測活動,每一輪跑之前應該先做一次 auth-liveness 快速探測,而不是事後從空結果反推。

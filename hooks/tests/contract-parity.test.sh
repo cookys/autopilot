@@ -94,7 +94,45 @@ assert_eq "$EXIT_VALIDATE_SCORECARD" "0" "JS-side validator accepts scorecard co
 assert_contains "$VALIDATE_SCORECARD" "parity-ok" "scorecard validation returns parity-ok"
 
 
-# Case C: Negative check - unknown key added
+# Case C: reviewer_runner enum parity for direct Anthropic-compatible reviewer.
+AC_CFG="$TEST_TMP/review-loop-anthropic-compatible.md"
+printf -- '- reviewer_runner: anthropic-compatible\n- reviewer_engine: MiniMax-M3\n' > "$AC_CFG"
+AC_ERR="$TEST_TMP/review-loop-anthropic-compatible.stderr"
+AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$AC_ERR")"
+EXIT_AC=$?
+assert_eq "$EXIT_AC" "0" "resolve-review-loop exits 0 with anthropic-compatible reviewer_runner"
+AC_ERR_LOWER="$(tr '[:upper:]' '[:lower:]' < "$AC_ERR")"
+assert_not_contains "$AC_ERR_LOWER" "error" "anthropic-compatible shell resolve does not emit error"
+assert_not_contains "$AC_ERR_LOWER" "block" "anthropic-compatible shell resolve does not emit block"
+
+AC_RUNNER="$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.reviewer_runner);' <<< "$AC_OUT")"
+assert_eq "$AC_RUNNER" "anthropic-compatible" "shell preserves anthropic-compatible reviewer_runner"
+
+AC_JS_RUNNER="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" node -e '
+const { resolveReviewLoopJson } = require("./src/engine/resolve-review-loop.js");
+const resolved = resolveReviewLoopJson([]);
+if (resolved.error || resolved.parseError || resolved.status !== 0) {
+  console.error(JSON.stringify({
+    status: resolved.status,
+    error: resolved.error && resolved.error.message,
+    parseError: resolved.parseError && resolved.parseError.message,
+    stderr: resolved.stderr,
+  }));
+  process.exit(1);
+}
+console.log(resolved.result.reviewer_runner);
+')"
+EXIT_AC_JS=$?
+assert_eq "$EXIT_AC_JS" "0" "JS module resolves anthropic-compatible reviewer_runner without error"
+assert_eq "$AC_JS_RUNNER" "$AC_RUNNER" "JS module preserves same reviewer_runner as shell"
+
+VALIDATE_AC="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$AC_OUT")"
+EXIT_VALIDATE_AC=$?
+assert_eq "$EXIT_VALIDATE_AC" "0" "JS-side validator accepts anthropic-compatible reviewer_runner"
+assert_contains "$VALIDATE_AC" "parity-ok" "anthropic-compatible validation returns parity-ok"
+
+
+# Case D: Negative check - unknown key added
 TAMPERED_UNKNOWN="$(node -e 'const obj = JSON.parse(process.argv[1]); obj.bogus_key = "unexpected_value"; console.log(JSON.stringify(obj));' "$NORMAL_OUT")"
 
 VALIDATE_UNKNOWN="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$TAMPERED_UNKNOWN" 2>&1)"
@@ -104,7 +142,7 @@ assert_eq "$EXIT_UNKNOWN" "1" "JS-side validator rejects unknown key"
 assert_contains "$VALIDATE_UNKNOWN" "shell emits keys unknown to JS: bogus_key" "validation error lists bogus_key"
 
 
-# Case D: Negative check - missing key
+# Case E: Negative check - missing key
 TAMPERED_MISSING="$(node -e 'const obj = JSON.parse(process.argv[1]); delete obj.reviewer_engine; console.log(JSON.stringify(obj));' "$NORMAL_OUT")"
 
 VALIDATE_MISSING="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$TAMPERED_MISSING" 2>&1)"

@@ -78,7 +78,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
 | `review_diff_scope` | how much the per-round reviewer reads (cost vs regression-catching) | `full` (re-read whole `base..HEAD` each round — safe, O(n) cost growth) `\| incremental-mitigated` (read `prev..HEAD` + full content of files-touched + invariants list + periodic/critical-path full re-read + **mandatory final full review before merge**) |
-| `density_scaling` | increase verification density for low/unknown capability tier implementers (bump max rounds, require 2 cross-family reviewers, require l1 decorrelated oracle) — fail-closed | `on\|off` (default off) |
+| `density_scaling` | scale verification density both directions by capability tier/risk: low/unknown implementers fail-closed upward (bump max rounds, require 2 cross-family reviewers, require l1 decorrelated oracle); high-tier + low-risk implementers cap cheap rounds at 2 and emit `verify_first: true` without weakening cross-family policy | `on\|off` (default off) |
 | `work_domain` | **emitted telemetry, NOT a config/routing knob** — the deterministic dominant domain of a diff (via `--auto-domain`/`--domain`; computed by `scripts/probe-diff-domain.sh`) | `rust\|backend-cli\|frontend\|docs\|mixed` (read-only record; selects no engine — domain routing is BACKLOG'd) |
 | `domain_source` | **emitted telemetry** — provenance of `work_domain` | `explicit` (valid `--domain`) `\| auto` (successful `--auto-domain` probe) `\| none` (no flag / non-git / empty diff / probe failure ⇒ `work_domain=mixed`) |
 
@@ -104,6 +104,9 @@ it — fail-closed). The cross-family overlap message escalates **WARNING** (low
 when a high-risk change's required cross-family decorrelation is unsatisfied (incl. an empty panel at
 high risk). Default stays exit-0 data mode — the resolver REPORTS, the depth-0 loop / pre-push gate
 ENFORCES (same pattern as `resolve-doa`/`resolve-qc-gate`). Full design: [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../docs/plans/2026-06-26-trust-tiered-review-policy.md).
+
+`density_scaling` is bidirectional because the exchange-rate bench showed the pipeline rescues
+under-capacity implementers, but taxes or regresses at/above-capacity implementers.
 
 ## When to use `incremental-mitigated` (architect-reviewed 2026-06-26)
 

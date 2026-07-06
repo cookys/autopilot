@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const root = process.argv[2];
 const isScorecard = process.argv[3] === 'true';
+const isDensity = process.argv[4] === 'true';
 
 // Extract REVIEW_LOOP_FIELDS from src/engine/resolve-review-loop.js
 const jsPath = path.join(root, 'src', 'engine', 'resolve-review-loop.js');
@@ -40,15 +41,22 @@ const emittedKeys = Object.keys(parsed);
 const expectedKeys = new Set(REVIEW_LOOP_FIELDS);
 
 // Documented allowlist of conditional keys that are known to the JS side.
-// The shell script only emits them when --check-scorecard is passed.
+// The shell script only emits scorecard keys when --check-scorecard is passed.
+// Density keys are emitted only when density scaling is enabled.
 const conditionalAllowlist = ['reviewer_qualified', 'fallback_ladder'];
+const optionalKnownFields = ['capability_tier', 'density_scaled', 'density_source', 'verify_first'];
 if (isScorecard) {
   for (const k of conditionalAllowlist) {
     expectedKeys.add(k);
   }
 }
+if (isDensity) {
+  for (const k of optionalKnownFields) {
+    expectedKeys.add(k);
+  }
+}
 
-const unknownEmitted = emittedKeys.filter(k => !expectedKeys.has(k));
+const unknownEmitted = emittedKeys.filter(k => !expectedKeys.has(k) && !optionalKnownFields.includes(k));
 const missingEmitted = Array.from(expectedKeys).filter(k => !emittedKeys.includes(k));
 
 if (unknownEmitted.length > 0 || missingEmitted.length > 0) {
@@ -93,6 +101,39 @@ EXIT_VALIDATE_SCORECARD=$?
 assert_eq "$EXIT_VALIDATE_SCORECARD" "0" "JS-side validator accepts scorecard config and matches fields exactly"
 assert_contains "$VALIDATE_SCORECARD" "parity-ok" "scorecard validation returns parity-ok"
 
+# Case B2: density-scaling conditional fields are known to the JS-side validator
+DENSITY_STORE="$TEST_TMP/contract-density-empty-scorecard"
+mkdir -p "$DENSITY_STORE"
+DENSITY_OUT="$(ENGINE_SCORECARD_DIR="$DENSITY_STORE" "$REPO_ROOT/scripts/resolve-review-loop.sh" --scale-by-capability)"
+EXIT_DENSITY=$?
+assert_eq "$EXIT_DENSITY" "0" "resolve-review-loop exits 0 with --scale-by-capability"
+
+VALIDATE_DENSITY="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" "true" <<< "$DENSITY_OUT")"
+EXIT_VALIDATE_DENSITY=$?
+assert_eq "$EXIT_VALIDATE_DENSITY" "0" "JS-side validator accepts density conditional fields and matches fields exactly"
+assert_contains "$VALIDATE_DENSITY" "parity-ok" "density validation returns parity-ok"
+
+# Case B3: high-tier density scaling emits verify_first=true and capped rounds, accepted by JS
+DENSITY_HIGH_STORE="$TEST_TMP/contract-density-high-scorecard"
+mkdir -p "$DENSITY_HIGH_STORE"
+RECIMPL_HIGH_JSON="$DENSITY_HIGH_STORE/rec.json"
+cat > "$RECIMPL_HIGH_JSON" <<'JSON'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+ENGINE_SCORECARD_DIR="$DENSITY_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
+DENSITY_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENSITY_HIGH_STORE" "$REPO_ROOT/scripts/resolve-review-loop.sh" --scale-by-capability --diff-lines 0 --protected-path 0 --oracle-available 1 --security-surface 0)"
+EXIT_DENSITY_HIGH=$?
+assert_eq "$EXIT_DENSITY_HIGH" "0" "resolve-review-loop exits 0 with --scale-by-capability and high-tier implementer"
+
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.capability_tier);' <<< "$DENSITY_HIGH_OUT")" "high" "high-tier scorecard row emits capability_tier=high"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.review_risk);' <<< "$DENSITY_HIGH_OUT")" "low" "high-tier density case exercises low-risk path"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(String(obj.verify_first));' <<< "$DENSITY_HIGH_OUT")" "true" "high-tier low-risk density scaling emits verify_first=true"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(String(obj.loop_max_rounds));' <<< "$DENSITY_HIGH_OUT")" "2" "high-tier low-risk density scaling caps loop_max_rounds at 2"
+
+VALIDATE_DENSITY_HIGH="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" "true" <<< "$DENSITY_HIGH_OUT")"
+EXIT_VALIDATE_DENSITY_HIGH=$?
+assert_eq "$EXIT_VALIDATE_DENSITY_HIGH" "0" "JS-side validator accepts high-tier density fields and matches fields exactly"
+assert_contains "$VALIDATE_DENSITY_HIGH" "parity-ok" "high-tier density validation returns parity-ok"
 
 # Case C: reviewer_runner enum parity for direct Anthropic-compatible reviewer.
 AC_CFG="$TEST_TMP/review-loop-anthropic-compatible.md"

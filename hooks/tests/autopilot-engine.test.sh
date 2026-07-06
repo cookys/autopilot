@@ -1814,6 +1814,309 @@ assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine default repair 
 assert_contains "$OUT" "repair_prompt_has_findings=true" "AutopilotEngine default repair prompt includes reviewer findings"
 assert_contains "$OUT" "repair_prompt_has_original=true" "AutopilotEngine default repair prompt preserves original task"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verification-loop" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.mkdirSync(tmp, { recursive: true });
+const verifyScript = path.join(tmp, 'verify-sequence.sh');
+fs.writeFileSync(verifyScript, [
+  '#!/usr/bin/env bash',
+  'seq_file="$1"',
+  'counter_file="$2"',
+  'count=0',
+  'if [ -f "$counter_file" ]; then count="$(cat "$counter_file")"; fi',
+  'count=$((count + 1))',
+  'printf "%s\\n" "$count" > "$counter_file"',
+  'result="$(sed -n "${count}p" "$seq_file")"',
+  'if [ "$result" = "pass" ]; then exit 0; fi',
+  'exit 1',
+  '',
+].join('\n'), 'utf8');
+fs.chmodSync(verifyScript, 0o755);
+
+const prompt = path.join(tmp, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt');
+const commits = [
+  '2222222222222222222222222222222222222222',
+  '3333333333333333333333333333333333333333',
+  '4444444444444444444444444444444444444444',
+  '5555555555555555555555555555555555555555',
+];
+const roster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  reviewer_qualified: true,
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 3,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+function runScenario(name, options) {
+  const scenarioDir = path.join(tmp, name);
+  fs.mkdirSync(scenarioDir, { recursive: true });
+  const seqFile = path.join(scenarioDir, 'verify-seq.txt');
+  const counterFile = path.join(scenarioDir, 'verify-count.txt');
+  if (options.verifySequence) {
+    fs.writeFileSync(seqFile, `${options.verifySequence.join('\n')}\n`, 'utf8');
+  }
+
+  const implCalls = [];
+  const reviewCalls = [];
+  const repairCalls = [];
+  const resetCalls = [];
+  const engine = new AutopilotEngine({
+    cwd: scenarioDir,
+    implementationDispatcher(args) {
+      implCalls.push(args);
+      const call = implCalls.length;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'committed',
+          runner: 'test-impl-runner',
+          model: 'test-impl-model',
+          branch: args[args.indexOf('--branch') + 1],
+          base: args[args.indexOf('--base') + 1],
+          commit: commits[call - 1],
+          files_changed: 1,
+          insertions: 1,
+          deletions: 0,
+          worktree: null,
+          agent_log: '/tmp/impl-log',
+          error: null,
+        },
+      };
+    },
+    reviewDispatcher() {
+      reviewCalls.push(true);
+      const call = reviewCalls.length;
+      const verdict = options.reviewVerdicts[call - 1] || options.reviewVerdicts[options.reviewVerdicts.length - 1];
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          runner: 'test-review-runner',
+          model: 'test-review-model',
+          status: 'reviewed',
+          verdict,
+          findings: `finding-${name}-${call}`,
+          raw_log: '/tmp/log',
+          error: null,
+        },
+      };
+    },
+    diffProvider({ round }) {
+      const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-loop-diff-'));
+      const file = path.join(diffDir, `${name}-round-${round}.diff`);
+      fs.writeFileSync(file, `round ${round}`, 'utf8');
+      return file;
+    },
+    repairPromptWriter({ round }) {
+      repairCalls.push(round);
+      const file = path.join(scenarioDir, `repair-${round}.txt`);
+      fs.writeFileSync(file, `repair ${round}`, 'utf8');
+      return file;
+    },
+    gitResetHard(args) {
+      resetCalls.push(args);
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+      };
+    },
+  });
+
+  const input = {
+    promptFile: prompt,
+    branch: `${name}-branch`,
+    base: '1111111111111111111111111111111111111111',
+    maxRounds: options.maxRounds || 3,
+    roster,
+  };
+  if (options.verifySequence) {
+    input.verifyCmd = `${verifyScript} ${seqFile} ${counterFile}`;
+  }
+  if (options.noVerifyFirst) {
+    input.noVerifyFirst = true;
+  }
+
+  const result = engine.runImplementationReviewLoop(input);
+  const verifyEntries = result.ledger.filter((entry) => entry.unit === 'verify_round');
+  const ratchetEntries = result.ledger.filter((entry) => entry.ratchet_reverted === true);
+  console.log(`${name}_status=${result.status}`);
+  console.log(`${name}_rounds=${result.rounds}`);
+  console.log(`${name}_reason=${result.convergence_reason === undefined ? 'absent' : result.convergence_reason}`);
+  console.log(`${name}_commit=${result.commit === undefined ? 'absent' : result.commit}`);
+  console.log(`${name}_impl_calls=${implCalls.length}`);
+  console.log(`${name}_review_calls=${reviewCalls.length}`);
+  console.log(`${name}_repair_calls=${repairCalls.length}`);
+  console.log(`${name}_reset_calls=${resetCalls.length}`);
+  console.log(`${name}_reset_to=${resetCalls[0] ? resetCalls[0].commit : ''}`);
+  console.log(`${name}_advisory_count=${Array.isArray(result.advisory_findings) ? result.advisory_findings.length : 'absent'}`);
+  console.log(`${name}_verify_passes=${verifyEntries.map((entry) => String(entry.verify_pass)).join(',')}`);
+  console.log(`${name}_ratchet_reverted_rounds=${result.ratchet_reverted_rounds === undefined ? 'absent' : result.ratchet_reverted_rounds}`);
+  console.log(`${name}_ratchet_entry_count=${ratchetEntries.length}`);
+  console.log(`${name}_has_verify_field=${Object.prototype.hasOwnProperty.call(result, 'verify_cmd_provided')}`);
+  console.log(`${name}_ledger_has_verify=${verifyEntries.length > 0}`);
+}
+
+function runTopLevelReviewFindingsScenario() {
+  const scenarioDir = path.join(tmp, 'top_level_findings');
+  fs.mkdirSync(scenarioDir, { recursive: true });
+  const seqFile = path.join(scenarioDir, 'verify-seq.txt');
+  const counterFile = path.join(scenarioDir, 'verify-count.txt');
+  fs.writeFileSync(seqFile, 'pass\n', 'utf8');
+
+  const engine = new AutopilotEngine({
+    cwd: scenarioDir,
+    implementationDispatcher(args) {
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'committed',
+          runner: 'test-impl-runner',
+          model: 'test-impl-model',
+          branch: args[args.indexOf('--branch') + 1],
+          base: args[args.indexOf('--base') + 1],
+          commit: commits[0],
+          files_changed: 1,
+          insertions: 1,
+          deletions: 0,
+          worktree: null,
+          agent_log: '/tmp/impl-log',
+          error: null,
+        },
+      };
+    },
+    diffProvider({ round }) {
+      const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-loop-diff-'));
+      const file = path.join(diffDir, `top-level-findings-round-${round}.diff`);
+      fs.writeFileSync(file, `round ${round}`, 'utf8');
+      return file;
+    },
+  });
+
+  let reviewCalls = 0;
+  engine.reviewDiff = () => {
+    reviewCalls += 1;
+    return {
+      status: 'reviewed',
+      verdict: 'FIX-THEN-SHIP',
+      findings: 'top-level finding',
+      ledger: [],
+    };
+  };
+
+  const result = engine.runImplementationReviewLoop({
+    promptFile: prompt,
+    branch: 'top-level-findings-branch',
+    base: '1111111111111111111111111111111111111111',
+    maxRounds: 3,
+    roster,
+    verifyCmd: `${verifyScript} ${seqFile} ${counterFile}`,
+  });
+
+  console.log(`top_level_findings_status=${result.status}`);
+  console.log(`top_level_findings_review_calls=${reviewCalls}`);
+  console.log(`top_level_findings_advisory_count=${Array.isArray(result.advisory_findings) ? result.advisory_findings.length : 'absent'}`);
+  console.log(`top_level_findings_advisory_0=${result.advisory_findings && result.advisory_findings[0]}`);
+}
+
+runScenario('no_verify', {
+  reviewVerdicts: ['SHIP-AS-IS'],
+  maxRounds: 1,
+});
+runScenario('verify_first_advisory', {
+  verifySequence: ['pass'],
+  reviewVerdicts: ['FIX-THEN-SHIP'],
+  maxRounds: 3,
+});
+runScenario('repair_passes', {
+  verifySequence: ['fail', 'pass'],
+  reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
+  maxRounds: 3,
+});
+runScenario('fail_tie_continues', {
+  verifySequence: ['fail', 'fail', 'fail'],
+  reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
+  maxRounds: 3,
+});
+runScenario('ratchet', {
+  verifySequence: ['fail', 'pass', 'fail'],
+  reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
+  noVerifyFirst: true,
+  maxRounds: 3,
+});
+runScenario('no_verify_first', {
+  verifySequence: ['pass', 'pass'],
+  reviewVerdicts: ['FIX-THEN-SHIP', 'SHIP-AS-IS'],
+  noVerifyFirst: true,
+  maxRounds: 3,
+});
+runTopLevelReviewFindingsScenario();
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine verification-anchored loop scenarios exit 0"
+assert_contains "$OUT" "no_verify_status=converged" "AutopilotEngine no-verify scenario preserves reviewer convergence"
+assert_contains "$OUT" "no_verify_reason=absent" "AutopilotEngine omits convergence_reason without verify-cmd"
+assert_contains "$OUT" "no_verify_has_verify_field=false" "AutopilotEngine omits verify-cmd result field without verify-cmd"
+assert_contains "$OUT" "no_verify_ledger_has_verify=false" "AutopilotEngine omits verify ledger without verify-cmd"
+assert_contains "$OUT" "verify_first_advisory_status=converged" "AutopilotEngine verify-first pass converges despite reviewer fix verdict"
+assert_contains "$OUT" "verify_first_advisory_reason=verification" "AutopilotEngine records verification convergence reason"
+assert_contains "$OUT" "verify_first_advisory_rounds=1" "AutopilotEngine verify-first pass stops after round one"
+assert_contains "$OUT" "verify_first_advisory_advisory_count=1" "AutopilotEngine records reviewer findings as advisory after verified pass"
+assert_contains "$OUT" "verify_first_advisory_impl_calls=1" "AutopilotEngine does not dispatch a repair after verified pass"
+assert_contains "$OUT" "verify_first_advisory_review_calls=1" "AutopilotEngine still dispatches one advisory review after verified pass"
+assert_contains "$OUT" "verify_first_advisory_verify_passes=true" "AutopilotEngine records round-one verify pass"
+assert_contains "$OUT" "repair_passes_status=converged" "AutopilotEngine converges when repair round verification passes"
+assert_contains "$OUT" "repair_passes_reason=verification" "AutopilotEngine repair pass records verification convergence"
+assert_contains "$OUT" "repair_passes_rounds=2" "AutopilotEngine repair pass returns second round"
+assert_contains "$OUT" "repair_passes_verify_passes=false,true" "AutopilotEngine records failed then passing verification"
+assert_contains "$OUT" "fail_tie_continues_status=non_converged" "AutopilotEngine continues fail-fail ties to max rounds"
+assert_contains "$OUT" "fail_tie_continues_rounds=3" "AutopilotEngine fail-fail tie reaches max rounds"
+assert_contains "$OUT" "fail_tie_continues_impl_calls=3" "AutopilotEngine dispatches repairs while verification keeps failing without regression"
+assert_contains "$OUT" "fail_tie_continues_reset_calls=0" "AutopilotEngine does not ratchet reset fail-fail ties"
+assert_contains "$OUT" "ratchet_status=non_converged" "AutopilotEngine ratchet scenario remains review-gated under no-verify-first"
+assert_contains "$OUT" "ratchet_commit=3333333333333333333333333333333333333333" "AutopilotEngine final commit reports best verified repair commit"
+assert_contains "$OUT" "ratchet_reset_calls=1" "AutopilotEngine resets after pass-to-fail regression"
+assert_contains "$OUT" "ratchet_reset_to=3333333333333333333333333333333333333333" "AutopilotEngine ratchet reset targets best commit"
+assert_contains "$OUT" "ratchet_ratchet_reverted_rounds=1" "AutopilotEngine counts ratchet-reverted rounds"
+assert_contains "$OUT" "ratchet_ratchet_entry_count=1" "AutopilotEngine records reverted round in ledger"
+assert_contains "$OUT" "no_verify_first_status=converged" "AutopilotEngine no-verify-first restores reviewer-gated convergence"
+assert_contains "$OUT" "no_verify_first_reason=reviewer" "AutopilotEngine no-verify-first records reviewer convergence"
+assert_contains "$OUT" "no_verify_first_rounds=2" "AutopilotEngine no-verify-first repairs after verified pass until reviewer ships"
+assert_contains "$OUT" "no_verify_first_impl_calls=2" "AutopilotEngine no-verify-first dispatches repair after reviewer fix verdict"
+assert_contains "$OUT" "no_verify_first_verify_passes=true,true" "AutopilotEngine no-verify-first still records per-round verification"
+assert_contains "$OUT" "top_level_findings_status=converged" "AutopilotEngine converges with top-level review findings on verified pass"
+assert_contains "$OUT" "top_level_findings_review_calls=1" "AutopilotEngine dispatches one top-level-shape advisory review"
+assert_contains "$OUT" "top_level_findings_advisory_count=1" "AutopilotEngine records top-level review findings as advisory"
+assert_contains "$OUT" "top_level_findings_advisory_0=top-level finding" "AutopilotEngine preserves top-level advisory finding text"
+
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];

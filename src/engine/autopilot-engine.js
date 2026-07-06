@@ -239,6 +239,83 @@ function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   return file;
 }
 
+function defaultVerifyCommandRunner({ verifyCmd, cwd }) {
+  const child = spawnSync(verifyCmd, {
+    cwd: cwd || process.cwd(),
+    encoding: 'utf8',
+    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return {
+    error: child.error || null,
+    status: child.status,
+    signal: child.signal || null,
+    stdout: child.stdout || '',
+    stderr: child.stderr || '',
+  };
+}
+
+function defaultGitResetHard({ commit, cwd }) {
+  const child = spawnSync('git', ['reset', '--hard', commit], {
+    cwd: cwd || process.cwd(),
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return {
+    error: child.error || null,
+    status: child.status,
+    signal: child.signal || null,
+    stdout: child.stdout || '',
+    stderr: child.stderr || '',
+  };
+}
+
+function verifyResultBlocked(result) {
+  if (!result) return 'missing verify command result';
+  if (result.error) return result.error.message || String(result.error);
+  if (result.signal) return `verify command terminated by signal ${result.signal}`;
+  return null;
+}
+
+function resetResultBlocked(result) {
+  if (!result) return 'missing ratchet reset result';
+  if (result.error) return result.error.message || String(result.error);
+  if (result.signal) return `ratchet reset terminated by signal ${result.signal}`;
+  if (result.status !== 0) return `ratchet reset exited with status ${result.status}`;
+  return null;
+}
+
+function collectFindings(review) {
+  let findings = null;
+  if (review && review.review && Object.prototype.hasOwnProperty.call(review.review, 'findings')) {
+    findings = review.review.findings;
+  } else if (review && Object.prototype.hasOwnProperty.call(review, 'findings')) {
+    findings = review.findings;
+  }
+  if (Array.isArray(findings)) return findings;
+  if (typeof findings === 'string' && findings.length > 0) return [findings];
+  return [];
+}
+
+function verificationRank(verifyPass) {
+  return verifyPass === true ? 1 : 0;
+}
+
+function resultWithVerificationFields(result, state) {
+  if (!state || !state.verifyCmdProvided) return result;
+  return {
+    ...result,
+    verify_cmd_provided: true,
+    convergence_reason: state.convergenceReason || null,
+    ratchet_reverted_rounds: state.ratchetRevertedRounds,
+    advisory_findings: state.advisoryFindings,
+    commit: state.bestCommit || (result.implementation && result.implementation.implementation
+      ? result.implementation.implementation.commit
+      : null),
+  };
+}
+
 function defaultRepairPromptWriter({
   promptFile,
   round,
@@ -280,6 +357,8 @@ class AutopilotEngine {
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
+    this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
+    this.gitResetHard = options.gitResetHard || defaultGitResetHard;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
   }
@@ -765,11 +844,24 @@ class AutopilotEngine {
     const branch = input.branch;
     const base = input.base;
     let loopCwd = this.cwd;
+    const verifyCmdProvided = Object.prototype.hasOwnProperty.call(input, 'verifyCmd')
+      && input.verifyCmd !== undefined
+      && input.verifyCmd !== null;
+    const verifyCmd = input.verifyCmd;
+    const noVerifyFirst = input.noVerifyFirst === true;
+    const verifyState = {
+      verifyCmdProvided,
+      convergenceReason: null,
+      ratchetRevertedRounds: 0,
+      advisoryFindings: [],
+      bestCommit: null,
+    };
+    const finish = (result) => resultWithVerificationFields(result, verifyState);
 
     if (!promptFile || typeof promptFile !== 'string') {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'promptFile is required',
@@ -778,12 +870,12 @@ class AutopilotEngine {
         roster: null,
         resolveResult: null,
         ledger,
-      };
+      });
     }
     if (!branch || typeof branch !== 'string') {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'branch is required',
@@ -792,12 +884,12 @@ class AutopilotEngine {
         roster: null,
         resolveResult: null,
         ledger,
-      };
+      });
     }
     if (!base || typeof base !== 'string') {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'base is required',
@@ -806,12 +898,12 @@ class AutopilotEngine {
         roster: null,
         resolveResult: null,
         ledger,
-      };
+      });
     }
     if (!isImmutableGitSha(base)) {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'base must be a full immutable git SHA',
@@ -820,13 +912,13 @@ class AutopilotEngine {
         roster: null,
         resolveResult: null,
         ledger,
-      };
+      });
     }
     if (Object.prototype.hasOwnProperty.call(input, 'cwd') && input.cwd !== undefined && input.cwd !== null) {
       if (typeof input.cwd !== 'string' || input.cwd.length === 0) {
         const startedAt = this.now();
         ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-        return {
+        return finish({
           status: 'blocked',
           phase: 'prepare_implementation_loop',
           reason: 'cwd must be a non-empty string',
@@ -835,9 +927,23 @@ class AutopilotEngine {
           roster: null,
           resolveResult: null,
           ledger,
-        };
+        });
       }
       loopCwd = path.resolve(input.cwd);
+    }
+    if (verifyCmdProvided && (typeof verifyCmd !== 'string' || verifyCmd.length === 0)) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return finish({
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'verifyCmd must be a non-empty string',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      });
     }
     promptFile = path.resolve(loopCwd, promptFile);
 
@@ -862,7 +968,7 @@ class AutopilotEngine {
       roster = resolved.roster;
 
       if (resolved.status === 'blocked') {
-        return {
+        return finish({
           status: 'blocked',
           phase: 'resolve_roster',
           reason: resolved.reason,
@@ -873,7 +979,7 @@ class AutopilotEngine {
           implementation: null,
           review: null,
           ledger,
-        };
+        });
       }
     }
 
@@ -883,7 +989,7 @@ class AutopilotEngine {
     } catch (error) {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: error.message || String(error),
@@ -896,7 +1002,7 @@ class AutopilotEngine {
         implementationChain: [],
         reviewChain: [],
         ledger,
-      };
+      });
     }
 
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
@@ -914,7 +1020,7 @@ class AutopilotEngine {
     } catch (error) {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: error.message || String(error),
@@ -923,7 +1029,7 @@ class AutopilotEngine {
         roster,
         resolveResult,
         ledger,
-      };
+      });
     }
 
     let convergenceVerdict = roster.loop_convergence_verdict;
@@ -933,7 +1039,7 @@ class AutopilotEngine {
     if (typeof convergenceVerdict !== 'string' || convergenceVerdict.length === 0) {
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return {
+      return finish({
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'convergenceVerdict is required',
@@ -942,7 +1048,7 @@ class AutopilotEngine {
         roster,
         resolveResult,
         ledger,
-      };
+      });
     }
 
     if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
@@ -952,7 +1058,7 @@ class AutopilotEngine {
           reviewer_qualified: roster.reviewer_qualified === true,
         }),
       );
-      return {
+      return finish({
         status: 'blocked',
         phase: 'reviewer_qualification',
         reason: 'reviewer is not qualified or qualification is unknown',
@@ -965,7 +1071,7 @@ class AutopilotEngine {
         implementationChain: [],
         reviewChain: [],
         ledger,
-      };
+      });
     }
 
     const implementationChain = [];
@@ -975,6 +1081,8 @@ class AutopilotEngine {
     let nextBase = base;
     let implementation = null;
     let review = null;
+    let bestVerifyPass = null;
+    let bestRound = 0;
 
     for (let round = 1; round <= maxRounds; round += 1) {
       const currentBranch = round === 1
@@ -1001,7 +1109,7 @@ class AutopilotEngine {
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
       if (implementation.status !== 'committed') {
-        return {
+        return finish({
           status: 'blocked',
           phase: 'dispatch_implementation',
           reason: implementation.reason || `implementation status ${implementation.status}`,
@@ -1014,10 +1122,128 @@ class AutopilotEngine {
           implementationChain,
           reviewChain,
           ledger,
-        };
+        });
       }
 
       const commit = implementation.implementation.commit;
+      let currentVerifyPass = null;
+      let currentRatchetReverted = false;
+      let nextBaseAfterRound = commit;
+      if (verifyCmdProvided) {
+        const verifyStartedAt = this.now();
+        let verifyResult;
+        try {
+          verifyResult = this.verifyCommandRunner({
+            verifyCmd,
+            cwd: loopCwd,
+            round,
+            commit,
+            branch: currentBranch,
+          });
+        } catch (error) {
+          verifyResult = {
+            error,
+            status: null,
+            signal: null,
+            stdout: '',
+            stderr: '',
+          };
+        }
+        const verifyBlockedReason = verifyResultBlocked(verifyResult);
+        if (verifyBlockedReason) {
+          ledger.push(this.ledgerEntry('verify_round', 'blocked', verifyStartedAt, {
+            round,
+            commit,
+            verify_pass: false,
+            exit_status: verifyResult ? verifyResult.status : null,
+          }));
+          return finish({
+            status: 'blocked',
+            phase: 'verify_round',
+            reason: verifyBlockedReason,
+            rounds: round,
+            verdict: null,
+            roster,
+            resolveResult,
+            implementation,
+            review: null,
+            implementationChain,
+            reviewChain,
+            ledger,
+            base,
+          });
+        }
+
+        currentVerifyPass = verifyResult.status === 0;
+        implementation.verify_pass = currentVerifyPass;
+        implementation.verify_exit_status = verifyResult.status;
+        const isWorseThanBest = bestRound > 0
+          && verificationRank(currentVerifyPass) < verificationRank(bestVerifyPass);
+        if (!isWorseThanBest) {
+          bestRound = round;
+          bestVerifyPass = currentVerifyPass;
+          verifyState.bestCommit = commit;
+        } else {
+          currentRatchetReverted = true;
+          implementation.ratchet_reverted = true;
+          verifyState.ratchetRevertedRounds += 1;
+          nextBaseAfterRound = verifyState.bestCommit;
+        }
+        ledger.push(this.ledgerEntry('verify_round', currentVerifyPass ? 'passed' : 'failed', verifyStartedAt, {
+          round,
+          commit,
+          verify_pass: currentVerifyPass,
+          exit_status: verifyResult.status,
+          ratchet_reverted: currentRatchetReverted,
+          best_round: bestRound,
+          best_commit: verifyState.bestCommit,
+        }));
+
+        if (currentRatchetReverted) {
+          const resetStartedAt = this.now();
+          let resetResult;
+          try {
+            resetResult = this.gitResetHard({
+              commit: verifyState.bestCommit,
+              cwd: loopCwd,
+              round,
+              revertedCommit: commit,
+            });
+          } catch (error) {
+            resetResult = {
+              error,
+              status: null,
+              signal: null,
+              stdout: '',
+              stderr: '',
+            };
+          }
+          const resetBlockedReason = resetResultBlocked(resetResult);
+          ledger.push(this.ledgerEntry('ratchet_reset', resetBlockedReason ? 'blocked' : 'reverted', resetStartedAt, {
+            round,
+            commit,
+            reset_to_commit: verifyState.bestCommit,
+            exit_status: resetResult ? resetResult.status : null,
+          }));
+          if (resetBlockedReason) {
+            return finish({
+              status: 'blocked',
+              phase: 'ratchet_reset',
+              reason: resetBlockedReason,
+              rounds: round,
+              verdict: null,
+              roster,
+              resolveResult,
+              implementation,
+              review: null,
+              implementationChain,
+              reviewChain,
+              ledger,
+              base,
+            });
+          }
+        }
+      }
       let diffFile;
       try {
         diffFile = this.diffProvider({
@@ -1029,7 +1255,7 @@ class AutopilotEngine {
           cwd: loopCwd,
         });
       } catch (error) {
-        return {
+        return finish({
           status: 'blocked',
           phase: 'prepare_review',
           reason: error.message || String(error),
@@ -1042,7 +1268,7 @@ class AutopilotEngine {
           implementationChain,
           reviewChain,
           ledger,
-        };
+        });
       }
 
       review = this.reviewDiff({
@@ -1059,7 +1285,25 @@ class AutopilotEngine {
       ledger.push(...review.ledger);
       reviewChain.push(review);
       if (review.status !== 'reviewed') {
-        return {
+        if (verifyCmdProvided && currentVerifyPass === true && !noVerifyFirst) {
+          verifyState.convergenceReason = 'verification';
+          return finish({
+            status: 'converged',
+            phase: 'converged',
+            reason: null,
+            rounds: round,
+            verdict: review.verdict || null,
+            roster,
+            resolveResult,
+            base,
+            implementation,
+            review,
+            implementationChain,
+            reviewChain,
+            ledger,
+          });
+        }
+        return finish({
           status: 'blocked',
           phase: 'dispatch_review',
           reason: review.reason || `review status ${review.status}`,
@@ -1072,11 +1316,15 @@ class AutopilotEngine {
           implementationChain,
           reviewChain,
           ledger,
-        };
+        });
       }
 
-      if (review.verdict === convergenceVerdict) {
-        return {
+      if (verifyCmdProvided && currentVerifyPass === true && !noVerifyFirst) {
+        if (review.verdict !== convergenceVerdict) {
+          verifyState.advisoryFindings.push(...collectFindings(review));
+        }
+        verifyState.convergenceReason = 'verification';
+        return finish({
           status: 'converged',
           phase: 'converged',
           reason: null,
@@ -1090,11 +1338,30 @@ class AutopilotEngine {
           implementationChain,
           reviewChain,
           ledger,
-        };
+        });
+      }
+
+      if (review.verdict === convergenceVerdict) {
+        if (verifyCmdProvided) verifyState.convergenceReason = 'reviewer';
+        return finish({
+          status: 'converged',
+          phase: 'converged',
+          reason: null,
+          rounds: round,
+          verdict: review.verdict,
+          roster,
+          resolveResult,
+          base,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
       }
 
       if (round >= maxRounds) {
-        return {
+        return finish({
           status: 'non_converged',
           phase: 'max_rounds',
           reason: `reached max rounds (${maxRounds}) without convergence`,
@@ -1108,7 +1375,7 @@ class AutopilotEngine {
           implementationChain,
           reviewChain,
           ledger,
-        };
+        });
       }
 
       try {
@@ -1116,12 +1383,12 @@ class AutopilotEngine {
           promptFile,
           round: round + 1,
           base: immutableBase,
-          previousCommit: commit,
+          previousCommit: nextBaseAfterRound,
           commit,
           review,
         });
       } catch (error) {
-        return {
+        return finish({
           status: 'blocked',
           phase: 'prepare_implementation',
           reason: error.message || String(error),
@@ -1134,13 +1401,13 @@ class AutopilotEngine {
           implementationChain,
           reviewChain,
           ledger,
-        };
+        });
       }
 
-      nextBase = commit;
+      nextBase = nextBaseAfterRound;
     }
 
-    return {
+    return finish({
       status: 'non_converged',
       phase: 'max_rounds',
       reason: `reached max rounds (${maxRounds}) without convergence`,
@@ -1154,7 +1421,7 @@ class AutopilotEngine {
       base,
       implementation,
       review: reviewChain[reviewChain.length - 1] || null,
-    };
+    });
   }
 }
 

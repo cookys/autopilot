@@ -149,3 +149,27 @@ haiku 在同一個任務上量到的 +80pp 提升(見 campaign R1b),在 flash �
 - **編輯限定的 implementer 需要人接手跑測試**:K3–K5 三輪各修好一件事,但都是 edit-only,沒有能力自己跑 test suite 收斂;最後是換成能執行指令的 implementer(K6,gpt-5.5/codex)才把整套 suite 跑綠。純編輯型 implementer 在「需要跑起來看」的收尾階段會卡住。
 - **enum 真相活在兩個副本裡**:`reviewer_runner` 的 `anthropic-compatible` 值同時要加進 shell 版(`scripts/resolve-review-loop.sh`,K7)和 JS 版(`src/engine/resolve-review-loop.js`,K8)的驗證清單,漏掉任何一邊都會讓另一邊靜默把值重置成 default。建議:找一個共用的 enum 來源,或至少補一條 `check-canonical-invariants.sh` 的種子斷言,讓兩邊漂移在 commit 時就被抓到。
 - **auth 掉線是靜默的**:活動中途一次 `/login` 狀態切換,悄悄殺掉 13 筆 run(全部回報 "Not logged in"、空 token、空結果),而不是明顯的錯誤。長時間無人值守的量測活動,每一輪跑之前應該先做一次 auth-liveness 快速探測,而不是事後從空結果反推。
+
+## 驗證錨定設計 — 實測驗證 (2026-07-07)
+
+在上一節「管線匯率實驗」量到的三個問題(haiku/t2 需要救援、M3/t12 白繳稅、M3/t13 反而退步)之上,新增第三個 arm——**verify-first**:每一輪由 engine 自己執行一條客觀驗證指令(`--verify-cmd`),第一輪就通過即視為收斂(review 只留作 advisory),沒通過才進 reviewer 修復迴圈;修復迴圈另加一道**棘輪(ratchet)**——任何一輪修復把 verify 從 pass 改成 fail,該輪直接被回退,最終 commit 永遠不會比之前任何一輪更差。同一批 n=3/cell,baseline 沿用 2026-07-06 那次匯率實驗的 bare/pipeline 數字。
+
+| model | task | bare | pipeline | **verify-first** |
+|---|---|---|---|---|
+| haiku | t2(below bar) | 0/3 @73s | 3/3 @204s | **3/3 @131s**(round 1、2、2;全部 `convergence_reason=verification`) |
+| MiniMax-M3 | t12(above bar) | 3/3 @37s | 3/3 @241s | **3/3 @57s**(全部 round 1) |
+| MiniMax-M3 | t13(above bar) | 3/3 @61s | 2/3 @728s(退步) | **3/3 @57s**(全部 round 1) |
+
+**判讀**:verify-first 對三種情境給出三個不同但都正確的答案——
+
+- **救援保留**:haiku/t2 仍然 3/3(bare 0/3 的救援效果沒有被 verify-first 弄丟),而且比 pipeline 便宜 36%(204s→131s)。
+- **稅金消失**:M3/t12 本來就過關,pipeline 卻要多繳 6.5× 的時間稅(37s→241s);verify-first 把它壓回 57s,比 pipeline 快 4.2×,幾乎貼齊 bare 的 37s。
+- **退步消失**:M3/t13 在 pipeline arm 是本次三組實驗裡最糟的一格(3/3→2/3,還要 728s);verify-first 這一格是 3/3 @57s——比 pipeline 快 12.8×,而且沒有退步。
+
+三格全部 `convergence_reason=verification`,沒有一輪是被 reviewer 的意見逼著去改一個本來就會過的解法。這正好對上設計初衷:**客觀驗證是收斂的權威依據,reviewer 是提出懷疑的探員,不是最終判官**——reviewer 找到的東西仍然要被驗證指令覆核過才算數,不會單靠一句"我覺得有問題"就重開一輪。
+
+**裁決小記(QC adjudication)**:這次三個單元(L/M/M2)共用同一把 MiniMax-M3 reviewer,過程中出現一個值得記下的落差——unit L 的 verdict 那一行寫的是 FIX-THEN-SHIP,但同一份 review 的分析正文結論其實是「沒有發現缺陷」(verdict 行與正文判讀不一致,即"以文為准");它在 unit N 提出的唯一一個"真缺陷"主張,經在 artifact tip 上直接執行測試套件驗證後被 REFUTED(套件全綠);而它在 unit M 抓到的覆蓋率缺口是真的,已在 M2 修掉。另外,3 個平行單元共用同一個 MiniMax endpoint,跑到一半被 rate limit 卡住,只能改成序列化重跑各單元的 review——並行審查在單一 endpoint 下不能假設互不干擾。
+
+**誠實限制**:n=3——方向夠大(救援保留、稅金消失、退步消失三個效果都是整數級的差距),但不是嚴謹統計上的定論。更關鍵的是:這次 bench 的 verify 指令本身就是 oracle——完美驗證是量測的上限,真實專案的測試套件不會是完美 oracle,verify-first 在真實專案上的效果會被套件本身的覆蓋率打折。
+
+**意涵**:密度縮放(density scaling)加上 verify_first,應該成為 engine 對「已通過 scorecard 資格認證的 implementer」的預設姿態——不是每次都要人工判斷要不要開這兩個開關。

@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.6 — verification-anchored engine loop: verify-first, ratchet, bidirectional density
+
+**Headline**: A new `engine implement-review --verify-cmd` mode makes objective, engine-executed verification the authority for convergence instead of reviewer opinion: a first-round verify pass converges immediately (the review becomes advisory, not gating), and a repair-round ratchet reverts any round that turns verify pass→fail, so the final commit is never worse than any prior round. `resolve-review-loop.sh` gains the other half of density scaling — high-tier + low-risk implementers now get `loop_max_rounds ≤2` + `verify_first: true` (v2.32.0 shipped only the low/unknown-tier crank-up half). Validated with `pipeline-bench --arm verify-first` (n=3/cell) against the 2026-07-06 bare/pipeline baselines: haiku/t2 (below task bar) keeps the full rescue at 3/3 while costing 36% less than the pipeline arm (204s→131s); MiniMax-M3/t12 (above bar) drops the pipeline's 6.5× time tax to 4.2× (241s→57s, converging at round 1 every run); MiniMax-M3/t13 (above bar) eliminates the pipeline's quality regression entirely — 2/3@728s → 3/3@57s, 12.8× faster. Every run converged with `convergence_reason=verification`; zero reviewer-forced repairs on solutions that already passed.
+
+prose-justification: +1 archived report section (~40 lines, Traditional Chinese) documenting the validation numbers and a QC adjudication note; no new skill/routing surface beyond the feature itself.
+
+### Added
+- `engine implement-review --verify-cmd '<cmd>'` (+ `--no-verify-first`): per-round engine-executed objective verification; verify-first convergence (a round-1 pass converges immediately, with the review recorded as advisory); repair ratchet (a repair round that turns verify pass→fail is reverted, so the final commit is always the best round seen). Result JSON gains `verify_pass` per round, `convergence_reason`, `ratchet_reverted_rounds`, `advisory_findings`. Absent flag is byte-identical to prior behavior.
+- `resolve-review-loop.sh` bidirectional density scaling: high-tier + low-risk implementers now emit `loop_max_rounds ≤2` and `verify_first: true` (families/`l1` unchanged; high risk still wins over tier).
+- `pipeline-bench --arm verify-first` + `convergence_reason` reporting on all arms — the measurement instrument behind the numbers below.
+
+### Measured
+- verify-first vs bare/pipeline (n=3/cell): haiku/t2 bare 0/3@73s → pipeline 3/3@204s → **verify-first 3/3@131s** (rounds 1,2,2 — rescue preserved, 36% cheaper than pipeline). MiniMax-M3/t12 bare 3/3@37s → pipeline 3/3@241s → **verify-first 3/3@57s** (all round 1 — tax cut 4.2×). MiniMax-M3/t13 bare 3/3@61s → pipeline 2/3@728s (regression) → **verify-first 3/3@57s** (all round 1 — regression eliminated, 12.8× faster). Caveat: n=3; the bench's verify command is itself the oracle, so this is an upper bound — real projects have imperfect test coverage.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.5`
+
 ## v2.32.5 — pipeline-vs-bare exchange-rate bench + two enum-drift fixes
 
 **Headline**: A new `evals/pipeline-bench/` harness measures the same model on the same task under **bare single-shot** execution vs the **full pipeline** (implementation → gpt-5.5 decorrelated review loop → L0 gates → repair, max 3 rounds), across 10 model×task cells (n=3/cell). The headline finding: pipeline value scales with the gap between model capability and task difficulty, not a fixed multiplier. When the gap is large and the model fails bare (haiku on t2-extract-verbatim, byte-fidelity, below task bar), the pipeline rescues it (+100pp, 0/3→3/3, at 2.8× time). When the gap is near zero and the model already passes bare (haiku on t12/t13 at-or-near bar; MiniMax-M3 on t12, above bar), the pipeline adds no quality and is pure tax (5.5–6.5× time, converged as low as 0/3–1/3). When the gap is negative — the model comfortably above the task (MiniMax-M3 on t13) — the pipeline can regress: 3/3→2/3 quality at 12× time, with the gpt-5.5 reviewer never converging (0/3) and the M3 repair loop breaking a solution that was already correct. Direct implication for density scaling: crank review rounds/panel size only for under-capacity implementers; on a capable model, the review loop is waste or actively harmful.

@@ -61,11 +61,16 @@ chmod +x "$MOCK_REPO/scripts/error-path-scan.sh"
 # Mock secret-scan-diff.js
 cat > "$MOCK_REPO/scripts/secret-scan-diff.js" << 'EOF'
 #!/usr/bin/env node
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
+const rangeIndex = process.argv.indexOf('--range');
+const range = rangeIndex === -1 ? '--cached' : process.argv[rangeIndex + 1];
+if (!range) process.exit(2);
 try {
-  const diff = execSync('git diff base..HEAD', {encoding: 'utf8'});
+  const diff = execFileSync('git', ['diff', range], {encoding: 'utf8'});
   if (diff.includes('FAKE_AWS_KEY')) process.exit(1);
-} catch (e) {}
+} catch (e) {
+  process.exit(2);
+}
 process.exit(0);
 EOF
 chmod +x "$MOCK_REPO/scripts/secret-scan-diff.js"
@@ -94,7 +99,7 @@ assert_contains "$res_pipe" '"rounds":2'
 assert_contains "$res_pipe" '"converged":true'
 assert_contains "$res_pipe" '"review_verdicts":["FIX-THEN-SHIP","SHIP-AS-IS"]'
 assert_contains "$res_pipe" '"gate_blocked":false'
-assert_contains "$res_pipe" '"rounds": [{'
+assert_contains "$res_pipe" '"rounds":[{'
 assert_contains "$res_pipe" '"verbatim_string"'
 assert_contains "$res_pipe" '"advisory_findings":0'
 

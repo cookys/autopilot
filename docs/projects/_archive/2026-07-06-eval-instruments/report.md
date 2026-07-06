@@ -68,3 +68,38 @@ haiku 在同一個任務上量到的 +80pp 提升(見 campaign R1b),在 flash �
 - **t14 首次量測**:5-turn constraint-drift 任務目前只有儀器,沒有任何真實跑過的數字——這是本批交付後最直接的空白。
 - **MiniMax endpoints**:弱協調器量測裡缺的那一條路徑,需要先設定 endpoints 才能補測。
 - **更難的任務測 flash 的提升空間**:flash 在 t2 上已經頂到天花板,若要量到 flash 這一層的提升,需要比 t2 更難、更能區分的任務。
+
+## 後續量測 (2026-07-06 補)
+
+### t14-constraint-horizon 第一次真實量測(haiku,5-turn,ON/OFF,n=5)
+
+由於一次收集環節的失誤,原定 5+5 的 ON/OFF 樣本掉了一格,實際跑到 2 個 ON + 3 個 OFF(共 5 筆)。所有 5 筆都完整跑滿 5 個 turn,沒有中途夭折。
+
+| 指標 | 整體 | 判讀 |
+|---|---|---|
+| oracle_pass | 0/5 | t14 對 haiku **有鑑別力**(非天花板)——五輪約束保持在 haiku 這一層真的會失敗 |
+
+漂移形狀(drift shape)拆開看更有訊息量:
+
+- **OFF**(3 筆):把新功能做出來了(fidelity 2/3),但完全沒守住原有約束(constraints 0/3)——典型的「往前做新東西時把舊規則忘掉」。
+- **ON**(2 筆):約束保住了 1/2,fidelity 也是 1/2——方向上與「pack 有助於約束保持」一致,但 n 只有 2 vs 3,連偵測中效應都不夠,**不能拿這個當結論用**。
+
+這次量測真正確立的,是**儀器本身能用**:它成功把「有沒有把活做完(fidelity)」和「有沒有守住不變量(constraint retention)」這兩件事分開看,而不是像天花板測項一樣兩者一起打滿分或一起打零分。下一步是把 n 補到能撐住一個真正的方向性宣稱。
+
+### MiniMax-M3 作為協調器(orchestrator):死管道根因 + 修復後數字
+
+**根因**:eval runner 在建立 scratch HOME 時,把 claude.ai 的登入憑證也複製進去了。這個複製進去的憑證,在認證優先順序上蓋過了 `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 這組 env 變數,導致 cc 用 claude.ai 的登入身份去解析模型名稱,而 "MiniMax-M3" 這個相容模型名稱對 claude.ai 帳號來說是無效選項。第一次 MiniMax 協調器 campaign 因此 22/22 全部死管道,錶面上顯示為「There's an issue with the selected model (MiniMax-M3)」的失敗,但實際上一次真正的模型呼叫都沒發生過——量到的是憑證優先順序 bug,不是 M3 的能力。
+
+**修復**:新增 `ORCH_CC_SHIM=1` 這個 arm,跳過 scratch HOME 的憑證複製步驟,讓 env 裡的 token 是唯一的認證來源(與 `dispatch-hetero.sh` 的 cc-shim 用的是同一套 recipe)。這個 flag 預設不設,行為與修復前逐位元組相同(byte-identical),只有明確設定才會走新路徑。已於 commit `a0b6716` 上船。修復後先手動即時驗證一次,確認能真正打到 MiniMax 端點,再重跑整組 campaign。
+
+**修復後的數字**(n=22,MiniMax-M3 作為協調器,`ORCH_CC_SHIM=1`):
+
+| 任務 | ON | OFF | 判讀 |
+|---|---|---|---|
+| t2 | 5/5 | 5/5 | 天花板 |
+| t12 | 3/3 | 3/3 | 天花板 |
+| t13 | 3/3 | 3/3 | 天花板 |
+
+平均每輪 152 秒。M3 在目前所有單輪任務上全部頂到天花板——而且是在 haiku 打不滿的那個 tier 之上(haiku 在 t12/t13 上是 2/3);pack 對 M3 沒有任何可量到的幫助。cc-shim 協調器路徑本身已端到端驗證過。
+
+**誠實結論**:M3 在現有這批單輪任務上已經是 above-band(高於 haiku 能頂到的水準),用現有任務量不出它的提升空間;要問「M3 的 pack/procedure 到底有沒有用」這個問題,答案要去 t14 這種 long-horizon 任務才找得到——這也是下一步的方向,而不是再加一批更多的單輪任務。

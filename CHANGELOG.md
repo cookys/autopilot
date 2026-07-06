@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.4 — cc-shim orchestrator arm + first long-horizon numbers
+
+**Headline**: A new `ORCH_CC_SHIM=1` arm lets the eval runner drive a `cc`-based orchestrator against an Anthropic-compatible endpoint (MiniMax-M3), plus the first-ever `t14-constraint-horizon` long-horizon numbers.
+
+### Fixed
+- The first MiniMax-M3 orchestrator campaign (22 runs) dead-piped 22/22 as failures, surfacing as "There's an issue with the selected model (MiniMax-M3)". Root cause: the eval runner copied the claude.ai login credential into the scratch HOME, which took precedence over `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` and rejected the compatible model name before a single real call happened — the wrong instrument reported 22/22 false failures, not a capability signal. `ORCH_CC_SHIM=1` (commit `a0b6716`) skips the credential copy so the env token is sole auth (same recipe as `dispatch-hetero.sh` cc-shim); default unset is byte-identical. Verified live before re-running the campaign.
+
+### Measured
+1. **t14-constraint-horizon, first run** (haiku, 5-turn, ON/OFF; n=5 — one row lost to a collection glitch, 2 ON + 3 OFF): `oracle_pass` 0/5 overall — t14 is discriminating for haiku (not ceiling; five-turn constraint retention genuinely fails). Drift shape: OFF did the new feature (fidelity 2/3) but held constraints 0/3; ON held constraints 1/2, fidelity 1/2 — direction consistent with "pack helps constraint retention" but n is far too small for any claim. The real result is that the instrument works: it separates did-the-work from held-the-invariants, and all 5 runs completed 5/5 turns.
+2. **MiniMax-M3 as orchestrator, post-fix** (`ORCH_CC_SHIM=1`, n=22): t2 ON 5/5 OFF 5/5; t12 ON 3/3 OFF 3/3; t13 ON 3/3 OFF 3/3; avg 152s/run. M3 ceilings every current single-turn task, above the haiku band (haiku got 2/3 on t12/t13); packs give it nothing on these tasks. The cc-shim orchestrator path is verified end-to-end. Measuring M3 lift needs t14-class long-horizon or harder tasks next.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.3`
+
 ## v2.32.3 — eval instruments + measurement results
 
 **Headline**: This release retires assumption in favor of measurement across three fronts. Reviewer qualification over `evals/known-bad/` (12 planted-defect diffs, `engine-qualify.sh`) records gpt-5.5, claude-sonnet-5, and claude-opus-4-8 all at 12/12 with `false_pass_on_critical=0` — the known-bad floor cannot rank Sonnet 5 vs Opus 4.8 (parity at ceiling), so the v2.32.0 opus-for-headroom routing stands as a judgment call, not a measured win, and sonnet remains a valid cost override; the `--allow-unqualified-reviewer` escape hatch is now closed for engine runs. A weak-orchestrator campaign (Gemini 3.5 Flash High via agy) on t2-extract-verbatim shows haiku's earlier +80pp procedure lift does NOT transfer to flash — flash ceilings 5/5 on both ON and OFF, confirming it doesn't need the recipe; `adjudication_valid` again shows the pack moving vocabulary, not protocol compliance (replicates R1). A third campaign on new discriminator tasks t10–t13 (haiku, ON/OFF ×3) finds NO measurable lift for the A1/A2/A4/A5 acceptance-pattern prose recipes — converting "assumed lift" into "not demonstrated"; only A3's operational procedure (t2) has ever shown lift. New instruments ship alongside the numbers: `evals/reviewer-bench/` panel-cmd adapters, `evals/orchestration/tasks/t10`–`t13`, `scripts/error-path-scan.sh` + `scripts/secret-scan-diff.js` wired into the completeness gate, and a multi-turn eval mode with `t14-constraint-horizon` closing the long-horizon evidence gap (first measurement is future work). The QC panel reviewing this batch caught a dead-instrument class defect: t13's oracle had an escaped-quote f-string that raised SyntaxError on every candidate (including correct ones), and its asserted values were separately inferable from candidate-visible `run-tests.sh` — a fake oracle on two independent axes. Rewritten with an env-fed heredoc + per-run `ORACLE_NONCE`, verified by a three-way probe (no-op fails / correct impl passes / hardcode cheat fails).

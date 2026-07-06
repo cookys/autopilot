@@ -149,13 +149,13 @@ const server = http.createServer((req, res) => {
       return;
     }
     
-    if (auth.includes('valid-token')) {
+    if (auth === 'Bearer valid-token') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ id: 'msg_1', content: [{ type: 'text', text: 'OK' }] }));
       return;
     }
     
-    if (auth.includes('invalid-token')) {
+    if (auth === 'Bearer invalid-token') {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { type: 'authentication_error', message: 'Invalid token' } }));
       return;
@@ -240,4 +240,4 @@ assert_contains "$wj_noremote_json" '"repo_key_source":"path-fallback"' "which -
 set_warn_out="$(cd "$NOREMOTE" && printf 'noremote-token' | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints set mm --url https://m --token-stdin --repo 2>&1)"
 assert_contains "$set_warn_out" "Warning: repo has no git remote. Overlay is keyed to the checkout PATH" "set --repo prints warning when no remote"
 
-echo "endpoints-cli: all assertions passed"
+finalize_test

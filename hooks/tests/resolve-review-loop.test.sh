@@ -4,6 +4,11 @@
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+
+# Keep default-path assertions hermetic when the surrounding agent/session exports
+# resolver overrides or live engine-state paths.
+unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
+
 json_get() { # json key -> raw json value
   local json="$1" key="$2"
   export JSON_VALUE="$json"
@@ -79,6 +84,12 @@ assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field r
 RCFG="$TEST_TMP/rl-ccshim-rev.md"
 printf -- '- reviewer_runner: cc-shim\n- reviewer_engine: MiniMax-M3\n' > "$RCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RCFG" bash "$SCRIPT" --field reviewer_runner)" "cc-shim reviewer_runner honored (dispatch-review supports it since v2.26.10)"
+ACRCFG="$TEST_TMP/rl-anthropic-compatible-rev.md"
+printf -- '- reviewer_runner: anthropic-compatible\n- reviewer_engine: MiniMax-M3\n' > "$ACRCFG"
+assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACRCFG" bash "$SCRIPT" --field reviewer_runner)" "anthropic-compatible reviewer_runner honored (dispatch-review direct HTTP reviewer)"
+ACI_CFG="$TEST_TMP/rl-anthropic-compatible-impl.md"
+printf -- '- implementer_runner: anthropic-compatible\n- implementer_engine: MiniMax-M3\n' > "$ACI_CFG"
+assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACI_CFG" bash "$SCRIPT" --field implementer_runner)" "anthropic-compatible implementer_runner rejected (dispatch-hetero does not support it)"
 GCFG="$TEST_TMP/rl-grok-impl.md"
 printf -- '- implementer_runner: grok\n- implementer_engine: grok-composer-2.5-fast\n' > "$GCFG"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field implementer_runner)" "grok implementer_runner honored"

@@ -131,7 +131,10 @@ SCRATCH_HOME=$(mktemp -d -t "orch-eval-scratch-home-XXXXXX")
 # Auth: plugins/settings stay isolated, but the claude CLI needs its login credential.
 # Copy ONLY the credential file (mode 600, deleted with the scratch home on exit) and a
 # minimal onboarding stub — nothing else from the real HOME leaks into the arm.
-if [ -f "${HOME}/.claude/.credentials.json" ]; then
+# cc-shim arm (ORCH_CC_SHIM=1): an Anthropic-compatible endpoint provides auth via
+# ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN env — SKIP the login-credential copy (a
+# present credentials.json takes precedence and rejects non-Anthropic model names).
+if [ "${ORCH_CC_SHIM:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
   mkdir -p "$SCRATCH_HOME/.claude"
   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_HOME/.claude/"
   chmod 600 "$SCRATCH_HOME/.claude/.credentials.json"

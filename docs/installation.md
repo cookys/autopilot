@@ -8,6 +8,21 @@ Install paths beyond the two-command Claude Code default (OpenCode, Codex, Antig
 
 ---
 
+### Unified dev setup entry
+
+`scripts/dev-setup.sh` is the contributor entry point for checking or setting up local harness integration:
+
+```bash
+./scripts/dev-setup.sh                              # Claude Code dev mode (backward-compatible default)
+./scripts/dev-setup.sh --check                      # read-only dashboard for Claude/Codex/OpenCode/agy
+./scripts/dev-setup.sh --check --harness codex      # read-only check for one harness
+./scripts/dev-setup.sh --harness codex --install    # explicit mutating install
+```
+
+Check mode is read-only for repo and user harness state except temporary diagnostic files. Missing optional CLIs are warnings; repo drift and known hazardous states, such as a symlinked agy plugin destination, fail the check. Non-Claude harness installs require `--install`; `--harness codex`, `--harness opencode`, `--harness agy`, and `--all` without `--install` report status only. Strict check mode avoids plugin-list probes that may update harness caches; set `AUTOPILOT_DEV_SETUP_ACTIVE_CLI_CHECKS=1` when you explicitly want those active CLI probes.
+
+---
+
 ### OpenCode (`.agents/skills/` auto-scan)
 
 Clone the repo anywhere; OpenCode native skill scanner picks up `.agents/skills/` from cwd.
@@ -38,6 +53,13 @@ codex plugin list --marketplace autopilot-local --available
 codex plugin add autopilot@autopilot-local
 ```
 
+Contributor shortcut:
+
+```bash
+./scripts/dev-setup.sh --check --harness codex
+./scripts/dev-setup.sh --harness codex --install
+```
+
 The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install. Run engine commands from the target repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
 
 For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
@@ -50,6 +72,13 @@ For global loose-skill availability across repos without installing the plugin p
 ./scripts/install-antigravity.sh                     # agy plugin validate → install → list
 agy plugin list | grep autopilot                     # verify it's registered
 # remove with: agy plugin uninstall autopilot
+```
+
+Contributor shortcut:
+
+```bash
+./scripts/dev-setup.sh --check --harness agy
+./scripts/dev-setup.sh --harness agy --install       # delegates to install-antigravity.sh
 ```
 
 ### Windows

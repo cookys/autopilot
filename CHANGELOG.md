@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.5 — pipeline-vs-bare exchange-rate bench + two enum-drift fixes
+
+**Headline**: A new `evals/pipeline-bench/` harness measures the same model on the same task under **bare single-shot** execution vs the **full pipeline** (implementation → gpt-5.5 decorrelated review loop → L0 gates → repair, max 3 rounds), across 10 model×task cells (n=3/cell). The headline finding: pipeline value scales with the gap between model capability and task difficulty, not a fixed multiplier. When the gap is large and the model fails bare (haiku on t2-extract-verbatim, byte-fidelity, below task bar), the pipeline rescues it (+100pp, 0/3→3/3, at 2.8× time). When the gap is near zero and the model already passes bare (haiku on t12/t13 at-or-near bar; MiniMax-M3 on t12, above bar), the pipeline adds no quality and is pure tax (5.5–6.5× time, converged as low as 0/3–1/3). When the gap is negative — the model comfortably above the task (MiniMax-M3 on t13) — the pipeline can regress: 3/3→2/3 quality at 12× time, with the gpt-5.5 reviewer never converging (0/3) and the M3 repair loop breaking a solution that was already correct. Direct implication for density scaling: crank review rounds/panel size only for under-capacity implementers; on a capable model, the review loop is waste or actively harmful.
+
+prose-justification: +1 harness (`evals/pipeline-bench/`, ~300 lines) plus a ~60-line archived report section; net growth is measurement infrastructure and its documented numbers, not routing/skill surface.
+
+### Added
+- `evals/pipeline-bench/run-pipeline-bench.sh` — bare-vs-pipeline exchange-rate harness: `--arm bare|pipeline`, decorrelated review via `dispatch-review.sh`, L0 gates (`secret-scan-diff.js` + `error-path-scan.sh`), up to `--max-rounds` repair rounds; emits per-run `result.json` (speed, oracle pass, verification metrics, tokens).
+
+### Fixed
+- `reviewer_runner` enum drift, two truth copies: `scripts/resolve-review-loop.sh` (bash `case` allow-list) and `src/engine/resolve-review-loop.js` (JS `assertOneOf` validator) both predated the `anthropic-compatible` reviewer runner (`dispatch-anthropic-review.js`, direct-HTTP Anthropic-compatible reviewer) — a config requesting it silently fell back to the default runner in one path while working in the other. Both widened to accept `anthropic-compatible`; unblocks MiniMax-class reviewer chains selected via `reviewer_runner`.
+
+### Measured
+- Pipeline exchange rate (n=3/cell): haiku/t2 bare 0/3@73s → pipeline 3/3@204s (2.8×, converged 3/3) — **rescue**. haiku/t12 bare 3/3@28s → pipeline 3/3@155s (5.5×, converged 1/3) — tax, no gain. haiku/t13 bare 2/3@52s → pipeline 2/3@298s (5.7×, converged 0/3) — tax, no gain. MiniMax-M3/t12 bare 3/3@37s → pipeline 3/3@241s (6.5×, converged 1/3) — tax, no gain. MiniMax-M3/t13 bare 3/3@61s → pipeline 2/3@728s (12×, converged 0/3) — **regression**.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.4`
+
 ## v2.32.4 — cc-shim orchestrator arm + first long-horizon numbers
 
 **Headline**: A new `ORCH_CC_SHIM=1` arm lets the eval runner drive a `cc`-based orchestrator against an Anthropic-compatible endpoint (MiniMax-M3), plus the first-ever `t14-constraint-horizon` long-horizon numbers.

@@ -4,11 +4,11 @@ Development autopilot — lifecycle orchestration for OpenCode.
 
 ## Skills
 
-24 skills covering the full development lifecycle:
+28 skills covering the full development lifecycle:
 
 - `dev-flow` — Start here before writing code (sizing, branch setup)
 - `brainstorm` — Pre-code Socratic design exploration (discovers options)
-- `l3` / `l4` / `l5` — Terse CEO front-doors (inline / background foreman / hetero impl)
+- `l3` / `l4` / `l5` / `l6` — Terse CEO front-doors (inline / background foreman / hetero impl / hetero verification authoring)
 - `ceo-agent` — Full delegation with constraints
 - `quality-pipeline` — Test → scan → completeness → review workflow
 - `finish-flow` — L-size closing sequence (6 discrete sub-tasks)
@@ -32,6 +32,13 @@ Development autopilot — lifecycle orchestration for OpenCode.
 - `autopilot-reviewer` — Three Red Lines code reviewer
 - `autopilot-debugger` — Root cause analysis
 - `autopilot-planner` — Task decomposition
+
+## Harness boundary
+
+OpenCode shares Autopilot skills and methodology agent bodies through `.agents/skills/`
+and `.opencode/opencode.json`. Claude Code hooks and slash-command behavior are not
+assumed to have OpenCode parity; platform-specific behavior lives in the OpenCode
+plugin wrapper and must be probed before being documented as equivalent.
 
 ## Philosophy
 

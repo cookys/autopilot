@@ -24,7 +24,7 @@
 
 <p align="center">
   <b>你終端機裡的 AI 專案負責人。</b><br>
-  Claude Code 負責寫程式，Autopilot 規劃它、委派它、用第二個引擎審查它、並記住學到的東西 —— 讓你不必盯著每一步就能交付。
+  Claude Code 是完整主場。Autopilot 負責規劃、委派、用第二個引擎審查、並記住學到的東西 —— 同時也為 Codex、OpenCode、agy 提供各自 harness 能支援的可攜路徑。
 </p>
 
 <p align="center">
@@ -44,14 +44,14 @@ push blocked — fix it, or override with a reason
 
 ## What Is Autopilot?
 
-Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那些你本來得自己動手的規劃、檢查、決策與記憶：
+Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件事做完** —— 那些你本來得自己動手的規劃、檢查、決策與記憶：
 
 - **給它目標，拿回結果** —— `/l3` `/l4` `/l5` `/l6` 和 `ceo-agent` 能把一個任務從頭跑到尾（判斷大小、規劃、實作、審查、收尾），只在真正該你拍板的決策點才停下來問。
 - **第二個引擎來吵你的 code** —— 審查可以跑在**不同的**模型家族（GPT、Gemini）上，所以更多 bug 在使用者看到之前就被抓到，而不是被寫它的同一個模型蓋章放行。
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它是單一 Claude Code plugin —— **28 個 skill、3 個方法論 agent、22 個 hook、零相依**。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **28 個 skill、3 個方法論 agent、22 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -87,6 +87,30 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 ```
 
 不用背指令 —— 用你自己的話說出來，對的 skill 就會接手。
+
+## 選擇你的路徑
+
+Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際使用的 harness 選入口：
+
+| 如果你是... | 從這裡開始 | 你會得到什麼 |
+|---|---|---|
+| **Claude Code 使用者** | 上面的兩行安裝指令 | 最完整路徑：skills、方法論 agents、hooks、`/l3`-`/l6`、plugin 管理的預設值 |
+| **Codex 使用者** | 本 repo 的 `.agents/skills/`，或 `platforms/codex/plugin` 的 local package | Autopilot skills，加上讓連結到 scripts/references 可運作的 bundled support payload；不宣稱 Claude hook parity |
+| **OpenCode 使用者** | `.agents/skills/` 加 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies，以及 OpenCode 專用的 in-process plugin wrapper |
+| **Antigravity（`agy`）使用者** | `scripts/install-antigravity.sh` | 受 guard 保護的 Claude Code-source plugin 匯入；不是 loose skills-dir scan |
+| **Contributor** | `./scripts/dev-setup.sh --check` | Claude/Codex/OpenCode/agy 的 read-only readiness dashboard；非 Claude 的 mutating setup 必須明確加 `--harness <name> --install` |
+
+## 從原則到系統預設
+
+課程版的大概念很簡單：把協作紀律教給 agent 一次，之後就不要每次重打。
+
+| 原則 | Autopilot 預設 |
+|---|---|
+| 寫 code 前先釐清工作 | `dev-flow` 把目標展開成大小、分支、plan 與 gates |
+| 要求證據，不接受安慰 | `quality-pipeline` 跑測試、掃未完成工作、審 diff |
+| 把 context 保存在模型外 | `project-lifecycle`、`handoff`、`finish-flow` 讓下一個 session 讀得到狀態 |
+| 不讓同一顆腦袋自己放行 | 異質 review 與 qc panel 讀 artifacts，而不是 implementer 自述 |
+| 依風險放權 | `/l3`-`/l6` 從 inline 自主一路擴到異質實作與驗證撰寫 |
 
 ## What It Does
 
@@ -126,6 +150,10 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 **→ 各級行為、預設值、override flags（`--expand` / `-x` / `--solo`）與完整範例：[docs/skills.md](docs/skills.md)。**
 
+### 信任模型
+
+Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證據；reviewer 直接讀任務、diff、log 與 artifacts。Deterministic gates 仍是權威，高風險工作需要去相關化的 review coverage，而 `no_verdict` review 永遠不能算通過。
+
 ### 🔌 接上另一個引擎（選用）
 
 只用 Claude 就夠了。但把 autopilot 指向**第二個引擎家族**，它的 review／implement pipeline 會更強——跨家族 qc panel 能抓到單一廠商跟同家族 reviewer 一起漏掉的問題，還能得到一個異質 implementer 做成本套利。**建議順序：你已經在付的訂閱 ≻ 按量計費的 API key**——OAuth 登入的 runner（`codex` / `agy` / `grok`）完全不需要 token；GLM／MiniMax 則放進單一 mode-600 檔案（`~/.autopilot/endpoints.env`），並在 `.claude/review-loop-config.md` 宣告式接線。
@@ -146,9 +174,16 @@ Claude Code 很會寫程式，Autopilot 讓它**把整件事做完** —— 那�
 
 **Claude Code**（主要）—— 上面那兩行指令。28 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
 
-### 其他平台
+### Harness 支援矩陣
 
-Autopilot 可攜：**OpenCode** 透過 `.agents/skills/` 發現 skill，**Codex** 可使用 `.agents/skills/` 或 `platforms/codex/plugin` 的 local package（manifest 只暴露 skills，但 payload 會包含支援檔），**Antigravity（`agy`）** 則將 repo 作為 Claude Code-source plugin 匯入，另有 Windows 與 pre-commit 閘門設定。完整的各平台說明，以及貢獻者 **dev-mode** 流程，都在 **[docs/installation.md](docs/installation.md)**。
+| Harness | 如何開始 | 目前支援 | 已知限制 |
+|---|---|---|---|
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：28 個 skills、3 個方法論 agents、22 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
+| **Codex** | `.agents/skills/`，或加入 `platforms/codex` marketplace 後 `codex plugin add autopilot@autopilot-local` | Skills-only package、generated support payload、repo-local marketplace | 預設 Codex package 刻意不載入 Claude hooks、apps 或 MCP servers |
+| **OpenCode** | 在這個 repo 使用 `.agents/skills/`；agents 走 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies、OpenCode plugin wrapper | Optional TypeScript deps 只在編輯 wrapper 時需要；hook parity 屬平台特定問題 |
+| **Antigravity（`agy`）** | `./scripts/install-antigravity.sh` | 受 guard 保護的 `agy plugin validate` / install / list 流程，採 export-then-install | Runtime hook firing 仍未驗證；install 不代表 hook behavior parity |
+
+完整各平台說明、Windows 注意事項與貢獻者 **dev-mode** 流程在 **[docs/installation.md](docs/installation.md)**。已驗證的 capability 邊界在 **[references/multi-agent-portability.md](references/multi-agent-portability.md)**。
 
 ## Learn More
 

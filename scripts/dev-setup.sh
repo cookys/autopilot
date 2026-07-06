@@ -481,6 +481,10 @@ parse_args() {
     die "--check and --install are mutually exclusive"
   fi
 
+  if [[ "$INSTALL" = "1" && -z "$HARNESS" && "$ALL" = "0" ]]; then
+    die "--install requires --harness <name> or --all"
+  fi
+
   if [[ "$INSTALL" = "1" ]]; then
     MODE="setup"
   elif [[ "$CHECK" = "1" ]]; then

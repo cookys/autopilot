@@ -35,6 +35,10 @@ assert_contains "$OUT" "--check" "help documents --check"
 assert_contains "$OUT" "--install" "help documents --install"
 assert_contains "$OUT" "--harness" "help documents --harness"
 
+OUT="$(bash "$SCRIPT" --install 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "--install without harness/all exits 1"
+assert_contains "$OUT" "--install requires --harness" "--install without target explains required selector"
+
 LEGACY_HOME="$TEST_TMP/legacy-home"
 make_claude_registry "$LEGACY_HOME"
 OUT="$(HOME="$LEGACY_HOME" bash "$SCRIPT" 2>&1)"; EXIT=$?

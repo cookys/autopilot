@@ -274,6 +274,44 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
   a hit cap is an escalation, never a silent continue. This is also the
   **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
 
+### 1.b Quota/session-limit reset preflight recovery (R4)
+
+This path is only for **quota/session-limit death** (session model usage/quota hit).
+It is distinct from `failure`/`killed` code-death recovery in §2; quota-reset
+resurrection must first re-validate quota, then route through the existing R3
+`run-ledger.sh resume` branch.
+
+Use this 7-step recovery sequence:
+
+1. Preserve the original session-limit error exactly as an immutable value in
+   control-loop state (raw CLI/tool error string), because this text is the source
+   of truth for downstream escalation and audit.
+2. Parse the reset point from `quota_error_text` and fail fast if unparsable.
+   Only parse explicit timestamps/countdowns present in the error string (for example
+   `reset=<unix_epoch>` or `retry_after=<seconds>`). If parsing cannot produce a
+   concrete deadline, **do not invent a wakeup** — escalate manually using the
+   preserved error and continue with the standard failure path.
+3. Derive the wake target from parsed reset:
+   `wake_at = reset_epoch + buffer_secs + jitter_secs`,
+   where `buffer_secs` avoids exact-boundary wake and `jitter_secs` reduces herd
+   collisions on shared accounts.
+4. Schedule the wakeup using one of the real wakeup primitives:
+   - Primary: `Monitor` one-shot timer, e.g.
+     `Monitor(command: "sleep ${delay}; echo QUOTA_WAKEUP", timeout_ms: ...)`
+   - Alternate portability path: `"/loop"` with a self-throttled checkpointed prompt
+     that waits until `now >= wake_at` before leaving reset mode.
+5. On wakeup, run the **separate probe budget** first:
+   `node bin/autopilot.js endpoints doctor --json`.
+   This is explicit SEPARATE-budget reachability/auth preflight to avoid immediately
+   spending heavy implementation budget.
+6. If probe is `outcome: ok` and status indicates recovery, execute the R3 path:
+   `scripts/run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>`.
+   This is the required idempotent continuation step; no bespoke resume branch.
+7. If probe reports limit still active (`status` indicates 429 or equivalent `still_limited`)
+   or is `auth_failed`/`network_failed` due to auth plane outage, do **not** retry
+   immediately. Apply exponential backoff with jitter (`delay *= 2`, capped), reschedule
+   via step 4, and re-run step 5 only at the new wake time.
+
 ### 2. Outcome → action table
 
 Every foreman / `dispatch-hetero.sh` outcome maps to a defined action — no

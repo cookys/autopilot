@@ -3,7 +3,7 @@
     <tr>
       <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
       <td width="24"></td>
-      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — standalone-capable lifecycle orchestration for Claude Code that coexists with Superpowers" height="180"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first lifecycle orchestration with portable paths for Codex, OpenCode, and agy" height="180"></td>
     </tr>
   </table>
 </div>

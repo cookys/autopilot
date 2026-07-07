@@ -35,6 +35,7 @@
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#       [--checklists <c1,c2>]  # optional adversarial checklist
 #       [--endpoint <name>]     # anthropic-compatible/cc-shim: resolve creds via
 #                               #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*);
 #                               #   raw env still used when omitted (byte-identical)
@@ -78,7 +79,7 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --runner)    RUNNER="${2:-}"; shift 2 ;;
@@ -88,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
+    --checklists) CHECKLISTS="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
     -h|--help)   sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -286,8 +288,8 @@ EOF
 
 Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block, with nothing after it.
 EOF
-  if [[ -n "$SPEC_FILE" ]]; then
-    cat <<'EOF'
+if [[ -n "$SPEC_FILE" ]]; then
+  cat <<'EOF'
 
 Task specification (baseline — DISPATCHER-AUTHORED, trusted):
 Grade the diff AGAINST this spec. Anything the spec explicitly declares
@@ -298,6 +300,18 @@ EOF
 
 --- end of specification ---
 EOF
+  fi
+  if [ -n "$CHECKLISTS" ]; then
+    cat <<'EOF'
+
+Adversarial checklist (must check these closely):
+EOF
+    IFS=',' read -r -a _checklists <<< "$CHECKLISTS"
+    for _item in "${_checklists[@]}"; do
+      _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      [ -z "$_item" ] && continue
+      printf '- %s\n' "$_item"
+    done
   fi
   cat <<'EOF'
 

@@ -1,6 +1,6 @@
 # Observation-first skills — 驗證合約必答 + 密度去硬編碼 + 演化規則
 
-> Status: R2 — 五家族 round-1 全數 FIX-THEN-SHIP,本版逐條吸收(gpt-5.5/grok/MiniMax/GLM/opus)
+> Status: R3 — R2 判定:gpt-5.5/grok/GLM SHIP-AS-IS;opus 1 blocking(紅綠 base-run 語意)+ MiniMax 2 kernels,本版吸收
 > Evidence base: `docs/projects/_archive/2026-07-06-eval-instruments/report.md`
 
 ## 背景:量測已定案的五件事
@@ -28,9 +28,15 @@ Sizing(全尺寸)intake 必答:**「這個任務做完,跑什麼命令能客觀�
 
 | 答案 | 機械判定 | 路由 |
 |------|---------|------|
-| 命令,且通過**紅綠驗證** | dispatcher 在 base 上先跑:必須 **FAIL**(改動前不可能過);implementation 後 PASS。`true`/`echo done` 在 base 就過 → vacuous,降級到下一列 | 完整驗證錨定:ratchet + advisory review + **僅當** implementer scorecard-qualified 且 risk=low 時 review 為非 gating(verify-first) |
-| 命令,但未過紅綠(vacuous)或無法在 base 跑 | 自動降級 | 同「無驗證」列 |
-| 「沒有客觀驗證」(合法誠實答案) | 記入 run summary | **審查 gating 常駐**,不分模型強弱(零機械觀測的工作不可證偽 — reviewer 是唯一觀測通道,故保留否決權;模型強只降輪數 ≤2,不降為零)|
+| 命令,且通過**紅綠驗證** | 見下方紅綠語意 | 紅綠通過 ⇒ **驗證錨定恆成立**(ratchet + 一輪 advisory review)。review 降為**非 gating** 需三條件**同時**:紅綠通過 **且** implementer scorecard-qualified **且** risk=low(opus R2:連言架構 — 單靠騙過紅綠拿不掉否決權)|
+| 命令,但未過紅綠(vacuous)或紅無法成立 | 自動降級 | 同「無驗證」列 |
+| 「沒有客觀驗證」(合法誠實答案) | 記入 run summary | **審查 gating 常駐**,不分模型強弱(零機械觀測不可證偽;reviewer 是唯一觀測通道,保留否決權;模型強只降輪數 ≤2,不降為零)。此 gating review **優先派工具可執行的原生 reviewer**(能實跑探索性檢查),而非 diff-text 軌(MiniMax R2)|
+
+**紅綠語意(opus R2 blocking 修訂 — in-diff 測試檔的 base-run 規則)**:
+- **base 定義**:dispatcher 釘死的 immutable base SHA(engine `--base`;dev-flow inline = intake 時的 HEAD)。dirty tree 不是 base — 驗證只對釘死狀態跑。
+- **base-run = base 的產品碼 + diff 中的驗證 artifact 套上去跑**(否則純新增 TDD 案例 — 測試檔在 diff 裡 — 會被誤降級)。
+- **紅的資格**:必須是 **assertion/行為失敗**;基礎設施錯誤(檔案不存在、import error、collect 0)**不算紅** — `test -f newfile`、`git diff --quiet` 類 artifact-存在探針因此無法冒充紅綠。套上 artifact 後仍是基礎設施錯誤 → 降級。
+- **紅必須可重現**(flaky base-fail 重跑一次確認;不可重現 → 降級)— 誠實計帳,防環境噪音冒充紅。
 
 安全邊界(gpt-5.5 R1):verify-cmd 由 dispatcher 撰寫、在**隔離 worktree** 執行、期望唯讀;`terraform apply` 類有副作用命令不是驗證 — 文件明載,並誠實標注「無 bwrap 即無硬沙箱」的既有邊界(BACKLOG 已有)。
 釐清(grok R1):verify-first 的引擎語意(v2.32.6)本就**仍派一輪 advisory review** — 被降的是 review 的否決權,不是觀測本身;plan 據此措辭,「跳過審查」的說法不再出現。
@@ -57,7 +63,7 @@ Sizing(全尺寸)intake 必答:**「這個任務做完,跑什麼命令能客觀�
 
 - ❌ 不動 `description:` frontmatter;❌ 不重寫方法論 skill;❌ 不做全面每輪重注入(tier-gated 先量測);❌ 不把干預變強制
 - ❌ 本 plan 不實作「驗證強度評分軸」(五家共識的缺口,但屬 resolver/engine 新功能)— 開 BACKLOG:`verify_strength` 作為 density 第三輸入;紅綠驗證是它的最小可行前身
-- ❌ 不改 resolver 本體(`min_panel_size` 增發同樣 BACKLOG)
+- ❌ 不改 resolver 本體(`min_panel_size` 增發同樣 BACKLOG — 條目須寫成**家族無關**:任何 required_families=1 的單家族 panel 都有單 lens 弱點,不限 Claude;並註明 lens 多樣 ≠ 家族去相關,同家族多 lens 共享盲點 — MiniMax/opus R2)
 
 ## 驗收(修訂 — 逐站點清單取代單一 grep)
 

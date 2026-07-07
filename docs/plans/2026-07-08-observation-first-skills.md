@@ -1,7 +1,7 @@
 # Observation-first skills — 驗證合約必答 + 密度去硬編碼 + 演化規則
 
-> Status: DRAFT → 五家族 loop review 中
-> Evidence base: `docs/projects/_archive/2026-07-06-eval-instruments/report.md`(匯率實驗、驗證錨定實測、逃逸懸崖、t14 n=35)
+> Status: R2 — 五家族 round-1 全數 FIX-THEN-SHIP,本版逐條吸收(gpt-5.5/grok/MiniMax/GLM/opus)
+> Evidence base: `docs/projects/_archive/2026-07-06-eval-instruments/report.md`
 
 ## 背景:量測已定案的五件事
 
@@ -10,64 +10,65 @@
 | 1 | 散文不改變行為;操作程序與機械合約才會 | campaign R1/R2、t10-t13 零增益、t14 p=0.279 |
 | 2 | 管線價值 = 模型與任務難度的落差 | haiku t2 0/3→3/3;M3 t13 3/3→2/3 @12× |
 | 3 | 驗證是法官、審查是偵探(verify-first) | 救援保留 -36%、稅砍 4×、倒退消除 |
-| 4 | 象限規則:模型強 或 驗證強,才可免審 | t2×medium 驗證 = 100% 逃逸 |
+| 4 | 象限規則:模型強 或 驗證強,才可降審 | t2×medium 驗證 = 100% 逃逸 |
 | 5 | 兩份真相必漂移 | reviewer_runner enum 雙站點(K7/K8) |
 
-## 設計原則(本 plan 的憲法)
+## 設計原則
 
 **強制只放在觀測層;干預層一律 evidence-triggered。**
+觀測(事後跑 verify、記 ledger、advisory review)可強制;干預(gating 審查迴圈、修復輪、程序要求)預設關、憑證據開。
 
-| 層 | 例子 | 政策 |
-|----|------|------|
-| 觀測(事後看結果) | 跑 verify-cmd、記 ledger | 可以強制 — 實測對強模型成本 ~20s、零品質損傷 |
-| 干預(改變模型怎麼工作) | 審查迴圈、修復輪、程序要求、提示包 | 預設關;只在「觀測到失敗」或象限判定(弱模型×弱驗證)時啟動 |
+## Scope(三項編輯)
 
-強模型的預設路徑因此是「裸跑 + 事後觀測」— 比現狀**更自由**,不是更受限。
+### A. dev-flow:驗證合約必答(修訂版 — 存在 ≠ 強度)
 
-## Scope(三項,全部是編輯不是重寫)
+Sizing(全尺寸)intake 必答:**「這個任務做完,跑什麼命令能客觀證明?」**
 
-### A. dev-flow:驗證合約必答(觀測層強制)
+**R1 五家共識洞**:提供命令 ≠ 驗證強。`true`/`echo done`/`python -c "import mymod"` 都是命令;把「存在」當「強」= 把逃逸懸崖(t2×medium 100% 逃逸)寫進制度;且「禁止假驗證」是散文,依論點 #1 無效。修訂為**機械分層**:
 
-Sizing(S/L/H/Fix 全尺寸)intake 增加一題:
-> **「這個任務做完,跑什麼命令能客觀證明?」**
+| 答案 | 機械判定 | 路由 |
+|------|---------|------|
+| 命令,且通過**紅綠驗證** | dispatcher 在 base 上先跑:必須 **FAIL**(改動前不可能過);implementation 後 PASS。`true`/`echo done` 在 base 就過 → vacuous,降級到下一列 | 完整驗證錨定:ratchet + advisory review + **僅當** implementer scorecard-qualified 且 risk=low 時 review 為非 gating(verify-first) |
+| 命令,但未過紅綠(vacuous)或無法在 base 跑 | 自動降級 | 同「無驗證」列 |
+| 「沒有客觀驗證」(合法誠實答案) | 記入 run summary | **審查 gating 常駐**,不分模型強弱(零機械觀測的工作不可證偽 — reviewer 是唯一觀測通道,故保留否決權;模型強只降輪數 ≤2,不降為零)|
 
-- 合法答案一:一條 shell 命令(測試/oracle/harness)→ 流進 `engine implement-review --verify-cmd` 與 pipeline 的驗證錨定路徑;象限「驗證強」列成立,qualified implementer 走 verify-first。
-- 合法答案二:**「沒有客觀驗證」** — 誠實宣告,路由到象限「驗證弱」列:審查員常駐(resolver 既有行為),且此宣告記入 run summary。
-- 禁止:逼生假驗證。有洞的考卷比沒有考卷更危險(逃逸懸崖:t2×medium = 100% 自信出貨壞品)。
-- 與既有機制的關係:L-size plan 的 acceptance-criteria 條款(dev-flow:331)已要求驗證方法 — 本項把它(1)前移到 sizing、(2)覆蓋全尺寸、(3)接上引擎參數,不重複造輪子。
+安全邊界(gpt-5.5 R1):verify-cmd 由 dispatcher 撰寫、在**隔離 worktree** 執行、期望唯讀;`terraform apply` 類有副作用命令不是驗證 — 文件明載,並誠實標注「無 bwrap 即無硬沙箱」的既有邊界(BACKLOG 已有)。
+釐清(grok R1):verify-first 的引擎語意(v2.32.6)本就**仍派一輪 advisory review** — 被降的是 review 的否決權,不是觀測本身;plan 據此措辭,「跳過審查」的說法不再出現。
 
-### B. 密度去硬編碼(四站點,改指向 resolver)
+### B. 密度去硬編碼(修訂版 — 六站點,兩站點保留字面值)
 
-| 站點 | 現文 | 改為 |
-|------|------|------|
-| `skills/l4/SKILL.md:21` | 「≥3 adversarial reviewers」 | 「panel 規模與家族數由 `resolve-review-loop.sh` 依象限決定」 |
-| `level-front-door.md:302` | 「fan-out of ≥3 adversarial QC reviewers」 | 同上(保留 lens 多樣性的要求,刪固定數字) |
-| `level-front-door.md:314` | 「the ≥3 reviewers are Claude subagents」 | 隨 302 改寫 |
-| `finish-flow/SKILL.md:60` | 「max 3 rounds」 | 「輪數上限 = resolver `loop_max_rounds`(密度縮放後)」 |
+| 站點 | 處置 |
+|------|------|
+| `skills/l4/SKILL.md:21` ≥3 reviewers | 改「家族數/panel 由 resolver 決定」**但保留 lens 下限:「homogeneous(全 Claude)panel 維持 ≥3 lens 下限」**(opus R1:resolver 只管 families 不管 panel size — 低風險 required_families=1 時單 lens 就能過;下限是 resolver 未覆蓋的真實安全屬性,BACKLOG:resolver 增發 `min_panel_size` 後才可拆) |
+| `level-front-door.md:302` | 同上 |
+| `level-front-door.md:314` | 隨 302 改寫 |
+| `level-front-door.md:478`(ledger 範例「claude ×N (≥3 lenses)」) | 隨 302 同步(opus R1:原 grep 會抓到它但原 scope 沒列 — 內部不一致修正) |
+| `quality-pipeline/references/code-review.md:195`「depth-0 ≥3 fan-out」 | 補入 scope(opus R1:原 grep 漏網的第五份漂移副本) |
+| `finish-flow/SKILL.md:60`「max 3 rounds」 | **保留字面值 3**(opus R1:這是 quality-pipeline 的同質修復迴圈,非 engine implement-review;finish-flow 不 consult resolver,指過去會懸空或把上限鬆到 5-7 — 與 M3 churn 證據反向)。加一句註記:「/l5 /l6 情境下 engine 迴圈另由 resolver 治理」 |
 
-原則:skill 文字裡不出現審查數量的字面數字;數字只活在 resolver 與其 config。
+通則(GLM R1):任何指向 resolver 的措辭附 fail-safe:「resolver 不可用時退回字面值 3」— 失效必須收斂,不得發散。
 
-### C. 演化規則入法(CLAUDE.md conventions,~10 行)
+### C. 演化規則入法(CLAUDE.md conventions,~12 行)
 
-1. **童子軍規則**:任何原因觸碰 skill 時,順手向「合約卡」方向修剪(觸發/輸入/決策表/引擎指標;判斷散文移 references/)。north-star gate 逐版看守方向。
-2. **成績單前置**:重寫或刪除任何 skill 前,必須先有 eval ON/OFF 兩臂證據(harness 已存在);無證據的重寫 = 無證據的信任,同罪。
+1. **童子軍規則**:觸碰 skill 時順手向合約卡修剪;north-star gate 逐版看守。
+2. **成績單前置**:重寫/刪除 skill 前必須有 eval ON/OFF 證據;無證據的重寫 = 無證據的信任。
 
-## Non-goals(明確不做)
+## Non-goals(不變 + 新增)
 
-- ❌ 不動任何 `description:` frontmatter(路由面,MAJOR 風險)
-- ❌ 不重寫方法論型 skill(debug/survey/think-tank…— 無失敗證據,不干預)
-- ❌ 不做全面「每輪規則重注入」(只測過 haiku;tier-gated + 先量測,進 BACKLOG)
-- ❌ 不把任何干預(迴圈/程序)變成強制
+- ❌ 不動 `description:` frontmatter;❌ 不重寫方法論 skill;❌ 不做全面每輪重注入(tier-gated 先量測);❌ 不把干預變強制
+- ❌ 本 plan 不實作「驗證強度評分軸」(五家共識的缺口,但屬 resolver/engine 新功能)— 開 BACKLOG:`verify_strength` 作為 density 第三輸入;紅綠驗證是它的最小可行前身
+- ❌ 不改 resolver 本體(`min_panel_size` 增發同樣 BACKLOG)
 
-## 驗收
+## 驗收(修訂 — 逐站點清單取代單一 grep)
 
-- A:dev-flow 修改處引用引擎參數名;S/Fix 路徑各有一行必答條款;「沒有客觀驗證」的路由語句存在
-- B:`grep -rn "≥ ?3.*(reviewer|QC)" skills/`(排除 model-routing 生成副本)= 0;四站點全部指向 resolver 欄位名
-- C:CLAUDE.md 有兩條規則;字數 ≤12 行
-- 機械 gates 全綠(validate/invariants/payload/slash-probe);north-star prose 淨減或持平
-- 本 plan 先過**五家族 loop review**(gpt-5.5 / MiniMax / GLM / grok / opus)收斂,才派實作
+- A:dev-flow 含三列路由表;紅綠驗證的 base-FAIL 條款有引擎參數對應;「沒有客觀驗證」路由語句存在;副作用警語存在
+- B:六站點逐一 diff 檢查(表列即驗收清單);輔助 grep 修正為 **case-insensitive** 且涵蓋 `max [0-9]+ rounds`(opus R1:原 grep 對 code-review.md:195 漏報、對 finish-flow 形態不匹配 — 單一 grep 不是健全的完備性 gate,故降為輔助)
+- C:CLAUDE.md 兩條規則 ≤12 行
+- BACKLOG 兩條新條目(verify_strength 軸、min_panel_size)存在
+- 機械 gates 全綠;north-star prose 淨減或持平
+- 本 plan R2 過五家族聯審才派實作
 
-## 風險與緩解
+## 風險
 
-- dev-flow 是入口協定(爆炸半徑高)+ 散文效果無 oracle(驗證弱)→ 依象限本 plan 即屬 review_risk=high,故五家族聯審,且實作後跑 slash-probe + 全套件
-- 審查 churn(「永不說 ship」)→ 裁決規則:finding 必須含具體失敗情境才可觸發修改;純風格意見記錄不行動
+- dev-flow 入口協定 + 散文無 oracle → 五家族聯審(R1 已抓 5 條真洞,制度有效)
+- 審查 churn → 裁決規則不變:finding 須含具體失敗情境

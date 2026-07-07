@@ -463,3 +463,14 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - 修法方向:改為計數制 — `families_distinct >= required_review_families` 才 satisfied;`--enforce` 同步。注意 KR:預設輸出 byte-compat(欄位值語意變更需 CHANGELOG 明示)。
 - 觸發:下次碰 `resolve-review-loop.sh` 的 enforce/panel 邏輯時;或高風險 diff 實際依賴 required=2 語意時。
 - ✅ RESOLVED 2026-07-05 — counting semantics implemented (this commit); entry retained for history.
+
+### 🔬 foreman↔depth-0 協調：liveness query + ownership lease + 插隊/steer 通道（l6-resilience R6-research）
+- **Trigger**: 下次多 foreman 並行 /l6 campaign；或 R0 ledger（run-ledger.sh）已 land 可當協調底座時。
+- **Context**: 2026-07-08 l6-resilience 實作 campaign 實痛——depth-0 把 foreman **回合間的正常驗證**誤判成 stall → 跳進去搶做同一 handler → two-cooks 撞 shared `.git`/worktree → 再加 depth-0↔foreman 訊息交錯（crossed messages）對 R5 擁有權誤解、差點互等死鎖。根因＝foreman↔depth-0 缺可靠協調機制。
+- **缺口三塊**:
+  - (1) **Liveness/state query**：廉價可靠分辨 {working-between-turns / waiting-on-detached-child / blocked-needs-input / dead}。現 `idle_notification` 太粗（"available" 歧義）、`ps`/`git` 輪詢會誤判（正是本次誤判來源）。
+  - (2) **Ownership lease 結構性防 two-cooks**：depth-0 與 foreman 不得同時動同一 artifact。**R0 ledger 的 lease/generation/nonce 是現成底座** → R6 建在 R0 上：depth-0 讀 ledger 看 stage 活性（非 ps 輪詢）、owner lease-gated，搶同 stage 結構上不可能。
+  - (3) **Interrupt/steer 通道 + 訊息排序**：foreman 在**工作中**（非只回合間）檢查的優先「插隊」通道，或寫進 ledger 的 directive；並處理 crossed-message（明確「誰現在擁有這決定」的 handshake / lease token）。
+- **副產物守則**（已可先用）: 多 agent 看似停頓，先查是不是正常回合間工作（ledger/log/ps 交叉），**別急著接手**——本次 foreman 全程能幹（診斷比 depth-0 深、主動協調），撞車全因 depth-0 觀測不足 + 反應過快。
+- **Effort**: L（research→design→impl；與 R0-R5 同 plan `docs/plans/2026-07-08-l6-resilience-improvements.md`，建議收為該 plan 的 R6）。
+- **Source**: l6-resilience R1–R5 dogfood campaign 協調事故，2026-07-08。

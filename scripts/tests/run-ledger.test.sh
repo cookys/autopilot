@@ -101,23 +101,55 @@ assert_json_eq "$LAST_LINE" '.state' 'stale_ignored' "late-child transition outp
 run_cmd query-latest --ledger "$LEDGER_A" --run-id "run-a" --stage "build"
 assert_json_eq "$CMD_OUT" '.state' 'stale_ignored' "late-child transition result"
 
-# 2) repeated resume (same idempotency key) does not replay
+# 2) resume idempotency + residual late child is fenced
 LEDGER_B="$TEST_TMP/ledger-b.jsonl"
 run_cmd init --ledger "$LEDGER_B"
 run_cmd stage-acquire --ledger "$LEDGER_B" --run-id "run-b" --stage "review" --pid "$$" --resources "resume"
 ACQ_B="$CMD_OUT"
 GEN_B="$(jq -r '.generation' <<<"$ACQ_B")"
 NONCE_B="$(jq -r '.nonce // empty' <<<"$ACQ_B")"
-run_cmd stage-apply --ledger "$LEDGER_B" --run-id "run-b" --stage "review" --generation "$GEN_B" --nonce "$NONCE_B" --to-state reviewed --idempotency-key "resume-key-1"
-assert_cmd_rc 0 "resume first apply"
-assert_json_eq "$CMD_OUT" '.status' 'applied' "resume first apply status"
-run_cmd stage-apply --ledger "$LEDGER_B" --run-id "run-b" --stage "review" --generation "$GEN_B" --nonce "$NONCE_B" --to-state reviewed --idempotency-key "resume-key-1"
-assert_cmd_rc 0 "resume second apply"
-assert_json_eq "$CMD_OUT" '.status' 'already_applied' "resume second apply status"
-JOURNAL_COUNT_B="$(jq -s --arg rid run-b --arg stg review '[ .[] | select(.kind=="journal" and .run_id==$rid and .stage==$stg and .status=="applied") ] | length' "$LEDGER_B")"
-assert_eq "$JOURNAL_COUNT_B" "1" "journal replay guard"
+cat > "$TEST_TMP/resume-late-child.sh" <<'CHILD'
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_PATH="$1"
+LEDGER_PATH="$2"
+RUN_ID="$3"
+STAGE="$4"
+GEN="$5"
+NONCE="$6"
+sleep 0.3
+bash "$SCRIPT_PATH" stage-transition --ledger "$LEDGER_PATH" --run-id "$RUN_ID" --stage "$STAGE" --generation "$GEN" --nonce "$NONCE" --to-state committed --idempotency-key "late-$RUN_ID"
+CHILD
+chmod +x "$TEST_TMP/resume-late-child.sh"
 
-# 3) outcome missing but git commit exists should still reconcile via git-truth
+(
+  bash "$TEST_TMP/resume-late-child.sh" \
+    "$SCRIPT" "$LEDGER_B" "run-b" "review" "$GEN_B" "$NONCE_B" \
+    >"$TEST_TMP/resume-late-child.out" \
+    2>"$TEST_TMP/resume-late-child.err"
+) &
+RESUME_CHILD_PID=$!
+
+sleep 0.15
+run_cmd resume --ledger "$LEDGER_B" --run-id "run-b" --idempotency-key "resume-key-race"
+assert_cmd_rc 0 "resume first round"
+NEW_GEN_B="$(jq -r '.new_generation' <<<"$CMD_OUT")"
+assert_json_eq "$CMD_OUT" '.status' 'resumed' "resume first status"
+assert_ne "$NEW_GEN_B" "$GEN_B" "generation bumped on resume"
+assert_json_eq "$CMD_OUT" '.adoption.status' 'needs_resume' "resume adopt status"
+
+wait "$RESUME_CHILD_PID" || true
+CHILD_OUT_B="$(cat "$TEST_TMP/resume-late-child.out")"
+assert_contains "$CHILD_OUT_B" '"state":"stale_ignored"' "late child transition is fenced"
+
+run_cmd resume --ledger "$LEDGER_B" --run-id "run-b" --idempotency-key "resume-key-race"
+assert_json_eq "$CMD_OUT" '.status' 'already_applied' "resume idempotent replay"
+RESUME_JOURNAL_COUNT_B="$(jq -s --arg rid "run-b" --arg stg "__resume__" --arg key "resume-key-race" --arg gen "0" '[ .[] | select(.kind=="journal" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .idempotency_key==$key and .status=="applied") ] | length' "$LEDGER_B")"
+assert_eq "$RESUME_JOURNAL_COUNT_B" "1" "exactly one resume journal row with idempotent key"
+run_cmd query-latest --ledger "$LEDGER_B" --run-id "run-b" --stage "review"
+assert_json_eq "$CMD_OUT" '.state' 'stale_ignored' "late child does not redo terminal commit"
+
+# 3) resume adopts committed work via stage-reconcile + git-truth
 LEDGER_C="$TEST_TMP/ledger-c.jsonl"
 REPO="$TEST_TMP/repo-c"
 git init -q "$REPO"
@@ -125,10 +157,11 @@ git init -q "$REPO"
 BASE_SHA="$(git -C "$REPO" rev-parse HEAD)"
 run_cmd init --ledger "$LEDGER_C"
 run_cmd stage-acquire --ledger "$LEDGER_C" --run-id "run-c" --stage "implement" --pid "$$" --resources "git-c" --git-ref "refs/heads/case-c" --git-sha "$BASE_SHA" --worktree "$REPO"
-run_cmd stage-reconcile --ledger "$LEDGER_C" --run-id "run-c" --stage "implement" --result-json "$TEST_TMP/missing-run-c-result.json" --git-dir "$REPO"
-assert_json_eq "$CMD_OUT" '.status' 'resolved' "git truth reconciliation status"
-assert_json_eq "$CMD_OUT" '.reason' 'git_truth' "git truth reconciliation reason"
-assert_json_true "$CMD_OUT" '.git_truth' "git truth flag true"
+run_cmd resume --ledger "$LEDGER_C" --run-id "run-c" --idempotency-key "resume-key-git-truth"
+assert_json_eq "$CMD_OUT" '.status' 'resumed' "git-truth resume status"
+assert_json_eq "$CMD_OUT" '.adoption.status' 'adopted' "git-truth adopted in resume"
+assert_json_true "$CMD_OUT" '.adoption.reconciled' "resume reconciliation adopted"
+assert_json_eq "$CMD_OUT" '.adoption.reason' 'git_truth' "git-truth reason"
 
 # 4) quarantined/D-like resource goes to recovery path without trusting release
 LEDGER_D="$TEST_TMP/ledger-d.jsonl"
@@ -140,8 +173,10 @@ PROBE_OUT="$(echo "$CMD_OUT" | tail -n 1)"
 assert_json_eq "$PROBE_OUT" '.to' 'stale_ignored' "stale alive transition reason"
 run_cmd resource-scan --ledger "$LEDGER_D" --resource-id "shared-lock" --state quarantined
 assert_contains "$CMD_OUT" '"state":"quarantined"' "resource scan sees quarantine"
-run_cmd resource-lock --ledger "$LEDGER_D" --resource-id "shared-lock" --run-id "run-d-recovery" --stage "recovery"
-assert_ne "$CMD_RC" "0" "recovery on quarantined resource must fail"
+run_cmd resume --ledger "$LEDGER_D" --run-id "run-d" --idempotency-key "resume-quarantine"
+assert_cmd_rc 3 "resume on quarantined resource must refuse"
+assert_json_eq "$CMD_OUT" '.status' 'blocked_resource' "quarantine recovery blocked status"
+assert_json_true "$CMD_OUT" '.must_use_new_resource' "quarantine recovery forces new resource"
 run_cmd resource-lock --ledger "$LEDGER_D" --resource-id "shared-lock-recovery" --run-id "run-d-recovery" --stage "recovery"
 assert_cmd_rc 0 "alternative resource lock succeeds"
 

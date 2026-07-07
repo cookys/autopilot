@@ -173,3 +173,48 @@ haiku 在同一個任務上量到的 +80pp 提升(見 campaign R1b),在 flash �
 **誠實限制**:n=3——方向夠大(救援保留、稅金消失、退步消失三個效果都是整數級的差距),但不是嚴謹統計上的定論。更關鍵的是:這次 bench 的 verify 指令本身就是 oracle——完美驗證是量測的上限,真實專案的測試套件不會是完美 oracle,verify-first 在真實專案上的效果會被套件本身的覆蓋率打折。
 
 **意涵**:密度縮放(density scaling)加上 verify_first,應該成為 engine 對「已通過 scorecard 資格認證的 implementer」的預設姿態——不是每次都要人工判斷要不要開這兩個開關。
+
+## 不完美驗證懸崖 + t14 大樣本 (2026-07-07)
+
+上一節的誠實限制寫得很清楚:那次 verify-first 實驗用的驗證指令本身就是 oracle,是量測的天花板,真實專案的測試套件不會是完美 oracle。這一節補上兩個直接量測:verify-first 在**不完美驗證**下會發生什麼(DATA A),以及 t14 long-horizon 約束漂移在補到 n=35 之後,原本 n=5 的方向性提示是否站得住(DATA B)。同一批交付 `pipeline-bench --verify-script` + `verification_escape` 欄位 + 4 個刻意弱化的驗證器 fixture(`evals/pipeline-bench/verifiers/`),讓「驗證強度」本身變成一個可調、可重跑的變數,而不是只能用預設的完美 oracle。
+
+### DATA A——不完美驗證的逃逸率(pipeline-bench --arm verify-first --verify-script,haiku,n=3/cell)
+
+| task | verifier tier | escapes(in-loop verify 通過但 TRUE oracle 失敗) | true oracle pass | avg |
+|---|---|---|---|---|
+| t2(haiku below bar) | medium(exists+non-empty+py_compile,不比對內容) | **3/3** | 0/3 | 61s |
+| t2 | weak(exists+non-empty) | 2/3 | 1/3 | 65s |
+| t13(haiku near bar) | medium(no-crash+JSON shape,不驗證數值) | 1/3 | 2/3 | 58s |
+| t13 | weak(exit-0 on clean fixture) | 1/3 | 2/3 | 50s |
+
+對照基準:v2.32.6 的完美 oracle verify-first 在 t2 上是 3/3 真通過 @131s。
+
+**懸崖在哪裡**:懸崖是「弱模型 × 弱驗證」這個象限——對一個低於任務門檻的模型,降級驗證把「被 review 救回來」(完美 oracle:3/3 真通過)變成「帶著信心出貨一個壞掉的東西」(medium 驗證:100% 逃逸、零真通過)。接近門檻的模型逃逸率低(1/3)。**象限規則**:verify-first 安全的前提是「模型夠強」或「驗證夠強」兩者至少一個成立;兩者都弱的時候,reviewer 必須回到迴圈裡,不能只靠 verify-first 收斂。這是密度縮放目前缺的校準輸入——不只是 implementer 的能力分級,還要看驗證本身的品質分級。
+
+### DATA B——t14 long-horizon 大樣本(n=35,haiku,5-turn 約束任務)
+
+30 筆新樣本 + 5 筆沿用同一套 harness 的舊樣本,合併 n=35(ON 17 / OFF 18)。
+
+- oracle_pass:ON/OFF 兩個 arm 都是 0/35——全 8 項檢查同時通過的門檻對 haiku 這個任務從未達成過。
+- 約束保住(constraints held):ON 3/17 vs OFF 1/18——單尾 Fisher exact p=0.279,**不顯著**。上一批 n=5 量到的方向性提示**沒有在 n=35 複製出來**。
+- 新功能做出來(features built):ON 7/17 vs OFF 10/18(不顯著)。
+- turn 完成度:35 筆裡有 34 筆完整跑滿 5 個 turn——收集機制本身是穩的,問題不在 harness。
+
+**誠實結論**:
+1. long-horizon 的約束漂移是真的、而且嚴重——35 筆裡只有 4 筆(11%)在 turn 1 訂下的三項約束撐到 turn 5 還全部保住。
+2. prose asset pack **救不回**這個漂移——這與本系列每一次 campaign 的結論一致:prose pack 移動的是詞彙,不是行為。
+3. 還沒測過、也是最直接的下一步儀器:**機制性的逐輪約束重新注入**(harness 在每個 turn 的 prompt 裡都重貼一次約束檔案)或**逐輪驗證**——靠 prompt 裡寫過一次的約束撐 5 輪,在 haiku 這一層已經被證明撐不住。
+
+### 對密度縮放的意涵
+
+DATA A 把「驗證品質」正式列為密度縮放公式裡一個獨立的輸入軸,不能再假設驗證指令等同完美 oracle。v2.32.6 的 verify-first 預設姿態(對已資格認證的 implementer 開 verify_first + 降 round 數)**只在驗證強度也達標時才安全**——如果一個專案的測試套件覆蓋率偏弱(等同 DATA A 的 medium/weak tier),對低於任務門檻的模型套用 verify-first 會把逃逸率推到接近 100%,而不是把它当作 review 的替代品。目前 `engine implement-review --verify-cmd` 還沒有辦法量測「這條驗證指令本身有多強」,這是缺口。
+
+### 教訓
+
+- **auth-liveness circuit breaker 這次真的救了一次**:兩個 campaign 共用的斷路器在第 1 筆就偵測到 AUTH LOST,直接停下來,而不是像之前那次一樣把 29 筆空結果全部跑完才發現。resume-skip-existing 的復原流程接上後可以直接從中斷點續跑。
+- **n=5 的方向性提示必須當提示看,不能當結論看**——這次 t14 補到 n=35 之後,原本「pack 似乎有助於約束保持」的方向直接消失(p=0.279)。任何 n≤5 的量測在被更大樣本複製之前,都只能寫「方向一致」,不能寫「證實」。
+
+### 下一步儀器
+
+- **逐輪約束重新注入**:t14 harness 在每個 turn 的 prompt 裡機制性重貼約束檔案,測試是否比一次性 prompt pack 更能撐住 long-horizon 約束。
+- **驗證品質評分**:對真實專案的測試套件(不只是 bench 的合成 verifier)建立一套可量測的「驗證強度」分級,讓 `resolve-review-loop.sh` 的密度縮放能把驗證品質當成第三個輸入軸,而不是隱性假設它永遠是完美 oracle。

@@ -41,6 +41,133 @@ function createClock(clock) {
   return defaultNow;
 }
 
+function resolveScriptPath(relativePath) {
+  return path.resolve(__dirname, '..', '..', relativePath);
+}
+
+function modelFamilyOfEngine(engine) {
+  const normalized = String(engine || '').toLowerCase();
+  if (/(gpt|codex|o1|o3|o4)/.test(normalized)) return 'openai';
+  if (/(claude|opus|sonnet|haiku)/.test(normalized)) return 'anthropic';
+  if (/(gemini|flash|bison)/.test(normalized)) return 'google';
+  if (/(grok|composer)/.test(normalized)) return 'xai';
+  if (/(minimax|abab)/.test(normalized)) return 'minimax';
+  if (/(glm|zhipu)/.test(normalized)) return 'zhipu';
+  return 'unknown';
+}
+
+function sourceTrustForEngine(engine) {
+  return ['openai', 'anthropic', 'google'].includes(modelFamilyOfEngine(engine)) ? 'high' : 'low';
+}
+
+function ensureDistinctReviewFamily({ implementerEngine, reviewerEngine }) {
+  const iFamily = modelFamilyOfEngine(implementerEngine);
+  const rFamily = modelFamilyOfEngine(reviewerEngine);
+  if (iFamily === 'unknown' || rFamily === 'unknown') return true;
+  return iFamily !== rFamily;
+}
+
+function normalizeChecklistList(value) {
+  const items = Array.isArray(value) ? value : `${value || ''}`.split(',');
+  const normalized = [];
+  for (const raw of items) {
+    const item = `${raw || ''}`.trim();
+    if (item === '') continue;
+    if (!normalized.includes(item)) {
+      normalized.push(item);
+    }
+  }
+  return normalized;
+}
+
+function buildRiskResolverArgs(baseArgs, riskFlags = {}) {
+  const args = Array.isArray(baseArgs) ? [...baseArgs] : ['--check-scorecard'];
+
+  if (riskFlags && typeof riskFlags === 'object' && !Array.isArray(riskFlags)) {
+    if (riskFlags.source_trust === 'low' || riskFlags.source_trust === 'high') {
+      args.push('--source-trust', riskFlags.source_trust);
+    }
+
+    if (Number.isInteger(riskFlags.diff_lines) || /^\d+$/.test(`${riskFlags.diff_lines}`)) {
+      args.push('--diff-lines', `${Number(riskFlags.diff_lines)}`);
+    }
+
+    if (riskFlags.protected_path === 1 || riskFlags.protected_path === '1') {
+      args.push('--protected-path', '1');
+    } else if (riskFlags.protected_path === 0 || riskFlags.protected_path === '0') {
+      args.push('--protected-path', '0');
+    }
+
+    if (riskFlags.oracle_available === 0 || riskFlags.oracle_available === '0' || riskFlags.oracle_available === 1 || riskFlags.oracle_available === '1') {
+      args.push('--oracle-available', `${riskFlags.oracle_available}`);
+    }
+
+    if (riskFlags.security_surface === 0 || riskFlags.security_surface === '0' || riskFlags.security_surface === 1 || riskFlags.security_surface === '1') {
+      args.push('--security-surface', `${riskFlags.security_surface}`);
+    }
+  }
+
+  return args;
+}
+
+function applyChecklistArg(extraReviewArgs, checklists = []) {
+  const normalized = normalizeChecklistList(checklists);
+  if (normalized.length === 0) return extraReviewArgs;
+  const result = Array.isArray(extraReviewArgs) ? [...extraReviewArgs] : [];
+  result.push('--checklists', normalized.join(','));
+  return result;
+}
+
+function defaultClassifyDiffRisk(input = {}) {
+  const args = ['--repo', input.repoRoot || process.cwd(), '--diff-file', input.diffFile];
+  if (input.sourceTrust) args.push('--source-trust', `${input.sourceTrust}`);
+  if (input.oracleAvailable === 0 || input.oracleAvailable === 1) {
+    args.push('--oracle-available', `${input.oracleAvailable}`);
+  }
+  if (input.securitySurface === 0 || input.securitySurface === 1) {
+    args.push('--security-surface', `${input.securitySurface}`);
+  }
+  if (input.rulesFile) {
+    args.push('--rules-file', `${input.rulesFile}`);
+  }
+  if (typeof input.samplingRatio !== 'undefined') {
+    args.push('--sampling-ratio', `${input.samplingRatio}`);
+  }
+  if (typeof input.samplingSeed !== 'undefined') {
+    args.push('--sampling-seed', `${input.samplingSeed}`);
+  }
+  if (input.range) {
+    args.push('--range', `${input.range}`);
+  }
+
+  const script = resolveScriptPath('scripts/classify-diff-risk.sh');
+  const child = spawnSync('bash', [script, ...args], {
+    encoding: 'utf8',
+    cwd: input.repoRoot || process.cwd(),
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (child.error) {
+    throw child.error;
+  }
+
+  if (child.status !== 0) {
+    throw new Error(`classify-diff-risk exited with status ${child.status}`);
+  }
+
+  const stdout = String(child.stdout || '').trim();
+  if (!stdout) {
+    throw new Error('classify-diff-risk returned empty output');
+  }
+
+  try {
+    return JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(`classify-diff-risk output was not valid JSON: ${error.message}`);
+  }
+}
+
 function reviewLoopResultBlocked(result) {
   if (!result) return 'missing review-loop result';
   if (result.error) return result.error.message || String(result.error);
@@ -131,7 +258,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -154,7 +281,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -370,6 +497,7 @@ class AutopilotEngine {
     this.gitResetHard = options.gitResetHard || defaultGitResetHard;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
+    this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -451,9 +579,23 @@ class AutopilotEngine {
   reviewDiff(input = {}) {
     const ledger = [];
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
+    const dynamicReviewRisk = input.dynamicReviewRisk === true;
     let roster = input.roster || null;
     let resolveResult = null;
     let reviewArgs = null;
+    let classification = null;
+    let reviewRisk = null;
+    let riskClassification = null;
+
+    const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+      ? input.rosterArgs
+      : ['--check-scorecard'];
+    const resolverOptions = {
+      ...(input.resolverOptions || {}),
+      cwd: Object.prototype.hasOwnProperty.call(input.resolverOptions || {}, 'cwd')
+        ? input.resolverOptions.cwd
+        : this.cwd,
+    };
 
     if (!input.diffFile || typeof input.diffFile !== 'string') {
       const startedAt = this.now();
@@ -472,13 +614,96 @@ class AutopilotEngine {
       };
     }
 
-    if (!roster) {
-      const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
-        ? input.rosterArgs
-        : ['--check-scorecard'];
+    if (!roster || dynamicReviewRisk) {
+      let riskAwareArgs = rosterArgs;
+
+      if (dynamicReviewRisk) {
+        const classifyInput = {
+          repoRoot: resolverOptions.cwd,
+          diffFile: input.diffFile,
+        };
+
+        if (Object.prototype.hasOwnProperty.call(input, 'sourceTrust')) {
+          classifyInput.sourceTrust = input.sourceTrust;
+        } else if (roster && roster.implementer_engine) {
+          classifyInput.sourceTrust = sourceTrustForEngine(roster.implementer_engine);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'oracleAvailable')) {
+          classifyInput.oracleAvailable = input.oracleAvailable;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'securitySurface')) {
+          classifyInput.securitySurface = input.securitySurface;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'classifyRulesFile')) {
+          classifyInput.rulesFile = input.classifyRulesFile;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'samplingRatio')) {
+          classifyInput.samplingRatio = input.samplingRatio;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'samplingSeed')) {
+          classifyInput.samplingSeed = input.samplingSeed;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'diffRange')) {
+          classifyInput.range = input.diffRange;
+        }
+
+        const startedAt = this.now();
+        try {
+          classification = this.classifyDiffRisk(classifyInput);
+        } catch (error) {
+          ledger.push(this.ledgerEntry('classify_diff_risk', 'blocked', startedAt));
+          return {
+            status: 'blocked',
+            phase: 'classify_diff_risk',
+            reason: error.message || String(error),
+            verdict: null,
+            roster,
+            resolveResult,
+            riskClassification: null,
+            reviewResult: null,
+            review: null,
+            reviewArgs,
+            ledger,
+          };
+        }
+
+        ledger.push(this.ledgerEntry('classify_diff_risk', 'classified', startedAt, {
+          domains: Array.isArray(classification.domains) ? classification.domains : [],
+          checklists: Array.isArray(classification.checklists) ? classification.checklists : [],
+          adversarial_review: Boolean(classification.adversarial_review),
+          sampling_selected: classification.sampling
+            ? Boolean(classification.sampling.selected)
+            : false,
+        }));
+
+        riskClassification = {
+          domains: Array.isArray(classification.domains) ? classification.domains : [],
+          checklists: Array.isArray(classification.checklists) ? classification.checklists : [],
+          adversarial_review: Boolean(classification.adversarial_review),
+          risk_flags: classification.risk_flags || {},
+          sampling: classification.sampling || {
+            enabled: false,
+            ratio: '0',
+            bucket: 0,
+            selected: false,
+            reason: 'classification-unavailable',
+          },
+        };
+
+        if (classification && classification.risk_flags) {
+          riskAwareArgs = buildRiskResolverArgs(rosterArgs, classification.risk_flags);
+        }
+      }
+
       const resolved = this.resolveRoster({
-        args: rosterArgs,
-        options: input.resolverOptions || {},
+        args: riskAwareArgs,
+        options: resolverOptions,
       });
       ledger.push(...resolved.ledger);
       resolveResult = resolved.result;
@@ -500,6 +725,10 @@ class AutopilotEngine {
       }
     }
 
+    if (!reviewRisk && resolveResult && resolveResult.result && resolveResult.result.review_risk) {
+      reviewRisk = resolveResult.result.review_risk;
+    }
+
     try {
       validateReviewRoster(roster);
     } catch (error) {
@@ -515,6 +744,30 @@ class AutopilotEngine {
         reviewResult: null,
         review: null,
         reviewArgs,
+        ledger,
+      };
+    }
+
+    const implementerEngine = Object.prototype.hasOwnProperty.call(input, 'implementerEngine')
+      ? input.implementerEngine
+      : roster.implementer_engine;
+    if (!ensureDistinctReviewFamily({
+      implementerEngine,
+      reviewerEngine: roster.reviewer_engine,
+    })) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('reviewer_family', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'reviewer_family',
+        reason: 'reviewer and implementer must be different families',
+        verdict: null,
+        roster,
+        resolveResult,
+        reviewResult: null,
+        review: null,
+        reviewArgs,
+        riskClassification,
         ledger,
       };
     }
@@ -540,14 +793,17 @@ class AutopilotEngine {
       };
     }
 
+    let reviewChecklist = Array.isArray(input.extraReviewArgs) ? input.extraReviewArgs : [];
+    if (dynamicReviewRisk && classification && Array.isArray(classification.checklists)) {
+      reviewChecklist = applyChecklistArg(reviewChecklist, classification.checklists);
+    }
+
     try {
       reviewArgs = buildReviewArgs({
         roster,
         diffFile: input.diffFile,
         specFile: input.specFile,
-        extraReviewArgs: Object.prototype.hasOwnProperty.call(input, 'extraReviewArgs')
-          ? input.extraReviewArgs
-          : [],
+        extraReviewArgs: reviewChecklist,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -599,6 +855,7 @@ class AutopilotEngine {
         roster,
         resolveResult,
         reviewResult,
+        riskClassification,
         review: null,
         reviewArgs,
         ledger,
@@ -608,10 +865,13 @@ class AutopilotEngine {
     return {
       status: reviewResult.result.status,
       verdict: parsed.verdict,
+      riskClassification,
+      reviewRisk,
       roster,
       resolveResult,
       reviewResult,
       review: parsed,
+      reviewRisk,
       reviewArgs,
       ledger,
     };
@@ -848,6 +1108,7 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
+    const dynamicReviewRisk = input.dynamicReviewRisk !== false;
     const ledger = [];
     let promptFile = input.promptFile;
     const branch = input.branch;
@@ -1290,8 +1551,23 @@ class AutopilotEngine {
       review = this.reviewDiff({
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
-        roster,
+        roster: dynamicReviewRisk ? null : roster,
+        rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+          ? input.rosterArgs
+          : ['--check-scorecard'],
+        resolverOptions: {
+          ...(input.resolverOptions || {}),
+          cwd: loopCwd,
+        },
+        dynamicReviewRisk,
         extraReviewArgs: input.extraReviewArgs || [],
+        sourceTrust: input.sourceTrust,
+        oracleAvailable: input.oracleAvailable,
+        securitySurface: input.securitySurface,
+        samplingRatio: input.samplingRatio,
+        samplingSeed: input.samplingSeed,
+        classifyRulesFile: input.classifyRulesFile,
+        implementerEngine: roster && roster.implementer_engine,
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,

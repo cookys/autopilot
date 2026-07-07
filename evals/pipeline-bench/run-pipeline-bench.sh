@@ -51,12 +51,12 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$MODEL" ] || [ -z "$OUT_DIR" ]; then
-  echo "Usage: $0 --task <task-id> --arm bare|pipeline --model <m> --out <dir> [--reviewer-model <m>] [--reviewer-runner <r>] [--max-rounds <n>] [--shim]" >&2
+  echo "Usage: $0 --task <task-id> --arm bare|pipeline|verify-first --model <m> --out <dir> [--reviewer-model <m>] [--reviewer-runner <r>] [--max-rounds <n>] [--shim]" >&2
   exit 2
 fi
 
-if [ "$ARM" != "bare" ] && [ "$ARM" != "pipeline" ]; then
-  echo "ERROR: --arm must be bare or pipeline" >&2
+if [ "$ARM" != "bare" ] && [ "$ARM" != "pipeline" ] && [ "$ARM" != "verify-first" ]; then
+  echo "ERROR: --arm must be bare, pipeline, or verify-first" >&2
   exit 2
 fi
 
@@ -122,6 +122,29 @@ RAW_LOG="$OUT_DIR/run.log"
 TIMEOUT_LIMIT="${ORCH_TIMEOUT:-10m}"
 START_TIME=$(date +%s)
 
+run_oracle() {
+  local log_file="$1"
+  ORACLE_EXIT=1
+
+  if [ -f "$TASK_DIR/oracle.sh" ]; then
+    set +e
+    (
+      cd "$TEMP_REPO"
+      bash "$TASK_DIR/oracle.sh" "$TEMP_REPO"
+    ) > "$log_file" 2>&1
+    ORACLE_EXIT=$?
+    set -e
+  else
+    : > "$log_file"
+  fi
+
+  if [ "$ORACLE_EXIT" -eq 0 ]; then
+    oracle_pass="true"
+  else
+    oracle_pass="false"
+  fi
+}
+
 # Round 1
 PROMPT_FILE="$OUT_DIR/prompt_1.md"
 cp "$TASK_DIR/task.md" "$PROMPT_FILE"
@@ -143,12 +166,26 @@ echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
 
 ROUNDS=1
 CONVERGED="null"
+CONVERGENCE_REASON="null"
 REVIEW_VERDICTS="[]"
 GATE_BLOCKED="false"
 ADVISORY_FINDINGS=0
 REPS_NOTE="null"
+LAST_ORACLE_LOG=""
+oracle_pass="false"
+ORACLE_EXIT=1
 
-if [ "$ARM" = "pipeline" ]; then
+if [ "$ARM" = "verify-first" ]; then
+  LAST_ORACLE_LOG="$OUT_DIR/oracle_round_${ROUNDS}.log"
+  run_oracle "$LAST_ORACLE_LOG"
+
+  if [ "$ORACLE_EXIT" -eq 0 ]; then
+    CONVERGED="true"
+    CONVERGENCE_REASON="verification"
+  fi
+fi
+
+if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" != "true" ]; }; then
   while true; do
     diff_file="$OUT_DIR/diff_${ROUNDS}.diff"
     git -C "$TEMP_REPO" diff $BASE_SHA..HEAD > "$diff_file"
@@ -191,6 +228,7 @@ if [ "$ARM" = "pipeline" ]; then
     # Secret gate block implies a failed round, overriding SHIP-AS-IS for the loop exit
     if [ "$VERDICT" = "SHIP-AS-IS" ] && [ "$SECRET_RC" -ne 1 ]; then
       CONVERGED="true"
+      CONVERGENCE_REASON="reviewer"
       break
     fi
     
@@ -226,32 +264,31 @@ if [ "$ARM" = "pipeline" ]; then
       git add -A
       git commit -q -m "round-${ROUNDS}" --no-verify --allow-empty
     )
+
+    if [ "$ARM" = "verify-first" ]; then
+      LAST_ORACLE_LOG="$OUT_DIR/oracle_round_${ROUNDS}.log"
+      run_oracle "$LAST_ORACLE_LOG"
+
+      if [ "$ORACLE_EXIT" -eq 0 ]; then
+        CONVERGED="true"
+        CONVERGENCE_REASON="verification"
+        break
+      fi
+    fi
   done
 fi
 
 changed_files=$(git -C "$TEMP_REPO" diff --name-only $BASE_SHA..HEAD | grep -v '^$' | wc -l | tr -d ' ')
 
+ORACLE_LOG="$OUT_DIR/oracle.log"
+if [ -n "$LAST_ORACLE_LOG" ]; then
+  cp "$LAST_ORACLE_LOG" "$ORACLE_LOG"
+else
+  run_oracle "$ORACLE_LOG"
+fi
+
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
-
-ORACLE_LOG="$OUT_DIR/oracle.log"
-ORACLE_EXIT=1
-
-if [ -f "$TASK_DIR/oracle.sh" ]; then
-  set +e
-  (
-    cd "$TEMP_REPO"
-    bash "$TASK_DIR/oracle.sh" "$TEMP_REPO"
-  ) > "$ORACLE_LOG" 2>&1
-  ORACLE_EXIT=$?
-  set -e
-fi
-
-if [ $ORACLE_EXIT -eq 0 ]; then
-  oracle_pass="true"
-else
-  oracle_pass="false"
-fi
 
 run_error="false"
 if [ "$RUN_EXIT" -ne 0 ]; then
@@ -288,7 +325,7 @@ fi
 
 RESULT_JSON="$OUT_DIR/result.json"
 
-TASK_ID="$TASK_ID" ARM="$ARM" MODEL="$MODEL" REPS_NOTE="$REPS_NOTE" ORACLE_PASS="$oracle_pass" DURATION="$DURATION" ROUNDS="$ROUNDS" CONVERGED="$CONVERGED" REVIEW_VERDICTS="$REVIEW_VERDICTS" GATE_BLOCKED="$GATE_BLOCKED" ADVISORY_FINDINGS="$ADVISORY_FINDINGS" CHANGED_FILES="$changed_files" TOKENS_JSON="$TOKENS_JSON" RUN_ERROR="$run_error" python3 -c 'import os, json; print(json.dumps({"task_id": os.environ["TASK_ID"], "arm": os.environ["ARM"], "model": os.environ["MODEL"], "reps_note": json.loads(os.environ["REPS_NOTE"]), "oracle_pass": json.loads(os.environ["ORACLE_PASS"]), "duration_total_s": int(os.environ["DURATION"]), "rounds": int(os.environ["ROUNDS"]), "converged": json.loads(os.environ["CONVERGED"]), "review_verdicts": json.loads(os.environ["REVIEW_VERDICTS"]), "gate_blocked": json.loads(os.environ["GATE_BLOCKED"]), "advisory_findings": int(os.environ["ADVISORY_FINDINGS"]), "changed_files": int(os.environ["CHANGED_FILES"]), "tokens": json.loads(os.environ["TOKENS_JSON"]), "run_error": json.loads(os.environ["RUN_ERROR"])}, separators=(",",":")))' > "$RESULT_JSON"
+TASK_ID="$TASK_ID" ARM="$ARM" MODEL="$MODEL" REPS_NOTE="$REPS_NOTE" ORACLE_PASS="$oracle_pass" DURATION="$DURATION" ROUNDS="$ROUNDS" CONVERGED="$CONVERGED" CONVERGENCE_REASON="$CONVERGENCE_REASON" REVIEW_VERDICTS="$REVIEW_VERDICTS" GATE_BLOCKED="$GATE_BLOCKED" ADVISORY_FINDINGS="$ADVISORY_FINDINGS" CHANGED_FILES="$changed_files" TOKENS_JSON="$TOKENS_JSON" RUN_ERROR="$run_error" python3 -c 'import os, json; convergence_reason = None if os.environ["CONVERGENCE_REASON"] == "null" else os.environ["CONVERGENCE_REASON"]; print(json.dumps({"task_id": os.environ["TASK_ID"], "arm": os.environ["ARM"], "model": os.environ["MODEL"], "reps_note": json.loads(os.environ["REPS_NOTE"]), "oracle_pass": json.loads(os.environ["ORACLE_PASS"]), "duration_total_s": int(os.environ["DURATION"]), "rounds": int(os.environ["ROUNDS"]), "converged": json.loads(os.environ["CONVERGED"]), "convergence_reason": convergence_reason, "review_verdicts": json.loads(os.environ["REVIEW_VERDICTS"]), "gate_blocked": json.loads(os.environ["GATE_BLOCKED"]), "advisory_findings": int(os.environ["ADVISORY_FINDINGS"]), "changed_files": int(os.environ["CHANGED_FILES"]), "tokens": json.loads(os.environ["TOKENS_JSON"]), "run_error": json.loads(os.environ["RUN_ERROR"])}, separators=(",",":")))' > "$RESULT_JSON"
 
 cat "$RESULT_JSON"
 

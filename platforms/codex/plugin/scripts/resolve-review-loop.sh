@@ -11,7 +11,7 @@
 #   Risk inputs (optional): --source-trust high|low --diff-lines N --protected-path 0|1
 #     --oracle-available 0|1 --security-surface 0|1  (drive deterministic review_risk)
 #   --check-scorecard  # include scorecard gate signal in output (opt-in, no extra keys by default)
-#   --scale-by-capability  # config: density_scaling (on|off). Increase verification density for low/unknown capability tier implementers (fail-closed). Evidence: campaign R1/R2 proved mechanical contracts move behavior.
+#   --scale-by-capability  # config: density_scaling (on|off). Scale verification density by capability tier and risk. Low/unknown fail-closed upward; high-tier/low-risk caps cheap rounds and emits verify_first.
 #   --enforce  # OPT-IN hard gate: exit 3 (still emits JSON/field) when the policy says BLOCK
 #              # — a high-risk change whose required cross-family decorrelation is unsatisfied
 #              # (e.g. "panel spans 1 distinct famil(y/ies), 2 required").
@@ -310,6 +310,7 @@ fi
 
 CAPABILITY_TIER="unknown"
 DENSITY_SCALED="false"
+VERIFY_FIRST="false"
 
 if [[ "$DENSITY_SOURCE" != "off" ]]; then
   SCORECARD_IMPL="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role implementer 2>/dev/null || true)"
@@ -344,13 +345,17 @@ if (!found) process.stdout.write("unknown");
 
   if [[ "$CAPABILITY_TIER" == "low" || "$CAPABILITY_TIER" == "unknown" ]]; then
     DENSITY_SCALED="true"
-    # Scale +2 capped at 7, but NEVER below the user-configured base — density
-    # scaling only ever increases verification density (round-3 review finding).
+    # Scale +2 capped at 7, but NEVER below the user-configured base for
+    # low/unknown implementers.
     BASE_ROUNDS="$MAX_ROUNDS"
     MAX_ROUNDS=$(( MAX_ROUNDS + 2 ))
     [[ "$MAX_ROUNDS" -gt 7 ]] && MAX_ROUNDS=$(( BASE_ROUNDS > 7 ? BASE_ROUNDS : 7 ))
     [[ "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]] && REQUIRED_REVIEW_FAMILIES=2
     L1_REQUIRED="true"
+  elif [[ "$CAPABILITY_TIER" == "high" && "$REVIEW_RISK" == "low" ]]; then
+    DENSITY_SCALED="true"
+    VERIFY_FIRST="true"
+    [[ "$MAX_ROUNDS" -gt 2 ]] && MAX_ROUNDS=2
   fi
 fi
 
@@ -813,6 +818,13 @@ if [[ -n "$FIELD" ]]; then
       fi
       printf '%s\n' "$DENSITY_SOURCE"
       ;;
+    verify_first)
+      if [[ "$DENSITY_SOURCE" == "off" ]]; then
+        echo "unknown field: verify_first (feature off)" >&2
+        exit 2
+      fi
+      printf '%s\n' "$VERIFY_FIRST"
+      ;;
     capability_state_source) printf '%s\n' "$CAP_STATE_SOURCE" ;;
     quota_status) printf '%s\n' "$CAP_QUOTA_STATUS" ;;
     quota_reset_at)
@@ -836,8 +848,8 @@ fi
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
 if [[ "$DENSITY_SOURCE" != "off" ]]; then
-  FMT_SUFFIX=", \"capability_tier\": \"%s\", \"density_scaled\": %s, \"density_source\": \"%s\" }\n"
-  ARGS_SUFFIX=("$CAPABILITY_TIER" "$DENSITY_SCALED" "$DENSITY_SOURCE")
+  FMT_SUFFIX=", \"capability_tier\": \"%s\", \"density_scaled\": %s, \"density_source\": \"%s\", \"verify_first\": %s }\n"
+  ARGS_SUFFIX=("$CAPABILITY_TIER" "$DENSITY_SCALED" "$DENSITY_SOURCE" "$VERIFY_FIRST")
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then

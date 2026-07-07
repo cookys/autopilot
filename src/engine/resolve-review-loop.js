@@ -137,6 +137,9 @@ function validateReviewLoopConfig(value) {
   if (hasFallbackLadder) {
     assertField(value, 'fallback_ladder', Array.isArray, 'an array');
   }
+  if (Object.prototype.hasOwnProperty.call(value, 'verify_first')) {
+    assertField(value, 'verify_first', (v) => typeof v === 'boolean', 'a boolean');
+  }
 
   return value;
 }
@@ -144,7 +147,7 @@ function validateReviewLoopConfig(value) {
 
 function looksLikeReviewLoopConfig(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  return [...REVIEW_LOOP_FIELDS, 'reviewer_qualified', 'fallback_ladder'].some((field) =>
+  return [...REVIEW_LOOP_FIELDS, 'reviewer_qualified', 'fallback_ladder', 'verify_first'].some((field) =>
     Object.prototype.hasOwnProperty.call(value, field),
   );
 }

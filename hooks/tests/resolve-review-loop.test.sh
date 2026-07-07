@@ -488,8 +488,10 @@ DENS_OFF_OUT="$(bash "$SCRIPT")"
 assert_not_contains "$DENS_OFF_OUT" "capability_tier" "feature off -> no capability_tier"
 assert_not_contains "$DENS_OFF_OUT" "density_scaled" "feature off -> no density_scaled"
 assert_not_contains "$DENS_OFF_OUT" "density_source" "feature off -> no density_source"
+assert_not_contains "$DENS_OFF_OUT" "verify_first" "feature off -> no verify_first"
 assert_eq "5" "$(json_get "$DENS_OFF_OUT" loop_max_rounds)" "feature off -> max rounds unchanged"
 assert_eq "2" "$(bash "$SCRIPT" --field capability_tier >/dev/null 2>&1; echo $?)" "capability_tier field fails when feature off"
+assert_eq "2" "$(bash "$SCRIPT" --field verify_first >/dev/null 2>&1; echo $?)" "verify_first field fails when feature off"
 
 # 22. --scale-by-capability with no implementer row -> unknown tier, fail-closed scaling
 DENS_UNK_STORE="$TEST_TMP/dens-unk"
@@ -501,10 +503,12 @@ assert_eq "flag" "$(json_get "$DENS_UNK_OUT" density_source)" "source is flag"
 assert_eq "7" "$(json_get "$DENS_UNK_OUT" loop_max_rounds)" "bumped max rounds (+2 default 5 = 7)"
 assert_eq "2" "$(json_get "$DENS_UNK_OUT" required_review_families)" "bumped review families to 2"
 assert_eq "true" "$(json_get "$DENS_UNK_OUT" l1_required)" "l1_required is true"
+assert_eq "false" "$(json_get "$DENS_UNK_OUT" verify_first)" "unknown tier -> verify_first false"
 assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field capability_tier)" "field capability_tier unknown"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first false for unknown tier"
 assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field cross_family_satisfied)" "density-scaled with 1 distinct non-impl family -> satisfied=false"
 
-# 23. --scale-by-capability with qualified implementer row -> high tier, no scaling
+# 23. --scale-by-capability with qualified implementer row -> high tier + low risk scales down
 DENS_HIGH_STORE="$TEST_TMP/dens-high"
 mkdir -p "$DENS_HIGH_STORE"
 RECIMPL_HIGH_JSON="$DENS_HIGH_STORE/rec.json"
@@ -514,10 +518,26 @@ JSON
 ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
 DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability)"
 assert_eq "high" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "qualified implementer -> high tier"
-assert_eq "false" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "high tier -> density_scaled false"
-assert_eq "5" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "high tier -> max rounds unchanged"
-assert_eq "1" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "high tier -> required_review_families unchanged"
-assert_eq "false" "$(json_get "$DENS_HIGH_OUT" l1_required)" "high tier -> l1_required unchanged"
+assert_eq "true" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "high tier + low risk -> density_scaled true"
+assert_eq "2" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "high tier + low risk -> max rounds capped at 2"
+assert_eq "1" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "high tier + low risk -> required_review_families unchanged"
+assert_eq "false" "$(json_get "$DENS_HIGH_OUT" l1_required)" "high tier + low risk -> l1_required unchanged"
+assert_eq "true" "$(json_get "$DENS_HIGH_OUT" verify_first)" "high tier + low risk -> verify_first true"
+assert_eq "true" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first true for high tier + low risk"
+
+DENS_HIGH_BASE1_CFG="$TEST_TMP/dens-high-base1.md"
+printf -- '- loop_max_rounds: 1\n' > "$DENS_HIGH_BASE1_CFG"
+DENS_HIGH_BASE1_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_HIGH_BASE1_CFG" ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability)"
+assert_eq "1" "$(json_get "$DENS_HIGH_BASE1_OUT" loop_max_rounds)" "high tier + base rounds 1 -> stays 1"
+assert_eq "true" "$(json_get "$DENS_HIGH_BASE1_OUT" verify_first)" "high tier + base rounds 1 -> verify_first true"
+
+DENS_HIGH_RISK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability --security-surface 1)"
+assert_eq "high" "$(json_get "$DENS_HIGH_RISK_OUT" capability_tier)" "qualified implementer high risk -> high tier"
+assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" density_scaled)" "high tier + high risk -> no density reduction"
+assert_eq "5" "$(json_get "$DENS_HIGH_RISK_OUT" loop_max_rounds)" "high tier + high risk -> max rounds unchanged"
+assert_eq "2" "$(json_get "$DENS_HIGH_RISK_OUT" required_review_families)" "high tier + high risk -> high-risk family requirement"
+assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" l1_required)" "high tier + high risk -> high-risk l1 requirement"
+assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" verify_first)" "high tier + high risk -> verify_first false"
 
 # 24. Config density_scaling: on -> scales via config (unknown tier)
 DENS_CFG="$TEST_TMP/dens-on.md"
@@ -527,6 +547,7 @@ assert_eq "unknown" "$(json_get "$DENS_CFG_OUT" capability_tier)" "config on -> 
 assert_eq "true" "$(json_get "$DENS_CFG_OUT" density_scaled)" "config on -> scaled"
 assert_eq "config" "$(json_get "$DENS_CFG_OUT" density_source)" "source is config"
 assert_eq "7" "$(json_get "$DENS_CFG_OUT" loop_max_rounds)" "max rounds scaled"
+assert_eq "false" "$(json_get "$DENS_CFG_OUT" verify_first)" "config on unknown tier -> verify_first false"
 
 # 25. Config density_scaling: garbage -> feature off
 DENS_GARBAGE_CFG="$TEST_TMP/dens-garbage.md"
@@ -534,6 +555,7 @@ printf -- '- density_scaling: banana\n' > "$DENS_GARBAGE_CFG"
 DENS_GARBAGE_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_GARBAGE_CFG" bash "$SCRIPT")"
 assert_not_contains "$DENS_GARBAGE_OUT" "capability_tier" "garbage config -> feature off"
 assert_not_contains "$DENS_GARBAGE_OUT" "density_scaled" "garbage config -> feature off"
+assert_not_contains "$DENS_GARBAGE_OUT" "verify_first" "garbage config -> feature off"
 
 # 26. Cap max rounds bump to 7
 DENS_CAP_CFG="$TEST_TMP/dens-cap.md"

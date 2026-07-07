@@ -11,7 +11,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec]
+  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
 
@@ -41,6 +41,8 @@ function parseImplementReviewArgs(rawArgs) {
     cwd: null,
     maxRounds: null,
     requireQualifiedReviewer: true,
+    verifyCmd: null,
+    noVerifyFirst: false,
   };
   let sawRequireQualifiedReviewer = false;
   let sawAllowUnqualifiedReviewer = false;
@@ -95,6 +97,20 @@ function parseImplementReviewArgs(rawArgs) {
       }
       output.maxRounds = n;
       i += 2;
+      continue;
+    }
+    if (arg === '--verify-cmd') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--verify-cmd requires a value' };
+      }
+      output.verifyCmd = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--no-verify-first') {
+      output.noVerifyFirst = true;
+      i += 1;
       continue;
     }
     if (arg === '--require-qualified-reviewer') {

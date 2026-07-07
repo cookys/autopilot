@@ -310,7 +310,7 @@ EOF
     for _item in "${_checklists[@]}"; do
       _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
       [ -z "$_item" ] && continue
-      printf '- %s\n' "$_item"
+      printf -- '- %s\n' "$_item"
     done
   fi
   cat <<'EOF'

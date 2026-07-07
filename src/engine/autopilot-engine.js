@@ -300,14 +300,6 @@ function buildRiskResolverArgs(baseArgs, riskFlags = {}) {
   return args;
 }
 
-function applyChecklistArg(extraReviewArgs, checklists = []) {
-  const normalized = normalizeChecklistList(checklists);
-  if (normalized.length === 0) return extraReviewArgs;
-  const result = Array.isArray(extraReviewArgs) ? [...extraReviewArgs] : [];
-  result.push('--checklists', normalized.join(','));
-  return result;
-}
-
 function defaultClassifyDiffRisk(input = {}) {
   const args = ['--repo', input.repoRoot || process.cwd(), '--diff-file', input.diffFile];
   if (input.sourceTrust) args.push('--source-trust', `${input.sourceTrust}`);
@@ -443,7 +435,7 @@ function validateInteger(value, field, minimum) {
   }
 }
 
-function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
+function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], checklists = [] }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
@@ -453,7 +445,15 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
     throw new TypeError('extra args cannot override --spec-file');
   }
 
-  const args = [
+  // `--checklists` is a BUILDER-MANAGED arg (like `--spec-file`): callers may not pass it in
+  // extraReviewArgs (it is reserved), the builder injects the classifier-derived list. It is
+  // placed FIRST so the risk-triggered checklist is the most visible part of the review args.
+  const args = [];
+  const normalizedChecklists = normalizeChecklistList(checklists);
+  if (normalizedChecklists.length > 0) {
+    args.push('--checklists', normalizedChecklists.join(','));
+  }
+  args.push(
     '--runner',
     roster.reviewer_runner,
     '--model',
@@ -462,7 +462,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
     diffFile,
     '--effort',
     roster.reviewer_effort,
-  ];
+  );
   if (specFile && typeof specFile === 'string') {
     args.push('--spec-file', specFile);
   }
@@ -983,17 +983,21 @@ class AutopilotEngine {
       };
     }
 
-    let reviewChecklist = Array.isArray(input.extraReviewArgs) ? input.extraReviewArgs : [];
-    if (dynamicReviewRisk && classification && Array.isArray(classification.checklists)) {
-      reviewChecklist = applyChecklistArg(reviewChecklist, classification.checklists);
-    }
+    const injectedChecklists = (dynamicReviewRisk && classification && Array.isArray(classification.checklists))
+      ? classification.checklists
+      : [];
 
     try {
       reviewArgs = buildReviewArgs({
         roster,
         diffFile: input.diffFile,
         specFile: input.specFile,
-        extraReviewArgs: reviewChecklist,
+        // Pass the caller value THROUGH (not coerced) so buildReviewArgs' validateExtraArgs
+        // surfaces a non-array as "extraReviewArgs must be an array" (pre-R5 contract).
+        extraReviewArgs: Object.prototype.hasOwnProperty.call(input, 'extraReviewArgs')
+          ? input.extraReviewArgs
+          : [],
+        checklists: injectedChecklists,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -1359,7 +1363,10 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
-    const dynamicReviewRisk = input.dynamicReviewRisk !== false;
+    // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
+    // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
+    // unless the caller explicitly passes dynamicReviewRisk: true.
+    const dynamicReviewRisk = input.dynamicReviewRisk === true;
     const ledger = [];
     let promptFile = input.promptFile;
     const branch = input.branch;

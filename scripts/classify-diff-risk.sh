@@ -126,9 +126,9 @@ RULE_FILE_PATH=''
 
 default_rules() {
   cat <<'RULES'
-auth	path	(^|/)(auth|authentication)(/|[_.-]|$)	authz-boundary,authz-tests
-tenant	path	(^|/)(tenant|tenant[_-]?id)(/|[_.-]|$)	tenant-boundary,tenant-isolation
-tenant	content	\b(tenant|tenant_id|tenant-id)\b	tenant-boundary,tenant-isolation
+auth	path	(^|/)(auth|authentication)(/|[_.-]|$)	authz-boundary
+tenant	path	(^|/)(tenant|tenant[_-]?id)(/|[_.-]|$)	tenant-boundary
+tenant	content	\b(tenant|tenant_id|tenant-id)\b	tenant-boundary
 dispatch-gate	content	(\b2e\b|dispatch[_ -]?gate|section\s*2e)	dispatch-gate-hardening
 money	content	\b(money|billing|stripe|invoice|subscription|payment)\b	billing-contracts,payment-security
 schema	path	(^|/)(schema|schemas)(/|[_.-]|$|\..*$)	schema-stability

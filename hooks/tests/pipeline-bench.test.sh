@@ -33,6 +33,11 @@ if [[ "$*" == *"--model verify-repair-test"* ]]; then
   echo '{"usage":{"input_tokens": 8},"session_id":"fake"}'
   exit 0
 fi
+if [[ "$*" == *"--model verify-escape-test"* ]]; then
+  echo "verify escape fail" >> foo.txt
+  echo '{"usage":{"input_tokens": 9},"session_id":"fake"}'
+  exit 0
+fi
 exit 1
 EOF
 chmod +x "$TEST_TMP/bin/claude"
@@ -98,6 +103,19 @@ chmod +x "$MOCK_REPO/scripts/secret-scan-diff.js"
 
 TARGET_SCRIPT="$MOCK_REPO/evals/pipeline-bench/run-pipeline-bench.sh"
 
+cat > "$TEST_TMP/always-pass.sh" << 'EOF'
+#!/usr/bin/env bash
+echo "verify first pass" >> "$1/foo.txt"
+exit 0
+EOF
+chmod +x "$TEST_TMP/always-pass.sh"
+
+cat > "$TEST_TMP/always-fail.sh" << 'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+chmod +x "$TEST_TMP/always-fail.sh"
+
 # 1. Bare arm
 OUT_BARE="$TEST_TMP/out_bare"
 bash "$TARGET_SCRIPT" --task t1 --arm bare --model pipeline-test --out "$OUT_BARE" >/dev/null 2>&1
@@ -110,6 +128,8 @@ assert_contains "$res_bare" '"rounds":1'
 assert_contains "$res_bare" '"convergence_reason":null'
 assert_contains "$res_bare" '"oracle_pass":true'
 assert_contains "$res_bare" '"verbatim_string"'
+assert_not_contains "$res_bare" '"verify_script"'
+assert_not_contains "$res_bare" '"verification_escape"'
 
 # 2. Verify-first stops after round-1 oracle pass
 OUT_VERIFY_PASS="$TEST_TMP/out_verify_pass"
@@ -139,7 +159,39 @@ assert_file_exists "$OUT_VERIFY_REPAIR/oracle_round_1.log"
 assert_file_exists "$OUT_VERIFY_REPAIR/oracle_round_2.log"
 assert_eq "$(cat "$TEST_TMP/review_count")" "1" "verify-first repair pass should invoke review exactly once"
 
-# 4. Pipeline arm
+# 4. Verify-script false green becomes verification_escape:true after final oracle
+OUT_VERIFY_ESCAPE="$TEST_TMP/out_verify_escape"
+rm -f "$TEST_TMP/review_called" "$TEST_TMP/review_count"
+bash "$TARGET_SCRIPT" --task t1 --arm verify-first --model verify-escape-test --out "$OUT_VERIFY_ESCAPE" --verify-script "$TEST_TMP/always-pass.sh" >/dev/null 2>&1
+assert_exit_code $? 0 "verify-script pass with failing oracle should exit 0"
+res_verify_escape=$(cat "$OUT_VERIFY_ESCAPE/result.json")
+assert_contains "$res_verify_escape" '"arm":"verify-first"'
+assert_contains "$res_verify_escape" '"converged":true'
+assert_contains "$res_verify_escape" '"convergence_reason":"verification"'
+assert_contains "$res_verify_escape" '"oracle_pass":false'
+assert_contains "$res_verify_escape" '"verify_script":"always-pass.sh"'
+assert_contains "$res_verify_escape" '"verification_escape":true'
+assert_file_absent "$TEST_TMP/review_called" "verify-script pass should not invoke review before final scoring"
+
+# 5. Verify-script always-fail enters the repair loop and does not mark escape
+OUT_VERIFY_FAIL="$TEST_TMP/out_verify_fail"
+rm -f "$TEST_TMP/review_called" "$TEST_TMP/review_count"
+bash "$TARGET_SCRIPT" --task t1 --arm verify-first --model verify-repair-test --out "$OUT_VERIFY_FAIL" --verify-script "$TEST_TMP/always-fail.sh" >/dev/null 2>&1
+assert_exit_code $? 0 "verify-script fail path should exit 0"
+res_verify_fail=$(cat "$OUT_VERIFY_FAIL/result.json")
+assert_contains "$res_verify_fail" '"arm":"verify-first"'
+assert_contains "$res_verify_fail" '"converged":true'
+assert_contains "$res_verify_fail" '"convergence_reason":"reviewer"'
+assert_contains "$res_verify_fail" '"oracle_pass":true'
+assert_contains "$res_verify_fail" '"verify_script":"always-fail.sh"'
+assert_contains "$res_verify_fail" '"verification_escape":false'
+assert_eq "$(cat "$TEST_TMP/review_count")" "2" "verify-script fail path should invoke review twice"
+
+# 6. Verify-script is rejected for non-verify-first arms
+bash "$TARGET_SCRIPT" --task t1 --arm bare --model pipeline-test --out "$TEST_TMP/out_bad_verify_arm" --verify-script "$TEST_TMP/always-pass.sh" >/dev/null 2>&1
+assert_exit_code $? 2 "verify-script with bare arm should exit 2"
+
+# 7. Pipeline arm
 OUT_PIPE="$TEST_TMP/out_pipe"
 rm -f "$TEST_TMP/review_called" "$TEST_TMP/review_count"
 bash "$TARGET_SCRIPT" --task t1 --arm pipeline --model pipeline-test --out "$OUT_PIPE" >/dev/null 2>&1
@@ -160,7 +212,7 @@ if [ -f "$TEST_TMP/temp_repo_snap/oracle.sh" ]; then
   exit 1
 fi
 
-# 5. Secret gate block path
+# 8. Secret gate block path
 OUT_SECRET="$TEST_TMP/out_secret"
 rm -f "$TEST_TMP/review_called" "$TEST_TMP/review_count" # reset mock reviewer to force rounds
 bash "$TARGET_SCRIPT" --task t1 --arm pipeline --model secret-test --out "$OUT_SECRET" >/dev/null 2>&1
@@ -169,11 +221,11 @@ res_secret=$(cat "$OUT_SECRET/result.json")
 assert_contains "$res_secret" '"gate_blocked":true'
 assert_contains "$res_secret" '"convergence_reason":null'
 
-# 6. Missing task exits 2
+# 9. Missing task exits 2
 bash "$TARGET_SCRIPT" --task missing-task --arm bare --model pipeline-test --out "$TEST_TMP/missing" >/dev/null 2>&1
 assert_exit_code $? 2 "missing task should exit 2"
 
-# 7. Relative --out from different cwd
+# 10. Relative --out from different cwd
 mkdir -p "$TEST_TMP/rel_cwd"
 (
   cd "$TEST_TMP/rel_cwd"
@@ -181,7 +233,7 @@ mkdir -p "$TEST_TMP/rel_cwd"
 )
 assert_file_exists "$TEST_TMP/rel_cwd/rel_out/result.json"
 
-# 8. Invalid --max-rounds
+# 11. Invalid --max-rounds
 bash "$TARGET_SCRIPT" --task t1 --arm bare --model pipeline-test --out "$TEST_TMP/out_invalid_rounds" --max-rounds banana >/dev/null 2>&1
 assert_exit_code $? 2 "invalid --max-rounds should exit 2"
 

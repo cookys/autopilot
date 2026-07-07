@@ -40,6 +40,16 @@ levels, or runners inline. Fields consumed by the loop:
   populate from `~/.autopilot/endpoints.env` via `load-endpoints-env.sh` +
   `resolve-endpoint.sh` — an empty field means no `--endpoint`, byte-identical env path)
 
+## Verify-first wiring rule
+
+When `resolve-review-loop.sh` emits `verify_first: true`, the foreman MUST pass
+`--verify-cmd` to `engine implement-review` using the unit's objective check:
+the independent harness command or unit test suite invocation. The dispatcher
+authors this command; never derive it from the implementer. Evidence: bench
+2026-07-07 found reviewer-judge loops on capable models cost 4-12x or regress,
+while verify-first eliminated both. `verify_first_signal_unused: true` in a run
+summary is a protocol deviation to record.
+
 ## Wired runners
 
 `codex`, `agy`/Gemini, `grok`, `cc-shim` (Anthropic-compatible endpoints — MiniMax-M3,

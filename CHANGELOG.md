@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.7 — escape-rate instrument + verify_first wiring + honest t14 large-n
+
+**Headline**: The v2.32.6 verify-first mode assumed the verify command is a perfect oracle; this release measures what happens when it isn't. A new `pipeline-bench --verify-script` mode (+ 4 deliberately weakened verifier fixtures under `evals/pipeline-bench/verifiers/`) finds a clear cliff: at the weak-model × weak-verification quadrant, degraded verification converts a rescue (perfect-oracle: 3/3 true passes) into 100% escape rate with zero true passes — in-loop verification passes while the true oracle fails on every run. Near-bar models escape rarely. The rule: verify-first convergence is only safe when the model is capable OR the verification is strong; if both are weak, the reviewer must stay in the loop. Separately, the engine now emits a `verify_first_signal_unused` ledger flag when a roster requests `verify_first: true` but no `--verify-cmd` was actually wired, closing a silent-no-op gap in the v2.32.6 density-scaling rollout. And the t14 long-horizon constraint-drift instrument was run to n=35 (folded with the prior n=5): the earlier "pack helps constraint retention" directional hint did **not** replicate (3/17 ON vs 1/18 OFF, Fisher p=0.279) — constraint drift over 5 turns is real and severe (only 4/35 runs held all three turn-1 constraints through turn 5), and the prose pack does not rescue it, consistent with every prior campaign in this series.
+
+prose-justification: +1 archived report section (~50 lines, Traditional Chinese) documenting the escape-cliff data, the t14 non-replication, and next instruments; no new skill/routing surface.
+
+### Added
+- `pipeline-bench --verify-script <path>` + `verification_escape` result field — runs a caller-supplied imperfect verifier in-loop while still checking the TRUE oracle out-of-band, so escapes (in-loop pass, true oracle fail) are directly measurable instead of assumed away.
+- 4 weakened verifier fixtures under `evals/pipeline-bench/verifiers/` (medium/weak tiers for t2 and t13) used to produce the DATA A table below.
+- `engine implement-review` emits `verify_first_signal_unused: true` + an escalation-ledger entry when the resolved roster sets `verify_first: true` but the caller never wired `--verify-cmd`; `/l5`/`/l6` foreman docs gain the corresponding MUST-wire rule.
+
+### Measured
+- **Escape-rate cliff** (haiku, n=3/cell, verify-first + `--verify-script`): t2 (below bar) medium verifier → **3/3 escapes, 0/3 true pass** @61s; weak verifier → 2/3 escapes, 1/3 true pass @65s. t13 (near bar) medium verifier → 1/3 escapes, 2/3 true pass @58s; weak verifier → 1/3 escapes, 2/3 true pass @50s. Baseline (perfect oracle, v2.32.6): t2 3/3 true pass @131s. Reading: escapes concentrate in the weak-model × weak-verification quadrant.
+- **t14 long-horizon, n=35** (haiku, 5-turn, folded 30 new + 5 prior): oracle_pass 0/35 both arms (ceiling never met). Constraints held: ON 3/17 vs OFF 1/18 (Fisher p=0.279, not significant — the n=5 hint did not replicate). Features built: ON 7/17 vs OFF 10/18 (n.s.). Turn completion 5/5 in 34/35 runs (mechanism solid). Only 4/35 runs (11%) held all three turn-1 constraints through turn 5.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.6`
+
 ## v2.32.6 — verification-anchored engine loop: verify-first, ratchet, bidirectional density
 
 **Headline**: A new `engine implement-review --verify-cmd` mode makes objective, engine-executed verification the authority for convergence instead of reviewer opinion: a first-round verify pass converges immediately (the review becomes advisory, not gating), and a repair-round ratchet reverts any round that turns verify pass→fail, so the final commit is never worse than any prior round. `resolve-review-loop.sh` gains the other half of density scaling — high-tier + low-risk implementers now get `loop_max_rounds ≤2` + `verify_first: true` (v2.32.0 shipped only the low/unknown-tier crank-up half). Validated with `pipeline-bench --arm verify-first` (n=3/cell) against the 2026-07-06 bare/pipeline baselines: haiku/t2 (below task bar) keeps the full rescue at 3/3 while costing 36% less than the pipeline arm (204s→131s); MiniMax-M3/t12 (above bar) drops the pipeline's 6.5× time tax to 4.2× (241s→57s, converging at round 1 every run); MiniMax-M3/t13 (above bar) eliminates the pipeline's quality regression entirely — 2/3@728s → 3/3@57s, 12.8× faster. Every run converged with `convergence_reason=verification`; zero reviewer-forced repairs on solutions that already passed.

@@ -303,17 +303,26 @@ function verificationRank(verifyPass) {
 }
 
 function resultWithVerificationFields(result, state) {
-  if (!state || !state.verifyCmdProvided) return result;
-  return {
-    ...result,
-    verify_cmd_provided: true,
-    convergence_reason: state.convergenceReason || null,
-    ratchet_reverted_rounds: state.ratchetRevertedRounds,
-    advisory_findings: state.advisoryFindings,
-    commit: state.bestCommit || (result.implementation && result.implementation.implementation
-      ? result.implementation.implementation.commit
-      : null),
-  };
+  let output = result;
+  if (state && state.verifyCmdProvided) {
+    output = {
+      ...output,
+      verify_cmd_provided: true,
+      convergence_reason: state.convergenceReason || null,
+      ratchet_reverted_rounds: state.ratchetRevertedRounds,
+      advisory_findings: state.advisoryFindings,
+      commit: state.bestCommit || (result.implementation && result.implementation.implementation
+        ? result.implementation.implementation.commit
+        : null),
+    };
+  }
+  if (state && state.verifyFirstSignalUnused) {
+    output = {
+      ...output,
+      verify_first_signal_unused: true,
+    };
+  }
+  return output;
 }
 
 function defaultRepairPromptWriter({
@@ -851,6 +860,7 @@ class AutopilotEngine {
     const noVerifyFirst = input.noVerifyFirst === true;
     const verifyState = {
       verifyCmdProvided,
+      verifyFirstSignalUnused: false,
       convergenceReason: null,
       ratchetRevertedRounds: 0,
       advisoryFindings: [],
@@ -981,6 +991,12 @@ class AutopilotEngine {
           ledger,
         });
       }
+    }
+
+    if (roster && roster.verify_first === true && !verifyCmdProvided) {
+      const startedAt = this.now();
+      verifyState.verifyFirstSignalUnused = true;
+      ledger.push(this.ledgerEntry('verify_first_signal', 'unused', startedAt));
     }
 
     try {

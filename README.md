@@ -24,7 +24,7 @@
 
 <p align="center">
   <b>The AI project lead for your terminal.</b><br>
-  Claude Code writes the code. Autopilot plans it, delegates it, reviews it with a second engine, and remembers what it learned — so you ship without babysitting every step.
+  Claude Code is the full home base. Autopilot plans, delegates, reviews with a second engine, and remembers what it learned — with portable paths for Codex, OpenCode, and agy where their harnesses support them.
 </p>
 
 <p align="center">
@@ -44,14 +44,14 @@ push blocked — fix it, or override with a reason
 
 ## What Is Autopilot?
 
-Claude Code is great at writing code. Autopilot makes it **finish the job** — the planning, checking, deciding, and remembering you'd otherwise do by hand:
+Claude Code is still the most complete host. Autopilot makes AI coding agents **finish the job** — the planning, checking, deciding, and remembering you'd otherwise do by hand:
 
 - **Hand it the goal, get back a result** — `/l3` `/l4` `/l5` `/l6` and `ceo-agent` can take a task end-to-end (sized, planned, built, reviewed, closed) and only stop to ask at the decisions that actually matter.
 - **A second engine argues with your code** — reviews can run on a *different* model family (GPT, Gemini), so more bugs get caught before your users see them instead of being rubber-stamped by the same model that wrote them.
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It's a single Claude Code plugin — **28 skills, 3 methodology agents, 22 hooks, zero dependencies**. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It ships first as a Claude Code plugin — **28 skills, 3 methodology agents, 22 hooks, zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 
@@ -87,6 +87,30 @@ You: "搞定這個重構，你決定"                       → full autonomous 
 ```
 
 No commands to memorize — say it in your own words and the right skill steps in.
+
+## Choose Your Path
+
+Autopilot is Claude Code-first, but not Claude Code-only. Pick the entry point that matches the harness you actually use:
+
+| If you are... | Start with | What you get |
+|---|---|---|
+| **Claude Code user** | The two-command install above | The complete path: skills, methodology agents, hooks, `/l3`-`/l6`, and plugin-managed defaults |
+| **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills plus bundled support payload for linked scripts/references; no Claude hook parity claim |
+| **OpenCode user** | `.agents/skills/` plus `.opencode/opencode.json` | Shared skills and methodology agent bodies, with an OpenCode-specific in-process plugin wrapper |
+| **Antigravity (`agy`) user** | `scripts/install-antigravity.sh` | Guarded import as a Claude Code-source plugin; no loose skills-dir scan |
+| **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy; mutating non-Claude setup requires `--harness <name> --install` |
+
+## From Principle To Default
+
+The course-sized idea is simple: teach the agent the collaboration discipline once, then stop retyping it.
+
+| Principle | Autopilot default |
+|---|---|
+| Clarify the work before coding | `dev-flow` expands goals into size, branch, plan, and gates |
+| Ask for proof, not reassurance | `quality-pipeline` runs tests, scans for incomplete work, and reviews the diff |
+| Preserve context outside the model | `project-lifecycle`, `handoff`, and `finish-flow` keep state readable by the next session |
+| Don't let one brain self-approve | Heterogeneous review and qc panels read artifacts, not the implementer's story |
+| Delegate by risk | `/l3`-`/l6` scale from inline autonomy to heterogeneous implementation and verification authoring |
 
 ## What It Does
 
@@ -126,6 +150,10 @@ No commands to memorize — say it in your own words and the right skill steps i
 
 **→ Per-level behaviour, presets, override flags (`--expand` / `-x` / `--solo`), and full examples: [docs/skills.md](docs/skills.md).**
 
+### Trust Model
+
+Autopilot delegates labor, not authority. Implementer self-report is never evidence; reviewers read the task, diff, logs, and artifacts directly. Deterministic gates stay authoritative, higher-risk work needs decorrelated review coverage, and a `no_verdict` review never clears a gate.
+
 ### 🔌 Add another engine (optional)
 
 Claude alone is enough. But point autopilot at a **second engine family** and its review/implement pipeline gets stronger — a cross-family qc panel catches what one vendor and its same-family reviewer jointly miss, and you get a heterogeneous implementer for cost-arbitrage. **Recommended order: a subscription you already pay for ≻ a metered API key** — OAuth-login runners (`codex` / `agy` / `grok`) need no token at all; GLM / MiniMax go in one canonical mode-600 file (`~/.autopilot/endpoints.env`) and are wired declaratively in `.claude/review-loop-config.md`.
@@ -146,9 +174,16 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 **Claude Code** (primary) — the two commands above. All 28 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
-### Other platforms
+### Harness Support
 
-Autopilot is portable: **OpenCode** discovers skills via `.agents/skills/`, **Codex** can use `.agents/skills/` or the local package under `platforms/codex/plugin` whose manifest exposes skills with bundled support payload, **Antigravity (`agy`)** imports the repo as a Claude Code-source plugin, and there's a Windows + pre-commit-gate setup. Full per-platform instructions, plus the contributor **dev-mode** workflow, are in **[docs/installation.md](docs/installation.md)**.
+| Harness | How to start | Supported today | Known limits |
+|---|---|---|---|
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 22 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
+| **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers |
+| **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
+| **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
+
+Full per-platform instructions, Windows notes, and the contributor **dev-mode** workflow are in **[docs/installation.md](docs/installation.md)**. Verified capability boundaries live in **[references/multi-agent-portability.md](references/multi-agent-portability.md)**.
 
 ## Learn More
 

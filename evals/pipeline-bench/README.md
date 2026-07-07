@@ -18,8 +18,16 @@ The verify-first arm measures the upper bound of verification-anchored control f
 
 ```bash
 run-pipeline-bench.sh --task <task-id> --arm bare|pipeline|verify-first --model <m> --out <dir> \
-    [--reviewer-model gpt-5.5] [--reviewer-runner codex] [--max-rounds 3] [--shim]
+    [--reviewer-model gpt-5.5] [--reviewer-runner codex] [--verify-script <path>] [--max-rounds 3] [--shim]
 ```
+
+## Imperfect verification (escape-rate) mode
+
+Use `--arm verify-first --verify-script <path>` to run `bash <path> <workdir>` as the in-loop verifier instead of the task oracle.
+The final `oracle.log` and `oracle_pass` still always come from the true task oracle.
+`result.json` adds `verify_script` and `verification_escape`.
+An escape means verify-first converged by in-loop verification, but the final true oracle failed.
+This measures what verify-first would have shipped under an imperfect verifier.
 
 Exit codes:
 - `0`: The pipeline ran to scoring, regardless of the oracle outcome.

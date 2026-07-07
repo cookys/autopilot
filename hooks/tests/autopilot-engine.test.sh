@@ -2117,6 +2117,152 @@ assert_contains "$OUT" "top_level_findings_review_calls=1" "AutopilotEngine disp
 assert_contains "$OUT" "top_level_findings_advisory_count=1" "AutopilotEngine records top-level review findings as advisory"
 assert_contains "$OUT" "top_level_findings_advisory_0=top-level finding" "AutopilotEngine preserves top-level advisory finding text"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verify-first-signal" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.mkdirSync(tmp, { recursive: true });
+const prompt = path.join(tmp, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt');
+
+function runSignalScenario(name, options) {
+  const scenarioDir = path.join(tmp, name);
+  fs.mkdirSync(scenarioDir, { recursive: true });
+  const resolverRoster = {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    reviewer_qualified: true,
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  };
+  if (options.verifyFirst === true) {
+    resolverRoster.verify_first = true;
+  }
+
+  let implementationCalls = 0;
+  let reviewCalls = 0;
+  let verifyCalls = 0;
+  const engine = new AutopilotEngine({
+    cwd: scenarioDir,
+    reviewLoopResolver() {
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: resolverRoster,
+      };
+    },
+    implementationDispatcher(args) {
+      implementationCalls += 1;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'committed',
+          runner: 'test-impl-runner',
+          model: 'test-impl-model',
+          branch: args[args.indexOf('--branch') + 1],
+          base: args[args.indexOf('--base') + 1],
+          commit: '2222222222222222222222222222222222222222',
+          files_changed: 1,
+          insertions: 1,
+          deletions: 0,
+          worktree: null,
+          agent_log: '/tmp/impl-log',
+          error: null,
+        },
+      };
+    },
+    reviewDispatcher() {
+      reviewCalls += 1;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          runner: 'test-review-runner',
+          model: 'test-review-model',
+          status: 'reviewed',
+          verdict: 'SHIP-AS-IS',
+          findings: '',
+          raw_log: '/tmp/log',
+          error: null,
+        },
+      };
+    },
+    diffProvider({ round }) {
+      const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-first-signal-'));
+      const file = path.join(diffDir, `${name}-round-${round}.diff`);
+      fs.writeFileSync(file, `round ${round}`, 'utf8');
+      return file;
+    },
+    verifyCommandRunner() {
+      verifyCalls += 1;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+      };
+    },
+  });
+
+  const input = {
+    promptFile: prompt,
+    branch: `${name}-branch`,
+    base: '1111111111111111111111111111111111111111',
+  };
+  if (options.verifyCmd) {
+    input.verifyCmd = 'true';
+  }
+
+  const result = engine.runImplementationReviewLoop(input);
+  const signalEntries = result.ledger.filter((entry) => entry.unit === 'verify_first_signal');
+  console.log(`${name}_status=${result.status}`);
+  console.log(`${name}_unused_key=${Object.prototype.hasOwnProperty.call(result, 'verify_first_signal_unused') ? result.verify_first_signal_unused : 'absent'}`);
+  console.log(`${name}_signal_entries=${signalEntries.map((entry) => `${entry.unit}:${entry.status}`).join(',') || 'absent'}`);
+  console.log(`${name}_implementation_calls=${implementationCalls}`);
+  console.log(`${name}_review_calls=${reviewCalls}`);
+  console.log(`${name}_verify_calls=${verifyCalls}`);
+}
+
+runSignalScenario('verify_first_without_cmd', { verifyFirst: true });
+runSignalScenario('verify_first_with_cmd', { verifyFirst: true, verifyCmd: true });
+runSignalScenario('no_verify_first_key', {});
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine verify_first unused-signal scenarios exit 0"
+assert_contains "$OUT" "verify_first_without_cmd_status=converged" "AutopilotEngine verify_first without verify-cmd preserves loop convergence"
+assert_contains "$OUT" "verify_first_without_cmd_unused_key=true" "AutopilotEngine reports unused verify_first signal without verify-cmd"
+assert_contains "$OUT" "verify_first_without_cmd_signal_entries=verify_first_signal:unused" "AutopilotEngine records unused verify_first signal in ledger"
+assert_contains "$OUT" "verify_first_without_cmd_implementation_calls=1" "AutopilotEngine verify_first unused-signal path still dispatches implementation once"
+assert_contains "$OUT" "verify_first_without_cmd_review_calls=1" "AutopilotEngine verify_first unused-signal path still dispatches review once"
+assert_contains "$OUT" "verify_first_without_cmd_verify_calls=0" "AutopilotEngine verify_first unused-signal path does not invent verification"
+assert_contains "$OUT" "verify_first_with_cmd_unused_key=absent" "AutopilotEngine omits unused signal when verify-cmd is provided"
+assert_contains "$OUT" "verify_first_with_cmd_signal_entries=absent" "AutopilotEngine omits unused signal ledger when verify-cmd is provided"
+assert_contains "$OUT" "verify_first_with_cmd_verify_calls=1" "AutopilotEngine still runs provided verify-cmd"
+assert_contains "$OUT" "no_verify_first_key_unused_key=absent" "AutopilotEngine omits unused signal when roster has no verify_first key"
+assert_contains "$OUT" "no_verify_first_key_signal_entries=absent" "AutopilotEngine omits unused signal ledger when roster has no verify_first key"
+
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];

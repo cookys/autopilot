@@ -28,6 +28,10 @@ authority. A dispatched green or reviewer pass is not authoritative by itself.
 - [`../../../scripts/resolve-review-loop.sh`](../../../scripts/resolve-review-loop.sh) (roster)
 
 Execution control and ledger behavior remain as in `/l5` and the front-door.
+The `/l5` verify-first wiring rule applies unchanged: when roster resolution
+emits `verify_first: true`, pass dispatcher-authored `--verify-cmd` for the
+unit objective check. Treat `verify_first_signal_unused: true` as a protocol
+deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
 
 ## Per-unit pipeline (authoritative flow)
 

@@ -11,6 +11,7 @@ REVIEWER_MODEL="gpt-5.5"
 REVIEWER_RUNNER="codex"
 MAX_ROUNDS=3
 SHIM=0
+VERIFY_SCRIPT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,6 +38,7 @@ while [ $# -gt 0 ]; do
       ;;
     --reviewer-model) REVIEWER_MODEL="$2"; shift 2 ;;
     --reviewer-runner) REVIEWER_RUNNER="$2"; shift 2 ;;
+    --verify-script) VERIFY_SCRIPT="$2"; shift 2 ;;
     --max-rounds)
       if ! [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
         echo "ERROR: --max-rounds must be a positive integer" >&2
@@ -51,13 +53,25 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$MODEL" ] || [ -z "$OUT_DIR" ]; then
-  echo "Usage: $0 --task <task-id> --arm bare|pipeline|verify-first --model <m> --out <dir> [--reviewer-model <m>] [--reviewer-runner <r>] [--max-rounds <n>] [--shim]" >&2
+  echo "Usage: $0 --task <task-id> --arm bare|pipeline|verify-first --model <m> --out <dir> [--reviewer-model <m>] [--reviewer-runner <r>] [--verify-script <path>] [--max-rounds <n>] [--shim]" >&2
   exit 2
 fi
 
 if [ "$ARM" != "bare" ] && [ "$ARM" != "pipeline" ] && [ "$ARM" != "verify-first" ]; then
   echo "ERROR: --arm must be bare, pipeline, or verify-first" >&2
   exit 2
+fi
+
+if [ -n "$VERIFY_SCRIPT" ]; then
+  if [ "$ARM" != "verify-first" ]; then
+    echo "ERROR: --verify-script is only valid with --arm verify-first" >&2
+    exit 2
+  fi
+  if [ ! -f "$VERIFY_SCRIPT" ]; then
+    echo "ERROR: --verify-script not found: $VERIFY_SCRIPT" >&2
+    exit 2
+  fi
+  VERIFY_SCRIPT="$(cd "$(dirname "$VERIFY_SCRIPT")" && pwd)/$(basename "$VERIFY_SCRIPT")"
 fi
 
 if [ "$SHIM" -eq 1 ]; then
@@ -145,6 +159,34 @@ run_oracle() {
   fi
 }
 
+run_in_loop_verify() {
+  local log_file="$1"
+  local cleanup_exit=0
+  IN_LOOP_VERIFY_EXIT=1
+
+  if [ -n "$VERIFY_SCRIPT" ]; then
+    set +e
+    (
+      cd "$TEMP_REPO"
+      bash "$VERIFY_SCRIPT" "$TEMP_REPO"
+    ) > "$log_file" 2>&1
+    IN_LOOP_VERIFY_EXIT=$?
+    (
+      cd "$TEMP_REPO"
+      git reset -q --hard HEAD
+      git clean -q -fd
+    ) >> "$log_file" 2>&1
+    cleanup_exit=$?
+    if [ "$cleanup_exit" -ne 0 ]; then
+      echo "WARNING: verify-script cleanup failed with exit $cleanup_exit" >> "$log_file"
+    fi
+    set -e
+  else
+    run_oracle "$log_file"
+    IN_LOOP_VERIFY_EXIT=$ORACLE_EXIT
+  fi
+}
+
 # Round 1
 PROMPT_FILE="$OUT_DIR/prompt_1.md"
 cp "$TASK_DIR/task.md" "$PROMPT_FILE"
@@ -174,12 +216,13 @@ REPS_NOTE="null"
 LAST_ORACLE_LOG=""
 oracle_pass="false"
 ORACLE_EXIT=1
+IN_LOOP_VERIFY_EXIT=1
 
 if [ "$ARM" = "verify-first" ]; then
   LAST_ORACLE_LOG="$OUT_DIR/oracle_round_${ROUNDS}.log"
-  run_oracle "$LAST_ORACLE_LOG"
+  run_in_loop_verify "$LAST_ORACLE_LOG"
 
-  if [ "$ORACLE_EXIT" -eq 0 ]; then
+  if [ "$IN_LOOP_VERIFY_EXIT" -eq 0 ]; then
     CONVERGED="true"
     CONVERGENCE_REASON="verification"
   fi
@@ -267,9 +310,9 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
 
     if [ "$ARM" = "verify-first" ]; then
       LAST_ORACLE_LOG="$OUT_DIR/oracle_round_${ROUNDS}.log"
-      run_oracle "$LAST_ORACLE_LOG"
+      run_in_loop_verify "$LAST_ORACLE_LOG"
 
-      if [ "$ORACLE_EXIT" -eq 0 ]; then
+      if [ "$IN_LOOP_VERIFY_EXIT" -eq 0 ]; then
         CONVERGED="true"
         CONVERGENCE_REASON="verification"
         break
@@ -281,7 +324,9 @@ fi
 changed_files=$(git -C "$TEMP_REPO" diff --name-only $BASE_SHA..HEAD | grep -v '^$' | wc -l | tr -d ' ')
 
 ORACLE_LOG="$OUT_DIR/oracle.log"
-if [ -n "$LAST_ORACLE_LOG" ]; then
+if [ -n "$VERIFY_SCRIPT" ]; then
+  run_oracle "$ORACLE_LOG"
+elif [ -n "$LAST_ORACLE_LOG" ]; then
   cp "$LAST_ORACLE_LOG" "$ORACLE_LOG"
 else
   run_oracle "$ORACLE_LOG"
@@ -325,7 +370,41 @@ fi
 
 RESULT_JSON="$OUT_DIR/result.json"
 
-TASK_ID="$TASK_ID" ARM="$ARM" MODEL="$MODEL" REPS_NOTE="$REPS_NOTE" ORACLE_PASS="$oracle_pass" DURATION="$DURATION" ROUNDS="$ROUNDS" CONVERGED="$CONVERGED" CONVERGENCE_REASON="$CONVERGENCE_REASON" REVIEW_VERDICTS="$REVIEW_VERDICTS" GATE_BLOCKED="$GATE_BLOCKED" ADVISORY_FINDINGS="$ADVISORY_FINDINGS" CHANGED_FILES="$changed_files" TOKENS_JSON="$TOKENS_JSON" RUN_ERROR="$run_error" python3 -c 'import os, json; convergence_reason = None if os.environ["CONVERGENCE_REASON"] == "null" else os.environ["CONVERGENCE_REASON"]; print(json.dumps({"task_id": os.environ["TASK_ID"], "arm": os.environ["ARM"], "model": os.environ["MODEL"], "reps_note": json.loads(os.environ["REPS_NOTE"]), "oracle_pass": json.loads(os.environ["ORACLE_PASS"]), "duration_total_s": int(os.environ["DURATION"]), "rounds": int(os.environ["ROUNDS"]), "converged": json.loads(os.environ["CONVERGED"]), "convergence_reason": convergence_reason, "review_verdicts": json.loads(os.environ["REVIEW_VERDICTS"]), "gate_blocked": json.loads(os.environ["GATE_BLOCKED"]), "advisory_findings": int(os.environ["ADVISORY_FINDINGS"]), "changed_files": int(os.environ["CHANGED_FILES"]), "tokens": json.loads(os.environ["TOKENS_JSON"]), "run_error": json.loads(os.environ["RUN_ERROR"])}, separators=(",",":")))' > "$RESULT_JSON"
+VERIFY_SCRIPT_BASENAME=""
+if [ -n "$VERIFY_SCRIPT" ]; then
+  VERIFY_SCRIPT_BASENAME="$(basename "$VERIFY_SCRIPT")"
+fi
+
+TASK_ID="$TASK_ID" ARM="$ARM" MODEL="$MODEL" REPS_NOTE="$REPS_NOTE" ORACLE_PASS="$oracle_pass" DURATION="$DURATION" ROUNDS="$ROUNDS" CONVERGED="$CONVERGED" CONVERGENCE_REASON="$CONVERGENCE_REASON" REVIEW_VERDICTS="$REVIEW_VERDICTS" GATE_BLOCKED="$GATE_BLOCKED" ADVISORY_FINDINGS="$ADVISORY_FINDINGS" CHANGED_FILES="$changed_files" TOKENS_JSON="$TOKENS_JSON" RUN_ERROR="$run_error" VERIFY_SCRIPT_BASENAME="$VERIFY_SCRIPT_BASENAME" python3 - <<'PYRESULT' > "$RESULT_JSON"
+import json
+import os
+
+convergence_reason = None if os.environ["CONVERGENCE_REASON"] == "null" else os.environ["CONVERGENCE_REASON"]
+converged = json.loads(os.environ["CONVERGED"])
+oracle_pass = json.loads(os.environ["ORACLE_PASS"])
+result = {
+    "task_id": os.environ["TASK_ID"],
+    "arm": os.environ["ARM"],
+    "model": os.environ["MODEL"],
+    "reps_note": json.loads(os.environ["REPS_NOTE"]),
+    "oracle_pass": oracle_pass,
+    "duration_total_s": int(os.environ["DURATION"]),
+    "rounds": int(os.environ["ROUNDS"]),
+    "converged": converged,
+    "convergence_reason": convergence_reason,
+    "review_verdicts": json.loads(os.environ["REVIEW_VERDICTS"]),
+    "gate_blocked": json.loads(os.environ["GATE_BLOCKED"]),
+    "advisory_findings": int(os.environ["ADVISORY_FINDINGS"]),
+    "changed_files": int(os.environ["CHANGED_FILES"]),
+    "tokens": json.loads(os.environ["TOKENS_JSON"]),
+    "run_error": json.loads(os.environ["RUN_ERROR"]),
+}
+verify_script = os.environ["VERIFY_SCRIPT_BASENAME"]
+if verify_script:
+    result["verify_script"] = verify_script
+    result["verification_escape"] = bool(converged is True and convergence_reason == "verification" and not oracle_pass)
+print(json.dumps(result, separators=(",", ":")))
+PYRESULT
 
 cat "$RESULT_JSON"
 

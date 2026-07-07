@@ -10,6 +10,196 @@ const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 
+const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
+const MISPLACEMENT_PATH_PATTERNS = [
+  /(^|[\/])\.gemini([\/]|$)/,
+  /(^|[\/])\.gemini-[^/\\]+([\/]|$)/,
+  /(^|[\/])\.cache[\/](?:.+[\/])?gemini([\/]|$)/,
+  /(^|[\/])gemini[\-]scratch([\/]|$)/,
+];
+
+function parseJsonFromLastLine(raw) {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (trimmed.length === 0) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (_error) {
+    // fall through to last-line parse for command outputs that include debug
+    // lines before the JSON payload.
+  }
+
+  const lines = String(raw).split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+  if (lines.length === 0) return null;
+  try {
+    return JSON.parse(lines[lines.length - 1]);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function runLedgerCommand(scriptPath, args) {
+  let child;
+  try {
+    child = spawnSync('bash', [scriptPath, ...args], {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (_error) {
+    return null;
+  }
+  return {
+    result: parseJsonFromLastLine(child.stdout),
+    status: child.status,
+    error: child.error || null,
+    signal: child.signal || null,
+  };
+}
+
+function isPathLikelyMisplaced(rawPath, cwd) {
+  if (typeof rawPath !== 'string' || rawPath.length === 0) {
+    return false;
+  }
+  if (!path.isAbsolute(rawPath)) {
+    return false;
+  }
+  const normalized = path.resolve(rawPath);
+  const normalizedCwd = cwd && path.resolve(cwd);
+  if (normalizedCwd && (normalized === normalizedCwd || normalized.startsWith(`${normalizedCwd}${path.sep}`))) {
+    return false;
+  }
+  const lower = normalized.toLowerCase();
+  return MISPLACEMENT_PATH_PATTERNS.some((pattern) => pattern.test(lower));
+}
+
+function collectMisplacementEvidence(result, cwd) {
+  const evidence = [];
+  if (!result || typeof result !== 'object') {
+    return evidence;
+  }
+  const fields = [
+    ['worktree', result.worktree],
+    ['agent_log', result.agent_log],
+    ['error', result.error],
+  ];
+  for (const [field, value] of fields) {
+    if (isPathLikelyMisplaced(value, cwd)) {
+      evidence.push(`${field}:${value}`);
+    }
+  }
+  return evidence;
+}
+
+function hasNoOpOrCommittedEmptyWrite(result) {
+  if (!result || typeof result !== 'object') {
+    return false;
+  }
+  if (result.status === 'no_op') {
+    return true;
+  }
+  if (result.status !== 'committed') {
+    return false;
+  }
+  if (!Number.isInteger(result.files_changed)
+    || !Number.isInteger(result.insertions)
+    || !Number.isInteger(result.deletions)) {
+    return false;
+  }
+  return result.files_changed === 0 && result.insertions === 0 && result.deletions === 0;
+}
+
+function resolveImplementationFromLedger({
+  implementationOptions,
+  ledger,
+  runId,
+  stage,
+  resultJson,
+  gitDir,
+  branch,
+  base,
+  cwd,
+}) {
+  const ledgerPath = ledger && typeof ledger === 'string' ? ledger : null;
+  const resolvedRunId = runId && typeof runId === 'string' ? runId : null;
+  const resolvedStage = stage && typeof stage === 'string' ? stage : 'implement';
+  const resolvedResultJson = (typeof resultJson === 'string' && resultJson.length > 0)
+    ? resultJson
+    : path.join(gitDir || cwd || process.cwd(), '.autopilot', 'implementer-result.json');
+  const resolvedGitDir = typeof gitDir === 'string' && gitDir.length > 0 ? gitDir : (cwd || process.cwd());
+
+  if (!ledgerPath || !resolvedRunId) {
+    return null;
+  }
+
+  const reconcile = runLedgerCommand(RUN_LEDGER_SCRIPT, [
+    'stage-reconcile',
+    '--ledger',
+    ledgerPath,
+    '--run-id',
+    resolvedRunId,
+    '--stage',
+    resolvedStage,
+    '--result-json',
+    resolvedResultJson,
+    '--git-dir',
+    resolvedGitDir,
+  ]);
+  if (!reconcile || reconcile.error || reconcile.status !== 0 || !reconcile.result) {
+    return null;
+  }
+  const reconcilePayload = reconcile.result;
+  if (reconcilePayload.status !== 'resolved' || (reconcilePayload.reason !== 'terminal_state' && reconcilePayload.reason !== 'git_truth')) {
+    return null;
+  }
+
+  const latest = runLedgerCommand(RUN_LEDGER_SCRIPT, [
+    'query-latest',
+    '--ledger',
+    ledgerPath,
+    '--run-id',
+    resolvedRunId,
+    '--stage',
+    resolvedStage,
+  ]);
+  if (!latest || latest.error || latest.status !== 0 || !latest.result) {
+    return null;
+  }
+  const latestRecord = latest.result;
+  const commit = latestRecord.git_sha;
+  if (typeof commit !== 'string' || !isImmutableGitSha(commit)) {
+    return null;
+  }
+
+  return {
+    status: 'committed',
+    runner: 'run-ledger',
+    model: 'run-ledger',
+    branch,
+    base,
+    commit,
+    files_changed: 0,
+    insertions: 0,
+    deletions: 0,
+    worktree: latestRecord.worktree || null,
+    agent_log: null,
+    error: null,
+    containment: 'plain',
+    contained: true,
+    reconcile_by_ledger: true,
+    reconcile_status: reconcilePayload.status,
+    reconcile_reason: reconcilePayload.reason,
+    reconcile_stage: resolvedStage,
+    reconcile_run_id: resolvedRunId,
+    _reconciled_by_ledger: true,
+    _reconciled_run_id: resolvedRunId,
+    _reconciled_stage: resolvedStage,
+    _reconciled_status: reconcilePayload.status,
+    _reconciled_reason: reconcilePayload.reason,
+  };
+}
+
 function defaultNow() {
   return new Date().toISOString();
 }
@@ -793,18 +983,79 @@ class AutopilotEngine {
         parseError: null,
       };
     }
-    const blockedReason = implementationResultBlocked(implementationResult);
-    const parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
+    let blockedReason = implementationResultBlocked(implementationResult);
+    let parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
+
+    let reconciledByLedger = false;
+    let reconcileDetails = null;
+    if (blockedReason && (!parsed || implementationResult.result === null)) {
+      const recovered = resolveImplementationFromLedger({
+        implementationOptions,
+        ledger: input.ledger,
+        runId: input.runId,
+        stage: input.implementationStage,
+        resultJson: input.resultJson,
+        gitDir: input.gitDir,
+        branch: input.branch,
+        base: input.base,
+        cwd: resolvedTaskCwd,
+      });
+      if (recovered) {
+        blockedReason = null;
+        parsed = recovered;
+        reconciledByLedger = true;
+        reconcileDetails = {
+          reconcile_status: recovered._reconciled_status,
+          reconcile_reason: recovered._reconciled_reason,
+          reconcile_stage: recovered._reconciled_stage,
+          reconcile_run_id: recovered._reconciled_run_id,
+        };
+      }
+    }
+
+    const misplacedWriteEvidence = (parsed && hasNoOpOrCommittedEmptyWrite(parsed))
+      ? collectMisplacementEvidence(parsed, resolvedTaskCwd)
+      : [];
+    const misplacedWrites = misplacedWriteEvidence.length > 0;
+    const dispatchStatus = blockedReason
+      ? 'blocked'
+      : (misplacedWrites
+        ? 'misplaced_writes'
+        : (parsed && parsed.status ? parsed.status : null));
+
     ledger.push(
-      this.ledgerEntry('dispatch_implementation', blockedReason ? 'blocked' : implementationResult.result.status, startedAt, {
+      this.ledgerEntry('dispatch_implementation', dispatchStatus || 'blocked', startedAt, {
         runner: parsed ? parsed.runner : null,
         model: parsed ? parsed.model : null,
         base: input.base,
         branch: input.branch,
         commit: parsed ? parsed.commit : null,
         exit_status: implementationResult ? implementationResult.status : null,
+        reconcile_by_ledger: reconciledByLedger,
+        reconcile_status: reconcileDetails ? reconcileDetails.reconcile_status : null,
+        reconcile_reason: reconcileDetails ? reconcileDetails.reconcile_reason : null,
+        misplaced_write_evidence: misplacedWriteEvidence.join('|') || null,
       }),
     );
+
+    if (misplacedWrites) {
+      const misplacedReason = (
+        `implementation writes appear outside --cwd `
+        + `(${misplacedWriteEvidence.join(', ')}). `
+        + 'likely hardcoded absolute path escaping the target worktree.'
+      );
+      return {
+        status: 'blocked',
+        phase: 'misplaced_writes',
+        reason: misplacedReason,
+        roster,
+        resolveResult,
+        implementationResult,
+        implementationArgs,
+        implementation: parsed,
+        ledger,
+      };
+    }
 
     if (blockedReason) {
       return {
@@ -820,11 +1071,11 @@ class AutopilotEngine {
       };
     }
 
-    if (implementationResult.result.status !== 'committed') {
+    if (!parsed || parsed.status !== 'committed') {
       return {
         status: 'blocked',
         phase: 'dispatch_implementation',
-        reason: `implementation status ${implementationResult.result.status}`,
+        reason: `implementation status ${parsed && parsed.status ? parsed.status : null}`,
         roster,
         resolveResult,
         implementationResult,
@@ -835,7 +1086,7 @@ class AutopilotEngine {
     }
 
     return {
-      status: implementationResult.result.status,
+      status: parsed.status,
       phase: 'dispatch_implementation',
       reason: null,
       roster,
@@ -1114,6 +1365,11 @@ class AutopilotEngine {
         branch: currentBranch,
         base: nextBase,
         roster,
+        runId: input.runId,
+        ledger: input.ledger,
+        implementationStage: input.implementationStage,
+        resultJson: input.resultJson,
+        gitDir: input.gitDir,
         extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
           ? input.extraImplementationArgs
           : [],
@@ -1125,9 +1381,10 @@ class AutopilotEngine {
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
       if (implementation.status !== 'committed') {
+        const implementationPhase = implementation.phase || 'dispatch_implementation';
         return finish({
           status: 'blocked',
-          phase: 'dispatch_implementation',
+          phase: implementationPhase,
           reason: implementation.reason || `implementation status ${implementation.status}`,
           rounds: round,
           verdict: null,

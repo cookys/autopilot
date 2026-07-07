@@ -1105,6 +1105,275 @@ assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine reports 
 assert_contains "$OUT" "reason=implementation result commit must be a full immutable git SHA" "AutopilotEngine surfaces non-SHA committed implementation"
 assert_contains "$OUT" "ledger=dispatch_implementation:blocked" "AutopilotEngine records non-SHA committed implementation as blocked"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-misplaced-no-op.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'no_op',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'impl-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: null,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: '/tmp/.gemini/out-of-cwd',
+        agent_log: '/tmp/.gemini/logs/impl.log',
+        error: '/tmp/.gemini/errors/ohno.log',
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}:${entry.reconcile_by_ledger}:${entry.reconcile_status}:${entry.misplaced_write_evidence}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine flags misplaced no-op writes"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine returns blocked for misplaced no-op"
+assert_contains "$OUT" "phase=misplaced_writes" "AutopilotEngine returns misplaced_writes phase for out-of-cwd writes"
+assert_contains "$OUT" "likely hardcoded absolute path escaping the target worktree" "AutopilotEngine explains out-of-cwd misplacement cause"
+assert_contains "$OUT" "dispatch_implementation:misplaced_writes" "AutopilotEngine records misplaced writes decision in dispatch_implementation ledger"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-empty-no-op.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'no_op',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'impl-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: null,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: null,
+        agent_log: null,
+        error: null,
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}:${entry.reconcile_by_ledger}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine keeps plain no-op path unchanged"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine keeps plain no-op result blocked"
+assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine preserves ordinary no-op dispatch phase"
+assert_contains "$OUT" "reason=implementation status no_op" "AutopilotEngine keeps ordinary no-op reason"
+assert_contains "$OUT" "dispatch_implementation:no_op" "AutopilotEngine leaves ordinary no-op as no_op dispatch status"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/split-brain-repo" "$TEST_TMP/split-brain-result.json" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const repoBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const { execFileSync } = require('child_process');
+
+const repo = path.join(repoBase, 'repo');
+const prompt = path.join(repoBase, 'prompt.txt');
+fs.mkdirSync(repo, { recursive: true });
+fs.writeFileSync(prompt, 'implementer prompt for split-brain');
+execFileSync('git', ['init'], { cwd: repo });
+execFileSync('git', ['config', 'user.email', 'autopilot@example.test'], { cwd: repo });
+execFileSync('git', ['config', 'user.name', 'Autopilot Test'], { cwd: repo });
+fs.writeFileSync(path.join(repo, 'file.txt'), 'base\n', 'utf8');
+execFileSync('git', ['add', 'file.txt'], { cwd: repo });
+execFileSync('git', ['commit', '-m', 'base'], { cwd: repo, stdio: 'ignore' });
+
+const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+const branch = 'sb-loop';
+execFileSync('git', ['checkout', '-b', branch], { cwd: repo });
+
+const runId = 'autopilot-r2-split-brain-run-id';
+const ledger = path.join(repo, '.autopilot', 'run-ledger.jsonl');
+const runLedger = (...args) => {
+  const output = execFileSync('bash', [path.join(root, 'scripts', 'run-ledger.sh'), ...args], {
+    encoding: 'utf8',
+  });
+  return JSON.parse(output.trim().split('\n').pop());
+};
+
+execFileSync('bash', [path.join(root, 'scripts', 'run-ledger.sh'), 'init', '--ledger', ledger]);
+
+let implementationCalls = 0;
+let reviewCalls = 0;
+let committedCommit = null;
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    implementationCalls += 1;
+    fs.appendFileSync(path.join(repo, 'file.txt'), `updated ${implementationCalls}\n`, 'utf8');
+    execFileSync('git', ['add', 'file.txt'], { cwd: repo });
+    execFileSync('git', ['commit', '-m', `split-brain ${implementationCalls}`], { cwd: repo, stdio: 'ignore' });
+    committedCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repo,
+      encoding: 'utf8',
+    }).trim();
+
+    const acquired = runLedger(
+      'stage-acquire',
+      '--ledger', ledger,
+      '--run-id', runId,
+      '--stage', 'implement',
+      '--git-ref', branch,
+      '--git-sha', committedCommit,
+      '--worktree', repo,
+    );
+    runLedger(
+      'stage-transition',
+      '--ledger', ledger,
+      '--run-id', runId,
+      '--stage', 'implement',
+      '--generation', String(acquired.generation),
+      '--nonce', acquired.nonce,
+      '--to-state', 'committed',
+      '--idempotency-key', `${runId}-impl`,
+      '--git-ref', branch,
+      '--git-sha', committedCommit,
+      '--worktree', repo,
+    );
+
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: new Error('simulated missing implementation result json'),
+      result: null,
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider() {
+    const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-r2-split-brain-${branch}-`));
+    const file = path.join(diffDir, 'range.diff');
+    fs.writeFileSync(file, 'split-brain diff', 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch,
+  base,
+  runId,
+  ledger,
+  implementationStage: 'implement',
+  resultJson: path.join(repo, '.autopilot', 'implementer-result.json'),
+  gitDir: repo,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    reviewer_qualified: true,
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  },
+});
+
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`implementation_calls=${result.implementationChain.length}`);
+console.log(`review_calls=${result.reviewChain.length}`);
+console.log(`reconciled=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconcile_by_ledger}`);
+console.log(`dispatch_row=${result.ledger.find((entry) => entry.unit === 'dispatch_implementation').status}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reconciles implementation outcome from run-ledger when result json is missing"
+assert_contains "$OUT" "status=converged" "AutopilotEngine split-brain path converges from ledger/git-truth"
+assert_contains "$OUT" "phase=converged" "AutopilotEngine split-brain path does not block"
+assert_contains "$OUT" "rounds=1" "AutopilotEngine split-brain path runs one round"
+assert_contains "$OUT" "implementation_calls=1" "AutopilotEngine split-brain path does not re-dispatch implementation"
+assert_contains "$OUT" "review_calls=1" "AutopilotEngine split-brain path dispatches a single review"
+assert_contains "$OUT" "reconciled=true" "AutopilotEngine split-brain path reconciles from ledger"
+assert_contains "$OUT" "dispatch_row=committed" "AutopilotEngine split-brain path reaches committed dispatch state from ledger"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
 const fs = require('fs');
 const os = require('os');

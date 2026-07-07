@@ -293,6 +293,7 @@ a JSON outcome.
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
 | `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
 | `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
+| `failed`/`killed` (foreman died before normal outcome emission) | run `run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>` and let it perform recovery: locate last ledger stage, bump generation (`stage-acquire --allow-reopen`), hold resource lock, reconcile by `stage-reconcile` before any redo, adopt git-truth when available, and report `review_round_owed`. If `status=already_applied`, caller must treat as a true no-op recovery replay. On `quarantined`/D resources, resume must refuse the old resource and request a new resource path. |
 
 ### 3. qc@depth-0 is THE gate
 
@@ -475,6 +476,7 @@ one row per step:
 | plan | claude | (foreman tier) | n/a | — | (plan doc / inline) |
 | impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | backend-cli | `<branch>@<sha>` |
 | foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | — | (qc notes) |
+| recovery | claude | (depth-0 tier) | resumed / already_applied / blocked_resource | — | run-ledger resume payload (`run_id`, `resume_point`, `new_generation`, `adoption`) |
 | **depth-0 qc panel (authoritative)** | claude ×N (≥3 lenses) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from

@@ -18,6 +18,7 @@
 #   journal-add
 #   stage-probe
 #   stage-reconcile
+#   resume
 #   gc-check
 #   query-latest
 #   resource-lock
@@ -207,7 +208,6 @@ acquire_resource_lock() {
 release_lock() {
   local fd="$1"
   flock -u "$fd" 2>/dev/null || true
-  eval "exec ${fd}>&-"
 }
 
 read_lock_owner() {
@@ -1166,6 +1166,186 @@ command_stage_reconcile() {
     '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result|if . then true else false end),git_truth:($git_truth|if . then true else false end),pending_side_effects:($pending|tonumber),terminal:($terminal|if . then true else false end),blocked_state:($blocked|if . then true else false end),holder_alive:($is_alive|if . then true else false end),resources:$resources}'
 }
 
+command_resume() {
+  local ledger="" run_id="" idempotency_key="" timeout="$DEFAULT_LOCK_TIMEOUT"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --run-id) run_id="$2"; shift 2 ;;
+      --idempotency-key) idempotency_key="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id required"
+  [ -n "$idempotency_key" ] || error "--idempotency-key required"
+
+  if [ ! -f "$ledger" ]; then
+    error "no ledger at $ledger"
+  fi
+
+  local resume_stage resume_record resume_generation resume_nonce resume_state resume_resources resume_worktree resume_git_ref resume_git_sha
+  resume_stage="$(jq -s -r --arg rid "$run_id" '[ .[] | select(.kind=="stage" and .run_id==$rid) ] | if length==0 then empty else .[-1].stage end' "$ledger")"
+  [ -n "$resume_stage" ] || error "no stage rows for run_id=$run_id"
+
+  resume_record="$(jq -s -c --arg rid "$run_id" --arg stage "$resume_stage" '[ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stage) ] | if length==0 then empty else .[-1] end' "$ledger")"
+  [ -n "$resume_record" ] || error "missing resume stage row"
+
+  resume_generation="$(jq -r '.generation // 0' <<<"$resume_record")"
+  resume_nonce="$(jq -r '.nonce // empty' <<<"$resume_record")"
+  resume_state="$(jq -r '.state // ""' <<<"$resume_record")"
+  resume_resources="$(jq -r '.resources // ""' <<<"$resume_record")"
+  resume_worktree="$(jq -r '.worktree // ""' <<<"$resume_record")"
+  resume_git_ref="$(jq -r '.git_ref // ""' <<<"$resume_record")"
+  resume_git_sha="$(jq -r '.git_sha // ""' <<<"$resume_record")"
+
+  local review_row review_state review_round_owed review_stage
+  review_row="$(jq -s -c --arg rid "$run_id" '[ .[] | select(.kind=="stage" and .run_id==$rid and .stage=="review") ] | if length==0 then empty else .[-1] end' "$ledger")"
+  review_state=""
+  review_stage="review"
+  if [ -n "$review_row" ] && [ "$review_row" != "empty" ] && [ "$review_row" != "null" ]; then
+    review_state="$(jq -r '.state // ""' <<<"$review_row")"
+    review_stage="$(jq -r '.stage // "review"' <<<"$review_row")"
+  fi
+
+  review_round_owed=1
+  if [ -n "$review_state" ] && is_terminal_gc_state "$review_state"; then
+    review_round_owed=0
+  fi
+
+  local blocked_csv=""
+  if [ -n "$resume_resources" ]; then
+    local r resource_state
+    local IFS=','
+    for r in $resume_resources; do
+      [ -z "$r" ] && continue
+      resource_state="$(audit_resource_contention "$ledger" "$r")"
+      if [ "$resource_state" = "quarantined" ]; then
+        if [ -z "$blocked_csv" ]; then
+          blocked_csv="$r"
+        else
+          blocked_csv="$blocked_csv $r"
+        fi
+      fi
+    done
+  fi
+
+  if [ -n "$blocked_csv" ]; then
+    local blocked_json
+    blocked_json="$(jq -R -s -c 'split(" ") | map(select(length>0))' <<<"$blocked_csv")"
+    jq -nc \
+      --arg rid "$run_id" \
+      --arg stage "$resume_stage" \
+      --arg resources "$resume_resources" \
+      --argjson blocked "$blocked_json" \
+      '{status:"blocked_resource",reason:"quarantined_resource",run_id:$rid,stage:$stage,resume_resources:$resources,blocked_resources:$blocked,must_use_new_resource:true,must_report:"use_new_resource_path"}'
+    return 3
+  fi
+
+  local resume_journal_stage="__resume__"
+  local review_json='{}'
+  if [ -n "$review_row" ] && [ "$review_row" != "empty" ] && [ "$review_row" != "null" ]; then
+    review_json="$review_row"
+  fi
+
+  local resume_lock_fds=""
+  local resume_has_resources=0
+  if [ -n "$resume_resources" ]; then
+    resume_has_resources=1
+    with_resource_locks "$ledger" "$resume_resources" "$timeout" resume_lock_fds || error "resource lock unavailable"
+  fi
+
+  if [ "$(has_applied_journal_key "$ledger" "$run_id" "$resume_journal_stage" "0" "$idempotency_key")" = "true" ]; then
+    if [ "$resume_has_resources" -eq 1 ]; then
+      for fd in $resume_lock_fds; do release_lock "$fd"; done
+    fi
+    jq -nc \
+      --arg rid "$run_id" \
+      --arg stage "$resume_stage" \
+      --arg pre_state "$resume_state" \
+      --arg pre_gen "$resume_generation" \
+      --arg pre_nonce "$resume_nonce" \
+      --arg pre_resources "$resume_resources" \
+      --argjson review_round_owed "$review_round_owed" \
+      --arg review_stage_name "$review_stage" \
+      --argjson review "$review_json" \
+      '{status:"already_applied",run_id:$rid,run_ledger_stage:$stage,resume_point:{state:$pre_state,generation:($pre_gen|tonumber),nonce:$pre_nonce,resources:$pre_resources},review_round_owed:($review_round_owed|if . then true else false end),review_stage:$review_stage_name,latest_review:$review}'
+    return 0
+  fi
+
+  local acquire_output new_generation new_nonce
+  acquire_output="$(command_stage_acquire --ledger "$ledger" --run-id "$run_id" --stage "$resume_stage" --pid "$$" --git-ref "$resume_git_ref" --git-sha "$resume_git_sha" --worktree "$resume_worktree" --resources "" --allow-reopen --timeout "$timeout")"
+  new_generation="$(jq -r '.generation' <<<"$acquire_output")"
+  new_nonce="$(jq -r '.nonce // empty' <<<"$acquire_output")"
+
+  local reconcile_json reconcile_status reconcile_reason
+  reconcile_json="$(command_stage_reconcile --ledger "$ledger" --run-id "$run_id" --stage "$resume_stage" --git-dir "$resume_worktree" --timeout "$timeout")"
+  reconcile_status="$(jq -r '.status // "missing"' <<<"$reconcile_json")"
+  reconcile_reason="$(jq -r '.reason // ""' <<<"$reconcile_json")"
+
+  local adoption_status="needs_resume"
+  if [ "$reconcile_status" = "resolved" ]; then
+    adoption_status="adopted"
+  fi
+
+  local adopted=0
+  if [ "$adoption_status" = "adopted" ]; then
+    adopted=1
+  fi
+
+  local resume_payload review_owed_bool="false"
+  if [ "$review_round_owed" -eq 1 ]; then
+    review_owed_bool="true"
+  fi
+  resume_payload="$(jq -nc \
+    --arg rid "$run_id" \
+    --arg stage "$resume_stage" \
+    --arg pre_state "$resume_state" \
+    --arg pre_gen "$resume_generation" \
+    --arg pre_nonce "$resume_nonce" \
+    --arg pre_resources "$resume_resources" \
+    --arg new_gen "$new_generation" \
+    --arg new_nonce "$new_nonce" \
+    --arg adopt "$adoption_status" \
+    --arg reason "$reconcile_reason" \
+    --arg id_key "$idempotency_key" \
+    --arg review_owed "$review_owed_bool" \
+    '{run_id:$rid,stage:$stage,resume_from:{state:$pre_state,generation:($pre_gen|tonumber),nonce:$pre_nonce,resources:$pre_resources},acquired:{generation:($new_gen|tonumber),nonce:$new_nonce},adoption:{status:$adopt,reason:$reason},review_round_owed:($review_owed=="true"),idempotency_key:$id_key}')"
+
+  write_side_effect_row "$ledger" "$run_id" "$resume_journal_stage" "0" "$new_nonce" "resume" "$idempotency_key" "applied" "$resume_payload" "$timeout"
+
+  local review_out='{}'
+  if [ -n "$review_row" ] && [ "$review_row" != "empty" ] && [ "$review_row" != "null" ]; then
+    review_out="$review_row"
+  fi
+
+  if [ "$resume_has_resources" -eq 1 ]; then
+    for fd in $resume_lock_fds; do release_lock "$fd"; done
+  fi
+
+  jq -nc \
+    --arg rid "$run_id" \
+    --arg stage "$resume_stage" \
+    --arg pre_state "$resume_state" \
+    --arg pre_gen "$resume_generation" \
+    --arg pre_nonce "$resume_nonce" \
+    --arg pre_resources "$resume_resources" \
+    --arg new_gen "$new_generation" \
+    --arg new_nonce "$new_nonce" \
+    --arg reconciliation "$reconcile_status" \
+    --arg reconciliation_reason "$reconcile_reason" \
+    --arg adopt_status "$adoption_status" \
+    --arg review_stage_name "$review_stage" \
+    --argjson review_round_owed "$review_round_owed" \
+    --argjson adopted "$adopted" \
+    --argjson reconcile "$reconcile_json" \
+    --argjson review "$review_out" \
+    '{status:"resumed",run_id:$rid,run_ledger_stage:$stage,resume_point:{state:$pre_state,generation:($pre_gen|tonumber),nonce:$pre_nonce,resources:$pre_resources},new_generation:($new_gen|tonumber),new_nonce:$new_nonce,review_round_owed:($review_round_owed|if . then true else false end),adoption:{status:$adopt_status,reason:$reconciliation_reason,reconciled:($adopted|if . then true else false end),reconcile:$reconcile},review_stage:$review_stage_name,latest_review:$review}'
+}
+
 command_gc_check() {
   local ledger="" run_id="" stage="" timeout="$DEFAULT_LOCK_TIMEOUT"
   while [ "$#" -gt 0 ]; do
@@ -1604,6 +1784,9 @@ case "$command" in
 
   stage-reconcile)
     command_stage_reconcile "$@" ;;
+
+  resume)
+    command_resume "$@" ;;
 
   journal-add)
     command_journal_add "$@" ;;

@@ -3,7 +3,7 @@
     <tr>
       <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
       <td width="24"></td>
-      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — 可獨立運作的 Claude Code 生命週期編排，與 Superpowers 並存" height="180"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first 的生命週期編排，並為 Codex、OpenCode、agy 提供可攜路徑" height="180"></td>
     </tr>
   </table>
 </div>

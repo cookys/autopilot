@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
   <title id="title">Autopilot hero banner</title>
-  <desc id="desc">Animated dark hero banner for the Autopilot Claude Code lifecycle orchestration plugin.</desc>
+  <desc id="desc">Animated dark hero banner for Autopilot lifecycle orchestration across AI coding-agent harnesses.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="300" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#0d1117"/>
@@ -88,8 +88,8 @@
   <g class="font">
     <text x="76" y="112" class="wordmark" fill="#5A67D8" opacity="0.24" filter="url(#softGlow)">Autopilot</text>
     <text x="76" y="112" class="wordmark" fill="url(#wordGradient)">Autopilot</text>
-    <text x="78" y="154" class="tagline" fill="#e6ebf5" opacity="0.92">Lifecycle orchestration for Claude Code &#8212; you describe it, it runs the whole job.</text>
-    <text x="80" y="56" class="micro" fill="#E8A838" opacity="0.88">Claude Code plugin</text>
+    <text x="78" y="154" class="tagline" fill="#e6ebf5" opacity="0.92">AI coding-agent lifecycle &#8212; plan, delegate, review, and finish.</text>
+    <text x="80" y="56" class="micro" fill="#E8A838" opacity="0.88">Claude Code-first &#183; multi-harness paths</text>
 
     <g transform="translate(78 205)">
       <g>

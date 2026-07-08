@@ -1,188 +1,44 @@
-# Session Handoff - 2026-07-02 (cross-harness engine infrastructure)
+# HANDOFF — /l6 skills-audit 系列結案快照(2026-07-08)
 
-> Resuming after `/clear`: read this file first, run the Verification block, then continue with Phase 6 or MiniMax/cc-shim smoke.
-> User preference: Traditional Chinese.
+> 取代 2026-07-02 版(該 campaign 已結案;快照非日誌)。由 session 31d0d311 於 clear 前寫入。
+> 機械快照另有 `handoff_inject` hook(已啟用)會在 /clear 時自動寫入 ~/.autopilot 並於下個 session 注入。
 
-## Repo State
+## 目標
+/l6 skills-audit 系列(2026-07-05 起)已全部完成:v2.32.0 → **v2.32.8** 八個版本 shipped + pushed。本 handoff 僅供下個 session 認路,無 in-flight 工作。
 
-- Repo: `/home/codepower/projects/autopilot`
-- Branch: `develop`
-- Expected HEAD: `d0cc6c0 fix(harness): separate driver and provider quota state`
-- Expected status before editing: clean.
-- Do not use or print secrets. MiniMax credentials are outside the repo.
+## 現況
+- develop = origin(`41a4219` + 本 handoff commit),工作樹乾淨,**零**工作分支、零 worktree 殘留
+- 孤兒測試檔(R5 時代)停放於 `~/.claude/jobs/31d0d311/tmp/parked/`,要救隨時在
+- reviewer roster(scorecard):**六家族** — gpt-5.5 / sonnet-5 / opus-4.8 / MiniMax-M3 / grok-build / GLM-5.2 全 qualified;**Gemini Flash 落榜**(漏放 1 critical,implementer-only)
+- endpoints:minimax + glm 都在 `~/.autopilot/endpoints.env`;grok 已裝已登入;codex quota limited 未耗盡
 
-Recent commits:
+## 已決事項(不重議)
+1. **Observation-first 憲法**(plan `docs/plans/2026-07-08-observation-first-skills.md`,五家族三輪收斂):強制只放觀測層;審查否決權移除需「紅綠 ∧ scorecard-qualified ∧ risk=low」連言;「沒有客觀驗證」合法但審查 gating 常駐
+2. **管線匯率定律**(實測):管線價值 = 模型與任務落差 — 救援不及格者(+100pp)、稅/傷害超標者(4-12×);verify-first 三預測全中
+3. **finish-flow「max 3 rounds」保留字面值**(它是 quality-pipeline 同質迴圈,非 engine 迴圈 — opus 裁定,勿再「修正」)
+4. **成本紀律**(user 逐字):Fable 只做決策與權限簽核;報告/分析→sonnet、qc lens→opus、勞務全委派
+5. 散文不改變行為(全系列 n>100 一致)— 任何「加提醒文字」的提案預設無效,要操作程序或機械合約
 
-| Commit | Summary |
-| --- | --- |
-| `d0cc6c0` | Separates driver availability from provider quota in harness capability state. Fixes the earlier mistaken interpretation that Anthropic subscription exhaustion disables provider-bound `cc-shim`. |
-| `1a03c02` | Adds governed role evidence states: scorecard can record/query planner/implementer/verifier/reviewer/orchestrator evidence; verifier/orchestrator remain evidence-only, not ladder/gate-routable. |
-| `8c7f612` | Adds Codex skills-only plugin package under `platforms/codex/plugin` plus local marketplace and package drift tests. |
-| `5ac0b0d` | Adds read-only harness capability state/report infrastructure. |
-| `34700d1` | Adds role and harness governance method. |
-| `533afc6` | Adds first read-only `AutopilotEngine` API. |
-| `0fd6d58` | Adds review-loop resolver bridge. |
-| `97be7cf` | Parses review dispatcher results. |
-| `fcae00f` | Adds autopilot dispatch review bridge. |
-| `f9ffc31` | Adds direct Anthropic-compatible reviewer path. |
+## 下一步(候選,無承諾順序)
+1. `grep -n "verify_strength\|min_panel_size" docs/BACKLOG.md` — 兩個已立案的 resolver 軸(驗證強度評分、家族無關 panel 下限),都是 S-M 工作量
+2. t14 每輪機械重注入儀器(長程漂移 4/35,散文救不了 — 唯一未測的機械解)
+3. 給 M3/flash 頻帶造更難的 eval 任務(現有全天花板,測不出 lift)
 
-## MiniMax / cc-shim Status
+## 驗證方式
+- `git log origin/develop --oneline -3` — 應見本 handoff commit 與 41a4219
+- `AUTOPILOT_SKIP_SLASH_PROBE=1 AUTOPILOT_SLASH_PROBE=1 ./scripts/preflight-release.sh` — v2.32.8 應 8/8
+- `node scripts/engine-scorecard.js current --role reviewer` — 應見 8 列(6 qualified + eng-review + Gemini failed)
 
-Important correction from 2026-07-02:
+## Read-order
+1. `~/.claude/projects/-home-cookys-projects-autopilot/memory/MEMORY.md` — 自動注入,batch 1-7 全史與教訓都在 l6-skills-audit 條目
+2. `docs/plans/2026-07-08-observation-first-skills.md` — 憲法本文(含五家審查修訂軌跡)
+3. `docs/projects/_archive/2026-07-06-eval-instruments/report.md` — 全部量測數字(匯率、逃逸懸崖、t14)
+4. `docs/BACKLOG.md` 尾部 — 兩個新軸的立案條目
 
-- "Claude Code quota exhausted" means **native Anthropic subscription quota** is unavailable.
-- It does **not** mean the Claude Code CLI driver is unusable for third-party provider-bound `cc-shim`.
-- `cc-shim` is: Claude Code CLI driver + explicit `ANTHROPIC_BASE_URL` + explicit `ANTHROPIC_AUTH_TOKEN` for MiniMax/GLM/etc.
-- The model/provider quota is MiniMax/GLM quota, not Anthropic subscription quota.
-- Native Anthropic-backed `claude` dispatch should still be avoided while Anthropic subscription quota is exhausted.
-
-Token/config presence checked safely on 2026-07-02:
-
-- Current shell env did **not** have `MINIMAX_API_KEY`, `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`, `ANTHROPIC_AUTH_TOKEN`, or `ANTHROPIC_BASE_URL` exported.
-- `~/.autopilot/providers/minimax.env` exists and contains present values for:
-  - `MINIMAX_API_KEY`
-  - `AUTOPILOT_MINIMAX_BASE_URL`
-  - `AUTOPILOT_MINIMAX_MODEL`
-  - `ANTHROPIC_BASE_URL`
-  - `ANTHROPIC_MODEL`
-  - `ANTHROPIC_DEFAULT_HAIKU_MODEL`
-  - `ANTHROPIC_DEFAULT_SONNET_MODEL`
-  - `ANTHROPIC_DEFAULT_OPUS_MODEL`
-
-Do not print that file. To use it in a future shell, source it only in the local process:
-
-```bash
-set -a
-. "$HOME/.autopilot/providers/minimax.env"
-set +a
-```
-
-Then verify presence without revealing values:
-
-```bash
-for k in MINIMAX_API_KEY AUTOPILOT_MINIMAX_BASE_URL AUTOPILOT_MINIMAX_MODEL ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL; do
-  if [ -n "${!k:-}" ]; then echo "$k=present"; else echo "$k=absent"; fi
-done
-```
-
-If `ANTHROPIC_AUTH_TOKEN` is absent after sourcing but `MINIMAX_API_KEY` is present, bind it only for the cc-shim process:
-
-```bash
-ANTHROPIC_AUTH_TOKEN="$MINIMAX_API_KEY" \
-  scripts/dispatch-review.sh --runner cc-shim --model "${ANTHROPIC_MODEL:-MiniMax-M3}" --diff-file /tmp/example.diff
-```
-
-Prefer the direct MiniMax reviewer path when possible:
-
-```bash
-scripts/dispatch-review.sh --runner anthropic-compatible --model "${AUTOPILOT_MINIMAX_MODEL:-MiniMax-M3}" --diff-file /tmp/example.diff
-```
-
-## What Is Done
-
-Completed and committed:
-
-- Direct Anthropic-compatible reviewer adapter for MiniMax-style APIs.
-- Review dispatcher JS bridge and parser.
-- Review-loop resolver JS bridge.
-- Read-only `AutopilotEngine` API.
-- Harness capability report infrastructure.
-- Codex skills-only plugin package with generated real skill/support payload.
-- Role/harness governance methodology.
-- Scorecard evidence support for all governed roles.
-- Driver/provider quota separation in capability state.
-
-Review/gates already run:
-
-- Codex / agy / Grok hetero reviews for the Codex package and role-evidence slices.
-- Clean subagent review for the role-evidence slice.
-- For the quota-domain fix, Codex/agy findings were checked and rejected with local proof; Grok returned `SHIP-AS-IS`.
-- Focused tests passed:
-  - `bash hooks/tests/harness-capabilities.test.sh` -> 90 assertions
-  - `bash hooks/tests/engine-onboarding-methodology.test.sh` -> 38 assertions
-  - `bash hooks/tests/codex-plugin-package.test.sh` -> 53 assertions
-  - `bash hooks/tests/engine-scorecard.test.sh` -> 14 passed
-- Broader gates passed:
-  - `scripts/validate.sh`
-  - `node scripts/sync-version.js --check`
-  - `node scripts/doc-drift-gate.js .` (known warning: non-UTF-8 `docs/plans/2026-05-14-test-suite.md`)
-  - `node scripts/check-hook-inventory.js --check`
-  - `git diff --check`
-
-## Next Work
-
-Recommended order:
-
-1. **Phase 6 - Hook Adapter Framework**
-   - Add normalized hook event schema.
-   - Add Claude payload normalizer fixtures.
-   - Extract host-neutral handlers for `intent-capture` and `session-start`.
-   - Add Codex warning-only probe hook package under `platforms/codex/`.
-   - Do not ship blocking Codex hooks until payload/cwd/env/failure semantics are probed.
-
-2. **MiniMax / cc-shim smoke**
-   - Source `~/.autopilot/providers/minimax.env` locally.
-   - Run direct MiniMax reviewer smoke (`anthropic-compatible`).
-   - Run provider-bound `cc-shim` reviewer smoke.
-   - Optionally run `cc-shim` implementer smoke in a throwaway worktree.
-   - Update capability state and scorecard evidence if the smoke passes.
-
-3. **Implementer JS Runner API**
-   - Add `src/runners/implement.js`.
-   - Parse `dispatch-hetero.sh` result JSON.
-   - Normalize `committed`, `dirty`, `no_op`, `question_suspected`, `failure`, `precondition_failed`.
-   - Keep old shell entrypoint compatible.
-
-4. **Full `/l5` / `/l6` Engine Loop**
-   - Wire `resolve roster -> implementer -> depth-0 verify -> reviewer panel -> repair loop -> final gate`.
-   - Human remains outside normal loop; only credentials, irreversible actions, unqualified rosters, and repeated fail-closed loops escalate.
-
-Later:
-
-- Planner eval harness.
-- Implementer eval corpus.
-- Verifier authoring eval.
-- Orchestrator promotion gate.
-- Skill trigger eval corpus.
-- Codex status-line/hook UX once hook payload probes are trustworthy.
-
-## Verification On Resume
-
-```bash
-cd /home/codepower/projects/autopilot
-git status --short -uall
-git log --oneline -5
-
-node --check src/harness/capabilities.js
-bash hooks/tests/harness-capabilities.test.sh
-bash hooks/tests/engine-onboarding-methodology.test.sh
-bash hooks/tests/codex-plugin-package.test.sh
-
-node bin/autopilot.js harness report --now 2026-07-02T00:00:00.000Z --stale-after 14d \
-  | node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(0,"utf8")); const c=r.records.find(x=>x.id==="claude-code"); const m=r.records.find(x=>x.id==="minimax-direct"); console.log(JSON.stringify({claude:c.auth_domains,minimax:m.auth_domains}, null, 2));'
-```
-
-Expected auth-domain shape:
-
-```json
-{
-  "claude": {
-    "driver_cli": "verified",
-    "anthropic_subscription_quota": "unavailable",
-    "third_party_provider_quota": "not-applicable"
-  },
-  "minimax": {
-    "provider_api_key": "verified",
-    "anthropic_subscription_quota": "not-applicable",
-    "cc_shim_provider_quota": "verified"
-  }
-}
-```
-
-## Gotchas
-
-- Do not conflate `claude` native Anthropic-backed dispatch with provider-bound `cc-shim`.
-- `cc-shim` must be explicit and must have `ANTHROPIC_BASE_URL` plus `ANTHROPIC_AUTH_TOKEN`; never let default Anthropic credentials decide routing.
-- Direct MiniMax reviewer intentionally ignores `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY`; it uses `MINIMAX_API_KEY` for MiniMax hosts or `ANTHROPIC_COMPATIBLE_AUTH_TOKEN` for generic third-party endpoints.
-- Codex plugin package copies generated payload under `platforms/codex/plugin`; after changing canonical `skills/`, `references/`, `scripts/`, or `project-config-template/`, run `scripts/sync-codex-plugin-skills.sh`.
-- `docs/HANDOFF.md` itself is a working handoff artifact; decide whether to commit it or leave it local before starting a new implementation slice.
+## 陷阱
+- **共用 checkout**:review diff 必須 path-scoped(`git diff base..HEAD -- <file>`);判分支歸屬先 `git log develop..<branch>`,空 = 死 ref
+- **被殺的 wrapper ≠ 工作丟失**:先查分支有沒有 commit(artifact 軌)
+- **verify-cmd 一律寫成 script 檔**傳路徑(嵌套引號會碎 argv)
+- **MiniMax 同 endpoint 並發會 rate-limit** → 序列;跨家族分流(A→MiniMax B→GLM C→grok)可平行
+- **長程 campaign 每 run 加 auth 存活檢查**(/login 切換會靜默殺光背景呼叫,已發生兩次)
+- 版本號先 `git fetch` 查撞車(本系列撞過兩次,先推先贏改號)

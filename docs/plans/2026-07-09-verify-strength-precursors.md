@@ -43,3 +43,9 @@ Shipping the density axis before those exist would route on a number nobody can 
 - ❌ No scoring instrument (Segment 2) — Segment 1 is binary red-green only.
 - ❌ No `resolve-review-loop.sh` change — no `verify_strength` key, no routing on it (Segment 3).
 - ❌ Segment 1 does NOT classify test files beyond a git-pathspec glob heuristic; it certifies red-green for the tests it's pointed at, it does not judge whether the RIGHT tests exist (that stays reviewer judgment).
+
+### Known limitations (depth-0 qc panel, opus live-probe, 2026-07-09 — all safe-direction, never a false VALIDATED)
+
+- **Glob over-matching**: production files whose name contains `test`/`spec` (e.g. `inspect.sh`, `contest.js`) match the default `:(glob)**/*test*`/`*spec*` pathspecs and get applied into the base worktree, violating "production held at base" and risking a false `NOT_RED_ON_BASE`. Safe direction (never a false VALIDATED); inherent to glob-based test detection. Pass explicit `--test-glob` for precision.
+- **Build failure on head is reported as `NOT_GREEN_ON_HEAD` (exit 1), not `INCONCLUSIVE` (exit 3)**: exit codes alone can't distinguish "tests genuinely didn't pass" from "the head environment wouldn't build". Still fail-closed (never false VALIDATED), but a downstream consumer keying on exit 3 for "ambiguous" won't see a build failure.
+- **In-source tests are invisible**: suites living inside source files (Rust `#[cfg(test)]`, Python doctests, same-file table tests) produce no standalone diff test-file → `no-test-files` INCONCLUSIVE. Fail-closed and safe, but the tool silently cannot validate these; Segment 3 policy must not treat their INCONCLUSIVE as "weak verification".

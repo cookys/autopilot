@@ -207,6 +207,55 @@ assert_eq "$VALID_JSONL_5" "true" "ledger 5 remains valid JSONL end-to-end"
 rm -f "$OUT_A" "$OUT_B"
 
 
+# 6. Self-deadlock on resource-bearing stages
+L6="$TEST_TMP/ledger6.jsonl"
+run_cmd init --ledger "$L6"
+run_cmd stage-acquire --ledger "$L6" --run-id r6 --stage payout --pid "$$" --resources "acct-42"
+GEN_6="$(jq -r '.generation' <<<"$CMD_OUT")"
+NONCE_6="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+
+set +e
+OUT_6="$("$SCRIPT" journal-add --ledger "$L6" --run-id r6 --stage payout --generation "$GEN_6" --nonce "$NONCE_6" --idempotency-key JK1 --status applied --timeout 3 2>&1)"
+RC_6=$?
+set -e
+assert_eq "$RC_6" "0" "journal-add on a resource-bearing stage must not self-deadlock on its own resource lock"
+
+COUNT_6="$(jq -s --arg rid r6 '[.[] | select(.kind=="journal" and .run_id==$rid and .idempotency_key=="JK1" and .status=="applied")] | length' "$L6")"
+assert_eq "$COUNT_6" "1" "journal row actually landed for resource-bearing stage"
+
+L7="$TEST_TMP/ledger7.jsonl"
+run_cmd init --ledger "$L7"
+run_cmd stage-acquire --ledger "$L7" --run-id r7 --stage ship --pid "$$" --resources "acct-99"
+GEN_7="$(jq -r '.generation' <<<"$CMD_OUT")"
+NONCE_7="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+
+set +e
+OUT_7="$("$SCRIPT" stage-apply --ledger "$L7" --run-id r7 --stage ship --generation "$GEN_7" --nonce "$NONCE_7" --to-state committed --idempotency-key JK2 --timeout 3 2>&1)"
+RC_7=$?
+set -e
+assert_eq "$RC_7" "0" "stage-apply on a resource-bearing stage must not self-deadlock on its own resource lock"
+
+run_cmd query-latest --ledger "$L7" --run-id r7 --stage ship
+assert_json_eq "$CMD_OUT" '.state' "committed" "stage state ends up committed after stage-apply"
+
+
+# 7. Duplicate dead-code atomic_append_ledger fd-release divergence
+L8="$TEST_TMP/ledger8.jsonl"
+run_cmd init --ledger "$L8"
+
+set +e
+bash "$SCRIPT" stage-acquire --ledger "$L8" --run-id r8 --stage test --pid "$$" >/dev/null 2>&1
+RC1=$?
+bash "$SCRIPT" stage-acquire --ledger "$L8" --run-id r8b --stage test --pid "$$" --allow-reopen >/dev/null 2>&1
+RC2=$?
+bash "$SCRIPT" stage-acquire --ledger "$L8" --run-id r8c --stage test --pid "$$" --allow-reopen --timeout 2 >/dev/null 2>&1
+RC3=$?
+set -e
+
+assert_eq "$RC1" "0" "first stage-acquire succeeds"
+assert_eq "$RC2" "0" "second stage-acquire succeeds"
+assert_eq "$RC3" "0" "sequential stage-acquire calls must not leave any lock held afterward (guards duplicate atomic_append_ledger fd-release drift)"
+
 # Print results
 if [ "${#FAILS[@]}" -eq 0 ]; then
   echo "PASS [$TEST_NAME] $PASS_COUNT assertions"

@@ -162,6 +162,25 @@ If neither → size the **feature**:
 **Risk Escalation** (force L for features): money/points, auth/security, production protocol changes.
 Risk-escalated bug fixes stay Fix but add PR review before merge.
 
+### 驗證合約(必答)
+
+Mandatory question: **「這個任務做完,跑什麼命令能客觀證明?」**
+
+| 答案 | 機械判定 | 路由 |
+|------|---------|------|
+| 命令,且通過**紅綠驗證** | 見下方紅綠語意 | 紅綠通過 ⇒ **驗證錨定恆成立**(ratchet + 一輪 advisory review)。review 降為**非 gating** 需三條件**同時**:紅綠通過 **且** implementer scorecard-qualified(機械定義:`engine-scorecard.js` status=qualified,由 `engine-qualify.sh` 的 known-bad 零漏放 bar 產生 — 非主觀判斷)**且** risk=low(opus R2:連言架構 — 單靠騙過紅綠拿不掉否決權) |
+| 命令,但未過紅綠(vacuous)或紅無法成立 | 自動降級 | 同「無驗證」列 |
+| 「沒有客觀驗證」(合法誠實答案) | 記入 run summary | **審查 gating 常駐**,不分模型強弱(零機械觀測不可證偽;reviewer 是唯一觀測通道,保留否決權;模型強只降輪數 ≤2,不降為零)。此 gating review **優先派工具可執行的原生 reviewer**(能實跑探索性檢查),而非 diff-text 軌(MiniMax R2) |
+
+紅綠語意:
+- base 定義: dispatcher 釘死的 immutable base SHA(engine `--base`;dev-flow inline = intake 時的 HEAD);dirty tree 不是 base。
+- base-run = base 的產品碼 + diff 中的驗證 artifact 套上去跑,避免純新增 TDD artifact 被誤降級。
+- 紅的資格 = assertion/行為失敗;基礎設施錯誤(檔案不存在、import error、collect 0)不算紅。
+- 紅必須可重現(flaky base-fail 重跑一次確認;不可重現 → 降級)。
+
+Engine wiring: answer flows to `engine implement-review --verify-cmd`;non-gating only per conjunction(紅綠 ∧ scorecard-qualified ∧ risk=low),else keep `--no-verify-first`.
+Side-effect warning: verify-cmd is dispatcher-authored, isolated-worktree, read-only expectation.
+
 ### Scope Creep Detection
 
 Size is evaluated once at start, but scope can grow silently. Two escalation paths:
@@ -214,6 +233,7 @@ TaskCreate: "S-scope-gate: Evaluate scope before every commit"
 This task stays pending and surfaces before every tool use — the forcing function that
 prevents "it was obviously S" from silently becoming a multi-module project without tracking.
 
+0. 驗證合約必答 — 見上
 1. Implement
 2. Quality gate (per project config, or: lint + test)
 3. Evaluate S-scope-gate indicators before committing
@@ -245,6 +265,7 @@ prevents "it was obviously S" from silently becoming a multi-module project with
 
 > Bug fix with clear root cause. No plan/project needed. Feature branch for traceability.
 
+0. 驗證合約必答 — 見上
 1. `git checkout -b fix/<description>`
 2. Investigate root cause (read code, trace data flow)
 3. Implement fix

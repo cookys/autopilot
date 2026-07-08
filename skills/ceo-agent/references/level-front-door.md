@@ -338,21 +338,26 @@ a JSON outcome.
 The foreman runs dev-flow → finish-flow, which has its **own** L-5 qc. That qc is
 explicitly **first-pass / non-authoritative**.
 
-The authoritative gate is a **depth-0 fan-out of ≥3 adversarial QC reviewers** —
-dispatched subagents, each with a **distinct non-overlapping lens** (e.g.
-correctness, security/faithfulness, completeness/edge-cases; for LLM-behavior or
+The authoritative gate is a **depth-0 QC panel** whose reviewer families/panel
+come from `scripts/resolve-review-loop.sh` (`qc_panel` /
+`required_review_families`); resolver unavailable → fall back to 3 reviewers.
+Homogeneous (all-Claude) panels keep a **≥3-lens floor** (resolver emits
+families, not panel size; until `min_panel_size` exists). Dispatch subagents,
+each with a **distinct non-overlapping lens** (e.g. correctness,
+security/faithfulness, completeness/edge-cases; for LLM-behavior or
 data-into-system changes add a domain lens), each reading the foreman's
 **artifacts** (the branch diff) and **citing `file:line`**, default-assuming
 broken until proven, per blind-dispatch clause 1
 ([`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). The CEO
 **synthesizes** their findings into the pass/fail verdict and **fixes or reverts
-every real issue before integration**. Scale reviewer count to blast radius (3 for
-a small diff; 5+ for a large/risky one).
+every real issue before integration**. Scale panel composition to resolver output
+and blast radius.
 
 **Disjoint-family panel (when `review-loop-config.md` sets a `qc_panel`).** By
-default the ≥3 reviewers are Claude subagents (homogeneous — diverse *lenses*, one
-*family*). For `/l5`/`/l6` (heterogeneous implementer) that is a decorrelation hole: if
-the implementer is OpenAI (`gpt-5.3-codex-spark`), a same-family reviewer shares its
+default `/l4` stays homogeneous — diverse *lenses*, one *family* — with the
+**≥3-lens floor** above; resolver unavailable → fall back to 3 reviewers. For
+`/l5`/`/l6` (heterogeneous implementer) that is a decorrelation hole: if the
+implementer is OpenAI (`gpt-5.3-codex-spark`), a same-family reviewer shares its
 blind spots. So resolve the panel from `scripts/resolve-review-loop.sh` (`qc_panel`)
 and dispatch a **disjoint-family** set — Claude/Opus via the native Agent tool,
 non-Claude vendors via **`scripts/dispatch-review.sh --runner codex|agy`** (read-only;
@@ -515,7 +520,7 @@ one row per step:
 | impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | backend-cli | `<branch>@<sha>` |
 | foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | — | (qc notes) |
 | recovery | claude | (depth-0 tier) | resumed / already_applied / blocked_resource | — | run-ledger resume payload (`run_id`, `resume_point`, `new_generation`, `adoption`) |
-| **depth-0 qc panel (authoritative)** | claude ×N (≥3 lenses) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
+| **depth-0 qc panel (authoritative)** | resolver `qc_panel` / claude ×N (homogeneous ≥3-lens floor) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from
   `dispatch-hetero.sh`'s outcome JSON (`runner`/`model` fields) for the `/l5`/`/l6`

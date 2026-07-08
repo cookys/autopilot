@@ -425,6 +425,20 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (per-command compact wrapper, e.g. a `git diff --stat`-first reviewer feed) — scope to the one command that actually bloats first, don't build the whole rtk surface speculatively.
 - **Source**: 2026-06-23 `/next` follow-up — user-requested survey of headroom + rtk; two Explore-agent technical reports + same-session spike (rtk not installed, CC 2.1.186, intent `last_tool_source:"transcript"` confirms transcript-pivot ≠ stdin, zero live PreToolUse hooks).
 
+### `verify_strength` as the third density input
+- **Trigger**: next time changing `resolve-review-loop.sh` density/risk inputs, OR after red-green validation exists and real test-suite strength can be instrumented.
+- **Context**: Verification QUALITY needs to become a first-class density axis for `resolve-review-loop`; evidence is the escape cliff where `t2×medium` produced 100% escapes.
+- **Direction**: Red-green validation is the minimal precursor, but real adoption needs a strength-scoring instrument for actual test suites before `verify_strength` can drive policy.
+- **Effort**: L
+- **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
+
+### resolver `min_panel_size` emission (family-agnostic)
+- **Trigger**: next time changing `resolve-review-loop.sh` panel emission/enforcement, OR before removing the homogeneous ≥3-lens prose floor.
+- **Context**: Any `required_families=1` single-family panel has the single-lens weakness; this is family-agnostic, not Claude-specific.
+- **Direction**: Emit `min_panel_size` separately from family requirements because lens diversity ≠ family decorrelation; same-family lenses can still share blind spots. Until then, keep the homogeneous ≥3-lens prose floor.
+- **Effort**: S
+- **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
+
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)
@@ -463,3 +477,25 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - 修法方向:改為計數制 — `families_distinct >= required_review_families` 才 satisfied;`--enforce` 同步。注意 KR:預設輸出 byte-compat(欄位值語意變更需 CHANGELOG 明示)。
 - 觸發:下次碰 `resolve-review-loop.sh` 的 enforce/panel 邏輯時;或高風險 diff 實際依賴 required=2 語意時。
 - ✅ RESOLVED 2026-07-05 — counting semantics implemented (this commit); entry retained for history.
+
+### 🔬 foreman↔depth-0 協調：liveness query + ownership lease + 插隊/steer 通道（l6-resilience R6-research）
+- **Trigger**: 下次多 foreman 並行 /l6 campaign；或 R0 ledger（run-ledger.sh）已 land 可當協調底座時。
+- **Context**: 2026-07-08 l6-resilience 實作 campaign 實痛——depth-0 把 foreman **回合間的正常驗證**誤判成 stall → 跳進去搶做同一 handler → two-cooks 撞 shared `.git`/worktree → 再加 depth-0↔foreman 訊息交錯（crossed messages）對 R5 擁有權誤解、差點互等死鎖。根因＝foreman↔depth-0 缺可靠協調機制。
+- **缺口三塊**:
+  - (1) **Liveness/state query**：廉價可靠分辨 {working-between-turns / waiting-on-detached-child / blocked-needs-input / dead}。現 `idle_notification` 太粗（"available" 歧義）、`ps`/`git` 輪詢會誤判（正是本次誤判來源）。
+  - (2) **Ownership lease 結構性防 two-cooks**：depth-0 與 foreman 不得同時動同一 artifact。**R0 ledger 的 lease/generation/nonce 是現成底座** → R6 建在 R0 上：depth-0 讀 ledger 看 stage 活性（非 ps 輪詢）、owner lease-gated，搶同 stage 結構上不可能。
+  - (3) **Interrupt/steer 通道 + 訊息排序**：foreman 在**工作中**（非只回合間）檢查的優先「插隊」通道，或寫進 ledger 的 directive；並處理 crossed-message（明確「誰現在擁有這決定」的 handshake / lease token）。
+- **副產物守則**（已可先用）: 多 agent 看似停頓，先查是不是正常回合間工作（ledger/log/ps 交叉），**別急著接手**——本次 foreman 全程能幹（診斷比 depth-0 深、主動協調），撞車全因 depth-0 觀測不足 + 反應過快。
+- **Effort**: L（research→design→impl；與 R0-R5 同 plan `docs/plans/2026-07-08-l6-resilience-improvements.md`，建議收為該 plan 的 R6）。
+- **Source**: l6-resilience R1–R5 dogfood campaign 協調事故，2026-07-08。
+
+### ⛔ l6-resilience R0-R5 impl 有 depth-0 qc verified Critical——fix pass 才可 merge（work on feat/l6-r1r5 @ 9e7e1d6，未 merge develop）
+- **Trigger**: 要 ship l6-resilience（R0 ledger + R2/R3/R4/R5 handler）到 develop 前，必須先修下列 qc panel（agy/codex/MiniMax 三家族，2026-07-08）verified 缺陷。code 在 `feat/l6-r1r5 @ 9e7e1d6`（4 支測試綠但併發/crash-ordering 未覆蓋）。
+- **Verified Critical**（≥2 家族或 depth-0 親驗）:
+  - **run-ledger.sh: shared ledger 檔 + 僅 per-run 鎖 → 併發不同 run append 丟記錄**（A-agy+A-codex 兩家族；depth-0 驗證 `canonical_ledger_path`→`$PWD/.autopilot/run-ledger.jsonl` 單一共享檔，`atomic_append_ledger` cp→mv 只持 run.<id>.lock；spec 說 per-run 但實作是全域）。修：全域 ledger 寫要 resource-scoped/全域鎖，非 per-run。
+  - **run-ledger.sh: stage-apply 先寫 applied journal 再做 state transition**，中間 crash → stage 未推進但 retry 全假成功（A-codex:914）。修：transition 與 journal 原子、或 journal-after-transition。
+  - **autopilot-engine.js:89 `hasNoOpOrCommittedEmptyWrite` 讓 R2 misplaced_writes 只在 files_changed===0 才 fire** → 合法改動 + 平行 out-of-tree 寫可雙重繞過 R2/R5（B-agy+B-mm 兩家族；spec 明確警告此 double-false-negative）。修：misplacement 檢查不受 files_changed 遮蔽。
+  - **autopilot-engine.js:1253 `resolveImplementationFromLedger` 跨 round 用 static stage** → 破 round 冪等、誤採前 round commit（B-agy）。
+- **Major**: check-then-act TOCTOU（latest_stage_record 在鎖外讀、critical section 內不 re-read，A-agy+A-codex）；journal has_applied 檢查在鎖外→double-apply（A-mm）；write_side_effect_row 單獨取 run-lock 違反 global acquire order（A-mm）；with_resource_locks 部分失敗漏 fd（A-mm）；classify-diff-risk.sh:255 `awk '{print $3}'` 截斷含空白檔名→risk 規則被繞（B-agy）；collectMisplacementEvidence 讀 result.error 當 path→false positive（B-mm）。
+- **Effort**: L（fix round：R0 ledger 併發模型重修 + engine gate 修 + re-qc）。建議 hetero implementer + 四支測試擴充含併發/crash-ordering case。
+- **Source**: l6-resilience depth-0 三家族 qc panel，2026-07-08。**更新**：R1(detach) foreman 已於 qc 後完成 merge（feat/l6-r1r5 tip 現 `3cf9f92`，6 支全實作）——但 qc panel 跑在 R1 前的 `9e7e1d6`，故 **fix-pass 的 re-qc 必須涵蓋全 6 支含 R1**（R1 動 live dispatch 腳本、未經 depth-0 qc）。

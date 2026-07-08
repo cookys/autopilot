@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.11 — red-green validation instrument (`verify_strength` precursor 1)
+
+**Headline**: New deterministic script `scripts/verify-red-green.sh` — the opposite-direction sibling of `verify-preexisting.sh` — proves that the tests a change carries actually EXERCISE the change rather than being constant-green empty tests: it runs the change's tests at `head` (must be GREEN) and, in an ISOLATED detached worktree, applies ONLY the change's test-file edits onto `base` (production code held at base) and reruns them (must be RED). This is the minimal precursor the `verify_strength` BACKLOG item named; the full three-segment path to a `verify_strength` review-density axis is now planned in `docs/plans/2026-07-09-verify-strength-precursors.md` and the BACKLOG item is decomposed into ordered segments (1 shipped, 2+3 pending).
+
+### Added
+- `scripts/verify-red-green.sh` — `--range <base>..<head> --verify-cmd <script-path> [--test-glob <git-pathspec>]... [--repo <dir>]`. Verdicts `VALIDATED` (exit 0) / `NOT_RED_ON_BASE` (exit 1) / `NOT_GREEN_ON_HEAD` (exit 1) / `INCONCLUSIVE` (exit 3, fail-closed). Reuses `git worktree add --detach` isolation (never mutates the live tree); every verdict is read from the real verify-cmd exit code (artifact-not-self-report). Default test-globs are `**/`-prefixed so nested test paths match. JSON `{verdict, red_green_validated, base_sha, head_sha, head_result, base_result, red_tests[], reason}`.
+- `hooks/tests/verify-red-green.test.sh` — covers all four verdicts + `--help`/invalid-flag/missing-arg + a nested-test-path regression (red before the glob fix, green after).
+- `docs/plans/2026-07-09-verify-strength-precursors.md` — the ordered decomposition of the `verify_strength` density axis.
+
+### Changed
+- `docs/BACKLOG.md` `verify_strength` item decomposed: precursor (1) marked delivered; remainder split into ordered segments (2) real-suite strength scorer and (3) `resolve-review-loop.sh` consumption.
+- Wired the new script into `skills/quality-pipeline/references/test-policy.md`, the quality-pipeline SKILL scripts table, and the CLAUDE.md inventory.
+
+### Fixed
+- (none)
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.10 — orchestration-eval: opt-in per-turn constraint re-injection (`--reinject`)
 
 **Headline**: The multi-turn orchestration-eval harness (`evals/orchestration/run-orchestration-eval.sh`) gains an opt-in `--reinject <relpath>` flag that mechanically re-pastes a `CONSTRAINTS REMINDER` block (verbatim content of the task's `repo/<relpath>`, e.g. `CONSTRAINTS.md`) into EVERY composed turn prompt (turn 1..N), for both the `cc` and `stub` runners. This is the "mechanical re-statement vs prose-once" instrument the 2026-07-06 eval-instruments report defined as the next step after prose asset packs failed to hold long-horizon constraints (t14 DATA B, n=35, p=0.279). Companion first real measurement on t14-constraint-horizon (haiku, 5-turn) is recorded in `docs/projects/2026-07-08-t14-reinject/`.

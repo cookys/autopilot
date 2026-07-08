@@ -425,11 +425,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (per-command compact wrapper, e.g. a `git diff --stat`-first reviewer feed) — scope to the one command that actually bloats first, don't build the whole rtk surface speculatively.
 - **Source**: 2026-06-23 `/next` follow-up — user-requested survey of headroom + rtk; two Explore-agent technical reports + same-session spike (rtk not installed, CC 2.1.186, intent `last_tool_source:"transcript"` confirms transcript-pivot ≠ stdin, zero live PreToolUse hooks).
 
-### `verify_strength` as the third density input
-- **Trigger**: next time changing `resolve-review-loop.sh` density/risk inputs, OR after red-green validation exists and real test-suite strength can be instrumented.
-- **Context**: Verification QUALITY needs to become a first-class density axis for `resolve-review-loop`; evidence is the escape cliff where `t2×medium` produced 100% escapes.
-- **Direction**: Red-green validation is the minimal precursor, but real adoption needs a strength-scoring instrument for actual test suites before `verify_strength` can drive policy.
-- **Effort**: L
+### `verify_strength` as the third density input — decomposed into ordered precursors
+Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-07-09-verify-strength-precursors.md). Evidence: the escape cliff where `t2×medium` verification produced 100% escapes — verification QUALITY is invisible to `resolve-review-loop.sh` routing.
+
+- **✅ Precursor (1) — red-green validation instrument** — DELIVERED 2026-07-09 (v2.32.11): `scripts/verify-red-green.sh` proves a change's tests are RED at base+tests / GREEN at head (else they don't exercise the change). Isolated detached worktrees; verdict from real exit codes. This is the BACKLOG's named minimal precursor.
+- **🔜 (2) — real test-suite "verification strength" scorer** — a graded (`weak|medium|strong`) score for an ACTUAL project's suite guarding a change (NOT the pipeline-bench synthetic fixtures). Candidate signals: per-test red-green (precursor 1), mutation-survival / assertion density on the diff, changed-line coverage, oracle presence. Needs its own calibration corpus tying scores to real escape outcomes. **Depends on (1).** Effort L.
+- **🔜 (3) — `resolve-review-loop.sh` consumes `verify_strength`** — fold the (2) score into the existing risk/density machinery (weak suite ⇒ more review depth; strong ⇒ less). Must be additive (byte-identical prefix + appended keys, like `--domain`/`min_panel_size`) and fail-safe (unknown ⇒ weakest ⇒ most review). **Depends on (2)** + the trust-tiered-review policy. Effort M.
+- **Trigger** (for 2/3): after precursor (1) is in use and a strength-scoring instrument can be calibrated, OR next time changing `resolve-review-loop.sh` density/risk inputs.
 - **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
 
 ### ✅ DONE (2026-07-08, v2.32.9) — resolver `min_panel_size` emission (family-agnostic)

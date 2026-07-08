@@ -9,6 +9,7 @@ ARM=""
 RUNNER=""
 MODEL=""
 OUT_DIR=""
+REINJECT_FILE=""
 
 # Parse arguments
 while [ $# -gt 0 ]; do
@@ -18,12 +19,13 @@ while [ $# -gt 0 ]; do
     --runner) RUNNER="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --out) OUT_DIR="$2"; shift 2 ;;
+    --reinject) REINJECT_FILE="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 if [ -z "$TASK_ID" ] || [ -z "$ARM" ] || [ -z "$RUNNER" ] || [ -z "$MODEL" ]; then
-  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>]" >&2
+  echo "Usage: $0 --task <id> --arm on|off --runner cc|agy|stub --model <m> [--out <dir>] [--reinject <relpath>]" >&2
   exit 2
 fi
 
@@ -43,6 +45,28 @@ if [ -d "$TASK_DIR/turns" ]; then
     HAS_TURNS="true"
   fi
 fi
+
+REINJECT_SRC=""
+if [ -n "$REINJECT_FILE" ]; then
+  if [ "$HAS_TURNS" != "true" ]; then
+    echo "ERROR: --reinject requires a multi-turn task" >&2
+    exit 2
+  fi
+  REINJECT_SRC="$TASK_DIR/repo/$REINJECT_FILE"
+  if [ ! -f "$REINJECT_SRC" ]; then
+    echo "ERROR: Reinjection source not found: $REINJECT_SRC" >&2
+    exit 2
+  fi
+fi
+
+emit_reinject_block() {
+  if [ -z "${REINJECT_SRC}" ]; then
+    return 0
+  fi
+  printf '\n=== CONSTRAINTS REMINDER (harness re-injection — these invariants remain in force across all turns) ===\n' >> "$1"
+  cat "$REINJECT_SRC" >> "$1"
+  printf '\n===\n\n' >> "$1"
+}
 
 # Set output directory if not provided
 if [ -z "$OUT_DIR" ]; then
@@ -160,7 +184,9 @@ if [ "$RUNNER" = "cc" ]; then
     for turn_file in $(ls -1 "$TASK_DIR/turns"/*.md | sort); do
       TURN_PROMPT="$OUT_DIR/turn_$(basename "$turn_file")"
       if [ "$TURNS_COMPLETED" -eq 0 ]; then
-        cat "$PROMPT_FILE" "$turn_file" > "$TURN_PROMPT"
+        cat "$PROMPT_FILE" > "$TURN_PROMPT"
+        emit_reinject_block "$TURN_PROMPT"
+        cat "$turn_file" >> "$TURN_PROMPT"
         OUT_JSON=$(
           cd "$TEMP_REPO"
           export HOME="$SCRATCH_HOME"
@@ -174,7 +200,9 @@ if [ "$RUNNER" = "cc" ]; then
         fi
         SESSION_ID=$(echo "$OUT_JSON" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | head -n1 || true)
       else
-        cat "$turn_file" > "$TURN_PROMPT"
+        : > "$TURN_PROMPT"
+        emit_reinject_block "$TURN_PROMPT"
+        cat "$turn_file" >> "$TURN_PROMPT"
         (
           cd "$TEMP_REPO"
           export HOME="$SCRATCH_HOME"
@@ -267,9 +295,13 @@ elif [ "$RUNNER" = "stub" ]; then
     for turn_file in $(ls -1 "$TASK_DIR/turns"/*.md | sort); do
       TURN_PROMPT="$OUT_DIR/turn_$(basename "$turn_file")"
       if [ "$TURNS_COMPLETED" -eq 0 ]; then
-        cat "$PROMPT_FILE" "$turn_file" > "$TURN_PROMPT"
+        cat "$PROMPT_FILE" > "$TURN_PROMPT"
+        emit_reinject_block "$TURN_PROMPT"
+        cat "$turn_file" >> "$TURN_PROMPT"
       else
-        cat "$LAST_PROMPT" "$turn_file" > "$TURN_PROMPT"
+        cat "$LAST_PROMPT" > "$TURN_PROMPT"
+        emit_reinject_block "$TURN_PROMPT"
+        cat "$turn_file" >> "$TURN_PROMPT"
       fi
       LAST_PROMPT="$TURN_PROMPT"
       (
@@ -382,11 +414,16 @@ if [ "${RUN_EXIT:-0}" -ne 0 ]; then
   run_error="true"
 fi
 
+REINJECT_JSON_FRAGMENT=""
+if [ -n "${REINJECT_SRC:-}" ]; then
+  REINJECT_JSON_FRAGMENT=',"reinject":"'"$(printf '%s' "$REINJECT_FILE" | tr -d '"\\')"'"'
+fi
+
 if [ "$HAS_TURNS" = "true" ]; then
-  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s,"turns":%s,"turns_completed":%s,"run_error":%s}\n' \
+  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s,"turns":%s,"turns_completed":%s,"run_error":%s%s}\n' \
     "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
     "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
-    "$patterns_named" "$probe_evidence_present" "$TURNS_TOTAL" "$TURNS_COMPLETED" "$run_error" > "$RESULT_JSON"
+    "$patterns_named" "$probe_evidence_present" "$TURNS_TOTAL" "$TURNS_COMPLETED" "$run_error" "$REINJECT_JSON_FRAGMENT" > "$RESULT_JSON"
 else
   # Single-prompt tasks: result.json stays byte-identical to the pre-multi-turn
   # schema (no turns/run_error keys) — hard compat bar, round-3 review finding.

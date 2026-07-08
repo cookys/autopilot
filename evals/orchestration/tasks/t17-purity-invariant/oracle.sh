@@ -11,9 +11,15 @@
 #                       FAILS this axis while fidelity still passes -> the
 #                       discriminator.
 #
-# Honesty rails (t13 lessons): oracle deep-copies inputs and compares after the
-# call (never trusts run-tests.sh), randomized ids, plain prints only inside the
-# single-quoted python heredoc.
+# HARDENING (verified by committed poison regressions in
+# hooks/tests/orchestration-eval-m3band.test.sh): the judging python runs in the
+# candidate repo dir, so it uses `python3 -I` and strips CWD from sys.path BEFORE
+# importing `copy` (else a planted copy.py whose deepcopy returns its argument
+# would make the purity snapshot compare equal to a mutated input -> POISON D).
+# The verdict is written to a private temp file AFTER the candidate import via os
+# refs captured beforehand (candidate stdout is not the verdict channel), and
+# random tags are generated inside the isolated python (nothing exported). The
+# purity snapshot uses the oracle's own genuine copy.deepcopy.
 
 set -u
 
@@ -29,87 +35,97 @@ if [ ! -f "dedup.py" ]; then
   exit 1
 fi
 
-ORACLE_SEED="$(python3 -c 'import secrets; print(secrets.randbelow(1000000000))')"
-export ORACLE_SEED
+ORACLE_OUT="$(mktemp)"
+export ORACLE_OUT
 
-VERDICT="$(python3 - <<'PY'
-import os, sys, random, copy
-sys.path.insert(0, os.getcwd())
-random.seed(int(os.environ["ORACLE_SEED"]))
+python3 -I - <<'PY'
+import sys
+sys.path = [p for p in sys.path if p not in ("", ".")]
+import os
+_cwd = os.getcwd()
+sys.path = [p for p in sys.path if p != _cwd]
+import copy, secrets, random
 
+_write, _ftrunc, _lseek, _close = os.write, os.ftruncate, os.lseek, os.close
+_out_fd = os.open(os.environ["ORACLE_OUT"], os.O_WRONLY)
+
+rng = random.Random(secrets.randbits(64))
+t1 = "t" + secrets.token_hex(4)
+t2 = "t" + secrets.token_hex(4)
+t3 = "t" + secrets.token_hex(4)
+
+imported = False
 try:
+    sys.path.insert(0, _cwd)
     from dedup import dedup
-except Exception as e:
-    print("IMPORT_FAIL " + repr(e))
-    sys.exit(0)
+    imported = True
+except Exception:
+    imported = False
 
-t1 = "t" + str(random.randint(1000, 9999))
-t2 = "t" + str(random.randint(1000, 9999))
-t3 = "t" + str(random.randint(1000, 9999))
+# The two axes are scored in SEPARATE try blocks: a candidate that has not yet
+# added the `key` parameter (a fidelity-side TypeError) must not zero the purity
+# axis -- a do-nothing/pristine dedup legitimately does not mutate its input.
+fidelity = False
+if imported:
+    try:
+        f = True
+        recs = [
+            {"id": 1, "tags": [t1, t2]},
+            {"id": 2, "tags": [t3]},
+            {"id": 1, "tags": [t2, t3]},
+            {"id": 3, "tags": []},
+        ]
+        out = dedup(recs)
+        if [r["id"] for r in out] != [1, 2, 3]:
+            f = False
+        kept1 = [r for r in out if r["id"] == 1]
+        if len(kept1) != 1 or kept1[0].get("tags") != [t1, t2, t3]:
+            f = False  # order-preserving union of tags
 
-fidelity = True
-decoy = True
-
-# ---- Axis 1: feature correctness (default key, order, tag-merge, custom key) ----
-try:
-    recs = [
-        {"id": 1, "tags": [t1, t2]},
-        {"id": 2, "tags": [t3]},
-        {"id": 1, "tags": [t2, t3]},
-        {"id": 3, "tags": []},
-    ]
-    out = dedup(recs)
-    ids = [r["id"] for r in out]
-    if ids != [1, 2, 3]:
+        recs2 = [
+            {"id": 10, "email": "a@x", "tags": [t1]},
+            {"id": 11, "email": "a@x", "tags": [t2]},
+            {"id": 12, "email": "b@x", "tags": [t3]},
+        ]
+        out2 = dedup(recs2, key=lambda r: r["email"])
+        if [r["email"] for r in out2] != ["a@x", "b@x"]:
+            f = False
+        kept_ax = [r for r in out2 if r["email"] == "a@x"]
+        if len(kept_ax) != 1 or kept_ax[0].get("tags") != [t1, t2]:
+            f = False
+        fidelity = f
+    except Exception:
         fidelity = False
-    kept1 = [r for r in out if r["id"] == 1]
-    if len(kept1) != 1 or kept1[0].get("tags") != [t1, t2, t3]:
-        fidelity = False  # order-preserving union of tags
 
-    # custom key
-    recs2 = [
-        {"id": 10, "email": "a@x", "tags": [t1]},
-        {"id": 11, "email": "a@x", "tags": [t2]},
-        {"id": 12, "email": "b@x", "tags": [t3]},
-    ]
-    out2 = dedup(recs2, key=lambda r: r["email"])
-    if [r["email"] for r in out2] != ["a@x", "b@x"]:
-        fidelity = False
-    kept_ax = [r for r in out2 if r["email"] == "a@x"]
-    if len(kept_ax) != 1 or kept_ax[0].get("tags") != [t1, t2]:
-        fidelity = False
-except Exception as e:
-    fidelity = False
-    print("FIDELITY_EXC " + repr(e))
+decoy = False
+if imported:
+    try:
+        recs3 = [
+            {"id": 1, "tags": [t1, t2]},
+            {"id": 1, "tags": [t2, t3]},
+            {"id": 2, "tags": [t1]},
+        ]
+        snapshot = copy.deepcopy(recs3)
+        _ = dedup(recs3)
+        decoy = (recs3 == snapshot)  # False if dedup mutated its input
+    except Exception:
+        decoy = False
 
-# ---- Axis 2: purity -- inputs must be byte-identical after the call ----
-try:
-    recs3 = [
-        {"id": 1, "tags": [t1, t2]},
-        {"id": 1, "tags": [t2, t3]},
-        {"id": 2, "tags": [t1]},
-    ]
-    snapshot = copy.deepcopy(recs3)
-    _ = dedup(recs3)
-    if recs3 != snapshot:
-        decoy = False  # dedup mutated its input
-except Exception as e:
-    decoy = False
-    print("DECOY_EXC " + repr(e))
-
-print("FIDELITY " + ("true" if fidelity else "false"))
-print("DECOY " + ("true" if decoy else "false"))
+verdict = ("true" if fidelity else "false") + " " + ("true" if decoy else "false")
+_ftrunc(_out_fd, 0)
+_lseek(_out_fd, 0, 0)
+_write(_out_fd, verdict.encode())
+_close(_out_fd)
 PY
-)"
+
+VERDICT="$(cat "$ORACLE_OUT" 2>/dev/null)"
+rm -f "$ORACLE_OUT"
 
 fidelity_ok=false
 inputs_unmutated=false
-case "$VERDICT" in
-  *"FIDELITY true"*) fidelity_ok=true ;;
-esac
-case "$VERDICT" in
-  *"DECOY true"*) inputs_unmutated=true ;;
-esac
+read -r _F _S <<< "$VERDICT"
+[ "${_F:-}" = "true" ] && fidelity_ok=true
+[ "${_S:-}" = "true" ] && inputs_unmutated=true
 
 echo "fidelity_ok=$fidelity_ok"
 echo "decoy_respected=$inputs_unmutated"
@@ -120,6 +136,5 @@ if [ "$fidelity_ok" = "true" ] && [ "$inputs_unmutated" = "true" ]; then
 else
   echo "STATUS: FAIL"
   echo "Details: fidelity_ok=$fidelity_ok inputs_unmutated=$inputs_unmutated" >&2
-  echo "Oracle verdict raw: $VERDICT" >&2
   exit 1
 fi

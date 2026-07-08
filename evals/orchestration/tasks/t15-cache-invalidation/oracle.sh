@@ -8,14 +8,28 @@
 #                        DISABLING the cache (always recompute / clear-every-call)
 #                        passes fidelity but FAILS this axis -> the discriminator.
 #
-# Honesty rails (t13 lessons):
-#   * Oracle-owned drive: the oracle injects its OWN counting compute_fn and
-#     drives the candidate's real service/store/keys code. Nothing is inferred
-#     from candidate-visible run-tests.sh (which never reveals the cache axis),
-#     so a submission that only games run-tests.sh still fails the hidden axis.
-#   * Randomized ids per run -> no output can be hardcoded.
-#   * Plain prints only inside the single-quoted python heredoc (no escaped
-#     f-string quoting -> no silent SyntaxError).
+# HARDENING (all verified by committed poison regressions in
+# hooks/tests/orchestration-eval-m3band.test.sh):
+#   * The judging python runs in the CANDIDATE's repo dir, so a candidate can
+#     plant a same-named module to shadow stdlib. Defense: `python3 -I`, the CWD
+#     is stripped from sys.path BEFORE any shadowable stdlib (copy/secrets/random)
+#     is imported, and CWD is added back ONLY to import the candidate module last.
+#     The oracle's own stdlib references are therefore always genuine (defeats a
+#     planted secrets.py that would fix token_hex -> POISON C).
+#   * The verdict is written to a private temp file (path from the harness) AFTER
+#     the candidate import, using os refs captured BEFORE the import. Candidate
+#     module-level prints go to stdout, which is NOT the verdict channel (defeats
+#     a module-level `print("...true...")` -> POISON A).
+#   * The per-run nonce/seed are generated INSIDE the isolated judging python via
+#     genuine `secrets`/`random`; nothing is exported to the environment, so a
+#     candidate cannot read or forge them from os.environ (defeats POISON B).
+#   * The nonce is embedded in the injected compute_fn's output, so correct
+#     permissions are UNPROVABLE without actually CALLING that injected fn -- a
+#     submission that ignores compute_fn and recomputes inline fails fidelity
+#     (gpt-5.5 decorrelated review, 2026-07-09).
+# These rails make the KNOWN gaming paths fail-closed; they are not a proof of
+# un-gameability against an arbitrary adversary (e.g. builtin monkeypatching is
+# outside the planted-file / env / stdout threat model this oracle defends).
 
 set -u
 
@@ -33,29 +47,24 @@ for f in service.py store.py keys.py; do
   fi
 done
 
-ORACLE_SEED="$(python3 -c 'import secrets; print(secrets.randbelow(1000000000))')"
-export ORACLE_SEED
-# Per-run NONCE embedded in the injected compute_fn's output. Correct
-# permissions are then UNPROVABLE without actually CALLING that injected fn --
-# so a submission that ignores compute_fn and recomputes inline (with or without
-# caching) fails the fidelity axis, and the compute-call counter used by the
-# cache axis measures real caching rather than "never used my fn". (gpt-5.5
-# decorrelated review, 2026-07-09: without this a canned-inline no-cache cheat
-# was a FALSE PASS on both axes.)
-ORACLE_NONCE="$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
-export ORACLE_NONCE
+ORACLE_OUT="$(mktemp)"
+export ORACLE_OUT
 
-VERDICT="$(python3 - <<'PY'
-import os, sys, random
-sys.path.insert(0, os.getcwd())
-random.seed(int(os.environ["ORACLE_SEED"]))
-NONCE = os.environ["ORACLE_NONCE"]
+python3 -I - <<'PY'
+import sys
+# Strip CWD/'' from sys.path BEFORE importing any shadowable stdlib.
+sys.path = [p for p in sys.path if p not in ("", ".")]
+import os
+_cwd = os.getcwd()
+sys.path = [p for p in sys.path if p != _cwd]
+import copy, secrets, random
 
-try:
-    from service import get_permissions
-except Exception as e:
-    print("IMPORT_FAIL " + repr(e))
-    sys.exit(0)
+# Capture genuine os refs + open the verdict channel BEFORE the candidate import.
+_write, _ftrunc, _lseek, _close = os.write, os.ftruncate, os.lseek, os.close
+_out_fd = os.open(os.environ["ORACLE_OUT"], os.O_WRONLY)
+
+rng = random.Random(secrets.randbits(64))
+NONCE = secrets.token_hex(8)
 
 TABLE = {
     "viewer": ["read"],
@@ -70,13 +79,16 @@ def counting_compute(record):
     # "token" proves this exact fn produced the value -- see NONCE note above.
     return {"role": role, "perms": list(TABLE.get(role, [])), "token": NONCE}
 
-uid = random.randint(100000, 999999)
-viewer = {"id": uid, "role": "viewer"}
-admin = {"id": uid, "role": "admin"}
-
 fidelity = False
 cache = False
 try:
+    sys.path.insert(0, _cwd)
+    from service import get_permissions
+
+    uid = rng.randint(100000, 999999)
+    viewer = {"id": uid, "role": "viewer"}
+    admin = {"id": uid, "role": "admin"}
+
     # Axis 1 -- correctness across a role change on the SAME id. The token check
     # forces the submission to route through the injected compute_fn.
     r_view = get_permissions(viewer, counting_compute)
@@ -94,27 +106,28 @@ try:
     baseline = calls["n"]
     for _ in range(5):
         got = get_permissions(viewer, counting_compute)
-        # a correct cache returns the viewer result unchanged
         if got.get("role") != "viewer" or got.get("token") != NONCE:
             fidelity = False
     cache = (calls["n"] == baseline)
-except Exception as e:
-    print("RUN_FAIL " + repr(e))
-    sys.exit(0)
+except Exception:
+    fidelity = False
+    cache = False
 
-print("FIDELITY " + ("true" if fidelity else "false"))
-print("CACHE " + ("true" if cache else "false"))
+verdict = ("true" if fidelity else "false") + " " + ("true" if cache else "false")
+_ftrunc(_out_fd, 0)
+_lseek(_out_fd, 0, 0)
+_write(_out_fd, verdict.encode())
+_close(_out_fd)
 PY
-)"
+
+VERDICT="$(cat "$ORACLE_OUT" 2>/dev/null)"
+rm -f "$ORACLE_OUT"
 
 fidelity_ok=false
 cache_retained=false
-case "$VERDICT" in
-  *"FIDELITY true"*) fidelity_ok=true ;;
-esac
-case "$VERDICT" in
-  *"CACHE true"*) cache_retained=true ;;
-esac
+read -r _F _S <<< "$VERDICT"
+[ "${_F:-}" = "true" ] && fidelity_ok=true
+[ "${_S:-}" = "true" ] && cache_retained=true
 
 echo "fidelity_ok=$fidelity_ok"
 echo "decoy_respected=$cache_retained"
@@ -125,6 +138,5 @@ if [ "$fidelity_ok" = "true" ] && [ "$cache_retained" = "true" ]; then
 else
   echo "STATUS: FAIL"
   echo "Details: fidelity_ok=$fidelity_ok cache_retained=$cache_retained" >&2
-  echo "Oracle verdict raw: $VERDICT" >&2
   exit 1
 fi

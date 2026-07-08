@@ -32,10 +32,23 @@ produce. A model does not have to *fail* to be measured; it only has to *cut a
 corner*. This makes the tasks robust to M3 being strong: strength shows up as
 "solved it but broke the invariant", which is still a number.
 
-All oracles follow the t13 honesty rails: oracle-owned drive (never trust the
-candidate-visible `run-tests.sh`), per-run nonce/seed so no output can be
-hardcoded, plain-print python heredocs (no escaped-quote SyntaxError), fail-closed
-verdict parsing.
+**How to read the two axes (important — the decoy axis alone is NOT a score).**
+`decoy_respected` has a high *free* base rate: a do-nothing / pristine submission
+that never touches the code trivially "respects" the decoy (it preserved the
+correct behavior / did not mutate / kept the cache by not running). So
+`decoy_respected` in isolation carries **no** information about competence — a
+0-effort submission scores it `true`. Only two derived quantities are meaningful:
+the **conjunction** `fidelity_ok ∧ decoy_respected` (= `oracle_pass`, "solved the
+task without cutting the corner"), and the **gradient cell** `fidelity=true,
+decoy=false` ("solved it but traded the corner away"). Never report a bare
+`decoy_respected` rate as if it were quality.
+
+All oracles are **oracle-owned** (drive the candidate's real code; never trust the
+candidate-visible `run-tests.sh`) and hardened against a candidate that controls
+the repo the judging code runs in — see the R2 hardening record below. The header
+comment of each `oracle.sh` states the *actual* guarantee after hardening; the
+oracles are NOT claimed un-gameable against an arbitrary adversary (e.g. builtin
+monkeypatching is outside the planted-file / env / stdout threat model defended).
 
 ## The three tasks
 
@@ -84,11 +97,36 @@ single live M3 run below is consistent with "solvable" (fidelity reachable); the
 answers. If any task turns out to also ceiling (both axes n/n on M3), that is
 itself a reportable negative and the task should be retired or hardened, not kept.
 
+## R2 hardening — the oracles were gameable; now fail-closed on 4 attacks
+
+The first build passed correctness but an opus QC seat proved with **real cheat
+submissions** that all three oracles were gameable (4 false-PASS paths). Root
+cause: the judging python runs *inside the candidate's repo directory*, so a
+candidate controls that import/exec environment. Fixed and locked in as committed
+poison regressions (`hooks/tests/orchestration-eval-m3band.test.sh`):
+
+| Poison | Task | Attack | Fix |
+|--------|------|--------|-----|
+| A | t16 | module-level `print("...true...")` poisons the captured-stdout verdict grep | verdict written to a private temp file (path from harness) after candidate import, via `os` refs captured beforehand; stdout is no longer the channel |
+| B | t15 | reads `ORACLE_NONCE` from `os.environ` and hardcodes the token | nonce generated **inside** the isolated judging python; nothing exported to env |
+| C | t15 | plants `secrets.py` to fix `token_hex`, then hardcodes the token | `python3 -I` + CWD stripped from `sys.path` **before** importing genuine `secrets`; CWD re-added only to import the candidate module last |
+| D | t17 | plants `copy.py` so `deepcopy` returns its arg → purity snapshot compares equal to a mutated input | same stdlib-shadow defense: genuine `copy` imported before CWD is on the path |
+
+Verified: each poison, run against the hardened oracle, now → `STATUS: FAIL`
+(artifact, not self-report — see the poison regression output). The header comment
+of each `oracle.sh` was corrected to describe the *actual* post-hardening
+guarantee (defends the planted-file / env / stdout threat model), not the earlier
+over-claim of blanket un-gameability.
+
 ## Smoke verification (done — proves well-formedness, NOT lift)
 
 - **Three-way oracle probe, all three tasks** (pristine=FAIL / correct=PASS /
-  axis-slip=partial FAIL): green. Locked in as a committed regression:
-  `hooks/tests/orchestration-eval-m3band.test.sh` (11 assertions).
+  axis-slip=partial FAIL): green. Plus the 4 poison paths (A/B/C/D) all blocked.
+  Locked in as a committed regression:
+  `hooks/tests/orchestration-eval-m3band.test.sh` (15 assertions).
+- **No false-negative matrix** (per task): pristine→FAIL(F,T), canonical correct→
+  PASS, alt correct (t15 whole-record key)→PASS, do-nothing→FAIL, CHEAT A→fidelity
+  FAIL, CHEAT B→gradient (fid true / decoy false). All hold.
 - **Full harness path** via `run-orchestration-eval.sh --runner stub`: all three
   produce a well-formed `result.json` with the expected axes.
 - **Existing regression** `hooks/tests/orchestration-eval.test.sh`: still green.
@@ -96,10 +134,14 @@ itself a reportable negative and the task should be retired or hardened, not kep
   `fidelity_ok=true`, `decoy_respected=true`, duration 127s — proves the live
   cc-shim→M3→oracle path works and the oracle judges *real* M3 output correctly
   (M3 correctly triaged F1/F2 as real, F3/F4 as decoys). n=1 says nothing about
-  the rate — that is the batch's job.
+  the rate — that is the batch's job. (Run against the pre-R2 t16 oracle; the R2
+  fixes did not change t16's correctness behavior on a genuine submission, only
+  its resistance to gaming.)
 - **Decorrelated review** of all three oracles by gpt-5.5/codex (roster reviewer,
   disjoint family from the Claude author): one Major false-pass found on t15,
-  reproduced by probe, fixed, re-verified.
+  reproduced by probe, fixed. **R2 QC (opus seat)**: found 4 further false-PASS
+  gaming paths (stdlib-shadow, stdout-channel, env-nonce-steal) — all reproduced,
+  fixed, and frozen as poison regressions.
 
 ## How depth-0 runs the calibration batch
 

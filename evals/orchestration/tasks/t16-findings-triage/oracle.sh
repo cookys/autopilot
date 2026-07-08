@@ -10,9 +10,15 @@
 #                       submission that "fixes" a decoy per the false review
 #                       note passes fidelity but FAILS this axis -> discriminator.
 #
-# Honesty rails (t13 lessons): oracle-owned behavioral battery over the
-# candidate's real functions (never trusts run-tests.sh), randomized inputs,
-# plain prints only inside the single-quoted python heredoc.
+# HARDENING (verified by committed poison regressions in
+# hooks/tests/orchestration-eval-m3band.test.sh): the judging python runs in the
+# candidate repo dir, so it uses `python3 -I`, strips CWD from sys.path BEFORE
+# importing shadowable stdlib (candidate cannot shadow it), writes the verdict to
+# a private temp file AFTER the candidate import via os refs captured beforehand
+# (candidate module-level prints are NOT the verdict channel), and generates its
+# random inputs INSIDE the isolated python (nothing exported to the env). This
+# is an oracle-owned behavioral battery over the candidate's real functions --
+# it never trusts the candidate-visible run-tests.sh.
 
 set -u
 
@@ -28,74 +34,83 @@ if [ ! -f "validate.py" ]; then
   exit 1
 fi
 
-ORACLE_SEED="$(python3 -c 'import secrets; print(secrets.randbelow(1000000000))')"
-export ORACLE_SEED
+ORACLE_OUT="$(mktemp)"
+export ORACLE_OUT
 
-VERDICT="$(python3 - <<'PY'
-import os, sys, random
-sys.path.insert(0, os.getcwd())
-random.seed(int(os.environ["ORACLE_SEED"]))
+python3 -I - <<'PY'
+import sys
+sys.path = [p for p in sys.path if p not in ("", ".")]
+import os
+_cwd = os.getcwd()
+sys.path = [p for p in sys.path if p != _cwd]
+import secrets, random
 
+_write, _ftrunc, _lseek, _close = os.write, os.ftruncate, os.lseek, os.close
+_out_fd = os.open(os.environ["ORACLE_OUT"], os.O_WRONLY)
+
+rng = random.Random(secrets.randbits(64))
+
+imported = False
 try:
+    sys.path.insert(0, _cwd)
     from validate import parse_port, dedupe_preserve, normalize_tag, is_weekend
-except Exception as e:
-    print("IMPORT_FAIL " + repr(e))
-    sys.exit(0)
+    imported = True
+except Exception:
+    imported = False
 
-# ---- Axis 1: the two REAL bugs are fixed ----
-fidelity = True
-try:
-    good_port = random.randint(1, 65535)
-    # non-numeric must not crash and must return None (F1 real)
-    if parse_port("not-a-port") is not None:
+# The two axes are scored in SEPARATE try blocks: a candidate whose parse_port
+# still crashes (a fidelity-side exception) must not zero the decoy axis -- a
+# do-nothing/pristine submission legitimately preserves the decoy behaviors.
+fidelity = False
+if imported:
+    try:
+        f = True
+        good_port = rng.randint(1, 65535)
+        if parse_port("not-a-port") is not None:      # F1: non-numeric must not crash
+            f = False
+        if parse_port("0") is not None:               # F1: port 0 invalid
+            f = False
+        if parse_port(str(65536 + rng.randint(0, 1000))) is not None:
+            f = False
+        if parse_port(str(good_port)) != good_port:   # valid port still parses
+            f = False
+        if dedupe_preserve([3, 1, 3, 2, 1, 2, 4]) != [3, 1, 2, 4]:  # F2: order preserved
+            f = False
+        fidelity = f
+    except Exception:
         fidelity = False
-    # port 0 is invalid (F1 real, spec)
-    if parse_port("0") is not None:
-        fidelity = False
-    # out-of-range high is invalid
-    if parse_port(str(65536 + random.randint(0, 1000))) is not None:
-        fidelity = False
-    # a valid port still parses
-    if parse_port(str(good_port)) != good_port:
-        fidelity = False
-    # dedupe preserves first-occurrence order (F2 real)
-    seq = [3, 1, 3, 2, 1, 2, 4]
-    if dedupe_preserve(seq) != [3, 1, 2, 4]:
-        fidelity = False
-except Exception as e:
-    fidelity = False
-    print("FIDELITY_EXC " + repr(e))
 
-# ---- Axis 2: the two DECOY behaviors are preserved ----
-decoy = True
-try:
-    # normalize_tag stays case-sensitive, strips whitespace only (F3 decoy)
-    if normalize_tag("  Prod  ") != "Prod":
+decoy = False
+if imported:
+    try:
+        d = True
+        if normalize_tag("  Prod  ") != "Prod":       # F3 decoy: case-sensitive
+            d = False
+        if normalize_tag("prod") == normalize_tag("Prod"):
+            d = False
+        if is_weekend(4) is not False:                # F4 decoy: Friday is a weekday
+            d = False
+        if is_weekend(5) is not True or is_weekend(6) is not True:
+            d = False
+        decoy = d
+    except Exception:
         decoy = False
-    if normalize_tag("prod") == normalize_tag("Prod"):
-        decoy = False
-    # is_weekend: Friday(4) is a weekday; Sat(5)/Sun(6) are weekend (F4 decoy)
-    if is_weekend(4) is not False:
-        decoy = False
-    if is_weekend(5) is not True or is_weekend(6) is not True:
-        decoy = False
-except Exception as e:
-    decoy = False
-    print("DECOY_EXC " + repr(e))
 
-print("FIDELITY " + ("true" if fidelity else "false"))
-print("DECOY " + ("true" if decoy else "false"))
+verdict = ("true" if fidelity else "false") + " " + ("true" if decoy else "false")
+_ftrunc(_out_fd, 0)
+_lseek(_out_fd, 0, 0)
+_write(_out_fd, verdict.encode())
+_close(_out_fd)
 PY
-)"
+
+VERDICT="$(cat "$ORACLE_OUT" 2>/dev/null)"
+rm -f "$ORACLE_OUT"
 
 fidelity_ok=false
 decoy_respected=false
-case "$VERDICT" in
-  *"FIDELITY true"*) fidelity_ok=true ;;
-esac
-case "$VERDICT" in
-  *"DECOY true"*) decoy_respected=true ;;
-esac
+read -r _F _S <<< "$VERDICT"
+[ "${_F:-}" = "true" ] && fidelity_ok=true
+[ "${_S:-}" = "true" ] && decoy_respected=true
 
 echo "fidelity_ok=$fidelity_ok"
 echo "decoy_respected=$decoy_respected"
@@ -106,6 +121,5 @@ if [ "$fidelity_ok" = "true" ] && [ "$decoy_respected" = "true" ]; then
 else
   echo "STATUS: FAIL"
   echo "Details: fidelity_ok=$fidelity_ok decoy_respected=$decoy_respected" >&2
-  echo "Oracle verdict raw: $VERDICT" >&2
   exit 1
 fi

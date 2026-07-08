@@ -163,6 +163,11 @@ run_lock_path() {
   echo "${ledger}.locks/run.${run_id}.lock"
 }
 
+ledger_lock_path() {
+  local ledger="$1"
+  echo "${ledger}.locks/ledger.lock"
+}
+
 resource_lock_path() {
   local ledger="$1" resource_id="$2"
   local hash
@@ -208,6 +213,19 @@ acquire_resource_lock() {
 release_lock() {
   local fd="$1"
   flock -u "$fd" 2>/dev/null || true
+  eval "exec ${fd}>&-" 2>/dev/null || true
+}
+
+with_ledger_lock() {
+  local ledger="$1" timeout="$2" out_var="${3:-}"
+  local lock_file lock_fd
+  lock_file="$(ledger_lock_path "$ledger")"
+  acquire_lock "$lock_file" "$timeout" lock_fd || return 1
+  if [ -n "$out_var" ]; then
+    printf -v "$out_var" '%s' "$lock_fd"
+    return 0
+  fi
+  echo "$lock_fd"
 }
 
 read_lock_owner() {
@@ -280,7 +298,7 @@ atomic_write_temp() {
 atomic_append_ledger() {
   local ledger="$1"
   local line="$2"
-  local fd="$3"
+  local fd="$3" ledger_lock_fd="${4:-}"
 
   local tmp="${ledger}.tmp.$$"
   if [ -f "$ledger" ]; then
@@ -351,7 +369,13 @@ with_resource_locks() {
     [ -z "$resource" ] && continue
     local path fd
     path="$(resource_lock_path "$ledger" "$resource")"
-    acquire_resource_lock "$path" "$timeout" '{"resource_state":"waiting"}' fd || return 1
+    if ! acquire_resource_lock "$path" "$timeout" '{"resource_state":"waiting"}' fd; then
+      local release_fd
+      for release_fd in $lock_fds; do
+        release_lock "$release_fd"
+      done
+      return 1
+    fi
     lock_fds="${lock_fds}${fd} "
   done
   if [ -n "$out_var" ]; then
@@ -387,13 +411,27 @@ append_record() {
   local run_lock_fd="${5:-}"
 
   if [ -n "$run_lock_fd" ]; then
-    atomic_append_ledger "$ledger" "$row_json" "$run_lock_fd"
+    local ledger_lock_fd
+    with_ledger_lock "$ledger" "$timeout" ledger_lock_fd || {
+      flock -u "$run_lock_fd"
+      eval "exec ${run_lock_fd}>&-"
+      error "failed to acquire ledger lock"
+    }
+    atomic_append_ledger "$ledger" "$row_json" "$run_lock_fd" "$ledger_lock_fd"
     return 0
   fi
 
   local run_fd
-  with_run_lock "$ledger" "$run_id" "$timeout" run_fd || error "failed to acquire run lock"
-  atomic_append_ledger "$ledger" "$row_json" "$run_fd"
+  if ! with_run_lock "$ledger" "$run_id" "$timeout" run_fd; then
+    error "failed to acquire run lock"
+  fi
+  local ledger_lock_fd
+  if ! with_ledger_lock "$ledger" "$timeout" ledger_lock_fd; then
+    flock -u "$run_fd"
+    eval "exec ${run_fd}>&-"
+    error "failed to acquire ledger lock"
+  fi
+  atomic_append_ledger "$ledger" "$row_json" "$run_fd" "$ledger_lock_fd"
 }
 
 latest_stage_record() {
@@ -424,7 +462,8 @@ has_applied_journal_key() {
 }
 
 write_side_effect_row() {
-  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" op="$6" idempotency_key="$7" status="$8" payload="$9" timeout="${10}"
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" op="$6" idempotency_key="$7" status="$8" payload="$9" timeout="${10}" run_lock_fd="${11:-}"
+  local latest_resources resource_fds="" local_run_fd
 
   local line
   line="$(jq -nc \
@@ -439,7 +478,29 @@ write_side_effect_row() {
     --arg nonce "$nonce" \
     --arg payload "$payload" \
     '{kind:$kind,ts:$ts,run_id:$run_id,stage:$stage,generation:$gen,nonce:$nonce,op:$op,idempotency_key:$id_key,status:$status,payload:$payload}')"
-  append_record "$ledger" "$run_id" "$line" "$timeout"
+
+  if [ -n "$run_lock_fd" ]; then
+    append_record "$ledger" "$run_id" "$line" "$timeout" "$run_lock_fd"
+    return 0
+  fi
+
+  local latest
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  latest_resources="$(jq -r '.resources // ""' <<<"$latest")"
+  if [ -n "$latest_resources" ]; then
+    with_resource_locks "$ledger" "$latest_resources" "$timeout" resource_fds || error "resource lock unavailable"
+  fi
+  if ! with_run_lock "$ledger" "$run_id" "$timeout" local_run_fd; then
+    if [ -n "$resource_fds" ]; then
+      for fd in $resource_fds; do release_lock "$fd"; done
+    fi
+    error "run lock unavailable"
+  fi
+
+  append_record "$ledger" "$run_id" "$line" "$timeout" "$local_run_fd"
+  if [ -n "$resource_fds" ]; then
+    for fd in $resource_fds; do release_lock "$fd"; done
+  fi
 }
 
 command_stage_acquire() {
@@ -656,18 +717,36 @@ command_journal_add() {
   [ -n "$nonce" ] || error "--nonce required"
   [ -n "$idempotency_key" ] || error "--idempotency-key required"
 
-  if [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
-    echo '{"status":"already_applied"}'
-    return 0
-  fi
-
   local existing
   existing="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   if [ -z "$existing" ]; then
     error "stage row missing; record journal after stage is acquired first"
   fi
+  local resources run_fds run_fd
+  resources="$(jq -r '.resources // ""' <<<"$existing")"
+  if [ -n "$resources" ]; then
+    with_resource_locks "$ledger" "$resources" "$timeout" run_fds || error "resource lock unavailable"
+  fi
+  if ! with_run_lock "$ledger" "$run_id" "$timeout" run_fd; then
+    if [ -n "$run_fds" ]; then
+      for fd in $run_fds; do release_lock "$fd"; done
+    fi
+    error "run lock unavailable"
+  fi
 
-  write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$op" "$idempotency_key" "$status" "$payload" "$timeout"
+  if [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
+    flock -u "$run_fd"; eval "exec ${run_fd}>&-"
+    if [ -n "$run_fds" ]; then
+      for fd in $run_fds; do release_lock "$fd"; done
+    fi
+    echo '{"status":"already_applied"}'
+    return 0
+  fi
+
+  write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$op" "$idempotency_key" "$status" "$payload" "$timeout" "$run_fd"
+  if [ -n "$run_fds" ]; then
+    for fd in $run_fds; do release_lock "$fd"; done
+  fi
   echo '{"status":"recorded"}'
 }
 
@@ -738,6 +817,15 @@ command_stage_transition() {
     return 11
   fi
 
+  if [ "$current_state" = "$to_state" ]; then
+    if [ -n "$idempotency_key" ] && [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
+      flock -u "$run_fd"; eval "exec ${run_fd}>&-"
+      for fd in $r_fds; do release_lock "$fd"; done
+      echo '{"status":"already_applied","state":"'$current_state'"}'
+      return 0
+    fi
+  fi
+
   if ! is_allowed_transition "$current_state" "$to_state"; then
     flock -u "$run_fd"; eval "exec ${run_fd}>&-"
     for fd in $r_fds; do release_lock "$fd"; done
@@ -748,15 +836,6 @@ command_stage_transition() {
     flock -u "$run_fd"; eval "exec ${run_fd}>&-"
     for fd in $r_fds; do release_lock "$fd"; done
     error "non-forward transition requested"
-  fi
-
-  if [ "$current_state" = "$to_state" ]; then
-    if [ -n "$idempotency_key" ] && [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
-      flock -u "$run_fd"; eval "exec ${run_fd}>&-"
-      for fd in $r_fds; do release_lock "$fd"; done
-      echo '{"status":"already_applied","state":"'$current_state'"}'
-      return 0
-    fi
   fi
 
   git_ref="${git_ref:-$(jq -r '.git_ref // ""' <<<"$latest")}"
@@ -812,11 +891,6 @@ command_stage_apply() {
   [ -n "$nonce" ] || error "--nonce required"
   [ -n "$to_state" ] || error "--to-state required"
 
-  if [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
-    echo '{"status":"already_applied"}'
-    return 0
-  fi
-
   local existing_line
   existing_line="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   if [ -z "$existing_line" ]; then
@@ -832,9 +906,49 @@ command_stage_apply() {
     error "stage transition token invalid"
   fi
 
-  # Record side effect first so probe/recovery can reason on idempotent key.
   if [ -n "$idempotency_key" ]; then
-    write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$side_effect_op" "$idempotency_key" "applied" "$payload" "$timeout"
+    local apply_resources apply_resource_fds apply_run_fd
+    apply_resources="$(jq -r '.resources // ""' <<<"$existing_line")"
+    if [ -n "$apply_resources" ]; then
+      with_resource_locks "$ledger" "$apply_resources" "$timeout" apply_resource_fds || error "resource lock unavailable"
+    fi
+
+    if ! with_run_lock "$ledger" "$run_id" "$timeout" apply_run_fd; then
+      if [ -n "$apply_resource_fds" ]; then
+        for fd in $apply_resource_fds; do release_lock "$fd"; done
+      fi
+      error "run lock unavailable"
+    fi
+
+    existing_line="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+    current_state="$(jq -r '.state // ""' <<<"$existing_line")"
+    if [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
+      flock -u "$apply_run_fd"; eval "exec ${apply_run_fd}>&-"
+      if [ -n "$apply_resource_fds" ]; then
+        for fd in $apply_resource_fds; do release_lock "$fd"; done
+      fi
+      if [ "$current_state" = "$to_state" ]; then
+        echo '{"status":"already_applied"}'
+        return 0
+      fi
+      command_stage_transition \
+        --ledger "$ledger" \
+        --run-id "$run_id" \
+        --stage "$stage" \
+        --generation "$generation" \
+        --nonce "$nonce" \
+        --to-state "$to_state" \
+        --idempotency-key "$idempotency_key" \
+        --timeout "$timeout" \
+        >/dev/null
+      echo '{"status":"applied"}'
+      return 0
+    fi
+
+    write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$side_effect_op" "$idempotency_key" "applied" "$payload" "$timeout" "$apply_run_fd"
+    if [ -n "$apply_resource_fds" ]; then
+      for fd in $apply_resource_fds; do release_lock "$fd"; done
+    fi
   fi
 
   command_stage_transition \
@@ -1752,8 +1866,14 @@ atomic_append_ledger() {
   mv "$tmp" "$ledger"
   durable_sync "$ledger"
   durable_sync "$(dirname "$ledger")"
-  flock -u "$fd"
-  eval "exec ${fd}>&-"
+  if [ -n "$fd" ]; then
+    flock -u "$fd"
+    eval "exec ${fd}>&-"
+  fi
+  if [ -n "$ledger_lock_fd" ]; then
+    flock -u "$ledger_lock_fd"
+    eval "exec ${ledger_lock_fd}>&-"
+  fi
 }
 
 command="${1:-}"

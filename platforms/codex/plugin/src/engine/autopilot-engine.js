@@ -82,7 +82,6 @@ function collectMisplacementEvidence(result, cwd) {
   const fields = [
     ['worktree', result.worktree],
     ['agent_log', result.agent_log],
-    ['error', result.error],
   ];
   for (const [field, value] of fields) {
     if (isPathLikelyMisplaced(value, cwd)) {
@@ -90,6 +89,35 @@ function collectMisplacementEvidence(result, cwd) {
     }
   }
   return evidence;
+}
+
+const IMPLEMENTATION_STAGE_DEFAULT = 'implement';
+const implementationAttemptsByRunId = new Map();
+
+function normalizeImplementationStage(value) {
+  return typeof value === 'string' && value.length > 0 ? value : IMPLEMENTATION_STAGE_DEFAULT;
+}
+
+function resolveImplementationLedgerStage(input = {}) {
+  const stageBase = normalizeImplementationStage(input.implementationStage);
+
+  if (Number.isInteger(input.implementationRound) && input.implementationRound > 0) {
+    return input.implementationRound === 1
+      ? stageBase
+      : `${stageBase}#r${input.implementationRound}`;
+  }
+
+  const runId = input.runId;
+  if (typeof runId !== 'string' || runId.length === 0) {
+    return stageBase;
+  }
+
+  const attemptKey = `${runId}\u0000${stageBase}`;
+  const nextAttempt = (implementationAttemptsByRunId.get(attemptKey) || 0) + 1;
+  implementationAttemptsByRunId.set(attemptKey, nextAttempt);
+  return nextAttempt === 1
+    ? stageBase
+    : `${stageBase}#r${nextAttempt}`;
 }
 
 function hasNoOpOrCommittedEmptyWrite(result) {
@@ -1361,6 +1389,11 @@ class AutopilotEngine {
     }
     let blockedReason = implementationResultBlocked(implementationResult);
     let parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
+    const resolvedImplementationStage = resolveImplementationLedgerStage({
+      implementationStage: input.implementationStage,
+      implementationRound: input.implementationRound,
+      runId: input.runId,
+    });
 
     let reconciledByLedger = false;
     let reconcileDetails = null;
@@ -1369,7 +1402,7 @@ class AutopilotEngine {
         implementationOptions,
         ledger: input.ledger,
         runId: input.runId,
-        stage: input.implementationStage,
+        stage: resolvedImplementationStage,
         resultJson: input.resultJson,
         gitDir: input.gitDir,
         branch: input.branch,
@@ -1389,7 +1422,7 @@ class AutopilotEngine {
       }
     }
 
-    const misplacedWriteEvidence = (parsed && hasNoOpOrCommittedEmptyWrite(parsed))
+    const misplacedWriteEvidence = parsed
       ? collectMisplacementEvidence(parsed, resolvedTaskCwd)
       : [];
     const misplacedWrites = misplacedWriteEvidence.length > 0;
@@ -1747,6 +1780,7 @@ class AutopilotEngine {
         roster,
         runId: input.runId,
         ledger: input.ledger,
+        implementationRound: round,
         implementationStage: input.implementationStage,
         resultJson: input.resultJson,
         gitDir: input.gitDir,

@@ -22,15 +22,18 @@
 
 set -euo pipefail
 
+# git :(glob) magic: a single '*' does NOT cross '/', so a bare '*test*' only
+# matches basenames at the repo root. Lead every pattern with '**/' so test files
+# at ANY depth (e.g. tests/unit_test.sh, src/foo.spec.ts) are matched.
 DEFAULT_TEST_GLOBS=(
-  '*test*'
-  '*spec*'
-  '*_test.*'
-  'test_*'
-  '*/tests/*'
-  '*/__tests__/*'
-  '*.test.*'
-  '*.spec.*'
+  '**/*test*'
+  '**/*spec*'
+  '**/*_test.*'
+  '**/test_*'
+  '**/tests/**'
+  '**/__tests__/**'
+  '**/*.test.*'
+  '**/*.spec.*'
 )
 
 RANGE=""

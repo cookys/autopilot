@@ -432,11 +432,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: L
 - **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
 
-### resolver `min_panel_size` emission (family-agnostic)
-- **Trigger**: next time changing `resolve-review-loop.sh` panel emission/enforcement, OR before removing the homogeneous ≥3-lens prose floor.
-- **Context**: Any `required_families=1` single-family panel has the single-lens weakness; this is family-agnostic, not Claude-specific.
-- **Direction**: Emit `min_panel_size` separately from family requirements because lens diversity ≠ family decorrelation; same-family lenses can still share blind spots. Until then, keep the homogeneous ≥3-lens prose floor.
-- **Effort**: S
+### ✅ DONE (2026-07-08, v2.32.9) — resolver `min_panel_size` emission (family-agnostic)
+- **Resolution**: `resolve-review-loop.sh` now emits a standalone integer `min_panel_size` (config key `min_panel_size`, default 3, fail-safe on garbage/`0`/negative), `--field`-accessible, appended as the last data key (byte-identical pre-existing keys); Node twin validates it (`REVIEW_LOOP_FIELDS` + `Number.isInteger && >= 1`). Emitted SEPARATELY from `required_review_families` (lens diversity ≠ family decorrelation; same-family lenses can share blind spots). The five consumer prose-floor sites (`l4` SKILL, `level-front-door.md` ×3, `quality-pipeline/references/code-review.md`) now read「must not drop below the resolver's `min_panel_size`」instead of「until `min_panel_size` exists」. Guarded by 12 new `hooks/tests/resolve-review-loop.test.sh` assertions (default / override / garbage-and-below-floor fail-safe / `--field` / independence-from-families / density-on emission / schema-lock) + the resolver schema-lock test extended.
+- **Trigger** (original): next time changing `resolve-review-loop.sh` panel emission/enforcement, OR before removing the homogeneous ≥3-lens prose floor.
 - **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
 
 ---

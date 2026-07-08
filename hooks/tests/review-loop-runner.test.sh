@@ -112,6 +112,7 @@ const valid = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 const parsed = parseReviewLoopOutput([
   '{not valid json}',
@@ -160,6 +161,7 @@ const valid = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 const parsed = parseReviewLoopOutput([
   'resolver preface',
@@ -227,6 +229,7 @@ const partial = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 try {
   parseReviewLoopOutput(JSON.stringify(partial));
@@ -273,6 +276,7 @@ const invalid = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 try {
   parseReviewLoopOutput(JSON.stringify(invalid, null, 2));
@@ -319,6 +323,7 @@ const valid = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 const parsed = parseReviewLoopOutput(`${JSON.stringify(valid)}\nlog line with {debug braces}`);
 console.log(parsed.reviewer_engine);
@@ -361,6 +366,7 @@ const valid = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":"bad"}`);
@@ -407,6 +413,7 @@ const valid = {
   capability_warnings: [],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":`);

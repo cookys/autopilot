@@ -39,6 +39,7 @@ const REVIEW_LOOP_FIELDS = [
   'capability_warnings',
   'reviewer_endpoint',
   'implementer_endpoint',
+  'min_panel_size',
 ];
 
 
@@ -125,6 +126,7 @@ function validateReviewLoopConfig(value) {
   for (const field of ['reviewer_endpoint', 'implementer_endpoint']) {
     assertField(value, field, (v) => typeof v === 'string', 'a string');
   }
+  assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
 
   const hasReviewerQualified = Object.prototype.hasOwnProperty.call(value, 'reviewer_qualified');
   const hasFallbackLadder = Object.prototype.hasOwnProperty.call(value, 'fallback_ladder');

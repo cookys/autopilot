@@ -219,10 +219,11 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      above derives its baseline by stripping the new keys from the already-modified
 #      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
-#      then work_domain, then domain_source, and the new capability keys — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":'
+#      then work_domain, then domain_source, the capability keys, reviewer/implementer_endpoint,
+#      and min_panel_size (appended last) — nothing else, nothing moved.
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
-assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint, in order"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint + min_panel_size, in order"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"
@@ -584,5 +585,37 @@ UNK2_CFG="$TEST_TMP/unk-impl-2fam.md"
 printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, claude-opus\n' > "$UNK2_CFG"
 UNK2_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK2_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"
 assert_eq "true" "$(json_get "$UNK2_OUT" cross_family_satisfied)" "unknown impl + 2 distinct families at required=2: satisfied=true (pigeonhole)"
+
+# 30. min_panel_size — family-agnostic panel-size floor, STANDALONE from required_review_families
+#     (lens diversity != family decorrelation; same-family lenses can still share blind spots).
+assert_eq "3" "$(bash "$SCRIPT" --field min_panel_size)" "default min_panel_size is 3"
+assert_contains "$(bash "$SCRIPT")" '"min_panel_size": 3' "default JSON carries min_panel_size as an integer"
+# legal override honored
+MPS_CFG="$TEST_TMP/mps.md"
+printf -- '- min_panel_size: 5\n' > "$MPS_CFG"
+assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_CFG" bash "$SCRIPT" --field min_panel_size)" "legal min_panel_size override honored"
+# garbage -> fail-safe 3
+MPS_BAD="$TEST_TMP/mps-bad.md"
+printf -- '- min_panel_size: banana\n' > "$MPS_BAD"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_BAD" bash "$SCRIPT" --field min_panel_size)" "garbage min_panel_size falls back to 3"
+# 0 (below the >=1 floor) -> fail-safe 3
+MPS_ZERO="$TEST_TMP/mps-zero.md"
+printf -- '- min_panel_size: 0\n' > "$MPS_ZERO"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_ZERO" bash "$SCRIPT" --field min_panel_size)" "min_panel_size 0 (below >=1 floor) falls back to 3"
+# negative -> fail-safe 3
+MPS_NEG="$TEST_TMP/mps-neg.md"
+printf -- '- min_panel_size: -2\n' > "$MPS_NEG"
+assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_NEG" bash "$SCRIPT" --field min_panel_size)" "negative min_panel_size falls back to 3"
+# INDEPENDENCE from required_review_families (the whole point): a min_panel_size override must
+# NOT move required_review_families, and forcing high risk (families=2) must NOT move min_panel_size.
+assert_eq "1" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_CFG" bash "$SCRIPT" --field required_review_families)" "min_panel_size override leaves required_review_families untouched"
+assert_eq "3" "$(bash "$SCRIPT" --security-surface 1 --field min_panel_size)" "high risk (families=2) leaves min_panel_size at default 3"
+assert_eq "2" "$(bash "$SCRIPT" --security-surface 1 --field required_review_families)" "sanity: high risk sets required_review_families=2"
+# present in the --check-scorecard JSON branch too
+assert_contains "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard)" '"min_panel_size": 3' "min_panel_size present in --check-scorecard JSON"
+# present when density_scaling is on (emitted before the density FMT_SUFFIX keys — ordering guard)
+MPS_DENS="$TEST_TMP/mps-dens.md"
+printf -- '- density_scaling: on\n' > "$MPS_DENS"
+assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_DENS" ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT")" '"min_panel_size": 3' "min_panel_size present when density_scaling on (before FMT_SUFFIX)"
 
 finalize_test

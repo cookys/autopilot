@@ -341,9 +341,11 @@ explicitly **first-pass / non-authoritative**.
 
 The authoritative gate is a **depth-0 QC panel** whose reviewer families/panel
 come from `scripts/resolve-review-loop.sh` (`qc_panel` /
-`required_review_families`); resolver unavailable → fall back to 3 reviewers.
-Homogeneous (all-Claude) panels keep a **≥3-lens floor** (resolver emits
-families, not panel size; until `min_panel_size` exists). Dispatch subagents,
+`required_review_families` / `min_panel_size`); resolver unavailable → fall back
+to 3 reviewers. A homogeneous (all-Claude) panel must not drop below the
+resolver's **`min_panel_size`** (default 3) — a panel-size floor emitted
+separately from families because lens diversity ≠ family decorrelation
+(same-family lenses can share blind spots). Dispatch subagents,
 each with a **distinct non-overlapping lens** (e.g. correctness,
 security/faithfulness, completeness/edge-cases; for LLM-behavior or
 data-into-system changes add a domain lens), each reading the foreman's
@@ -356,7 +358,7 @@ and blast radius.
 
 **Disjoint-family panel (when `review-loop-config.md` sets a `qc_panel`).** By
 default `/l4` stays homogeneous — diverse *lenses*, one *family* — with the
-**≥3-lens floor** above; resolver unavailable → fall back to 3 reviewers. For
+**`min_panel_size` floor** above; resolver unavailable → fall back to 3 reviewers. For
 `/l5`/`/l6` (heterogeneous implementer) that is a decorrelation hole: if the
 implementer is OpenAI (`gpt-5.3-codex-spark`), a same-family reviewer shares its
 blind spots. So resolve the panel from `scripts/resolve-review-loop.sh` (`qc_panel`)
@@ -521,7 +523,7 @@ one row per step:
 | impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | backend-cli | `<branch>@<sha>` |
 | foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | — | (qc notes) |
 | recovery | claude | (depth-0 tier) | resumed / already_applied / blocked_resource | — | run-ledger resume payload (`run_id`, `resume_point`, `new_generation`, `adoption`) |
-| **depth-0 qc panel (authoritative)** | resolver `qc_panel` / claude ×N (homogeneous ≥3-lens floor) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
+| **depth-0 qc panel (authoritative)** | resolver `qc_panel` / claude ×N (homogeneous panel ≥ resolver `min_panel_size`) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from
   `dispatch-hetero.sh`'s outcome JSON (`runner`/`model` fields) for the `/l5`/`/l6`

@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.9 — resolver `min_panel_size` (family-agnostic panel-size floor)
+
+**Headline**: `scripts/resolve-review-loop.sh` now emits a standalone integer field **`min_panel_size`** (default 3, config key `min_panel_size`), turning the prose「homogeneous panels keep a ≥3-lens floor」into resolver data. It is deliberately **separate** from `required_review_families`: lens diversity ≠ family decorrelation, and same-family lenses can still share blind spots — so panel size and family count are independent knobs. The five consumer prose-floor sites (`l4` SKILL, `level-front-door.md` ×3, `quality-pipeline/references/code-review.md`) now read「must not drop below the resolver's `min_panel_size`」instead of the hardcoded「until `min_panel_size` exists」placeholder. Closes the family-agnostic-`min_panel_size` BACKLOG entry.
+
+### Added
+- `resolve-review-loop.sh`: `min_panel_size` field — emitted in the default and `--check-scorecard` JSON (appended as the last data key so all pre-existing keys stay byte-identical), retrievable via `--field min_panel_size`. Integer ≥ 1; garbage / missing / `0` / negative fail-safe to the default 3. Not coupled to review_risk / families / source-trust.
+- `src/engine/resolve-review-loop.js` (Node twin): `min_panel_size` added to `REVIEW_LOOP_FIELDS` and type-validated (`Number.isInteger(v) && v >= 1`).
+- `project-config-template/review-loop-config.md`: `- min_panel_size: 3` setting + a field-reference row documenting the lens-diversity-≠-family-decorrelation rationale.
+
+### Changed
+- Five prose-floor sites rewritten from「≥3-lens floor … until `min_panel_size` exists」to「homogeneous panel must not drop below the resolver's `min_panel_size` (default 3)」, sourcing the floor from resolver data.
+
+### Fixed
+- (loop-internal) The hetero implementer's first pass wrongly quoted three boolean specifiers (`l1_required`/`cross_family_required`/`cross_family_satisfied`) in the non-scorecard printf block; the depth-1 verify caught it (`verify_pass=false`) and it was repaired before integration.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.8`
+
+prose-justification: adds one config field-reference row + a CHANGELOG entry documenting a new resolver field; the five consumer-doc edits are net-neutral rewrites (placeholder → resolver-sourced wording), not new prose surface.
+
 ## v2.32.8 — observation-first skills + engine verify-cwd fix
 
 **Headline**: `docs/plans/2026-07-08-observation-first-skills.md` converged through a five-family × three-round design review (R1: all 5 families FIX with 5 real findings; R2: gpt-5.5/grok/GLM SHIP-AS-IS, opus 1 blocking on red-green base-run semantics for in-diff artifacts, MiniMax kernels folded; R3: opus SHIP-AS-IS confirmation) and ships a mandatory verification-contract intake for `dev-flow` plus de-hardcoded review density at 5 call sites. The instrument caught its own runner on the first real red-green run: all three parallel implementation units logged `verify_pass=false` while their verify scripts ran green at the artifact tips — the engine was executing `--verify-cmd` in the main checkout instead of the round's commit, and the repair ratchet's `git reset --hard` targeted that same live checkout (a latent main-checkout-destruction bug that never fired only because verify was always false). Both are fixed this release.

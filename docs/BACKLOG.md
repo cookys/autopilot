@@ -487,15 +487,26 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
   - (3) **Interrupt/steer 通道 + 訊息排序**：foreman 在**工作中**（非只回合間）檢查的優先「插隊」通道，或寫進 ledger 的 directive；並處理 crossed-message（明確「誰現在擁有這決定」的 handshake / lease token）。
 - **副產物守則**（已可先用）: 多 agent 看似停頓，先查是不是正常回合間工作（ledger/log/ps 交叉），**別急著接手**——本次 foreman 全程能幹（診斷比 depth-0 深、主動協調），撞車全因 depth-0 觀測不足 + 反應過快。
 - **Effort**: L（research→design→impl；與 R0-R5 同 plan `docs/plans/2026-07-08-l6-resilience-improvements.md`，建議收為該 plan 的 R6）。
-- **Source**: l6-resilience R1–R5 dogfood campaign 協調事故，2026-07-08。
+- **Source**: l6-resilience R1–R5 dogfood campaign 協調事故，2026-07-08。fix-pass 輪（同日）再添 4 例：foreman 收到 depth-0 指示後未起跑即 idle ×2（需顯式「立即動工」nudge）、完成回報與 depth-0 指示 crossed-messages ×2（雙方快照互相過期）——強化本條 priority。
 
-### ⛔ l6-resilience R0-R5 impl 有 depth-0 qc verified Critical——fix pass 才可 merge（work on feat/l6-r1r5 @ 9e7e1d6，未 merge develop）
-- **Trigger**: 要 ship l6-resilience（R0 ledger + R2/R3/R4/R5 handler）到 develop 前，必須先修下列 qc panel（agy/codex/MiniMax 三家族，2026-07-08）verified 缺陷。code 在 `feat/l6-r1r5 @ 9e7e1d6`（4 支測試綠但併發/crash-ordering 未覆蓋）。
-- **Verified Critical**（≥2 家族或 depth-0 親驗）:
-  - **run-ledger.sh: shared ledger 檔 + 僅 per-run 鎖 → 併發不同 run append 丟記錄**（A-agy+A-codex 兩家族；depth-0 驗證 `canonical_ledger_path`→`$PWD/.autopilot/run-ledger.jsonl` 單一共享檔，`atomic_append_ledger` cp→mv 只持 run.<id>.lock；spec 說 per-run 但實作是全域）。修：全域 ledger 寫要 resource-scoped/全域鎖，非 per-run。
-  - **run-ledger.sh: stage-apply 先寫 applied journal 再做 state transition**，中間 crash → stage 未推進但 retry 全假成功（A-codex:914）。修：transition 與 journal 原子、或 journal-after-transition。
-  - **autopilot-engine.js:89 `hasNoOpOrCommittedEmptyWrite` 讓 R2 misplaced_writes 只在 files_changed===0 才 fire** → 合法改動 + 平行 out-of-tree 寫可雙重繞過 R2/R5（B-agy+B-mm 兩家族；spec 明確警告此 double-false-negative）。修：misplacement 檢查不受 files_changed 遮蔽。
-  - **autopilot-engine.js:1253 `resolveImplementationFromLedger` 跨 round 用 static stage** → 破 round 冪等、誤採前 round commit（B-agy）。
-- **Major**: check-then-act TOCTOU（latest_stage_record 在鎖外讀、critical section 內不 re-read，A-agy+A-codex）；journal has_applied 檢查在鎖外→double-apply（A-mm）；write_side_effect_row 單獨取 run-lock 違反 global acquire order（A-mm）；with_resource_locks 部分失敗漏 fd（A-mm）；classify-diff-risk.sh:255 `awk '{print $3}'` 截斷含空白檔名→risk 規則被繞（B-agy）；collectMisplacementEvidence 讀 result.error 當 path→false positive（B-mm）。
-- **Effort**: L（fix round：R0 ledger 併發模型重修 + engine gate 修 + re-qc）。建議 hetero implementer + 四支測試擴充含併發/crash-ordering case。
-- **Source**: l6-resilience depth-0 三家族 qc panel，2026-07-08。**更新**：R1(detach) foreman 已於 qc 後完成 merge（feat/l6-r1r5 tip 現 `3cf9f92`，6 支全實作）——但 qc panel 跑在 R1 前的 `9e7e1d6`，故 **fix-pass 的 re-qc 必須涵蓋全 6 支含 R1**（R1 動 live dispatch 腳本、未經 depth-0 qc）。
+### ✅ DONE (2026-07-08, develop `c35dc88`) — l6-resilience R0-R5 + fix pass merged
+- **Resolution**: fix pass 於 `fix/l6-fixpass` 完成後 merge develop。原 4 Critical/6 Major 全修；re-qc（gpt-5.5/gemini-flash/sonnet 跨家族 panel＋depth-0 親驗，涵蓋全 6 支含 R1）再揪出並修復：run-ledger 5 組重複函式定義（stale 早期版僅靠 bash 後定義蓋前碰巧未生效）、`command_init` 無鎖截斷、**M1 TOCTOU 實際未修**（原 harness 過關靠 generation fencing 巧合）、`stale_ignored` marker 世代污染（修＝generation-scoped 三步驟解析＋確定性重現 test；fix round 的鎖內 re-read 自身引入、engine verify 輪抓到）、stage-acquire 鎖外算 gen、engine fallback Map 無界、resilience test 空洞斷言、setsid 缺失 fallback、classify a/b 連續 strip 過剝、detach stderr sidecar、`PACKED_PROMPT_TEMP` detach 交棒、R4 doc 錯用無網路 `endpoints doctor`（改 `endpoints test`）、裝飾性 `risk_family_decorrelation_always_on` key（實際強制力在 engine `ensureDistinctReviewFamily`）。驗收＝depth-0 親跑 108/110（2 失敗與乾淨 develop baseline 一致）＋concurrency test 15 連跑綠。R1 detach 測試（真 kill -9＋heartbeat＋resume）被 panel 評為全 diff 驗證最扎實部分。
+
+### MiniMax-M3（anthropic-compatible）reviewer 校準：自信但錯誤的 central finding 比率過高
+- **Trigger**: 下次 resolve roster 把 MiniMax-M3 放 reviewer 席、或維護 engine scorecard 時。
+- **Context**: 2026-07-08 l6-resilience campaign 6 次 MiniMax review 有 5 次 central claim 查證不成立（U2 implementationRound「未 thread」／U3 prefix-strip 誤解／FR-2 不對稱指控／FR-3「HAVE_SETSID 未初始化」（reviewer 只看 diff、看不到未變動 context 行）／FR-4「只改鏡像」），僅 1 次屬實且有價值（FR-1 repair 漏 nonce 比對）。每次誤判都需 depth-0/foreman 對原始碼親自查證，是 campaign 最大時間稅。深因之一＝diff-only 餵入的 context 盲點。
+- **Options**: (a) scorecard 對 MiniMax reviewer 降 confidence／註記 diff-context 盲點；(b) dispatch-review 對此 runner 附 touched-file 全文（trusted baseline 通道）；(c) SOP 明文「MiniMax findings 必二次查證後才採信」。
+- **Effort**: S-M。
+- **Source**: l6-resilience fix-pass campaign，2026-07-08。
+
+### classify-diff-risk.sh：binary diff 無 ---/+++ 行 → 路徑不進風險規則
+- **Trigger**: 下次碰 classify-diff-risk.sh，或 risk 規則需涵蓋 protected-path 的 binary 變更時。
+- **Context**: binary 變更（無 --text）只有 `diff --git a/x b/x`＋`Binary files ... differ` 行；`collect_touched_paths` 只解析 ---/+++/rename 行 → protected path 的 binary 變更逃逸 risk 規則。re-qc panel（gemini）發現、depth-0 親驗確認。修法＝fallback 解析 `diff --git` 行（注意含空白檔名的引號規則）。
+- **Effort**: S。
+- **Source**: l6-resilience re-qc panel，2026-07-08。
+
+### verification-authoring rails 三件小缺陷（author 唯讀契約／leakage 誤判／polarity tripwire）
+- **Trigger**: 下次碰 dispatch-author.sh / dispatch-review.sh，或再用「先寫 buggy-behavior 斷言、修復後翻極性」的 harness 授權流程時。
+- **Context**: (1) `dispatch-author.sh` agy runner 於失敗嘗試時直接寫雜檔進目標 worktree，違反自身文件宣稱的 no-repo-mutation 契約；(2) `dispatch-review.sh` 的 prompt-leakage 偵測把格式正確的 VERDICT/FINDINGS 回覆誤判為 leakage（raw_log 乾淨，需人工繞過）；(3) 「pre-authorized polarity flip」慣例無結構性 tripwire（如 grep-檢查的 marker）強制翻轉發生於 ship 前——本次靠 foreman 自律完成（`bd1a96d`）。均為 2026-07-08 campaign 實測。
+- **Effort**: S 每件。
+- **Source**: l6-resilience campaign deviations ledger，2026-07-08。

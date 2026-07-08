@@ -768,6 +768,27 @@ command_stage_transition() {
   current_nonce="$(jq -r '.nonce // empty' <<<"$current_row")"
   resources="$(jq -r '.resources // ""' <<<"$current_row")"
 
+  if [ "$nonce" != "$current_nonce" ]; then
+    stale_from="$(jq -r '.state // ""' <<<"$current_row")"
+    local stale_line
+    stale_line="$(jq -nc \
+      --arg kind "stage" \
+      --arg ts "$(iso_ts)" \
+      --arg rid "$run_id" \
+      --arg stg "$stage" \
+      --arg state "stale_ignored" \
+      --arg reason "late_writer" \
+      --argjson gen "$generation" \
+      --arg nonce_v "$nonce" \
+      --arg from "$stale_from" \
+      --arg to "$to_state" \
+      '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,generation:$gen,nonce:$nonce_v,transition_from:$from,transition_to:$to}')"
+    append_record "$ledger" "$run_id" "$stale_line" "$timeout" "$run_fd"
+    for fd in $r_fds; do release_lock "$fd"; done
+    echo "$stale_line"
+    return 11
+  fi
+
   if [ "$current_state" = "$to_state" ]; then
     if [ -n "$idempotency_key" ] && [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then
       flock -u "$run_fd"; eval "exec ${run_fd}>&-"

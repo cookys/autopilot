@@ -272,6 +272,18 @@ run_cmd stage-transition --ledger "$LEDGER_5B" --run-id r5b --stage ship --gener
 assert_cmd_rc 0 "fresh generation transition succeeds"
 assert_json_eq "$CMD_OUT" '.state' "committed" "fresh writer reaches target state in deterministic repro"
 
+# 5c. Wrong nonce for current generation is fenced as stale_ignored
+LEDGER_5C="$TEST_TMP/ledger-5c.jsonl"
+run_cmd init --ledger "$LEDGER_5C"
+run_cmd stage-acquire --ledger "$LEDGER_5C" --run-id r5c --stage ship --pid "$$"
+GEN_5C="$(jq -r '.generation' <<<"$CMD_OUT")"
+NONCE_5C="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+
+run_cmd stage-transition --ledger "$LEDGER_5C" --run-id r5c --stage ship --generation "$GEN_5C" --nonce "${NONCE_5C}bad" --to-state committed
+assert_cmd_rc 11 "wrong nonce transition is fenced with return 11"
+assert_json_eq "$CMD_OUT" '.state' "stale_ignored" "wrong nonce output shows stale_ignored"
+assert_json_eq "$CMD_OUT" '.generation' "$GEN_5C" "wrong nonce stale marker preserves caller generation"
+
 # 8. TOCTOU-safe transition validation: stale transition is fenced after concurrent lease bump
 LEDGER_8="$TEST_TMP/ledger-8.jsonl"
 run_cmd init --ledger "$LEDGER_8"

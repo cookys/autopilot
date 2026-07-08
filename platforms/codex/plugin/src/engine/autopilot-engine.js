@@ -10,6 +10,196 @@ const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 
+const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
+const MISPLACEMENT_PATH_PATTERNS = [
+  /(^|[\/])\.gemini([\/]|$)/,
+  /(^|[\/])\.gemini-[^/\\]+([\/]|$)/,
+  /(^|[\/])\.cache[\/](?:.+[\/])?gemini([\/]|$)/,
+  /(^|[\/])gemini[\-]scratch([\/]|$)/,
+];
+
+function parseJsonFromLastLine(raw) {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (trimmed.length === 0) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (_error) {
+    // fall through to last-line parse for command outputs that include debug
+    // lines before the JSON payload.
+  }
+
+  const lines = String(raw).split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+  if (lines.length === 0) return null;
+  try {
+    return JSON.parse(lines[lines.length - 1]);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function runLedgerCommand(scriptPath, args) {
+  let child;
+  try {
+    child = spawnSync('bash', [scriptPath, ...args], {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (_error) {
+    return null;
+  }
+  return {
+    result: parseJsonFromLastLine(child.stdout),
+    status: child.status,
+    error: child.error || null,
+    signal: child.signal || null,
+  };
+}
+
+function isPathLikelyMisplaced(rawPath, cwd) {
+  if (typeof rawPath !== 'string' || rawPath.length === 0) {
+    return false;
+  }
+  if (!path.isAbsolute(rawPath)) {
+    return false;
+  }
+  const normalized = path.resolve(rawPath);
+  const normalizedCwd = cwd && path.resolve(cwd);
+  if (normalizedCwd && (normalized === normalizedCwd || normalized.startsWith(`${normalizedCwd}${path.sep}`))) {
+    return false;
+  }
+  const lower = normalized.toLowerCase();
+  return MISPLACEMENT_PATH_PATTERNS.some((pattern) => pattern.test(lower));
+}
+
+function collectMisplacementEvidence(result, cwd) {
+  const evidence = [];
+  if (!result || typeof result !== 'object') {
+    return evidence;
+  }
+  const fields = [
+    ['worktree', result.worktree],
+    ['agent_log', result.agent_log],
+    ['error', result.error],
+  ];
+  for (const [field, value] of fields) {
+    if (isPathLikelyMisplaced(value, cwd)) {
+      evidence.push(`${field}:${value}`);
+    }
+  }
+  return evidence;
+}
+
+function hasNoOpOrCommittedEmptyWrite(result) {
+  if (!result || typeof result !== 'object') {
+    return false;
+  }
+  if (result.status === 'no_op') {
+    return true;
+  }
+  if (result.status !== 'committed') {
+    return false;
+  }
+  if (!Number.isInteger(result.files_changed)
+    || !Number.isInteger(result.insertions)
+    || !Number.isInteger(result.deletions)) {
+    return false;
+  }
+  return result.files_changed === 0 && result.insertions === 0 && result.deletions === 0;
+}
+
+function resolveImplementationFromLedger({
+  implementationOptions,
+  ledger,
+  runId,
+  stage,
+  resultJson,
+  gitDir,
+  branch,
+  base,
+  cwd,
+}) {
+  const ledgerPath = ledger && typeof ledger === 'string' ? ledger : null;
+  const resolvedRunId = runId && typeof runId === 'string' ? runId : null;
+  const resolvedStage = stage && typeof stage === 'string' ? stage : 'implement';
+  const resolvedResultJson = (typeof resultJson === 'string' && resultJson.length > 0)
+    ? resultJson
+    : path.join(gitDir || cwd || process.cwd(), '.autopilot', 'implementer-result.json');
+  const resolvedGitDir = typeof gitDir === 'string' && gitDir.length > 0 ? gitDir : (cwd || process.cwd());
+
+  if (!ledgerPath || !resolvedRunId) {
+    return null;
+  }
+
+  const reconcile = runLedgerCommand(RUN_LEDGER_SCRIPT, [
+    'stage-reconcile',
+    '--ledger',
+    ledgerPath,
+    '--run-id',
+    resolvedRunId,
+    '--stage',
+    resolvedStage,
+    '--result-json',
+    resolvedResultJson,
+    '--git-dir',
+    resolvedGitDir,
+  ]);
+  if (!reconcile || reconcile.error || reconcile.status !== 0 || !reconcile.result) {
+    return null;
+  }
+  const reconcilePayload = reconcile.result;
+  if (reconcilePayload.status !== 'resolved' || (reconcilePayload.reason !== 'terminal_state' && reconcilePayload.reason !== 'git_truth')) {
+    return null;
+  }
+
+  const latest = runLedgerCommand(RUN_LEDGER_SCRIPT, [
+    'query-latest',
+    '--ledger',
+    ledgerPath,
+    '--run-id',
+    resolvedRunId,
+    '--stage',
+    resolvedStage,
+  ]);
+  if (!latest || latest.error || latest.status !== 0 || !latest.result) {
+    return null;
+  }
+  const latestRecord = latest.result;
+  const commit = latestRecord.git_sha;
+  if (typeof commit !== 'string' || !isImmutableGitSha(commit)) {
+    return null;
+  }
+
+  return {
+    status: 'committed',
+    runner: 'run-ledger',
+    model: 'run-ledger',
+    branch,
+    base,
+    commit,
+    files_changed: 0,
+    insertions: 0,
+    deletions: 0,
+    worktree: latestRecord.worktree || null,
+    agent_log: null,
+    error: null,
+    containment: 'plain',
+    contained: true,
+    reconcile_by_ledger: true,
+    reconcile_status: reconcilePayload.status,
+    reconcile_reason: reconcilePayload.reason,
+    reconcile_stage: resolvedStage,
+    reconcile_run_id: resolvedRunId,
+    _reconciled_by_ledger: true,
+    _reconciled_run_id: resolvedRunId,
+    _reconciled_stage: resolvedStage,
+    _reconciled_status: reconcilePayload.status,
+    _reconciled_reason: reconcilePayload.reason,
+  };
+}
+
 function defaultNow() {
   return new Date().toISOString();
 }
@@ -39,6 +229,125 @@ function createClock(clock) {
     return () => normalizeTimestamp(clock());
   }
   return defaultNow;
+}
+
+function resolveScriptPath(relativePath) {
+  return path.resolve(__dirname, '..', '..', relativePath);
+}
+
+function modelFamilyOfEngine(engine) {
+  const normalized = String(engine || '').toLowerCase();
+  if (/(gpt|codex|o1|o3|o4)/.test(normalized)) return 'openai';
+  if (/(claude|opus|sonnet|haiku)/.test(normalized)) return 'anthropic';
+  if (/(gemini|flash|bison)/.test(normalized)) return 'google';
+  if (/(grok|composer)/.test(normalized)) return 'xai';
+  if (/(minimax|abab)/.test(normalized)) return 'minimax';
+  if (/(glm|zhipu)/.test(normalized)) return 'zhipu';
+  return 'unknown';
+}
+
+function sourceTrustForEngine(engine) {
+  return ['openai', 'anthropic', 'google'].includes(modelFamilyOfEngine(engine)) ? 'high' : 'low';
+}
+
+function ensureDistinctReviewFamily({ implementerEngine, reviewerEngine }) {
+  const iFamily = modelFamilyOfEngine(implementerEngine);
+  const rFamily = modelFamilyOfEngine(reviewerEngine);
+  if (iFamily === 'unknown' || rFamily === 'unknown') return true;
+  return iFamily !== rFamily;
+}
+
+function normalizeChecklistList(value) {
+  const items = Array.isArray(value) ? value : `${value || ''}`.split(',');
+  const normalized = [];
+  for (const raw of items) {
+    const item = `${raw || ''}`.trim();
+    if (item === '') continue;
+    if (!normalized.includes(item)) {
+      normalized.push(item);
+    }
+  }
+  return normalized;
+}
+
+function buildRiskResolverArgs(baseArgs, riskFlags = {}) {
+  const args = Array.isArray(baseArgs) ? [...baseArgs] : ['--check-scorecard'];
+
+  if (riskFlags && typeof riskFlags === 'object' && !Array.isArray(riskFlags)) {
+    if (riskFlags.source_trust === 'low' || riskFlags.source_trust === 'high') {
+      args.push('--source-trust', riskFlags.source_trust);
+    }
+
+    if (Number.isInteger(riskFlags.diff_lines) || /^\d+$/.test(`${riskFlags.diff_lines}`)) {
+      args.push('--diff-lines', `${Number(riskFlags.diff_lines)}`);
+    }
+
+    if (riskFlags.protected_path === 1 || riskFlags.protected_path === '1') {
+      args.push('--protected-path', '1');
+    } else if (riskFlags.protected_path === 0 || riskFlags.protected_path === '0') {
+      args.push('--protected-path', '0');
+    }
+
+    if (riskFlags.oracle_available === 0 || riskFlags.oracle_available === '0' || riskFlags.oracle_available === 1 || riskFlags.oracle_available === '1') {
+      args.push('--oracle-available', `${riskFlags.oracle_available}`);
+    }
+
+    if (riskFlags.security_surface === 0 || riskFlags.security_surface === '0' || riskFlags.security_surface === 1 || riskFlags.security_surface === '1') {
+      args.push('--security-surface', `${riskFlags.security_surface}`);
+    }
+  }
+
+  return args;
+}
+
+function defaultClassifyDiffRisk(input = {}) {
+  const args = ['--repo', input.repoRoot || process.cwd(), '--diff-file', input.diffFile];
+  if (input.sourceTrust) args.push('--source-trust', `${input.sourceTrust}`);
+  if (input.oracleAvailable === 0 || input.oracleAvailable === 1) {
+    args.push('--oracle-available', `${input.oracleAvailable}`);
+  }
+  if (input.securitySurface === 0 || input.securitySurface === 1) {
+    args.push('--security-surface', `${input.securitySurface}`);
+  }
+  if (input.rulesFile) {
+    args.push('--rules-file', `${input.rulesFile}`);
+  }
+  if (typeof input.samplingRatio !== 'undefined') {
+    args.push('--sampling-ratio', `${input.samplingRatio}`);
+  }
+  if (typeof input.samplingSeed !== 'undefined') {
+    args.push('--sampling-seed', `${input.samplingSeed}`);
+  }
+  if (input.range) {
+    args.push('--range', `${input.range}`);
+  }
+
+  const script = resolveScriptPath('scripts/classify-diff-risk.sh');
+  const child = spawnSync('bash', [script, ...args], {
+    encoding: 'utf8',
+    cwd: input.repoRoot || process.cwd(),
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  if (child.error) {
+    throw child.error;
+  }
+
+  if (child.status !== 0) {
+    throw new Error(`classify-diff-risk exited with status ${child.status}`);
+  }
+
+  const stdout = String(child.stdout || '').trim();
+  if (!stdout) {
+    throw new Error('classify-diff-risk returned empty output');
+  }
+
+  try {
+    return JSON.parse(stdout);
+  } catch (error) {
+    throw new Error(`classify-diff-risk output was not valid JSON: ${error.message}`);
+  }
 }
 
 function reviewLoopResultBlocked(result) {
@@ -126,17 +435,25 @@ function validateInteger(value, field, minimum) {
   }
 }
 
-function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
+function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], checklists = [] }) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
 
-  const args = [
+  // `--checklists` is a BUILDER-MANAGED arg (like `--spec-file`): callers may not pass it in
+  // extraReviewArgs (it is reserved), the builder injects the classifier-derived list. It is
+  // placed FIRST so the risk-triggered checklist is the most visible part of the review args.
+  const args = [];
+  const normalizedChecklists = normalizeChecklistList(checklists);
+  if (normalizedChecklists.length > 0) {
+    args.push('--checklists', normalizedChecklists.join(','));
+  }
+  args.push(
     '--runner',
     roster.reviewer_runner,
     '--model',
@@ -145,7 +462,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
     diffFile,
     '--effort',
     roster.reviewer_effort,
-  ];
+  );
   if (specFile && typeof specFile === 'string') {
     args.push('--spec-file', specFile);
   }
@@ -154,7 +471,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -482,6 +799,7 @@ class AutopilotEngine {
     this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
+    this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -563,9 +881,23 @@ class AutopilotEngine {
   reviewDiff(input = {}) {
     const ledger = [];
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
+    const dynamicReviewRisk = input.dynamicReviewRisk === true;
     let roster = input.roster || null;
     let resolveResult = null;
     let reviewArgs = null;
+    let classification = null;
+    let reviewRisk = null;
+    let riskClassification = null;
+
+    const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+      ? input.rosterArgs
+      : ['--check-scorecard'];
+    const resolverOptions = {
+      ...(input.resolverOptions || {}),
+      cwd: Object.prototype.hasOwnProperty.call(input.resolverOptions || {}, 'cwd')
+        ? input.resolverOptions.cwd
+        : this.cwd,
+    };
 
     if (!input.diffFile || typeof input.diffFile !== 'string') {
       const startedAt = this.now();
@@ -584,13 +916,96 @@ class AutopilotEngine {
       };
     }
 
-    if (!roster) {
-      const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
-        ? input.rosterArgs
-        : ['--check-scorecard'];
+    if (!roster || dynamicReviewRisk) {
+      let riskAwareArgs = rosterArgs;
+
+      if (dynamicReviewRisk) {
+        const classifyInput = {
+          repoRoot: resolverOptions.cwd,
+          diffFile: input.diffFile,
+        };
+
+        if (Object.prototype.hasOwnProperty.call(input, 'sourceTrust')) {
+          classifyInput.sourceTrust = input.sourceTrust;
+        } else if (roster && roster.implementer_engine) {
+          classifyInput.sourceTrust = sourceTrustForEngine(roster.implementer_engine);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'oracleAvailable')) {
+          classifyInput.oracleAvailable = input.oracleAvailable;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'securitySurface')) {
+          classifyInput.securitySurface = input.securitySurface;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'classifyRulesFile')) {
+          classifyInput.rulesFile = input.classifyRulesFile;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'samplingRatio')) {
+          classifyInput.samplingRatio = input.samplingRatio;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'samplingSeed')) {
+          classifyInput.samplingSeed = input.samplingSeed;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(input, 'diffRange')) {
+          classifyInput.range = input.diffRange;
+        }
+
+        const startedAt = this.now();
+        try {
+          classification = this.classifyDiffRisk(classifyInput);
+        } catch (error) {
+          ledger.push(this.ledgerEntry('classify_diff_risk', 'blocked', startedAt));
+          return {
+            status: 'blocked',
+            phase: 'classify_diff_risk',
+            reason: error.message || String(error),
+            verdict: null,
+            roster,
+            resolveResult,
+            riskClassification: null,
+            reviewResult: null,
+            review: null,
+            reviewArgs,
+            ledger,
+          };
+        }
+
+        ledger.push(this.ledgerEntry('classify_diff_risk', 'classified', startedAt, {
+          domains: Array.isArray(classification.domains) ? classification.domains : [],
+          checklists: Array.isArray(classification.checklists) ? classification.checklists : [],
+          adversarial_review: Boolean(classification.adversarial_review),
+          sampling_selected: classification.sampling
+            ? Boolean(classification.sampling.selected)
+            : false,
+        }));
+
+        riskClassification = {
+          domains: Array.isArray(classification.domains) ? classification.domains : [],
+          checklists: Array.isArray(classification.checklists) ? classification.checklists : [],
+          adversarial_review: Boolean(classification.adversarial_review),
+          risk_flags: classification.risk_flags || {},
+          sampling: classification.sampling || {
+            enabled: false,
+            ratio: '0',
+            bucket: 0,
+            selected: false,
+            reason: 'classification-unavailable',
+          },
+        };
+
+        if (classification && classification.risk_flags) {
+          riskAwareArgs = buildRiskResolverArgs(rosterArgs, classification.risk_flags);
+        }
+      }
+
       const resolved = this.resolveRoster({
-        args: rosterArgs,
-        options: input.resolverOptions || {},
+        args: riskAwareArgs,
+        options: resolverOptions,
       });
       ledger.push(...resolved.ledger);
       resolveResult = resolved.result;
@@ -612,6 +1027,10 @@ class AutopilotEngine {
       }
     }
 
+    if (!reviewRisk && resolveResult && resolveResult.result && resolveResult.result.review_risk) {
+      reviewRisk = resolveResult.result.review_risk;
+    }
+
     try {
       validateReviewRoster(roster);
     } catch (error) {
@@ -627,6 +1046,30 @@ class AutopilotEngine {
         reviewResult: null,
         review: null,
         reviewArgs,
+        ledger,
+      };
+    }
+
+    const implementerEngine = Object.prototype.hasOwnProperty.call(input, 'implementerEngine')
+      ? input.implementerEngine
+      : roster.implementer_engine;
+    if (!ensureDistinctReviewFamily({
+      implementerEngine,
+      reviewerEngine: roster.reviewer_engine,
+    })) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('reviewer_family', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'reviewer_family',
+        reason: 'reviewer and implementer must be different families',
+        verdict: null,
+        roster,
+        resolveResult,
+        reviewResult: null,
+        review: null,
+        reviewArgs,
+        riskClassification,
         ledger,
       };
     }
@@ -652,14 +1095,21 @@ class AutopilotEngine {
       };
     }
 
+    const injectedChecklists = (dynamicReviewRisk && classification && Array.isArray(classification.checklists))
+      ? classification.checklists
+      : [];
+
     try {
       reviewArgs = buildReviewArgs({
         roster,
         diffFile: input.diffFile,
         specFile: input.specFile,
+        // Pass the caller value THROUGH (not coerced) so buildReviewArgs' validateExtraArgs
+        // surfaces a non-array as "extraReviewArgs must be an array" (pre-R5 contract).
         extraReviewArgs: Object.prototype.hasOwnProperty.call(input, 'extraReviewArgs')
           ? input.extraReviewArgs
           : [],
+        checklists: injectedChecklists,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -711,6 +1161,7 @@ class AutopilotEngine {
         roster,
         resolveResult,
         reviewResult,
+        riskClassification,
         review: null,
         reviewArgs,
         ledger,
@@ -720,10 +1171,13 @@ class AutopilotEngine {
     return {
       status: reviewResult.result.status,
       verdict: parsed.verdict,
+      riskClassification,
+      reviewRisk,
       roster,
       resolveResult,
       reviewResult,
       review: parsed,
+      reviewRisk,
       reviewArgs,
       ledger,
     };
@@ -905,18 +1359,79 @@ class AutopilotEngine {
         parseError: null,
       };
     }
-    const blockedReason = implementationResultBlocked(implementationResult);
-    const parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
+    let blockedReason = implementationResultBlocked(implementationResult);
+    let parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
+
+    let reconciledByLedger = false;
+    let reconcileDetails = null;
+    if (blockedReason && (!parsed || implementationResult.result === null)) {
+      const recovered = resolveImplementationFromLedger({
+        implementationOptions,
+        ledger: input.ledger,
+        runId: input.runId,
+        stage: input.implementationStage,
+        resultJson: input.resultJson,
+        gitDir: input.gitDir,
+        branch: input.branch,
+        base: input.base,
+        cwd: resolvedTaskCwd,
+      });
+      if (recovered) {
+        blockedReason = null;
+        parsed = recovered;
+        reconciledByLedger = true;
+        reconcileDetails = {
+          reconcile_status: recovered._reconciled_status,
+          reconcile_reason: recovered._reconciled_reason,
+          reconcile_stage: recovered._reconciled_stage,
+          reconcile_run_id: recovered._reconciled_run_id,
+        };
+      }
+    }
+
+    const misplacedWriteEvidence = (parsed && hasNoOpOrCommittedEmptyWrite(parsed))
+      ? collectMisplacementEvidence(parsed, resolvedTaskCwd)
+      : [];
+    const misplacedWrites = misplacedWriteEvidence.length > 0;
+    const dispatchStatus = blockedReason
+      ? 'blocked'
+      : (misplacedWrites
+        ? 'misplaced_writes'
+        : (parsed && parsed.status ? parsed.status : null));
+
     ledger.push(
-      this.ledgerEntry('dispatch_implementation', blockedReason ? 'blocked' : implementationResult.result.status, startedAt, {
+      this.ledgerEntry('dispatch_implementation', dispatchStatus || 'blocked', startedAt, {
         runner: parsed ? parsed.runner : null,
         model: parsed ? parsed.model : null,
         base: input.base,
         branch: input.branch,
         commit: parsed ? parsed.commit : null,
         exit_status: implementationResult ? implementationResult.status : null,
+        reconcile_by_ledger: reconciledByLedger,
+        reconcile_status: reconcileDetails ? reconcileDetails.reconcile_status : null,
+        reconcile_reason: reconcileDetails ? reconcileDetails.reconcile_reason : null,
+        misplaced_write_evidence: misplacedWriteEvidence.join('|') || null,
       }),
     );
+
+    if (misplacedWrites) {
+      const misplacedReason = (
+        `implementation writes appear outside --cwd `
+        + `(${misplacedWriteEvidence.join(', ')}). `
+        + 'likely hardcoded absolute path escaping the target worktree.'
+      );
+      return {
+        status: 'blocked',
+        phase: 'misplaced_writes',
+        reason: misplacedReason,
+        roster,
+        resolveResult,
+        implementationResult,
+        implementationArgs,
+        implementation: parsed,
+        ledger,
+      };
+    }
 
     if (blockedReason) {
       return {
@@ -932,11 +1447,11 @@ class AutopilotEngine {
       };
     }
 
-    if (implementationResult.result.status !== 'committed') {
+    if (!parsed || parsed.status !== 'committed') {
       return {
         status: 'blocked',
         phase: 'dispatch_implementation',
-        reason: `implementation status ${implementationResult.result.status}`,
+        reason: `implementation status ${parsed && parsed.status ? parsed.status : null}`,
         roster,
         resolveResult,
         implementationResult,
@@ -947,7 +1462,7 @@ class AutopilotEngine {
     }
 
     return {
-      status: implementationResult.result.status,
+      status: parsed.status,
       phase: 'dispatch_implementation',
       reason: null,
       roster,
@@ -960,6 +1475,10 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
+    // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
+    // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
+    // unless the caller explicitly passes dynamicReviewRisk: true.
+    const dynamicReviewRisk = input.dynamicReviewRisk === true;
     const ledger = [];
     let promptFile = input.promptFile;
     const branch = input.branch;
@@ -1226,6 +1745,11 @@ class AutopilotEngine {
         branch: currentBranch,
         base: nextBase,
         roster,
+        runId: input.runId,
+        ledger: input.ledger,
+        implementationStage: input.implementationStage,
+        resultJson: input.resultJson,
+        gitDir: input.gitDir,
         extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
           ? input.extraImplementationArgs
           : [],
@@ -1237,9 +1761,10 @@ class AutopilotEngine {
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
       if (implementation.status !== 'committed') {
+        const implementationPhase = implementation.phase || 'dispatch_implementation';
         return finish({
           status: 'blocked',
-          phase: 'dispatch_implementation',
+          phase: implementationPhase,
           reason: implementation.reason || `implementation status ${implementation.status}`,
           rounds: round,
           verdict: null,
@@ -1486,8 +2011,23 @@ class AutopilotEngine {
       review = this.reviewDiff({
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
-        roster,
+        roster: dynamicReviewRisk ? null : roster,
+        rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+          ? input.rosterArgs
+          : ['--check-scorecard'],
+        resolverOptions: {
+          ...(input.resolverOptions || {}),
+          cwd: loopCwd,
+        },
+        dynamicReviewRisk,
         extraReviewArgs: input.extraReviewArgs || [],
+        sourceTrust: input.sourceTrust,
+        oracleAvailable: input.oracleAvailable,
+        securitySurface: input.securitySurface,
+        samplingRatio: input.samplingRatio,
+        samplingSeed: input.samplingSeed,
+        classifyRulesFile: input.classifyRulesFile,
+        implementerEngine: roster && roster.implementer_engine,
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,

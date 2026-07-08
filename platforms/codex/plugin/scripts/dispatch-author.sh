@@ -48,6 +48,11 @@
 set -uo pipefail
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
+
+# Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
+# inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
+ORIG_ARGS=("$@")
 
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
 # absent/rejected file = no-op → the cc-shim precondition fires normally). Loaded BEFORE any
@@ -57,6 +62,8 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_AUTHOR_SELF_DIR/load-endpoints-env.sh" ] && . "$_AUTHOR_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+# R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). See lib/dispatch-detach.sh.
+LEDGER=""; RUN_ID=""; STAGE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --runner)      RUNNER="${2:-}"; shift 2 ;;
@@ -65,6 +72,9 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
+    --ledger)      LEDGER="${2:-}"; shift 2 ;;
+    --run-id)      RUN_ID="${2:-}"; shift 2 ;;
+    --stage)       STAGE="${2:-}"; shift 2 ;;
     --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
@@ -95,6 +105,11 @@ case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort mu
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
   die_precondition "AUTOPILOT_SETTLE_MS must be an integer millisecond value (got: $AUTOPILOT_SETTLE_MS)"
 fi
+
+# R1 detach: when ledger coords are supplied and detach is on (default), re-run this dispatch
+# INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
+# inline behavior when no coords / DISPATCH_DETACH=0. NEVER returns when it engages.
+dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "$_AUTHOR_SELF_DIR" -- "${ORIG_ARGS[@]}"
 
 EP_URL=""; EP_TOKEN_ENV=""
 if [[ -n "$ENDPOINT" ]]; then

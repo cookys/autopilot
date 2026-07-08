@@ -52,6 +52,14 @@ deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
 6. Convergence-by-verification gates continue/rework; merge only after the
    QC-Verdict is earned.
 
+### Outcome → action table (R3 recovery branch)
+
+When the foreman itself fails or is killed before emitting a normal outcome, depth 0 uses:
+
+| Outcome | Depth-0 action |
+|---------|----------------|
+| `failed`/`killed` (no normal outcome) | Run `scripts/run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>`: locate the last committed stage, bump generation with `stage-acquire --allow-reopen` (fencing stale writers), hold resource locks, run `stage-reconcile` and adopt if `git_truth`/terminal result exists, then **only** dispatch `dispatch-review` if `review_round_owed=true` in the resume payload. |
+
 ## Why authoring has its own rail (recorded rationale)
 
 From this repo's 2026-07-02 incident: `dispatch-review.sh` wraps prompts as
@@ -64,4 +72,3 @@ diff-reviews-only.
 ## Level 6's depth-0 context discipline
 
 Depth-0 never authors implementation or verification content inline; even verification-prompt authoring is dispatched via `dispatch-author.sh`. Inline execution is restricted to `--solo` runs or a recorded `precondition_failed` fallback. This discipline ensures depth-0 acts purely as a long-running brain, preserving its context window for high-level orchestration and final quality control, while treating any inline authoring as a deviation to be recorded in the run-summary ledger.
-

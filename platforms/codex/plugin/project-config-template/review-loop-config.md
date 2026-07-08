@@ -40,6 +40,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
+- risk_family_decorrelation_always_on: true
+- risk_adversarial_sampling_ratio: 0.05
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_aggregation: union-on-verified-critical
 - review_diff_scope: full
@@ -81,6 +83,46 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `density_scaling` | scale verification density both directions by capability tier/risk: low/unknown implementers fail-closed upward (bump max rounds, require 2 cross-family reviewers, require l1 decorrelated oracle); high-tier + low-risk implementers cap cheap rounds at 2 and emit `verify_first: true` without weakening cross-family policy | `on\|off` (default off) |
 | `work_domain` | **emitted telemetry, NOT a config/routing knob** — the deterministic dominant domain of a diff (via `--auto-domain`/`--domain`; computed by `scripts/probe-diff-domain.sh`) | `rust\|backend-cli\|frontend\|docs\|mixed` (read-only record; selects no engine — domain routing is BACKLOG'd) |
 | `domain_source` | **emitted telemetry** — provenance of `work_domain` | `explicit` (valid `--domain`) `\| auto` (successful `--auto-domain` probe) `\| none` (no flag / non-git / empty diff / probe failure ⇒ `work_domain=mixed`) |
+
+### Orthogonal R5 risk classifier + sampler policy
+
+`classify-diff-risk.sh` is the orthogonal domain/adversariality layer. It emits:
+
+- detected `domains`
+- `checklists` matched for that diff
+- `risk_flags` (`source_trust`, `diff_lines`, `protected_path`, `oracle_available`, `security_surface`)
+- `sampling` metadata (`enabled`, `ratio`, `bucket`, `selected`, `reason`)
+- `adversarial_review` boolean for the caller
+
+Required canonical docs entries (for humans and policy checks, not mandatory parser keys):
+
+- `risk_family_decorrelation_always_on: true` (inner-loop reviewer must differ from implementer family)
+- `risk_adversarial_sampling_ratio: 0.05` (or your preferred non-zero ratio)
+
+Checklist mapping:
+
+- `auth` → `authz-boundary`, `authz-tests`
+- `tenant`/`tenant_id` → `tenant-boundary`, `tenant-isolation`
+- §2e dispatch-gate → `dispatch-gate-hardening`
+- `money`/`stripe`/`billing` → `billing-contracts`, `payment-security`
+- `schema` → `schema-stability`, `contracts`
+- `migration` → `migration-safety`
+- `sync`/`cursor`/`watermark` → `sync-safety`, `replication-gating`
+- `shared-infra` → `shared-infra-hardening`
+- `config` → `configuration-drift`
+- `generated-types` → `generated-types-contract`
+- `contracts` → `contracts-hardening`
+- `concurrency` → `concurrency-safety`
+- `serialization` → `serialization-correctness`
+- `db-helper` → `db-helper-integrity`
+- `feature-flag` → `feature-flag-governance`
+- `clock`/`timezone` → `clock-time-ordering`
+
+Closed-loop write-back is supported via:
+
+- `bash scripts/classify-diff-risk.sh append-rule --repo <repo> --domain <domain> --scope path|content|either --pattern <regex> --checklist <c1,c2> [--rules-file <path>]`
+
+Canonical behavior is still enforced by `resolve-review-loop.sh` on the same run flags (`--source-trust`, `--diff-lines`, `--protected-path`, `--oracle-available`, `--security-surface`) so this file documents intent and telemetry, not a separate parser contract.
 
 ### Risk-tiered review depth (v2.25.11 — emitted by `resolve-review-loop.sh`, not config keys)
 

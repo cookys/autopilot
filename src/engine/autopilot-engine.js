@@ -92,7 +92,6 @@ function collectMisplacementEvidence(result, cwd) {
 }
 
 const IMPLEMENTATION_STAGE_DEFAULT = 'implement';
-const implementationAttemptsByRunId = new Map();
 
 function normalizeImplementationStage(value) {
   return typeof value === 'string' && value.length > 0 ? value : IMPLEMENTATION_STAGE_DEFAULT;
@@ -108,34 +107,11 @@ function resolveImplementationLedgerStage(input = {}) {
   }
 
   const runId = input.runId;
-  if (typeof runId !== 'string' || runId.length === 0) {
-    return stageBase;
+  if (typeof runId === 'string' && runId.length > 0) {
+    throw new Error(`implementationRound is required to resolve ledger stage for runId "${runId}"`);
   }
 
-  const attemptKey = `${runId}\u0000${stageBase}`;
-  const nextAttempt = (implementationAttemptsByRunId.get(attemptKey) || 0) + 1;
-  implementationAttemptsByRunId.set(attemptKey, nextAttempt);
-  return nextAttempt === 1
-    ? stageBase
-    : `${stageBase}#r${nextAttempt}`;
-}
-
-function hasNoOpOrCommittedEmptyWrite(result) {
-  if (!result || typeof result !== 'object') {
-    return false;
-  }
-  if (result.status === 'no_op') {
-    return true;
-  }
-  if (result.status !== 'committed') {
-    return false;
-  }
-  if (!Number.isInteger(result.files_changed)
-    || !Number.isInteger(result.insertions)
-    || !Number.isInteger(result.deletions)) {
-    return false;
-  }
-  return result.files_changed === 0 && result.insertions === 0 && result.deletions === 0;
+  return stageBase;
 }
 
 function resolveImplementationFromLedger({

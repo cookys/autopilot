@@ -139,6 +139,15 @@ BASE_SHA=$(git -C "$SCRATCH_WT" rev-parse HEAD)
 )
 ROUND1_SHA=$(git -C "$SCRATCH_WT" rev-parse HEAD)
 
+# Create a second commit simulating Round 2
+(
+  cd "$SCRATCH_WT"
+  git checkout -qb "round2-branch"
+  echo "more changes" >> readme.md
+  git commit -qam "round 2 commit"
+)
+ROUND2_SHA=$(git -C "$SCRATCH_WT" rev-parse HEAD)
+
 LEDGER_PATH="$TEST_TMP/ledger.jsonl"
 RUN_LEDGER_SCRIPT="$REPO_ROOT/scripts/run-ledger.sh"
 bash "$RUN_LEDGER_SCRIPT" init --ledger "$LEDGER_PATH"
@@ -148,6 +157,12 @@ GEN=$(jq -r '.generation' <<<"$ACQ_OUT")
 NONCE=$(jq -r '.nonce' <<<"$ACQ_OUT")
 
 bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --generation "$GEN" --nonce "$NONCE" --to-state committed
+
+ACQ_OUT2=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --pid "$$" --git-ref "refs/heads/round2-branch" --git-sha "$ROUND2_SHA" --worktree "$SCRATCH_WT")
+GEN2=$(jq -r '.generation' <<<"$ACQ_OUT2")
+NONCE2=$(jq -r '.nonce' <<<"$ACQ_OUT2")
+
+bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --generation "$GEN2" --nonce "$NONCE2" --to-state committed
 
 OUT3="$(node - "$REPO_ROOT" "$PROMPT_TXT" "$SCRATCH_WT" "$LEDGER_PATH" "$BASE_SHA" "$ROUND1_SHA" <<'NODE'
 const path = require('path');
@@ -182,6 +197,7 @@ const result1 = engine.implementTask({
   base: baseSha,
   runId: 'RUNX',
   implementationStage: 'implement',
+  implementationRound: 1,
   ledger,
   gitDir,
   roster: {
@@ -201,6 +217,7 @@ const result2 = engine.implementTask({
   base: round1Sha,
   runId: 'RUNX',
   implementationStage: 'implement',
+  implementationRound: 2,
   ledger,
   gitDir,
   roster: {
@@ -223,7 +240,11 @@ assert_contains "$OUT3" "round1_commit=$ROUND1_SHA" "Round 1 commit is round 1 S
 # fix/l6-fixpass commit history) — the foreman re-asserts the correct polarity once the
 # actual round-scoped stage-key scheme is known, per the pre-authorized inversion noted
 # in the U2 harness-authoring brief.
-assert_neq "$(printf '%s' "$OUT3" | grep -o 'round2_commit=[0-9a-f]*' | cut -d= -f2)" "$ROUND1_SHA" "Round 2 must resolve to a different ledger identity than round 1 (not silently re-adopt its stale commit)"
+ROUND2_STATUS="$(printf '%s' "$OUT3" | awk -F'=' '/^round2_status=/{print $2}' | tail -n 1)"
+ROUND2_COMMIT="$(printf '%s' "$OUT3" | grep -oE 'round2_commit=[0-9a-f]{40}' | cut -d= -f2 | tail -n 1)"
+
+assert_eq "$ROUND2_STATUS" "committed" "Round 2 should be committed after ledger recovery"
+assert_neq "$ROUND2_COMMIT" "" "Round 2 should emit a non-empty commit"
+assert_neq "$ROUND2_COMMIT" "$ROUND1_SHA" "Round 2 must resolve to a different ledger identity than round 1 (not silently re-adopt its stale commit)"
 
 finalize_test
-

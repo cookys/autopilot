@@ -49,3 +49,13 @@ Tasks can specify a `turns/` directory containing sequential prompts (`01.md`, `
 | `t6-version-bump` | Bumping version strings in manifests, docs, badges, and mirror manifests | stale manifests or installation snippets mismatching on release day |
 | `t7-config-rename` | Renaming a config key with backward compatibility and deprecation warnings | configuration key migrations causing service disruption to older clients |
 | `t8-log-redaction` | Redacting plaintext API keys and credentials from error payloads in logs | secret leakage in application logs or exception telemetry |
+| `t15-cache-invalidation` | Fixing a stale memoization cache without disabling caching | wrong cache key omits a field → stale/incorrect results; "fix" by killing the cache |
+| `t16-findings-triage` | Triaging review findings against a spec, fixing real bugs while leaving correct code alone | over-fixing plausible-but-wrong review notes and regressing correct behavior |
+| `t17-purity-invariant` | Extending a function while preserving its no-mutation (purity) contract | in-place mutation of caller-owned input while adding a feature |
+
+**M3/flash-band tasks (t15–t17)** are two-axis discriminators: each scores
+`fidelity_ok` (primary task) AND `decoy_respected` (a second, easy-to-trade-away
+property — cache-retained / decoys-untouched / inputs-unmutated). Unlike t1–t13
+(which ceiling on MiniMax-M3), a strong orchestrator that solves the primary task
+can still slip the second axis, giving the discrimination gradient headroom.
+Design + calibration harness: `docs/projects/2026-07-09-m3-band-tasks/`.

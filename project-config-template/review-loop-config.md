@@ -43,6 +43,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_aggregation: union-on-verified-critical
 - review_diff_scope: full
+- min_panel_size: 3
 - density_scaling: off
 
 > **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a

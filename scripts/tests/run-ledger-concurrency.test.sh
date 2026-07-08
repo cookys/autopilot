@@ -107,15 +107,32 @@ assert_eq "$VALID_JSONL_1" "true" "ledger 1 remains valid JSONL end-to-end"
 
 # 1b. init is serialized and cannot race with append (Critical)
 LEDGER_INIT_RACE="$TEST_TMP/ledger-init-race.jsonl"
-for i in {1..12}; do
+INIT_RACE_ATTEMPTS=12
+INIT_RACE_INITIALIZED=0
+INIT_RACE_EXISTS=0
+
+for i in $(seq 1 "$INIT_RACE_ATTEMPTS"); do
   (
-    bash "$SCRIPT" init --ledger "$LEDGER_INIT_RACE" >/dev/null 2>&1
+    bash "$SCRIPT" init --ledger "$LEDGER_INIT_RACE" >"$TEST_TMP/init-race-$i.init.out" 2>/dev/null
   ) &
   (
     bash "$SCRIPT" stage-acquire --ledger "$LEDGER_INIT_RACE" --run-id "init-race-$i" --stage build --pid "$$" --allow-reopen >/dev/null 2>&1
   ) &
 done
 wait
+
+for i in $(seq 1 "$INIT_RACE_ATTEMPTS"); do
+  INIT_RACE_STATUS="$(jq -r '.status // empty' <"$TEST_TMP/init-race-$i.init.out" 2>/dev/null || echo '')"
+  if [ "$INIT_RACE_STATUS" = "initialized" ]; then
+    INIT_RACE_INITIALIZED=$((INIT_RACE_INITIALIZED + 1))
+  elif [ "$INIT_RACE_STATUS" = "exists" ]; then
+    INIT_RACE_EXISTS=$((INIT_RACE_EXISTS + 1))
+  fi
+done
+
+assert_ne "$INIT_RACE_INITIALIZED" "0" "at least one init path initializes a new ledger"
+assert_ne "$INIT_RACE_EXISTS" "0" "serialized init calls observe already-initialized ledger"
+assert_eq "$((INIT_RACE_INITIALIZED + INIT_RACE_EXISTS))" "$INIT_RACE_ATTEMPTS" "every concurrent init returns a recognized status"
 
 VALID_JSONL_INIT_RACE=true
 while read -r line; do
@@ -126,7 +143,7 @@ done < "$LEDGER_INIT_RACE"
 assert_eq "$VALID_JSONL_INIT_RACE" "true" "ledger init race remains valid JSONL"
 
 INIT_RACE_COUNT="$(jq -s '[.[] | select(.kind=="stage" and .stage=="build")] | length' "$LEDGER_INIT_RACE")"
-assert_eq "$INIT_RACE_COUNT" "12" "no inits truncate concurrent stage-acquire writes"
+assert_eq "$INIT_RACE_COUNT" "$INIT_RACE_ATTEMPTS" "no inits truncate concurrent stage-acquire writes"
 
 
 # 2. Crash-ordering false-success on retry (Critical C2)
@@ -243,48 +260,67 @@ run_cmd stage-acquire --ledger "$LEDGER_8" --run-id r9 --stage ship --pid "$$" -
 GEN8_A="$(jq -r '.generation' <<<"$CMD_OUT")"
 NONCE8_A="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
 
+ACQ8_OUT_A="$TEST_TMP/out8-acq.a.$$"
+ACQ8_OUT_B="$TEST_TMP/out8-acq.b.$$"
 OUT8_A="$TEST_TMP/out8.a.$$"
 OUT8_B="$TEST_TMP/out8.b.$$"
-ACQ8_OUT="$TEST_TMP/out8-acquire.$$"
-
-bash "$SCRIPT" resource-lock --ledger "$LEDGER_8" --resource-id race-resource --run-id holder --stage ship --hold-seconds 4 >/dev/null 2>&1 &
-HOLDER8_PID=$!
 
 set +e
-bash "$SCRIPT" stage-transition --ledger "$LEDGER_8" --run-id r9 --stage ship --generation "$GEN8_A" --nonce "$NONCE8_A" --to-state committed >"$OUT8_A" 2>&1 &
-PID8_A=$!
-sleep 0.1
+bash "$SCRIPT" stage-acquire --ledger "$LEDGER_8" --run-id r9 --stage ship --pid "$$" --allow-reopen >"$ACQ8_OUT_A" 2>&1 &
+PID8_ACQ_A=$!
+bash "$SCRIPT" stage-acquire --ledger "$LEDGER_8" --run-id r9 --stage ship --pid "$$" --allow-reopen >"$ACQ8_OUT_B" 2>&1 &
+PID8_ACQ_B=$!
 
-bash "$SCRIPT" stage-acquire --ledger "$LEDGER_8" --run-id r9 --stage ship --pid "$$" --allow-reopen >"$ACQ8_OUT" 2>&1
-RC8_ACQ=$?
-RC8_B="1"
-if [ "$RC8_ACQ" -ne 0 ]; then
-  FAILS+=("setup lease bump for TOCTOU test should succeed")
+wait "$PID8_ACQ_A"
+RC8_ACQ_A=$?
+wait "$PID8_ACQ_B"
+RC8_ACQ_B=$?
+set -e
+
+assert_eq "$RC8_ACQ_A" "0" "concurrent lease bumps for TOCTOU setup must all succeed"
+assert_eq "$RC8_ACQ_B" "0" "concurrent lease bumps for TOCTOU setup must all succeed"
+
+GEN8_B="$(jq -r '.generation' <"$ACQ8_OUT_A")"
+GEN8_C="$(jq -r '.generation' <"$ACQ8_OUT_B")"
+NONCE8_B="$(jq -r '.nonce // empty' <"$ACQ8_OUT_A")"
+NONCE8_C="$(jq -r '.nonce // empty' <"$ACQ8_OUT_B")"
+
+assert_ne "$GEN8_B" "$GEN8_C" "concurrent lease bumps must observe distinct generations"
+if [ "$GEN8_B" -gt "$GEN8_C" ]; then
+  GEN8_FRESH="$GEN8_B"
+  NONCE8_FRESH="$NONCE8_B"
 else
-  GEN8_B="$(jq -r '.generation' <"$ACQ8_OUT")"
-  NONCE8_B="$(jq -r '.nonce // empty' <"$ACQ8_OUT")"
-  bash "$SCRIPT" stage-transition --ledger "$LEDGER_8" --run-id r9 --stage ship --generation "$GEN8_B" --nonce "$NONCE8_B" --to-state committed >"$OUT8_B" 2>&1 &
-  PID8_B=$!
+  GEN8_FRESH="$GEN8_C"
+  NONCE8_FRESH="$NONCE8_C"
 fi
+
+set +e
+bash "$SCRIPT" stage-transition --ledger "$LEDGER_8" --run-id r9 --stage ship --generation "$GEN8_FRESH" --nonce "$NONCE8_FRESH" --to-state committed >"$OUT8_B" 2>&1 &
+PID8_B=$!
+bash -c "sleep 0.05; \"$SCRIPT\" stage-transition --ledger \"$LEDGER_8\" --run-id r9 --stage ship --generation \"$GEN8_A\" --nonce \"$NONCE8_A\" --to-state committed >\"$OUT8_A\" 2>&1" &
+PID8_A=$!
 
 wait "$PID8_A"
 RC8_A=$?
-if [ -n "${PID8_B:-}" ]; then
-  wait "$PID8_B"
-  RC8_B=$?
-fi
+wait "$PID8_B"
+RC8_B=$?
 set -e
 
-wait "$HOLDER8_PID" 2>/dev/null || true
-
+VALID_JSONL_8=true
+while read -r line; do
+  if [ -n "$line" ] && ! jq -e . <<<"$line" >/dev/null 2>&1; then
+    VALID_JSONL_8=false
+  fi
+done < "$LEDGER_8"
+assert_eq "$VALID_JSONL_8" "true" "ledger 8 remains valid JSONL during TOCTOU test"
+assert_eq "$RC8_B" "0" "current transition with fresh lease succeeds"
 assert_eq "$RC8_A" "11" "superseded transition is fenced with return 11"
 VAL8_A="$(cat "$OUT8_A")"
-assert_json_eq "$VAL8_A" '.state' "stale_ignored" "superseded transition writes stale_ignored state"
-assert_eq "$RC8_B" "0" "current transition with fresh lease succeeds"
 VAL8_B="$(cat "$OUT8_B")"
+assert_json_eq "$VAL8_A" '.state' "stale_ignored" "superseded transition writes stale_ignored state"
 assert_json_eq "$VAL8_B" '.state' "committed" "fresh transition still commits"
 
-rm -f "$OUT8_A" "$OUT8_B" "$ACQ8_OUT"
+rm -f "$OUT8_A" "$OUT8_B" "$ACQ8_OUT_A" "$ACQ8_OUT_B"
 
 # 9. Concurrent stage-acquire must allocate distinct generations
 LEDGER_9="$TEST_TMP/ledger-9.jsonl"

@@ -27,9 +27,18 @@
 #     permissions are UNPROVABLE without actually CALLING that injected fn -- a
 #     submission that ignores compute_fn and recomputes inline fails fidelity
 #     (gpt-5.5 decorrelated review, 2026-07-09).
-# These rails make the KNOWN gaming paths fail-closed; they are not a proof of
-# un-gameability against an arbitrary adversary (e.g. builtin monkeypatching is
-# outside the planted-file / env / stdout threat model this oracle defends).
+# These rails make the KNOWN gaming paths (planted-file / env / stdout)
+# fail-closed; they are NOT a proof of un-gameability against an arbitrary
+# adversary. Out of scope: ANY in-process introspection (stack frames / gc /
+# monkeypatching), because the candidate module is imported into the SAME
+# python process as this judge and can walk caller frames or gc-tracked
+# objects to recover secrets the judge never exported. Verified concretely:
+# a candidate that calls sys._getframe() at import time can walk the caller's
+# frame globals, regex-scrape the real per-run NONCE, and forge a fidelity
+# result without ever calling the injected compute_fn (opus adversarial
+# re-attack, 2026-07-09; residual N2). Closing this needs the candidate's call
+# to run in a SEPARATE process/interpreter from the judge (process isolation)
+# -- a redesign, tracked in BACKLOG, not fixed by this oracle.
 
 set -u
 

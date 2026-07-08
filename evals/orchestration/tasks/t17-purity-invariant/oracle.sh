@@ -20,6 +20,19 @@
 # refs captured beforehand (candidate stdout is not the verdict channel), and
 # random tags are generated inside the isolated python (nothing exported). The
 # purity snapshot uses the oracle's own genuine copy.deepcopy.
+#
+# NOT covered by the above: ANY in-process introspection (stack frames / gc /
+# monkeypatching). The candidate module is imported into the SAME python
+# process as this judge, so it can walk caller frames or gc-tracked objects to
+# recover secrets the judge never exported. Verified concretely: a candidate
+# that walks this purity-check block's `snapshot` local via sys._getframe()
+# can re-sync it to match the (mutated) working data on the fly, so
+# `snapshot == recs` stays true while the candidate is actively mutating an
+# input -- faking the purity axis while genuinely violating it (opus
+# adversarial re-attack, 2026-07-09; residual N2'). Closing this needs the
+# candidate's call to run in a SEPARATE process/interpreter from the judge
+# (process isolation) -- a redesign, tracked in BACKLOG, not fixed by this
+# oracle.
 
 set -u
 

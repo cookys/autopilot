@@ -503,6 +503,19 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S。
 - **Source**: l6-resilience re-qc panel，2026-07-08。
 
+### M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界
+- **Trigger**: 下次把 `evals/orchestration/tasks/t15-cache-invalidation`、`t16-findings-triage`、`t17-purity-invariant` 用於對抗性 implementer 情境（`/l5`、`/l6` hetero 派遣、或任何候選碼不可信的場合）。
+- **Context**: 這三個 oracle 的判分 python 與候選碼在**同一個 process** 內執行，候選模組 import 時可用 `sys._getframe()` 走訪呼叫端 frame 的 globals/locals，撈出判分器從未匯出的密鑰。opus 2026-07-09 對抗性重攻實測兩條可靠（5/5 PASS）exploit：N2（t15）——撈出真 `NONCE` 偽造 token 且從不呼叫注入的 `compute_fn`，fidelity 與 cache 軸皆假過；N2'（t17）——重同步 purity 檢查區塊的 `snapshot` 局部變數，一邊 mutate 一邊讓 `snapshot == recs` 恆真。R2 硬化（4 條 planted-file/env/stdout 攻擊）已修好且仍成立，但這條 in-process introspection 類別是**架構性**盲點，不是 R2 修復範圍。真正封死需要候選函式呼叫跑在與判分器分離的 subprocess/interpreter（process isolation），對映 `check-test-integrity.sh` L1 block-mode 在 CLAUDE.md 已記錄的同一結論（no local-only same-process mechanism 對抗同帳號候選碼是防偽的）。
+- **Effort**: L（redesign，非修補）。
+- **Source**: opus 對抗性重攻，2026-07-09。`docs/projects/2026-07-09-m3-band-tasks/report.md` § "Residual: in-process introspection"。
+
+### 單輪任務對 M3 判別是死路 — 要量 pack/procedure lift 需轉向 long-horizon
+- **Trigger**: 下次想造「更難」的單輪任務去判別 MiniMax-M3（或同量級模型），或想量測 pack/procedure 在 M3 頻帶的行為差異時。
+- **Context**: t15-t17（兩軸判別任務，含 fidelity/decoy 雙軸設計，專為在 M3 頻帶內找 headroom 而建）校準結果 M3 全數天花板 —— n=3/cell，3 任務 × 2 arm × 3 軸，**18/18 全過**，含各任務刻意設計來誘使 M3 抄捷徑的軸（disable-cache / over-fix-decoy / mutate-under-pressure）。ON（pack）與 OFF 亦無可測差異。與 t1-t13 同命運。這重申 2026-07-06 archive 的結論：M3 的判別訊號（若存在）在 long-horizon（t14 型）任務，不是再加單輪任務難度。
+- **Options**: (a) 直接轉向擴充 t14 型 long-horizon 任務的判別力；(b) 若仍要單輪任務，需要質變的難度設計（非本次「兩軸」思路的漸進強化）；(c) 接受 M3 在單輪任務上已無 pack/procedure 可測 lift，把校準資源移往其他頻帶或其他量測維度。
+- **Effort**: M。
+- **Source**: `docs/projects/2026-07-09-m3-band-tasks/report.md` § Results，2026-07-09。
+
 ### verification-authoring rails 三件小缺陷（author 唯讀契約／leakage 誤判／polarity tripwire）
 - **Trigger**: 下次碰 dispatch-author.sh / dispatch-review.sh，或再用「先寫 buggy-behavior 斷言、修復後翻極性」的 harness 授權流程時。
 - **Context**: (1) `dispatch-author.sh` agy runner 於失敗嘗試時直接寫雜檔進目標 worktree，違反自身文件宣稱的 no-repo-mutation 契約；(2) `dispatch-review.sh` 的 prompt-leakage 偵測把格式正確的 VERDICT/FINDINGS 回覆誤判為 leakage（raw_log 乾淨，需人工繞過）；(3) 「pre-authorized polarity flip」慣例無結構性 tripwire（如 grep-檢查的 marker）強制翻轉發生於 ship 前——本次靠 foreman 自律完成（`bd1a96d`）。均為 2026-07-08 campaign 實測。

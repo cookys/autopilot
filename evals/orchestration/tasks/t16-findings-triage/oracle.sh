@@ -19,6 +19,18 @@
 # random inputs INSIDE the isolated python (nothing exported to the env). This
 # is an oracle-owned behavioral battery over the candidate's real functions --
 # it never trusts the candidate-visible run-tests.sh.
+#
+# NOT covered by the above: ANY in-process introspection (stack frames / gc /
+# monkeypatching). The candidate module is imported into the SAME python
+# process as this judge, so it can walk caller frames or gc-tracked objects to
+# recover secrets the judge never exported. Sibling t15/t17 oracles have a
+# concretely verified exploit of this class (sys._getframe() caller-frame
+# scraping, opus adversarial re-attack 2026-07-09); this oracle's random
+# inputs are not env/file-secret-derived so the same exact exploit does not
+# transfer, but the same in-process trust boundary applies here and is NOT
+# defended. Closing this needs the candidate's call to run in a SEPARATE
+# process/interpreter from the judge (process isolation) -- a redesign,
+# tracked in BACKLOG, not fixed by this oracle.
 
 set -u
 

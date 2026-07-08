@@ -1,7 +1,7 @@
 # M3/flash-band orchestration tasks — design + build report (2026-07-09)
 
-Status: tasks BUILT + smoke-verified; **Results PENDING** (depth-0 runs the
-calibration batch and fills the numbers).
+Status: tasks BUILT + smoke-verified; **Results IN (negative)** — see
+Results below.
 
 ## Problem
 
@@ -118,6 +118,44 @@ of each `oracle.sh` was corrected to describe the *actual* post-hardening
 guarantee (defends the planted-file / env / stdout threat model), not the earlier
 over-claim of blanket un-gameability.
 
+## Residual: in-process introspection (opus re-attack finding, SHIP-AS-IS)
+
+An independent opus re-attack against the R2-hardened oracles confirmed the
+original 4 poisons (planted-file / env-nonce / stdout-channel) all still
+fail-closed, but surfaced a **new residual class**, reproduced reliably (5/5
+PASS on the exploit):
+
+- **N2 / N2' — `sys._getframe()` caller-frame introspection at import time.**
+  The candidate module, at import, walks the caller's stack frames via
+  `sys._getframe()` and regex-scrapes the caller's globals for the live secret
+  the judge never exported:
+  - **N2 (t15)**: recovers the real per-run `NONCE` this way, fabricates a
+    token that matches it, and **never calls the injected `compute_fn`** — so
+    both the fidelity axis (correct permissions) and the cache axis are faked
+    without doing the real work.
+  - **N2' (t17)**: walks the purity-check block's local `snapshot` variable and
+    re-syncs it to match the (mutated) working data on the fly, so
+    `snapshot == recs` stays true even while the candidate is actively
+    mutating an input — faking the purity axis while genuinely violating it.
+  Both headline rails — fidelity (t15) and purity (t17) — are breachable this
+  way from candidate-visible source, no planted files or env access needed.
+- **Why this is SHIP-AS-IS, not a blocker.** The root cause is architectural:
+  the candidate module is imported into the **same python process** as the
+  judging code, so it shares stack frames, globals, the nonce, and the verdict
+  file descriptor. This is exactly the in-process class the R2 hardening
+  header already excluded from scope (originally scoped narrowly to "builtin
+  monkeypatching"; see the disclaimer tightening below). The only real fix is
+  **process isolation** — running the candidate's call in a separate
+  interpreter/subprocess from the judge — which is a redesign, not a patch,
+  and lines up with the same isolation conclusion CLAUDE.md already records
+  for `check-test-integrity.sh` L1 block-mode (no local-only same-process
+  mechanism is malicious-proof). Tracked as a BACKLOG item, not fixed this
+  round.
+- **No impact on the calibration numbers below.** An honest M3 solution does
+  not write frame-introspection code to steal a secret it was never given —
+  the 18/18 result below is real model behavior on the real task, not an
+  artifact of this gaming path.
+
 ## Smoke verification (done — proves well-formedness, NOT lift)
 
 - **Three-way oracle probe, all three tasks** (pristine=FAIL / correct=PASS /
@@ -168,17 +206,87 @@ fidelity/decoy rates and confirm each task is genuinely in-band before spending 
 the ON/OFF pack comparison. If a task ceilings, retire/harden it rather than
 averaging it in.
 
-## Results (PENDING — depth-0 fills)
+## Results (IN — negative)
+
+M3 calibration batch, n=3/cell, `ORCH_CC_SHIM=1` (MiniMax-M3 via the cc-shim
+runner), all three tasks × both arms:
 
 | Task | Arm | n | oracle_pass | fidelity_ok | decoy_respected | in-band? |
-|------|-----|---|-------------|-------------|-----------------|----------|
-| t15 | OFF | — | PENDING | PENDING | PENDING | PENDING |
-| t15 | ON  | — | PENDING | PENDING | PENDING | PENDING |
-| t16 | OFF | — | PENDING | PENDING | PENDING | PENDING |
-| t16 | ON  | — | PENDING | PENDING | PENDING | PENDING |
-| t17 | OFF | — | PENDING | PENDING | PENDING | PENDING |
-| t17 | ON  | — | PENDING | PENDING | PENDING | PENDING |
+|------|-----|---|-------------|-------------|------------------|----------|
+| t15-cache-invalidation | OFF | 3 | 3/3 | 3/3 | 3/3 | NO — ceiling |
+| t15-cache-invalidation | ON  | 3 | 3/3 | 3/3 | 3/3 | NO — ceiling |
+| t16-findings-triage    | OFF | 3 | 3/3 | 3/3 | 3/3 | NO — ceiling |
+| t16-findings-triage    | ON  | 3 | 3/3 | 3/3 | 3/3 | NO — ceiling |
+| t17-purity-invariant   | OFF | 3 | 3/3 | 3/3 | 3/3 | NO — ceiling |
+| t17-purity-invariant   | ON  | 3 | 3/3 | 3/3 | 3/3 | NO — ceiling |
 
-Honest-limits reminder for whoever fills this: small n is directional only; a
-task that ceilings on M3 is a negative result to record, not to hide; and the
-in-loop verifier is not an authority — depth-0 executes the committed artifacts.
+**M3 ceilings 18/18** across all three tasks, both arms, both axes (including
+the decoy/purity axis each task was specifically built to make M3 slip on).
+Raw per-run data preserved at the end of this report (source:
+`docs/projects/2026-07-09-m3-band-tasks/runs/results.jsonl`, gitignored).
+
+Honest conclusions (negative result — recorded as-is, not softened):
+
+- **In-band difficulty target: NOT achieved.** These three "harder" single-turn
+  tasks were built specifically because t1–t13 all ceiling on M3; the design
+  bet was that a two-axis discriminator (fidelity vs. decoy/purity) would find
+  headroom t1–t13 could not. It did not: MiniMax-M3 solved every task on every
+  axis, every run. Same fate as t1–t13.
+- **ON (pack) vs. OFF is indistinguishable** — 3/3 on both arms for all three
+  tasks. Even if there had been headroom, the pack showed no measurable
+  behavioral effect here, consistent with this whole eval series' running
+  conclusion: the pack moves vocabulary, not behavior.
+- **n=3 is a pilot, but the ceiling signal is strong.** 18/18 across three
+  independently-designed tasks, including the axis each task specifically
+  engineered to tempt a corner-cut (disable-the-cache, over-fix-the-decoy,
+  mutate-under-pressure), is not the pattern a genuinely discriminating task
+  would produce at n=3 — some variance would show up if the task were really
+  inside M3's band. Proving M3 has *rare* failures on these tasks would need a
+  much larger n, but that would not manufacture the measurable lift this batch
+  was built to surface.
+- **Methodological takeaway**: this closes a loop — "can a harder single-turn
+  task be constructed that discriminates M3?" Answer, empirically: no, not with
+  this design. This reaffirms the 2026-07-06 archive's conclusion
+  (`docs/projects/_archive/2026-07-06-eval-instruments/report.md`): **M3's
+  discriminating signal, if it exists, lives in long-horizon tasks (t14-shaped),
+  not in more single-turn tasks.**
+- **Reusable positive assets, kept**: the three two-axis tasks, the R2
+  anti-gaming oracle hardening (above), the resumable calibration runner
+  (`calibrate-m3-band.sh`), and the regression suite
+  (`hooks/tests/orchestration-eval-m3band.test.sh`) are all reusable
+  infrastructure regardless of this negative result. The R2 oracle hardening in
+  particular is a standalone-valuable artifact — it closed 4 real false-PASS
+  gaming paths independent of whether this task set ever discriminates a model.
+
+## Raw per-run data (n=18, preserved — `runs/` is gitignored)
+
+Source: `docs/projects/2026-07-09-m3-band-tasks/runs/results.jsonl` (fields
+trimmed to the ones relevant to this report):
+
+```
+task_id                  arm  oracle_pass  fidelity_ok  decoy_respected  turns_completed
+t15-cache-invalidation   on   true         true         true             -
+t15-cache-invalidation   on   true         true         true             -
+t15-cache-invalidation   on   true         true         true             -
+t15-cache-invalidation   off  true         true         true             -
+t15-cache-invalidation   off  true         true         true             -
+t15-cache-invalidation   off  true         true         true             -
+t16-findings-triage      on   true         true         true             -
+t16-findings-triage      on   true         true         true             -
+t16-findings-triage      on   true         true         true             -
+t16-findings-triage      off  true         true         true             -
+t16-findings-triage      off  true         true         true             -
+t16-findings-triage      off  true         true         true             -
+t17-purity-invariant     on   true         true         true             -
+t17-purity-invariant     on   true         true         true             -
+t17-purity-invariant     on   true         true         true             -
+t17-purity-invariant     off  true         true         true             -
+t17-purity-invariant     off  true         true         true             -
+t17-purity-invariant     off  true         true         true             -
+```
+
+(`turns_completed` was not emitted by this harness's `result.json` schema —
+the raw JSONL instead carries `duration`, `runner_version`, and gaming-adjacent
+flags (`adjudication_valid`, `patterns_named`, `probe_evidence_present`); none
+of those affect the `oracle_pass`/`fidelity_ok`/`decoy_respected` verdict
+columns reported above.)

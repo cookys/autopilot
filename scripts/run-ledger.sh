@@ -717,19 +717,26 @@ command_stage_transition() {
     error "run lock unavailable"
   }
 
-  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
-  [ -n "$latest" ] || {
+  local stage_rows max_gen caller_rows current_row stale_from
+  stage_rows="$(jq -s --arg rid "$run_id" --arg stg "$stage" '
+    [ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stg) ]' "$ledger")"
+  if [ -z "$stage_rows" ] || [ "$stage_rows" = "null" ] || [ "$stage_rows" = "[]" ]; then
     flock -u "$run_fd"
     eval "exec ${run_fd}>&-"
     for fd in $r_fds; do release_lock "$fd"; done
     error "stage moved while locking run=$run_id stage=$stage"
-  }
-  current_state="$(jq -r '.state' <<<"$latest")"
-  current_gen="$(jq -r '.generation // 0' <<<"$latest")"
-  current_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
-  resources="$(jq -r '.resources // ""' <<<"$latest")"
+  fi
 
-  if [ "$generation" -ne "$current_gen" ] || [ "$nonce" != "$current_nonce" ]; then
+  max_gen="$(jq -r 'if length==0 then 0 else (map((.generation // 0 | tostring) | tonumber) | max) end' <<<"$stage_rows")"
+  current_row="$(jq -r --arg generation "$generation" '
+    [ .[] | select((.generation // 0 | tostring) == $generation) ]
+    | if length==0 then empty else .[-1] end' <<<"$stage_rows")"
+
+  if [ "$max_gen" -gt "$generation" ]; then
+    stale_from=""
+    if [ -n "$current_row" ]; then
+      stale_from="$(jq -r '.state // ""' <<<"$current_row")"
+    fi
     local stale_line
     stale_line="$(jq -nc \
       --arg kind "stage" \
@@ -738,9 +745,9 @@ command_stage_transition() {
       --arg stg "$stage" \
       --arg state "stale_ignored" \
       --arg reason "late_writer" \
-      --argjson gen "$current_gen" \
+      --argjson gen "$generation" \
       --arg nonce_v "$nonce" \
-      --arg from "${current_state}" \
+      --arg from "$stale_from" \
       --arg to "$to_state" \
       '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,generation:$gen,nonce:$nonce_v,transition_from:$from,transition_to:$to}')"
     append_record "$ledger" "$run_id" "$stale_line" "$timeout" "$run_fd"
@@ -748,6 +755,18 @@ command_stage_transition() {
     echo "$stale_line"
     return 11
   fi
+
+  [ -n "$current_row" ] || {
+    flock -u "$run_fd"
+    eval "exec ${run_fd}>&-"
+    for fd in $r_fds; do release_lock "$fd"; done
+    error "stage moved while locking run=$run_id stage=$stage"
+  }
+
+  current_state="$(jq -r '.state' <<<"$current_row")"
+  current_gen="$(jq -r '.generation // 0' <<<"$current_row")"
+  current_nonce="$(jq -r '.nonce // empty' <<<"$current_row")"
+  resources="$(jq -r '.resources // ""' <<<"$current_row")"
 
   if [ "$current_state" = "$to_state" ]; then
     if [ -n "$idempotency_key" ] && [ "$(has_applied_journal_key "$ledger" "$run_id" "$stage" "$generation" "$idempotency_key")" = "true" ]; then

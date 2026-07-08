@@ -252,6 +252,26 @@ assert_eq "$VALID_JSONL_5" "true" "ledger 5 remains valid JSONL end-to-end"
 
 rm -f "$OUT_A" "$OUT_B"
 
+# 5b. Deterministic generation-scoped stale writer fencing (non-racy repro)
+LEDGER_5B="$TEST_TMP/ledger-5b.jsonl"
+run_cmd init --ledger "$LEDGER_5B"
+run_cmd stage-acquire --ledger "$LEDGER_5B" --run-id r5b --stage ship --pid "$$"
+GEN_5B_1="$(jq -r '.generation' <<<"$CMD_OUT")"
+NONCE_5B_1="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+
+run_cmd stage-acquire --ledger "$LEDGER_5B" --run-id r5b --stage ship --pid "$$" --allow-reopen
+GEN_5B_2="$(jq -r '.generation' <<<"$CMD_OUT")"
+NONCE_5B_2="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+
+run_cmd stage-transition --ledger "$LEDGER_5B" --run-id r5b --stage ship --generation "$GEN_5B_1" --nonce "$NONCE_5B_1" --to-state committed
+assert_cmd_rc 11 "sequential stale generation transition is fenced"
+assert_json_eq "$CMD_OUT" '.state' "stale_ignored" "sequential stale writer output shows stale_ignored"
+assert_json_eq "$CMD_OUT" '.generation' "$GEN_5B_1" "stale marker preserves caller generation"
+
+run_cmd stage-transition --ledger "$LEDGER_5B" --run-id r5b --stage ship --generation "$GEN_5B_2" --nonce "$NONCE_5B_2" --to-state committed
+assert_cmd_rc 0 "fresh generation transition succeeds"
+assert_json_eq "$CMD_OUT" '.state' "committed" "fresh writer reaches target state in deterministic repro"
+
 # 8. TOCTOU-safe transition validation: stale transition is fenced after concurrent lease bump
 LEDGER_8="$TEST_TMP/ledger-8.jsonl"
 run_cmd init --ledger "$LEDGER_8"

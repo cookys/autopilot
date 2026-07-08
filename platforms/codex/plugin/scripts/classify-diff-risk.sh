@@ -386,13 +386,17 @@ collect_touched_paths() {
 
   collect_path() {
     local candidate="$1"
+    local side="$2"
     candidate="${candidate#\"}"
     candidate="${candidate%\"}"
     if ! [[ "$candidate" == a/* || "$candidate" == b/* || "$candidate" == /dev/null ]]; then
       return
     fi
-    candidate="${candidate#a/}"
-    candidate="${candidate#b/}"
+    case "$side" in
+      a) candidate="${candidate#a/}" ;;
+      b) candidate="${candidate#b/}" ;;
+      *) return ;;
+    esac
     [ -z "$candidate" ] && return
     [ "$candidate" = "/dev/null" ] && return
     append_unique "$candidate" paths_out
@@ -410,10 +414,10 @@ collect_touched_paths() {
   while IFS= read -r line; do
     if [[ "$line" == ---\ * ]]; then
       source="${line#--- }"
-      collect_path "$source"
+      collect_path "$source" a
     elif [[ "$line" == +++\ * ]]; then
       source="${line#+++ }"
-      collect_path "$source"
+      collect_path "$source" b
     elif [[ "$line" == rename\ from\ * ]]; then
       source="${line#rename from }"
       collect_rename_path "$source"

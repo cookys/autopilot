@@ -381,24 +381,45 @@ collect_touched_paths() {
   local diff_file="$1"
   local -n paths_out="$2"
   local line=''
-  local left=''
-  local right=''
-  local path=''
+  local source=''
   paths_out=()
 
+  collect_path() {
+    local candidate="$1"
+    candidate="${candidate#\"}"
+    candidate="${candidate%\"}"
+    if ! [[ "$candidate" == a/* || "$candidate" == b/* || "$candidate" == /dev/null ]]; then
+      return
+    fi
+    candidate="${candidate#a/}"
+    candidate="${candidate#b/}"
+    [ -z "$candidate" ] && return
+    [ "$candidate" = "/dev/null" ] && return
+    append_unique "$candidate" paths_out
+  }
+
+  collect_rename_path() {
+    local candidate="$1"
+    candidate="${candidate#\"}"
+    candidate="${candidate%\"}"
+    [ -z "$candidate" ] && return
+    [ "$candidate" = "/dev/null" ] && return
+    append_unique "$candidate" paths_out
+  }
+
   while IFS= read -r line; do
-    if [[ "$line" == diff\ --git\ * ]]; then
-      left="$(awk '{print $3}' <<<"$line")"
-      right="$(awk '{print $4}' <<<"$line")"
-      for path in "$left" "$right"; do
-        path="${path%%\"}"
-        path="${path#\"}"
-        path="${path#a/}"
-        path="${path#b/}"
-        [ -z "$path" ] && continue
-        [ "$path" = "/dev/null" ] && continue
-        append_unique "$path" paths_out
-      done
+    if [[ "$line" == ---\ * ]]; then
+      source="${line#--- }"
+      collect_path "$source"
+    elif [[ "$line" == +++\ * ]]; then
+      source="${line#+++ }"
+      collect_path "$source"
+    elif [[ "$line" == rename\ from\ * ]]; then
+      source="${line#rename from }"
+      collect_rename_path "$source"
+    elif [[ "$line" == rename\ to\ * ]]; then
+      source="${line#rename to }"
+      collect_rename_path "$source"
     fi
   done < "$diff_file"
 }

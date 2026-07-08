@@ -300,15 +300,16 @@ Use this 7-step recovery sequence:
      `Monitor(command: "sleep ${delay}; echo QUOTA_WAKEUP", timeout_ms: ...)`
    - Alternate portability path: `"/loop"` with a self-throttled checkpointed prompt
      that waits until `now >= wake_at` before leaving reset mode.
-5. On wakeup, run the **separate probe budget** first:
-   `node bin/autopilot.js endpoints doctor --json`.
-   This is explicit SEPARATE-budget reachability/auth preflight to avoid immediately
-   spending heavy implementation budget.
-6. If probe is `outcome: ok` and status indicates recovery, execute the R3 path:
+5. On wakeup, run the **separate probe budget** first against the endpoint that maps to
+   the quota-limited engine for this recovery path (typically `<quota_limited_endpoint_name>`):
+   `node bin/autopilot.js endpoints test <quota_limited_endpoint_name> --json`.
+   This is explicit network+auth preflight to avoid immediately spending heavy
+   implementation budget.
+6. If probe is `outcome: ok`, execute the R3 path:
    `scripts/run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>`.
    This is the required idempotent continuation step; no bespoke resume branch.
-7. If probe reports limit still active (`status` indicates 429 or equivalent `still_limited`)
-   or is `auth_failed`/`network_failed` due to auth plane outage, do **not** retry
+7. If probe reports limit still active (`outcome: network_failed` with `http_status: 429`
+   or equivalent `still_limited`) or is `auth_failed`/`network_failed` due to auth plane outage, do **not** retry
    immediately. Apply exponential backoff with jitter (`delay *= 2`, capped), reschedule
    via step 4, and re-run step 5 only at the new wake time.
 

@@ -40,8 +40,6 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- risk_family_decorrelation_always_on: true
-- risk_adversarial_sampling_ratio: 0.05
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_aggregation: union-on-verified-critical
 - review_diff_scope: full
@@ -96,7 +94,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 
 Required canonical docs entries (for humans and policy checks, not mandatory parser keys):
 
-- `risk_family_decorrelation_always_on: true` (inner-loop reviewer must differ from implementer family)
+- `risk_family_decorrelation_always_on: true` (inner-loop reviewer must differ from implementer family; enforced unconditionally by `ensureDistinctReviewFamily` in `src/engine/autopilot-engine.js` and **not** controllable by any config key)
 - `risk_adversarial_sampling_ratio: 0.05` (or your preferred non-zero ratio)
 
 Checklist mapping:

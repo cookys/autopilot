@@ -1414,7 +1414,7 @@ class AutopilotEngine {
           let branchForceResult;
           try {
             branchForceResult = this.gitBranchForce({
-              branch,
+              branch: currentBranch,
               commit: verifyState.bestCommit,
               cwd: loopCwd,
               round,
@@ -1434,7 +1434,7 @@ class AutopilotEngine {
             round,
             commit,
             selected_commit: verifyState.bestCommit,
-            branch,
+            branch: currentBranch,
             branch_update_exit_status: branchForceResult ? branchForceResult.status : null,
           }));
           if (branchForceBlockedReason) {

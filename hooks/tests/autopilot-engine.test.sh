@@ -1992,6 +1992,7 @@ function runScenario(name, options) {
 
   const result = engine.runImplementationReviewLoop(input);
   const verifyEntries = result.ledger.filter((entry) => entry.unit === 'verify_round');
+  const ratchetSelectEntries = result.ledger.filter((entry) => entry.unit === 'ratchet_select');
   const ratchetEntries = result.ledger.filter((entry) => entry.ratchet_reverted === true);
   console.log(`${name}_status=${result.status}`);
   console.log(`${name}_rounds=${result.rounds}`);
@@ -2001,7 +2002,9 @@ function runScenario(name, options) {
   console.log(`${name}_review_calls=${reviewCalls.length}`);
   console.log(`${name}_repair_calls=${repairCalls.length}`);
   console.log(`${name}_branch_force_calls=${branchForceCalls.length}`);
+  console.log(`${name}_branch_force_branch=${branchForceCalls[0] ? branchForceCalls[0].branch : ''}`);
   console.log(`${name}_branch_force_to=${branchForceCalls[0] ? branchForceCalls[0].commit : ''}`);
+  console.log(`${name}_ratchet_select_branch=${ratchetSelectEntries[0] ? ratchetSelectEntries[0].branch : ''}`);
   console.log(`${name}_advisory_count=${Array.isArray(result.advisory_findings) ? result.advisory_findings.length : 'absent'}`);
   console.log(`${name}_verify_passes=${verifyEntries.map((entry) => String(entry.verify_pass)).join(',')}`);
   console.log(`${name}_ratchet_reverted_rounds=${result.ratchet_reverted_rounds === undefined ? 'absent' : result.ratchet_reverted_rounds}`);
@@ -2098,7 +2101,7 @@ runScenario('fail_tie_continues', {
   maxRounds: 3,
 });
 runScenario('ratchet', {
-  verifySequence: ['fail', 'pass', 'fail'],
+  verifySequence: ['pass', 'fail', 'pass'],
   reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
   noVerifyFirst: true,
   maxRounds: 3,
@@ -2133,9 +2136,11 @@ assert_contains "$OUT" "fail_tie_continues_rounds=3" "AutopilotEngine fail-fail 
 assert_contains "$OUT" "fail_tie_continues_impl_calls=3" "AutopilotEngine dispatches repairs while verification keeps failing without regression"
 assert_contains "$OUT" "fail_tie_continues_branch_force_calls=0" "AutopilotEngine does not ratchet-select fail-fail ties"
 assert_contains "$OUT" "ratchet_status=non_converged" "AutopilotEngine ratchet scenario remains review-gated under no-verify-first"
-assert_contains "$OUT" "ratchet_commit=3333333333333333333333333333333333333333" "AutopilotEngine final commit reports best verified repair commit"
+assert_contains "$OUT" "ratchet_commit=4444444444444444444444444444444444444444" "AutopilotEngine final commit reports best verified repair commit"
 assert_contains "$OUT" "ratchet_branch_force_calls=1" "AutopilotEngine branch-selects after pass-to-fail regression"
-assert_contains "$OUT" "ratchet_branch_force_to=3333333333333333333333333333333333333333" "AutopilotEngine ratchet branch update targets best commit"
+assert_contains "$OUT" "ratchet_branch_force_branch=ratchet-branch-repair-r2-2222222" "AutopilotEngine ratchet branch update targets the current repair branch"
+assert_contains "$OUT" "ratchet_branch_force_to=2222222222222222222222222222222222222222" "AutopilotEngine ratchet branch update targets best commit"
+assert_contains "$OUT" "ratchet_ratchet_select_branch=ratchet-branch-repair-r2-2222222" "AutopilotEngine ratchet ledger records the current repair branch"
 assert_contains "$OUT" "ratchet_ratchet_reverted_rounds=1" "AutopilotEngine counts ratchet-reverted rounds"
 assert_contains "$OUT" "ratchet_ratchet_entry_count=1" "AutopilotEngine records reverted round in ledger"
 assert_contains "$OUT" "no_verify_first_status=converged" "AutopilotEngine no-verify-first restores reviewer-gated convergence"

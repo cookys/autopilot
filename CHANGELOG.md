@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.8 — observation-first skills + engine verify-cwd fix
+
+**Headline**: `docs/plans/2026-07-08-observation-first-skills.md` converged through a five-family × three-round design review (R1: all 5 families FIX with 5 real findings; R2: gpt-5.5/grok/GLM SHIP-AS-IS, opus 1 blocking on red-green base-run semantics for in-diff artifacts, MiniMax kernels folded; R3: opus SHIP-AS-IS confirmation) and ships a mandatory verification-contract intake for `dev-flow` plus de-hardcoded review density at 5 call sites. The instrument caught its own runner on the first real red-green run: all three parallel implementation units logged `verify_pass=false` while their verify scripts ran green at the artifact tips — the engine was executing `--verify-cmd` in the main checkout instead of the round's commit, and the repair ratchet's `git reset --hard` targeted that same live checkout (a latent main-checkout-destruction bug that never fired only because verify was always false). Both are fixed this release.
+
+### Added
+- `dev-flow` mandatory verification-contract intake: the sizing question 「這個任務做完,跑什麼命令能客觀證明?」, with a 3-row routing table — a red-green pass routes to anchoring (non-gating, only via the conjunction red-green ∧ scorecard-qualified reviewer ∧ risk=low); a vacuous answer (`true`/`echo done`/import-only) demotes back to gating; and a legitimate 「沒有客觀驗證」 answer keeps the gating review loop, with a tool-capable native reviewer preferred. Red-green semantics: base = a pinned SHA; base-run = the base product plus the diff's own verification artifact; an assertion failure is red, an infra error is not; red must be reproducible.
+- CLAUDE.md "Skill evolution rules": boy-scout (touch a skill → trim it toward its contract-card shape) and scorecard-first (no rewrite or deletion without eval ON/OFF evidence).
+- Two BACKLOG entries: a third density axis (`verify_strength`) and a family-agnostic `min_panel_size`.
+
+### Changed
+- Review-density de-hardcoding at 5 sites (`l4:21`, front-door `:302`/`:314`/`:478`, `code-review:195`) — literal panel-size/round wording replaced with resolver-driven wording, retaining the homogeneous ≥3-lens floor (the resolver emits required families, not a panel-size number; resolver-unavailable fails safe to 3).
+- `finish-flow:60` "max 3 rounds" deliberately KEPT literal — it governs a different loop (the homogeneous quality-pipeline repair loop), and pointing it at the resolver would have loosened 3→5-7 against the measured M3 churn evidence.
+
+### Fixed
+- Engine `implement-review --verify-cmd` executed the verify command in the engine's own working directory (the main checkout) rather than the round's commit worktree, so a genuinely green verify script was misreported as `verify_pass=false` on every round. Live-found by the first real red-green run: three parallel implementation units (reviewer families split A→MiniMax, B→GLM, C→grok — first use of the freshly-qualified 5-family roster) all showed the false-negative.
+- The repair ratchet's convergence-selection step used `git reset --hard` against that same main-checkout working tree — a latent destructive-write bug that had never fired only because `verify_pass` was always false beforehand. Fixed: verification now runs inside a per-round temporary worktree, and the ratchet selects the winning round by moving a branch pointer (`git branch -f`) rather than resetting a working tree. Worktree cleanup is guaranteed on all failure paths, with a `verify_cleanup_warning` ledger entry for visibility when cleanup itself fails.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.7`
+
+prose-justification: the dev-flow intake block and the CLAUDE.md evolution-rules section are deliberate prose additions (new mandatory question + routing table + two rules); the engine verify-cwd/ratchet fix also grew doc lines describing the new worktree-based semantics.
+
 ## v2.32.7 — escape-rate instrument + verify_first wiring + honest t14 large-n
 
 **Headline**: The v2.32.6 verify-first mode assumed the verify command is a perfect oracle; this release measures what happens when it isn't. A new `pipeline-bench --verify-script` mode (+ 4 deliberately weakened verifier fixtures under `evals/pipeline-bench/verifiers/`) finds a clear cliff: at the weak-model × weak-verification quadrant, degraded verification converts a rescue (perfect-oracle: 3/3 true passes) into 100% escape rate with zero true passes — in-loop verification passes while the true oracle fails on every run. Near-bar models escape rarely. The rule: verify-first convergence is only safe when the model is capable OR the verification is strong; if both are weak, the reviewer must stay in the loop. Separately, the engine now emits a `verify_first_signal_unused` ledger flag when a roster requests `verify_first: true` but no `--verify-cmd` was actually wired, closing a silent-no-op gap in the v2.32.6 density-scaling rollout. And the t14 long-horizon constraint-drift instrument was run to n=35 (folded with the prior n=5): the earlier "pack helps constraint retention" directional hint did **not** replicate (3/17 ON vs 1/18 OFF, Fisher p=0.279) — constraint drift over 5 turns is real and severe (only 4/35 runs held all three turn-1 constraints through turn 5), and the prose pack does not rescue it, consistent with every prior campaign in this series.

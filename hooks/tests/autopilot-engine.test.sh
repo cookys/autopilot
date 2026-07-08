@@ -1859,6 +1859,35 @@ const roster = {
   loop_convergence_verdict: 'SHIP-AS-IS',
 };
 
+function mockWorktreeHandlers(prefix) {
+  return {
+    gitWorktreeAdd({ round }) {
+      const parent = fs.mkdtempSync(path.join(tmp, `${prefix || 'verify'}-${round || 0}-wt-`));
+      const worktree = path.join(parent, 'wt');
+      fs.mkdirSync(worktree, { recursive: true });
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        worktree,
+        parent,
+      };
+    },
+    gitWorktreeRemove({ worktree }) {
+      fs.rmSync(worktree, { recursive: true, force: true });
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+      };
+    },
+  };
+}
+
 function runScenario(name, options) {
   const scenarioDir = path.join(tmp, name);
   fs.mkdirSync(scenarioDir, { recursive: true });
@@ -1871,9 +1900,10 @@ function runScenario(name, options) {
   const implCalls = [];
   const reviewCalls = [];
   const repairCalls = [];
-  const resetCalls = [];
+  const branchForceCalls = [];
   const engine = new AutopilotEngine({
     cwd: scenarioDir,
+    ...mockWorktreeHandlers(name),
     implementationDispatcher(args) {
       implCalls.push(args);
       const call = implCalls.length;
@@ -1934,8 +1964,8 @@ function runScenario(name, options) {
       fs.writeFileSync(file, `repair ${round}`, 'utf8');
       return file;
     },
-    gitResetHard(args) {
-      resetCalls.push(args);
+    gitBranchForce(args) {
+      branchForceCalls.push(args);
       return {
         error: null,
         status: 0,
@@ -1962,6 +1992,7 @@ function runScenario(name, options) {
 
   const result = engine.runImplementationReviewLoop(input);
   const verifyEntries = result.ledger.filter((entry) => entry.unit === 'verify_round');
+  const ratchetSelectEntries = result.ledger.filter((entry) => entry.unit === 'ratchet_select');
   const ratchetEntries = result.ledger.filter((entry) => entry.ratchet_reverted === true);
   console.log(`${name}_status=${result.status}`);
   console.log(`${name}_rounds=${result.rounds}`);
@@ -1970,8 +2001,10 @@ function runScenario(name, options) {
   console.log(`${name}_impl_calls=${implCalls.length}`);
   console.log(`${name}_review_calls=${reviewCalls.length}`);
   console.log(`${name}_repair_calls=${repairCalls.length}`);
-  console.log(`${name}_reset_calls=${resetCalls.length}`);
-  console.log(`${name}_reset_to=${resetCalls[0] ? resetCalls[0].commit : ''}`);
+  console.log(`${name}_branch_force_calls=${branchForceCalls.length}`);
+  console.log(`${name}_branch_force_branch=${branchForceCalls[0] ? branchForceCalls[0].branch : ''}`);
+  console.log(`${name}_branch_force_to=${branchForceCalls[0] ? branchForceCalls[0].commit : ''}`);
+  console.log(`${name}_ratchet_select_branch=${ratchetSelectEntries[0] ? ratchetSelectEntries[0].branch : ''}`);
   console.log(`${name}_advisory_count=${Array.isArray(result.advisory_findings) ? result.advisory_findings.length : 'absent'}`);
   console.log(`${name}_verify_passes=${verifyEntries.map((entry) => String(entry.verify_pass)).join(',')}`);
   console.log(`${name}_ratchet_reverted_rounds=${result.ratchet_reverted_rounds === undefined ? 'absent' : result.ratchet_reverted_rounds}`);
@@ -1989,6 +2022,7 @@ function runTopLevelReviewFindingsScenario() {
 
   const engine = new AutopilotEngine({
     cwd: scenarioDir,
+    ...mockWorktreeHandlers('top-level-findings'),
     implementationDispatcher(args) {
       return {
         error: null,
@@ -2067,7 +2101,7 @@ runScenario('fail_tie_continues', {
   maxRounds: 3,
 });
 runScenario('ratchet', {
-  verifySequence: ['fail', 'pass', 'fail'],
+  verifySequence: ['pass', 'fail', 'pass'],
   reviewVerdicts: ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
   noVerifyFirst: true,
   maxRounds: 3,
@@ -2100,11 +2134,13 @@ assert_contains "$OUT" "repair_passes_verify_passes=false,true" "AutopilotEngine
 assert_contains "$OUT" "fail_tie_continues_status=non_converged" "AutopilotEngine continues fail-fail ties to max rounds"
 assert_contains "$OUT" "fail_tie_continues_rounds=3" "AutopilotEngine fail-fail tie reaches max rounds"
 assert_contains "$OUT" "fail_tie_continues_impl_calls=3" "AutopilotEngine dispatches repairs while verification keeps failing without regression"
-assert_contains "$OUT" "fail_tie_continues_reset_calls=0" "AutopilotEngine does not ratchet reset fail-fail ties"
+assert_contains "$OUT" "fail_tie_continues_branch_force_calls=0" "AutopilotEngine does not ratchet-select fail-fail ties"
 assert_contains "$OUT" "ratchet_status=non_converged" "AutopilotEngine ratchet scenario remains review-gated under no-verify-first"
-assert_contains "$OUT" "ratchet_commit=3333333333333333333333333333333333333333" "AutopilotEngine final commit reports best verified repair commit"
-assert_contains "$OUT" "ratchet_reset_calls=1" "AutopilotEngine resets after pass-to-fail regression"
-assert_contains "$OUT" "ratchet_reset_to=3333333333333333333333333333333333333333" "AutopilotEngine ratchet reset targets best commit"
+assert_contains "$OUT" "ratchet_commit=4444444444444444444444444444444444444444" "AutopilotEngine final commit reports best verified repair commit"
+assert_contains "$OUT" "ratchet_branch_force_calls=1" "AutopilotEngine branch-selects after pass-to-fail regression"
+assert_contains "$OUT" "ratchet_branch_force_branch=ratchet-branch-repair-r2-2222222" "AutopilotEngine ratchet branch update targets the current repair branch"
+assert_contains "$OUT" "ratchet_branch_force_to=2222222222222222222222222222222222222222" "AutopilotEngine ratchet branch update targets best commit"
+assert_contains "$OUT" "ratchet_ratchet_select_branch=ratchet-branch-repair-r2-2222222" "AutopilotEngine ratchet ledger records the current repair branch"
 assert_contains "$OUT" "ratchet_ratchet_reverted_rounds=1" "AutopilotEngine counts ratchet-reverted rounds"
 assert_contains "$OUT" "ratchet_ratchet_entry_count=1" "AutopilotEngine records reverted round in ledger"
 assert_contains "$OUT" "no_verify_first_status=converged" "AutopilotEngine no-verify-first restores reviewer-gated convergence"
@@ -2117,6 +2153,478 @@ assert_contains "$OUT" "top_level_findings_review_calls=1" "AutopilotEngine disp
 assert_contains "$OUT" "top_level_findings_advisory_count=1" "AutopilotEngine records top-level review findings as advisory"
 assert_contains "$OUT" "top_level_findings_advisory_0=top-level finding" "AutopilotEngine preserves top-level advisory finding text"
 
+REAL_GIT="$(command -v git)"
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verify-worktree-regression" "$REAL_GIT" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const root = process.argv[2];
+const tmp = process.argv[3];
+const realGit = process.argv[4];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+function run(cmd, args, options = {}) {
+  const result = spawnSync(cmd, args, {
+    cwd: options.cwd,
+    env: options.env || process.env,
+    encoding: 'utf8',
+    shell: false,
+    stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.error || result.status !== 0) {
+    const detail = result.error ? result.error.message : result.stderr;
+    throw new Error(`${cmd} ${args.join(' ')} failed: ${detail}`);
+  }
+  return result.stdout.trim();
+}
+
+fs.rmSync(tmp, { recursive: true, force: true });
+fs.mkdirSync(tmp, { recursive: true });
+const repo = path.join(tmp, 'repo');
+fs.mkdirSync(repo, { recursive: true });
+run(realGit, ['init', '-q'], { cwd: repo });
+run(realGit, ['config', 'user.email', 'engine-test@example.invalid'], { cwd: repo });
+run(realGit, ['config', 'user.name', 'Engine Test'], { cwd: repo });
+fs.writeFileSync(path.join(repo, 'base.txt'), 'base\n', 'utf8');
+fs.writeFileSync(path.join(repo, 'sentinel.txt'), 'main checkout sentinel\n', 'utf8');
+run(realGit, ['add', 'base.txt', 'sentinel.txt'], { cwd: repo });
+run(realGit, ['commit', '-q', '-m', 'base'], { cwd: repo });
+const base = run(realGit, ['rev-parse', 'HEAD'], { cwd: repo });
+
+const binDir = path.join(tmp, 'bin');
+fs.mkdirSync(binDir, { recursive: true });
+const gitLog = path.join(tmp, 'git.log');
+const gitShim = path.join(binDir, 'git');
+fs.writeFileSync(gitShim, [
+  '#!/usr/bin/env bash',
+  `log=${JSON.stringify(gitLog)}`,
+  `real_git=${JSON.stringify(realGit)}`,
+  'printf "%s|git" "$PWD" >> "$log"',
+  'for arg in "$@"; do printf " %q" "$arg" >> "$log"; done',
+  'printf "\\n" >> "$log"',
+  'exec "$real_git" "$@"',
+  '',
+].join('\n'), 'utf8');
+fs.chmodSync(gitShim, 0o755);
+process.env.PATH = `${binDir}:${process.env.PATH}`;
+
+const prompt = path.join(tmp, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt', 'utf8');
+const verifyScript = path.join(tmp, 'verify-round-file.sh');
+fs.writeFileSync(verifyScript, [
+  '#!/usr/bin/env bash',
+  'test -f round-only.txt || exit 1',
+  'test ! -f fail-marker.txt',
+  '',
+].join('\n'), 'utf8');
+fs.chmodSync(verifyScript, 0o755);
+
+const roster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  reviewer_qualified: true,
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 2,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+const commits = [];
+let implementationCalls = 0;
+const engine = new AutopilotEngine({
+  cwd: repo,
+  implementationDispatcher(args) {
+    implementationCalls += 1;
+    const branch = args[args.indexOf('--branch') + 1];
+    const roundBase = args[args.indexOf('--base') + 1];
+    const parent = fs.mkdtempSync(path.join(tmp, 'impl-wt-'));
+    const worktree = path.join(parent, 'wt');
+    try {
+      run('git', ['worktree', 'add', '--detach', '-q', worktree, roundBase], { cwd: repo });
+      fs.writeFileSync(path.join(worktree, 'round-only.txt'), `round ${implementationCalls}\n`, 'utf8');
+      if (implementationCalls === 2) {
+        fs.writeFileSync(path.join(worktree, 'fail-marker.txt'), 'regression\n', 'utf8');
+      }
+      run('git', ['add', 'round-only.txt'], { cwd: worktree });
+      if (implementationCalls === 2) {
+        run('git', ['add', 'fail-marker.txt'], { cwd: worktree });
+      }
+      run('git', ['commit', '-q', '-m', `round ${implementationCalls}`], { cwd: worktree });
+      const commit = run('git', ['rev-parse', 'HEAD'], { cwd: worktree });
+      run('git', ['branch', '-f', branch, commit], { cwd: repo });
+      commits.push(commit);
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'committed',
+          runner: 'test-impl-runner',
+          model: 'test-impl-model',
+          branch,
+          base: roundBase,
+          commit,
+          files_changed: 1,
+          insertions: 1,
+          deletions: 0,
+          worktree: null,
+          agent_log: '/tmp/impl-log',
+          error: null,
+        },
+      };
+    } finally {
+      run('git', ['worktree', 'remove', '--force', worktree], { cwd: repo });
+      fs.rmSync(parent, { recursive: true, force: true });
+    }
+  },
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'FIX-THEN-SHIP',
+        findings: 'keep repairing',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider({ round }) {
+    const file = path.join(tmp, `round-${round}.diff`);
+    fs.writeFileSync(file, `round ${round}`, 'utf8');
+    return file;
+  },
+  repairPromptWriter({ round }) {
+    const file = path.join(tmp, `repair-${round}.txt`);
+    fs.writeFileSync(file, `repair ${round}`, 'utf8');
+    return file;
+  },
+});
+
+const beforeWorktrees = run('git', ['worktree', 'list', '--porcelain'], { cwd: repo }).split('\n').filter((line) => line.startsWith('worktree ')).length;
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'unit-verify-regression',
+  base,
+  maxRounds: 2,
+  roster,
+  verifyCmd: verifyScript,
+  noVerifyFirst: true,
+});
+const afterWorktrees = run('git', ['worktree', 'list', '--porcelain'], { cwd: repo }).split('\n').filter((line) => line.startsWith('worktree ')).length;
+const log = fs.readFileSync(gitLog, 'utf8');
+const logLines = log.split('\n').filter(Boolean);
+const mainSentinel = fs.readFileSync(path.join(repo, 'sentinel.txt'), 'utf8').trim();
+const mainHasRoundOnly = fs.existsSync(path.join(repo, 'round-only.txt'));
+const mainHead = run('git', ['rev-parse', 'HEAD'], { cwd: repo });
+const status = run('git', ['status', '--short'], { cwd: repo });
+const verifyEntries = result.ledger.filter((entry) => entry.unit === 'verify_round');
+const ratchetSelectEntries = result.ledger.filter((entry) => entry.unit === 'ratchet_select');
+const verifyWorktreeAdds = logLines.filter((line) => line.includes('|git worktree add ') && line.includes('/autopilot-verify-wt-'));
+const verifyWorktreeRemoves = logLines.filter((line) => line.includes('|git worktree remove ') && line.includes('/autopilot-verify-wt-'));
+const allWorktreeAdds = logLines.filter((line) => line.includes('|git worktree add '));
+const allWorktreeRemoves = logLines.filter((line) => line.includes('|git worktree remove '));
+const resetHardCalls = logLines.filter((line) => line.includes('|git reset --hard'));
+
+console.log(`worktree_regression_status=${result.status}`);
+console.log(`worktree_regression_commit=${result.commit}`);
+console.log(`worktree_regression_best_commit=${commits[0]}`);
+console.log(`worktree_regression_commit_is_best=${result.commit === commits[0]}`);
+console.log(`worktree_regression_verify_passes=${verifyEntries.map((entry) => String(entry.verify_pass)).join(',')}`);
+console.log(`worktree_regression_ratchet_rounds=${result.ratchet_reverted_rounds}`);
+console.log(`worktree_regression_ratchet_select_statuses=${ratchetSelectEntries.map((entry) => entry.status).join(',')}`);
+console.log(`worktree_regression_ratchet_selected_best=${ratchetSelectEntries.length === 1 && ratchetSelectEntries[0].selected_commit === commits[0]}`);
+console.log(`worktree_regression_main_sentinel=${mainSentinel}`);
+console.log(`worktree_regression_main_has_round_only=${mainHasRoundOnly}`);
+console.log(`worktree_regression_main_head_unchanged=${mainHead === base}`);
+console.log(`worktree_regression_status_clean=${status === ''}`);
+console.log(`worktree_regression_worktree_count_delta=${afterWorktrees - beforeWorktrees}`);
+console.log(`worktree_regression_worktree_adds=${allWorktreeAdds.length}`);
+console.log(`worktree_regression_worktree_removes=${allWorktreeRemoves.length}`);
+console.log(`worktree_regression_verify_worktree_adds=${verifyWorktreeAdds.length}`);
+console.log(`worktree_regression_verify_worktree_removes=${verifyWorktreeRemoves.length}`);
+console.log(`worktree_regression_verify_adds_from_repo=${verifyWorktreeAdds.every((line) => line.startsWith(`${repo}|git worktree add `))}`);
+console.log(`worktree_regression_verify_removes_from_repo=${verifyWorktreeRemoves.every((line) => line.startsWith(`${repo}|git worktree remove `))}`);
+console.log(`worktree_regression_reset_hard_calls=${resetHardCalls.length}`);
+console.log(`worktree_regression_branch_force_best=${log.includes(`|git branch -f unit-verify-regression ${commits[0]}`)}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine real verify worktree regression scenario exits 0"
+assert_contains "$OUT" "worktree_regression_status=non_converged" "AutopilotEngine keeps reviewer-gated status under no-verify-first"
+assert_contains "$OUT" "worktree_regression_verify_passes=true,false" "AutopilotEngine runs verify-cmd in each round commit worktree"
+assert_contains "$OUT" "worktree_regression_commit_is_best=true" "AutopilotEngine final result commit selects the best verified commit"
+assert_contains "$OUT" "worktree_regression_ratchet_rounds=1" "AutopilotEngine ratchets pass-to-fail regression by selection"
+assert_contains "$OUT" "worktree_regression_ratchet_select_statuses=selected" "AutopilotEngine records branch-selection ratchet status"
+assert_contains "$OUT" "worktree_regression_ratchet_selected_best=true" "AutopilotEngine ratchet ledger selects the best verified commit"
+assert_contains "$OUT" "worktree_regression_main_sentinel=main checkout sentinel" "AutopilotEngine leaves main checkout sentinel unchanged"
+assert_contains "$OUT" "worktree_regression_main_has_round_only=false" "AutopilotEngine does not verify by mutating the main checkout"
+assert_contains "$OUT" "worktree_regression_main_head_unchanged=true" "AutopilotEngine does not move the invoking checkout HEAD"
+assert_contains "$OUT" "worktree_regression_status_clean=true" "AutopilotEngine leaves the invoking checkout clean"
+assert_contains "$OUT" "worktree_regression_worktree_count_delta=0" "AutopilotEngine cleans up temp verify worktrees"
+assert_contains "$OUT" "worktree_regression_verify_worktree_adds=2" "AutopilotEngine creates one temp verify worktree per round"
+assert_contains "$OUT" "worktree_regression_verify_worktree_removes=2" "AutopilotEngine removes every temp verify worktree"
+assert_contains "$OUT" "worktree_regression_verify_adds_from_repo=true" "AutopilotEngine creates verify worktrees from the repo cwd"
+assert_contains "$OUT" "worktree_regression_verify_removes_from_repo=true" "AutopilotEngine removes verify worktrees from the repo cwd"
+assert_contains "$OUT" "worktree_regression_reset_hard_calls=0" "AutopilotEngine never runs git reset --hard"
+assert_contains "$OUT" "worktree_regression_branch_force_best=true" "AutopilotEngine branch-selects the best verified commit"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verify-worktree-add-fail" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.rmSync(tmp, { recursive: true, force: true });
+fs.mkdirSync(tmp, { recursive: true });
+const osTmp = path.join(tmp, 'os-tmp');
+fs.mkdirSync(osTmp, { recursive: true });
+process.env.TMPDIR = osTmp;
+const binDir = path.join(tmp, 'bin');
+fs.mkdirSync(binDir, { recursive: true });
+const gitShim = path.join(binDir, 'git');
+fs.writeFileSync(gitShim, [
+  '#!/usr/bin/env bash',
+  'if [ "$1" = "worktree" ] && [ "$2" = "add" ]; then',
+  '  mkdir -p "$5/partial"',
+  '  printf "simulated worktree add failure\\n" >&2',
+  '  exit 73',
+  'fi',
+  'printf "unexpected git call: %s\\n" "$*" >&2',
+  'exit 99',
+  '',
+].join('\n'), 'utf8');
+fs.chmodSync(gitShim, 0o755);
+process.env.PATH = `${binDir}:${process.env.PATH}`;
+
+const scenarioDir = path.join(tmp, 'repo');
+fs.mkdirSync(scenarioDir, { recursive: true });
+const prompt = path.join(tmp, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt', 'utf8');
+const roster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  reviewer_qualified: true,
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+const engine = new AutopilotEngine({
+  cwd: scenarioDir,
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'add-fail-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: '2222222222222222222222222222222222222222',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher() {
+    throw new Error('review should not run after verify worktree add failure');
+  },
+  diffProvider({ round }) {
+    const file = path.join(tmp, `round-${round}.diff`);
+    fs.writeFileSync(file, `round ${round}`, 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'add-fail-branch',
+  base: '1111111111111111111111111111111111111111',
+  maxRounds: 1,
+  roster,
+  verifyCmd: 'true',
+});
+const verifyEntry = result.ledger.find((entry) => entry.unit === 'verify_round');
+const strayDirs = fs.readdirSync(osTmp).filter((name) => name.startsWith('autopilot-verify-wt-'));
+
+console.log(`worktree_add_fail_status=${result.status}`);
+console.log(`worktree_add_fail_setup_exit=${verifyEntry && verifyEntry.setup_exit_status}`);
+console.log(`worktree_add_fail_blocked_reason=${verifyEntry && verifyEntry.blocked_reason}`);
+console.log(`worktree_add_fail_stray_count=${strayDirs.length}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine verify worktree add-failure cleanup test exits 0"
+assert_contains "$OUT" "worktree_add_fail_status=blocked" "AutopilotEngine blocks when verify worktree add fails"
+assert_contains "$OUT" "worktree_add_fail_setup_exit=73" "AutopilotEngine records worktree add failure status"
+assert_contains "$OUT" "worktree_add_fail_blocked_reason=git worktree command exited with status 73" "AutopilotEngine surfaces worktree add failure reason"
+assert_contains "$OUT" "worktree_add_fail_stray_count=0" "AutopilotEngine removes failed verify worktree mkdtemp parent"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verify-worktree-remove-fail" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const tmp = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.rmSync(tmp, { recursive: true, force: true });
+fs.mkdirSync(tmp, { recursive: true });
+const scenarioDir = path.join(tmp, 'repo');
+fs.mkdirSync(scenarioDir, { recursive: true });
+const prompt = path.join(tmp, 'prompt.txt');
+fs.writeFileSync(prompt, 'implementer prompt', 'utf8');
+const roster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  reviewer_qualified: true,
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+let parent = null;
+let worktree = null;
+let removeCalls = 0;
+const engine = new AutopilotEngine({
+  cwd: scenarioDir,
+  gitWorktreeAdd({ round }) {
+    parent = fs.mkdtempSync(path.join(tmp, `remove-fail-${round}-wt-`));
+    worktree = path.join(parent, 'wt');
+    fs.mkdirSync(worktree, { recursive: true });
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      worktree,
+      parent,
+    };
+  },
+  gitWorktreeRemove() {
+    removeCalls += 1;
+    return {
+      error: null,
+      status: 81,
+      signal: null,
+      stdout: '',
+      stderr: 'simulated remove failure',
+    };
+  },
+  verifyCommandRunner() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  },
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'remove-fail-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: '2222222222222222222222222222222222222222',
+        files_changed: 1,
+        insertions: 1,
+        deletions: 0,
+        worktree: null,
+        agent_log: '/tmp/impl-log',
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider({ round }) {
+    const file = path.join(tmp, `round-${round}.diff`);
+    fs.writeFileSync(file, `round ${round}`, 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'remove-fail-branch',
+  base: '1111111111111111111111111111111111111111',
+  maxRounds: 1,
+  roster,
+  verifyCmd: 'true',
+});
+const verifyEntry = result.ledger.find((entry) => entry.unit === 'verify_round');
+
+console.log(`worktree_remove_fail_status=${result.status}`);
+console.log(`worktree_remove_fail_cleanup_exit=${verifyEntry && verifyEntry.cleanup_exit_status}`);
+console.log(`worktree_remove_fail_warning=${verifyEntry && verifyEntry.verify_cleanup_warning}`);
+console.log(`worktree_remove_fail_warning_present=${Boolean(verifyEntry && verifyEntry.verify_cleanup_warning)}`);
+console.log(`worktree_remove_fail_remove_calls=${removeCalls}`);
+console.log(`worktree_remove_fail_worktree_exists=${fs.existsSync(worktree)}`);
+console.log(`worktree_remove_fail_parent_exists=${fs.existsSync(parent)}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine verify worktree remove-failure warning test exits 0"
+assert_contains "$OUT" "worktree_remove_fail_status=converged" "AutopilotEngine completes despite verify worktree remove failure"
+assert_contains "$OUT" "worktree_remove_fail_cleanup_exit=81" "AutopilotEngine records worktree remove failure status"
+assert_contains "$OUT" "worktree_remove_fail_warning=git worktree command exited with status 81" "AutopilotEngine records verify cleanup warning in ledger"
+assert_contains "$OUT" "worktree_remove_fail_warning_present=true" "AutopilotEngine exposes verify cleanup warning"
+assert_contains "$OUT" "worktree_remove_fail_remove_calls=1" "AutopilotEngine attempts git worktree remove"
+assert_contains "$OUT" "worktree_remove_fail_worktree_exists=false" "AutopilotEngine force-removes worktree path after remove failure"
+assert_contains "$OUT" "worktree_remove_fail_parent_exists=false" "AutopilotEngine removes verify worktree parent after remove failure"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verify-first-signal" <<'NODE'
 const fs = require('fs');
 const os = require('os');
@@ -2128,6 +2636,35 @@ const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 fs.mkdirSync(tmp, { recursive: true });
 const prompt = path.join(tmp, 'prompt.txt');
 fs.writeFileSync(prompt, 'implementer prompt');
+
+function mockWorktreeHandlers(prefix) {
+  return {
+    gitWorktreeAdd({ round }) {
+      const parent = fs.mkdtempSync(path.join(tmp, `${prefix || 'verify'}-${round || 0}-wt-`));
+      const worktree = path.join(parent, 'wt');
+      fs.mkdirSync(worktree, { recursive: true });
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        worktree,
+        parent,
+      };
+    },
+    gitWorktreeRemove({ worktree }) {
+      fs.rmSync(worktree, { recursive: true, force: true });
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+      };
+    },
+  };
+}
 
 function runSignalScenario(name, options) {
   const scenarioDir = path.join(tmp, name);
@@ -2152,6 +2689,7 @@ function runSignalScenario(name, options) {
   let verifyCalls = 0;
   const engine = new AutopilotEngine({
     cwd: scenarioDir,
+    ...mockWorktreeHandlers(name),
     reviewLoopResolver() {
       return {
         error: null,

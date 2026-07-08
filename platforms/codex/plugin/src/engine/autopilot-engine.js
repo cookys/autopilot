@@ -255,8 +255,105 @@ function defaultVerifyCommandRunner({ verifyCmd, cwd }) {
   };
 }
 
-function defaultGitResetHard({ commit, cwd }) {
-  const child = spawnSync('git', ['reset', '--hard', commit], {
+function defaultGitWorktreeAdd({ commit, cwd }) {
+  if (!cwd || typeof cwd !== 'string') {
+    return {
+      error: new Error('git worktree add requires repository cwd'),
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      worktree: null,
+      parent: null,
+    };
+  }
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-wt-'));
+  const worktree = path.join(parent, 'wt');
+  let child;
+  try {
+    child = spawnSync('git', ['worktree', 'add', '--detach', '--quiet', worktree, commit], {
+      cwd,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    let stderr = '';
+    try {
+      fs.rmSync(parent, { recursive: true, force: true });
+    } catch (cleanupError) {
+      stderr = `verify worktree parent cleanup failed: ${cleanupError.message}`;
+    }
+    return {
+      error,
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr,
+      worktree,
+      parent,
+    };
+  }
+  const result = {
+    error: child.error || null,
+    status: child.status,
+    signal: child.signal || null,
+    stdout: child.stdout || '',
+    stderr: child.stderr || '',
+    worktree,
+    parent,
+  };
+  if (worktreeResultBlocked(result)) {
+    try {
+      fs.rmSync(parent, { recursive: true, force: true });
+    } catch (error) {
+      result.stderr = appendCleanupWarning(
+        result.stderr,
+        `verify worktree parent cleanup failed: ${error.message}`,
+      );
+    }
+  }
+  return result;
+}
+
+function defaultGitWorktreeRemove({ worktree, cwd }) {
+  if (!cwd || typeof cwd !== 'string') {
+    return {
+      error: new Error('git worktree remove requires repository cwd'),
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  }
+  const child = spawnSync('git', ['worktree', 'remove', '--force', worktree], {
+    cwd,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const result = {
+    error: child.error || null,
+    status: child.status,
+    signal: child.signal || null,
+    stdout: child.stdout || '',
+    stderr: child.stderr || '',
+  };
+  if (worktreeResultBlocked(result)) {
+    try {
+      fs.rmSync(worktree, { recursive: true, force: true });
+    } catch (error) {
+      result.stderr = appendCleanupWarning(
+        result.stderr,
+        `verify worktree cleanup fallback failed: ${error.message}`,
+      );
+    }
+  }
+  return result;
+}
+
+function defaultGitBranchForce({ branch, commit, cwd }) {
+  const child = spawnSync('git', ['branch', '-f', branch, commit], {
     cwd: cwd || process.cwd(),
     encoding: 'utf8',
     shell: false,
@@ -278,11 +375,24 @@ function verifyResultBlocked(result) {
   return null;
 }
 
-function resetResultBlocked(result) {
-  if (!result) return 'missing ratchet reset result';
+function worktreeResultBlocked(result) {
+  if (!result) return 'missing git worktree result';
   if (result.error) return result.error.message || String(result.error);
-  if (result.signal) return `ratchet reset terminated by signal ${result.signal}`;
-  if (result.status !== 0) return `ratchet reset exited with status ${result.status}`;
+  if (result.signal) return `git worktree command terminated by signal ${result.signal}`;
+  if (result.status !== 0) return `git worktree command exited with status ${result.status}`;
+  return null;
+}
+
+function appendCleanupWarning(current, message) {
+  if (!message) return current;
+  return current ? `${current}; ${message}` : message;
+}
+
+function branchForceResultBlocked(result) {
+  if (!result) return 'missing ratchet branch update result';
+  if (result.error) return result.error.message || String(result.error);
+  if (result.signal) return `ratchet branch update terminated by signal ${result.signal}`;
+  if (result.status !== 0) return `ratchet branch update exited with status ${result.status}`;
   return null;
 }
 
@@ -367,7 +477,9 @@ class AutopilotEngine {
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
-    this.gitResetHard = options.gitResetHard || defaultGitResetHard;
+    this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
+    this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
+    this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
   }
@@ -1148,14 +1260,42 @@ class AutopilotEngine {
       if (verifyCmdProvided) {
         const verifyStartedAt = this.now();
         let verifyResult;
+        let verifyWorktree = null;
+        let verifyWorktreeParent = null;
+        let verifyWorktreeAdded = false;
+        let verifySetupBlockedReason = null;
+        let verifyCleanupResult = null;
+        let verifyCleanupWarning = null;
         try {
-          verifyResult = this.verifyCommandRunner({
-            verifyCmd,
+          const worktreeAddResult = this.gitWorktreeAdd({
+            commit,
             cwd: loopCwd,
             round,
-            commit,
             branch: currentBranch,
           });
+          verifyWorktree = worktreeAddResult ? worktreeAddResult.worktree : null;
+          verifyWorktreeParent = worktreeAddResult ? worktreeAddResult.parent : null;
+          verifySetupBlockedReason = worktreeResultBlocked(worktreeAddResult);
+          if (verifySetupBlockedReason) {
+            verifyResult = {
+              error: worktreeAddResult && worktreeAddResult.error
+                ? worktreeAddResult.error
+                : new Error(verifySetupBlockedReason),
+              status: worktreeAddResult ? worktreeAddResult.status : null,
+              signal: worktreeAddResult ? worktreeAddResult.signal || null : null,
+              stdout: worktreeAddResult ? worktreeAddResult.stdout || '' : '',
+              stderr: worktreeAddResult ? worktreeAddResult.stderr || '' : '',
+            };
+          } else {
+            verifyWorktreeAdded = true;
+            verifyResult = this.verifyCommandRunner({
+              verifyCmd,
+              cwd: verifyWorktree,
+              round,
+              commit,
+              branch: currentBranch,
+            });
+          }
         } catch (error) {
           verifyResult = {
             error,
@@ -1164,14 +1304,65 @@ class AutopilotEngine {
             stdout: '',
             stderr: '',
           };
+        } finally {
+          try {
+            if (verifyWorktreeAdded && verifyWorktree) {
+              try {
+                verifyCleanupResult = this.gitWorktreeRemove({
+                  worktree: verifyWorktree,
+                  cwd: loopCwd,
+                  round,
+                  commit,
+                  branch: currentBranch,
+                });
+                verifyCleanupWarning = worktreeResultBlocked(verifyCleanupResult);
+              } catch (error) {
+                verifyCleanupResult = {
+                  error,
+                  status: null,
+                  signal: null,
+                  stdout: '',
+                  stderr: '',
+                };
+                verifyCleanupWarning = worktreeResultBlocked(verifyCleanupResult);
+              }
+              if (verifyCleanupWarning) {
+                try {
+                  fs.rmSync(verifyWorktree, { recursive: true, force: true });
+                } catch (error) {
+                  verifyCleanupWarning = appendCleanupWarning(
+                    verifyCleanupWarning,
+                    `fallback fs cleanup failed: ${error.message}`,
+                  );
+                }
+              }
+            }
+          } finally {
+            if (verifyWorktreeParent) {
+              try {
+                fs.rmSync(verifyWorktreeParent, { recursive: true, force: true });
+              } catch (error) {
+                verifyCleanupWarning = appendCleanupWarning(
+                  verifyCleanupWarning,
+                  `verify worktree parent cleanup failed: ${error.message}`,
+                );
+              }
+            }
+          }
         }
-        const verifyBlockedReason = verifyResultBlocked(verifyResult);
+        const verifyBlockedReason = verifySetupBlockedReason
+          || verifyResultBlocked(verifyResult);
         if (verifyBlockedReason) {
           ledger.push(this.ledgerEntry('verify_round', 'blocked', verifyStartedAt, {
             round,
             commit,
             verify_pass: false,
             exit_status: verifyResult ? verifyResult.status : null,
+            verify_worktree: verifyWorktree,
+            blocked_reason: verifyBlockedReason,
+            setup_exit_status: verifyResult ? verifyResult.status : null,
+            cleanup_exit_status: verifyCleanupResult ? verifyCleanupResult.status : null,
+            verify_cleanup_warning: verifyCleanupWarning,
           }));
           return finish({
             status: 'blocked',
@@ -1210,23 +1401,27 @@ class AutopilotEngine {
           commit,
           verify_pass: currentVerifyPass,
           exit_status: verifyResult.status,
+          verify_worktree: verifyWorktree,
+          cleanup_exit_status: verifyCleanupResult ? verifyCleanupResult.status : null,
+          verify_cleanup_warning: verifyCleanupWarning,
           ratchet_reverted: currentRatchetReverted,
           best_round: bestRound,
           best_commit: verifyState.bestCommit,
         }));
 
         if (currentRatchetReverted) {
-          const resetStartedAt = this.now();
-          let resetResult;
+          const ratchetStartedAt = this.now();
+          let branchForceResult;
           try {
-            resetResult = this.gitResetHard({
+            branchForceResult = this.gitBranchForce({
+              branch: currentBranch,
               commit: verifyState.bestCommit,
               cwd: loopCwd,
               round,
               revertedCommit: commit,
             });
           } catch (error) {
-            resetResult = {
+            branchForceResult = {
               error,
               status: null,
               signal: null,
@@ -1234,18 +1429,19 @@ class AutopilotEngine {
               stderr: '',
             };
           }
-          const resetBlockedReason = resetResultBlocked(resetResult);
-          ledger.push(this.ledgerEntry('ratchet_reset', resetBlockedReason ? 'blocked' : 'reverted', resetStartedAt, {
+          const branchForceBlockedReason = branchForceResultBlocked(branchForceResult);
+          ledger.push(this.ledgerEntry('ratchet_select', branchForceBlockedReason ? 'branch_update_blocked' : 'selected', ratchetStartedAt, {
             round,
             commit,
-            reset_to_commit: verifyState.bestCommit,
-            exit_status: resetResult ? resetResult.status : null,
+            selected_commit: verifyState.bestCommit,
+            branch: currentBranch,
+            branch_update_exit_status: branchForceResult ? branchForceResult.status : null,
           }));
-          if (resetBlockedReason) {
+          if (branchForceBlockedReason) {
             return finish({
               status: 'blocked',
-              phase: 'ratchet_reset',
-              reason: resetBlockedReason,
+              phase: 'ratchet_select',
+              reason: branchForceBlockedReason,
               rounds: round,
               verdict: null,
               roster,

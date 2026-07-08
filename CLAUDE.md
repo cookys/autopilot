@@ -103,6 +103,11 @@ There is **no "everything must be JS" mandate** — the v2.25.3 `port-autopilot-
 
 Rule of thumb: **if it parses JSON or could run under agy, write it in Node; otherwise shell is fine.** When in doubt, prefer Node for anything new that returns structured output.
 
+## Skill evolution rules
+
+- **童子軍規則 (boy-scout)**: any touch of a skill trims it toward contract-card shape (trigger/inputs/decision-table/engine-pointers; judgment prose → references/). The north-star gate (prose↓ engine↑) watches per release.
+- **成績單前置 (scorecard-first)**: rewriting or deleting any skill requires prior eval ON/OFF evidence (evals/orchestration harness); an unevidenced rewrite = unevidenced trust.
+
 ## Severity vocabulary
 
 Unified across all skills and agents:

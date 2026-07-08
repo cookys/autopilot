@@ -35,6 +35,7 @@
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
+#       [--checklists <c1,c2>]  # optional adversarial checklist
 #       [--endpoint <name>]     # anthropic-compatible/cc-shim: resolve creds via
 #                               #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*);
 #                               #   raw env still used when omitted (byte-identical)
@@ -70,6 +71,11 @@
 set -uo pipefail
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
+
+# Preserve the original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
+# inside a kill-surviving setsid session (see lib/dispatch-detach.sh). Captured before parsing.
+ORIG_ARGS=("$@")
 
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
 # rejected/absent file = no-op → the cc-shim/anthropic precondition fires normally). Loaded
@@ -78,7 +84,11 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""
+# R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
+# DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
+# heartbeats to the ledger and lands its JSON result atomically (lib/dispatch-detach.sh).
+LEDGER=""; RUN_ID=""; STAGE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --runner)    RUNNER="${2:-}"; shift 2 ;;
@@ -88,6 +98,10 @@ while [[ $# -gt 0 ]]; do
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
+    --checklists) CHECKLISTS="${2:-}"; shift 2 ;;
+    --ledger)    LEDGER="${2:-}"; shift 2 ;;
+    --run-id)    RUN_ID="${2:-}"; shift 2 ;;
+    --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
     -h|--help)   sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -104,6 +118,11 @@ if [[ -n "$SPEC_FILE" ]]; then
   [[ -f "$SPEC_FILE" && -r "$SPEC_FILE" ]] || die_precondition "--spec-file must be a readable regular file"
 fi
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
+
+# R1 detach: when ledger coords are supplied and detach is on (default), re-run this dispatch
+# INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
+# inline behavior when no coords / DISPATCH_DETACH=0. NEVER returns when it engages.
+dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "$_REVIEW_SELF_DIR" -- "${ORIG_ARGS[@]}"
 
 timeout_to_ms() {
   local t="$1"
@@ -286,8 +305,8 @@ EOF
 
 Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block, with nothing after it.
 EOF
-  if [[ -n "$SPEC_FILE" ]]; then
-    cat <<'EOF'
+if [[ -n "$SPEC_FILE" ]]; then
+  cat <<'EOF'
 
 Task specification (baseline — DISPATCHER-AUTHORED, trusted):
 Grade the diff AGAINST this spec. Anything the spec explicitly declares
@@ -298,6 +317,18 @@ EOF
 
 --- end of specification ---
 EOF
+  fi
+  if [ -n "$CHECKLISTS" ]; then
+    cat <<'EOF'
+
+Adversarial checklist (must check these closely):
+EOF
+    IFS=',' read -r -a _checklists <<< "$CHECKLISTS"
+    for _item in "${_checklists[@]}"; do
+      _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      [ -z "$_item" ] && continue
+      printf -- '- %s\n' "$_item"
+    done
   fi
   cat <<'EOF'
 

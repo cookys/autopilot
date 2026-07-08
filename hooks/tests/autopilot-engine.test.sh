@@ -1105,6 +1105,275 @@ assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine reports 
 assert_contains "$OUT" "reason=implementation result commit must be a full immutable git SHA" "AutopilotEngine surfaces non-SHA committed implementation"
 assert_contains "$OUT" "ledger=dispatch_implementation:blocked" "AutopilotEngine records non-SHA committed implementation as blocked"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-misplaced-no-op.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'no_op',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'impl-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: null,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: '/tmp/.gemini/out-of-cwd',
+        agent_log: '/tmp/.gemini/logs/impl.log',
+        error: '/tmp/.gemini/errors/ohno.log',
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}:${entry.reconcile_by_ledger}:${entry.reconcile_status}:${entry.misplaced_write_evidence}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine flags misplaced no-op writes"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine returns blocked for misplaced no-op"
+assert_contains "$OUT" "phase=misplaced_writes" "AutopilotEngine returns misplaced_writes phase for out-of-cwd writes"
+assert_contains "$OUT" "likely hardcoded absolute path escaping the target worktree" "AutopilotEngine explains out-of-cwd misplacement cause"
+assert_contains "$OUT" "dispatch_implementation:misplaced_writes" "AutopilotEngine records misplaced writes decision in dispatch_implementation ledger"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implementer-empty-no-op.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'no_op',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        branch: 'impl-branch',
+        base: '1111111111111111111111111111111111111111',
+        commit: null,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: null,
+        agent_log: null,
+        error: null,
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+});
+
+const result = engine.implementTask({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}:${entry.reconcile_by_ledger}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine keeps plain no-op path unchanged"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine keeps plain no-op result blocked"
+assert_contains "$OUT" "phase=dispatch_implementation" "AutopilotEngine preserves ordinary no-op dispatch phase"
+assert_contains "$OUT" "reason=implementation status no_op" "AutopilotEngine keeps ordinary no-op reason"
+assert_contains "$OUT" "dispatch_implementation:no_op" "AutopilotEngine leaves ordinary no-op as no_op dispatch status"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/split-brain-repo" "$TEST_TMP/split-brain-result.json" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const repoBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+const { execFileSync } = require('child_process');
+
+const repo = path.join(repoBase, 'repo');
+const prompt = path.join(repoBase, 'prompt.txt');
+fs.mkdirSync(repo, { recursive: true });
+fs.writeFileSync(prompt, 'implementer prompt for split-brain');
+execFileSync('git', ['init'], { cwd: repo });
+execFileSync('git', ['config', 'user.email', 'autopilot@example.test'], { cwd: repo });
+execFileSync('git', ['config', 'user.name', 'Autopilot Test'], { cwd: repo });
+fs.writeFileSync(path.join(repo, 'file.txt'), 'base\n', 'utf8');
+execFileSync('git', ['add', 'file.txt'], { cwd: repo });
+execFileSync('git', ['commit', '-m', 'base'], { cwd: repo, stdio: 'ignore' });
+
+const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+const branch = 'sb-loop';
+execFileSync('git', ['checkout', '-b', branch], { cwd: repo });
+
+const runId = 'autopilot-r2-split-brain-run-id';
+const ledger = path.join(repo, '.autopilot', 'run-ledger.jsonl');
+const runLedger = (...args) => {
+  const output = execFileSync('bash', [path.join(root, 'scripts', 'run-ledger.sh'), ...args], {
+    encoding: 'utf8',
+  });
+  return JSON.parse(output.trim().split('\n').pop());
+};
+
+execFileSync('bash', [path.join(root, 'scripts', 'run-ledger.sh'), 'init', '--ledger', ledger]);
+
+let implementationCalls = 0;
+let reviewCalls = 0;
+let committedCommit = null;
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    implementationCalls += 1;
+    fs.appendFileSync(path.join(repo, 'file.txt'), `updated ${implementationCalls}\n`, 'utf8');
+    execFileSync('git', ['add', 'file.txt'], { cwd: repo });
+    execFileSync('git', ['commit', '-m', `split-brain ${implementationCalls}`], { cwd: repo, stdio: 'ignore' });
+    committedCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repo,
+      encoding: 'utf8',
+    }).trim();
+
+    const acquired = runLedger(
+      'stage-acquire',
+      '--ledger', ledger,
+      '--run-id', runId,
+      '--stage', 'implement',
+      '--git-ref', branch,
+      '--git-sha', committedCommit,
+      '--worktree', repo,
+    );
+    runLedger(
+      'stage-transition',
+      '--ledger', ledger,
+      '--run-id', runId,
+      '--stage', 'implement',
+      '--generation', String(acquired.generation),
+      '--nonce', acquired.nonce,
+      '--to-state', 'committed',
+      '--idempotency-key', `${runId}-impl`,
+      '--git-ref', branch,
+      '--git-sha', committedCommit,
+      '--worktree', repo,
+    );
+
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: new Error('simulated missing implementation result json'),
+      result: null,
+    };
+  },
+  reviewDispatcher() {
+    reviewCalls += 1;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: '',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+  diffProvider() {
+    const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), `autopilot-r2-split-brain-${branch}-`));
+    const file = path.join(diffDir, 'range.diff');
+    fs.writeFileSync(file, 'split-brain diff', 'utf8');
+    return file;
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch,
+  base,
+  runId,
+  ledger,
+  implementationStage: 'implement',
+  resultJson: path.join(repo, '.autopilot', 'implementer-result.json'),
+  gitDir: repo,
+  roster: {
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    reviewer_qualified: true,
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  },
+});
+
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`implementation_calls=${result.implementationChain.length}`);
+console.log(`review_calls=${result.reviewChain.length}`);
+console.log(`reconciled=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconcile_by_ledger}`);
+console.log(`dispatch_row=${result.ledger.find((entry) => entry.unit === 'dispatch_implementation').status}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reconciles implementation outcome from run-ledger when result json is missing"
+assert_contains "$OUT" "status=converged" "AutopilotEngine split-brain path converges from ledger/git-truth"
+assert_contains "$OUT" "phase=converged" "AutopilotEngine split-brain path does not block"
+assert_contains "$OUT" "rounds=1" "AutopilotEngine split-brain path runs one round"
+assert_contains "$OUT" "implementation_calls=1" "AutopilotEngine split-brain path does not re-dispatch implementation"
+assert_contains "$OUT" "review_calls=1" "AutopilotEngine split-brain path dispatches a single review"
+assert_contains "$OUT" "reconciled=true" "AutopilotEngine split-brain path reconciles from ledger"
+assert_contains "$OUT" "dispatch_row=committed" "AutopilotEngine split-brain path reaches committed dispatch state from ledger"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
 const fs = require('fs');
 const os = require('os');
@@ -3012,5 +3281,283 @@ assert_eq "0" "$EXIT" "AutopilotEngine runImplementationReviewLoop spec-file tes
 assert_contains "$OUT" "default_has_spec=true" "runImplementationReviewLoop passes spec-file by default"
 assert_contains "$OUT" "default_spec_value=true" "runImplementationReviewLoop uses prompt file as spec file by default"
 assert_contains "$OUT" "no_spec_has_spec=false" "runImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const diffBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const calls = [];
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    calls.push({
+      phase: 'resolve',
+      args: Array.from(arguments[0] || []),
+    });
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        implementer_engine: 'gpt-5.3-codex-spark',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 1,
+        loop_convergence_verdict: 'SHIP-AS-IS',
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    calls.push({
+      phase: 'review',
+      args: Array.from(args || []),
+    });
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: 'none',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const sensitiveDiff = `${diffBase}.sensitive.diff`;
+fs.writeFileSync(
+  sensitiveDiff,
+  [
+    'diff --git a/auth/tenant-auth.ts b/auth/tenant-auth.ts',
+    'index 1111111..2222222 100644',
+    '--- a/auth/tenant-auth.ts',
+    '+++ b/auth/tenant-auth.ts',
+    '@@ -1,2 +1,2 @@',
+    ' const user = tenant_id;',
+    '+const tenantBoundary = true;',
+  ].join('\n') + '\n',
+);
+
+const sensitiveResult = engine.reviewDiff({
+  dynamicReviewRisk: true,
+  diffFile: sensitiveDiff,
+  implementerEngine: 'gpt-5.3-codex-spark',
+  sourceTrust: 'low',
+  oracleAvailable: 1,
+  securitySurface: 0,
+});
+
+const sensitiveResolveArgs = calls.find((entry) => entry.phase === 'resolve')?.args.join(' ') || '';
+const sensitiveReviewArgs = calls.find((entry) => entry.phase === 'review')?.args.join(' ') || '';
+console.log(`sensitive_status=${sensitiveResult.status}`);
+console.log(`sensitive_adversarial=${sensitiveResult.riskClassification && sensitiveResult.riskClassification.adversarial_review}`);
+console.log(`sensitive_domains=${JSON.stringify(sensitiveResult.riskClassification ? sensitiveResult.riskClassification.domains : [])}`);
+console.log(`sensitive_checklists=${JSON.stringify(sensitiveResult.riskClassification ? sensitiveResult.riskClassification.checklists : [])}`);
+console.log(`sensitive_resolve_args=${sensitiveResolveArgs}`);
+console.log(`sensitive_review_args=${sensitiveReviewArgs}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff dynamic-risk sensitive diff process exits 0"
+assert_contains "$OUT" "sensitive_status=reviewed" "dynamic sensitive diff is reviewed"
+assert_contains "$OUT" "sensitive_adversarial=true" "dynamic sensitive diff flagged adversarial"
+assert_contains "$OUT" "sensitive_resolve_args=--check-scorecard --source-trust low" "risk flags from classifier flow into resolve args"
+assert_contains "$OUT" "sensitive_review_args=--checklists authz-boundary,tenant-boundary" "classifier checklists are appended to review args"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const diffBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const calls = [];
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    calls.push({
+      phase: 'resolve',
+      args: Array.from(arguments[0] || []),
+    });
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'test-review-model',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        implementer_engine: 'gpt-5.5',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 1,
+        loop_convergence_verdict: 'SHIP-AS-IS',
+      },
+    };
+  },
+  reviewDispatcher(args) {
+    calls.push({
+      phase: 'review',
+      args: Array.from(args || []),
+    });
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: 'none',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const lowriskDiff = `${diffBase}.sampling.diff`;
+fs.writeFileSync(
+  lowriskDiff,
+  [
+    'diff --git a/docs/readme.md b/docs/readme.md',
+    'index 1111111..2222222 100644',
+    '--- a/docs/readme.md',
+    '+++ b/docs/readme.md',
+    '@@ -1,2 +1,3 @@',
+    ' # README',
+    '+more docs content',
+  ].join('\n') + '\n',
+);
+
+const lowriskResult = engine.reviewDiff({
+  dynamicReviewRisk: true,
+  diffFile: lowriskDiff,
+  implementerEngine: 'gpt-5.5',
+  sourceTrust: 'high',
+  oracleAvailable: 1,
+  securitySurface: 0,
+  samplingRatio: 1,
+  samplingSeed: 'engine-test-sampling',
+});
+
+const lowriskReviewArgs = calls.find((entry) => entry.phase === 'review')?.args.join(' ') || '';
+console.log(`sampling_status=${lowriskResult.status}`);
+console.log(`sampling_adversarial=${lowriskResult.riskClassification && lowriskResult.riskClassification.adversarial_review}`);
+console.log(`sampling_selected=${lowriskResult.riskClassification && lowriskResult.riskClassification.sampling ? lowriskResult.riskClassification.sampling.selected : false}`);
+console.log(`sampling_reason=${lowriskResult.riskClassification && lowriskResult.riskClassification.sampling ? lowriskResult.riskClassification.sampling.reason : ''}`);
+console.log(`sampling_checklists=${JSON.stringify(lowriskResult.riskClassification ? lowriskResult.riskClassification.checklists : [])}`);
+console.log(`sampling_review_args=${lowriskReviewArgs}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff low-risk sampling run exits 0"
+assert_contains "$OUT" "sampling_status=reviewed" "low-risk sampling run is reviewed"
+assert_contains "$OUT" "sampling_adversarial=true" "sampling-selected low-risk diff is adversarial"
+assert_contains "$OUT" "sampling_selected=true" "sampling-selected bit is preserved"
+assert_contains "$OUT" "sampling_reason=low-risk-sampling" "sampling reason is low-risk-sampling"
+assert_contains "$OUT" "sampling_checklists=[\"sampling-sanity\"]" "sampling-sanity checklist is injected"
+assert_contains "$OUT" "sampling_review_args=--checklists sampling-sanity" "sampling checklist is appended to review args"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const diffBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const engine = new AutopilotEngine({
+  reviewLoopResolver() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        reviewer_engine: 'gpt-5.5',
+        reviewer_effort: 'xhigh',
+        reviewer_runner: 'test-review-runner',
+        implementer_engine: 'gpt-5.5',
+        implementer_effort: 'high',
+        implementer_runner: 'test-impl-runner',
+        loop_max_rounds: 1,
+        loop_convergence_verdict: 'SHIP-AS-IS',
+      },
+    };
+  },
+  reviewDispatcher() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        runner: 'test-review-runner',
+        model: 'test-review-model',
+        status: 'reviewed',
+        verdict: 'SHIP-AS-IS',
+        findings: 'none',
+        raw_log: '/tmp/log',
+        error: null,
+      },
+    };
+  },
+});
+
+const sameFamilyDiff = `${diffBase}.same-family.diff`;
+fs.writeFileSync(
+  sameFamilyDiff,
+  [
+    'diff --git a/docs/changelog.md b/docs/changelog.md',
+    'index 1111111..2222222 100644',
+    '--- a/docs/changelog.md',
+    '+++ b/docs/changelog.md',
+    '@@ -1,1 +1,2 @@',
+    '+docs update',
+  ].join('\n') + '\n',
+);
+
+const sameFamilyResult = engine.reviewDiff({
+  dynamicReviewRisk: true,
+  diffFile: sameFamilyDiff,
+  implementerEngine: 'gpt-5.5',
+  sourceTrust: 'high',
+  oracleAvailable: 1,
+  securitySurface: 0,
+});
+
+console.log(`same_family_status=${sameFamilyResult.status}`);
+console.log(`same_family_phase=${sameFamilyResult.phase}`);
+console.log(`same_family_reason=${sameFamilyResult.reason}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff same-family block process exits 0"
+assert_contains "$OUT" "same_family_status=blocked" "same-family family-decorrelation blocks review"
+assert_contains "$OUT" "same_family_phase=reviewer_family" "same-family block phase is reviewer_family"
+assert_contains "$OUT" "same_family_reason=reviewer and implementer must be different families" "same-family block reason is explicit"
 
 finalize_test

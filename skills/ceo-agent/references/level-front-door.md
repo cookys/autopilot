@@ -274,6 +274,45 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
   a hit cap is an escalation, never a silent continue. This is also the
   **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
 
+### 1.b Quota/session-limit reset preflight recovery (R4)
+
+This path is only for **quota/session-limit death** (session model usage/quota hit).
+It is distinct from `failure`/`killed` code-death recovery in §2; quota-reset
+resurrection must first re-validate quota, then route through the existing R3
+`run-ledger.sh resume` branch.
+
+Use this 7-step recovery sequence:
+
+1. Preserve the original session-limit error exactly as an immutable value in
+   control-loop state (raw CLI/tool error string), because this text is the source
+   of truth for downstream escalation and audit.
+2. Parse the reset point from `quota_error_text` and fail fast if unparsable.
+   Only parse explicit timestamps/countdowns present in the error string (for example
+   `reset=<unix_epoch>` or `retry_after=<seconds>`). If parsing cannot produce a
+   concrete deadline, **do not invent a wakeup** — escalate manually using the
+   preserved error and continue with the standard failure path.
+3. Derive the wake target from parsed reset:
+   `wake_at = reset_epoch + buffer_secs + jitter_secs`,
+   where `buffer_secs` avoids exact-boundary wake and `jitter_secs` reduces herd
+   collisions on shared accounts.
+4. Schedule the wakeup using one of the real wakeup primitives:
+   - Primary: `Monitor` one-shot timer, e.g.
+     `Monitor(command: "sleep ${delay}; echo QUOTA_WAKEUP", timeout_ms: ...)`
+   - Alternate portability path: `"/loop"` with a self-throttled checkpointed prompt
+     that waits until `now >= wake_at` before leaving reset mode.
+5. On wakeup, run the **separate probe budget** first against the endpoint that maps to
+   the quota-limited engine for this recovery path (typically `<quota_limited_endpoint_name>`):
+   `node bin/autopilot.js endpoints test <quota_limited_endpoint_name> --json`.
+   This is explicit network+auth preflight to avoid immediately spending heavy
+   implementation budget.
+6. If probe is `outcome: ok`, execute the R3 path:
+   `scripts/run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>`.
+   This is the required idempotent continuation step; no bespoke resume branch.
+7. If probe reports limit still active (`outcome: network_failed` with `http_status: 429`
+   or equivalent `still_limited`) or is `auth_failed`/`network_failed` due to auth plane outage, do **not** retry
+   immediately. Apply exponential backoff with jitter (`delay *= 2`, capped), reschedule
+   via step 4, and re-run step 5 only at the new wake time.
+
 ### 2. Outcome → action table
 
 Every foreman / `dispatch-hetero.sh` outcome maps to a defined action — no
@@ -293,6 +332,7 @@ a JSON outcome.
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
 | `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
 | `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
+| `failed`/`killed` (foreman died before normal outcome emission) | run `run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>` and let it perform recovery: locate last ledger stage, bump generation (`stage-acquire --allow-reopen`), hold resource lock, reconcile by `stage-reconcile` before any redo, adopt git-truth when available, and report `review_round_owed`. If `status=already_applied`, caller must treat as a true no-op recovery replay. On `quarantined`/D resources, resume must refuse the old resource and request a new resource path. |
 
 ### 3. qc@depth-0 is THE gate
 
@@ -480,6 +520,7 @@ one row per step:
 | plan | claude | (foreman tier) | n/a | — | (plan doc / inline) |
 | impl | claude \| agy | sonnet \| Gemini 3.5 Flash | committed | backend-cli | `<branch>@<sha>` |
 | foreman first-pass qc | claude | (foreman tier) | pass (non-authoritative) | — | (qc notes) |
+| recovery | claude | (depth-0 tier) | resumed / already_applied / blocked_resource | — | run-ledger resume payload (`run_id`, `resume_point`, `new_generation`, `adoption`) |
 | **depth-0 qc panel (authoritative)** | resolver `qc_panel` / claude ×N (homogeneous ≥3-lens floor) | (depth-0 tier) | **pass/fail** (synthesized) | — | per-reviewer `file:line` findings over `git diff <base>..<branch>` |
 
 - **`runner`/`model` provenance** for the impl step comes straight from

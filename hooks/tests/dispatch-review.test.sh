@@ -52,6 +52,9 @@ extract_markers() {
 }
 
 PROMPT="$(read_prompt_arg "$@")"
+if [ -n "${PROMPT_CAPTURE_FILE:-}" ]; then
+  printf '%s' "$PROMPT" >"$PROMPT_CAPTURE_FILE"
+fi
 if ! MARKERS="$(extract_markers "$PROMPT" 2>/dev/null)"; then
   exit 0
 fi
@@ -639,6 +642,19 @@ assert_contains "$PROMPT_CONTENT" "Task specification (baseline — DISPATCHER-A
 assert_contains "$PROMPT_CONTENT" "Spec file baseline text" "prompt contains spec file text"
 assert_contains "$PROMPT_CONTENT" "Diff under review:" "prompt still contains Diff under review:"
 
+# Regression Test 9: checklist routing in prompt
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" --checklists "authz-boundary,tenant-boundary" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "checklist prompt-capture stub exits 0"
+PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
+assert_contains "$PROMPT_CONTENT" "Adversarial checklist (must check these closely):" "prompt contains checklist section when checklists set"
+assert_contains "$PROMPT_CONTENT" "- authz-boundary" "prompt includes authz-boundary checklist item"
+assert_contains "$PROMPT_CONTENT" "- tenant-boundary" "prompt includes tenant-boundary checklist item"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "no-checklist prompt-capture stub exits 0"
+PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
+assert_not_contains "$PROMPT_CONTENT" "Adversarial checklist (must check these closely):" "prompt omits checklist section when --checklists is absent"
+
 # Regression Test: multi-line findings containing double quotes/backslashes must produce valid parseable JSON.
 OUT="$(STUB_MODE=quotes DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "quotes stub exits 0"
@@ -646,4 +662,3 @@ node -e 'JSON.parse(process.argv[1])' "$OUT"
 assert_eq "0" "$?" "emitted JSON with multi-line quotes is valid and parseable"
 
 finalize_test
-

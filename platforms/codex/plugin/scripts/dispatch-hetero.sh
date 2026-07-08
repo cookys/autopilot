@@ -111,6 +111,22 @@ EFFECTIVE_SKILL_MODE="off"
 SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
 SKILL_PACK_CONTENT_TEMP=""
+# --- R1 detach / durable-result plumbing (all OPTIONAL; absent ⇒ byte-identical legacy behavior) ---
+# When --ledger/--run-id/--stage are ALL supplied AND detach is on (DISPATCH_DETACH!=0, the
+# default), the long-running engine worker is run inside a `setsid` session that SURVIVES the
+# caller (the wrapper / 900s-capped bash tool) being killed. That detached session heartbeats to
+# the R0 ledger, writes its final outcome JSON atomically to a deterministic result path, and
+# records the committed stage — so a killed caller loses no work (recover via run-ledger resume).
+# When any coord is absent OR DISPATCH_DETACH=0, NONE of this engages: the inline path below runs
+# exactly as it did before R1 (proven byte-identical by the detach test + existing hetero tests).
+LEDGER=""
+RUN_ID=""
+STAGE=""
+RESULTS_DIR=""
+RESULT_FILE=""
+EXIT_FILE=""
+HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
+OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
 cleanup() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
@@ -166,6 +182,9 @@ while [ $# -gt 0 ]; do
     --skill-mode) SKILL_MODE="${2:-}"; shift 2 ;;
     --skill) SKILLS+=("${2:-}"); shift 2 ;;
     --store) export ENGINE_CAPABILITY_DIR="${2:-}"; shift 2 ;;
+    --ledger) LEDGER="${2:-}"; shift 2 ;;
+    --run-id) RUN_ID="${2:-}"; shift 2 ;;
+    --stage) STAGE="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
   esac
@@ -473,6 +492,15 @@ trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [
 # container. The command cd's into the worktree itself (we cannot rely on a
 # subshell cwd surviving the container boundary).
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
+  if [ "${IN_DETACHED_CHILD:-0}" -eq 1 ]; then
+    # In the detached child we already ARE the surviving `setsid` session (created at launch),
+    # so run the worker plainly IN-session — its descendants share our session and die/finish
+    # with us; there is no nested container to reap on this path.
+    CONTAINMENT="setsid"
+    "$@" >"$LOG" 2>&1
+    AGENT_EXIT=$?
+    return 0
+  fi
   if [ "$HAVE_CGROUP" -eq 1 ]; then
     SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
     CONTAINMENT="cgroup"
@@ -494,7 +522,10 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
   reap_container   # reap on the NORMAL exit path too (catch escaped survivors), set CONTAINED
 }
 
-# --- run the agent (its stdout/stderr go to LOG, never our stdout) ---
+# --- the agent runner (its stdout/stderr go to LOG, never our stdout) ---
+# Extracted verbatim into a function so BOTH the inline path and the detached child dispatch
+# the SAME engine invocation with ZERO behavioral difference.
+run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
   run_worker bash -c 'cd "$1" && exec "$5" exec --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
@@ -577,9 +608,9 @@ run build/test or to commit.
   run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --dangerously-skip-permissions --print-timeout "$5"' \
       _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT"
 fi
-[ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
-trap - INT TERM
+}
 
+compute_artifacts() {
 # agy/grok/codex run edit-only → the wrapper makes the commit (deterministic). It fires
 # whenever the worker left edits but did NOT move HEAD (HEAD==BASE && dirty), REGARDLESS of
 # runner; if the worker already committed (HEAD moved) or left nothing, this is a no-op.
@@ -617,6 +648,7 @@ if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
 fi
+}
 
 passive_capture() {
   local status="${1:-}"
@@ -666,46 +698,181 @@ passive_capture() {
   fi
 }
 
-if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
-  # --- a new commit exists ---
-  if [ -n "$DIRTY" ]; then
-    # committed but left the tree dirty → failure regardless of exit code
-    passive_capture "dirty"
-    emit "dirty" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"
-    exit 1
-  elif [ "$AGENT_EXIT" -ne 0 ]; then
-    # clean commit but the worker exited non-zero — NOT scored success (KR1):
-    # the abnormal exit means the run can't be trusted as a clean implementation.
-    passive_capture "failure"
-    emit "failure" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" "agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"
-    exit 1
-  else
-    # new commit + clean tree + agent exit 0 → the only success path
-    if [ "$KEEP" = "0" ]; then
-      git worktree remove --force "$WT" >/dev/null 2>&1 && WT=""
+# classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
+# inline path (→ emit to stdout + exit) and the detached child (→ write-result + ledger). It
+# sets OUTCOME_* and performs the outcome-specific side effects (passive_capture; worktree
+# removal on clean success) EXACTLY as the pre-R1 inline tree did — the existing hetero tests
+# assert the resulting stdout/exit byte-for-byte, guarding this refactor.
+classify_outcome() {
+  OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=1
+  if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+    # --- a new commit exists ---
+    if [ -n "$DIRTY" ]; then
+      # committed but left the tree dirty → failure regardless of exit code
+      passive_capture "dirty"
+      OUTCOME_STATUS="dirty"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+      OUTCOME_ERR="agent committed but left uncommitted changes (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+    elif [ "$AGENT_EXIT" -ne 0 ]; then
+      # clean commit but the worker exited non-zero — NOT scored success (KR1):
+      # the abnormal exit means the run can't be trusted as a clean implementation.
+      passive_capture "failure"
+      OUTCOME_STATUS="failure"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+      OUTCOME_ERR="agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+    else
+      # new commit + clean tree + agent exit 0 → the only success path
+      if [ "$KEEP" = "0" ]; then
+        git worktree remove --force "$WT" >/dev/null 2>&1 && WT=""
+      fi
+      OUTCOME_STATUS="committed"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=0
     fi
-    emit "committed" "$HEAD_SHA" "$FILES" "$INS" "$DEL" "$WT" ""
-    exit 0
-  fi
-else
-  # --- no new commit: split by HOW the worker ended ---
-  if [ -n "$DIRTY" ]; then
-    # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
-    # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
-    passive_capture "dirty"
-    emit "dirty" "" 0 0 0 "$WT" "edits left uncommitted, no commit made (wrapper commit may have failed; agent exit $AGENT_EXIT); worktree kept"
-    exit 1
-  elif [ "$AGENT_EXIT" -eq 0 ]; then
-    # clean exit, nothing committed → agent legitimately decided nothing was needed
-    passive_capture "no_op"
-    emit "no_op" "" 0 0 0 "$WT" "agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"
-    exit 1
   else
-    # timeout or non-zero exit, nothing committed → likely paused on a clarifying
-    # question (auto-approve does not silence the model's own question) or stalled
-    passive_capture "question_suspected"
-    emit "question_suspected" "" 0 0 0 "$WT" "agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"
-    exit 1
+    # --- no new commit: split by HOW the worker ended ---
+    if [ -n "$DIRTY" ]; then
+      # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
+      # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
+      passive_capture "dirty"
+      OUTCOME_STATUS="dirty"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+      OUTCOME_ERR="edits left uncommitted, no commit made (wrapper commit may have failed; agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+    elif [ "$AGENT_EXIT" -eq 0 ]; then
+      # clean exit, nothing committed → agent legitimately decided nothing was needed
+      passive_capture "no_op"
+      OUTCOME_STATUS="no_op"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+      OUTCOME_ERR="agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"; OUTCOME_EXIT=1
+    else
+      # timeout or non-zero exit, nothing committed → likely paused on a clarifying
+      # question (auto-approve does not silence the model's own question) or stalled
+      passive_capture "question_suspected"
+      OUTCOME_STATUS="question_suspected"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+      OUTCOME_ERR="agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"; OUTCOME_EXIT=1
+    fi
   fi
+}
+
+# ============================ R1 DETACH (setsid kill-survival) ============================
+# heartbeat_loop — periodic liveness beat to the ledger, keyed to the detached child's lease
+# (generation/nonce/pid). Immediate first beat, then every HEARTBEAT_SECS. Runs backgrounded
+# inside the detached child and is killed once the worker completes.
+heartbeat_loop() {
+  local run_ledger="$SELF_DIR/run-ledger.sh"
+  while :; do
+    bash "$run_ledger" stage-heartbeat --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+      --generation "$DETACH_GEN" --nonce "$DETACH_NONCE" --pid "$DETACH_SELF_PID" >/dev/null 2>&1 || true
+    sleep "${HEARTBEAT_SECS:-20}"
+  done
+}
+
+# detached_main — runs INSIDE the setsid session (sourced state + functions via declare). It owns
+# the full lifecycle so a killed caller loses nothing: acquire lease → heartbeat → run engine →
+# wrapper-commit + verify → write outcome JSON atomically to RESULT_FILE → record committed stage.
+detached_main() {
+  set -uo pipefail
+  IN_DETACHED_CHILD=1
+  local run_ledger="$SELF_DIR/run-ledger.sh"
+  # Keep the worktree in detach mode: it is the git-truth a `resume` uses to adopt the work,
+  # and the orchestrator (not this leaf) owns its later cleanup.
+  KEEP=1
+  local packed_prompt_for_child="${PACKED_PROMPT_TEMP:-}"
+  # Decouple from the caller's prompt temp lifecycle: copy it into a child-owned file so the
+  # parent's EXIT cleanup cannot yank it mid-run.
+  local child_prompt="$RESULTS_DIR/${RUN_ID}.${STAGE}.prompt"
+  if cp -f "$PROMPT_FILE" "$child_prompt" 2>/dev/null; then PROMPT_FILE="$child_prompt"; fi
+  # Acquire the lease AS THIS detached process (records our pid/start_time → the watchdog can
+  # tell alive-vs-dead). --allow-reopen so an orchestrator pre-lease is renewed, not rejected.
+  DETACH_SELF_PID="$$"
+  local acq; acq="$(bash "$run_ledger" stage-acquire --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+    --pid "$DETACH_SELF_PID" --git-ref "refs/heads/$BRANCH" --worktree "$WT" --allow-reopen 2>/dev/null || true)"
+  DETACH_GEN="$(printf '%s' "$acq" | jq -r '.generation // empty' 2>/dev/null || true)"
+  DETACH_NONCE="$(printf '%s' "$acq" | jq -r '.nonce // empty' 2>/dev/null || true)"
+  local hb_pid=""
+  if [ -n "$DETACH_GEN" ] && [ -n "$DETACH_NONCE" ]; then
+    heartbeat_loop &
+    hb_pid=$!
+  fi
+  # run the engine worker (in-session), then finalize by artifact
+  run_agent
+  [ -n "$hb_pid" ] && { kill "$hb_pid" 2>/dev/null || true; wait "$hb_pid" 2>/dev/null || true; }
+  compute_artifacts
+  classify_outcome
+  # Build the SAME outcome JSON the inline path would print, and land it atomically.
+  local json; json="$(emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR")"
+  local payload_tmp="$RESULT_FILE.payload.$$"
+  printf '%s' "$json" > "$payload_tmp"
+  bash "$run_ledger" write-result --path "$RESULT_FILE" --payload-file "$payload_tmp" >/dev/null 2>&1 || true
+  rm -f "$payload_tmp"
+  # exit-code sidecar (atomic) so the supervising parent relays the SAME exit code
+  printf '%s' "$OUTCOME_EXIT" > "$EXIT_FILE.tmp.$$" && mv "$EXIT_FILE.tmp.$$" "$EXIT_FILE"
+  # Record the committed stage so the work is recoverable via `run-ledger resume` (git-truth).
+  if [ "$OUTCOME_STATUS" = "committed" ] && [ -n "$DETACH_GEN" ] && [ -n "$DETACH_NONCE" ]; then
+    bash "$run_ledger" stage-transition --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+      --generation "$DETACH_GEN" --nonce "$DETACH_NONCE" --to-state committed \
+      --git-sha "$OUTCOME_COMMIT" --worktree "$WT" >/dev/null 2>&1 || true
+  fi
+  rm -f "$child_prompt" 2>/dev/null || true
+  [ -n "$packed_prompt_for_child" ] && rm -f "$packed_prompt_for_child" 2>/dev/null || true
+  exit "$OUTCOME_EXIT"
+}
+
+# dispatch_detached_run — the PARENT side. Serializes state+functions, launches detached_main in a
+# NEW SESSION (setsid) so a killed caller cannot take the worker down, then blocks-and-relays the
+# SAME stdout JSON + exit code as the inline path (transparent normal case). NEVER returns.
+dispatch_detached_run() {
+  mkdir -p "$RESULTS_DIR"
+  rm -f "$RESULT_FILE" "$EXIT_FILE"
+  local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
+  {
+    declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM CONTAINMENT CONTAINED EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
+      PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
+      OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT 2>/dev/null
+    declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
+    declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
+      classify_outcome heartbeat_loop detached_main
+  } > "$state_file"
+  # In detach mode the DETACHED child owns the worktree/branch lifecycle. A caller signal must
+  # NOT reap the worktree out from under it — replace the reaping trap with a bare exit.
+  trap 'exit 143' INT TERM
+  # Prevent the top-level EXIT cleanup from deleting the prompt temp under a detached child.
+  # The detached child now owns and removes this prompt copy.
+  unset PACKED_PROMPT_TEMP
+  # The child removes the state file right after sourcing (before the long run) so a caller-kill
+  # of the parent — which skips the parent's own cleanup below — cannot leak it.
+  setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
+  local child=$!
+  wait "$child"; local wait_rc=$?
+  # Reaching here means the caller was NOT killed → relay the durable result transparently.
+  local out_rc="$wait_rc"
+  if [ -f "$EXIT_FILE" ]; then out_rc="$(cat "$EXIT_FILE" 2>/dev/null || echo "$wait_rc")"; fi
+  if [ -f "$RESULT_FILE" ]; then
+    cat "$RESULT_FILE"; printf '\n'
+  else
+    emit "failure" "" 0 0 0 "$WT" "detached worker produced no result file (run-id=$RUN_ID stage=$STAGE)"
+    out_rc=1
+  fi
+  rm -f "$state_file"
+  exit "$out_rc"
+}
+
+# ---- dispatch decision ----
+# Detach is ON by default; DISPATCH_DETACH=0 (or false/no/off) forces the legacy inline path.
+detach_on() {
+  case "${DISPATCH_DETACH:-1}" in
+    0|false|FALSE|no|NO|off|OFF|No|Off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
+  RESULTS_DIR="${LEDGER}.results"
+  RESULT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.result.json"
+  EXIT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.exit"
+  dispatch_detached_run   # never returns
 fi
 
+# ---- inline path (DISPATCH_DETACH=0 OR no ledger coords): byte-identical to pre-R1 behavior ----
+run_agent
+[ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+trap - INT TERM
+compute_artifacts
+classify_outcome
+emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
+exit "$OUTCOME_EXIT"

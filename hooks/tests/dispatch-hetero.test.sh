@@ -389,5 +389,24 @@ assert_contains "$OUT" "invalid skill name" "'..' skill name rejected"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-dot --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill . 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "reject '.' skill name exit code"
 
-finalize_test
+# 21. R1 detach gate falls back to inline when `setsid --help --wait` is unavailable
+SETSIDLESS_BIN="$TEST_TMP/no-setsid"
+mkdir -p "$SETSIDLESS_BIN"
+cat > "$SETSIDLESS_BIN/setsid" <<'EOF'
+#!/usr/bin/env bash
+echo "set -: no setsid wait support" >&2
+exit 1
+EOF
+chmod +x "$SETSIDLESS_BIN/setsid"
+LEDGER_NOSET="$TEST_TMP/no-setsid-ledger/ledger.jsonl"
+mkdir -p "$TEST_TMP/no-setsid-ledger"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_NOSET" >/dev/null
+OUT="$(cd "$SBX" && PATH="$SETSIDLESS_BIN:$PATH" "$SCRIPT" --branch feat/no-setsid --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --ledger "$LEDGER_NOSET" --run-id rn --stage implement 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "missing setsid support falls back to inline dispatch"
+assert_contains "$OUT" '"status": "committed"' "setsid-unavailable fallback still returns committed outcome"
+HB_COUNT="$(grep -c '\"kind\":\"heartbeat\"' "$LEDGER_NOSET" 2>/dev/null)"; HB_COUNT="${HB_COUNT:-0}"
+assert_eq "0" "$HB_COUNT" "setsid-unavailable fallback bypasses detach-side heartbeats"
+assert_file_absent "${LEDGER_NOSET}.results/rn.implement.result.json" "setsid-unavailable fallback does not emit detached durable result"
 
+finalize_test

@@ -24,6 +24,23 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.10 — orchestration-eval: opt-in per-turn constraint re-injection (`--reinject`)
+
+**Headline**: The multi-turn orchestration-eval harness (`evals/orchestration/run-orchestration-eval.sh`) gains an opt-in `--reinject <relpath>` flag that mechanically re-pastes a `CONSTRAINTS REMINDER` block (verbatim content of the task's `repo/<relpath>`, e.g. `CONSTRAINTS.md`) into EVERY composed turn prompt (turn 1..N), for both the `cc` and `stub` runners. This is the "mechanical re-statement vs prose-once" instrument the 2026-07-06 eval-instruments report defined as the next step after prose asset packs failed to hold long-horizon constraints (t14 DATA B, n=35, p=0.279). Companion first real measurement on t14-constraint-horizon (haiku, 5-turn) is recorded in `docs/projects/2026-07-08-t14-reinject/`.
+
+### Added
+- `--reinject <relpath>` flag on `run-orchestration-eval.sh`; resolves `<relpath>` against the task's frozen source repo (`<task>/repo/<relpath>`), errors `exit 2` on a single-prompt task. Multi-turn `result.json` gains a `"reinject":"<relpath>"` key ONLY when the flag is set.
+- `hooks/tests/orchestration-eval-reinject.test.sh` — stub-runner unit test (re-inject ON injects the block into turn 1..N + adds the result key; OFF omits both; single-prompt task rejected with exit 2).
+
+### Changed
+- `evals/orchestration/README.md` "Multi-turn mode" documents the flag and the byte-identical-when-omitted guarantee.
+
+### Fixed
+- (none)
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.9 — resolver `min_panel_size` (family-agnostic panel-size floor)
 
 **Headline**: `scripts/resolve-review-loop.sh` now emits a standalone integer field **`min_panel_size`** (default 3, config key `min_panel_size`), turning the prose「homogeneous panels keep a ≥3-lens floor」into resolver data. It is deliberately **separate** from `required_review_families`: lens diversity ≠ family decorrelation, and same-family lenses can still share blind spots — so panel size and family count are independent knobs. The five consumer prose-floor sites (`l4` SKILL, `level-front-door.md` ×3, `quality-pipeline/references/code-review.md`) now read「must not drop below the resolver's `min_panel_size`」instead of the hardcoded「until `min_panel_size` exists」placeholder. Closes the family-agnostic-`min_panel_size` BACKLOG entry.

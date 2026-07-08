@@ -32,9 +32,10 @@ To guarantee the validity and integrity of the evaluation, we adhere to the foll
 ## Multi-turn mode
 
 Tasks can specify a `turns/` directory containing sequential prompts (`01.md`, `02.md`, ...) instead of a single prompt. This measures long-horizon drift, evaluating if an agent can sustain constraints across multiple interventions.
-- **Contract**: Between turns, no external hints or re-injections occur. The oracle evaluates the final state against invariants.
+- **Contract**: By default, no external hints or re-injections occur between turns — the oracle evaluates the final state against invariants, measuring pure long-horizon drift.
 - **Runners**: Supported by `cc` (via `--resume` capturing the session ID from turn 1) and `stub` (by concatenating). The `agy` runner does not support multi-turn execution.
 - **Limits**: Only `cc` supports true session resumption. Note that multi-turn requires N invocations, increasing total cost by roughly N×.
+- **Opt-in per-turn re-injection (`--reinject <relpath>`)**: mechanically prepends a `CONSTRAINTS REMINDER` block containing the verbatim content of `<task>/repo/<relpath>` to EVERY composed turn prompt (turn 1..N), instead of relying on turn 1 having stated the rules once. `<relpath>` is resolved against the task's frozen source repo. This is the instrument for testing whether mechanical re-statement beats prose-once against long-horizon constraint drift. Requires a `turns/` task (errors `exit 2` on a single-prompt task). Multi-turn `result.json` gains a `"reinject":"<relpath>"` key ONLY when the flag is set; **when the flag is omitted, all behavior and output are byte-identical to before** (verified: `hooks/tests/orchestration-eval-reinject.test.sh`).
 
 ## Task provenance (why these are fair)
 

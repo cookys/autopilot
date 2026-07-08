@@ -212,6 +212,10 @@ acquire_resource_lock() {
 
 release_lock() {
   local fd="$1"
+  fd="$(printf '%s' "$fd" | tr -d '[:space:]')"
+  if [ -z "$fd" ]; then
+    return 0
+  fi
   flock -u "$fd" 2>/dev/null || true
   eval "exec ${fd}>&-" 2>/dev/null || true
 }
@@ -362,7 +366,7 @@ with_resource_locks() {
     return 0
   fi
 
-  local lock_fds=""
+  local lock_fds=()
   local resource
   local IFS=','
   for resource in $sorted; do
@@ -371,18 +375,20 @@ with_resource_locks() {
     path="$(resource_lock_path "$ledger" "$resource")"
     if ! acquire_resource_lock "$path" "$timeout" '{"resource_state":"waiting"}' fd; then
       local release_fd
-      for release_fd in $lock_fds; do
+      for release_fd in "${lock_fds[@]}"; do
         release_lock "$release_fd"
       done
       return 1
     fi
-    lock_fds="${lock_fds}${fd} "
+    lock_fds+=("$fd")
   done
   if [ -n "$out_var" ]; then
-    printf -v "$out_var" '%s' "$lock_fds"
+    local out_list
+    out_list="${lock_fds[*]}"
+    printf -v "$out_var" '%s' "$out_list"
     return 0
   fi
-  echo "$lock_fds"
+  echo "${lock_fds[*]}"
 }
 
 audit_resource_contention() {
@@ -413,8 +419,6 @@ append_record() {
   if [ -n "$run_lock_fd" ]; then
     local ledger_lock_fd
     with_ledger_lock "$ledger" "$timeout" ledger_lock_fd || {
-      flock -u "$run_lock_fd"
-      eval "exec ${run_lock_fd}>&-"
       error "failed to acquire ledger lock"
     }
     atomic_append_ledger "$ledger" "$row_json" "$run_lock_fd" "$ledger_lock_fd"
@@ -479,20 +483,30 @@ write_side_effect_row() {
     --arg payload "$payload" \
     '{kind:$kind,ts:$ts,run_id:$run_id,stage:$stage,generation:$gen,nonce:$nonce,op:$op,idempotency_key:$id_key,status:$status,payload:$payload}')"
 
-  if [ -n "$run_lock_fd" ]; then
-    append_record "$ledger" "$run_id" "$line" "$timeout" "$run_lock_fd"
-    return 0
-  fi
-
   local latest
   latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   latest_resources="$(jq -r '.resources // ""' <<<"$latest")"
   if [ -n "$latest_resources" ]; then
     with_resource_locks "$ledger" "$latest_resources" "$timeout" resource_fds || error "resource lock unavailable"
   fi
+
+  if [ -n "$run_lock_fd" ]; then
+    append_record "$ledger" "$run_id" "$line" "$timeout" "$run_lock_fd"
+    if [ -n "$resource_fds" ]; then
+      local release_fd
+      for release_fd in $resource_fds; do
+        release_lock "$release_fd"
+      done
+    fi
+    return 0
+  fi
+
   if ! with_run_lock "$ledger" "$run_id" "$timeout" local_run_fd; then
     if [ -n "$resource_fds" ]; then
-      for fd in $resource_fds; do release_lock "$fd"; done
+      local release_fd
+      for release_fd in $resource_fds; do
+        release_lock "$release_fd"
+      done
     fi
     error "run lock unavailable"
   fi
@@ -722,7 +736,7 @@ command_journal_add() {
   if [ -z "$existing" ]; then
     error "stage row missing; record journal after stage is acquired first"
   fi
-  local resources run_fds run_fd
+  local resources run_fds="" run_fd
   resources="$(jq -r '.resources // ""' <<<"$existing")"
   if [ -n "$resources" ]; then
     with_resource_locks "$ledger" "$resources" "$timeout" run_fds || error "resource lock unavailable"
@@ -824,6 +838,9 @@ command_stage_transition() {
       echo '{"status":"already_applied","state":"'$current_state'"}'
       return 0
     fi
+    flock -u "$run_fd"; eval "exec ${run_fd}>&-"
+    for fd in $r_fds; do release_lock "$fd"; done
+    error "invalid transition ${current_state} -> ${to_state}"
   fi
 
   if ! is_allowed_transition "$current_state" "$to_state"; then
@@ -907,7 +924,7 @@ command_stage_apply() {
   fi
 
   if [ -n "$idempotency_key" ]; then
-    local apply_resources apply_resource_fds apply_run_fd
+    local apply_resources apply_resource_fds="" apply_run_fd
     apply_resources="$(jq -r '.resources // ""' <<<"$existing_line")"
     if [ -n "$apply_resources" ]; then
       with_resource_locks "$ledger" "$apply_resources" "$timeout" apply_resource_fds || error "resource lock unavailable"
@@ -1829,6 +1846,7 @@ atomic_append_ledger() {
   local ledger="$1"
   local line="$2"
   local fd="$3"
+  local ledger_lock_fd="${4:-}"
 
   local tmp="${ledger}.tmp.$$"
   if [ -f "$ledger" ]; then

@@ -474,3 +474,14 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **副產物守則**（已可先用）: 多 agent 看似停頓，先查是不是正常回合間工作（ledger/log/ps 交叉），**別急著接手**——本次 foreman 全程能幹（診斷比 depth-0 深、主動協調），撞車全因 depth-0 觀測不足 + 反應過快。
 - **Effort**: L（research→design→impl；與 R0-R5 同 plan `docs/plans/2026-07-08-l6-resilience-improvements.md`，建議收為該 plan 的 R6）。
 - **Source**: l6-resilience R1–R5 dogfood campaign 協調事故，2026-07-08。
+
+### ⛔ l6-resilience R0-R5 impl 有 depth-0 qc verified Critical——fix pass 才可 merge（work on feat/l6-r1r5 @ 9e7e1d6，未 merge develop）
+- **Trigger**: 要 ship l6-resilience（R0 ledger + R2/R3/R4/R5 handler）到 develop 前，必須先修下列 qc panel（agy/codex/MiniMax 三家族，2026-07-08）verified 缺陷。code 在 `feat/l6-r1r5 @ 9e7e1d6`（4 支測試綠但併發/crash-ordering 未覆蓋）。
+- **Verified Critical**（≥2 家族或 depth-0 親驗）:
+  - **run-ledger.sh: shared ledger 檔 + 僅 per-run 鎖 → 併發不同 run append 丟記錄**（A-agy+A-codex 兩家族；depth-0 驗證 `canonical_ledger_path`→`$PWD/.autopilot/run-ledger.jsonl` 單一共享檔，`atomic_append_ledger` cp→mv 只持 run.<id>.lock；spec 說 per-run 但實作是全域）。修：全域 ledger 寫要 resource-scoped/全域鎖，非 per-run。
+  - **run-ledger.sh: stage-apply 先寫 applied journal 再做 state transition**，中間 crash → stage 未推進但 retry 全假成功（A-codex:914）。修：transition 與 journal 原子、或 journal-after-transition。
+  - **autopilot-engine.js:89 `hasNoOpOrCommittedEmptyWrite` 讓 R2 misplaced_writes 只在 files_changed===0 才 fire** → 合法改動 + 平行 out-of-tree 寫可雙重繞過 R2/R5（B-agy+B-mm 兩家族；spec 明確警告此 double-false-negative）。修：misplacement 檢查不受 files_changed 遮蔽。
+  - **autopilot-engine.js:1253 `resolveImplementationFromLedger` 跨 round 用 static stage** → 破 round 冪等、誤採前 round commit（B-agy）。
+- **Major**: check-then-act TOCTOU（latest_stage_record 在鎖外讀、critical section 內不 re-read，A-agy+A-codex）；journal has_applied 檢查在鎖外→double-apply（A-mm）；write_side_effect_row 單獨取 run-lock 違反 global acquire order（A-mm）；with_resource_locks 部分失敗漏 fd（A-mm）；classify-diff-risk.sh:255 `awk '{print $3}'` 截斷含空白檔名→risk 規則被繞（B-agy）；collectMisplacementEvidence 讀 result.error 當 path→false positive（B-mm）。
+- **Effort**: L（fix round：R0 ledger 併發模型重修 + engine gate 修 + re-qc）。建議 hetero implementer + 四支測試擴充含併發/crash-ordering case。
+- **Source**: l6-resilience depth-0 三家族 qc panel，2026-07-08。**R1（detach）也還沒做**（transport-cursed，見另條）。

@@ -484,4 +484,4 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
   - **autopilot-engine.js:1253 `resolveImplementationFromLedger` 跨 round 用 static stage** → 破 round 冪等、誤採前 round commit（B-agy）。
 - **Major**: check-then-act TOCTOU（latest_stage_record 在鎖外讀、critical section 內不 re-read，A-agy+A-codex）；journal has_applied 檢查在鎖外→double-apply（A-mm）；write_side_effect_row 單獨取 run-lock 違反 global acquire order（A-mm）；with_resource_locks 部分失敗漏 fd（A-mm）；classify-diff-risk.sh:255 `awk '{print $3}'` 截斷含空白檔名→risk 規則被繞（B-agy）；collectMisplacementEvidence 讀 result.error 當 path→false positive（B-mm）。
 - **Effort**: L（fix round：R0 ledger 併發模型重修 + engine gate 修 + re-qc）。建議 hetero implementer + 四支測試擴充含併發/crash-ordering case。
-- **Source**: l6-resilience depth-0 三家族 qc panel，2026-07-08。**R1（detach）也還沒做**（transport-cursed，見另條）。
+- **Source**: l6-resilience depth-0 三家族 qc panel，2026-07-08。**更新**：R1(detach) foreman 已於 qc 後完成 merge（feat/l6-r1r5 tip 現 `3cf9f92`，6 支全實作）——但 qc panel 跑在 R1 前的 `9e7e1d6`，故 **fix-pass 的 re-qc 必須涵蓋全 6 支含 R1**（R1 動 live dispatch 腳本、未經 depth-0 qc）。

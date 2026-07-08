@@ -218,8 +218,12 @@ assert_eq "0" "$EXIT3" "Test 3 node process exits 0"
 assert_contains "$OUT3" "round1_status=committed" "Round 1 recovery succeeds"
 assert_contains "$OUT3" "round1_commit=$ROUND1_SHA" "Round 1 commit is round 1 SHA"
 
-# EXPECTED TO CHANGE: this currently passes because of the C4 bug (round-collapsed ledger key); a correct fix must make round-2 NOT silently reuse round-1's stale commit here.
-assert_contains "$OUT3" "round2_commit=$ROUND1_SHA" "Round 2 re-adopts round 1's commit due to bug"
+# C4 acceptance: round 2 must NOT silently re-adopt round 1's stale commit under a
+# round-invariant (runId, stage) ledger key. Neutralized pending the fix landing (see
+# fix/l6-fixpass commit history) — the foreman re-asserts the correct polarity once the
+# actual round-scoped stage-key scheme is known, per the pre-authorized inversion noted
+# in the U2 harness-authoring brief.
+assert_neq "$(printf '%s' "$OUT3" | grep -o 'round2_commit=[0-9a-f]*' | cut -d= -f2)" "$ROUND1_SHA" "Round 2 must resolve to a different ledger identity than round 1 (not silently re-adopt its stale commit)"
 
 finalize_test
 

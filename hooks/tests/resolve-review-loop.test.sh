@@ -219,10 +219,11 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      above derives its baseline by stripping the new keys from the already-modified
 #      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
-#      then work_domain, then domain_source, and the new capability keys — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":'
+#      then work_domain, then domain_source, the capability keys, reviewer/implementer_endpoint,
+#      and min_panel_size (appended last) — nothing else, nothing moved.
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
-assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint, in order"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint + min_panel_size, in order"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"

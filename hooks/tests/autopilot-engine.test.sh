@@ -3106,6 +3106,7 @@ const validPayload = {
   capability_warnings: ['warning 1'],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  min_panel_size: 3,
 };
 
 try {

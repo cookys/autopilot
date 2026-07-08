@@ -43,6 +43,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_aggregation: union-on-verified-critical
 - review_diff_scope: full
+- min_panel_size: 3
 - density_scaling: off
 
 > **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a
@@ -77,6 +78,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
 | `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
+| `min_panel_size` | **minimum panel-size floor** for a homogeneous (single-family) qc panel — a homogeneous panel must not drop below this many distinct-lens reviewers. Emitted **separately** from `required_review_families` on purpose: lens diversity ≠ family decorrelation, and same-family lenses can still share blind spots, so panel size and family count are independent knobs. Standalone integer — NOT coupled to review_risk / families / source-trust | integer ≥ 1 (default 3); garbage / missing / `0` / negative → fail-safe 3 |
 | `review_diff_scope` | how much the per-round reviewer reads (cost vs regression-catching) | `full` (re-read whole `base..HEAD` each round — safe, O(n) cost growth) `\| incremental-mitigated` (read `prev..HEAD` + full content of files-touched + invariants list + periodic/critical-path full re-read + **mandatory final full review before merge**) |
 | `density_scaling` | scale verification density both directions by capability tier/risk: low/unknown implementers fail-closed upward (bump max rounds, require 2 cross-family reviewers, require l1 decorrelated oracle); high-tier + low-risk implementers cap cheap rounds at 2 and emit `verify_first: true` without weakening cross-family policy | `on\|off` (default off) |
 | `work_domain` | **emitted telemetry, NOT a config/routing knob** — the deterministic dominant domain of a diff (via `--auto-domain`/`--domain`; computed by `scripts/probe-diff-domain.sh`) | `rust\|backend-cli\|frontend\|docs\|mixed` (read-only record; selects no engine — domain routing is BACKLOG'd) |

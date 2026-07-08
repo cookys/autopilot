@@ -342,6 +342,10 @@ atomic_append_ledger() {
   sync -f "$(dirname "$ledger")"
   flock -u "$fd"
   eval "exec ${fd}>&-"
+  if [ -n "$ledger_lock_fd" ]; then
+    flock -u "$ledger_lock_fd"
+    eval "exec ${ledger_lock_fd}>&-"
+  fi
 }
 
 with_run_lock() {
@@ -466,8 +470,8 @@ has_applied_journal_key() {
 }
 
 write_side_effect_row() {
-  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" op="$6" idempotency_key="$7" status="$8" payload="$9" timeout="${10}" run_lock_fd="${11:-}"
-  local latest_resources resource_fds="" local_run_fd
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" op="$6" idempotency_key="$7" status="$8" payload="$9" timeout="${10}" run_lock_fd="${11:-}" caller_resource_fds="${12:-}"
+  local latest_resources resource_fds="" local_run_fd own_resource_locks=0
 
   local line
   line="$(jq -nc \
@@ -484,15 +488,20 @@ write_side_effect_row() {
     '{kind:$kind,ts:$ts,run_id:$run_id,stage:$stage,generation:$gen,nonce:$nonce,op:$op,idempotency_key:$id_key,status:$status,payload:$payload}')"
 
   local latest
-  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
-  latest_resources="$(jq -r '.resources // ""' <<<"$latest")"
-  if [ -n "$latest_resources" ]; then
-    with_resource_locks "$ledger" "$latest_resources" "$timeout" resource_fds || error "resource lock unavailable"
+  if [ -n "$caller_resource_fds" ]; then
+    resource_fds="$caller_resource_fds"
+  else
+    latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+    latest_resources="$(jq -r '.resources // ""' <<<"$latest")"
+    if [ -n "$latest_resources" ]; then
+      with_resource_locks "$ledger" "$latest_resources" "$timeout" resource_fds || error "resource lock unavailable"
+      own_resource_locks=1
+    fi
   fi
 
   if [ -n "$run_lock_fd" ]; then
     append_record "$ledger" "$run_id" "$line" "$timeout" "$run_lock_fd"
-    if [ -n "$resource_fds" ]; then
+    if [ "$own_resource_locks" -eq 1 ] && [ -n "$resource_fds" ]; then
       local release_fd
       for release_fd in $resource_fds; do
         release_lock "$release_fd"
@@ -502,7 +511,7 @@ write_side_effect_row() {
   fi
 
   if ! with_run_lock "$ledger" "$run_id" "$timeout" local_run_fd; then
-    if [ -n "$resource_fds" ]; then
+    if [ "$own_resource_locks" -eq 1 ] && [ -n "$resource_fds" ]; then
       local release_fd
       for release_fd in $resource_fds; do
         release_lock "$release_fd"
@@ -512,7 +521,7 @@ write_side_effect_row() {
   fi
 
   append_record "$ledger" "$run_id" "$line" "$timeout" "$local_run_fd"
-  if [ -n "$resource_fds" ]; then
+  if [ "$own_resource_locks" -eq 1 ] && [ -n "$resource_fds" ]; then
     for fd in $resource_fds; do release_lock "$fd"; done
   fi
 }
@@ -757,7 +766,7 @@ command_journal_add() {
     return 0
   fi
 
-  write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$op" "$idempotency_key" "$status" "$payload" "$timeout" "$run_fd"
+  write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$op" "$idempotency_key" "$status" "$payload" "$timeout" "$run_fd" "$run_fds"
   if [ -n "$run_fds" ]; then
     for fd in $run_fds; do release_lock "$fd"; done
   fi
@@ -962,7 +971,7 @@ command_stage_apply() {
       return 0
     fi
 
-    write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$side_effect_op" "$idempotency_key" "applied" "$payload" "$timeout" "$apply_run_fd"
+    write_side_effect_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$side_effect_op" "$idempotency_key" "applied" "$payload" "$timeout" "$apply_run_fd" "$apply_resource_fds"
     if [ -n "$apply_resource_fds" ]; then
       for fd in $apply_resource_fds; do release_lock "$fd"; done
     fi

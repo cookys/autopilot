@@ -33,3 +33,6 @@ __pycache__/
 eval-repo-*/
 orch-eval-scratch-home-*/
 .claude/settings.json
+
+# transient orchestration calibration run outputs (depth-0 runs these)
+docs/projects/2026-07-09-m3-band-tasks/runs/

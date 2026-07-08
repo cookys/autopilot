@@ -425,6 +425,20 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S (per-command compact wrapper, e.g. a `git diff --stat`-first reviewer feed) — scope to the one command that actually bloats first, don't build the whole rtk surface speculatively.
 - **Source**: 2026-06-23 `/next` follow-up — user-requested survey of headroom + rtk; two Explore-agent technical reports + same-session spike (rtk not installed, CC 2.1.186, intent `last_tool_source:"transcript"` confirms transcript-pivot ≠ stdin, zero live PreToolUse hooks).
 
+### `verify_strength` as the third density input
+- **Trigger**: next time changing `resolve-review-loop.sh` density/risk inputs, OR after red-green validation exists and real test-suite strength can be instrumented.
+- **Context**: Verification QUALITY needs to become a first-class density axis for `resolve-review-loop`; evidence is the escape cliff where `t2×medium` produced 100% escapes.
+- **Direction**: Red-green validation is the minimal precursor, but real adoption needs a strength-scoring instrument for actual test suites before `verify_strength` can drive policy.
+- **Effort**: L
+- **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
+
+### resolver `min_panel_size` emission (family-agnostic)
+- **Trigger**: next time changing `resolve-review-loop.sh` panel emission/enforcement, OR before removing the homogeneous ≥3-lens prose floor.
+- **Context**: Any `required_families=1` single-family panel has the single-lens weakness; this is family-agnostic, not Claude-specific.
+- **Direction**: Emit `min_panel_size` separately from family requirements because lens diversity ≠ family decorrelation; same-family lenses can still share blind spots. Until then, keep the homogeneous ≥3-lens prose floor.
+- **Effort**: S
+- **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
+
 ---
 
 ## Resolved (kept briefly for traceability; prune when stale)

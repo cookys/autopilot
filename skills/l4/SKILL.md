@@ -18,9 +18,13 @@ qc verdict**.
 
 Hard rules:
 - Startup presets identical to `/l3`; engine all-Claude (hetero implementer → `/l5`).
-- **qc@depth-0 is THE gate**: a fan-out of ≥3 adversarial reviewers over the branch
-  diff, synthesized + fix-before-integrate — NEVER a CEO self-read, and distinct
-  from the foreman's first-pass qc.
+- **qc@depth-0 is THE gate**: reviewer families/panel come from
+  `scripts/resolve-review-loop.sh` (`qc_panel` / `required_review_families`);
+  resolver unavailable → fall back to 3 reviewers. Homogeneous (all-Claude)
+  panels keep a **≥3-lens floor** (resolver emits families, not panel size;
+  until `min_panel_size` exists). Reviewers read the branch diff, synthesized +
+  fix-before-integrate — NEVER a CEO self-read, and distinct from the
+  foreman's first-pass qc.
 - Merge-back and worktree GC are owned by depth 0; budget cap is fail-closed
   (`TaskStop` + escalate). Record the run-summary ledger in the final CEO Report.
 - `--solo` → the `/l3` inline engine (also the automatic degradation when the

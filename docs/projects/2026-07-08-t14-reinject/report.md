@@ -58,21 +58,50 @@ invariants — TSV-only, UTC ISO-8601, exit-code-3-reserved — survive to the f
 
 ### Results
 
-_PENDING — measurement batch in progress; table + Fisher p + honest conclusion filled on
-completion._
+Batch completed clean: 15/15 runs finished all 5 turns (harness stable, no auth-loss, no
+run errors). Depth-0-owned collection (per-run auth-liveness circuit breaker + resume-skip).
 
 | Arm | constraints-held | features-built (fidelity) | oracle_pass | n |
 |-----|------------------|---------------------------|-------------|---|
-| re-inject ON (arm=off + `--reinject`) | TBD | TBD | TBD | TBD |
-| OFF baseline (archive, arm=off, no reinject) | 1/18 | 10/18 | 0/18 | 18 |
+| re-inject ON (arm=off + `--reinject`) | 3/15 (20.0%) | 7/15 | 0/15 | 15 |
+| OFF baseline (archive, arm=off, no reinject) | 1/18 (5.6%) | 10/18 | 0/18 | 18 |
+| _prior: prose-pack ON (archive DATA B)_ | _3/17 (17.6%)_ | _7/17_ | _0/17_ | _17_ |
+
+**constraints-held ON vs OFF: one-tailed Fisher exact p = 0.234 — NOT significant.**
 
 ### Honest conclusion
 
-_PENDING._
+1. **The instrument works.** 15/15 runs completed the full 5-turn horizon with the
+   `CONSTRAINTS REMINDER` block mechanically prepended every turn; the collection rail
+   (auth breaker + resume-skip) held. `--reinject` is a real, reusable long-horizon knob.
+2. **Per-turn re-injection did NOT beat prose at n=15.** 3/15 (20.0%) constraints-held vs
+   the baseline 1/18 (5.6%) is directionally higher but **not significant** (p=0.234) — and
+   lands essentially on top of the archive's prose-pack arm (3/17, 17.6%, p=0.279). Restating
+   the constraints verbatim every single turn was statistically indistinguishable from
+   stating them once. This holds the series' consistent result: **the lever moves vocabulary,
+   not behavior.**
+3. **The drift is deeper than recency.** If long-horizon constraint loss were a "the model
+   stopped seeing the rules" problem, mechanical every-turn re-injection should have rescued
+   it. It didn't. At haiku tier the failure is the model not *honoring* constraints it is
+   currently looking at, not forgetting they exist — so the fix space is model capability
+   (or hard verification/gating), not prompt refresh.
+4. **n=15 is directional, not conclusive** (series rule: sub-30 samples are hints). p=0.234
+   neither confirms nor refutes a small real effect; a decisive read needs n≥30 per arm. But
+   the *tie with the prose pack* is the load-bearing observation, and that is robust to n:
+   two different delivery mechanisms for the same constraint text produced the same ~18-20%.
+
+### Follow-up (BACKLOG candidate)
+Per-turn mechanical **verification/gating** (reject a turn whose output violates a
+constraint, force a retry) is the untested lever left — distinct from re-injection, which
+this measurement shows is not the answer. Re-injection is now available as a harness knob if
+a larger-n or different-tier study wants it.
 
 ## Provenance
 
 - Branch: `worktree-agent-a99587d3c46e5f721`; base `3bdfce4` (v2.32.9); impl commit
   `841c226` (`l6-t14-reinject-impl`, gpt-5.3-codex-spark via `engine implement-review`,
   cgroup-contained, verify-first pass, convergence_reason=verification).
-- Raw per-run results: `reinject-results.jsonl` (this dir, added on completion).
+- Raw per-run results: `reinject-results.jsonl` (this dir, 15 lines).
+- Measurement collected at depth-0 (2026-07-09) after the /l6 foreman hit a model quota
+  limit mid-batch; instrument work was recovered from the committed branch artifact and the
+  batch re-driven by a resumable depth-0 harness.

@@ -288,66 +288,6 @@ is_process_alive() {
   return 0
 }
 
-atomic_write_temp() {
-  local target="$1"
-  local data="$2"
-  local tmp="${target}.tmp.$$"
-  mkdir -p "$(dirname "$target")"
-  printf '%s' "$data" > "$tmp"
-  sync -d "$tmp"
-  mv "$tmp" "$target"
-  sync -f "$(dirname "$target")"
-}
-
-atomic_append_ledger() {
-  local ledger="$1"
-  local line="$2"
-  local fd="$3" ledger_lock_fd="${4:-}"
-
-  local tmp="${ledger}.tmp.$$"
-  if [ -f "$ledger" ]; then
-    cp "$ledger" "$tmp"
-  else
-    : > "$tmp"
-  fi
-
-  local max_bytes max_rot
-  max_bytes="${RUN_LEDGER_MAX_BYTES:-$DEFAULT_MAX_BYTES}"
-  max_rot="${RUN_LEDGER_MAX_ROTATIONS:-$DEFAULT_MAX_ROTATIONS}"
-
-  if [ -s "$tmp" ]; then
-    local bytes
-    bytes=$(wc -c < "$tmp")
-    if [ "$bytes" -ge "$max_bytes" ] && [ "$max_bytes" -gt 0 ]; then
-      local idx
-      idx=$max_rot
-      while [ "$idx" -ge 2 ]; do
-        local prev=$((idx - 1))
-        if [ -f "${ledger}.${prev}" ]; then
-          mv "${ledger}.${prev}" "${ledger}.${idx}"
-        fi
-        idx=$((idx - 1))
-      done
-      if [ -f "$ledger" ]; then
-        mv "$ledger" "${ledger}.1"
-      fi
-      : > "$tmp"
-    fi
-  fi
-
-  printf '%s
-' "$line" >> "$tmp"
-  sync -d "$tmp"
-  mv "$tmp" "$ledger"
-  sync -f "$(dirname "$ledger")"
-  flock -u "$fd"
-  eval "exec ${fd}>&-"
-  if [ -n "$ledger_lock_fd" ]; then
-    flock -u "$ledger_lock_fd"
-    eval "exec ${ledger_lock_fd}>&-"
-  fi
-}
-
 with_run_lock() {
   local ledger="$1" run_id="$2" timeout="$3"
   local out_var="${4:-}"
@@ -395,24 +335,6 @@ with_resource_locks() {
   echo "${lock_fds[*]}"
 }
 
-audit_resource_contention() {
-  local ledger="$1" resource_id="$2"
-  local last
-  if [ ! -f "$ledger" ]; then
-    echo "active"
-    return
-  fi
-  last="$(jq -r -s --arg rid "$resource_id" '
-    [ .[] | select(.kind=="resource" and .resource_id==$rid) ]
-    | if length==0 then empty else .[-1].state end
-  ' "$ledger")"
-  if [ -z "$last" ] || [ "$last" = "null" ]; then
-    echo "active"
-  else
-    echo "$last"
-  fi
-}
-
 append_record() {
   local ledger="$1"
   local run_id="$2"
@@ -440,33 +362,6 @@ append_record() {
     error "failed to acquire ledger lock"
   fi
   atomic_append_ledger "$ledger" "$row_json" "$run_fd" "$ledger_lock_fd"
-}
-
-latest_stage_record() {
-  local ledger="$1" run_id="$2" stage="$3"
-  if [ ! -f "$ledger" ]; then
-    echo ""
-    return
-  fi
-  jq -c --arg rid "$run_id" --arg stg "$stage" '
-    [ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stg) ]
-    | if length==0 then empty else .[-1] end
-  ' "$ledger"
-}
-
-has_applied_journal_key() {
-  local ledger="$1" run_id="$2" stage="$3" generation="$4" idempotency_key="$5"
-  if [ ! -f "$ledger" ] || [ -z "$idempotency_key" ]; then
-    echo "false"
-    return
-  fi
-  local exists
-  exists="$(jq -r --arg rid "$run_id" --arg stg "$stage" --arg gid "$generation" --arg key "$idempotency_key" '
-    [ .[]
-      | select(.kind=="journal" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gid and .idempotency_key==$key and .status=="applied") ]
-    | if length>0 then true else false end
-  ' "$ledger")"
-  echo "$exists"
 }
 
 write_side_effect_row() {
@@ -558,32 +453,6 @@ command_stage_acquire() {
 
   resources="$(sort_csv_ids "$resources")"
 
-  local latest latest_state latest_gen latest_nonce
-  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
-  if [ -n "$latest" ]; then
-    latest_state="$(jq -r '.state' <<<"$latest")"
-    latest_gen="$(jq -r '.generation // 0' <<<"$latest")"
-    latest_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
-
-    local latest_alive=1
-    if [ "$latest_state" = "leased" ]; then
-      if is_process_alive "$(jq -r '.pid' <<<"$latest")" "$(jq -r '.start_time' <<<"$latest")"; then
-        last_hb="$(jq -r '.heartbeat_ts // 0' <<<"$latest")"
-        now=$(now_ts)
-        if [ "$((now - last_hb))" -lt "$stale_secs" ]; then
-          latest_alive=0
-          is_terminal_gstate=0
-        fi
-      fi
-    fi
-    if [ "$latest_state" = "leased" ] && [ "$latest_alive" -eq 0 ]; then
-      # keep allowing renewal from stale leased holder only when explicitly stale/allow-reopen
-      :
-    elif is_terminal_gc_state "$latest_state" && [ "$allow_reopen" -eq 0 ]; then
-      error "run=$run_id stage=$stage already in terminal state=$latest_state; pass --allow-reopen"
-    fi
-  fi
-
   local resource_fds=""
   if [ -n "$resources" ]; then
     with_resource_locks "$ledger" "$resources" "$timeout" resource_fds || error "could not acquire resource locks"
@@ -596,6 +465,34 @@ command_stage_acquire() {
     fi
     error "run-lock unavailable"
   }
+
+  local latest latest_state latest_gen latest_nonce
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  if [ -n "$latest" ]; then
+    latest_state="$(jq -r '.state' <<<"$latest")"
+    latest_gen="$(jq -r '.generation // 0' <<<"$latest")"
+    latest_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
+
+    local latest_alive=1
+    if [ "$latest_state" = "leased" ]; then
+      if is_process_alive "$(jq -r '.pid' <<<"$latest")" "$(jq -r '.start_time' <<<"$latest")"; then
+        last_hb="$(jq -r '.heartbeat_ts // 0' <<<"$latest")"
+        now="$(now_ts)"
+        if [ "$((now - last_hb))" -lt "$stale_secs" ]; then
+          latest_alive=0
+        fi
+      fi
+    fi
+
+    if [ "$latest_state" = "leased" ] && [ "$latest_alive" -eq 0 ]; then
+      :
+    elif is_terminal_gc_state "$latest_state" && [ "$allow_reopen" -eq 0 ]; then
+      flock -u "$run_fd"
+      eval "exec ${run_fd}>&-"
+      [ -n "$resource_fds" ] && for fd in $resource_fds; do release_lock "$fd"; done
+      error "run=$run_id stage=$stage already in terminal state=$latest_state; pass --allow-reopen"
+    fi
+  fi
 
   if [ -n "$latest" ] && is_blocked_state "$latest_state" && [ "$allow_reopen" -eq 0 ]; then
     flock -u "$run_fd"; eval "exec ${run_fd}>&-"
@@ -820,7 +717,26 @@ command_stage_transition() {
     error "run lock unavailable"
   }
 
-  if [ "$generation" -ne "$current_gen" ] || [ "$nonce" != "$current_nonce" ]; then
+  local stage_rows max_gen caller_rows current_row stale_from
+  stage_rows="$(jq -s --arg rid "$run_id" --arg stg "$stage" '
+    [ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stg) ]' "$ledger")"
+  if [ -z "$stage_rows" ] || [ "$stage_rows" = "null" ] || [ "$stage_rows" = "[]" ]; then
+    flock -u "$run_fd"
+    eval "exec ${run_fd}>&-"
+    for fd in $r_fds; do release_lock "$fd"; done
+    error "stage moved while locking run=$run_id stage=$stage"
+  fi
+
+  max_gen="$(jq -r 'if length==0 then 0 else (map((.generation // 0 | tostring) | tonumber) | max) end' <<<"$stage_rows")"
+  current_row="$(jq -r --arg generation "$generation" '
+    [ .[] | select((.generation // 0 | tostring) == $generation) ]
+    | if length==0 then empty else .[-1] end' <<<"$stage_rows")"
+
+  if [ "$max_gen" -gt "$generation" ]; then
+    stale_from=""
+    if [ -n "$current_row" ]; then
+      stale_from="$(jq -r '.state // ""' <<<"$current_row")"
+    fi
     local stale_line
     stale_line="$(jq -nc \
       --arg kind "stage" \
@@ -829,9 +745,42 @@ command_stage_transition() {
       --arg stg "$stage" \
       --arg state "stale_ignored" \
       --arg reason "late_writer" \
-      --argjson gen "$current_gen" \
+      --argjson gen "$generation" \
       --arg nonce_v "$nonce" \
-      --arg from "${current_state}" \
+      --arg from "$stale_from" \
+      --arg to "$to_state" \
+      '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,generation:$gen,nonce:$nonce_v,transition_from:$from,transition_to:$to}')"
+    append_record "$ledger" "$run_id" "$stale_line" "$timeout" "$run_fd"
+    for fd in $r_fds; do release_lock "$fd"; done
+    echo "$stale_line"
+    return 11
+  fi
+
+  [ -n "$current_row" ] || {
+    flock -u "$run_fd"
+    eval "exec ${run_fd}>&-"
+    for fd in $r_fds; do release_lock "$fd"; done
+    error "stage moved while locking run=$run_id stage=$stage"
+  }
+
+  current_state="$(jq -r '.state' <<<"$current_row")"
+  current_gen="$(jq -r '.generation // 0' <<<"$current_row")"
+  current_nonce="$(jq -r '.nonce // empty' <<<"$current_row")"
+  resources="$(jq -r '.resources // ""' <<<"$current_row")"
+
+  if [ "$nonce" != "$current_nonce" ]; then
+    stale_from="$(jq -r '.state // ""' <<<"$current_row")"
+    local stale_line
+    stale_line="$(jq -nc \
+      --arg kind "stage" \
+      --arg ts "$(iso_ts)" \
+      --arg rid "$run_id" \
+      --arg stg "$stage" \
+      --arg state "stale_ignored" \
+      --arg reason "late_writer" \
+      --argjson gen "$generation" \
+      --arg nonce_v "$nonce" \
+      --arg from "$stale_from" \
       --arg to "$to_state" \
       '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,generation:$gen,nonce:$nonce_v,transition_from:$from,transition_to:$to}')"
     append_record "$ledger" "$run_id" "$stale_line" "$timeout" "$run_fd"
@@ -1761,12 +1710,19 @@ command_init() {
   mkdir -p "$(dirname "$ledger")"
   mkdir -p "${ledger}.locks"
 
+  local ledger_lock_fd
+  with_ledger_lock "$ledger" "$DEFAULT_LOCK_TIMEOUT" ledger_lock_fd || error "ledger lock unavailable"
+
   if [ -f "$ledger" ]; then
+    flock -u "$ledger_lock_fd"
+    eval "exec ${ledger_lock_fd}>&-"
     echo "{\"status\":\"exists\",\"path\":\"$ledger\"}"
     return 0
   fi
 
   : > "$ledger"
+  flock -u "$ledger_lock_fd"
+  eval "exec ${ledger_lock_fd}>&-"
   echo "{\"status\":\"initialized\",\"path\":\"$ledger\"}"
 }
 

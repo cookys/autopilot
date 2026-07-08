@@ -771,6 +771,7 @@ detached_main() {
   # Keep the worktree in detach mode: it is the git-truth a `resume` uses to adopt the work,
   # and the orchestrator (not this leaf) owns its later cleanup.
   KEEP=1
+  local packed_prompt_for_child="${PACKED_PROMPT_TEMP:-}"
   # Decouple from the caller's prompt temp lifecycle: copy it into a child-owned file so the
   # parent's EXIT cleanup cannot yank it mid-run.
   local child_prompt="$RESULTS_DIR/${RUN_ID}.${STAGE}.prompt"
@@ -807,6 +808,7 @@ detached_main() {
       --git-sha "$OUTCOME_COMMIT" --worktree "$WT" >/dev/null 2>&1 || true
   fi
   rm -f "$child_prompt" 2>/dev/null || true
+  [ -n "$packed_prompt_for_child" ] && rm -f "$packed_prompt_for_child" 2>/dev/null || true
   exit "$OUTCOME_EXIT"
 }
 
@@ -830,6 +832,9 @@ dispatch_detached_run() {
   # In detach mode the DETACHED child owns the worktree/branch lifecycle. A caller signal must
   # NOT reap the worktree out from under it — replace the reaping trap with a bare exit.
   trap 'exit 143' INT TERM
+  # Prevent the top-level EXIT cleanup from deleting the prompt temp under a detached child.
+  # The detached child now owns and removes this prompt copy.
+  unset PACKED_PROMPT_TEMP
   # The child removes the state file right after sourcing (before the long run) so a caller-kill
   # of the parent — which skips the parent's own cleanup below — cannot leak it.
   setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
@@ -856,7 +861,7 @@ detach_on() {
     *) return 0 ;;
   esac
 }
-if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ]; then
+if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
   RESULTS_DIR="${LEDGER}.results"
   RESULT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.result.json"
   EXIT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.exit"
@@ -871,4 +876,3 @@ compute_artifacts
 classify_outcome
 emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
 exit "$OUTCOME_EXIT"
-

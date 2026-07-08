@@ -95,6 +95,80 @@ RESUME_JSON="$(bash "$LEDGER_SH" resume --ledger "$LEDGER_A" --run-id rk --idemp
 assert_eq "resumed" "$(printf '%s' "$RESUME_JSON" | jq -r '.status' 2>/dev/null)" "kill-survival: run-ledger resume recovers the run"
 
 # =========================================================================================
+# (f) DISPATCH_DETACH helper: detached child stderr is preserved in a durable sidecar.
+# =========================================================================================
+DD_HELPER_SELF="$TEST_TMP/detach-helper-stderr.sh"
+cat > "$DD_HELPER_SELF" <<'EOF'
+#!/usr/bin/env bash
+echo '{"status":"child-result"}'
+echo "detach helper stderr payload" >&2
+exit 9
+EOF
+chmod +x "$DD_HELPER_SELF"
+
+LEDGER_HELPER="$TEST_TMP/f/ledger.jsonl"
+mkdir -p "$TEST_TMP/f"
+bash "$LEDGER_SH" init --ledger "$LEDGER_HELPER" >/dev/null
+
+(
+  source "$REPO_ROOT/scripts/lib/dispatch-detach.sh"
+  dispatch_detach_supervise "$DD_HELPER_SELF" "$LEDGER_HELPER" r1 stage1 "$REPO_ROOT/scripts"
+) > "$TEST_TMP/dd-helper.out" 2> "$TEST_TMP/dd-helper.err"
+DD_HELPER_RC=$?
+DD_HELPER_RESULT="${LEDGER_HELPER}.results/r1.stage1.result.json"
+DD_HELPER_STDERR="${DD_HELPER_RESULT}.stderr"
+
+assert_eq "9" "$DD_HELPER_RC" "dispatch_detach_supervise propagates detached child exit code"
+assert_file_exists "$DD_HELPER_RESULT" "dispatch_detach_supervise writes durable result json"
+assert_file_exists "$DD_HELPER_STDERR" "dispatch_detach_supervise preserves re-exec stderr in sidecar"
+assert_contains "$(cat "$DD_HELPER_STDERR")" "detach helper stderr payload" "dispatch_detach_supervise sidecar contains stderr text"
+
+# =========================================================================================
+# (g) Parent SIGTERM after detach handoff does not delete PACKED_PROMPT_TEMP.
+# =========================================================================================
+STUB_PACK_TERM="$TEST_TMP/agy-pack-term"
+cat > "$STUB_PACK_TERM" <<EOF
+#!/usr/bin/env bash
+sleep 5
+echo ok > ok.txt
+git add ok.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: packed prompt detached"
+EOF
+chmod +x "$STUB_PACK_TERM"
+
+LEDGER_PACK="$TEST_TMP/g/ledger.jsonl"
+mkdir -p "$TEST_TMP/g"
+bash "$LEDGER_SH" init --ledger "$LEDGER_PACK" >/dev/null
+mkdir -p "$TEST_TMP/pack-term"
+
+(
+  cd "$SBX"
+  TMPDIR="$TEST_TMP/pack-term" DISPATCH_HEARTBEAT_SECS=1 \
+    bash "$SCRIPT" --branch feat/pack-term --prompt-file "$PROMPT" --agy-bin "$STUB_PACK_TERM" \
+      --skill-mode prompt --skill autopilot:dev-flow --ledger "$LEDGER_PACK" --run-id pg --stage implement > "$TEST_TMP/pack-term.out" 2> "$TEST_TMP/pack-term.err"
+) &
+WRAPPER_G_PID=$!
+
+PACKED_PROMPT_TEMP=""
+for _ in $(seq 1 80); do
+  PACKED_PROMPT_TEMP="$(find "$TEST_TMP/pack-term" -maxdepth 1 -name 'dispatch-hetero-packed-prompt-*' -type f 2>/dev/null | head -n 1)"
+  [ -n "$PACKED_PROMPT_TEMP" ] && break
+  sleep 0.1
+done
+assert_neq "" "$PACKED_PROMPT_TEMP" "skill-mode prompt created a child-owned prompt temp path"
+
+kill -TERM "$WRAPPER_G_PID" 2>/dev/null || true
+wait "$WRAPPER_G_PID" 2>/dev/null || true
+assert_file_exists "$PACKED_PROMPT_TEMP" "parent TERM does not delete PACKED_PROMPT_TEMP immediately"
+
+RESULT_G="${LEDGER_PACK}.results/pg.implement.result.json"
+for _ in $(seq 1 40); do [ -f "$RESULT_G" ] && break; sleep 0.5; done
+assert_file_exists "$RESULT_G" "detached run survived parent TERM and still wrote result"
+assert_eq "committed" "$(cat "$RESULT_G" | jq -r '.status' 2>/dev/null)" "parent TERM preserves detached outcome state"
+PACK_WT="$(cat "$RESULT_G" | jq -r '.worktree' 2>/dev/null)"
+[ -n "$PACK_WT" ] && [ "$PACK_WT" != "null" ] && LEAKED_WTS+=("$PACK_WT")
+
+# =========================================================================================
 # (c) TRANSPARENT NORMAL default (detach on), un-killed → relays SAME JSON/exit
 # =========================================================================================
 LEDGER_C="$TEST_TMP/c/ledger.jsonl"

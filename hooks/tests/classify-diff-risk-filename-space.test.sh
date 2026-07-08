@@ -79,5 +79,25 @@ SENSITIVE_CHECKLISTS="$(json_get "$SENSITIVE_OUT" checklists)"
 assert_contains "$SENSITIVE_DOMAINS" '"auth"' "sensitive path with spaces should match default auth rule"
 assert_contains "$SENSITIVE_CHECKLISTS" '"authz-boundary"' "sensitive path with spaces should trigger authz-boundary checklist"
 
-finalize_test
+# 3. Paths that start with b/ must preserve that top-level directory.
+BP_RULES_FILE="$TEST_TMP/bprefix-rules.tsv"
+printf 'b-prefix\tpath\t^b/x$\tb-prefix-check\n' > "$BP_RULES_FILE"
 
+B_PREFIX_DIFF="$TEST_TMP/bprefix.diff"
+cat > "$B_PREFIX_DIFF" <<'DIFF'
+diff --git a/b/x b/b/x
+index 1111111..2222222 100644
+--- a/b/x
++++ b/b/x
+@@ -1,2 +1,2 @@
+ old line
++new line
+DIFF
+
+B_PREFIX_OUT="$(bash "$SCRIPT" --repo "$TEST_TMP" --diff-file "$B_PREFIX_DIFF" --rules-file "$BP_RULES_FILE" --sampling-ratio 0)"
+B_PREFIX_DOMAINS="$(json_get "$B_PREFIX_OUT" domains)"
+B_PREFIX_CHECKLISTS="$(json_get "$B_PREFIX_OUT" checklists)"
+assert_contains "$B_PREFIX_DOMAINS" '"b-prefix"' "path rule matches when file path truly starts with b/"
+assert_contains "$B_PREFIX_CHECKLISTS" '"b-prefix-check"' "matched b/ path rule emits configured checklist"
+
+finalize_test

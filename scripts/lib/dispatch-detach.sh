@@ -44,9 +44,10 @@ dispatch_detach_supervise() {
   local results_dir="${ledger}.results"
   local result_file="$results_dir/${run_id}.${stage}.result.json"
   local exit_file="$results_dir/${run_id}.${stage}.exit"
+  local stderr_file="$results_dir/${run_id}.${stage}.result.json.stderr"
   local hb="${DISPATCH_HEARTBEAT_SECS:-20}"
   mkdir -p "$results_dir"
-  rm -f "$result_file" "$exit_file"
+  rm -f "$result_file" "$exit_file" "$stderr_file"
 
   # serialize the original argv NUL-delimited so the detached child re-runs this EXACT dispatch
   local argfile; argfile="$(mktemp -t dispatch-detach-args-XXXXXX)"
@@ -58,7 +59,7 @@ dispatch_detach_supervise() {
   DISPATCH_DETACH=0 \
   DD_ARGFILE="$argfile" DD_SELF="$self" DD_LEDGER_SH="$run_ledger" \
   DD_LEDGER="$ledger" DD_RUNID="$run_id" DD_STAGE="$stage" \
-  DD_RESULT="$result_file" DD_EXIT="$exit_file" DD_HB="$hb" \
+  DD_RESULT="$result_file" DD_EXIT="$exit_file" DD_HB="$hb" DD_STDERR="$stderr_file" \
   setsid bash -c '
     set -uo pipefail
     _args=()
@@ -78,7 +79,7 @@ dispatch_detach_supervise() {
       hbpid=$!
     fi
     partial="$DD_RESULT.partial.$$"
-    DISPATCH_DETACH=0 bash "$DD_SELF" "${_args[@]}" > "$partial" 2>/dev/null
+    DISPATCH_DETACH=0 bash "$DD_SELF" "${_args[@]}" > "$partial" 2>"$DD_STDERR"
     rc=$?
     [ -n "$hbpid" ] && { kill "$hbpid" 2>/dev/null || true; }
     bash "$DD_LEDGER_SH" write-result --path "$DD_RESULT" --no-require-json --payload-file "$partial" >/dev/null 2>&1 || mv -f "$partial" "$DD_RESULT" 2>/dev/null || true

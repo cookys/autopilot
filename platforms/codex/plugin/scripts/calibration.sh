@@ -456,7 +456,7 @@ cmd_run_clean_set() {
     base="$(basename "$diff_file" .diff)"
     local expected_file="$CLEAN_DIR/$base.expected.json"
 
-    [ -f "$expected_file" ] || { printf 'calibration.sh: run-clean-set: missing sidecar %s\n' "$expected_file" >&2; continue; }
+    [ -f "$expected_file" ] || { printf 'calibration.sh: run-clean-set: missing sidecar %s\n' "$expected_file" >&2; die "run-clean-set: invalid corpus — fix the sidecar before trusting this gate"; }
 
     # Sidecar sanity check only — a clean-corpus expected.json carries {"class":"clean"},
     # a CORPUS-MEMBERSHIP tag, not a defect SEVERITY. cmd_add_sample's --class flag is
@@ -465,8 +465,8 @@ cmd_run_clean_set() {
     # critical|major|minor" (caught live: the first run-clean-set smoke test failed this
     # way before the fix).
     local sidecar_class
-    sidecar_class="$(grep -o '"class":"[^"]*"' "$expected_file" | cut -d'"' -f4)"
-    [ "$sidecar_class" = "clean" ] || { printf 'calibration.sh: run-clean-set: %s missing/unexpected class (want "clean", got "%s")\n' "$expected_file" "$sidecar_class" >&2; continue; }
+    sidecar_class="$(grep -oE '"class"[[:space:]]*:[[:space:]]*"[^"]*"' "$expected_file" | sed -E 's/.*"([^"]*)"$/\1/')"
+    [ "$sidecar_class" = "clean" ] || { printf 'calibration.sh: run-clean-set: %s missing/unexpected class (want "clean", got "%s")\n' "$expected_file" "$sidecar_class" >&2; die "run-clean-set: invalid corpus — fix the sidecar before trusting this gate"; }
 
     total_run=$((total_run + 1))
 
@@ -497,6 +497,7 @@ cmd_run_clean_set() {
   done
 
   [ "$any_diff" = "1" ] || die "run-clean-set: no .diff files found in $CLEAN_DIR"
+  [ "$total_run" -gt 0 ] || die "run-clean-set: zero cases evaluated — corpus invalid or empty, gate NOT satisfied"
 
   printf '{"total_run":%d,"over_flags":%d}\n' "$total_run" "$over_flags"
 }

@@ -1,0 +1,2 @@
+calibration.sh: run-known-bad: FALSE PASS on 07-hardcoded-credential (class=critical)
+{"total_run":12,"false_passes":1}

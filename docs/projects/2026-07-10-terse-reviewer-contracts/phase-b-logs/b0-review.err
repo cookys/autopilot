@@ -1,0 +1,1 @@
+dispatch-review: codex/gpt-5.5 (effort=xhigh) may run for MINUTES — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.

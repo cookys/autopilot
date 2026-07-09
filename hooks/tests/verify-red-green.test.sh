@@ -177,6 +177,20 @@ test_json_escape_control_chars() {
     assert_eq "$out" 'a\nb\tc\rd\be\ff\"g\\h\u0001i' "json_escape escapes control chars + quote + backslash"
 }
 
+# 10. Relative --verify-cmd whose dirname component is a PLAIN FILE must exit 2
+#     with a named error — never abort uncleanly via set -e during
+#     canonicalization (the cd is wrapped in a conditional).
+test_verify_cmd_dirname_plain_file() {
+    local repo="$TEST_TMP/repo_dirname"
+    $GIT init "$repo" >/dev/null 2>&1
+    $GIT -C "$repo" commit --allow-empty -m base >/dev/null 2>&1
+    : > "$TEST_TMP/plainfile"
+    local err ec
+    err=$(cd "$TEST_TMP" && "$SCRIPT" --range "HEAD..HEAD" --verify-cmd "plainfile/cmd.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "plain-file dirname verify-cmd exits 2 (named error)"
+    assert_contains "$err" "verify-cmd" "plain-file dirname error names verify-cmd"
+}
+
 test_validated
 test_validated_nested
 test_not_red_on_base
@@ -187,5 +201,6 @@ test_invalid_flag
 test_missing_verify_cmd
 test_relative_verify_cmd
 test_json_escape_control_chars
+test_verify_cmd_dirname_plain_file
 
 finalize_test

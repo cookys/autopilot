@@ -185,7 +185,12 @@ HEAD_SHA="$(git -C "$REPO" rev-parse --verify "$HEAD_REF" 2>/dev/null)" || err_u
 # would stop resolving (or resolve to a different file) after the cd.
 if [[ "$VERIFY_CMD" != /* ]]; then
   if [[ -e "$VERIFY_CMD" ]]; then
-    VERIFY_CMD="$(cd "$(dirname "$VERIFY_CMD")" && pwd)/$(basename "$VERIFY_CMD")"
+    # Wrap the cd in a conditional: a non-directory dirname or a cd failure
+    # (permissions, races) must exit 2 with a named error, not abort via set -e.
+    if ! VERIFY_CMD_DIR="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd)"; then
+      err_usage "verify-cmd dirname unresolvable: $VERIFY_CMD"
+    fi
+    VERIFY_CMD="$VERIFY_CMD_DIR/$(basename "$VERIFY_CMD")"
   else
     err_usage "verify-cmd not found (relative path resolved against caller cwd): $VERIFY_CMD"
   fi

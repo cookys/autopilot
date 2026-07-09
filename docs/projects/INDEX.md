@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-10 | [terse-reviewer-contracts](2026-07-10-terse-reviewer-contracts/README.md) — /l6 M2 contract slimming (dispatch-review.sh prompt template + reviewer.md + code-review.md) + verification-harness authoring (prompt-skeleton test + golden + expected-sections). Phase A (depth-1 foreman); Phase B measurement legs held at depth-0 checkpoint. grok-4.5 impl / gpt-5.5 review / gemini-3.5-flash harness authoring. | TBD | feat/terse-reviewer-contracts |
 
 ## 已完成 (Completed)
 

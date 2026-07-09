@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.14 — worktree-teardown seam (loud orphan visibility + opt-in project hook + flock-gated `--gc`)
+
+**Headline**: `dispatch-hetero` worktree removal is no longer fail-silent. A failed `git worktree remove --force` now always emits a loud stderr WARN and a nullable `orphan_worktree` JSON field (exit codes unchanged — removal failure ≠ dispatch failure). Each worktree gets a marker (`.autopilot-worktree`) plus a process-lifetime exclusive `flock` on `.autopilot-worktree.lock` so liveness is kernel-owned (crash/SIGKILL safe; **no pid checks**). Projects can opt into a repo-root-contained `teardown_hook` (argv-exec, 120s timeout, fail-open) for reclaiming external resources, and a marker-scoped flock-gated `dispatch-hetero.sh --gc` stale reaper (default **disabled** via `stale_reaper_age_days: 0`). Motivation: the PEACE leak incident — ~92 GB of orphaned `hetero-*` worktrees (root-owned `target/`) plus ~126 GB dangling named Docker volumes, host `/` at 99%. **Script seam — no hook-count/skill-count change.**
+
+### Added
+- `scripts/lib/worktree-reap.sh` — sourced lib: `reap_worktree` (success path: optional hook + remove; never `git branch -D`), `reap_worktree_minimal` (INT/TERM trap: remove only + `$ORPHAN_LOG` append), `gc_stale_worktrees` (`--gc`: global flock + per-tree `flock -n` ownership handoff + age-from-marker + structured JSON envelope), `_wt_is_live`, `_wt_validate_path`.
+- `scripts/resolve-worktree-teardown.sh` — 4-level precedence resolver (`$WORKTREE_TEARDOWN_CONFIG_OVERRIDE` → cwd `.claude/` → repo `.claude/` → `project-config-template/`) emitting `{teardown_hook, stale_reaper_age_days, reaper_scope, source}`; garbage → safe defaults (hook empty, age 0, scope marker-only); `--field` support; exit 0 data-mode.
+- `project-config-template/worktree-teardown-config.md` — shipped all-off defaults.
+- `dispatch-hetero.sh --gc` (+ `--reap-unmarked --yes` recovery for unmarked `hetero-*` basenames only).
+
+### Changed
+- `scripts/dispatch-hetero.sh`: marker + lifetime flock at worktree creation; success path → `reap_worktree`; INT/TERM trap → `reap_worktree_minimal` then original `git branch -D` (sole branch-delete site); `emit()` gains additive `orphan_worktree` (null|path); `ORPHAN_LOG` initialized early before the trap is armed.
+
+### Fixed
+- Silent orphaning of worktrees when `git worktree remove --force` fails (e.g. root-owned build artifacts left by Docker-as-root builds).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: no config required (defaults are inert); remove any project `.claude/worktree-teardown-config.md` if opted in.
+
 ## v2.32.13 — opt-in `dispatch-model-guard` PreToolUse hook (expensive-model dispatch ask)
 
 **Headline**: New **opt-in** hook `dispatch-model-guard` — mechanical enforcement of the expensive-model dispatch discipline: subagent dispatch (`Agent`/`Task`) naming a guarded engine (default `fable`) or omitting `model:` triggers a native PreToolUse `permissionDecision: "ask"` instead of silently spending the session model. Born from a live probe where an omitted `model:` inherited Fable and burned 45k tokens on a 5-second task. Hook count **22 → 23** (10 default-on + **13** opt-in).

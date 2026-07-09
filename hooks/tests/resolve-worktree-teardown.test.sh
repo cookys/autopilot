@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Test seam for scripts/resolve-worktree-teardown.sh
+. "$(dirname "$0")/lib.sh"
+
+# Note: 120-second hook-timeout branch untestable without timeout seam
+
+# Test 1: Default config output
+test_default_config() {
+    local output
+    output=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
+    
+    assert_contains "$output" '"teardown_hook": ""' "default hook should be empty"
+    assert_contains "$output" '"stale_reaper_age_days": 0' "default age should be 0"
+    assert_contains "$output" '"reaper_scope": "marker-only"' "default scope should be marker-only"
+    assert_contains "$output" '"source": "template"' "source should be template"
+    
+    echo "$output" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))' 2>/dev/null
+    assert_eq 0 $? "JSON should be valid"
+}
+
+# Test 2: Field query for age
+test_field_age() {
+    local age
+    age=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field stale_reaper_age_days)
+    assert_eq "0" "$age" "default age should be 0"
+}
+
+# Test 3: Field query for hook
+test_field_hook() {
+    local hook
+    hook=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field teardown_hook)
+    assert_eq "" "$hook" "default hook should be empty"
+}
+
+# Test 4: Config override
+test_config_override() {
+    local config="$TEST_TMP/config.md"
+    cat > "$config" << 'EOF'
+- stale_reaper_age_days: 3
+- teardown_hook: .claude/hooks/x.sh
+EOF
+    
+    local output
+    output=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
+    
+    assert_contains "$output" '"stale_reaper_age_days": 3' "should override age"
+    assert_contains "$output" '"teardown_hook": ".claude/hooks/x.sh"' "should override hook"
+}
+
+# Test 5: Garbage age falls back to 0
+test_garbage_age_fallback() {
+    local config="$TEST_TMP/garbage-config.md"
+    echo '- stale_reaper_age_days: banana' > "$config"
+    
+    local output
+    output=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
+    
+    assert_contains "$output" '"stale_reaper_age_days": 0' "garbage age should fall back to 0"
+}
+
+# Test 6: Override field query
+test_override_field_query() {
+    local config="$TEST_TMP/field-config.md"
+    echo '- stale_reaper_age_days: 5' > "$config"
+    
+    local age
+    age=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field stale_reaper_age_days)
+    assert_eq "5" "$age" "overridden age should be 5"
+}
+
+# Test 7: JSON parses with node
+test_json_node_parse() {
+    local output
+    output=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
+    
+    local parsed
+    parsed=$(echo "$output" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).stale_reaper_age_days)' 2>/dev/null)
+    assert_eq "0" "$parsed" "node should parse JSON and extract age"
+}
+
+# invoke all cases (depth-0 recorded deviation: author omitted invocations)
+test_default_config
+test_field_age
+test_field_hook
+test_config_override
+test_garbage_age_fallback
+test_override_field_query
+test_json_node_parse
+finalize_test

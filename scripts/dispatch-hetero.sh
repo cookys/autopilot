@@ -40,6 +40,8 @@
 #       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--keep-worktree]                      # keep worktree even on success
+#   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper
+#       [--reap-unmarked --yes]                # recovery: reap unmarked hetero-* only
 #   ⏳ TIMEOUT: the implementer run can take MANY minutes. Under Claude Code's Bash tool,
 #   pass a generous `timeout` — the 120s tool default SIGTERMs long runs (exit 143). Persist
 #   once with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
@@ -53,7 +55,10 @@
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
 #     "worktree": "...|null", "agent_log": "..." , "error": "...|null",
-#     "skill_mode_effective": "...", "skills_injected": [...] }
+#     "skill_mode_effective": "...", "skills_injected": [...],
+#     "orphan_worktree": "...|null" }          # non-null iff remove failed and dir remains
+# --gc OUTPUT: { "reaped":[…], "skipped_live":n, "skipped_fresh":n,
+#     "skipped_unmatched":n, "lock_unsupported":n, "kept_orphan":[…] }
 #
 # OUTCOME states (the no-commit case is split by HOW the worker ended so a legit
 # no-op task is not confused with a stalled/paused one — see
@@ -111,6 +116,14 @@ EFFECTIVE_SKILL_MODE="off"
 SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
 SKILL_PACK_CONTENT_TEMP=""
+# ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
+# trap firing mid-run appends to a real path instead of an undefined one.
+ORPHAN_LOG="${TMPDIR:-/tmp}/autopilot-orphan-worktrees.log"
+OUTCOME_ORPHAN=""     # non-empty path when worktree remove failed and dir remains
+WT_LOCK_FD=""         # dedicated fd holding exclusive lifetime flock on the worktree lock
+DO_GC=0               # --gc subcommand (stale reaper; no dispatch)
+REAP_UNMARKED=0       # --reap-unmarked recovery flag (requires --yes)
+GC_YES=0              # --yes confirmation for destructive recovery flags
 # --- R1 detach / durable-result plumbing (all OPTIONAL; absent ⇒ byte-identical legacy behavior) ---
 # When --ledger/--run-id/--stage are ALL supplied AND detach is on (DISPATCH_DETACH!=0, the
 # default), the long-running engine worker is run inside a `setsid` session that SURVIVES the
@@ -127,31 +140,34 @@ RESULT_FILE=""
 EXIT_FILE=""
 HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
 OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
+# shellcheck source=/dev/null
+. "$SELF_DIR/lib/worktree-reap.sh"
 cleanup() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
 }
 trap cleanup EXIT
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
 
 emit() { # status commit files ins del worktree error
-  local commit_json="null" wt_json="null" err_json="null"
+  local commit_json="null" wt_json="null" err_json="null" orphan_json="null"
   [ -n "${2:-}" ] && commit_json="\"$2\""
   [ -n "${6:-}" ] && wt_json="\"$(json_escape "$6")\""
   [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
+  [ -n "${OUTCOME_ORPHAN:-}" ] && orphan_json="\"$(json_escape "$OUTCOME_ORPHAN")\""
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json"
 }
 
 die_precondition() {
@@ -185,10 +201,28 @@ while [ $# -gt 0 ]; do
     --ledger) LEDGER="${2:-}"; shift 2 ;;
     --run-id) RUN_ID="${2:-}"; shift 2 ;;
     --stage) STAGE="${2:-}"; shift 2 ;;
+    --gc) DO_GC=1; shift ;;
+    --reap-unmarked) REAP_UNMARKED=1; shift ;;
+    --yes) GC_YES=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) die_precondition "unknown argument: $1" ;;
   esac
 done
+
+# --- --gc subcommand (standalone stale reaper; no dispatch) ---
+if [ "$DO_GC" -ne 1 ] && { [ "$REAP_UNMARKED" -eq 1 ] || [ "$GC_YES" -eq 1 ]; }; then
+  die_precondition "--reap-unmarked/--yes are --gc flags; pass --gc"
+fi
+if [ "$DO_GC" -eq 1 ]; then
+  if [ "$REAP_UNMARKED" -eq 1 ] && [ "$GC_YES" -ne 1 ]; then
+    echo "error: --reap-unmarked requires --yes (recovery escape hatch)" >&2
+    exit 2
+  fi
+  # Export flags for gc_stale_worktrees (reads REAP_UNMARKED).
+  export REAP_UNMARKED GC_YES
+  gc_stale_worktrees
+  exit $?
+fi
 
 # Runner selection. Explicit --runner wins; `auto` detects codex from the model
 # name. The OLD bug: only `*gpt-5.5*` matched, so other codex models
@@ -434,6 +468,54 @@ if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
   git branch -D "$BRANCH" >/dev/null 2>&1 || true
   die_precondition "git worktree add failed"
 fi
+# Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
+# (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
+# Both names are registered in the COMMON git dir's info/exclude below: the wrapper
+# commits with `git add -A`, so without the exclude both bookkeeping files would
+# land in every dispatched commit, and `git status --porcelain` cleanliness checks
+# would see them as untracked.
+{
+  printf 'created_at=%s\n' "$(date +%s)"
+  printf 'branch=%s\n' "$BRANCH"
+  printf 'schema=1\n'
+} > "$WT/.autopilot-worktree"
+# Hold exclusive lock on a dedicated fd for the whole dispatch life. Never close
+# early; never exec-replace this shell (would release the lock silently).
+# On lock failure, clean up the just-created worktree+branch before dying —
+# die_precondition alone would leak them (panel round-2 finding).
+_wt_lock_fail() {
+  git worktree remove --force "$WT" >/dev/null 2>&1 || true
+  git branch -D "$BRANCH" >/dev/null 2>&1 || true
+  die_precondition "$1"
+}
+exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
+flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
+# Keep bookkeeping files invisible to git status / git add -A inside the worktree.
+# For linked worktrees, git reads info/exclude from the COMMON git dir (shared
+# repo-wide). The per-worktree gitdir's info/exclude is ignored by git — a name
+# written there still shows in git status. Append is idempotent because the common
+# exclude is shared by the consuming repo and all its worktrees; repeated
+# dispatches must not accumulate duplicate lines.
+if ! {
+  if _wt_common_dir="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" && [ -n "$_wt_common_dir" ]; then
+    true
+  else
+    # Older git lacks --path-format=absolute; fall back and absolutize if relative.
+    _wt_common_dir="$(git -C "$WT" rev-parse --git-common-dir)" &&
+    case "$_wt_common_dir" in
+      /*) true ;;
+      *) _wt_common_dir="$(cd "$WT/$_wt_common_dir" && pwd)" ;;
+    esac
+  fi &&
+  mkdir -p "$_wt_common_dir/info" &&
+  _wt_exclude="$_wt_common_dir/info/exclude" &&
+  for _wt_name in .autopilot-worktree .autopilot-worktree.lock; do
+    grep -qxF "$_wt_name" "$_wt_exclude" 2>/dev/null || printf '%s\n' "$_wt_name" >> "$_wt_exclude"
+  done
+}; then
+  echo "dispatch-hetero: WARNING — failed to register worktree bookkeeping files in git exclude (git status / git add -A may see them)" >&2
+fi
+unset _wt_common_dir _wt_exclude _wt_name
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
 
@@ -485,8 +567,9 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 }
 
 # A TERM during the long run orphans the worktree + branch AND can leave worker
-# descendants. Trap it to reap the container first, then the worktree + branch.
-trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; git worktree remove --force "$WT" >/dev/null 2>&1; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+# descendants. Trap it to reap the container first, then minimal worktree remove
+# (no project hook — signal-safe) + branch -D (sole branch-delete site) + exit 2.
+trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; reap_worktree_minimal "$WT"; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -721,7 +804,11 @@ classify_outcome() {
     else
       # new commit + clean tree + agent exit 0 → the only success path
       if [ "$KEEP" = "0" ]; then
-        git worktree remove --force "$WT" >/dev/null 2>&1 && WT=""
+        # Full reap (project teardown_hook + remove). NEVER branch -D here — the
+        # branch survives for review/merge. On remove failure: loud WARN +
+        # OUTCOME_ORPHAN set; exit code unchanged (D4).
+        OUTCOME_ORPHAN=""
+        reap_worktree "$WT"
       fi
       OUTCOME_STATUS="committed"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=0
     fi
@@ -824,10 +911,14 @@ dispatch_detached_run() {
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM CONTAINMENT CONTAINED EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
-      OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT 2>/dev/null
+      OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
-      classify_outcome heartbeat_loop detached_main
+      classify_outcome heartbeat_loop detached_main \
+      reap_worktree reap_worktree_minimal _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
+      _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
+      gc_stale_worktrees 2>/dev/null || true
   } > "$state_file"
   # In detach mode the DETACHED child owns the worktree/branch lifecycle. A caller signal must
   # NOT reap the worktree out from under it — replace the reaping trap with a bare exit.

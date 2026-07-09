@@ -135,6 +135,7 @@ When `/l5` or `/l6` is invoked, the foreman resolves the roster and execution pa
 - **`review_diff_scope`**: Controls what the impl-review reads each round:
   - `full` (default) ⇒ the reviewer reads the whole `<base>..HEAD` diff every round. Safe; cost grows O(n) as the diff accumulates.
   - `incremental-mitigated` ⇒ the reviewer reads `<prev-round>..HEAD` PLUS the full content of every file touched this round PLUS a standing invariants/prior-findings checklist; do a full `<base>..HEAD` re-read every 3–5 rounds or whenever a round touches shared/critical logic (classifiers, schemas, fixtures, harness control flow); and ALWAYS a final full `<base>..HEAD` review before merge. Use only on long loops — naive incremental-only misses cross-file regressions in untouched files. When this mode is on, `independent_harness` MUST run the FULL test suite, not just touched-file tests (real lesson 2026-06-26: a stale-fixture regression in an untouched test file slipped a too-narrow per-round scope to the final sweep). Reference driver: `resolve-review-loop.sh --field review_diff_scope`.
+- **`independent_harness:on`**: Depth-0 ALSO builds its own adversarial harness and never trusts the implementer's own green.
 - **`loop_max_rounds` cap → convergence semantics.** When the review loop hits its
   `loop_max_rounds` ceiling, depth-0 reads the terminal round's verdict before deciding.
   If the final verdict is **FIX-THEN-SHIP** (conditional pass) AND the round-over-round

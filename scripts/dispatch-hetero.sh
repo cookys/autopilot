@@ -467,7 +467,7 @@ if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
 fi
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
-# Both names are registered in the worktree's git info/exclude below: the wrapper
+# Both names are registered in the COMMON git dir's info/exclude below: the wrapper
 # commits with `git add -A`, so without the exclude both bookkeeping files would
 # land in every dispatched commit, and `git status --porcelain` cleanliness checks
 # would see them as untracked.
@@ -481,15 +481,31 @@ fi
 exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || die_precondition "cannot open worktree lifetime lock"
 flock -x "$WT_LOCK_FD" || die_precondition "cannot acquire worktree lifetime lock"
 # Keep bookkeeping files invisible to git status / git add -A inside the worktree.
-# Linked worktrees have a gitdir-pointer FILE at .git — resolve the real git dir.
+# For linked worktrees, git reads info/exclude from the COMMON git dir (shared
+# repo-wide). The per-worktree gitdir's info/exclude is ignored by git — a name
+# written there still shows in git status. Append is idempotent because the common
+# exclude is shared by the consuming repo and all its worktrees; repeated
+# dispatches must not accumulate duplicate lines.
 if ! {
-  _wt_git_dir="$(git -C "$WT" rev-parse --git-dir)" &&
-  mkdir -p "$_wt_git_dir/info" &&
-  printf '%s\n' '.autopilot-worktree' '.autopilot-worktree.lock' >> "$_wt_git_dir/info/exclude"
+  if _wt_common_dir="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" && [ -n "$_wt_common_dir" ]; then
+    true
+  else
+    # Older git lacks --path-format=absolute; fall back and absolutize if relative.
+    _wt_common_dir="$(git -C "$WT" rev-parse --git-common-dir)" &&
+    case "$_wt_common_dir" in
+      /*) true ;;
+      *) _wt_common_dir="$(cd "$WT/$_wt_common_dir" && pwd)" ;;
+    esac
+  fi &&
+  mkdir -p "$_wt_common_dir/info" &&
+  _wt_exclude="$_wt_common_dir/info/exclude" &&
+  for _wt_name in .autopilot-worktree .autopilot-worktree.lock; do
+    grep -qxF "$_wt_name" "$_wt_exclude" 2>/dev/null || printf '%s\n' "$_wt_name" >> "$_wt_exclude"
+  done
 }; then
   echo "dispatch-hetero: WARNING — failed to register worktree bookkeeping files in git exclude (git status / git add -A may see them)" >&2
 fi
-unset _wt_git_dir
+unset _wt_common_dir _wt_exclude _wt_name
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
 

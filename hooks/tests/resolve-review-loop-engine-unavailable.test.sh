@@ -45,13 +45,10 @@ val=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field on_engine_unavai
 assert_eq "ask" "$val" "garbage override falls back to ask"
 ERR="$( { REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" >/dev/null; } 2>&1 )"
 assert_contains "$ERR" 'on_engine_unavailable' "garbage override warns on stderr mentioning on_engine_unavailable"
+assert_contains "$ERR" 'yolo' "garbage override stderr contains the offending value"
+assert_contains "$ERR" 'ask|solo-fallback|wait-reset' "garbage override stderr contains the enum hint"
 
 # --- Test 6: Byte-prefix compat (the key's value must not affect the prefix) ---
-unset REVIEW_LOOP_CONFIG_OVERRIDE
-json_default=$(bash "$SCRIPT")
-prefix_default=$(printf '%s' "$json_default" | sed 's/, "on_engine_unavailable":.*//')
-assert_eq "$prefix_default" "$prefix_default" "no-config run prefix-stripped against itself is stable (sanity)"
-
 CFG_ASK="$TEST_TMP/cfg-ask.md"
 printf -- '- on_engine_unavailable: ask\n' > "$CFG_ASK"
 json_ask=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ASK" bash "$SCRIPT")

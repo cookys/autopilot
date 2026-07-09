@@ -276,7 +276,9 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
 
 ### 1.b Quota/session-limit reset preflight recovery (R4)
 
-**Gated on `on_engine_unavailable`** (from `scripts/resolve-review-loop.sh`): this
+**Gated on `on_engine_unavailable`** (retrieve the resolved value with
+`bash scripts/resolve-review-loop.sh --field on_engine_unavailable` — read it,
+never hand-type the policy): this
 auto-wakeup path only runs when the resolved key is `solo-fallback` or
 `wait-reset`. Under `ask` (the shipped default), the run stops at the quota death
 and escalates to the user immediately — report which engine died and the parsed

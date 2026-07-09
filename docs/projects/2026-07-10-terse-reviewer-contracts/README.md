@@ -39,4 +39,25 @@ Not in scope: Phase B measurement legs; merge to develop; push.
 
 ## Status
 
-See [`phase-a-status.md`](phase-a-status.md) for the live per-unit ledger.
+See [`phase-a-status.md`](phase-a-status.md) for the Phase A per-unit ledger and
+[`phase-b-results.md`](phase-b-results.md) for the full M3 measurement data.
+
+## Outcome (2026-07-10, depth-0 ruling)
+
+**M3 HALTED on plan gate #2 — baseline-engine calibration instability, not slimming harm.**
+
+- Path T (template, gemini-3.5-flash): the slimmed template itself measured STABLE
+  (0.917/0.917 both runs, miss-set ⊆ baseline's, injection intact, weak-tier haiku 12/12) —
+  but the BASELINE oscillated 0.917/0.833 across the 0.9 floor, which is the plan's explicit
+  halt-and-open-calibration-issue condition. Paired verdict: confounded, cannot certify.
+- Path C (reviewer.md + code-review.md, sonnet + preamble adapter): the adapter proved an
+  unfaithful instrument (baseline clean 10/10 over-flag; baseline injection broken) — no
+  slimming conclusion drawable either way.
+- **Ruling**: slimmed contracts (−16%/−17%/−14%) PARKED on `feat/terse-reviewer-contracts`
+  (commits bbcf192 / 3637646 / 29f1bc4), retry gated on the reviewer-harness calibration
+  BACKLOG entry. Instrument + infra (claude-native runner, evals/clean/, run-clean-set,
+  prompt-skeleton harness, Path-C adapter, all measurement records) SHIPPED via
+  `ship/terse-contracts-instrument` (v2.32.15).
+- Three BACKLOG entries carry the follow-ups: terse-contracts retry (S), reviewer-harness
+  calibration (S–M; measured lead: haiku scored 12/12 on this corpus and may be the better
+  leg engine), Path-C faithful instrument (M).

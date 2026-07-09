@@ -1,6 +1,10 @@
 # Plan — terse reviewer contracts
 
-> Status: R2 — 5-engine panel (gpt-5.5/gemini-3.5-flash/grok-4.5/MiniMax-M3/glm-5.2) findings verified and folded (2026-07-09); ready for execution when reviewer-engine quota allows.
+> Status: EXECUTED 2026-07-10 (/l6 full campaign, M1→M2→M3) — **M3 HALTED on gate #2** (baseline-engine
+> calibration instability, the plan's own stop condition; NOT slimming harm). Slimmed contracts (−14~17%,
+> all mechanically green, Path-T behaviorally stable) are PARKED on `feat/terse-reviewer-contracts` pending
+> the reviewer-harness calibration BACKLOG entry. Instrument/infra shipped v2.32.15. Full data:
+> `docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`.
 > Size: S–M
 > Source: Superpowers 6 study + autopilot north-star.
 

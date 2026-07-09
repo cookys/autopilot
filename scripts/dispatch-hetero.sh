@@ -467,6 +467,10 @@ if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
 fi
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
+# Both names are registered in the worktree's git info/exclude below: the wrapper
+# commits with `git add -A`, so without the exclude both bookkeeping files would
+# land in every dispatched commit, and `git status --porcelain` cleanliness checks
+# would see them as untracked.
 {
   printf 'created_at=%s\n' "$(date +%s)"
   printf 'branch=%s\n' "$BRANCH"
@@ -476,6 +480,16 @@ fi
 # early; never exec-replace this shell (would release the lock silently).
 exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || die_precondition "cannot open worktree lifetime lock"
 flock -x "$WT_LOCK_FD" || die_precondition "cannot acquire worktree lifetime lock"
+# Keep bookkeeping files invisible to git status / git add -A inside the worktree.
+# Linked worktrees have a gitdir-pointer FILE at .git — resolve the real git dir.
+if ! {
+  _wt_git_dir="$(git -C "$WT" rev-parse --git-dir)" &&
+  mkdir -p "$_wt_git_dir/info" &&
+  printf '%s\n' '.autopilot-worktree' '.autopilot-worktree.lock' >> "$_wt_git_dir/info/exclude"
+}; then
+  echo "dispatch-hetero: WARNING — failed to register worktree bookkeeping files in git exclude (git status / git add -A may see them)" >&2
+fi
+unset _wt_git_dir
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
 

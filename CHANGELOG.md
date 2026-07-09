@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.12 — `on_engine_unavailable` review-loop policy (fail-closed thrift)
+
+**Headline**: "What to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`)" is now a declarative per-project review-loop config key instead of a hand-typed instruction. Shipped default is **`ask`** (fail-closed): both engine-quota death and `precondition_failed` stop the run and escalate to the user — the expensive depth-0 session model never silently takes over implementation labor. Legacy auto-`--solo` / §1.b auto-wakeup are opt-in via `solo-fallback` / `wait-reset`. `/l6` hardens the expensive-model thrift discipline as an explicit hard rule.
+
+### Added
+- `on_engine_unavailable` key in `project-config-template/review-loop-config.md` — enum `ask | solo-fallback | wait-reset`, default `ask`. Behavior matrix: `ask` = escalate both quota death and `precondition_failed`; `solo-fallback` = legacy (`precondition_failed` → `--solo`, quota death → §1.b auto-wakeup); `wait-reset` = §1.b on quota death, still escalate non-quota `precondition_failed`.
+- `scripts/resolve-review-loop.sh`: default `DEF_ON_ENGINE_UNAVAILABLE=ask`, enum-validate with stderr warn + safe-default, `--field on_engine_unavailable`, JSON emission appended after `min_panel_size` (pre-existing output remains a byte-exact prefix).
+- `/l6` hard rule **Expensive-model thrift**: inline fallback is an escalation event governed by `on_engine_unavailable`, never a silent default.
+
+### Changed
+- `skills/ceo-agent/references/level-front-door.md`: `precondition_failed` outcome row gated on resolved `on_engine_unavailable` (`ask`/`wait-reset` → escalate; `solo-fallback` → `--solo`); §1.b auto-wakeup path only runs under `solo-fallback` or `wait-reset` (under `ask`, escalate immediately with engine + parsed reset time if available).
+
+### Fixed
+- (none)
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.11 — red-green validation instrument (`verify_strength` precursor 1)
 
 **Headline**: New deterministic script `scripts/verify-red-green.sh` — the opposite-direction sibling of `verify-preexisting.sh` — proves that the tests a change carries actually EXERCISE the change rather than being constant-green empty tests: it runs the change's tests at `head` (must be GREEN) and, in an ISOLATED detached worktree, applies ONLY the change's test-file edits onto `base` (production code held at base) and reruns them (must be RED). This is the minimal precursor the `verify_strength` BACKLOG item named; the full three-segment path to a `verify_strength` review-density axis is now planned in `docs/plans/2026-07-09-verify-strength-precursors.md` and the BACKLOG item is decomposed into ordered segments (1 shipped, 2+3 pending).

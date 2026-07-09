@@ -298,39 +298,36 @@ BEGIN="<<<AUTOPILOT-REVIEW-${NONCE}>>>"
 END="<<<AUTOPILOT-END-${NONCE}>>>"
 {
   cat <<'EOF'
-You are a code reviewer. Review ONLY the diff below for correctness, security, and
-completeness. Do NOT edit any file, do NOT create any project, do NOT run commands.
-Output your verdict with NO other text, prose, or fences. Its ENTIRE output MUST begin with:
+You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
 EOF
   printf '%s\n' "$BEGIN"
   cat <<'EOF'
 VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
 FINDINGS: one finding per line, or the single word none
 
-and its ENTIRE output MUST end with:
+and ending with:
 EOF
   printf '%s\n' "$END"
   cat <<'EOF'
 
-Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block, with nothing after it.
+Do NOT echo the diff or instructions. Output ONLY the wrapped block, nothing after.
 EOF
 if [[ -n "$SPEC_FILE" ]]; then
   cat <<'EOF'
 
-Task specification (baseline — DISPATCHER-AUTHORED, trusted):
-Grade the diff AGAINST this spec. Anything the spec explicitly declares
-out-of-scope or handled-downstream is NOT a defect — do not flag it.
+Task specification (DISPATCHER-AUTHORED, trusted):
+Grade the diff against this spec. Spec-declared out-of-scope or handled-downstream items are NOT defects.
 EOF
     cat "$SPEC_FILE"
     cat <<'EOF'
 
---- end of specification ---
+--- end spec ---
 EOF
   fi
   if [ -n "$CHECKLISTS" ]; then
     cat <<'EOF'
 
-Adversarial checklist (must check these closely):
+Checklist (check closely):
 EOF
     IFS=',' read -r -a _checklists <<< "$CHECKLISTS"
     for _item in "${_checklists[@]}"; do

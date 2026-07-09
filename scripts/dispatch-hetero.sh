@@ -481,8 +481,15 @@ fi
 } > "$WT/.autopilot-worktree"
 # Hold exclusive lock on a dedicated fd for the whole dispatch life. Never close
 # early; never exec-replace this shell (would release the lock silently).
-exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || die_precondition "cannot open worktree lifetime lock"
-flock -x "$WT_LOCK_FD" || die_precondition "cannot acquire worktree lifetime lock"
+# On lock failure, clean up the just-created worktree+branch before dying —
+# die_precondition alone would leak them (panel round-2 finding).
+_wt_lock_fail() {
+  git worktree remove --force "$WT" >/dev/null 2>&1 || true
+  git branch -D "$BRANCH" >/dev/null 2>&1 || true
+  die_precondition "$1"
+}
+exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
+flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
 # Keep bookkeeping files invisible to git status / git add -A inside the worktree.
 # For linked worktrees, git reads info/exclude from the COMMON git dir (shared
 # repo-wide). The per-worktree gitdir's info/exclude is ignored by git — a name

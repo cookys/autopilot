@@ -150,7 +150,7 @@ _wt_is_live() {
   fi
 
   # Open (create if missing) on a dedicated fd.
-  exec {probe}>"$lock" 2>/dev/null || return 2
+  exec {probe}>"$lock" || return 2
   flock -n "$probe"
   frc=$?
   if [ "$frc" -eq 0 ]; then
@@ -158,7 +158,7 @@ _wt_is_live() {
     return 0
   fi
   # Did not acquire — close probe fd.
-  exec {probe}>&- 2>/dev/null || true
+  exec {probe}>&- || true
   if [ "$frc" -eq 1 ]; then
     return 1   # EWOULDBLOCK — live
   fi
@@ -313,7 +313,7 @@ gc_stale_worktrees() {
   frc=$?
   if [ "$frc" -ne 0 ]; then
     printf 'reaper: another --gc is running; no-op\n' >&2
-    exec {gcfd}>&- 2>/dev/null || true
+    exec {gcfd}>&- || true
     printf '{ "reaped": [], "skipped_live": 0, "skipped_fresh": 0, "skipped_unmatched": 0, "lock_unsupported": 0, "kept_orphan": [] }\n'
     return 0
   fi
@@ -375,7 +375,7 @@ gc_stale_worktrees() {
             fi
             if [ "$age" -lt "$threshold" ]; then
               skipped_fresh=$((skipped_fresh + 1))
-              [ -n "$probe_fd" ] && exec {probe_fd}>&- 2>/dev/null || true
+              [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
               _WT_PROBE_FD=""
               continue
             fi
@@ -404,7 +404,7 @@ gc_stale_worktrees() {
           reaped_count=$((reaped_count + 1))
         fi
 
-        [ -n "$probe_fd" ] && exec {probe_fd}>&- 2>/dev/null || true
+        [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
         _WT_PROBE_FD=""
         ;;
     esac
@@ -412,7 +412,7 @@ gc_stale_worktrees() {
 
   git worktree prune >/dev/null 2>&1 || true
 
-  exec {gcfd}>&- 2>/dev/null || true
+  exec {gcfd}>&- || true
 
   printf '{ "reaped": [%s], "skipped_live": %s, "skipped_fresh": %s, "skipped_unmatched": %s, "lock_unsupported": %s, "kept_orphan": [%s] }\n' \
     "$reaped_json" "$skipped_live" "$skipped_fresh" "$skipped_unmatched" "$lock_unsupported" "$kept_json"

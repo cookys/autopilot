@@ -26,6 +26,7 @@ Hard rules:
   hardcoding of model/runner/effort.
 - `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
 - **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.
+- **Expensive-model thrift**: depth-0 assumes the session model is the most expensive engine in the fleet; inline fallback (`--solo` or authoring content itself) is an escalation event governed by `on_engine_unavailable` (from `resolve-review-loop.sh`), never a silent default.
 
 **MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
 (per-unit pipeline, machinery, authoring-rail rationale) and

@@ -36,6 +36,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - implementer_runner: auto
 - reviewer_endpoint:
 - implementer_endpoint:
+- on_engine_unavailable: ask
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
@@ -72,6 +73,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
 | `reviewer_endpoint` | **named endpoint** for a `cc-shim`/`anthropic-compatible` REVIEWER — resolves creds via `resolve-endpoint.sh` (`AUTOPILOT_ENDPOINT_<NAME>_*`, populated from `~/.autopilot/endpoints.env`). `/l5`/`/l6` passes it as `--endpoint <name>` so you don't hand-type it. Empty = none (raw `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before) | an endpoint name `[A-Za-z0-9_]` (e.g. `glm`, `minimax`), or empty |
 | `implementer_endpoint` | same, for a `cc-shim` IMPLEMENTER (→ `dispatch-hetero.sh --endpoint`). Empty = none | an endpoint name `[A-Za-z0-9_]`, or empty |
+| `on_engine_unavailable` | what to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`) | `ask\|solo-fallback\|wait-reset` (default `ask`). **Behavior matrix**: `ask` — BOTH engine-quota death and `precondition_failed` stop the run and escalate to the user (no automatic `--solo` inline fallback, no automatic quota-reset wakeup). Fail-closed: the expensive depth-0 session model never silently takes over implementation labor. `solo-fallback` — legacy: `precondition_failed` falls back to `--solo` inline; quota death follows the §1.b auto-wakeup recovery (see `level-front-door.md`). `wait-reset` — quota death follows §1.b auto-wakeup; `precondition_failed` (non-quota) still escalates to the user |
 | `loop_max_rounds` | adversarial-loop convergence cap per phase | integer (default 5) |
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |

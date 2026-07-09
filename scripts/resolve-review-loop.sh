@@ -30,7 +30,7 @@
 #   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
 #   qc_panel (array), qc_panel_aggregation, review_risk, required_review_families,
 #   l1_required, cross_family_required, cross_family_satisfied, review_diff_scope, source,
-#   work_domain, domain_source}
+#   work_domain, domain_source, min_panel_size, on_engine_unavailable}
 # (qc_panel = disjoint-family terminal gate; warns on stderr if the panel shares the
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
@@ -75,6 +75,7 @@ DEF_QC_AGG="union-on-verified-critical"
 #                           FULL suite, not just touched-file tests.
 DEF_DIFF_SCOPE="full"
 DEF_MIN_PANEL_SIZE="3"
+DEF_ON_ENGINE_UNAVAILABLE="ask"
 
 FIELD=""
 SOURCE_TRUST=""
@@ -203,6 +204,15 @@ MIN_PANEL_SIZE="$(read_field min_panel_size "$DEF_MIN_PANEL_SIZE")"
 if ! { [[ "$MIN_PANEL_SIZE" =~ ^[0-9]+$ ]] && [[ "$MIN_PANEL_SIZE" -ge 1 ]]; }; then
   MIN_PANEL_SIZE="$DEF_MIN_PANEL_SIZE"
 fi
+
+ON_ENGINE_UNAVAILABLE="$(read_field on_engine_unavailable "$DEF_ON_ENGINE_UNAVAILABLE")"
+case "$ON_ENGINE_UNAVAILABLE" in
+  ask|solo-fallback|wait-reset) ;;
+  *)
+    echo "resolve-review-loop: ignoring invalid on_engine_unavailable (must be ask|solo-fallback|wait-reset): $ON_ENGINE_UNAVAILABLE" >&2
+    ON_ENGINE_UNAVAILABLE="$DEF_ON_ENGINE_UNAVAILABLE"
+    ;;
+esac
 
 DENSITY_SCALING_CFG="$(read_field density_scaling "off")"
 case "$DENSITY_SCALING_CFG" in on|off) ;; *) DENSITY_SCALING_CFG="off" ;; esac
@@ -802,6 +812,7 @@ if [[ -n "$FIELD" ]]; then
       ;;
     review_diff_scope) printf '%s\n' "$DIFF_SCOPE" ;;
     min_panel_size) printf '%s\n' "$MIN_PANEL_SIZE" ;;
+    on_engine_unavailable) printf '%s\n' "$ON_ENGINE_UNAVAILABLE" ;;
     source) printf '%s\n' "$SOURCE" ;;
     work_domain) printf '%s\n' "$DWORK_DOMAIN" ;;
     domain_source) printf '%s\n' "$DOMAIN_SOURCE" ;;
@@ -861,7 +872,7 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s"'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -869,15 +880,15 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "${ARGS_SUFFIX[@]}"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s"'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "${ARGS_SUFFIX[@]}"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

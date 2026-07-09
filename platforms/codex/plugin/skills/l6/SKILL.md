@@ -26,6 +26,7 @@ Hard rules:
   hardcoding of model/runner/effort.
 - `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
 - **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.
+- **Every depth-0 `Agent` dispatch MUST pass `model` explicitly** (foreman = `opus`; mechanical inventory / file work = `sonnet`/`haiku`) — a subagent with no `model` inherits the parent session's model, silently running a Fable-class CEO's foreman on Fable. See the model-inheritance warning in [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md) § "Dispatching the foreman".
 
 **MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
 (per-unit pipeline, machinery, authoring-rail rationale) and

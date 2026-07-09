@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-10 | [suite-repairs](2026-07-10-suite-repairs/README.md) — /l6 B+C: `dispatch-author.sh --endpoint` parity (already shipped, verified) + pre-existing full-suite failures (only `contract-parity.test.sh` still red at base — JS-twin `on_engine_unavailable` field sync). | v2.32.16+ | worktree-agent-a4098eb5cd9dcbeaf |
 
 ## 已完成 (Completed)
 

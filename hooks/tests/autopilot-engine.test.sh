@@ -3107,6 +3107,7 @@ const validPayload = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 
 try {

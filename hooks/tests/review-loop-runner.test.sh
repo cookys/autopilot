@@ -113,6 +113,7 @@ const valid = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 const parsed = parseReviewLoopOutput([
   '{not valid json}',
@@ -162,6 +163,7 @@ const valid = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 const parsed = parseReviewLoopOutput([
   'resolver preface',
@@ -230,6 +232,7 @@ const partial = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 try {
   parseReviewLoopOutput(JSON.stringify(partial));
@@ -277,6 +280,7 @@ const invalid = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 try {
   parseReviewLoopOutput(JSON.stringify(invalid, null, 2));
@@ -324,6 +328,7 @@ const valid = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 const parsed = parseReviewLoopOutput(`${JSON.stringify(valid)}\nlog line with {debug braces}`);
 console.log(parsed.reviewer_engine);
@@ -367,6 +372,7 @@ const valid = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":"bad"}`);
@@ -414,6 +420,7 @@ const valid = {
   reviewer_endpoint: '',
   implementer_endpoint: '',
   min_panel_size: 3,
+  on_engine_unavailable: 'ask',
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":`);

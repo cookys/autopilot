@@ -1,0 +1,113 @@
+diff --git a/docs/projects/ongoing-maintenance/2026-07.md b/docs/projects/ongoing-maintenance/2026-07.md
+index 8fbc452..0d6864e 100644
+--- a/docs/projects/ongoing-maintenance/2026-07.md
++++ b/docs/projects/ongoing-maintenance/2026-07.md
+@@ -7,3 +7,4 @@ finish-flow F.3. Larger work is tracked in `docs/projects/INDEX.md` + CHANGELOG.
+ |------|--------|---------|
+ | 07-02 | (this) | fix(ladder): `--impl-prompt-file` verified caller HEAD when `dispatch-hetero` returned `worktree:null` → use returned commit SHA for `base..commit` diff, require branch-tip/base ancestry guards (v2.31.1) |
+ | 07-05 | 67ee388 | fix(dispatch): late-flush 誤判 empty_output → content-driven quiescence(fd/pgrep 對沙箱 codex worker 雙盲被否證;size-stable 1s + empty-grace 10s + deadline 60s;codex 分支補 timeout)(跨 3 檔 + lib + test)|
++| 07-05 | e8f8e38 | fix(dispatch): cc-shim 空窗寬限 10s 不足(當日 MiniMax 再判空)→ per-runner grace 第三參數(env > arg > 10000;cc-shim 30s)(3 檔)|
+diff --git a/platforms/codex/plugin/scripts/dispatch-author.sh b/platforms/codex/plugin/scripts/dispatch-author.sh
+index 0ad0d8e..76ad3a1 100755
+--- a/platforms/codex/plugin/scripts/dispatch-author.sh
++++ b/platforms/codex/plugin/scripts/dispatch-author.sh
+@@ -206,7 +206,11 @@ fi
+ # `script -qec` always emits chrome lines; strip CR and those lines before
+ # checking for non-whitespace output.
+ # Bounded settle-wait for late-flush
+-wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
++if [[ "$RUNNER" = "cc-shim" ]]; then
++  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
++else
++  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
++fi
+ 
+ if ! tr -d '\r' < "$RAW_LOG" \
+   | sed '/^Script started on /d; /^Script done on /d' \
+diff --git a/platforms/codex/plugin/scripts/dispatch-review.sh b/platforms/codex/plugin/scripts/dispatch-review.sh
+index 2bdb6bf..6542eae 100755
+--- a/platforms/codex/plugin/scripts/dispatch-review.sh
++++ b/platforms/codex/plugin/scripts/dispatch-review.sh
+@@ -405,7 +405,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
+       bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+       _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>&1
+   CCSHIM_RC=$?
+-  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
++  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
+   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+   if [ "$CCSHIM_RC" -ne 0 ]; then
+     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+diff --git a/platforms/codex/plugin/scripts/lib/output-quiescence.sh b/platforms/codex/plugin/scripts/lib/output-quiescence.sh
+index 880c8e5..51709a1 100644
+--- a/platforms/codex/plugin/scripts/lib/output-quiescence.sh
++++ b/platforms/codex/plugin/scripts/lib/output-quiescence.sh
+@@ -20,6 +20,8 @@
+ # - If the size is > 0 but growing, we reset stable_count and keep polling.
+ # - If the file remains empty (size == 0) and the elapsed time reaches a bounded grace
+ #   period (grace_ms, default 10000ms), we return 0 (honest empty, does not pay the full deadline).
++#   Precedence for grace_ms is: env var AUTOPILOT_EMPTY_GRACE_MS (operator override) > caller's 3rd arg (per-runner default) > 10000.
++#   Per-runner defaults exist because the cc-shim runner's flush profile is empirically slower than codex.
+ # - If elapsed reaches deadline_ms, we return 1 (caller proceeds with its check anyway).
+ #
+ # Note: whitespace-only content counts as "content" for stability purposes but will still
+@@ -32,7 +34,7 @@ wait_output_quiescent() {
+   local target="${1:-}"
+   local deadline_ms="${2:-0}"
+ 
+-  local grace_ms="${AUTOPILOT_EMPTY_GRACE_MS:-10000}"
++  local grace_ms="${AUTOPILOT_EMPTY_GRACE_MS:-${3:-10000}}"
+   local stable_polls="${AUTOPILOT_STABLE_POLLS:-4}"
+   local elapsed=0
+   local prev_size=-1
+diff --git a/scripts/dispatch-author.sh b/scripts/dispatch-author.sh
+index 0ad0d8e..76ad3a1 100755
+--- a/scripts/dispatch-author.sh
++++ b/scripts/dispatch-author.sh
+@@ -206,7 +206,11 @@ fi
+ # `script -qec` always emits chrome lines; strip CR and those lines before
+ # checking for non-whitespace output.
+ # Bounded settle-wait for late-flush
+-wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
++if [[ "$RUNNER" = "cc-shim" ]]; then
++  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
++else
++  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
++fi
+ 
+ if ! tr -d '\r' < "$RAW_LOG" \
+   | sed '/^Script started on /d; /^Script done on /d' \
+diff --git a/scripts/dispatch-review.sh b/scripts/dispatch-review.sh
+index 2bdb6bf..6542eae 100755
+--- a/scripts/dispatch-review.sh
++++ b/scripts/dispatch-review.sh
+@@ -405,7 +405,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
+       bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+       _ "$CCSHIM_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>&1
+   CCSHIM_RC=$?
+-  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
++  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
+   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+   if [ "$CCSHIM_RC" -ne 0 ]; then
+     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+diff --git a/scripts/lib/output-quiescence.sh b/scripts/lib/output-quiescence.sh
+index 880c8e5..51709a1 100644
+--- a/scripts/lib/output-quiescence.sh
++++ b/scripts/lib/output-quiescence.sh
+@@ -20,6 +20,8 @@
+ # - If the size is > 0 but growing, we reset stable_count and keep polling.
+ # - If the file remains empty (size == 0) and the elapsed time reaches a bounded grace
+ #   period (grace_ms, default 10000ms), we return 0 (honest empty, does not pay the full deadline).
++#   Precedence for grace_ms is: env var AUTOPILOT_EMPTY_GRACE_MS (operator override) > caller's 3rd arg (per-runner default) > 10000.
++#   Per-runner defaults exist because the cc-shim runner's flush profile is empirically slower than codex.
+ # - If elapsed reaches deadline_ms, we return 1 (caller proceeds with its check anyway).
+ #
+ # Note: whitespace-only content counts as "content" for stability purposes but will still
+@@ -32,7 +34,7 @@ wait_output_quiescent() {
+   local target="${1:-}"
+   local deadline_ms="${2:-0}"
+ 
+-  local grace_ms="${AUTOPILOT_EMPTY_GRACE_MS:-10000}"
++  local grace_ms="${AUTOPILOT_EMPTY_GRACE_MS:-${3:-10000}}"
+   local stable_polls="${AUTOPILOT_STABLE_POLLS:-4}"
+   local elapsed=0
+   local prev_size=-1

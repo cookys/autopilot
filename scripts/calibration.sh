@@ -36,6 +36,15 @@
 #               — only pass panel-cmd values from the same trust boundary as
 #               this script.
 #
+#   run-clean-set --panel-cmd '<cmd>'
+#               Sibling of run-known-bad, INVERTED: feeds each diff in evals/clean/ (real
+#               merged known-good diffs, no injected defect) to the panel command and
+#               records OVER-FLAGS (panel says "fail" on a clean diff) per class into the
+#               sample store. Authoritative verdict is always "pass" for this corpus — same
+#               panel-cmd contract (diff on stdin, {"verdict":"pass"|"fail"} on stdout), same
+#               TRUST NOTE. Used for the specificity/over-flag-rate gate, distinct from
+#               run-known-bad's sensitivity/false-pass-on-critical gate.
+#
 # DATA DIR: ~/.autopilot/calibration/ (seam: CALIBRATION_DATA_DIR env override)
 #
 # EXIT CODES:
@@ -59,6 +68,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DATA_DIR="${CALIBRATION_DATA_DIR:-$HOME/.autopilot/calibration}"
 SAMPLES_FILE="$DATA_DIR/samples.jsonl"
 KNOWN_BAD_DIR="$REPO_ROOT/evals/known-bad"
+CLEAN_DIR="$REPO_ROOT/evals/clean"
 
 usage() {
   cat <<'EOF'
@@ -86,6 +96,12 @@ SUBCOMMANDS:
               TRUST NOTE: --panel-cmd executes as shell (bash -c).  This is
               an internal tool; panel-cmd must come from the same trust
               boundary as this script.
+
+  run-clean-set --panel-cmd '<cmd>'
+              Sibling of run-known-bad, inverted: feed each diff in evals/clean/
+              (real merged known-good diffs) to the panel command and record
+              OVER-FLAGS (panel says "fail" on a clean diff). Same panel-cmd
+              contract and TRUST NOTE as run-known-bad.
 
 EXIT CODES:
   0  success
@@ -410,6 +426,81 @@ cmd_run_known_bad() {
   printf '{"total_run":%d,"false_passes":%d}\n' "$total_run" "$false_passes"
 }
 
+# ── run-clean-set ───────────────────────────────────────────────────────────────
+# Inverted sibling of run-known-bad: authoritative verdict is always "pass" (no defect),
+# and a panel "fail" verdict is an OVER-FLAG, not a catch. Feeds the specificity gate
+# (clean-diff over-flag rate) rather than run-known-bad's sensitivity gate.
+
+cmd_run_clean_set() {
+  local panel_cmd=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --panel-cmd) panel_cmd="${2:-}"; shift 2 ;;
+      --help|-h)   usage; exit 0 ;;
+      *) die "run-clean-set: unknown argument: $1" ;;
+    esac
+  done
+
+  [ -n "$panel_cmd" ] || die "run-clean-set: --panel-cmd is required"
+  [ -d "$CLEAN_DIR" ] || die "run-clean-set: evals/clean/ not found at $CLEAN_DIR"
+
+  local any_diff=0
+  local over_flags=0
+  local total_run=0
+
+  for diff_file in "$CLEAN_DIR"/*.diff; do
+    [ -f "$diff_file" ] || continue
+    any_diff=1
+    local base
+    base="$(basename "$diff_file" .diff)"
+    local expected_file="$CLEAN_DIR/$base.expected.json"
+
+    [ -f "$expected_file" ] || { printf 'calibration.sh: run-clean-set: missing sidecar %s\n' "$expected_file" >&2; continue; }
+
+    # Sidecar sanity check only — a clean-corpus expected.json carries {"class":"clean"},
+    # a CORPUS-MEMBERSHIP tag, not a defect SEVERITY. cmd_add_sample's --class flag is
+    # severity-typed (critical|major|minor, for known-bad samples) and must NOT receive
+    # this value — passing "clean" through it would reject with "--class must be
+    # critical|major|minor" (caught live: the first run-clean-set smoke test failed this
+    # way before the fix).
+    local sidecar_class
+    sidecar_class="$(grep -o '"class":"[^"]*"' "$expected_file" | cut -d'"' -f4)"
+    [ "$sidecar_class" = "clean" ] || { printf 'calibration.sh: run-clean-set: %s missing/unexpected class (want "clean", got "%s")\n' "$expected_file" "$sidecar_class" >&2; continue; }
+
+    total_run=$((total_run + 1))
+
+    # Run panel command with diff on stdin; capture stdout (same contract as run-known-bad)
+    local panel_out
+    panel_out="$(bash -c "$panel_cmd" < "$diff_file" 2>/dev/null)" || true
+    local panel_verdict
+    panel_verdict="$(printf '%s' "$panel_out" | grep -o '"verdict":"[^"]*"' | tail -1 | cut -d'"' -f4)"
+    # Non-parseable defaults to "fail" for run-known-bad (conservative toward catching
+    # defects); here the conservative default is the SAME direction (fail = over-flag),
+    # because a non-parseable/no-verdict result must never be silently read as a clean pass.
+    [ -n "$panel_verdict" ] || panel_verdict="fail"
+
+    # Authoritative verdict for the clean corpus: always "pass" (no injected defect).
+    # No --class passed (see sidecar note above — it is not a severity here).
+    local auth_verdict="pass"
+
+    cmd_add_sample \
+      --panel-verdict "$panel_verdict" \
+      --authoritative-verdict "$auth_verdict" \
+      --outcome "ok" \
+      --source "clean:$base"
+
+    if [ "$panel_verdict" = "fail" ]; then
+      over_flags=$((over_flags + 1))
+      printf 'calibration.sh: run-clean-set: OVER-FLAG on %s\n' "$base" >&2
+    fi
+  done
+
+  [ "$any_diff" = "1" ] || die "run-clean-set: no .diff files found in $CLEAN_DIR"
+
+  printf '{"total_run":%d,"over_flags":%d}\n' "$total_run" "$over_flags"
+}
+
 # ── entrypoint ────────────────────────────────────────────────────────────────
 
 SUBCMD="${1:-}"
@@ -418,6 +509,7 @@ case "$SUBCMD" in
   add-sample)    shift; cmd_add_sample "$@" ;;
   report)        shift; cmd_report "$@" ;;
   run-known-bad) shift; cmd_run_known_bad "$@" ;;
+  run-clean-set) shift; cmd_run_clean_set "$@" ;;
   --help|-h)     usage; exit 0 ;;
   "")            usage >&2; exit 1 ;;
   *)             die "unknown subcommand: $SUBCMD (try --help)" ;;

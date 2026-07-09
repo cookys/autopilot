@@ -9,6 +9,7 @@
     "config-protection",
     "cost-tracker",
     "design-quality",
+    "dispatch-model-guard",
     "large-file-warner",
     "mcp-health",
     "session-summary",

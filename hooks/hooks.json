@@ -84,6 +84,16 @@
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js pre"
           }
         ]
+      },
+      {
+        "//": "OPT-IN (default-off): dispatch-model-guard — ask on guarded expensive engine or omitted model",
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
+          }
+        ]
       }
     ],
     "PostToolUse": [

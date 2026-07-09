@@ -1,0 +1,45 @@
+# dispatch-guard-config — per-project expensive-model dispatch gate
+
+> Copy to `.claude/dispatch-guard-config.md` in the consuming project to override.
+> Resolved in-process by [`hooks/dispatch-model-guard.js`](../hooks/dispatch-model-guard.js)
+> (opt-in PreToolUse hook on `Task|Agent`). Override path via
+> `$DISPATCH_GUARD_CONFIG_OVERRIDE`. Sibling of the spend-control discipline in
+> `scripts/resolve-dispatch.sh`: this hook mechanically asks when a subagent
+> dispatch would land on a guarded expensive engine or omit `model:` entirely.
+
+This is the **expensive-model dispatch forcing function**: an omitted `model:`
+silently inherits the session model (which may be Fable-class), and an explicit
+`fable` / `claude-fable-5` lands on a high-cost engine without a second look. The
+hook returns a native PreToolUse `permissionDecision: "ask"` so the operator
+approves deliberately — or re-dispatches with a cheaper explicit model. Fail-open
+on unreadable payloads (spend control, not a security boundary).
+
+## Settings (one `key: value` per line; first match wins)
+
+- guarded_models: fable
+- on_missing_model: ask
+- mode: ask
+
+## Field reference
+
+| Key | Values | Meaning |
+|-----|--------|---------|
+| `guarded_models` | comma-separated tokens | Case-insensitive substring match against `tool_input.model` (e.g. `fable` matches `claude-fable-5`). Empty/garbage → default `fable`. |
+| `on_missing_model` | `ask` \| `allow` | When `model` is omitted: `ask` = permission ASK (default); `allow` = pass through. Garbage → `ask` (fail-closed). |
+| `mode` | `ask` \| `warn` \| `off` | `ask` = native permission ASK; `warn` = advisory stderr only; `off` = inert. Garbage → `ask` (fail-closed). |
+
+## Defaults & fail-closed
+
+Unknown / missing / unparseable config keys → **`mode: ask`**, **`on_missing_model: ask`**,
+**`guarded_models: fable`**. Set `mode: warn` to calibrate before enforcing, or
+`mode: off` / leave the opt-in hook disabled to skip entirely.
+
+## Enable the hook
+
+The hook is **opt-in** (default-off). Enable via:
+
+```json
+{ "hooks": { "dispatch-model-guard": true } }
+```
+
+in `~/.autopilot/config.json`, or env `AUTOPILOT_HOOK_DISPATCH_MODEL_GUARD=1`.

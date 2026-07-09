@@ -54,6 +54,14 @@ FAIL: ReconnectTest.GameStateRestore
 
 The script stashes uncommitted work, checks out base, runs the test, restores. Replaces the manual `git stash && checkout develop` recipe — fewer ways to leave the work tree in a bad state.
 
+**Red-green validation (does a new test actually exercise the change?).** The opposite-direction sibling `scripts/verify-red-green.sh` proves a change's tests are not constant-green empty tests: it runs the change's tests at `head` (must be GREEN) and, in an isolated detached worktree, applies ONLY the change's test-file edits onto `base` (production code held at base) and reruns them (must be RED). Verdict `VALIDATED` only when head-green AND base-red; `NOT_RED_ON_BASE` means the test passes without the production change (it isn't testing anything); `NOT_GREEN_ON_HEAD` / `INCONCLUSIVE` fail closed.
+```bash
+scripts/verify-red-green.sh --range <base>..<head> --verify-cmd <script-path>
+# JSON: {"verdict":"VALIDATED","red_green_validated":true,"red_tests":[...], ...}
+# exit 0 VALIDATED · 1 NOT_RED/NOT_GREEN · 2 usage · 3 INCONCLUSIVE (fail-closed)
+```
+It reuses `git worktree add --detach` isolation (never mutates the live tree); every verdict is read from the real verify-cmd exit code, never self-report. It is the minimal precursor to a `verify_strength` review-density axis (see `docs/plans/2026-07-09-verify-strength-precursors.md`).
+
 **Step 3: Re-run until clean.**
 ```bash
 <your-test-command>  # e.g., npm test, make test, dev.sh test

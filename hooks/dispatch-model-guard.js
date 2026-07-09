@@ -141,13 +141,14 @@ try {
   }
 
   const toolInput = input.tool_input || {};
-  const model = String(toolInput.model || '').trim().toLowerCase();
+  const modelRaw = String(toolInput.model || '').trim();
+  const model = modelRaw.toLowerCase();
 
   if (model) {
     const hit = config.guarded_models.some((token) => model.includes(token));
     if (hit) {
       handleGuard(
-        `dispatch-model-guard: model '${model}' is a guarded expensive engine — approve, or re-dispatch with a cheaper model per scripts/resolve-dispatch.sh`,
+        `dispatch-model-guard: model '${modelRaw}' is a guarded expensive engine — approve, or re-dispatch with a cheaper model per scripts/resolve-dispatch.sh`,
         config.mode
       );
     }

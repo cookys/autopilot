@@ -9,7 +9,7 @@
 #   - assert_eq, assert_neq, assert_contains, assert_not_contains
 #   - assert_file_exists, assert_file_absent, assert_exit_code
 #   - run_hook (capture stdout/stderr/exit into vars)
-#   - fail (print + exit 1), pass_test (print + exit 0)
+#   - fail (print + exit 1), finalize_test (call once at EOF: PASS/FAIL summary + exit)
 #   - Per-test sandbox AUTOPILOT_HOME (overrides ~/.autopilot so tests don't
 #     touch the user's real state). Hooks read os.homedir() → HOME, so we set
 #     HOME to TEST_TMP for hook invocations via run_hook.

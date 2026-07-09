@@ -1,10 +1,12 @@
 # Plan — terse reviewer contracts
 
-> Status: EXECUTED 2026-07-10 (/l6 full campaign, M1→M2→M3) — **M3 HALTED on gate #2** (baseline-engine
-> calibration instability, the plan's own stop condition; NOT slimming harm). Slimmed contracts (−14~17%,
-> all mechanically green, Path-T behaviorally stable) are PARKED on `feat/terse-reviewer-contracts` pending
-> the reviewer-harness calibration BACKLOG entry. Instrument/infra shipped v2.32.15. Full data:
-> `docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`.
+> Status: PARTIALLY SHIPPED 2026-07-10. /l6 full campaign (M1→M2→M3): first M3 run HALTED on gate #2
+> (gemini-3.5-flash baseline instability — the plan's own stop condition, not slimming harm); Board then
+> directed a haiku 2-run stability check (1.0/1.0) → leg-engine switch → M3 re-run, which the **template
+> contract PASSED (shipped v2.32.16, −16%)**. reviewer.md/code-review.md (−17%/−14%) remain PARKED on
+> `feat/terse-reviewer-contracts` behind the Path-C faithful-instrument BACKLOG entry. Instrument/infra
+> shipped v2.32.15. Data: `docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md` +
+> `m3-rerun-haiku.md`.
 > Size: S–M
 > Source: Superpowers 6 study + autopilot north-star.
 

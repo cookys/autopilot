@@ -57,14 +57,14 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S(Spike)— consult 通道整合已出貨(v2.31.20:hetero-dispatch.md § Peer consult + front-door § 0 + coexistence 表);殘餘=review 通道校準(Spark 重置後跑 known-bad 10 案,false-pass-on-critical=0 才准進 qc 面)與 `rescue --write` 沙箱姿態。
 - **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
 
-### ⏸ EXECUTED-then-HALTED (2026-07-10) — terse reviewer contracts:瘦身完成但 M3 gate 觸發校準 halt;成果停放待儀器修復
-- **Trigger**: 下方「reviewer-harness 校準」條目解決後(基線引擎在 known-bad 上穩定 ≥0.9 且 fp-critical=0),重跑 M3 配對腿即可 —— **瘦身成果已寫好**,停放在 `feat/terse-reviewer-contracts`(bbcf192 模板 −16% / 3637646 reviewer.md −17% / 29f1bc4 code-review.md −14%,全部 grok 實作 + gpt-5.5 SHIP-AS-IS + 機械閘全綠)。
+### ⏸ PARTIAL-SHIP (2026-07-10) — terse reviewer contracts:模板已出貨(haiku 重跑過 M3);reviewer.md/code-review.md 停放待 Path-C 儀器
+- **Trigger**: 「Path-C 忠實儀器」條目解決後,對 reviewer.md/code-review.md 跑配對腿即可 —— 兩份瘦身成果停放在 `feat/terse-reviewer-contracts`(3637646 reviewer.md −17% / 29f1bc4 code-review.md −14%)。**模板(bbcf192,−16%)已於 v2.32.16 出貨**:Board 指示驗 haiku 兩跑穩定性(1.0/1.0,對照 gemini 0.917/0.833)後換腿重跑 M3 全過(12/12、fp-critical=0、injection 完好、clean 裁決 0 Critical/Major)——見 `docs/projects/2026-07-10-terse-reviewer-contracts/m3-rerun-haiku.md`。
 - **Context**: 2026-07-10 /l6 全程執行(M1 儀器 → M2 瘦身 → M3 量測)。M3 結果:Path T(模板,gemini-3.5-flash)瘦身版自身穩定(0.917/0.917、injection 完好、haiku 弱層探針 12/12 滿分),但**基線兩跑震盪 0.917/0.833 跨 0.9 地板** → plan gate #2 的明文 halt 條件;Path C(reviewer.md+code-review.md,sonnet+preamble 轉接器)儀器失真(基線 clean 10/10 全誤旗、injection 兩腿皆破)無法下任何結論。完整逐案數據:[`docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`](projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md)。儀器與基礎設施(claude-native runner、evals/clean/、run-clean-set、prompt-skeleton 測試、Path-C 轉接器)已於 v2.32.15 出貨。
 - **Effort**: S(重跑 M3 legs;瘦身本體零工作)
 - **Source**: 2026-07-10 /l6 campaign;plan [`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md) M3-outcome 節。
 
-### reviewer-harness 校準 — 基線引擎在 n=12 known-bad 上不穩定,配對量測無法成立
-- **Trigger**: 下次要跑任何 reviewer-contract 配對量測(上方 terse-contracts 重試是第一個等待者);或下次 engine-onboarding 校準新 reviewer 時順手處理。
+### ✅ RESOLVED (2026-07-10, 同日) — reviewer-harness 校準:換 claude-native haiku 腿(選項 c)
+- **Resolution**: Board 直接下令走選項 (c):haiku 兩跑穩定性驗證通過(基線 known-bad 1.0/1.0、fp-critical=0 含 08 與雙 injection)→ 換腿重跑 M3 → 模板過閘出貨 v2.32.16。haiku 已記入 engine scorecard(reviewer/qualified/capability 1.0,expires 2026-10-10)。gemini-3.5-flash 不再作 reviewer-contract 量測腿。原 Trigger 保留於下供未來參考:
 - **Context**: 2026-07-10 M3 campaign 實測:gemini-3.5-flash 對同一 12 案 known-bad 兩跑敏感度 0.917/0.833(跨 0.9 地板;離散案例 06 兩跑翻轉),且基線就抓不到 08-path-traversal(fp-critical=0 這個 gate 在該引擎上原生不可滿足)。單跑 n=12 的一案擺幅 ≈8.3pp,>雜訊容忍。可選修法:(a) 擴 known-bad 語料到 n≥30 攤薄單案擺幅;(b) 每案 majority-of-3 取多數決作為該案 verdict(成本 ×3);(c) 換校準過的引擎跑腿 —— **實測線索:claude-native haiku 在同語料 12/12 滿分(含 08 與兩 injection),比 gemini flash 更適合當量測腿引擎**,且是原生 auth 零 endpoint 配置。(c) 最便宜,先驗證 haiku 兩跑穩定性即可採。
 - **Effort**: S(選項 c:haiku 重跑穩定性驗證 ~24 calls)/ M(選項 a:擴語料)
 - **Source**: 2026-07-10 phase-b-results.md gate #2/#6 FAIL;M1 已記錄 08 為 gemini 既有弱點。

@@ -40,6 +40,7 @@ const REVIEW_LOOP_FIELDS = [
   'reviewer_endpoint',
   'implementer_endpoint',
   'min_panel_size',
+  'on_engine_unavailable',
 ];
 
 
@@ -128,6 +129,7 @@ function validateReviewLoopConfig(value) {
     assertField(value, field, (v) => typeof v === 'string', 'a string');
   }
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
+  assertOneOf(value, 'on_engine_unavailable', ['ask', 'solo-fallback', 'wait-reset']);
 
   const hasReviewerQualified = Object.prototype.hasOwnProperty.call(value, 'reviewer_qualified');
   const hasFallbackLadder = Object.prototype.hasOwnProperty.call(value, 'fallback_ladder');

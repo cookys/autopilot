@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.16 — slimmed dispatch-review reviewer prompt (−16%, M3-gated on the haiku leg)
+
+**Headline**: The `dispatch-review.sh` reviewer prompt template ships **16% slimmer** (~353 → ~296 tokens on the per-dispatch heredoc), paid back on EVERY hetero review call. This is the first of the three terse-reviewer-contracts to clear the plan's full M3 measurement gate — after the Board-directed leg-engine switch: `claude-native haiku` proved 2-run stable on the 12-case known-bad corpus (baseline sensitivity **1.0/1.0**, vs gemini-3.5-flash's 0.917/0.833 oscillation that halted the first campaign), fp-on-critical=0 including `08-path-traversal` and both injection cases, slimmed leg 12/12 with zero case-level regressions, clean over-flags adjudicated 0/10 Critical-Major on both legs (binary-mapping raw data + per-flag adjudication recorded in `docs/projects/2026-07-10-terse-reviewer-contracts/m3-rerun-haiku.md`). haiku recorded in the engine scorecard as a qualified reviewer (capability 1.0). `agents/reviewer.md` / `code-review.md` slimming stays parked behind the Path-C faithful-instrument BACKLOG entry.
+
+### Changed
+- `scripts/dispatch-review.sh` — prompt-assembly heredoc slimmed (semantics preserved verbatim: nonce wrapped-block protocol, VERDICT/FINDINGS contract, read-only injunctions, spec/checklist sections); `evals/reviewer-bench/prompt-skeleton.golden` updated same-commit (plan §4 #9); 3 pinned-string test assertions updated to the new wording (assertion count unchanged, positive+negative pairs preserved).
+- `docs/BACKLOG.md` — reviewer-harness calibration entry RESOLVED (haiku leg, option c); terse-contracts entry → PARTIAL-SHIP.
+
+### Fixed
+- (none)
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: none required (prompt-template change only; protocol/parser byte-compatible).
+
 ## v2.32.15 — reviewer-contract measurement instrument (claude-native runner, clean-diff corpus, prompt-skeleton harness)
 
 **Headline**: The full measurement instrument for reviewer-contract work ships; the contract slimming it was built to gate does NOT (parked honest). `dispatch-review.sh` gains a **`claude-native` runner** (local Claude Code CLI with its own ambient auth — first-party models like haiku as harness/probe engines; reuses the canonical PROMPT_FILE, no second prompt-assembly source). `calibration.sh` gains **`run-clean-set`** (specificity/over-flag gate — inverted sibling of `run-known-bad`; a panel "fail" on a clean diff is an over-flag). New **`evals/clean/`** 10-case corpus of real merged known-good develop diffs (with a recorded provenance rule: never source "clean" cases from a subsystem with a multi-round bug-fix history — the first corpus draft was contaminated and produced a false 60% over-flag reading). New **`hooks/tests/dispatch-review-prompt-skeleton.test.sh`** + committed golden — captures the REAL assembled reviewer prompt via the `--bin` stub seam and byte-diffs it against `evals/reviewer-bench/prompt-skeleton.golden` (volatile nonces normalized). New **`evals/reviewer-bench/panel-cmd-contract-claude.sh`** adapter + `expected-sections.md`.

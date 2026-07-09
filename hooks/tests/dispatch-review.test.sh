@@ -618,12 +618,12 @@ end_marker="$(printf '%s\n' "$PROMPT_CONTENT" | sed -n 's/^\(<<<AUTOPILOT-END-[0
 assert_neq "" "$begin_marker" "begin_marker extracted"
 assert_neq "" "$end_marker" "end_marker extracted"
 
-expected_begin_block="Output your verdict with NO other text, prose, or fences. Its ENTIRE output MUST begin with:
+expected_begin_block="Output ONLY a wrapped block (no other text/fences), beginning with:
 $begin_marker
 VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
 FINDINGS: one finding per line, or the single word none"
 
-expected_end_block="and its ENTIRE output MUST end with:
+expected_end_block="and ending with:
 $end_marker"
 
 assert_contains "$PROMPT_CONTENT" "$expected_begin_block" "prompt contains begin-with instruction followed by BEGIN marker"
@@ -638,7 +638,7 @@ printf 'Spec file baseline text\n' > "$SPEC"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --spec-file "$SPEC" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "spec-file prompt-capture stub exits 0"
 PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
-assert_contains "$PROMPT_CONTENT" "Task specification (baseline — DISPATCHER-AUTHORED, trusted):" "prompt contains spec header"
+assert_contains "$PROMPT_CONTENT" "Task specification (DISPATCHER-AUTHORED, trusted):" "prompt contains spec header"
 assert_contains "$PROMPT_CONTENT" "Spec file baseline text" "prompt contains spec file text"
 assert_contains "$PROMPT_CONTENT" "Diff under review:" "prompt still contains Diff under review:"
 
@@ -646,14 +646,14 @@ assert_contains "$PROMPT_CONTENT" "Diff under review:" "prompt still contains Di
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" --checklists "authz-boundary,tenant-boundary" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "checklist prompt-capture stub exits 0"
 PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
-assert_contains "$PROMPT_CONTENT" "Adversarial checklist (must check these closely):" "prompt contains checklist section when checklists set"
+assert_contains "$PROMPT_CONTENT" "Checklist (check closely):" "prompt contains checklist section when checklists set"
 assert_contains "$PROMPT_CONTENT" "- authz-boundary" "prompt includes authz-boundary checklist item"
 assert_contains "$PROMPT_CONTENT" "- tenant-boundary" "prompt includes tenant-boundary checklist item"
 
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "no-checklist prompt-capture stub exits 0"
 PROMPT_CONTENT="$(cat "$CAPTURED_PROMPT_FILE")"
-assert_not_contains "$PROMPT_CONTENT" "Adversarial checklist (must check these closely):" "prompt omits checklist section when --checklists is absent"
+assert_not_contains "$PROMPT_CONTENT" "Checklist (check closely):" "prompt omits checklist section when --checklists is absent"
 
 # Regression Test: multi-line findings containing double quotes/backslashes must produce valid parseable JSON.
 OUT="$(STUB_MODE=quotes DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

@@ -152,6 +152,45 @@ test_missing_verify_cmd() {
     assert_eq "$?" "2" "missing --verify-cmd exits 2"
 }
 
+# 8. Relative --verify-cmd is canonicalized against the CALLER's cwd at startup
+#    (regression: the executable check ran in caller cwd but execution cd'd into
+#    detached worktrees, so a relative path silently failed as NOT_GREEN_ON_HEAD).
+test_relative_verify_cmd() {
+    local repo="$TEST_TMP/repo_relvc"
+    local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
+    local base head; base=${shas%% *}; head=${shas##* }
+    create_verify_cmd "$TEST_TMP/verify_rel.sh"
+    local out ec
+    out=$(cd "$TEST_TMP" && "$SCRIPT" --range "$base..$head" --verify-cmd "./verify_rel.sh" --repo "$repo" 2>&1); ec=$?
+    assert_eq "$ec" "0" "relative verify-cmd VALIDATED exits 0"
+    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "relative verify-cmd VALIDATED verdict"
+    (cd "$TEST_TMP" && "$SCRIPT" --range "$base..$head" --verify-cmd "./no_such_cmd.sh" --repo "$repo") >/dev/null 2>&1
+    assert_eq "$?" "2" "nonexistent relative verify-cmd exits 2 (named error)"
+}
+
+# 9. json_escape yields valid JSON for control chars (\n \t \r \b \f, other
+#    <0x20 as \u00XX) plus quote and backslash (regression: only \ and " were
+#    escaped, so a crafted path/reason string produced invalid JSON).
+test_json_escape_control_chars() {
+    eval "$(sed -n '/^json_escape()/,/^}$/p' "$SCRIPT")"
+    local out; out=$(json_escape $'a\nb\tc\rd\be\ff"g\\h\x01i')
+    assert_eq "$out" 'a\nb\tc\rd\be\ff\"g\\h\u0001i' "json_escape escapes control chars + quote + backslash"
+}
+
+# 10. Relative --verify-cmd whose dirname component is a PLAIN FILE must exit 2
+#     with a named error — never abort uncleanly via set -e during
+#     canonicalization (the cd is wrapped in a conditional).
+test_verify_cmd_dirname_plain_file() {
+    local repo="$TEST_TMP/repo_dirname"
+    $GIT init "$repo" >/dev/null 2>&1
+    $GIT -C "$repo" commit --allow-empty -m base >/dev/null 2>&1
+    : > "$TEST_TMP/plainfile"
+    local err ec
+    err=$(cd "$TEST_TMP" && "$SCRIPT" --range "HEAD..HEAD" --verify-cmd "plainfile/cmd.sh" --repo "$repo" 2>&1 >/dev/null); ec=$?
+    assert_eq "$ec" "2" "plain-file dirname verify-cmd exits 2 (named error)"
+    assert_contains "$err" "verify-cmd" "plain-file dirname error names verify-cmd"
+}
+
 test_validated
 test_validated_nested
 test_not_red_on_base
@@ -160,5 +199,8 @@ test_inconclusive_no_test_files
 test_help
 test_invalid_flag
 test_missing_verify_cmd
+test_relative_verify_cmd
+test_json_escape_control_chars
+test_verify_cmd_dirname_plain_file
 
 finalize_test

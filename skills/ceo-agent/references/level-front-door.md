@@ -136,6 +136,13 @@ When `/l5` or `/l6` is invoked, the foreman resolves the roster and execution pa
   - `full` (default) ⇒ the reviewer reads the whole `<base>..HEAD` diff every round. Safe; cost grows O(n) as the diff accumulates.
   - `incremental-mitigated` ⇒ the reviewer reads `<prev-round>..HEAD` PLUS the full content of every file touched this round PLUS a standing invariants/prior-findings checklist; do a full `<base>..HEAD` re-read every 3–5 rounds or whenever a round touches shared/critical logic (classifiers, schemas, fixtures, harness control flow); and ALWAYS a final full `<base>..HEAD` review before merge. Use only on long loops — naive incremental-only misses cross-file regressions in untouched files. When this mode is on, `independent_harness` MUST run the FULL test suite, not just touched-file tests (real lesson 2026-06-26: a stale-fixture regression in an untouched test file slipped a too-narrow per-round scope to the final sweep). Reference driver: `resolve-review-loop.sh --field review_diff_scope`.
 - **`independent_harness:on`**: Depth-0 ALSO builds its own adversarial harness and never trusts the implementer's own green.
+- **`loop_max_rounds` cap → convergence semantics.** When the review loop hits its
+  `loop_max_rounds` ceiling, depth-0 reads the terminal round's verdict before deciding.
+  If the final verdict is **FIX-THEN-SHIP** (conditional pass) AND the round-over-round
+  findings show a **single-point-convergence** shape (narrowing to one residual fix, NOT
+  a REWORK-class churn), depth-0 may rule **"conditional convergence"**: apply the final
+  fix and advance, with the authoritative qc panel (§3) as the backstop. A capped round
+  whose verdict is **REWORK** is still an **escalation** — the cap did not converge.
 - **Block-mode test-integrity override stays DEFERRED**: A block-mode `executed_set_shrink` hard-fails with no honored override (no local-only containment is malicious-proof against a same-user worker — sibling-scope escape; gpt-5.5 review 2026-06-26). Resolve a legit shrink by fixing the test or running that project in `warn`. Re-enable is BACKLOG'd behind real isolation.
 
 ### Width — fixed cap 3, disjointness-gated
@@ -180,9 +187,16 @@ The foreman is a native `Agent` dispatched in the background with worktree
 isolation. P0 spike (2026-06-22, PASS) verified every step below empirically:
 
 ```
-agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "general-purpose", prompt: <foreman brief>)
+agentId = Agent(run_in_background: true, isolation: "worktree", subagent_type: "general-purpose", model: "opus", prompt: <foreman brief>)
 ```
 
+- **🔴 Every `Agent` dispatch MUST pass `model` explicitly.** With no `model`
+  argument the subagent **inherits the parent session's model** — so a Fable-class
+  CEO silently runs its foreman on Fable, which violates Amendment 11 (the foreman is
+  a `sub-orchestrator` → `opus`) and burns through Fable quota (real case 2026-07-09
+  hangar `/l6`: the foreman died mid-run on an API limit). Rule: set `model` on every
+  dispatch — foreman / sub-orchestrator = `opus`; mechanical inventory / file work =
+  `sonnet` or `haiku`. Never rely on inheritance.
 - `Agent(run_in_background, isolation:"worktree")` returns an **`agentId`** that
   is usable as a `TaskStop` `task_id`.
 - The foreman's worktree is at a **deterministic** path:
@@ -209,6 +223,15 @@ The moment the leaf becomes a heterogeneous engine (`/l5`/`/l6`), that leaf is i
 — only its log file + git artifacts exist. A *live* "model is asking a question" stream from
 agy is the deferred `stream-json` rail (spike-gated, NOT built — see
 [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md) § "Deferred").
+
+**A background foreman that yields its turn to wait on its OWN background child (e.g.
+a long `engine implement-review` run) is NOT auto-woken.** When that child completes,
+depth-0 receives the completed notification and MUST `SendMessage` the foreman to
+resume it — nothing else revives a foreman parked behind its own sub-dispatch. Prefer
+to head this off in the foreman brief: instruct it to **wait with a blocking primitive**
+(a high-timeout foreground `Bash`, or `TaskOutput` block on the child) rather than
+yielding, and — if it must yield the turn — to first write out each unit's status and
+the concrete next step so depth-0 can resume it deterministically.
 
 #### Worktree base — default `origin/develop` (NOT the CEO's HEAD), selectable via `worktree.baseRef`
 
@@ -270,9 +293,17 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
   (Cancel the guard with `TaskStop <monitor-id>` once the foreman returns normally,
   else it fires a harmless stale event at the cap.) The wall-clock itself is plain
   depth-0 timing (no new primitive).
-- **On timeout or cap-hit → `TaskStop <agentId>` then escalate.** Fail-closed:
-  a hit cap is an escalation, never a silent continue. This is also the
-  **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
+- **On timeout or cap-hit, judge by git artifacts BEFORE acting.** Read the foreman
+  worktree branch's commit progress (`git -C <worktree> log`), **never the foreman's
+  self-report**, to decide whether it is healthily advancing. Healthily progressing →
+  a **one-time** extension is allowed, recorded in the decision log (a second overrun
+  is a hard `TaskStop`, no second extension). No commit progress → **immediate
+  `TaskStop <agentId>` + escalate.**
+- **No progress — or any overrun after the one-time extension → `TaskStop
+  <agentId>` then escalate.** The artifact check above is the ONLY branch out of a
+  hit cap. Fail-closed: a hit cap is an escalation, never a silent continue (the
+  extension is itself an explicit, decision-logged action, not a continue). This is
+  also the **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
 
 ### 1.b Quota/session-limit reset preflight recovery (R4)
 

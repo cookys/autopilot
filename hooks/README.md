@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-22 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A) + **12 opt-in** (Tier B) — zero disabled as of v2.25.2. As of v2.26.2 **all 22 are wired in `hooks.json`** (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 12 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+23 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A) + **13 opt-in** (Tier B) — zero disabled as of v2.25.2. As of v2.26.2 **all 23 are wired in `hooks.json`** (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 13 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -110,6 +110,7 @@ hooks/
   test-runner.js           # Tier B (opt-in)
   design-quality.js        # Tier B (opt-in)
   mcp-health.js            # Tier B (opt-in)
+  dispatch-model-guard.js  # Tier B (opt-in) — ask on guarded expensive engine / omitted model
   version-drift-check.js   # Tier A (default-on, silent outside dev clone) — behind-upstream advisory (SessionStart)
 ```
 
@@ -184,7 +185,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
 
-## Tier B — Opt-In (12 hooks)
+## Tier B — Opt-In (13 hooks)
 
 Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-in.js` and no-ops until you opt in. **Enable** by adding the stem to `~/.autopilot/config.json`:
 
@@ -210,8 +211,13 @@ Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upp
 | test-runner | PostToolUse | Write\|Edit | Runs sibling vitest/jest test. Timeout: 60s |
 | design-quality | PostToolUse | Write\|Edit | Warns on generic UI patterns. Timeout: 10s |
 | mcp-health | PreToolUse + PostToolUseFailure | mcp__.* | Exponential backoff (30s base, 10min cap) |
+| dispatch-model-guard | PreToolUse | Task\|Agent | Asks when subagent dispatch names a guarded expensive engine (default `fable`) or omits `model:` (would inherit session model). Config: `guarded_models` / `on_missing_model` / `mode` via `.claude/dispatch-guard-config.md` |
 
 > The three PreToolUse blockers + `session-summary` were re-enabled (opt-in) once the `/dev/stdin`→fd-0 fix landed — they read `fs.readFileSync(0)` instead of opening the broken `/dev/stdin` path. The PreToolUse blockers ship opt-in rather than default-on because hard-blocking commits/reads is a per-project policy call.
+
+### dispatch-model-guard (opt-in)
+
+Mechanical enforcement of expensive-model dispatch discipline. On `Agent`/`Task` tool use, returns a native PreToolUse `permissionDecision: "ask"` when `tool_input.model` contains a guarded token (default `fable`, case-insensitive substring — so `claude-fable-5` matches) or when `model` is omitted (subagent would inherit the session model). Config keys in `.claude/dispatch-guard-config.md` (or `$DISPATCH_GUARD_CONFIG_OVERRIDE`): `guarded_models`, `on_missing_model` (`ask`|`allow`), `mode` (`ask`|`warn`|`off`). Enable via `~/.autopilot/config.json` `{"hooks":{"dispatch-model-guard":true}}` (or `AUTOPILOT_HOOK_DISPATCH_MODEL_GUARD=1`). Fail-open on unreadable payloads. **Headless note:** under `claude -p`, an ask is effectively a refusal whose reason instructs re-dispatch with an explicit cheaper model.
 
 ## Secret Patterns
 

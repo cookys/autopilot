@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.13 — opt-in `dispatch-model-guard` PreToolUse hook (expensive-model dispatch ask)
+
+**Headline**: New **opt-in** hook `dispatch-model-guard` — mechanical enforcement of the expensive-model dispatch discipline: subagent dispatch (`Agent`/`Task`) naming a guarded engine (default `fable`) or omitting `model:` triggers a native PreToolUse `permissionDecision: "ask"` instead of silently spending the session model. Born from a live probe where an omitted `model:` inherited Fable and burned 45k tokens on a 5-second task. Hook count **22 → 23** (10 default-on + **13** opt-in).
+
+**opt-in**: enable the `dispatch-model-guard` stem via `~/.autopilot/config.json` `{"hooks":{"dispatch-model-guard":true}}` or env `AUTOPILOT_HOOK_DISPATCH_MODEL_GUARD=1`. Default-off (wired in `hooks.json`, self-gated via `_shared/opt-in.js`).
+
+### Added
+- **`hooks/dispatch-model-guard.js`** — PreToolUse matcher `Task|Agent`. Asks when `tool_input.model` contains a guarded token (case-insensitive substring) or when `model` is empty and `on_missing_model: ask` (default). `mode: warn` prints advisory stderr and allows (calibration); `mode: off` is inert. Fail-open on unreadable payloads / internal errors (spend control, not a security boundary).
+- **`project-config-template/dispatch-guard-config.md`** — config keys: `guarded_models` (default `fable`), `on_missing_model` (`ask`|`allow`, default `ask`), `mode` (`ask`|`warn`|`off`, default `ask`). Resolved in-process from `$DISPATCH_GUARD_CONFIG_OVERRIDE` or `<cwd>/.claude/dispatch-guard-config.md`.
+- Wired in `hooks/hooks.json` + listed in `hooks/opt-in-manifest.json`; documented in `hooks/README.md` + `settings.example.json` enable list.
+
+### Changed
+- Hook inventory: **22 → 23** total (10 default-on, **12 → 13** opt-in, 0 disabled).
+
+### Fixed
+- (none)
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: disable `dispatch-model-guard` in `~/.autopilot/config.json` (or leave it unset — default-off).
+
 ## v2.32.12 — `on_engine_unavailable` review-loop policy (fail-closed thrift)
 
 **Headline**: "What to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`)" is now a declarative per-project review-loop config key instead of a hand-typed instruction. Shipped default is **`ask`** (fail-closed): both engine-quota death and `precondition_failed` stop the run and escalate to the user — the expensive depth-0 session model never silently takes over implementation labor. Legacy auto-`--solo` / §1.b auto-wakeup are opt-in via `solo-fallback` / `wait-reset`. `/l6` hardens the expensive-model thrift discipline as an explicit hard rule.

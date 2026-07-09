@@ -10,6 +10,6 @@
   },
 
   "//opt-in-hooks": "As of v2.26.2 opt-in hooks are NOT enabled by copying entries here. They are wired in the plugin's own hooks.json (the ONLY place ${CLAUDE_PLUGIN_ROOT} expands and where the path auto-tracks plugin updates) and stay default-OFF until you enable them. Enable via ~/.autopilot/config.json — NOT this file.",
-  "//opt-in-hooks-how": "Create/edit ~/.autopilot/config.json: {\"hooks\": {\"branch-protection\": true, \"commit-secret-scan\": true}}. Per-hook env override also works: AUTOPILOT_HOOK_BRANCH_PROTECTION=1. See hooks/README.md (Tier B) + hooks/opt-in-manifest.json for the full list.",
-  "//opt-in-hooks-list": "Enable-able stems: accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, cost-tracker, design-quality, large-file-warner, mcp-health, session-summary, test-runner."
+  "//opt-in-hooks-how": "Create/edit ~/.autopilot/config.json: {\"hooks\": {\"branch-protection\": true, \"commit-secret-scan\": true, \"dispatch-model-guard\": true}}. Per-hook env override also works: AUTOPILOT_HOOK_BRANCH_PROTECTION=1. See hooks/README.md (Tier B) + hooks/opt-in-manifest.json for the full list.",
+  "//opt-in-hooks-list": "Enable-able stems: accumulator, batch-format, branch-protection, check-console, commit-secret-scan, config-protection, cost-tracker, design-quality, dispatch-model-guard, large-file-warner, mcp-health, session-summary, test-runner."
 }

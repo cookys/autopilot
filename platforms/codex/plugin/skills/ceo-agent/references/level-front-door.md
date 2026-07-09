@@ -299,11 +299,22 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
   a **one-time** extension is allowed, recorded in the decision log (a second overrun
   is a hard `TaskStop`, no second extension). No commit progress → **immediate
   `TaskStop <agentId>` + escalate.**
-- **On timeout or cap-hit → `TaskStop <agentId>` then escalate.** Fail-closed:
-  a hit cap is an escalation, never a silent continue. This is also the
-  **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
+- **No progress — or any overrun after the one-time extension → `TaskStop
+  <agentId>` then escalate.** The artifact check above is the ONLY branch out of a
+  hit cap. Fail-closed: a hit cap is an escalation, never a silent continue (the
+  extension is itself an explicit, decision-logged action, not a continue). This is
+  also the **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
 
 ### 1.b Quota/session-limit reset preflight recovery (R4)
+
+**Gated on `on_engine_unavailable`** (retrieve the resolved value with
+`bash scripts/resolve-review-loop.sh --field on_engine_unavailable` — read it,
+never hand-type the policy): this
+auto-wakeup path only runs when the resolved key is `solo-fallback` or
+`wait-reset`. Under `ask` (the shipped default), the run stops at the quota death
+and escalates to the user immediately — report which engine died and the parsed
+reset time if available; do **not** schedule a wakeup or silently fall back to
+inline/`--solo` labor on the expensive depth-0 session model.
 
 This path is only for **quota/session-limit death** (session model usage/quota hit).
 It is distinct from `failure`/`killed` code-death recovery in §2; quota-reset
@@ -359,7 +370,7 @@ a JSON outcome.
 | `dirty` | Escalate (worker committed then left the tree dirty — not reviewable). |
 | `failure` | Escalate (clean commit but abnormal exit — run not trustworthy). |
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
-| `precondition_failed` | Fall back to `--solo` (the foreman could not start; run inline). For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
+| `precondition_failed` | **Gated on `on_engine_unavailable`** (from `resolve-review-loop.sh`): `ask` / `wait-reset` → escalate to the user (record in ledger; do **not** auto-`--solo`); `solo-fallback` → fall back to `--solo` (the foreman could not start; run inline). For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
 | `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
 | `failed`/`killed` (foreman died before normal outcome emission) | run `run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>` and let it perform recovery: locate last ledger stage, bump generation (`stage-acquire --allow-reopen`), hold resource lock, reconcile by `stage-reconcile` before any redo, adopt git-truth when available, and report `review_round_owed`. If `status=already_applied`, caller must treat as a true no-op recovery replay. On `quarantined`/D resources, resume must refuse the old resource and request a new resource path. |
 

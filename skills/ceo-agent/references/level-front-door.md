@@ -299,9 +299,11 @@ merge authority, and it is absent on non-CC hosts — never a dependency of the 
   a **one-time** extension is allowed, recorded in the decision log (a second overrun
   is a hard `TaskStop`, no second extension). No commit progress → **immediate
   `TaskStop <agentId>` + escalate.**
-- **On timeout or cap-hit → `TaskStop <agentId>` then escalate.** Fail-closed:
-  a hit cap is an escalation, never a silent continue. This is also the
-  **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
+- **No progress — or any overrun after the one-time extension → `TaskStop
+  <agentId>` then escalate.** The artifact check above is the ONLY branch out of a
+  hit cap. Fail-closed: a hit cap is an escalation, never a silent continue (the
+  extension is itself an explicit, decision-logged action, not a continue). This is
+  also the **foreman-tier stall detector** — a hung foreman trips the depth-0 clock.
 
 ### 1.b Quota/session-limit reset preflight recovery (R4)
 

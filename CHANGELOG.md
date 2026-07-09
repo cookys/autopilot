@@ -24,6 +24,31 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.15 — reviewer-contract measurement instrument (claude-native runner, clean-diff corpus, prompt-skeleton harness)
+
+**Headline**: The full measurement instrument for reviewer-contract work ships; the contract slimming it was built to gate does NOT (parked honest). `dispatch-review.sh` gains a **`claude-native` runner** (local Claude Code CLI with its own ambient auth — first-party models like haiku as harness/probe engines; reuses the canonical PROMPT_FILE, no second prompt-assembly source). `calibration.sh` gains **`run-clean-set`** (specificity/over-flag gate — inverted sibling of `run-known-bad`; a panel "fail" on a clean diff is an over-flag). New **`evals/clean/`** 10-case corpus of real merged known-good develop diffs (with a recorded provenance rule: never source "clean" cases from a subsystem with a multi-round bug-fix history — the first corpus draft was contaminated and produced a false 60% over-flag reading). New **`hooks/tests/dispatch-review-prompt-skeleton.test.sh`** + committed golden — captures the REAL assembled reviewer prompt via the `--bin` stub seam and byte-diffs it against `evals/reviewer-bench/prompt-skeleton.golden` (volatile nonces normalized). New **`evals/reviewer-bench/panel-cmd-contract-claude.sh`** adapter + `expected-sections.md`.
+
+**Campaign outcome (recorded, not shipped)**: the 2026-07-10 /l6 M3 paired measurement HALTED on the plan's gate #2 — gemini-3.5-flash baseline sensitivity oscillated 0.917/0.833 across the 0.9 floor at n=12 (calibration instability, not slimming harm; the slimmed template itself measured stable with injection intact and a flawless 12/12 haiku weak-tier read). Slimmed contracts (−16%/−17%/−14%) are parked on `feat/terse-reviewer-contracts`; three BACKLOG entries carry the retry path. Full per-case data: `docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`.
+
+### Added
+- `dispatch-review.sh --runner claude-native` — native-auth Claude CLI reviewer path (no ANTHROPIC_BASE_URL/AUTH_TOKEN precondition, no HOME redirect; same read-only prompt-injection levers as cc-shim otherwise).
+- `calibration.sh run-clean-set --panel-cmd '<cmd>'` — over-flag counter over `evals/clean/`; sidecar `class:"clean"` is corpus membership, not severity (deliberately NOT passed to `add-sample --class`).
+- `evals/clean/` — 10 clean-diff fixtures + expected.json sidecars; provenance rule in plan §3 M1.
+- `hooks/tests/dispatch-review-prompt-skeleton.test.sh` + `evals/reviewer-bench/prompt-skeleton.golden` — assembled-prompt structural drift gate (11 assertions).
+- `evals/reviewer-bench/panel-cmd-contract-claude.sh` — contract-as-preamble native adapter (recorded limitation: unfaithful for behavioral certification — see BACKLOG "Path-C 忠實儀器"; retained for weak-tier probes).
+- `evals/reviewer-bench/expected-sections.md` — per-case-class reviewer-output section expectations.
+
+### Changed
+- Codex plugin payload mirror re-synced (also catches up v2.32.14 worktree-teardown files the mirror was missing).
+- `docs/plans/2026-07-05-terse-reviewer-contracts.md` — R2 5-engine panel fold, R3 weak-tier probe design, M1 baseline numbers, M3 halt outcome.
+
+### Fixed
+- (none)
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: no config required (all additions are inert until invoked).
+
 ## v2.32.14 — worktree-teardown seam (loud orphan visibility + opt-in project hook + flock-gated `--gc`)
 
 **Headline**: `dispatch-hetero` worktree removal is no longer fail-silent. A failed `git worktree remove --force` now always emits a loud stderr WARN and a nullable `orphan_worktree` JSON field (exit codes unchanged — removal failure ≠ dispatch failure). Each worktree gets a marker (`.autopilot-worktree`) plus a process-lifetime exclusive `flock` on `.autopilot-worktree.lock` so liveness is kernel-owned (crash/SIGKILL safe; **no pid checks**). Projects can opt into a repo-root-contained `teardown_hook` (argv-exec, 120s timeout, fail-open) for reclaiming external resources, and a marker-scoped flock-gated `dispatch-hetero.sh --gc` stale reaper (default **disabled** via `stale_reaper_age_days: 0`). Motivation: the PEACE leak incident — ~92 GB of orphaned `hetero-*` worktrees (root-owned `target/`) plus ~126 GB dangling named Docker volumes, host `/` at 99%. **Script seam — no hook-count/skill-count change.**

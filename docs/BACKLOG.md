@@ -57,11 +57,23 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S(Spike)— consult 通道整合已出貨(v2.31.20:hetero-dispatch.md § Peer consult + front-door § 0 + coexistence 表);殘餘=review 通道校準(Spark 重置後跑 known-bad 10 案,false-pass-on-critical=0 才准進 qc 面)與 `rescue --write` 沙箱姿態。
 - **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
 
-### terse reviewer contracts — 量測式瘦身(plan 已 R1 收斂,待執行窗口)
-- **Trigger**: reviewer-engine 額度窗口(GPT-5.3-Codex-Spark 2026-07-07 12:44 重置,或直接用 gpt-5.5 跑雙腿)+ 一個維護時段(~46 次 review call:2 腿 ×(10 known-bad + 3 injection + 10 clean 擴充集))。
-- **Context**: Superpowers 6 實測 −41% reviewer 輸出、verdict 不變;autopilot 的三份 reviewer 契約(reviewer.md 242 行 / code-review.md 331 行 / dispatch-review 模板)從未量測式瘦身。Plan 已經 MiniMax-M3 全文審(5🟠 全折入 R1):配對基線、絕對敏感度 ≥0.9 地板、clean 集擴到 ≥10、組裝後 prompt 結構檢查、合併腿驗交互效應。完整 gate:[`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md)。
-- **Effort**: S–M
-- **Source**: 2026-07-05 Superpowers 6 研究(唯一可吸收項)+ 北極星 prose↓。
+### ⏸ EXECUTED-then-HALTED (2026-07-10) — terse reviewer contracts:瘦身完成但 M3 gate 觸發校準 halt;成果停放待儀器修復
+- **Trigger**: 下方「reviewer-harness 校準」條目解決後(基線引擎在 known-bad 上穩定 ≥0.9 且 fp-critical=0),重跑 M3 配對腿即可 —— **瘦身成果已寫好**,停放在 `feat/terse-reviewer-contracts`(bbcf192 模板 −16% / 3637646 reviewer.md −17% / 29f1bc4 code-review.md −14%,全部 grok 實作 + gpt-5.5 SHIP-AS-IS + 機械閘全綠)。
+- **Context**: 2026-07-10 /l6 全程執行(M1 儀器 → M2 瘦身 → M3 量測)。M3 結果:Path T(模板,gemini-3.5-flash)瘦身版自身穩定(0.917/0.917、injection 完好、haiku 弱層探針 12/12 滿分),但**基線兩跑震盪 0.917/0.833 跨 0.9 地板** → plan gate #2 的明文 halt 條件;Path C(reviewer.md+code-review.md,sonnet+preamble 轉接器)儀器失真(基線 clean 10/10 全誤旗、injection 兩腿皆破)無法下任何結論。完整逐案數據:[`docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`](projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md)。儀器與基礎設施(claude-native runner、evals/clean/、run-clean-set、prompt-skeleton 測試、Path-C 轉接器)已於 v2.32.15 出貨。
+- **Effort**: S(重跑 M3 legs;瘦身本體零工作)
+- **Source**: 2026-07-10 /l6 campaign;plan [`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md) M3-outcome 節。
+
+### reviewer-harness 校準 — 基線引擎在 n=12 known-bad 上不穩定,配對量測無法成立
+- **Trigger**: 下次要跑任何 reviewer-contract 配對量測(上方 terse-contracts 重試是第一個等待者);或下次 engine-onboarding 校準新 reviewer 時順手處理。
+- **Context**: 2026-07-10 M3 campaign 實測:gemini-3.5-flash 對同一 12 案 known-bad 兩跑敏感度 0.917/0.833(跨 0.9 地板;離散案例 06 兩跑翻轉),且基線就抓不到 08-path-traversal(fp-critical=0 這個 gate 在該引擎上原生不可滿足)。單跑 n=12 的一案擺幅 ≈8.3pp,>雜訊容忍。可選修法:(a) 擴 known-bad 語料到 n≥30 攤薄單案擺幅;(b) 每案 majority-of-3 取多數決作為該案 verdict(成本 ×3);(c) 換校準過的引擎跑腿 —— **實測線索:claude-native haiku 在同語料 12/12 滿分(含 08 與兩 injection),比 gemini flash 更適合當量測腿引擎**,且是原生 auth 零 endpoint 配置。(c) 最便宜,先驗證 haiku 兩跑穩定性即可採。
+- **Effort**: S(選項 c:haiku 重跑穩定性驗證 ~24 calls)/ M(選項 a:擴語料)
+- **Source**: 2026-07-10 phase-b-results.md gate #2/#6 FAIL;M1 已記錄 08 為 gemini 既有弱點。
+
+### Path-C 忠實儀器 — contract-as-preamble 轉接器失真,reviewer.md/code-review.md 的行為量測需要原生通道
+- **Trigger**: terse-contracts 重試時若要對 reviewer.md/code-review.md 下行為結論(模板路徑不受此限);或下次任何「量測 agent system-prompt 契約」需求。
+- **Context**: 2026-07-10 實測 `panel-cmd-contract-claude.sh`(契約全文塞 prompt preamble + claude -p)不忠實:基線(未瘦身契約!)clean 10/10 全誤旗(「default-assume broken」契約 + 二元 FIX-THEN-SHIP→over-flag 映射,任何 Minor nit 都觸發)、injection 兩腿皆不穩(基線 r1 漏 11+12 —— 生產環境原生 reviewer 不可能如此)。修法方向:(a) 原生 Agent 通道(system-prompt 載契約,即 subagent_type=autopilot:reviewer)+ 每案獨立 dispatch —— 但 plugin 快取使 session 內無法切換契約版本,需跨 session 或 --setting-sources 隔離;(b) severity-aware verdict 映射(解析 findings 嚴重度,僅 Critical/Major 計 over-flag —— plan §4 #6 本來的定義);兩者都做才完整。轉接器本身保留(weak-tier 探針堪用,結構已審)。
+- **Effort**: M
+- **Source**: 2026-07-10 phase-b-results.md Path C 節 + adapter limitation 記錄。
 
 ### 表面積精煉 C 組（鏡像改發版生成一 sprint；B 組已出貨 v2.31.16）
 - **Trigger**: C1a Spike 先行（codex 安裝源可指向什麼：orphan branch／release artifact／獨立小 repo，用真 codex CLI 驗）；Spike 結論出來前 C1b 不存在。C2（hook multiplexer）沿用其既有條目 trigger。

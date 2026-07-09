@@ -96,6 +96,7 @@ function validateReviewLoopConfig(value) {
   }
   assertOneOf(value, 'reviewer_effort', ['low', 'medium', 'high', 'xhigh', 'max']);
   assertOneOf(value, 'implementer_effort', ['low', 'medium', 'high', 'xhigh', 'max']);
+  // claude-native (dispatch-review.sh) is deliberately NOT roster-eligible — it is a measurement/probe runner; an unknown reviewer_runner here silently falls back to the default.
   assertOneOf(value, 'reviewer_runner', ['codex', 'auto', 'agy', 'grok', 'cc-shim', 'anthropic-compatible']);
   assertOneOf(value, 'implementer_runner', ['auto', 'codex', 'agy', 'grok', 'cc-shim']);
   assertOneOf(value, 'spec_review', ['on', 'off']);

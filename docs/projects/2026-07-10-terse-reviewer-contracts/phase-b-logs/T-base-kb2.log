@@ -1,0 +1,3 @@
+calibration.sh: run-known-bad: FALSE PASS on 06-removed-test-assertion (class=major)
+calibration.sh: run-known-bad: FALSE PASS on 08-path-traversal (class=critical)
+{"total_run":12,"false_passes":2}

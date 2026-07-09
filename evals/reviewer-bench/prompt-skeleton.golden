@@ -1,0 +1,23 @@
+You are a code reviewer. Review ONLY the diff below for correctness, security, and
+completeness. Do NOT edit any file, do NOT create any project, do NOT run commands.
+Output your verdict with NO other text, prose, or fences. Its ENTIRE output MUST begin with:
+<<<AUTOPILOT-REVIEW-<NONCE>>>>
+VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
+FINDINGS: one finding per line, or the single word none
+
+and its ENTIRE output MUST end with:
+<<<AUTOPILOT-END-<NONCE>>>>
+
+Do NOT repeat or echo the diff or these instructions. Output ONLY the wrapped block, with nothing after it.
+
+Diff under review:
+```
+diff --git a/x.js b/x.js
+--- a/x.js
++++ b/x.js
+@@ -1 +1 @@
+-const a = 1
++const a = 2
+
+```
+<<<AUTOPILOT-END-<NONCE>>>>

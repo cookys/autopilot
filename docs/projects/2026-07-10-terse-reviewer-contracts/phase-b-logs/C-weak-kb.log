@@ -1,0 +1,2 @@
+calibration.sh: run-known-bad: FALSE PASS on 02-inverted-condition (class=critical)
+{"total_run":12,"false_passes":1}

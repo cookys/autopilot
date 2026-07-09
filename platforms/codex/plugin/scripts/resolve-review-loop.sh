@@ -253,6 +253,7 @@ QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
 # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
+# claude-native (dispatch-review.sh) is deliberately NOT roster-eligible — it is a measurement/probe runner; an unknown reviewer_runner here silently falls back to the default.
 case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim|anthropic-compatible) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac

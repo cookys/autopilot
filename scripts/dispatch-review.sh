@@ -30,7 +30,7 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
@@ -45,6 +45,13 @@
 #   with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
 #   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
+#   claude-native runner: drives the LOCAL Claude Code CLI with its own ambient/native auth
+#   (OAuth session / subscription / ANTHROPIC_API_KEY — whatever is already configured), for
+#   first-party Anthropic models (e.g. claude-haiku). Unlike cc-shim (a third-party
+#   compatible-endpoint driver), this path does NOT require or touch
+#   ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN and does NOT redirect HOME (native session
+#   credentials commonly live under the real HOME). Reuses the same canonical PROMPT_FILE
+#   every other runner reads — no second prompt-assembly source.
 #   anthropic-compatible runner: direct HTTP POST to an Anthropic-compatible /v1/messages
 #   endpoint (MiniMax-M3, GLM-*, …) via dispatch-anthropic-review.js — NOT claude/cc-shim.
 #   Auth from env only: MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN
@@ -62,7 +69,7 @@
 #   ANTHROPIC_API_KEY.
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...", "raw_log": "<path>", "error": "..." }
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
@@ -110,8 +117,8 @@ done
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$RUNNER" "$MODEL" "$1"; exit 2; }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, or anthropic-compatible (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, or claude-native (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
@@ -257,12 +264,14 @@ CODEX_OUT=""
 CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
+CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 cleanup() {
   rm -f "$PROMPT_FILE" "$BLOCK_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
+  [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
 }
 trap cleanup EXIT
 PARSE_INPUT="$RAW_LOG"
@@ -465,6 +474,34 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     passive_capture "no_verdict"
     printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
+    exit 1
+  fi
+elif [[ "$RUNNER" = "claude-native" ]]; then
+  CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
+  [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (claude-native drives the local Claude Code CLI with its own ambient/native auth)"
+  case "$CC_BIN" in
+    /*) ;;
+    *)  CC_BIN="$(cd "$(dirname "$CC_BIN")" 2>/dev/null && pwd)/$(basename "$CC_BIN")" || true
+        case "$CC_BIN" in /*) ;; *) die_precondition "could not resolve --bin to an absolute path: ${BIN}" ;; esac ;;
+  esac
+  # Read-only posture on the untrusted diff, same prompt-injection-reducing levers as cc-shim
+  # (--setting-sources project / --strict-mcp-config / --tools "" / scratch cwd), MINUS the
+  # auth-isolating ones that don't apply to a first-party native call: no ANTHROPIC_BASE_URL/
+  # ANTHROPIC_AUTH_TOKEN precondition, no `env -u ANTHROPIC_API_KEY`, no HOME redirection
+  # (native OAuth-session / subscription credentials commonly live under the real HOME; unlike
+  # cc-shim's explicit bearer token, there is no HOME-independent credential to pass instead).
+  CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+      _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>&1
+  CNATIVE_RC=$?
+  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
+  rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  if [ "$CNATIVE_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: claude-native (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$CNATIVE_RC" "$([ "$CNATIVE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    passive_capture "no_verdict"
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "claude-native exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CNATIVE_RC"
     exit 1
   fi
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then

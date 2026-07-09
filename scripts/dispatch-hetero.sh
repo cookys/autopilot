@@ -210,6 +210,9 @@ while [ $# -gt 0 ]; do
 done
 
 # --- --gc subcommand (standalone stale reaper; no dispatch) ---
+if [ "$DO_GC" -ne 1 ] && { [ "$REAP_UNMARKED" -eq 1 ] || [ "$GC_YES" -eq 1 ]; }; then
+  die_precondition "--reap-unmarked/--yes are --gc flags; pass --gc"
+fi
 if [ "$DO_GC" -eq 1 ]; then
   if [ "$REAP_UNMARKED" -eq 1 ] && [ "$GC_YES" -ne 1 ]; then
     echo "error: --reap-unmarked requires --yes (recovery escape hatch)" >&2

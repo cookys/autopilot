@@ -292,6 +292,9 @@ gc_stale_worktrees() {
   # Disabled guard FIRST — before any enumeration (round-3 codex Major).
   if [ "$age_days" -le 0 ]; then
     printf 'reaper disabled (stale_reaper_age_days=0)\n' >&2
+    # stdout contract: --gc ALWAYS emits the JSON envelope (downstream consumers
+    # parse stdout unconditionally); disabled = empty envelope, not silence.
+    printf '{ "reaped": [], "skipped_live": 0, "skipped_fresh": 0, "skipped_unmatched": 0, "lock_unsupported": 0, "kept_orphan": [] }\n'
     exit 0
   fi
 

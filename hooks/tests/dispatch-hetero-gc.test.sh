@@ -106,7 +106,17 @@ EOF
         sleep 30
     ) &
     local lock_pid=$!
-    sleep 0.1  # Give lock time to establish
+    LOCK_WAIT_PATH="$wt_path/.autopilot-worktree.lock"
+    # wait (bounded) until the holder actually owns the lock — fixed sleeps race on loaded hosts
+    for _ in $(seq 1 50); do
+        flock -n "$LOCK_WAIT_PATH" true 2>/dev/null || break
+        LOCK_WAIT_PATH="$TMPDIR/.autopilot-gc.lock"
+    # wait (bounded) until the holder actually owns the lock — fixed sleeps race on loaded hosts
+    for _ in $(seq 1 50); do
+        flock -n "$LOCK_WAIT_PATH" true 2>/dev/null || break
+        sleep 0.1
+    done
+    done
     
     cd "$scratch"
     local output

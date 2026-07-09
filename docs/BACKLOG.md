@@ -81,12 +81,18 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: C1=M（含 Spike）
 - **Source**: 2026-07-04 Fable 5 session（Cookys 口頭核可）；B 組出貨 = docs/projects/2026-07-04-surface-area-reduction-b/。
 
-### Pre-existing full-suite failures: `autopilot-cli` (4) / `review-runner` (4) / `intent-capture-basic-write` (2)
+### ✅ RESOLVED (2026-07-10, v2.32.17) — pre-existing full-suite failures: autopilot-cli/review-runner/intent-capture already fixed on develop (stale classification); the REAL red was contract-parity (JS twin missing on_engine_unavailable) — fixed
 - **ABSORBED 2026-07-04** into `docs/plans/2026-07-04-quality-floor-engine.md` §7 **P3-pre2** (Board directive: quality-floor completion run, v2.31.12 target).
 - **Trigger**: next full-suite-green push, OR next time touching `bin/autopilot.js` dispatch delegation / `src/runners/review.js` / intent-capture session-id fallback.
 - **Context**: classified PRE_EXISTING against develop during the v2.31.10 release (fail identically on the pre-branch base). `autopilot-cli.test.sh` + `review-runner.test.sh` failures are in the dispatch-review-through-CLI stub path (`status/verdict/findings` not parsed — plausibly stale stub fixtures from the v2.31.3 nonce wrapped-block protocol, same class the v2.31.10 sibling-test fixture repairs addressed for other files); `intent-capture-basic-write` canonical-fallback session-id assertions were already noted failing at v2.31.2. Suite otherwise green (89/93 at v2.31.10).
 - **Effort**: Fix
 - **Source**: 2026-07-04 review-closeout L-5.2 full-suite classification (develop-worktree baseline run).
+
+### resolve-endpoint.test.sh 不 hermetic — 吃到使用者真實 endpoints.env 憑證
+- **Trigger**: 下次碰 `hooks/tests/resolve-endpoint.test.sh` 或 `scripts/load-endpoints-env.sh`;或該測試再度紅掉時。
+- **Context**: 2026-07-10 實測:測試斷言「AUTOPILOT_ENDPOINT_GLM_TOKEN 未設時 fail-closed 要報 unset」,但機器上 `~/.autopilot/endpoints.env` 真的設定了 GLM(2026-07-09 起)→ loader 載入真憑證 → token 存在 → 斷言失敗。測試環境未隔離(需 `AUTOPILOT_ENDPOINTS_ENV` 指向空檔或 env -u 清乾淨)。1/56 失敗,pre-existing 於 v2.32.15+,與程式行為無關。
+- **Effort**: S(一行 env 隔離)
+- **Source**: 2026-07-10 L6-r2 WS-C depth-0 root-cause(foreman 標 out-of-scope,depth-0 查明根因)。
 
 ### Contract JSON-schema SSOT for the bash↔JS resolver/runner contracts
 - **Trigger**: the next NEW field added to `resolve-review-loop.sh` (or a second contract-drift incident anywhere) after v2.31.10's round-trip parity tests.
@@ -100,7 +106,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: 2026-07-04 review-closeout design panel Q2.
 
-### dispatch-author.sh `--endpoint` parity with dispatch-hetero/dispatch-review
+### ✅ DONE (already shipped ~v2.31.13, `2a5d7fa` feat/eb-w2; BACKLOG entry was stale) — dispatch-author.sh `--endpoint` parity
 - **Trigger**: next time authoring is dispatched to an Anthropic-compatible endpoint (cc-shim) — the flag gap forces a manual `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN` export.
 - **Context**: hit live 2026-07-04: grok(-build AND -composer) intermittently returned zero-byte output on ~90-line authoring prompts (capability event recorded), and the MiniMax fallback needed hand-wired env because `dispatch-author.sh` lacks the `--endpoint <name>` flag its two siblings have. One-flag addition + the loader mapping (`resolve-endpoint.sh` → `ANTHROPIC_*`).
 - **Effort**: S

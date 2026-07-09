@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.17 — JS-twin contract parity: `on_engine_unavailable` (the parity gate did its job)
+
+**Headline**: `contract-parity.test.sh` had been red on develop since the v2.32.12 shell resolver gained `on_engine_unavailable` — the JS twin (`src/engine/resolve-review-loop.js` + codex mirror) never learned the field, exactly the drift class the parity test exists to catch. Fixed: field added to `REVIEW_LOOP_FIELDS` + `assertOneOf(['ask','solo-fallback','wait-reset'])` (required, matching `min_panel_size` treatment); two test fixtures that predated the field updated additively. Also: the v2.31.10 "pre-existing full-suite failures" BACKLOG entry proved stale (autopilot-cli/review-runner/intent-capture already green on develop), and the `dispatch-author --endpoint` parity entry was already shipped at `2a5d7fa` — both corrected. New BACKLOG entry: `resolve-endpoint.test.sh` is not hermetic (asserts a GLM token is unset, but reads the machine's real `~/.autopilot/endpoints.env`, which now has GLM configured — 1/56, environment-dependent).
+
+### Fixed
+- `src/engine/resolve-review-loop.js` (+ codex mirror): `on_engine_unavailable` in `REVIEW_LOOP_FIELDS` + enum validation — restores shell↔JS twin parity; `contract-parity.test.sh` 17/11 → 28/0.
+- `hooks/tests/autopilot-engine.test.sh` / `hooks/tests/review-loop-runner.test.sh`: inline config fixtures gain the field (additive; no assertion removed/weakened).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.16 — slimmed dispatch-review reviewer prompt (−16%, M3-gated on the haiku leg)
 
 **Headline**: The `dispatch-review.sh` reviewer prompt template ships **16% slimmer** (~353 → ~296 tokens on the per-dispatch heredoc), paid back on EVERY hetero review call. This is the first of the three terse-reviewer-contracts to clear the plan's full M3 measurement gate — after the Board-directed leg-engine switch: `claude-native haiku` proved 2-run stable on the 12-case known-bad corpus (baseline sensitivity **1.0/1.0**, vs gemini-3.5-flash's 0.917/0.833 oscillation that halted the first campaign), fp-on-critical=0 including `08-path-traversal` and both injection cases, slimmed leg 12/12 with zero case-level regressions, clean over-flags adjudicated 0/10 Critical-Major on both legs (binary-mapping raw data + per-flag adjudication recorded in `docs/projects/2026-07-10-terse-reviewer-contracts/m3-rerun-haiku.md`). haiku recorded in the engine scorecard as a qualified reviewer (capability 1.0). `agents/reviewer.md` / `code-review.md` slimming stays parked behind the Path-C faithful-instrument BACKLOG entry.

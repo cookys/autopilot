@@ -9,6 +9,10 @@
 #   scripts/verify-red-green.sh --base <ref> --head <ref> --verify-cmd <script-path> \
 #       [--test-glob <glob>]... [--repo <dir>]
 #
+#   --verify-cmd may be a relative path; it is canonicalized to an absolute path
+#   against the CALLER's cwd at startup, because execution happens inside
+#   detached worktrees (a caller-relative path would not resolve after the cd).
+#
 # Output: JSON on stdout:
 #   { verdict, red_green_validated, base_sha, head_sha, head_result, base_result,
 #     red_tests, reason }
@@ -44,11 +48,34 @@ REPO=""
 declare -a TEST_GLOBS=()
 
 usage() {
-  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
 }
 
+# Full JSON string escaping, pure bash (no new dependency): backslash, quote,
+# the named control escapes (\n \t \r \b \f), and every other char < 0x20 as
+# \u00XX — a crafted ref/path/reason string must never yield invalid JSON.
 json_escape() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+  local s="$1" out="" i c ord
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "$c" in
+      \\)     out+='\\' ;;
+      '"')    out+='\"' ;;
+      $'\n')  out+='\n' ;;
+      $'\t')  out+='\t' ;;
+      $'\r')  out+='\r' ;;
+      $'\b')  out+='\b' ;;
+      $'\f')  out+='\f' ;;
+      *)
+        printf -v ord '%d' "'$c"
+        if (( ord < 32 )); then
+          printf -v c '\\u%04x' "$ord"
+        fi
+        out+="$c"
+        ;;
+    esac
+  done
+  printf '%s' "$out"
 }
 
 json_array_from_lines() {
@@ -153,6 +180,16 @@ fi
 BASE_SHA="$(git -C "$REPO" rev-parse --verify "$BASE_REF" 2>/dev/null)" || err_usage "base ref not found: $BASE_REF"
 HEAD_SHA="$(git -C "$REPO" rev-parse --verify "$HEAD_REF" 2>/dev/null)" || err_usage "head ref not found: $HEAD_REF"
 
+# Canonicalize --verify-cmd to an absolute path BEFORE any cd: run_verify_cmd
+# executes inside detached worktrees, so a path relative to the caller's cwd
+# would stop resolving (or resolve to a different file) after the cd.
+if [[ "$VERIFY_CMD" != /* ]]; then
+  if [[ -e "$VERIFY_CMD" ]]; then
+    VERIFY_CMD="$(cd "$(dirname "$VERIFY_CMD")" && pwd)/$(basename "$VERIFY_CMD")"
+  else
+    err_usage "verify-cmd not found (relative path resolved against caller cwd): $VERIFY_CMD"
+  fi
+fi
 if [[ ! -x "$VERIFY_CMD" ]]; then
   err_usage "verify-cmd not found or not executable: $VERIFY_CMD"
 fi

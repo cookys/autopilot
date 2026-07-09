@@ -1,0 +1,39 @@
+## Reviewer Report
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+- `hooks/tests/verify-red-green.test.sh:180-192` (new `test_verify_cmd_dirname_plain_file`) — **The test does not exercise the code path it claims to test, and would pass identically with the fix reverted.** The test constructs `--verify-cmd "plainfile/cmd.sh"` where `$TEST_TMP/plainfile` is a plain file, intending to hit the new `if ! VERIFY_CMD_DIR="$(cd "$(dirname "$VERIFY_CMD")" 2>/dev/null && pwd)"` guard at `platforms/codex/plugin/scripts/verify-red-green.sh:190-193` / `scripts/verify-red-green.sh:190-193`. But that guard is only reached inside `if [[ -e "$VERIFY_CMD" ]]` (`platforms/codex/plugin/scripts/verify-red-green.sh:187`). Per POSIX `stat()` semantics, when a non-final path component is not a directory, `stat()` returns `ENOTDIR` and `[[ -e ]]` evaluates false — it cannot be true when `dirname` is a plain file. So `-e "plainfile/cmd.sh"` is false, and the script takes the **pre-existing, unchanged** `else` branch at `platforms/codex/plugin/scripts/verify-red-green.sh:195` (`err_usage "verify-cmd not found..."`), which already existed before this diff and already returns exit 2 containing the substring `"verify-cmd"`. Mutation check: revert the production fix back to the bare `VERIFY_CMD="$(cd "$(dirname "$VERIFY_CMD")" && pwd)/$(basename "$VERIFY_CMD")"` and this test still passes unchanged — it is a vacuous probe per the "mutation-validated probe" standard (a probe that stays green when the claimed defect is reintroduced refutes nothing). Consequence: the actual defensive fix (preventing an uncontrolled `set -e` abort on a TOCTOU-style `cd` failure) ships with **zero** regression coverage; a future refactor that drops the `if !` guard would not be caught by this suite. Fix direction: either (a) construct a scenario that genuinely reaches the `cd` failure while `-e` is still true — e.g., a harness that removes/replaces the target directory or drops its execute bit *between* the `-e` check and the `cd` (guard for root-bypasses-permissions in CI), or (b) if that race is impractical to test deterministically, rename/re-scope this test to honestly document that it exercises the pre-existing "not found" branch (already possibly overlapping `test_relative_verify_cmd`/`test_missing_verify_cmd` — not confirmed since those bodies are unchanged and not in this diff) rather than claiming to cover the new `cd`-guard.
+
+### 🟡 Minor (recommended)
+None.
+
+### 🔵 Suggestion (consider)
+- `platforms/codex/plugin/scripts/verify-red-green.sh:190` / `scripts/verify-red-green.sh:190` — `2>/dev/null` on the `cd` unconditionally swallows the underlying OS error (e.g., "Not a directory" vs. "Permission denied"), replacing it with a generic "verify-cmd dirname unresolvable" message. This is a minor debuggability regression for whoever hits this rare path in the future. Consider capturing stderr into a variable and appending it to the `err_usage` message for easier diagnosis.
+
+### ✅ Verified Clean
+- Reviewed `platforms/codex/plugin/scripts/verify-red-green.sh:185-196` and `scripts/verify-red-green.sh:185-196` — both copies received byte-identical patches; sync between the two duplicated script locations is maintained correctly.
+- Reviewed the `if ! VERIFY_CMD_DIR="$(cd ... 2>/dev/null && pwd)"; then err_usage ...; fi` construct — commands used as an `if` condition are exempt from `set -e`, so this correctly prevents the uncontrolled abort the comment describes, for the code path it actually reaches.
+- Reviewed quoting throughout the fix — no unquoted expansions, no shell-injection surface; `VERIFY_CMD` is a trusted CLI-supplied argument, not untrusted network/user input.
+- No hardcoded secrets, SQL/XSS/CSRF/SSRF/command-injection surface in this diff — pure local shell tooling.
+- No LLM/agent-dispatch code present in this diff (excessive-agency / prompt-injection / unbounded-consumption checklist items are not applicable here).
+- No performance concerns — script contains no loops over large data, no hot-path I/O.
+- Reviewed full diff for scope creep — every changed line traces to the task (fix + matching test + the required sync of both script copies; nothing else touched).
+
+**Disclosed bounds (not covered by this review):**
+- Did not execute `bash hooks/tests/run.sh` — no Bash tool execution was available in this review session. Per the checklist this gate is normally mandatory (non-zero exit = 🔴 Critical); its pass/fail state here is **UNVERIFIED**, not confirmed green, and must be run before merge.
+- Did not enumerate the full repository tree to confirm there is no third platform-specific copy of `verify-red-green.sh` beyond the two shown in the diff (no directory-listing tool available in this session). If a third copy exists, it needs the same patch.
+- `err_usage`'s definition is not part of this diff; its exit-2 behavior is assumed (based on the pre-existing `|| err_usage` idiom at the same file's `HEAD_SHA` line) rather than directly confirmed. If it does not unconditionally exit, a failed `cd` would fall through and construct a bogus `VERIFY_CMD_DIR/basename` path instead of stopping — this is a pre-existing assumption in the codebase, not newly introduced by this diff.
+
+### Summary
+Overall risk: Medium
+Top 3 priorities to fix:
+1. Rework or re-scope `test_verify_cmd_dirname_plain_file` — as written it cannot reach the new `cd`-guard code and passes identically pre- and post-fix (`hooks/tests/verify-red-green.test.sh:180-192`).
+2. Run `bash hooks/tests/run.sh` before merge to close the disclosed test-execution gap.
+3. (Suggestion) Preserve the underlying `cd` failure reason instead of swallowing it via `2>/dev/null`.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: The Major finding (vacuous regression test) has a clear, scoped fix — no root-cause investigation or domain specialization required.
+Remaining risks: Test suite has not been executed in this review session (disclosed bound); a third, unpatched copy of `verify-red-green.sh` elsewhere in the repo cannot be ruled out without directory enumeration.

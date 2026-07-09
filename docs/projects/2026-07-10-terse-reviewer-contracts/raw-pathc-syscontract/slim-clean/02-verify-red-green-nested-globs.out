@@ -1,0 +1,39 @@
+## Reviewer Report
+
+**Review-session bound (disclosed per "No silent caps"):** This review had no tool execution available (Bash/Read disabled in this session — confirmed by the framing note preceding the spec). I could only analyze the diff hunks provided. I could **not**: (a) read the rest of `scripts/verify-red-green.sh` beyond the shown hunk to see how `DEFAULT_TEST_GLOBS` is actually consumed downstream, (b) execute `hooks/tests/run.sh` / `hooks/tests/verify-red-green.test.sh`, or (c) inspect the shared test-harness helpers (`assert_eq`, `assert_contains`, `json_field`, `$SCRIPT`/`$GIT` setup) referenced but not shown. These are flagged explicitly rather than assumed clean.
+
+### 🟠 Major (strongly recommended)
+
+- `scripts/verify-red-green.sh:25-34` (new `DEFAULT_TEST_GLOBS`, per the added comment claiming "git `:(glob)` magic") — **The consuming code that actually matches these patterns against changed files is not present in this diff hunk and could not be located/verified in this review.** Git's `**` cross-directory glob semantics (leading `**/` matches zero-or-more dirs, trailing `/**` matches everything inside) are **glob pathspec-magic behavior** — they require the patterns to be passed through git with `:(glob)` magic (or `--glob-pathspecs`/`core.globPathSpecs`), not git's bare default pathspec matching. If downstream code instead matches these strings via plain bash `[[ $file == $pattern ]]` / `case` without `shopt -s globstar`, `**` silently collapses to `*` (no cross-`/` matching) and the fix is a no-op — the exact bug being "fixed" would persist. Impact: the entire fix's correctness hinges on this unverified detail. Fix direction: cite the exact call site (`grep -n DEFAULT_TEST_GLOBS scripts/verify-red-green.sh` for all usages) and confirm it is passed to `git diff`/`git ls-files` with glob pathspec magic; if it's bash-native matching, confirm `shopt -s globstar` is set and re-verify semantics match git's documented rules quoted in the comment (they differ subtly — e.g. bash globstar doesn't implement the "match in all directories including zero" rule for `**/foo` the same way).
+
+- Test-suite execution not performed for this change (see session bound above). Per this repo's own policy (`hooks/tests/run.sh` must pass, non-zero → Critical), this is a **live-system fact** that cannot be certified via file:line alone. Mark UNVERIFIED. Fix direction: run `hooks/tests/run.sh` (or targeted `bash hooks/tests/verify-red-green.test.sh`) before merge; treat any failure as Critical per project policy, not as this review's Major.
+
+### 🟡 Minor (recommended)
+
+- `scripts/verify-red-green.sh:26-27,32-33` — Prefixing `*test*`/`*spec*` with `**/` correctly fixes the nested-path miss, but also **broadens the match surface to every depth**: any file whose path contains the substring "test" or "spec" anywhere (e.g. `docs/spec-notes.md`, `src/testing-utils.ts`, `vendor/pkg/test-runner.js`) now counts as a "test file changed" signal at any depth, whereas previously this overbroad substring match was at least confined to root-level basenames. This is an amplification of a pre-existing weak-pattern design, not a new class of bug, but it changes VALIDATED/INCONCLUSIVE classification behavior more broadly than the stated regression (nested test detection). Fix direction: consider tightening to extension-anchored patterns (`**/*.test.*`, `**/*_test.*`, `**/test_*.sh`) rather than bare substring matches, or explicitly accept the trade-off in the comment.
+
+### 🔵 Suggestion (consider)
+
+- `hooks/tests/verify-red-green.test.sh:66-91` — The new `test_validated_nested` asserts the fixed behavior but there's no accompanying mutation check (e.g., temporarily reverting the `**/` prefixes and confirming this exact test fails) demonstrating the test would have caught the regression pre-fix. Given this tool's own purpose is red/green validation, applying that same discipline to its own regression test would strengthen confidence the test isn't vacuously green. Fix direction: as a one-time local check before merge, revert `scripts/verify-red-green.sh`'s glob array to the pre-fix patterns and confirm `test_validated_nested` fails, then re-apply the fix and confirm it passes.
+
+### ✅ Verified Clean
+
+- Reviewed both changed files (`scripts/verify-red-green.sh`, `hooks/tests/verify-red-green.test.sh`) against the diff — no unrelated renames, refactors, or formatting changes; both hunks map directly to a single coherent task ("fix nested-path glob-matching regression + add regression test").
+- Reviewed full diff for scope creep — every changed line traces to the task; no unrequested changes found.
+- No security-relevant surface introduced: `DEFAULT_TEST_GLOBS` entries are static developer-authored strings, no user/network input reaches these patterns in the shown hunk.
+- `hooks/tests/verify-red-green.test.sh:80-83` — heredoc uses quoted `'VC_EOF'` terminator, correctly preventing premature expansion of `$1` inside the generated verify-cmd script; `chmod +x` applied before invocation. No shell-injection or missing-exec-bit issue.
+- `hooks/tests/verify-red-green.test.sh:85` (`local out; out=$(...); local ec=$?`) — correctly captures the exit status of the preceding command substitution; the `local` builtin on the same line as a *pre-evaluated* `$?` value doesn't clobber it (only `local ec=$(cmd)` nesting would). No bug.
+- New test function naming/variable scoping (`repo`, `vc`, `out`, `ec`, `head`, `base` all `local`) — no collision risk with sibling test functions.
+
+### Summary
+Overall risk: **Medium** — the stated intent (fix nested-test-path glob detection) is architecturally sound and matches documented git pathspec glob semantics *if* the consuming code actually invokes git glob-pathspec matching, but that consuming code is outside this diff and unverified in this session, and no test execution was performed to confirm the fix works end-to-end. The change itself is small, well-scoped, and includes a reasonable regression test.
+
+Top 3 priorities to fix:
+1. Confirm (via `grep`/reading the full file) that `DEFAULT_TEST_GLOBS` is consumed through git pathspec `:(glob)` matching, not bash-native pattern matching — this determines whether the fix does anything at all.
+2. Run `hooks/tests/run.sh` (or the targeted test file) and confirm `test_validated_nested` passes.
+3. Consider tightening the now-any-depth substring patterns (`**/*test*`, `**/*spec*`) to reduce false-positive "test file changed" classification.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: Open items are mechanical follow-ups (read the rest of one file, run the existing test suite) rather than an unclear-root-cause debugging task or a structural multi-file refactor needing planning.
+Remaining risks: If the downstream match mechanism turns out to be bash-native (not git pathspec glob) matching, the fix as diffed does not actually resolve the nested-path bug despite the passing-looking regression test structure — must be confirmed before merge.

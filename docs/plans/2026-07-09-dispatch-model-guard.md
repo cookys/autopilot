@@ -70,7 +70,9 @@ Repo rule: no env-var/payload claims without verification. Use `scripts/toggle-p
 - hooks.json PreToolUse entry (matcher per S1); opt-in-manifest + README tier table + settings.example.json.
 - `check-hook-inventory.js --check` green (23 hooks: 10 default-on + 13 opt-in); `sync-version.js --version <PATCH> --hook-count 23 --skill-count 28`; CHANGELOG with `opt-in` paragraph (check-optin-changelog gate); INDEX fix-ship row; `preflight-release.sh` 8/8.
 
-### P3 — Live e2e on this machine (size Fix)
+### P3 — Live e2e on this machine (size Fix) — ✅ DONE 2026-07-09
+
+Verified post-merge via fresh headless sessions (hooks snapshot at session start — `/reload-plugins` does NOT re-read hooks.json, so the merging session itself stays unguarded until restart): probe A `model: fable` → refused with the guard reason; probe B omitted model → refused "no model specified"; probe C `model: haiku` → allowed. Enabled in `~/.autopilot/config.json`. Interactive native-prompt UX takes effect from the user's next session.
 
 - Enable via `~/.autopilot/config.json {"hooks":{"dispatch-model-guard":true}}`.
 - Probe A: Agent dispatch `model: fable`-class → native ask prompt appears (user sees it — this is the acceptance the user asked for: "用 fable 派遣會被擋下").

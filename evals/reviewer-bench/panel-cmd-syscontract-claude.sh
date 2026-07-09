@@ -8,14 +8,20 @@
 # PREAMBLE — ruled unfaithful in phase-b-results.md). This adapter puts reviewer.md
 # in the system-prompt channel and inlines code-review.md in the user message.
 #
+# v2 tools-enabled behavior: Runs claude with read-only tools enabled (Read, Grep, Glob)
+# and sets the working directory to SYSCONTRACT_REPO_CWD. Bash is deliberately excluded,
+# so the contract's run-the-tests verification remains out of reach (recorded residual
+# limitation).
+#
 # Usage: panel-cmd-syscontract-claude.sh <reviewer-md-path> <code-review-md-path> <model>
 #   diff on stdin; emits {"verdict":"pass"|"fail"} on stdout; exits 0 on every
 #   review outcome (fail-closed), exit 1 only on usage error.
 #
 # ENV:
-#   SYSCONTRACT_LOG_DIR  when set, the full raw model output for each case is saved
-#                        to <dir>/<case-basename>.out (basename recovered from the
-#                        stdin source file via /proc/self/fd/0).
+#   SYSCONTRACT_REPO_CWD  required in v2 tools-enabled mode; must be the repository directory.
+#   SYSCONTRACT_LOG_DIR   when set, the full raw model output for each case is saved
+#                         to <dir>/<case-basename>.out (basename recovered from the
+#                         stdin source file via /proc/self/fd/0).
 
 set -uo pipefail
 
@@ -40,6 +46,13 @@ if [ ! -f "$SPEC_MD" ] || [ ! -r "$SPEC_MD" ]; then
   exit 0
 fi
 
+if [ -z "${SYSCONTRACT_REPO_CWD:-}" ] || [ ! -d "$SYSCONTRACT_REPO_CWD" ]; then
+  echo "panel-cmd-syscontract-claude: SYSCONTRACT_REPO_CWD unset or not a directory (required in v2 tools-enabled mode): ${SYSCONTRACT_REPO_CWD:-}" >&2
+  echo '{"verdict":"fail"}'
+  exit 0
+fi
+REPO_CWD="$SYSCONTRACT_REPO_CWD"
+
 # STEP 1 — resolve claude binary absolute path before cd'ing to scratch cwd
 CC_BIN="$(command -v claude 2>/dev/null || true)"
 if [ -z "$CC_BIN" ]; then
@@ -59,12 +72,10 @@ esac
 DIFF_TEMP="$(mktemp -t panel-cmd-syscontract-claude-diff-XXXXXX)"
 SYS_PROMPT="$(mktemp -t panel-cmd-syscontract-claude-sysprompt-XXXXXX)"
 USER_MSG="$(mktemp -t panel-cmd-syscontract-claude-usrmsg-XXXXXX)"
-CC_CWD="$(mktemp -d -t panel-cmd-syscontract-claude-cwd-XXXXXX)"
 RAW_LOG="$(mktemp -t panel-cmd-syscontract-claude-log-XXXXXX)"
 
 cleanup() {
   rm -f "$DIFF_TEMP" "$SYS_PROMPT" "$USER_MSG" "$RAW_LOG" "$RAW_LOG.err"
-  rm -rf "$CC_CWD"
 }
 trap cleanup EXIT
 
@@ -77,7 +88,7 @@ awk 'NR==1 && $0=="---"{infm=1; next} infm && $0=="---"{infm=0; next} !infm{prin
 
 # STEP 3 — build the USER message: note + full canonical spec + the diff. NO verdict-format
 # instruction (the reviewer contract's own output format is the parse target).
-printf 'The canonical review spec follows. In production you Read it via tools; tools are disabled here, so it is inlined below. Review the diff per your contract.\n\n' > "$USER_MSG"
+printf 'The canonical review spec follows, inlined for determinism. You have read-only tools (Read, Grep, Glob) and your working directory is the repository under review; you may verify claims against the codebase, but you cannot run commands or tests. Review the diff per your contract.\n\n' > "$USER_MSG"
 cat "$SPEC_MD" >> "$USER_MSG"
 printf '\n\nInput diff:\n' >> "$USER_MSG"
 cat "$DIFF_TEMP" >> "$USER_MSG"
@@ -87,8 +98,8 @@ cat "$DIFF_TEMP" >> "$USER_MSG"
 # diagnostics and must never be able to satisfy the parse. HOME is NOT overridden
 # so native auth survives (as in panel-cmd-contract-claude.sh).
 ERR_LOG="$RAW_LOG.err"
-timeout 300 bash -c 'cd "$1" && exec "$2" -p --model "$3" --system-prompt-file "$4" --setting-sources project --strict-mcp-config --tools "" < "$5"' \
-    _ "$CC_CWD" "$CC_BIN" "$MODEL" "$SYS_PROMPT" "$USER_MSG" > "$RAW_LOG" 2>"$ERR_LOG"
+timeout 300 bash -c 'cd "$1" && exec "$2" -p --model "$3" --system-prompt-file "$4" --setting-sources project --strict-mcp-config --tools "Read,Grep,Glob" < "$5"' \
+    _ "$REPO_CWD" "$CC_BIN" "$MODEL" "$SYS_PROMPT" "$USER_MSG" > "$RAW_LOG" 2>"$ERR_LOG"
 CC_RC=$?
 [ -s "$ERR_LOG" ] && sed 's/^/panel-cmd-syscontract-claude[stderr]: /' "$ERR_LOG" >&2
 rm -f "$ERR_LOG"
@@ -198,3 +209,4 @@ else
   echo '{"verdict":"pass"}'
 fi
 exit 0
+

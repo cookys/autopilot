@@ -261,7 +261,10 @@ reap_worktree_minimal() {
   if [ -z "$wt" ]; then
     return 0
   fi
-  if ! git worktree remove --force "$wt" 2>>"${ORPHAN_LOG:-/dev/null}"; then
+  # Honor the WT_RM test seam (same as _wt_git_worktree_remove) so the failure
+  # branch is testable; array-exec keeps this signal-handler-safe (no subshell).
+  local _rm=(git); [ -n "${WT_RM:-}" ] && _rm=("$WT_RM")
+  if ! "${_rm[@]}" worktree remove --force "$wt" 2>>"${ORPHAN_LOG:-/dev/null}"; then
     if [ -n "${ORPHAN_LOG:-}" ]; then
       printf '%s\n' "$wt" >> "$ORPHAN_LOG"
     fi
@@ -294,7 +297,11 @@ gc_stale_worktrees() {
 
   # Global serialization.
   gc_lock="${TMPDIR:-/tmp}/.autopilot-gc.lock"
-  exec {gcfd}>"$gc_lock" 2>/dev/null || {
+  # NOTE: no `2>/dev/null` here — a redirection on `exec` is PERMANENT for the
+  # whole process; it would silence every later stderr diagnostic in this run
+  # (the no-op notice, orphan WARNs). A failed open prints bash's own error,
+  # which is acceptable alongside our WARN.
+  exec {gcfd}>"$gc_lock" || {
     printf 'WARN: cannot open global gc lock %s; aborting --gc\n' "$gc_lock" >&2
     printf '{ "reaped": [], "skipped_live": 0, "skipped_fresh": 0, "skipped_unmatched": 0, "lock_unsupported": 0, "kept_orphan": [] }\n'
     return 0

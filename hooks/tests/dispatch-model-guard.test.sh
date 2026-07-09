@@ -96,7 +96,7 @@ PAYLOAD='{"tool_name":"Agent","tool_input":{"model":"fable"},"hook_event_name":"
 run_hook dispatch-model-guard.js "$PAYLOAD"
 assert_eq 0 "$__RUN_EXIT" "case12-exit"
 assert_eq "" "$__RUN_STDOUT" "case12-stdout-silent"
-assert_not_contains "" "$__RUN_STDERR" "case12-stderr-nonempty"
+assert_contains "$__RUN_STDERR" "dispatch-model-guard" "case12-stderr-carries-warn-advisory"
 unset DISPATCH_GUARD_CONFIG_OVERRIDE
 
 # Case 13: Config garbage mode: yolo → model fable asks (fail-closed)

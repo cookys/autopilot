@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Dispatch observability Stage 2 — 雙工溝通：`--runner pi`（RPC）整合
+- **Trigger**: 下次一條 hetero dispatch 因 stall／走偏而「只能等 timeout 或砍掉重跑」造成實際損失時；或 Board 核可 Stage 2 動工。
+- **Context**: **pi RPC spike 已完成（2026-07-11, VERIFIED live）**——`steer` 中途注入（tool-call 邊界遞送、`queue_update` 可見、模型服從）、`abort` 8ms 即停、逐 `message_end` 的 `usage{input,output,cacheRead,cacheWrite,totalTokens}`（cache 命中即時可觀測）、typed JSONL 事件流、session tree 自有、custom provider 以 `"apiKey":"$ENV"` 參照（token 零落盤,MiniMax/GLM 經 `load-endpoints-env.sh` 直接供電）。完整報告＋殘餘清單：[`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md)。整合工作＝`dispatch-hetero.sh --runner pi`（supervisor 持 RPC stdio、EDIT-ONLY＋worktree＋artifact 驗證軌原樣沿用）、manifest 增 duplex 通道、stall 從 report-only 升級「steer 探詢→無回應才砍」。前置殘餘：skills-in-RPC 載入未測、`streamingBehavior:"steer"`（無 tool 邊界）未驗、長跑穩定性未測。cc-shim `claude -p --input-format stream-json` 是平行候選（未 spike）。
+- **Effort**: L（整合）；殘餘驗證 S
+- **Source**: 2026-07-11 Board 三階段方向（Stage 1 = v2.32.20）；pi spike 同日。
+
 ### ✅ SHIPPED (2026-07-11, v2.32.20) — Dispatch observability Stage 1 — hetero run 失聯歸零（start manifest + dispatch-status + usage 入 ledger）
 - **Resolution**: 同日 inline depth-0 執行出貨。兩 dispatcher 起跑即發 run manifest（每退出路徑 finalize、detach 子行程 pid 改寫、`AUTOPILOT_DISPATCH_MANIFEST=0` 逃生口）＋ `scripts/dispatch-status.js`（flock 判活同 `_wt_is_live` 契約；codex-chrome/JSONL/plain 自動偵測；stall report-only）＋ hetero final JSON additive `run_id`/`usage`/`wall_secs` → engine ledger。**記錄性 deviation**：review final JSON 不加欄位（scope 原文寫要加）——`review-result` 是 v2.32.19 剛硬化的 `additionalProperties:false` SSOT 契約（`review.js` unknown-field throw、7 發射點），manifest 已給 review 可觀測性、usage 由 `raw_log`+`--usage-only` 事後導出，加欄位爆炸半徑不成比。驗收全過：mid-run `alive:true` e2e、真實 codex v0.144.0 捕流 fixture（tokens 7,420）、52 assertions、全套件 120/120。Stage 2（pi RPC / cc-shim stream-json 雙工溝通）與 Stage 3（自適應調度 policy）為後續條目（見下方原 Context 的三階段框架）。專案紀錄：[`docs/projects/2026-07-11-dispatch-observability-s1/`](projects/2026-07-11-dispatch-observability-s1/README.md)。原 Trigger 保留於下供參考：
 - **Trigger**: ~~下次接到「監察/協調 hetero engine」方向的工作指派時直接引燃~~（已引燃並完成）；或下次任何人再抱怨一次「dispatch 出去就失聯」。

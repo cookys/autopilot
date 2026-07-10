@@ -42,6 +42,16 @@ The no-commit case is **split by how the worker ended** so a legitimate no-op ta
 
 The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.
 
+### Verified duplex candidate — pi RPC (spiked 2026-07-11, NOT yet wired)
+
+A REAL mid-run channel exists: the pi coding agent's RPC mode (`pi --mode rpc`, LF-JSONL over
+stdio) live-verified `steer` (mid-run injection, delivered at tool-call boundaries, honored),
+`abort` (8ms stop), and per-message `usage` incl. cacheRead — driven by MiniMax-M3 through the
+autopilot endpoints (`"apiKey": "$ENV"` reference, no secret on disk). Evidence + residuals:
+[`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md).
+Integration (`--runner pi`) is BACKLOG "Dispatch observability Stage 2" — the trust rails
+(worktree isolation, wrapper-commit, artifact verification) carry over unchanged.
+
 ### Deferred — stream-json "live question" rail (spike-gated, NOT built)
 
 A richer signal — a *live* "the model is asking a question" event from `--output-format stream-json` — is **deferred behind an existence spike, not committed**. `claude -p --output-format stream-json` is known to emit `assistant` / `tool_use` / `tool_result` / `result`; whether any of `claude` / `codex exec` / `gemini -p` emits a **machine-distinguishable** "asking a question" event is unverified. **Before any parser code**, a spike must capture real runs and answer "does the event even exist." If it does not, the rail is invalid (a question-mark heuristic would be scrape-equivalent) and stays unbuilt. Recorded sample files are the spike deliverable; any future parser is tested against the recording, never a live CLI. Tracked in the plan's §8, not here.

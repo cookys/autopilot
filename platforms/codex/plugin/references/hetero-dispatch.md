@@ -54,6 +54,38 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 - Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
 
+## Mid-run observability — run manifest + [`scripts/dispatch-status.js`](../scripts/dispatch-status.js)
+
+A dispatch is no longer fire-and-forget (Stage 1, BACKLOG "Dispatch observability"). At START,
+`dispatch-hetero.sh` and `dispatch-review.sh` write a **run manifest** to
+`${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}/<run-id>.manifest.json`
+(run_id, live log path, worktree, lock path, predicted containment, pid) and announce
+`run_id=… manifest=…` on stderr — BEFORE blocking on the worker. The worker's event stream was
+always streamed live to the log file; the manifest is what makes it findable mid-flight.
+
+```bash
+scripts/dispatch-status.js --run <run-id>      # one JSON line: phase/alive/stall/tokens/files
+scripts/dispatch-status.js --list              # all manifests (started/ended)
+scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/tokens)
+```
+
+- **Liveness** (advisory ordering): flock probe on the worktree lifetime lock (same contract as
+  `_wt_is_live`; survives detach — the child inherits the fd) → cgroup scope → pid. Any positive
+  signal ⇒ `alive:true` / `phase:"running"`; finalized manifest (`ended_at`) ⇒ `"exited"`.
+- **Stall**: `alive` AND log mtime age > `--stall-secs` (default 180) ⇒ `stall:true`. Report-only —
+  Stage 1 has NO auto-kill; killing stays the caller's call (`--gc`, `dispatch-batch.sh reap`).
+- **Telemetry honesty**: events/tool_calls/tokens are parsed from the HARNESS event stream
+  (codex-chrome `tokens used` footer — empirically fixtured; generic JSONL key scan), NEVER from
+  worker self-report; formats carrying no signal (agy pseudo-TTY, cc-shim plain text) yield
+  honest `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
+- **Final JSON**: `dispatch-hetero.sh` output gains ADDITIVE `run_id` / `usage` / `wall_secs`
+  (usage via `dispatch-status.js --usage-only`, embedded fail-safe — any parse failure ⇒ `null`).
+  `dispatch-review.sh`'s final JSON is deliberately UNCHANGED (strict `additionalProperties:false`
+  schema, v2.32.19 SSOT) — correlate a review run via its `raw_log` path and derive usage post-hoc
+  with `--usage-only`.
+- **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
+  artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
+
 ## Wired engines (runners) — how to pick one
 
 `--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):

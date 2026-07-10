@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.20 — dispatch observability Stage 1: hetero runs are no longer fire-and-forget
+
+**Headline**: A dispatched hetero run used to go dark until its final JSON — its identity (log path, worktree, cgroup scope) only surfaced AFTER completion, so depth-0 could not locate, watch, or liveness-probe it (the 失聯 problem; Board direction 2026-07-11). Stage 1 closes the monitoring gap with three additive pieces: (1) `dispatch-hetero.sh` and `dispatch-review.sh` now emit a START-time **run manifest** (`${TMPDIR}/autopilot-dispatch-runs/<run-id>.manifest.json` + a stderr `run_id=…` announce) BEFORE blocking on the worker, and finalize it (`ended_at`/`final_status`) on every exit path; (2) NEW `scripts/dispatch-status.js` turns the already-live-streaming worker log + kernel/cgroup state into one JSON status line — `phase running|exited`, liveness (flock probe on the worktree lifetime lock, same `_wt_is_live` contract, detach-safe), `last_event_age_s`, stall detection (report-only, no auto-kill), events/tool_calls/tokens parsed from the harness event stream (codex `tokens used` footer empirically fixtured from a real v0.144.0 capture; generic JSONL key scan; no-signal formats yield honest `null`), and git-artifact-derived `files_touched`; (3) hetero's final JSON gains additive `run_id`/`usage`/`wall_secs`, flowing into the engine's `dispatch_implementation` ledger entry — the first per-dispatch cost telemetry for the future adaptive-scheduling stages (Stage 2 duplex channel / Stage 3 policy remain BACKLOG). Trust boundary unchanged: all of this is scheduling telemetry; verdicts still derive exclusively from git artifacts + fail-closed parsers. Deliberate deviation from the BACKLOG scope text: `dispatch-review.sh`'s final JSON is byte-identical (its strict `additionalProperties:false` schema shipped in v2.32.19's SSOT; correlate a review run via `raw_log`, derive usage post-hoc with `--usage-only`).
+
+### Added
+- `scripts/dispatch-status.js` — run-manifest status (`--run`/`--list`), parse-only `--summary`, and fail-safe `--usage-only` (object-or-`null`, exit 0 always — embedded in hetero's emit path).
+- Run-manifest emission + finalize in `scripts/dispatch-hetero.sh` (incl. detached-child pid rewrite; predicted containment recorded) and `scripts/dispatch-review.sh` (codex capture files created early so the manifest points at the LIVE stream). Escape hatch `AUTOPILOT_DISPATCH_MANIFEST=0`; dir override `AUTOPILOT_DISPATCH_RUNS_DIR`.
+- `hooks/tests/dispatch-status.test.sh` (52 assertions: real-capture codex fixture, JSONL/plain honesty, flock liveness, stall, mid-run alive:true e2e, review-contract-unchanged guard, escape hatch) + `hooks/tests/fixtures/dispatch-status/` (sanitized REAL codex v0.144.0 capture with provenance README).
+
+### Changed
+- `scripts/dispatch-hetero.sh` final JSON: additive `run_id`/`usage`/`wall_secs`; `precondition_failed` JSON carries `run_id`. `src/engine/autopilot-engine.js` `dispatch_implementation` ledger entry passes `run_id`/`usage`/`wall_secs` through. `schemas/runner-result.schema.json` documents the three optional fields (envelope stays `additionalProperties:true`).
+- `hooks/tests/dispatch-detach.test.sh` normalize(): `run_id`/`wall_secs` added to the run-volatile field list.
+
+### Fixed
+- `hooks/tests/codex-plugin-package.test.sh` sandbox fixture: `schemas/` payload dir added (pre-existing red since v2.32.19 added schemas/ to the sync payload without updating the sandbox fixture; classified PRE_EXISTING via a develop-baseline worktree run before fixing).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.32.19`; stray manifests live only under `${TMPDIR}/autopilot-dispatch-runs/` (safe to `rm -rf`).
+
 ## v2.32.19 — contract schema SSOT (twin drift becomes build-impossible) + resolve-endpoint hermeticity
 
 **Headline**: The bash↔JS resolver contract gets its single source of truth: NEW `schemas/review-loop-contract.schema.json` declares all 31 review-loop fields (order, enums, shell-var mapping); `src/engine/resolve-review-loop.js` (+ codex mirror) now DERIVES `REVIEW_LOOP_FIELDS` and its enum tables from the schema at require time — the hand-written twin lists that drifted twice (contract-parity red for 2 days over `on_engine_unavailable`) are gone. The shell side stays runtime-untouched (honoring the 2026-07-04 panel's bash-plumbing deferral) but gains a loud drift gate: NEW `scripts/check-contract-schema.js` asserts the shell resolver's emitted key set and per-field enum case-arms against the schema (identifier-guarded, line-anchored so commented-out arms don't satisfy it), wired into `contract-parity.test.sh` as Case F. Fail-closed verified by seeded-drift probes (add/remove field → exit 1 naming the field), re-run independently at depth-0. Also: `hooks/tests/resolve-endpoint.test.sh` is hermetic now — it pinned `AUTOPILOT_ENDPOINTS_ENV` to a nonexistent path in its JS invocations, closing the "machine's real ~/.autopilot/endpoints.env leaks into fail-closed assertions" red (root cause: `os.homedir()` resolves via getpwuid even under `env -i`).

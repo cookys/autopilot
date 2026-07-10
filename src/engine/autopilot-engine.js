@@ -1420,6 +1420,11 @@ class AutopilotEngine {
         reconcile_status: reconcileDetails ? reconcileDetails.reconcile_status : null,
         reconcile_reason: reconcileDetails ? reconcileDetails.reconcile_reason : null,
         misplaced_write_evidence: misplacedWriteEvidence.join('|') || null,
+        // Observability passthrough (Stage 1): usage parsed from the HARNESS event stream
+        // by dispatch-status.js (never worker self-report); null on older dispatchers.
+        run_id: parsed && parsed.run_id !== undefined ? parsed.run_id : null,
+        usage: parsed && parsed.usage !== undefined ? parsed.usage : null,
+        wall_secs: parsed && Number.isInteger(parsed.wall_secs) ? parsed.wall_secs : null,
       }),
     );
 

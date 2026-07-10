@@ -1,0 +1,26 @@
+DONE
+Reading prompt from stdin...
+OpenAI Codex v0.144.0
+--------
+workdir: /tmp/fixture-workdir
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: low
+reasoning summaries: none
+session id: 019f4da9-07ca-7593-bd19-12cfea360cd4
+--------
+user
+Run the command: echo FIXTURE_RUN_MARKER
+Then reply with exactly: DONE
+
+exec
+/usr/bin/zsh -lc 'echo FIXTURE_RUN_MARKER' in /tmp/fixture-workdir
+ succeeded in 0ms:
+FIXTURE_RUN_MARKER
+
+codex
+DONE
+tokens used
+7,420

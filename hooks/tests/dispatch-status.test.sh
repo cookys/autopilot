@@ -93,6 +93,23 @@ assert_contains "$OUT" '"alive":false' "lock released: not alive"
 assert_contains "$OUT" '"phase":"exited"' "lock released: phase exited"
 assert_contains "$OUT" '"stall":false' "exited: never reported stalled"
 
+# lock "free" is AUTHORITATIVE in the negative direction (the _wt_is_live contract):
+# a live pid in the manifest at that point is pid reuse — must NOT resurrect the run.
+cat > "$RUNS_DIR/live-3.manifest.json" <<EOF
+{ "schema": 1, "run_id": "live-3", "role": "implementer", "runner": "agy", "model": "m", "branch": "b", "base": "develop", "base_sha": null, "worktree": null, "lock_path": "$LOCK", "log_path": "$LIVELOG", "aux_log": null, "pid": $$, "scope_unit": null, "containment_planned": "plain", "started_at": "2026-07-11T00:00:00Z", "started_epoch": 0, "prompt_file": null, "ledger": null, "stage": null, "ended_at": null, "ended_epoch": null, "final_status": null }
+EOF
+OUT="$(node "$STATUS_JS" --run live-3)"
+assert_contains "$OUT" '"lock":"free"' "lock-free + live pid: lock probed free"
+assert_contains "$OUT" '"pid":"alive"' "lock-free + live pid: pid genuinely alive (this test shell)"
+assert_contains "$OUT" '"alive":false' "lock-free + live pid: flock verdict is authoritative — pid reuse must not resurrect the run"
+
+# no lock verdict (review manifests have lock_path null) → pid IS the fallback signal
+cat > "$RUNS_DIR/live-4.manifest.json" <<EOF
+{ "schema": 1, "run_id": "live-4", "role": "reviewer", "runner": "agy", "model": "m", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "$LIVELOG", "aux_log": null, "pid": $$, "scope_unit": null, "containment_planned": "scratch", "started_at": "2026-07-11T00:00:00Z", "started_epoch": 0, "prompt_file": null, "ledger": null, "stage": null, "ended_at": null, "ended_epoch": null, "final_status": null }
+EOF
+OUT="$(node "$STATUS_JS" --run live-4)"
+assert_contains "$OUT" '"alive":true' "no lock (reviewer): live pid is the fallback liveness signal"
+
 write_manifest_fixture live-2 '"2026-07-11T00:10:00Z"'
 OUT="$(node "$STATUS_JS" --run live-2)"
 assert_contains "$OUT" '"phase":"exited"' "ended_at set: phase exited regardless of probes"
@@ -177,12 +194,13 @@ DIFF="$TEST_TMP/d.diff"; printf 'diff --git a/x b/x\n+hi\n' > "$DIFF"
 RV_OUT="$("$REVIEW" --runner agy --model tm --diff-file "$DIFF" --bin /nonexistent-agy 2>/dev/null)"; RC=$?
 assert_eq "$RC" "2" "review: precondition exit 2 unchanged"
 assert_not_contains "$RV_OUT" 'run_id' "review: final JSON contract UNCHANGED (strict schema — no new fields)"
-RV_MANIFEST="$(grep -l '"role": "reviewer"' "$RUNS_DIR"/*.manifest.json 2>/dev/null | head -1)"
+RV_MANIFEST="$(grep -l '"run_id": "review-' "$RUNS_DIR"/*.manifest.json 2>/dev/null | head -1)"
 assert_neq "$RV_MANIFEST" "" "review: manifest written"
 if [ -n "$RV_MANIFEST" ]; then
   RVM="$(cat "$RV_MANIFEST")"
   assert_contains "$RVM" '"runner": "agy"' "review manifest: runner recorded"
   assert_not_contains "$RVM" '"ended_at": null' "review manifest: finalized (ended_at stamped) on exit"
+  assert_contains "$RVM" '"final_status": "precondition_failed"' "review manifest: final_status mapped from the exit code (2 → precondition_failed)"
 fi
 
 # ---------- 8. AUTOPILOT_DISPATCH_MANIFEST=0 escape hatch ----------

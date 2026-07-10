@@ -270,10 +270,22 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs) {
     pid: probePid(manifest ? manifest.pid : null),
     scope: probeScope(manifest ? manifest.scope_unit : null),
   };
-  const positive = liveness.lock === 'held' || liveness.pid === 'alive' || liveness.scope === 'active';
-  const allUnknown = (liveness.lock === 'n/a' || liveness.lock === 'unsupported')
-    && liveness.pid === 'n/a' && liveness.scope === 'n/a';
-  let alive = positive ? true : (allUnknown ? null : false);
+  // flock is PRIMARY and authoritative in BOTH directions (the _wt_is_live contract):
+  // the worker inherits the lock fd, so "free" means dispatcher AND worker are gone —
+  // a still-"alive" pid at that point is pid reuse, never the run. scope/pid are
+  // consulted only when no lock verdict exists (review manifests have no lock).
+  let alive;
+  if (liveness.lock === 'held') {
+    alive = true;
+  } else if (liveness.lock === 'free') {
+    alive = false;
+  } else if (liveness.scope === 'active' || liveness.pid === 'alive') {
+    alive = true;
+  } else if (liveness.pid === 'n/a' && liveness.scope === 'n/a') {
+    alive = null;
+  } else {
+    alive = false;
+  }
   let phase = alive === true ? 'running' : (alive === false ? 'exited' : 'unknown');
   if (manifest && manifest.ended_at) { alive = false; phase = 'exited'; }
 

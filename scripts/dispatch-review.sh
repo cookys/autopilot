@@ -266,15 +266,26 @@ GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak 
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 cleanup() {
+  # $? at trap entry = the script's exit code — its authoritative status contract
+  # (0 reviewed / 1 no_verdict / 2 precondition_failed; anything else = killed/aborted).
+  # Captured FIRST, before rm/rmdir can clobber it.
+  _cleanup_rc=$?
   rm -f "$PROMPT_FILE" "$BLOCK_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
-  # Observability: stamp ended_at so dispatch-status.js reports phase:"exited" on every
-  # exit path (verdict detail stays in the final JSON — the manifest is telemetry only).
-  # declare -F guard: the trap is armed a few lines before the function is defined.
+  # Observability: stamp ended_at + final_status (from the exit code, the one source
+  # every emit path already honors) so dispatch-status.js reports phase:"exited" with
+  # the outcome on every exit path. declare -F guard: the trap is armed a few lines
+  # before the function is defined.
+  case "$_cleanup_rc" in
+    0) REVIEW_FINAL_STATUS="reviewed" ;;
+    2) REVIEW_FINAL_STATUS="precondition_failed" ;;
+    1) REVIEW_FINAL_STATUS="no_verdict" ;;
+    *) REVIEW_FINAL_STATUS="aborted_rc_${_cleanup_rc}" ;;
+  esac
   declare -F review_manifest_finalize >/dev/null 2>&1 && review_manifest_finalize
 }
 trap cleanup EXIT
@@ -322,13 +333,15 @@ write_review_manifest() {
     ended_json="\"$REVIEW_MANIFEST_ENDED\""
     endep_json="${REVIEW_MANIFEST_ENDED_EPOCH:-null}"
   fi
+  local final_json="null"
+  [ -n "${REVIEW_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$REVIEW_FINAL_STATUS")\""
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": null }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$REVIEW_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }

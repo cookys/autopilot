@@ -57,8 +57,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S(Spike)— consult 通道整合已出貨(v2.31.20:hetero-dispatch.md § Peer consult + front-door § 0 + coexistence 表);殘餘=review 通道校準(Spark 重置後跑 known-bad 10 案,false-pass-on-critical=0 才准進 qc 面)與 `rescue --write` 沙箱姿態。
 - **Source**: 2026-07-05 orchestrator-economy 吸收(X thread @diegocabezas01 觸發;src 初評 depth-0)。
 
-### ⏸ PARTIAL-SHIP (2026-07-10) — terse reviewer contracts:模板已出貨(haiku 重跑過 M3);reviewer.md/code-review.md 停放待 Path-C 儀器
-- **Trigger**: 「Path-C 忠實儀器」條目解決後,對 reviewer.md/code-review.md 跑配對腿即可 —— 兩份瘦身成果停放在 `feat/terse-reviewer-contracts`(3637646 reviewer.md −17% / 29f1bc4 code-review.md −14%)。**模板(bbcf192,−16%)已於 v2.32.16 出貨**:Board 指示驗 haiku 兩跑穩定性(1.0/1.0,對照 gemini 0.917/0.833)後換腿重跑 M3 全過(12/12、fp-critical=0、injection 完好、clean 裁決 0 Critical/Major)——見 `docs/projects/2026-07-10-terse-reviewer-contracts/m3-rerun-haiku.md`。
+### ✅ FULLY SHIPPED (2026-07-10, v2.32.16+v2.32.18) — terse reviewer contracts:三份契約全數量測過 gate 出貨
+- **Resolution**: 模板 −16%(v2.32.16,haiku 腿)+ reviewer.md −17% / code-review.md −14%(v2.32.18,syscontract 儀器 v3 + 協議 c 配對一致性:kb 1.000×3、fp-critical=0、injection 6/6、5 discordance 逐案裁決全非弱化——case 03 的 claim-decomposition 條文語意保留驗證為關鍵證據)。量測記錄:`docs/projects/2026-07-10-terse-reviewer-contracts/`(m3-rerun-haiku.md + m3-pathc-syscontract.md)。
 - **Context**: 2026-07-10 /l6 全程執行(M1 儀器 → M2 瘦身 → M3 量測)。M3 結果:Path T(模板,gemini-3.5-flash)瘦身版自身穩定(0.917/0.917、injection 完好、haiku 弱層探針 12/12 滿分),但**基線兩跑震盪 0.917/0.833 跨 0.9 地板** → plan gate #2 的明文 halt 條件;Path C(reviewer.md+code-review.md,sonnet+preamble 轉接器)儀器失真(基線 clean 10/10 全誤旗、injection 兩腿皆破)無法下任何結論。完整逐案數據:[`docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`](projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md)。儀器與基礎設施(claude-native runner、evals/clean/、run-clean-set、prompt-skeleton 測試、Path-C 轉接器)已於 v2.32.15 出貨。
 - **Effort**: S(重跑 M3 legs;瘦身本體零工作)
 - **Source**: 2026-07-10 /l6 campaign;plan [`docs/plans/2026-07-05-terse-reviewer-contracts.md`](plans/2026-07-05-terse-reviewer-contracts.md) M3-outcome 節。
@@ -69,8 +69,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S(選項 c:haiku 重跑穩定性驗證 ~24 calls)/ M(選項 a:擴語料)
 - **Source**: 2026-07-10 phase-b-results.md gate #2/#6 FAIL;M1 已記錄 08 為 gemini 既有弱點。
 
-### Path-C 忠實儀器 — contract-as-preamble 轉接器失真,reviewer.md/code-review.md 的行為量測需要原生通道
-- **Trigger**: terse-contracts 重試時若要對 reviewer.md/code-review.md 下行為結論(模板路徑不受此限);或下次任何「量測 agent system-prompt 契約」需求。
+### ✅ RESOLVED (2026-07-10, v2.32.18) — Path-C 忠實儀器:syscontract 通道(--system-prompt-file + read-only tools + 時間軸 worktree)三輪迭代認證忠實
+- **Resolution**: `evals/reviewer-bench/panel-cmd-syscontract-claude.sh`(v3):契約經 `claude --system-prompt-file` 真 system-prompt 通道 + `--tools Read,Grep,Glob`(無 Bash,殘餘限制已記)+ per-case 時間軸 worktree + severity-aware parser + 每案原始輸出存檔。preamble 三病徵(kb 不穩/injection 破/全誤旗)全消。儀器備忘:段落式 finding 對 parser 隱形(fail-open 形狀)、弱層會以 provenance 理由拒審合成 diff。原 Trigger 供未來參考:
 - **Context**: 2026-07-10 實測 `panel-cmd-contract-claude.sh`(契約全文塞 prompt preamble + claude -p)不忠實:基線(未瘦身契約!)clean 10/10 全誤旗(「default-assume broken」契約 + 二元 FIX-THEN-SHIP→over-flag 映射,任何 Minor nit 都觸發)、injection 兩腿皆不穩(基線 r1 漏 11+12 —— 生產環境原生 reviewer 不可能如此)。修法方向:(a) 原生 Agent 通道(system-prompt 載契約,即 subagent_type=autopilot:reviewer)+ 每案獨立 dispatch —— 但 plugin 快取使 session 內無法切換契約版本,需跨 session 或 --setting-sources 隔離;(b) severity-aware verdict 映射(解析 findings 嚴重度,僅 Critical/Major 計 over-flag —— plan §4 #6 本來的定義);兩者都做才完整。轉接器本身保留(weak-tier 探針堪用,結構已審)。
 - **Effort**: M
 - **Source**: 2026-07-10 phase-b-results.md Path C 節 + adapter limitation 記錄。
@@ -93,6 +93,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: 2026-07-10 實測:測試斷言「AUTOPILOT_ENDPOINT_GLM_TOKEN 未設時 fail-closed 要報 unset」,但機器上 `~/.autopilot/endpoints.env` 真的設定了 GLM(2026-07-09 起)→ loader 載入真憑證 → token 存在 → 斷言失敗。測試環境未隔離(需 `AUTOPILOT_ENDPOINTS_ENV` 指向空檔或 env -u 清乾淨)。1/56 失敗,pre-existing 於 v2.32.15+,與程式行為無關。
 - **Effort**: S(一行 env 隔離)
 - **Source**: 2026-07-10 L6-r2 WS-C depth-0 root-cause(foreman 標 out-of-scope,depth-0 查明根因)。
+
+### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
+- **Trigger**: 下次要對 reviewer 契約/引擎做「絕對」(非配對)specificity 認證時;或 evals/clean/ 標籤再倒一個時。
+- **Context**: 2026-07-10 syscontract campaign 實測:12 個「clean」標籤(merged-未被翻 標注法)倒了 5 個(舊01/舊03/06/08/新03),其中新03 的 flag 還抓到當日 develop 現行真 bug(ladder-run.sh pipefail,v2.32.18 修)。全火力 reviewer(sonnet+全契約+tools)比「merged=clean」標注法強。配對一致性協議(m3-pathc-syscontract.md final protocol)不需要標籤,已作為現行量測法;真 certified-clean 集需逐案對抗性預審(每案先過一輪全火力 review + 人工裁決),成本高,等有絕對認證需求再建。
+- **Effort**: M
+- **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
 
 ### Contract JSON-schema SSOT for the bash↔JS resolver/runner contracts
 - **Trigger**: the next NEW field added to `resolve-review-loop.sh` (or a second contract-drift incident anywhere) after v2.31.10's round-trip parity tests.

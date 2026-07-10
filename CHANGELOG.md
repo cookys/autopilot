@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.18 — slimmed reviewer.md + code-review.md ship (syscontract instrument certifies them) + ladder-run pipefail fix
+
+**Headline**: The remaining two terse reviewer contracts ship: `agents/reviewer.md` **−17%** (~4.9k→~4.1k tokens) and `skills/quality-pipeline/references/code-review.md` **−14%** (~6.6k→~5.6k) — paid on every native reviewer dispatch. Certification came from a NEW faithful measurement instrument built for the purpose: `evals/reviewer-bench/panel-cmd-syscontract-claude.sh` loads the contract via `claude --system-prompt-file` (the REAL system-prompt channel), gives read-only tools (`Read,Grep,Glob` — the contract's verification duties become executable), per-case timeline worktrees, a severity-aware verdict parser, and per-case raw-output archiving. Three instrument iterations eliminated every artifact class (preamble distortion → UNVERIFIED-Major storms → leak-guard/timeline/timeout artifacts); the final campaign ran a paired-concordance protocol (absolute clean-threshold retired — 5 of 12 "clean" corpus labels fell under full-strength review, one flag catching a LIVE bug this release fixes). Gates: kb sensitivity **1.000/1.000 baseline, 1.000 slimmed**, fp-on-critical=0, injection 6/6 with explicit refusal, zero case-level regression; all 5 clean discordances adjudicated non-weakening at depth-0 (the load-bearing one — a base-only repo-wide hunt — was ruled stochastic after verifying the driving claim-decomposition clause survives the slimming verbatim-in-meaning). Aggregate campaign result across v2.32.16+18: reviewer-contract surface ~19.7k → ~16.6k tokens (**−16%**), zero measured behavior loss.
+
+### Added
+- `evals/reviewer-bench/panel-cmd-syscontract-claude.sh` — faithful system-prompt-channel contract-measurement adapter (v3: `--system-prompt-file`, read-only tools, `SYSCONTRACT_REPO_CWD`/`SYSCONTRACT_CWD_MANIFEST` timeline worktrees, `SYSCONTRACT_LOG_DIR` raw archives, severity-aware parser, 600s tool-loop timeout, fail-closed rails).
+- Full instrument-iteration + measurement records under `docs/projects/2026-07-10-terse-reviewer-contracts/` (m3-pathc-syscontract.md + raw outputs for every flag, per-case both-leg tables, protocol-change rationale).
+
+### Changed
+- `agents/reviewer.md` 242→222 lines (semantic-preserving compression; Three Red Lines / claim-decomposition / Verified Clean + Handoff / fail-closed language intact — canonical-invariant seeds green).
+- `skills/quality-pipeline/references/code-review.md` 331→322 lines (same discipline; Invocation § canonical anchor untouched).
+- `evals/clean/` corpus v2: cases 01/03 replaced (labels falsified — 01 by 4-engine convergence, 03 by the repo's own later-fix e098a78) with vetted 6b5f8cc/9af225e fixtures; corpus REFRAMED as a "merged real-world diffs" comparison set, not certified-clean (see BACKLOG "certified-clean 語料庫重建").
+
+### Fixed
+- `scripts/ladder-run.sh:106` — pipefail+`grep -q` SIGPIPE false-negative (the v2.32.1 class; **caught by the instrumented reviewer itself** during a measurement leg, live on develop): promotion-decision probe read as failed on >64KB QC-store reports. Converted to the `grep -c >/dev/null` idiom; empirically 63/100 false-negatives → 0/100 in the target shell.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: none required (contract prose + eval assets + a shell fix; protocols/vocabulary unchanged).
+
 ## v2.32.17 — JS-twin contract parity: `on_engine_unavailable` (the parity gate did its job)
 
 **Headline**: `contract-parity.test.sh` had been red on develop since the v2.32.12 shell resolver gained `on_engine_unavailable` — the JS twin (`src/engine/resolve-review-loop.js` + codex mirror) never learned the field, exactly the drift class the parity test exists to catch. Fixed: field added to `REVIEW_LOOP_FIELDS` + `assertOneOf(['ask','solo-fallback','wait-reset'])` (required, matching `min_panel_size` treatment); two test fixtures that predated the field updated additively. Also: the v2.31.10 "pre-existing full-suite failures" BACKLOG entry proved stale (autopilot-cli/review-runner/intent-capture already green on develop), and the `dispatch-author --endpoint` parity entry was already shipped at `2a5d7fa` — both corrected. New BACKLOG entry: `resolve-endpoint.test.sh` is not hermetic (asserts a GLM token is unset, but reads the machine's real `~/.autopilot/endpoints.env`, which now has GLM configured — 1/56, environment-dependent).

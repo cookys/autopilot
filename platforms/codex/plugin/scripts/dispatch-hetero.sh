@@ -189,7 +189,13 @@ emit() { # status commit files ins del worktree error
   local usage_json="null"
   if [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] && [ -r "$SELF_DIR/dispatch-status.js" ] \
      && command -v node >/dev/null 2>&1; then
-    usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --usage-only 2>/dev/null)" || usage_json="null"
+    # Format is DECLARED by runner (this script knows its own invocation flags: codex =
+    # chrome text, grok = --output-format json, agy/cc-shim = plain) — never content-
+    # sniffed, so a worker printing JSON/fake-chrome cannot self-report telemetry.
+    local log_format="plain"
+    [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
+    [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+    usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
     case "$usage_json" in
       '{'*'}') ;;   # single-line JSON object — accepted
       *) usage_json="null" ;;
@@ -234,6 +240,12 @@ write_manifest() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
+  # grok --output-format json / agy+cc-shim plain). dispatch-status.js trusts this
+  # over content sniffing so worker output can never self-report telemetry.
+  local log_format="plain"
+  [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
+  [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
   local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(json_escape "$MANIFEST_SCOPE_UNIT")\""
   local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
   local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
@@ -243,10 +255,10 @@ write_manifest() {
   [ -n "${MANIFEST_ENDED_EPOCH:-}" ] && endep_json="$MANIFEST_ENDED_EPOCH"
   [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$MANIFEST_FINAL_STATUS")\""
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
       "$(json_escape "$DISPATCH_RUN_ID")" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(json_escape "${WT:-}")" "$(json_escape "${WT:-}/.autopilot-worktree.lock")" "$(json_escape "${LOG:-}")" \
-      "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
+      "$log_format" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(json_escape "${PROMPT_FILE:-}")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }

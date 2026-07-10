@@ -34,17 +34,28 @@ OUT="$(node "$STATUS_JS" --log "$FIXTURES/codex-chrome-merged.log" --usage-only)
 assert_contains "$OUT" '"total_tokens":7420' "usage-only: codex tokens"
 assert_eq "$(printf '%s' "$OUT" | wc -l | tr -d ' ')" "0" "usage-only: exactly one line (no trailing extras)"
 
-# ---------- 2. generic JSONL parsing ----------
+# ---------- 2. generic JSONL parsing (dispatcher-declared format) ----------
 JSONL="$TEST_TMP/synth.jsonl"
 printf '%s\n' \
   '{"type":"message","usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":30}}' \
   '{"type":"tool_use","tool_name":"bash"}' > "$JSONL"
-OUT="$(node "$STATUS_JS" --log "$JSONL" --summary)"
+OUT="$(node "$STATUS_JS" --log "$JSONL" --summary --format jsonl)"
 assert_contains "$OUT" '"input_tokens":100' "jsonl: input tokens"
 assert_contains "$OUT" '"output_tokens":50' "jsonl: output tokens"
 assert_contains "$OUT" '"cache_read_tokens":30' "jsonl: cache read tokens"
 assert_contains "$OUT" '"total_tokens":150' "jsonl: total derived from input+output"
 assert_contains "$OUT" '"tool_calls":1' "jsonl: tool_use event counted"
+
+# anti-self-report guard: the SAME log with the dispatcher-declared format `plain`
+# (what agy/cc-shim runs declare) must yield NO telemetry — a worker printing JSON
+# usage lines cannot promote its own output into token telemetry (gpt-5.5 R2).
+OUT="$(node "$STATUS_JS" --log "$JSONL" --summary --format plain)"
+assert_contains "$OUT" '"tokens":null' "declared plain beats JSON-looking content: tokens null (self-report suppressed)"
+OUT="$(node "$STATUS_JS" --log "$JSONL" --usage-only --format plain)"
+assert_eq "$OUT" "null" "usage-only with declared plain: null despite JSON-looking content"
+OUT="$(node "$STATUS_JS" --log "$JSONL" --usage-only --format bogus)"; RC=$?
+assert_eq "$OUT" "null" "usage-only with invalid --format: still null, never an error"
+assert_eq "$RC" "0" "usage-only with invalid --format: exit 0 (never-fail discipline)"
 
 # ---------- 3. plain text → honest nulls; missing file → null ----------
 PLAIN="$TEST_TMP/plain.log"
@@ -131,12 +142,15 @@ git -C "$SBX" init -q -b develop
 git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 PROMPT="$TEST_TMP/prompt.txt"; echo "task" > "$PROMPT"
 
+# The stub deliberately PRINTS a JSON usage line: an agy (plain-declared) worker's
+# self-reported "usage" must NOT surface in the final JSON's usage field.
 STUB_OK="$TEST_TMP/agy-ok"
 cat > "$STUB_OK" <<'EOF'
 #!/usr/bin/env bash
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
+echo '{"usage":{"input_tokens":999999,"output_tokens":999999}}'
 echo "done"
 EOF
 chmod +x "$STUB_OK"
@@ -145,13 +159,14 @@ OUT="$(cd "$SBX" && "$HETERO" --branch t/obs-e2e --prompt-file "$PROMPT" --agy-b
 assert_eq "$RC" "0" "e2e: committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "e2e: committed status"
 assert_contains "$OUT" '"run_id": "hetero-' "e2e: final JSON carries generated run_id"
-assert_contains "$OUT" '"usage": null' "e2e: plain-text stub log → usage honestly null"
+assert_contains "$OUT" '"usage": null' "e2e: agy declares plain → usage null even though the stub PRINTED a JSON usage line (self-report suppressed)"
 assert_contains "$OUT" '"wall_secs": ' "e2e: wall_secs present"
 E2E_RUN_ID="$(printf '%s' "$OUT" | sed -n 's/.*"run_id": "\([^"]*\)".*/\1/p')"
 assert_file_exists "$RUNS_DIR/$E2E_RUN_ID.manifest.json" "e2e: manifest written under runs dir"
 MOUT="$(cat "$RUNS_DIR/$E2E_RUN_ID.manifest.json")"
 assert_contains "$MOUT" '"final_status": "committed"' "e2e: manifest finalized with outcome"
 assert_contains "$MOUT" '"role": "implementer"' "e2e: manifest role"
+assert_contains "$MOUT" '"log_format": "plain"' "e2e: manifest declares the runner's stream format (agy → plain)"
 OUT="$(node "$STATUS_JS" --run "$E2E_RUN_ID")"
 assert_contains "$OUT" '"phase":"exited"' "e2e: post-run status exited"
 assert_contains "$OUT" '"final_status":"committed"' "e2e: post-run status carries final_status"

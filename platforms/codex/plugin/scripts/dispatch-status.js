@@ -18,9 +18,14 @@
 // USAGE:
 //   dispatch-status.js --run <run-id> [--dir <manifest-dir>] [--stall-secs N]
 //   dispatch-status.js --log <path> [--manifest <path>] [--stall-secs N]
-//   dispatch-status.js --log <path> --summary          # parse-only, no liveness
-//   dispatch-status.js --log <path> --usage-only       # ONE line: usage object or `null`
+//   dispatch-status.js --log <path> --summary [--format F]    # parse-only, no liveness
+//   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
 //   dispatch-status.js --list [--dir <manifest-dir>]
+//   --format codex-chrome|jsonl|plain|auto — the DISPATCHER-declared stream format
+//   (manifest `log_format` when reading via --run). Telemetry parsing trusts the
+//   declaration, never content sniffing: a worker's own output can contain JSON
+//   lines, and sniffing would promote that self-report into telemetry. 'auto'
+//   (bare --log with no declaration) is for ad-hoc diagnostics only.
 //
 // OUTPUT (status mode), one JSON object:
 //   { schema, run_id, role, runner, model, phase: "running"|"exited"|"unknown",
@@ -183,7 +188,13 @@ function parseJsonl(text) {
   return { events: events || null, tool_calls: toolCalls || (events ? 0 : null), last_action: lastAction, tokens: hasTokens ? tokens : null, usage_source: hasTokens ? 'jsonl' : 'none' };
 }
 
-function parseLog(logPath) {
+function parseLog(logPath, declaredFormat) {
+  // declaredFormat is the DISPATCHER's declaration of what stream format it invoked
+  // (manifest log_format / --format): the dispatcher knows its own runner flags, so
+  // this is a harness-authoritative channel. Content sniffing ('auto') exists ONLY
+  // for ad-hoc diagnostics on a bare --log — it must never be the embedded path,
+  // because a worker's own output can contain JSON lines (or fake chrome) and
+  // sniffing would promote that self-report into telemetry (gpt-5.5 R2 finding).
   const base = { events: null, tool_calls: null, last_action: null, tokens: null, usage_source: 'none', log_bytes: null, format: 'missing' };
   let text;
   try {
@@ -192,7 +203,7 @@ function parseLog(logPath) {
     return base;
   }
   base.log_bytes = Buffer.byteLength(text);
-  const format = detectFormat(text);
+  const format = declaredFormat && declaredFormat !== 'auto' ? declaredFormat : detectFormat(text);
   base.format = format;
   if (format === 'codex-chrome') return { ...base, ...parseCodexChrome(text) };
   if (format === 'jsonl') return { ...base, ...parseJsonl(text) };
@@ -254,9 +265,10 @@ function filesTouched(worktree, baseSha) {
 
 // --- modes -----------------------------------------------------------------------
 
-function buildStatus(manifest, manifestPath, logOverride, stallSecs) {
+function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverride) {
   const logPath = logOverride || (manifest ? manifest.log_path : null);
-  const parsed = logPath ? parseLog(logPath) : parseLog('');
+  const declared = formatOverride || (manifest && manifest.log_format) || 'auto';
+  const parsed = logPath ? parseLog(logPath, declared) : parseLog('', declared);
   let logStat = null;
   if (logPath && fs.existsSync(logPath)) {
     const st = fs.statSync(logPath);
@@ -315,11 +327,11 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs) {
   };
 }
 
-function usageOnly(logPath) {
+function usageOnly(logPath, declaredFormat) {
   // Output discipline: EXACTLY one line — a usage object or the literal `null`.
   // Embedded in dispatch-hetero emit(); must never emit anything else or fail.
   try {
-    const parsed = parseLog(logPath);
+    const parsed = parseLog(logPath, declaredFormat);
     if (!parsed.tokens) { process.stdout.write('null\n'); return; }
     process.stdout.write(`${JSON.stringify({ ...parsed.tokens, source: parsed.usage_source })}\n`);
   } catch (_e) {
@@ -335,7 +347,8 @@ function main(argv) {
     else if (a === '--dir') { args.dir = argv[++i]; }
     else if (a === '--log') { args.log = argv[++i]; }
     else if (a === '--manifest') { args.manifest = argv[++i]; }
-    else if (a === '--runner') { args.runner = argv[++i]; } // labeling hint only; format is auto-detected
+    else if (a === '--runner') { args.runner = argv[++i]; } // labeling hint only
+    else if (a === '--format') { args.format = argv[++i]; } // dispatcher-declared stream format
     else if (a === '--stall-secs') { args.stallSecs = Number(argv[++i]); }
     else if (a === '--summary') { args.summary = true; }
     else if (a === '--usage-only') { args.usageOnly = true; }
@@ -355,9 +368,15 @@ function main(argv) {
     process.stderr.write('--stall-secs must be a positive number\n');
     return 2;
   }
+  if (args.format && !['codex-chrome', 'jsonl', 'plain', 'auto'].includes(args.format)) {
+    // usage-only must still honor its never-fail discipline
+    if (args.usageOnly) { process.stdout.write('null\n'); return 0; }
+    process.stderr.write('--format must be codex-chrome|jsonl|plain|auto\n');
+    return 2;
+  }
 
   if (args.usageOnly) {
-    usageOnly(args.log || '');
+    usageOnly(args.log || '', args.format || 'auto');
     return 0;
   }
 
@@ -381,7 +400,7 @@ function main(argv) {
 
   if (args.summary) {
     if (!args.log) { process.stderr.write('--summary requires --log <path>\n'); return 2; }
-    const parsed = parseLog(args.log);
+    const parsed = parseLog(args.log, args.format || 'auto');
     process.stdout.write(`${JSON.stringify({ events: parsed.events, tool_calls: parsed.tool_calls, last_action: parsed.last_action, tokens: parsed.tokens, usage_source: parsed.usage_source, log_bytes: parsed.log_bytes, format: parsed.format })}\n`);
     return 0;
   }
@@ -410,7 +429,7 @@ function main(argv) {
     return 2;
   }
 
-  const status = buildStatus(manifest, manifestPath, args.log || null, args.stallSecs);
+  const status = buildStatus(manifest, manifestPath, args.log || null, args.stallSecs, args.format || null);
   process.stdout.write(`${JSON.stringify(status)}\n`);
   return 0;
 }

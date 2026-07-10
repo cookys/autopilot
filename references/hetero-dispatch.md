@@ -76,7 +76,10 @@ scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/t
   Stage 1 has NO auto-kill; killing stays the caller's call (`--gc`, `dispatch-batch.sh reap`).
 - **Telemetry honesty**: events/tool_calls/tokens are parsed from the HARNESS event stream
   (codex-chrome `tokens used` footer — empirically fixtured; generic JSONL key scan), NEVER from
-  worker self-report; formats carrying no signal (agy pseudo-TTY, cc-shim plain text) yield
+  worker self-report. The stream format is **dispatcher-declared** (manifest `log_format` /
+  `--format`, derived from the invocation flags the dispatcher itself chose), never content-
+  sniffed — a worker printing JSON usage lines into a plain-text log cannot promote its own
+  output into telemetry. Formats carrying no signal (agy pseudo-TTY, cc-shim plain text) yield
   honest `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
 - **Final JSON**: `dispatch-hetero.sh` output gains ADDITIVE `run_id` / `usage` / `wall_secs`
   (usage via `dispatch-status.js --usage-only`, embedded fail-safe — any parse failure ⇒ `null`).

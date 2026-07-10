@@ -322,9 +322,15 @@ write_review_manifest() {
   REVIEW_MANIFEST_FILE="$dir/${safe_id}.manifest.json"
   local tmp="$REVIEW_MANIFEST_FILE.tmp.$$"
   local live_log="$RAW_LOG" aux_json="null"
+  # log_format = dispatcher-DECLARED (codex = chrome text; every other review runner is
+  # invoked with plain/pty output — grok gets --output-format plain here, unlike hetero).
+  # dispatch-status.js trusts the declaration over content sniffing so a reviewed diff /
+  # model output containing JSON lines can never self-report telemetry.
+  local log_format="plain"
   if [ "$RUNNER" = "codex" ] && [ -n "$CODEX_OUT" ]; then
     live_log="$CODEX_OUT"
     aux_json="\"$(json_escape "$CODEX_ERR")\""
+    log_format="codex-chrome"
   fi
   local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
   local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
@@ -336,9 +342,9 @@ write_review_manifest() {
   local final_json="null"
   [ -n "${REVIEW_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$REVIEW_FINAL_STATUS")\""
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
-      "$(json_escape "$live_log")" "$aux_json" "$$" \
+      "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"

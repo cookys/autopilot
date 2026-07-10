@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/review-result.schema.json",
+  "title": "ReviewResult",
+  "description": "Review-specific dispatch output emitted by dispatch-review.sh and dispatch-anthropic-review.js.",
+  "type": "object",
+  "required": ["status", "runner", "model", "verdict", "findings", "raw_log", "error"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["reviewed", "no_verdict", "precondition_failed"]
+    },
+    "runner": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "verdict": {
+      "type": ["string", "null"],
+      "enum": ["SHIP-AS-IS", "FIX-THEN-SHIP", null]
+    },
+    "findings": {
+      "type": "string",
+      "description": "Parsed FINDINGS line or empty string on failure paths."
+    },
+    "raw_log": {
+      "type": ["string", "null"],
+      "description": "Filesystem path to redacted raw capture; request headers are not logged, and runner auth tokens are exact-match redacted from captured response text."
+    },
+    "error": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": false
+}

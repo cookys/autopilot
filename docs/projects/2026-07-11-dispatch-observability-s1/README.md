@@ -19,6 +19,18 @@ hetero dispatch 是 fire-and-forget：run 的身分證（`$LOG` 路徑、worktre
 - **review final JSON 不動**（BACKLOG scope 原文寫兩個 dispatcher 的 final JSON 都加欄位）：`review-result` 是 `additionalProperties:false` 嚴格契約（v2.32.19 SSOT 剛硬化，`src/runners/review.js` 對 unknown field throw、7 個發射點）；manifest 已給 review 可觀測性，usage 可由 `raw_log` + `--usage-only` 事後導出。加欄位的爆炸半徑（validator + schema + anthropic JS 發射器 + mirror）與收益不成比。
 - 順手修一條 PRE_EXISTING（develop 基準驗證）：`codex-plugin-package.test.sh` sandbox fixture 缺 `schemas/`（v2.32.19 加 payload 時漏更新）。
 
+## Review loop（decorrelated, 3 families）
+
+| Round | Engine | Verdict | Disposition |
+|-------|--------|---------|-------------|
+| R1 | codex/gpt-5.5 xhigh | FIX-THEN-SHIP (2) | 兩條皆實：① review manifest `final_status` 恆 null → cleanup trap 以 exit code（腳本的權威狀態契約 0/1/2）映射；② flock `free` 時 pid/scope 仍可判活 → 違反 `_wt_is_live` 契約（worker 繼承 lock fd,`free` = 權威死亡,pid alive = pid 重用），改 free 權威否決 |
+| R2 | codex/gpt-5.5 xhigh | FIX-THEN-SHIP (1) | 實：JSONL 內容嗅探會把 model 印的 JSON 行當 telemetry（self-report 洩漏）→ 格式改 dispatcher 宣告（manifest `log_format` + `--format`），嗅探降級 ad-hoc 診斷 |
+| R3 | codex/gpt-5.5 xhigh | FIX-THEN-SHIP (1) | 實：`tokens used` 全文掃描 + last-wins 可被 worker 在 exec 輸出注入（中途輪詢/中止 run）→ 尾錨定 footer + emit 端 `AGENT_EXIT==0` 閘（clean exit ⇒ 真 footer 必佔尾位） |
+| R4 | MiniMax-M3（codex quota 枯竭換家族,fail-closed 正確擋下 partial output） | FIX-THEN-SHIP (9) | 逐條查證：8 駁回（`-n` guard 已在、`is-active` exit-0 即 active、detach 路徑 LEDGER 必非空、4 條要求的註解/行為已存在、run_id-in-precondition 是刻意關聯設計）；1 Minor 採納（usage 子 schema `additionalProperties:false`——文件化 parser 閉合建構的事實） |
+| R4b | agy/Gemini 3.5 Flash (High) | **SHIP-AS-IS** (none) | 第三家族確認輪 |
+
+收斂依據：驗證後未決 finding 集 = 空（converge by verification, not verdict string）。
+
 ## Verification
 
 - `hooks/tests/dispatch-status.test.sh` 52 assertions，含載重驗收：**mid-run `alive:true`**（dispatch 背景執行中 manifest 可發現＋判活）、stall 偵測、review 契約位元組不變 guard、逃生口。

@@ -42,7 +42,8 @@
     },
     "usage": {
       "type": ["object", "null"],
-      "description": "Token usage parsed from the harness event stream by dispatch-status.js (--usage-only) — never worker self-report. Null when the runner's log format carries no usage signal.",
+      "description": "Token usage parsed from the harness event stream by dispatch-status.js (--usage-only) — never worker self-report. Null when the runner's log format carries no usage signal. Closed shape: the object is constructed by the parser with these keys only (additionalProperties:false documents that construction).",
+      "additionalProperties": false,
       "properties": {
         "total_tokens": { "type": ["integer", "null"] },
         "input_tokens": { "type": ["integer", "null"] },

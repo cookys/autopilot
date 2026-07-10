@@ -1,0 +1,247 @@
+diff --git a/.claude-plugin/marketplace.json b/.claude-plugin/marketplace.json
+index 14a0a90..8ddbff2 100644
+--- a/.claude-plugin/marketplace.json
++++ b/.claude-plugin/marketplace.json
+@@ -7,7 +7,7 @@
+     {
+       "name": "autopilot",
+       "source": "./",
+-      "version": "2.32.0",
++      "version": "2.32.1",
+       "description": "Development autopilot — 28 skills + 3 methodology agents + 22 hooks (10 default-on, 12 opt-in) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Standalone-capable; coexists with Superpowers when installed."
+     }
+   ]
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 991c579..48dd1a2 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "autopilot",
+-  "version": "2.32.0",
++  "version": "2.32.1",
+   "description": "Development autopilot — 28 lifecycle skills + 3 methodology agents + 22 hooks (10 default-on, 12 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
+   "author": {
+     "name": "TWGS Team"
+diff --git a/.opencode/agent-bodies/reviewer.body.md b/.opencode/agent-bodies/reviewer.body.md
+index 7875102..3f6f62d 100644
+--- a/.opencode/agent-bodies/reviewer.body.md
++++ b/.opencode/agent-bodies/reviewer.body.md
+@@ -23,7 +23,7 @@ These are the autopilot methodology discipline. Violating any of them means your
+ 
+ - Assume everything is broken until proven otherwise.
+ - No "looks good to me". No "probably fine". If you haven't traced it, you haven't reviewed it.
+-- **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Your input is
++- (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Your input is
+   the **artifacts** (diff, files, test/command output) plus the **original** task / plan / commit
+   message as baseline — *nothing else*. You **MUST NOT** be given, and **MUST NOT solicit or rely on**,
+   the implementer's self-report, summary, "what I did" writeup, or self-assessed verdict. Those are
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 950ecbe..c5579cc 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
+ - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
+ -->
+ 
++## v2.32.1 — the REAL empty_output root cause: pipefail + grep -q (one-flag fix)
++
++**Headline**: The `empty_output` misclassification epidemic (a successful hetero dispatch marked failed) is fixed, and the root cause is one flag. `dispatch-author.sh`'s emptiness check ran `tr | sed | grep -q` under `set -o pipefail`: `grep -q` exits at the first match, upstream `tr`/`sed` take SIGPIPE/EPIPE, pipefail marks the pipeline failed, and `if !` inverts FOUND-content into "empty" — **measured 97/100 false-empty on a 6KB capture; small outputs pass, which is why every probe kept lying**. Fix: `grep -c '[^[:space:]]' > /dev/null` (reads all input; 0/100). A committed big-output regression test guards the class.
++
++> **CORRECTION (honest record)**: the v2.31.17 "content flushed late after frontend exit" narrative was a **misdiagnosis** — content was present all along; the CHECK was lying. A refutation experiment run in **zsh** (the Bash tool's outer shell) masked the bash-specific SIGPIPE behavior — cross-shell refutations must run in the target shell. A marker-aware quiescence design was explored and **reverted before merge**: `wait_output_quiescent` runs *after* the runner frontend exits, so it only ever bounds the short post-exit flush tail; a "turn-budget" deadline was the wrong model and disabling grace/stability in marker mode hung the suite on legitimate failure stubs. The v2.31.17 content-quiescence lib is unchanged (harmless; covers any genuinely-late flush).
++
++### Fixed
++- `dispatch-author.sh` final emptiness check: `grep -q` → `grep -c >/dev/null` (the actual epidemic root cause). `dispatch-review.sh`'s greps were already direct-on-file (immune) — which is why review dispatches never exhibited the bug.
++
++### Added
++- `hooks/tests/dispatch-output-quiescence.test.sh`: big-output pipefail regression case (a multi-KB capture must classify `authored`, never false-empty).
++
++### Rollback
++- Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.32.0`.
++
+ ## v2.32.0 — handoff skill + audit-decision batch: routing tiebreaks, opus reviewer, density scaling
+ 
+ **Headline**: The 2026-07-05 dual-family skills audit (573 real sessions of transcripts mined; Claude fan-out + codex/gpt-5.5 decorrelated track) lands as a decision batch. New **`handoff` skill** (skill #28) — the single biggest transcript-evidenced gap: the user hand-drove the "寫 handoff → /clear → resume" ritual 91 times; the skill standardizes a 7-section resume doc (write + resume modes, proactive offer rule), complementing the machine-snapshot `session-handoff` hook (which had never been enabled — it is opt-in via `handoff_inject`). Reviewer/debugger routing reconciles to **opus** (the "100% accuracy" sonnet benchmark turned out ceremonial: no raw artifacts, two model generations stale, self-contradictory 100%-vs-97/88-vs-94-98; runtime paths disagreed — resolve-dispatch said sonnet while agent frontmatter ran opus). `resolve-review-loop.sh` gains **tier-scaled verification density** (`--scale-by-capability` / `density_scaling`): a low/unknown-capability implementer fail-closed gets +2 review rounds (cap 7, never below the user base), ≥2 review families, and L1 required — the lift campaigns' core lesson (mechanical contracts move behavior; prose doesn't) applied to the under-served cc-shim/weak-implementer path. Plus: `references/routing-tiebreaks.md` (6 documented ambiguity tiebreaks), the `doc/`→`docs/` default-path sweep to zero, two load-bearing rules (verifier isolation, panel aggregation) now pinned by canonical-invariant seeds (negative-tested), and /l6's depth-0 context-discipline hard rule written down.
+diff --git a/README.md b/README.md
+index bee3371..4794cf4 100644
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,7 @@
+ 
+ <p align="center">
+   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
+-  <img src="https://img.shields.io/badge/version-2.32.0-E8A838?style=flat-square" alt="v2.32.0">
++  <img src="https://img.shields.io/badge/version-2.32.1-E8A838?style=flat-square" alt="v2.32.1">
+   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
+   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
+   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
+diff --git a/README.zh-TW.md b/README.zh-TW.md
+index 25b16e1..784aedf 100644
+--- a/README.zh-TW.md
++++ b/README.zh-TW.md
+@@ -10,7 +10,7 @@
+ 
+ <p align="center">
+   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
+-  <img src="https://img.shields.io/badge/version-2.32.0-E8A838?style=flat-square" alt="v2.32.0">
++  <img src="https://img.shields.io/badge/version-2.32.1-E8A838?style=flat-square" alt="v2.32.1">
+   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
+   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
+   <img src="https://img.shields.io/badge/hooks-22-6B8E6B?style=flat-square" alt="22 Hooks">
+diff --git a/docs/metrics/surface-lines.json b/docs/metrics/surface-lines.json
+index 7bae323..9d469b1 100644
+--- a/docs/metrics/surface-lines.json
++++ b/docs/metrics/surface-lines.json
+@@ -1,6 +1,6 @@
+ {
+-  "version": "2.32.0",
+-  "prose": 10759,
++  "version": "2.32.1",
++  "prose": 10865,
+   "engine": 3185,
+   "note": "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f)"
+ }
+diff --git a/docs/projects/INDEX.md b/docs/projects/INDEX.md
+index 104d3b0..dce0d07 100644
+--- a/docs/projects/INDEX.md
++++ b/docs/projects/INDEX.md
+@@ -13,6 +13,7 @@
+ 
+ | Date | Project | Version | Merge | Plan |
+ |------|---------|---------|-------|------|
++| 2026-07-05 | empty-output-root-cause — **pipefail+grep -q false-empty (97/100 measured) fixed with one-flag grep -c**; marker-aware quiescence explored then reverted pre-merge (wait runs post-exit → only bounds flush tail); honest CORRECTION of the v2.31.17 late-flush narrative + zsh-refutation gotcha. Rebased onto v2.32.0 after concurrent-session divergence. Fix-size, trail in [ongoing-maintenance](ongoing-maintenance/2026-07.md) | v2.32.1 | `(merge pending)` | [CHANGELOG](../../CHANGELOG.md) |
+ | 2026-07-05 | [audit-decisions](../../CHANGELOG.md) — **v2.32.0: handoff skill + audit-decision batch** (/l6 run): `handoff` skill #28 (91-hit transcript gap; Gemini Flash impl + gpt-5.5 review); reviewer/debugger→opus reconciliation (ceremonial benchmark retired, honest staleness note); `--scale-by-capability` tier-scaled verification density (fail-closed unknown, +6 tests; Gemini Pro impl); routing-tiebreaks reference (6 ambiguities) + doc/→docs/ sweep + 3 negative-tested invariant seeds + /l6 depth-0 context discipline. qc panel gpt-5.5+claude×2, union-on-verified-critical, no verified Critical | v2.32.0 | `7a7a872` | [report](_archive/2026-07-05-l6-skills-audit/report.md) |
+ | 2026-07-05 | [l6-skills-audit](_archive/2026-07-05-l6-skills-audit/report.md) — **/l6 dual-family skills audit** over 573 sessions of real transcripts: 6 instruction-surface drifts fixed (ceo-agent /l6 omission + /l5 stale wording + L-1.6 omission + DOA merged-branch carve-out, dev-flow 6→7, severity-table order, finish-flow doc/docs mix); report-only: reviewer/debugger `model: opus` vs canonical sonnet, 6 routing-tiebreak gaps, 2 ungated canonical duplications (verifier isolation, panel aggregation), doc/→docs/ sweep; transcript-driven: `handoff` skill candidate (91 hits), language-reversion enforcement (16), delegation-posture defaults (~22); lift roadmap: tier-scaled verification density #1. codex diff review SHIP-AS-IS | — | `9ace4e7` | [report](_archive/2026-07-05-l6-skills-audit/report.md) |
+ | 2026-07-05 | codex-plugin-consult — plugin consult channel integrated capability-gated (hetero-dispatch § Peer consult + front-door §0 + coexistence table; review channel gated on known-bad calibration) + terse-reviewer-contracts 開案 (plan R1, MiniMax 5🟠 folded). S-size, trail in [ongoing-maintenance](ongoing-maintenance/2026-07.md) | v2.31.20 | `e736c8c` | [plan](../plans/2026-07-05-terse-reviewer-contracts.md) |
+diff --git a/docs/projects/ongoing-maintenance/2026-07.md b/docs/projects/ongoing-maintenance/2026-07.md
+index 22fdcab..9e75851 100644
+--- a/docs/projects/ongoing-maintenance/2026-07.md
++++ b/docs/projects/ongoing-maintenance/2026-07.md
+@@ -10,3 +10,4 @@ finish-flow F.3. Larger work is tracked in `docs/projects/INDEX.md` + CHANGELOG.
+ | 07-05 | c7b048c | fix(dispatch): cc-shim 空窗寬限 10s 不足(當日 MiniMax 再判空)→ per-runner grace 第三參數(env > arg > 10000;cc-shim 30s)(3 檔)|
+ | 07-05 | 1017e18 | feat(routing): orchestrator-economy — deep-reasoner/fast-worker 角色列(canonical+resolver+test)+ front-door Economy mode + codex-plugin spike BACKLOG(S,3 commits — S-gate 邊界:同一特性內 review 驅動的 r2,未跨 scope,INDEX row 已存在)|
+ | 07-05 | e736c8c | feat(consult): codex-plugin consult 通道整合(capability-gated)+ terse-contracts 開案(plan R1)|
++| 07-05 | pending | fix(dispatch): pipefail+grep -q 誤判空(97/100)→ grep -c;marker 模式撤回;並發 session 分歧後 rebase 到 v2.32.0 成 v2.32.1 |
+diff --git a/hooks/tests/dispatch-output-quiescence.test.sh b/hooks/tests/dispatch-output-quiescence.test.sh
+index 0a37562..6c2bb6d 100755
+--- a/hooks/tests/dispatch-output-quiescence.test.sh
++++ b/hooks/tests/dispatch-output-quiescence.test.sh
+@@ -123,4 +123,15 @@ assert_eq "$DISPATCH_EXIT" "3" "runner-timeout-parity exit"
+ assert_eq "$DISPATCH_STATUS" "runner_failed" "runner-timeout-parity status"
+ assert_le "$DISPATCH_ELAPSED" "10" "runner-timeout-parity bounded by timeout"
+ 
++# big-output-pipefail regression: THE root cause of the 2026-07-05 empty_output
++# epidemic — bash `set -o pipefail` + a piped `grep -q` early-exit SIGPIPEs the
++# upstream tr/sed on multi-KB captures, so found content is misclassified empty
++# ~97% of the time. A large payload must classify "authored", not empty.
++big_stub=$(make_stub "codex-big-output" 'head -c 6000 /dev/urandom | base64
++exit 0')
++run_dispatch "$big_stub" env
++assert_eq "$DISPATCH_EXIT" "0" "big-output-pipefail exit"
++assert_eq "$DISPATCH_STATUS" "authored" "big-output-pipefail status (must not false-empty)"
++assert_le "$DISPATCH_ELAPSED" "6" "big-output-pipefail returns promptly"
++
+ finalize_test
+diff --git a/platforms/codex/.agents/plugins/marketplace.json b/platforms/codex/.agents/plugins/marketplace.json
+index a704176..b5d36f8 100644
+--- a/platforms/codex/.agents/plugins/marketplace.json
++++ b/platforms/codex/.agents/plugins/marketplace.json
+@@ -10,7 +10,7 @@
+         "source": "local",
+         "path": "./plugin"
+       },
+-      "version": "2.32.0",
++      "version": "2.32.1",
+       "policy": {
+         "installation": "AVAILABLE",
+         "authentication": "ON_INSTALL"
+diff --git a/platforms/codex/plugin/.codex-plugin/plugin.json b/platforms/codex/plugin/.codex-plugin/plugin.json
+index b07a01d..8293c04 100644
+--- a/platforms/codex/plugin/.codex-plugin/plugin.json
++++ b/platforms/codex/plugin/.codex-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "autopilot",
+-  "version": "2.32.0",
++  "version": "2.32.1",
+   "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts. The manifest exposes skills only and does not load Claude Code hooks.",
+   "author": {
+     "name": "TWGS Team"
+diff --git a/platforms/codex/plugin/scripts/dispatch-author.sh b/platforms/codex/plugin/scripts/dispatch-author.sh
+index 76ad3a1..e2c59b6 100755
+--- a/platforms/codex/plugin/scripts/dispatch-author.sh
++++ b/platforms/codex/plugin/scripts/dispatch-author.sh
+@@ -212,9 +212,11 @@ else
+   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+ fi
+ 
++# grep -c (not -q): -q exits at first match and SIGPIPEs tr/sed under pipefail — a
++# multi-KB capture then misclassifies as empty ~97% of the time (measured 2026-07-05).
+ if ! tr -d '\r' < "$RAW_LOG" \
+   | sed '/^Script started on /d; /^Script done on /d' \
+-  | grep -q '[^[:space:]]'; then
++  | grep -c '[^[:space:]]' > /dev/null; then
+   printf '{ "runner": "%s", "model": "%s", "status": "empty_output", "raw_log": "%s", "error": "no non-whitespace output from runner — fail-closed" }\n' \
+     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
+   exit 1
+diff --git a/platforms/codex/plugin/scripts/preflight-release.sh b/platforms/codex/plugin/scripts/preflight-release.sh
+index c92782a..0390cd1 100755
+--- a/platforms/codex/plugin/scripts/preflight-release.sh
++++ b/platforms/codex/plugin/scripts/preflight-release.sh
+@@ -152,9 +152,11 @@ check_north_star() {
+     return 0
+   fi
+   local base_prose base_engine base_version
+-  base_prose=$(node -e "console.log(require('./$SURFACE_BASELINE').prose)" 2>/dev/null)
+-  base_engine=$(node -e "console.log(require('./$SURFACE_BASELINE').engine)" 2>/dev/null)
+-  base_version=$(node -e "console.log(require('./$SURFACE_BASELINE').version)" 2>/dev/null)
++  # process.stdout.write(String(..)) — console.log colorizes numbers under
++  # FORCE_COLOR (ANSI codes break the -gt test → false "baseline unparseable")
++  base_prose=$(node -e "process.stdout.write(String(require('./$SURFACE_BASELINE').prose))" 2>/dev/null)
++  base_engine=$(node -e "process.stdout.write(String(require('./$SURFACE_BASELINE').engine))" 2>/dev/null)
++  base_version=$(node -e "process.stdout.write(String(require('./$SURFACE_BASELINE').version))" 2>/dev/null)
+   if ! [ "$base_prose" -gt 0 ] 2>/dev/null; then
+     echo "    baseline unparseable ($SURFACE_BASELINE) — re-seed with --update-baseline" >&2
+     return 1
+diff --git a/platforms/codex/plugin/skills/finish-flow/SKILL.md b/platforms/codex/plugin/skills/finish-flow/SKILL.md
+index 2042dd4..d35af4d 100644
+--- a/platforms/codex/plugin/skills/finish-flow/SKILL.md
++++ b/platforms/codex/plugin/skills/finish-flow/SKILL.md
+@@ -61,7 +61,7 @@ status=completed` call. Combining steps into one tool call defeats the forcing f
+ | L-5.3 | Merge to develop (or main per project convention) | `git checkout develop && git merge --no-ff <feature-branch>`. The merge commit message MUST carry the qc-evidence trailer `QC-Verdict: PASS (reviewer <id>, <YYYY-MM-DD>)` once L-5.2 passed — the `.githooks/pre-push` **qc-gate** ([`scripts/resolve-qc-gate.sh`](../../scripts/resolve-qc-gate.sh), strength per `.claude/qc-gate-config.md`) refuses to push a protected-path range without it. Same trailer requirement applies to **F.4** and **H-9.3**. Verify merge commit landed. Output: `git log -1 --format="%H %s%n%(trailers:key=QC-Verdict)"` showing merge commit + trailer. |
+ | L-5.4 | Post-Merge Review | Re-read critical files that were changed (pick 1–3 highest-risk) to verify merge didn't silently drop changes. **Doc-sync (conditional)**: if the change touched user-facing behavior or 3+ modules, invoke `autopilot:doc-sync` in scoped mode (base = the merge-base) to confirm docs still match the merged code; OFFER full mode for large/user-facing ships. Triage confirmed findings per doc-sync's fix policy (user docs → reality; specs → STALE-fix or mark NOT-YET-IMPLEMENTED + BACKLOG). Output: grep/diff confirming each expected change is present on develop + doc-sync drift summary (or "doc-sync skipped: no user-facing/3+ module change"). |
+ | L-5.5 | Archive project | Move `docs/projects/<project>/` → `docs/projects/_archive/<project>/` (or the project-configured projects path). Update `docs/projects/INDEX.md` (remove from 進行中, add to 已完成 with date). **Stale-qualifier guard**: `grep -E '^\|' docs/projects/INDEX.md \| grep -Ei '\((pending\|target\|in progress\|WIP\|TBD\|draft)\)'` MUST be empty (scan **table rows only** — the `^\|` prefilter excludes section headers like `## 進行中 (In Progress)` which would otherwise false-positive under `-i`; `-i` then catches lowercase `(wip)` in a row); on hit, emit matched lines + halt. **Release-hygiene gate** (if this ship bumped the version): run `scripts/preflight-release.sh` — verifies CHANGELOG entry + INDEX row + version mirrors are consistent with canonical `.claude-plugin/plugin.json`; must exit 0. Output: `ls docs/projects/_archive/<project>/` + grep guard pass-confirmation + preflight-release pass line. |
+-| L-5.6 | L Session End (full checklist) | Run the dev-flow "Session End L-Full" checklist (verify completion, update project docs, knowledge extraction via autopilot:learn if warranted, deferred items to BACKLOG, triggered BACKLOG pickup, staging verify, escalation events exist for every triggered quality-floor emission point (or none fired)). Output: pass/fail summary for each gate. |
++| L-5.6 | L Session End (full checklist) | Run the dev-flow "Session End L-Full" checklist (verify completion, update project docs, knowledge extraction via autopilot:learn if warranted, episodic-distill evaluation (did this project produce a transferable methodology or a rework-tempered procedure? yes → suggest `autopilot:distill` episodic mode — learn records lesson-FACTS, distill produces executable PROCEDURES), deferred items to BACKLOG, triggered BACKLOG pickup, staging verify, escalation events exist for every triggered quality-floor emission point (or none fired)). Output: pass/fail summary for each gate. |
+ | L-5.7 | Delete merged branch (local + remote) | The ship is merged + archived — delete the feature branch so it doesn't accumulate. **This step exists because L-5 historically had no branch-cleanup sub-task** (unlike `F.5`/`H-9.5`), so every L-ship left its `feat/*` branch behind (local AND on `origin`). Verify it's merged first (`git branch --merged develop` lists it), then: `git branch -d <feature-branch>` (local) **and** `git push origin --delete <feature-branch>` if it was ever pushed. Skip remote delete only if the branch was never pushed. (Placed AFTER L-5.6 — unlike H's `H-9.5`-before-`H-9.6` order — intentionally: L-5.6 Session End's first check verifies merged-status, so deleting last consumes that verification. Don't "fix" the asymmetry.) Output: `git branch` + `git ls-remote --heads origin <branch>` both confirming the branch is gone. |
+ 
+ After all 7 completed → mark the parent L-5 task (from L-1) completed.
+diff --git a/plugin.json b/plugin.json
+index 991c579..48dd1a2 100644
+--- a/plugin.json
++++ b/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "autopilot",
+-  "version": "2.32.0",
++  "version": "2.32.1",
+   "description": "Development autopilot — 28 lifecycle skills + 3 methodology agents + 22 hooks (10 default-on, 12 opt-in) enforcing Three Red Lines discipline. Standalone-capable orchestration that coexists with Superpowers.",
+   "author": {
+     "name": "TWGS Team"
+diff --git a/scripts/dispatch-author.sh b/scripts/dispatch-author.sh
+index 76ad3a1..e2c59b6 100755
+--- a/scripts/dispatch-author.sh
++++ b/scripts/dispatch-author.sh
+@@ -212,9 +212,11 @@ else
+   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+ fi
+ 
++# grep -c (not -q): -q exits at first match and SIGPIPEs tr/sed under pipefail — a
++# multi-KB capture then misclassifies as empty ~97% of the time (measured 2026-07-05).
+ if ! tr -d '\r' < "$RAW_LOG" \
+   | sed '/^Script started on /d; /^Script done on /d' \
+-  | grep -q '[^[:space:]]'; then
++  | grep -c '[^[:space:]]' > /dev/null; then
+   printf '{ "runner": "%s", "model": "%s", "status": "empty_output", "raw_log": "%s", "error": "no non-whitespace output from runner — fail-closed" }\n' \
+     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
+   exit 1

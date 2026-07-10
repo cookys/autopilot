@@ -1,0 +1,50 @@
+## Reviewer Report
+
+**Scope disclosure (bound):** I have **read-only** tools (Read/Grep/Glob) — no Bash. I could not execute `hooks/tests/verify-red-green.test.sh`, `hooks/tests/run.sh`, or reproduce the crash scenario below live. All findings are traced by reading the diff + surrounding code; the bash `set -e`/command-substitution semantics claim below is corroborated by the codebase's *own* later-round comment (cited), not by an execution I ran. Also disclosing: while reading the live working tree to verify the diff's context, I found the live file (`scripts/verify-red-green.sh` / its codex mirror) already contains code and a test **beyond** what this diff shows (an `if !`-wrapped `cd` + `test_verify_cmd_dirname_plain_file`). This diff is reviewed as the standalone unit presented — the discrepancy is called out below since it's directly relevant to Finding #1.
+
+### 🟠 Major (strongly recommended)
+
+- `scripts/verify-red-green.sh:186-192` (identical in `platforms/codex/plugin/scripts/verify-red-green.sh:186-192`) — The new relative-`--verify-cmd` canonicalization does an **unguarded** `cd` inside a command-substitution assignment under `set -euo pipefail` (line 27):
+  ```bash
+  if [[ -e "$VERIFY_CMD" ]]; then
+    VERIFY_CMD="$(cd "$(dirname "$VERIFY_CMD")" && pwd)/$(basename "$VERIFY_CMD")"
+  else
+  ```
+  If the `dirname` component of a caller-supplied relative path exists but is **not a directory** (e.g. `--verify-cmd "somefile/cmd.sh"` where `somefile` is a plain file — plausible on a caller typo or a race), `cd` fails, the command-substitution assignment returns non-zero, and under `set -e` a bare assignment-as-simple-command aborts the script immediately — **before** it reaches `err_usage` (line 195/199). The script's whole contract is "always emit one of 4 documented JSON verdicts with exit 0/1/2/3" (header lines 16-25); this path breaks that contract with an uncontrolled bash abort, no JSON on stdout, and an exit code that is not guaranteed to be `2`.
+  - **Impact:** any caller (e.g. `/l5`/`/l6` dispatch code, or a hand-typed invocation) that hits this edge case gets a silent/garbled failure instead of the documented `usage`-error contract — harder to diagnose, and any JSON-parsing consumer gets empty/invalid input instead of a clean error.
+  - **Corroborating evidence this is a real, recognized defect (not speculative):** the live working tree already contains the fix for exactly this case, with a comment stating the failure mode verbatim: `scripts/verify-red-green.sh:188-192` (current HEAD) — *"Wrap the cd in a conditional: a non-directory dirname or a cd failure (permissions, races) must exit 2 with a named error, not abort via set -e."* — plus a dedicated regression test `test_verify_cmd_dirname_plain_file` (`hooks/tests/verify-red-green.test.sh:183-192`, current HEAD) that is **not part of this diff**.
+  - **Test-coverage gap in this diff specifically:** `test_relative_verify_cmd` (added by this diff, `hooks/tests/verify-red-green.test.sh:158-169`) only exercises (a) a bare filename in the cwd (`dirname` = `.`, `cd .` always succeeds) and (b) a nonexistent path (hits the `else`/`-e`-false branch, never touches the `cd`). Neither case reaches the crash path, so this diff's own new tests would pass despite shipping the bug.
+  - **Fix direction:** wrap the `cd`/`pwd` in a guarded conditional and route the failure through `err_usage` (the pattern already proven in the later HEAD version), and add the equivalent regression test (dirname-is-a-plain-file) *in this diff* rather than relying on it existing only in a later round.
+
+### 🟡 Minor (recommended)
+
+- `scripts/verify-red-green.sh:57-79` — `printf -v ord '%d' "'$c"` relies on bash's "quote-prefixed" numeric-value idiom without an inline comment explaining it; a future maintainer reading this cold has to know the bash-ism. Not a defect — the surrounding block comment (lines 54-56) explains intent but not this specific mechanism. Fix direction: one-line comment noting `"'$c"` yields the char's ordinal via bash's `printf %d` quote convention.
+
+### 🔵 Suggestion (consider)
+
+- `scripts/verify-red-green.sh:58-77` — Character-by-character bash loop for `json_escape` is O(n) with a `printf -v` call per character; fine for the current inputs (SHAs, refs, short reason strings) but would be slow on an unusually large string. Not worth fixing pre-emptively — no current caller passes large strings — but worth a one-line note if `reason`/`red_tests` content sources ever change to include large blobs.
+
+### ✅ Verified Clean
+
+- Reviewed all 3 files touched by this diff: `scripts/verify-red-green.sh`, `platforms/codex/plugin/scripts/verify-red-green.sh`, `hooks/tests/verify-red-green.test.sh`.
+- The two mirrored script files (`scripts/verify-red-green.sh` and `platforms/codex/plugin/scripts/verify-red-green.sh`) are edited **identically** — this is expected, not scope creep: `scripts/sync-codex-plugin-skills.sh:37-45` wholesale-mirrors the `scripts/` directory into the codex payload, so both copies changing in lockstep is the correct/required behavior, not duplication introduced by the author.
+- `usage()` sed range bump `2,21p` → `2,25p` (`scripts/verify-red-green.sh:51`) correctly accounts for the 4 new header comment lines (3 comment lines + 1 blank) added at lines 12-15 — verified by counting.
+- `json_escape` control-character/quote/backslash escaping logic (`scripts/verify-red-green.sh:57-79`) traced by hand against `case` pattern matching semantics (backslash/quote/named-escape patterns are literal single-char matches, no glob ambiguity) — correct for the documented cases (`\n \t \r \b \f`, quote, backslash, other `<0x20` → `\uXXXX`). No behavior regression vs. the old `sed`-based implementation for non-ASCII bytes (both old and new pass such bytes through unescaped — not a new gap).
+- `test_json_escape_control_chars`'s `sed -n '/^json_escape()/,/^}$/p'` extraction (`hooks/tests/verify-red-green.test.sh:175`) correctly captures the whole function body without premature truncation — verified no other line in the function is a standalone `}` (all `${...}` expansions are inline, never anchored `^}$`).
+- Absolute `--verify-cmd` paths are unaffected by the new canonicalization branch (`[[ "$VERIFY_CMD" != /* ]]` guard) — backward compatible, traced.
+- New test file registration: `hooks/tests/run.sh` auto-discovers `*.test.sh` files, so no additional wiring is needed for the new test cases to run — confirmed present (not traced deeper as no finding depends on it).
+- No security-relevant change: `VERIFY_CMD` execution (`run_verify_cmd`, unchanged by this diff) was already attacker/caller-controlled by design; canonicalization does not widen that trust boundary.
+- No scope creep — every changed line traces to the two documented fixes (relative-path canonicalization; full JSON control-char escaping) stated in the diff's own comments; no unrelated reformatting, renames, or refactors found.
+
+### Summary
+Overall risk: **Medium** — the shipped feature (canonicalizing `--verify-cmd`) is directionally correct and the JSON-escaping improvement is sound, but the canonicalization has a real, reproducible crash-class edge case that the diff's own new test doesn't cover, and — per my read of the live tree — a fix for exactly this gap already exists past this diff, meaning shipping this diff as its own unit would (temporarily) regress a fix that's already been identified elsewhere in the history.
+
+Top 3 priorities to fix:
+1. Wrap the `cd "$(dirname "$VERIFY_CMD")"` canonicalization in a guarded conditional so a non-directory/failed `cd` produces the documented `err_usage`/exit-2 contract instead of an uncontrolled `set -e` abort (`scripts/verify-red-green.sh:186-192` + codex mirror).
+2. Add a regression test for the non-directory-dirname case in this diff (the pattern already exists later in history — `test_verify_cmd_dirname_plain_file` — pull it in rather than leaving the gap).
+3. (Minor) Document the `"'$c"` ordinal idiom inline in `json_escape` for maintainability.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: The fix pattern for the one Major finding already exists verbatim elsewhere in the codebase (cited file:line) — this is a direct patch application, not a root-cause investigation or domain-expert question.
+Remaining risks: None beyond the Major finding above; Minor/Suggestion items are non-blocking per the 4-tier severity policy.

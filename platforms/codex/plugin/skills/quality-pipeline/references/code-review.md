@@ -1,17 +1,16 @@
-
 # Code Review (All Sizes, Mandatory)
 
 **Every commit/merge requires code review. No exceptions.**
 
 ## Fix-First Classification (C++ Safe)
 
-Before presenting findings to the user, classify each into AUTO-FIX or ASK.
+Classify each finding AUTO-FIX or ASK before presenting.
 
-**C++ safety principle:** In C++, even "mechanical" changes can alter compiled output and runtime behavior. Auto-fix scope is intentionally narrow.
+**C++ safety principle:** Even "mechanical" C++ edits can change compiled output and runtime. Auto-fix stays narrow.
 
 ### AUTO-FIX (apply immediately, no asking)
 
-Only these categories — nothing that changes compiled output:
+Only these — nothing that changes compiled output:
 
 | Category | Examples | Why safe |
 |----------|----------|----------|
@@ -19,13 +18,13 @@ Only these categories — nothing that changes compiled output:
 | Trailing whitespace / extra blank lines | Whitespace-only diffs | Zero compiled output change |
 | Log message text corrections | `spdlog::info("recieved")` → `spdlog::info("received")` | String literal only |
 | Markdown / documentation fixes | Typos in `docs/`, README, CLAUDE.md | Not compiled |
-| Unused `#include` removal | **Only if compiler confirms** no transitive dependency (the project build command passes) | Must verify — C++ headers have side effects |
+| Unused `#include` removal | **Only if compiler confirms** no transitive dependency (project build passes) | Must verify — C++ headers have side effects |
 
-**Hard boundary:** If in doubt, it is ASK, not AUTO-FIX.
+**Hard boundary:** Doubt → ASK, not AUTO-FIX.
 
 ### ASK (present to user with recommendation)
 
-Everything else, including items that seem trivial:
+Everything else, including seemingly trivial items:
 
 | Category | Why not auto-fix |
 |----------|-----------------|
@@ -66,11 +65,11 @@ Everything else, including items that seem trivial:
 
 ## Invocation
 
-**Dispatch per the `.claude/dispatch-config.md` `## Code Review` chain** (auto-injected at the top of `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the **first AVAILABLE** reviewer in the chain; plugins not installed are skipped automatically. **`autopilot:reviewer` is the default fallback** when the chain is unset or no entry is dispatchable. The chain is a declarative preference; if you want a one-off non-chain reviewer, dispatch it directly via the Agent tool.
+**Dispatch per the `.claude/dispatch-config.md` `## Code Review` chain** (auto-injected atop `skills/quality-pipeline/SKILL.md`). quality-pipeline picks the **first AVAILABLE** reviewer; missing plugins skipped. **`autopilot:reviewer` is the default fallback** when chain unset or nothing dispatchable. Chain = declarative preference; one-off non-chain reviewer → Agent tool direct.
 
-**Model/mode**: resolve via `scripts/resolve-dispatch.sh --role reviewer` — emits JSON `{model, mode, agent, source}` consulting `.claude/model-routing-config.md` or [`references/model-routing.md`](../../../references/model-routing.md) defaults. Do not hardcode defaults at the dispatch site.
+**Model/mode**: `scripts/resolve-dispatch.sh --role reviewer` → JSON `{model, mode, agent, source}` from `.claude/model-routing-config.md` or [`references/model-routing.md`](../../../references/model-routing.md) defaults. Never hardcode at dispatch site.
 
-Example dispatch (when the chain selects `autopilot:reviewer`):
+Example (chain selects `autopilot:reviewer`):
 
 ```
 Task tool:
@@ -78,31 +77,22 @@ Task tool:
   prompt: "Review the changes against [plan/task description]. Focus on [specific concerns]."
 ```
 
-> (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST — EVERY round, round 1 included).** The dispatch prompt/context MUST carry
-> **only artifacts** — the diff / changed files / test output — plus the **original** task / plan / commit
-> message as the baseline to grade against. It **MUST NOT** include the implementer's self-report, summary,
-> "what I did" writeup, or self-assessed verdict: feeding the verifier the implementer's own account of the
-> work anchors it into confirming the claim (multi-agent hallucination cascade), which is the exact failure
-> a decorrelated gate exists to prevent. `[plan/task description]` is the *specification*, not a report of
-> what was done — keep that; strip any "here's what I changed / it works / this is done" narrative. Canonical
-> rule + baseline-vs-report test: [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)
-> § "Verifier isolation". This is orthogonal to the round-2+ blind re-dispatch below (which strips *prior
-> verdicts*); both apply.
+> (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST — EVERY round, round 1 included).** Dispatch prompt/context MUST carry **only artifacts** — diff / changed files / test output — plus the **original** task / plan / commit message as baseline. It **MUST NOT** include the implementer's self-report, summary, "what I did" writeup, or self-assessed verdict: that anchors the verifier into confirming the claim (multi-agent hallucination cascade) — the failure a decorrelated gate prevents. `[plan/task description]` is the *specification*, not a report of work done — keep it; strip any "here's what I changed / it works / this is done" narrative. Rule + baseline-vs-report test: [`references/blind-dispatch.md`](../../../references/blind-dispatch.md) § "Verifier isolation". Orthogonal to round-2+ blind re-dispatch (strips *prior verdicts*); both apply.
 >
-> On round 2+ (Re-review Loop below), additionally leave `[specific concerns]` blank or restrict it to **non-finding-derived** scope reminders only. Run `scripts/check-redispatch-prompt.sh <prompt>` before dispatching — exit 1 means the prompt is leaky per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md) and MUST be stripped.
+> Round 2+ (Re-review Loop): leave `[specific concerns]` blank or **non-finding-derived** scope reminders only. Run `scripts/check-redispatch-prompt.sh <prompt>` before dispatch — exit 1 = leaky per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md); MUST strip.
 
-Whichever reviewer the chain selects, the agent (per the canonical scope statement consumed by `agents/reviewer.md` too) will:
-1. Read every file affected by the diff and the **original task / plan / commit message** as baseline. Callers / tests / config are read only when a finding depends on them.
-2. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep dimension defined in "Scope Creep / Surgical Changes Scan" below).
+Whichever reviewer the chain selects, the agent (canonical scope also consumed by `agents/reviewer.md`) will:
+1. Read every file affected by the diff and the **original task / plan / commit message** as baseline. Callers / tests / config only when a finding depends on them.
+2. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep in "Scope Creep / Surgical Changes Scan" below).
 3. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`.
 
-(Non-autopilot reviewers may return a different output shape — see "Handoff Consumption" below for enum vocabulary; foreign-shape outputs fall back to inline interpretation by quality-pipeline.)
+(Non-autopilot reviewers may use another shape — see "Handoff Consumption" for enum vocabulary; foreign shapes → quality-pipeline inline interpretation.)
 
 ## Handoff Consumption
 
-After the reviewer returns, read the `### Handoff` section and route the next step by enum.
+Read `### Handoff`; route by enum.
 
-**Scope note**: the table below lists only the enum values `autopilot:reviewer` itself emits. The global enum grammar (see `agents/README.md`) also defines `AUTOPILOT_PLANNER`, `PARALLEL_DISPATCH`, and `SEQUENTIAL_DISPATCH` — those are emitted by other methodology agents (planner / debugger) but never by reviewer, so quality-pipeline does not need to consume them here.
+**Scope note**: table = enums `autopilot:reviewer` emits. Global grammar (`agents/README.md`) also has `AUTOPILOT_PLANNER`, `PARALLEL_DISPATCH`, `SEQUENTIAL_DISPATCH` — other methodology agents only; quality-pipeline need not consume them here.
 
 | Enum | quality-pipeline action |
 |------|------------------------|
@@ -112,29 +102,29 @@ After the reviewer returns, read the `### Handoff` section and route the next st
 | `NEEDS_DOMAIN_EXPERT` | Use the rationale to pick the appropriate voltagent role agent (e.g., `voltagent-lang:rust-engineer`, `voltagent-data-ai:postgres-pro`) and dispatch for the fix |
 | `DOCUMENT_ONLY` | Record the findings without taking fix action (typical for 🟡 Minor / 🔵 Suggestion only runs) |
 
-Methodology agents do not call each other. Any re-dispatch happens in quality-pipeline, never inside the reviewer's own session.
+Methodology agents never call each other. Re-dispatch is quality-pipeline's job, not the reviewer's session.
 
 ### Consuming a finding — verify before implementing (findings are suggestions to evaluate, not orders)
 
-A reviewer finding is a *claim to check*, not a command to obey. Before acting on each one:
+A finding is a *claim to check*, not a command. Before acting:
 
-1. **Verify it against the codebase yourself.** Open the cited `file:line`; confirm the claim actually holds. A reviewer is the same class of model that can confabulate — a finding that doesn't reproduce when you read the code is a false positive, not a task. (This is the consumer-side half of the Fact-driven Red Line.)
-2. **Push back with technical reasoning when the finding is wrong** — it breaks existing behavior, the reviewer lacked context, it's a legacy/compat constraint, or it conflicts with a prior decision. Cite the working test / existing code that refutes it. Don't defensively dismiss; don't blindly comply.
-3. **YAGNI-check "do it properly" suggestions** — if a finding says "implement X fully", `grep` for whether X is actually used first; unused → propose removal, not expansion.
-4. **No performative agreement.** Never reply "You're absolutely right!", "Great catch!", or any thanks. State the fix (`Fixed — <what changed>`) or the reasoned pushback. Actions over affect; the diff shows you heard it.
-5. **Apply fixes one at a time and re-verify** — don't batch-apply a list and assume it's green; each fix gets its own check (the re-review loop already enforces this at the round level).
+1. **Verify against the codebase.** Open cited `file:line`; confirm the claim. Reviewers confabulate — unreproducible = false positive, not a task. (Consumer half of the Fact-driven Red Line.)
+2. **Push back with technical reasoning when wrong** — breaks existing behavior, missing context, legacy/compat, or conflicts a prior decision. Cite refuting test/code. No defensive dismissal; no blind compliance.
+3. **YAGNI-check "do it properly"** — "implement X fully" → `grep` if X is used; unused → propose removal, not expansion.
+4. **No performative agreement.** Never "You're absolutely right!", "Great catch!", or thanks. State the fix (`Fixed — <what changed>`) or reasoned pushback. Actions over affect; the diff shows you heard it.
+5. **One fix at a time, re-verify** — no batch-apply-and-hope; each fix checked (re-review loop enforces at round level).
 
-The mechanical form of this rule is the adjudication table (`scripts/adjudicate-findings.js`, statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`); `union-on-verified-critical`'s "verified" = actionable status in the table.
+Mechanical form: adjudication table (`scripts/adjudicate-findings.js`, statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`); `union-on-verified-critical` "verified" = actionable status there.
 
 ## Scope Creep / Surgical Changes Scan
 
 **Every changed line must trace directly to the stated task, plan, or commit message.**
 
-In addition to the correctness / security / boundary / error-handling / performance / API-usage checklist, the reviewer **must** scan the diff for changes that are not requested by the task. This addresses the most common LLM-coding failure mode: agents "improving" adjacent code, refactoring what isn't broken, or cleaning up code they think they understand.
+Beyond correctness / security / boundary / error-handling / performance / API-usage, the reviewer **must** scan for unrequested changes — the common LLM failure of "improving" adjacent code, refactoring unbroken code, or cleaning what they think they understand.
 
 ### Pre-screen (cheap, deterministic)
 
-Before the per-hunk judgment pass, run `scripts/diff-scope-report.sh [--message-file <commit-msg>]`. v1 covers two language-agnostic signals: `whitespace_only_file` and `unrelated_to_message`. The script emits JSON `findings`; the reviewer treats each as a candidate that must be judged, not an auto-finding. Hunks not pre-screened still get the full "which sentence implements this hunk?" test below.
+Before per-hunk judgment: `scripts/diff-scope-report.sh [--message-file <commit-msg>]`. v1 signals: `whitespace_only_file`, `unrelated_to_message`. JSON `findings` = candidates to judge, not auto-findings. Unscreened hunks still get the mapping test below.
 
 ### What counts as scope creep
 
@@ -150,7 +140,7 @@ Before the per-hunk judgment pass, run `scripts/diff-scope-report.sh [--message-
 
 ### The test
 
-For each changed hunk the reviewer answers: **"Which sentence of the task description does this hunk implement?"** If no sentence maps to it, it is scope creep.
+Per changed hunk: **"Which sentence of the task description does this hunk implement?"** No map → scope creep.
 
 ### Severity
 
@@ -163,7 +153,7 @@ For each changed hunk the reviewer answers: **"Which sentence of the task descri
 
 ### Reviewer output contract
 
-When scope creep is found, emit a dedicated subsection:
+Scope creep found → dedicated subsection:
 
 ```
 ### Scope Creep Findings
@@ -172,33 +162,33 @@ When scope creep is found, emit a dedicated subsection:
 🟡 Minor    — `src/bar.h:103` comment reworded; not part of the requested fix.
 ```
 
-When no scope creep is detected, the `✅ Verified Clean` section MUST explicitly include the line:
+No scope creep → `✅ Verified Clean` MUST include:
 
 ```
 - No scope creep — every changed line traces to the task.
 ```
 
-so downstream consumers can confirm the scan ran rather than being silently skipped. To populate that Verified Clean section deterministically (every reviewed file enumerated), seed it from `scripts/diff-file-list.sh changed` — that removes the LLM-from-memory file enumeration step.
+so consumers know the scan ran. Seed Verified Clean via `scripts/diff-file-list.sh changed` (no LLM-from-memory file list).
 
 ### Why this matters (one-liner)
 
-Mixed task-driven and scope-creep changes inflate review time, break `git blame` / bisect attribution, and (especially in C++) risk silent behavior changes from "harmless" refactors. Cheaper to push back at review than revert after merge.
+Mixed task + scope-creep changes inflate review, break `git blame` / bisect, and (esp. C++) risk silent behavior shifts from "harmless" refactors. Push back at review; cheaper than post-merge revert.
 
 ## No silent caps — disclose every bound
 
-**Any bounded coverage — top-N, per-segment, sampled, or skipped-on-timeout — MUST be DISCLOSED in the verdict. An undisclosed bound is a defect.** If the review read only the first N files of a large diff, judged one partition of a fanned-out audit, sampled a subset, or dropped work because a tool timed out, that limit belongs in the report (in `### ✅ Verified Clean` or the `### Summary`), stated as *what was NOT covered*. A reader who believes a partial sweep was exhaustive is worse off than one told the scope up front.
+**Any bounded coverage — top-N, per-segment, sampled, or skipped-on-timeout — MUST be DISCLOSED in the verdict. An undisclosed bound is a defect.** Partial file reads, one partition, samples, or timeout drops belong in the report (`### ✅ Verified Clean` or `### Summary`) as *what was NOT covered*. Believing a partial sweep was exhaustive is worse than knowing the bound.
 
-This **generalizes the `skills/doc-sync` ethos** to the reviewer/audit output contract: doc-sync already holds that its non-deterministic LLM sweep is bounded — *"a 'clean' sweep only means this sample found nothing, never that nothing exists"* — and never lets a clean sample masquerade as proof of absence. The same honesty applies to any review or audit that bounds its own coverage: name the bound, don't let it pass silently.
+**Generalizes `skills/doc-sync` ethos**: doc-sync treats its non-deterministic LLM sweep as bounded — *"a 'clean' sweep only means this sample found nothing, never that nothing exists"* — never proof of absence. Same honesty for any bounded review/audit: name the bound; never silent.
 
 ## Panel aggregation (multi-reviewer / disjoint-family qc)
 
-When the authoritative qc is a **panel** of reviewers (the depth-0 panel resolved by `scripts/resolve-review-loop.sh` `qc_panel` / `required_review_families` / `min_panel_size`; a homogeneous all-Claude panel must not drop below the resolver's **`min_panel_size`** (default 3), emitted separately from `required_review_families` because lens diversity ≠ family decorrelation (same-family lenses can share blind spots); resolver unavailable → fall back to 3 reviewers — see [`skills/ceo-agent/references/level-front-door.md`](../../ceo-agent/references/level-front-door.md) § "qc@depth-0"), the verdicts combine by **`union-on-verified-critical`**, NOT majority vote:
+When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.sh` `qc_panel` / `required_review_families` / `min_panel_size`; homogeneous all-Claude must not drop below resolver **`min_panel_size`** (default 3), separate from `required_review_families` — lens diversity ≠ family decorrelation; same-family lenses share blind spots; no resolver → fall back to 3 — see [`skills/ceo-agent/references/level-front-door.md`](../../ceo-agent/references/level-front-door.md) § "qc@depth-0"), combine by **`union-on-verified-critical`**, NOT majority:
 
-- **Any single panelist's _verified_ Critical/Major blocks the gate.** A correlated-blind-spot catch is, by definition, seen by only ONE reviewer (often the cross-family one). A **majority vote would suppress exactly the finding the panel exists to surface** — so majority is **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → falls back to `union-on-verified-critical`).
-- **"Verified" gates the union, not raw count.** Before a single-track finding blocks, reproduce it: an **executable** claim goes through the `independent_harness` (run the case — execution is the decorrelation ceiling, zero shared LLM lineage); a non-executable claim (design/spec-fit) gets a depth-0 second-look. This keeps one noisy reviewer from false-blocking while never letting a real single-track Critical through.
-- **A panelist that returns no verdict is FAIL-CLOSED.** An empty / unparseable reviewer result (e.g. `dispatch-review.sh` `status:no_verdict` from an agy stdout-drop) counts as **"did not clear"**, never as a silent pass. Re-dispatch or treat as a blocking unknown.
-- **Decorrelate by _family_, not just by lens.** N reviewers from one vendor share failure modes; the panel must span **≥1 family different from the implementer's** (`resolve-review-loop.sh` emits `cross_family_required`/`cross_family_satisfied`; an **unknown-family** member fails closed = does NOT satisfy it). Grounding: PoLL (a panel of disjoint families beats a single large judge AND cuts intra-model bias) + self-preference/familiarity bias in same-family judges.
-- **Risk-tiered depth, honest terminal states (v2.25.11).** Review depth scales with a deterministic `implementation_review_risk` (NOT source-trust alone — diff risk, oracle availability, security surface; `resolve-review-loop.sh`), not with who implemented. At **high risk**, cross-family is hard-required and the **decorrelated execution oracle (`l1_required`) is mandatory** — its absence is `block`/non-automerge (resolver `--enforce` exits 3). The allowed terminal states are explicit and never let a softer gate forge a pass: **`verified`** (a decorrelated oracle/reviewer cleared it), **`unverified-nonblocking`** (low-risk, proceeds but is HONESTLY labelled unverified — NOT a green), **`unverified-blocking`** (high-risk missing required L1/cross-family — blocked). `warn`/`off` modes may suppress BLOCKING but may **never** relabel `unverified` as `verified`. Full design + scope (honest-but-weak only, not malicious-proof): [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../../../docs/plans/2026-06-26-trust-tiered-review-policy.md).
+- **Any panelist's _verified_ Critical/Major blocks.** Correlated-blind-spot catches appear to ONE reviewer (often cross-family). **Majority would suppress exactly the finding the panel exists for** — majority **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → `union-on-verified-critical`).
+- **"Verified" gates the union, not raw count.** Before a single-track finding blocks: reproduce it — **executable** via `independent_harness` (execution = decorrelation ceiling, zero shared LLM lineage); non-executable (design/spec-fit) → depth-0 second-look. Stops noisy false-blocks; never lets a real single-track Critical through.
+- **No-verdict = FAIL-CLOSED.** Empty/unparseable (e.g. `dispatch-review.sh` `status:no_verdict` from agy stdout-drop) = **"did not clear"**, never silent pass. Re-dispatch or treat as blocking unknown.
+- **Decorrelate by _family_, not just lens.** Same-vendor N share failure modes; panel needs **≥1 family ≠ implementer's** (`cross_family_required`/`cross_family_satisfied` from `resolve-review-loop.sh`; **unknown-family** fails closed = unsatisfied). Grounding: PoLL (disjoint families beat one large judge + cut intra-model bias) + same-family self-preference/familiarity bias.
+- **Risk-tiered depth, honest terminals (v2.25.11).** Depth follows deterministic `implementation_review_risk` (NOT source-trust alone — diff risk, oracle availability, security surface; `resolve-review-loop.sh`), not who implemented. **High risk**: cross-family hard-required + **decorrelated execution oracle (`l1_required`) mandatory** — absence → `block`/non-automerge (`--enforce` exit 3). Terminals, never forged softer: **`verified`** (decorrelated oracle/reviewer cleared), **`unverified-nonblocking`** (low-risk, proceeds but HONESTLY unverified — NOT green), **`unverified-blocking`** (high-risk missing L1/cross-family — blocked). `warn`/`off` may suppress BLOCKING but **never** relabel `unverified` as `verified`. Design (honest-but-weak only, not malicious-proof): [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../../../docs/plans/2026-06-26-trust-tiered-review-policy.md).
 
 ## 4-Tier Severity
 
@@ -220,7 +210,7 @@ When the authoritative qc is a **panel** of reviewers (the depth-0 panel resolve
 
 ## Re-review Loop (Critical / Major)
 
-Fix Critical and Major findings, then re-review. Repeat until only Suggestion/Minor remain or reviewer says LGTM.
+Fix Critical/Major → re-review until only Suggestion/Minor or LGTM.
 
 ```
 review → findings?
@@ -231,13 +221,13 @@ review → findings?
 
 **Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues.
 
-**Re-review checkpoint (dispatcher-only)**: Before round 1, run `scripts/diff-since-last-round.sh mark` to snapshot the HEAD SHA; between rounds, `scripts/diff-since-last-round.sh stat` returns JSON `{changed_files, insertions, deletions, doc_only}`. If `doc_only=true` and `changed_files` is trivially small, the dispatcher MAY short-circuit re-review. This decision and its data live **only in the dispatcher** — never pass the delta to the reviewer (leaks round-cycle meta-signal per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). After the loop closes, `scripts/diff-since-last-round.sh clear`.
+**Re-review checkpoint (dispatcher-only)**: Before round 1, `scripts/diff-since-last-round.sh mark` snapshots HEAD; between rounds `scripts/diff-since-last-round.sh stat` → JSON `{changed_files, insertions, deletions, doc_only}`. If `doc_only=true` and `changed_files` trivially small, dispatcher MAY short-circuit. Decision + data stay **in the dispatcher only** — never pass delta to the reviewer (leaks round-cycle meta-signal per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). Loop closed → `scripts/diff-since-last-round.sh clear`.
 
-**Re-review dispatch is blind** — when re-dispatching `autopilot:reviewer` (or whichever reviewer the chain selects) for round 2+ on the same diff, the dispatch prompt MUST be stripped of prior-round findings. Follow the dispatcher pre-flight checklist in [`references/blind-dispatch.md`](../../../references/blind-dispatch.md); run `scripts/check-redispatch-prompt.sh <prompt-file>` — exit 1 ⇒ strip and re-check before dispatching. The prior finding lives in the dispatcher's memory; the fixer is NOT blind (it gets the full finding). Skipping the linter step is how the gate silently self-bypasses. These constraints hold at any nesting depth — neither the reviewer nor the fixer may dispatch the next round's review itself (see [`references/blind-dispatch.md`](../../../references/blind-dispatch.md) § Nested dispatch).
+**Re-review dispatch is blind** — round 2+ re-dispatch of `autopilot:reviewer` (or chain pick) MUST strip prior-round findings. Pre-flight: [`references/blind-dispatch.md`](../../../references/blind-dispatch.md); `scripts/check-redispatch-prompt.sh <prompt-file>` — exit 1 ⇒ strip and re-check. Prior finding stays in dispatcher memory; fixer is NOT blind (gets full finding). Skipping the linter self-bypasses the gate. Holds at any nesting depth — neither reviewer nor fixer dispatches the next round's review ([`references/blind-dispatch.md`](../../../references/blind-dispatch.md) § Nested dispatch).
 
 ## Suggestion / Minor Processing
 
-**Suggestion/Minor does not mean "ignore."** Each must be analyzed before merge:
+**Suggestion/Minor ≠ "ignore."** Analyze each before merge:
 
 ```
 For each Suggestion/Minor finding:
@@ -264,14 +254,15 @@ Classify into one of four outcomes:
 
 ### Backlog Entry Format
 
-Every backlog entry **must** include a trigger condition:
+Every backlog entry **must** include a trigger:
+
 ```markdown
 - [ ] [Suggestion] Cache rank table query results
   - Trigger: when optimizing for 10K+ concurrent users
   - Context: quality-pipeline (code-review) found repeated DB queries in the target module
 ```
 
-Entries without trigger conditions are rejected.
+No trigger → rejected.
 
 ## Review Timing
 
@@ -284,24 +275,24 @@ Entries without trigger conditions are rejected.
 
 ## Prohibited Excuses
 
-All sizes require review. Major must be fixed now. Fix requires re-review. No severity judgment without analysis. No backlog without trigger condition.
+All sizes require review. Major fixed now. Fix requires re-review. No severity without analysis. No backlog without trigger.
 > Full list: [_base/prohibited-behaviors.md](../_base/prohibited-behaviors.md)
 
 ## Shadow QC panel (task-tree engine)
 
-Condition: `docs/projects/<proj>/tree/` exists AND the review target is a verdict-bearing node (node report has non-null `verdict`). Opt-in is automatic — the shadow path activates only when the tree is present (KR5: zero behavior change for non-opted-in users).
+Condition: `docs/projects/<proj>/tree/` exists AND target is a verdict-bearing node (non-null `verdict`). Auto opt-in when tree present (KR5: zero change for non-opted-in users).
 
 | What runs | How | Authority |
 |-----------|-----|-----------|
 | Authoritative reviewer | Existing flow (this doc) | Authoritative — findings drive fixes |
 | `scripts/qc-panel.js` | In parallel with authoritative reviewer | Shadow only — no fix action; informs calibration |
 
-**Amendment 4 liveness (binding)**: every panel run MUST produce (a) a verdict artifact JSON in `docs/projects/<proj>/tree/panel/` AND (b) a calibration sample via `scripts/calibration.sh add-sample`. If either fails, `qc-panel.js` exits non-zero — a silently-dead shadow fails the gate.
+**Amendment 4 liveness (binding)**: every panel run MUST (a) write verdict artifact JSON under `docs/projects/<proj>/tree/panel/` AND (b) emit a calibration sample via `scripts/calibration.sh add-sample`. Either fails → `qc-panel.js` non-zero; silently-dead shadow fails the gate.
 
 **Baseline separation (M2 binding)**:
 
-- `qc-panel.js`'s internal `calibration.sh add-sample` call uses `--baseline self-report`. This records the panel's verdict against the node report's own verdict (worker self-report). It is **liveness-only** — not counted in graduation math.
-- After both the authoritative reviewer verdict AND the panel verdict are available, the dispatcher adds a **second sample** with `--baseline reviewer`. This is the **graduation-bearing** sample:
+- Internal `calibration.sh add-sample` uses `--baseline self-report` (panel vs node-report self-verdict). **Liveness-only** — not in graduation math.
+- After both authoritative reviewer and panel verdicts exist, dispatcher adds a **second**, **graduation-bearing** sample with `--baseline reviewer`:
 
 ```sh
 scripts/calibration.sh add-sample \
@@ -312,15 +303,15 @@ scripts/calibration.sh add-sample \
   [--tokens <panel_token_estimate>]
 ```
 
-`scripts/calibration.sh report` computes agreement rate, false-pass-on-critical, sample_count, and graduation status **exclusively over `baseline==reviewer` samples** (records lacking the field count as reviewer for backward compat). `self_report_sample_count` is printed separately.
+`scripts/calibration.sh report` uses agreement, false-pass-on-critical, sample_count, graduation **only over `baseline==reviewer`** (missing field = reviewer for backward compat). `self_report_sample_count` printed separately.
 
-The calibration report exposes the data the Board needs for the P5→active decision (Amendment 6). No authority shifts before graduation criteria are met.
+Report feeds Board P5→active (Amendment 6). No authority shift before graduation criteria met.
 
 ### Finding-survival (refute pass) — SHADOW / non-gating until calibrated
 
-The panel's Q1–Q3 shapes all interrogate the **implementer**; nothing checks whether the panel's **own** `MISSED:` findings are real before they cost a fix round. Two standing project memories (`verify-reviewer-claims`, `delegate-selftest-false-green`) hold that reviewer findings are non-authoritative — a finding is a claim to check, not an order to obey. `qc-panel.js` adds a 4th question shape, the **refute pass**: for each candidate miss, the **other** cross-family judge (the one that did NOT raise it) attempts to refute it — wrong / already satisfied by the artifacts / out of scope per the scope rule. **Uncertainty counts AGAINST the finding** (`default-refuted-if-uncertain`): a miss **survives only by explicitly defeating refutation**.
+Q1–Q3 interrogate the **implementer**; nothing checks the panel's own `MISSED:` before a fix round. Project memories (`verify-reviewer-claims`, `delegate-selftest-false-green`): findings are claims, not orders. `qc-panel.js` 4th shape = **refute pass**: for each candidate miss, the **other** cross-family judge (not the raiser) tries to refute — wrong / already satisfied / out of scope. **Uncertainty AGAINST the finding** (`default-refuted-if-uncertain`): miss **survives only by explicitly defeating refutation**.
 
-🔴 **This is SHADOW only — non-gating until it graduates.** The authoritative verdict is **unchanged**: the panel still fails on any non-empty `MISSED:` exactly as before. The refute result rides **alongside** as `refute_shadow:{refuted_misses[],survived_misses[]}` in the panel JSON and into the calibration sample's `--source` tag (`refute=refuted:N,survived:M,gating_misses:K`) — it does **not** alter `verdict`. A refute pass that suppressed a true critical would be worse than the bug it fixes, so it feeds **calibration only**. It may become authoritative **only after** `scripts/calibration.sh` (`run-known-bad`) shows it does not false-suppress critical findings — the same `GRAD_*` graduation criteria block that gates the panel itself (min samples, min agreement, `false_pass_on_critical == 0`).
+🔴 **SHADOW only — non-gating until graduated.** Authoritative verdict **unchanged**: non-empty `MISSED:` still fails. Refute rides **alongside** as `refute_shadow:{refuted_misses[],survived_misses[]}` in panel JSON + calibration `--source` (`refute=refuted:N,survived:M,gating_misses:K`) — does **not** alter `verdict`. Suppressing a true critical via refute is worse than the bug; **calibration only**. Authoritative **only after** `scripts/calibration.sh` (`run-known-bad`) shows no false-suppress of criticals — same `GRAD_*` bar as the panel (min samples, min agreement, `false_pass_on_critical == 0`).
 
 ## See Also
 

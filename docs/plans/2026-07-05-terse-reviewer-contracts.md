@@ -1,14 +1,11 @@
 # Plan — terse reviewer contracts
 
-> Status: PARTIALLY SHIPPED 2026-07-10. /l6 full campaign (M1→M2→M3): first M3 run HALTED on gate #2
-> (gemini-3.5-flash baseline instability — the plan's own stop condition, not slimming harm); Board then
-> directed a haiku 2-run stability check (1.0/1.0) → leg-engine switch → M3 re-run, which the **template
-> contract PASSED (shipped v2.32.16, −16%)**. reviewer.md/code-review.md (−17%/−14%) remain PARKED on
-> `feat/terse-reviewer-contracts` behind the Path-C faithful-instrument BACKLOG entry. Instrument/infra
-> shipped v2.32.15. Data: `docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md` +
-> `m3-rerun-haiku.md`.
-> Size: S–M
-> Source: Superpowers 6 study + autopilot north-star.
+> Status: FULLY SHIPPED 2026-07-10 — template −16% (v2.32.16, haiku leg) + reviewer.md −17% +
+> code-review.md −14% (v2.32.18, syscontract instrument v3, protocol-c paired concordance: kb 1.000×3,
+> fp-critical=0, injection 6/6, all 5 clean discordances adjudicated non-weakening at depth-0).
+> Instrument iterations + protocol change + corpus reframing recorded in
+> `docs/projects/2026-07-10-terse-reviewer-contracts/` (phase-b-results.md, m3-rerun-haiku.md,
+> m3-pathc-syscontract.md). Aggregate: reviewer-contract surface ~19.7k → ~16.6k tokens (−16%).
 
 ## 1. 問題
 

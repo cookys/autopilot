@@ -1,0 +1,37 @@
+## Reviewer Report
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+None found.
+
+### 🟡 Minor (recommended)
+- **Test execution not performed — disclosed bound.** Per the review contract's step 7 ("Run project tests as pre-merge gate... `bash hooks/tests/run.sh`"), this run should execute the L2 suite. This reviewer session was provisioned with **Read/Grep/Glob only — no Bash tool** — `hooks/tests/run.sh` (and therefore the new `test_validated_nested` in `hooks/tests/verify-red-green.test.sh:68-90`) could **not** be executed. I traced the logic by hand (see Verified Clean below) and it checks out, but that is a code-read, not an executed-artifact confirmation. Per Red Line 2 ("Execute... or mark UNVERIFIED"), this is disclosed as UNVERIFIED rather than silently assumed green. Fix direction: dispatcher/consumer of this report MUST run `bash hooks/tests/run.sh verify-red-green` before merge and treat non-zero as blocking.
+
+### 🔵 Suggestion (consider)
+- `scripts/verify-red-green.sh:28-37` — All 8 default globs now carry the `**/` prefix, which is correct for the stated nested-path bug, but the underlying substring-matching heuristics (e.g. `*test*` matching `latest.sh`, `contest.md`, etc.) are unchanged and pre-existing — not introduced by this diff, so not flagged as a finding here, just noting it's still a coarse heuristic if a future false-positive shows up in a real diff.
+
+### ✅ Verified Clean
+- `scripts/verify-red-green.sh:22-37` — Change is a targeted glob-prefix fix (`'*test*'` → `'**/*test*'`, etc.) with an accurate explanatory comment. Traced git `:(glob)` pathspec semantics by hand: a pattern with no leading `**/` and no `/` must match the *entire* relative path (`tests/unit_test.sh`), and a bare `*` cannot cross `/` — so old patterns like `'*test*'` genuinely could not match a nested `tests/unit_test.sh` path, confirming the stated bug is real and the `**/` prefix fix is the correct remedy (leading `**/` = zero-or-more path components, `**/tests/**` matches anything strictly inside a `tests/` dir at any depth).
+- `scripts/verify-red-green.sh:73-259` — Rest of the script (arg parsing, worktree lifecycle, JSON emission, exit codes) is untouched by this diff; re-read for regressions from the glob change — `collect_test_files()` (`scripts/verify-red-green.sh:165-178`) only consumes `TEST_GLOBS`/`DEFAULT_TEST_GLOBS` as opaque pathspec strings, so no other code path is affected by widening the glob.
+- `hooks/tests/verify-red-green.test.sh:68-90` (`test_validated_nested`) — Walked through the fixture: base commit has `src/prod.sh` echoing `2`, head commit changes it to `4` and adds `tests/unit_test.sh` asserting `4`. The RED check (product script applies only the test-file patch onto the base worktree, per `scripts/verify-red-green.sh:239-247`) will see `src/prod.sh` still echo `2` while the test now asserts `4` → red, as required. HEAD check has both changes → green. Verdict `VALIDATED`/exit 0 expected, matching the assertions at lines 88-89. Test is a genuine regression guard (would have failed pre-fix, since pre-fix globs couldn't match `tests/unit_test.sh` at all → `INCONCLUSIVE`/exit 3 instead).
+- `hooks/tests/verify-red-green.test.sh:155-162` — New test is correctly wired into the call list right after `test_validated`; no other test call was dropped or reordered.
+- Confirmed via `Grep` (repo-wide) that `verify-red-green.sh` / `DEFAULT_TEST_GLOBS` / `--test-glob` have **no other consumers** in the codebase — no downstream caller relies on the old root-only glob behavior, and no doc (`CLAUDE.md` scripts inventory, `references/*.md`) references this script, so no doc-drift was introduced or needed.
+- Confirmed via `Read` of `hooks/tests/run.sh:76-93` that `*.test.sh` files under `hooks/tests/` are auto-discovered by glob — no explicit registration was needed for the new test to run under `hooks/tests/run.sh`.
+- `hooks/tests/lib.sh` (unmodified, read for context only) — `assert_eq`/`assert_contains`/`finalize_test` used correctly by the new test; the `out=$(...)`; `local ec=$?` pattern on `hooks/tests/verify-red-green.test.sh:87-88` correctly captures the script's real exit code (word-expansion of `$?` happens before `local` executes, so this is not the classic `local x=$(cmd)` exit-code-masking gotcha) — same pattern as every other test in this file, not a regression.
+- No scope creep — every changed line traces to the stated fix (nested-glob matching bug) and its regression test; diff touches exactly `scripts/verify-red-green.sh` (glob array + explanatory comment) and `hooks/tests/verify-red-green.test.sh` (one new test function + its registration), nothing else.
+- Security: no injected shell content beyond the existing sandboxed heredoc pattern already used by sibling tests (`TEST_TMP`-scoped, `chmod +x` on generated scripts); no secrets, no new external input handling.
+
+### Summary
+Overall risk: **Low**. This is a small, well-scoped, correctly-reasoned glob-matching bug fix with a matching regression test; no security, logic, or scope-creep issues found by static trace. The one open item is procedural, not a code defect: this review session had no Bash tool, so the new test (and the full `hooks/tests/run.sh` suite) could not actually be executed — that gate must still run before merge.
+
+Top 3 priorities to fix:
+1. Run `bash hooks/tests/run.sh verify-red-green` (or the full suite) before merge — this review could not execute it (tool constraint, disclosed above).
+2. None — no Critical/Major code issues found.
+3. None — no scope creep found.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: No Critical/Major findings from code inspection; the only outstanding item is executing the test suite (an environment/tooling gap in this review session, not a code fix), which main Claude/dispatcher can run directly.
+Remaining risks: Test suite not executed in this review (no Bash tool available) — must be run as the pre-merge gate before this diff lands.

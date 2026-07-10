@@ -103,7 +103,8 @@ $extra_id"; fi
   report=$(python3 "$QC_PY" --store "$tmp" report 2>/dev/null); rc=$?
   set -e
   rm -f "$tmp"
-  if [ $rc -ne 0 ] || ! printf '%s\n' "$report" | grep -q 'OVERALL escape rate'; then
+  # grep -c (not -q) avoids the pipefail/SIGPIPE false-negative
+  if [ $rc -ne 0 ] || ! printf '%s\n' "$report" | grep -c 'OVERALL escape rate' > /dev/null; then
     CALC_OK=0; CLASS_REAL=0; CLASS_ESC_PCT=""; CLASS_ESC_FRAC=""; ENDORSE_PCT=""; ENDORSE_FRAC=""
     return 0
   fi

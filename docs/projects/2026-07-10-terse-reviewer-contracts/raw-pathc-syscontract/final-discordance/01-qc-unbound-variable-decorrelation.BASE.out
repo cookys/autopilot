@@ -1,0 +1,41 @@
+## Reviewer Report
+
+**Scope note (disclosed per "No silent caps"):** I have Read/Grep/Glob only — no Bash tool in this session. I could not execute `hooks/tests/run.sh`, `scripts/sync-codex-plugin-skills.sh --check`, or the new tests themselves. All correctness claims below are from static tracing of `scripts/resolve-review-loop.sh`'s variable lifecycle line-by-line and manual evaluation of each new test's inputs against that traced logic — not from an executed run. This is a genuine bound on this review; if a live run is available before merge, run the L1/L2 suite as the final gate.
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+None found.
+
+### 🟡 Minor (recommended)
+- `platforms/codex/plugin/src/engine/autopilot-engine.js:134-160` — This hunk reorders two identical validation calls (`validateExtraArgs(...)` and the explicit `--spec-file` override check) in `buildReviewArgs` and `validateExtraReviewArgs`. No sentence in the CHANGELOG entry (`CHANGELOG.md:39`, the only "Fixed" entry for this diff) describes this file or this change — per the scope-creep test ("which sentence implements this hunk?"), it doesn't map to anything stated. I verified it is **behaviorally inert**: `src/engine/autopilot-engine.js:129-161` (the canonical root source, unmodified in this diff) already has this exact order, and both the specific check (`"extra args cannot override --spec-file"`) and the generic `validateExtraArgs` check (message `` `extra args cannot override ${key}` `` where `key` resolves to the literal string `--spec-file` since `--spec-file` is in the passed `reservedSet`) produce the *identical* error string — so which one throws first is unobservable. Root and mirror are now byte-line-count identical (both 1173 lines) after this hunk, consistent with this being catch-up for `scripts/sync-codex-plugin-skills.sh`'s src-mirror invariant rather than a new defect. **Impact**: none functionally, but an undisclosed hunk in a reviewed diff erodes scope-review trust and, if the mirror-sync gate (`sync-codex-plugin-skills.sh --check`, wired into pre-commit) was actually failing before this hunk, that fact belongs in the commit message/CHANGELOG rather than silently riding along. **Fix**: add a one-line CHANGELOG/commit-message note ("mirror-sync: bring codex-plugin autopilot-engine.js validation-order back in parity with root") or split it into its own housekeeping commit next time.
+- `CHANGELOG.md:38-42` — The `### Fixed` section is placed between `### Added` and `### Changed`, but the project's own release template (`CHANGELOG.md:10-17`) specifies the order `Added → Changed → Fixed`. Cosmetic only; no functional consequence. **Fix**: reorder to `Added → Changed → Fixed` on next touch of this entry (not worth a standalone commit).
+
+### 🔵 Suggestion (consider)
+None beyond the items above.
+
+### ✅ Verified Clean
+- `scripts/resolve-review-loop.sh:264-278` (`_distinct_count`/`_diff_family`/`IMPL_FAMILY` computed via the QC_PANEL loop) — unchanged by this diff, confirmed still executes before the relocated block needs its outputs.
+- `scripts/resolve-review-loop.sh:292-302` (risk computation, sets `REQUIRED_REVIEW_FAMILIES`) and `:304-355` (density-scaling block, may bump `REQUIRED_REVIEW_FAMILIES` to 2) — confirmed both complete, with no further reassignment of `REQUIRED_REVIEW_FAMILIES` anywhere else in the file (grepped all 12 references; only 296/300/352 assign, all before the relocated block at 361-368), before the relocated unknown-implementer block at `:357-368` reads it. This directly substantiates the CHANGELOG's claim that under the *old* placement (immediately after the QC_PANEL loop, before the risk block existed) `$REQUIRED_REVIEW_FAMILIES` was referenced before assignment under `set -uo pipefail` (`scripts/resolve-review-loop.sh:40`) — bash aborts such a script with exit 1 on first reference, matching "zero JSON, `--enforce` exit 1 not 3" in `CHANGELOG.md:39`. The fix's new position is correct and matches its own comment's rationale.
+- `scripts/resolve-review-loop.sh:373-392` (`CROSS_FAMILY_REQUIRED`/`CROSS_FAMILY_SATISFIED`/warning severity) — confirmed still positioned after the relocated block, so `_diff_family` is available when needed; no double-evaluation, no duplicated block (grepped: exactly one occurrence of the `IMPL_FAMILY == "unknown"` conditional in the final file).
+- `platforms/codex/plugin/scripts/resolve-review-loop.sh` — byte-identical hunk to `scripts/resolve-review-loop.sh`, correctly keeping the two mirrored copies in sync (both are inputs to `sync-codex-plugin-skills.sh`'s `scripts` DIR entry).
+- `hooks/tests/resolve-review-loop.test.sh:533-553` (tests 27-29) — manually traced each against the script logic:
+  - Test 27 (`--source-trust high`, unknown implementer, 1-distinct-family panel `gpt-5.5, gpt-5.3-codex-spark` — both map to `openai` via `family_of()` at `scripts/resolve-review-loop.sh:204-215`): `REVIEW_RISK=low`, `REQUIRED_REVIEW_FAMILIES=1`; block sets `_diff_family=1` (since `REQUIRED_REVIEW_FAMILIES < 2`); `CROSS_FAMILY_SATISFIED`: `_diff_family==1 && _distinct_count(1) >= REQUIRED(1)` → `true`. Matches asserted expectations, exit 0.
+  - Test 28 (same config, `--security-surface 1` → high risk, `REQUIRED_REVIEW_FAMILIES=2`): block's inner condition `_distinct_count>=2 (false) || REQUIRED<2 (false)` → `_diff_family` stays 0 → `CROSS_FAMILY_SATISFIED=false`; `--enforce` path (`:401-404`) fires since `CROSS_FAMILY_REQUIRED=true` (panel non-empty), `CROSS_FAMILY_SATISFIED=false`, `REVIEW_RISK=="high"` → `ENFORCE_EXIT=3`. Matches.
+  - Test 29 (unknown implementer, 2-distinct-family panel `gpt-5.5, claude-opus` → openai+anthropic, `--security-surface 1`): `_distinct_count=2 >= 2` → `_diff_family=1`; satisfied `1>=2` at `REQUIRED=2` → `true` (pigeonhole). Matches.
+  - All three tests exercise a code path (`IMPL_FAMILY=="unknown"`) that no pre-existing test in the file reached (grepped all `cross_family_satisfied`/`unknown` assertions in the file — every prior one uses a *known* implementer family, e.g. `gpt-5.3-codex-spark`, `minimax`), which explains why this bug shipped undetected and confirms the new tests are a genuine, non-overlapping regression addition.
+- `CHANGELOG.md:27-42` — Prose changes accurately describe the actual code fix (verified above); no unsubstantiated claims found in the "Fixed" entry.
+- No hardcoded secrets, no injection surface: `IMPL_FAMILY`/family strings flow only through `case`-pattern string comparisons (`scripts/resolve-review-loop.sh:204-215`, `:361-368`), never into `eval`/command substitution.
+- Reviewed full diff for scope creep — every changed line traces to the task **except** the one `autopilot-engine.js` hunk flagged above as Minor (verified inert, not a defect, but undisclosed).
+- No scope creep in `scripts/resolve-review-loop.sh`, `platforms/codex/plugin/scripts/resolve-review-loop.sh`, or `hooks/tests/resolve-review-loop.test.sh` — every hunk maps directly to "relocate the decorrelation block" + "add 3 regression tests" as stated.
+- Test suite / lint: **NOT executed** (no Bash tool available this session) — disclosed as the review's coverage bound; recommend running `bash hooks/tests/run.sh` before merge as the mechanical gate this report could not itself pull.
+
+### Summary
+Overall risk: **Low**
+Top 3 priorities to fix: 1. (optional, Minor) Add a one-line disclosure for the `autopilot-engine.js` mirror-sync hunk to CHANGELOG/commit message. 2. (optional, Minor) Reorder CHANGELOG `### Fixed`/`### Changed` to match the template. 3. Run `bash hooks/tests/run.sh` before merge since this reviewer could not execute it — the core fix and its 3 new tests trace correctly by static analysis but haven't been machine-verified in this session.
+
+### Handoff
+Next consumer: DOCUMENT_ONLY
+Routing rationale: Only Minor findings (undisclosed-but-inert mirror-sync hunk, cosmetic CHANGELOG section order); the core `set -u` fix is verified correct by trace and its regression tests verified logically consistent — no fix action required beyond optional documentation polish.
+Remaining risks: The new tests (27-29) and the core fix have not been executed in this session (no Bash tool) — run `hooks/tests/run.sh` as a mechanical confirmation before merge.

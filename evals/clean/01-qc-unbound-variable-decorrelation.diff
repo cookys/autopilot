@@ -1,0 +1,166 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9231bd7..ee938ab 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -26,7 +26,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
+ 
+ ## v2.32.1 — discipline docs + honest cross-family counting + review spec channel
+ 
+-**Headline**: The second /l6 audit batch. **`dispatch-review.sh --spec-file`** gives the review rail a dispatcher-authored spec-baseline channel (allowed by verifier-isolation — only the implementer's self-report is forbidden) and `engine implement-review` passes the unit prompt through by default (`--no-review-spec` to suppress): this removes the structural non-convergence where a spec-blind reviewer re-flags downstream-owned work every round (v2.32.0 ran 0/3 units converged; this batch, with scope declared, 3/3 converged and the reviewer's rounds caught two real defects instead). **`cross_family_satisfied` becomes a counting rule** — distinct panel families ≥ `required_review_families` AND ≥1 family differing from a KNOWN implementer family (an unknown implementer family can no longer prove decorrelation — reviewer round-2 catch); `required=1` output is unchanged, `required=2` (high-risk / density-scaled) now blocks single-family panels under `--enforce`. Plus three transcript-evidenced discipline docs: mid-run question rule (5 corrections: "一路到底不要問我"), finish-flow four-surface sweep with per-surface outputs (4 corrections: "該補的都處理了嗎"), and a user-stated requirements ledger from dev-flow scope audit into finish-flow Final Goal Review (2 corrections: "後來沒寫?").
++**Headline**: The second /l6 audit batch. **`dispatch-review.sh --spec-file`** gives the review rail a dispatcher-authored spec-baseline channel (allowed by verifier-isolation — only the implementer's self-report is forbidden) and `engine implement-review` passes the unit prompt through by default (`--no-review-spec` to suppress): this removes the structural non-convergence where a spec-blind reviewer re-flags downstream-owned work every round (v2.32.0 ran 0/3 units converged; this batch, with scope declared, 3/3 converged and the reviewer's rounds caught two real defects instead). **`cross_family_satisfied` becomes a counting rule** — distinct panel families ≥ `required_review_families` AND ≥1 family provably differing from the implementer's (reviewer round-2 catch: with an UNKNOWN implementer family a single known reviewer family can't prove decorrelation — at `required=2` it now takes ≥2 distinct known families, which by pigeonhole guarantees ≥1 differs); `required=1` output is unchanged, `required=2` (high-risk / density-scaled) now blocks single-family panels under `--enforce`. Plus three transcript-evidenced discipline docs: mid-run question rule (5 corrections: "一路到底不要問我"), finish-flow four-surface sweep with per-surface outputs (4 corrections: "該補的都處理了嗎"), and a user-stated requirements ledger from dev-flow scope audit into finish-flow Final Goal Review (2 corrections: "後來沒寫?").
+ 
+ ### Added
+ - `scripts/dispatch-review.sh --spec-file <file>` — trusted dispatcher-authored task-spec baseline section in the reviewer prompt; "out-of-scope/handled-downstream per spec" is explicitly not a defect; missing path fails closed (exit 2); absent flag = byte-identical prompt. Trust note updated: spec is dispatcher input, the DIFF remains the only untrusted content.
+@@ -35,6 +35,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
+ - finish-flow L-5.6: **four-surface sweep** (skill/doc/memory/knowledge) with per-surface "updated: X / not needed: reason" outputs.
+ - level-front-door "Mid-run question discipline": with front-door presets, wanting to confirm direction is not an escalation trigger; near-misses are recorded, never asked mid-run.
+ 
++### Fixed
++- qc-panel catch (executed repro): the unknown-implementer decorrelation block referenced `REQUIRED_REVIEW_FAMILIES` before assignment — `set -u` fatal abort (zero JSON, `--enforce` exit 1 not 3) exactly on unknown-implementer + single-family panels; block relocated after the risk/density blocks (also correct: it must see the FINAL required value) + 3 regression tests.
++
+ ### Changed
+ - `cross_family_satisfied` counting semantics (was: any single family differing from the implementer satisfied even `required=2`). `--enforce` messages now name the distinct-family count. BACKLOG entry marked resolved.
+ 
+diff --git a/hooks/tests/resolve-review-loop.test.sh b/hooks/tests/resolve-review-loop.test.sh
+index 1919ec4..00f6b48 100755
+--- a/hooks/tests/resolve-review-loop.test.sh
++++ b/hooks/tests/resolve-review-loop.test.sh
+@@ -530,4 +530,26 @@ printf -- '- loop_max_rounds: 6\n- density_scaling: on\n' > "$DENS_CAP_CFG"
+ DENS_CAP_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_CAP_CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT")"
+ assert_eq "7" "$(json_get "$DENS_CAP_OUT" loop_max_rounds)" "max rounds bumped from 6 to cap 7"
+ 
++# 27. Unknown implementer family + single-distinct-family panel — the qc2-security crash repro.
++# Must emit JSON gracefully (no set -u abort). required=1 (low risk): legacy-compat satisfied=true.
++UNK_IMPL_CFG="$TEST_TMP/unk-impl.md"
++printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, gpt-5.3-codex-spark\n' > "$UNK_IMPL_CFG"
++UNK_LOW_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --source-trust high 2>/dev/null)"; UNK_LOW_EXIT=$?
++assert_eq "0" "$UNK_LOW_EXIT" "unknown impl + 1-family panel: exits 0 (no unbound-variable crash)"
++assert_contains "$UNK_LOW_OUT" '"cross_family_satisfied"' "unknown impl low risk: JSON emitted"
++assert_eq "true" "$(json_get "$UNK_LOW_OUT" cross_family_satisfied)" "unknown impl + 1 family at required=1: legacy-compat satisfied=true"
++
++# 28. Same config at HIGH risk (required=2): graceful JSON, satisfied=false, --enforce exit 3.
++UNK_HIGH_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"; UNK_HIGH_EXIT=$?
++assert_eq "0" "$UNK_HIGH_EXIT" "unknown impl + 1-family panel at high risk: exits 0 with JSON"
++assert_eq "false" "$(json_get "$UNK_HIGH_OUT" cross_family_satisfied)" "unknown impl + 1 family at required=2: satisfied=false"
++REVIEW_LOOP_CONFIG_OVERRIDE="$UNK_IMPL_CFG" bash "$SCRIPT" --security-surface 1 --enforce >/dev/null 2>&1; UNK_ENFORCE_EXIT=$?
++assert_eq "3" "$UNK_ENFORCE_EXIT" "unknown impl + 1 family at required=2 --enforce: exit 3 (blocks)"
++
++# 29. Unknown implementer + TWO distinct known families at required=2: pigeonhole -> satisfied=true.
++UNK2_CFG="$TEST_TMP/unk-impl-2fam.md"
++printf -- '- implementer_engine: my-custom-model-v1\n- qc_panel: gpt-5.5, claude-opus\n' > "$UNK2_CFG"
++UNK2_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNK2_CFG" bash "$SCRIPT" --security-surface 1 2>/dev/null)"
++assert_eq "true" "$(json_get "$UNK2_OUT" cross_family_satisfied)" "unknown impl + 2 distinct families at required=2: satisfied=true (pigeonhole)"
++
+ finalize_test
+diff --git a/platforms/codex/plugin/scripts/resolve-review-loop.sh b/platforms/codex/plugin/scripts/resolve-review-loop.sh
+index ff07d98..f752e29 100755
+--- a/platforms/codex/plugin/scripts/resolve-review-loop.sh
++++ b/platforms/codex/plugin/scripts/resolve-review-loop.sh
+@@ -277,17 +277,6 @@ for _m in "${QC_PANEL[@]}"; do
+   fi
+ done
+ 
+-# If the implementer's family is unknown, a single known reviewer family cannot prove
+-# decorrelation (it might be the implementer's actual family).
+-if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
+-  # Compatibility bar: for required_review_families=1, the value must remain identical
+-  # to the legacy behavior. For high risk (required >= 2), we strictly require >= 2
+-  # distinct families to prove decorrelation from an unknown implementer.
+-  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
+-    _diff_family=1
+-  fi
+-fi
+-
+ # Derive source trust from implementer family when not explicitly set:
+ # trusted vendors are OpenAI/Anthropic/Google; unknown or custom stacks default to low trust.
+ case "$SOURCE_TRUST" in
+@@ -365,6 +354,19 @@ if (!found) process.stdout.write("unknown");
+   fi
+ fi
+ 
++# If the implementer's family is unknown, a single known reviewer family cannot prove
++# decorrelation (it might be the implementer's actual family). Placed AFTER the risk AND
++# density-scaling blocks so REQUIRED_REVIEW_FAMILIES is final — referencing it earlier was
++# an unbound-variable crash under set -u (qc2-security executed repro, 2026-07-05).
++if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
++  # Compatibility bar: for required_review_families=1, the value must remain identical
++  # to the legacy behavior. For required >= 2, we strictly need >= 2 distinct known
++  # families — by pigeonhole at least one then differs from the unknown implementer.
++  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
++    _diff_family=1
++  fi
++fi
++
+ # Cross-family review is required whenever L2 review runs (a non-empty panel) AND always at
+ # high risk (or scaled density) — an EMPTY panel at high risk is itself a violation (no reviewers at all, let alone
+ # cross-family), so it must be required+unsatisfied so --enforce blocks it (gpt-5.5 round-2).
+diff --git a/platforms/codex/plugin/src/engine/autopilot-engine.js b/platforms/codex/plugin/src/engine/autopilot-engine.js
+index b83d915..1e33861 100644
+--- a/platforms/codex/plugin/src/engine/autopilot-engine.js
++++ b/platforms/codex/plugin/src/engine/autopilot-engine.js
+@@ -131,10 +131,10 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
+   if (!diffFile || typeof diffFile !== 'string') {
+     throw new TypeError('diffFile is required');
+   }
++  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
+     throw new TypeError('extra args cannot override --spec-file');
+   }
+-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+ 
+   const args = [
+     '--runner',
+@@ -154,10 +154,10 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [] }) {
+ }
+ 
+ function validateExtraReviewArgs(extraReviewArgs) {
++  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
+     throw new TypeError('extra args cannot override --spec-file');
+   }
+-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file']), 'extraReviewArgs');
+ }
+ 
+ function buildImplementationArgs({
+diff --git a/scripts/resolve-review-loop.sh b/scripts/resolve-review-loop.sh
+index ff07d98..f752e29 100755
+--- a/scripts/resolve-review-loop.sh
++++ b/scripts/resolve-review-loop.sh
+@@ -277,17 +277,6 @@ for _m in "${QC_PANEL[@]}"; do
+   fi
+ done
+ 
+-# If the implementer's family is unknown, a single known reviewer family cannot prove
+-# decorrelation (it might be the implementer's actual family).
+-if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
+-  # Compatibility bar: for required_review_families=1, the value must remain identical
+-  # to the legacy behavior. For high risk (required >= 2), we strictly require >= 2
+-  # distinct families to prove decorrelation from an unknown implementer.
+-  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
+-    _diff_family=1
+-  fi
+-fi
+-
+ # Derive source trust from implementer family when not explicitly set:
+ # trusted vendors are OpenAI/Anthropic/Google; unknown or custom stacks default to low trust.
+ case "$SOURCE_TRUST" in
+@@ -365,6 +354,19 @@ if (!found) process.stdout.write("unknown");
+   fi
+ fi
+ 
++# If the implementer's family is unknown, a single known reviewer family cannot prove
++# decorrelation (it might be the implementer's actual family). Placed AFTER the risk AND
++# density-scaling blocks so REQUIRED_REVIEW_FAMILIES is final — referencing it earlier was
++# an unbound-variable crash under set -u (qc2-security executed repro, 2026-07-05).
++if [[ "$IMPL_FAMILY" == "unknown" && "$_distinct_count" -ge 1 ]]; then
++  # Compatibility bar: for required_review_families=1, the value must remain identical
++  # to the legacy behavior. For required >= 2, we strictly need >= 2 distinct known
++  # families — by pigeonhole at least one then differs from the unknown implementer.
++  if [[ "$_distinct_count" -ge 2 || "$REQUIRED_REVIEW_FAMILIES" -lt 2 ]]; then
++    _diff_family=1
++  fi
++fi
++
+ # Cross-family review is required whenever L2 review runs (a non-empty panel) AND always at
+ # high risk (or scaled density) — an EMPTY panel at high risk is itself a violation (no reviewers at all, let alone
+ # cross-family), so it must be required+unsatisfied so --enforce blocks it (gpt-5.5 round-2).

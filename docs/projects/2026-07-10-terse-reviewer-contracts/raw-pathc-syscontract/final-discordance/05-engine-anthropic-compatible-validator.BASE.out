@@ -1,0 +1,31 @@
+## Reviewer Report
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+None found.
+
+### 🟡 Minor (recommended)
+- `hooks/tests/contract-parity.test.sh:112` — `require("./src/engine/resolve-review-loop.js")` uses a bare relative path, which Node resolves against `process.cwd()` for a `node -e` eval script (not against the calling file's directory, since there is no calling file). This only works today because `hooks/tests/run.sh:19` does `cd "$REPO_ROOT"` before invoking every `*.test.sh` file — every other reference in this same test file avoids that assumption and passes an explicit root: the file's own `validate-parity.js` heredoc takes `root` as `process.argv[2]` (`hooks/tests/contract-parity.test.sh:11,15`), and the pre-existing Case A/B invocations use `"$REPO_ROOT/scripts/resolve-review-loop.sh"` (absolute). If this test file is ever invoked directly with a different cwd (e.g. `cd hooks/tests && bash contract-parity.test.sh`), the new block throws `Cannot find module './src/engine/resolve-review-loop.js'` — a misleading `MODULE_NOT_FOUND` crash instead of a real assertion failure, and inconsistent with the file's own established convention. Fix: pass `REPO_ROOT` through the environment (already exported by `lib.sh:22`) and build the path inside the eval script via `require(path.join(process.env.REPO_ROOT, 'src', 'engine', 'resolve-review-loop.js'))`, matching the pattern already used by `validate-parity.js` in the same file.
+
+### 🔵 Suggestion (consider)
+- `CHANGELOG.md` — not touched by this diff, but the change fixes a genuine parity bug: the shell resolver already accepted `reviewer_runner: anthropic-compatible` (`scripts/resolve-review-loop.sh:239`, pre-existing, unmodified by this diff) while the JS-side validator rejected it (`src/engine/resolve-review-loop.js:98`, prior enum `['codex', 'auto', 'agy', 'grok', 'cc-shim']` — confirmed via the diff's `-` line) — any code path going through `resolveReviewLoopJson`/`validateReviewLoopConfig` with a project config setting that exact (documented, working) value would throw. Per `CLAUDE.md` Versioning table, "a bug fix or hardening of existing behavior" is at minimum a PATCH-worthy fix and per the user's standing `release-hygiene` preference should get a `### Fixed` line in the next `CHANGELOG.md` entry. Not blocking — can ride with the next version bump — but should not be silently dropped.
+
+### ✅ Verified Clean
+- `src/engine/resolve-review-loop.js:98` — enum now includes `'anthropic-compatible'`, restoring 1:1 parity with the shell-side accepted values at `scripts/resolve-review-loop.sh:239` (which this diff does not touch — confirmed that value was already live there, unguarded by this fix).
+- `platforms/codex/plugin/src/engine/resolve-review-loop.js:98` — byte-identical mirror update; confirmed `src` is in the tracked mirror set (`scripts/sync-codex-plugin-skills.sh:37-45` `DIRS` array includes `"src"`), so keeping the two files in lockstep is correct and required, not scope creep.
+- Grepped the whole repo for every `reviewer_runner`/`cc-shim` enum literal (`codex|auto|agy|grok|cc-shim`) — only two sites exist (`scripts/resolve-review-loop.sh` and the two `src/engine/resolve-review-loop.js` copies), and both JS copies are now in sync with the shell; no other stale enum site was missed.
+- `src/engine/resolve-review-loop.js:99` (`implementer_runner` enum, unchanged) — correctly does **not** gain `anthropic-compatible`; confirmed the shell's own `implementer_runner` case (`scripts/resolve-review-loop.sh:242`) also excludes it, consistent with `anthropic-compatible` being reviewer-only by design (`scripts/dispatch-anthropic-review.js` row in `CLAUDE.md` describes it as reviewer-side HTTP dispatch; implementer access to Anthropic-compatible endpoints goes through `cc-shim` instead). No missing update here.
+- `hooks/tests/contract-parity.test.sh:97-132` (new Case C) — traced the actual runtime values it exercises against `scripts/resolve-review-loop.sh`: with `implementer_engine` left at its default (`gpt-5.3-codex-spark`, family `openai`) and the default `qc_panel` (`gpt-5.5, claude-opus, gemini-flash` → openai/anthropic/google), the risk computation (lines 294-302) yields `review_risk=low`, `required_review_families=1`, and the cross-family check (lines 378-382) is satisfied (`_diff_family=1`, `_distinct_count=3 >= 1`) — so no `WARNING`/`ERROR` line is emitted to stderr, confirming `assert_not_contains ... "error"` / `"block"` at lines 105-106 are grounded assertions, not accidental passes on an always-empty string by luck alone.
+- Reviewed the full 3-file diff for scope creep — every changed line traces to one task: extend the `reviewer_runner` enum to accept `anthropic-compatible` in both JS copies and add parity test coverage. No unrelated formatting, renames, or refactors present. **No scope creep — every changed line traces to the task.**
+- No silent caps: the diff is 3 files / ~50 changed lines; all three files were read in full, nothing was sampled or truncated.
+- Test suite: not executed (read-only review tools only, per this review's contract) — noted as an explicit bound rather than asserted as passing.
+
+### Summary
+Overall risk: Low
+Top 3 priorities to fix: 1. (Minor) Make the new `require()` call in `hooks/tests/contract-parity.test.sh:112` cwd-independent by passing `REPO_ROOT` through the environment instead of relying on the test runner's implicit `cd`. 2. (Suggestion) Add a `CHANGELOG.md ### Fixed` line for the JS/shell `reviewer_runner` parity gap this diff closes. 3. No further priorities — the core enum fix and its mirror/test coverage are correct and traced to real, pre-existing shell behavior.
+
+### Handoff
+Next consumer: DOCUMENT_ONLY
+Remaining risks: The Minor test-fragility finding (cwd-dependent `require`) is latent — it will not surface as long as `contract-parity.test.sh` is always invoked via `hooks/tests/run.sh`. No other unaddressed risks; the core fix (enum parity) is correct and complete.

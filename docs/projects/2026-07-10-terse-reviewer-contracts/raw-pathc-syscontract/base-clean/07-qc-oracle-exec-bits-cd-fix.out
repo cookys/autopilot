@@ -1,0 +1,47 @@
+## Reviewer Report
+
+**⚠️ Scope-of-review disclosure (read first):** This review was conducted **without tool access** (Read/Bash/Grep disabled in this session) and **without a task/plan/commit-message baseline** — only the raw diff was supplied. Per the Three Red Lines and the "No silent caps" clause, I am disclosing this bound explicitly rather than certifying a clean sweep:
+
+- I could **not** run `scripts/diff-file-list.sh changed`, `scripts/diff-scope-report.sh`, or `bash hooks/tests/run.sh`.
+- I could **not** read the other `evals/orchestration/tasks/*/oracle.sh` files to verify the comment's claim ("same contract as the other oracles").
+- I could **not** read the full contents of `scripts/error-path-scan.sh` / `scripts/secret-scan-diff.js` to confirm they have a shebang line consistent with their new executable bit.
+- Without the task/commit message, the scope-creep "which sentence implements this hunk?" test is applied on **best-effort inference from the diff alone**, not a verified baseline.
+
+Findings below are scoped accordingly; anything that depends on a live-system or out-of-diff fact is marked `UNVERIFIED`.
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+- `scripts/error-path-scan.sh` (mode 100644→100755), `scripts/secret-scan-diff.js` (mode 100644→100755) — These are pure permission-bit changes (no content diff shown) bundled into a diff whose only functional change is `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh`. Nothing in the diff ties these two files to the t14-constraint-horizon fix. Per the scope-creep test ("which sentence of the task implements this hunk?"), an unrequested executable-bit flip is a **behavior tweak** (it changes whether the file can be invoked directly as `./error-path-scan.sh` vs. requiring `bash error-path-scan.sh`), not cosmetic — it falls under "Unrequested change in compiled/executable output" in the severity table (Major). Impact: mixes an unrelated permission change into a targeted bugfix commit, muddying `git blame`/bisect attribution, and for `secret-scan-diff.js` specifically, flipping the executable bit on a `.js` file only works correctly if it has a `#!/usr/bin/env node` shebang — this is `UNVERIFIED` from the diff (no content shown). Fix direction: either (a) confirm these mode changes are part of the same task/commit intent and, if so, state that explicitly in the commit message, or (b) split them into a separate commit/PR, or (c) revert the mode bits if they were an accidental `chmod +x` picked up by `git add`. Before relying on the new `+x` bit for `secret-scan-diff.js`, confirm it has a shebang line — otherwise direct invocation (`./secret-scan-diff.js`) will fail or be misinterpreted by the shell.
+
+### 🟡 Minor (recommended)
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh:5-7` — `if [ $# -ge 1 ]; then cd "$1"; fi` makes the repo-path argument optional. If the runner's contract requires `$1` (per the added comment) but some caller path fails to pass it, the script silently falls back to checking `./cli.py` relative to whatever the current working directory happens to be, producing a generic "CLI not found" error later rather than a clear "missing required argument" failure. Impact: harder to diagnose a caller-side integration bug (confusing downstream error instead of a precise one). Fix direction: if the contract truly requires the argument, fail fast with an explicit message, e.g. `if [ $# -lt 1 ]; then echo "usage: oracle.sh <candidate-repo-path>" >&2; exit 1; fi`. If the intent is to support manual dev invocation from inside an already-cd'd repo, keep the optional behavior but add a one-line comment stating that duality explicitly (currently the comment only describes the runner-supplied-argument case, not the no-argument case).
+
+### 🔵 Suggestion (consider)
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh:4` — The comment asserts "same contract as the other oracles" as a statement of fact about the rest of the `evals/orchestration/tasks/*` tree. This is `UNVERIFIED` in this review (no tool access to grep sibling `oracle.sh` files). Recommend the merge reviewer (with tool access) confirm this via `grep -l 'cd "\$1"' evals/orchestration/tasks/*/oracle.sh` before trusting the comment, since an inaccurate "contract" comment is a common source of future confusion.
+
+### Scope Creep Findings
+🟠 Major — `scripts/error-path-scan.sh` (mode-only, +x) and `scripts/secret-scan-diff.js` (mode-only, +x): unrequested, unrelated to the t14-constraint-horizon oracle fix that is the only content change in this diff. See Major finding above.
+
+(No task/commit-message baseline was provided to this review, so this scope-creep call is inferred from diff content alone, not confirmed against a stated task sentence — flagged per the disclosure at the top of this report.)
+
+### ✅ Verified Clean
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh:5-7` — `cd "$1"` is properly quoted; no word-splitting/globbing/path-injection risk from an unquoted variable.
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh` — `set -euo pipefail` is retained; a failing `cd` (nonexistent directory) will abort the script immediately with a clear shell-level error rather than silently continuing into a wrong directory.
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh` — no `$1` access occurs outside the `$# -ge 1` guard, so `set -u` cannot trigger an unbound-variable failure here.
+- No hardcoded secrets, SQL/command injection, or SSRF surface introduced by this diff.
+- **Not verified / explicitly disclosed as NOT covered** (tooling unavailable in this session): `scripts/diff-file-list.sh changed`, `scripts/diff-scope-report.sh`, `bash hooks/tests/run.sh`, contents of the two mode-changed files, and sibling `oracle.sh` files in `evals/orchestration/tasks/`.
+
+### Summary
+Overall risk: **Low-Medium** — the functional fix in `oracle.sh` is small, correctly quoted, and fails safely; the primary concern is the unexplained bundling of two unrelated executable-bit flips into the same diff, compounded by the fact that this review had no task/commit-message baseline and no tool access to independently confirm scope or run tests.
+
+Top 3 priorities to fix:
+1. Confirm intent behind the `chmod +x` on `scripts/error-path-scan.sh` and `scripts/secret-scan-diff.js` — split out or justify in the commit message; verify `secret-scan-diff.js` has a shebang if the executable bit is meant to be used.
+2. Decide whether `oracle.sh`'s missing-argument case should fail fast with a clear usage message instead of silently degrading to a relative-path lookup.
+3. Before merge, have someone with tool access run `bash hooks/tests/run.sh` and `scripts/diff-scope-report.sh` to close the verification gaps this review could not cover.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: Highest finding is 🟠 Major (unexplained scope-creep permission bits) with a clear, low-effort fix path (confirm intent / split commit / verify shebang); no domain-expert or root-cause investigation required.
+Remaining risks: Unverified claim about sibling `oracle.sh` contract consistency; unverified shebang presence in `secret-scan-diff.js`; test suite not executed in this review (tool access disabled) — must be run before merge.

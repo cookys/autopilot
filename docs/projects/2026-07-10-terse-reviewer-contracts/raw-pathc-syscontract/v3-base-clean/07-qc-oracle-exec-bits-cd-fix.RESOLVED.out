@@ -1,0 +1,40 @@
+## Reviewer Report
+
+**Scope note (disclosed per "no silent caps"):** This review had **Read/Grep/Glob only** — no Bash tool. I could not execute `scripts/diff-file-list.sh`, `scripts/diff-scope-report.sh`, or `bash hooks/tests/run.sh` (the mandated pre-merge test-suite gate). All file enumeration and the "does the test suite pass" question below are therefore **unverified by execution** and must be run before merge. I also was **not given the original task/commit message** for this diff — only the 3-file diff itself — so scope-creep judgments below are based on cross-referencing the live codebase (CHANGELOG precedent, doc contracts, sibling files), not a supplied baseline sentence-by-sentence map. That gap is disclosed, not silently assumed clean.
+
+Diff surface (manually enumerated from the provided diff, 3 files):
+1. `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh` — content change (+5 lines)
+2. `scripts/error-path-scan.sh` — mode-only change (100644→100755)
+3. `scripts/secret-scan-diff.js` — mode-only change (100644→100755)
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+None found.
+
+### 🟡 Minor (recommended)
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh:5` — The added comment states "runner passes it as $1 — same contract as the other oracles," but this is **false for every current caller**. Verified by full-repo grep (`oracle\.sh\b`) across the codebase: the only two invocation sites are `evals/orchestration/run-orchestration-eval.sh:306-311` (`cp "$TASK_DIR/oracle.sh" "$TEMP_REPO/oracle.sh"; cd "$TEMP_REPO"; bash oracle.sh` — zero args) and `hooks/tests/orchestration-eval.test.sh` (every T1–T8 block, e.g. lines 29/63/86/111/…/395, calls `bash oracle.sh` with no argument, cwd already set to the candidate copy). Because of this, the added `if [ $# -ge 1 ]; then cd "$1"; fi` (lines 6-8) is **dead code under every existing call site** — it never fires. This isn't a new regression (`t10-t13-log-parser/oracle.sh:6-8` etc. already carry the identical inert guard, just without a comment), but the *new comment* asserts a concrete, checkable fact about the harness contract that the harness itself contradicts. Impact: a future engineer editing `run-orchestration-eval.sh` or authoring `t15`+ oracles may trust this comment and design around a `$1`-passing contract that doesn't exist, or wrongly assume t14 is exercised with an explicit repo-path argument. Fix: either correct the comment ("currently unused — oracle.sh is always invoked via `bash oracle.sh` with cwd already the candidate repo per `run-orchestration-eval.sh:306-311`; this guard is defensive, matching the t10-t13 convention, not a live contract") or drop the block since it does nothing today.
+
+### 🔵 Suggestion (consider)
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh` (whole file, pre-existing gap not introduced by this diff) — `hooks/tests/orchestration-eval.test.sh` only exercises T1–T8 (verified: grepping that file for `t9-|t10-|t11-|t12-|t13-|t14-` returns zero matches). T14's oracle logic — and this diff's own change to it — has **no automated pristine-fails/fixed-passes check**, unlike every task T1-T8. Impact: the misleading comment above (and any future regression in this oracle) would go undetected by the test suite. Fix: add a T14 block to `hooks/tests/orchestration-eval.test.sh` mirroring the T1-T8 pattern; this would also have forced verification of the actual invocation contract before the comment was written.
+- Bundling concern: the mode-bit changes to `scripts/error-path-scan.sh` / `scripts/secret-scan-diff.js` are functionally unrelated to the t14 `oracle.sh` cd/comment change (different subsystem, different concern). Both fixes are individually legitimate (see Verified Clean), but combining unrelated fixes in one diff reduces `git blame`/bisect precision. Without the original commit message I can't rule this in or out as a真正 scope violation — flagging for the author/dispatcher to confirm both were part of one stated task.
+
+### ✅ Verified Clean
+- `scripts/error-path-scan.sh:1` and `scripts/secret-scan-diff.js:1` — both carry correct shebangs (`#!/usr/bin/env bash`, `#!/usr/bin/env node`) consistent with direct execution.
+- The 100644→100755 mode change on these two files is a **real, justified fix**, not cosmetic scope creep: `skills/quality-pipeline/references/completeness-gate.md:27-28` documents direct-invocation usage (`scripts/secret-scan-diff.js --staged`, `scripts/error-path-scan.sh --staged`, no `node`/`bash` prefix), which requires the executable bit; without it these documented invocations would fail with "Permission denied." `CHANGELOG.md:222` independently documents "missing +x bits" as a previously-identified, recurring defect class in this exact codebase (v2.31.12), corroborating this is a known legitimate maintenance fix rather than an unexplained tweak.
+- No content changes accompany the mode flips (diff shows mode-only headers, confirmed no code lines touched) — zero behavior-change risk from the flip itself.
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh:10-176` (the pre-existing CLI-testing logic, unchanged by this diff) — read in full; no regression introduced by the added lines 4-8 (added lines execute only when `$# -ge 1`, which is unreachable today, so the rest of the oracle's behavior is byte-identical to before).
+- No security-relevant surface touched: no secrets, no injection vectors, no network/dispatch code in this diff.
+- No LLM/agent-dispatch trust-boundary issues — this diff doesn't touch any dispatch, prompt-construction, or agent-permission path.
+- `set -euo pipefail` integrity preserved in `oracle.sh` — the added guard doesn't introduce an unguarded command that could abort under `-e` given current callers (edge case of `cd ""` on an empty-but-present `$1` noted only as theoretical, since no caller ever passes an arg).
+- Test-suite execution (`bash hooks/tests/run.sh`) **not run** — no Bash tool available in this review environment; this is a disclosed bound, not a pass.
+
+### Summary
+Overall risk: **Low**
+Top 3 priorities to fix: 1. Correct or remove the misleading "runner passes it as $1" comment in `oracle.sh:5` (Minor). 2. Add T14 coverage to `hooks/tests/orchestration-eval.test.sh` so this oracle isn't the only one of 14 with zero automated verification (Suggestion). 3. Before merge, run `bash hooks/tests/run.sh` and `scripts/diff-scope-report.sh` — neither was executable in this review session (disclosed bound).
+
+### Handoff
+Next consumer: DOCUMENT_ONLY
+Routing rationale: Highest finding is 🟡 Minor (misleading comment, functionally inert) plus 🔵 Suggestions — no Critical/Major, no fix requiring domain expertise or replanning.
+Remaining risks: (1) unexecuted test suite / scope-report script in this review pass — must be run before merge; (2) t14 oracle has zero regression-test coverage, so future changes to it (including this one) are unverified by CI.

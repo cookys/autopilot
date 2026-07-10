@@ -1,1 +1,0 @@
-{"class":"clean","source_commit":"69d1496","source_subject":"fix(verify-red-green): escape JSON control chars + canonicalize --verify-cmd to absolute path"}

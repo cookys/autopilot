@@ -38,6 +38,7 @@ DIRS=(
   "skills"
   "bin"
   "src"
+  "schemas"
   "hooks/_shared"
   "references"
   "scripts"

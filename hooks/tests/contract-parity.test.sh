@@ -14,19 +14,9 @@ const isDensity = process.argv[4] === 'true';
 
 // Extract REVIEW_LOOP_FIELDS from src/engine/resolve-review-loop.js
 const jsPath = path.join(root, 'src', 'engine', 'resolve-review-loop.js');
-const fileContent = fs.readFileSync(jsPath, 'utf8');
-const match = fileContent.match(/const REVIEW_LOOP_FIELDS = \s*\[([\s\S]*?)\];/);
-if (!match) {
-  console.error("Could not find REVIEW_LOOP_FIELDS in resolve-review-loop.js");
-  process.exit(2);
-}
-const REVIEW_LOOP_FIELDS = match[1]
-  .split(',')
-  .map(s => s.trim().replace(/['"]/g, ''))
-  .filter(Boolean);
-
-// Import validateReviewLoopConfig from the module
-const { validateReviewLoopConfig } = require(jsPath);
+// REVIEW_LOOP_FIELDS is now DERIVED from schemas/review-loop-contract.schema.json
+// and exported by the module — import it directly (no brittle source regex).
+const { validateReviewLoopConfig, REVIEW_LOOP_FIELDS } = require(jsPath);
 
 const stdout = fs.readFileSync(0, 'utf8');
 let parsed;
@@ -191,5 +181,14 @@ EXIT_MISSING=$?
 
 assert_eq "$EXIT_MISSING" "1" "JS-side validator rejects missing key"
 assert_contains "$VALIDATE_MISSING" "missing keys in shell output: reviewer_engine" "validation error lists missing reviewer_engine"
+
+# Case F: contract-schema SSOT gate (scripts/check-contract-schema.js) — the shell
+# resolver's field-set + shell-validated enum sets must match the canonical
+# schemas/review-loop-contract.schema.json (the JS side derives from it, so this
+# assertion closes the shell side). Added by the contract-schema-ssot ship.
+SCHEMA_GATE_OUT="$(node "$REPO_ROOT/scripts/check-contract-schema.js" 2>&1)"
+EXIT_SCHEMA_GATE=$?
+assert_eq "$EXIT_SCHEMA_GATE" "0" "check-contract-schema passes on current tree"
+assert_contains "$SCHEMA_GATE_OUT" "contract-schema-ok" "check-contract-schema emits ok marker"
 
 finalize_test

@@ -9,39 +9,26 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const RESOLVE_REVIEW_LOOP = path.join(REPO_ROOT, 'scripts', 'resolve-review-loop.sh');
 const MAX_REVIEW_LOOP_STDOUT_BYTES = 1024 * 1024;
 
-const REVIEW_LOOP_FIELDS = [
-  'reviewer_engine',
-  'reviewer_effort',
-  'reviewer_runner',
-  'implementer_engine',
-  'implementer_effort',
-  'implementer_runner',
-  'loop_max_rounds',
-  'loop_convergence_verdict',
-  'spec_review',
-  'independent_harness',
-  'qc_panel',
-  'qc_panel_aggregation',
-  'review_risk',
-  'required_review_families',
-  'l1_required',
-  'cross_family_required',
-  'cross_family_satisfied',
-  'review_diff_scope',
-  'source',
-  'work_domain',
-  'domain_source',
-  'capability_state_source',
-  'quota_status',
-  'quota_reset_at',
-  'skill_mode_requested',
-  'skill_mode_effective',
-  'capability_warnings',
-  'reviewer_endpoint',
-  'implementer_endpoint',
-  'min_panel_size',
-  'on_engine_unavailable',
-];
+// Single source of truth for the always-emitted review-loop contract fields.
+// REVIEW_LOOP_FIELDS (ordered list) and the assertOneOf enum tables below are
+// DERIVED from schemas/review-loop-contract.schema.json — do not hand-maintain a
+// second copy. Resolved relative to __dirname so the codex-mirror copy finds ITS
+// sibling schema.
+const CONTRACT_SCHEMA = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, '..', '..', 'schemas', 'review-loop-contract.schema.json'),
+    'utf8',
+  ),
+);
+const REVIEW_LOOP_FIELDS = CONTRACT_SCHEMA['x-field-order'];
+
+function schemaEnum(field) {
+  const prop = CONTRACT_SCHEMA.properties && CONTRACT_SCHEMA.properties[field];
+  if (!prop || !Array.isArray(prop.enum)) {
+    throw new Error(`review-loop-contract schema missing enum for field: ${field}`);
+  }
+  return prop.enum;
+}
 
 
 function assertField(value, field, predicate, expected) {
@@ -95,18 +82,18 @@ function validateReviewLoopConfig(value) {
   ]) {
     assertField(value, field, nonEmptyString, 'a non-empty string');
   }
-  assertOneOf(value, 'reviewer_effort', ['low', 'medium', 'high', 'xhigh', 'max']);
-  assertOneOf(value, 'implementer_effort', ['low', 'medium', 'high', 'xhigh', 'max']);
+  assertOneOf(value, 'reviewer_effort', schemaEnum('reviewer_effort'));
+  assertOneOf(value, 'implementer_effort', schemaEnum('implementer_effort'));
   // claude-native (dispatch-review.sh) is deliberately NOT roster-eligible — it is a measurement/probe runner; an unknown reviewer_runner here silently falls back to the default.
-  assertOneOf(value, 'reviewer_runner', ['codex', 'auto', 'agy', 'grok', 'cc-shim', 'anthropic-compatible']);
-  assertOneOf(value, 'implementer_runner', ['auto', 'codex', 'agy', 'grok', 'cc-shim']);
-  assertOneOf(value, 'spec_review', ['on', 'off']);
-  assertOneOf(value, 'independent_harness', ['on', 'off']);
-  assertOneOf(value, 'qc_panel_aggregation', ['union-on-verified-critical', 'unanimous-ship']);
-  assertOneOf(value, 'review_risk', ['low', 'high']);
-  assertOneOf(value, 'review_diff_scope', ['full', 'incremental-mitigated']);
-  assertOneOf(value, 'work_domain', ['rust', 'backend-cli', 'frontend', 'docs', 'mixed']);
-  assertOneOf(value, 'domain_source', ['none', 'explicit', 'auto']);
+  assertOneOf(value, 'reviewer_runner', schemaEnum('reviewer_runner'));
+  assertOneOf(value, 'implementer_runner', schemaEnum('implementer_runner'));
+  assertOneOf(value, 'spec_review', schemaEnum('spec_review'));
+  assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));
+  assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
+  assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
+  assertOneOf(value, 'review_diff_scope', schemaEnum('review_diff_scope'));
+  assertOneOf(value, 'work_domain', schemaEnum('work_domain'));
+  assertOneOf(value, 'domain_source', schemaEnum('domain_source'));
   assertField(value, 'loop_max_rounds', (v) => Number.isInteger(v), 'an integer');
   assertField(value, 'required_review_families', (v) => Number.isInteger(v), 'an integer');
   assertField(value, 'qc_panel', Array.isArray, 'an array');
@@ -129,7 +116,7 @@ function validateReviewLoopConfig(value) {
     assertField(value, field, (v) => typeof v === 'string', 'a string');
   }
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
-  assertOneOf(value, 'on_engine_unavailable', ['ask', 'solo-fallback', 'wait-reset']);
+  assertOneOf(value, 'on_engine_unavailable', schemaEnum('on_engine_unavailable'));
 
   const hasReviewerQualified = Object.prototype.hasOwnProperty.call(value, 'reviewer_qualified');
   const hasFallbackLadder = Object.prototype.hasOwnProperty.call(value, 'fallback_ladder');
@@ -259,6 +246,7 @@ function resolveReviewLoopJson(args = [], options = {}) {
 
 module.exports = {
   resolveReviewLoop,
+  REVIEW_LOOP_FIELDS,
   resolveReviewLoopJson,
   parseReviewLoopOutput,
   validateReviewLoopConfig,

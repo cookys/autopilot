@@ -240,6 +240,81 @@ Major on clean ≠ over-flag" rule) is depth-0's to apply, not this foreman's.
   failures, no quota death.
 - v2: 13 claude calls (sanity leg 10 + case-09 probe + tool_use probe + haiku smoke) + 1 agy
   authoring + 1 gpt-5.5 review. Cumulative both instruments: ~59 claude + 2 agy + 2 gpt-5.5.
+
+---
+
+# v3 — per-case timeline manifests + clean-corpus v2 (FINAL instrument iteration)
+
+Depth-0 approved all three v2 artifact fixes, independently verified case 03's flag as REAL by
+repo history (69d1496's unguarded `cd` is exactly what e098a78 later fixed), and directed corpus
+surgery + v3 as the FINAL iteration ("if v3 sanity still ≥3/10, STOP for good; the fallback is a
+depth-0 adjudication protocol, not a v4").
+
+## Corpus surgery (clean-corpus v2, committed f4b10f2)
+
+- REMOVED `01-verify-red-green-dirname-exit` (4-engine convergent test-coverage defect) and
+  `03-verify-red-green-json-escape` (69d1496 → later fixed by e098a78; label falsified).
+- REPLACED with `01-qc-unbound-variable-decorrelation` (6b5f8cc) and `03-dispatch-pipefail-grepc`
+  (9af225e). Vetting: provenance rule + the NEW no-later-fix check — every line each commit added
+  survives verbatim at develop (checked per-line, not per-file: shared hot files like CHANGELOG
+  have later commits, but none touch these changes).
+- Version note: **the shipped template campaign (phase-b/m3-rerun) used clean-corpus v1; this
+  campaign uses v2** — both versioned, no retroactive invalidation of the shipped result.
+
+## Instrument v3 (committed f4b10f2)
+
+`SYSCONTRACT_CWD_MANIFEST` = per-case map (diff sha256 → absolute worktree path): clean fixtures
+run in a worktree at their own `source_commit` (kills temporal skew), known-bad cases map to the
+leg worktree; manifest miss / relative path / unreadable ⇒ fail-closed (silent HEAD fallback would
+silently reintroduce the skew). Timeout 300→600s. Leak guard narrowed to the actual answer keys
+(`evals/known-bad/`, `evals/clean/`, + this campaign's records dir — recorded addition to
+depth-0's two-dir list: the m3 docs contain per-case verdict tables, i.e. answer keys). gpt-5.5
+review: 1 Minor (manifest path must be absolute) — guard added. Stub suite M1–M6 + live haiku
+via a timeline worktree green.
+
+## v3 sanity gate (baseline clean ×1, sonnet, clean-corpus v2) — **5/10 ⇒ STOP FOR GOOD**
+
+| Case | v1 | v2 | v3 | v3 adjudication (every claim verified by git artifact) |
+|------|----|----|----|----|
+| 01 (NEW: qc-unbound) | – | – | clean | replacement fixture behaves clean |
+| 02-verify-red-green-nested-globs | clean | clean | **🟠 flag** | **No-Bash residual limitation, behaving per-contract**: the diff's correctness rests on live git `:(glob)` behavior; the contract mandates executing the suite (workflow §7) and forbids certifying live-system facts from code alone; reviewer disclosed the bound and flagged. Instrument-class (documented limitation), the exact class depth-0's fallback rule covers. |
+| 03 (NEW: pipefail-grepc) | – | – | **🟠 flag** | **TRUE finding, still-live bug**: `scripts/ladder-run.sh:106` runs `printf \| grep -q 'OVERALL escape rate'` under `set -euo pipefail` — the EXACT class 9af225e's own CHANGELOG claims eradicated — VERIFIED present at 9af225e AND at develop today (grep -q early-exit ⇒ SIGPIPE ⇒ pipeline rc≠0 ⇒ spurious HOLD-ERROR path). Corpus label arguable ("no defect in the diff" vs the contract's claim-scope rule); the finding itself is real. **Byproduct bug handed to depth-0.** |
+| 04 | clean | clean | clean | |
+| 05-engine-anthropic-compatible-validator | 🟠 | clean | clean | stays resolved |
+| 06-review-loop-anthropic-compatible-runner | 🟠 | clean | **🔴 flag** | **TRUE at-snapshot Critical — label falsified by our own corpus**: at 5870b63 the JS validator enum (`src/engine/resolve-review-loop.js:98`) verifiably lacks `anthropic-compatible` while the shell (this diff) emits it — and the later fix is fe2f421, WHICH IS FIXTURE 05 ("second enum-drift site"). v2 saw it clean only because HEAD already contained the fix. The timeline worktree did its job. |
+| 07-qc-oracle-exec-bits-cd-fix | 🟠 | 🟠 (leak-guard artifact) | **clean** | **narrowed leak guard fixed it** (proof archived `07-…RESOLVED.out`) |
+| 08-preflight-force-color-parser | clean | 🟠 (temporal artifact) | **🟠 flag** | **TRUE at-snapshot finding — not temporal after all**: at 81e6d5e the codex-payload mirror `platforms/codex/plugin/scripts/preflight-release.sh` verifiably lacks the fix (0 vs 4 `process.stdout.write` matches) — the commit shipped with the mirror stale, later re-synced by 1baf357 ("drift owed by v2.32.11/v2.32.12"). The v2 "temporal false premise" reading was itself premature: v2's CHANGELOG-placement finding was temporal, but the snapshot exposes a real staleness the HEAD view masked. |
+| 09-dispatch-per-runner-empty-grace | artifact | artifact (timeout) | **🟠 flag** | **600s fixed the timeout — real report now**: specific, line-cited claims (stale "10s" comment at `dispatch-author.test.sh:242` after the default moved to 30000ms; no test discriminates 10s vs 30s grace; the lib's own header calls this the bug class's third occurrence). Same genuine test-coverage class as old-01. Not artifact-adjudicated; probeable. |
+| 10 | clean | clean | clean | |
+| **rate** | 6/10 | 5/10 | **5/10** | **0 instrument artifacts remain** — 3 verified-true findings (03, 06, 08) + 1 plausible-true (09) + 1 documented no-Bash limitation (02) |
+
+## v3 reading (for depth-0) — what the 5/10 actually measures
+
+Every v2 instrument artifact is FIXED (07 leak guard ✓, 08's temporal component ✓, 09 timeout ✓
+— all three resolved into either clean or a REAL report). The v3 "over-flags" contain **zero
+mechanical instrument failures**: three are artifact-verified true findings at the fixture's own
+snapshot (06 even cross-validates against fixture 05 — one fixture is the fix of another's gap),
+one is a specific probeable test-coverage claim, one is the documented no-Bash limitation
+executing the contract faithfully. The number now measures **corpus label quality against a
+reviewer this thorough**, not instrument unfaithfulness: "merged and not since flagged" produces
+labels sonnet+full-contract+tools can falsify at will (5 of 12 clean labels have now fallen across
+the campaign: old-01, old-03, 06, 08, and arguably new-03). Options that are depth-0's to weigh:
+apply the fallback adjudication protocol per-case; re-scope the over-flag gate to
+artifact-refuted findings only; or accept that this corpus cannot host a <3/10 sanity bar for a
+tools-enabled full-contract reviewer and gate the parked contracts on known-bad sensitivity +
+per-case flag concordance instead.
+
+## Byproduct for depth-0 (outside measurement scope)
+
+`scripts/ladder-run.sh:106` — live pipefail+grep -q instance at develop (the memory-documented
+97% false-empty class): `! printf '%s\n' "$report" | grep -q 'OVERALL escape rate'` can spuriously
+take the HOLD-ERROR branch when the marker IS present. Fail-closed direction (no false promote)
+but a real defect of the class 9af225e declared eradicated. One-line `grep -c >/dev/null` fix.
+
+## Cost (v3 increment)
+
+11 claude calls (sanity 10 + haiku smoke) + 1 agy authoring + 1 gpt-5.5 review + 10 timeline
+worktrees (mechanical). Campaign cumulative: ~70 claude + 3 agy + 3 gpt-5.5.
 - Deviation: slimmed legs were launched before base-clean finished (parallel overlap to save
   wall-clock); the sanity gate tripped mid-flight and both were killed per the brief ("don't burn
   the rest of the legs"). Their partial data is reported honestly as non-gating.

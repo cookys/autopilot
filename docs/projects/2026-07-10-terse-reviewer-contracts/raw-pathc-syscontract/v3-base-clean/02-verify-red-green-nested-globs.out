@@ -1,0 +1,35 @@
+## Reviewer Report
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+- `scripts/verify-red-green.sh:28-37` + `hooks/tests/verify-red-green.test.sh:68-90` — **Test suite could not be executed in this review** (my toolset is Read/Grep/Glob only — no Bash). This diff's entire correctness claim rests on a **live-system fact**: how the installed git's `:(glob)` pathspec magic (`fnmatch`/`wildmatch` with `**` double-star extension) actually resolves `**/*test*` and `**/tests/**` against nested paths like `tests/unit_test.sh`. Static trace of the fnmatch semantics is consistent with the intended fix (leading `**/` absorbs zero-or-more directory segments, letting the trailing literal match the basename), and the new regression test `test_validated_nested` (`hooks/tests/verify-red-green.test.sh:68-90`) is exactly the artifact designed to prove it — but per the Fact-driven Red Line I cannot certify a live-git-behavior claim by citing code alone; it must be **executed**. → **Fix direction**: run `bash hooks/tests/run.sh` (or targeted `bash hooks/tests/verify-red-green.test.sh`) before merge. A non-zero exit on this file is a blocking finding per the project's own quality-pipeline gate (workflow item 7); this review cannot close that loop and the gap must be disclosed rather than silently assumed green.
+
+### 🟡 Minor (recommended)
+- `CHANGELOG.md:27` (unchanged by this diff) — No CHANGELOG entry accompanies this fix. Per the project's own versioning rule ("a bug fix or hardening of existing behavior... = PATCH") and the standing user preference (`feedback_release-hygiene.md`: "after code work, proactively update CHANGELOG"), a nested-glob correctness fix to a shipped script (`scripts/verify-red-green.sh`) should get a `### Fixed` line before this is released, even if this specific commit is mid-branch work. Not blocking commit, but flag before finish-flow / release gate.
+
+### 🔵 Suggestion (consider)
+None beyond the Minor item above — the fix is narrowly scoped and the new test follows the existing file's conventions (`create_verify_cmd`-style inline heredoc, `local` scoping, unique `$TEST_TMP` subdir), so there's nothing stylistic to push back on.
+
+### ✅ Verified Clean
+- Reviewed `scripts/verify-red-green.sh:28-37` — file enumeration matches the diff exactly (2 files: `scripts/verify-red-green.sh`, `hooks/tests/verify-red-green.test.sh`); no `diff-file-list.sh` available (Bash unavailable) so this enumeration is manual from the diff itself — disclosed as the coverage bound.
+- Reviewed the glob-array change itself: all 8 patterns received the identical `**/` prefix treatment; no pattern was skipped or treated inconsistently, and the change doesn't alter matching for existing root-level fixtures (`calc.sh`, `calc.test.sh` used by `test_validated`/`test_not_red_on_base`/`test_not_green_on_head`) — a leading `**/` matching zero directories degrades to the old root-only pattern, so the pre-existing passing tests are not put at risk by this change (reasoned from fnmatch semantics; still gated by the unexecuted test-suite caveat above).
+- Reviewed for a duplicated glob-matching bug in the stated sibling `scripts/verify-preexisting.sh` (referenced in `hooks/tests/verify-red-green.test.sh:3` header comment) — grepped for glob/test-path logic there; none found, so no related fix is missing from that file.
+- Reviewed `hooks/tests/run.sh:73-94` — `*.test.sh` files are auto-discovered by glob, and both changed files keep their `100755` (executable) mode per the diff headers — the new test function is wired in automatically; no missing registration.
+- Checked `CLAUDE.md` "Scripts inventory" — `verify-red-green.sh` is not listed there, but the "When adding a new script" 3-file wiring rule applies only to **new** scripts; this script pre-exists the diff, so no wiring omission chargeable to this change.
+- Security: no injection surface — glob patterns are static string literals, heredocs are quote-delimited (`'VC_EOF'`, `'VERIFY_EOF'`) preventing variable expansion at write-time; no new user-controlled input path.
+- No scope creep — every changed line traces to the stated regression fix: the script hunk is the bug fix itself (array + explanatory comment), the test hunk is the regression guard plus its registration call, both directly implementing "the default globs must match test files at any depth, not just repo root" (per the added comment/test-name baseline, no external commit message was provided).
+
+### Summary
+Overall risk: **Medium** — the code change itself is small, narrowly scoped, and its reasoning (fnmatch/`**`-glob semantics) is internally consistent and matches well-known git pathspec double-star behavior, but the review is capped by an **undisclosed-if-I-didn't-say-so** limitation: this session has no Bash access, so the one thing that actually proves the fix (running `verify-red-green.test.sh` against real git) was **not executed**. That is a live-system fact, not a documented one, and I am flagging it as UNVERIFIED per the Fact-driven Red Line rather than asserting it passes.
+
+Top 3 priorities to fix:
+1. Execute `bash hooks/tests/run.sh` (or the single test file) before merge — this is the load-bearing verification this whole diff is missing from this review.
+2. Add a `CHANGELOG.md` `### Fixed` entry for the nested-glob regression before the next release cut.
+3. (No code defect to fix — the glob-pattern logic itself reads correct.)
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: The only actionable finding (Major) is "run the existing test file" — a trivial, no-domain-expertise action; no root-cause investigation or structural decomposition needed.
+Remaining risks: Live-git `:(glob)` double-star matching behavior is unverified by execution in this review session (no Bash tool) — must be confirmed by actually running `hooks/tests/verify-red-green.test.sh` before this is treated as merge-safe.

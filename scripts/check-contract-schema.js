@@ -95,7 +95,12 @@ function main() {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(shellVar)) {
       fail(`schema field ${field} has a non-identifier x-shell-var: ${shellVar}`);
     }
-    const armRe = new RegExp('case\\s+"\\$' + shellVar + '"\\s+in\\s+([a-z0-9][a-z0-9|-]*)\\)');
+    // Anchor `case` to line start (after optional indent) so a commented-out /
+    // dead arm (`# case "$VAR" in ...`) cannot satisfy the match. This gate
+    // reconciles the DECLARED allowed-value set (schema <-> live shell arm); the
+    // shell's runtime REJECTION of an out-of-enum value (invalid -> default) is
+    // behavioral resolver-correctness, covered by hooks/tests/resolve-review-loop.test.sh.
+    const armRe = new RegExp('(?:^|\\n)[ \\t]*case\\s+"\\$' + shellVar + '"\\s+in\\s+([a-z0-9][a-z0-9|-]*)\\)');
     const armMatch = shellSrc.match(armRe);
     if (!armMatch) {
       fail(`shell has no \`case "$${shellVar}"\` validation arm for schema field ${field}`);

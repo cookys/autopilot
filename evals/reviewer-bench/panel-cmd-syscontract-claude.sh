@@ -93,7 +93,7 @@ if [ -n "${SYSCONTRACT_CWD_MANIFEST:-}" ]; then
     exit 0
   fi
   DIFF_SHA="$(sha256sum "$DIFF_TEMP" | awk '{print $1}')"
-  MAPPED="$(awk -v k="$DIFF_SHA" '$1==k{print $2; exit}' "$MANIFEST_FILE")"
+  MAPPED="$(awk -v k="$DIFF_SHA" '$1==k{sub(/^[^[:space:]]+[[:space:]]+/,""); print; exit}' "$MANIFEST_FILE")"
   if [ -n "$MAPPED" ]; then
     case "$MAPPED" in
       /*) ;;
@@ -234,6 +234,8 @@ has_finding() {
 
 CRIT="$(has_finding "🔴")"
 MAJ="$(has_finding "🟠")"
+
+case "$CRIT$MAJ" in 00|01|10|11) ;; *) echo "SYSCONTRACT-UNPARSEABLE (severity probe malfunction: crit='$CRIT' maj='$MAJ')" >&2; echo '{"verdict":"fail"}'; exit 0 ;; esac
 
 if [ "$CRIT" = "1" ] || [ "$MAJ" = "1" ]; then
   echo '{"verdict":"fail"}'

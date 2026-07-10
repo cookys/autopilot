@@ -24,6 +24,25 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.19 — contract schema SSOT (twin drift becomes build-impossible) + resolve-endpoint hermeticity
+
+**Headline**: The bash↔JS resolver contract gets its single source of truth: NEW `schemas/review-loop-contract.schema.json` declares all 31 review-loop fields (order, enums, shell-var mapping); `src/engine/resolve-review-loop.js` (+ codex mirror) now DERIVES `REVIEW_LOOP_FIELDS` and its enum tables from the schema at require time — the hand-written twin lists that drifted twice (contract-parity red for 2 days over `on_engine_unavailable`) are gone. The shell side stays runtime-untouched (honoring the 2026-07-04 panel's bash-plumbing deferral) but gains a loud drift gate: NEW `scripts/check-contract-schema.js` asserts the shell resolver's emitted key set and per-field enum case-arms against the schema (identifier-guarded, line-anchored so commented-out arms don't satisfy it), wired into `contract-parity.test.sh` as Case F. Fail-closed verified by seeded-drift probes (add/remove field → exit 1 naming the field), re-run independently at depth-0. Also: `hooks/tests/resolve-endpoint.test.sh` is hermetic now — it pinned `AUTOPILOT_ENDPOINTS_ENV` to a nonexistent path in its JS invocations, closing the "machine's real ~/.autopilot/endpoints.env leaks into fail-closed assertions" red (root cause: `os.homedir()` resolves via getpwuid even under `env -i`).
+
+### Added
+- `schemas/review-loop-contract.schema.json` — canonical 31-field contract (x-field-order, enums, x-shell-var).
+- `scripts/check-contract-schema.js` — shell↔schema drift gate (field-set + per-field enum parity; exit 1 names the drifted field).
+
+### Changed
+- `src/engine/resolve-review-loop.js` (+ mirror): schema-derived field/enum tables, `__dirname`-relative schema resolution (mirror standalone-verified), require-time x-field-order invariant. Behavior byte-identical (320/35/30 pre-existing assertions unmodified and green).
+- `hooks/tests/contract-parity.test.sh`: Case F (drift gate) + REVIEW_LOOP_FIELDS extraction via module import (the old source-regex only matched literal arrays).
+- `scripts/sync-codex-plugin-skills.sh`: `schemas/` added to mirrored DIRS.
+
+### Fixed
+- `hooks/tests/resolve-endpoint.test.sh` 1/56 environment-dependent failure on machines with real GLM credentials configured (assertions not weakened; green on both credentialed and bare machines).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.18 — slimmed reviewer.md + code-review.md ship (syscontract instrument certifies them) + ladder-run pipefail fix
 
 **Headline**: The remaining two terse reviewer contracts ship: `agents/reviewer.md` **−17%** (~4.9k→~4.1k tokens) and `skills/quality-pipeline/references/code-review.md` **−14%** (~6.6k→~5.6k) — paid on every native reviewer dispatch. Certification came from a NEW faithful measurement instrument built for the purpose: `evals/reviewer-bench/panel-cmd-syscontract-claude.sh` loads the contract via `claude --system-prompt-file` (the REAL system-prompt channel), gives read-only tools (`Read,Grep,Glob` — the contract's verification duties become executable), per-case timeline worktrees, a severity-aware verdict parser, and per-case raw-output archiving. Three instrument iterations eliminated every artifact class (preamble distortion → UNVERIFIED-Major storms → leak-guard/timeline/timeout artifacts); the final campaign ran a paired-concordance protocol (absolute clean-threshold retired — 5 of 12 "clean" corpus labels fell under full-strength review, one flag catching a LIVE bug this release fixes). Gates: kb sensitivity **1.000/1.000 baseline, 1.000 slimmed**, fp-on-critical=0, injection 6/6 with explicit refusal, zero case-level regression; all 5 clean discordances adjudicated non-weakening at depth-0 (the load-bearing one — a base-only repo-wide hunt — was ruled stochastic after verifying the driving claim-decomposition clause survives the slimming verbatim-in-meaning). Aggregate campaign result across v2.32.16+18: reviewer-contract surface ~19.7k → ~16.6k tokens (**−16%**), zero measured behavior loss.

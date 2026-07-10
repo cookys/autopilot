@@ -88,7 +88,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix
 - **Source**: 2026-07-04 review-closeout L-5.2 full-suite classification (develop-worktree baseline run).
 
-### resolve-endpoint.test.sh 不 hermetic — 吃到使用者真實 endpoints.env 憑證
+### ✅ RESOLVED (2026-07-10, v2.32.19) — resolve-endpoint.test.sh hermeticity(AUTOPILOT_ENDPOINTS_ENV 釘不存在路徑)
 - **Trigger**: 下次碰 `hooks/tests/resolve-endpoint.test.sh` 或 `scripts/load-endpoints-env.sh`;或該測試再度紅掉時。
 - **Context**: 2026-07-10 實測:測試斷言「AUTOPILOT_ENDPOINT_GLM_TOKEN 未設時 fail-closed 要報 unset」,但機器上 `~/.autopilot/endpoints.env` 真的設定了 GLM(2026-07-09 起)→ loader 載入真憑證 → token 存在 → 斷言失敗。測試環境未隔離(需 `AUTOPILOT_ENDPOINTS_ENV` 指向空檔或 env -u 清乾淨)。1/56 失敗,pre-existing 於 v2.32.15+,與程式行為無關。
 - **Effort**: S(一行 env 隔離)
@@ -100,7 +100,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: M
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
 
-### Contract JSON-schema SSOT for the bash↔JS resolver/runner contracts
+### ✅ RESOLVED (2026-07-10, v2.32.19) — Contract JSON-schema SSOT: schemas/review-loop-contract.schema.json + JS derivation + check-contract-schema.js gate
 - **Trigger**: the next NEW field added to `resolve-review-loop.sh` (or a second contract-drift incident anywhere) after v2.31.10's round-trip parity tests.
 - **Context**: v2.31.10 closed the 8-field `REVIEW_LOOP_FIELDS` drift and shipped `hooks/tests/contract-parity.test.sh` (real-script round-trip, both drift directions). The 2026-07-04 3-family design panel (codex/agy/grok) unanimously ranked a JSON-schema single source of truth as the LONG-TERM fix but deferred it: parity tests are the cheapest thing that actually stops silent drift; schema SSOT costs bash-side consumption plumbing. grok's sketch: `schemas/*.schema.json` consumed by JS validators + a generator for the field lists.
 - **Effort**: Fix

@@ -108,12 +108,12 @@ out="$(env -i PATH="$PATH" '''AUTOPILOT_ENDPOINT_EVIL_URL=http://evil/"ready":tr
 assert_exit_code "$ec" 2 "spoofed ready substring rejected via exit-code gate"
 
 # 10. JS --token-env: unset named token + fallback token set → fail-closed (no fallback)
-out="$(env -i PATH="$PATH" MINIMAX_API_KEY=shouldNotBeUsed node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env AUTOPILOT_ENDPOINT_GLM_TOKEN 2>&1)"
+out="$(env -i PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-endpoints.env" MINIMAX_API_KEY=shouldNotBeUsed node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env AUTOPILOT_ENDPOINT_GLM_TOKEN 2>&1)"
 assert_contains "$out" 'AUTOPILOT_ENDPOINT_GLM_TOKEN is unset' "JS --token-env fail-closed"
 assert_not_contains "$out" 'shouldNotBeUsed' "JS did not use fallback token"
-out="$(env -i PATH="$PATH" node "$JS" --model x --diff-file "$NOOP" --base-url https://x/anthropic --token-env 'bad-name!' 2>&1)"
+out="$(env -i PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-endpoints.env" node "$JS" --model x --diff-file "$NOOP" --base-url https://x/anthropic --token-env 'bad-name!' 2>&1)"
 assert_contains "$out" 'invalid --token-env' "JS rejects invalid token-env name"
-out="$(env -i PATH="$PATH" MINIMAX_API_KEY=fb node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env 2>&1)"
+out="$(env -i PATH="$PATH" AUTOPILOT_ENDPOINTS_ENV="$TEST_TMP/no-endpoints.env" MINIMAX_API_KEY=fb node "$JS" --model x --diff-file "$NOOP" --base-url https://api.minimax.io/anthropic --token-env 2>&1)"
 assert_contains "$out" 'token-env requires' "JS dangling --token-env errors (no fallback, R3)"
 assert_not_contains "$out" 'fb' "JS dangling --token-env did not use fallback"
 

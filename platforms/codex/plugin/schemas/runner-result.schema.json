@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/runner-result.schema.json",
+  "title": "RunnerResult",
+  "description": "Generic runner provenance and outcome envelope shared across dispatch scripts and future engine adapters.",
+  "type": "object",
+  "required": ["status", "runner", "model"],
+  "additionalProperties": true,
+  "properties": {
+    "status": {
+      "type": "string",
+      "description": "Outcome status for the dispatched role."
+    },
+    "runner": {
+      "type": "string",
+      "description": "Runner family or transport identifier (e.g. codex, agy, anthropic-compatible)."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model identifier passed to the runner."
+    },
+    "role": {
+      "type": "string",
+      "enum": ["implementer", "reviewer", "explorer"],
+      "description": "Optional lifecycle role when known."
+    },
+    "containment": {
+      "type": ["string", "null"],
+      "description": "Teardown-hygiene provenance tier when cgroup containment was attempted."
+    },
+    "contained": {
+      "type": ["boolean", "null"],
+      "description": "Whether teardown verified an empty worker cgroup."
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Human-readable error detail when status is not a success path."
+    }
+  }
+}

@@ -109,30 +109,36 @@ function parseCodexChrome(text) {
   // Empirical format (codex v0.143/0.144, hooks/tests/fixtures/dispatch-status/):
   // section headers on their own line: user / exec / codex / thinking; the run
   // ends with a standalone "tokens used" line followed by a comma-grouped number.
+  //
+  // Injection posture (gpt-5.5 R3): worker command output is embedded UNESCAPED in
+  // this text stream, so any pattern a worker can type is spoofable mid-stream.
+  // tokens are therefore TAIL-ANCHORED only — the genuine footer is written by the
+  // harness as the very last thing, so anything non-blank after a candidate footer
+  // disqualifies it. This nulls tokens for mid-run reads (footer not written yet —
+  // honest) and defeats mid-stream fakes. Residual: an ABORTED run whose final
+  // output happens to be a crafted fake footer; dispatch-hetero's emit() closes
+  // that by extracting usage only on a clean worker exit (genuine footer then
+  // always owns the tail). events/tool_calls/last_action remain best-effort
+  // HEURISTIC counters in this text format (a worker can echo section-header-like
+  // lines) — scheduling color only, never precision inputs.
   const lines = text.split(/\r?\n/);
   let events = 0;
   let toolCalls = 0;
   let lastAction = null;
-  let total = null;
   for (let i = 0; i < lines.length; i += 1) {
     const t = lines[i].trim();
     if (t === 'user' || t === 'exec' || t === 'codex' || t === 'thinking') {
       events += 1;
       lastAction = t;
       if (t === 'exec') toolCalls += 1;
-      continue;
     }
-    if (t === 'tokens used') {
-      for (let j = i + 1; j < lines.length; j += 1) {
-        const n = lines[j].trim();
-        if (!n) continue;
-        if (/^[\d,]+$/.test(n)) {
-          const v = Number(n.replace(/,/g, ''));
-          if (Number.isFinite(v)) total = v; // last occurrence wins
-        }
-        break;
-      }
-    }
+  }
+  let total = null;
+  let i = lines.length - 1;
+  while (i >= 0 && lines[i].trim() === '') i -= 1;
+  if (i >= 1 && /^[\d,]+$/.test(lines[i].trim()) && lines[i - 1].trim() === 'tokens used') {
+    const v = Number(lines[i].trim().replace(/,/g, ''));
+    if (Number.isFinite(v)) total = v;
   }
   const tokens = emptyTokens();
   tokens.total_tokens = total;

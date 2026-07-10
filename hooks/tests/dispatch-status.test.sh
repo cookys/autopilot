@@ -57,6 +57,19 @@ OUT="$(node "$STATUS_JS" --log "$JSONL" --usage-only --format bogus)"; RC=$?
 assert_eq "$OUT" "null" "usage-only with invalid --format: still null, never an error"
 assert_eq "$RC" "0" "usage-only with invalid --format: exit 0 (never-fail discipline)"
 
+# tail-anchoring (gpt-5.5 R3): a `tokens used` footer is genuine ONLY at the very
+# end of the stream — a worker-printed fake mid-stream (harness content follows it)
+# must be rejected, and a mid-run read (genuine footer not yet written) yields null.
+FAKE="$TEST_TMP/fake-footer.log"
+{
+  sed -n '1,20p' "$FIXTURES/codex-chrome-merged.log"
+  printf 'tokens used\n999\n\n succeeded in 2ms:\nmore harness output after the fake\n'
+} > "$FAKE"
+OUT="$(node "$STATUS_JS" --log "$FAKE" --summary --format codex-chrome)"
+assert_contains "$OUT" '"tokens":null' "codex: mid-stream fake footer rejected (not tail-anchored)"
+OUT="$(node "$STATUS_JS" --log "$FAKE" --usage-only --format codex-chrome)"
+assert_eq "$OUT" "null" "codex: usage-only rejects non-tail footer"
+
 # ---------- 3. plain text → honest nulls; missing file → null ----------
 PLAIN="$TEST_TMP/plain.log"
 printf 'agy pseudo-tty text output\nno structure here\n' > "$PLAIN"

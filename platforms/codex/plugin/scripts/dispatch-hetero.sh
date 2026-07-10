@@ -187,11 +187,14 @@ emit() { # status commit files ins del worktree error
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
   local usage_json="null"
-  if [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] && [ -r "$SELF_DIR/dispatch-status.js" ] \
-     && command -v node >/dev/null 2>&1; then
+  if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
+     && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
     # Format is DECLARED by runner (this script knows its own invocation flags: codex =
     # chrome text, grok = --output-format json, agy/cc-shim = plain) — never content-
     # sniffed, so a worker printing JSON/fake-chrome cannot self-report telemetry.
+    # AGENT_EXIT==0 gate: on a clean exit the harness footer always owns the log tail,
+    # so the parser's tail-anchored token read cannot be spoofed; on an abnormal exit
+    # the tail is worker-controlled → usage stays null (honest, not fabricated).
     local log_format="plain"
     [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
     [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"

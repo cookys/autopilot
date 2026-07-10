@@ -1,0 +1,39 @@
+## Reviewer Report
+
+### 🔴 Critical
+
+**BLOCKER: Diff artifact integrity failure** — The diff claims to modify `scripts/tree.sh` at lines 88–96, but `scripts/tree.sh` does not exist in the current codebase. Only `scripts/tree.js` exists (confirmed via `Glob scripts/tree*` → `scripts/tree.js`). 
+
+Consequence: **Cannot verify the diff against live code.** Per the Fact-driven Red Line, `file_path:line_number` citations are non-verifiable when the file does not exist. The Three Red Lines prohibit reviewing unverified claims.
+
+Fix direction: 
+1. **Clarify the artifact:** Is this diff staged but not yet applied? Is the filename incorrect (should be `tree.js`, not `tree.sh`)? Is this diff from an archived/abandoned branch?
+2. **If the file is new:** Confirm it's intended and provide full file context. 
+3. **If the filename is wrong:** Resubmit the diff with the correct path (`scripts/tree.js`) and full context of the function being modified.
+4. **If from an archived effort:** Confirm whether this is in-scope for the current review cycle.
+
+**Cannot proceed with code review until this artifact integrity issue is resolved.**
+
+---
+
+### ✅ Verified Clean
+
+No areas pre-verified as clean — the review is blocked at the artifact-integrity stage prior to code analysis.
+
+---
+
+### Summary
+
+**Overall risk: UNREVIEWED — blocking artifact issue**
+
+**Top priority:** Resolve diff target file mismatch before re-dispatch.
+
+---
+
+### Handoff
+
+**Next consumer:** `MAIN_CLAUDE`
+
+**Routing rationale:** Artifact integrity issue requires user clarification of intent (file path, branch context, or staging status), not code review.
+
+**Remaining risks:** Unknown scope and target — cannot assess further until diff integrity is established.

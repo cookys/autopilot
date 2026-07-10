@@ -1,0 +1,31 @@
+## Reviewer Report
+
+Scope note: the diff itself is the only artifact supplied (no separate task/plan/commit-message text was attached to this dispatch) — I inferred task intent from the case directory name (`07-qc-oracle-exec-bits-cd-fix`: two implied outcomes, "exec bits" + "cd fix") and verified each hunk against that inference plus the surrounding codebase. This is disclosed per the no-silent-caps rule rather than treated as a full verified-scope baseline.
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh:5-6` — The new comment asserts "runner passes it as $1 — same contract as the other oracles," but this is **verifiably false** for every call site in the repo. `evals/orchestration/run-orchestration-eval.sh:309-311` invokes `bash oracle.sh` with **zero arguments**, having already `cd "$TEMP_REPO"` itself one line earlier (`run-orchestration-eval.sh:310`). The self-test harness does the same for every task it covers (`hooks/tests/orchestration-eval.test.sh:29,63,86,111,...` — all `bash oracle.sh` with no args, preceded by an explicit `cd`). `score.js` never shells out to `oracle.sh` at all (only reads `oracle_pass` from the JSON, `score.js:101`). I found no call site anywhere in the repo (including t10-t13, which have the identical pre-existing `if [ $# -ge 1 ]; then cd "$1"; fi` block, e.g. `t10-format-migrate/oracle.sh:6-8`, `t11-boundary-fix/oracle.sh:6-8`, `t12-cleanup-script/oracle.sh:6-8`) that ever passes `$1`. Consequence: (a) the added block is dead code — it does not fix whatever cd-related defect motivated this change, since the production/self-test call path already `cd`s before invoking `oracle.sh` with no args; (b) the false "contract" claim is a maintainability hazard — a future refactor of `run-orchestration-eval.sh` that trusts this comment (e.g. dropping its own `cd "$TEMP_REPO"` on the theory that "oracle.sh handles it via $1 like the others") would silently break oracle execution for **all 14** tasks, not just t14. Fix direction: correct the comment to state the actual contract (the runner already `cd`s into the temp repo before calling `oracle.sh` with no arguments; this guard exists only so `oracle.sh` can optionally be invoked standalone against an arbitrary path, matching the sibling oracles' style) — or remove the block if standalone invocation isn't an actual supported use case. If the original intent was to fix a real cd-related bug elsewhere, that bug is not addressed by this hunk and needs to be re-identified.
+
+### 🟡 Minor (recommended)
+- `evals/orchestration/tasks/t14-constraint-horizon/oracle.sh` (whole file) — t14 has **no self-test coverage** in `hooks/tests/orchestration-eval.test.sh` (only T1–T8 are exercised there; T9–T14 are absent — confirmed via grep, no `t9-`/`t10-`/…/`t14-` matches). This is a pre-existing gap, not introduced by this diff, but it means the change under review (and the t14 oracle generally) ships with zero automated verification that it still classifies pristine/fixed states correctly. Disclosing this as an uncovered bound rather than treating the diff as verified-by-tests. Fix direction: add a T14 pristine/fixed pair to `orchestration-eval.test.sh` following the T1-T8 pattern.
+
+### 🔵 Suggestion (consider)
+None beyond the above.
+
+### ✅ Verified Clean
+- `scripts/error-path-scan.sh`: mode change `100644→100755` is correct and needed — `skills/quality-pipeline/references/completeness-gate.md:28` and `skills/quality-pipeline/SKILL.md:36` invoke it directly (`scripts/error-path-scan.sh --staged`, no `bash` prefix); file has a valid `#!/usr/bin/env bash` shebang (`scripts/error-path-scan.sh:1`). Content unchanged — pure permission-bit diff, verified via the mode-only diff hunk.
+- `scripts/secret-scan-diff.js`: mode change `100644→100755` is correct and needed — `skills/quality-pipeline/references/completeness-gate.md:27` invokes it directly (`scripts/secret-scan-diff.js --staged`); file has a valid `#!/usr/bin/env node` shebang (`scripts/secret-scan-diff.js:1`). Content unchanged — pure permission-bit diff.
+- No security issues: the `cd "$1"` addition in `t14/oracle.sh` only executes when an explicit argument is supplied (guarded), runs inside a throwaway harness-managed temp clone, and introduces no new attacker-controlled input path beyond what the identical pattern in t10-t13 already exposes.
+- No scope creep — every changed line (two exec-bit flips + one oracle.sh hunk) traces to the inferred task ("exec bits" + "cd fix"); no unrelated formatting, renames, or refactors present in the diff.
+- Reviewed full diff for scope creep — every changed line traces to the task (per available naming/context; no separate task text was supplied to this dispatch, disclosed above).
+
+### Summary
+Overall risk: Medium
+Top 3 priorities to fix: 1. Correct or remove the false "runner passes it as $1" comment/dead code in `t14/oracle.sh:5-6` — verify against `run-orchestration-eval.sh:309-311` before re-asserting any runner contract. 2. Confirm the exec-bit fixes (already correct) don't mask that the real cd-related defect (if one exists) is still unaddressed. 3. Add T14 (and ideally T9–T13) self-test coverage to `hooks/tests/orchestration-eval.test.sh` so oracle changes are verified by the suite instead of by inspection.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: The Major finding is a straightforward comment/dead-code correction (or removal) with a clear fix direction; no domain-specialist knowledge or root-cause investigation is required — the false claim was already located and disproven against the actual call sites in this repo.
+Remaining risks: If a genuine cd-related bug existed in the t14 harness path that this diff was meant to fix, it remains unaddressed since the added block never executes under any current call site — worth confirming against whatever originally motivated this change before closing it out.

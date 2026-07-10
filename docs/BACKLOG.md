@@ -26,6 +26,24 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Dispatch observability Stage 1 — hetero run 失聯歸零（start manifest + dispatch-status + usage 入 ledger）
+- **Trigger**: 下次接到「監察/協調 hetero engine」方向的工作指派時直接引燃；或下次任何人再抱怨一次「dispatch 出去就失聯」。
+- **Context**: hetero dispatch 是 fire-and-forget：run 的身分證（`$LOG` 路徑/worktree/cgroup unit）只在 final JSON 才吐出，depth-0 派發後無法定位、監看、判活該 run——只能等 timeout 或 exit。關鍵事實：worker 事件流**已經即時落盤**（`dispatch-hetero.sh` `run_worker()` 全程導 `$LOG`；codex=JSONL 事件、grok=JSON 流），缺的是 start-time manifest ＋ 解析器 ＋ 判活面。對照組：CC Workflow/Agent 的可視性來自 harness 自有事件流——我們的流其實在手上，只是沒接。此為三階段（監察→雙工溝通(pi RPC/cc-shim stream-json)→自適應調度）的第一階段；信任剛性（artifact-not-self-report、fail-closed verdict）不動，本階段只軟化調度盲區。六要素任務全文如下：
+
+  **Goal**: 每個 hetero dispatch 從派發那一刻起可被 depth-0 定位與監看（活性、最後事件距今秒數、改檔清單、token 累計、stall 判定），並在結束時把 usage/牆鐘寫進 final JSON 與 /l5 ledger。失聯（派發後無任何中途觀測點）歸零。
+
+  **Scope**: `scripts/dispatch-hetero.sh`、`scripts/dispatch-review.sh`（起跑即發 run manifest：`{run_id, role, runner, model, branch, worktree, log_path, scope_unit, pid, started_at}` 至 `${TMPDIR}/autopilot-dispatch-runs/<run-id>.json`，並於阻塞 worker 前以 stderr/`--manifest-out` 公布 run_id；final JSON 增列 `run_id`+`usage` 欄位，additive-only）；新增 `scripts/dispatch-status.js`（Node built-ins only：`--run <id>`|`--log <path> --runner <r>` → 逐 runner 解析活流 + cgroup/pid 判活 → `{alive, last_event_age_s, events, tool_calls, last_action, files_touched, tokens{input,output,cache_read}|null, stall}`；不可解析格式 → `telemetry:"unavailable"`，永不捏造）；/l5 run-summary ledger + `src/engine/autopilot-engine.js` ledger 增 usage/wall_secs；`hooks/tests/dispatch-status.test.sh` + 逐 runner fixture logs；`references/hetero-dispatch.md` 增 monitoring 節；CLAUDE.md inventory row。
+
+  **Input**: 既有活流 `$LOG`（`dispatch-hetero.sh:577-604` 已即時寫入）；codex exec JSONL 事件 schema（任務內含一次真實捕流做 fixture——spike-before-assert）；cc-shim `claude -p` stream-json usage 欄位；grok `--output-format json`；agy pseudo-TTY 純文字（僅 mtime 判活，tokens=null，誠實降級）。
+
+  **Output**: manifest 發射（兩個 dispatch 腳本）＋ `dispatch-status.js` ＋ final JSON 擴欄 ＋ ledger 欄位 ＋ fixtures/tests ＋ 文件三處（reference/CLAUDE.md/CHANGELOG）。
+
+  **Acceptance**: (1) 真實 codex dispatch 起跑 2 秒內 `dispatch-status.js --run <id>` 回 `alive:true` 且 `events` 隨後遞增；對 worker `kill -STOP` 超過門檻 → `stall:true`。(2) codex run 的 final JSON `tokens` 非 null；agy run `tokens:null` 但中途 mtime 判活可用。(3) 既有 status enum/exit codes/JSON 消費者位元組級不變（欄位僅追加）；既有 dispatch 測試全綠。(4) 任何 telemetry 欄位不得源自 worker 自報（只讀 harness 事件流/cgroup/git；worker prompt 零改動）；manifest/status 輸出不含任何 secret。
+
+  **Boundaries**: 不做中途訊息注入（Stage 2：pi RPC / cc-shim stream-json 雙工）；不做自動砍除策略（本階段 report-only，policy 是 Stage 3）；artifact 驗證與 fail-closed verdict 軌一律不動；不得為了 telemetry 開任何 worker 自寫狀態檔的口子。
+- **Effort**: L
+- **Source**: 2026-07-11 Fable 5 session（Board 方向討論：hetero engine 失聯 → 監察/協調/溝通三機制分層；pi 定位為 Stage 2 雙工儀器）。
+
 ### Orchestration-eval failure-triage rule — every FAIL must carry a classified cause before it may be scored
 - **Trigger**: next time touching `evals/orchestration/` (runner or score.js), OR the next campaign round.
 - **Context**: 2026-07-04 R2: a mid-campaign Claude Code re-login killed 15/40 runs (1-2s, "Not logged in") which were silently scored as oracle failures — publishing a wrong "60%/60% attention-slip" conclusion until a duration sanity sweep caught it (correction shipped same day). Board sharpened the principle (2026-07-04): duration floors / auth-signature scans are just heuristic INSTANCES — the real rule is **no unexplained failures in the data: a FAIL row is scoreable ONLY once triaged to `capability_fail` (model attempted, oracle rejects the work) vs `infra_fail` (auth/timeout/spawn/empty — excluded from stats, loudly counted)**. Implementation: runner emits a `failure_class` field derived from run.log evidence (auth signatures, timeout status, zero-output) + oracle outcome; `score.js` REFUSES rows with `oracle_pass:false` lacking a classification, and prints an infra-excluded tally in every report (silent-cap honesty rule applies). Mirrors quality-pipeline's PRE_EXISTING/INTRODUCED discipline and adjudicate-findings' "no unverified verdicts": the same fail-closed epistemics, applied to the eval's own data pipeline.

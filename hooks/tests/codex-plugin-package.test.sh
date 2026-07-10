@@ -178,7 +178,7 @@ assert_eq "$PRECOMMIT_TRIGGER_OUT" "precommit_codex_doc_triggers_in_sync" "Codex
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
-for rel in skills bin src hooks/_shared references scripts project-config-template; do
+for rel in skills bin src hooks/_shared references scripts project-config-template schemas; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
   printf 'payload %s\n' "$rel" > "$SYNC_SANDBOX/$rel/payload.txt"
   cp "$SYNC_SANDBOX/$rel/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/$rel/payload.txt"

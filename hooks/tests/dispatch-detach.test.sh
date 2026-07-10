@@ -203,12 +203,15 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: inline"
 EOF
 chmod +x "$STUB_OK"
 
-normalize() { # strip run-volatile fields (commit sha / worktree / agent_log / branch) → stable text
+normalize() { # strip run-volatile fields (commit sha / worktree / agent_log / branch /
+  # observability run_id + wall_secs — Stage 1 additive fields, volatile per run) → stable text
   printf '%s' "$1" | sed -E \
     -e 's/"commit": "[0-9a-f]{40}"/"commit": "SHA"/' \
     -e 's#"worktree": "[^"]*"#"worktree": "WT"#' \
     -e 's#"agent_log": "[^"]*"#"agent_log": "LOG"#' \
-    -e 's#"branch": "[^"]*"#"branch": "BR"#'
+    -e 's#"branch": "[^"]*"#"branch": "BR"#' \
+    -e 's#"run_id": "[^"]*"#"run_id": "RID"#' \
+    -e 's#"wall_secs": [0-9]+#"wall_secs": W#'
 }
 
 # Baseline: a NO-coords run (unambiguously the legacy inline path).

@@ -266,15 +266,99 @@ GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak 
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 cleanup() {
+  # $? at trap entry = the script's exit code — its authoritative status contract
+  # (0 reviewed / 1 no_verdict / 2 precondition_failed; anything else = killed/aborted).
+  # Captured FIRST, before rm/rmdir can clobber it.
+  _cleanup_rc=$?
   rm -f "$PROMPT_FILE" "$BLOCK_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
+  # Observability: stamp ended_at + final_status (from the exit code, the one source
+  # every emit path already honors) so dispatch-status.js reports phase:"exited" with
+  # the outcome on every exit path. declare -F guard: the trap is armed a few lines
+  # before the function is defined.
+  case "$_cleanup_rc" in
+    0) REVIEW_FINAL_STATUS="reviewed" ;;
+    2) REVIEW_FINAL_STATUS="precondition_failed" ;;
+    1) REVIEW_FINAL_STATUS="no_verdict" ;;
+    *) REVIEW_FINAL_STATUS="aborted_rc_${_cleanup_rc}" ;;
+  esac
+  declare -F review_manifest_finalize >/dev/null 2>&1 && review_manifest_finalize
 }
 trap cleanup EXIT
 PARSE_INPUT="$RAW_LOG"
+
+# --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE, telemetry only) ---
+# START-time manifest so depth-0 / dispatch-status.js can locate and liveness-probe this
+# review run mid-flight (the 失聯 fix — identity used to surface only in the final JSON).
+# log_path points at the file that receives LIVE bytes per runner: codex streams stdout
+# to CODEX_OUT (merged into RAW_LOG only after completion), every other runner writes
+# RAW_LOG directly. Best-effort sidecar: a manifest failure never fails the dispatch.
+# Disable with AUTOPILOT_DISPATCH_MANIFEST=0. Final-JSON contract is UNCHANGED (strict
+# additionalProperties:false schema — v2.32.19 SSOT); correlate via raw_log, and derive
+# usage post-hoc with: dispatch-status.js --log <raw_log> --usage-only.
+REVIEW_MANIFEST_FILE=""
+REVIEW_STARTED_EPOCH="$(date +%s)"
+if [ -n "$RUN_ID" ]; then
+  REVIEW_RUN_ID="$RUN_ID"
+else
+  REVIEW_RUN_ID="review-${REVIEW_STARTED_EPOCH}-$$-$(head -c2 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+fi
+REVIEW_MANIFEST_ENDED=""
+if [ "$RUNNER" = "codex" ]; then
+  # Created EARLY (normally inside the codex branch) so the manifest can point at the
+  # live-stream file; the codex branch reuses these when already set.
+  CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
+  CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
+fi
+write_review_manifest() {
+  [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] && return 0
+  local dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+  { mkdir -p "$dir"; } 2>/dev/null || return 0
+  local safe_id; safe_id="$(printf '%s' "$REVIEW_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
+  REVIEW_MANIFEST_FILE="$dir/${safe_id}.manifest.json"
+  local tmp="$REVIEW_MANIFEST_FILE.tmp.$$"
+  local live_log="$RAW_LOG" aux_json="null"
+  # log_format = dispatcher-DECLARED (codex = chrome text; every other review runner is
+  # invoked with plain/pty output — grok gets --output-format plain here, unlike hetero).
+  # dispatch-status.js trusts the declaration over content sniffing so a reviewed diff /
+  # model output containing JSON lines can never self-report telemetry.
+  local log_format="plain"
+  if [ "$RUNNER" = "codex" ] && [ -n "$CODEX_OUT" ]; then
+    live_log="$CODEX_OUT"
+    aux_json="\"$(json_escape "$CODEX_ERR")\""
+    log_format="codex-chrome"
+  fi
+  local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
+  local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
+  local ended_json="null" endep_json="null"
+  if [ -n "$REVIEW_MANIFEST_ENDED" ]; then
+    ended_json="\"$REVIEW_MANIFEST_ENDED\""
+    endep_json="${REVIEW_MANIFEST_ENDED_EPOCH:-null}"
+  fi
+  local final_json="null"
+  [ -n "${REVIEW_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$REVIEW_FINAL_STATUS")\""
+  {
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+      "$(json_escape "$REVIEW_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
+      "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
+      "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+  } 2>/dev/null && mv -f "$tmp" "$REVIEW_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  return 0
+}
+review_manifest_finalize() {
+  [ -n "${REVIEW_MANIFEST_FILE:-}" ] || return 0
+  REVIEW_MANIFEST_ENDED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  REVIEW_MANIFEST_ENDED_EPOCH="$(date +%s)"
+  write_review_manifest
+}
+write_review_manifest
+[ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-review: run_id=${REVIEW_RUN_ID} manifest=${REVIEW_MANIFEST_FILE:-none} (watch: scripts/dispatch-status.js --run ${REVIEW_RUN_ID})" >&2
 DIFF_SIZE_BYTES="$(wc -c < "$DIFF_FILE")"
 if [ "$DIFF_SIZE_BYTES" -gt 98304 ]; then
   SIZE_WARNING="large diff (${DIFF_SIZE_BYTES} bytes) exceeds 96 KB; large diffs can trigger prompt echo, consider splitting"
@@ -356,9 +440,11 @@ if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
   # READ-ONLY sandbox: a reviewer never writes/execs, and the diff is untrusted (injection).
-  # codex stdout is delivered normally under a pipe.
-  CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
-  CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
+  # codex stdout is delivered normally under a pipe. Capture files are normally created
+  # by the manifest block above (so the manifest can point at the live stream); the
+  # mktemp here is the fallback when that block was skipped.
+  [ -n "$CODEX_OUT" ] || CODEX_OUT="$(mktemp -t dispatch-review-codex-out-XXXXXX)"
+  [ -n "$CODEX_ERR" ] || CODEX_ERR="$(mktemp -t dispatch-review-codex-err-XXXXXX)"
   timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
       --sandbox read-only \
       -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$CODEX_OUT" 2> "$CODEX_ERR"

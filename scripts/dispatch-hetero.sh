@@ -119,6 +119,23 @@ SKILL_PACK_CONTENT_TEMP=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
 # trap firing mid-run appends to a real path instead of an undefined one.
 ORPHAN_LOG="${TMPDIR:-/tmp}/autopilot-orphan-worktrees.log"
+# --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE) ---
+# A START-time manifest under $MANIFEST_DIR_PATH names this run's identity (run_id,
+# log path, worktree, lock, predicted containment) so depth-0 / dispatch-status.js can
+# locate and liveness-probe the run MID-FLIGHT instead of waiting for the final JSON.
+# Best-effort sidecar: a manifest write failure NEVER fails the dispatch. Disable with
+# AUTOPILOT_DISPATCH_MANIFEST=0 (legacy byte-identical escape hatch, minus the new
+# final-JSON fields). Telemetry only — no verdict/status semantics change.
+MANIFEST_DIR_PATH="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+DISPATCH_RUN_ID=""
+DISPATCH_STARTED_EPOCH=""
+MANIFEST_FILE=""
+MANIFEST_CONTAINMENT="plain"
+MANIFEST_SCOPE_UNIT=""
+MANIFEST_PID_RECORDED=""
+MANIFEST_ENDED_AT=""
+MANIFEST_ENDED_EPOCH=""
+MANIFEST_FINAL_STATUS=""
 OUTCOME_ORPHAN=""     # non-empty path when worktree remove failed and dir remains
 WT_LOCK_FD=""         # dedicated fd holding exclusive lifetime flock on the worktree lock
 DO_GC=0               # --gc subcommand (stale reaper; no dispatch)
@@ -163,11 +180,38 @@ emit() { # status commit files ins del worktree error
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s }\n' \
+  # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
+  # validates required-field presence, not a closed set). usage is parsed from the HARNESS
+  # event stream in $LOG by dispatch-status.js (--usage-only prints ONE line: an object or
+  # `null`, never fails) — NOT worker self-report. Any parse/node failure ⇒ null.
+  local run_id_json="null"
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
+  local usage_json="null"
+  if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
+     && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
+    # Format is DECLARED by runner (this script knows its own invocation flags: codex =
+    # chrome text, grok = --output-format json, agy/cc-shim = plain) — never content-
+    # sniffed, so a worker printing JSON/fake-chrome cannot self-report telemetry.
+    # AGENT_EXIT==0 gate: on a clean exit the harness footer always owns the log tail,
+    # so the parser's tail-anchored token read cannot be spoofed; on an abnormal exit
+    # the tail is worker-controlled → usage stays null (honest, not fabricated).
+    local log_format="plain"
+    [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
+    [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+    usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
+    case "$usage_json" in
+      '{'*'}') ;;   # single-line JSON object — accepted
+      *) usage_json="null" ;;
+    esac
+  fi
+  local wall_json="null"
+  [ -n "${DISPATCH_STARTED_EPOCH:-}" ] && wall_json="$(( $(date +%s) - DISPATCH_STARTED_EPOCH ))"
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
+    "$run_id_json" "$usage_json" "$wall_json"
 }
 
 die_precondition() {
@@ -175,10 +219,63 @@ die_precondition() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s }\n' \
+  local run_id_json="null"
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s }\n' \
     "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json"
   exit 2
+}
+
+# write_manifest [pid] — (re)write the run manifest atomically. Best-effort: ANY failure
+# is swallowed (the manifest is a telemetry sidecar, never a dispatch dependency).
+# Called at three points: pre-dispatch (parent pid), detached-child start (child pid —
+# the parent pid dies with a killed caller while the child lives on), and finalize.
+write_manifest() {
+  [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] && return 0
+  [ -n "${DISPATCH_RUN_ID:-}" ] || return 0
+  { mkdir -p "$MANIFEST_DIR_PATH"; } 2>/dev/null || return 0
+  [ -n "${1:-}" ] && MANIFEST_PID_RECORDED="$1"
+  local safe_id; safe_id="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
+  MANIFEST_FILE="$MANIFEST_DIR_PATH/${safe_id}.manifest.json"
+  local tmp="$MANIFEST_FILE.tmp.$$"
+  local runner="agy"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
+  # grok --output-format json / agy+cc-shim plain). dispatch-status.js trusts this
+  # over content sniffing so worker output can never self-report telemetry.
+  local log_format="plain"
+  [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
+  [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+  local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(json_escape "$MANIFEST_SCOPE_UNIT")\""
+  local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
+  local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
+  local pid_json="null"; [ -n "${MANIFEST_PID_RECORDED:-}" ] && pid_json="$MANIFEST_PID_RECORDED"
+  local ended_json="null" endep_json="null" final_json="null"
+  [ -n "${MANIFEST_ENDED_AT:-}" ] && ended_json="\"$MANIFEST_ENDED_AT\""
+  [ -n "${MANIFEST_ENDED_EPOCH:-}" ] && endep_json="$MANIFEST_ENDED_EPOCH"
+  [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$MANIFEST_FINAL_STATUS")\""
+  {
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+      "$(json_escape "$DISPATCH_RUN_ID")" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
+      "${BASE_SHA:-}" "$(json_escape "${WT:-}")" "$(json_escape "${WT:-}/.autopilot-worktree.lock")" "$(json_escape "${LOG:-}")" \
+      "$log_format" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(json_escape "${PROMPT_FILE:-}")" \
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+  } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  return 0
+}
+
+# manifest_finalize <final-status> — stamp ended_at/final_status so dispatch-status.js
+# reports phase:"exited" even after all processes/locks are gone. Best-effort.
+manifest_finalize() {
+  [ -n "${MANIFEST_FILE:-}" ] || return 0
+  MANIFEST_FINAL_STATUS="${1:-}"
+  MANIFEST_ENDED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  MANIFEST_ENDED_EPOCH="$(date +%s)"
+  write_manifest
 }
 
 while [ $# -gt 0 ]; do
@@ -222,6 +319,16 @@ if [ "$DO_GC" -eq 1 ]; then
   export REAP_UNMARKED GC_YES
   gc_stale_worktrees
   exit $?
+fi
+
+# Run identity for the observability manifest: reuse the ledger --run-id when supplied
+# (one id across ledger + manifest + final JSON), else generate a unique one. Set BEFORE
+# preconditions so even a precondition_failed JSON carries a correlatable run_id.
+DISPATCH_STARTED_EPOCH="$(date +%s)"
+if [ -n "$RUN_ID" ]; then
+  DISPATCH_RUN_ID="$RUN_ID"
+else
+  DISPATCH_RUN_ID="hetero-${DISPATCH_STARTED_EPOCH}-$$-$(head -c2 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 fi
 
 # Runner selection. Explicit --runner wins; `auto` detects codex from the model
@@ -833,6 +940,9 @@ classify_outcome() {
       OUTCOME_ERR="agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"; OUTCOME_EXIT=1
     fi
   fi
+  # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
+  # final status even after processes/locks are gone (both inline and detached paths).
+  manifest_finalize "$OUTCOME_STATUS"
 }
 
 # ============================ R1 DETACH (setsid kill-survival) ============================
@@ -866,6 +976,9 @@ detached_main() {
   # Acquire the lease AS THIS detached process (records our pid/start_time → the watchdog can
   # tell alive-vs-dead). --allow-reopen so an orchestrator pre-lease is renewed, not rejected.
   DETACH_SELF_PID="$$"
+  # Rewrite the manifest with the DETACHED child's pid: the parent pid dies with a killed
+  # caller while this session survives — the manifest must point liveness probes here.
+  write_manifest "$DETACH_SELF_PID"
   local acq; acq="$(bash "$run_ledger" stage-acquire --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
     --pid "$DETACH_SELF_PID" --git-ref "refs/heads/$BRANCH" --worktree "$WT" --allow-reopen 2>/dev/null || true)"
   DETACH_GEN="$(printf '%s' "$acq" | jq -r '.generation // empty' 2>/dev/null || true)"
@@ -912,10 +1025,12 @@ dispatch_detached_run() {
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
-      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD 2>/dev/null
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD \
+      DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
+      MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
-      classify_outcome heartbeat_loop detached_main \
+      classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize \
       reap_worktree reap_worktree_minimal _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true
@@ -952,6 +1067,22 @@ detach_on() {
     *) return 0 ;;
   esac
 }
+# --- observability manifest (pre-dispatch; predicted containment) ---
+# Written BEFORE the worker starts so the run is locatable from second zero. The
+# scope-unit prediction matches run_worker's inline naming ("hetero-<branch>-$$.scope");
+# in detach mode the child runs in-session (setsid), no scope exists.
+if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
+  MANIFEST_CONTAINMENT="setsid-detached"
+elif [ "$HAVE_CGROUP" -eq 1 ]; then
+  MANIFEST_CONTAINMENT="cgroup"
+  MANIFEST_SCOPE_UNIT="hetero-${BRANCH//\//-}-$$.scope"
+elif [ "$HAVE_SETSID" -eq 1 ]; then
+  MANIFEST_CONTAINMENT="setsid"
+else
+  MANIFEST_CONTAINMENT="plain"
+fi
+write_manifest "$$"
+[ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: run_id=${DISPATCH_RUN_ID} manifest=${MANIFEST_FILE:-none} log=${LOG} (watch: scripts/dispatch-status.js --run ${DISPATCH_RUN_ID})" >&2
 if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
   RESULTS_DIR="${LEDGER}.results"
   RESULT_FILE="$RESULTS_DIR/${RUN_ID}.${STAGE}.result.json"

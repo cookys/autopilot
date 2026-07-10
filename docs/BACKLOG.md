@@ -26,8 +26,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### Dispatch observability Stage 1 — hetero run 失聯歸零（start manifest + dispatch-status + usage 入 ledger）
-- **Trigger**: 下次接到「監察/協調 hetero engine」方向的工作指派時直接引燃；或下次任何人再抱怨一次「dispatch 出去就失聯」。
+### ✅ SHIPPED (2026-07-11, v2.32.20) — Dispatch observability Stage 1 — hetero run 失聯歸零（start manifest + dispatch-status + usage 入 ledger）
+- **Resolution**: 同日 inline depth-0 執行出貨。兩 dispatcher 起跑即發 run manifest（每退出路徑 finalize、detach 子行程 pid 改寫、`AUTOPILOT_DISPATCH_MANIFEST=0` 逃生口）＋ `scripts/dispatch-status.js`（flock 判活同 `_wt_is_live` 契約；codex-chrome/JSONL/plain 自動偵測；stall report-only）＋ hetero final JSON additive `run_id`/`usage`/`wall_secs` → engine ledger。**記錄性 deviation**：review final JSON 不加欄位（scope 原文寫要加）——`review-result` 是 v2.32.19 剛硬化的 `additionalProperties:false` SSOT 契約（`review.js` unknown-field throw、7 發射點），manifest 已給 review 可觀測性、usage 由 `raw_log`+`--usage-only` 事後導出，加欄位爆炸半徑不成比。驗收全過：mid-run `alive:true` e2e、真實 codex v0.144.0 捕流 fixture（tokens 7,420）、52 assertions、全套件 120/120。Stage 2（pi RPC / cc-shim stream-json 雙工溝通）與 Stage 3（自適應調度 policy）為後續條目（見下方原 Context 的三階段框架）。專案紀錄：[`docs/projects/2026-07-11-dispatch-observability-s1/`](projects/2026-07-11-dispatch-observability-s1/README.md)。原 Trigger 保留於下供參考：
+- **Trigger**: ~~下次接到「監察/協調 hetero engine」方向的工作指派時直接引燃~~（已引燃並完成）；或下次任何人再抱怨一次「dispatch 出去就失聯」。
 - **Context**: hetero dispatch 是 fire-and-forget：run 的身分證（`$LOG` 路徑/worktree/cgroup unit）只在 final JSON 才吐出，depth-0 派發後無法定位、監看、判活該 run——只能等 timeout 或 exit。關鍵事實：worker 事件流**已經即時落盤**（`dispatch-hetero.sh` `run_worker()` 全程導 `$LOG`；codex=JSONL 事件、grok=JSON 流），缺的是 start-time manifest ＋ 解析器 ＋ 判活面。對照組：CC Workflow/Agent 的可視性來自 harness 自有事件流——我們的流其實在手上，只是沒接。此為三階段（監察→雙工溝通(pi RPC/cc-shim stream-json)→自適應調度）的第一階段；信任剛性（artifact-not-self-report、fail-closed verdict）不動，本階段只軟化調度盲區。六要素任務全文如下：
 
   **Goal**: 每個 hetero dispatch 從派發那一刻起可被 depth-0 定位與監看（活性、最後事件距今秒數、改檔清單、token 累計、stall 判定），並在結束時把 usage/牆鐘寫進 final JSON 與 /l5 ledger。失聯（派發後無任何中途觀測點）歸零。

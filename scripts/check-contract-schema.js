@@ -69,19 +69,17 @@ function main() {
     fail(`shell output emits field(s) NOT in schema: ${extra.join(', ')}`);
   }
 
-  // (b) enum parity: every x-shell-validated schema enum set must appear as a
-  // shell `case` alternation (order-insensitive set match).
+  // (b) enum parity: every x-shell-validated schema field must be enforced by the
+  // shell via a `case "$<x-shell-var>" in ...)` arm whose allowed-value set matches
+  // the schema enum EXACTLY. Keying on the field's specific shell variable (not a
+  // global value-set scan) is what lets this catch a REMOVED validation on a field
+  // whose enum is SHARED with another field (e.g. reviewer_effort/implementer_effort,
+  // spec_review/independent_harness).
   let shellSrc;
   try {
     shellSrc = fs.readFileSync(SHELL_PATH, 'utf8');
   } catch (e) {
     fail(`cannot read shell resolver ${SHELL_PATH}: ${e.message}`);
-  }
-  const shellSets = new Set();
-  const caseRe = /([a-z0-9][a-z0-9-]*(?:\|[a-z0-9][a-z0-9-]*)+)\)/g;
-  let m;
-  while ((m = caseRe.exec(shellSrc)) !== null) {
-    shellSets.add(m[1].split('|').sort().join('|'));
   }
   const props = schema.properties || {};
   for (const field of fieldOrder) {
@@ -90,9 +88,19 @@ function main() {
     if (!Array.isArray(prop.enum) || prop.enum.length === 0) {
       fail(`schema field ${field} is x-shell-validated but has no enum`);
     }
-    const key = [...prop.enum].sort().join('|');
-    if (!shellSets.has(key)) {
-      fail(`shell has no case-set matching schema enum for ${field}: expected {${prop.enum.join('|')}}`);
+    const shellVar = prop['x-shell-var'];
+    if (!shellVar) {
+      fail(`schema field ${field} is x-shell-validated but has no x-shell-var`);
+    }
+    const armRe = new RegExp('case\\s+"\\$' + shellVar + '"\\s+in\\s+([a-z0-9][a-z0-9|-]*)\\)');
+    const armMatch = shellSrc.match(armRe);
+    if (!armMatch) {
+      fail(`shell has no \`case "$${shellVar}"\` validation arm for schema field ${field}`);
+    }
+    const shellSet = armMatch[1].split('|').sort().join('|');
+    const schemaSet = [...prop.enum].sort().join('|');
+    if (shellSet !== schemaSet) {
+      fail(`enum drift for ${field} (shell $${shellVar}): shell={${armMatch[1]}} vs schema={${prop.enum.join('|')}}`);
     }
   }
 

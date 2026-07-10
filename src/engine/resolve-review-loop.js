@@ -21,6 +21,13 @@ const CONTRACT_SCHEMA = JSON.parse(
   ),
 );
 const REVIEW_LOOP_FIELDS = CONTRACT_SCHEMA['x-field-order'];
+if (
+  !Array.isArray(REVIEW_LOOP_FIELDS)
+  || REVIEW_LOOP_FIELDS.length === 0
+  || !REVIEW_LOOP_FIELDS.every((f) => typeof f === 'string' && f.length > 0)
+) {
+  throw new Error('review-loop-contract schema x-field-order must be a non-empty array of field-name strings');
+}
 
 function schemaEnum(field) {
   const prop = CONTRACT_SCHEMA.properties && CONTRACT_SCHEMA.properties[field];

@@ -92,6 +92,9 @@ function main() {
     if (!shellVar) {
       fail(`schema field ${field} is x-shell-validated but has no x-shell-var`);
     }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(shellVar)) {
+      fail(`schema field ${field} has a non-identifier x-shell-var: ${shellVar}`);
+    }
     const armRe = new RegExp('case\\s+"\\$' + shellVar + '"\\s+in\\s+([a-z0-9][a-z0-9|-]*)\\)');
     const armMatch = shellSrc.match(armRe);
     if (!armMatch) {

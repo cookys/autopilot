@@ -8,20 +8,22 @@
 # PREAMBLE — ruled unfaithful in phase-b-results.md). This adapter puts reviewer.md
 # in the system-prompt channel and inlines code-review.md in the user message.
 #
-# v2 tools-enabled behavior: Runs claude with read-only tools enabled (Read, Grep, Glob)
-# and sets the working directory to SYSCONTRACT_REPO_CWD. Bash is deliberately excluded,
-# so the contract's run-the-tests verification remains out of reach (recorded residual
-# limitation).
+# v3 tools-enabled behavior: Runs claude with read-only tools enabled (Read, Grep, Glob)
+# and sets the working directory to REPO_CWD (resolved dynamically from
+# SYSCONTRACT_CWD_MANIFEST if set, otherwise fallback to SYSCONTRACT_REPO_CWD).
+# Timeout is increased to 600s. Fail-closed-on-miss semantics apply if manifest is set.
+# Bash is deliberately excluded.
 #
 # Usage: panel-cmd-syscontract-claude.sh <reviewer-md-path> <code-review-md-path> <model>
 #   diff on stdin; emits {"verdict":"pass"|"fail"} on stdout; exits 0 on every
 #   review outcome (fail-closed), exit 1 only on usage error.
 #
 # ENV:
-#   SYSCONTRACT_REPO_CWD  required in v2 tools-enabled mode; must be the repository directory.
-#   SYSCONTRACT_LOG_DIR   when set, the full raw model output for each case is saved
-#                         to <dir>/<case-basename>.out (basename recovered from the
-#                         stdin source file via /proc/self/fd/0).
+#   SYSCONTRACT_REPO_CWD      required default repository directory.
+#   SYSCONTRACT_CWD_MANIFEST  optional text file of lines '<sha256> <absolute-path>' mapping diff to worktree.
+#   SYSCONTRACT_LOG_DIR       when set, the full raw model output for each case is saved
+#                             to <dir>/<case-basename>.out (basename recovered from the
+#                             stdin source file via /proc/self/fd/0).
 
 set -uo pipefail
 
@@ -82,6 +84,36 @@ trap cleanup EXIT
 # Read the diff from stdin
 cat > "$DIFF_TEMP"
 
+# Insert the lookup after DIFF_TEMP has been read and before STEP 2
+if [ -n "${SYSCONTRACT_CWD_MANIFEST:-}" ]; then
+  MANIFEST_FILE="$SYSCONTRACT_CWD_MANIFEST"
+  if [ ! -f "$MANIFEST_FILE" ] || [ ! -r "$MANIFEST_FILE" ]; then
+    echo "panel-cmd-syscontract-claude: SYSCONTRACT_CWD_MANIFEST set but unreadable: $MANIFEST_FILE" >&2
+    echo '{"verdict":"fail"}'
+    exit 0
+  fi
+  DIFF_SHA="$(sha256sum "$DIFF_TEMP" | awk '{print $1}')"
+  MAPPED="$(awk -v k="$DIFF_SHA" '$1==k{print $2; exit}' "$MANIFEST_FILE")"
+  if [ -n "$MAPPED" ]; then
+    case "$MAPPED" in
+      /*) ;;
+      *)  echo "panel-cmd-syscontract-claude: manifest cwd not absolute for $DIFF_SHA: $MAPPED" >&2
+          echo '{"verdict":"fail"}'
+          exit 0 ;;
+    esac
+    if [ ! -d "$MAPPED" ]; then
+      echo "panel-cmd-syscontract-claude: manifest cwd missing for $DIFF_SHA: $MAPPED" >&2
+      echo '{"verdict":"fail"}'
+      exit 0
+    fi
+    REPO_CWD="$MAPPED"
+  else
+    echo "panel-cmd-syscontract-claude: MANIFEST-MISS $DIFF_SHA (case not enumerated; refusing HEAD fallback)" >&2
+    echo '{"verdict":"fail"}'
+    exit 0
+  fi
+fi
+
 # STEP 2 — strip leading YAML frontmatter from REVIEWER_MD to build the system-prompt file.
 # Drops the leading `---`…`---` block if present; otherwise copies verbatim.
 awk 'NR==1 && $0=="---"{infm=1; next} infm && $0=="---"{infm=0; next} !infm{print}' "$REVIEWER_MD" > "$SYS_PROMPT"
@@ -98,7 +130,7 @@ cat "$DIFF_TEMP" >> "$USER_MSG"
 # diagnostics and must never be able to satisfy the parse. HOME is NOT overridden
 # so native auth survives (as in panel-cmd-contract-claude.sh).
 ERR_LOG="$RAW_LOG.err"
-timeout 300 bash -c 'cd "$1" && exec "$2" -p --model "$3" --system-prompt-file "$4" --setting-sources project --strict-mcp-config --tools "Read,Grep,Glob" < "$5"' \
+timeout 600 bash -c 'cd "$1" && exec "$2" -p --model "$3" --system-prompt-file "$4" --setting-sources project --strict-mcp-config --tools "Read,Grep,Glob" < "$5"' \
     _ "$REPO_CWD" "$CC_BIN" "$MODEL" "$SYS_PROMPT" "$USER_MSG" > "$RAW_LOG" 2>"$ERR_LOG"
 CC_RC=$?
 [ -s "$ERR_LOG" ] && sed 's/^/panel-cmd-syscontract-claude[stderr]: /' "$ERR_LOG" >&2

@@ -1,0 +1,37 @@
+## Reviewer Report
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+- `CHANGELOG.md:359` — The new "Fixed" bullet documenting the `preflight-release.sh` FORCE_COLOR fix is inserted into the **`## v2.32.0`** section (`CHANGELOG.md:340`), which is an already-shipped, historical release — two versions have since been released on top of it (`## v2.32.15` at `CHANGELOG.md:42`, `## v2.32.16` at `CHANGELOG.md:27`, and `.claude-plugin/plugin.json:3` confirms canonical version is currently `2.32.16`). No new version section was added for this fix, and no version bump accompanies it anywhere in the diff.
+  - **Impact**: This retroactively edits an already-released version's notes, corrupting release history — anyone auditing "what shipped in v2.32.0" will now see a fix that was never actually part of that release, or of the two releases that followed it. It also violates this repo's own documented versioning policy in `CLAUDE.md` ("PATCH: ...a bug fix or hardening of existing behavior... including fixes to release tooling like `sync-version.js`" — explicitly citing the analogous precedent of the `sync-version.js` count-preservation fix getting its own `v2.25.1` entry, not being folded into an older release's notes). The project's own mechanical gate won't catch this: `preflight-release.sh`'s `check_changelog_entry` (`scripts/preflight-release.sh:74-78`) only verifies that a `## v$VERSION` heading exists for the *current* canonical version — it never validates that a "Fixed" bullet lands under the right section, so this slips through silently.
+  - **Fix**: Revert this changelog placement; bump the canonical version (e.g. `2.32.17`) via `scripts/sync-version.js`, and add a new top-of-file `## v2.32.17` section documenting the fix, per the repo's own template (`CHANGELOG.md:3-25`) and versioning table.
+
+### 🟡 Minor (recommended)
+- `scripts/preflight-release.sh:155-156` / `CHANGELOG.md:359` — The stated root cause ("`console.log(number)` emits ANSI color codes under `FORCE_COLOR`, breaking the shell `-gt` test") is a **live-system Node.js-behavior claim**. I have no Bash/execution access in this review, so I could not confirm it by running e.g. `FORCE_COLOR=1 node -e "console.log(42)" | cat -A` to show the actual escape bytes, nor could I find such a repro committed anywhere in this diff (no new test case). Per the reviewer's live-system-fact rule, this should be marked as an observed/measured fact (or a repro command added), not asserted as settled fact from a code comment alone. This does **not** block the fix itself — `process.stdout.write(String(...))` is a strictly safer emission path regardless of the precise root cause (it can never carry ANSI codes) — but the confidence level of the comment/changelog wording should be softened or backed by a committed regression test.
+
+### 🔵 Suggestion (consider)
+None beyond the above.
+
+### ✅ Verified Clean
+- Reviewed `scripts/preflight-release.sh:148-178` (`check_north_star`) — the fix uniformly replaces `console.log(...)` with `process.stdout.write(String(...))` for all three extracted fields (`prose`, `engine`, `version`); downstream arithmetic (`-gt 0` guard, `d_prose`/`d_engine`/`pct`/`limit` computations at lines 160-176) is untouched and remains correct — only the string-emission mechanism changed, no logic regression.
+- Verified `platforms/codex/plugin/scripts/preflight-release.sh:148-167` (the Codex plugin payload mirror, materialized by `scripts/sync-codex-plugin-skills.sh` whose `DIRS` array at `scripts/sync-codex-plugin-skills.sh:37-45` includes `scripts`) already contains byte-identical fixed code to the source — no drift detected for this file; `sync-codex-plugin-skills.sh --check` would not flag it.
+- Confirmed `$SURFACE_BASELINE` (`docs/metrics/surface-lines.json`) is a fixed repo-relative path constant, not derived from user/external input — no injection risk in the `node -e "...require('./$SURFACE_BASELINE')..."` invocations, unchanged from pre-diff behavior.
+- No hardcoded secrets, no security-sensitive surfaces (auth, network, file-write outside the existing baseline path) touched by this diff.
+- Reviewed full diff for scope creep — every changed line traces to the task (comment + 3 parser-line replacements in `preflight-release.sh`; a changelog note describing the fix). No unrelated reformatting or refactor found in the code file.
+
+**Disclosed bound**: This review was performed with Read/Grep/Glob only — no Bash access. I did not run `scripts/diff-file-list.sh`, `scripts/diff-scope-report.sh`, or the test suite (`hooks/tests/run.sh`); those require execution. Given the diff is only 2 files / ~10 changed lines, I read both files in full surrounding context manually as a substitute, so file-enumeration coverage is complete for this diff, but the test-suite gate (step 7 of the reviewer workflow) was **not run** — that gap is a bound on this review, not a defect verified absent.
+
+### Summary
+Overall risk: Low (functional fix is small, correct, and strictly safer than the old code) but the release-hygiene defect (🟠) is a real process violation worth blocking on before merge, since it silently corrupts already-shipped release history in a way the repo's own automated gates cannot detect.
+
+Top 3 priorities to fix:
+1. Move the CHANGELOG fix note out of the stale `## v2.32.0` section into a new version section, paired with an actual version bump (`scripts/sync-version.js`).
+2. Add a committed regression test or explicit repro note for the `FORCE_COLOR` claim so it's a verified fact, not an unverified assertion in a comment.
+3. (Optional, low priority) Nothing else — the code fix itself is sound as-is.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: The 🟠 Major finding (misplaced CHANGELOG entry + missing version bump) has a clear, mechanical fix (revert placement, run `sync-version.js`, add new section) — no domain expertise or root-cause investigation needed.
+Remaining risks: Low-confidence claim about Node.js `FORCE_COLOR`/`console.log` color behavior remains unverified by execution (noted as Minor, non-blocking since the fix is safe regardless of root-cause precision).

@@ -171,11 +171,75 @@ haiku pass on an instrument that just failed its faithfulness gate would measure
    independently confirmed here (out of measurement scope) — depth-0 may want a one-off check
    before treating them purely as over-flags.
 
+---
+
+# v2 — read-only tools-enabled instrument (depth-0-directed iteration)
+
+Depth-0 accepted the v1 diagnosis (residual unfaithfulness = tools-off, not the prompt channel;
+the 05/06 UNVERIFIED-class flags independently confirmed no-latent-bug) and directed instrument v2.
+
+## Instrument v2 (committed 0df110f)
+
+Same file, v2 behavior (recorded decision: not an additive flag — v1's tools-off mode is
+known-unfaithful, keeping it reachable would be a footgun): `--tools "Read,Grep,Glob"` (NO Bash —
+the contract's run-the-tests verification stays out of reach, residual limitation), cwd = required
+`$SYSCONTRACT_REPO_CWD` (fail-closed unset/missing), user-note states the tool affordance. Parser
+and rails byte-identical. Authored agy/gemini-3.5-flash (1 round); gpt-5.5 review of the revision
+diff: **SHIP-AS-IS, no findings**. Stub suite (5 cases incl. env fail-closed) + `stream-json`
+probe (tool_use verified firing) + live haiku adapter call all green.
+
+Per-leg scratch worktrees with **answer-key leak guard**: baseline = detached worktree at HEAD,
+slimmed = detached at `feat/terse-reviewer-contracts`; `evals/` + `docs/projects/` (+
+`skill-creator-workspace/`) removed from both before any leg, removal verified by find.
+
+## v2 sanity gate (baseline clean ×1, sonnet) — **TRIPPED AGAIN: 5/10 ≥ 3/10 → STOP**
+
+| Case | v1 (tools-off) | v2 (tools-on) | v2 adjudication (saved outputs, `raw-pathc-syscontract/v2-base-clean/`) |
+|------|----|----|----|
+| 01-verify-red-green-dirname-exit | 🟠 flag | **🟠 flag** | Genuine recurring claim: "test does not exercise the code path it claims to test, would PASS against pre-fix code". Now a 4-instance cross-engine convergence (gemini M1, haiku base-r2, sonnet v1 + v2-with-tools). Factual, probeable claim about the FIXTURE's own test quality — a corpus-adjudication question, not obviously reviewer noise. |
+| 02-verify-red-green-nested-globs | clean | clean | — |
+| 03-verify-red-green-json-escape | 🟠 flag | **🟠 flag** | Code-robustness claim (unguarded `cd` in command-substitution under `set -euo pipefail`), asserted after Reading both file copies. Specific and probeable; severity debatable. |
+| 04-dev-setup-require-target | clean | clean | — |
+| 05-engine-anthropic-compatible-validator | 🟠 (UNVERIFIED parity) | **clean** | **TOOLS RESOLVED IT** — the report traces the full parity chain (shell enum resolve-review-loop.sh:257 pre-existing, JS consumer autopilot-engine.js, test case chain) and concludes "genuine bug fix, correctly scoped". Exactly the class depth-0 predicted Read tools resolve. Proof archived as `05-…RESOLVED.out`. |
+| 06-review-loop-anthropic-compatible-runner | 🟠 (false premise) | **clean** | **TOOLS RESOLVED IT.** |
+| 07-qc-oracle-exec-bits-cd-fix | 🟠 (scope-creep) | **🟠 flag** | **Instrument artifact — leak-guard blind spot**: the fixture diff's target file lives under `evals/orchestration/`, which the answer-key leak guard DELETED from the scratch worktree; the reviewer self-labels "Verification gap, not a confirmed defect — full file unreadable in this sandbox" and emits Major. The leak guard and the fixture corpus overlap. |
+| 08-preflight-force-color-parser | clean | **🟠 flag (NEW)** | **Instrument artifact — temporal false premise**: fixture diffs are HISTORICAL merged commits, but the reviewer verifies against TODAY's HEAD, where the CHANGELOG hunk's target section has since been buried under v2.32.15/16 — so it concludes "retroactive edit of already-shipped v2.32.0, corrupting release history" (verified: the fixture hunk targets line 43, then-current section). Tools-enabled review of historical diffs against HEAD manufactures this class. |
+| 09-dispatch-per-runner-empty-grace | fail-closed artifact | **fail-closed artifact** | Zero-byte output; direct probe reproduces at exactly 300s elapsed → **tool-loop exceeds the per-case timeout** on this dispatch-script diff. Fail-closed → counted over-flag. |
+| 10-preflight-release-cli-args | clean | clean | — |
+| **over-flag rate** | 6/10 | **5/10** | = 2 genuine recurring Majors (01, 03) + 3 instrument artifacts (07 leak-guard, 08 temporal, 09 timeout) |
+
+Campaign halted per the brief before any further leg (baseline kb ×2, slimmed legs, weak-tier
+probe: NOT RUN in v2). The fallback protocol (depth-0 adjudication with the "self-tagged-UNVERIFIED
+Major on clean ≠ over-flag" rule) is depth-0's to apply, not this foreman's.
+
+## v2 reading (for depth-0)
+
+1. **The tools hypothesis was RIGHT for its class**: both pure-UNVERIFIED flags (05, 06) resolved
+   into detailed verified-clean traces. The residual unfaithfulness is three NEW, smaller,
+   *mechanical* instrument gaps — not a channel-choice error:
+   - **Temporal skew** (08): historical fixture diffs need a repo checkout at each fixture's
+     PARENT commit, not HEAD — otherwise already-merged changes read as retroactive edits.
+     (v3 fix: per-case `git worktree add --detach <tmp> <parent-sha>`; needs parent-SHA sidecars
+     in the clean corpus, or content-matching the diff against history.)
+   - **Leak-guard/corpus overlap** (07): deleting all of `evals/` blinds the reviewer to fixture
+     diffs that legitimately touch `evals/orchestration/`. (v3 fix: guard only the answer keys —
+     `evals/known-bad/`, `evals/clean/`.)
+   - **Tool-loop timeout** (09): 300s is too tight for sonnet+tools on dispatch-script diffs.
+     (v3 fix: ~600s for tools-enabled legs.)
+2. **Cases 01/03 are not obviously instrument noise**: 01 is a 4-instance cross-engine convergent,
+   specific, probeable claim about the fixture's own test ("passes with the fix reverted") — the
+   plan's accepted limitation ("clean = merged, not defect-verified") biting, i.e. a corpus
+   question. If the three artifacts were fixed and 01 adjudicated at corpus level, the v2 rate
+   reads 1–2/10.
+3. All three artifact classes are cheap, mechanical v3 fixes; no channel re-design needed.
+
 ## Cost / deviations
 
-- ~46 claude calls total: 43 leg calls (base-kb 12+12, base-clean 10, slim-kb 7, slim-clean 2) +
+- v1: ~46 claude calls total: 43 leg calls (base-kb 12+12, base-clean 10, slim-kb 7, slim-clean 2) +
   2 haiku smoke + 1 debug probe. Authoring: 1 agy call; review: 1 gpt-5.5 codex call. No engine
   failures, no quota death.
+- v2: 13 claude calls (sanity leg 10 + case-09 probe + tool_use probe + haiku smoke) + 1 agy
+  authoring + 1 gpt-5.5 review. Cumulative both instruments: ~59 claude + 2 agy + 2 gpt-5.5.
 - Deviation: slimmed legs were launched before base-clean finished (parallel overlap to save
   wall-clock); the sanity gate tripped mid-flight and both were killed per the brief ("don't burn
   the rest of the legs"). Their partial data is reported honestly as non-gating.

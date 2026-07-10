@@ -1,0 +1,38 @@
+## Reviewer Report
+
+**Scope of this review**: I have read-only tools (Read/Grep/Glob) — no Bash. Per the "No silent caps" rule, I disclose this bound explicitly: I could **not execute** `bash hooks/tests/run.sh` (the mandated pre-merge test gate) nor `scripts/diff-file-list.sh` / `scripts/diff-scope-report.sh`. All findings below are derived from static reading of the three changed files plus the files they reference (`scripts/resolve-review-loop.sh`, `hooks/tests/lib.sh`, `hooks/tests/run.sh`, `hooks/tests/resolve-review-loop.test.sh`, `src/engine/autopilot-engine.js`), never from execution. This diff is small (3 files) so full manual coverage was achievable without sampling.
+
+### 🔴 Critical (must fix before merge)
+None found.
+
+### 🟠 Major (strongly recommended)
+None found.
+
+### 🟡 Minor (recommended)
+- `hooks/tests/contract-parity.test.sh:153` — `require("./src/engine/resolve-review-loop.js")` is a **relative path**, unlike every other repo-file reference in this test suite, which anchors on `$REPO_ROOT` (e.g. `validate-parity.js` at line 16 does `path.join(root, 'src', 'engine', 'resolve-review-loop.js')` with `root` passed explicitly as `process.argv[2]`; `hooks/tests/dispatch-review.test.sh:473` uses `"$REPO_ROOT/scripts/engine-capability-state.js"`). Under the documented/CI invocation path (`hooks/tests/run.sh:19` does `cd "$REPO_ROOT"` before running every `*.test.sh`, and `.github/workflows/test.yml` calls that runner) this resolves correctly, so it is **not a live functional bug today**. But it silently depends on the caller's cwd being the repo root — if this file is ever invoked directly via an absolute path from another cwd (a mode the suite's own README.md:33 documents as supported: `bash hooks/tests/<file>.test.sh`, which itself only works when cwd already happens to be repo root), the bare `require()` throws `MODULE_NOT_FOUND`, the node process exits non-zero, and `assert_eq "$EXIT_AC_JS" "0"` (line 167) fails with a misleading verdict (looks like a parity break, is actually a path-resolution break). Fix: pass `$REPO_ROOT` in like the other `node -e` invocations in this file do (e.g. via an env var or `path.join`), e.g. `REPO_ROOT="$REPO_ROOT" node -e 'const path=require("path"); const {resolveReviewLoopJson}=require(path.join(process.env.REPO_ROOT,"src/engine/resolve-review-loop.js"));...'`.
+
+### 🔵 Suggestion (consider)
+None beyond the item above.
+
+### ✅ Verified Clean
+- `src/engine/resolve-review-loop.js:98` — `assertOneOf(value, 'reviewer_runner', [...])` enum extended to include `'anthropic-compatible'`. Verified this closes a **real, live parity gap**: `scripts/resolve-review-loop.sh:257` already accepts `anthropic-compatible` as a valid `reviewer_runner` (pre-existing code, not touched by this diff), and `hooks/tests/resolve-review-loop.test.sh:87-89` already asserts the shell side honors it — but the JS-side validator's enum was one entry short of the shell's, and this validator is consumed in production by `src/engine/autopilot-engine.js:9,795` (`resolveReviewLoopJson`) via `bin/autopilot.js`. Before this fix, any project with `reviewer_runner: anthropic-compatible` configured would pass shell resolution but throw inside the JS engine layer (`must be one of: codex, auto, agy, grok, cc-shim`). Genuine bug fix, correctly scoped.
+- `platforms/codex/plugin/src/engine/resolve-review-loop.js:98` — identical one-line change applied to the mirrored Codex plugin payload, keeping the two copies byte-parity (consistent with the `scripts/sync-codex-plugin-skills.sh --check` anti-drift gate noted in this repo's own tooling inventory). Confirmed both diffs are textually identical.
+- `implementer_runner` enum (`resolve-review-loop.js:99` in both files) deliberately left unchanged — verified against `hooks/tests/resolve-review-loop.test.sh:90-92`, which explicitly asserts `implementer_runner: anthropic-compatible` is rejected and falls back to `auto` (dispatch-hetero does not support it). No missing update there.
+- `hooks/tests/contract-parity.test.sh` new Case C (lines 138-173) — traced the full assertion chain: (1) shell resolve exits 0 and preserves `reviewer_runner: anthropic-compatible` (line 144-150); (2) stderr contains no "error"/"block" — verified by reading `scripts/resolve-review-loop.sh` end-to-end that no diagnostic branch fires for this minimal 2-key config (cross-family check is satisfied by default `qc_panel`/`implementer_engine`, endpoint/`on_engine_unavailable` warnings don't fire since those keys are unset, and the `engine-capability-state.js` subprocess output is JSON-captured via stdout, never leaked to this script's own stderr); (3) the JS module (`resolveReviewLoopJson`) resolves the same runner value without error, confirming shell/JS parity is the actual thing under test; (4) `validate-parity.js` accepts the output. Test is non-redundant with `resolve-review-loop.test.sh` (which only checks shell `--field` output, never the JS-side `validateReviewLoopConfig`).
+- Case renumbering (`# Case C` → `# Case D`, `# Case D` → `# Case E` at lines 176, 186) is a mechanical consequence of the insertion, not scope creep; blank-line spacing (single before the new Case C, double before D/E) matches the pre-existing convention in the surrounding sections.
+- Reviewed full diff for scope creep — every changed line traces to one task: adding `anthropic-compatible` as a valid `reviewer_runner` enum value on the JS side and proving shell↔JS parity for it. No unrelated renames, reformatting, or refactors present in any of the three files.
+- No hardcoded secrets, no injection surface, no boundary/null-deref/performance concerns — this diff is enum-list + test-only, touches no I/O, network, or user input parsing beyond existing config-file reads.
+
+### Summary
+Overall risk: **Low**
+This is a tight, well-evidenced parity-bug fix: the shell-side resolver and a sibling test already treated `anthropic-compatible` as a valid `reviewer_runner`, but the JS-side validator (consumed by the production engine layer) was one enum entry behind, meaning a real config value already documented and used elsewhere in the repo (`dispatch-review.sh`, `schemas/runner-result.schema.json`, `docs/BACKLOG.md`, CHANGELOG) would have thrown inside `autopilot-engine.js`. Both the canonical and mirrored Codex-plugin copies were updated identically, and the new test correctly exercises shell↔JS parity rather than duplicating existing coverage.
+
+Top 3 priorities to fix:
+1. (Minor, optional) Harden `hooks/tests/contract-parity.test.sh:153` to use an absolute path for the `require()` instead of relying on cwd == REPO_ROOT, matching the pattern already used elsewhere in the same file.
+2. Run `bash hooks/tests/run.sh` before merge (I could not execute it in this review — read-only tooling) to get an actual green/red signal on this new test.
+3. None further — diff is otherwise clean.
+
+### Handoff
+Next consumer: MAIN_CLAUDE
+Routing rationale: Only a Minor test-robustness suggestion remains; fix is a straightforward path-construction change, no domain expertise or root-cause investigation needed. The one still-open action item is executing the test suite, which the calling skill/session (with Bash access) should do before merge.
+Remaining risks: Test suite (`bash hooks/tests/run.sh`) has not actually been executed against this diff in this review — confirm it passes, particularly the new Case C in `contract-parity.test.sh`, before merge.

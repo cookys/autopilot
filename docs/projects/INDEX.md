@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-10 | [contract-schema-ssot](2026-07-10-contract-schema-ssot/README.md) — `schemas/review-loop-contract.schema.json` SSOT: JS derives `REVIEW_LOOP_FIELDS`+enum tables from it; new `check-contract-schema.js` gate closes the shell side (field-set + per-field enum-arm parity), wired into contract-parity. + resolve-endpoint.test.sh hermeticity quick-win (56/56). /l6 L6-r3, gemini/agy impl, gpt-5.5 review converged SHIP-AS-IS (4 rounds). Foreman-verified; awaiting depth-0 qc + merge. | TBD (patch) | `worktree-agent-a2a954dd63356fc39` |
 
 ## 已完成 (Completed)
 

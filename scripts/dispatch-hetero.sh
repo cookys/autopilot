@@ -254,6 +254,7 @@ write_manifest() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy+cc-shim plain). dispatch-status.js trusts this
   # over content sniffing so worker output can never self-report telemetry.

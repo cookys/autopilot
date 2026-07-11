@@ -25,8 +25,10 @@
 #                                              #   cc-shim (EXPLICIT only): Claude Code CLI
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
-#                                              #   in env (e.g. MiniMax-M3, GLM-*) — explicit only.
 #                                              #   in env (e.g. MiniMax-M3, GLM-*).
+#                                              #   pi (EXPLICIT only): pi coding agent over RPC
+#                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
+#                                              #   provider default minimax via PI_RPC_PROVIDER).
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--endpoint <name>]                    # cc-shim only: resolve creds via
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)

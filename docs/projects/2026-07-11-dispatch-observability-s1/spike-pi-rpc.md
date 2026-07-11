@@ -26,9 +26,22 @@
 - **信任姿態不變**:pi 無 permission popup、tools 預設全開 → worktree 隔離 + wrapper-commit + artifact 驗證的既有軌**原樣沿用**;RPC 只是把「等 timeout」換成「可觀測、可打斷」。
 - 整合草圖（未做,BACKLOG Stage-2 條目）:`dispatch-hetero.sh --runner pi`,supervisor 持 RPC stdio;manifest 增 duplex 通道資訊;stall 偵測從 report-only 升級成「steer 探詢 → 無回應才砍」。
 
-## 殘餘（未驗,勿宣稱）
+## 殘餘 Stage-2 前置（2026-07-11 三項全數 LIVE 驗證，MiniMax-M3 供電）
 
-- follow_up / `streamingBehavior:"steer"`（純文字長訊息中途注入——無 tool 邊界時的遞送語意）未逐一驗。
-- skills 在 RPC/print mode 是否載入未測（另一 spike;agy 的教訓:別假設）。
-- 長跑穩定性、OpenAI/訂閱 auth 供應商、`compat` 旗標對各 endpoint 的必要性未測。
-- 模型服從 steer 是行為層,依模型而異;協議層（排隊+注入）才是本 spike 的保證。
+三個殘餘 spike 於 Stage-2 動工前逐一 live 驗（drivers＋transcripts: scratchpad `pi-s2/spike{1,2,3}-*.jsonl`；設計經 agy/Gemini 3.5 Flash 授權，family≠implementer）：
+
+| Spike | 結論 | 證據 |
+|-------|------|------|
+| **skills-in-RPC** | ✅ **VERIFIED-loaded**（RPC 模式） | `.agents/skills/<name>/SKILL.md`（Agent Skills 標準，frontmatter `name`/`description`）**auto-discovery**（cwd 向上；project-local 需 `-a`/`--approve` 信任）與**顯式 `--skill <path>`** 兩路皆令模型 echo 出 SKILL.md 內的不可猜 token。pi 原生 skill 面在 RPC 下工作——**Stage-2 之後可考慮把 autopilot skills 以 `--skill` 餵給 pi implementer**（不像 agy「skills 不載入」的負面結果） |
+| **無 tool 邊界的 steer** | ✅ 語意釐清：**排隊、於 message/turn 邊界遞送**（非 mid-message 硬打斷） | 純文字 `--no-tools` 從 1 數到 100 的任務，第 8 個 text_delta 後送 steer：in-flight 訊息**完整跑完到 100**（`queue_update` 立即可見），`message_end`＋`turn_end` 後才起**新 turn** 回 `STEER_ACK`。→ steer 是**邊界遞送**協調機制，不是硬中斷；要硬停用 `abort`（8ms）。對 supervisor 的含意：stall 探詢 steer 不會打斷 in-flight message，但 stalled run 本就無 in-flight message，探詢語意正確 |
+| **RPC 長跑穩定** | ✅ **STABLE** | 12 個分開的 `sleep 12` bash tool call，~164s（≈2.7min），事件流連續（177 events，最大 inter-event gap 12010ms＝sleep 本身，無斷線/hang），`tool_execution_start`＝`tool_execution_end`＝12，agent_end 乾淨。13 個 `message_end` 各帶 `usage`，**per-message 非累計**：sum(input)=4010、sum(output)=412、`cacheRead` 單調成長 512→2048（context 累積）；last `totalTokens`=2248（僅最後一則） |
+
+**Stage-2 usage 解析結論（load-bearing）**：pi 的 `message_end.usage` 是**每則訊息**（非累計）且含**巢狀 `cost:{input,output,…}`**。因此
+(a) 通用 jsonl parser 的「last-seen-wins」對 pi 會**低報**（只取最後一則）；
+(b) 遞迴通用 scan 對 `input`/`output` 會被 `cost.input=0` **碰撞歸零**（會回噬 grok 的 jsonl 路徑）。
+→ **Stage-2 為 pi 用專屬 declared format `pi-rpc`**（非通用 jsonl），parser 只讀 `message.usage` 頂層鍵並**跨訊息聚合**：input=Σinput、output=Σoutput、cache_read=ΣcacheRead、total=input+output（誠實計費口徑，與既有 jsonl 的 total 後備一致）；tool_calls 只數 `tool_execution_start`。宣告格式紀律不變（dispatcher 宣告，永不內容嗅探）。
+
+## 仍未驗（勿宣稱）
+
+- follow_up / `streamingBehavior:"steer"` 的其他組合、OpenAI/訂閱 auth 供應商、`compat` 旗標對各 endpoint 的必要性未測。
+- 模型服從 steer 是行為層,依模型而異;協議層（排隊+邊界遞送）才是保證。

@@ -26,8 +26,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### Dispatch observability Stage 2 — 雙工溝通：`--runner pi`（RPC）整合
-- **Trigger**: 下次一條 hetero dispatch 因 stall／走偏而「只能等 timeout 或砍掉重跑」造成實際損失時；或 Board 核可 Stage 2 動工。
+### ✅ SHIPPED (2026-07-11, v2.32.21) — Dispatch observability Stage 2 — 雙工溝通：`--runner pi`（RPC）整合
+- **Resolution**: /l6 depth-1 foreman 出貨。`dispatch-hetero.sh --runner pi`（EXPLICIT-only）＋ NEW supervisor `scripts/lib/pi-rpc-run.js`（RPC stdio、EDIT-ONLY＋worktree＋wrapper-commit＋artifact 驗證軌**原樣沿用**、native JSONL 事件流 tee 進 `$LOG`）＋ dispatch-status.js declared `pi-rpc` 格式（per-message usage 聚合、cost 物件隔離）＋ manifest/final JSON additive `duplex`。三前置殘餘全 live 驗（skills-in-RPC ✅ 載入、無 tool 邊界 steer=**排隊+邊界遞送**非硬打斷、12-tool ~164s **STABLE**——見 spike doc）。**stall 維持 report-only**（探詢一次不砍——「無回應才砍」的自動砍除是 Stage 3 policy，本階段不做）。depth-0 qc 抓到委派 mock 掩蓋的兩個 defect：pi RPC 常駐 server agent_end 後不自退→等 exit 死鎖（改主動 EOF→SIGTERM→SIGKILL、以觀測 agent_end 判成功）；UTF-8 chunk-split 壞控制行（改 StringDecoder）。Gemini 去相關對抗審再補 11 case（拒其一 Critical「spoofed agent_end」——worker 無法注入頂層裸行）。驗收：36 assertions＋全 dispatch 套件零回歸＋真 MiniMax-M3 e2e committed（usage 3612 tok）。專案：[`spike-pi-rpc.md`](projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md)。**Stage 3（自適應調度 policy：steer 探詢→無回應才砍、re-dispatch）留下方後續**。原 Trigger 保留供參：
+- **Trigger**: ~~下次一條 hetero dispatch 因 stall／走偏而「只能等 timeout 或砍掉重跑」造成實際損失時~~（已完成）；或 Board 核可 Stage 2 動工。
 - **Context**: **pi RPC spike 已完成（2026-07-11, VERIFIED live）**——`steer` 中途注入（tool-call 邊界遞送、`queue_update` 可見、模型服從）、`abort` 8ms 即停、逐 `message_end` 的 `usage{input,output,cacheRead,cacheWrite,totalTokens}`（cache 命中即時可觀測）、typed JSONL 事件流、session tree 自有、custom provider 以 `"apiKey":"$ENV"` 參照（token 零落盤,MiniMax/GLM 經 `load-endpoints-env.sh` 直接供電）。完整報告＋殘餘清單：[`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md)。整合工作＝`dispatch-hetero.sh --runner pi`（supervisor 持 RPC stdio、EDIT-ONLY＋worktree＋artifact 驗證軌原樣沿用）、manifest 增 duplex 通道、stall 從 report-only 升級「steer 探詢→無回應才砍」。前置殘餘：skills-in-RPC 載入未測、`streamingBehavior:"steer"`（無 tool 邊界）未驗、長跑穩定性未測。cc-shim `claude -p --input-format stream-json` 是平行候選（未 spike）。
 - **Effort**: L（整合）；殘餘驗證 S
 - **Source**: 2026-07-11 Board 三階段方向（Stage 1 = v2.32.20）；pi spike 同日。

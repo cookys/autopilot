@@ -230,9 +230,11 @@ die_precondition() {
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s }\n' \
+  local duplex_json="null"
+  [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s }\n' \
     "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
   exit 2
 }
 

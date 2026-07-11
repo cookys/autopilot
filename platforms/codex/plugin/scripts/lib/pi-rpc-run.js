@@ -183,6 +183,18 @@ async function run() {
   child.stdout.on('end', () => { lineHandler.flush(); });
   child.stderr.on('data', (chunk) => process.stderr.write(chunk));
 
+  // External-signal shutdown (qc panel, gpt-5.5): a caller TERM/INT/HUP (dispatch
+  // timeout, ad-hoc Ctrl-C) must not orphan the persistent pi server. The cgroup
+  // containment tier reaps the subtree, but setsid/plain tiers and standalone use
+  // do not — the supervisor must be self-sufficient at every tier. TERM the child
+  // immediately (KILL backstop), then exit once the kill window has elapsed.
+  const onSignal = () => {
+    try { child.kill('SIGTERM'); } catch (_e) { /* already gone */ }
+    setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) {} }, 800);
+    setTimeout(() => process.exit(1), 1000);
+  };
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, onSignal);
+
   child.stdin.write(`${JSON.stringify({ id: 'prompt-1', type: 'prompt', message: promptPayload })}\n`);
 
   const timer = setInterval(() => {

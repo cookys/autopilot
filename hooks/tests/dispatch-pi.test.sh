@@ -253,4 +253,36 @@ NOUSAGE_SUM="$(node "$STATUS_JS" --log "$NOUSAGE_LOG" --format pi-rpc --summary)
 assert_contains "$NOUSAGE_SUM" '"tokens":null' "parser: no message_end → tokens null (not fabricated 0)"
 assert_contains "$NOUSAGE_SUM" '"usage_source":"none"' "parser: no usage → source none"
 
+# 12) supervisor external-signal shutdown (qc panel, gpt-5.5): SIGTERM to the
+# supervisor must not orphan the persistent pi server — verified empirically
+# (kill + pid probe), never by reasoning. The fake pi ignores stdin EOF and
+# would live forever without the supervisor's signal handler.
+STUB_ORPHAN="$TEST_TMP/pi-orphan"
+cat > "$STUB_ORPHAN" <<'__EOF9'
+#!/usr/bin/env bash
+echo "$$" > "${PI_ORPHAN_PIDFILE:?}"
+# ignore stdin/EOF entirely; only signals can end this process
+while :; do sleep 1; done
+__EOF9
+chmod +x "$STUB_ORPHAN"
+CW="$TEST_TMP/cw-signal"; sup_cwd "$CW"
+ORPHAN_PIDFILE="$TEST_TMP/orphan.pid"
+( cd "$CW" && PI_ORPHAN_PIDFILE="$ORPHAN_PIDFILE" PI_RPC_STALL_PROBE_SECS=999 \
+    node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_ORPHAN" >/dev/null 2>&1 ) &
+SUP_SHELL_PID=$!
+for _i in $(seq 1 40); do [ -s "$ORPHAN_PIDFILE" ] && break; sleep 0.25; done
+FAKE_PI_PID="$(cat "$ORPHAN_PIDFILE" 2>/dev/null)"
+assert_neq "$FAKE_PI_PID" "" "signal test: fake pi started and reported its pid"
+# TERM the supervisor's node process (child of the subshell), not the subshell
+SUP_NODE_PID="$(pgrep -P "$SUP_SHELL_PID" -f pi-rpc-run 2>/dev/null | head -1)"
+[ -z "$SUP_NODE_PID" ] && SUP_NODE_PID="$SUP_SHELL_PID"
+kill -TERM "$SUP_NODE_PID" 2>/dev/null
+PI_DEAD=0
+for _i in $(seq 1 20); do
+  if ! kill -0 "$FAKE_PI_PID" 2>/dev/null; then PI_DEAD=1; break; fi
+  sleep 0.25
+done
+assert_eq "$PI_DEAD" "1" "signal test: SIGTERM to supervisor also terminates the spawned pi (no orphan)"
+wait "$SUP_SHELL_PID" 2>/dev/null
+
 finalize_test

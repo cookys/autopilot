@@ -156,4 +156,101 @@ RC_MISSING_MODELS=$?
 assert_eq "2" "$RC_MISSING_MODELS" "pi precondition missing models.json"
 assert_contains "$OUT_MISSING_MODELS" 'pi models.json not readable' "pi precondition names missing models.json"
 
+# ============================================================================
+# Supervisor-direct tests (pi-rpc-run.js) — behaviors below the dispatch status
+# layer. Added from the 2026-07-11 decorrelated (Gemini) adversarial review.
+# ============================================================================
+PI_RPC_RUN="$REPO_ROOT/scripts/lib/pi-rpc-run.js"
+SUP_PROMPT="$TEST_TMP/sup-prompt.txt"; printf 'do the task\n' > "$SUP_PROMPT"
+sup_cwd() { mkdir -p "$1"; }
+
+# 6) prompt response success:false → supervisor exit 1 even with agent_end.
+STUB_PROMPTFAIL="$TEST_TMP/pi-promptfail"
+cat > "$STUB_PROMPTFAIL" <<'__EOF5'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":false}'
+    printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
+  fi
+done
+__EOF5
+chmod +x "$STUB_PROMPTFAIL"
+CW="$TEST_TMP/cw-promptfail"; sup_cwd "$CW"
+( cd "$CW" && timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_PROMPTFAIL" >/dev/null 2>&1 )
+assert_eq "1" "$?" "supervisor: prompt success:false → exit 1"
+
+# 7) UTF-8 multibyte char split across stdout chunks in the agent_end line must
+# still parse (StringDecoder fix). Mock writes 🚀 (F0 9F 9A 80) split 2+2 bytes.
+STUB_UTF8="$TEST_TMP/pi-utf8"
+cat > "$STUB_UTF8" <<'__EOF6'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+    printf '{"type":"agent_end","messages":[{"role":"user","text":"go \xf0\x9f'
+    sleep 0.3
+    printf '\x9a\x80"}],"stopReason":"stop"}\n'
+  fi
+done
+__EOF6
+chmod +x "$STUB_UTF8"
+CW="$TEST_TMP/cw-utf8"; sup_cwd "$CW"
+( cd "$CW" && timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_UTF8" >/dev/null 2>&1 )
+assert_eq "0" "$?" "supervisor: multibyte agent_end split across chunks still detected → exit 0"
+
+# 8) no stall probe when events keep flowing (probe must NOT fire).
+STUB_FLOW="$TEST_TMP/pi-flow"
+cat > "$STUB_FLOW" <<'__EOF7'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+    for i in 1 2 3 4 5 6; do printf '%s\n' '{"type":"turn_update","n":'"$i"'}'; sleep 0.3; done
+    printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
+  fi
+done
+__EOF7
+chmod +x "$STUB_FLOW"
+CW="$TEST_TMP/cw-flow"; sup_cwd "$CW"
+FLOW_EVENTS="$( cd "$CW" && PI_RPC_STALL_PROBE_SECS=1 timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_FLOW" 2>/dev/null )"
+assert_eq "0" "$?" "supervisor: flowing events → exit 0"
+assert_not_contains "$FLOW_EVENTS" 'supervisor_stall_probe' "supervisor: no stall probe while events flow"
+
+# 9) hard cap PI_RPC_MAX_SECS aborts a runaway (no agent_end) → exit 1.
+STUB_HANG="$TEST_TMP/pi-hang"
+cat > "$STUB_HANG" <<'__EOF8'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+    sleep 60
+  fi
+done
+__EOF8
+chmod +x "$STUB_HANG"
+CW="$TEST_TMP/cw-hang"; sup_cwd "$CW"
+( cd "$CW" && PI_RPC_MAX_SECS=1 PI_RPC_STALL_PROBE_SECS=999 timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_HANG" >/dev/null 2>&1 )
+assert_eq "1" "$?" "supervisor: PI_RPC_MAX_SECS hard cap → exit 1"
+
+# 10) parser: nested cost object never counted; multi message_end aggregation.
+PARSE_LOG="$TEST_TMP/parse.jsonl"
+{
+  printf '%s\n' '{"type":"message_end","message":{"usage":{"input":150,"output":30,"cacheRead":10,"cost":{"input":9999,"output":8888,"cacheRead":7777}}}}'
+  printf '%s\n' '{"type":"tool_execution_start","toolName":"bash"}'
+  printf '%s\n' '{"type":"message_end","message":{"usage":{"input":50,"output":20,"cacheRead":5,"cost":{"input":1,"output":1,"cacheRead":1}}}}'
+} > "$PARSE_LOG"
+PARSE_SUM="$(node "$STATUS_JS" --log "$PARSE_LOG" --format pi-rpc --summary)"
+assert_contains "$PARSE_SUM" '"input_tokens":200' "parser: aggregates input across message_end (150+50), cost ignored"
+assert_contains "$PARSE_SUM" '"output_tokens":50' "parser: aggregates output (30+20), cost ignored"
+assert_contains "$PARSE_SUM" '"cache_read_tokens":15' "parser: aggregates cacheRead (10+5), cost ignored"
+assert_contains "$PARSE_SUM" '"total_tokens":250' "parser: total = input+output (honest billed spend)"
+
+# 11) parser: agent_end with NO usage → tokens null (honest, not zero).
+NOUSAGE_LOG="$TEST_TMP/nousage.jsonl"
+printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}' > "$NOUSAGE_LOG"
+NOUSAGE_SUM="$(node "$STATUS_JS" --log "$NOUSAGE_LOG" --format pi-rpc --summary)"
+assert_contains "$NOUSAGE_SUM" '"tokens":null' "parser: no message_end → tokens null (not fabricated 0)"
+assert_contains "$NOUSAGE_SUM" '"usage_source":"none"' "parser: no usage → source none"
+
 finalize_test

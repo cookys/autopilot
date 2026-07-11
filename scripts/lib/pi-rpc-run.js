@@ -27,6 +27,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 
 const HARNESS_EDIT_ONLY = `=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
@@ -91,14 +92,20 @@ function parseLine(line, state, eventSink, onAgentEnd) {
 }
 
 function makeLineHandler(processLine) {
+  // Use a StringDecoder so a multi-byte UTF-8 char split across two stdout chunks
+  // is buffered, not turned into U+FFFD replacement chars. agent_end carries the
+  // full `messages[]` (which can contain multi-byte user text), so a mangled line
+  // there would fail JSON.parse → missed agent_end → deadlock. (Gemini review 2026-07-11)
+  const decoder = new StringDecoder('utf8');
   let carry = '';
   const h = (chunk) => {
-    const text = `${carry}${chunk.toString('utf8')}`;
+    const text = `${carry}${Buffer.isBuffer(chunk) ? decoder.write(chunk) : chunk}`;
     const parts = text.split('\n');
     carry = parts.pop() || '';
     for (const p of parts) processLine(p);
   };
   h.flush = () => {
+    carry += decoder.end();
     if (carry) {
       processLine(carry);
       carry = '';

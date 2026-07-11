@@ -50,7 +50,11 @@ The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question
 native JSONL event stream verbatim to the dispatch log (`agent_end`, `message_end`,
 `tool_execution_*`, ...), and prepends an EDIT-ONLY harness directive to the task prompt. The
 dispatch declares `log_format: "pi-rpc"` and emits ADDITIVE `duplex: "rpc"` in both final
-JSON and manifest for contract-aware consumers.
+JSON and manifest for contract-aware consumers. **pi RPC is a persistent server — it does NOT
+exit after `agent_end`** (it waits for the next prompt), so the supervisor proactively shuts it
+down on `agent_end` (stdin EOF → SIGTERM → SIGKILL) and scores success on the OBSERVED
+`agent_end` + prompt response, never on pi's self-exit code (waiting for that would deadlock —
+verified live 2026-07-11).
 
 Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are parsed from
 `message.usage` and aggregated (`input`/`output`/`cacheRead`), with `usage_source: "pi-rpc"`.

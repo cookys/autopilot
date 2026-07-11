@@ -43,7 +43,7 @@
     "reviewer_runner": { "type": "string", "enum": ["codex", "auto", "agy", "grok", "cc-shim", "anthropic-compatible"], "x-shell-validated": true, "x-shell-var": "REV_RUNNER" },
     "implementer_engine": { "type": "string", "minLength": 1 },
     "implementer_effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "x-shell-validated": true, "x-shell-var": "IMPL_EFFORT" },
-    "implementer_runner": { "type": "string", "enum": ["auto", "codex", "agy", "grok", "cc-shim"], "x-shell-validated": true, "x-shell-var": "IMPL_RUNNER" },
+    "implementer_runner": { "type": "string", "enum": ["auto", "codex", "agy", "grok", "cc-shim", "pi"], "x-shell-validated": true, "x-shell-var": "IMPL_RUNNER" },
     "loop_max_rounds": { "type": "integer" },
     "loop_convergence_verdict": { "type": "string", "minLength": 1 },
     "spec_review": { "type": "string", "enum": ["on", "off"], "x-shell-validated": true, "x-shell-var": "SPEC_REVIEW" },

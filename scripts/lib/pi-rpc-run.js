@@ -195,7 +195,11 @@ async function run() {
   };
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, onSignal);
 
-  child.stdin.write(`${JSON.stringify({ id: 'prompt-1', type: 'prompt', message: promptPayload })}\n`);
+  // Guarded like the steer write: a spawn-race EPIPE must surface as the normal
+  // fail-closed exit-1 path (no agent_end observed), not an unhandled throw.
+  try {
+    child.stdin.write(`${JSON.stringify({ id: 'prompt-1', type: 'prompt', message: promptPayload })}\n`);
+  } catch (_e) { /* child already gone → exitPromise resolves → scored failure */ }
 
   const timer = setInterval(() => {
     const now = Date.now();

@@ -253,6 +253,46 @@ NOUSAGE_SUM="$(node "$STATUS_JS" --log "$NOUSAGE_LOG" --format pi-rpc --summary)
 assert_contains "$NOUSAGE_SUM" '"tokens":null' "parser: no message_end → tokens null (not fabricated 0)"
 assert_contains "$NOUSAGE_SUM" '"usage_source":"none"' "parser: no usage → source none"
 
+# 12b) shutdown ESCALATION path (qc panel, opus): a pi that completes the protocol
+# (agent_end) but IGNORES stdin EOF and TRAPS SIGTERM — the exact persistent-server
+# shape the escalation ladder (stdin EOF → SIGTERM → SIGKILL) was written for.
+# The supervisor must still terminate (SIGKILL rung) and score SUCCESS on the
+# observed agent_end. Also asserts the EDIT-ONLY harness directive actually
+# reaches pi's prompt payload (a stated trust rail, previously untested).
+STUB_STUBBORN="$TEST_TMP/pi-stubborn"
+cat > "$STUB_STUBBORN" <<'__EOF8'
+#!/usr/bin/env bash
+trap '' TERM HUP
+while IFS= read -r line; do
+  if printf '%s' "$line" | grep -c '"type":"prompt"' >/dev/null; then
+    printf '%s' "$line" > "${PI_PROMPT_CAPTURE:?}"
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+    printf '%s\n' '{"type":"message_end","message":{"usage":{"input":10,"output":5,"cacheRead":0,"cost":{"input":0,"output":0}}}}'
+    printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
+    break
+  fi
+done
+# stdin EOF is IGNORED from here on; TERM is trapped — only SIGKILL ends this.
+while :; do sleep 1; done
+__EOF8
+chmod +x "$STUB_STUBBORN"
+CW="$TEST_TMP/cw-stubborn"; sup_cwd "$CW"
+PROMPT_CAPTURE="$TEST_TMP/prompt-capture.json"
+( cd "$CW" && PI_PROMPT_CAPTURE="$PROMPT_CAPTURE" PI_RPC_STALL_PROBE_SECS=999 \
+    timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_STUBBORN" >/dev/null 2>&1 )
+assert_eq "0" "$?" "shutdown escalation: TERM-trapping EOF-ignoring pi still reaped via SIGKILL; success scored on observed agent_end"
+assert_file_exists "$PROMPT_CAPTURE" "shutdown escalation: prompt payload captured by mock"
+if grep -c 'HARNESS DIRECTIVE' "$PROMPT_CAPTURE" >/dev/null 2>&1; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "EDIT-ONLY harness directive missing from the prompt payload pi received"
+fi
+if grep -c 'do the task' "$PROMPT_CAPTURE" >/dev/null 2>&1; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "task prompt body missing from the prompt payload pi received"
+fi
+
 # 12) supervisor external-signal shutdown (qc panel, gpt-5.5): SIGTERM to the
 # supervisor must not orphan the persistent pi server — verified empirically
 # (kill + pid probe), never by reasoning. The fake pi ignores stdin EOF and

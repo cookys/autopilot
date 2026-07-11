@@ -180,6 +180,25 @@ CW="$TEST_TMP/cw-promptfail"; sup_cwd "$CW"
 ( cd "$CW" && timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_PROMPTFAIL" >/dev/null 2>&1 )
 assert_eq "1" "$?" "supervisor: prompt success:false → exit 1"
 
+# 6b) prompt success:false with NO agent_end (gpt-5.5 R3): a rejected prompt on
+# the persistent server must trigger the fail-closed shutdown ladder, not idle
+# until an external timeout. Mock keeps reading forever after the rejection —
+# only the supervisor-initiated shutdown (EOF→TERM→KILL) can end it. Assert a
+# FAST exit 1 (rc 1, not timeout's 124).
+STUB_PROMPTFAIL_HANG="$TEST_TMP/pi-promptfail-hang"
+cat > "$STUB_PROMPTFAIL_HANG" <<'__EOF5B'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -c '"type":"prompt"' >/dev/null; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":false}'
+  fi
+done
+__EOF5B
+chmod +x "$STUB_PROMPTFAIL_HANG"
+CW="$TEST_TMP/cw-promptfail-hang"; sup_cwd "$CW"
+( cd "$CW" && PI_RPC_STALL_PROBE_SECS=999 timeout 20 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" --pi-bin "$STUB_PROMPTFAIL_HANG" >/dev/null 2>&1 )
+assert_eq "1" "$?" "supervisor: rejected prompt with no agent_end → fail-closed shutdown, fast exit 1 (never hangs to timeout)"
+
 # 7) UTF-8 multibyte char split across stdout chunks in the agent_end line must
 # still parse (StringDecoder fix). Mock writes 🚀 (F0 9F 9A 80) split 2+2 bytes.
 STUB_UTF8="$TEST_TMP/pi-utf8"

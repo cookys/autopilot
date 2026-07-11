@@ -83,7 +83,14 @@ function parseLine(line, state, eventSink, onAgentEnd) {
   const type = typeof obj.type === 'string' ? obj.type : null;
   if (type === 'response' && obj.command === 'prompt') {
     state.seenPromptResponse = true;
-    if (obj.success === false) state.promptFailed = true;
+    if (obj.success === false) {
+      state.promptFailed = true;
+      // Fail-closed shutdown (gpt-5.5 R3): a REJECTED prompt never produces an
+      // agent_end — the persistent server would idle forever awaiting the next
+      // command. Trigger the same shutdown ladder; scoring stays exit 1
+      // (promptFailed wins over any later agent_end).
+      if (typeof onAgentEnd === 'function') onAgentEnd();
+    }
   }
   if (type === 'agent_end') {
     state.seenAgentEnd = true;

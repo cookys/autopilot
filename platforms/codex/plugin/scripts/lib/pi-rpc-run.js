@@ -164,6 +164,17 @@ async function run() {
     child.once('error', (err) => reject(err));
     child.once('exit', (code, signal) => resolve({ code: code === null ? 1 : code, signal }));
   });
+  // An async stdin EPIPE (pi died mid-write) emits 'error' on the stream; without a
+  // listener Node raises an uncaught exception and the supervisor dies WITHOUT the
+  // shutdown ladder (gpt-5.5 R2). Swallow it — child death is observed via 'exit'
+  // and scored fail-closed (no agent_end ⇒ exit 1).
+  child.stdin.on('error', () => { /* observed via exit; fail-closed scoring */ });
+  // If run() ever rejects after a successful spawn (child 'error' event), make the
+  // exit path best-effort kill the child so the promised cleanup holds on the
+  // rejection path too. Descendants of pi remain the CONTAINMENT rail's job
+  // (cgroup reap in dispatch-hetero run_worker) — same posture as every other
+  // runner; the supervisor's kills target the pi server process itself.
+  exitPromise.catch(() => { try { child.kill('SIGKILL'); } catch (_e) {} });
 
   // pi RPC stays alive after agent_end (persistent server). Proactively shut it
   // down: close stdin (EOF), then SIGTERM, then SIGKILL — otherwise `exitPromise`

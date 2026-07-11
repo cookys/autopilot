@@ -26,7 +26,7 @@ scripts/dispatch-hetero.sh --branch feat/<task> --prompt-file /tmp/task.md \
     [--model "Gemini 3.5 Flash (High)"] [--base develop] [--timeout 9m]
 ```
 
-JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error}` (`runner` is `"codex"`, `"agy"`, or `"grok"` per `--runner auto|codex|agy|grok` — `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, else agy; `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance — all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
+JSON to stdout: `{status, runner, model, containment, contained, branch, base, commit, files_changed, insertions, deletions, worktree, agent_log, error, duplex}` (`runner` is `"codex"`, `"agy"`, `"grok"`, `"cc-shim"`, or `"pi"` per `--runner auto|codex|agy|grok|cc-shim|pi` — `auto` routes `*gpt*`/`*codex*` → codex, `*grok*`/`*composer*` → grok, else agy; `model` echoes `--model`; `containment`/`contained` carry teardown-hygiene provenance; `duplex` is `"rpc"` for `pi` and `null` for all other runners; all **engine provenance** the caller records in its run-summary ledger; consumed by the `/l5` impl row, [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md)). Exit 0 = committed + clean tree + agent exit 0 (worktree auto-removed; **branch survives** for review/merge). Exit 1 = ran but did not yield a reviewable clean commit (`dirty` / `failure` / `no_op` / `question_suspected` — see Outcome states; worktree **kept** for inspection). Exit 2 = precondition failure. The agent's stdout/stderr are written to a temp file; **`agent_log` contains that file's path, not the log text** — read the file to inspect agent output.
 
 ### Outcome states
 
@@ -42,15 +42,27 @@ The no-commit case is **split by how the worker ended** so a legitimate no-op ta
 
 The caller distinguishes "nothing needed" (`no_op`) from "blind hang" (`question_suspected`) at ~20 lines of shell, surfacing the real pain — a silently hung worker — without any new always-on LLM or stream parser in the dispatch path.
 
-### Verified duplex candidate — pi RPC (spiked 2026-07-11, NOT yet wired)
+### pi (RPC duplex)
 
-A REAL mid-run channel exists: the pi coding agent's RPC mode (`pi --mode rpc`, LF-JSONL over
-stdio) live-verified `steer` (mid-run injection, delivered at tool-call boundaries, honored),
-`abort` (8ms stop), and per-message `usage` incl. cacheRead — driven by MiniMax-M3 through the
-autopilot endpoints (`"apiKey": "$ENV"` reference, no secret on disk). Evidence + residuals:
-[`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md).
-Integration (`--runner pi`) is BACKLOG "Dispatch observability Stage 2" — the trust rails
-(worktree isolation, wrapper-commit, artifact verification) carry over unchanged.
+`--runner pi` drives `pi --mode rpc` in a dedicated supervisory process
+([`scripts/lib/pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)). The supervisor spawns
+`pi --mode rpc --provider <provider> --model <model> --session-dir <dir>`, forwards the
+native JSONL event stream verbatim to the dispatch log (`agent_end`, `message_end`,
+`tool_execution_*`, ...), and prepends an EDIT-ONLY harness directive to the task prompt. The
+dispatch declares `log_format: "pi-rpc"` and emits ADDITIVE `duplex: "rpc"` in both final
+JSON and manifest for contract-aware consumers. **pi RPC is a persistent server — it does NOT
+exit after `agent_end`** (it waits for the next prompt), so the supervisor proactively shuts it
+down on `agent_end` (stdin EOF → SIGTERM → SIGKILL) and scores success on the OBSERVED
+`agent_end` + prompt response, never on pi's self-exit code (waiting for that would deadlock —
+verified live 2026-07-11).
+
+Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are parsed from
+`message.usage` and aggregated (`input`/`output`/`cacheRead`), with `usage_source: "pi-rpc"`.
+`pi-rpc` is intentionally separated from the generic JSONL scanner so nested `cost` fields cannot
+pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` steer injection
+(`no_event_timeout`) and remains report-only by default unless `PI_RPC_MAX_SECS` is set.
+Evidence + residuals: [`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
+(`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
 ### Deferred — stream-json "live question" rail (spike-gated, NOT built)
 
@@ -109,6 +121,7 @@ scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/t
 | `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. |
 | `grok` | xAI `grok-build`, `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
 | `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3 reviewer-calibrated** (10/10 known-bad, 0 false-pass-on-critical, 3/3 clean). **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
+| `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
 
 Full per-runner usage recipes (incl. the cc-shim env setup and which models are clean) live in
 [`../project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md) § Gotchas.

@@ -21,7 +21,7 @@
 //   dispatch-status.js --log <path> --summary [--format F]    # parse-only, no liveness
 //   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
 //   dispatch-status.js --list [--dir <manifest-dir>]
-//   --format codex-chrome|jsonl|plain|auto — the DISPATCHER-declared stream format
+//   --format codex-chrome|jsonl|pi-rpc|plain|auto — the DISPATCHER-declared stream format
 //   (manifest `log_format` when reading via --run). Telemetry parsing trusts the
 //   declaration, never content sniffing: a worker's own output can contain JSON
 //   lines, and sniffing would promote that self-report into telemetry. 'auto'
@@ -194,6 +194,55 @@ function parseJsonl(text) {
   return { events: events || null, tool_calls: toolCalls || (events ? 0 : null), last_action: lastAction, tokens: hasTokens ? tokens : null, usage_source: hasTokens ? 'jsonl' : 'none' };
 }
 
+function parsePiRpc(text) {
+  // pi-rpc parser is separate because `message.usage` includes a nested `cost`
+  // object. The generic recursive JSONL scan would recurse into cost and can
+  // incorrectly treat its zeroes as real per-message usage.
+  const lines = text.split(/\r?\n/);
+  let events = 0;
+  let toolCalls = 0;
+  let lastAction = null;
+  let input = 0;
+  let output = 0;
+  let cacheRead = 0;
+  let hadUsage = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t.startsWith('{') || !t.endsWith('}')) continue;
+    let obj;
+    try { obj = JSON.parse(t); } catch (_e) { continue; }
+    if (!obj || typeof obj !== 'object') continue;
+    events += 1;
+    const type = typeof obj.type === 'string' ? obj.type : (typeof obj.event === 'string' ? obj.event : null);
+    if (type) lastAction = type;
+    if (type === 'tool_execution_start') toolCalls += 1;
+    const usage = obj?.message?.usage;
+    if (usage && typeof usage === 'object') {
+      const iu = Number(usage.input);
+      const ou = Number(usage.output);
+      const cr = Number(usage.cacheRead);
+      if (Number.isFinite(iu)) input += iu;
+      if (Number.isFinite(ou)) output += ou;
+      if (Number.isFinite(cr)) cacheRead += cr;
+      hadUsage = true;
+    }
+  }
+  const tokens = emptyTokens();
+  if (hadUsage) {
+    tokens.input_tokens = input;
+    tokens.output_tokens = output;
+    tokens.cache_read_tokens = cacheRead;
+    tokens.total_tokens = input + output;
+  }
+  return {
+    events: events || null,
+    tool_calls: toolCalls,
+    last_action: lastAction,
+    tokens: hadUsage ? tokens : null,
+    usage_source: hadUsage ? 'pi-rpc' : 'none',
+  };
+}
+
 function parseLog(logPath, declaredFormat) {
   // declaredFormat is the DISPATCHER's declaration of what stream format it invoked
   // (manifest log_format / --format): the dispatcher knows its own runner flags, so
@@ -213,6 +262,7 @@ function parseLog(logPath, declaredFormat) {
   base.format = format;
   if (format === 'codex-chrome') return { ...base, ...parseCodexChrome(text) };
   if (format === 'jsonl') return { ...base, ...parseJsonl(text) };
+  if (format === 'pi-rpc') return { ...base, ...parsePiRpc(text) };
   return base; // plain: honest nulls (agy pseudo-TTY / cc-shim text carry no usage)
 }
 
@@ -374,10 +424,10 @@ function main(argv) {
     process.stderr.write('--stall-secs must be a positive number\n');
     return 2;
   }
-  if (args.format && !['codex-chrome', 'jsonl', 'plain', 'auto'].includes(args.format)) {
+  if (args.format && !['codex-chrome', 'jsonl', 'pi-rpc', 'plain', 'auto'].includes(args.format)) {
     // usage-only must still honor its never-fail discipline
     if (args.usageOnly) { process.stdout.write('null\n'); return 0; }
-    process.stderr.write('--format must be codex-chrome|jsonl|plain|auto\n');
+    process.stderr.write('--format must be codex-chrome|jsonl|pi-rpc|plain|auto\n');
     return 2;
   }
 

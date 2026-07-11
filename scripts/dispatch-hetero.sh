@@ -18,7 +18,7 @@
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
 #       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
-#       [--runner auto|codex|agy|grok|cc-shim] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|pi] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-build, grok-composer-2.5-fast
@@ -26,6 +26,9 @@
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
 #                                              #   in env (e.g. MiniMax-M3, GLM-*).
+#                                              #   pi (EXPLICIT only): pi coding agent over RPC
+#                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
+#                                              #   provider default minimax via PI_RPC_PROVIDER).
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--endpoint <name>]                    # cc-shim only: resolve creds via
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
@@ -39,6 +42,7 @@
 #       [--grok-bin grok]                      # alternate binary (test seam)
 #       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
 #                                              #   stale codex earlier in PATH lacking the flag)
+#       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--keep-worktree]                      # keep worktree even on success
 #   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper
 #       [--reap-unmarked --yes]                # recovery: reap unmarked hetero-* only
@@ -50,7 +54,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy"|"grok", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -106,6 +110,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
+IS_PI=0
+PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
@@ -179,6 +185,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
   # validates required-field presence, not a closed set). usage is parsed from the HARNESS
@@ -198,6 +205,7 @@ emit() { # status commit files ins del worktree error
     local log_format="plain"
     [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
     [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+    [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
     usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
     case "$usage_json" in
       '{'*'}') ;;   # single-line JSON object — accepted
@@ -206,12 +214,14 @@ emit() { # status commit files ins del worktree error
   fi
   local wall_json="null"
   [ -n "${DISPATCH_STARTED_EPOCH:-}" ] && wall_json="$(( $(date +%s) - DISPATCH_STARTED_EPOCH ))"
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s }\n' \
+  local duplex_json="null"
+  [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json"
+    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json"
 }
 
 die_precondition() {
@@ -219,11 +229,14 @@ die_precondition() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s }\n' \
+  local duplex_json="null"
+  [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s }\n' \
     "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")" \
-    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json"
+    "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
   exit 2
 }
 
@@ -243,12 +256,16 @@ write_manifest() {
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy+cc-shim plain). dispatch-status.js trusts this
   # over content sniffing so worker output can never self-report telemetry.
   local log_format="plain"
   [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
   [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+  [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+  local duplex_json="null"
+  [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
   local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(json_escape "$MANIFEST_SCOPE_UNIT")\""
   local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
   local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
@@ -258,10 +275,10 @@ write_manifest() {
   [ -n "${MANIFEST_ENDED_EPOCH:-}" ] && endep_json="$MANIFEST_ENDED_EPOCH"
   [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$MANIFEST_FINAL_STATUS")\""
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
       "$(json_escape "$DISPATCH_RUN_ID")" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(json_escape "${WT:-}")" "$(json_escape "${WT:-}/.autopilot-worktree.lock")" "$(json_escape "${LOG:-}")" \
-      "$log_format" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
+      "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(json_escape "${PROMPT_FILE:-}")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -290,6 +307,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
+    --pi-bin) PI_BIN="${2:-}"; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --skill-mode) SKILL_MODE="${2:-}"; shift 2 ;;
@@ -339,11 +357,13 @@ fi
 IS_CODEX=0
 IS_GROK=0
 IS_CCSHIM=0
+IS_PI=0
 case "$RUNNER" in
   codex)   IS_CODEX=1 ;;
   agy)     ;;
   grok)    IS_GROK=1 ;;
   cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
+  pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
   auto)
     # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
     # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
@@ -356,7 +376,7 @@ case "$RUNNER" in
       IS_GROK=1
     fi
     ;;
-  *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim (got: $RUNNER)" ;;
+  *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi (got: $RUNNER)" ;;
 esac
 
 case "$EFFORT" in
@@ -449,6 +469,12 @@ elif [ "$IS_CCSHIM" -eq 1 ]; then
   # real-Anthropic key can't take precedence over the shim token — so accepting API_KEY
   # here would pass the precondition then leave the run with no usable auth (gpt-5.5 review).
   [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] || die_precondition "cc-shim requires ANTHROPIC_AUTH_TOKEN in env (the shim's bearer token; ANTHROPIC_API_KEY is intentionally NOT used — it is unset before launching claude so it cannot override the shim token)"
+elif [ "$IS_PI" -eq 1 ]; then
+  command -v node >/dev/null 2>&1 || die_precondition "node not found (pi runner requires Node for the RPC supervisor)"
+  command -v "$PI_BIN" >/dev/null 2>&1 || die_precondition "pi binary not found: $PI_BIN"
+  [ -r "$SELF_DIR/lib/pi-rpc-run.js" ] || die_precondition "pi supervisor not found: $SELF_DIR/lib/pi-rpc-run.js"
+  _pi_models_json="${PI_MODELS_JSON:-$HOME/.pi/agent/models.json}"
+  [ -r "$_pi_models_json" ] || die_precondition "pi models.json not readable: $_pi_models_json"
 elif [ "$IS_GROK" -eq 1 ]; then
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 else
@@ -468,6 +494,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_CODEX:-0}" -eq 1 ] && local_runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && local_runner="grok"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && local_runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && local_runner="pi"
 
   if [[ "$SKILL_MODE" == "auto" ]]; then
     cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
@@ -766,6 +793,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --always-approve --no-alt-screen --output-format json' \
       _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
   rm -f "$GROK_PROMPT_FILE"
+elif [ "$IS_PI" -eq 1 ]; then
+  run_worker bash -c 'cd "$1" && exec node "$2" --pi-bin "$3" --provider "$4" --model "$5" --cwd "$1" --prompt-file "$6"' _ "$WT" "$SELF_DIR/lib/pi-rpc-run.js" "$PI_BIN" "${PI_RPC_PROVIDER:-minimax}" "$MODEL" "$PROMPT_FILE"
 else
   printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at ~10s then AUTO-BACKGROUNDS longer commands and waits (empirically a 75s command DID complete and return stdout, bounded by --print-timeout — the old 'hard 10s cap / cannot run build/test' framing is REFUTED, agy 1.0.14 2026-07-02); what stays unreliable is chaining run-long-command THEN git-commit in ONE -p turn (the turn can yield after the backgrounded task). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test AND self-commit mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
   # agy (Gemini) in -p print mode CANNOT reliably run a long command THEN commit in
@@ -818,7 +847,7 @@ compute_artifacts() {
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"
   git -C "$WT" add -A
   _identity_args=()
   if ! git -C "$WT" var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
@@ -855,6 +884,7 @@ passive_capture() {
         [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
         [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
         [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+        [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         local payload
         payload="$(OBSERVED_AT="$observed_at" RUNNER="$runner" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" node -e '
@@ -1020,8 +1050,8 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-    declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM CONTAINMENT CONTAINED EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI PI_BIN CONTAINMENT CONTAINED EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \

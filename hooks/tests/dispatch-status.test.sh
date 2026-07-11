@@ -46,6 +46,22 @@ assert_contains "$OUT" '"cache_read_tokens":30' "jsonl: cache read tokens"
 assert_contains "$OUT" '"total_tokens":150' "jsonl: total derived from input+output"
 assert_contains "$OUT" '"tool_calls":1' "jsonl: tool_use event counted"
 
+# ---------- 2b. pi-rpc parsing (executor-declared format) ----------
+PIRPC="$TEST_TMP/pi-rpc.jsonl"
+printf '%s\n' \
+  '{"id":"prompt-1","type":"response","command":"prompt","success":true}' \
+  '{"type":"agent_start"}' \
+  '{"type":"tool_execution_start","toolName":"bash","args":{"command":"edit"}}' \
+  '{"type":"tool_execution_end","toolName":"bash","result":{"success":true,"output":"ok"}}' \
+  '{"type":"message_end","message":{"role":"assistant","usage":{"input":100,"output":20,"cacheRead":50,"cacheWrite":0,"totalTokens":170,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}}' \
+  '{"type":"agent_end","messages":[],"stopReason":"stop"}' > "$PIRPC"
+OUT="$(node "$STATUS_JS" --log "$PIRPC" --summary --format pi-rpc)"
+assert_contains "$OUT" '"format":"pi-rpc"' "pi-rpc: format used"
+assert_contains "$OUT" '"tool_calls":1' "pi-rpc: only tool_execution_start counted"
+assert_contains "$OUT" '"total_tokens":120' "pi-rpc: input+output summed"
+assert_contains "$OUT" '"cache_read_tokens":50' "pi-rpc: cache read from message.usage"
+assert_contains "$OUT" '"usage_source":"pi-rpc"' "pi-rpc: usage source labeled"
+
 # anti-self-report guard: the SAME log with the dispatcher-declared format `plain`
 # (what agy/cc-shim runs declare) must yield NO telemetry — a worker printing JSON
 # usage lines cannot promote its own output into token telemetry (gpt-5.5 R2).

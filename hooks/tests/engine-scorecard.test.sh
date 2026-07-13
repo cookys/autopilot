@@ -135,6 +135,44 @@ echo "$(row B r f reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | timeout 20 
 t1=$(date +%s)
 if [ "$ec" = "0" ]; then ok "12: stale lock broken/recovered (record ok in $((t1-t0))s)"; else bad "12: stale lock wedged record (exit=$ec after $((t1-t0))s) — A1"; fi
 
+# 13 (v2.32.25 R1): distinct efforts are distinct invocation-tuple identities —
+# two rows for the same engine+runner at different codex efforts must BOTH
+# survive into current/ladder, not collapse to the latest event.
+reset
+r1="$(row tupeng codex openai reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='high';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='xhigh';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+effs=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='tupeng').map(r=>r.effort).sort();process.stdout.write(l.join(','))})")
+[ "$effs" = "high,xhigh" ] && ok "13: distinct efforts coexist as distinct tuples (got: $effs)" || bad "13: efforts collapsed (got: $effs) — R1"
+
+# 14 (v2.32.25 R4): model is an alias REFINEMENT — re-recording the same
+# engine+runner+effort with model added must SUPERSEDE the model-less row in
+# the ladder (else the stale non-dispatchable display id stays selectable).
+reset
+r1="$(row aliaseng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$r1" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+al=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='aliaseng');process.stdout.write(l.length+':'+l.map(r=>r.model).join(','))})")
+[ "$al" = "1:haiku" ] && ok "14: model refinement supersedes the model-less row (got: $al)" || bad "14: stale model-less row survives (got: $al) — R4"
+
+# 15 (v2.32.25 R5): a LATER failed re-qualification retires the rung — the
+# older qualified model-less row must NOT survive the supersede.
+reset
+r1="$(row retireng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$r1" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';r.status='failed';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+rl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='retireng').length))})")
+[ "$rl" = "0" ] && ok "15: later failed re-qual retires the rung" || bad "15: stale qualified row survived a failed re-qual (rows=$rl) — R5"
+
+# 16 (v2.32.25 R7): supersede preserves configured identity — rows from a
+# DIFFERENT corpus (distinct qualification setup) must not retire each other.
+reset
+r1="$(row corpeng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$r1" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.corpus_version='c@2';r.status='failed';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+cl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='corpeng').length))})")
+[ "$cl" = "1" ] && ok "16: cross-corpus rows do not retire each other (c@1 survives c@2 failure)" || bad "16: cross-corpus retirement leak (rows=$cl) — R7"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

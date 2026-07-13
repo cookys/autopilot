@@ -574,13 +574,13 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S 每件。
 - **Source**: l6-resilience campaign deviations ledger，2026-07-08。
 
-### engine in-loop 去相關 review 對預設 roster（openai×openai）結構性死路
+### ✅ DONE (v2.32.25) — engine in-loop 去相關 review 對預設 roster（openai×openai）結構性死路
 - **Trigger**: 下次調 review-loop 預設 roster、改 `modelFamilyOfEngine`、或發現 /l5 run 的收斂全靠 verify-first 而 review round 一直 `reviewer_family` blocked 時。
 - **Context**: 2026-07-13 /l5 e2e 實測發現（非本次 tier 引入，是既存結構）：`ensureDistinctReviewFamily` 把 gpt-5.5 / gpt-5.6-sol / gpt-5.3-codex-spark 全映成 `openai`（regex `(gpt|codex|o1|o3|o4)`），而預設 roster 的 implementer（codex-spark）與 reviewer（gpt-5.5）同家族 → engine `implement-review` 的 in-loop review **永遠**在 `reviewer_family` 閘被擋，收斂實質上只靠 verify-first；低風險 tier（sol，亦 openai）同樣過不了這關。深層問題：家族去相關要求與「reviewer 選同 vendor 最強模型」的 roster 選擇互斥——真去相關的 in-loop reviewer 得選 MiniMax/GLM/gemini/claude 家族（claude-haiku 已 qualified，但 tier 設計是同 runner，claude-native ≠ codex → 單一 `reviewer_runner` 欄位的限制也一起浮出）。候選修法：(a) roster 預設改跨家族 reviewer；(b) tier 欄位補 `reviewer_runner_low_risk`；(c) family gate 對 low-risk 降為 warn。需要設計討論，不宜順手改。
 - **Effort**: M（含設計）。
 - **Source**: 2026-07-13 /l5 low-risk tier e2e（foreman ledger `reviewer_family: blocked` + depth-0 verify）。
 
-### reviewer_qualified 資格檢查未覆蓋 low-risk tier 代換後的 reviewer
+### ✅ DONE (v2.32.25) — reviewer_qualified 資格檢查未覆蓋 low-risk tier 代換後的 reviewer
 - **Trigger**: 下次碰 resolve-review-loop.sh 的 --check-scorecard 段或 engine reviewDiff 的 reviewer_qualification 閘，或 low-risk tier 引擎的 scorecard 過期（gpt-5.6-sol 2026-10-11）時。
 - **Context**: v2.32.23 e2e 實測前發現：`reviewer_qualified` 由 resolver 對 `reviewer_engine`（incumbent）計算；`reviewDiff` 的 overlay 代換發生在其後，代換進來的 `reviewer_engine_low_risk` 引擎不受 fail-closed 資格閘覆蓋（若 sol row 缺席/過期，閘不會擋）。目前緩解：sol 已有正確 id 的 qualified row（event 59）。正規修法候選：(a) resolver 在兩鍵皆設時對 low-risk 引擎也查 scorecard，emit `reviewer_qualified_low_risk`；(b) 或 reviewDiff 代換後以 effective engine 重查。附帶：scorecard row 的 engine id 慣例應等於 roster 欄位值（`gpt-5.6-sol`，不含 effort 後綴——effort 不是 identity 維度）；首登記的 `gpt-5.6-sol-high` row 為 id 慣例錯誤示範，留存無害。
 - **Effort**: S。

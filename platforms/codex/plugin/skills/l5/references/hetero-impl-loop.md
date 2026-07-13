@@ -40,6 +40,10 @@ levels, or runners inline. Fields consumed by the loop:
 - `review_diff_scope` (`full` default; `incremental-mitigated` semantics — including
   the mandatory full re-reads and the full-suite harness requirement — are specified
   in front-door § "Heterogeneous engine loop details (/l5 and /l6)")
+- `on_family_conflict` (`fallback` default) — same-family reviewer×implementer conflicts
+  substitute a cross-family qualified scorecard-ladder row instead of hard-blocking the
+  in-loop review (guards + allowlist in front-door § roster notes; `block` restores the
+  pre-v2.32.25 hard block)
 - `independent_harness`, `qc_panel`, `qc_panel_aggregation`
 - `reviewer_endpoint` / `implementer_endpoint` (declarative `--endpoint`; credentials
   populate from `~/.autopilot/endpoints.env` via `load-endpoints-env.sh` +

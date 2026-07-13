@@ -179,8 +179,15 @@ function nowArgToMs(value, required = false) {
 }
 
 function identityKey(row) {
+  // Invocation-tuple extension (v2.32.25 R1): effort/model are OPTIONAL row fields
+  // but distinct values are distinct qualifications (gpt-X@high and gpt-X@xhigh
+  // must not collapse to the latest event). They join the KEY (undefined → '')
+  // without joining the required-field check — most rows legitimately omit them.
+  const tupleExt = ['effort', 'model']
+    .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''));
   return CONFIGURED_IDENTITY_FIELDS
     .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''))
+    .concat(tupleExt)
     .join('\u0000');
 }
 
@@ -207,6 +214,23 @@ function validateRecordRow(row) {
 
   if (!VALID_VERSION_SOURCES.has(row.version_source)) {
     failValidation(`invalid version_source '${row.version_source}'`);
+  }
+
+  // OPTIONAL effort (v2.32.25, family-conflict fallback): when present it names the
+  // calibrated reasoning effort of this row's invocation tuple. Only codex-runner
+  // consumers require it; absent = "not effort-calibrated" (ladder projects null).
+  if (row.effort !== undefined
+      && !['low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
+    failValidation(`invalid effort '${row.effort}' (low|medium|high|xhigh|max or omit)`);
+  }
+
+  // OPTIONAL model (v2.32.25): the exact --model string for this row's runner when
+  // the engine id is a display id rather than a dispatchable model (e.g. engine
+  // "claude-haiku" dispatches as claude-native --model "haiku"). Absent = engine id
+  // IS the dispatch string.
+  if (row.model !== undefined
+      && (typeof row.model !== 'string' || row.model.trim().length === 0)) {
+    failValidation('model must be a non-empty string when present');
   }
 
   if (!VALID_STATUSES.has(row.status)) {
@@ -440,9 +464,30 @@ function currentRowsForRole(role, nowMs) {
     }
   }
 
+  // Invocation-tuple supersede (v2.32.25 R6+R7, shared by current AND ladder):
+  // `model` is an alias refinement of the same qualification — the newest event
+  // per (FULL configured identity + effort) wins regardless of whether it
+  // carries `model`, so a stale model-less row can neither stay selectable in
+  // the ladder nor feed `reviewer_qualified` in resolve-review-loop
+  // --check-scorecard. The key preserves every configured-identity dimension
+  // (corpus/harness/runner_version/prompt hash — R7: rows from different
+  // qualification setups must never retire each other) and omits ONLY model;
+  // distinct efforts remain distinct rungs (R1).
+  const byInvocation = new Map();
+  for (const row of latest.values()) {
+    const key = CONFIGURED_IDENTITY_FIELDS
+      .map((name) => (row[name] !== undefined ? String(row[name]) : ''))
+      .concat([row.effort === undefined ? '' : String(row.effort)])
+      .join('\u0000');
+    const existing = byInvocation.get(key);
+    if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
+      byInvocation.set(key, row);
+    }
+  }
+
   const output = [];
 
-  for (const row of latest.values()) {
+  for (const row of byInvocation.values()) {
     const effectiveStatus = deriveStatus(row, nowMs);
     const rowStatus = typeof effectiveStatus === 'string' ? effectiveStatus : row.status;
 
@@ -459,6 +504,9 @@ function currentRowsForRole(role, nowMs) {
       family: row.family,
       cost: row.cost,
       model_version: row.model_version,
+      // optional invocation-tuple fields (v2.32.25) — carried so ladder can project them
+      ...(row.effort !== undefined ? { effort: row.effort } : {}),
+      ...(row.model !== undefined ? { model: row.model } : {}),
       event_id: toEventId(row.event_id) || 0,
     });
   }
@@ -552,14 +600,20 @@ function cmdReport(args) {
 
 function cmdLadder(args) {
   const { role, implementerFamily } = parseLadderArgs(args);
-  const rows = currentRowsForRole(role, todayMsUtc()).filter((row) => row.status === 'qualified');
-  const ranked = rows.slice().sort(sortByCapability);
+  // currentRowsForRole already applies the invocation-tuple supersede (R6) —
+  // a later failed/expired re-qualification retires the rung before this
+  // qualified filter runs (R5 semantics preserved).
+  const deduped = currentRowsForRole(role, todayMsUtc())
+    .filter((row) => row.status === 'qualified')
+    .sort(sortByCapability);
 
-  const ladder = ranked.map((row) => ({
+  const ladder = deduped.map((row) => ({
     engine: row.engine,
     runner: row.runner,
     family: row.family,
     capability_score: row.capability_score,
+    effort: row.effort === undefined ? null : row.effort,
+    model: row.model === undefined ? null : row.model,
     same_family: Boolean(implementerFamily && row.family === implementerFamily),
   }));
 

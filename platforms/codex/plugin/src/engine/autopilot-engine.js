@@ -254,6 +254,14 @@ function sourceTrustForEngine(engine) {
   return ['openai', 'anthropic', 'google'].includes(modelFamilyOfEngine(engine)) ? 'high' : 'low';
 }
 
+// Family-conflict fallback (v2.32.25): runners a fallback ladder row may select.
+// Validated dispatch-review modes only; 'auto' is rejected (hides the concrete
+// invocation) and endpoint-backed runners (cc-shim / anthropic-compatible) stay
+// excluded until scorecard rows carry endpoint provenance — substituting them
+// without it could silently dispatch the wrong backend.
+const FALLBACK_REVIEW_RUNNERS = new Set(['codex', 'agy', 'grok', 'claude-native']);
+const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
 function ensureDistinctReviewFamily({ implementerEngine, reviewerEngine }) {
   const iFamily = modelFamilyOfEngine(implementerEngine);
   const rFamily = modelFamilyOfEngine(reviewerEngine);
@@ -1058,11 +1066,37 @@ class AutopilotEngine {
       && typeof roster.reviewer_engine_low_risk === 'string' && roster.reviewer_engine_low_risk.length > 0
       && typeof roster.reviewer_effort_low_risk === 'string' && roster.reviewer_effort_low_risk.length > 0
     ) {
+      const tierIncumbent = {
+        reviewer_engine: roster.reviewer_engine,
+        reviewer_effort: roster.reviewer_effort,
+      };
       roster = {
         ...roster,
         reviewer_engine: roster.reviewer_engine_low_risk,
         reviewer_effort: roster.reviewer_effort_low_risk,
       };
+      // Tier qualification tuple check (v2.32.25, closes the "reviewer_qualified
+      // doesn't cover the substituted engine" gap): when scorecard data IS present
+      // (fallback_ladder emitted by --check-scorecard, the default rosterArgs), the
+      // substituted pair must appear in the qualified ladder as an invocation TUPLE —
+      // engine + runner, and for the codex runner (the only one that consumes
+      // reasoning effort) the row's calibrated effort must match. No matching tuple
+      // → revert to the incumbent pair (fail-safe = the stronger reviewer), ledger'd.
+      // Rosters without a ladder (no --check-scorecard) are unchecked here — the
+      // config owner vouches per scorecard-first.
+      if (Array.isArray(roster.fallback_ladder)) {
+        const tuple = roster.fallback_ladder.find((row) => row
+          && row.engine === roster.reviewer_engine
+          && row.runner === roster.reviewer_runner
+          && (row.runner !== 'codex' || row.effort === roster.reviewer_effort));
+        if (!tuple) {
+          ledger.push(this.ledgerEntry('tier_reviewer_unqualified', 'reverted', this.now(), {
+            tier_engine: roster.reviewer_engine,
+            reverted_to: tierIncumbent.reviewer_engine,
+          }));
+          roster = { ...roster, ...tierIncumbent };
+        }
+      }
     }
 
     try {
@@ -1091,21 +1125,107 @@ class AutopilotEngine {
       implementerEngine,
       reviewerEngine: roster.reviewer_engine,
     })) {
-      const startedAt = this.now();
-      ledger.push(this.ledgerEntry('reviewer_family', 'blocked', startedAt));
-      return {
-        status: 'blocked',
-        phase: 'reviewer_family',
-        reason: 'reviewer and implementer must be different families',
-        verdict: null,
-        roster,
-        resolveResult,
-        reviewResult: null,
-        review: null,
-        reviewArgs,
-        riskClassification,
-        ledger,
-      };
+      // Family-conflict fallback (v2.32.25 design review: gpt-5.5 xhigh REVISE
+      // applied): instead of unconditionally hard-blocking — which left the
+      // DEFAULT openai×openai roster with a permanently dead in-loop review and
+      // convergence riding verify-first alone — walk the qualified cross-family
+      // scorecard ladder. Every guard fails CLOSED to the pre-v2.32.25 block:
+      //   - mode: roster.on_family_conflict must be exactly 'fallback'
+      //     (absent/invalid/'block' → block);
+      //   - provenance: roster.fallback_ladder_implementer_family must equal the
+      //     ACTUAL implementer's family (a pre-resolved roster may carry a ladder
+      //     computed against a different implementer — stale ladder never selects);
+      //   - candidate: first ladder row whose ENGINE-derived family (row.family is
+      //     advisory only) differs from the implementer family and is not unknown,
+      //     whose runner is in the validated dispatch-review allowlist ('auto' and
+      //     endpoint-backed runners excluded until rows carry endpoint provenance),
+      //     and — for the codex runner — whose row carries a calibrated effort;
+      //   - no candidate → block.
+      // A selected fallback substitutes engine+runner (+row effort when present;
+      // non-codex runners ignore --effort, so an inherited roster effort is inert).
+      const implFamily = modelFamilyOfEngine(implementerEngine);
+      let fallbackRow = null;
+      // implFamily 'unknown' is UNREACHABLE here today (ensureDistinctReviewFamily
+      // returns true — no conflict — when either family is unknown), but the
+      // explicit guard pins the invariant locally: if that gate's unknown-handling
+      // ever changes, an unclassified implementer must fall through to the hard
+      // block, never into ladder selection (gpt-5.5 R3 defense-in-depth).
+      if (
+        implFamily !== 'unknown'
+        && roster.on_family_conflict === 'fallback'
+        && Array.isArray(roster.fallback_ladder)
+        && typeof roster.fallback_ladder_implementer_family === 'string'
+        && roster.fallback_ladder_implementer_family === implFamily
+      ) {
+        for (const row of roster.fallback_ladder) {
+          if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') continue;
+          const rowFamily = modelFamilyOfEngine(row.engine);
+          if (rowFamily === 'unknown' || rowFamily === implFamily) continue;
+          // R2 (gpt-5.5): the family authorization must hold for the string we
+          // actually DISPATCH, not just the display engine id — a row pairing a
+          // cross-family engine with a same-family model would otherwise slip a
+          // same-family reviewer through the decorrelation gate. Both derived
+          // families must agree, be known, and differ from the implementer's.
+          const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
+          const dispatchFamily = modelFamilyOfEngine(rowModel);
+          if (dispatchFamily !== rowFamily) continue;
+          if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) continue;
+          if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) continue;
+          fallbackRow = row;
+          break;
+        }
+      }
+      if (fallbackRow) {
+        // row.model = the exact --model dispatch string when the engine id is a
+        // display id (e.g. engine "claude-haiku" dispatches as claude-native
+        // --model "haiku"); absent = the engine id IS the dispatch string.
+        const fallbackModel = typeof fallbackRow.model === 'string' && fallbackRow.model
+          ? fallbackRow.model
+          : fallbackRow.engine;
+        ledger.push(this.ledgerEntry('reviewer_family_fallback', 'selected', this.now(), {
+          from_engine: roster.reviewer_engine,
+          to_engine: fallbackRow.engine,
+          to_model: fallbackModel,
+          to_runner: fallbackRow.runner,
+        }));
+        roster = {
+          ...roster,
+          reviewer_engine: fallbackModel,
+          reviewer_runner: fallbackRow.runner,
+          ...(typeof fallbackRow.effort === 'string' && VALID_EFFORTS.has(fallbackRow.effort)
+            ? { reviewer_effort: fallbackRow.effort }
+            : {}),
+          // The fallback row comes from the QUALIFIED ladder (post-R5 a retired
+          // rung never surfaces), so the effective reviewer's qualification is
+          // certified by the selected row — not by the unused incumbent's
+          // reviewer_qualified (gpt-5.5 R6 Minor).
+          reviewer_qualified: true,
+          // Defense-in-depth (gpt-5.5 R8; inert today — the engine never wires
+          // roster.reviewer_endpoint into dispatch args, and endpoint-backed
+          // runners are excluded from the allowlist): the incumbent's named
+          // endpoint must not survive onto a substituted reviewer if endpoint
+          // wiring is ever added.
+          ...(Object.prototype.hasOwnProperty.call(roster, 'reviewer_endpoint')
+            ? { reviewer_endpoint: '' }
+            : {}),
+        };
+      } else {
+        const startedAt = this.now();
+        ledger.push(this.ledgerEntry('reviewer_family', 'blocked', startedAt));
+        return {
+          status: 'blocked',
+          phase: 'reviewer_family',
+          reason: 'reviewer and implementer must be different families',
+          verdict: null,
+          roster,
+          resolveResult,
+          reviewResult: null,
+          review: null,
+          reviewArgs,
+          riskClassification,
+          ledger,
+        };
+      }
     }
 
     if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {

@@ -3110,6 +3110,7 @@ const validPayload = {
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
+  on_family_conflict: 'fallback',
 };
 
 try {
@@ -3666,5 +3667,144 @@ assert_contains "$OUT" "tier_high_model=true" "review_risk=high always keeps the
 assert_contains "$OUT" "tier_half_model=true" "half-set low-risk pair keeps the incumbent (fail-safe)"
 assert_contains "$OUT" "tier_pre_model=true" "PRE-RESOLVED roster path: roster.review_risk drives the tier (live-found gap)"
 assert_contains "$OUT" "tier_pre_roster=gpt-5.6-sol" "pre-resolved path roster self-documents the substitution"
+
+# --- family-conflict fallback (v2.32.25) ---------------------------------------
+# On reviewer/implementer same-family conflict: mode=fallback walks the qualified
+# cross-family ladder (runner-allowlisted, provenance-checked, codex rows need a
+# calibrated effort); every guard failure blocks exactly as pre-v2.32.25.
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const diffBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const fbDiff = `${diffBase}.family-fb.diff`;
+fs.writeFileSync(
+  fbDiff,
+  [
+    'diff --git a/docs/notes.md b/docs/notes.md',
+    'index 1111111..2222222 100644',
+    '--- a/docs/notes.md',
+    '+++ b/docs/notes.md',
+    '@@ -1,1 +1,2 @@',
+    '+docs update',
+  ].join('\n') + '\n',
+);
+
+function engineWith() {
+  return new AutopilotEngine({
+    reviewLoopResolver() { throw new Error('resolver must not be called (pre-resolved roster)'); },
+    reviewDispatcher() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          runner: 'x', model: 'x', status: 'reviewed',
+          verdict: 'SHIP-AS-IS', findings: 'none', raw_log: '/tmp/log', error: null,
+        },
+      };
+    },
+  });
+}
+const baseRoster = {
+  reviewer_engine: 'gpt-5.5',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'codex',
+  implementer_engine: 'gpt-5.3-codex-spark',
+  implementer_effort: 'high',
+  implementer_runner: 'auto',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+function run(extra) {
+  return engineWith().reviewDiff({
+    diffFile: fbDiff,
+    implementerEngine: 'gpt-5.3-codex-spark',
+    roster: { ...baseRoster, ...extra },
+  });
+}
+
+// mixed ladder: same-family row, allowlist-rejected runner, codex row without
+// calibrated effort — all skipped; claude-native haiku selected.
+const LADDER = [
+  { engine: 'gpt-5.6-terra', runner: 'codex', family: 'openai', effort: 'high' },
+  { engine: 'claude-opus', runner: 'bogus-runner', family: 'anthropic' },
+  { engine: 'claude-opus', runner: 'codex', family: 'anthropic', effort: null },
+  // R2 trap: cross-family display engine but SAME-family dispatch model — must be skipped
+  { engine: 'claude-sneak', runner: 'claude-native', family: 'anthropic', model: 'gpt-5.4-mini' },
+  { engine: 'claude-haiku', runner: 'claude-native', family: 'anthropic', effort: null, model: 'haiku' },
+];
+
+const fb = run({ on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`fb_status=${fb.status}`);
+console.log(`fb_args=${(fb.reviewArgs || []).join(' ').includes('--runner claude-native') && (fb.reviewArgs || []).join(' ').includes('--model haiku')}`);
+console.log(`fb_ledger=${fb.ledger.some((e) => e.unit === 'reviewer_family_fallback')}`);
+
+const blockMode = run({ on_family_conflict: 'block', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`fb_blockmode=${blockMode.status}:${blockMode.phase}`);
+
+const absentMode = run({ fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`fb_absentmode=${absentMode.status}:${absentMode.phase}`);
+
+const staleProv = run({ on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'anthropic' });
+console.log(`fb_staleprov=${staleProv.status}:${staleProv.phase}`);
+
+const noCandidate = run({ on_family_conflict: 'fallback', fallback_ladder: [LADDER[0], LADDER[1], LADDER[2]], fallback_ladder_implementer_family: 'openai' });
+console.log(`fb_nocand=${noCandidate.status}:${noCandidate.phase}`);
+
+// R6 Minor: with requireQualifiedReviewer, the EFFECTIVE fallback reviewer is
+// certified by the selected qualified ladder row, not the incumbent's flag.
+const fbQual = engineWith().reviewDiff({
+  diffFile: fbDiff,
+  implementerEngine: 'gpt-5.3-codex-spark',
+  requireQualifiedReviewer: true,
+  roster: { ...baseRoster, reviewer_qualified: false, on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' },
+});
+console.log(`fb_qual=${fbQual.status}`);
+
+// tier tuple qualification: ladder WITHOUT the tier pair → revert to incumbent
+const tierLadderMiss = engineWith().reviewDiff({
+  diffFile: fbDiff,
+  implementerEngine: 'claude-opus',
+  roster: {
+    ...baseRoster,
+    review_risk: 'low',
+    reviewer_engine_low_risk: 'gpt-5.6-sol',
+    reviewer_effort_low_risk: 'high',
+    fallback_ladder: [{ engine: 'gpt-5.5', runner: 'codex', effort: 'xhigh', family: 'openai' }],
+    fallback_ladder_implementer_family: 'anthropic',
+  },
+});
+console.log(`tier_miss_model=${(tierLadderMiss.reviewArgs || []).join(' ').includes('--model gpt-5.5')}`);
+console.log(`tier_miss_ledger=${tierLadderMiss.ledger.some((e) => e.unit === 'tier_reviewer_unqualified')}`);
+
+// tier tuple qualification: ladder WITH the tuple (engine+runner+codex effort) → tier holds
+const tierLadderHit = engineWith().reviewDiff({
+  diffFile: fbDiff,
+  implementerEngine: 'claude-opus',
+  roster: {
+    ...baseRoster,
+    review_risk: 'low',
+    reviewer_engine_low_risk: 'gpt-5.6-sol',
+    reviewer_effort_low_risk: 'high',
+    fallback_ladder: [{ engine: 'gpt-5.6-sol', runner: 'codex', effort: 'high', family: 'openai' }],
+    fallback_ladder_implementer_family: 'anthropic',
+  },
+});
+console.log(`tier_hit_model=${(tierLadderHit.reviewArgs || []).join(' ').includes('--model gpt-5.6-sol')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "family-fallback run exits 0"
+assert_contains "$OUT" "fb_status=reviewed" "conflict+fallback: review actually runs"
+assert_contains "$OUT" "fb_args=true" "fallback selects the first valid cross-family row (claude-haiku/claude-native)"
+assert_contains "$OUT" "fb_ledger=true" "fallback is ledger'd (reviewer_family_fallback)"
+assert_contains "$OUT" "fb_blockmode=blocked:reviewer_family" "mode=block keeps the hard block"
+assert_contains "$OUT" "fb_absentmode=blocked:reviewer_family" "absent on_family_conflict fails closed to block"
+assert_contains "$OUT" "fb_staleprov=blocked:reviewer_family" "stale ladder provenance blocks (pre-resolved roster protection)"
+assert_contains "$OUT" "fb_nocand=blocked:reviewer_family" "no valid cross-family candidate blocks"
+assert_contains "$OUT" "fb_qual=reviewed" "fallback row certifies effective qualification (incumbent flag unused)"
+assert_contains "$OUT" "tier_miss_model=true" "tier pair absent from qualified ladder reverts to incumbent"
+assert_contains "$OUT" "tier_miss_ledger=true" "tier revert is ledger'd (tier_reviewer_unqualified)"
+assert_contains "$OUT" "tier_hit_model=true" "tier tuple present in ladder → tier holds"
 
 finalize_test

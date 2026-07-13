@@ -3108,6 +3108,8 @@ const validPayload = {
   implementer_endpoint: '',
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
+  reviewer_engine_low_risk: '',
+  reviewer_effort_low_risk: '',
 };
 
 try {
@@ -3561,5 +3563,81 @@ assert_eq "0" "$EXIT" "AutopilotEngine reviewDiff same-family block process exit
 assert_contains "$OUT" "same_family_status=blocked" "same-family family-decorrelation blocks review"
 assert_contains "$OUT" "same_family_phase=reviewer_family" "same-family block phase is reviewer_family"
 assert_contains "$OUT" "same_family_reason=reviewer and implementer must be different families" "same-family block reason is explicit"
+
+# --- risk-tiered low-risk reviewer overlay (v2.32.23) --------------------------
+# resolver roster carries reviewer_engine_low_risk/_effort_low_risk; the engine
+# must substitute the pair ONLY when computed review_risk=low AND both keys set.
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const diffBase = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const tierDiff = `${diffBase}.lowrisk-tier.diff`;
+fs.writeFileSync(
+  tierDiff,
+  [
+    'diff --git a/docs/notes.md b/docs/notes.md',
+    'index 1111111..2222222 100644',
+    '--- a/docs/notes.md',
+    '+++ b/docs/notes.md',
+    '@@ -1,1 +1,2 @@',
+    '+docs update',
+  ].join('\n') + '\n',
+);
+
+function makeEngine(reviewRisk, lowRiskPair) {
+  return new AutopilotEngine({
+    reviewLoopResolver() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          reviewer_engine: 'gpt-5.5',
+          reviewer_effort: 'xhigh',
+          reviewer_runner: 'test-review-runner',
+          implementer_engine: 'gpt-5.3-codex-spark',
+          implementer_effort: 'high',
+          implementer_runner: 'test-impl-runner',
+          loop_max_rounds: 1,
+          loop_convergence_verdict: 'SHIP-AS-IS',
+          review_risk: reviewRisk,
+          ...lowRiskPair,
+        },
+      };
+    },
+    reviewDispatcher() {
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          runner: 'test-review-runner', model: 'x', status: 'reviewed',
+          verdict: 'SHIP-AS-IS', findings: 'none', raw_log: '/tmp/log', error: null,
+        },
+      };
+    },
+  });
+}
+
+const pair = { reviewer_engine_low_risk: 'gpt-5.6-sol', reviewer_effort_low_risk: 'high' };
+
+const low = makeEngine('low', pair).reviewDiff({ diffFile: tierDiff, implementerEngine: 'claude-opus' });
+console.log(`tier_low_status=${low.status}`);
+console.log(`tier_low_model=${low.reviewArgs.join(' ').includes('--model gpt-5.6-sol') && low.reviewArgs.join(' ').includes('--effort high')}`);
+console.log(`tier_low_roster=${low.roster.reviewer_engine}`);
+
+const high = makeEngine('high', pair).reviewDiff({ diffFile: tierDiff, implementerEngine: 'claude-opus' });
+console.log(`tier_high_model=${high.reviewArgs.join(' ').includes('--model gpt-5.5') && high.reviewArgs.join(' ').includes('--effort xhigh')}`);
+
+const half = makeEngine('low', { reviewer_engine_low_risk: 'gpt-5.6-sol', reviewer_effort_low_risk: '' })
+  .reviewDiff({ diffFile: tierDiff, implementerEngine: 'claude-opus' });
+console.log(`tier_half_model=${half.reviewArgs.join(' ').includes('--model gpt-5.5')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "low-risk tier overlay run exits 0"
+assert_contains "$OUT" "tier_low_status=reviewed" "low-risk tier run is reviewed"
+assert_contains "$OUT" "tier_low_model=true" "review_risk=low + both keys → low-risk pair drives --model/--effort"
+assert_contains "$OUT" "tier_low_roster=gpt-5.6-sol" "returned roster self-documents the substitution"
+assert_contains "$OUT" "tier_high_model=true" "review_risk=high always keeps the incumbent pair"
+assert_contains "$OUT" "tier_half_model=true" "half-set low-risk pair keeps the incumbent (fail-safe)"
 
 finalize_test

@@ -221,7 +221,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
 #      then work_domain, then domain_source, the capability keys, reviewer/implementer_endpoint,
 #      and min_panel_size (appended last) — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint + min_panel_size, in order"
 
@@ -617,5 +617,31 @@ assert_contains "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-sc
 MPS_DENS="$TEST_TMP/mps-dens.md"
 printf -- '- density_scaling: on\n' > "$MPS_DENS"
 assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MPS_DENS" ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT")" '"min_panel_size": 3' "min_panel_size present when density_scaling on (before FMT_SUFFIX)"
+
+# risk-tiered low-risk reviewer overlay: ADDITIVE fields, empty = tiering off
+# (caller uses reviewer_engine/effort unchanged). Non-empty pair = the loop
+# reviewer for computed review_risk=low; high risk always uses reviewer_engine.
+# HERMETIC default probe: the autopilot repo now ships a dogfood
+# .claude/review-loop-config.md that SETS the low-risk pair (precedence slot 3),
+# so "no override" is no longer the neutral default inside this repo — pin the
+# default semantics through an explicit keyless config instead.
+EMPTY_LR_CFG="$TEST_TMP/lr-empty.md"
+: > "$EMPTY_LR_CFG"
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" bash "$SCRIPT" 2>&1)"
+assert_contains "$OUT" '"reviewer_engine_low_risk": ""' "default low-risk engine empty"
+assert_contains "$OUT" '"reviewer_effort_low_risk": ""' "default low-risk effort empty"
+
+LR_CFG="$TEST_TMP/lr.md"
+printf -- '- reviewer_engine_low_risk: gpt-5.6-sol\n- reviewer_effort_low_risk: high\n' > "$LR_CFG"
+assert_eq "gpt-5.6-sol" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$LR_CFG" bash "$SCRIPT" --field reviewer_engine_low_risk)" "low-risk engine override honored"
+assert_eq "high" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$LR_CFG" bash "$SCRIPT" --field reviewer_effort_low_risk)" "low-risk effort override honored"
+assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$LR_CFG" bash "$SCRIPT")" '"reviewer_engine_low_risk": "gpt-5.6-sol"' "low-risk engine in full JSON"
+
+# garbage low-risk effort → EMPTY (tiering off, never a bogus effort), warn on stderr
+LRB_CFG="$TEST_TMP/lrb.md"
+printf -- '- reviewer_engine_low_risk: gpt-5.6-sol\n- reviewer_effort_low_risk: turbo\n' > "$LRB_CFG"
+assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$LRB_CFG" bash "$SCRIPT" --field reviewer_effort_low_risk 2>/dev/null)" "garbage low-risk effort falls back to empty"
+LRB_ERR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$LRB_CFG" bash "$SCRIPT" --field reviewer_effort_low_risk 2>&1 >/dev/null)"
+assert_contains "$LRB_ERR" "reviewer_effort_low_risk" "garbage low-risk effort warns on stderr"
 
 finalize_test

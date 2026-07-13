@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # panel-cmd-dispatch.sh — Adapter for dispatch-review.sh review panel
-# Usage: panel-cmd-dispatch.sh <runner> <model>
+# Usage: panel-cmd-dispatch.sh <runner> <model> [effort]
+# [effort] (optional): forwarded as dispatch-review.sh --effort (low|medium|high|
+# xhigh|…); omitted = dispatch-review's own default (xhigh). Added for the
+# model×effort qualification matrix (engine-onboarding).
 
 set -uo pipefail
 
 if [ $# -lt 2 ] || [ -z "$1" ] || [ -z "$2" ]; then
-  echo "Usage: $0 <runner> <model>" >&2
+  echo "Usage: $0 <runner> <model> [effort]" >&2
   exit 1
 fi
 
 RUNNER="$1"
 MODEL="$2"
+EFFORT="${3:-}"
 
 # Resolve repo root robustly from the script's own path
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -37,7 +41,11 @@ trap cleanup EXIT
 cat > "$DIFF_TEMP"
 
 # Run dispatch-review.sh
-"$DISPATCH_SCRIPT" --runner "$RUNNER" --model "$MODEL" --diff-file "$DIFF_TEMP" > "$DISPATCH_OUT" 2> "$DISPATCH_ERR"
+if [ -n "$EFFORT" ]; then
+  "$DISPATCH_SCRIPT" --runner "$RUNNER" --model "$MODEL" --effort "$EFFORT" --diff-file "$DIFF_TEMP" > "$DISPATCH_OUT" 2> "$DISPATCH_ERR"
+else
+  "$DISPATCH_SCRIPT" --runner "$RUNNER" --model "$MODEL" --diff-file "$DIFF_TEMP" > "$DISPATCH_OUT" 2> "$DISPATCH_ERR"
+fi
 DISPATCH_RC=$?
 
 # Pass through any stderr output from the dispatch script

@@ -478,6 +478,7 @@ function reapRuns(dir, days, dryRun) {
     if (nowS - refEpoch <= maxAgeS) { out.skipped_fresh += 1; continue; }
 
     const wt = typeof m.worktree === 'string' && m.worktree ? m.worktree : null;
+    let wtRemovalFailed = false;
     if (wt && alive === false && path.isAbsolute(wt) && fs.existsSync(wt)) {
       const marker = path.join(wt, '.autopilot-worktree');
       const wtLock = path.join(wt, '.autopilot-worktree.lock');
@@ -497,11 +498,16 @@ function reapRuns(dir, days, dryRun) {
             }
             out.reaped_worktrees.push(wt);
           } catch (e) {
+            // Keep the manifest when the paired worktree delete errored (gpt-5.5
+            // R2 Minor): deleting it would orphan a large failure-kept worktree
+            // where a later --reap retry could no longer find it.
+            wtRemovalFailed = true;
             out.errors.push({ file, error: `worktree: ${e.message}` });
           }
         }
       }
     }
+    if (wtRemovalFailed) continue;
 
     if (dryRun) {
       out.reaped_manifests.push(f);

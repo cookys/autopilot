@@ -111,6 +111,26 @@ assert_exit_code "$__RUN_EXIT" 0 "G: reap exit 0"
 assert_file_absent "$RUNS/runG.manifest.json" "G: dead+aged manifest reaped"
 assert_file_exists "$WT_NOLOCK/artifact.txt" "G: lock-missing (n/a) worktree NEVER removed"
 
+# --- H: worktree delete ERRORS → manifest KEPT for a later retry (gpt-5.5 R2) --
+test_wt_removal_failure_keeps_manifest() {
+  local wt_stuck="$TEST_TMP/wt-stuck"
+  mkdir -p "$wt_stuck"
+  printf 'created_at=%s\nschema=1\n' "$OLD" > "$wt_stuck/.autopilot-worktree"
+  : > "$wt_stuck/.autopilot-worktree.lock"
+  : > "$wt_stuck/artifact.txt"
+  chmod a-w "$wt_stuck"   # unlink of children now EACCES → rmSync throws
+  mk_manifest "runH.manifest.json" "{\"schema\":1,\"run_id\":\"runH\",\"role\":\"implementer\",\"runner\":\"codex\",\"model\":\"m\",\"worktree\":\"$wt_stuck\",\"lock_path\":\"$wt_stuck/.autopilot-worktree.lock\",\"pid\":null,\"scope_unit\":null,\"started_epoch\":$OLD,\"ended_at\":null,\"ended_epoch\":null,\"final_status\":null}"
+  run_reap
+  chmod u+w "$wt_stuck"   # restore so TEST_TMP EXIT cleanup can remove it
+  assert_exit_code "$__RUN_EXIT" 0 "H: reap exit 0"
+  assert_file_exists "$RUNS/runH.manifest.json" "H: manifest KEPT when worktree delete errors"
+  assert_contains "$__RUN_STDOUT" '"worktree:' "H: worktree error recorded in errors[]"
+  rm -f "$RUNS/runH.manifest.json"
+}
+if [ "$(id -u)" -ne 0 ]; then
+  test_wt_removal_failure_keeps_manifest
+fi
+
 # --- unparseable manifest is skipped with an error entry, not deleted ----------
 printf 'not json' > "$RUNS/junk.manifest.json"
 touch -d "30 days ago" "$RUNS/junk.manifest.json"

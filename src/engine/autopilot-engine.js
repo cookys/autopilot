@@ -1200,6 +1200,14 @@ class AutopilotEngine {
           // certified by the selected row — not by the unused incumbent's
           // reviewer_qualified (gpt-5.5 R6 Minor).
           reviewer_qualified: true,
+          // Defense-in-depth (gpt-5.5 R8; inert today — the engine never wires
+          // roster.reviewer_endpoint into dispatch args, and endpoint-backed
+          // runners are excluded from the allowlist): the incumbent's named
+          // endpoint must not survive onto a substituted reviewer if endpoint
+          // wiring is ever added.
+          ...(Object.prototype.hasOwnProperty.call(roster, 'reviewer_endpoint')
+            ? { reviewer_endpoint: '' }
+            : {}),
         };
       } else {
         const startedAt = this.now();

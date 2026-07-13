@@ -582,7 +582,22 @@ function cmdLadder(args) {
   const rows = currentRowsForRole(role, todayMsUtc()).filter((row) => row.status === 'qualified');
   const ranked = rows.slice().sort(sortByCapability);
 
-  const ladder = ranked.map((row) => ({
+  // Ladder-level supersede (v2.32.25 R4): `model` is an alias REFINEMENT of the
+  // same qualification, not a distinct one — a re-record that adds model:"haiku"
+  // must replace the older model-less row here, or the stale row (whose display
+  // id is not dispatchable) stays selectable. Distinct EFFORTS remain distinct
+  // rungs (R1). Key: engine+runner+effort, highest event_id wins.
+  const byInvocation = new Map();
+  for (const row of ranked) {
+    const key = `${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`;
+    const existing = byInvocation.get(key);
+    if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
+      byInvocation.set(key, row);
+    }
+  }
+  const deduped = ranked.filter((row) => byInvocation.get(`${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`) === row);
+
+  const ladder = deduped.map((row) => ({
     engine: row.engine,
     runner: row.runner,
     family: row.family,

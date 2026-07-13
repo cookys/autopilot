@@ -145,6 +145,16 @@ echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='xhigh';console.lo
 effs=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='tupeng').map(r=>r.effort).sort();process.stdout.write(l.join(','))})")
 [ "$effs" = "high,xhigh" ] && ok "13: distinct efforts coexist as distinct tuples (got: $effs)" || bad "13: efforts collapsed (got: $effs) — R1"
 
+# 14 (v2.32.25 R4): model is an alias REFINEMENT — re-recording the same
+# engine+runner+effort with model added must SUPERSEDE the model-less row in
+# the ladder (else the stale non-dispatchable display id stays selectable).
+reset
+r1="$(row aliaseng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$r1" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+al=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='aliaseng');process.stdout.write(l.length+':'+l.map(r=>r.model).join(','))})")
+[ "$al" = "1:haiku" ] && ok "14: model refinement supersedes the model-less row (got: $al)" || bad "14: stale model-less row survives (got: $al) — R4"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

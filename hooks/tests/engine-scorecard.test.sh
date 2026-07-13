@@ -164,6 +164,15 @@ echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';r.status='f
 rl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='retireng').length))})")
 [ "$rl" = "0" ] && ok "15: later failed re-qual retires the rung" || bad "15: stale qualified row survived a failed re-qual (rows=$rl) — R5"
 
+# 16 (v2.32.25 R7): supersede preserves configured identity — rows from a
+# DIFFERENT corpus (distinct qualification setup) must not retire each other.
+reset
+r1="$(row corpeng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$r1" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.corpus_version='c@2';r.status='failed';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+cl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='corpeng').length))})")
+[ "$cl" = "1" ] && ok "16: cross-corpus rows do not retire each other (c@1 survives c@2 failure)" || bad "16: cross-corpus retirement leak (rows=$cl) — R7"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

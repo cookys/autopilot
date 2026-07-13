@@ -464,15 +464,21 @@ function currentRowsForRole(role, nowMs) {
     }
   }
 
-  // Invocation-tuple supersede (v2.32.25 R6, shared by current AND ladder):
+  // Invocation-tuple supersede (v2.32.25 R6+R7, shared by current AND ladder):
   // `model` is an alias refinement of the same qualification — the newest event
-  // per engine+runner+effort wins regardless of whether it carries `model`, so
-  // a stale model-less row can neither stay selectable in the ladder nor feed
-  // `reviewer_qualified` in resolve-review-loop --check-scorecard. Distinct
-  // efforts remain distinct rungs (R1).
+  // per (FULL configured identity + effort) wins regardless of whether it
+  // carries `model`, so a stale model-less row can neither stay selectable in
+  // the ladder nor feed `reviewer_qualified` in resolve-review-loop
+  // --check-scorecard. The key preserves every configured-identity dimension
+  // (corpus/harness/runner_version/prompt hash — R7: rows from different
+  // qualification setups must never retire each other) and omits ONLY model;
+  // distinct efforts remain distinct rungs (R1).
   const byInvocation = new Map();
   for (const row of latest.values()) {
-    const key = `${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`;
+    const key = CONFIGURED_IDENTITY_FIELDS
+      .map((name) => (row[name] !== undefined ? String(row[name]) : ''))
+      .concat([row.effort === undefined ? '' : String(row.effort)])
+      .join('\u0000');
     const existing = byInvocation.get(key);
     if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
       byInvocation.set(key, row);

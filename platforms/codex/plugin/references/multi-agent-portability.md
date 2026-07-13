@@ -76,6 +76,42 @@ A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (
 - **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
 - **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
+### Verified by Spike (codex-cli 0.144.0 + gpt-5.6-sol, 2026-07-13): `spawn_agent` subagent MODEL routing
+
+Matters to any user running autopilot **on a Codex host**: skills that say "dispatch a
+subagent with model X" (role routing per `resolve-dispatch.sh`) cannot express the model
+through codex's native `spawn_agent` under default config. autopilot's own dispatch scripts
+(`codex exec -m <model>`) are UNAFFECTED — this is about codex-as-host interactive sessions.
+Four facts, all artifact-verified (child rollout JSONL under `~/.codex/sessions/…`, matched
+via `thread_spawn.parent_thread_id` — never the parent's self-report):
+
+1. **Default schema is 3 fields** (`task_name`/`message`/`fork_turns`) — no `model`. On
+   MultiAgentV2 models (gpt-5.6-sol) the trimmed schema is **server-reserved**: flipping only
+   `hide_spawn_agent_metadata=false` gets every turn rejected with
+   `Function 'collaboration.spawn_agent' is reserved for use by this model and must match the
+   configured schema` (HTTP 400). Client side, `codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
+   `hide_spawn_agent_metadata_options()` removes `agent_type`/`model`/`reasoning_effort`/`service_tier`.
+2. **The official custom-agent TOML path routes but does NOT switch the model** (0.144.0):
+   `~/.codex/agents/<name>.toml` with `model = "gpt-5.4-mini"`, spawned via
+   `task_name=<name>` → spawn accepted, profile matched, but the child rollout shows
+   `"model":"gpt-5.6-sol"` — **it inherited the parent's model; the TOML `model` was ignored**
+   (the openai/codex#26868 defect class is still live). Also: agent names must match
+   `[a-z0-9_]` — hyphens are rejected by the tool router.
+3. **Working opt-in escape (two lines, BOTH required)** in the user's `~/.codex/config.toml`:
+   ```toml
+   [features.multi_agent_v2]
+   hide_spawn_agent_metadata = false
+   tool_namespace = "agents"
+   ```
+   Renaming the namespace off the reserved `collaboration.*` restores the full 7-field schema,
+   and a `model="gpt-5.4-mini"` child verifiably runs as gpt-5.4-mini (rollout artifact).
+   Caveats: undocumented upstream, may be closed by a future codex release; failure mode is
+   loud (spawn → 400). This is a **user-owned opt-in** — autopilot must never auto-edit
+   `~/.codex/config.toml`. Recipe + guidance: `platforms/codex/README.md` § Subagent model routing.
+4. **Re-verification probe** (one short `codex exec`): ask the model to print the exact JSON
+   parameter schema of its spawn_agent tool; 3 fields = still locked, 7 fields = open.
+   Upstream watch: openai/codex #31814 / #31097 / #26868 (BACKLOG'd).
+
 ---
 
 ## 2. Key Insight: `.agents/skills/` is the cross-platform intersection

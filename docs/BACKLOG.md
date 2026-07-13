@@ -574,6 +574,12 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S 每件。
 - **Source**: l6-resilience campaign deviations ledger，2026-07-08。
 
+### codex spawn_agent model 欄位被鎖 — 追蹤上游、解鎖後撤 opt-in 文件
+- **Trigger**: codex CLI 升版（`codex --version` 變動）、codex-host user 回報 spawn 400、或 openai/codex #31814 / #31097 / #26868 有 maintainer 回應／關聯 PR 時。
+- **Context**: 2026-07-13 Spike（0.144.0 + gpt-5.6-sol，rollout-artifact 驗證）：`spawn_agent` 預設 schema 只有 3 欄（`model` 被 `hide_spawn_agent_metadata=true` 拔掉＋伺服器端 reserved `collaboration.*` schema 鎖死——只翻 flag 每 turn 400）；官方 `~/.codex/agents/*.toml` 的 `model` 欄在 0.144.0 被無視（child 繼承父模型，#26868 類仍活；另 agent 名限 `[a-z0-9_]`）；唯一實測可用解 = 兩行 opt-in（`hide_spawn_agent_metadata=false` + `tool_namespace="agents"`，缺一不可）。已系統性記載：`references/multi-agent-portability.md` § spawn_agent MODEL routing（Spike 證據）＋ `platforms/codex/README.md` § Subagent model routing（user opt-in 指南，autopilot 絕不代改 user config）。重驗探針：一句 `codex exec` 要模型印出 spawn_agent 參數 schema（3 欄=仍鎖、7 欄=已開）。上游解鎖（官方 TOML model 生效或預設曝欄位）後：更新兩處文件、撤 opt-in 建議。
+- **Effort**: S（重驗＋文件更新）。
+- **Source**: 2026-07-13 spawn_agent 深挖（4 探針實測＋`multi_agents_spec.rs` 原始碼對照）；使用者要求系統性正規解（非單機 config 結案）。
+
 ### dispatch 大型 calibration/eval scratch 改走非配額路徑（usrquota 事故殘項 d）
 - **Trigger**: 下次跑 `calibration.sh` / swe-calibrate 類大型 clone 校準，或 `/tmp` per-user 用量再度異常成長時。
 - **Context**: 2026-07-13 /tmp usrquota 撐爆事故（cookys 名下 ~21.3 GiB → EDQUOT → 整台機器 Claude Code Bash 假死；`df -h` 全域量誤導，probe 法=直接寫檔看 "disk quota exceeded"）。四個修法中 (a) 各 dispatch 腳本啟動 prune 自家過期 log/scratch（`scripts/lib/prune-tmp-residue.sh`）、(b) manifest reaper（`dispatch-status.js --reap`）、(c) hooks/tests 全域 TMPDIR 重導＋trap 鏈修復 —— **均已於 v2.32.22 出貨**。剩 (d)：`swe-calibrate-*`（44 個 ×~110M）這類大型校準 clone 仍寫 `${TMPDIR}`，單體大、非逐日累積，mtime prune 不合適；候選 = 改預設寫 `~/.autopilot/scratch/`（非配額路徑）+ 完跑即清。附帶教訓（已入 memory）：清理腳本的排除清單必須套用到**所有** phase——dirty-skip 的 worktree 曾被後續 glob 撈走刪掉。

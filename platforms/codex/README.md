@@ -22,6 +22,35 @@ Claude-only tool calls are not provided by the Codex package. Treat them as
 platform-specific instructions until a future harness-neutral skill-body split
 lands.
 
+## Subagent model routing (`spawn_agent`) — opt-in
+
+On codex-cli 0.144.0 with a MultiAgentV2 model (e.g. gpt-5.6-sol), the native
+`spawn_agent` tool exposes only `task_name`/`message`/`fork_turns` — **no `model`
+field** — so autopilot's role→model routing (`scripts/resolve-dispatch.sh`) cannot
+be expressed on subagent spawns: every subagent silently inherits the parent's
+(expensive) model. The official `~/.codex/agents/<name>.toml` profile path routes
+the spawn but its `model` field is IGNORED on 0.144.0 (child inherits the parent
+model — verified by rollout artifact; openai/codex#26868 class). Full spike
+evidence: `references/multi-agent-portability.md` § "spawn_agent subagent MODEL
+routing".
+
+Working **opt-in** (add to YOUR `~/.codex/config.toml`; autopilot never edits it):
+
+```toml
+[features.multi_agent_v2]
+hide_spawn_agent_metadata = false
+tool_namespace = "agents"
+```
+
+Both lines are required — the first alone trips the server-reserved
+`collaboration.spawn_agent` schema (400 on every turn); renaming the tool
+namespace restores the full 7-field schema (`model`/`agent_type`/
+`reasoning_effort`/`service_tier`) and per-call model overrides verifiably take
+effect. Caveats: undocumented upstream and may be closed by a future codex
+release; the failure mode is loud (spawn returns 400), so "use until it breaks"
+is safe. Without the opt-in, treat subagent spawns as same-model-as-parent and
+budget accordingly.
+
 ## Hook probe package
 
 `hook-probe/` is a separate Codex plugin marketplace used only for adapter

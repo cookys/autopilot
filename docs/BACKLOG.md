@@ -573,3 +573,9 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Context**: (1) `dispatch-author.sh` agy runner 於失敗嘗試時直接寫雜檔進目標 worktree，違反自身文件宣稱的 no-repo-mutation 契約；(2) `dispatch-review.sh` 的 prompt-leakage 偵測把格式正確的 VERDICT/FINDINGS 回覆誤判為 leakage（raw_log 乾淨，需人工繞過）；(3) 「pre-authorized polarity flip」慣例無結構性 tripwire（如 grep-檢查的 marker）強制翻轉發生於 ship 前——本次靠 foreman 自律完成（`bd1a96d`）。均為 2026-07-08 campaign 實測。
 - **Effort**: S 每件。
 - **Source**: l6-resilience campaign deviations ledger，2026-07-08。
+
+### dispatch 大型 calibration/eval scratch 改走非配額路徑（usrquota 事故殘項 d）
+- **Trigger**: 下次跑 `calibration.sh` / swe-calibrate 類大型 clone 校準，或 `/tmp` per-user 用量再度異常成長時。
+- **Context**: 2026-07-13 /tmp usrquota 撐爆事故（cookys 名下 ~21.3 GiB → EDQUOT → 整台機器 Claude Code Bash 假死；`df -h` 全域量誤導，probe 法=直接寫檔看 "disk quota exceeded"）。四個修法中 (a) 各 dispatch 腳本啟動 prune 自家過期 log/scratch（`scripts/lib/prune-tmp-residue.sh`）、(b) manifest reaper（`dispatch-status.js --reap`）、(c) hooks/tests 全域 TMPDIR 重導＋trap 鏈修復 —— **均已於 v2.32.22 出貨**。剩 (d)：`swe-calibrate-*`（44 個 ×~110M）這類大型校準 clone 仍寫 `${TMPDIR}`，單體大、非逐日累積，mtime prune 不合適；候選 = 改預設寫 `~/.autopilot/scratch/`（非配額路徑）+ 完跑即清。附帶教訓（已入 memory）：清理腳本的排除清單必須套用到**所有** phase——dirty-skip 的 worktree 曾被後續 glob 撈走刪掉。
+- **Effort**: S。
+- **Source**: 2026-07-13 session 實地診斷＋v2.32.22 fix/tmp-residue-retention。

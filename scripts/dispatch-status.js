@@ -21,6 +21,11 @@
 //   dispatch-status.js --log <path> --summary [--format F]    # parse-only, no liveness
 //   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
 //   dispatch-status.js --list [--dir <manifest-dir>]
+//   dispatch-status.js --reap [--days N] [--dir <manifest-dir>] [--dry-run]
+//   --reap: retention reaper for the runs dir — deletes not-live manifests older than
+//   --days (default 7) and, ONLY on a definitive dead lock verdict + .autopilot-worktree
+//   marker + free worktree lock, the failure-kept worktree (then `git worktree prune`s
+//   the owner repo). A live run is never touched. See the reapRuns() header for policy.
 //   --format codex-chrome|jsonl|pi-rpc|plain|auto — the DISPATCHER-declared stream format
 //   (manifest `log_format` when reading via --run). Telemetry parsing trusts the
 //   declaration, never content sniffing: a worker's own output can contain JSON
@@ -297,6 +302,32 @@ function probeScope(unit) {
   return r.status === 0 ? 'active' : 'inactive';
 }
 
+// flock is PRIMARY and authoritative in BOTH directions (the _wt_is_live contract):
+// the worker inherits the lock fd, so "free" means dispatcher AND worker are gone —
+// a still-"alive" pid at that point is pid reuse, never the run. scope/pid are
+// consulted only when no lock verdict exists (review manifests have no lock).
+// alive: true (definitively live) | false (definitively dead) | null (no signal).
+function probeAlive(manifest) {
+  const liveness = {
+    lock: probeLock(manifest ? manifest.lock_path : null),
+    pid: probePid(manifest ? manifest.pid : null),
+    scope: probeScope(manifest ? manifest.scope_unit : null),
+  };
+  let alive;
+  if (liveness.lock === 'held') {
+    alive = true;
+  } else if (liveness.lock === 'free') {
+    alive = false;
+  } else if (liveness.scope === 'active' || liveness.pid === 'alive') {
+    alive = true;
+  } else if (liveness.pid === 'n/a' && liveness.scope === 'n/a') {
+    alive = null;
+  } else {
+    alive = false;
+  }
+  return { liveness, alive };
+}
+
 function filesTouched(worktree, baseSha) {
   // Git-artifact-derived (never log/self-report). Null when the worktree is gone
   // (post-success reap) or git fails — an honest "can't tell", not an empty list.
@@ -333,27 +364,8 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverr
     logStat = { path: logPath, exists: false, bytes: null, mtime_age_s: null };
   }
 
-  const liveness = {
-    lock: probeLock(manifest ? manifest.lock_path : null),
-    pid: probePid(manifest ? manifest.pid : null),
-    scope: probeScope(manifest ? manifest.scope_unit : null),
-  };
-  // flock is PRIMARY and authoritative in BOTH directions (the _wt_is_live contract):
-  // the worker inherits the lock fd, so "free" means dispatcher AND worker are gone —
-  // a still-"alive" pid at that point is pid reuse, never the run. scope/pid are
-  // consulted only when no lock verdict exists (review manifests have no lock).
-  let alive;
-  if (liveness.lock === 'held') {
-    alive = true;
-  } else if (liveness.lock === 'free') {
-    alive = false;
-  } else if (liveness.scope === 'active' || liveness.pid === 'alive') {
-    alive = true;
-  } else if (liveness.pid === 'n/a' && liveness.scope === 'n/a') {
-    alive = null;
-  } else {
-    alive = false;
-  }
+  const { liveness, alive: probedAlive } = probeAlive(manifest);
+  let alive = probedAlive;
   let phase = alive === true ? 'running' : (alive === false ? 'exited' : 'unknown');
   if (manifest && manifest.ended_at) { alive = false; phase = 'exited'; }
 
@@ -395,8 +407,124 @@ function usageOnly(logPath, declaredFormat) {
   }
 }
 
+// --- reap (manifest + dead-worktree retention) ------------------------------------
+// BACKLOG 2026-07-13 (b): manifests (and failure-kept worktrees) accumulated with no
+// retention — 602 manifests + multi-hundred-MB dead worktrees helped exhaust the /tmp
+// per-user quota. Policy (conservative, artifact-not-self-report):
+//   - a LIVE run (probeAlive true) is NEVER touched, regardless of age;
+//   - manifest reaped only when not-live AND older than --days (ended_epoch ||
+//     started_epoch || file mtime);
+//   - worktree removed ONLY on DEFINITIVE dead (alive === false, i.e. a lock verdict —
+//     never null/no-signal) AND the dir carries the .autopilot-worktree marker AND its
+//     own lifetime lock is free — the same eligibility contract as
+//     lib/worktree-reap.sh gc_stale_worktrees; unmarked dirs are never deleted;
+//   - unparseable manifests are reported in errors[], never deleted;
+//   - after a worktree removal the owner repo (from the linked worktree's .git file)
+//     gets a best-effort `git worktree prune` so no stale registration lingers.
+
+function worktreeOwnerRepo(wt) {
+  // A linked worktree's .git is a FILE: "gitdir: <abs>/.git/worktrees/<name>".
+  try {
+    const gitFile = path.join(wt, '.git');
+    if (!fs.statSync(gitFile).isFile()) return null;
+    const m = fs.readFileSync(gitFile, 'utf8').match(/^gitdir:\s*(.+)$/m);
+    if (!m) return null;
+    const gd = m[1].trim();
+    const idx = gd.indexOf(`${path.sep}.git${path.sep}worktrees${path.sep}`);
+    return idx === -1 ? null : gd.slice(0, idx);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function reapRuns(dir, days, dryRun) {
+  const out = {
+    schema: 1,
+    dry_run: !!dryRun,
+    dir,
+    days,
+    scanned: 0,
+    reaped_manifests: [],
+    reaped_worktrees: [],
+    skipped_live: 0,
+    skipped_fresh: 0,
+    errors: [],
+  };
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json'));
+  } catch (_e) { /* absent dir → empty result */ }
+  const nowS = Math.floor(Date.now() / 1000);
+  const maxAgeS = days * 86400;
+  for (const f of entries) {
+    const file = path.join(dir, f);
+    out.scanned += 1;
+    let m;
+    try {
+      m = readManifest(file);
+    } catch (e) {
+      out.errors.push({ file, error: `unparseable: ${e.message}` });
+      continue;
+    }
+    const ended = Boolean(m.ended_at || m.final_status);
+    const alive = ended ? false : probeAlive(m).alive;
+    if (alive === true) { out.skipped_live += 1; continue; }
+    let refEpoch;
+    if (Number.isFinite(m.ended_epoch)) refEpoch = m.ended_epoch;
+    else if (Number.isFinite(m.started_epoch)) refEpoch = m.started_epoch;
+    else {
+      try { refEpoch = Math.floor(fs.statSync(file).mtimeMs / 1000); } catch (_e) { refEpoch = nowS; }
+    }
+    if (nowS - refEpoch <= maxAgeS) { out.skipped_fresh += 1; continue; }
+
+    const wt = typeof m.worktree === 'string' && m.worktree ? m.worktree : null;
+    let wtRemovalFailed = false;
+    if (wt && alive === false && path.isAbsolute(wt) && fs.existsSync(wt)) {
+      const marker = path.join(wt, '.autopilot-worktree');
+      const wtLock = path.join(wt, '.autopilot-worktree.lock');
+      // Require a DEFINITIVE 'free' verdict: 'n/a' (lock file missing) and
+      // 'unsupported' (flock unavailable) are unknowns, and an unknown must
+      // never authorize deletion (gpt-5.5 R1 Major). Such dirs stay — the
+      // pre-reaper status quo — rather than being reaped on a guess.
+      if (fs.existsSync(marker) && probeLock(wtLock) === 'free') {
+        if (dryRun) {
+          out.reaped_worktrees.push(wt);
+        } else {
+          try {
+            const repoRoot = worktreeOwnerRepo(wt);
+            fs.rmSync(wt, { recursive: true, force: true });
+            if (repoRoot) {
+              spawnSync('git', ['-C', repoRoot, 'worktree', 'prune'], { stdio: 'ignore', timeout: 10000 });
+            }
+            out.reaped_worktrees.push(wt);
+          } catch (e) {
+            // Keep the manifest when the paired worktree delete errored (gpt-5.5
+            // R2 Minor): deleting it would orphan a large failure-kept worktree
+            // where a later --reap retry could no longer find it.
+            wtRemovalFailed = true;
+            out.errors.push({ file, error: `worktree: ${e.message}` });
+          }
+        }
+      }
+    }
+    if (wtRemovalFailed) continue;
+
+    if (dryRun) {
+      out.reaped_manifests.push(f);
+    } else {
+      try {
+        fs.unlinkSync(file);
+        out.reaped_manifests.push(f);
+      } catch (e) {
+        out.errors.push({ file, error: `manifest: ${e.message}` });
+      }
+    }
+  }
+  return out;
+}
+
 function main(argv) {
-  const args = { stallSecs: DEFAULT_STALL_SECS };
+  const args = { stallSecs: DEFAULT_STALL_SECS, days: 7 };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--run') { args.run = argv[++i]; }
@@ -409,6 +537,9 @@ function main(argv) {
     else if (a === '--summary') { args.summary = true; }
     else if (a === '--usage-only') { args.usageOnly = true; }
     else if (a === '--list') { args.list = true; }
+    else if (a === '--reap') { args.reap = true; }
+    else if (a === '--days') { args.days = Number(argv[++i]); }
+    else if (a === '--dry-run') { args.dryRun = true; }
     else if (a === '--help' || a === '-h') { args.help = true; }
     else { process.stderr.write(`unknown argument: ${a}\n`); return 2; }
   }
@@ -433,6 +564,16 @@ function main(argv) {
 
   if (args.usageOnly) {
     usageOnly(args.log || '', args.format || 'auto');
+    return 0;
+  }
+
+  if (args.reap) {
+    if (!Number.isInteger(args.days) || args.days <= 0) {
+      process.stderr.write('--days must be a positive integer\n');
+      return 2;
+    }
+    const out = reapRuns(manifestDir(args.dir), args.days, args.dryRun);
+    process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
     return 0;
   }
 

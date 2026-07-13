@@ -33,6 +33,16 @@ mkdir -p "$HOOK_HOME"
 HOOK_TMPDIR="$TEST_TMP/tmp"
 mkdir -p "$HOOK_TMPDIR"
 
+# Export the redirect GLOBALLY, not just via run_hook: tests that invoke
+# scripts/*.sh directly (dispatch-hetero.test.sh etc.) used to inherit the REAL
+# /tmp, so every mktemp the script-under-test performed leaked into the host tmp
+# namespace — 616 hetero-feat-*/hetero-t-* fixture logs accumulated and helped
+# exhaust the /tmp per-user quota (2026-07-13 incident, BACKLOG (c)). TEST_TMP
+# itself was created above with the REAL TMPDIR (it must be, to survive this
+# export) and the EXIT trap cleans everything under it. A test that needs a
+# different TMPDIR can still export its own after sourcing lib.sh.
+export TMPDIR="$HOOK_TMPDIR"
+
 cleanup_test_tmp() { rm -rf "$TEST_TMP"; }
 trap cleanup_test_tmp EXIT
 

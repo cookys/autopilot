@@ -107,6 +107,13 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # any endpoint/env consumption. resolution contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
 # shellcheck source=/dev/null
 [ -r "$SELF_DIR/load-endpoints-env.sh" ] && . "$SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
+# Startup retention prune of OUR OWN aged ${TMPDIR} residue (logs/prompt temps/pi
+# sessions — NEVER worktrees; those are lock/marker-gated in worktree-reap.sh /
+# dispatch-status.js --reap). Best-effort; AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 disables.
+# shellcheck source=/dev/null
+[ -r "$SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$SELF_DIR/lib/prune-tmp-residue.sh" \
+  && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" \
+       'hetero-*-log-*' 'dispatch-hetero-*' 'pi-rpc-session-*' 'hetero-detach-state-*' || true
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint

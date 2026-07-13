@@ -89,6 +89,7 @@ always streamed live to the log file; the manifest is what makes it findable mid
 scripts/dispatch-status.js --run <run-id>      # one JSON line: phase/alive/stall/tokens/files
 scripts/dispatch-status.js --list              # all manifests (started/ended)
 scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/tokens)
+scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (see below)
 ```
 
 - **Liveness** (advisory ordering): flock probe on the worktree lifetime lock (same contract as
@@ -110,6 +111,27 @@ scripts/dispatch-status.js --log <p> --summary # parse-only (events/tool_calls/t
   with `--usage-only`.
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
+
+## Residue retention — startup log prune + manifest reaper
+
+Dispatch residue used to accumulate with NO retention until it exhausted the host's `/tmp`
+per-user quota (usrquota) and silently broke every harness Bash call on the machine
+(2026-07-13 incident: 1910 `dispatch-review-log-*` + 616 test-fixture logs + 126
+`pi-rpc-session-*` + 602 manifests ≈ 21 GiB). Two mechanisms now bound it:
+
+- **Startup log prune** (`scripts/lib/prune-tmp-residue.sh`): each dispatch script
+  (`dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-author.sh` / `dispatch-explore.sh`)
+  best-effort prunes ITS OWN aged `${TMPDIR}` residue (raw logs, prompt temps, scratch cwds,
+  pi sessions) at startup — items older than `${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}` days,
+  own-user only, `-maxdepth 1`, fixed name prefixes. `0` disables. LOGS AND SCRATCH ONLY —
+  worktrees are never blind-mtime-pruned (they carry a liveness lock; see next bullet).
+- **Manifest reaper** (`dispatch-status.js --reap [--days N] [--dry-run]`, default 7 days):
+  scans the runs dir; a LIVE run (flock/pid/scope probe) is never touched regardless of age;
+  not-live manifests older than `--days` are deleted; a failure-kept worktree is removed ONLY
+  on a DEFINITIVE dead lock verdict + the `.autopilot-worktree` marker + a free worktree lock
+  (the `gc_stale_worktrees` eligibility contract), then the owner repo gets `git worktree
+  prune`. Unmarked dirs and unparseable manifests are never deleted. Complements (not
+  replaces) `dispatch-hetero.sh --gc`, which stays the config-gated worktree-only reaper.
 
 ## Wired engines (runners) — how to pick one
 

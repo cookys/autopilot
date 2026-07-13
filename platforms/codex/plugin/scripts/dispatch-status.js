@@ -481,7 +481,11 @@ function reapRuns(dir, days, dryRun) {
     if (wt && alive === false && path.isAbsolute(wt) && fs.existsSync(wt)) {
       const marker = path.join(wt, '.autopilot-worktree');
       const wtLock = path.join(wt, '.autopilot-worktree.lock');
-      if (fs.existsSync(marker) && probeLock(wtLock) !== 'held') {
+      // Require a DEFINITIVE 'free' verdict: 'n/a' (lock file missing) and
+      // 'unsupported' (flock unavailable) are unknowns, and an unknown must
+      // never authorize deletion (gpt-5.5 R1 Major). Such dirs stay — the
+      // pre-reaper status quo — rather than being reaped on a guess.
+      if (fs.existsSync(marker) && probeLock(wtLock) === 'free') {
         if (dryRun) {
           out.reaped_worktrees.push(wt);
         } else {

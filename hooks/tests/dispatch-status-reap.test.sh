@@ -97,6 +97,20 @@ else
   done < "$TEST_TMP/subshell-fail"
 fi
 
+# --- G: marker present but lock file MISSING → probeLock 'n/a' is an unknown, ---
+# never a deletion authorization (gpt-5.5 R1 Major): manifest reaped, wt kept.
+WT_NOLOCK="$TEST_TMP/wt-nolock"
+mkdir -p "$WT_NOLOCK"
+printf 'created_at=%s\nschema=1\n' "$OLD" > "$WT_NOLOCK/.autopilot-worktree"
+: > "$WT_NOLOCK/artifact.txt"
+bash -c ':' & DEAD_PID=$!
+wait "$DEAD_PID" 2>/dev/null
+mk_manifest "runG.manifest.json" "{\"schema\":1,\"run_id\":\"runG\",\"role\":\"implementer\",\"runner\":\"codex\",\"model\":\"m\",\"worktree\":\"$WT_NOLOCK\",\"lock_path\":null,\"pid\":$DEAD_PID,\"scope_unit\":null,\"started_epoch\":$OLD,\"ended_at\":null,\"ended_epoch\":null,\"final_status\":null}"
+run_reap
+assert_exit_code "$__RUN_EXIT" 0 "G: reap exit 0"
+assert_file_absent "$RUNS/runG.manifest.json" "G: dead+aged manifest reaped"
+assert_file_exists "$WT_NOLOCK/artifact.txt" "G: lock-missing (n/a) worktree NEVER removed"
+
 # --- unparseable manifest is skipped with an error entry, not deleted ----------
 printf 'not json' > "$RUNS/junk.manifest.json"
 touch -d "30 days ago" "$RUNS/junk.manifest.json"

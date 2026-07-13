@@ -24,6 +24,23 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.25 — family-conflict fallback: in-loop review revives via the cross-family scorecard ladder
+
+**Headline**: The 2026-07-13 /l5 e2e exposed that the engine's in-loop decorrelated review was STRUCTURALLY DEAD for the shipped default roster — implementer gpt-5.3-codex-spark and reviewer gpt-5.5 both map to the openai family, so `reviewDiff` hard-blocked at `reviewer_family` on every run and convergence rode verify-first alone. New contract field `on_family_conflict` (default `fallback`): on a same-family conflict the engine substitutes the first CROSS-FAMILY QUALIFIED row from the scorecard `fallback_ladder` (e.g. claude-haiku via claude-native, known-bad 12/12) so the in-loop review actually runs. Design adversarially reviewed by gpt-5.5 xhigh (REVISE applied in full): invocation-tuple identity, runner allowlist (`codex|agy|grok|claude-native`; `auto` and endpoint-backed runners excluded until rows carry endpoint provenance), codex rows require a calibrated row `effort`, ladder provenance (`fallback_ladder_implementer_family`) must match the ACTUAL implementer family (stale pre-resolved rosters never select), and every guard failure blocks exactly as before. Also closes the BACKLOG'd qualification gap: a tier-substituted reviewer must now appear in the qualified ladder as a tuple or it reverts to the incumbent (`tier_reviewer_unqualified` ledger entry).
+
+### Added
+- Contract field `on_family_conflict` (`fallback|block`, garbage→`block` fail-closed): schema SSOT + resolver (defaults/read/validate/`--field`/both emissions) + template key table. Conditional `--check-scorecard` key `fallback_ladder_implementer_family` (ladder provenance; JS validator accepts).
+- `engine-scorecard.js`: rows accept OPTIONAL `effort` (invocation-tuple calibration) and OPTIONAL `model` (the exact `--model` dispatch string when the engine id is a display id — live-found: `claude-haiku` is not dispatchable, claude-native needs `--model haiku`); `current` carries both, `ladder` projects both (`null` when absent). gpt-5.6-sol row re-recorded with `effort:"high"`; claude-haiku row re-recorded with `model:"haiku"`. Live e2e chain verified: tier(sol) → family conflict vs codex-spark → fallback → REAL claude-native haiku review → SHIP-AS-IS.
+- `resolve-review-loop.sh --check-scorecard` now computes `fallback_ladder` WITH `--implementer-family` (same_family flags authoritative).
+- Engine `reviewDiff`: family-conflict fallback selection + `reviewer_family_fallback` ledger entry + tier tuple qualification (`tier_reviewer_unqualified` revert). 12 new engine assertions + 4 resolver assertions.
+
+### Changed
+- Test fixtures across engine/runner/resolver suites carry the new always-emitted key; KR2 key-order pin extended; ladder baselines updated to the implementer-family-aware call. Codex plugin payload mirror re-synced.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `on_family_conflict: block` restores the pre-v2.32.25 hard block without a version change.
+
 ## v2.32.24 — tier fix: pre-resolved-roster path reads `roster.review_risk`
 
 **Headline**: The v2.32.23 low-risk tier was DEAD on the canonical `/l5` loop path — live-found by the same-day e2e run. `engine implement-review` passes a pre-resolved roster into `reviewDiff` (dynamicReviewRisk off), so `resolveResult` stays null and the substitution guard's `reviewRisk` was never populated even though the roster itself carried `review_risk:"low"` + both `_low_risk` keys (artifact: the run's `review.roster` showed the incumbent still selected). Fix: `reviewDiff` now falls back to `roster.review_risk`. Live re-verification with the real resolver + real dispatch: reviewArgs `--model gpt-5.6-sol --effort high`, raw-log header `model: gpt-5.6-sol`, verdict SHIP-AS-IS on a clean diff.

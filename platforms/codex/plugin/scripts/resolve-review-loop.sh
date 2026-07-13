@@ -78,6 +78,10 @@ DEF_QC_AGG="union-on-verified-critical"
 DEF_DIFF_SCOPE="full"
 DEF_MIN_PANEL_SIZE="3"
 DEF_ON_ENGINE_UNAVAILABLE="ask"
+# in-loop reviewer family-conflict policy (engine reviewDiff): fallback = walk the
+# cross-family qualified scorecard ladder; block = hard-block (pre-v2.32.25 behavior).
+# Garbage → block (fail-closed: the engine treats anything but "fallback" as block).
+DEF_ON_FAMILY_CONFLICT="fallback"
 
 FIELD=""
 SOURCE_TRUST=""
@@ -184,6 +188,11 @@ REV_EFFORT_LOW_RISK="$(read_field reviewer_effort_low_risk "$DEF_REV_EFFORT_LOW_
 case "$REV_EFFORT_LOW_RISK" in
   ''|low|medium|high|xhigh|max) ;;
   *) echo "resolve-review-loop: ignoring invalid reviewer_effort_low_risk (must be low|medium|high|xhigh|max): $REV_EFFORT_LOW_RISK" >&2; REV_EFFORT_LOW_RISK="" ;;
+esac
+ON_FAMILY_CONFLICT="$(read_field on_family_conflict "$DEF_ON_FAMILY_CONFLICT")"
+case "$ON_FAMILY_CONFLICT" in
+  fallback|block) ;;
+  *) echo "resolve-review-loop: invalid on_family_conflict (must be fallback|block): $ON_FAMILY_CONFLICT — using block (fail-closed)" >&2; ON_FAMILY_CONFLICT="block" ;;
 esac
 MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
@@ -511,7 +520,7 @@ REVIEWER_QUALIFIED="false"
 FALLBACK_LADDER_JSON="[]"
 if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
   SCORECARD_CURRENT="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role reviewer 2>/dev/null || true)"
-  SCORECARD_LADDER="$(node "$SCRIPT_DIR/engine-scorecard.js" ladder --role reviewer 2>/dev/null || true)"
+  SCORECARD_LADDER="$(node "$SCRIPT_DIR/engine-scorecard.js" ladder --role reviewer --implementer-family "$IMPL_FAMILY" 2>/dev/null || true)"
   FALLBACK_LADDER_JSON="$(printf '%s' "$SCORECARD_LADDER" | json_parse_array_compact || printf '%s' "[]")"
 
   REVIEWER_STATUS=""
@@ -801,6 +810,7 @@ if [[ -n "$FIELD" ]]; then
     implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
     reviewer_engine_low_risk) printf '%s\n' "$REV_ENGINE_LOW_RISK" ;;
     reviewer_effort_low_risk) printf '%s\n' "$REV_EFFORT_LOW_RISK" ;;
+    on_family_conflict) printf '%s\n' "$ON_FAMILY_CONFLICT" ;;
     loop_max_rounds) printf '%s\n' "$MAX_ROUNDS" ;;
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
@@ -888,23 +898,23 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s"'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s"'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
-    "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" \
+    "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" "$IMPL_FAMILY" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "${ARGS_SUFFIX[@]}"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s"'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s"'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "${ARGS_SUFFIX[@]}"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

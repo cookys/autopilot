@@ -209,6 +209,23 @@ function validateRecordRow(row) {
     failValidation(`invalid version_source '${row.version_source}'`);
   }
 
+  // OPTIONAL effort (v2.32.25, family-conflict fallback): when present it names the
+  // calibrated reasoning effort of this row's invocation tuple. Only codex-runner
+  // consumers require it; absent = "not effort-calibrated" (ladder projects null).
+  if (row.effort !== undefined
+      && !['low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
+    failValidation(`invalid effort '${row.effort}' (low|medium|high|xhigh|max or omit)`);
+  }
+
+  // OPTIONAL model (v2.32.25): the exact --model string for this row's runner when
+  // the engine id is a display id rather than a dispatchable model (e.g. engine
+  // "claude-haiku" dispatches as claude-native --model "haiku"). Absent = engine id
+  // IS the dispatch string.
+  if (row.model !== undefined
+      && (typeof row.model !== 'string' || row.model.trim().length === 0)) {
+    failValidation('model must be a non-empty string when present');
+  }
+
   if (!VALID_STATUSES.has(row.status)) {
     failValidation(`invalid status '${row.status}'`);
   }
@@ -459,6 +476,9 @@ function currentRowsForRole(role, nowMs) {
       family: row.family,
       cost: row.cost,
       model_version: row.model_version,
+      // optional invocation-tuple fields (v2.32.25) — carried so ladder can project them
+      ...(row.effort !== undefined ? { effort: row.effort } : {}),
+      ...(row.model !== undefined ? { model: row.model } : {}),
       event_id: toEventId(row.event_id) || 0,
     });
   }
@@ -560,6 +580,8 @@ function cmdLadder(args) {
     runner: row.runner,
     family: row.family,
     capability_score: row.capability_score,
+    effort: row.effort === undefined ? null : row.effort,
+    model: row.model === undefined ? null : row.model,
     same_family: Boolean(implementerFamily && row.family === implementerFamily),
   }));
 

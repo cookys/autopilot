@@ -37,7 +37,8 @@
     "min_panel_size",
     "on_engine_unavailable",
     "reviewer_engine_low_risk",
-    "reviewer_effort_low_risk"
+    "reviewer_effort_low_risk",
+    "on_family_conflict"
   ],
   "properties": {
     "reviewer_engine": { "type": "string", "minLength": 1 },
@@ -72,7 +73,8 @@
     "min_panel_size": { "type": "integer", "minimum": 1 },
     "on_engine_unavailable": { "type": "string", "enum": ["ask", "solo-fallback", "wait-reset"], "x-shell-validated": true, "x-shell-var": "ON_ENGINE_UNAVAILABLE" },
     "reviewer_engine_low_risk": { "type": "string", "description": "Risk-tiered overlay: non-empty (with reviewer_effort_low_risk) = the LOOP reviewer engine for computed review_risk=low; empty = tiering off (reviewer_engine used at every risk). High risk always uses reviewer_engine." },
-    "reviewer_effort_low_risk": { "type": "string", "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string." }
+    "reviewer_effort_low_risk": { "type": "string", "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string." },
+    "on_family_conflict": { "type": "string", "enum": ["fallback", "block"], "x-shell-validated": true, "x-shell-var": "ON_FAMILY_CONFLICT", "description": "Engine reviewDiff policy when the (effective) reviewer shares the implementer's model family: fallback = substitute the first cross-family qualified row from fallback_ladder (runner-allowlisted, fail-closed on no candidate); block = hard-block (pre-v2.32.25 behavior). Resolver coerces garbage to block; the engine treats absent/invalid as block. The conditional --check-scorecard key fallback_ladder_implementer_family carries ladder provenance (the implementer family the ladder was computed against) so a stale pre-resolved roster fails closed." }
   },
   "required": [
     "reviewer_engine",
@@ -107,7 +109,8 @@
     "min_panel_size",
     "on_engine_unavailable",
     "reviewer_engine_low_risk",
-    "reviewer_effort_low_risk"
+    "reviewer_effort_low_risk",
+    "on_family_conflict"
   ],
   "additionalProperties": true
 }

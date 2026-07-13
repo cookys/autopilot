@@ -221,7 +221,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
 #      then work_domain, then domain_source, the capability keys, reviewer/implementer_endpoint,
 #      and min_panel_size (appended last) — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint + min_panel_size, in order"
 
@@ -263,7 +263,7 @@ cat > "$RECQUAL_JSON" <<'JSON'
 {"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
 JSON
 ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECQUAL_JSON" > /dev/null
-EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer)"
+EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
 QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard)"
 assert_eq "true" "$(json_get "$QUAL_OUT" reviewer_qualified)" "qualified reviewer row => reviewer_qualified true"
 assert_eq "$EXPECTED_LADDER" "$(json_get "$QUAL_OUT" fallback_ladder)" "fallback_ladder matches scorecard ladder output"
@@ -289,7 +289,7 @@ cat > "$RECFAIL_JSON" <<'JSON'
 {"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}
 JSON
 ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECFAIL_JSON" > /dev/null
-FAIL_LADDER="$(ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer)"
+FAIL_LADDER="$(ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
 FAIL_OUT="$(ENGINE_SCORECARD_DIR="$FAILDIR" bash "$SCRIPT" --check-scorecard)"
 assert_eq "false" "$(json_get "$FAIL_OUT" reviewer_qualified)" "failed reviewer row => reviewer_qualified false"
 assert_eq "$FAIL_LADDER" "$(json_get "$FAIL_OUT" fallback_ladder)" "failed row still emits fallback ladder"
@@ -302,7 +302,7 @@ cat > "$RECEXPIRED_JSON" <<'JSON'
 {"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-01-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"expired","qualified_at":"2026-01-01","expires":"2026-01-02"}
 JSON
 ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECEXPIRED_JSON" > /dev/null
-EXP_LADDER="$(ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer)"
+EXP_LADDER="$(ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
 EXP_OUT="$(ENGINE_SCORECARD_DIR="$EXPDIR" bash "$SCRIPT" --check-scorecard)"
 assert_eq "false" "$(json_get "$EXP_OUT" reviewer_qualified)" "expired reviewer row => reviewer_qualified false"
 assert_eq "$EXP_LADDER" "$(json_get "$EXP_OUT" fallback_ladder)" "expired row still emits fallback ladder"
@@ -643,5 +643,18 @@ printf -- '- reviewer_engine_low_risk: gpt-5.6-sol\n- reviewer_effort_low_risk: 
 assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$LRB_CFG" bash "$SCRIPT" --field reviewer_effort_low_risk 2>/dev/null)" "garbage low-risk effort falls back to empty"
 LRB_ERR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$LRB_CFG" bash "$SCRIPT" --field reviewer_effort_low_risk 2>&1 >/dev/null)"
 assert_contains "$LRB_ERR" "reviewer_effort_low_risk" "garbage low-risk effort warns on stderr"
+
+# on_family_conflict: always-emitted enum, default fallback, garbage → block (fail-closed)
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" bash "$SCRIPT" 2>&1)"
+assert_contains "$OUT" '"on_family_conflict": "fallback"' "default on_family_conflict is fallback"
+OFC_CFG="$TEST_TMP/ofc.md"
+printf -- '- on_family_conflict: block\n' > "$OFC_CFG"
+assert_eq "block" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$OFC_CFG" bash "$SCRIPT" --field on_family_conflict)" "on_family_conflict block honored"
+printf -- '- on_family_conflict: banana\n' > "$OFC_CFG"
+assert_eq "block" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$OFC_CFG" bash "$SCRIPT" --field on_family_conflict 2>/dev/null)" "garbage on_family_conflict fails closed to block"
+
+# --check-scorecard fallback_ladder carries implementer-family provenance
+SC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" ENGINE_SCORECARD_DIR="${EMPTY_SCDIR:-$TEST_TMP/empty-sc}" bash "$SCRIPT" --check-scorecard 2>/dev/null)"
+assert_contains "$SC_OUT" '"fallback_ladder_implementer_family"' "ladder provenance key present under --check-scorecard"
 
 finalize_test

@@ -33,7 +33,7 @@ const expectedKeys = new Set(REVIEW_LOOP_FIELDS);
 // Documented allowlist of conditional keys that are known to the JS side.
 // The shell script only emits scorecard keys when --check-scorecard is passed.
 // Density keys are emitted only when density scaling is enabled.
-const conditionalAllowlist = ['reviewer_qualified', 'fallback_ladder'];
+const conditionalAllowlist = ['reviewer_qualified', 'fallback_ladder', 'fallback_ladder_implementer_family'];
 const optionalKnownFields = ['capability_tier', 'density_scaled', 'density_source', 'verify_first'];
 if (isScorecard) {
   for (const k of conditionalAllowlist) {

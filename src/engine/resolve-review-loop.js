@@ -136,6 +136,12 @@ function validateReviewLoopConfig(value) {
   if (hasFallbackLadder) {
     assertField(value, 'fallback_ladder', Array.isArray, 'an array');
   }
+  // Conditional provenance for the family-conflict fallback (v2.32.25): names the
+  // implementer family the ladder was computed against so a stale pre-resolved
+  // roster can be detected. Emitted alongside fallback_ladder by --check-scorecard.
+  if (Object.prototype.hasOwnProperty.call(value, 'fallback_ladder_implementer_family')) {
+    assertField(value, 'fallback_ladder_implementer_family', (v) => typeof v === 'string', 'a string');
+  }
   if (Object.prototype.hasOwnProperty.call(value, 'verify_first')) {
     assertField(value, 'verify_first', (v) => typeof v === 'boolean', 'a boolean');
   }

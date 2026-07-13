@@ -574,6 +574,12 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S 每件。
 - **Source**: l6-resilience campaign deviations ledger，2026-07-08。
 
+### reviewer_qualified 資格檢查未覆蓋 low-risk tier 代換後的 reviewer
+- **Trigger**: 下次碰 resolve-review-loop.sh 的 --check-scorecard 段或 engine reviewDiff 的 reviewer_qualification 閘，或 low-risk tier 引擎的 scorecard 過期（gpt-5.6-sol 2026-10-11）時。
+- **Context**: v2.32.23 e2e 實測前發現：`reviewer_qualified` 由 resolver 對 `reviewer_engine`（incumbent）計算；`reviewDiff` 的 overlay 代換發生在其後，代換進來的 `reviewer_engine_low_risk` 引擎不受 fail-closed 資格閘覆蓋（若 sol row 缺席/過期，閘不會擋）。目前緩解：sol 已有正確 id 的 qualified row（event 59）。正規修法候選：(a) resolver 在兩鍵皆設時對 low-risk 引擎也查 scorecard，emit `reviewer_qualified_low_risk`；(b) 或 reviewDiff 代換後以 effective engine 重查。附帶：scorecard row 的 engine id 慣例應等於 roster 欄位值（`gpt-5.6-sol`，不含 effort 後綴——effort 不是 identity 維度）；首登記的 `gpt-5.6-sol-high` row 為 id 慣例錯誤示範，留存無害。
+- **Effort**: S。
+- **Source**: 2026-07-13 /l5 low-risk tier e2e 前置檢查。
+
 ### codex spawn_agent model 欄位被鎖 — 追蹤上游、解鎖後撤 opt-in 文件
 - **Trigger**: codex CLI 升版（`codex --version` 變動）、codex-host user 回報 spawn 400、或 openai/codex #31814 / #31097 / #26868 有 maintainer 回應／關聯 PR 時。
 - **Context**: 2026-07-13 Spike（0.144.0 + gpt-5.6-sol，rollout-artifact 驗證）：`spawn_agent` 預設 schema 只有 3 欄（`model` 被 `hide_spawn_agent_metadata=true` 拔掉＋伺服器端 reserved `collaboration.*` schema 鎖死——只翻 flag 每 turn 400）；官方 `~/.codex/agents/*.toml` 的 `model` 欄在 0.144.0 被無視（child 繼承父模型，#26868 類仍活；另 agent 名限 `[a-z0-9_]`）；唯一實測可用解 = 兩行 opt-in（`hide_spawn_agent_metadata=false` + `tool_namespace="agents"`，缺一不可）。已系統性記載：`references/multi-agent-portability.md` § spawn_agent MODEL routing（Spike 證據）＋ `platforms/codex/README.md` § Subagent model routing（user opt-in 指南，autopilot 絕不代改 user config）。重驗探針：一句 `codex exec` 要模型印出 spawn_agent 參數 schema（3 欄=仍鎖、7 欄=已開）。上游解鎖（官方 TOML model 生效或預設曝欄位）後：更新兩處文件、撤 opt-in 建議。

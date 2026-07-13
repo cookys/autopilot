@@ -57,6 +57,20 @@ Projects can create `.claude/model-routing-config.md` with a custom dispatch tab
 The file format should include a markdown table with columns: Role, Model, Mode.
 Skills will prefer the project config over these defaults.
 
+## Codex-host caveat (spawn_agent model lock)
+
+On a Codex host the native `spawn_agent` tool exposes NO `model` field by default
+(server-reserved schema on MultiAgentV2 models; the official agents-TOML `model` is
+also ignored on codex-cli 0.144.x) — so this routing table CANNOT be expressed on
+subagent spawns: every child silently inherits the parent's model. Before routing
+by model on Codex, check the user has the documented opt-in enabled
+(`[features.multi_agent_v2]` with `hide_spawn_agent_metadata = false` AND
+`tool_namespace = "agents"` in their own `~/.codex/config.toml`); a one-call probe
+is asking for spawn_agent's parameter names (3 fields = locked, 7 = open). Without
+the opt-in, degrade honestly: spawn same-model and say so — do not claim a model
+was routed. Spike evidence + recipe: `references/multi-agent-portability.md`
+§ spawn_agent MODEL routing and `platforms/codex/README.md` § Subagent model routing.
+
 ## Evidence
 
 Based on benchmark (2026-04-13, 90 runs, 10 real cases, 6 providers):

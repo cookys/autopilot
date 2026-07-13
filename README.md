@@ -179,7 +179,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 | Harness | How to start | Supported today | Known limits |
 |---|---|---|---|
 | **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 22 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
-| **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers |
+| **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` § Subagent model routing |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
 

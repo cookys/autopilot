@@ -1145,8 +1145,14 @@ class AutopilotEngine {
       // non-codex runners ignore --effort, so an inherited roster effort is inert).
       const implFamily = modelFamilyOfEngine(implementerEngine);
       let fallbackRow = null;
+      // implFamily 'unknown' is UNREACHABLE here today (ensureDistinctReviewFamily
+      // returns true — no conflict — when either family is unknown), but the
+      // explicit guard pins the invariant locally: if that gate's unknown-handling
+      // ever changes, an unclassified implementer must fall through to the hard
+      // block, never into ladder selection (gpt-5.5 R3 defense-in-depth).
       if (
-        roster.on_family_conflict === 'fallback'
+        implFamily !== 'unknown'
+        && roster.on_family_conflict === 'fallback'
         && Array.isArray(roster.fallback_ladder)
         && typeof roster.fallback_ladder_implementer_family === 'string'
         && roster.fallback_ladder_implementer_family === implFamily

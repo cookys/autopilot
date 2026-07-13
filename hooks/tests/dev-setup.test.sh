@@ -34,6 +34,7 @@ assert_eq "$EXIT" "0" "help exits 0"
 assert_contains "$OUT" "--check" "help documents --check"
 assert_contains "$OUT" "--install" "help documents --install"
 assert_contains "$OUT" "--harness" "help documents --harness"
+assert_contains "$OUT" "opencode" "help documents OpenCode harness"
 
 OUT="$(bash "$SCRIPT" --install 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "--install without harness/all exits 1"
@@ -104,6 +105,15 @@ assert_eq "$EXIT" "0" "codex harness without --install is check-only"
 assert_contains "$OUT" "strict read-only mode" "codex check skips active CLI probes"
 assert_file_absent "$TEST_TMP/codex-stub-marker" "codex check does not call codex plugin subcommands"
 assert_not_contains "$OUT" "Sync and install" "codex check does not run install path"
+
+cat > "$STUB_BIN/opencode2" <<'SH'
+#!/usr/bin/env bash
+echo "opencode2 v0.0.0-next-mismatch"
+SH
+chmod +x "$STUB_BIN/opencode2"
+OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:/usr/bin:/bin" bash "$REPO_ROOT/scripts/install-opencode.sh" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "OpenCode installer fails closed on version mismatch"
+assert_contains "$OUT" "version mismatch" "OpenCode installer explains pinned nightly mismatch"
 
 OUT="$(bash "$REPO_ROOT/platforms/codex/plugin/scripts/dev-setup.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "Codex package dev-setup refuses to run from generated payload"

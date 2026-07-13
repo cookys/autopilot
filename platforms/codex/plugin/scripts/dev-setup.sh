@@ -358,27 +358,27 @@ check_opencode() {
     status FAIL "opencode" ".opencode/opencode.json missing"
   fi
 
-  if have_cmd opencode; then
-    status OK "opencode" "opencode CLI found"
+  if have_cmd opencode2; then
+    status OK "opencode" "opencode2 CLI found: $(opencode2 --version 2>/dev/null | head -1)"
   else
-    status WARN "opencode" "opencode CLI not found on PATH"
+    status WARN "opencode" "opencode2 CLI not found on PATH"
   fi
 
-  if [[ -d "$REPO_DIR/.opencode/node_modules" ]]; then
-    status OK "opencode" "optional TypeScript deps installed"
+  if "$REPO_DIR/scripts/sync-opencode-plugin.sh" --check >/dev/null 2>&1; then
+    status OK "opencode" "OpenCode V2 extension payload is in sync"
   else
-    status WARN "opencode" "optional TypeScript deps missing; run --harness opencode --install if editing plugin TS"
+    status FAIL "opencode" "OpenCode V2 extension payload drift detected; run scripts/sync-opencode-plugin.sh"
+  fi
+
+  if [[ -d "$REPO_DIR/platforms/opencode/plugin/node_modules" ]]; then
+    status OK "opencode" "OpenCode V2 extension dependencies installed"
+  else
+    status WARN "opencode" "OpenCode V2 extension dependencies missing; run --harness opencode --install"
   fi
 }
 
 setup_opencode() {
-  "$REPO_DIR/scripts/setup-symlinks.sh"
-  if [[ ! -f "$REPO_DIR/.opencode/package.json" ]]; then
-    echo "No .opencode/package.json; nothing to install."
-    return 0
-  fi
-  have_cmd npm || die "npm not found on PATH"
-  (cd "$REPO_DIR/.opencode" && npm install)
+  "$REPO_DIR/scripts/install-opencode.sh"
 }
 
 check_agy() {

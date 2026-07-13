@@ -579,23 +579,27 @@ function cmdReport(args) {
 
 function cmdLadder(args) {
   const { role, implementerFamily } = parseLadderArgs(args);
-  const rows = currentRowsForRole(role, todayMsUtc()).filter((row) => row.status === 'qualified');
-  const ranked = rows.slice().sort(sortByCapability);
+  const rows = currentRowsForRole(role, todayMsUtc());
 
-  // Ladder-level supersede (v2.32.25 R4): `model` is an alias REFINEMENT of the
-  // same qualification, not a distinct one — a re-record that adds model:"haiku"
-  // must replace the older model-less row here, or the stale row (whose display
-  // id is not dispatchable) stays selectable. Distinct EFFORTS remain distinct
-  // rungs (R1). Key: engine+runner+effort, highest event_id wins.
+  // Ladder-level supersede (v2.32.25 R4+R5): `model` is an alias REFINEMENT of
+  // the same qualification, not a distinct one — a re-record that adds
+  // model:"haiku" must replace the older model-less row here, or the stale row
+  // (whose display id is not dispatchable) stays selectable. Distinct EFFORTS
+  // remain distinct rungs (R1). Key: engine+runner+effort, highest event_id
+  // wins. Supersede runs BEFORE the qualified filter (R5): a later failed /
+  // expired re-qualification must RETIRE the rung, not leave the older
+  // qualified row selectable.
   const byInvocation = new Map();
-  for (const row of ranked) {
+  for (const row of rows) {
     const key = `${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`;
     const existing = byInvocation.get(key);
     if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
       byInvocation.set(key, row);
     }
   }
-  const deduped = ranked.filter((row) => byInvocation.get(`${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`) === row);
+  const deduped = Array.from(byInvocation.values())
+    .filter((row) => row.status === 'qualified')
+    .sort(sortByCapability);
 
   const ladder = deduped.map((row) => ({
     engine: row.engine,

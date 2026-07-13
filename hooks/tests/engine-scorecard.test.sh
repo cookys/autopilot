@@ -155,6 +155,15 @@ echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';console.log
 al=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='aliaseng');process.stdout.write(l.length+':'+l.map(r=>r.model).join(','))})")
 [ "$al" = "1:haiku" ] && ok "14: model refinement supersedes the model-less row (got: $al)" || bad "14: stale model-less row survives (got: $al) — R4"
 
+# 15 (v2.32.25 R5): a LATER failed re-qualification retires the rung — the
+# older qualified model-less row must NOT survive the supersede.
+reset
+r1="$(row retireng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$r1" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';r.status='failed';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+rl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='retireng').length))})")
+[ "$rl" = "0" ] && ok "15: later failed re-qual retires the rung" || bad "15: stale qualified row survived a failed re-qual (rows=$rl) — R5"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

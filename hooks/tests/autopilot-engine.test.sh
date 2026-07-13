@@ -3631,6 +3631,31 @@ console.log(`tier_high_model=${high.reviewArgs.join(' ').includes('--model gpt-5
 const half = makeEngine('low', { reviewer_engine_low_risk: 'gpt-5.6-sol', reviewer_effort_low_risk: '' })
   .reviewDiff({ diffFile: tierDiff, implementerEngine: 'claude-opus' });
 console.log(`tier_half_model=${half.reviewArgs.join(' ').includes('--model gpt-5.5')}`);
+
+// PRE-RESOLVED roster path (the canonical implement-review loop: roster passed
+// in, dynamicReviewRisk off, resolveResult never populated) — the tier must key
+// off roster.review_risk itself. Live-found gap 2026-07-13: /l5 e2e run showed
+// roster.review_risk:"low" + both _low_risk keys with the reviewer stuck on the
+// incumbent, because reviewRisk was only ever read from resolveResult.
+const pre = makeEngine('unused', {}).reviewDiff({
+  diffFile: tierDiff,
+  implementerEngine: 'claude-opus',
+  roster: {
+    reviewer_engine: 'gpt-5.5',
+    reviewer_effort: 'xhigh',
+    reviewer_runner: 'test-review-runner',
+    implementer_engine: 'gpt-5.3-codex-spark',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    loop_max_rounds: 1,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    review_risk: 'low',
+    reviewer_engine_low_risk: 'gpt-5.6-sol',
+    reviewer_effort_low_risk: 'high',
+  },
+});
+console.log(`tier_pre_model=${pre.reviewArgs.join(' ').includes('--model gpt-5.6-sol') && pre.reviewArgs.join(' ').includes('--effort high')}`);
+console.log(`tier_pre_roster=${pre.roster.reviewer_engine}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "low-risk tier overlay run exits 0"
@@ -3639,5 +3664,7 @@ assert_contains "$OUT" "tier_low_model=true" "review_risk=low + both keys → lo
 assert_contains "$OUT" "tier_low_roster=gpt-5.6-sol" "returned roster self-documents the substitution"
 assert_contains "$OUT" "tier_high_model=true" "review_risk=high always keeps the incumbent pair"
 assert_contains "$OUT" "tier_half_model=true" "half-set low-risk pair keeps the incumbent (fail-safe)"
+assert_contains "$OUT" "tier_pre_model=true" "PRE-RESOLVED roster path: roster.review_risk drives the tier (live-found gap)"
+assert_contains "$OUT" "tier_pre_roster=gpt-5.6-sol" "pre-resolved path roster self-documents the substitution"
 
 finalize_test

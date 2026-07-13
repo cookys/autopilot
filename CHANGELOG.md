@@ -24,6 +24,23 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.24 — tier fix: pre-resolved-roster path reads `roster.review_risk`
+
+**Headline**: The v2.32.23 low-risk tier was DEAD on the canonical `/l5` loop path — live-found by the same-day e2e run. `engine implement-review` passes a pre-resolved roster into `reviewDiff` (dynamicReviewRisk off), so `resolveResult` stays null and the substitution guard's `reviewRisk` was never populated even though the roster itself carried `review_risk:"low"` + both `_low_risk` keys (artifact: the run's `review.roster` showed the incumbent still selected). Fix: `reviewDiff` now falls back to `roster.review_risk`. Live re-verification with the real resolver + real dispatch: reviewArgs `--model gpt-5.6-sol --effort high`, raw-log header `model: gpt-5.6-sol`, verdict SHIP-AS-IS on a clean diff.
+
+### Fixed
+- `src/engine/autopilot-engine.js` `reviewDiff`: `reviewRisk` fallback to `roster.review_risk` on the pre-resolved-roster path. Engine test `tier_pre_*` pins it.
+
+### Added
+- `evals/clean/11-review-loop-tier-fields.{diff,expected.json}` — clean-corpus case 11 (known-good v2.32.23 excerpt), produced by the /l5 e2e run's hetero implementer (gpt-5.3-codex-spark, unit f3beb6c) and depth-0-qc'd.
+
+### Known findings (BACKLOG'd, not fixed here)
+- `reviewer_qualified` gate does not cover the tier-substituted engine (mitigated: sol has a qualified scorecard row under the canonical id).
+- In-loop decorrelated review is structurally blocked for the DEFAULT openai×openai roster (`reviewer_family` gate) — pre-existing; convergence has been riding verify-first. Design discussion queued.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.23 — risk-tiered low-risk loop reviewer (`reviewer_engine_low_risk`)
 
 **Headline**: The review-loop contract gains an ADDITIVE risk-tiered reviewer overlay: `reviewer_engine_low_risk` + `reviewer_effort_low_risk` in `review-loop-config.md`. When BOTH are set, `/l5`/`/l6` use that pair as the per-round loop reviewer for changes the resolver scores `review_risk=low`; `high` risk — protected paths, security surfaces, large diffs — ALWAYS stays on `reviewer_engine`/`reviewer_effort`, and the disjoint-family `qc_panel` terminal gate is untouched. Empty (the default everywhere) = byte-identical behavior. Motivation: the 2026-07-13 qualification of `gpt-5.6-sol @ high` (known-bad 12/12, false-pass-on-critical 0, clean-set 9/10 with one defensible Minor, ~10s/case vs minutes at gpt-5.5 xhigh) makes a fast qualified engine available for cheap rounds — while the METR eval-awareness findings on sol argue against promoting it to high-risk duty on benchmark evidence alone. Scorecard-first honored: adoption is config-gated on `engine-qualify.sh` evidence, and autopilot's own dogfood config adopts the tier.

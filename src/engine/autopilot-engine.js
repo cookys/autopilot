@@ -1034,6 +1034,15 @@ class AutopilotEngine {
     if (!reviewRisk && resolveResult && resolveResult.result && resolveResult.result.review_risk) {
       reviewRisk = resolveResult.result.review_risk;
     }
+    // Pre-resolved-roster path (implement-review passes roster with
+    // dynamicReviewRisk off): resolveResult stays null, but the roster itself
+    // carries the contract's review_risk — read it, or the low-risk tier below
+    // is dead on the canonical /l5 loop path (found live 2026-07-13: roster
+    // showed review_risk:"low" + both _low_risk keys, reviewer stayed
+    // incumbent because reviewRisk was never populated here).
+    if (!reviewRisk && roster && typeof roster.review_risk === 'string' && roster.review_risk) {
+      reviewRisk = roster.review_risk;
+    }
 
     // Risk-tiered low-risk reviewer overlay (v2.32.23): when the final computed
     // review_risk is LOW and the roster carries BOTH _low_risk keys, the loop

@@ -7,7 +7,9 @@
 CLI="$REPO_ROOT/bin/autopilot.js"
 SH="$REPO_ROOT/scripts/load-endpoints-env.sh"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# Chain lib.sh's cleanup: a bare trap here REPLACES the EXIT trap lib.sh set,
+# which silently leaked one TEST_TMP dir per run into the host tmp namespace.
+trap 'rm -rf "$WORK"; cleanup_test_tmp' EXIT
 BASE="$WORK/endpoints.env"
 
 run() { env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints "$@"; }
@@ -180,8 +182,8 @@ for i in {1..30}; do
 done
 PORT=$(cat "$PORT_FILE")
 
-# Update trap to cleanup the background stub server
-trap 'kill $STUB_PID 2>/dev/null; rm -rf "$WORK"' EXIT
+# Update trap to cleanup the background stub server (keep chaining cleanup_test_tmp)
+trap 'kill $STUB_PID 2>/dev/null; rm -rf "$WORK"; cleanup_test_tmp' EXIT
 
 # Configure fake endpoints pointing to stub
 printf 'valid-token' | run set stubok --url "http://127.0.0.1:$PORT" --token-stdin >/dev/null

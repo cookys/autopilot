@@ -62,6 +62,13 @@
 
 set -uo pipefail
 
+_EXPLORE_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt temps,
+# agy run scripts). Best-effort; AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 disables.
+# shellcheck source=/dev/null
+[ -r "$_EXPLORE_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_EXPLORE_SELF_DIR/lib/prune-tmp-residue.sh" \
+  && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-explore-*' || true
+
 RUNNER=""; MODEL=""; PROMPT_FILE=""; REPO=""; EFFORT="xhigh"; TIMEOUT="9m"; BIN=""; NO_PROBE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in

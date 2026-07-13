@@ -10,7 +10,9 @@ JS="$REPO_ROOT/scripts/lib/load-endpoints-env.js"
 DR="$REPO_ROOT/scripts/dispatch-review.sh"
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# Chain lib.sh's cleanup: a bare trap here REPLACES the EXIT trap lib.sh set,
+# which silently leaked one TEST_TMP dir per run into the host tmp namespace.
+trap 'rm -rf "$WORK"; cleanup_test_tmp' EXIT
 
 # run_sh <envfile> [extra env assignments...] — source the loader against <envfile> in an
 # isolated env and print a NON-SECRET-safe (fake values) dump of the resulting env + LOADED

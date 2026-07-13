@@ -90,6 +90,11 @@ ORIG_ARGS=("$@")
 _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/load-endpoints-env.sh" ] && . "$_REVIEW_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
+# Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt/out/err
+# temps, scratch cwds). Best-effort; AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 disables.
+# shellcheck source=/dev/null
+[ -r "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" \
+  && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-review-*' || true
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND

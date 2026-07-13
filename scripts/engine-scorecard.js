@@ -464,9 +464,24 @@ function currentRowsForRole(role, nowMs) {
     }
   }
 
+  // Invocation-tuple supersede (v2.32.25 R6, shared by current AND ladder):
+  // `model` is an alias refinement of the same qualification — the newest event
+  // per engine+runner+effort wins regardless of whether it carries `model`, so
+  // a stale model-less row can neither stay selectable in the ladder nor feed
+  // `reviewer_qualified` in resolve-review-loop --check-scorecard. Distinct
+  // efforts remain distinct rungs (R1).
+  const byInvocation = new Map();
+  for (const row of latest.values()) {
+    const key = `${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`;
+    const existing = byInvocation.get(key);
+    if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
+      byInvocation.set(key, row);
+    }
+  }
+
   const output = [];
 
-  for (const row of latest.values()) {
+  for (const row of byInvocation.values()) {
     const effectiveStatus = deriveStatus(row, nowMs);
     const rowStatus = typeof effectiveStatus === 'string' ? effectiveStatus : row.status;
 
@@ -579,25 +594,10 @@ function cmdReport(args) {
 
 function cmdLadder(args) {
   const { role, implementerFamily } = parseLadderArgs(args);
-  const rows = currentRowsForRole(role, todayMsUtc());
-
-  // Ladder-level supersede (v2.32.25 R4+R5): `model` is an alias REFINEMENT of
-  // the same qualification, not a distinct one — a re-record that adds
-  // model:"haiku" must replace the older model-less row here, or the stale row
-  // (whose display id is not dispatchable) stays selectable. Distinct EFFORTS
-  // remain distinct rungs (R1). Key: engine+runner+effort, highest event_id
-  // wins. Supersede runs BEFORE the qualified filter (R5): a later failed /
-  // expired re-qualification must RETIRE the rung, not leave the older
-  // qualified row selectable.
-  const byInvocation = new Map();
-  for (const row of rows) {
-    const key = `${row.engine}\u0000${row.runner}\u0000${row.effort === undefined ? '' : row.effort}`;
-    const existing = byInvocation.get(key);
-    if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
-      byInvocation.set(key, row);
-    }
-  }
-  const deduped = Array.from(byInvocation.values())
+  // currentRowsForRole already applies the invocation-tuple supersede (R6) —
+  // a later failed/expired re-qualification retires the rung before this
+  // qualified filter runs (R5 semantics preserved).
+  const deduped = currentRowsForRole(role, todayMsUtc())
     .filter((row) => row.status === 'qualified')
     .sort(sortByCapability);
 

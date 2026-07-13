@@ -3752,6 +3752,16 @@ console.log(`fb_staleprov=${staleProv.status}:${staleProv.phase}`);
 const noCandidate = run({ on_family_conflict: 'fallback', fallback_ladder: [LADDER[0], LADDER[1], LADDER[2]], fallback_ladder_implementer_family: 'openai' });
 console.log(`fb_nocand=${noCandidate.status}:${noCandidate.phase}`);
 
+// R6 Minor: with requireQualifiedReviewer, the EFFECTIVE fallback reviewer is
+// certified by the selected qualified ladder row, not the incumbent's flag.
+const fbQual = engineWith().reviewDiff({
+  diffFile: fbDiff,
+  implementerEngine: 'gpt-5.3-codex-spark',
+  requireQualifiedReviewer: true,
+  roster: { ...baseRoster, reviewer_qualified: false, on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' },
+});
+console.log(`fb_qual=${fbQual.status}`);
+
 // tier tuple qualification: ladder WITHOUT the tier pair → revert to incumbent
 const tierLadderMiss = engineWith().reviewDiff({
   diffFile: fbDiff,
@@ -3792,6 +3802,7 @@ assert_contains "$OUT" "fb_blockmode=blocked:reviewer_family" "mode=block keeps 
 assert_contains "$OUT" "fb_absentmode=blocked:reviewer_family" "absent on_family_conflict fails closed to block"
 assert_contains "$OUT" "fb_staleprov=blocked:reviewer_family" "stale ladder provenance blocks (pre-resolved roster protection)"
 assert_contains "$OUT" "fb_nocand=blocked:reviewer_family" "no valid cross-family candidate blocks"
+assert_contains "$OUT" "fb_qual=reviewed" "fallback row certifies effective qualification (incumbent flag unused)"
 assert_contains "$OUT" "tier_miss_model=true" "tier pair absent from qualified ladder reverts to incumbent"
 assert_contains "$OUT" "tier_miss_ledger=true" "tier revert is ledger'd (tier_reviewer_unqualified)"
 assert_contains "$OUT" "tier_hit_model=true" "tier tuple present in ladder → tier holds"

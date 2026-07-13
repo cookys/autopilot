@@ -1195,6 +1195,11 @@ class AutopilotEngine {
           ...(typeof fallbackRow.effort === 'string' && VALID_EFFORTS.has(fallbackRow.effort)
             ? { reviewer_effort: fallbackRow.effort }
             : {}),
+          // The fallback row comes from the QUALIFIED ladder (post-R5 a retired
+          // rung never surfaces), so the effective reviewer's qualification is
+          // certified by the selected row — not by the unused incumbent's
+          // reviewer_qualified (gpt-5.5 R6 Minor).
+          reviewer_qualified: true,
         };
       } else {
         const startedAt = this.now();

@@ -31,6 +31,11 @@ and treat its output as the only source of truth — never hardcode models, effo
 levels, or runners inline. Fields consumed by the loop:
 
 - `reviewer_engine` / `reviewer_effort` / `reviewer_runner`
+- `reviewer_engine_low_risk` / `reviewer_effort_low_risk` — risk-tiered overlay: BOTH
+  set AND computed `review_risk=low` ⇒ the per-round loop reviewer is this pair (same
+  runner); high risk or any empty key ⇒ `reviewer_engine`/`reviewer_effort`. qc_panel
+  is unaffected. (Selection rule canonical in front-door § roster notes; the engine
+  CLI applies it automatically in `reviewDiff`.)
 - `implementer_engine` / `implementer_effort` / `implementer_runner`
 - `review_diff_scope` (`full` default; `incremental-mitigated` semantics — including
   the mandatory full re-reads and the full-suite harness requirement — are specified

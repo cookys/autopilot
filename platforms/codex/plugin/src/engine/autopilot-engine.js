@@ -1035,6 +1035,27 @@ class AutopilotEngine {
       reviewRisk = resolveResult.result.review_risk;
     }
 
+    // Risk-tiered low-risk reviewer overlay (v2.32.23): when the final computed
+    // review_risk is LOW and the roster carries BOTH _low_risk keys, the loop
+    // reviewer becomes that pair (runner unchanged). High/unknown risk keeps
+    // reviewer_engine/reviewer_effort — the fail-safe direction is the stronger
+    // incumbent. Derived HERE (after reviewRisk is final, before the family gate
+    // and buildReviewArgs) so every downstream consumer sees the effective pair;
+    // the returned roster self-documents the substitution (it still carries the
+    // _low_risk source keys).
+    if (
+      reviewRisk === 'low'
+      && roster
+      && typeof roster.reviewer_engine_low_risk === 'string' && roster.reviewer_engine_low_risk.length > 0
+      && typeof roster.reviewer_effort_low_risk === 'string' && roster.reviewer_effort_low_risk.length > 0
+    ) {
+      roster = {
+        ...roster,
+        reviewer_engine: roster.reviewer_engine_low_risk,
+        reviewer_effort: roster.reviewer_effort_low_risk,
+      };
+    }
+
     try {
       validateReviewRoster(roster);
     } catch (error) {

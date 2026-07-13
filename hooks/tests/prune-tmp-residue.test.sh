@@ -70,6 +70,19 @@ test_slash_pattern_refused() {
 }
 test_slash_pattern_refused
 
+# --- t5b: marked worktree dir is NEVER pruned even when the pattern matches ----
+# (gpt-5.5 R3 Major: branch "feat/log-parser" → worktree hetero-feat-log-parser-X
+# collides with the hetero-*-log-* log pattern; the marker is the shield.)
+test_marked_worktree_never_pruned() {
+  mk_aged "$PRUNE_TMP/hetero-feat-log-parser-abc123/" 10
+  : > "$PRUNE_TMP/hetero-feat-log-parser-abc123/.autopilot-worktree"
+  touch -d "10 days ago" "$PRUNE_TMP/hetero-feat-log-parser-abc123"
+  TMPDIR="$PRUNE_TMP" prune_tmp_residue 3 'hetero-*-log-*'
+  assert_file_exists "$PRUNE_TMP/hetero-feat-log-parser-abc123/.autopilot-worktree" \
+    "aged MARKED dir survives a colliding pattern"
+}
+test_marked_worktree_never_pruned
+
 # --- t6: absent TMPDIR is a silent no-op --------------------------------------
 test_absent_tmpdir_noop() {
   TMPDIR="$PRUNE_TMP/does-not-exist" prune_tmp_residue 3 'dispatch-review-log-*'

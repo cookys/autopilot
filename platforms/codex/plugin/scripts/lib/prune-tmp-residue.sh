@@ -37,8 +37,18 @@ prune_tmp_residue() {
     case "$pat" in
       ''|*/*|.*) continue ;;
     esac
+    # Marker guard (gpt-5.5 R3 Major): a worktree dir ALWAYS carries the
+    # .autopilot-worktree marker, and a branch name containing "log" makes the
+    # worktree name (hetero-<branch>-XXXXXX) collide with the hetero log
+    # pattern (hetero-*-log-*). A marked dir is NEVER blind-mtime-pruned here,
+    # no matter what pattern matched — worktree reaping stays lock/marker-gated
+    # in worktree-reap.sh / dispatch-status.js --reap.
     find "$tmp" -maxdepth 1 -user "$me" -name "$pat" -mtime "+$days" \
-      \( -type f -o -type d \) -exec rm -rf -- {} + 2>/dev/null
+      \( -type f -o -type d \) -print0 2>/dev/null |
+      while IFS= read -r -d '' _pr_item; do
+        [ -e "$_pr_item/.autopilot-worktree" ] && continue
+        rm -rf -- "$_pr_item" 2>/dev/null
+      done
   done
   return 0
 }

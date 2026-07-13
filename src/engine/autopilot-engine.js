@@ -1155,6 +1155,14 @@ class AutopilotEngine {
           if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') continue;
           const rowFamily = modelFamilyOfEngine(row.engine);
           if (rowFamily === 'unknown' || rowFamily === implFamily) continue;
+          // R2 (gpt-5.5): the family authorization must hold for the string we
+          // actually DISPATCH, not just the display engine id — a row pairing a
+          // cross-family engine with a same-family model would otherwise slip a
+          // same-family reviewer through the decorrelation gate. Both derived
+          // families must agree, be known, and differ from the implementer's.
+          const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
+          const dispatchFamily = modelFamilyOfEngine(rowModel);
+          if (dispatchFamily !== rowFamily) continue;
           if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) continue;
           if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) continue;
           fallbackRow = row;

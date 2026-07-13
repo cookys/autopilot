@@ -135,6 +135,16 @@ echo "$(row B r f reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | timeout 20 
 t1=$(date +%s)
 if [ "$ec" = "0" ]; then ok "12: stale lock broken/recovered (record ok in $((t1-t0))s)"; else bad "12: stale lock wedged record (exit=$ec after $((t1-t0))s) — A1"; fi
 
+# 13 (v2.32.25 R1): distinct efforts are distinct invocation-tuple identities —
+# two rows for the same engine+runner at different codex efforts must BOTH
+# survive into current/ladder, not collapse to the latest event.
+reset
+r1="$(row tupeng codex openai reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='high';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='xhigh';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
+effs=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='tupeng').map(r=>r.effort).sort();process.stdout.write(l.join(','))})")
+[ "$effs" = "high,xhigh" ] && ok "13: distinct efforts coexist as distinct tuples (got: $effs)" || bad "13: efforts collapsed (got: $effs) — R1"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

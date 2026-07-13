@@ -3730,6 +3730,8 @@ const LADDER = [
   { engine: 'gpt-5.6-terra', runner: 'codex', family: 'openai', effort: 'high' },
   { engine: 'claude-opus', runner: 'bogus-runner', family: 'anthropic' },
   { engine: 'claude-opus', runner: 'codex', family: 'anthropic', effort: null },
+  // R2 trap: cross-family display engine but SAME-family dispatch model — must be skipped
+  { engine: 'claude-sneak', runner: 'claude-native', family: 'anthropic', model: 'gpt-5.4-mini' },
   { engine: 'claude-haiku', runner: 'claude-native', family: 'anthropic', effort: null, model: 'haiku' },
 ];
 

@@ -179,8 +179,15 @@ function nowArgToMs(value, required = false) {
 }
 
 function identityKey(row) {
+  // Invocation-tuple extension (v2.32.25 R1): effort/model are OPTIONAL row fields
+  // but distinct values are distinct qualifications (gpt-X@high and gpt-X@xhigh
+  // must not collapse to the latest event). They join the KEY (undefined → '')
+  // without joining the required-field check — most rows legitimately omit them.
+  const tupleExt = ['effort', 'model']
+    .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''));
   return CONFIGURED_IDENTITY_FIELDS
     .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''))
+    .concat(tupleExt)
     .join('\u0000');
 }
 

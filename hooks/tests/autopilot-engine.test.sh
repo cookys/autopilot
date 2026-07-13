@@ -3108,6 +3108,8 @@ const validPayload = {
   implementer_endpoint: '',
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
+  reviewer_engine_low_risk: '',
+  reviewer_effort_low_risk: '',
 };
 
 try {

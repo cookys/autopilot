@@ -35,7 +35,9 @@
     "reviewer_endpoint",
     "implementer_endpoint",
     "min_panel_size",
-    "on_engine_unavailable"
+    "on_engine_unavailable",
+    "reviewer_engine_low_risk",
+    "reviewer_effort_low_risk"
   ],
   "properties": {
     "reviewer_engine": { "type": "string", "minLength": 1 },
@@ -68,7 +70,9 @@
     "reviewer_endpoint": { "type": "string" },
     "implementer_endpoint": { "type": "string" },
     "min_panel_size": { "type": "integer", "minimum": 1 },
-    "on_engine_unavailable": { "type": "string", "enum": ["ask", "solo-fallback", "wait-reset"], "x-shell-validated": true, "x-shell-var": "ON_ENGINE_UNAVAILABLE" }
+    "on_engine_unavailable": { "type": "string", "enum": ["ask", "solo-fallback", "wait-reset"], "x-shell-validated": true, "x-shell-var": "ON_ENGINE_UNAVAILABLE" },
+    "reviewer_engine_low_risk": { "type": "string", "description": "Risk-tiered overlay: non-empty (with reviewer_effort_low_risk) = the LOOP reviewer engine for computed review_risk=low; empty = tiering off (reviewer_engine used at every risk). High risk always uses reviewer_engine." },
+    "reviewer_effort_low_risk": { "type": "string", "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string." }
   },
   "required": [
     "reviewer_engine",
@@ -101,7 +105,9 @@
     "reviewer_endpoint",
     "implementer_endpoint",
     "min_panel_size",
-    "on_engine_unavailable"
+    "on_engine_unavailable",
+    "reviewer_engine_low_risk",
+    "reviewer_effort_low_risk"
   ],
   "additionalProperties": true
 }

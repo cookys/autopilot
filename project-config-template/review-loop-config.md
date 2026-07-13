@@ -31,6 +31,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - reviewer_engine: gpt-5.5
 - reviewer_effort: xhigh
 - reviewer_runner: codex
+- reviewer_engine_low_risk:
+- reviewer_effort_low_risk:
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_effort: high
 - implementer_runner: auto
@@ -67,6 +69,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 |-------|---------|--------|
 | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
+| `reviewer_engine_low_risk` | **risk-tiered overlay**: when BOTH `_low_risk` keys are set, the loop reviewer for computed `review_risk=low` becomes this pair (same `reviewer_runner`); `review_risk=high` ALWAYS uses `reviewer_engine`/`reviewer_effort`. Empty = tiering off. Adopt a faster engine on low-risk diffs only after it clears `engine-qualify.sh` (scorecard-first) | a model name (e.g. `gpt-5.6-sol`), or empty |
+| `reviewer_effort_low_risk` | effort for the low-risk reviewer; garbage → empty (tiering off — fail-safe reviews with the stronger incumbent) | `low\|medium\|high\|xhigh\|max`, or empty |
 | `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| auto` |
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |

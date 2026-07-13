@@ -24,6 +24,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.23 — risk-tiered low-risk loop reviewer (`reviewer_engine_low_risk`)
+
+**Headline**: The review-loop contract gains an ADDITIVE risk-tiered reviewer overlay: `reviewer_engine_low_risk` + `reviewer_effort_low_risk` in `review-loop-config.md`. When BOTH are set, `/l5`/`/l6` use that pair as the per-round loop reviewer for changes the resolver scores `review_risk=low`; `high` risk — protected paths, security surfaces, large diffs — ALWAYS stays on `reviewer_engine`/`reviewer_effort`, and the disjoint-family `qc_panel` terminal gate is untouched. Empty (the default everywhere) = byte-identical behavior. Motivation: the 2026-07-13 qualification of `gpt-5.6-sol @ high` (known-bad 12/12, false-pass-on-critical 0, clean-set 9/10 with one defensible Minor, ~10s/case vs minutes at gpt-5.5 xhigh) makes a fast qualified engine available for cheap rounds — while the METR eval-awareness findings on sol argue against promoting it to high-risk duty on benchmark evidence alone. Scorecard-first honored: adoption is config-gated on `engine-qualify.sh` evidence, and autopilot's own dogfood config adopts the tier.
+
+### Added
+- Contract fields `reviewer_engine_low_risk` (string, empty=off) + `reviewer_effort_low_risk` (empty or `low|medium|high|xhigh|max`; garbage → empty with a stderr warning — the fail-safe direction is reviewing with the stronger incumbent, never a bogus effort): `schemas/review-loop-contract.schema.json` (x-field-order + required + properties, appended last), `scripts/resolve-review-loop.sh` (defaults, config read + validation, `--field` arms, both JSON emission variants), JS validator picks them up via schema derivation. `evals/reviewer-bench/panel-cmd-dispatch.sh` gains an optional `[effort]` third arg for model×effort qualification runs.
+- `.claude/review-loop-config.md` (autopilot dogfood): low-risk tier = `gpt-5.6-sol @ high` (scorecard event 58, expires 2026-10-11), incumbent `gpt-5.5 @ xhigh` keeps high-risk + qc_panel duty.
+- Docs: template `review-loop-config.md` key table, `level-front-door.md` roster note (never promote a low-risk-tier engine to high-risk duty by judgment — config + qualify evidence only), CLAUDE.md inventory row.
+
+### Changed
+- `hooks/tests/resolve-review-loop.test.sh` (new field coverage + KR2 key-order pin extended), `autopilot-engine.test.sh` / `review-loop-runner.test.sh` fixtures carry the new always-emitted keys. Codex plugin payload mirror re-synced.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: leave the two keys empty (or delete them) — resolver output minus the two appended keys is byte-identical to v2.32.22.
+
 ## v2.32.22 — dispatch residue retention: startup log prune + manifest reaper + test-TMPDIR seal
 
 **Headline**: Dispatch residue no longer accumulates unbounded. The 2026-07-13 incident: months of retention-less `${TMPDIR}` residue (1910 `dispatch-review-log-*`, 616 test-fixture logs leaked to the REAL `/tmp`, 126 `pi-rpc-session-*`, 602 run manifests, plus multi-hundred-MB failure-kept worktrees ≈ 21 GiB) exhausted the host's `/tmp` **per-user quota** (tmpfs `usrquota`) — at which point every Claude Code Bash call on the machine failed with zero output (the harness's own bookkeeping writes hit `EDQUOT`), while `df -h` still showed global free space. Three bounded fixes, all fail-safe and all conservative about live runs: (a) each dispatch script prunes ITS OWN aged logs/scratch at startup; (b) `dispatch-status.js --reap` retention-reaps dead manifests + marker-gated dead worktrees; (c) the hooks test suite's TMPDIR redirect is now global, so scripts-under-test can no longer leak fixtures into the host `/tmp`.

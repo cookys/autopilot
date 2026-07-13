@@ -24,12 +24,12 @@ lands.
 
 ## Subagent model routing (`spawn_agent`) — opt-in
 
-On codex-cli 0.144.0 with a MultiAgentV2 model (e.g. gpt-5.6-sol), the native
+On codex-cli 0.144.0–0.144.3 (re-verified 2026-07-13) with a MultiAgentV2 model (e.g. gpt-5.6-sol), the native
 `spawn_agent` tool exposes only `task_name`/`message`/`fork_turns` — **no `model`
 field** — so autopilot's role→model routing (`scripts/resolve-dispatch.sh`) cannot
 be expressed on subagent spawns: every subagent silently inherits the parent's
 (expensive) model. The official `~/.codex/agents/<name>.toml` profile path routes
-the spawn but its `model` field is IGNORED on 0.144.0 (child inherits the parent
+the spawn but its `model` field is IGNORED on 0.144.0–0.144.3 (child inherits the parent
 model — verified by rollout artifact; openai/codex#26868 class). Full spike
 evidence: `references/multi-agent-portability.md` § "spawn_agent subagent MODEL
 routing".

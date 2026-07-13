@@ -76,7 +76,7 @@ A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (
 - **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
 - **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
-### Verified by Spike (codex-cli 0.144.0 + gpt-5.6-sol, 2026-07-13): `spawn_agent` subagent MODEL routing
+### Verified by Spike (codex-cli 0.144.0 + gpt-5.6-sol, 2026-07-13; re-verified UNCHANGED on 0.144.3 same day): `spawn_agent` subagent MODEL routing
 
 Matters to any user running autopilot **on a Codex host**: skills that say "dispatch a
 subagent with model X" (role routing per `resolve-dispatch.sh`) cannot express the model

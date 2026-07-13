@@ -105,6 +105,11 @@ via `thread_spawn.parent_thread_id` — never the parent's self-report):
    ```
    Renaming the namespace off the reserved `collaboration.*` restores the full 7-field schema,
    and a `model="gpt-5.4-mini"` child verifiably runs as gpt-5.4-mini (rollout artifact).
+   Spawn-target coverage (0.144.3, sol parent, all rollout-artifact-verified): `gpt-5.6-terra`,
+   `gpt-5.6-luna`, `gpt-5.3-codex-spark`, `gpt-5.4-mini` all run as the requested model —
+   including luna (a MultiAgentV1-flagged model), so V1/V2 flags don't gate spawn TARGETS.
+   Untested as children: `gpt-5.5`, `gpt-5.4`, `codex-auto-review` (same mechanism expected,
+   not verified).
    Caveats: undocumented upstream, may be closed by a future codex release; failure mode is
    loud (spawn → 400). This is a **user-owned opt-in** — autopilot must never auto-edit
    `~/.codex/config.toml`. Recipe + guidance: `platforms/codex/README.md` § Subagent model routing.

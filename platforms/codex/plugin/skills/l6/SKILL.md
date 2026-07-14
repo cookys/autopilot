@@ -16,6 +16,9 @@ except verification AUTHORING is ALSO leaf-dispatched to a heterogeneous engine;
 depth-0 remains pure orchestration.
 
 Hard rules:
+- At entry run `node <plugin>/scripts/session-mode.js set --level l6` (`--solo` ⇒
+  `set --level l3`) — arms the orchestrator-edit-gate + context-budget hooks
+  (level-front-door § "Session-mode marker").
 - **Delegate the labor, never the trust**: depth-0 still EXECUTES committed
   artifacts, runs the mechanical checks, judges convergence-by-verification, and
   holds merge authority. A dispatched green or reviewer pass is never

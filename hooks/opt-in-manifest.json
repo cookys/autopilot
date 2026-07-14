@@ -7,11 +7,13 @@
     "check-console",
     "commit-secret-scan",
     "config-protection",
+    "context-budget",
     "cost-tracker",
     "design-quality",
     "dispatch-model-guard",
     "large-file-warner",
     "mcp-health",
+    "orchestrator-edit-gate",
     "session-summary",
     "test-runner"
   ]

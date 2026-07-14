@@ -18,6 +18,9 @@ qc verdict**.
 
 Hard rules:
 - Startup presets identical to `/l3`; engine all-Claude (hetero implementer → `/l5`).
+- At entry run `node <plugin>/scripts/session-mode.js set --level l4` (`--solo` ⇒
+  `set --level l3`) — arms the orchestrator-edit-gate + context-budget hooks
+  (level-front-door § "Session-mode marker").
 - **qc@depth-0 is THE gate**: reviewer families/panel come from
   `scripts/resolve-review-loop.sh` (`qc_panel` / `required_review_families` /
   `min_panel_size`); resolver unavailable → fall back to 3 reviewers. A

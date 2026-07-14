@@ -26,6 +26,19 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Dispatch-branch lifecycle：session-end 整合候選 gate + repo-branch reaper + 中間輪收斂
+- **Trigger**: 下次任何 /l4-/l6 campaign 結束時發現未併回 develop 的整合候選或 dispatch branch；或 TWGameProject 2026-07-10 殘骸 triage 動工時。
+- **Context**: 2026-07-14 codex-worktree 稽核（`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`）判定結構主因在 autopilot：merge-back/worktree GC 只是 prose 責任（`level-front-door.md` §4/§5），無任何 deterministic 後盾 — `--gc`/`--reap` 只清 `/tmp` worktree，`scripts/` 無 repo-branch reaper ⇒ TWGameProject 留下 ~70 條 20260710 branch（O(engines×tasks×rounds) 爆炸）+ 46-commit `ceo-integration-candidate-r1` 懸空。修法三件：(1) finish-flow / ceo-agent 收尾 gate — `git branch --list 'ceo-integration-candidate-*'` 存在且 `develop..<it>` ahead>0 ⇒ 擋 clean exit、要求 merge/保留記 handoff/丟棄三選一明確裁決；(2) 新 `scripts/reap-dispatch-branches.sh` — dispatch-owned branch（`ceo-*-<date>`、`agent/*-r?-<date>`）凡被 authoritative branch contain（`merge-base --is-ancestor`）或被高輪 sibling 取代 ⇒ bundle 存證後 `branch -D`；未 contain 一律保留並列出（preserve-first、fail-closed，對照 PEACE 2026-07-14 GC 紀律）；(3) 中間輪收斂 — dispatch 層在整合成功時自動刪被取代的 `-r<n-1>` 中間輪（或改單一 per-task branch force-update）。附帶小修：`autopilot-orphan-worktrees.log` 的 permission-denied 陳舊條目定期 prune（目前留著已消失檔案的殘影）。
+- **Effort**: M（gate S + reaper M + 收斂 S）
+- **Source**: 2026-07-14 codex-worktree audit §3/§5；handoff 2026-07-14。
+- **殘骸現況（2026-07-14 使用者裁決）**：TWGameProject 殘骸**全部擱置**（含 46-commit `ceo-integration-candidate-r1` 的併/棄裁決、5 條 contained branch、`platform-authz-r1-recovered` worktree）— 未 bundle、未刪、原樣保留；動工時先讀 audit 報告 §5「立即清理」的 preserve-first 順序。
+
+### codex-native `spawn_agent` 盲區納管（codex 當 depth-0 時）
+- **Trigger**: 下次 codex 擔任 depth-0 orchestrator 跑 /l4-/l6 前；或下次改版 `platforms/codex/plugin/skills/ceo-agent` payload 時。
+- **Context**: 同上稽核：codex 原生 `spawn_agent`（該次 976 呼叫）完全在 autopilot 軌道外 — 非 Agent-tool（無 TaskStop）、非 shell-dispatched（無 pgid 可 reap），schema 無 model 參數（無法 pin cheap model），autopilot 兩種 teardown primitive 都無效，merge-back/GC 零覆蓋。codex 並自承因此「沒有維持純 CEO context」自己下海 implement。修法：codex-orchestrator 路徑在 payload 內明文禁用原生 `spawn_agent`（一切走 autopilot dispatch 軌道），或至少收尾 gate 偵測 `~/.codex/sessions` 的 spawn_agent 殘留並警示。
+- **Effort**: S（payload prose 禁令）/ M（收尾偵測 gate）
+- **Source**: 2026-07-14 codex-worktree audit §2/§4/§5。
+
 ### check-test-integrity-l1.test.sh 固定 /tmp 路徑在多使用者機器上撞牆（flaky）
 - **Trigger**: 下次碰 hooks/tests/check-test-integrity-l1.test.sh 或 run.sh 全套件又因它紅掉時。
 - **Context**: test 寫死 `/tmp/autopilot-l1-js-install.log`；共用機上被其他使用者（實測 codepower）的舊檔佔走 ⇒ Permission denied ⇒ 套件級 flaky（單獨跑 exit 0、run.sh 下偶紅）。修法：mktemp 或 `${TMPDIR}` + 使用者隔離路徑。同場另一個 run.sh 紅是 engine-scorecard case 13（efforts collapsed）— PRE_EXISTING on develop，屬另一個既有問題。
@@ -44,7 +57,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Trigger**: 下次發現 depth-0 繞過 dispatch 路徑手做實作（如 2026-07-14 研究中 92d8784a 用裸 codex exec 繞 dispatch-hetero、user 質問才自白），或 orchestrator-edit-gate 進 block 模式時（Bash 寫檔是它宣告的盲區，E1 是 backstop）。
 - **Context**: merge 時驗「product commits 是否可溯源到 dispatch run manifests」（`${TMPDIR}/autopilot-dispatch-runs/*.manifest.json` 已存在）+ depth-0 Edit 計數；不符 ⇒ 擋 merge（qc-gate 同級）。A1 是事前預防（honest-agent 級），E1 是事後偵測 — 兩者合起來才閉環。
 - **Effort**: M。
-- **Source**: 2026-07-14 transcript 研究 S3（協議合規無 gate、adjudicate-findings 零呼叫）；plan § Declared limits。
+- **Source**: 2026-07-14 transcript 研究 S3（協議合規無 gate、adjudicate-findings 零呼叫）；plan § Declared limits。**追加證據（2026-07-14 codex-worktree audit）**：codex 當 depth-0 時自承下海 implement + 用原生 `spawn_agent`（976 次）完全繞過 dispatch 軌道 — 又一筆「協議合規純靠模型自覺、無機器可驗」的 S3 實例。
 
 ### B1/B2 review 路徑效率（diff-only 強制 + delta re-review）
 - **Trigger**: 下次任何 /l5 /l6 run 的 review dispatch 出現 repo 爬讀（review session token 中位數異常）或 marathon loop（>5 輪）時；或 Board 排程。

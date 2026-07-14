@@ -1,0 +1,12 @@
+{
+  "case": "03-swallowed-exit-code",
+  "class": "critical",
+  "defect_summary": "locked_append failure swallowed with '|| true'; caller always sees exit 0, silently losing events",
+  "any_of": [
+    {"all_of": ["|| true"]},
+    {"all_of": ["locked_append"]},
+    {"all_of": ["swallow"]},
+    {"regex": "exit\\s*(code\\s*)?0"},
+    {"regex": "(lost|losing|silent)[^.\\n]{0,30}event"}
+  ]
+}

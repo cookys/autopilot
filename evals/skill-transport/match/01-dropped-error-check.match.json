@@ -1,0 +1,12 @@
+{
+  "case": "01-dropped-error-check",
+  "class": "critical",
+  "defect_summary": "flock return code silently dropped; emit_event returns 0 even when the append fails",
+  "any_of": [
+    {"all_of": ["flock", "return"]},
+    {"regex": "\\$\\?"},
+    {"all_of": ["emit_event"]},
+    {"regex": "returns?\\s+0\\b"},
+    {"regex": "return (code|value|status)[^.\\n]{0,50}(no longer|not|never|isn't|unchecked|ignor)"}
+  ]
+}

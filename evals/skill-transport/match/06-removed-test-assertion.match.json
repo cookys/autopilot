@@ -1,0 +1,12 @@
+{
+  "case": "06-removed-test-assertion",
+  "class": "major",
+  "defect_summary": "key test assertions deleted; emit-appends-to-events.jsonl and event-type checks no longer verified",
+  "any_of": [
+    {"all_of": ["assertion"]},
+    {"regex": "no longer\\s+(verif|assert|ensur|guarantee|cover)"},
+    {"all_of": ["event type"]},
+    {"regex": "(delet|strip|gut|weaken)[^.\\n]{0,30}(assert|coverage|check)"},
+    {"regex": "assert[^.\\n]{0,30}(remov|delet|gone|missing)"}
+  ]
+}

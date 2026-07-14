@@ -176,6 +176,97 @@ function runsHuman(runs, stdout) {
   if (live.length === 0) stdout.write('  (none live)\n');
 }
 
+function runsTree(runs) {
+  // Shape: each node keeps existing run fields and gains `children: []`; synthetic
+  // roots for missing parents are explicit nodes: { synthetic_external: true, run_id,
+  // parent_run_id: null, children: [...] }. A node whose parent chain loops back to
+  // itself (self-ref or A→B→A cycle — malformed lineage) is routed to `roots` with
+  // `cycle_detected: true` instead of being folded: a malformed chain must NEVER
+  // silently hide runs (the flat view stays the source of truth).
+  const nodeById = new Map();
+  for (const run of runs) {
+    if (!run || !run.run_id) continue;
+    nodeById.set(`${run.run_id}`, { ...run, children: [] });
+  }
+  // inCycle: walk the parent chain from `startId`; true iff it returns to startId.
+  // A missing parent (synthetic external) or parentless ancestor terminates honestly.
+  const inCycle = (startId) => {
+    const seen = new Set([startId]);
+    let cur = nodeById.get(startId);
+    while (cur) {
+      const p = cur.parent_run_id;
+      if (!p) return false;
+      const pid = `${p}`;
+      if (pid === startId) return true;
+      if (seen.has(pid)) return false; // a cycle strictly above startId, handled at its own nodes
+      seen.add(pid);
+      cur = nodeById.get(pid);
+    }
+    return false;
+  };
+  const roots = [];
+  const synthetic = new Map();
+  for (const node of nodeById.values()) {
+    const parent = node.parent_run_id;
+    if (!parent) {
+      roots.push(node);
+      continue;
+    }
+    const parentId = `${parent}`;
+    if (inCycle(`${node.run_id}`)) {
+      node.cycle_detected = true;
+      roots.push(node);
+      continue;
+    }
+    const parentNode = nodeById.get(parentId);
+    if (parentNode) {
+      parentNode.children.push(node);
+      continue;
+    }
+    let syn = synthetic.get(parentId);
+    if (!syn) {
+      syn = {
+        synthetic_external: true,
+        run_id: parentId,
+        role: 'external',
+        runner: null,
+        model: null,
+        phase: null,
+        started_at: null,
+        ended_at: null,
+        final_status: null,
+        parent_run_id: null,
+        root_run_id: null,
+        depth: null,
+        children: [],
+      };
+      synthetic.set(parentId, syn);
+      roots.push(syn);
+    }
+    syn.children.push(node);
+  }
+  return roots;
+}
+
+function runsTreeHuman(nodes, stdout, indent = '') {
+  const render = (node, prefix, depth) => {
+    const linePrefix = `${indent}${'  '.repeat(depth)}`;
+    if (node.synthetic_external) {
+      stdout.write(`${linePrefix}SYNTHETIC ROOT (external): ${node.run_id}\n`);
+    } else {
+      const live = !(node.ended_at || node.final_status);
+      const status = live ? 'LIVE' : 'DONE';
+      const phase = node.phase || (live ? 'running' : 'exited');
+      const alive = node.alive === undefined || node.alive === null ? 'null' : node.alive;
+      const stall = node.stall ? ' STALL(report-only — cross-check before reacting)' : '';
+      const cycle = node.cycle_detected ? ` CYCLE(parent=${node.parent_run_id} — malformed lineage, flat \`runs\` is the source of truth)` : '';
+      stdout.write(`${linePrefix}${status} ${node.run_id} role=${node.role || '?'} ${node.runner || '?'}/${node.model || '?'} phase=${phase} alive=${alive}${stall}${cycle}\n`);
+    }
+    for (const child of (node.children || [])) render(child, prefix, depth + 1);
+  };
+  for (const node of nodes) render(node, indent, 0);
+}
+
 // --- roster -------------------------------------------------------------------
 
 function collectRoster(cwd) {
@@ -215,9 +306,10 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
   const args = argv.slice();
   const sub = args[0] && !args[0].startsWith('--') ? args.shift() : 'overview';
   const json = args.includes('--json');
+  const tree = args.includes('--tree');
   const probe = args.includes('--probe');
   for (const a of args) {
-    if (a !== '--json' && a !== '--probe') {
+    if (a !== '--json' && a !== '--probe' && !(a === '--tree' && sub === 'runs')) {
       stderr.write(`unknown status argument: ${a}\n`);
       return 2;
     }
@@ -232,7 +324,8 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
   }
   if (sub === 'runs') {
     const runs = collectRuns();
-    if (json) stdout.write(`${JSON.stringify(runs, null, 2)}\n`);
+    if (json) stdout.write(`${JSON.stringify(tree ? runsTree(runs) : runs, null, 2)}\n`);
+    else if (tree) runsTreeHuman(runsTree(runs), stdout);
     else runsHuman(runs, stdout);
     return 0;
   }

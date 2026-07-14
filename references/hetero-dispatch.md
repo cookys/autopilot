@@ -113,6 +113,13 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   with `--usage-only`.
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
+- **Trace lineage contract (telemetry only):** dispatchers inherit lineage from incoming env
+  (`AUTOPILOT_PARENT_RUN_ID`, `AUTOPILOT_ROOT_RUN_ID`, `AUTOPILOT_DISPATCH_DEPTH`) and stamp
+  each manifest with `parent_run_id` + `root_run_id` + `depth` so dispatch trees are auditable.
+- **HONEST BOUNDARY (observability scope):** lineage spans only layers passing through
+  `dispatch-hetero.sh` / `dispatch-review.sh`; engine-internal spawns (e.g. codex `spawn_agent`,
+  agy recursion) and depth-0-only tooling do not appear unless they emit one of those
+  dispatch manifests.
 
 ## Residue retention — startup log prune + manifest reaper
 

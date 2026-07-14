@@ -16,6 +16,9 @@ except the IMPLEMENTER is a heterogeneous engine driven through the canonical
 `engine implement-review` path (`bin/autopilot.js` → `dispatch-hetero.sh`).
 
 Hard rules:
+- At entry run `node <plugin>/scripts/session-mode.js set --level l5` (`--solo` ⇒
+  `set --level l3`) — arms the orchestrator-edit-gate + context-budget hooks
+  (level-front-door § "Session-mode marker").
 - The roster from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)
   is the ONLY source of truth — never hardcode model/runner/effort inline.
 - Implementation dispatch uses an **immutable base SHA**; verification is by **git

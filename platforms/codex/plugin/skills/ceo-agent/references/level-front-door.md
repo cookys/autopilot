@@ -304,6 +304,25 @@ The control loop is enforced at **depth 0** — the child cannot be trusted to
 police its own budget (fox/henhouse, Round-2 Ops 🔴 fix). The CEO wraps the
 foreman dispatch in a guard it owns:
 
+### -1. Session-mode marker + depth-0 context discipline (v2.32.27)
+
+At /l4 /l5 /l6 entry, depth-0 runs `node <plugin>/scripts/session-mode.js set
+--level lN` (and `set --level l3` on `--solo` degradation; `clear` happens in
+finish-flow closing). The marker arms two opt-in hooks:
+
+- **orchestrator-edit-gate**: depth-0 Edit/Write of product files is a protocol
+  violation — dispatch instead. Subagents/foremen pass (hook payload identity).
+- **context-budget**: measures the REAL context size. Once T1 (100k) has fired,
+  depth-0 MUST checkpoint + `autopilot:handoff` at the next phase boundary
+  (after a merged unit / qc verdict) and continue in a fresh session — context
+  cost ≈ length × remaining messages, quadratic in session length (2026-07-14
+  transcript study: 96%+ of tokens were cache_read on unsplit depth-0 sessions).
+  At T2 (150k) stop taking on new work and hand off NOW.
+
+Corollary (always, hooks on or off): dispatch outputs land in FILES; depth-0
+reads only the emitted JSON summary — never scroll raw worker logs into the
+depth-0 context.
+
 ### 0. Peer consult (optional, Claude Code + codex plugin only)
 
 For quick second opinions during depth-0 judgment (design sanity, alternative

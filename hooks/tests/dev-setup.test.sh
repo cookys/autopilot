@@ -111,7 +111,13 @@ cat > "$STUB_BIN/opencode2" <<'SH'
 echo "opencode2 v0.0.0-next-mismatch"
 SH
 chmod +x "$STUB_BIN/opencode2"
-OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:/usr/bin:/bin" bash "$REPO_ROOT/scripts/install-opencode.sh" 2>&1)"; EXIT=$?
+# Keep REAL node+npm reachable: the installer preflights npm and reads the pin
+# via `node -p` BEFORE the version check. On hosts whose node lives outside
+# /usr/bin (nvm), the stripped PATH would fail those gates and never reach the
+# mismatch branch under test — prepend the real node bin dir (node and npm
+# share it) while still shadowing opencode2 with the stub.
+NODE_BIN_DIR="$(dirname "$(command -v node)")"
+OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_BIN_DIR:/usr/bin:/bin" bash "$REPO_ROOT/scripts/install-opencode.sh" 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "OpenCode installer fails closed on version mismatch"
 assert_contains "$OUT" "version mismatch" "OpenCode installer explains pinned nightly mismatch"
 

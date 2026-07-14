@@ -49,6 +49,13 @@ levels, or runners inline. Fields consumed by the loop:
   populate from `~/.autopilot/endpoints.env` via `load-endpoints-env.sh` +
   `resolve-endpoint.sh` — an empty field means no `--endpoint`, byte-identical env path)
 
+## Live sensing
+
+Foreman dispatch is never fire-and-forget: depth-0 pre-assigns the run-ledger
+path, the foreman heartbeats it, and depth-0 watches
+`node scripts/watch-foreman.js --ledger <path>` (Monitor on CC, `--once` poll
+elsewhere). Ritual + report-only discipline: front-door § "Live sensing".
+
 ## Verify-first wiring rule
 
 When `resolve-review-loop.sh` emits `verify_first: true`, the foreman MUST pass

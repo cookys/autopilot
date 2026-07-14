@@ -24,6 +24,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.27 — foreman live sensing: no YOLO window after /l4 /l5 /l6 dispatch
+
+**Headline**: Dispatching a foreman used to open a black box until its completion notification. New `scripts/watch-foreman.js` (S3-lite: sensing ONLY) composes the two substrates that already existed — the foreman run-ledger (`run-ledger.sh` stage acquire/transition/heartbeat) and the dispatch run-manifest dir — into one line-buffered event stream (`STAGE`/`LEAF_START`/`LEAF_END`/`QUIET`/`LEAF_STALL`/`WAIT`) designed to sit behind the CC Monitor tool, with `--once` as the harness-neutral snapshot poller. Front-door § "Live sensing" makes the ritual mandatory: depth-0 pre-assigns run-id + ledger path BEFORE dispatch and writes them into the foreman prompt; the foreman heartbeats ≥ every 5 minutes inside long stages. Report-only by construction (no child_process — greppable test invariant; QUIET/STALL lines embed the R6 "never grab a leased stage" rule from the 2026-07-08 two-cooks crash). Scheduling/steer policy stays open (R6/S3).
+
+### Added
+- `scripts/watch-foreman.js` + `hooks/tests/watch-foreman.test.sh` (16 assertions: real run-ledger records — never hand-forged; stage events, quiet detection, leaf start/end/stall, `--once`, WAIT, usage errors, no-spawn invariant).
+- Front-door § Live sensing (mandatory ritual) + l5/l6 reference pointers + CLAUDE.md inventory row; BACKLOG R6 entry annotated partially closed (sensing half of gap 1; lease + steer remain).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.26 — fallback preference lists: the strong reviewer takes the high-risk seat
 
 **Headline**: v2.32.25's ladder fallback picked by ladder order — with claude-haiku as the only cross-family row that meant haiku on HIGH-risk duty too ("fallback haiku? 這也弱太多了"). Two contract fields fix seat assignment: `reviewer_fallback_preference` and `reviewer_fallback_preference_low_risk` — HUMAN-ordered engine-id lists consulted before raw ladder order (every preferred candidate still passes all v2.32.25 guards; empty lists = unchanged ladder order). claude-opus @ claude-native was qualified onto the ladder the scorecard-first way (known-bad 12/12, clean 10/11 — corpus now includes case 11 — expires 2026-10-12, row carries `model:"opus"`). Autopilot dogfood: high risk → claude-opus, low risk → claude-haiku.

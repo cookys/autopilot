@@ -6,6 +6,11 @@
 > and [`../../l5/references/hetero-impl-loop.md`](../../l5/references/hetero-impl-loop.md) —
 > read those FIRST. This file covers only what `/l6` adds on top of `/l5`.
 
+## Live sensing
+
+Same ritual as `/l5`: pre-assigned run-ledger path + foreman heartbeats +
+depth-0 `watch-foreman.js` watcher (front-door § "Live sensing"; report-only).
+
 ## What /l6 changes vs /l5
 
 Verification AUTHORING is additionally leaf-dispatched through the canonical

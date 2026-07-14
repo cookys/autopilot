@@ -602,6 +602,12 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S 每件。
 - **Source**: l6-resilience campaign deviations ledger，2026-07-08。
 
+### capability-state quota 身分缺 endpoint 維度＋local runner 語意未定
+- **Trigger**: 第一次要記錄 metered endpoint（MiniMax/GLM via cc-shim / anthropic-compatible）的 quota 觀測時；或第一個 local runner（ollama 類/pi 指本機）接線時。
+- **Context**: 2026-07-14 status CLI 設計檢討（cookys 指出 hetero 引擎多來源）：quota 的錢包身分依來源類別不同——訂閱=vendor 池（runner+model 夠用）；**metered endpoint=錢包在 NAMED ENDPOINT**（同 model 走不同 endpoint 是不同錢包，store 事件目前無 `endpoint` 欄→身分歧義）；**local=根本沒有額度概念**（該記 availability/load）。顯示層已修（v2.32.30 source-class 分組＋各類正確措辭＋metered 標明歧義），store 端待做：(a) capability 事件加 optional `endpoint` 欄並進 merge 身分（比照 scorecard effort/model 的 tuple 擴充經驗——注意 R7 教訓：身分鍵要保留既有維度只加不減）；(b) local 類的 capability shape（availability 而非 quota enum）。**別提前建**：等 producer 出現才加，避免無人寫入的 schema 面。部分供應商可能有餘額查詢 API（如 MiniMax）——未驗證，接線前先 Spike。
+- **Effort**: S（endpoint 欄）＋S（local shape）。
+- **Source**: 2026-07-14 status-cli 設計討論。
+
 ### ✅ DONE (v2.32.25) — engine in-loop 去相關 review 對預設 roster（openai×openai）結構性死路
 - **Trigger**: 下次調 review-loop 預設 roster、改 `modelFamilyOfEngine`、或發現 /l5 run 的收斂全靠 verify-first 而 review round 一直 `reviewer_family` blocked 時。
 - **Context**: 2026-07-13 /l5 e2e 實測發現（非本次 tier 引入，是既存結構）：`ensureDistinctReviewFamily` 把 gpt-5.5 / gpt-5.6-sol / gpt-5.3-codex-spark 全映成 `openai`（regex `(gpt|codex|o1|o3|o4)`），而預設 roster 的 implementer（codex-spark）與 reviewer（gpt-5.5）同家族 → engine `implement-review` 的 in-loop review **永遠**在 `reviewer_family` 閘被擋，收斂實質上只靠 verify-first；低風險 tier（sol，亦 openai）同樣過不了這關。深層問題：家族去相關要求與「reviewer 選同 vendor 最強模型」的 roster 選擇互斥——真去相關的 in-loop reviewer 得選 MiniMax/GLM/gemini/claude 家族（claude-haiku 已 qualified，但 tier 設計是同 runner，claude-native ≠ codex → 單一 `reviewer_runner` 欄位的限制也一起浮出）。候選修法：(a) roster 預設改跨家族 reviewer；(b) tier 欄位補 `reviewer_runner_low_risk`；(c) family gate 對 low-risk 降為 warn。需要設計討論，不宜順手改。

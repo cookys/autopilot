@@ -58,6 +58,7 @@ function collectQuota() {
     return {
       runner: row.runner,
       model: row.model,
+      source_class: sourceClassOf(row.runner),
       status: q.status || 'unknown',
       reset_at: q.reset_at || null,
       observed_at: row.observed_at || null,
@@ -83,17 +84,59 @@ function probeQuotaSafe(rows, stderr) {
   }
 }
 
+// Engine SOURCE CLASSES have different quota semantics — never render a local
+// model as if it had a subscription pool, and never key a metered endpoint's
+// wallet on runner+model alone:
+//   subscription      OAuth CLIs (codex/grok/agy/claude-native): vendor pools,
+//                     PER-MODEL (2026-07-14 lesson), reset windows, no remaining-%.
+//   metered-endpoint  token-billed via a named endpoint (cc-shim /
+//                     anthropic-compatible): the WALLET identity is the endpoint,
+//                     not runner+model — the capability store does not record the
+//                     endpoint yet (BACKLOG'd), so rows here are endpoint-ambiguous.
+//   provider-config   pi: metered OR local depending on ~/.pi/agent/models.json.
+//   local             no quota concept at all — availability/load is the signal
+//                     (no local runner is wired yet; class reserved).
+const RUNNER_SOURCE_CLASS = {
+  codex: 'subscription',
+  grok: 'subscription',
+  agy: 'subscription',
+  'claude-native': 'subscription',
+  'cc-shim': 'metered-endpoint',
+  'anthropic-compatible': 'metered-endpoint',
+  pi: 'provider-config',
+};
+const CLASS_CAPTION = {
+  subscription: 'vendor pools, PER-MODEL — never extrapolate across models; no remaining-% API, status+reset+age is the ceiling',
+  'metered-endpoint': 'token-billed; wallet identity = the NAMED ENDPOINT, which the store does not record yet — same model via another endpoint is a DIFFERENT wallet (rows endpoint-ambiguous)',
+  'provider-config': 'pi routes per ~/.pi/agent/models.json — semantics follow the configured provider (metered or local)',
+  local: 'no quota concept — availability/load is the signal',
+  unknown: 'unrecognized runner — semantics unknown, verify before relying',
+};
+
+function sourceClassOf(runner) {
+  return RUNNER_SOURCE_CLASS[runner] || 'unknown';
+}
+
 function quotaHuman(rows, stdout) {
   if (rows.length === 0) {
     stdout.write('quota: no recorded observations (run a dispatch, or probe per-model with a tiny codex exec)\n');
     return;
   }
-  stdout.write('QUOTA (recorded per-pool state; pools are PER-MODEL — never extrapolate across models)\n');
+  stdout.write('QUOTA (recorded state, grouped by engine SOURCE CLASS — each class means something different)\n');
+  const byClass = new Map();
   for (const r of rows) {
-    const flags = [r.stale ? 'STALE' : 'fresh', r.reset_at ? `reset ${r.reset_at}` : null].filter(Boolean).join(', ');
-    stdout.write(`  ${r.runner}/${r.model}: ${r.status} (${r.observed_age}; ${flags})\n`);
+    const cls = sourceClassOf(r.runner);
+    if (!byClass.has(cls)) byClass.set(cls, []);
+    byClass.get(cls).push(r);
   }
-  stdout.write('note: subscription CLIs expose no remaining-%; status+reset+age is the honest ceiling. A model ABSENT here has no fresh observation (TTL-expired or never probed) — treat as unknown, probe per-model before relying.\n');
+  for (const [cls, group] of byClass) {
+    stdout.write(`  [${cls}] ${CLASS_CAPTION[cls] || CLASS_CAPTION.unknown}\n`);
+    for (const r of group) {
+      const flags = [r.stale ? 'STALE' : 'fresh', r.reset_at ? `reset ${r.reset_at}` : null].filter(Boolean).join(', ');
+      stdout.write(`    ${r.runner}/${r.model}: ${r.status} (${r.observed_age}; ${flags})\n`);
+    }
+  }
+  stdout.write('note: a model ABSENT here has no fresh observation (TTL-expired or never probed) — treat as unknown, probe before relying.\n');
 }
 
 // --- runs ---------------------------------------------------------------------

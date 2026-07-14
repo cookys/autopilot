@@ -24,6 +24,16 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.30 — status quota: engine SOURCE CLASSES (subscription / metered-endpoint / provider-config / local)
+
+**Headline**: "hetero engine 有好幾家、可能從不一樣的地方來、可能有 local model" — the quota view now groups rows by SOURCE CLASS with class-correct semantics instead of implying every engine has a subscription pool: subscription (OAuth CLIs; per-MODEL pools, reset windows, no remaining-%), metered-endpoint (cc-shim / anthropic-compatible; the WALLET identity is the NAMED ENDPOINT which the capability store does not record yet — rows explicitly declared endpoint-ambiguous), provider-config (pi — follows ~/.pi/agent/models.json), local (reserved: no quota concept, availability is the signal). JSON rows gain `source_class`. Store-side identity extension (optional `endpoint` field + local capability shape) deliberately BACKLOG'd until a producer exists.
+
+### Changed
+- `src/status/cli.js` quota grouping + captions; `status-cli.test.sh` 26 assertions (metered caption declares "DIFFERENT wallet").
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.29 — `autopilot status`: one read-only surface for quota / runs / roster
 
 **Headline**: New CLI family `autopilot status [quota|runs|roster] [--json] [--probe]` — the human/agent front door over the three observation substrates that already existed: per-MODEL quota pools from engine-capability-state (status + reset_at + observation age; honesty ceiling stated in-output — subscription CLIs expose no remaining-%, TTL-expired observations are ABSENT = unknown, never shown as live truth; `--probe` refreshes via the safe no-spend surface), live dispatch runs from dispatch-status (phase/alive/stall enrichment, STALL marked report-only), and the resolved roster seats (high/low-risk reviewers, family-conflict policy, preference lists, fallback ladder, qc panel). Born of the 2026-07-14 per-model quota-pool incident and the "看得到才不是 YOLO" thread.

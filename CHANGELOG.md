@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.32.27 — foreman live sensing: no YOLO window after /l4 /l5 /l6 dispatch
+## v2.32.28 — foreman live sensing: no YOLO window after /l4 /l5 /l6 dispatch
 
 **Headline**: Dispatching a foreman used to open a black box until its completion notification. New `scripts/watch-foreman.js` (S3-lite: sensing ONLY) composes the two substrates that already existed — the foreman run-ledger (`run-ledger.sh` stage acquire/transition/heartbeat) and the dispatch run-manifest dir — into one line-buffered event stream (`STAGE`/`LEAF_START`/`LEAF_END`/`QUIET`/`LEAF_STALL`/`WAIT`) designed to sit behind the CC Monitor tool, with `--once` as the harness-neutral snapshot poller. Front-door § "Live sensing" makes the ritual mandatory: depth-0 pre-assigns run-id + ledger path BEFORE dispatch and writes them into the foreman prompt; the foreman heartbeats ≥ every 5 minutes inside long stages. Report-only by construction (no child_process — greppable test invariant; QUIET/STALL lines embed the R6 "never grab a leased stage" rule from the 2026-07-08 two-cooks crash). Scheduling/steer policy stays open (R6/S3).
 

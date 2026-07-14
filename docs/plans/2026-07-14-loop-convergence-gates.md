@@ -1,7 +1,7 @@
 # Loop-Convergence Gates — hetero review-loop non-convergence防護
 
 **Date**: 2026-07-14
-**Status**: In progress (feature/loop-convergence-gates)
+**Status**: ✅ Implemented on feature/loop-convergence-gates (v2.32.31) — all 5 gates landed; gates 1+3 red-case proven (7 real incident fixtures TRIP; healthy + boundary negative controls PASS); gate 2 seal/drift green; gates 4+5 brief-template constraints. Implementer gpt-5.3-codex-spark via canonical `engine implement-review`; verification authored by MiniMax-M3; in-loop review by agy/Gemini (endpoint-backed cc-shim reviewers are unusable in the engine loop — see finding below).
 **Origin**: 2026-07-14 codex replay-driver incident — a hetero engine's self-directed
 review loop ran 8 artifact generations (v1 → v3.4), `tests_executed:false` for the
 *entire* run (zero actual execution), `ship_ready:false` monotonic, review verdicts

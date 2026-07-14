@@ -24,7 +24,7 @@ fi
 "$ROOT/scripts/setup-symlinks.sh"
 (cd "$PACKAGE" && npm install)
 "$ROOT/scripts/sync-opencode-plugin.sh"
-(cd "$ROOT/.opencode/plugin-package" && npm install)
+ln -s "$PACKAGE/node_modules" "$ROOT/.opencode/plugin-package/node_modules"
 
 echo "Installed Autopilot OpenCode V2 extension"
 echo "Package: $PACKAGE"

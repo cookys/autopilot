@@ -26,7 +26,7 @@ if [[ "$MODE" = "check" ]]; then
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
   build "$TMP/plugin-package"
-  if [[ ! -d "$TARGET" ]] || ! diff -ruN "$TMP/plugin-package" "$TARGET"; then
+  if [[ ! -d "$TARGET" ]] || ! diff -ruN --exclude=node_modules "$TMP/plugin-package" "$TARGET"; then
     echo "OpenCode plugin payload drift detected; run scripts/sync-opencode-plugin.sh" >&2
     exit 1
   fi

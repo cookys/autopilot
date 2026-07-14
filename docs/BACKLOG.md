@@ -556,6 +556,7 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - ✅ RESOLVED 2026-07-05 — counting semantics implemented (this commit); entry retained for history.
 
 ### 🔬 foreman↔depth-0 協調：liveness query + ownership lease + 插隊/steer 通道（l6-resilience R6-research）
+- **部分結案 (v2.32.27)**: 缺口 (1) liveness/state query 的「感知」半邊由 `scripts/watch-foreman.js` 落地（ledger stage/heartbeat + leaf manifest 合流事件；QUIET/STALL 皆 report-only、內嵌「別搶 stage」守則；front-door § Live sensing 儀式化：派遣前指定 ledger 路徑、foreman 心跳義務、depth-0 Monitor）。仍開放：{working/waiting/blocked/dead} 的**可靠分辨**（心跳靜默仍是模糊訊號）、(2) ownership lease 結構性防撞、(3) 插隊/steer 通道。
 - **Trigger**: 下次多 foreman 並行 /l6 campaign；或 R0 ledger（run-ledger.sh）已 land 可當協調底座時。
 - **Context**: 2026-07-08 l6-resilience 實作 campaign 實痛——depth-0 把 foreman **回合間的正常驗證**誤判成 stall → 跳進去搶做同一 handler → two-cooks 撞 shared `.git`/worktree → 再加 depth-0↔foreman 訊息交錯（crossed messages）對 R5 擁有權誤解、差點互等死鎖。根因＝foreman↔depth-0 缺可靠協調機制。
 - **缺口三塊**:

@@ -24,6 +24,18 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.28 — foreman live sensing: no YOLO window after /l4 /l5 /l6 dispatch
+
+**Headline**: Dispatching a foreman used to open a black box until its completion notification. New `scripts/watch-foreman.js` (S3-lite: sensing ONLY) composes the two substrates that already existed — the foreman run-ledger (`run-ledger.sh` stage acquire/transition/heartbeat) and the dispatch run-manifest dir — into one line-buffered event stream (`STAGE`/`LEAF_START`/`LEAF_END`/`QUIET`/`LEAF_STALL`/`WAIT`) designed to sit behind the CC Monitor tool, with `--once` as the harness-neutral snapshot poller. Front-door § "Live sensing" makes the ritual mandatory: depth-0 pre-assigns run-id + ledger path BEFORE dispatch and writes them into the foreman prompt; the foreman heartbeats ≥ every 5 minutes inside long stages. Report-only by construction (no child_process — greppable test invariant; QUIET/STALL lines embed the R6 "never grab a leased stage" rule from the 2026-07-08 two-cooks crash). Scheduling/steer policy stays open (R6/S3).
+
+### Added
+- `scripts/watch-foreman.js` + `hooks/tests/watch-foreman.test.sh` (16 assertions: real run-ledger records — never hand-forged; stage events, quiet detection, leaf start/end/stall, `--once`, WAIT, usage errors, no-spawn invariant).
+- Front-door § Live sensing (mandatory ritual) + l5/l6 reference pointers + CLAUDE.md inventory row; BACKLOG R6 entry annotated partially closed (sensing half of gap 1; lease + steer remain).
+- opt-in: `context-budget` and `orchestrator-edit-gate` (both opt-in, default-off) shipped in the concurrently-cut v2.32.27 entry below; this release inherits their wiring unchanged (version-collision renumber artifact — the stems are named here so the opt-in changelog gate anchors to the current version).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.27 — depth-0 economics: context-budget + orchestrator-edit-gate hooks
 
 **Headline**: The 2026-07-14 six-researcher transcript study of two consuming projects (TWGameProject + PEACE, ~22B tokens of Claude transcripts + ~88B of codex sessions) found 96%+ of all tokens were cache_read on ever-growing depth-0 sessions (worst case 1.12B tokens / 94.7h in ONE session; orchestration:implementation ≈ 30:1), and nominal /l5 sessions doing 48–54 inline depth-0 Edits — "pure orchestration" existed only in prose. Two new hooks make the depth-0 economics mechanical: **context-budget** reads the REAL context size (last assistant `usage` row, backward transcript scan 64KB→5MB) and advises session splitting at T1 (100k, user-visible nudge) / T2 (150k, exit-2 escalated advisory directing the model to write a handoff and the user to /clear); **orchestrator-edit-gate** arms in /l4-/l6 sessions (new `scripts/session-mode.js` marker at level entry) and warns (default) or denies (`block`) depth-0 product-file edits — subagents/foremen pass via the empirically-probed hook-payload identity (`agent_id` presence, CC 2.1.208, SPIKE-verified). Design adversarially reviewed by a 3-family hetero panel (Gemini 3.5 Flash High / GPT-OSS 120B / MiniMax-M3 — all FIX-THEN-SHIP, findings folded: WHERE-not-WHO worktree backdoor closed, >64KB-line scan brittleness fixed, narrow allowlist, no pretend enforcement at T2, T3 deny tier deferred pending warn-mode calibration).

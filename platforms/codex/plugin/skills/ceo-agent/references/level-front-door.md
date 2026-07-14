@@ -123,6 +123,34 @@ CEO (depth 0, this session)
     `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before). This closes the
     old "type `--endpoint` by hand every run" gap — the project config owns it now.
 
+### Live sensing — no YOLO window after dispatch (S3-lite)
+
+Dispatching the foreman must not open a black-box window until its completion
+notification. Sensing is MANDATORY for `/l4 /l5 /l6`; it is observation-only
+(scheduling/steer stays future work — the R6 two-cooks crash came from depth-0
+REACTING too fast, not from seeing too little):
+
+1. **Before dispatch**, depth-0 chooses the run id + ledger path
+   (`${TMPDIR}/autopilot-dispatch-runs/<foreman-run-id>.ledger.jsonl` by
+   convention) and writes BOTH into the foreman prompt.
+2. **Foreman duties** (in the prompt, non-optional): `run-ledger.sh
+   stage-acquire` when starting a phase, `stage-transition` at phase
+   boundaries, `stage-heartbeat` at least every 5 minutes inside long stages.
+   The leaf dispatches need nothing extra — their run manifests are already
+   emitted by `dispatch-hetero.sh`/`dispatch-review.sh`.
+3. **Depth-0 arms ONE watcher** right after dispatch:
+   `node scripts/watch-foreman.js --ledger <path>` behind the Monitor tool
+   (CC; `persistent: false`, timeout ≈ expected run length) — events: `STAGE`
+   (phase transitions), `LEAF_START/LEAF_END` (hetero dispatches), `QUIET` /
+   `LEAF_STALL` (silence beyond `--quiet-secs`, default 600). Non-CC fallback:
+   run the same tool with `--once` as a manual snapshot poller.
+4. **Report-only discipline** (R6): `QUIET`/`LEAF_STALL` are observations,
+   never verdicts. Cross-check first (`dispatch-status.js --run <id>`, ledger
+   tail, git activity); a quiet foreman is usually doing between-turns work;
+   NEVER grab a stage the foreman holds a lease on — escalate to the user if
+   genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
+   after the foreman is confirmed dead).
+
 ### Heterogeneous engine loop details (/l5 and /l6)
 
 Level-specific long-form lives with each level (this section stays common-protocol only):

@@ -1,0 +1,10 @@
+{
+  "artifact_status": "V2_TESTS_RUN_MOSTLY_GREEN_ONE_FINDING",
+  "artifact_generation": 2,
+  "tests_authored": 12,
+  "tests_executed": true,
+  "tests_passed": 11,
+  "tests_failed": 1,
+  "review_verdict": "REWORK_ONE_MINOR",
+  "ship_ready": false
+}

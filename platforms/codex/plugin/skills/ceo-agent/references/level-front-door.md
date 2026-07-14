@@ -125,6 +125,17 @@ CEO (depth 0, this session)
 
 ### Live sensing — no YOLO window after dispatch (S3-lite)
 
+**裸跑禁令 (gate 4, non-negotiable): a multi-hour autonomous hetero loop MUST have a
+named depth-0 clock owner.** No `/l4 /l5 /l6` run — and no self-directed hetero review
+loop — may run unwatched for hours. Depth-0 is the clock owner: it arms the watcher
+(below), holds the wall-clock, and owns the brake. A loop with no clock owner is a
+banned bare run — the exact shape of the 2026-07-14 replay-driver incident (8 artifact
+generations, zero test execution, hours unattended). The clock owner's brake is a
+verification-anchored + generation ceiling, mechanized by
+[`scripts/check-loop-convergence.js`](../../../scripts/check-loop-convergence.js)
+(gates 1 + 3): ≥2 consecutive zero-execution rounds, or generation cap reached while
+still REWORK-shape ⇒ halt + escalate, do NOT open another round.
+
 Dispatching the foreman must not open a black-box window until its completion
 notification. Sensing is MANDATORY for `/l4 /l5 /l6`; it is observation-only
 (scheduling/steer stays future work — the R6 two-cooks crash came from depth-0

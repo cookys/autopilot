@@ -1,0 +1,8 @@
+{
+  "artifact_status": "V1_STATIC_ONLY_THIS_ROUND",
+  "artifact_generation": 1,
+  "tests_authored": 8,
+  "tests_executed": false,
+  "review_verdict": "REWORK_NEEDS_TESTS_RUN",
+  "ship_ready": false
+}

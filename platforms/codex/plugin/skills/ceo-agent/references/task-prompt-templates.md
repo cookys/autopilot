@@ -54,6 +54,13 @@ dev-flow L-1.6 enforces on the main session, applied to subagent dispatch.]
 - Estimated effort: [N conversation turns / small / medium]
 - Model: [inherit / sonnet / opus]
 - Complexity ceiling: [what NOT to architect]
+- **Scale budget (MANDATORY for dispatched/hetero work — gate 5): [max LOC delta,
+  e.g. ≤250; max files touched, e.g. ≤3].** A brief with no scale budget is
+  incomplete — a worker with no ceiling grinds instead of escalating. If the work
+  demonstrably exceeds the budget, the worker STOPS and returns an `[ESCALATION]`
+  (re-scope / split), it does NOT silently blow past it. Sanity-check realized
+  width against the budget with `scripts/measure-task-width.sh` (upper-bound
+  file-disjoint churn probe; see its header for what it does/doesn't measure).
 
 ### DONE — Definition of done
 [Not "I think it's good" but "these commands all pass".]

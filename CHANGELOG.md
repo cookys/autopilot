@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.31 — loop-convergence gates: verification-anchored + generation cap brake for hetero review loops
+
+**Headline**: downgrades the "a human should have pulled the brake on a spinning hetero review loop" rule from "someone remembers to watch" into machine gates (`ironlaw-to-gate`). Origin: the 2026-07-14 codex replay-driver incident — a self-directed hetero review loop ran 8 artifact generations (v1→v3.4) with `tests_executed:false` the ENTIRE run (zero execution), `ship_ready:false` monotonic, verdicts oscillating FAIL/PASS, hours unattended. Five gates: (1+3) a deterministic `scripts/check-loop-convergence.js` — ≥2 consecutive zero-execution rounds, or generation cap reached while still REWORK-shape ⇒ halt; (2) `scripts/rubric-freeze.js` spec-hash seal + drift; (4+5) depth-0 clock-owner (裸跑禁令) + dispatch-brief scale budget as brief-template hard constraints. Honest scope: all five stop HONEST-but-WEAK loops; a worker that FORGES status fields is out of scope (needs execution provenance). Rules→gates table: `docs/ironlaw-to-gate-map.md`.
+
+### Added
+- `scripts/check-loop-convergence.js` — gates 1 (verification-anchored: ≥2 consecutive zero-execution rounds) + 3 (generation cap; parses `artifact_generation` as number `2` OR string `"3.4"`). Data mode exit 0 (reports, like the resolve-* siblings); `--enforce` exit 3 on TRIP.
+- `scripts/rubric-freeze.js` — gate 2: `seal`/`check` round-0 acceptance rubric by sha256 (FROZEN/DRIFT).
+- `docs/ironlaw-to-gate-map.md` — rules→gates map + review-only list + "new gate" checklist.
+- Red-case proof + negative controls: `hooks/tests/check-loop-convergence.test.sh`, `hooks/tests/rubric-freeze.test.sh` (+ 7 real incident fixtures under `hooks/tests/fixtures/loop-convergence/`), wired into the CI hooks suite.
+
+### Changed
+- `skills/ceo-agent/references/level-front-door.md` — 裸跑禁令 (gate 4): a multi-hour autonomous hetero loop MUST have a named depth-0 clock owner wielding the convergence brake.
+- `skills/ceo-agent/references/task-prompt-templates.md` § HOW MUCH + `references/hetero-dispatch.md` invariants — gate 5 scale budget (LOC/files ceiling; over-budget ⇒ escalate) + gate 4 reference.
+
 ## v2.32.30 — status quota: engine SOURCE CLASSES (subscription / metered-endpoint / provider-config / local)
 
 **Headline**: "hetero engine 有好幾家、可能從不一樣的地方來、可能有 local model" — the quota view now groups rows by SOURCE CLASS with class-correct semantics instead of implying every engine has a subscription pool: subscription (OAuth CLIs; per-MODEL pools, reset windows, no remaining-%), metered-endpoint (cc-shim / anthropic-compatible; the WALLET identity is the NAMED ENDPOINT which the capability store does not record yet — rows explicitly declared endpoint-ambiguous), provider-config (pi — follows ~/.pi/agent/models.json), local (reserved: no quota concept, availability is the signal). JSON rows gain `source_class`. Store-side identity extension (optional `endpoint` field + local capability shape) deliberately BACKLOG'd until a producer exists.

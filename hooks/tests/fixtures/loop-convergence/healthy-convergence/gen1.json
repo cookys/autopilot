@@ -1,0 +1,10 @@
+{
+  "artifact_status": "V1_TESTS_RUN_RED_PENDING_REPAIR",
+  "artifact_generation": 1,
+  "tests_authored": 12,
+  "tests_executed": true,
+  "tests_passed": 7,
+  "tests_failed": 5,
+  "review_verdict": "REWORK_FAILING_TESTS",
+  "ship_ready": false
+}

@@ -1,0 +1,10 @@
+{
+  "artifact_status": "V3_TESTS_RUN_GREEN_ACCEPTED",
+  "artifact_generation": 3,
+  "tests_authored": 12,
+  "tests_executed": true,
+  "tests_passed": 12,
+  "tests_failed": 0,
+  "review_verdict": "SHIP-AS-IS",
+  "ship_ready": true
+}

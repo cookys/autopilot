@@ -66,6 +66,30 @@ pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` s
 Evidence + residuals: [`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
 (`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
+### Directive reachability (Phase 2 — advisory nudge channel)
+
+Depth-0 can queue a one-way **advisory** directive to a running stage's lease holder via the R0
+ledger ([`scripts/run-ledger.sh`](../scripts/run-ledger.sh) `directive-send` / `directive-poll` /
+`directive-ack`): `directive-send` binds the nudge to the target stage's CURRENT lease
+(generation+nonce) and **refuses if no stage is leased** — you cannot nudge a stage nobody holds.
+Every send is terminalized by exactly one ack row (`directive_delivered`, or `directive_expired`
+with reason `run_ended` / `stale_generation`) — a directive never vanishes silently. Delivery is
+**queue-and-deliver-at-boundary**, never a hard interrupt. How far a directive actually reaches
+depends on the runner:
+
+| Runner | Reachability | Mechanism |
+|--------|--------------|-----------|
+| `pi` (RPC duplex) | **mid-run** | the supervisor ([`pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)) polls the ledger on its own cadence (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s) and delivers a native RPC `steer` prefixed `[depth-0 directive] …`, then acks `directive_delivered` **from the supervisor** (never the worker); at shutdown any still-pending directive is `directive_expired(run_ended)`. Enabled only when `--ledger/--run-id/--stage` are all passed — otherwise byte-identical to before. |
+| CC foreman (dev-flow inline) | **stage boundary** | the foreman polls its own run-id at each stage boundary (before `stage-acquire` of the next stage), honors + records, then acks. |
+| one-shot batch runners (`codex exec` / `agy -p` / `grok` / `cc-shim`) | **UNREACHABLE mid-run** | no duplex channel — a directive can only shape the **NEXT** round's dispatch prompt. No pretend-channel is offered. |
+
+AUTHORITY LINES (non-negotiable): a directive is **advisory** — the lease holder keeps the stage,
+there is **no auto-kill on non-response** (Stage 3 scheduling/steer stays BACKLOG'd), and the
+read-only [`watch-foreman.js`](../scripts/watch-foreman.js) NEVER gains a directive-send surface
+(its no-`child_process` / report-only invariant is unchanged). The delivering supervisor — not the
+worker — writes every ack (worker bytes stay JSON-escaped inside tool events, so a worker can't
+forge its own delivery).
+
 ### Deferred — stream-json "live question" rail (spike-gated, NOT built)
 
 A richer signal — a *live* "the model is asking a question" event from `--output-format stream-json` — is **deferred behind an existence spike, not committed**. `claude -p --output-format stream-json` is known to emit `assistant` / `tool_use` / `tool_result` / `result`; whether any of `claude` / `codex exec` / `gemini -p` emits a **machine-distinguishable** "asking a question" event is unverified. **Before any parser code**, a spike must capture real runs and answer "does the event even exist." If it does not, the rail is invalid (a question-mark heuristic would be scrape-equivalent) and stays unbuilt. Recorded sample files are the spike deliverable; any future parser is tested against the recording, never a live CLI. Tracked in the plan's §8, not here.

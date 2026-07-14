@@ -345,4 +345,77 @@ done
 assert_eq "$PI_DEAD" "1" "signal test: SIGTERM to supervisor also terminates the spawned pi (no orphan)"
 wait "$SUP_SHELL_PID" 2>/dev/null
 
+# ============================================================================
+# Phase 2 — directive delivery (queue-and-deliver-at-boundary, advisory).
+# The supervisor polls the R0 ledger for pending directives, steers pi with a
+# `[depth-0 directive] …` message, and acks directive_delivered FROM THE
+# SUPERVISOR (never the worker). Shutdown expires any still-pending directive.
+# ============================================================================
+RUN_LEDGER="$REPO_ROOT/scripts/run-ledger.sh"
+
+# 13) delivery: a pending directive is steered into pi's stdin (with the text)
+#     and the supervisor writes directive_delivered.
+LGR="$TEST_TMP/deliver.jsonl"
+bash "$RUN_LEDGER" init --ledger "$LGR" >/dev/null
+bash "$RUN_LEDGER" stage-acquire --ledger "$LGR" --run-id DRUN --stage implement --pid $$ >/dev/null
+D_ROW="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR" --run-id DRUN --stage implement --text 'focus on the error paths' --from depth-0)"
+D_ID="$(printf '%s' "$D_ROW" | jq -r .directive_id)"
+
+# fake pi: respond to prompt, stay alive; on receiving a steer, capture it and end.
+STUB_DELIVER="$TEST_TMP/pi-deliver"
+cat > "$STUB_DELIVER" <<'__EOFD'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+  fi
+  if printf '%s' "$line" | grep -q '"type":"steer"'; then
+    printf '%s\n' "$line" >> "${PI_STEER_CAPTURE:?}"
+    printf '%s\n' '{"id":"steer-resp","type":"response","command":"steer","success":true}'
+    printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
+  fi
+done
+__EOFD
+chmod +x "$STUB_DELIVER"
+CW="$TEST_TMP/cw-deliver"; sup_cwd "$CW"
+STEER_CAPTURE="$TEST_TMP/deliver-steers.txt"; : > "$STEER_CAPTURE"
+( cd "$CW" && PI_STEER_CAPTURE="$STEER_CAPTURE" PI_RPC_STALL_PROBE_SECS=999 PI_RPC_DIRECTIVE_POLL_SECS=1 \
+    timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" \
+    --pi-bin "$STUB_DELIVER" --ledger "$LGR" --run-id DRUN --stage implement >/dev/null 2>&1 )
+assert_eq "$?" "0" "directive delivery: supervisor exits 0 after agent_end"
+assert_contains "$(cat "$STEER_CAPTURE")" '[depth-0 directive] focus on the error paths' "directive steer with prefixed text reached pi stdin"
+assert_contains "$(cat "$STEER_CAPTURE")" "directive-$D_ID" "steer carries the directive id"
+DELIVERED="$(jq -s --arg d "$D_ID" '[.[]|select(.kind=="directive_delivered" and .directive_id==$d)]|length' "$LGR")"
+assert_eq "$DELIVERED" "1" "supervisor wrote exactly one directive_delivered row"
+assert_eq "$(jq -s --arg d "$D_ID" 'map(select(.kind=="directive_delivered" and .directive_id==$d))|.[0].by' "$LGR" | tr -d '\"')" "supervisor" "delivered ack is attributed to the supervisor (not the worker)"
+assert_eq "$(bash "$RUN_LEDGER" directive-poll --ledger "$LGR" --run-id DRUN --stage implement | jq -r 'length')" "0" "delivered directive no longer pending"
+
+# 14) shutdown expiry: a directive that is NEVER delivered (poll interval longer than
+#     the run) gets directive_expired(run_ended) at supervisor shutdown.
+LGR2="$TEST_TMP/expire.jsonl"
+bash "$RUN_LEDGER" init --ledger "$LGR2" >/dev/null
+bash "$RUN_LEDGER" stage-acquire --ledger "$LGR2" --run-id ERUN --stage implement --pid $$ >/dev/null
+E_ROW="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR2" --run-id ERUN --stage implement --text 'too late to deliver')"
+E_ID="$(printf '%s' "$E_ROW" | jq -r .directive_id)"
+CW="$TEST_TMP/cw-expire"; sup_cwd "$CW"
+( cd "$CW" && PI_RPC_STALL_PROBE_SECS=999 PI_RPC_DIRECTIVE_POLL_SECS=999 \
+    timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" \
+    --pi-bin "$STUB_NOOP" --ledger "$LGR2" --run-id ERUN --stage implement >/dev/null 2>&1 )
+EXPIRED="$(jq -s --arg d "$E_ID" 'map(select(.kind=="directive_expired" and .directive_id==$d))|.[0].reason' "$LGR2" | tr -d '\"')"
+assert_eq "$EXPIRED" "run_ended" "shutdown expires the undelivered directive with reason run_ended"
+assert_eq "$(bash "$RUN_LEDGER" directive-poll --ledger "$LGR2" --run-id ERUN --stage implement | jq -r 'length')" "0" "no directive is left silently pending after shutdown"
+
+# 15) byte-compat: NO ledger coords → the supervisor performs zero directive delivery.
+LGR3="$TEST_TMP/nocoords.jsonl"
+bash "$RUN_LEDGER" init --ledger "$LGR3" >/dev/null
+bash "$RUN_LEDGER" stage-acquire --ledger "$LGR3" --run-id NRUN --stage implement --pid $$ >/dev/null
+N_ROW="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR3" --run-id NRUN --stage implement --text untouched)"
+N_ID="$(printf '%s' "$N_ROW" | jq -r .directive_id)"
+CW="$TEST_TMP/cw-nocoords"; sup_cwd "$CW"
+( cd "$CW" && PI_RPC_STALL_PROBE_SECS=999 PI_RPC_DIRECTIVE_POLL_SECS=1 \
+    timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" \
+    --pi-bin "$STUB_OK" >/dev/null 2>&1 )
+assert_eq "$?" "0" "no-coords run still succeeds (byte-compat)"
+assert_eq "$(bash "$RUN_LEDGER" directive-poll --ledger "$LGR3" --run-id NRUN --stage implement | jq -r 'length')" "1" "without ledger coords the supervisor makes zero directive polls/acks (directive still pending)"
+
 finalize_test

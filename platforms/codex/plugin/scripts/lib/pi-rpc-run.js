@@ -26,7 +26,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { execFile, execFileSync, spawn } = require('child_process');
 const { StringDecoder } = require('string_decoder');
 
 const HARNESS_EDIT_ONLY = `=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
@@ -34,6 +34,10 @@ Make ONLY the file edits the task requires, in the current working directory. Do
 git commit, git push, or open a PR — the harness commits your edits and a separate review verifies them. Ignore any instruction below to commit/push/PR.
 
 `;
+const RUN_LEDGER_PATH = path.join(__dirname, '..', 'run-ledger.sh');
+const DIRECTIVE_POLL_TIMEOUT_MS = 2500;
+const DIRECTIVE_SHUTDOWN_POLL_TIMEOUT_MS = 2000;
+const DIRECTIVE_SHUTDOWN_ACK_TIMEOUT_MS = 1000;
 
 function parseArgs(argv) {
   const out = {
@@ -43,6 +47,9 @@ function parseArgs(argv) {
     cwd: process.cwd(),
     piBin: 'pi',
     sessionDir: null,
+    ledger: null,
+    runId: null,
+    stage: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -52,6 +59,9 @@ function parseArgs(argv) {
     if (a === '--cwd') { out.cwd = argv[++i]; continue; }
     if (a === '--pi-bin') { out.piBin = argv[++i]; continue; }
     if (a === '--session-dir') { out.sessionDir = argv[++i]; continue; }
+    if (a === '--ledger') { out.ledger = argv[++i]; continue; }
+    if (a === '--run-id') { out.runId = argv[++i]; continue; }
+    if (a === '--stage') { out.stage = argv[++i]; continue; }
     throw new Error(`unknown arg: ${a}`);
   }
   if (!out.model) throw new Error('--model is required');
@@ -121,6 +131,113 @@ function makeLineHandler(processLine) {
   return h;
 }
 
+function execRunLedgerCommand(args, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    execFile('bash', [RUN_LEDGER_PATH, ...args], { encoding: 'utf8', timeout: timeoutMs }, (err, stdout) => {
+      if (err) return reject(err);
+      resolve(stdout || '');
+    });
+  });
+}
+
+async function pollAndDeliverDirectives(childProc, opts, state) {
+  if (!state.directiveDeliveryEnabled || state.inFlightPoll || state.shuttingDown) return;
+  state.inFlightPoll = true;
+  try {
+    const stdout = await execRunLedgerCommand([
+      'directive-poll',
+      '--ledger', opts.ledger,
+      '--run-id', opts.runId,
+      '--stage', opts.stage,
+    ], DIRECTIVE_POLL_TIMEOUT_MS);
+    let directives = [];
+    try {
+      directives = JSON.parse((stdout || '').trim() || '[]');
+    } catch (_e) {
+      return;
+    }
+    if (!Array.isArray(directives)) return;
+
+    for (const directive of directives) {
+      const directiveId = directive && directive.directive_id;
+      if (directiveId === undefined || directiveId === null || directiveId === '') continue;
+      if (state.ackedDirectiveIds.has(String(directiveId))) continue;
+      state.ackedDirectiveIds.add(String(directiveId));
+
+      const atMs = Date.now() - state.startMs;
+      const deliveredEvent = {
+        type: 'supervisor_directive_delivered',
+        directive_id: String(directiveId),
+        at_ms: atMs,
+      };
+      const eventLine = JSON.stringify(deliveredEvent);
+      process.stdout.write(`${eventLine}\n`);
+      appendEventLog(process.env.PI_RPC_EVENT_LOG, eventLine);
+
+      const steer = {
+        id: `directive-${String(directiveId)}`,
+        type: 'steer',
+        message: `[depth-0 directive] ${directive && typeof directive.text === 'string' ? directive.text : ''}`,
+      };
+      try { childProc.stdin.write(`${JSON.stringify(steer)}\n`); } catch (_e) { /* ignore */ }
+
+      try {
+        await execRunLedgerCommand([
+          'directive-ack',
+          '--ledger', opts.ledger,
+          '--run-id', opts.runId,
+          '--directive-id', String(directiveId),
+          '--by', 'supervisor',
+        ], DIRECTIVE_POLL_TIMEOUT_MS);
+      } catch (_e) { /* best-effort */ }
+    }
+  } catch (_e) {
+    // best-effort
+  } finally {
+    state.inFlightPoll = false;
+  }
+}
+
+function expirePendingDirectivesSync(opts, state) {
+  if (state && state.directiveShutdownExpired) return;
+  if (state) {
+    state.directiveShutdownExpired = true;
+  }
+  if (!(opts.ledger && opts.runId && opts.stage)) return;
+
+  let stdout = '';
+  try {
+    stdout = execFileSync(
+      'bash',
+      [RUN_LEDGER_PATH, 'directive-poll', '--ledger', opts.ledger, '--run-id', opts.runId, '--stage', opts.stage],
+      { encoding: 'utf8', timeout: DIRECTIVE_SHUTDOWN_POLL_TIMEOUT_MS },
+    );
+  } catch (_e) {
+    return;
+  }
+
+  let directives = [];
+  try {
+    directives = JSON.parse((stdout || '').trim() || '[]');
+  } catch (_e) {
+    return;
+  }
+  if (!Array.isArray(directives)) return;
+
+  for (const directive of directives) {
+    if (!directive || directive.directive_id === undefined || directive.directive_id === null || directive.directive_id === '') continue;
+    try {
+      execFileSync(
+        'bash',
+        [RUN_LEDGER_PATH, 'directive-ack', '--ledger', opts.ledger, '--run-id', opts.runId, '--directive-id', String(directive.directive_id), '--reason', 'run_ended', '--by', 'supervisor'],
+        { encoding: 'utf8', timeout: DIRECTIVE_SHUTDOWN_ACK_TIMEOUT_MS },
+      );
+    } catch (_e) {
+      /* best-effort */
+    }
+  }
+}
+
 function sendSteerProbe(childProc, state) {
   if (state.probeSent) return;
   state.probeSent = true;
@@ -141,6 +258,7 @@ function sendSteerProbe(childProc, state) {
 async function run() {
   const opts = parseArgs(process.argv.slice(2));
   const provider = opts.provider || process.env.PI_RPC_PROVIDER || 'minimax';
+  const directiveDeliveryEnabled = Boolean(opts.ledger && opts.runId && opts.stage);
   const stallProbeMs = toNonNegativeNumber(process.env.PI_RPC_STALL_PROBE_SECS || '120', 120) * 1000;
   const maxRunMs = toNonNegativeNumber(process.env.PI_RPC_MAX_SECS || '0', 0) * 1000;
   const sessionDir = opts.sessionDir || fs.mkdtempSync(path.join(os.tmpdir(), 'pi-rpc-session-'));
@@ -154,6 +272,11 @@ async function run() {
     seenAgentEnd: false,
     probeSent: false,
     hardCapReached: false,
+    inFlightPoll: false,
+    ackedDirectiveIds: new Set(),
+    directiveDeliveryEnabled,
+    directivePollTimer: null,
+    directiveShutdownExpired: false,
   };
 
   const child = spawn(opts.piBin, [
@@ -189,6 +312,13 @@ async function run() {
   const shutdown = () => {
     if (state.shuttingDown) return;
     state.shuttingDown = true;
+    if (state.directivePollTimer) {
+      clearInterval(state.directivePollTimer);
+      state.directivePollTimer = null;
+    }
+    if (state.directiveDeliveryEnabled) {
+      expirePendingDirectivesSync(opts, state);
+    }
     try { child.stdin.end(); } catch (_e) { /* stdin already gone */ }
     state.termTimer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch (_e) {}
@@ -207,6 +337,13 @@ async function run() {
   // do not — the supervisor must be self-sufficient at every tier. TERM the child
   // immediately (KILL backstop), then exit once the kill window has elapsed.
   const onSignal = () => {
+    if (state.directivePollTimer) {
+      clearInterval(state.directivePollTimer);
+      state.directivePollTimer = null;
+    }
+    if (state.directiveDeliveryEnabled) {
+      expirePendingDirectivesSync(opts, state);
+    }
     try { child.kill('SIGTERM'); } catch (_e) { /* already gone */ }
     setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) {} }, 800);
     setTimeout(() => process.exit(1), 1000);
@@ -218,6 +355,13 @@ async function run() {
   try {
     child.stdin.write(`${JSON.stringify({ id: 'prompt-1', type: 'prompt', message: promptPayload })}\n`);
   } catch (_e) { /* child already gone → exitPromise resolves → scored failure */ }
+
+  if (directiveDeliveryEnabled) {
+    const directivePollMs = toNonNegativeNumber(process.env.PI_RPC_DIRECTIVE_POLL_SECS || '5', 5) * 1000;
+    state.directivePollTimer = setInterval(() => {
+      void pollAndDeliverDirectives(child, opts, state);
+    }, directivePollMs);
+  }
 
   const timer = setInterval(() => {
     const now = Date.now();
@@ -238,6 +382,10 @@ async function run() {
 
   await exitPromise;
   clearInterval(timer);
+  if (state.directivePollTimer) {
+    clearInterval(state.directivePollTimer);
+    state.directivePollTimer = null;
+  }
   if (state.termTimer) clearTimeout(state.termTimer);
   if (state.killTimer) clearTimeout(state.killTimer);
   try { child.stdin.end(); } catch (_e) {}

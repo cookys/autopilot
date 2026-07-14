@@ -63,4 +63,10 @@ assert_contains "$OUT" "STAGE run=wfrun implement" "live mode emits stage events
 # --- 7. no kill/steer surface (sensing-only guarantee, greppable) ----------------
 assert_not_contains "$(cat "$WF")" "child_process" "watcher spawns nothing (pure observation)"
 
+# --- 8. no directive-SEND/ACK surface (Phase 2: the watcher senses, never nudges) -
+# The directive channel is advisory and written only by depth-0 / the delivering
+# supervisor — the read-only watcher must never gain a directive write surface.
+assert_not_contains "$(cat "$WF")" "directive-send" "watcher has no directive-send surface"
+assert_not_contains "$(cat "$WF")" "directive-ack" "watcher has no directive-ack surface"
+
 finalize_test

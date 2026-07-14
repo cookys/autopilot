@@ -163,6 +163,22 @@ REACTING too fast, not from seeing too little):
    NEVER grab a stage the foreman holds a lease on — escalate to the user if
    genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
    after the foreman is confirmed dead).
+5. **Advisory directive channel (Phase 2 — nudge, never seize).** Depth-0 may
+   queue a one-way *advisory* nudge to a running stage's lease holder — it does
+   NOT auto-kill, does NOT grab the lease, and never overrides the holder's
+   authority (Stage 3 scheduling/steer stays BACKLOG'd). Send side (depth-0):
+   `run-ledger.sh directive-send --ledger <path> --run-id <foreman-run-id>
+   --stage <stage> --text "<guidance>" --from depth-0` — refused (exit ≠ 0) if
+   that stage has no live lease (you cannot nudge a stage nobody holds); the
+   directive binds to the lease's current generation. Foreman duty (in the
+   prompt, non-optional): **at every stage boundary — before `stage-acquire` of
+   the next stage — poll your own directives** (`run-ledger.sh directive-poll
+   --ledger <path> --run-id <foreman-run-id> [--stage <stage>]`) and honor +
+   record any pending guidance, then ack it. Reachability differs by runner —
+   see [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md)
+   § Directive reachability: pi-rpc = mid-run steer; a CC foreman = stage
+   boundary; one-shot batch runners = only the NEXT round's dispatch. The
+   read-only `watch-foreman.js` NEVER gains a directive-send surface.
 
 HONEST BOUNDARY (SCOPE): dispatcher lineages only include runs emitted by
 `dispatch-hetero.sh`/`dispatch-review.sh`. Engine-native internal subprocesses

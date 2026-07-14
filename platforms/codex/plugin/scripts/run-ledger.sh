@@ -25,6 +25,10 @@
 #   resource-scan
 #   write-result
 #   write-atomic
+#   directive-send
+#   directive-poll
+#   directive-list
+#   directive-ack
 #
 # Notes:
 #   - The default lock order is global and explicit: resource locks (sorted by resource id)
@@ -1599,6 +1603,199 @@ command_query_latest() {
     | if length==0 then {} else .[-1] end' "$ledger"
 }
 
+command_directive_send() {
+  local ledger="" run_id="" stage="" text="" from="" directive_id="" timeout="$DEFAULT_LOCK_TIMEOUT"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --run-id) run_id="$2"; shift 2 ;;
+      --stage) stage="$2"; shift 2 ;;
+      --text) text="$2"; shift 2 ;;
+      --from) from="$2"; shift 2 ;;
+      --directive-id) directive_id="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id is required"
+  [ -n "$stage" ] || error "--stage is required"
+  [ -n "$text" ] || error "--text is required"
+  [ -n "$from" ] || from=""
+
+  local run_fd
+  if ! with_run_lock "$ledger" "$run_id" "$timeout" run_fd; then
+    error "run lock unavailable"
+  fi
+
+  local lease_row lease_state generation nonce
+  lease_row="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  if [ -z "$lease_row" ]; then
+    release_lock "$run_fd"
+    error "no live lease for stage=$stage; cannot send directive"
+  fi
+
+  lease_state="$(jq -r '.state // ""' <<<"$lease_row")"
+  if [ "$lease_state" != "leased" ]; then
+    release_lock "$run_fd"
+    error "no live lease for stage=$stage; cannot send directive"
+  fi
+
+  generation="$(jq -r '.generation // 0' <<<"$lease_row")"
+  nonce="$(jq -r '.nonce // ""' <<<"$lease_row")"
+  if [ -z "$directive_id" ]; then
+    directive_id="dir-$(rand_hex)"
+  fi
+
+  local line
+  line="$(jq -nc \
+    --arg kind "directive" \
+    --arg ts "$(iso_ts)" \
+    --arg rid "$run_id" \
+    --arg stg "$stage" \
+    --argjson gen "$generation" \
+    --arg nonce_v "$nonce" \
+    --arg did "$directive_id" \
+    --arg txt "$text" \
+    --arg from_v "$from" \
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:$gen,nonce:$nonce_v,directive_id:$did,text:$txt,from:$from_v}')"
+
+  append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
+  echo "$line"
+}
+
+command_directive_poll() {
+  local ledger="" run_id="" stage="" timeout="$DEFAULT_LOCK_TIMEOUT"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --run-id) run_id="$2"; shift 2 ;;
+      --stage) stage="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id is required"
+  [ -n "$stage" ] || stage=""
+
+  if [ ! -f "$ledger" ]; then
+    echo '[]'
+    return 0
+  fi
+
+  jq -s --arg rid "$run_id" --arg stg "$stage" '
+    (map(select(.kind=="directive_delivered" or .kind=="directive_expired") | .directive_id) | unique) as $acked
+    | [ .[] | select(.kind=="directive" and .run_id==$rid and ($stg=="" or .stage==$stg) and (.directive_id as $d | ($acked | index($d)) | not)) ]' "$ledger"
+}
+
+command_directive_ack() {
+  local ledger="" run_id="" directive_id="" reason="" by="" timeout="$DEFAULT_LOCK_TIMEOUT"
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --run-id) run_id="$2"; shift 2 ;;
+      --directive-id) directive_id="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
+      --by) by="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id is required"
+  [ -n "$directive_id" ] || error "--directive-id required"
+  if [ -n "$reason" ] && [ "$reason" != "run_ended" ] && [ "$reason" != "stale_generation" ]; then
+    error "invalid reason; expected run_ended or stale_generation"
+  fi
+  [ -n "$by" ] || by=""
+
+  local run_fd
+  if ! with_run_lock "$ledger" "$run_id" "$timeout" run_fd; then
+    error "run lock unavailable"
+  fi
+
+  local directive_row
+  if [ ! -f "$ledger" ]; then
+    release_lock "$run_fd"
+    error "no directive directive_id=$directive_id"
+  fi
+
+  directive_row="$(jq -s --arg rid "$run_id" --arg did "$directive_id" '
+    [ .[] | select(.kind=="directive" and .run_id==$rid and .directive_id==$did) ]
+    | if length==0 then empty else .[-1] end' "$ledger")"
+  if [ -z "$directive_row" ] || [ "$directive_row" = "empty" ]; then
+    release_lock "$run_fd"
+    error "no directive directive_id=$directive_id"
+  fi
+
+  local has_acked
+  has_acked="$(jq -s --arg rid "$run_id" --arg did "$directive_id" '
+    [ .[] | select((.kind=="directive_delivered" or .kind=="directive_expired") and .run_id==$rid and .directive_id==$did) ]
+    | if length==0 then false else true end' "$ledger" 2>/dev/null || echo false)"
+  if [ "$has_acked" = "true" ]; then
+    release_lock "$run_fd"
+    echo '{"status":"already_acked"}'
+    return 0
+  fi
+
+  local stage generation nonce outcome terminal_reason
+  stage="$(jq -r '.stage // ""' <<<"$directive_row")"
+  generation="$(jq -r '.generation // 0' <<<"$directive_row")"
+  nonce="$(jq -r '.nonce // ""' <<<"$directive_row")"
+
+  if [ "$reason" = "run_ended" ]; then
+    outcome="expired"
+    terminal_reason="run_ended"
+  else
+    local leased_row
+    leased_row="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+    if [ -n "$leased_row" ] && [ "$(jq -r '.state // ""' <<<"$leased_row")" = "leased" ] && [ "$(jq -r '.generation // 0' <<<"$leased_row")" -eq "$generation" ]; then
+      outcome="delivered"
+    else
+      outcome="expired"
+      terminal_reason="stale_generation"
+    fi
+  fi
+
+  local line
+  if [ "$outcome" = "delivered" ]; then
+    line="$(jq -nc \
+      --arg kind "directive_delivered" \
+      --arg ts "$(iso_ts)" \
+      --arg rid "$run_id" \
+      --arg stg "$stage" \
+      --argjson gen "$generation" \
+      --arg nonce_v "$nonce" \
+      --arg did "$directive_id" \
+      --arg by_v "$by" \
+      '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:$gen,nonce:$nonce_v,directive_id:$did,by:$by_v}')"
+    append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
+    echo '{"status":"delivered"}'
+    return 0
+  fi
+
+  line="$(jq -nc \
+    --arg kind "directive_expired" \
+    --arg ts "$(iso_ts)" \
+    --arg rid "$run_id" \
+    --arg stg "$stage" \
+    --argjson gen "$generation" \
+    --arg nonce_v "$nonce" \
+    --arg did "$directive_id" \
+    --arg reason_v "$terminal_reason" \
+    --arg by_v "$by" \
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:$gen,nonce:$nonce_v,directive_id:$did,reason:$reason_v,by:$by_v}')"
+  append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
+  echo '{"status":"expired","reason":"'"$terminal_reason"'"}'
+}
+
 command_resource_scan() {
   local ledger="" resource_ids="" state_filter=""
   while [ "$#" -gt 0 ]; do
@@ -1911,6 +2108,15 @@ case "$command" in
 
   write-atomic)
     command_write_atomic "$@" ;;
+
+  directive-send)
+    command_directive_send "$@" ;;
+
+  directive-poll|directive-list)
+    command_directive_poll "$@" ;;
+
+  directive-ack)
+    command_directive_ack "$@" ;;
 
   --help|-h|help)
     usage

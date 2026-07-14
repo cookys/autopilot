@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用
+- **Trigger**: 下次要在 `engine implement-review` 迴圈裡用 endpoint-backed reviewer（GLM/MiniMax via cc-shim `--endpoint`），或碰 `src/engine/autopilot-engine.js` buildReviewArgs 段時。
+- **Context**: 2026-07-14 loop-convergence-gates run（foreman escalation #1）：`autopilot-engine.js:1222` 組 reviewer dispatch 參數時不傳 `reviewer_endpoint` → cc-shim reviewer 缺 endpoint creds 結構性失敗；foreman 被迫換 agy/Gemini。獨立佐證：MiniMax-M3 即使 endpoint 通、在 dispatch-review 的 wrapped block 下也結構性 no_verdict（fail-closed 正確；GLM-5.2 standalone probe 可用）。修法：wire `reviewer_endpoint`（roster/resolver 已有此概念）into buildReviewArgs，並補一條 red-case（endpoint reviewer 配置下組出的 args 必含 --endpoint）。
+- **Effort**: S。
+- **Source**: 2026-07-14 /l6 loop-convergence-gates foreman ledger + depth-0 qc probe。
+
 ### check-test-integrity-l1.test.sh 固定 /tmp 路徑在多使用者機器上撞牆（flaky）
 - **Trigger**: 下次碰 hooks/tests/check-test-integrity-l1.test.sh 或 run.sh 全套件又因它紅掉時。
 - **Context**: test 寫死 `/tmp/autopilot-l1-js-install.log`；共用機上被其他使用者（實測 codepower）的舊檔佔走 ⇒ Permission denied ⇒ 套件級 flaky（單獨跑 exit 0、run.sh 下偶紅）。修法：mktemp 或 `${TMPDIR}` + 使用者隔離路徑。同場另一個 run.sh 紅是 engine-scorecard case 13（efforts collapsed）— PRE_EXISTING on develop，屬另一個既有問題。

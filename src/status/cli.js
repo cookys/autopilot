@@ -179,12 +179,31 @@ function runsHuman(runs, stdout) {
 function runsTree(runs) {
   // Shape: each node keeps existing run fields and gains `children: []`; synthetic
   // roots for missing parents are explicit nodes: { synthetic_external: true, run_id,
-  // parent_run_id: null, children: [...] }.
+  // parent_run_id: null, children: [...] }. A node whose parent chain loops back to
+  // itself (self-ref or A→B→A cycle — malformed lineage) is routed to `roots` with
+  // `cycle_detected: true` instead of being folded: a malformed chain must NEVER
+  // silently hide runs (the flat view stays the source of truth).
   const nodeById = new Map();
   for (const run of runs) {
     if (!run || !run.run_id) continue;
     nodeById.set(`${run.run_id}`, { ...run, children: [] });
   }
+  // inCycle: walk the parent chain from `startId`; true iff it returns to startId.
+  // A missing parent (synthetic external) or parentless ancestor terminates honestly.
+  const inCycle = (startId) => {
+    const seen = new Set([startId]);
+    let cur = nodeById.get(startId);
+    while (cur) {
+      const p = cur.parent_run_id;
+      if (!p) return false;
+      const pid = `${p}`;
+      if (pid === startId) return true;
+      if (seen.has(pid)) return false; // a cycle strictly above startId, handled at its own nodes
+      seen.add(pid);
+      cur = nodeById.get(pid);
+    }
+    return false;
+  };
   const roots = [];
   const synthetic = new Map();
   for (const node of nodeById.values()) {
@@ -194,6 +213,11 @@ function runsTree(runs) {
       continue;
     }
     const parentId = `${parent}`;
+    if (inCycle(`${node.run_id}`)) {
+      node.cycle_detected = true;
+      roots.push(node);
+      continue;
+    }
     const parentNode = nodeById.get(parentId);
     if (parentNode) {
       parentNode.children.push(node);
@@ -235,7 +259,8 @@ function runsTreeHuman(nodes, stdout, indent = '') {
       const phase = node.phase || (live ? 'running' : 'exited');
       const alive = node.alive === undefined || node.alive === null ? 'null' : node.alive;
       const stall = node.stall ? ' STALL(report-only — cross-check before reacting)' : '';
-      stdout.write(`${linePrefix}${status} ${node.run_id} role=${node.role || '?'} ${node.runner || '?'}/${node.model || '?'} phase=${phase} alive=${alive}${stall}\n`);
+      const cycle = node.cycle_detected ? ` CYCLE(parent=${node.parent_run_id} — malformed lineage, flat \`runs\` is the source of truth)` : '';
+      stdout.write(`${linePrefix}${status} ${node.run_id} role=${node.role || '?'} ${node.runner || '?'}/${node.model || '?'} phase=${phase} alive=${alive}${stall}${cycle}\n`);
     }
     for (const child of (node.children || [])) render(child, prefix, depth + 1);
   };

@@ -31,7 +31,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Added
 - Lineage env contract + manifest fields (`parent_run_id`/`root_run_id`/`depth`) in `scripts/dispatch-hetero.sh` and `scripts/dispatch-review.sh` — ADDITIVE; absent env ⇒ output differs only by the three new keys (root default: parent null, root=own run_id, depth 0). Values survive the hetero detach `declare -p` state serialization.
 - `scripts/watch-foreman.js --root <run-id>` — lineage-filtered leaf attribution with `attribution=time-window` tagging for pre-upgrade manifests. Report-only invariant preserved (no child_process).
-- `scripts/dispatch-status.js --list` surfaces the lineage fields; `autopilot status runs --tree` (`src/status/cli.js`) renders the parent/child/synthetic-external tree (`--json` composes; default `runs` unchanged).
+- `scripts/dispatch-status.js --list` surfaces the lineage fields; `autopilot status runs --tree` (`src/status/cli.js`) renders the parent/child/synthetic-external tree (`--json` composes; default `runs` unchanged). Malformed lineage (self-referencing parent / A→B→A cycle) never hides runs: such nodes surface at root tagged `cycle_detected: true` (`--json`) / a visible `CYCLE(...)` marker (human) — the flat view stays the source of truth. Inherited lineage ids are sanitized to `[A-Za-z0-9._-]` and depth is forced base-10 (`"08"` would be octal-invalid and could corrupt the manifest JSON).
 - `hooks/tests/dispatch-lineage.test.sh` — artifact-based adversarial harness (real manifest files; detach survival; concurrent-root zero cross-attribution; legacy time-window fallback).
 
 ### Changed

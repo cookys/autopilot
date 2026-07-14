@@ -212,4 +212,53 @@ assert_eq "yes" "$EXT_CHILD" "tree: orphan folded under synthetic external root"
 FLAT_JSON="$(AUTOPILOT_DISPATCH_RUNS_DIR="$TREE_RUNS" node "$CLI" status runs --json 2>/dev/null)"
 assert_not_contains "$FLAT_JSON" "synthetic_external" "default runs --json stays flat (no synthetic nodes)"
 
+# =========================================================================
+# 11. malformed lineage must NEVER silently hide runs (--tree cycle guard)
+# =========================================================================
+CYC_RUNS="$TEST_TMP/cycle-runs"; mkdir -p "$CYC_RUNS"
+cm() { # id parent
+  printf '{"schema":1,"run_id":"%s","role":"implementer","runner":"agy","model":"m","started_at":"2026-07-15T00:00:00Z","ended_at":"2026-07-15T00:00:01Z","final_status":"committed","parent_run_id":"%s","root_run_id":"%s","depth":1}\n' \
+    "$1" "$2" "$2" > "$CYC_RUNS/$1.manifest.json"
+}
+# (a) self-referencing parent: run must APPEAR, tagged
+cm selfy selfy
+SELF_JSON="$(AUTOPILOT_DISPATCH_RUNS_DIR="$CYC_RUNS" node "$CLI" status runs --tree --json 2>/dev/null)"
+assert_contains "$SELF_JSON" '"run_id": "selfy"' "self-ref run appears in --tree --json (never hidden)"
+assert_contains "$SELF_JSON" '"cycle_detected": true' "self-ref run tagged cycle_detected in --json"
+SELF_HUMAN="$(AUTOPILOT_DISPATCH_RUNS_DIR="$CYC_RUNS" node "$CLI" status runs --tree 2>/dev/null)"
+assert_contains "$SELF_HUMAN" "selfy" "self-ref run appears in human --tree"
+assert_contains "$SELF_HUMAN" "CYCLE(" "self-ref human line carries visible CYCLE marker"
+rm -f "$CYC_RUNS/selfy.manifest.json"
+# (b) two-node cycle A→B→A: BOTH must appear, both tagged
+cm cycA cycB
+cm cycB cycA
+CYC_JSON="$(AUTOPILOT_DISPATCH_RUNS_DIR="$CYC_RUNS" node "$CLI" status runs --tree --json 2>/dev/null)"
+assert_contains "$CYC_JSON" '"run_id": "cycA"' "cycle: node A appears in --tree --json"
+assert_contains "$CYC_JSON" '"run_id": "cycB"' "cycle: node B appears in --tree --json"
+BOTH_TAGGED="$(printf '%s' "$CYC_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s);const t=a.filter(n=>n.cycle_detected===true).map(n=>n.run_id).sort();process.stdout.write(t.join(","))})')"
+assert_eq "cycA,cycB" "$BOTH_TAGGED" "cycle: both nodes routed to roots tagged cycle_detected"
+# (c) --json shape: tagged nodes are ROOT-level entries with children arrays
+CYC_SHAPE="$(printf '%s' "$CYC_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s);process.stdout.write(a.every(n=>Array.isArray(n.children))?"ok":"bad")})')"
+assert_eq "ok" "$CYC_SHAPE" "cycle: every --json root node carries a children array"
+
+# =========================================================================
+# 12. leading-zero depth ("08" would be octal-invalid) → base-10, valid JSON
+# =========================================================================
+run_hetero depth08 AUTOPILOT_PARENT_RUN_ID=foreman-O8 AUTOPILOT_DISPATCH_DEPTH=08
+M_08="$RUNS/depth08.manifest.json"
+assert_file_exists "$M_08" "depth=08 manifest written"
+# valid JSON AND numeric 8 (not literal 08, not frozen/defaulted)
+D08="$(node -e 'const m=require(process.argv[1]);process.stdout.write(String(m.depth))' "$M_08" 2>/dev/null)"
+assert_eq "8" "$D08" "depth 08 coerced base-10 to 8 in valid manifest JSON"
+assert_contains "$(cat "$ENVDUMP")" "AUTOPILOT_DISPATCH_DEPTH=9" "worker depth incremented past 08 (9, not octal-stuck)"
+
+# =========================================================================
+# 13. control chars in inherited parent id → sanitized, manifest stays valid JSON
+# =========================================================================
+run_hetero ctlparent AUTOPILOT_PARENT_RUN_ID="$(printf 'evil\tid')"
+M_CTL="$RUNS/ctlparent.manifest.json"
+assert_file_exists "$M_CTL" "control-char parent manifest written"
+CTL_PARENT="$(node -e 'const m=require(process.argv[1]);process.stdout.write(String(m.parent_run_id))' "$M_CTL" 2>/dev/null)"
+assert_eq "evil-id" "$CTL_PARENT" "tab in parent id sanitized (manifest parses as valid JSON)"
+
 finalize_test

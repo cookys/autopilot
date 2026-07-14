@@ -143,14 +143,16 @@ REACTING too fast, not from seeing too little):
 
 1. **Before dispatch**, depth-0 chooses the run id + ledger path
    (`${TMPDIR}/autopilot-dispatch-runs/<foreman-run-id>.ledger.jsonl` by
-   convention) and writes BOTH into the foreman prompt.
+   convention), exports the foreman lineage (`AUTOPILOT_PARENT_RUN_ID=<foreman-run-id>`,
+   `AUTOPILOT_ROOT_RUN_ID=<foreman-run-id>`, `AUTOPILOT_DISPATCH_DEPTH=1`), and writes both
+   the foreman run-id + watcher arg into the foreman prompt.
 2. **Foreman duties** (in the prompt, non-optional): `run-ledger.sh
    stage-acquire` when starting a phase, `stage-transition` at phase
    boundaries, `stage-heartbeat` at least every 5 minutes inside long stages.
    The leaf dispatches need nothing extra — their run manifests are already
    emitted by `dispatch-hetero.sh`/`dispatch-review.sh`.
 3. **Depth-0 arms ONE watcher** right after dispatch:
-   `node scripts/watch-foreman.js --ledger <path>` behind the Monitor tool
+   `node scripts/watch-foreman.js --ledger <path> --root <foreman-run-id>` behind the Monitor tool
    (CC; `persistent: false`, timeout ≈ expected run length) — events: `STAGE`
    (phase transitions), `LEAF_START/LEAF_END` (hetero dispatches), `QUIET` /
    `LEAF_STALL` (silence beyond `--quiet-secs`, default 600). Non-CC fallback:
@@ -161,6 +163,13 @@ REACTING too fast, not from seeing too little):
    NEVER grab a stage the foreman holds a lease on — escalate to the user if
    genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
    after the foreman is confirmed dead).
+
+HONEST BOUNDARY (SCOPE): dispatcher lineages only include runs emitted by
+`dispatch-hetero.sh`/`dispatch-review.sh`. Engine-native internal subprocesses
+(`spawn_agent`, agy recursion) and CC-native foremen are not observed as child
+runs in the watch tree; a CC-native foreman appears only as a synthetic
+`(external)` root, so no completeness claim is implied beyond dispatcher
+coverage.
 
 ### Heterogeneous engine loop details (/l5 and /l6)
 

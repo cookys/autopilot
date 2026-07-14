@@ -26,7 +26,7 @@
 //
 // Usage:
 //   node scripts/watch-foreman.js --ledger <path> [--runs-dir <dir>]
-//     [--interval-secs 30] [--quiet-secs 600] [--max-secs 0] [--once]
+//     [--root <run-id>] [--interval-secs 30] [--quiet-secs 600] [--max-secs 0] [--once]
 //
 // Exit: 0 (clean end / --once / --max-secs reached), 2 usage.
 
@@ -36,6 +36,7 @@ const path = require('path');
 function parseArgs(argv) {
   const args = {
     ledger: '',
+    root: '',
     runsDir: process.env.AUTOPILOT_DISPATCH_RUNS_DIR
       || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs'),
     intervalSecs: 30,
@@ -47,6 +48,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--ledger') args.ledger = argv[++i] || '';
     else if (a === '--runs-dir') args.runsDir = argv[++i] || '';
+    else if (a === '--root') args.root = argv[++i] || '';
     else if (a === '--interval-secs') args.intervalSecs = Number(argv[++i]);
     else if (a === '--quiet-secs') args.quietSecs = Number(argv[++i]);
     else if (a === '--max-secs') args.maxSecs = Number(argv[++i]);
@@ -140,6 +142,14 @@ function tickLeaves(args, nowMs) {
     let m;
     try { m = JSON.parse(fs.readFileSync(path.join(args.runsDir, f), 'utf8')); } catch (_e) { continue; }
     if (!m || typeof m !== 'object' || !m.run_id) continue;
+    const hasRoot = m.root_run_id !== undefined && m.root_run_id !== null && m.root_run_id !== '';
+    if (args.root) {
+      if (hasRoot) {
+        if (`${m.root_run_id}` !== `${args.root}`) {
+          continue;
+        }
+      }
+    }
     // Only report leaves born after the watcher started (historic manifests are noise).
     const startedMs = tsToMs(m.started_epoch) || tsToMs(m.started_at);
     if (startedMs !== null && startedMs < state.watchStartMs && !state.leaves.has(m.run_id)) continue;
@@ -149,7 +159,9 @@ function tickLeaves(args, nowMs) {
     if (!entry) {
       entry = { ended, stallAnnounced: false };
       state.leaves.set(m.run_id, entry);
-      emit(`LEAF_START ${m.run_id} role=${m.role || '?'} ${m.runner || '?'}/${m.model || '?'}`);
+      let startLine = `LEAF_START ${m.run_id} role=${m.role || '?'} ${m.runner || '?'}/${m.model || '?'}`;
+      if (args.root && !hasRoot) startLine = `${startLine} attribution=time-window`;
+      emit(startLine);
       if (ended) { emit(`LEAF_END ${m.run_id} ${m.final_status || 'ended'}`); continue; }
       // fall through: a live leaf gets its stall check on FIRST sighting too
     } else if (!entry.ended && ended) {

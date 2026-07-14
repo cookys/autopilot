@@ -587,7 +587,18 @@ function main(argv) {
     for (const f of entries) {
       try {
         const m = readManifest(path.join(dir, f));
-        out.push({ run_id: m.run_id || null, role: m.role || null, runner: m.runner || null, model: m.model || null, started_at: m.started_at || null, ended_at: m.ended_at || null, manifest: path.join(dir, f) });
+        out.push({
+          run_id: m.run_id || null,
+          role: m.role || null,
+          runner: m.runner || null,
+          model: m.model || null,
+          started_at: m.started_at || null,
+          ended_at: m.ended_at || null,
+          parent_run_id: m.parent_run_id || null,
+          root_run_id: m.root_run_id || null,
+          depth: typeof m.depth === 'number' ? m.depth : (m.depth != null ? Number(m.depth) : null),
+          manifest: path.join(dir, f),
+        });
       } catch (_e) { /* unreadable manifest skipped */ }
     }
     out.sort((a, b) => String(a.started_at).localeCompare(String(b.started_at)));

@@ -312,6 +312,21 @@ if [ -n "$RUN_ID" ]; then
 else
   REVIEW_RUN_ID="review-${REVIEW_STARTED_EPOCH}-$$-$(head -c2 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 fi
+LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
+LINEAGE_ROOT=""
+LINEAGE_DEPTH=0
+if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
+  LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID}"
+  LINEAGE_ROOT="${AUTOPILOT_ROOT_RUN_ID:-$LINEAGE_PARENT}"
+  LINEAGE_DEPTH="${AUTOPILOT_DISPATCH_DEPTH:-1}"
+  case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
+else
+  LINEAGE_ROOT="$REVIEW_RUN_ID"
+  LINEAGE_DEPTH=0
+fi
+export AUTOPILOT_PARENT_RUN_ID="$REVIEW_RUN_ID"
+export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
+export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 REVIEW_MANIFEST_ENDED=""
 if [ "$RUNNER" = "codex" ]; then
   # Created EARLY (normally inside the codex branch) so the manifest can point at the
@@ -346,13 +361,16 @@ write_review_manifest() {
   fi
   local final_json="null"
   [ -n "${REVIEW_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$REVIEW_FINAL_STATUS")\""
+  local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
+  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
+  local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$REVIEW_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }

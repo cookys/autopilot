@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-14 | [context-budget-orchestrator-gate](2026-07-14-context-budget-orchestrator-gate/README.md) | v2.32.26 | feat/v2.32.26-context-budget-orchestrator-gate |
 
 ## 已完成 (Completed)
 

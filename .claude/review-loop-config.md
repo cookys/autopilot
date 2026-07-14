@@ -18,6 +18,17 @@
 - reviewer_runner: codex
 - reviewer_engine_low_risk: gpt-5.6-sol
 - reviewer_effort_low_risk: high
+- on_family_conflict: fallback
+- reviewer_fallback_preference: claude-opus
+- reviewer_fallback_preference_low_risk: claude-haiku
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_effort: high
 - implementer_runner: auto
+
+> Fallback preference rationale (2026-07-14): with an openai implementer BOTH
+> roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer
+> comes from the cross-family ladder. High risk → claude-opus @ claude-native
+> (qualified 2026-07-14: known-bad 12/12, clean 10/11, expires 2026-10-12);
+> low risk → claude-haiku (calibrated cheap leg — ~10s rounds). Without the
+> preference lists, alphabetical ladder order would put haiku on high-risk
+> duty, which is too weak for that seat.

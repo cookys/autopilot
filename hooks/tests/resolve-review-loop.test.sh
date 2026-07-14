@@ -221,7 +221,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
 #      then work_domain, then domain_source, the capability keys, reviewer/implementer_endpoint,
 #      and min_panel_size (appended last) — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint + min_panel_size, in order"
 
@@ -652,6 +652,15 @@ printf -- '- on_family_conflict: block\n' > "$OFC_CFG"
 assert_eq "block" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$OFC_CFG" bash "$SCRIPT" --field on_family_conflict)" "on_family_conflict block honored"
 printf -- '- on_family_conflict: banana\n' > "$OFC_CFG"
 assert_eq "block" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$OFC_CFG" bash "$SCRIPT" --field on_family_conflict 2>/dev/null)" "garbage on_family_conflict fails closed to block"
+
+# reviewer_fallback_preference (+_low_risk): always-emitted arrays, default []
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" bash "$SCRIPT" 2>&1)"
+assert_contains "$OUT" '"reviewer_fallback_preference": []' "default fallback preference empty array"
+assert_contains "$OUT" '"reviewer_fallback_preference_low_risk": []' "default low-risk fallback preference empty array"
+PREF_CFG="$TEST_TMP/pref.md"
+printf -- '- reviewer_fallback_preference: claude-opus, MiniMax-M3\n- reviewer_fallback_preference_low_risk: claude-haiku\n' > "$PREF_CFG"
+assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PREF_CFG" bash "$SCRIPT")" '"reviewer_fallback_preference": ["claude-opus", "MiniMax-M3"]' "preference list parsed to array"
+assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PREF_CFG" bash "$SCRIPT")" '"reviewer_fallback_preference_low_risk": ["claude-haiku"]' "low-risk preference list parsed"
 
 # --check-scorecard fallback_ladder carries implementer-family provenance
 SC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" ENGINE_SCORECARD_DIR="${EMPTY_SCDIR:-$TEST_TMP/empty-sc}" bash "$SCRIPT" --check-scorecard 2>/dev/null)"

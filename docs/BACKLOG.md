@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### check-test-integrity-l1.test.sh 固定 /tmp 路徑在多使用者機器上撞牆（flaky）
+- **Trigger**: 下次碰 hooks/tests/check-test-integrity-l1.test.sh 或 run.sh 全套件又因它紅掉時。
+- **Context**: test 寫死 `/tmp/autopilot-l1-js-install.log`；共用機上被其他使用者（實測 codepower）的舊檔佔走 ⇒ Permission denied ⇒ 套件級 flaky（單獨跑 exit 0、run.sh 下偶紅）。修法：mktemp 或 `${TMPDIR}` + 使用者隔離路徑。同場另一個 run.sh 紅是 engine-scorecard case 13（efforts collapsed）— PRE_EXISTING on develop，屬另一個既有問題。
+- **Effort**: S。
+- **Source**: 2026-07-14 v2.32.26 L-5.2 quality gate 實跑。
+
 ### context-budget T3 deny tier（handoff 結構檢查 + 新 dispatch 拒絕 + anti-spiral）
 - **Trigger**: ≥3 次真實 /l4-/l6 run 在 warn 模式下累積校準資料後（含至少 1 次合成對抗 session — warn 模式樣本是 false-positive 的下界不是量測，MiniMax panel finding）。
 - **Context**: v2.32.26 出貨 T1/T2 advisory；T3（PreToolUse 擋 Edit/Write + 拒絕 NEW dispatch 直到合規 handoff 落地）刻意延後。設計要點已定於 plan：handoff 檢查用 content-hash + 結構段落（非 mtime，touch 可偽造）、handoff allowlist 收窄到 docs/projects/** + ~/.autopilot/handoffs/、3 次 deny 未從 ⇒ 降級 warn + 大聲放棄（gate 跟模型吵架會燒掉它要省的 token，Gemini finding）、擋新 dispatch 用自家 script 名 leading-command 枚舉（非 write-regex — 三家 panel 一致否決 write-regex）。

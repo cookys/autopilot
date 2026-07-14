@@ -127,7 +127,9 @@ while IFS='|' read -r arm caseset cid rep; do
   esac
 
   T0="$(date +%s.%N)"
-  RESP="$(DISPATCH_QUIET=1 "$DISPATCH_REVIEW_CMD" "${ARGS[@]}" 2>/dev/null || true)"
+  # </dev/null so a runner that reads stdin (agy's `script -qec` pseudo-TTY) cannot consume
+  # the `while read` loop's CELLS heredoc and terminate the matrix after one cell.
+  RESP="$(DISPATCH_QUIET=1 "$DISPATCH_REVIEW_CMD" "${ARGS[@]}" </dev/null 2>/dev/null || true)"
   T1="$(date +%s.%N)"
   LAT="$(node -e 'process.stdout.write(String(Math.round((process.argv[1]-process.argv[2])*1000)/1000))' "$T1" "$T0")"
 

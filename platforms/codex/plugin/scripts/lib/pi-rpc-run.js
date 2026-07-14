@@ -157,6 +157,22 @@ async function pollAndDeliverDirectives(childProc, opts, state) {
       return;
     }
     if (!Array.isArray(directives)) return;
+    if (directives.length === 0) return;
+
+    // Validate-then-steer-then-ack (QC fix): read the CURRENT lease once per poll
+    // batch and only steer a directive whose bound generation+nonce still match a
+    // live lease — a stale-generation directive must never reach the current worker
+    // (it is still acked below, which records expired(stale_generation) authoritatively).
+    let lease = null;
+    try {
+      const leaseOut = await execRunLedgerCommand([
+        'query-latest',
+        '--ledger', opts.ledger,
+        '--run-id', opts.runId,
+        '--stage', opts.stage,
+      ], DIRECTIVE_POLL_TIMEOUT_MS);
+      lease = JSON.parse((leaseOut || '').trim() || 'null');
+    } catch (_e) { lease = null; }
 
     for (const directive of directives) {
       const directiveId = directive && directive.directive_id;
@@ -165,21 +181,38 @@ async function pollAndDeliverDirectives(childProc, opts, state) {
       state.ackedDirectiveIds.add(String(directiveId));
 
       const atMs = Date.now() - state.startMs;
-      const deliveredEvent = {
-        type: 'supervisor_directive_delivered',
-        directive_id: String(directiveId),
-        at_ms: atMs,
-      };
-      const eventLine = JSON.stringify(deliveredEvent);
-      process.stdout.write(`${eventLine}\n`);
-      appendEventLog(process.env.PI_RPC_EVENT_LOG, eventLine);
+      const leaseMatches = Boolean(
+        lease && typeof lease === 'object' && lease.state === 'leased'
+        && Number(lease.generation) === Number(directive.generation)
+        && String(lease.nonce || '') === String(directive.nonce || ''),
+      );
 
-      const steer = {
-        id: `directive-${String(directiveId)}`,
-        type: 'steer',
-        message: `[depth-0 directive] ${directive && typeof directive.text === 'string' ? directive.text : ''}`,
-      };
-      try { childProc.stdin.write(`${JSON.stringify(steer)}\n`); } catch (_e) { /* ignore */ }
+      if (leaseMatches) {
+        const deliveredEvent = {
+          type: 'supervisor_directive_delivered',
+          directive_id: String(directiveId),
+          at_ms: atMs,
+        };
+        const eventLine = JSON.stringify(deliveredEvent);
+        process.stdout.write(`${eventLine}\n`);
+        appendEventLog(process.env.PI_RPC_EVENT_LOG, eventLine);
+
+        const steer = {
+          id: `directive-${String(directiveId)}`,
+          type: 'steer',
+          message: `[depth-0 directive] ${directive && typeof directive.text === 'string' ? directive.text : ''}`,
+        };
+        try { childProc.stdin.write(`${JSON.stringify(steer)}\n`); } catch (_e) { /* ignore */ }
+      } else {
+        const staleEvent = {
+          type: 'supervisor_directive_stale_skipped',
+          directive_id: String(directiveId),
+          at_ms: atMs,
+        };
+        const staleLine = JSON.stringify(staleEvent);
+        process.stdout.write(`${staleLine}\n`);
+        appendEventLog(process.env.PI_RPC_EVENT_LOG, staleLine);
+      }
 
       try {
         await execRunLedgerCommand([
@@ -189,7 +222,19 @@ async function pollAndDeliverDirectives(childProc, opts, state) {
           '--directive-id', String(directiveId),
           '--by', 'supervisor',
         ], DIRECTIVE_POLL_TIMEOUT_MS);
-      } catch (_e) { /* best-effort */ }
+      } catch (e) {
+        // NOT silent (QC fix): ackedDirectiveIds suppresses any re-steer, so a
+        // swallowed ack failure would drift delivered-vs-expired accounting with
+        // zero trace. Emit a supervisor event so the drift is observable in the log.
+        const failEvent = {
+          type: 'supervisor_directive_ack_failed',
+          directive_id: String(directiveId),
+          error: e && e.message ? String(e.message) : 'ack_failed',
+        };
+        const failLine = JSON.stringify(failEvent);
+        process.stdout.write(`${failLine}\n`);
+        appendEventLog(process.env.PI_RPC_EVENT_LOG, failLine);
+      }
     }
   } catch (_e) {
     // best-effort
@@ -316,14 +361,17 @@ async function run() {
       clearInterval(state.directivePollTimer);
       state.directivePollTimer = null;
     }
-    if (state.directiveDeliveryEnabled) {
-      expirePendingDirectivesSync(opts, state);
-    }
     try { child.stdin.end(); } catch (_e) { /* stdin already gone */ }
     state.termTimer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch (_e) {}
       state.killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) {} }, 1500);
     }, 1500);
+    // Directive expiry runs AFTER the teardown ladder is armed (QC fix): it needs only
+    // the ledger, never a live child — a blocking execFileSync on a lock-contended
+    // ledger must not delay the child's EOF/TERM by multiple seconds.
+    if (state.directiveDeliveryEnabled) {
+      expirePendingDirectivesSync(opts, state);
+    }
   };
 
   const lineHandler = makeLineHandler((line) => parseLine(line, state, process.env.PI_RPC_EVENT_LOG, shutdown));
@@ -337,6 +385,13 @@ async function run() {
   // do not — the supervisor must be self-sufficient at every tier. TERM the child
   // immediately (KILL backstop), then exit once the kill window has elapsed.
   const onSignal = () => {
+    // TERM the child IMMEDIATELY (the stated invariant) — directive expiry is a
+    // ledger-only bookkeeping step and runs after the kill ladder is armed (QC fix:
+    // a blocking expiry before the kill delayed worker teardown on the external-kill
+    // path by up to several seconds under ledger lock contention).
+    try { child.kill('SIGTERM'); } catch (_e) { /* already gone */ }
+    setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) {} }, 800);
+    setTimeout(() => process.exit(1), 1000);
     if (state.directivePollTimer) {
       clearInterval(state.directivePollTimer);
       state.directivePollTimer = null;
@@ -344,9 +399,6 @@ async function run() {
     if (state.directiveDeliveryEnabled) {
       expirePendingDirectivesSync(opts, state);
     }
-    try { child.kill('SIGTERM'); } catch (_e) { /* already gone */ }
-    setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) {} }, 800);
-    setTimeout(() => process.exit(1), 1000);
   };
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, onSignal);
 

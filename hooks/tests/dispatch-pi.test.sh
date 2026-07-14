@@ -405,6 +405,40 @@ EXPIRED="$(jq -s --arg d "$E_ID" 'map(select(.kind=="directive_expired" and .dir
 assert_eq "$EXPIRED" "run_ended" "shutdown expires the undelivered directive with reason run_ended"
 assert_eq "$(bash "$RUN_LEDGER" directive-poll --ledger "$LGR2" --run-id ERUN --stage implement | jq -r 'length')" "0" "no directive is left silently pending after shutdown"
 
+# 14b) stale directive is NEVER steered (QC fix — validate-then-steer-then-ack):
+# a directive bound to lease gen N with the stage since re-acquired at gen N+1 must
+# be skipped (no steer reaches pi) yet still terminalize as expired(stale_generation).
+LGR_ST="$TEST_TMP/stale.jsonl"
+bash "$RUN_LEDGER" init --ledger "$LGR_ST" >/dev/null
+bash "$RUN_LEDGER" stage-acquire --ledger "$LGR_ST" --run-id SRUN --stage implement --pid $$ >/dev/null
+S_ROW="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR_ST" --run-id SRUN --stage implement --text 'stale nudge')"
+S_ID="$(printf '%s' "$S_ROW" | jq -r .directive_id)"
+bash "$RUN_LEDGER" stage-acquire --ledger "$LGR_ST" --run-id SRUN --stage implement --pid $$ >/dev/null  # bump generation
+STUB_SLOW="$TEST_TMP/pi-slow"
+cat > "$STUB_SLOW" <<'__EOFS'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+    sleep 3
+    printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
+  fi
+  if printf '%s' "$line" | grep -q 'depth-0 directive'; then
+    printf '%s\n' "$line" >> "${PI_STALE_STEER_CAPTURE:?}"
+  fi
+done
+__EOFS
+chmod +x "$STUB_SLOW"
+CW="$TEST_TMP/cw-stale"; sup_cwd "$CW"
+STALE_CAPTURE="$TEST_TMP/stale-steers.txt"; : > "$STALE_CAPTURE"
+STALE_OUT="$( cd "$CW" && PI_STALE_STEER_CAPTURE="$STALE_CAPTURE" PI_RPC_STALL_PROBE_SECS=999 PI_RPC_DIRECTIVE_POLL_SECS=1 \
+    timeout 30 node "$PI_RPC_RUN" --model M --provider minimax --cwd "$CW" --prompt-file "$SUP_PROMPT" \
+    --pi-bin "$STUB_SLOW" --ledger "$LGR_ST" --run-id SRUN --stage implement 2>/dev/null )"
+assert_not_contains "$(cat "$STALE_CAPTURE")" 'depth-0 directive' "stale-generation directive never steered to the current worker"
+assert_contains "$STALE_OUT" 'supervisor_directive_stale_skipped' "stale skip is an observable supervisor event"
+STALE_TERM="$(jq -s --arg d "$S_ID" 'map(select(.kind=="directive_expired" and .directive_id==$d))|.[0].reason' "$LGR_ST" | tr -d '\"')"
+assert_eq "$STALE_TERM" "stale_generation" "stale directive still terminalizes as expired(stale_generation)"
+
 # 15) byte-compat: NO ledger coords → the supervisor performs zero directive delivery.
 LGR3="$TEST_TMP/nocoords.jsonl"
 bash "$RUN_LEDGER" init --ledger "$LGR3" >/dev/null
@@ -417,5 +451,54 @@ CW="$TEST_TMP/cw-nocoords"; sup_cwd "$CW"
     --pi-bin "$STUB_OK" >/dev/null 2>&1 )
 assert_eq "$?" "0" "no-coords run still succeeds (byte-compat)"
 assert_eq "$(bash "$RUN_LEDGER" directive-poll --ledger "$LGR3" --run-id NRUN --stage implement | jq -r 'length')" "1" "without ledger coords the supervisor makes zero directive polls/acks (directive still pending)"
+
+# 16) E2E through dispatch-hetero (QC MAJOR fix): the PRODUCTION pi dispatch path must
+# forward --ledger/--run-id/--stage to the supervisor, so a depth-0 directive-send
+# against the dispatch's own lease actually DELIVERS mid-run. Fake pi blocks until the
+# directive steer arrives (deterministic), writes the steer line into the WORKTREE so
+# the assertion reads a GIT ARTIFACT (committed by the wrapper), never self-report.
+STUB_E2E="$TEST_TMP/pi-e2e"
+cat > "$STUB_E2E" <<'__EOFE'
+#!/usr/bin/env bash
+while IFS= read -r line || [ -n "$line" ]; do
+  if printf '%s' "$line" | grep -q '"type":"prompt"'; then
+    printf '%s\n' '{"id":"prompt-1","type":"response","command":"prompt","success":true}'
+  fi
+  if printf '%s' "$line" | grep -q 'depth-0 directive'; then
+    printf '%s\n' "$line" > steer_capture.txt
+    printf '%s\n' '{"id":"steer-resp","type":"response","command":"steer","success":true}'
+    printf '%s\n' '{"type":"agent_end","messages":[],"stopReason":"stop"}'
+  fi
+done
+__EOFE
+chmod +x "$STUB_E2E"
+LGR_E2E="$TEST_TMP/e2e.jsonl"
+bash "$RUN_LEDGER" init --ledger "$LGR_E2E" >/dev/null
+E2E_OUT_FILE="$TEST_TMP/e2e-dispatch.out"
+( cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" PI_RPC_STALL_PROBE_SECS=999 PI_RPC_DIRECTIVE_POLL_SECS=1 \
+    "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-e2e-directive --prompt-file "$PROMPT" \
+    --pi-bin "$STUB_E2E" --ledger "$LGR_E2E" --run-id E2ERUN --stage implement > "$E2E_OUT_FILE" 2>&1 ) &
+E2E_DISPATCH_PID=$!
+# Send the directive mid-run: retry until the dispatch's OWN lease exists (send refuses
+# before that — the refusal is the contract, so the retry loop IS the boundary).
+E2E_SENT=""
+for _i in $(seq 1 60); do
+  E2E_SENT="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR_E2E" --run-id E2ERUN --stage implement --text 'nudge-e2e' --from depth-0 2>/dev/null)" && break
+  sleep 0.5
+done
+E2E_DID="$(printf '%s' "$E2E_SENT" | jq -r '.directive_id // empty' 2>/dev/null)"
+assert_neq "$E2E_DID" "" "e2e: directive-send succeeded against the dispatch's live lease"
+wait "$E2E_DISPATCH_PID"; E2E_RC=$?
+assert_eq "$E2E_RC" "0" "e2e: pi dispatch with ledger coords exits 0"
+assert_contains "$(cat "$E2E_OUT_FILE")" '"status": "committed"' "e2e: dispatch committed"
+# git-artifact assertion: the steer (with the prefixed text) reached fake pi's stdin
+E2E_STEER="$(git -C "$SBX" show feat/pi-e2e-directive:steer_capture.txt 2>/dev/null)"
+assert_contains "$E2E_STEER" '[depth-0 directive] nudge-e2e' "e2e: steer with prefixed directive text reached pi (git artifact)"
+assert_contains "$E2E_STEER" "directive-$E2E_DID" "e2e: steer carries the directive id (git artifact)"
+E2E_DELIVERED="$(jq -s --arg d "$E2E_DID" '[.[]|select(.kind=="directive_delivered" and .directive_id==$d)]|length' "$LGR_E2E")"
+assert_eq "$E2E_DELIVERED" "1" "e2e: exactly one directive_delivered row landed"
+assert_eq "$(bash "$RUN_LEDGER" directive-poll --ledger "$LGR_E2E" --run-id E2ERUN --stage implement | jq -r 'length')" "0" "e2e: nothing left pending"
+# and the no-coords dispatch (test 1) performed zero directive activity in its log
+assert_not_contains "$(cat "$LOG_PATH")" 'supervisor_directive' "no-coords dispatch log has zero directive activity (byte-compat)"
 
 finalize_test

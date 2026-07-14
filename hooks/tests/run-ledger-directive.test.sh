@@ -89,4 +89,40 @@ assert_eq "$(jqr "$(bash "$RL" init --ledger "$L")" .status)" "exists" "init on 
 # --- 10. poll on an absent ledger is a clean empty array --------------------------
 assert_eq "$(bash "$RL" directive-poll --ledger "$TEST_TMP/nope.jsonl" --run-id X | jq -r 'length')" "0" "poll on absent ledger → []"
 
+# --- 11. nonce fencing (QC fix): same generation, DIFFERENT nonce ⇒ expired --------
+# A fenced/replaced writer can present the same generation under a new nonce; the
+# delivered branch must compare BOTH. Simulated by appending a forged leased row
+# (same gen, different nonce) — the exact shape a fencing race would leave.
+LN="$TEST_TMP/nonce.jsonl"
+bash "$RL" init --ledger "$LN" >/dev/null
+NACQ="$(bash "$RL" stage-acquire --ledger "$LN" --run-id RN --stage implement --pid $$)"
+NGEN="$(jqr "$NACQ" .generation)"
+ND="$(bash "$RL" directive-send --ledger "$LN" --run-id RN --stage implement --text fenced)"
+NDID="$(jqr "$ND" .directive_id)"
+printf '%s\n' "$(jq -nc --argjson gen "$NGEN" '{kind:"stage",ts:"2026-07-15T00:00:00Z",run_id:"RN",stage:"implement",state:"leased",generation:$gen,nonce:"deadbeefdeadbeef",pid:1,start_time:1,heartbeat_ts:1,git_ref:"",git_sha:"",worktree:"",resources:"",reason:"acquire"}')" >> "$LN"
+NACK="$(bash "$RL" directive-ack --ledger "$LN" --run-id RN --directive-id "$NDID")"
+assert_eq "$(jqr "$NACK" .status)" "expired" "same-generation different-nonce lease → expired"
+assert_eq "$(jqr "$NACK" .reason)" "stale_generation" "nonce mismatch records stale_generation"
+
+# --- 12. rotation survival (QC fix): a rotated-out directive stays visible ---------
+# RUN_LEDGER_MAX_BYTES rotation must not silently drop a pending directive: poll/ack
+# scan the rotated ${ledger}.N segments too, so the directive still terminalizes.
+LR="$TEST_TMP/rot.jsonl"
+(
+  export RUN_LEDGER_MAX_BYTES=600
+  bash "$RL" init --ledger "$LR" >/dev/null
+  bash "$RL" stage-acquire --ledger "$LR" --run-id RR --stage implement --pid $$ >/dev/null
+  bash "$RL" directive-send --ledger "$LR" --run-id RR --stage implement --text survive-rotation > "$TEST_TMP/rot-directive.json"
+  for s in a b c d e; do bash "$RL" stage-acquire --ledger "$LR" --run-id RR --stage "st$s" --pid $$ >/dev/null; done
+)
+RDID="$(jq -r .directive_id "$TEST_TMP/rot-directive.json")"
+assert_file_exists "$LR.1" "rotation actually happened (segment file exists)"
+assert_eq "$(grep -c '"kind":"directive"' "$LR" 2>/dev/null || true)" "0" "directive row rotated out of the live ledger (the hazard is real)"
+RPOLL="$(bash "$RL" directive-poll --ledger "$LR" --run-id RR --stage implement)"
+assert_eq "$(jqr "$RPOLL" 'length')" "1" "poll still sees the rotated-out directive"
+assert_eq "$(jqr "$RPOLL" '.[0].directive_id')" "$RDID" "rotated directive id intact"
+RACK="$(bash "$RL" directive-ack --ledger "$LR" --run-id RR --directive-id "$RDID" --reason run_ended)"
+assert_eq "$(jqr "$RACK" .status)" "expired" "rotated directive still terminalizes"
+assert_eq "$(bash "$RL" directive-poll --ledger "$LR" --run-id RR --stage implement | jq -r 'length')" "0" "terminal ack row in the live ledger hides the rotated directive"
+
 finalize_test

@@ -1603,6 +1603,27 @@ command_query_latest() {
     | if length==0 then {} else .[-1] end' "$ledger"
 }
 
+# directive_scan_files — the directive read set: rotated segments (oldest first) then
+# the live ledger. Ledger rotation (RUN_LEDGER_MAX_BYTES) must not silently drop a
+# pending directive ("a directive never vanishes silently"): poll/ack scan the rotated
+# ${ledger}.N files too, so a directive whose row rotated out is still visible and can
+# still be terminalized. Appends always go to the live ledger only.
+directive_scan_files() {
+  local ledger="$1" idx max_rot
+  max_rot="${RUN_LEDGER_MAX_ROTATIONS:-$DEFAULT_MAX_ROTATIONS}"
+  idx="$max_rot"
+  while [ "$idx" -ge 1 ]; do
+    if [ -f "${ledger}.${idx}" ]; then
+      printf '%s\n' "${ledger}.${idx}"
+    fi
+    idx=$((idx - 1))
+  done
+  if [ -f "$ledger" ]; then
+    printf '%s\n' "$ledger"
+  fi
+  return 0
+}
+
 command_directive_send() {
   local ledger="" run_id="" stage="" text="" from="" directive_id="" timeout="$DEFAULT_LOCK_TIMEOUT"
 
@@ -1683,14 +1704,16 @@ command_directive_poll() {
   [ -n "$run_id" ] || error "--run-id is required"
   [ -n "$stage" ] || stage=""
 
-  if [ ! -f "$ledger" ]; then
+  local scan_files=()
+  mapfile -t scan_files < <(directive_scan_files "$ledger")
+  if [ "${#scan_files[@]}" -eq 0 ]; then
     echo '[]'
     return 0
   fi
 
   jq -s --arg rid "$run_id" --arg stg "$stage" '
     (map(select(.kind=="directive_delivered" or .kind=="directive_expired") | .directive_id) | unique) as $acked
-    | [ .[] | select(.kind=="directive" and .run_id==$rid and ($stg=="" or .stage==$stg) and (.directive_id as $d | ($acked | index($d)) | not)) ]' "$ledger"
+    | [ .[] | select(.kind=="directive" and .run_id==$rid and ($stg=="" or .stage==$stg) and (.directive_id as $d | ($acked | index($d)) | not)) ]' "${scan_files[@]}"
 }
 
 command_directive_ack() {
@@ -1722,14 +1745,16 @@ command_directive_ack() {
   fi
 
   local directive_row
-  if [ ! -f "$ledger" ]; then
+  local scan_files=()
+  mapfile -t scan_files < <(directive_scan_files "$ledger")
+  if [ "${#scan_files[@]}" -eq 0 ]; then
     release_lock "$run_fd"
     error "no directive directive_id=$directive_id"
   fi
 
   directive_row="$(jq -s --arg rid "$run_id" --arg did "$directive_id" '
     [ .[] | select(.kind=="directive" and .run_id==$rid and .directive_id==$did) ]
-    | if length==0 then empty else .[-1] end' "$ledger")"
+    | if length==0 then empty else .[-1] end' "${scan_files[@]}")"
   if [ -z "$directive_row" ] || [ "$directive_row" = "empty" ]; then
     release_lock "$run_fd"
     error "no directive directive_id=$directive_id"
@@ -1738,7 +1763,7 @@ command_directive_ack() {
   local has_acked
   has_acked="$(jq -s --arg rid "$run_id" --arg did "$directive_id" '
     [ .[] | select((.kind=="directive_delivered" or .kind=="directive_expired") and .run_id==$rid and .directive_id==$did) ]
-    | if length==0 then false else true end' "$ledger" 2>/dev/null || echo false)"
+    | if length==0 then false else true end' "${scan_files[@]}" 2>/dev/null || echo false)"
   if [ "$has_acked" = "true" ]; then
     release_lock "$run_fd"
     echo '{"status":"already_acked"}'
@@ -1754,9 +1779,13 @@ command_directive_ack() {
     outcome="expired"
     terminal_reason="run_ended"
   else
+    # Delivery-time fencing: the CURRENT lease must match the directive's bound
+    # generation AND nonce (both captured at send time). A nonce mismatch at the same
+    # generation is a fenced/replaced writer — treated identically to a generation
+    # advance and recorded as expired(stale_generation).
     local leased_row
     leased_row="$(latest_stage_record "$ledger" "$run_id" "$stage")"
-    if [ -n "$leased_row" ] && [ "$(jq -r '.state // ""' <<<"$leased_row")" = "leased" ] && [ "$(jq -r '.generation // 0' <<<"$leased_row")" -eq "$generation" ]; then
+    if [ -n "$leased_row" ] && [ "$(jq -r '.state // ""' <<<"$leased_row")" = "leased" ] && [ "$(jq -r '.generation // 0' <<<"$leased_row")" -eq "$generation" ] && [ "$(jq -r '.nonce // ""' <<<"$leased_row")" = "$nonce" ]; then
       outcome="delivered"
     else
       outcome="expired"

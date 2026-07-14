@@ -37,6 +37,14 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Changed
 - Nothing existing: additive-only. Absent the three new flags / no directives, every existing code path is byte-identical. `schemas/` + `src/engine/review.js` untouched; `dispatch-review.sh` final JSON schema unchanged.
 
+### Fixed (depth-0 QC panel round — FIX-THEN-SHIP, folded into this release)
+- 🟠 `dispatch-hetero.sh --runner pi` now FORWARDS `--ledger/--run-id/--stage` to the supervisor (gated on all three) — previously the ONLY production pi path never enabled delivery, so a documented `directive-send` would sit permanently pending (violating both "exactly one terminal ack" and "no pretend-channel"). E2E test: real dispatch + mid-run send ⇒ `directive_delivered` + steer asserted from the committed git artifact.
+- 🟠 supervisor shutdown/SIGTERM: the child kill/EOF ladder is armed BEFORE the (blocking, ledger-only) directive expiry — a lock-contended ledger can no longer delay worker teardown on the external-kill path.
+- 🟡 `directive-ack` delivered-branch now validates the lease **nonce** as well as the generation (a same-generation nonce mismatch = fenced/replaced writer ⇒ `expired(stale_generation)`).
+- 🟡 validate-then-steer-then-ack: the supervisor checks the directive's bound lease against the CURRENT lease before writing to pi's stdin — a stale-generation directive is never steered to the current worker (observable as `supervisor_directive_stale_skipped`).
+- 🟡 ledger rotation (`RUN_LEDGER_MAX_BYTES`) no longer silently drops pending directives: `directive-poll`/`directive-ack` scan rotated `<ledger>.N` segments (appends still go to the live ledger only).
+- 🔵 a failed delivered-ack is emitted as a `supervisor_directive_ack_failed` log event instead of being silently swallowed (the in-memory re-steer suppression made silent failure an invisible accounting drift).
+
 ### Authority boundary
 - A directive is **advisory** — the lease holder keeps the stage, there is **no auto-kill on non-response** (Stage 3 scheduling/steer stays BACKLOG'd), and the read-only `watch-foreman.js` never gains a directive-send surface (its no-`child_process` / report-only greppable invariant is unchanged).
 

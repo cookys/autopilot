@@ -73,13 +73,16 @@ ledger ([`scripts/run-ledger.sh`](../scripts/run-ledger.sh) `directive-send` / `
 `directive-ack`): `directive-send` binds the nudge to the target stage's CURRENT lease
 (generation+nonce) and **refuses if no stage is leased** — you cannot nudge a stage nobody holds.
 Every send is terminalized by exactly one ack row (`directive_delivered`, or `directive_expired`
-with reason `run_ended` / `stale_generation`) — a directive never vanishes silently. Delivery is
-**queue-and-deliver-at-boundary**, never a hard interrupt. How far a directive actually reaches
+with reason `run_ended` / `stale_generation` — the stale reason covers BOTH a generation advance
+and a same-generation nonce mismatch, i.e. a fenced/replaced writer) — a directive never vanishes
+silently. This holds across ledger rotation too: `directive-poll`/`directive-ack` scan the rotated
+`<ledger>.N` segments, so a directive whose row rotated out of the live ledger stays visible and
+still terminalizes. Delivery is **queue-and-deliver-at-boundary**, never a hard interrupt. How far a directive actually reaches
 depends on the runner:
 
 | Runner | Reachability | Mechanism |
 |--------|--------------|-----------|
-| `pi` (RPC duplex) | **mid-run** | the supervisor ([`pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)) polls the ledger on its own cadence (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s) and delivers a native RPC `steer` prefixed `[depth-0 directive] …`, then acks `directive_delivered` **from the supervisor** (never the worker); at shutdown any still-pending directive is `directive_expired(run_ended)`. Enabled only when `--ledger/--run-id/--stage` are all passed — otherwise byte-identical to before. |
+| `pi` (RPC duplex) | **mid-run** | the supervisor ([`pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)) polls the ledger on its own cadence (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s), **validates the directive's bound lease (generation+nonce) against the CURRENT lease before steering** — a stale directive is never steered to the current worker, only terminalized as expired — then delivers a native RPC `steer` prefixed `[depth-0 directive] …` and acks `directive_delivered` **from the supervisor** (never the worker; an ack failure is emitted as a `supervisor_directive_ack_failed` log event, not swallowed). At shutdown any still-pending directive is `directive_expired(run_ended)` — the expiry runs AFTER the child teardown ladder is armed, so a lock-contended ledger can't delay worker teardown. Enabled only when `--ledger/--run-id/--stage` are all passed (`dispatch-hetero.sh --runner pi` forwards its own coords automatically) — otherwise byte-identical to before. |
 | CC foreman (dev-flow inline) | **stage boundary** | the foreman polls its own run-id at each stage boundary (before `stage-acquire` of the next stage), honors + records, then acks. |
 | one-shot batch runners (`codex exec` / `agy -p` / `grok` / `cc-shim`) | **UNREACHABLE mid-run** | no duplex channel — a directive can only shape the **NEXT** round's dispatch prompt. No pretend-channel is offered. |
 

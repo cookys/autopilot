@@ -22,7 +22,8 @@ v=$(printf '%s' "$out" | node -e 'const d=JSON.parse(require("fs").readFileSync(
 assert_eq "$v" "FROZEN" "verdict on unmodified spec should be FROZEN"
 
 # 2. DRIFT: mutate the spec, re-check
-printf '- criterion 2 (added later)\n' >> "$SPEC"
+# ('%s\n' form: a bare leading-dash format string makes printf parse '-' as an option)
+printf '%s\n' '- criterion 2 (added later)' >> "$SPEC"
 out=$(node "$SCRIPT" check "$SPEC" "$SEAL" --json) ; rc=$?
 assert_exit_code "$rc" 3 "check on mutated spec should exit 3 (DRIFT)"
 v=$(printf '%s' "$out" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write(String(d.verdict))')

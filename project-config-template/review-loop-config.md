@@ -40,6 +40,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - implementer_endpoint:
 - on_engine_unavailable: ask
 - on_family_conflict: fallback
+- reviewer_fallback_preference:
+- reviewer_fallback_preference_low_risk:
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
@@ -73,6 +75,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `reviewer_engine_low_risk` | **risk-tiered overlay**: when BOTH `_low_risk` keys are set, the loop reviewer for computed `review_risk=low` becomes this pair (same `reviewer_runner`); `review_risk=high` ALWAYS uses `reviewer_engine`/`reviewer_effort`. Empty = tiering off. Adopt a faster engine on low-risk diffs only after it clears `engine-qualify.sh` (scorecard-first) | a model name (e.g. `gpt-5.6-sol`), or empty |
 | `reviewer_effort_low_risk` | effort for the low-risk reviewer; garbage → empty (tiering off — fail-safe reviews with the stronger incumbent) | `low\|medium\|high\|xhigh\|max`, or empty |
 | `on_family_conflict` | engine `reviewDiff` policy when the (effective) reviewer shares the implementer's model family: `fallback` = substitute the first cross-family QUALIFIED scorecard-ladder row (runner allowlist `codex\|agy\|grok\|claude-native`; codex rows need a calibrated `effort` on the row; ladder provenance must match the actual implementer family) so the in-loop decorrelated review actually runs; `block` = hard-block (pre-v2.32.25 behavior — for the default openai implementer + openai reviewer this means the in-loop review NEVER runs and convergence rides verify-first). Garbage → `block` (fail-closed) | `fallback` (default) \| `block` |
+| `reviewer_fallback_preference` | HUMAN-ordered engine ids the family-conflict fallback prefers over raw ladder order (every candidate still passes all guards: cross-family, runner allowlist, calibrated codex effort). Empty = ladder order (alphabetical within capability ties — set this if the strongest cross-family reviewer must win the high-risk seat) | comma list of scorecard engine ids (e.g. `claude-opus, MiniMax-M3`), or empty |
+| `reviewer_fallback_preference_low_risk` | preference list applied when computed `review_risk=low` (cheap calibrated leg for cheap rounds); empty = use `reviewer_fallback_preference` | comma list, or empty |
 | `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| auto` |
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |

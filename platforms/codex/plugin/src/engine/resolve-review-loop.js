@@ -124,6 +124,14 @@ function validateReviewLoopConfig(value) {
   }
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
   assertOneOf(value, 'on_engine_unavailable', schemaEnum('on_engine_unavailable'));
+  for (const field of ['reviewer_fallback_preference', 'reviewer_fallback_preference_low_risk']) {
+    assertField(value, field, Array.isArray, 'an array');
+    for (const member of value[field]) {
+      if (typeof member !== 'string' || member.length === 0) {
+        throw new Error(`review-loop output JSON field ${field} must contain only non-empty strings`);
+      }
+    }
+  }
 
   const hasReviewerQualified = Object.prototype.hasOwnProperty.call(value, 'reviewer_qualified');
   const hasFallbackLadder = Object.prototype.hasOwnProperty.call(value, 'fallback_ladder');

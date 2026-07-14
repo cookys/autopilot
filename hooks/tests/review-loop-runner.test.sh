@@ -117,6 +117,8 @@ const valid = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 const parsed = parseReviewLoopOutput([
   '{not valid json}',
@@ -170,6 +172,8 @@ const valid = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 const parsed = parseReviewLoopOutput([
   'resolver preface',
@@ -242,6 +246,8 @@ const partial = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 try {
   parseReviewLoopOutput(JSON.stringify(partial));
@@ -293,6 +299,8 @@ const invalid = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 try {
   parseReviewLoopOutput(JSON.stringify(invalid, null, 2));
@@ -344,6 +352,8 @@ const valid = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 const parsed = parseReviewLoopOutput(`${JSON.stringify(valid)}\nlog line with {debug braces}`);
 console.log(parsed.reviewer_engine);
@@ -391,6 +401,8 @@ const valid = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":"bad"}`);
@@ -442,6 +454,8 @@ const valid = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":`);

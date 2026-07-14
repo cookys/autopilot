@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.26 — fallback preference lists: the strong reviewer takes the high-risk seat
+
+**Headline**: v2.32.25's ladder fallback picked by ladder order — with claude-haiku as the only cross-family row that meant haiku on HIGH-risk duty too ("fallback haiku? 這也弱太多了"). Two contract fields fix seat assignment: `reviewer_fallback_preference` and `reviewer_fallback_preference_low_risk` — HUMAN-ordered engine-id lists consulted before raw ladder order (every preferred candidate still passes all v2.32.25 guards; empty lists = unchanged ladder order). claude-opus @ claude-native was qualified onto the ladder the scorecard-first way (known-bad 12/12, clean 10/11 — corpus now includes case 11 — expires 2026-10-12, row carries `model:"opus"`). Autopilot dogfood: high risk → claude-opus, low risk → claude-haiku.
+
+### Added
+- Contract fields `reviewer_fallback_preference` / `reviewer_fallback_preference_low_risk` (arrays, default `[]`): schema SSOT + resolver (csv→array, `--field`, both emissions) + JS validator member checks + engine preference-ordered selection (low-risk list wins on computed `review_risk=low`; invalid preferred entries skipped; empty → ladder order).
+- claude-opus reviewer scorecard row (claude-native, `model:"opus"`).
+
+### Changed
+- Template/front-door/dogfood config document seat assignment; fixtures + KR2 pin extended.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: leave both lists empty — selection is byte-identical to v2.32.25.
+
 ## v2.32.25 — family-conflict fallback: in-loop review revives via the cross-family scorecard ladder
 
 **Headline**: The 2026-07-13 /l5 e2e exposed that the engine's in-loop decorrelated review was STRUCTURALLY DEAD for the shipped default roster — implementer gpt-5.3-codex-spark and reviewer gpt-5.5 both map to the openai family, so `reviewDiff` hard-blocked at `reviewer_family` on every run and convergence rode verify-first alone. New contract field `on_family_conflict` (default `fallback`): on a same-family conflict the engine substitutes the first CROSS-FAMILY QUALIFIED row from the scorecard `fallback_ladder` (e.g. claude-haiku via claude-native, known-bad 12/12) so the in-loop review actually runs. Design adversarially reviewed by gpt-5.5 xhigh (REVISE applied in full): invocation-tuple identity, runner allowlist (`codex|agy|grok|claude-native`; `auto` and endpoint-backed runners excluded until rows carry endpoint provenance), codex rows require a calibrated row `effort`, ladder provenance (`fallback_ladder_implementer_family`) must match the ACTUAL implementer family (stale pre-resolved rosters never select), and every guard failure blocks exactly as before. Also closes the BACKLOG'd qualification gap: a tier-substituted reviewer must now appear in the qualified ladder as a tuple or it reverts to the incumbent (`tier_reviewer_unqualified` ledger entry).

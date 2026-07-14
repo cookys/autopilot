@@ -179,3 +179,10 @@ test('wrapper: parse cadence — below t1 only every 5th call parses (cheap path
   const st = JSON.parse(fs.readFileSync(path.join(env.AUTOPILOT_CONTEXT_BUDGET_DIR, `${sid}.json`), 'utf8'));
   assert.strictEqual(st.calls, 4);
 });
+
+test('wrapper: subagent fire (agent_id present) ⇒ silent exit 0 (depth-0 only)', () => {
+  const p = tmpFile([usageLine(80_000, 80_000, 1_000, 10)]); // would be T2 for depth-0
+  const r = runHook({ transcript_path: p, agent_id: 'a326adc31e613f671', agent_type: 'general-purpose' }, freshEnv());
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(r.stderr.trim(), '');
+});

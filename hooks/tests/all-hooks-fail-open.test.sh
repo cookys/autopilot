@@ -34,6 +34,8 @@ HOOK_FILES=(
   hooks/suggest-compact.js
   hooks/test-runner.js
   hooks/session-start.js
+  hooks/context-budget.js
+  hooks/orchestrator-edit-gate.js
 )
 
 for hook in "${HOOK_FILES[@]}"; do

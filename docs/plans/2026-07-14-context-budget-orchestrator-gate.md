@@ -30,7 +30,7 @@ Consequences: (1) A1 identity = `agent_id` **absence** ⇒ depth-0; (2) A2's bud
 - **T2 escalated advisory** (≥t2): (a) direct the model: write `autopilot:handoff` doc NOW, stop taking new work; (b) user-visible line: "/clear or restart after handoff lands". PostToolUse cannot deny and /clear is a USER action — no pretend enforcement. Repeat every 10 calls.
 - **T3 block** — DEFERRED to a follow-up release (see Backlog note). v1 ships warn-only tiers; deny semantics (handoff structural check, anti-spiral give-up, new-dispatch refusal) land only after warn-mode + synthetic-adversary calibration data exists.
 
-**State**: `~/.autopilot/context-budget/<session-id>.json` (cursor + last-fire counters), flock-guarded, corrupt ⇒ reset-and-continue. Host-stable path (NOT TMPDIR — docker-exec visibility).
+**State**: `~/.autopilot/context-budget/<session-id>.json` (cursor + last-fire counters), atomic tmp+rename writes (corruption-free; no flock — subagent fires are skipped via `agent_id`, so concurrent same-session writers are not a practical path; a lost counter update would only delay a throttle window), corrupt ⇒ reset-and-continue. Host-stable path (NOT TMPDIR — docker-exec visibility).
 
 **Protocol prose** (level-front-door.md): /l4-/l6 depth-0 MUST handoff at phase boundaries once T1 has fired; dispatch outputs land in files, depth-0 reads only emitted JSON summaries.
 

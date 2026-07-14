@@ -31,6 +31,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: v2.32.26 出貨 T1/T2 advisory；T3（PreToolUse 擋 Edit/Write + 拒絕 NEW dispatch 直到合規 handoff 落地）刻意延後。設計要點已定於 plan：handoff 檢查用 content-hash + 結構段落（非 mtime，touch 可偽造）、handoff allowlist 收窄到 docs/projects/** + ~/.autopilot/handoffs/、3 次 deny 未從 ⇒ 降級 warn + 大聲放棄（gate 跟模型吵架會燒掉它要省的 token，Gemini finding）、擋新 dispatch 用自家 script 名 leading-command 枚舉（非 write-regex — 三家 panel 一致否決 write-regex）。
 - **Effort**: M。
 - **Source**: `docs/plans/2026-07-14-context-budget-orchestrator-gate.md` § Out of scope；3-family panel review 2026-07-14。
+- **硬前置（pre-merge review 2026-07-14 🟡）**: orchestrator-edit-gate 升 block 模式前，必須先解決「finish-flow 期間 marker 仍 LIVE」：CHANGELOG/README*/plugin.json 不在 allowlist，block 模式會把 depth-0 的 release 編輯全擋掉。修法二選一：finish-flow 進場即 clear marker，或 allowlist 加 release-file 集合。
 
 ### E1 dispatch-manifest 合規 merge gate（/lN 宣稱 ⇒ 機器可驗）
 - **Trigger**: 下次發現 depth-0 繞過 dispatch 路徑手做實作（如 2026-07-14 研究中 92d8784a 用裸 codex exec 繞 dispatch-hetero、user 質問才自白），或 orchestrator-edit-gate 進 block 模式時（Bash 寫檔是它宣告的盲區，E1 是 backstop）。

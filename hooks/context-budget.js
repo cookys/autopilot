@@ -95,6 +95,10 @@ function saveState(file, st) {
     // fd 0, not '/dev/stdin': the device path throws ENXIO under piped spawns
     // (#6305 — the same trap documented in suggest-compact.js).
     try { payload = JSON.parse(fs.readFileSync(0, 'utf8')); } catch { /* fail-open */ }
+    // Depth-0 only: subagent fires carry agent_id (SPIKE-1) and would read the
+    // PARENT transcript anyway — a T2 exit-2 there would inject the handoff
+    // directive into the wrong actor's stderr (pre-merge review finding).
+    if (payload && payload.agent_id) process.exit(0);
     const tpath = payload && payload.transcript_path;
     if (!tpath || typeof tpath !== 'string') process.exit(0);
 

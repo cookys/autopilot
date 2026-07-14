@@ -10,7 +10,7 @@
   "evidence": {
     "source": "local-isolated-server-probe-and-official-beta-docs",
     "command": "bash hooks/tests/opencode-v2-plugin.test.sh",
-    "result": "opencode2 0.0.0-next-15481; V2 plugin setup and tool hook registration verified; intent capture path verified in isolated HOME"
+    "result": "opencode2 0.0.0-next-15493; V2 plugin setup and tool hook registration verified; intent capture path verified in isolated HOME"
   },
   "capabilities": {
     "repo_skills": "verified",

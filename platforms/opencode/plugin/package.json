@@ -2,12 +2,12 @@
   "name": "autopilot-opencode",
   "private": true,
   "type": "module",
-  "description": "Type-resolution package for autopilot's OpenCode V2 plugin. OpenCode auto-discovers .opencode/plugins/*.ts at runtime.",
+  "description": "Autopilot OpenCode V2 extension loaded explicitly by .opencode/opencode.json.",
   "scripts": {
     "typecheck": "tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --types node --skipLibCheck autopilot.ts"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "0.0.0-next-15481"
+    "@opencode-ai/plugin": "0.0.0-next-15493"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

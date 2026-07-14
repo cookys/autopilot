@@ -165,12 +165,14 @@ while IFS='|' read -r arm caseset cid rep; do
   ROW_CASE="$cid" ROW_REPEAT="$rep" ROW_VERDICT="$VERDICT" ROW_HASVERDICT="$([ -n "$VERDICT" ] && echo 1 || echo 0)" \
   ROW_STATUS="$STATUS" ROW_NOVERDICT="$NO_VERDICT" ROW_FLAGGED="$FLAGGED" ROW_CAUGHT="$CAUGHT" ROW_LAT="$LAT" \
   ROW_TOKENS="$TOKENS" ROW_RAWLOG="$RAWLOG" ROW_HASRAW="$([ -n "$RAWLOG" ] && echo 1 || echo 0)" ROW_SEED="$SEED" ROW_TS="$TS" ROW_KEY="$CELL_KEY" ROW_OUT="$OUT" \
+  ROW_FINDINGS_B64="$(printf '%s' "$FINDINGS" | base64 | tr -d '\n')" \
   node -e '
     const E=process.env; const num=(x)=>x==="null"||x===""?null:Number(x); const bool=(x)=>x==="true";
+    const findings=Buffer.from(E.ROW_FINDINGS_B64||"","base64").toString("utf8");
     const row={engine:E.ROW_ENGINE,runner:E.ROW_RUNNER,model:E.ROW_MODEL,arm:E.ROW_ARM,case_set:E.ROW_CASESET,
       case:E.ROW_CASE,repeat:Number(E.ROW_REPEAT),verdict:E.ROW_HASVERDICT==="1"?E.ROW_VERDICT:null,status:E.ROW_STATUS,
       no_verdict:bool(E.ROW_NOVERDICT),flagged:bool(E.ROW_FLAGGED),caught:E.ROW_CAUGHT==="null"?null:bool(E.ROW_CAUGHT),
-      latency_s:num(E.ROW_LAT),tokens:num(E.ROW_TOKENS),raw_log:E.ROW_HASRAW==="1"?E.ROW_RAWLOG:null,
+      findings,latency_s:num(E.ROW_LAT),tokens:num(E.ROW_TOKENS),raw_log:E.ROW_HASRAW==="1"?E.ROW_RAWLOG:null,
       seed:Number(E.ROW_SEED),ts:E.ROW_TS,cell_key:E.ROW_KEY};
     require("fs").appendFileSync(E.ROW_OUT, JSON.stringify(row)+"\n");
   ' 2>/dev/null || true

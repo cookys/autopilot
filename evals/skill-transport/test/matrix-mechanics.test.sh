@@ -19,22 +19,22 @@ DISPATCH_REVIEW_CMD="$STUB" STUB_SCENARIO=delta2 \
   bash "$ST/run-matrix.sh" --engine stub --runner claude-native --model stub \
   --k 3 --arms nopack,pack,placebo --out "$OUT" --seed 4242 >/dev/null 2>&1
 ROWS=$(wc -l < "$OUT")
-[ "$ROWS" = "207" ] && ok || bad "delta2 rows expected 207 got $ROWS"
+[ "$ROWS" = "216" ] && ok || bad "delta2 rows expected 216 got $ROWS"
 [ -f "$OUT.stub.seed" ] && [ "$(cat "$OUT.stub.seed")" = "4242" ] && ok || bad "seed not recorded"
 
 # resume adds 0
 DISPATCH_REVIEW_CMD="$STUB" STUB_SCENARIO=delta2 \
   bash "$ST/run-matrix.sh" --engine stub --runner claude-native --model stub \
   --k 3 --arms nopack,pack,placebo --out "$OUT" >/dev/null 2>&1
-[ "$(wc -l < "$OUT")" = "207" ] && ok || bad "resume changed row count"
+[ "$(wc -l < "$OUT")" = "216" ] && ok || bad "resume changed row count"
 
 REP="$TMP/delta2.report.json"
 node "$ST/report.js" --in "$OUT" --json > "$REP" 2>/dev/null
 [ "$(jqf "$REP" engines.stub.discordant_pack_vs_nopack.delta)" = "2" ] && ok || bad "delta2 delta expected 2 got $(jqf "$REP" engines.stub.discordant_pack_vs_nopack.delta)"
 [ "$(jqf "$REP" engines.stub.discordant_placebo_vs_nopack.delta)" = "0" ] && ok || bad "placebo delta expected 0"
 [ "$(jqf "$REP" engines.stub.format_conflict)" = "false" ] && ok || bad "delta2 format_conflict should be false"
-[ "$(jqf "$REP" engines.stub.arms.pack.caught)" = "12" ] && ok || bad "pack caught expected 12 got $(jqf "$REP" engines.stub.arms.pack.caught)"
-[ "$(jqf "$REP" engines.stub.arms.nopack.caught)" = "10" ] && ok || bad "nopack caught expected 10 got $(jqf "$REP" engines.stub.arms.nopack.caught)"
+[ "$(jqf "$REP" engines.stub.arms.pack.caught)" = "13" ] && ok || bad "pack caught expected 13 got $(jqf "$REP" engines.stub.arms.pack.caught)"
+[ "$(jqf "$REP" engines.stub.arms.nopack.caught)" = "11" ] && ok || bad "nopack caught expected 11 got $(jqf "$REP" engines.stub.arms.nopack.caught)"
 [ "$(jqf "$REP" engines.stub.arms.nopack.false_pass_on_major)" = "2" ] && ok || bad "nopack fp_major expected 2"
 [ "$(jqf "$REP" engines.stub.arms.pack.clean_overflag)" = "0" ] && ok || bad "pack over-flag expected 0"
 [ "$(jqf "$REP" engines.stub.arms.pack.specificity)" = "1" ] && ok || bad "pack specificity expected 1"

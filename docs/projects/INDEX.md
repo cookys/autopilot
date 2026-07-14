@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-14 | [dispatch-branch-lifecycle](2026-07-14-dispatch-branch-lifecycle/README.md) — session-end 整合候選 gate + `reap-dispatch-branches.sh` preserve-first reaper + 中間輪收斂（codex-worktree audit §5 修法） | v2.32.28 | `feature/dispatch-branch-lifecycle` |
 
 ## 已完成 (Completed)
 

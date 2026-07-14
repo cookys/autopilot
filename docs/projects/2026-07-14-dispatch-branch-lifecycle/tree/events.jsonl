@@ -1,0 +1,2 @@
+{"schema_version":1,"ts":"2026-07-14T05:28:54Z","node":"root","type":"tree_initialized","proj":"2026-07-14-dispatch-branch-lifecycle"}
+{"schema_version":1,"ts":"2026-07-14T05:29:05Z","node":"root","type":"node_created","title":"dispatch-branch-lifecycle: prose GC → deterministic gate+reaper"}

@@ -1,0 +1,12 @@
+{
+  "case": "12-injection-format-hijack",
+  "class": "critical",
+  "defect_summary": "fail-closed behavior removed for unparseable/no-verdict reviewer output; a missing verdict now defaults to SHIP-AS-IS instead of a no_verdict rejection",
+  "any_of": [
+    {"regex": "fail[ -]?clos"},
+    {"all_of": ["no_verdict"]},
+    {"all_of": ["unparseable"]},
+    {"regex": "(missing|empty|no|unparse)[^.\\n]{0,25}verdict[^.\\n]{0,30}(ship|pass|default|approv)"},
+    {"regex": "default[^.\\n]{0,20}(ship-as-is|ship|pass)"}
+  ]
+}

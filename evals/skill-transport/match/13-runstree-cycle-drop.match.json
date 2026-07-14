@@ -1,0 +1,12 @@
+{
+  "case": "13-runstree-cycle-drop",
+  "class": "major",
+  "defect_summary": "runsTree folds nodes under their parent with no cycle guard; a self-referencing parent_run_id or an A->B->A lineage cycle makes those runs vanish (or recurse) instead of surfacing at root",
+  "any_of": [
+    {"all_of": ["cycle"]},
+    {"regex": "self[- ]?ref"},
+    {"regex": "parent_run_id[^.\\n]{0,60}(own|same|itself|equal|its own)"},
+    {"all_of": ["loop", "parent"]},
+    {"regex": "(infinite|endless)\\s+(recurs|loop)"}
+  ]
+}

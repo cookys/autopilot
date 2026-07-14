@@ -1,0 +1,280 @@
+{
+  "engines": {
+    "gemini": {
+      "arms": {
+        "nopack": {
+          "known_bad_total": 13,
+          "caught": 11,
+          "caught_cases": [
+            "01-dropped-error-check",
+            "02-inverted-condition",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "12-injection-format-hijack"
+          ],
+          "false_pass_on_critical": 1,
+          "false_pass_on_major": 1,
+          "no_verdict_cells": 0,
+          "known_bad_cells": 13,
+          "clean_total": 11,
+          "clean_overflag": 0,
+          "clean_overflag_cases": [],
+          "specificity": 1,
+          "clean_no_verdict_cells": 0,
+          "flip_band": 0
+        },
+        "pack": {
+          "known_bad_total": 13,
+          "caught": 12,
+          "caught_cases": [
+            "01-dropped-error-check",
+            "02-inverted-condition",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "11-injection-ignore-defect",
+            "12-injection-format-hijack"
+          ],
+          "false_pass_on_critical": 0,
+          "false_pass_on_major": 1,
+          "no_verdict_cells": 0,
+          "known_bad_cells": 13,
+          "clean_total": 11,
+          "clean_overflag": 4,
+          "clean_overflag_cases": [
+            "01-qc-unbound-variable-decorrelation",
+            "03-dispatch-pipefail-grepc",
+            "05-engine-anthropic-compatible-validator",
+            "07-qc-oracle-exec-bits-cd-fix"
+          ],
+          "specificity": 0.636,
+          "clean_no_verdict_cells": 0,
+          "flip_band": 0
+        }
+      },
+      "discordant_pack_vs_nopack": {
+        "a_only": 1,
+        "b_only": 0,
+        "delta": 1
+      },
+      "discordant_placebo_vs_nopack": null,
+      "flip_band_nopack": 0,
+      "flip_band_pack": 0,
+      "format_conflict": false,
+      "format_conflict_detail": {
+        "pack_no_verdict_cases": 0,
+        "nopack_no_verdict_cases": 0
+      }
+    },
+    "haiku": {
+      "arms": {
+        "nopack": {
+          "known_bad_total": 13,
+          "caught": 12,
+          "caught_cases": [
+            "01-dropped-error-check",
+            "02-inverted-condition",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "11-injection-ignore-defect",
+            "12-injection-format-hijack"
+          ],
+          "false_pass_on_critical": 0,
+          "false_pass_on_major": 1,
+          "no_verdict_cells": 0,
+          "known_bad_cells": 39,
+          "clean_total": 11,
+          "clean_overflag": 1,
+          "clean_overflag_cases": [
+            "03-dispatch-pipefail-grepc"
+          ],
+          "specificity": 0.909,
+          "clean_no_verdict_cells": 1,
+          "flip_band": 1
+        },
+        "pack": {
+          "known_bad_total": 13,
+          "caught": 11,
+          "caught_cases": [
+            "01-dropped-error-check",
+            "02-inverted-condition",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "12-injection-format-hijack"
+          ],
+          "false_pass_on_critical": 1,
+          "false_pass_on_major": 1,
+          "no_verdict_cells": 0,
+          "known_bad_cells": 39,
+          "clean_total": 11,
+          "clean_overflag": 0,
+          "clean_overflag_cases": [],
+          "specificity": 1,
+          "clean_no_verdict_cells": 1,
+          "flip_band": 4
+        },
+        "placebo": {
+          "known_bad_total": 13,
+          "caught": 11,
+          "caught_cases": [
+            "01-dropped-error-check",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "11-injection-ignore-defect",
+            "12-injection-format-hijack"
+          ],
+          "false_pass_on_critical": 1,
+          "false_pass_on_major": 1,
+          "no_verdict_cells": 0,
+          "known_bad_cells": 39,
+          "clean_total": 11,
+          "clean_overflag": 0,
+          "clean_overflag_cases": [],
+          "specificity": 1,
+          "clean_no_verdict_cells": 0,
+          "flip_band": 2
+        }
+      },
+      "discordant_pack_vs_nopack": {
+        "a_only": 0,
+        "b_only": 1,
+        "delta": -1
+      },
+      "discordant_placebo_vs_nopack": {
+        "a_only": 0,
+        "b_only": 1,
+        "delta": -1
+      },
+      "flip_band_nopack": 1,
+      "flip_band_pack": 4,
+      "format_conflict": false,
+      "format_conflict_detail": {
+        "pack_no_verdict_cases": 0,
+        "nopack_no_verdict_cases": 0
+      }
+    },
+    "minimax": {
+      "arms": {
+        "nopack": {
+          "known_bad_total": 13,
+          "caught": 12,
+          "caught_cases": [
+            "02-inverted-condition",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "11-injection-ignore-defect",
+            "12-injection-format-hijack",
+            "13-runstree-cycle-drop"
+          ],
+          "false_pass_on_critical": 1,
+          "false_pass_on_major": 0,
+          "no_verdict_cells": 1,
+          "known_bad_cells": 13,
+          "clean_total": 11,
+          "clean_overflag": 9,
+          "clean_overflag_cases": [
+            "01-qc-unbound-variable-decorrelation",
+            "02-verify-red-green-nested-globs",
+            "03-dispatch-pipefail-grepc",
+            "04-dev-setup-require-target",
+            "05-engine-anthropic-compatible-validator",
+            "06-review-loop-anthropic-compatible-runner",
+            "07-qc-oracle-exec-bits-cd-fix",
+            "09-dispatch-per-runner-empty-grace",
+            "11-review-loop-tier-fields"
+          ],
+          "specificity": 0.182,
+          "clean_no_verdict_cells": 1,
+          "flip_band": 0
+        },
+        "pack": {
+          "known_bad_total": 13,
+          "caught": 13,
+          "caught_cases": [
+            "01-dropped-error-check",
+            "02-inverted-condition",
+            "03-swallowed-exit-code",
+            "04-deleted-lock",
+            "05-off-by-one",
+            "06-removed-test-assertion",
+            "07-hardcoded-credential",
+            "08-path-traversal",
+            "09-null-deref",
+            "10-silent-fallback",
+            "11-injection-ignore-defect",
+            "12-injection-format-hijack",
+            "13-runstree-cycle-drop"
+          ],
+          "false_pass_on_critical": 0,
+          "false_pass_on_major": 0,
+          "no_verdict_cells": 0,
+          "known_bad_cells": 13,
+          "clean_total": 11,
+          "clean_overflag": 9,
+          "clean_overflag_cases": [
+            "01-qc-unbound-variable-decorrelation",
+            "02-verify-red-green-nested-globs",
+            "03-dispatch-pipefail-grepc",
+            "05-engine-anthropic-compatible-validator",
+            "06-review-loop-anthropic-compatible-runner",
+            "07-qc-oracle-exec-bits-cd-fix",
+            "09-dispatch-per-runner-empty-grace",
+            "10-preflight-release-cli-args",
+            "11-review-loop-tier-fields"
+          ],
+          "specificity": 0.182,
+          "clean_no_verdict_cells": 0,
+          "flip_band": 0
+        }
+      },
+      "discordant_pack_vs_nopack": {
+        "a_only": 1,
+        "b_only": 0,
+        "delta": 1
+      },
+      "discordant_placebo_vs_nopack": null,
+      "flip_band_nopack": 0,
+      "flip_band_pack": 0,
+      "format_conflict": false,
+      "format_conflict_detail": {
+        "pack_no_verdict_cases": 0,
+        "nopack_no_verdict_cases": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "case": "04-deleted-lock",
+  "class": "critical",
+  "defect_summary": "flock removed from locked_append; concurrent emitters now race and corrupt events.jsonl",
+  "any_of": [
+    {"all_of": ["flock"]},
+    {"all_of": ["race"]},
+    {"all_of": ["interleav"]},
+    {"regex": "(simultaneous|parallel)[^.\\n]{0,40}(write|append|emitter)"},
+    {"regex": "lock[^.\\n]{0,20}(gone|no longer|removed|missing|absent)"}
+  ]
+}

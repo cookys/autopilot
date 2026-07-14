@@ -1,0 +1,42 @@
+SKILL-TRANSPORT REVIEWER A/B — matrix report
+source: evals/skill-transport/results/matrix.jsonl   rows: 312
+(report is DATA + advisory rule-threshold checks; the §5 adopt/refute call is depth-0's)
+
+==== engine: gemini ====
+arm	kb_caught/tot	fp_crit	fp_major	no_verdict	clean_overflag/tot	specificity	flip_band
+nopack	11/13	1	1	0/13	0/11	1	0
+pack	12/13	0	1	0/13	4/11	0.636	0
+
+discordant (pack vs nopack): pack-only=1 nopack-only=0 DELTA=+1
+flip band (nopack)=0 (pack)=0
+format_conflict=false (pack_nv_cases=0 nopack_nv_cases=0)
+-- advisory §5 checks (depth-0 decides) --
+  R-H2-adopt inputs: delta=1 (need >=+2), exceeds_flip_band=true (band=0), clean_overflag_increase=4 (need <=1), format_conflict=false (need false)
+  R-H2-refute input: delta<+2 OR delta<=band OR specificity_degrades
+
+==== engine: haiku ====
+arm	kb_caught/tot	fp_crit	fp_major	no_verdict	clean_overflag/tot	specificity	flip_band
+nopack	12/13	0	1	0/39	1/11	0.909	1
+pack	11/13	1	1	0/39	0/11	1	4
+placebo	11/13	1	1	0/39	0/11	1	2
+
+discordant (pack vs nopack): pack-only=0 nopack-only=1 DELTA=-1
+discordant (placebo vs nopack): placebo-only=0 nopack-only=1 DELTA=-1
+flip band (nopack)=1 (pack)=4
+format_conflict=false (pack_nv_cases=0 nopack_nv_cases=0)
+-- advisory §5 checks (depth-0 decides) --
+  R-H2-adopt inputs: delta=-1 (need >=+2), exceeds_flip_band=false (band=4), clean_overflag_increase=-1 (need <=1), format_conflict=false (need false)
+  R-H2-placebo input: placebo_delta=-1 vs ceil(pack_delta/2)=0 -> placebo_veto=false
+  R-H2-refute input: delta<+2 OR delta<=band OR specificity_degrades
+
+==== engine: minimax ====
+arm	kb_caught/tot	fp_crit	fp_major	no_verdict	clean_overflag/tot	specificity	flip_band
+nopack	12/13	1	0	1/13	9/11	0.182	0
+pack	13/13	0	0	0/13	9/11	0.182	0
+
+discordant (pack vs nopack): pack-only=1 nopack-only=0 DELTA=+1
+flip band (nopack)=0 (pack)=0
+format_conflict=false (pack_nv_cases=0 nopack_nv_cases=1)
+-- advisory §5 checks (depth-0 decides) --
+  R-H2-adopt inputs: delta=1 (need >=+2), exceeds_flip_band=true (band=0), clean_overflag_increase=0 (need <=1), format_conflict=false (need false)
+  R-H2-refute input: delta<+2 OR delta<=band OR specificity_degrades

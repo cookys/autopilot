@@ -1,0 +1,12 @@
+{
+  "case": "10-silent-fallback",
+  "class": "critical",
+  "defect_summary": "unknown DOA preset silently falls back to cloud-high-trust (most permissive) instead of escalating; fail-closed contract violated",
+  "any_of": [
+    {"all_of": ["fallback"]},
+    {"all_of": ["cloud-high-trust"]},
+    {"all_of": ["permissive"]},
+    {"regex": "fail[ -]?clos"},
+    {"regex": "(instead of|rather than|no)[^.\\n]{0,20}escalat"}
+  ]
+}

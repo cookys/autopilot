@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE="$ROOT/platforms/opencode/plugin"
-LINK="$ROOT/.opencode/plugin-package"
 
 command -v opencode2 >/dev/null 2>&1 || {
   echo "Error: opencode2 not found on PATH" >&2

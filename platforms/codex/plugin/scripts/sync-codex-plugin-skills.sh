@@ -45,6 +45,11 @@ DIRS=(
   "project-config-template"
 )
 
+SCRIPT_EXCLUDES=(
+  "install-opencode.sh"
+  "sync-opencode-plugin.sh"
+)
+
 DOC_FILES=(
   "docs/plans/2026-06-04-distill-consolidate.md"
   "docs/plans/2026-06-22-ceo-fleet-autonomy.md"
@@ -76,9 +81,23 @@ sync_dir() {
   mkdir -p "$dst"
 
   if command -v rsync >/dev/null 2>&1; then
-    rsync -aL --delete "$src/" "$dst/"
+    local args=(-aL --delete)
+    if [ "$rel" = "scripts" ]; then
+      local excluded
+      for excluded in "${SCRIPT_EXCLUDES[@]}"; do
+        args+=(--exclude "$excluded")
+      done
+    fi
+    rsync "${args[@]}" "$src/" "$dst/"
   else
-    (cd "$src" && tar -chf - .) | (cd "$dst" && tar -xf -)
+    local tar_args=(-chf -)
+    if [ "$rel" = "scripts" ]; then
+      local excluded
+      for excluded in "${SCRIPT_EXCLUDES[@]}"; do
+        tar_args+=(--exclude="./$excluded")
+      done
+    fi
+    (cd "$src" && tar "${tar_args[@]}" .) | (cd "$dst" && tar -xf -)
   fi
 }
 
@@ -108,6 +127,22 @@ check_dir() {
   if [ ! -d "$dst" ]; then
     echo "drift: missing directory platforms/codex/plugin/$rel"
     return 1
+  fi
+
+  if [ "$rel" = "scripts" ]; then
+    local args=(-qr)
+    local excluded
+    for excluded in "${SCRIPT_EXCLUDES[@]}"; do
+      args+=(--exclude="$excluded")
+    done
+    diff "${args[@]}" "$src" "$dst"
+    for excluded in "${SCRIPT_EXCLUDES[@]}"; do
+      if [ -e "$dst/$excluded" ]; then
+        echo "drift: excluded OpenCode installer leaked into platforms/codex/plugin/scripts/$excluded"
+        return 1
+      fi
+    done
+    return 0
   fi
 
   diff -qr "$src" "$dst"

@@ -118,5 +118,7 @@ assert_contains "$OUT" "version mismatch" "OpenCode installer explains pinned ni
 OUT="$(bash "$REPO_ROOT/platforms/codex/plugin/scripts/dev-setup.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "Codex package dev-setup refuses to run from generated payload"
 assert_contains "$OUT" "source repository" "Codex package dev-setup explains source repo requirement"
+assert_file_absent "$REPO_ROOT/platforms/codex/plugin/scripts/install-opencode.sh" "Codex payload excludes source-repo OpenCode installer"
+assert_file_absent "$REPO_ROOT/platforms/codex/plugin/scripts/sync-opencode-plugin.sh" "Codex payload excludes OpenCode sync script"
 
 finalize_test

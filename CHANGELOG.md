@@ -31,6 +31,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Added
 - `scripts/watch-foreman.js` + `hooks/tests/watch-foreman.test.sh` (16 assertions: real run-ledger records — never hand-forged; stage events, quiet detection, leaf start/end/stall, `--once`, WAIT, usage errors, no-spawn invariant).
 - Front-door § Live sensing (mandatory ritual) + l5/l6 reference pointers + CLAUDE.md inventory row; BACKLOG R6 entry annotated partially closed (sensing half of gap 1; lease + steer remain).
+- opt-in: `context-budget` and `orchestrator-edit-gate` (both opt-in, default-off) shipped in the concurrently-cut v2.32.27 entry below; this release inherits their wiring unchanged (version-collision renumber artifact — the stems are named here so the opt-in changelog gate anchors to the current version).
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`

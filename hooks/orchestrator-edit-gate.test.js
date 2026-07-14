@@ -1,0 +1,213 @@
+/**
+ * Tests for orchestrator-edit-gate: pure decision lib + wrapper black-box.
+ * Run: node --test hooks/orchestrator-edit-gate.test.js
+ *
+ * Panel-finding regressions guarded here:
+ * - SPIKE-1 canary: subagent identity = payload `agent_id` PRESENCE (empirical
+ *   CC 2.1.208 schema — the fixture mirrors a real captured payload). If a CC
+ *   update changes this schema, these tests are the tripwire.
+ * - MiniMax WHERE-not-WHO: depth-0 editing inside a dispatch worktree is STILL
+ *   denied — worker territory protection must not double as a depth-0 backdoor.
+ * - Stale-marker/mode-change: an l3 marker (set by /l3 re-entry or --solo)
+ *   neutralizes the gate; an expired marker is a no-op.
+ */
+
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const LIB = path.join(__dirname, 'orchestrator-edit-gate-lib.js');
+const HOOK = path.join(__dirname, 'orchestrator-edit-gate.js');
+const { decide, isAllowlisted } = require(LIB);
+
+// ---- pure lib ----
+
+test('decide: no marker ⇒ allow', () => {
+  assert.strictEqual(decide({ markerLevel: null, isSubagent: false, inRepoRoot: true, inDispatchWorktree: false, allowlisted: false }).action, 'allow');
+});
+
+test('decide: l3 marker ⇒ allow (inline-by-design)', () => {
+  assert.strictEqual(decide({ markerLevel: 'l3', isSubagent: false, inRepoRoot: true, inDispatchWorktree: false, allowlisted: false }).action, 'allow');
+});
+
+test('decide: l5 + depth-0 + product path ⇒ gate', () => {
+  const d = decide({ markerLevel: 'l5', isSubagent: false, inRepoRoot: true, inDispatchWorktree: false, allowlisted: false });
+  assert.strictEqual(d.action, 'gate');
+  assert.match(d.reason, /dispatch/i);
+});
+
+test('decide: l5 + SUBAGENT ⇒ allow (SPIKE-1 identity)', () => {
+  assert.strictEqual(decide({ markerLevel: 'l5', isSubagent: true, inRepoRoot: true, inDispatchWorktree: false, allowlisted: false }).action, 'allow');
+});
+
+test('decide: l5 + depth-0 + allowlisted ⇒ allow', () => {
+  assert.strictEqual(decide({ markerLevel: 'l5', isSubagent: false, inRepoRoot: true, inDispatchWorktree: false, allowlisted: true }).action, 'allow');
+});
+
+test('decide: l5 + depth-0 + dispatch worktree ⇒ gate (WHERE-not-WHO)', () => {
+  const d = decide({ markerLevel: 'l4', isSubagent: false, inRepoRoot: false, inDispatchWorktree: true, allowlisted: false });
+  assert.strictEqual(d.action, 'gate');
+});
+
+test('decide: l5 + depth-0 + outside repo & worktrees ⇒ allow (scratchpad etc.)', () => {
+  assert.strictEqual(decide({ markerLevel: 'l5', isSubagent: false, inRepoRoot: false, inDispatchWorktree: false, allowlisted: false }).action, 'allow');
+});
+
+test('isAllowlisted: tracking/config/plans paths pass, product paths fail', () => {
+  assert.strictEqual(isAllowlisted('docs/projects/2026-07-14-x/README.md'), true);
+  assert.strictEqual(isAllowlisted('.claude/settings.json'), true);
+  assert.strictEqual(isAllowlisted('.autopilot/state.json'), true);
+  assert.strictEqual(isAllowlisted('docs/plans/2026-07-14-x.md'), true);
+  assert.strictEqual(isAllowlisted('src/engine/autopilot-engine.js'), false);
+  assert.strictEqual(isAllowlisted('docs/README.md'), false);
+  // GPT-OSS finding: a handoff-named file in product territory is NOT allowlisted
+  assert.strictEqual(isAllowlisted('src/handoff.md'), false);
+});
+
+// ---- wrapper black-box ----
+
+function setup() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'oeg-'));
+  const repo = path.join(base, 'repo');
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(repo, 'docs', 'projects'), { recursive: true });
+  const markers = path.join(base, 'markers');
+  const sid = `t-${path.basename(base)}`;
+  const env = {
+    ...process.env,
+    AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE: '1',
+    AUTOPILOT_SESSION_MODE_DIR: markers,
+    AUTOPILOT_ORCH_EDIT_GATE_MODE: 'block',
+    CLAUDE_CODE_SESSION_ID: sid,
+  };
+  return { base, repo, env, sid };
+}
+
+function setMarker(env, repo, level, extra = []) {
+  const r = spawnSync('node', [path.join(__dirname, '..', 'scripts', 'session-mode.js'),
+    'set', '--level', level, '--repo-root', repo, ...extra], { env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+}
+
+// Payload fixtures mirror the SPIKE-1 capture (CC 2.1.208).
+function payload(file, { subagent = false } = {}) {
+  const p = {
+    hook_event_name: 'PreToolUse',
+    session_id: 'overridden-by-env-derivation',
+    transcript_path: '/tmp/whatever.jsonl',
+    cwd: '/tmp',
+    permission_mode: 'default',
+    prompt_id: 'p-1',
+    tool_use_id: 'toolu_x',
+    tool_name: 'Edit',
+    tool_input: { file_path: file, old_string: 'a', new_string: 'b' },
+  };
+  if (subagent) { p.agent_id = 'a326adc31e613f671'; p.agent_type = 'general-purpose'; }
+  return p;
+}
+
+function runHook(obj, env) {
+  return spawnSync('node', [HOOK], {
+    input: typeof obj === 'string' ? obj : JSON.stringify(obj),
+    encoding: 'utf8', env,
+  });
+}
+
+test('wrapper: disabled ⇒ exit 0 even with live l5 marker', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(repo, 'src', 'a.js')), { ...env, AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE: '' });
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: no marker ⇒ exit 0 silent', () => {
+  const { repo, env } = setup();
+  const r = runHook(payload(path.join(repo, 'src', 'a.js')), env);
+  assert.strictEqual(r.status, 0);
+  assert.strictEqual(r.stderr.trim(), '');
+});
+
+test('wrapper: l5 marker + depth-0 + product file + block ⇒ exit 2 deny', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(repo, 'src', 'a.js')), env);
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /dispatch/i);
+});
+
+test('wrapper: l5 marker + SUBAGENT payload ⇒ exit 0 (foreman passes)', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(repo, 'src', 'a.js'), { subagent: true }), env);
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: l3 marker ⇒ exit 0', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l3');
+  const r = runHook(payload(path.join(repo, 'src', 'a.js')), env);
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: expired marker ⇒ exit 0', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5', ['--ttl-hours', '0']);
+  const r = runHook(payload(path.join(repo, 'src', 'a.js')), env);
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: allowlisted tracking path ⇒ exit 0', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(repo, 'docs', 'projects', 'x', 'README.md')), env);
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: depth-0 editing inside a dispatch worktree ⇒ exit 2 (WHERE-not-WHO)', () => {
+  const { base, repo, env } = setup();
+  const wt = path.join(base, 'wt-unit1');
+  fs.mkdirSync(wt, { recursive: true });
+  fs.writeFileSync(path.join(wt, '.autopilot-worktree'), '');
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(wt, 'src.js')), env);
+  assert.strictEqual(r.status, 2);
+});
+
+test('wrapper: file outside repo/worktrees (scratch) ⇒ exit 0', () => {
+  const { base, repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(base, 'scratch', 'notes.md')), env);
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: warn mode ⇒ exit 0 with stderr warning', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l5');
+  const r = runHook(payload(path.join(repo, 'src', 'a.js')), { ...env, AUTOPILOT_ORCH_EDIT_GATE_MODE: 'warn' });
+  assert.strictEqual(r.status, 0);
+  assert.match(r.stderr, /orchestrator/i);
+});
+
+test('wrapper: garbage stdin ⇒ fail-open exit 0', () => {
+  const { env } = setup();
+  const r = runHook('{{{nope', env);
+  assert.strictEqual(r.status, 0);
+});
+
+test('wrapper: Write and NotebookEdit paths are gated too', () => {
+  const { repo, env } = setup();
+  setMarker(env, repo, 'l6');
+  const w = payload(path.join(repo, 'src', 'b.js'));
+  w.tool_name = 'Write';
+  w.tool_input = { file_path: path.join(repo, 'src', 'b.js'), content: 'x' };
+  assert.strictEqual(runHook(w, env).status, 2);
+  const n = payload(path.join(repo, 'src', 'c.ipynb'));
+  n.tool_name = 'NotebookEdit';
+  n.tool_input = { notebook_path: path.join(repo, 'src', 'c.ipynb'), new_source: 'x' };
+  assert.strictEqual(runHook(n, env).status, 2);
+});

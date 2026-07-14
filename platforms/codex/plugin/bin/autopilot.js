@@ -5,6 +5,7 @@ const { dispatchReview } = require('../src/runners/review');
 const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
 const { runHarnessCli } = require('../src/harness/cli');
 const { runEndpointsCli } = require('../src/endpoints/cli');
+const { runStatusCli } = require('../src/status/cli');
 const { AutopilotEngine } = require('../src/engine');
 
 function printHelp() {
@@ -14,6 +15,7 @@ function printHelp() {
   node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
+  node bin/autopilot.js status [quota|runs|roster] [--json] [--probe]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -25,6 +27,7 @@ Commands:
                     --allow-unqualified-reviewer only as an explicit escape hatch.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
+  status            Read-only state overview: per-pool quota (recorded, per-MODEL pools), live dispatch runs, resolved roster seats (quota|runs|roster; --json; --probe = safe surface refresh, no model spend).
                     tokens never printed, never read from argv).
 
 Exit codes:
@@ -156,6 +159,10 @@ const args = process.argv.slice(2);
 if (args.length === 0 || args[0] === '-h' || args[0] === '--help' || args[0] === 'help') {
   printHelp();
   process.exit(0);
+}
+
+if (args[0] === 'status') {
+  process.exit(runStatusCli(args.slice(1), { cwd: process.cwd() }));
 }
 
 if (args[0] === 'dispatch') {

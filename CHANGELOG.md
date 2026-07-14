@@ -24,6 +24,16 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.29 — `autopilot status`: one read-only surface for quota / runs / roster
+
+**Headline**: New CLI family `autopilot status [quota|runs|roster] [--json] [--probe]` — the human/agent front door over the three observation substrates that already existed: per-MODEL quota pools from engine-capability-state (status + reset_at + observation age; honesty ceiling stated in-output — subscription CLIs expose no remaining-%, TTL-expired observations are ABSENT = unknown, never shown as live truth; `--probe` refreshes via the safe no-spend surface), live dispatch runs from dispatch-status (phase/alive/stall enrichment, STALL marked report-only), and the resolved roster seats (high/low-risk reviewers, family-conflict policy, preference lists, fallback ladder, qc panel). Born of the 2026-07-14 per-model quota-pool incident and the "看得到才不是 YOLO" thread.
+
+### Added
+- `src/status/cli.js` + `bin/autopilot.js status` routing/help + `hooks/tests/status-cli.test.sh` (22 assertions, all substrates env-sandboxed; TTL-drop semantics pinned).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.28 — foreman live sensing: no YOLO window after /l4 /l5 /l6 dispatch
 
 **Headline**: Dispatching a foreman used to open a black box until its completion notification. New `scripts/watch-foreman.js` (S3-lite: sensing ONLY) composes the two substrates that already existed — the foreman run-ledger (`run-ledger.sh` stage acquire/transition/heartbeat) and the dispatch run-manifest dir — into one line-buffered event stream (`STAGE`/`LEAF_START`/`LEAF_END`/`QUIET`/`LEAF_STALL`/`WAIT`) designed to sit behind the CC Monitor tool, with `--once` as the harness-neutral snapshot poller. Front-door § "Live sensing" makes the ritual mandatory: depth-0 pre-assigns run-id + ledger path BEFORE dispatch and writes them into the foreman prompt; the foreman heartbeats ≥ every 5 minutes inside long stages. Report-only by construction (no child_process — greppable test invariant; QUIET/STALL lines embed the R6 "never grab a leased stage" rule from the 2026-07-08 two-cooks crash). Scheduling/steer policy stays open (R6/S3).

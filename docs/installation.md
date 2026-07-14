@@ -23,20 +23,27 @@ Check mode is read-only for repo and user harness state except temporary diagnos
 
 ---
 
-### OpenCode (`.agents/skills/` auto-scan)
+### OpenCode V2 extension
 
-Clone the repo anywhere; OpenCode native skill scanner picks up `.agents/skills/` from cwd.
+OpenCode support follows the core + extension layout:
+
+- host-neutral hook logic: `src/hooks/`
+- canonical harness package: `platforms/opencode/plugin/`
+- generated repo-local consumer: `.opencode/plugin-package/`
+- project agents/config: `.opencode/opencode.json`
 
 ```bash
 git clone https://github.com/cookys/autopilot.git
 cd autopilot
-./scripts/setup-symlinks.sh                          # ensure .agents/skills/ symlink resolves (no-op on Linux/macOS/WSL)
-cd .opencode && npm install                          # for @opencode-ai/plugin types (optional unless editing the TS plugin)
-cd ..
-opencode debug skill | grep autopilot                # verify autopilot skills discovered
+./scripts/install-opencode.sh
+bash hooks/tests/opencode-v2-plugin.test.sh
+opencode2
 ```
 
-Agents (`autopilot-reviewer`, `autopilot-debugger`, `autopilot-planner`) load via `.opencode/opencode.json` automatically.
+The installer configures shared skills, installs the pinned V2 extension dependency,
+and synchronizes the generated consumer payload. OpenCode V2's plugin API is beta;
+rerun the smoke test after every upgrade. The exact verified nightly and unsupported
+capabilities are recorded in `src/harness/capabilities/opencode.json`.
 
 ### Codex (OpenAI)
 

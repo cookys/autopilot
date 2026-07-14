@@ -1157,22 +1157,40 @@ class AutopilotEngine {
         && typeof roster.fallback_ladder_implementer_family === 'string'
         && roster.fallback_ladder_implementer_family === implFamily
       ) {
-        for (const row of roster.fallback_ladder) {
-          if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') continue;
+        const rowIsValid = (row) => {
+          if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') return false;
           const rowFamily = modelFamilyOfEngine(row.engine);
-          if (rowFamily === 'unknown' || rowFamily === implFamily) continue;
+          if (rowFamily === 'unknown' || rowFamily === implFamily) return false;
           // R2 (gpt-5.5): the family authorization must hold for the string we
           // actually DISPATCH, not just the display engine id — a row pairing a
           // cross-family engine with a same-family model would otherwise slip a
           // same-family reviewer through the decorrelation gate. Both derived
           // families must agree, be known, and differ from the implementer's.
           const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
-          const dispatchFamily = modelFamilyOfEngine(rowModel);
-          if (dispatchFamily !== rowFamily) continue;
-          if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) continue;
-          if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) continue;
-          fallbackRow = row;
-          break;
+          if (modelFamilyOfEngine(rowModel) !== rowFamily) return false;
+          if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) return false;
+          if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) return false;
+          return true;
+        };
+        // Preference lists (v2.32.26, "fallback haiku is too weak"): HUMAN-ordered
+        // engine ids from config are consulted BEFORE raw ladder order — a
+        // preferred row must still pass every guard above; no valid preferred row
+        // → plain ladder order. review_risk=low uses the _low_risk list when
+        // non-empty (cheap calibrated leg for cheap rounds; the strong list for
+        // everything else).
+        const prefList = (reviewRisk === 'low'
+          && Array.isArray(roster.reviewer_fallback_preference_low_risk)
+          && roster.reviewer_fallback_preference_low_risk.length > 0)
+          ? roster.reviewer_fallback_preference_low_risk
+          : (Array.isArray(roster.reviewer_fallback_preference) ? roster.reviewer_fallback_preference : []);
+        for (const preferred of prefList) {
+          const row = roster.fallback_ladder.find((r) => r && r.engine === preferred && rowIsValid(r));
+          if (row) { fallbackRow = row; break; }
+        }
+        if (!fallbackRow) {
+          for (const row of roster.fallback_ladder) {
+            if (rowIsValid(row)) { fallbackRow = row; break; }
+          }
         }
       }
       if (fallbackRow) {

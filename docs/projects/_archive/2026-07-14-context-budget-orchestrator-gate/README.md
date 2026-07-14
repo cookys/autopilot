@@ -6,7 +6,7 @@
 > **Success criteria**:
 > 1. `node --test hooks/context-budget.test.js hooks/orchestrator-edit-gate.test.js` green, red-green provable (tests fail against absent libs — verified during TDD).
 > 2. `bash hooks/tests/all-hooks-fail-open.test.sh` green including both new hooks.
-> 3. `node scripts/check-hook-inventory.js --check` and `scripts/preflight-release.sh` pass at v2.32.26.
+> 3. `node scripts/check-hook-inventory.js --check` and `scripts/preflight-release.sh` pass at v2.32.27.
 > 4. Live probe: marker set to l5 + block mode ⇒ depth-0 Edit denied, subagent Edit passes (SPIKE-1 replay).
 > **Scope boundary**:
 > - IN: session-mode.js marker CLI; two hooks (lib/wrapper/tests); hooks.json + opt-in manifest + hooks/README wiring; l4/l5/l6/level-front-door/finish-flow prose write-points; CHANGELOG + version 2.32.26 + inventory/parity gates; BACKLOG entries for deferred items.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * session-mode.js — orchestrator-mode marker CLI (A1/A2 support, v2.32.26).
+ * session-mode.js — orchestrator-mode marker CLI (A1/A2 support, v2.32.27).
  *
  * Written by depth-0 at /l3 /l4 /l5 /l6 entry; read by the orchestrator-edit-gate
  * and context-budget hooks. One marker file per session id:

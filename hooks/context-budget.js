@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * context-budget — PostToolUse * (opt-in, default-off; v2.32.26)
+ * context-budget — PostToolUse * (opt-in, default-off; v2.32.27)
  *
  * Measures the REAL context size (last assistant `message.usage` in the
  * transcript: input + cache_read + cache_creation) and nudges/directs session

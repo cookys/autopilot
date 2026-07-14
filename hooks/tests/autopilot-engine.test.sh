@@ -3111,6 +3111,8 @@ const validPayload = {
   reviewer_engine_low_risk: '',
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
+  reviewer_fallback_preference: [],
+  reviewer_fallback_preference_low_risk: [],
 };
 
 try {
@@ -3752,6 +3754,31 @@ console.log(`fb_staleprov=${staleProv.status}:${staleProv.phase}`);
 const noCandidate = run({ on_family_conflict: 'fallback', fallback_ladder: [LADDER[0], LADDER[1], LADDER[2]], fallback_ladder_implementer_family: 'openai' });
 console.log(`fb_nocand=${noCandidate.status}:${noCandidate.phase}`);
 
+// v2.32.26 preference lists: human order beats ladder order (guards still apply)
+const OPUS_LADDER = LADDER.concat([{ engine: 'claude-opus-cal', runner: 'claude-native', family: 'anthropic', model: 'opus' }]);
+const fbPref = run({
+  on_family_conflict: 'fallback', fallback_ladder: OPUS_LADDER, fallback_ladder_implementer_family: 'openai',
+  reviewer_fallback_preference: ['not-in-ladder', 'claude-opus-cal', 'claude-haiku'],
+});
+console.log(`pref_model=${(fbPref.reviewArgs || []).join(' ').includes('--model opus')}`);
+
+// low-risk list wins when review_risk=low
+const fbPrefLow = run({
+  on_family_conflict: 'fallback', fallback_ladder: OPUS_LADDER, fallback_ladder_implementer_family: 'openai',
+  review_risk: 'low',
+  reviewer_engine_low_risk: '', reviewer_effort_low_risk: '',
+  reviewer_fallback_preference: ['claude-opus-cal'],
+  reviewer_fallback_preference_low_risk: ['claude-haiku'],
+});
+console.log(`pref_low_model=${(fbPrefLow.reviewArgs || []).join(' ').includes('--model haiku')}`);
+
+// empty preference → ladder order unchanged (haiku first valid)
+const fbPrefEmpty = run({
+  on_family_conflict: 'fallback', fallback_ladder: OPUS_LADDER, fallback_ladder_implementer_family: 'openai',
+  reviewer_fallback_preference: [], reviewer_fallback_preference_low_risk: [],
+});
+console.log(`pref_empty_model=${(fbPrefEmpty.reviewArgs || []).join(' ').includes('--model haiku')}`);
+
 // R6 Minor: with requireQualifiedReviewer, the EFFECTIVE fallback reviewer is
 // certified by the selected qualified ladder row, not the incumbent's flag.
 const fbQual = engineWith().reviewDiff({
@@ -3803,6 +3830,9 @@ assert_contains "$OUT" "fb_absentmode=blocked:reviewer_family" "absent on_family
 assert_contains "$OUT" "fb_staleprov=blocked:reviewer_family" "stale ladder provenance blocks (pre-resolved roster protection)"
 assert_contains "$OUT" "fb_nocand=blocked:reviewer_family" "no valid cross-family candidate blocks"
 assert_contains "$OUT" "fb_qual=reviewed" "fallback row certifies effective qualification (incumbent flag unused)"
+assert_contains "$OUT" "pref_model=true" "preference order beats ladder order (invalid preferred skipped)"
+assert_contains "$OUT" "pref_low_model=true" "low-risk preference list wins on review_risk=low"
+assert_contains "$OUT" "pref_empty_model=true" "empty preference keeps pure ladder order"
 assert_contains "$OUT" "tier_miss_model=true" "tier pair absent from qualified ladder reverts to incumbent"
 assert_contains "$OUT" "tier_miss_ledger=true" "tier revert is ledger'd (tier_reviewer_unqualified)"
 assert_contains "$OUT" "tier_hit_model=true" "tier tuple present in ladder → tier holds"

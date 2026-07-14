@@ -1,0 +1,30 @@
+{
+  "id": "opencode",
+  "display_name": "OpenCode V2",
+  "kind": "cli",
+  "status": "warning",
+  "harness_level": "H2",
+  "last_checked_at": "2026-07-14",
+  "verified_at": "2026-07-14",
+  "expires_at": "2026-07-21",
+  "evidence": {
+    "source": "local-isolated-server-probe-and-official-beta-docs",
+    "command": "bash hooks/tests/opencode-v2-plugin.test.sh",
+    "result": "opencode2 0.0.0-next-15493; V2 plugin setup and tool hook registration verified; intent capture path verified in isolated HOME"
+  },
+  "capabilities": {
+    "repo_skills": "verified",
+    "plugin_packaging": "verified",
+    "tool_hooks": "verified",
+    "session_hooks": "unavailable",
+    "intent_capture": "verified",
+    "resume_hints": "unavailable",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "The V2 plugin API is beta and the package is pinned to the matching OpenCode2 nightly.",
+    "Run the smoke probe after every OpenCode2 upgrade.",
+    "The documented session hook is absent in next-15402 and event subscription during setup deadlocks activation, so session lifecycle and resume hints are disabled.",
+    "Do not promote OpenCode hooks to blocking gates without fresh probe evidence."
+  ]
+}

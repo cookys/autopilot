@@ -1,7 +1,7 @@
 # Context-Budget Hook (A2) + Orchestrator-Edit Gate (A1)
 
 **Date**: 2026-07-14
-**Status**: ✅ Shipped in v2.32.26 — merged as 17ec44b (3-family hetero panel: Gemini 3.5 Flash High + GPT-OSS 120B + MiniMax-M3, all FIX-THEN-SHIP, findings folded in; SPIKE-1 resolved empirically)
+**Status**: ✅ Shipped in v2.32.27 — merged as 17ec44b (3-family hetero panel: Gemini 3.5 Flash High + GPT-OSS 120B + MiniMax-M3, all FIX-THEN-SHIP, findings folded in; SPIKE-1 resolved empirically)
 **Origin**: 6-researcher transcript study of TWGameProject + PEACE (2026-07-14): 96%+ of all tokens are cache_read on ever-growing depth-0 sessions (max 1.12B tokens / 94.7h single session); orchestration:implementation ≈ 30:1; nominal /l5 depth-0 did 48–54 inline Edits. The economic model of /l4-/l6 leaks at depth-0; these two hooks are the forcing functions the "pure orchestration" prose never had.
 
 ## Principle

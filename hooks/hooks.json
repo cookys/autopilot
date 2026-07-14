@@ -96,7 +96,7 @@
         ]
       },
       {
-        "//": "OPT-IN (default-off): orchestrator-edit-gate — in /l4-/l6 sessions (session-mode marker) depth-0 inline product edits are warned/denied; subagents pass (payload agent_id). A1 of the depth-0 economics plan (v2.32.26).",
+        "//": "OPT-IN (default-off): orchestrator-edit-gate — in /l4-/l6 sessions (session-mode marker) depth-0 inline product edits are warned/denied; subagents pass (payload agent_id). A1 of the depth-0 economics plan (v2.32.27).",
         "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * orchestrator-edit-gate — PreToolUse Edit|Write|NotebookEdit (opt-in,
- * default-off; v2.32.26)
+ * default-off; v2.32.27)
  *
  * A1 of the depth-0 economics plan: in /l4 /l5 /l6 sessions (marker set by
  * scripts/session-mode.js at level entry), depth-0 editing product files is a

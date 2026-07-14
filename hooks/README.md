@@ -112,9 +112,9 @@ hooks/
   mcp-health.js            # Tier B (opt-in)
   dispatch-model-guard.js  # Tier B (opt-in) — ask on guarded expensive engine / omitted model
   version-drift-check.js   # Tier A (default-on, silent outside dev clone) — behind-upstream advisory (SessionStart)
-  context-budget.js        # Tier B (opt-in) — real context-size signal, T1/T2 session-split advisories (v2.32.26)
+  context-budget.js        # Tier B (opt-in) — real context-size signal, T1/T2 session-split advisories (v2.32.27)
   context-budget-lib.js    # pure backward usage scan + tier decision (lib, not a hook)
-  orchestrator-edit-gate.js     # Tier B (opt-in) — depth-0 inline-edit gate for /l4-/l6 (v2.32.26)
+  orchestrator-edit-gate.js     # Tier B (opt-in) — depth-0 inline-edit gate for /l4-/l6 (v2.32.27)
   orchestrator-edit-gate-lib.js # pure gate decision (lib, not a hook)
 ```
 

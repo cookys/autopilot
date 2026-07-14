@@ -35,11 +35,11 @@ Panel: 3-family hetero review (Gemini 3.5 Flash High / GPT-OSS 120B / MiniMax-M3
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| P0 | scripts/session-mode.js + tests | pending |
-| P1 | A2 context-budget lib/wrapper/tests | pending |
-| P2 | A1 orchestrator-edit-gate lib/wrapper/tests | pending |
-| P3 | Wiring (hooks.json, manifest, README, prose write-points) | pending |
-| P4 | Docs/release (CHANGELOG, 2.32.26, gates, BACKLOG) | pending |
+| P0 | scripts/session-mode.js + tests | ✅ aaf25c2 (19/19, red-green) |
+| P1 | A2 context-budget lib/wrapper/tests | ✅ 96d91b2 (16/16, red-green) |
+| P2 | A1 orchestrator-edit-gate lib/wrapper/tests | ✅ a61de8b (20/20, red-green) |
+| P3 | Wiring (hooks.json, manifest, README, prose write-points) | ✅ 1e404a2 (fail-open 22/22, validate 28/28) |
+| P4 | Docs/release (CHANGELOG, 2.32.26, gates, BACKLOG) | ✅ (this commit) |
 
 ## Decision Log
 

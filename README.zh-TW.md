@@ -10,10 +10,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.32.25-E8A838?style=flat-square" alt="v2.32.25">
+  <img src="https://img.shields.io/badge/version-2.32.26-E8A838?style=flat-square" alt="v2.32.26">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-23-6B8E6B?style=flat-square" alt="23 Hooks">
+  <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>

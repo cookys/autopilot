@@ -26,6 +26,24 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### context-budget T3 deny tier（handoff 結構檢查 + 新 dispatch 拒絕 + anti-spiral）
+- **Trigger**: ≥3 次真實 /l4-/l6 run 在 warn 模式下累積校準資料後（含至少 1 次合成對抗 session — warn 模式樣本是 false-positive 的下界不是量測，MiniMax panel finding）。
+- **Context**: v2.32.26 出貨 T1/T2 advisory；T3（PreToolUse 擋 Edit/Write + 拒絕 NEW dispatch 直到合規 handoff 落地）刻意延後。設計要點已定於 plan：handoff 檢查用 content-hash + 結構段落（非 mtime，touch 可偽造）、handoff allowlist 收窄到 docs/projects/** + ~/.autopilot/handoffs/、3 次 deny 未從 ⇒ 降級 warn + 大聲放棄（gate 跟模型吵架會燒掉它要省的 token，Gemini finding）、擋新 dispatch 用自家 script 名 leading-command 枚舉（非 write-regex — 三家 panel 一致否決 write-regex）。
+- **Effort**: M。
+- **Source**: `docs/plans/2026-07-14-context-budget-orchestrator-gate.md` § Out of scope；3-family panel review 2026-07-14。
+
+### E1 dispatch-manifest 合規 merge gate（/lN 宣稱 ⇒ 機器可驗）
+- **Trigger**: 下次發現 depth-0 繞過 dispatch 路徑手做實作（如 2026-07-14 研究中 92d8784a 用裸 codex exec 繞 dispatch-hetero、user 質問才自白），或 orchestrator-edit-gate 進 block 模式時（Bash 寫檔是它宣告的盲區，E1 是 backstop）。
+- **Context**: merge 時驗「product commits 是否可溯源到 dispatch run manifests」（`${TMPDIR}/autopilot-dispatch-runs/*.manifest.json` 已存在）+ depth-0 Edit 計數；不符 ⇒ 擋 merge（qc-gate 同級）。A1 是事前預防（honest-agent 級），E1 是事後偵測 — 兩者合起來才閉環。
+- **Effort**: M。
+- **Source**: 2026-07-14 transcript 研究 S3（協議合規無 gate、adjudicate-findings 零呼叫）；plan § Declared limits。
+
+### B1/B2 review 路徑效率（diff-only 強制 + delta re-review）
+- **Trigger**: 下次任何 /l5 /l6 run 的 review dispatch 出現 repo 爬讀（review session token 中位數異常）或 marathon loop（>5 輪）時；或 Board 排程。
+- **Context**: 2026-07-14 研究：45% 的 codex review session 爬整個 repo（中位 698K token vs diff-only 27K，26 倍，佔全部 codex token 27%）；r23 案例每輪全量重餵 spec（160-230K 字元 × 60+ 次審查，零 delta）。對策草案：dispatch-review 各 runner 禁探索（codex --sandbox read-only 已有，加 no-tools 級收緊 + 違規 fail-closed）；round 2+ 只餵「上輪 findings + delta diff」（`diff-since-last-round.sh` 已存在，缺 reviewer-safe 輸出格式 — 現有輸出是 dispatcher-only，直接餵會洩 round-cycle meta-signal）。效益量級：codex token -27%、marathon 每輪成本降一個數量級。
+- **Effort**: L（需獨立 plan + panel review）。
+- **Source**: 2026-07-14 評估報告 §Q2；quant-codex-cookys-report。
+
 ### ✅ SHIPPED (2026-07-11, v2.32.21) — Dispatch observability Stage 2 — 雙工溝通：`--runner pi`（RPC）整合
 - **Resolution**: /l6 depth-1 foreman 出貨。`dispatch-hetero.sh --runner pi`（EXPLICIT-only）＋ NEW supervisor `scripts/lib/pi-rpc-run.js`（RPC stdio、EDIT-ONLY＋worktree＋wrapper-commit＋artifact 驗證軌**原樣沿用**、native JSONL 事件流 tee 進 `$LOG`）＋ dispatch-status.js declared `pi-rpc` 格式（per-message usage 聚合、cost 物件隔離）＋ manifest/final JSON additive `duplex`。三前置殘餘全 live 驗（skills-in-RPC ✅ 載入、無 tool 邊界 steer=**排隊+邊界遞送**非硬打斷、12-tool ~164s **STABLE**——見 spike doc）。**stall 維持 report-only**（探詢一次不砍——「無回應才砍」的自動砍除是 Stage 3 policy，本階段不做）。depth-0 qc 抓到委派 mock 掩蓋的兩個 defect：pi RPC 常駐 server agent_end 後不自退→等 exit 死鎖（改主動 EOF→SIGTERM→SIGKILL、以觀測 agent_end 判成功）；UTF-8 chunk-split 壞控制行（改 StringDecoder）。Gemini 去相關對抗審再補 11 case（拒其一 Critical「spoofed agent_end」——worker 無法注入頂層裸行）。驗收：36 assertions＋全 dispatch 套件零回歸＋真 MiniMax-M3 e2e committed（usage 3612 tok）。專案：[`spike-pi-rpc.md`](projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md)。**Stage 3（自適應調度 policy：steer 探詢→無回應才砍、re-dispatch）留下方後續**。原 Trigger 保留供參：
 - **Trigger**: ~~下次一條 hetero dispatch 因 stall／走偏而「只能等 timeout 或砍掉重跑」造成實際損失時~~（已完成）；或 Board 核可 Stage 2 動工。

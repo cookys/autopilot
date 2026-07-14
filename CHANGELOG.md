@@ -24,6 +24,28 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.26 — depth-0 economics: context-budget + orchestrator-edit-gate hooks
+
+**Headline**: The 2026-07-14 six-researcher transcript study of two consuming projects (TWGameProject + PEACE, ~22B tokens of Claude transcripts + ~88B of codex sessions) found 96%+ of all tokens were cache_read on ever-growing depth-0 sessions (worst case 1.12B tokens / 94.7h in ONE session; orchestration:implementation ≈ 30:1), and nominal /l5 sessions doing 48–54 inline depth-0 Edits — "pure orchestration" existed only in prose. Two new hooks make the depth-0 economics mechanical: **context-budget** reads the REAL context size (last assistant `usage` row, backward transcript scan 64KB→5MB) and advises session splitting at T1 (100k, user-visible nudge) / T2 (150k, exit-2 escalated advisory directing the model to write a handoff and the user to /clear); **orchestrator-edit-gate** arms in /l4-/l6 sessions (new `scripts/session-mode.js` marker at level entry) and warns (default) or denies (`block`) depth-0 product-file edits — subagents/foremen pass via the empirically-probed hook-payload identity (`agent_id` presence, CC 2.1.208, SPIKE-verified). Design adversarially reviewed by a 3-family hetero panel (Gemini 3.5 Flash High / GPT-OSS 120B / MiniMax-M3 — all FIX-THEN-SHIP, findings folded: WHERE-not-WHO worktree backdoor closed, >64KB-line scan brittleness fixed, narrow allowlist, no pretend enforcement at T2, T3 deny tier deferred pending warn-mode calibration).
+
+**opt-in**: both new hooks ship default-OFF, self-gated via `_shared/opt-in.js` — enable `context-budget` and `orchestrator-edit-gate` in `~/.autopilot/config.json` `{"hooks":{"context-budget":true,"orchestrator-edit-gate":true}}` (or `AUTOPILOT_HOOK_CONTEXT_BUDGET=1` / `AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE=1`). Hook tally 23 → 25 (10 default-on / 15 opt-in / 0 disabled).
+
+### Added
+- `hooks/context-budget.js` + `context-budget-lib.js` (+ `node --test` suite, 16 tests): real context-size signal, T1/T2 advisory tiers, corrupt-state reset-and-continue, fd-0 stdin (ENXIO #6305).
+- `hooks/orchestrator-edit-gate.js` + `orchestrator-edit-gate-lib.js` (+ suite, 20 tests): depth-0 inline-edit gate; identity = payload `agent_id` (SPIKE-1 canary fixtures); territory = realpath containment (deepest-existing-ancestor, symlink/new-file safe) + `.autopilot-worktree` detection; allowlist docs/projects, docs/plans, .claude, .autopilot; modes warn/block/off.
+- `scripts/session-mode.js` (+ black-box test, 19 assertions): session-keyed orchestrator-mode marker (set/clear/status, 24h TTL, atomic write, host-stable `~/.autopilot/session-mode/`); `set` overwrites so `--solo`//l3 re-entry neutralizes a stale /l5 marker.
+
+### Changed
+- /l4 /l5 /l6 SKILL.md Hard rules: run `session-mode.js set --level lN` at entry; finish-flow L-5.6 clears the marker; ceo-agent level-front-door gains § "Session-mode marker + depth-0 context discipline" (T1-fired ⇒ phase-boundary handoff MUST; dispatch outputs stay in files).
+- hooks/README: tally 25, Tier-B rows + architecture entries for both hooks.
+
+### Hook-order semantics reminder
+- Claude Code hooks run **in parallel / non-deterministic order across different matcher blocks**. Only **intra-matcher** sequencing within a single matcher block is guaranteed; `context-budget` (PostToolUse `.*`) and `orchestrator-edit-gate` (PreToolUse `Edit|Write|NotebookEdit`) claim no cross-matcher ordering.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.32.25` + `rm -rf ~/.autopilot/session-mode/ ~/.autopilot/context-budget/`
+
 ## v2.32.25 — family-conflict fallback: in-loop review revives via the cross-family scorecard ladder
 
 **Headline**: The 2026-07-13 /l5 e2e exposed that the engine's in-loop decorrelated review was STRUCTURALLY DEAD for the shipped default roster — implementer gpt-5.3-codex-spark and reviewer gpt-5.5 both map to the openai family, so `reviewDiff` hard-blocked at `reviewer_family` on every run and convergence rode verify-first alone. New contract field `on_family_conflict` (default `fallback`): on a same-family conflict the engine substitutes the first CROSS-FAMILY QUALIFIED row from the scorecard `fallback_ladder` (e.g. claude-haiku via claude-native, known-bad 12/12) so the in-loop review actually runs. Design adversarially reviewed by gpt-5.5 xhigh (REVISE applied in full): invocation-tuple identity, runner allowlist (`codex|agy|grok|claude-native`; `auto` and endpoint-backed runners excluded until rows carry endpoint provenance), codex rows require a calibrated row `effort`, ladder provenance (`fallback_ladder_implementer_family`) must match the ACTUAL implementer family (stale pre-resolved rosters never select), and every guard failure blocks exactly as before. Also closes the BACKLOG'd qualification gap: a tier-substituted reviewer must now appear in the qualified ladder as a tuple or it reverts to the incumbent (`tier_reviewer_unqualified` ledger entry).

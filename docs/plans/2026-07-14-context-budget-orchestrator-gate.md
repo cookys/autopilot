@@ -60,7 +60,7 @@ Deny message: dispatch instead (dispatch-hetero / Agent tool); escape = `--solo`
 
 | # | Deliverable |
 |---|---|
-| P0 | `scripts/session-mode.js` (set/clear/status, TTL, flock) + `node --test` unit tests |
+| P0 | `scripts/session-mode.js` (set/clear/status, TTL, atomic tmp+rename) + black-box CLI tests |
 | P1 | A2: `context-budget-lib.js` (pure: backward-scan parser, tier decision, throttle) + `context-budget.js` wrapper + tests (incl. >64KB-line fixture, corrupt-state reset, SPIKE-1 canary) |
 | P2 | A1: `orchestrator-edit-gate-lib.js` (pure: marker validity, identity, containment, allowlist) + `orchestrator-edit-gate.js` wrapper + tests (foreman-passes case, WHERE-not-WHO case, stale-marker case) |
 | P3 | Wiring: hooks.json (PostToolUse `*` + PreToolUse Edit|Write|NotebookEdit), opt-in-manifest (+2), hooks/README tier table, marker write-points in l4/l5/l6/ceo-agent prose + finish-flow clear |

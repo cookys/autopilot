@@ -31,7 +31,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 **opt-in**: both new hooks ship default-OFF, self-gated via `_shared/opt-in.js` — enable `context-budget` and `orchestrator-edit-gate` in `~/.autopilot/config.json` `{"hooks":{"context-budget":true,"orchestrator-edit-gate":true}}` (or `AUTOPILOT_HOOK_CONTEXT_BUDGET=1` / `AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE=1`). Hook tally 23 → 25 (10 default-on / 15 opt-in / 0 disabled).
 
 ### Added
-- `hooks/context-budget.js` + `context-budget-lib.js` (+ `node --test` suite, 16 tests): real context-size signal, T1/T2 advisory tiers, corrupt-state reset-and-continue, fd-0 stdin (ENXIO #6305).
+- `hooks/context-budget.js` + `context-budget-lib.js` (+ `node --test` suite, 17 tests): real context-size signal, T1/T2 advisory tiers, corrupt-state reset-and-continue, fd-0 stdin (ENXIO #6305).
 - `hooks/orchestrator-edit-gate.js` + `orchestrator-edit-gate-lib.js` (+ suite, 20 tests): depth-0 inline-edit gate; identity = payload `agent_id` (SPIKE-1 canary fixtures); territory = realpath containment (deepest-existing-ancestor, symlink/new-file safe) + `.autopilot-worktree` detection; allowlist docs/projects, docs/plans, .claude, .autopilot; modes warn/block/off.
 - `scripts/session-mode.js` (+ black-box test, 19 assertions): session-keyed orchestrator-mode marker (set/clear/status, 24h TTL, atomic write, host-stable `~/.autopilot/session-mode/`); `set` overwrites so `--solo`//l3 re-entry neutralizes a stale /l5 marker.
 

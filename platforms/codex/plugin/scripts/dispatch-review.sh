@@ -32,6 +32,7 @@
 # USAGE:
 #   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
+#       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
@@ -96,7 +97,7 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-review-*' || true
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
 # DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
 # heartbeats to the ledger and lands its JSON result atomically (lib/dispatch-detach.sh).
@@ -107,6 +108,7 @@ while [[ $# -gt 0 ]]; do
     --model)     MODEL="${2:-}"; shift 2 ;;
     --diff-file) DIFF_FILE="${2:-}"; shift 2 ;;
     --spec-file) SPEC_FILE="${2:-}"; shift 2 ;;
+    --pack-file) PACK_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
@@ -115,7 +117,7 @@ while [[ $# -gt 0 ]]; do
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
-    -h|--help)   sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -128,6 +130,13 @@ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native) ;; 
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
   [[ -f "$SPEC_FILE" && -r "$SPEC_FILE" ]] || die_precondition "--spec-file must be a readable regular file"
+fi
+# --pack-file (ADDITIVE): a trusted, dispatcher-authored methodology pack prepended to the
+# review prompt inside the nonce protocol (the output-format instructions still come first
+# and are reinforced after the diff, so the pack cannot displace the wrapped-block protocol).
+# Absent flag ⇒ byte-identical prompt. Same trust posture as --spec-file (dispatcher-authored).
+if [[ -n "$PACK_FILE" ]]; then
+  [[ -f "$PACK_FILE" && -r "$PACK_FILE" ]] || die_precondition "--pack-file must be a readable regular file"
 fi
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
@@ -425,6 +434,17 @@ EOF
 
 Do NOT echo the diff or instructions. Output ONLY the wrapped block, nothing after.
 EOF
+  if [[ -n "$PACK_FILE" ]]; then
+    cat <<'EOF'
+
+Review methodology (DISPATCHER-AUTHORED, trusted — apply when reviewing; do NOT echo it):
+EOF
+    cat "$PACK_FILE"
+    cat <<'EOF'
+
+--- end methodology ---
+EOF
+  fi
 if [[ -n "$SPEC_FILE" ]]; then
   cat <<'EOF'
 

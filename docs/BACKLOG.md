@@ -637,3 +637,8 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Context**: 2026-07-13 /tmp usrquota 撐爆事故（cookys 名下 ~21.3 GiB → EDQUOT → 整台機器 Claude Code Bash 假死；`df -h` 全域量誤導，probe 法=直接寫檔看 "disk quota exceeded"）。四個修法中 (a) 各 dispatch 腳本啟動 prune 自家過期 log/scratch（`scripts/lib/prune-tmp-residue.sh`）、(b) manifest reaper（`dispatch-status.js --reap`）、(c) hooks/tests 全域 TMPDIR 重導＋trap 鏈修復 —— **均已於 v2.32.22 出貨**。剩 (d)：`swe-calibrate-*`（44 個 ×~110M）這類大型校準 clone 仍寫 `${TMPDIR}`，單體大、非逐日累積，mtime prune 不合適；候選 = 改預設寫 `~/.autopilot/scratch/`（非配額路徑）+ 完跑即清。附帶教訓（已入 memory）：清理腳本的排除清單必須套用到**所有** phase——dirty-skip 的 worktree 曾被後續 glob 撈走刪掉。
 - **Effort**: S。
 - **Source**: 2026-07-13 session 實地診斷＋v2.32.22 fix/tmp-residue-retention。
+
+## commit-secret-scan hook 掃 deletion 行造成 false positive 死路
+- **Context**: 2026-07-15 TWGameProject 落地時，staged diff 的 `-` 行含 HEAD 既有、`.gitleaks.toml` 已 allowlist 的 AWS 文件範例金鑰（AKIA…EXAMPLE），hook 掃 `git diff --cached` 全文（含 deletion 行）→ 任何修改/移除該行的 commit 都被硬擋；照此邏輯「從 repo 移除真洩漏密鑰」的 commit 也會被擋。當次以 hook 自身的 `--amend --no-edit` 豁免分兩步落地。
+- **Fix 方向**: `hooks/commit-secret-scan.js` 只掃新增行（`^+` 且非 `+++`），並考慮讀取 repo `.gitleaks.toml` allowlist。
+- **Trigger**: 下次碰 hooks/_shared/secret-patterns.js 或有人再撞此 FP。

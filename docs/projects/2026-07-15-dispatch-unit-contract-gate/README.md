@@ -1,6 +1,6 @@
 # Dispatch unit contract gate
 
-> Status: IN PROGRESS — C1 contract freeze
+> Status: BLOCKED — C1 independent oracle did not produce a valid RED artifact
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
@@ -86,7 +86,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | in progress — contract freeze | v2.32.35 pushed/reloaded; branch + l6 marker active | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | blocked — verification authoring | Contract/checklist frozen; GLM returned 529 twice; AGY fallback breached containment once and its corrected candidate infrastructure-failed RED | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -100,6 +100,29 @@ The repository/session prerequisites now pass: v2.32.35 is pushed, installed, re
 l6 marker was cleared, and this branch is based on the pushed remote SHA. C1 runner dispatch remains
 NO-GO until its bounded contract freezes exact mirrors, RED command, acceptance, live roster tuple,
 and budgets. Model/quota selection must come from live readiness, not conversation memory.
+
+## C1 bootstrap attempt ledger
+
+- Setup commit: `3be3818`; consuming checkout tree stayed/restored to
+  `7c1133f93d271a31a54eede9ec1ce7ea872165da` throughout author recovery.
+- Frozen external contract: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/C1-bootstrap.contract.json`,
+  SHA-256 `1b6d6c46945b2df86554f04cb545e584d10ad8da81e6df2ee00bbabe401cb5e1`.
+  It authorized exactly three canonical outputs plus two generator-only Codex mirrors, five files,
+  1600 diff lines, 300 seconds, one implementation attempt, and six argv-only acceptance checks.
+- Live readiness: Spark's direct read-only scratch probe passed and capability event 43 records
+  `available/high`; two GLM endpoint tests returned `outcome=ok`, but both strict-roster author calls
+  ended in server-side 529 overload with no artifact and no checkout mutation.
+- Recorded AGY fallback attempt 1 returned a syntactic candidate but mutated the consuming checkout;
+  quarantined SHA-256 `ada044001c60b600c4e35c9b7eb4f18c18262dd07ccd2598a94575dcc9774ee8`.
+  It was rejected for `containment_breach` and an unavailable `sha256sum` assumption.
+- Corrected AGY recovery removed all consuming-repo paths and did preserve containment. Legacy rail
+  status was `authored`, but raw output contained prose/PTY chrome; deterministic normalization
+  produced candidate SHA-256 `4807ce54bba22754edeacf4e29ebf811bde2ec5075c072bb58951fdf9ac4c270`.
+  Isolated base+oracle RED exited 1 but then aborted at `SIDE_SHA: unbound variable`, so this is an
+  infrastructure-red, not proof of product behavior. It is quarantined only.
+- No product or accepted verification code was written. C1 remains NO-GO. A later session must issue
+  a new contract/hash from its then-current immutable HEAD; this contract cannot be reused after the
+  blocker documentation commit advances the branch.
 
 ## Dispatch policy
 

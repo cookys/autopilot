@@ -92,6 +92,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+SELECTION_SOURCE="explicit_cli"
+if [[ "$STRICT_ROSTER" -eq 1 ]]; then
+  SELECTION_SOURCE="strict_roster"
+fi
+SELECTION_PATH=""
+SELECTION_PATH_RESOLVED=0
+VERIFICATION_AUTHOR_ENGINE=""
+VERIFICATION_AUTHOR_RUNNER=""
+VERIFICATION_AUTHOR_EFFORT=""
+VERIFICATION_AUTHOR_ENDPOINT=""
+VERIFICATION_AUTHOR_FAMILY=""
+
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
 
 read_review_loop_field() {
@@ -133,17 +145,54 @@ process.exit(4);
 ' "$key"
 }
 
+emit_verification_author() {
+  if [[ "$SELECTION_PATH_RESOLVED" -ne 1 ]]; then
+    printf 'null'
+    return
+  fi
+
+  printf '{ "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": "%s", "family": "%s" }' \
+    "$(json_escape "$VERIFICATION_AUTHOR_ENGINE")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_RUNNER")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_EFFORT")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_ENDPOINT")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_FAMILY")"
+}
+
+emit_result() {
+  local status="$1"
+  local raw_log="$2"
+  local error_message="$3"
+  local exit_code="$4"
+
+  local raw_log_json="null"
+  if [[ "$raw_log" != "null" ]]; then
+    raw_log_json="\"$(json_escape "$raw_log")\""
+  fi
+
+  local error_json="null"
+  if [[ "$error_message" != "null" ]]; then
+    error_json="\"$(json_escape "$error_message")\""
+  fi
+
+  local selection_path_json="null"
+  if [[ "$SELECTION_PATH_RESOLVED" -eq 1 ]]; then
+    selection_path_json="\"$(json_escape "$SELECTION_PATH")\""
+  fi
+
+  printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s }\n' \
+    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
+    "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" "$(emit_verification_author)"
+  exit "$exit_code"
+}
+
 die_precondition() {
-  printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "raw_log": null, "error": "%s" }\n' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$1")"
-  exit 2
+  emit_result "precondition_failed" "null" "$1" "2"
 }
 
 die_runner_failed() {
   local -r runner_exit_code="$1"
-  printf '{ "runner": "%s", "model": "%s", "status": "runner_failed", "raw_log": "%s", "error": "runner exited %s" }\n' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$runner_exit_code")"
-  exit 3
+  emit_result "runner_failed" "$RAW_LOG" "runner exited $runner_exit_code" 3
 }
 
 if [[ "$STRICT_ROSTER" -eq 1 ]]; then
@@ -195,6 +244,13 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   MODEL="$verification_author_engine"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster model"
   EFFORT="$verification_author_effort"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster effort"
   ENDPOINT="$verification_author_endpoint"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster endpoint"
+  SELECTION_PATH="$REVIEW_LOOP_CONFIG"
+  SELECTION_PATH_RESOLVED=1
+  VERIFICATION_AUTHOR_ENGINE="$verification_author_engine"
+  VERIFICATION_AUTHOR_RUNNER="$verification_author_runner"
+  VERIFICATION_AUTHOR_EFFORT="$verification_author_effort"
+  VERIFICATION_AUTHOR_ENDPOINT="$verification_author_endpoint"
+  VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
@@ -333,11 +389,7 @@ fi
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
   | grep -c '[^[:space:]]' > /dev/null; then
-  printf '{ "runner": "%s", "model": "%s", "status": "empty_output", "raw_log": "%s", "error": "no non-whitespace output from runner — fail-closed" }\n' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
-  exit 1
+  emit_result "empty_output" "$RAW_LOG" "no non-whitespace output from runner — fail-closed" 1
 fi
 
-printf '{ "runner": "%s", "model": "%s", "status": "authored", "raw_log": "%s", "error": null }\n' \
-  "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
-exit 0
+emit_result "authored" "$RAW_LOG" "null" 0

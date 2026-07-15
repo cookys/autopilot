@@ -5,8 +5,9 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/develop`; the Opus recovery started from `4f5dcb69eb8af0979cf6f219d2aa83812945514e`
-  (`docs(project): record Gemini author rejection`). Product tree is clean; no accepted product/test code。
+  `origin/feat/dispatch-unit-contract-gate`; the fresh MiniMax recovery started from
+  `d0012624c00263d3e0103f06158c05f340c6f3a1` (`docs(project): record AGY Opus author timeout`).
+  Product tree is clean; no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
   the L-1 project-ledger commit plus this blocker snapshot when committed.
 - l6 marker is active. Spark live readiness passed and capability event 43 is `available/high`.
@@ -31,6 +32,10 @@
   The only author call preserved byte-for-byte checkout containment but AGY timed out waiting for the
   response after five minutes. Its 218-byte raw log contains no authored Bash. This is
   `REJECT/no-artifact`, not quota/429; no Spark dispatch ran.
+- User then freshly authorized `MiniMax-M3`. The endpoint probe passed, strict roster resolved
+  `cc-shim/minimax` versus Spark `openai`, and a new current-HEAD contract plus focused prompt were
+  frozen. The single call preserved complete containment but returned only one newline byte and
+  `status=empty_output`. This is `REJECT/empty-output`, not timeout/quota; no Spark dispatch ran.
 
 ## 已決事項(不重議)
 
@@ -46,6 +51,9 @@
 - The later AGY `Claude Opus 4.6 (Thinking)` authorization was exercised once through strict roster.
   It produced only a timeout log and no artifact. Do not retry its recorded prompt or interpret the
   runner exit as a quota result.
+- The fresh MiniMax authorization was exercised once with a new current-HEAD contract and shorter
+  prompt. It returned empty output despite a passing endpoint probe. Do not replay either recorded
+  MiniMax prompt or count endpoint-probe success as full-author readiness.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -114,3 +122,9 @@
   `Error: timeout waiting for response`. Before/after containment digest is identical:
   1,459 files, tree-content SHA-256 `f0a37af2dd75828cf1446f14e2b0232483688597619d502b5bae60c9917a03b8`,
   config-only diff SHA-256 `3799aade09cf60495a6c2307e94d8af2021025239a8b231bb40dfa1428a095b0`.
+- Fresh MiniMax raw log is `/tmp/dispatch-author-log-nWuKex`, exactly one newline byte, SHA-256
+  `01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b`. The rail selected
+  `MiniMax-M3/cc-shim/high/endpoint minimax/family minimax` and returned `empty_output`; endpoint
+  preflight had returned `ok` in 1,401 ms. Before/after containment is identical: 1,459 files,
+  tree-content SHA-256 `5ad3c041acf0e71c1b9d267d183b9efcb86d38b52a3dd14060fd1b476ed5d5fc`, config-only diff
+  SHA-256 `7781453cfabcd958911bd46ec4836e11622e8e498486a7205fd4a4ddf105bcda`.

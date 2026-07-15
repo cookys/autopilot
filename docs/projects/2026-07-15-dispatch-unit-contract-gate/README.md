@@ -66,6 +66,7 @@ from repository truth.
 | “還有誰可以 review ? 用 gpt-5.5 or minimax 3” | C1 recovery evidence: MiniMax author attempt plus gpt-5.5 artifact and ledger reviews |
 | “用 agy 的 gemini 3.1 pro 試試?” | C1 AGY Gemini 3.1 Pro High author attempt, isolated RED/fidelity gate, and one review-driven repair |
 | “agy 有 opus 4.6 將就用?” | One strict-roster AGY Claude Opus 4.6 Thinking author attempt, containment proof, and no-artifact timeout classification |
+| “換 minimax 3?” | Fresh-current-HEAD MiniMax-M3 strict author attempt with a focused prompt, containment proof, and empty-output classification |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -89,7 +90,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | blocked — verification authoring | GLM 529; MiniMax and AGY Opus 4.6 timeouts; AGY candidates rejected for containment, infrastructure, or semantic fixture failures; Gemini 3.1 Pro two-round recovery also rejected | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | blocked — verification authoring | GLM 529; MiniMax timeout then empty output; AGY Opus 4.6 timeout; AGY candidates rejected for containment, infrastructure, or semantic fixture failures; Gemini 3.1 Pro two-round recovery also rejected | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -159,6 +160,14 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   is 218 bytes, SHA-256 `ec5fdb3c0f1c8c8c1d9cc3f080f7e4e698b3316cf805b0c4d25d12be60e92b39`, and contains only PTY
   chrome plus `Error: timeout waiting for response`; no Bash artifact exists. Classified
   `REJECT/no-artifact`, not quota/429 and not eligible for normalization or repair.
+- The user then freshly authorized `MiniMax-M3`. The `minimax` endpoint probe returned `ok` in
+  1,401 ms, and an isolated strict roster resolved `cc-shim/minimax` against Spark `openai`.
+  Depth-0 froze `C1-bootstrap-minimax3-r2.contract.json` at base `d0012624` (SHA-256
+  `bef9b46fe4e61c356be5b01ce9d1b6cad18cfd5c76167eb73242f9cb0b2cbb43`) plus a focused 6,679-byte
+  prompt (SHA-256 `8d0318ffc031a92de99ce595a424199efe07e57f71e68be444b6cabf690f3a0c`). The single call preserved
+  the complete checkout snapshot but returned `empty_output`: raw log `/tmp/dispatch-author-log-nWuKex`
+  is exactly one newline byte, SHA-256 `01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b`.
+  Classified `REJECT/empty-output`, not timeout, quota, or an oracle RED; no Spark dispatch ran.
 - No product or accepted verification code was written. C1 remains NO-GO. A later session must issue
   a new contract/hash from its then-current immutable HEAD; this contract cannot be reused after the
   blocker documentation commit advances the branch.

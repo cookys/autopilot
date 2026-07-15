@@ -3,12 +3,12 @@
 > 本 handoff 由 context-budget T2（150k）逼出。CEO 模式進行中（Board 指令：plan → hetero loop review → 實作修好）。
 
 ## 目標
-把 codex-worktree audit §5 的 autopilot 側修法做完：session-end 整合候選 gate + `scripts/reap-dispatch-branches.sh`（preserve-first）+ 中間輪收斂 + orphan-log 小修 — plan 已寫好（DRAFT），**下一步是 P1 hetero loop review 收斂**，然後實作。
+把 codex-worktree audit §5 的 autopilot 側修法做完：session-end 整合候選 gate + `scripts/reap-dispatch-branches.sh`（preserve-first）+ 中間輪收斂 + orphan-log 小修 — plan 已完成 hetero review 並標記 CONVERGED，**下一步是 P2 L6 verification authoring + 實作**。
 
 ## 現況
-- Branch `feature/dispatch-branch-lifecycle` @ `57b92e9`（tree 乾淨；base = develop `0cfb021`）。
+- Branch `feature/dispatch-branch-lifecycle` @ `72b32bea`，P1 tracking changes staged；`origin/develop` 另有 1 個新 handoff commit，P1 commit 後同步。
 - DONE：CEO 啟動參數（just-results / Hold / no-go=TWGameProject 不動）；L-1.5 scope audit（見專案 README 表格）；專案 scaffold（README + INDEX 進行中 row + tree shadow init）；**P0 plan 完成** → `docs/plans/2026-07-14-dispatch-branch-lifecycle.md`（DRAFT，含完整 §2.5 Global Constraints / 4 Phases / inversion 表）。
-- Task list（若 /clear 後仍在）：#16 L-1.5 ✅、#18 P0 ✅、#19 P1（下一個）、#20 P2、#21 P3、#22 L-5 finish-flow、#17 L-1.6 進行中。
+- Phase state：L-1.5 / L-1.6 / P0 / P1 ✅；P2 → P3 → L-5 待執行。
 - develop 側已完成（前段工作）：BACKLOG 兩新條目 + E1 證據 + 舊 docs/HANDOFF.md 消耗刪除（`0cfb021`）。
 
 ## 已決事項(不重議)
@@ -18,17 +18,17 @@
 - 引擎現實：codex quota 死至 2026-07-20、grok 402 ⇒ review 面 = agy（`--model "Gemini 3.5 Flash (High)"`）+ cc-shim `--endpoint glm|minimax`（endpoints 已驗活：`node bin/autopilot.js endpoints list` → glm/minimax 都 ✓）。
 
 ## 下一步
-1. **P1 hetero loop review**：先 `scripts/dispatch-review.sh --help` 確認 flags（勿憑記憶），把 plan 全文當 diff-file 餵 2 家族（agy Gemini + cc-shim glm 或 minimax）做設計審；prompt 過 `scripts/check-dispatch-suppression.sh`；findings → 改 plan → 再審，直到無未決 Critical/Major；每輪記入 plan 的 Review log 節。
-2. P2 實作（TDD，Phase A→B→C→D 照 plan §4 的 acceptance 清單）；P3 對實作 diff 再跑 hetero review loop；L-5 invoke autopilot:finish-flow（merge develop 在 CEO DOA 內）。
+1. P1 已完成：5 external generations（Gemini + GLM），無未決 Critical/Major；詳見 plan Review log。
+2. **P2 下一步**：L6 strict-roster verification authoring，將 artifact 餵入 implementation brief，再做 TDD（Phase A→B→C→D 照 plan §4 acceptance 清單）；P3 對實作 diff 再跑 hetero review loop；L-5 invoke autopilot:finish-flow（merge develop 在 CEO DOA 內）。
 3. 收尾時 BACKLOG「Dispatch-branch lifecycle」條目標 shipped、本 HANDOFF.md 刪除。
 
 ## 驗證方式
-- plan 存在且為 DRAFT：`head -3 docs/plans/2026-07-14-dispatch-branch-lifecycle.md`。
-- checkpoint：`git log --oneline -2` 應含 `57b92e9`（P0）與 base `0cfb021`。
-- P1 完成的定義：plan Review log 有 ≥1 輪跨家族審查記錄且 Status 改為 CONVERGED。
+- plan 存在且為 CONVERGED：`head -3 docs/plans/2026-07-14-dispatch-branch-lifecycle.md`。
+- checkpoint：`git log --oneline -2` 應含 `72b32bea`（develop sync merge）與其前置 P0 history。
+- P1 完成：plan Review log 有跨家族審查記錄且 Status = CONVERGED。
 
 ## Read-order
-1. docs/plans/2026-07-14-dispatch-branch-lifecycle.md — 要被審的 plan 本體
+1. docs/plans/2026-07-14-dispatch-branch-lifecycle.md — 已收斂的 implementation spec
 2. docs/projects/2026-07-14-dispatch-branch-lifecycle/README.md — OKR/scope/phase 狀態
 3. /home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md — 事實依據（§5 修法、§1 殘骸清單）
 4. references/blind-dispatch.md — P1 dispatch prompt 紀律

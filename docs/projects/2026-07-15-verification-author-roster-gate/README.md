@@ -38,8 +38,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 1b.i JS/schema compatibility | complete on feature branch | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
 | Unit 1 aggregate review | complete | Final MiniMax-M3 + AGY `SHIP-AS-IS`; depth-0 full gate green at `05d0aad` |
-| Unit 2a strict CLI/authorization | in progress | RED: manual args, missing roster, absent tuple, same/unknown family; zero runner/log |
-| Unit 2b endpoint/valid dispatch | pending | RED: configured GLM tuple reaches fake runner; endpoint failure has no fallback |
+| Unit 2a strict CLI/authorization | complete | RED `c8ad68e` + amendments `6ae59b3`, `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 2b endpoint/valid dispatch | in progress | Next: independent RED for configured GLM tuple reaching the exact fake runner and endpoint failure with no fallback |
 | Unit 2c result provenance | pending | RED: strict vs legacy payload, selection path, secret hygiene |
 | Unit 3 session coupling | pending | RED oracle first |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
@@ -72,5 +72,14 @@ model qualification policy. Those remain in the separate follow-up plan.
 - The first Spark resolver-compatibility test run was killed at the 115-second outer limit after it
   authored a complete diff. A bounded retry replayed that exact transcript diff, completed in 94
   seconds as `40698b4`, and passed the full Unit 1 depth-0 gate.
+- Unit 2a was split again at the implementation boundary: `4290bb0` owns strict CLI/exact-config
+  preflight, while `ae22b67` owns the one-shot resolver JSON snapshot and tuple/family gates. Two
+  115-second Spark attempts left no commit and were rejected; bounded replay run
+  `hetero-1784090815-1847883-ec59` produced the accepted two-file commit.
+- Unit 2a depth-0 QC passed strict oracle 45, legacy author 65, verification-author resolver 31,
+  full resolver 227, schema parity, mirror sync, diff, and clean-tree checks. Initial reviewer
+  claims about Node `-e` argv, the `incomplete` diagnostic, and inherited override precedence were
+  disproved with executable reproductions. Final artifacts: MiniMax-M3
+  `dispatch-review-log-tkf1k8` and AGY `dispatch-review-log-yJ00fB`, both `SHIP-AS-IS`.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

@@ -113,8 +113,8 @@ the whole project as one authoring block.
 | 1b.i JS/schema compatibility | complete | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | 1b.ii configs/resolver compatibility | complete | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
 | 1 aggregate review | complete | Endpoint RED `55a1e55`; repairs through `05d0aad`; final MiniMax-M3 + AGY `SHIP-AS-IS`; full depth-0 gate green |
-| 2a strict CLI/authorization | in progress | Separate RED oracle; no endpoint/runner/provenance implementation yet |
-| 2b endpoint/valid dispatch | pending | Separate RED oracle after 2a green |
+| 2a strict CLI/authorization | complete | RED `c8ad68e` + `6ae59b3` + `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| 2b endpoint/valid dispatch | in progress | Independent RED oracle next; 2a frozen |
 | 2c result provenance | pending | Separate RED oracle after 2b green |
 | 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |
 | 4 docs/payload | pending | Canonical l6 command, payload sync, full QC |

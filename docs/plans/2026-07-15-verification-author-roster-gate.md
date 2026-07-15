@@ -78,10 +78,13 @@ Existing status/exit semantics remain: `authored=0`, `empty_output=1`, `precondi
 
 ### Unit boundaries
 
-1. Resolver/schema/config unit: only resolver contract, schema/JS parity, and project templates.
+1. Resolver/schema/config unit: resolver contract, schema/JS parity, project templates, and the
+   deterministic Codex payload mirrors required by the repo pre-commit gate. Canonical source plus
+   its repo-declared generated mirrors is one atomic scope boundary, not a later scope expansion.
 2. Strict dispatch unit: only authorization/family/endpoint ordering and result provenance.
 3. Session compatibility unit: active-l6 enforcement plus legacy/expired/corrupt controls.
-4. Docs/payload unit: l6/front-door canonical command and generated Codex payload sync.
+4. Docs/payload unit: l6/front-door canonical command and any remaining generated Codex payload
+   sync not already owned atomically by units 1-3.
 
 Each unit gets its own immutable-base RED proof, commit, focused test, and review. No agent receives
 the whole project as one authoring block.

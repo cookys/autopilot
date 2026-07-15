@@ -32,6 +32,8 @@
 #       [--bin <path>]          # override the runner binary (test seam)
 #       [--endpoint <name>]     # cc-shim: resolve named-endpoint creds via resolve-endpoint.sh
 #                               #   (AUTOPILOT_ENDPOINT_<NAME>_*); raw env still used when omitted
+#       [--strict-roster]      # enforce project roster-only selection
+#       [--repo-root <path>]   # required with --strict-roster for strict-mode config resolution
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
 #   shell script), which drops trailing prompt newlines. This mirrors dispatch-review
 #   and is safe for prompt semantics.
@@ -67,20 +69,24 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-author-*' || true
 
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+REPO_ROOT=""; STRICT_ROSTER=0
+RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). See lib/dispatch-detach.sh.
 LEDGER=""; RUN_ID=""; STAGE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --runner)      RUNNER="${2:-}"; shift 2 ;;
-    --model)       MODEL="${2:-}"; shift 2 ;;
+    --runner)      RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
+    --model)       MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
-    --effort)      EFFORT="${2:-}"; shift 2 ;;
+    --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
-    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
+    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; ENDPOINT_SUPPLIED=1; shift 2 ;;
+    --strict-roster) STRICT_ROSTER=1; shift ;;
+    --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -100,6 +106,17 @@ die_runner_failed() {
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$runner_exit_code")"
   exit 3
 }
+
+if [[ "$STRICT_ROSTER" -eq 1 ]]; then
+  [[ "$RUNNER_SUPPLIED" -eq 0 ]] || die_precondition "manual --runner is not allowed with --strict-roster"
+  [[ "$MODEL_SUPPLIED" -eq 0 ]] || die_precondition "manual --model is not allowed with --strict-roster"
+  [[ "$EFFORT_SUPPLIED" -eq 0 ]] || die_precondition "manual --effort is not allowed with --strict-roster"
+  [[ "$ENDPOINT_SUPPLIED" -eq 0 ]] || die_precondition "manual --endpoint is not allowed with --strict-roster"
+  [[ -n "$REPO_ROOT" ]] || die_precondition "--repo-root is required with --strict-roster"
+  [[ -d "$REPO_ROOT" ]] || die_precondition "--repo-root must point to an existing directory"
+  REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+  [[ -r "$REPO_ROOT/.claude/review-loop-config.md" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
+fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
 case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must be codex, agy, grok, or cc-shim (got: $RUNNER)" ;; esac

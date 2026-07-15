@@ -4,10 +4,87 @@ Status: in-progress
 Branch: fix/verification-author-roster-gate
 Canonical source: `/home/cookys/projects/autopilot`
 
-Owner: GPT-5.3-Codex-Spark High (implementation)
-Tests: GLM (RED cases first)
+Spec owner: depth-0 CEO (this document is the only design authority)
+Owner: GPT-5.3-Codex-Spark High (implementation only)
+Tests: heterogeneous verification author (RED cases first; GLM primary, explicit fallback recorded)
 Independent review: MiniMax-M3 + AGY Gemini 3.5 Flash High
 Depth-0 QC run after merge-ready checkpoint.
+
+## Frozen v1 contract (depth-0 authored)
+
+Implementers and verification authors translate this contract into code/tests; they do not
+rename fields, add fallback policy, or redesign the interface.
+
+### Consuming-project config and resolver
+
+The canonical config keys are exactly:
+
+- `verification_author_present`: `true|false`; this is the project's explicit authorization bit.
+- `verification_author_engine`: model/engine id; empty when `present=false`.
+- `verification_author_runner`: `codex|agy|grok|cc-shim`; empty when `present=false`.
+- `verification_author_effort`: `low|medium|high|xhigh|max`; empty when `present=false`.
+- `verification_author_endpoint`: named endpoint id or empty; it never contains a URL/token.
+
+`resolve-review-loop.sh` always emits those five keys plus:
+
+- `verification_author_family`: derived with the resolver's existing `family_of`; `unknown` is explicit.
+- `implementer_family`: derived from `implementer_engine` by that same function.
+- `config_path`: canonical absolute path of the selected config, or empty for builtin defaults.
+
+Existing `source` remains the selection-slot provenance (`override|project-cwd|project-repo|template|builtin-default`).
+Do not add a second parser or family table. The schema remains the SSOT for JS field order/types.
+
+Validation is exact:
+
+- `present=false` requires all four tuple fields empty and is a valid unauthorized state.
+- `present=true` requires engine, runner, and effort; endpoint may be empty.
+- Any partial/inconsistent tuple, invalid author runner/effort/endpoint, or `present=false` with a
+  non-empty tuple exits resolver status `3` with a semantic diagnostic; it is never defaulted.
+- Unknown family may resolve successfully for observability, but strict dispatch always blocks it.
+
+### Strict author CLI
+
+Canonical invocation:
+
+```sh
+scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> [--bin <test-seam>]
+```
+
+In strict mode, `--model`, `--runner`, `--effort`, and `--endpoint` are forbidden even when they
+happen to match. The script resolves all four values itself. This removes the hybrid/manual path
+instead of trying to judge whether a hand-typed model was "close enough". Missing roster,
+resolver status `3`, unknown family, or same family exits `2` before endpoint lookup, binary lookup,
+temp-log creation, or runner start.
+
+Endpoint readiness is checked only after authorization/family gates and never changes the tuple.
+No fallback engine/model/runner exists on this path.
+
+### Session coupling
+
+- An active session marker with `level=l6` requires `--strict-roster`; legacy explicit dispatch exits
+  `2` before runner start.
+- Outside active l6, legacy explicit dispatch remains byte-compatible.
+- Missing, expired, or corrupt markers do not invent an l6 authorization. They behave as inactive.
+- `--strict-roster` itself always requires a valid project roster regardless of marker state, so an
+  invalid marker can never bypass the roster gate.
+
+### Result contract
+
+Every result adds `selection_source` (`strict_roster|explicit_cli`), `selection_path`, and
+`verification_author` (`null` on explicit legacy; otherwise `{engine,runner,effort,endpoint,family}`).
+Only endpoint name is emitted. URL, token environment value, token, and raw credentials are forbidden.
+Existing status/exit semantics remain: `authored=0`, `empty_output=1`, `precondition_failed=2`,
+`runner_failed=3`.
+
+### Unit boundaries
+
+1. Resolver/schema/config unit: only resolver contract, schema/JS parity, and project templates.
+2. Strict dispatch unit: only authorization/family/endpoint ordering and result provenance.
+3. Session compatibility unit: active-l6 enforcement plus legacy/expired/corrupt controls.
+4. Docs/payload unit: l6/front-door canonical command and generated Codex payload sync.
+
+Each unit gets its own immutable-base RED proof, commit, focused test, and review. No agent receives
+the whole project as one authoring block.
 
 ## Problem
 

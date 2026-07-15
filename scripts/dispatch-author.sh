@@ -94,6 +94,45 @@ done
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
 
+read_review_loop_field() {
+  local key="$1"
+  node -e '
+const fs = require("fs");
+
+const key = process.argv[1];
+let raw;
+try {
+  raw = fs.readFileSync(0, "utf8");
+} catch {
+  process.exit(2);
+}
+
+let data;
+try {
+  data = JSON.parse(raw);
+} catch {
+  process.exit(2);
+}
+
+if (!Object.prototype.hasOwnProperty.call(data, key)) {
+  process.exit(3);
+}
+
+const value = data[key];
+if (typeof value === "boolean") {
+  process.stdout.write(value ? "true" : "false");
+  process.exit(0);
+}
+
+if (typeof value === "string" || typeof value === "number") {
+  process.stdout.write(String(value));
+  process.exit(0);
+}
+
+process.exit(4);
+' "$key"
+}
+
 die_precondition() {
   printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "raw_log": null, "error": "%s" }\n' \
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$1")"
@@ -115,7 +154,47 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   [[ -n "$REPO_ROOT" ]] || die_precondition "--repo-root is required with --strict-roster"
   [[ -d "$REPO_ROOT" ]] || die_precondition "--repo-root must point to an existing directory"
   REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
-  [[ -r "$REPO_ROOT/.claude/review-loop-config.md" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
+  REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
+  [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
+  REVIEW_LOOP_JSON="$(
+    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
+  )"
+  REVIEW_LOOP_JSON_RC=$?
+  if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
+    die_precondition "resolve-review-loop failed"
+  fi
+
+  verification_author_present="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_present)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_present in review loop config"
+  verification_author_engine="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_engine)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_engine in review loop config"
+  verification_author_runner="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_runner)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_runner in review loop config"
+  verification_author_effort="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_effort)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_effort in review loop config"
+  verification_author_endpoint="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_endpoint)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_endpoint in review loop config"
+  verification_author_family="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_family)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_family in review loop config"
+  implementer_family="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field implementer_family)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid implementer_family in review loop config"
+  config_path="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field config_path)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid config_path in review loop config"
+
+  [[ "$verification_author_present" == true ]] || die_precondition "strict roster requires verification_author_present=true"
+  [[ -n "$verification_author_engine" ]] || die_precondition "strict roster requires verification_author_engine"
+  [[ -n "$verification_author_runner" ]] || die_precondition "strict roster requires verification_author_runner"
+  [[ -n "$verification_author_effort" ]] || die_precondition "strict roster requires verification_author_effort"
+  [[ -n "$verification_author_family" ]] || die_precondition "strict roster requires verification_author_family"
+  [[ -n "$implementer_family" ]] || die_precondition "strict roster requires implementer_family"
+  [[ "$verification_author_family" != unknown ]] || die_precondition "verification_author_family must not be unknown"
+  [[ "$implementer_family" != unknown ]] || die_precondition "implementer_family must not be unknown"
+  [[ "$verification_author_family" != "$implementer_family" ]] || die_precondition "strict roster requires distinct verification_author_family and implementer_family"
+  [[ "$config_path" == "$REVIEW_LOOP_CONFIG" ]] || die_precondition "strict roster requires config_path to equal --repo-root/.claude/review-loop-config.md"
+  RUNNER="$verification_author_runner"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster runner"
+  MODEL="$verification_author_engine"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster model"
+  EFFORT="$verification_author_effort"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster effort"
+  ENDPOINT="$verification_author_endpoint"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster endpoint"
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"

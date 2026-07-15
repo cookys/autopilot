@@ -34,10 +34,16 @@
 |-------|---------|--------|
 | P0 | Plan 撰寫（docs/plans/2026-07-14-dispatch-branch-lifecycle.md） | complete |
 | P1 | Hetero loop review of plan（agy Gemini + cc-shim GLM，5 generations；無未決 Critical/Major） | complete |
-| P2 | 實作（TDD：fixture tests 先行） | pending |
-| P3 | 實作 diff hetero review loop + 文件 wiring | pending |
+| P2 | 實作（TDD：fixture tests 先行；MiniMax verification-author artifact + foreman fallback） | complete |
+| P3 | 實作 diff hetero review loop + 文件 wiring | in progress |
 | L-5 | finish-flow（quality gate → merge develop → archive） | pending |
 
 ## 已知限制（引擎面）
 
 codex quota 死至 2026-07-20、grok 402 ⇒ review 面用 agy（Gemini 3.5 Flash (High)）+ cc-shim `--endpoint glm|minimax`（endpoints 已驗活）。跨家族去相關成立（Google + Zhipu/MiniMax vs 實作方 Anthropic-inline）。
+
+## P2 execution evidence（2026-07-15）
+
+`dispatch-author.sh --strict-roster` 的 configured GLM-5.2 endpoint 連續兩次 API 529；Board 核准一次性 roster override 後，由 `cc-shim/MiniMax-M3@high` 產出 verification-author artifact，repo config 隨即 byte-for-byte 還原。Canonical Spark implementer 以 current-checkout/no-worktree 方式嘗試兩次，均卡在 model-refresh/futex 且零 artifact；Board 因此核准本 foreman 依 author artifact 與已收斂 plan 實作。Recovery 時原 `/tmp/dispatch-author-log-6GM37V` 已不存在；不重建或偽造內容，僅保留 ledger、runner/model provenance 與 converged plan 作為採納依據。
+
+Recovery 的 test-only negative control 在 immutable base `8250dc9` 得到 `RED_RC=1`，失敗為 registered orphan worktree 未 retry/remove 與 log 未清除兩個行為 assertion（非缺檔/import failure）；相同測試在 current tree GREEN：`dispatch-hetero-gc.test.sh` 23 assertions、`reap-dispatch-branches.test.sh` 35 assertions。完整 `hooks/tests/run.sh` 為 139/142 test files green；L1 opt-in/session-marker、engine-scorecard、OpenCode 三組非零均在獨立 `8250dc9` clone 重現，scorecard 原檔零差異且重跑呈現 head PASS/base FAIL，判定為既有環境/flaky baseline。`preflight-portability.sh` 13/17，四個非零（既有 eval `validate.py` bare refs + OpenCode discovery 三項）亦全在 base 重現；canonical/payload/version/hook-inventory gates green。Depth-0 在 P2 boundary 將原 18-path 預算修正為 26（超額皆為 plan 明列、由 canonical version/payload sync 產生的 mirrors）；目前 25 product paths、changed LOC 926/1500，新增第 27 路徑前必須再 escalation。

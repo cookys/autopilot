@@ -382,4 +382,100 @@ EOF
 
 test_marker_exclusion
 
+# Test 10: --gc rewrites the signal-handler orphan log before stale enumeration.
+test_orphan_log_hygiene_retries_registered_worktree() {
+    export TMPDIR="$TEST_TMP/tmp-orphan-hygiene"
+    mkdir -p "$TMPDIR"
+
+    local scratch="$TEST_TMP/repo-orphan-hygiene"
+    git init -q "$scratch"
+    git -C "$scratch" config user.email "test@example.com"
+    git -C "$scratch" config user.name "Test User"
+    git -C "$scratch" commit -q --allow-empty -m "initial"
+
+    local wt_path="$scratch/wt-orphan-retry"
+    git -C "$scratch" worktree add -q "$wt_path" -b orphan-retry
+
+    local orphan_log="$TMPDIR/autopilot-orphan-worktrees.log"
+    printf '%s\n' \
+        'fatal: quoted "remove" failure' \
+        "$TMPDIR/does-not-exist" \
+        "$wt_path" > "$orphan_log"
+
+    local output exit_code
+    cd "$scratch"
+    output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+    exit_code=$?
+    cd - >/dev/null
+
+    assert_eq 0 "$exit_code" "orphan hygiene exit code"
+    if [ -d "$wt_path" ]; then
+        fail "registered own-user orphan worktree should be retried and removed"
+    else
+        __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+    fi
+    assert_file_absent "$orphan_log" "pruned empty orphan log should be removed"
+    assert_not_contains "${output:-}" 'fatal: quoted' "retry diagnostics must not be replayed"
+}
+
+test_orphan_log_hygiene_retries_registered_worktree
+
+# Test 11: absent logs are a no-op; failed registered-worktree retries remain
+# actionable without appending another copy of git's diagnostic text.
+test_orphan_log_hygiene_absent_and_retry_failure() {
+    export TMPDIR="$TEST_TMP/tmp-orphan-failure"
+    mkdir -p "$TMPDIR"
+
+    local scratch="$TEST_TMP/repo-orphan-failure"
+    git init -q "$scratch"
+    git -C "$scratch" config user.email "test@example.com"
+    git -C "$scratch" config user.name "Test User"
+    git -C "$scratch" commit -q --allow-empty -m "initial"
+
+    local orphan_log="$TMPDIR/autopilot-orphan-worktrees.log"
+    local output exit_code
+    cd "$scratch"
+    output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+    exit_code=$?
+    cd - >/dev/null
+    assert_eq 0 "$exit_code" "absent orphan log leaves gc behavior unchanged"
+    assert_file_absent "$orphan_log" "absent orphan log stays absent"
+
+    local wt_path="$scratch/wt-orphan-keep"
+    git -C "$scratch" worktree add -q "$wt_path" -b orphan-keep
+    printf '%s\n' "$wt_path" > "$orphan_log"
+
+    local real_git fake_bin
+    real_git=$(command -v git)
+    fake_bin="$TEST_TMP/fake-git"
+    mkdir -p "$fake_bin"
+    cat > "$fake_bin/git" <<EOF
+#!/usr/bin/env bash
+if [[ " \$* " == *" worktree remove --force $wt_path "* ]]; then
+  printf '%s\n' 'fatal: injected "remove" failure' >&2
+  exit 1
+fi
+exec "$real_git" "\$@"
+EOF
+    chmod +x "$fake_bin/git"
+
+    cd "$scratch"
+    output=$(PATH="$fake_bin:$PATH" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
+    exit_code=$?
+    cd - >/dev/null
+    assert_eq 0 "$exit_code" "failed orphan retry does not break gc"
+    if [ -d "$wt_path" ]; then
+        __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+    else
+        fail "failed registered-worktree retry must keep the worktree"
+    fi
+    assert_contains "$(cat "$orphan_log")" "$wt_path" "failed retry remains in orphan log"
+    assert_not_contains "$(cat "$orphan_log")" 'injected "remove" failure' "retry stderr is never appended to orphan log"
+    assert_not_contains "${output:-}" 'injected "remove" failure' "retry stderr remains suppressed"
+
+    git -C "$scratch" worktree remove --force "$wt_path"
+}
+
+test_orphan_log_hygiene_absent_and_retry_failure
+
 finalize_test

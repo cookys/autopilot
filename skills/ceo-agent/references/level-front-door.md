@@ -542,6 +542,21 @@ foreman built on the CEO's actual HEAD (STEP-0 bootstrap, Gotchas). On conflict
 (base moved during a long run): **rebase/cherry-pick-retry once, else escalate** —
 never auto-resolve unattended.
 
+After a successful cherry-pick or merge, retire dispatch-owned dated branches through
+the deterministic reaper, not an ad-hoc broad branch glob:
+
+```bash
+scripts/reap-dispatch-branches.sh reap --into develop --yes
+scripts/reap-dispatch-branches.sh reap --into develop --reap-superseded --dry-run
+# After reviewing the superseded-round preview:
+scripts/reap-dispatch-branches.sh reap --into develop --reap-superseded --yes
+```
+
+The first command removes only branches proven contained by the authoritative branch;
+the opt-in second pass removes superseded intermediate rounds only after a preview.
+Every deletion is preceded by one verified full-history bundle. Branches outside the
+reaper's anchored grammar remain an explicit harness cleanup responsibility.
+
 ### 5. Worktree GC
 
 Every non-success outcome (`dirty` / `no_op` / `question_suspected` / `failure`)
@@ -556,11 +571,12 @@ git worktree prune
 
 - For the `/l5`/`/l6` agy path, the worktree path is in the outcome JSON (`worktree`
   field) and the branch in the `branch` field — reap **both**:
-  `git worktree remove --force <worktree>` (if non-null) **and**
-  `git branch -D <branch>` (`git worktree remove` does NOT delete the branch, so a
-  non-success hetero dispatch leaves a stale branch otherwise). On a `committed`
-  outcome the worktree is already auto-removed (`worktree: null`); after the
-  depth-0 cherry-pick, still `git branch -D <branch>` to clear the integrated branch.
+  `git worktree remove --force <worktree>` (if non-null). For a dated branch covered
+  by `reap-dispatch-branches.sh`, let the reaper prove containment, create and verify
+  its bundle, then delete it; do not use an unchecked `git branch -D`. On a
+  `committed` outcome the worktree is already auto-removed (`worktree: null`); after
+  the depth-0 cherry-pick run the contained reaper pass above. Out-of-grammar
+  `hetero/<name>` branches still require explicit inspected cleanup.
 - For a killed native Claude foreman, the path is deterministic
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory

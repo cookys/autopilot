@@ -132,6 +132,71 @@ SKILL_PACK_CONTENT_TEMP=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
 # trap firing mid-run appends to a real path instead of an undefined one.
 ORPHAN_LOG="${TMPDIR:-/tmp}/autopilot-orphan-worktrees.log"
+
+# Retry signal-handler orphan entries once before the normal marker/age GC pass.
+# The log can contain both paths and redirected git stderr, so only exact,
+# registered linked-worktree paths are actionable; everything else is either
+# pruned as noise/stale state or preserved as a recoverable live path.
+rewrite_orphan_log() {
+  [ -f "$ORPHAN_LOG" ] || return 0
+
+  local tmp="${ORPHAN_LOG}.tmp.$$"
+  local path gitfile_line common_raw common_dir registered line
+  : > "$tmp" || return 0
+
+  while IFS= read -r path || [ -n "$path" ]; do
+    case "$path" in
+      /*) ;;
+      *) continue ;;
+    esac
+    [ -d "$path" ] || continue
+
+    if [ ! -O "$path" ]; then
+      printf '%s\n' "$path" >> "$tmp"
+      continue
+    fi
+    if [ ! -f "$path/.git" ]; then
+      printf '%s\n' "$path" >> "$tmp"
+      continue
+    fi
+    IFS= read -r gitfile_line < "$path/.git" || gitfile_line=""
+    case "$gitfile_line" in
+      gitdir:\ *) ;;
+      *) printf '%s\n' "$path" >> "$tmp"; continue ;;
+    esac
+
+    common_raw="$(git -C "$path" rev-parse --git-common-dir 2>/dev/null)" || {
+      printf '%s\n' "$path" >> "$tmp"
+      continue
+    }
+    common_dir="$(cd "$path" 2>/dev/null && cd "$common_raw" 2>/dev/null && pwd -P)" || {
+      printf '%s\n' "$path" >> "$tmp"
+      continue
+    }
+
+    registered=0
+    while IFS= read -r line; do
+      if [ "$line" = "worktree $path" ]; then
+        registered=1
+        break
+      fi
+    done < <(git --git-dir="$common_dir" worktree list --porcelain 2>/dev/null)
+    if [ "$registered" -ne 1 ]; then
+      printf '%s\n' "$path" >> "$tmp"
+      continue
+    fi
+
+    if ! git --git-dir="$common_dir" worktree remove --force "$path" >/dev/null 2>&1; then
+      printf '%s\n' "$path" >> "$tmp"
+    fi
+  done < "$ORPHAN_LOG"
+
+  if [ -s "$tmp" ]; then
+    mv -f "$tmp" "$ORPHAN_LOG"
+  else
+    rm -f "$tmp" "$ORPHAN_LOG"
+  fi
+}
 # --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE) ---
 # A START-time manifest under $MANIFEST_DIR_PATH names this run's identity (run_id,
 # log path, worktree, lock, predicted containment) so depth-0 / dispatch-status.js can
@@ -345,6 +410,7 @@ if [ "$DO_GC" -eq 1 ]; then
   fi
   # Export flags for gc_stale_worktrees (reads REAP_UNMARKED).
   export REAP_UNMARKED GC_YES
+  rewrite_orphan_log
   gc_stale_worktrees
   exit $?
 fi

@@ -1,3 +1,4 @@
 {"schema_version":1,"ts":"2026-07-14T05:28:54Z","node":"root","type":"tree_initialized","proj":"2026-07-14-dispatch-branch-lifecycle"}
 {"schema_version":1,"ts":"2026-07-14T05:29:05Z","node":"root","type":"node_created","title":"dispatch-branch-lifecycle: prose GC → deterministic gate+reaper"}
 {"schema_version":1,"ts":"2026-07-15T08:42:00Z","node":"root/p1","type":"phase_completed","title":"P1 hetero plan review converged after 5 external generations"}
+{"schema_version":1,"ts":"2026-07-15T09:35:40Z","node":"root/p2","type":"phase_completed","title":"P2 implemented reaper gate wiring and orphan-log hygiene; focused tests green"}

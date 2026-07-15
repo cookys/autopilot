@@ -32,9 +32,10 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S。
 - **Source**: 2026-07-14 /l6 loop-convergence-gates foreman ledger + depth-0 qc probe。
 
-### Dispatch-branch lifecycle：session-end 整合候選 gate + repo-branch reaper + 中間輪收斂
+### ~~Dispatch-branch lifecycle：session-end 整合候選 gate + repo-branch reaper + 中間輪收斂~~（shipped v2.32.37）
 - **Trigger**: 下次任何 /l4-/l6 campaign 結束時發現未併回 develop 的整合候選或 dispatch branch；或 TWGameProject 2026-07-10 殘骸 triage 動工時。
 - **Context**: 2026-07-14 codex-worktree 稽核（`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`）判定結構主因在 autopilot：merge-back/worktree GC 只是 prose 責任（`level-front-door.md` §4/§5），無任何 deterministic 後盾 — `--gc`/`--reap` 只清 `/tmp` worktree，`scripts/` 無 repo-branch reaper ⇒ TWGameProject 留下 ~70 條 20260710 branch（O(engines×tasks×rounds) 爆炸）+ 46-commit `ceo-integration-candidate-r1` 懸空。修法三件：(1) finish-flow / ceo-agent 收尾 gate — `git branch --list 'ceo-integration-candidate-*'` 存在且 `develop..<it>` ahead>0 ⇒ 擋 clean exit、要求 merge/保留記 handoff/丟棄三選一明確裁決；(2) 新 `scripts/reap-dispatch-branches.sh` — dispatch-owned branch（`ceo-*-<date>`、`agent/*-r?-<date>`）凡被 authoritative branch contain（`merge-base --is-ancestor`）或被高輪 sibling 取代 ⇒ bundle 存證後 `branch -D`；未 contain 一律保留並列出（preserve-first、fail-closed，對照 PEACE 2026-07-14 GC 紀律）；(3) 中間輪收斂 — dispatch 層在整合成功時自動刪被取代的 `-r<n-1>` 中間輪（或改單一 per-task branch force-update）。附帶小修：`autopilot-orphan-worktrees.log` 的 permission-denied 陳舊條目定期 prune（目前留著已消失檔案的殘影）。
+- **Status**: shipped in v2.32.37 — deterministic check/ack gate, preserve-first bundle-before-delete reaper, superseded-round opt-in, and orphan-log retry hygiene. Historical TWGameProject residue remains explicitly out of scope and untouched.
 - **Effort**: M（gate S + reaper M + 收斂 S）
 - **Source**: 2026-07-14 codex-worktree audit §3/§5；handoff 2026-07-14。
 - **殘骸現況（2026-07-14 使用者裁決）**：TWGameProject 殘骸**全部擱置**（含 46-commit `ceo-integration-candidate-r1` 的併/棄裁決、5 條 contained branch、`platform-authz-r1-recovered` worktree）— 未 bundle、未刪、原樣保留；動工時先讀 audit 報告 §5「立即清理」的 preserve-first 順序。

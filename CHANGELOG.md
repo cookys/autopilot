@@ -24,6 +24,29 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.37 — Dispatch branch lifecycle gate and preserve-first reaper
+
+**Headline**: finish-flow can no longer silently leave an ahead integration candidate behind, and dispatch-owned local branches can be retired through a deterministic bundle-before-delete lifecycle rail.
+
+### Added
+
+- Added `scripts/reap-dispatch-branches.sh` with read-only classification, exact-tip preservation acknowledgements, contained-branch reaping, and opt-in superseded-round cleanup.
+- Added fixture-repository coverage for candidate gating, base-10 round ordering, slash refs, bundle integrity, all-or-nothing pre-delete failures, checked-out guards, and invalid environments.
+
+### Changed
+
+- L-size session end now runs the dispatch-branch gate before clearing orchestrator mode.
+- CEO merge-back and heterogeneous-dispatch cleanup guidance now routes dated dispatch branches through the preserve-first reaper.
+
+### Fixed
+
+- Dispatch orphan-log GC now retries valid registered own-user worktrees, retains failed retries without duplicating diagnostics, and prunes non-actionable stale/noise entries.
+
+### Rollback
+
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.35`; the new reaper is additive and creates no persistent state unless `check --ack` or `reap --yes` is explicitly used.
+
 ## v2.32.35 — /l6 verification-author roster gate
 
 **Headline**: active `/l6` verification authoring is now authorized by the consuming project's first-class roster tuple instead of manual model/runner prose; fail-closed selection while depth 0 retains artifact execution/QC/merge authority.

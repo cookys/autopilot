@@ -105,6 +105,21 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 - Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
 
+## Repo-branch lifecycle
+
+`scripts/reap-dispatch-branches.sh` is the preserve-first lifecycle rail for dispatch-owned **local** branches. Its built-in anchored grammar is:
+
+* `ceo-integration-candidate-r<N>` — integration candidates.
+* `ceo-<task>-r<N>-<YYYYMMDD>` — dated intermediate rounds.
+* `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
+* Repeated `--pattern <bash-ere>` adds an explicit local family. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
+
+`scan` emits JSON classification without mutating the repo. `check` is the finish-flow gate: exit 0 means no unacknowledged ahead integration candidate; exit 1 means depth 0 must integrate, explicitly preserve, or discard. `--ack <branch>` records preservation against the exact current tip; malformed, missing, or moved-tip acks are pruned fail-closed.
+
+`reap` is dry-run unless `--yes` is supplied. It reaps proven-contained branches; superseded rounds require `--reap-superseded`. Before deletion it creates one positive-ref full-history bundle for the entire set, verifies it, checks every head is present, rejects checked-out branches, and compare-and-deletes each exact tip. A bundle create/verify/list-heads failure leaves the entire set intact; a per-branch checked-out or moved-tip failure keeps that branch while allowing other already-preserved branches to proceed.
+
+Exit 2 is a usage/environment failure. Bundles default outside the repository; `--bundle-dir` overrides the location. The tool never touches remote refs and never treats a name match alone as deletion authority.
+
 ## Mid-run observability — run manifest + [`scripts/dispatch-status.js`](../scripts/dispatch-status.js)
 
 A dispatch is no longer fire-and-forget (Stage 1, BACKLOG "Dispatch observability"). At START,

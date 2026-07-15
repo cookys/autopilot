@@ -37,8 +37,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 1a shell/schema | complete on feature branch | Spark `e61d75d`; focused QC green |
 | Unit 1b.i JS/schema compatibility | complete on feature branch | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
-| Unit 1 aggregate review | rework | AGY found shell/JS endpoint-name parity gap; RED `55a1e55`; MiniMax envelope parsed `no_verdict` |
-| Unit 2 strict dispatch | pending | RED oracle first |
+| Unit 1 aggregate review | complete | Final MiniMax-M3 + AGY `SHIP-AS-IS`; depth-0 full gate green at `05d0aad` |
+| Unit 2 strict dispatch | next | RED oracle first; split authorization, endpoint-ordering, and result-provenance cases |
 | Unit 3 session coupling | pending | RED oracle first |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
 
@@ -61,6 +61,10 @@ model qualification policy. Those remain in the separate follow-up plan.
   `dispatch-author.sh` documenting a read-only posture. Only its declared three-line test diff was
   present and it was isolated/verified before commit, but the rail behavior is a containment breach
   to mechanize in the separate dispatch-unit contract project.
+- Unit 1 review converged after endpoint parity repairs `f2c5518`, `50c1c23`, and guard-order repair
+  `05d0aad`. Final artifacts: MiniMax-M3 `dispatch-review-log-wP7sJm` and AGY
+  `dispatch-review-log-Iw7OxK`, both `SHIP-AS-IS`. Depth-0 reran resolver 227, independent oracle 31,
+  runner 35, engine 367, parity 30, schema, mirror-sync, skill validation, and diff checks green.
 - The first Spark resolver-compatibility test run was killed at the 115-second outer limit after it
   authored a complete diff. A bounded retry replayed that exact transcript diff, completed in 94
   seconds as `40698b4`, and passed the full Unit 1 depth-0 gate.

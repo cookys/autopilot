@@ -188,6 +188,12 @@ scripts/dispatch-hetero.sh --strict-contract --contract-file <json> --prompt-fil
 Each unit has one immutable base, its own allowed paths, RED proof, commit, and review. Never dispatch
 this whole plan as one implementation task.
 
+Empirical boundary evidence from the roster-gate dogfood (2026-07-15): a four-file Spark repair with
+the full acceptance surface spent 115 seconds scanning and timed out before editing. Splitting the
+same repair into schema+mirror, JS+mirror, and guard-order+mirror units completed in 25, 46, and 33
+seconds. Contract generation should therefore prefer one semantic decision plus mandatory mirrors,
+with later aggregate QC, rather than counting four related files as automatically small.
+
 ## Required tests
 
 - Missing/malformed contract blocks before fake runner.

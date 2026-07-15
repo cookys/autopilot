@@ -107,8 +107,8 @@ the whole project as one authoring block.
 | 1a shell/schema implementation | complete, not independently shippable | Spark `e61d75d`; focused oracle 31/31 green; schema/mirror/skill validation green |
 | 1b.i JS/schema compatibility | complete | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | 1b.ii configs/resolver compatibility | complete | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
-| 1 aggregate review | rework | AGY found shell/JS endpoint-name parity gap; RED `55a1e55`; rerun both reviewers after repair |
-| 2 strict dispatch | pending | Separate RED oracle, Spark implementation, dual review |
+| 1 aggregate review | complete | Endpoint RED `55a1e55`; repairs through `05d0aad`; final MiniMax-M3 + AGY `SHIP-AS-IS`; full depth-0 gate green |
+| 2 strict dispatch | next | Separate bounded RED oracles, Spark implementation, dual review |
 | 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |
 | 4 docs/payload | pending | Canonical l6 command, payload sync, full QC |
 

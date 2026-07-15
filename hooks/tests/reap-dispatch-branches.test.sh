@@ -31,6 +31,7 @@ test_scan_check_and_ack() {
   t3=$(child_commit "$repo" "$base" candidate)
 
   git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t3"
+  git -C "$repo" tag ceo-integration-candidate-r1 "$t3"
   git -C "$repo" update-ref refs/heads/ceo-openai-task-r2-20260715 "$t1"
   git -C "$repo" update-ref refs/heads/ceo-openai-task-r10-20260715 "$t2"
   git -C "$repo" update-ref refs/heads/agent/unit-r08-20260715 "$t1"
@@ -147,7 +148,7 @@ test_bundle_failure_and_checked_out_guard() {
 test_bundle_failure_and_checked_out_guard
 
 test_environment_errors() {
-  local rc
+  local rc out
   set +e
   bash "$SCRIPT" scan --repo "$TEST_TMP/no-repo" >/dev/null 2>/dev/null; rc=$?
   set -e
@@ -159,8 +160,45 @@ test_environment_errors() {
   bash "$SCRIPT" scan --repo "$repo" --into does-not-exist >/dev/null 2>/dev/null; rc=$?
   set -e
   assert_eq "$rc" 2 "invalid integration target exits 2"
+
+  bash "$SCRIPT" check --repo "$repo" --into develop >/dev/null
+  if [ -e "$repo/.git/autopilot-reap-ack" ]; then
+    fail "plain check without acknowledgements must not create persistent state"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+
+  git -C "$repo" branch ordinary-user-branch develop
+  set +e
+  out=$(bash "$SCRIPT" scan --repo "$repo" --into develop --pattern '' 2>/dev/null); rc=$?
+  set -e
+  assert_eq "$rc" 2 "empty custom pattern is rejected"
+  assert_eq "$out" "" "empty custom pattern cannot classify every local branch"
 }
 
 test_environment_errors
+
+test_malformed_recorded_tip_is_bundle_failure() {
+  local repo="$TEST_TMP/sha256-repo" out rc
+  git init -q --object-format=sha256 -b develop "$repo"
+  git -C "$repo" config user.email test@example.com
+  git -C "$repo" config user.name "Test User"
+  git -C "$repo" commit -q --allow-empty -m base
+  git -C "$repo" branch agent/contained-r1-20260715 develop
+
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir "$TEST_TMP/sha256-bundles" 2>/dev/null); rc=$?
+  set -e
+  assert_eq "$rc" 1 "non-40-hex recorded tip is a bundle-stage failure"
+  if json_valid "$out"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "recorded-tip failure emits valid JSON"; fi
+  assert_contains "$out" '"stage":"bundle"' "recorded-tip failure names bundle stage"
+  if git -C "$repo" show-ref --verify --quiet refs/heads/agent/contained-r1-20260715; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "recorded-tip failure must preserve the eligible branch"
+  fi
+}
+
+test_malformed_recorded_tip_is_bundle_failure
 
 finalize_test

@@ -112,13 +112,13 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 * `ceo-integration-candidate-r<N>` — integration candidates.
 * `ceo-<task>-r<N>-<YYYYMMDD>` — dated intermediate rounds.
 * `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
-* Repeated `--pattern <bash-ere>` adds an explicit local family. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
+* Repeated `--pattern <bash-ere>` adds an explicit local family; an empty ERE is rejected because it would match every local branch. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
 
 `scan` emits JSON classification without mutating the repo. `check` is the finish-flow gate: exit 0 means no unacknowledged ahead integration candidate; exit 1 means depth 0 must integrate, explicitly preserve, or discard. `--ack <branch>` records preservation against the exact current tip; malformed, missing, or moved-tip acks are pruned fail-closed.
 
 `reap` is dry-run unless `--yes` is supplied. It reaps proven-contained branches; superseded rounds require `--reap-superseded`. Before deletion it creates one positive-ref full-history bundle for the entire set, verifies it, checks every head is present, rejects checked-out branches, and compare-and-deletes each exact tip. A bundle create/verify/list-heads failure leaves the entire set intact; a per-branch checked-out or moved-tip failure keeps that branch while allowing other already-preserved branches to proceed.
 
-Exit 2 is a usage/environment failure. Bundles default outside the repository; `--bundle-dir` overrides the location. The tool never touches remote refs and never treats a name match alone as deletion authority.
+Exit 2 is a usage/environment failure. Bundles default under the git common dir, outside tracked worktree content; `--bundle-dir` overrides the location. The tool never touches remote refs and never treats a name match alone as deletion authority.
 
 ## Mid-run observability — run manifest + [`scripts/dispatch-status.js`](../scripts/dispatch-status.js)
 

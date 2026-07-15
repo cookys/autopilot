@@ -54,13 +54,14 @@ most valuable output is the thing that never lands) and unbounded branch accumul
   `git bundle verify` both exit 0 for that branch; bundle-verify failure ⇒ branch kept + finding
   reported + exit 1.
 - Un-contained AND un-superseded branches are never deleted regardless of flags.
-- `check` (the gate) is read-only: it never mutates git state; adjudication is the caller's.
+- `check` (the gate) never mutates refs or worktrees; only explicit `--ack` metadata and
+  deterministic stale-ack pruning may write under the git common dir. Adjudication is the caller's.
 - Exit codes: 0 clean / 1 adjudication-needed-or-violation / 2 usage-or-environment. Exit 1's
   meaning is per-subcommand and unambiguous at the call site (`check` ⇒ adjudication needed;
   `reap` ⇒ ≥1 failure recorded; `scan` never exits 1); JSON on stdout, diagnostics on stderr.
   (R2: glm Minor)
 - No new config file and no new hook in this plan; patterns ship as documented defaults +
-  additive `--pattern` flags.
+  additive, non-empty `--pattern` flags (an empty ERE would match every local branch).
 - Branch-name matching MUST be anchored to the dated dispatch grammar (see §4 Phase A); a
   user's hand-made branch that merely resembles it (no date suffix) must not match.
 - JSON emission: every dynamic string (branch names, git error messages, paths) passes through

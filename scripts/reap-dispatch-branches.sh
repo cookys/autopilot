@@ -73,6 +73,7 @@ git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || die_env "not a git reposit
 into_sha="$(git -C "$repo" rev-parse --verify "${into}^{commit}" 2>/dev/null)" || die_env "integration target does not resolve: $into"
 
 for pattern in "${extra_patterns[@]}"; do
+  [ -n "$pattern" ] || die_env "--pattern ERE must not be empty"
   [[ "" =~ $pattern ]]
   [ "$?" -ne 2 ] || die_env "invalid --pattern ERE: $pattern"
 done
@@ -119,7 +120,7 @@ while IFS= read -r name; do
     sibling_key["$name"]="${BASH_REMATCH[1]}|${BASH_REMATCH[3]}"
     round["$name"]=$((10#${BASH_REMATCH[2]}))
   fi
-done < <(git -C "$repo" for-each-ref --sort=refname --format='%(refname:short)' refs/heads)
+done < <(git -C "$repo" for-each-ref --sort=refname --format='%(refname:lstrip=2)' refs/heads)
 
 # One canonical survivor per same-tip integration-candidate group.
 for name in "${candidates[@]}"; do
@@ -257,7 +258,12 @@ if [ "$command_name" = check ]; then
     fi
     acknowledged["$ack_branch"]="${tip[$ack_branch]}"
   fi
-  mv -f "$ack_tmp" "$ack_file" || die_env "cannot atomically rewrite ack file"
+  if [ -s "$ack_tmp" ]; then
+    mv -f "$ack_tmp" "$ack_file" || die_env "cannot atomically rewrite ack file"
+  else
+    rm -f "$ack_tmp" || die_env "cannot remove empty ack rewrite"
+    rm -f "$ack_file" || die_env "cannot prune empty ack file"
+  fi
 
   gate=0
   for name in "${candidates_ahead[@]}"; do
@@ -296,6 +302,21 @@ if [ "${#eligible[@]}" -eq 0 ]; then
   exit 0
 fi
 
+declare -a refs=()
+bundle_error=""
+for name in "${eligible[@]}"; do
+  if [[ ! "${tip[$name]}" =~ ^[0-9a-f]{40}$ ]]; then
+    bundle_error="invalid recorded tip for $name"
+    break
+  fi
+  refs+=("refs/heads/$name")
+done
+if [ -n "$bundle_error" ]; then
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false}\n' "$(json_escape "$bundle_error")"
+  exit 1
+fi
+
 if [ -z "$bundle_dir" ]; then
   bundle_dir="$common_dir/autopilot-reap-bundles/$(date -u +%Y-%m-%d)"
 fi
@@ -305,13 +326,7 @@ mkdir -p "$bundle_dir" 2>/dev/null || {
   exit 1
 }
 bundle="$bundle_dir/reap-$(date -u +%Y%m%dT%H%M%SZ)-$$.bundle"
-declare -a refs=()
-for name in "${eligible[@]}"; do
-  [[ "${tip[$name]}" =~ ^[0-9a-f]{40}$ ]] || die_env "invalid recorded tip for $name"
-  refs+=("refs/heads/$name")
-done
 
-bundle_error=""
 git -C "$repo" bundle create "$bundle" "${refs[@]}" >/dev/null 2>"$bundle.tmp.err" || bundle_error="$(<"$bundle.tmp.err")"
 rm -f "$bundle.tmp.err"
 if [ -z "$bundle_error" ]; then

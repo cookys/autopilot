@@ -31,7 +31,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 ### Added
 
 - Added `scripts/reap-dispatch-branches.sh` with read-only classification, exact-tip preservation acknowledgements, contained-branch reaping, and opt-in superseded-round cleanup.
-- Added fixture-repository coverage for candidate gating, base-10 round ordering, slash refs, bundle integrity, all-or-nothing pre-delete failures, checked-out guards, and invalid environments.
+- Added fixture-repository coverage for candidate gating, base-10 round ordering, slash refs, bundle integrity, empty-pattern rejection, bundle-stage all-or-nothing failures, per-branch checked-out guards, and invalid environments.
 
 ### Changed
 

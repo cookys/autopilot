@@ -3,12 +3,12 @@
 > 本 handoff 由 context-budget T2（150k）逼出。CEO 模式進行中（Board 指令：plan → hetero loop review → 實作修好）。
 
 ## 目標
-把 codex-worktree audit §5 的 autopilot 側修法做完：session-end 整合候選 gate + `scripts/reap-dispatch-branches.sh`（preserve-first）+ 中間輪收斂 + orphan-log 小修。P2 已實作並通過 focused tests；**下一步是 P3 full-diff hetero review loop + QC，之後交還 depth 0 跑 L-5**。
+把 codex-worktree audit §5 的 autopilot 側修法做完：session-end 整合候選 gate + `scripts/reap-dispatch-branches.sh`（preserve-first）+ 中間輪收斂 + orphan-log 小修。P2/P3 已完成；**下一步交還 depth 0 跑 L-5 authoritative QC、merge、archive**。
 
 ## 現況
 - Branch `feature/dispatch-branch-lifecycle` @ `72b32bea`，P1 tracking changes staged；`origin/develop` 另有 1 個新 handoff commit，P1 commit 後同步。
 - DONE：CEO 啟動參數（just-results / Hold / no-go=TWGameProject 不動）；L-1.5 scope audit（見專案 README 表格）；專案 scaffold（README + INDEX 進行中 row + tree shadow init）；**P0 plan 完成** → `docs/plans/2026-07-14-dispatch-branch-lifecycle.md`（DRAFT，含完整 §2.5 Global Constraints / 4 Phases / inversion 表）。
-- Phase state：L-1.5 / L-1.6 / P0 / P1 / P2 ✅；P3 進行中；L-5 由 depth 0 執行。
+- Phase state：L-1.5 / L-1.6 / P0 / P1 / P2 / P3 ✅；L-5 由 depth 0 執行。
 - develop 側已完成（前段工作）：BACKLOG 兩新條目 + E1 證據 + 舊 docs/HANDOFF.md 消耗刪除（`0cfb021`）。
 
 ## 已決事項(不重議)
@@ -27,7 +27,7 @@
 
 ## 下一步
 1. P1 已完成：5 external generations（Gemini + GLM），無未決 Critical/Major；詳見 plan Review log。
-2. **P3 下一步**：對完整實作 diff 跑 artifact-only hetero review loop，修到無未決 Critical/Major，重跑 full suite + release/portability/pre-commit；之後由 depth 0 invoke autopilot:finish-flow（authoritative QC + merge develop 在 CEO DOA 內）。
+2. **L-5 下一步**：由 depth 0 invoke `autopilot:finish-flow`，跑 authoritative QC + merge develop + archive；P3 final Gemini structured verdict 與 Grok raw wrapped verdict 均為 `SHIP-AS-IS`，無未決 Critical/Major。
 3. 收尾時 BACKLOG「Dispatch-branch lifecycle」條目標 shipped、本 HANDOFF.md 刪除。
 
 ## 驗證方式

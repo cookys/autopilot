@@ -35,15 +35,21 @@
 | P0 | Plan 撰寫（docs/plans/2026-07-14-dispatch-branch-lifecycle.md） | complete |
 | P1 | Hetero loop review of plan（agy Gemini + cc-shim GLM，5 generations；無未決 Critical/Major） | complete |
 | P2 | 實作（TDD：fixture tests 先行；MiniMax verification-author artifact + foreman fallback） | complete |
-| P3 | 實作 diff hetero review loop + 文件 wiring | in progress |
+| P3 | 實作 diff hetero review loop + 文件 wiring | complete |
 | L-5 | finish-flow（quality gate → merge develop → archive） | pending |
 
 ## 已知限制（引擎面）
 
-codex quota 死至 2026-07-20、grok 402 ⇒ review 面用 agy（Gemini 3.5 Flash (High)）+ cc-shim `--endpoint glm|minimax`（endpoints 已驗活）。跨家族去相關成立（Google + Zhipu/MiniMax vs 實作方 Anthropic-inline）。
+2026-07-16 Spark 與 Grok 4.5 已恢復。Canonical Spark fixer rail 會建立隔離 worktree，與本次 recovery 的「不得新增 worktree」硬限制衝突，因此 P3 修正沿用 Board 已核准的 depth-1 native fallback。Grok read-only review 可完成內容審查，但 CLI 會在 nonce wrapper 前加 preamble，canonical parser 因而誠實回報 `no_verdict`；raw wrapped block 僅作 finding/second-look 證據，結構化 clearance 由 Gemini/MiniMax 補足。Claude Code CLI 另遇 weekly 429（reset 2026-07-16 12:00 Asia/Taipei），只阻塞 release preflight 的五個 slash-entry LLM probes。
 
 ## P2 execution evidence（2026-07-15）
 
 `dispatch-author.sh --strict-roster` 的 configured GLM-5.2 endpoint 連續兩次 API 529；Board 核准一次性 roster override 後，由 `cc-shim/MiniMax-M3@high` 產出 verification-author artifact，repo config 隨即 byte-for-byte 還原。Canonical Spark implementer 以 current-checkout/no-worktree 方式嘗試兩次，均卡在 model-refresh/futex 且零 artifact；Board 因此核准本 foreman 依 author artifact 與已收斂 plan 實作。Recovery 時原 `/tmp/dispatch-author-log-6GM37V` 已不存在；不重建或偽造內容，僅保留 ledger、runner/model provenance 與 converged plan 作為採納依據。
 
 Recovery 的 test-only negative control 在 immutable base `8250dc9` 得到 `RED_RC=1`，失敗為 registered orphan worktree 未 retry/remove 與 log 未清除兩個行為 assertion（非缺檔/import failure）；相同測試在 current tree GREEN：`dispatch-hetero-gc.test.sh` 23 assertions、`reap-dispatch-branches.test.sh` 35 assertions。完整 `hooks/tests/run.sh` 為 139/142 test files green；L1 opt-in/session-marker、engine-scorecard、OpenCode 三組非零均在獨立 `8250dc9` clone 重現，scorecard 原檔零差異且重跑呈現 head PASS/base FAIL，判定為既有環境/flaky baseline。`preflight-portability.sh` 13/17，四個非零（既有 eval `validate.py` bare refs + OpenCode discovery 三項）亦全在 base 重現；canonical/payload/version/hook-inventory gates green。Depth-0 在 P2 boundary 將原 18-path 預算修正為 26（超額皆為 plan 明列、由 canonical version/payload sync 產生的 mirrors）；目前 25 product paths、changed LOC 926/1500，新增第 27 路徑前必須再 escalation。
+
+## P3 review + QC evidence（2026-07-16）
+
+完整 implementation diff 以 artifact-only canonical `dispatch-review.sh` 盲審；所有 round 2+ prompt 均先通過 suppression + redispatch linter。Gemini r1/r2/r3/r4 皆為結構化 `SHIP-AS-IS`；MiniMax-M3 額外 leg 為結構化 `SHIP-AS-IS`。Grok r2 raw block 為 `SHIP-AS-IS`，r3 raw block 為 `FIX-THEN-SHIP`，r4 raw block 回到 `SHIP-AS-IS`；三次皆因 wrapper 前 preamble 被 parser fail-closed 成 `no_verdict`，未被冒充為結構化 pass。Final frozen diff `/tmp/dispatch-branch-p3-r4.diff` sha256 `c735294fed6ee36c4a64dcc700c650fb38739d6e87ed73df0e004a69206acc4a`；final artifacts 為 Gemini `/tmp/dispatch-review-log-L16p0G` 與 Grok `/tmp/dispatch-review-log-WhDXir`。
+
+所有可驗證 finding 均先重現再修：空 `--pattern ''` 全 branch over-match、bundle/per-branch preservation 文件過度宣稱、plain `check` 建立空 ack state、同名 tag 令 `%(refname:short)` 造成 integration-candidate false-clean、以及 non-40-hex recorded tip 錯誤走 exit 2。Focused RED→GREEN 最終為 reaper 42 assertions + orphan-GC 23 assertions；bash syntax、canonical/payload/version、dogfood `scan`/`check` 全綠。兩次完整 suite：第一輪 139/142，三個非零 group 與 P2 baseline 完全相同；最終輪 140/142，engine-scorecard flaky case 轉綠，僅 L1 opt-in/session-marker 與 OpenCode 兩個既有 group 非零。`preflight-portability.sh` 仍為相同 baseline 13/17。Release deterministic gates 在明示 skip quota-blocked slash probes 時 8/8；未 skip 為 7/8，唯一失敗是上述 Claude weekly 429。最終 scope 為 26 product paths、changed LOC 1392/1500，risk counter 15/20，未擴 scope。

@@ -41,8 +41,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 2a strict CLI/authorization | complete | RED `c8ad68e` + amendments `6ae59b3`, `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 2b endpoint/valid dispatch | complete (test-only) | AGY oracle `15642bb` + executable mode `54cd881`; endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 2c result provenance | complete | AGY oracles `156f777`..`7469af6`, `c99278a`/`c79b335`; Spark `d1f407c`; failure 11 + provenance 9 + endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
-| Unit 3 session coupling | in progress | Next: independent RED for active-l6 strict enforcement plus missing/expired/corrupt controls |
-| Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
+| Unit 3 session coupling | complete | AGY oracle `be6ca98`..`b9e69af` + isolation `8765610`; Spark `f89d49d`; session 28 + core 19 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 4 docs/payload/final QC | in progress | Canonical l6/front-door docs, output contract, payload sync, full QC, then finish-flow |
 
 ## Decision log
 
@@ -91,5 +91,11 @@ model qualification policy. Those remain in the separate follow-up plan.
   `c79b335` then proved precondition/runner-failed/empty-output provenance and secret absence.
   Depth-0 passed 11/9/17/45/65/31/227 assertions plus schema/mirror/clean gates. Final artifacts:
   MiniMax-M3 `dispatch-review-log-F4huPQ` and AGY `dispatch-review-log-FIFKiI`, both `SHIP-AS-IS`.
+- Unit 3 AGY oracle `be6ca98`..`b9e69af` isolated a 24/4 active-l6 RED; compatibility-fixture
+  commit `8765610` prevented the real developer marker from contaminating legacy tests. Spark
+  `f89d49d` reuses exported `session-mode.js::readMarker()` and blocks only active l6 non-strict
+  author dispatch. Depth-0 passed session 28, core 19, failure/provenance/endpoint/strict 11/9/17/45,
+  and legacy 65. Final artifacts: MiniMax-M3 `dispatch-review-log-ofZacQ` and AGY
+  `dispatch-review-log-s6rNze`, both `SHIP-AS-IS`.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

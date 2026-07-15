@@ -81,8 +81,15 @@ assert_eq "committed" "$(printf '%s' "$RES_JSON" | jq -r '.status' 2>/dev/null)"
 HB_COUNT="$(grep -c '"kind":"heartbeat"' "$LEDGER_A" 2>/dev/null)"; HB_COUNT="${HB_COUNT:-0}"
 assert_eq "yes" "$([ "$HB_COUNT" -ge 2 ] && echo yes || echo no)" "kill-survival: heartbeat advanced (>=2 beats, got $HB_COUNT)"
 
-# ledger shows the stage committed
-COMMIT_ROWS="$(grep -c '"state":"committed"' "$LEDGER_A" 2>/dev/null)"; COMMIT_ROWS="${COMMIT_ROWS:-0}"
+# ledger shows the stage committed. detached_main writes RESULT_FILE (line ~1037) strictly
+# BEFORE the ledger stage-transition to committed (line ~1042) — a real ordering gap, not test
+# noise — so poll here the same way we polled for RESULT_A above instead of checking once.
+COMMIT_ROWS=0
+for _ in $(seq 1 20); do
+  COMMIT_ROWS="$(grep -c '"state":"committed"' "$LEDGER_A" 2>/dev/null)"; COMMIT_ROWS="${COMMIT_ROWS:-0}"
+  [ "$COMMIT_ROWS" -ge 1 ] && break
+  sleep 0.25
+done
 assert_eq "yes" "$([ "$COMMIT_ROWS" -ge 1 ] && echo yes || echo no)" "kill-survival: ledger recorded the committed stage"
 
 # recoverable: the committed stage + the durable atomic result reconcile to resolved (the

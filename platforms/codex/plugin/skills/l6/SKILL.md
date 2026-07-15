@@ -25,8 +25,11 @@ Hard rules:
   authoritative by itself.
 - Verification authoring goes through `dispatch-author.sh` (the raw-prompt rail —
   NOT `dispatch-review.sh`) on a DIFFERENT family than the implementer engine.
-- All dispatch parameters come from `resolve-review-loop.sh`; no manual
-  hardcoding of model/runner/effort.
+- `/l6` strict verification-author dispatch is exactly:
+  `scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
+  The runner/model/effort/endpoint are resolved from the consuming project’s
+  `.claude/review-loop-config.md` via `resolve-review-loop.sh`; no caller-supplied
+  `--runner`, `--model`, `--effort`, or `--endpoint` in strict mode.
 - `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
 - **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.
 - **Expensive-model thrift**: depth-0 assumes the session model is the most expensive engine in the fleet; inline fallback (`--solo` or authoring content itself) is an escalation event governed by `on_engine_unavailable` (from `resolve-review-loop.sh`), never a silent default.

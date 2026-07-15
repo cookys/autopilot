@@ -1,0 +1,12 @@
+{
+  "case": "08-path-traversal",
+  "class": "critical",
+  "defect_summary": "basename sanitization removed; a project name like '../../etc' allows writes outside docs/projects/",
+  "any_of": [
+    {"all_of": ["traversal"]},
+    {"all_of": ["basename"]},
+    {"all_of": ["../"]},
+    {"all_of": ["sanitiz"]},
+    {"regex": "(write|escape)[^.\\n]{0,30}outside"}
+  ]
+}

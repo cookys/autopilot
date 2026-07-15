@@ -14,7 +14,7 @@
 ## 已決事項(不重議)
 - Board 裁決：TWGameProject 殘骸全部擱置 — 本專案只出工具，絕不對該 repo 動手。
 - Scope Hold：spawn_agent 納管、E1 gate、`unit-*`（dispatch-batch 所有）都 OUT（plan §7）。
-- Plan 核心設計已定（見 plan §2.5/§4）：bash-only、preserve-first 不可豁免（create→verify→delete 嚴格順序）、gate read-only + sha-pinned `--ack`（`.git/autopilot-reap-ack`，新 commit 重新武裝）、anchored dated branch grammar（lookalike 不得匹配）、無新 config/hook、版號 v2.32.28 PATCH。
+- Plan 核心設計已定（見 plan §2.5/§4）：bash-only、preserve-first 不可豁免（create→verify→delete 嚴格順序）、gate read-only + sha-pinned `--ack`（`.git/autopilot-reap-ack`，新 commit 重新武裝）、anchored dated branch grammar（lookalike 不得匹配）、無新 config/hook、版號 v2.32.37 PATCH（2026-07-15 合流時 canonical 已出貨 v2.32.35、v2.32.36 已由 queued 專案保留；原 target v2.32.28 也已被 foreman-sensing 出貨使用）。
 - 引擎現實：codex quota 死至 2026-07-20、grok 402 ⇒ review 面 = agy（`--model "Gemini 3.5 Flash (High)"`）+ cc-shim `--endpoint glm|minimax`（endpoints 已驗活：`node bin/autopilot.js endpoints list` → glm/minimax 都 ✓）。
 
 ## 下一步

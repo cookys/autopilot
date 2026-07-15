@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用
+- **Trigger**: 下次要在 `engine implement-review` 迴圈裡用 endpoint-backed reviewer（GLM/MiniMax via cc-shim `--endpoint`），或碰 `src/engine/autopilot-engine.js` buildReviewArgs 段時。
+- **Context**: 2026-07-14 loop-convergence-gates run（foreman escalation #1）：`autopilot-engine.js:1222` 組 reviewer dispatch 參數時不傳 `reviewer_endpoint` → cc-shim reviewer 缺 endpoint creds 結構性失敗；foreman 被迫換 agy/Gemini。獨立佐證：MiniMax-M3 即使 endpoint 通、在 dispatch-review 的 wrapped block 下也結構性 no_verdict（fail-closed 正確；GLM-5.2 standalone probe 可用）。修法：wire `reviewer_endpoint`（roster/resolver 已有此概念）into buildReviewArgs，並補一條 red-case（endpoint reviewer 配置下組出的 args 必含 --endpoint）。
+- **Effort**: S。
+- **Source**: 2026-07-14 /l6 loop-convergence-gates foreman ledger + depth-0 qc probe。
+
 ### Dispatch-branch lifecycle：session-end 整合候選 gate + repo-branch reaper + 中間輪收斂
 - **Trigger**: 下次任何 /l4-/l6 campaign 結束時發現未併回 develop 的整合候選或 dispatch branch；或 TWGameProject 2026-07-10 殘骸 triage 動工時。
 - **Context**: 2026-07-14 codex-worktree 稽核（`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`）判定結構主因在 autopilot：merge-back/worktree GC 只是 prose 責任（`level-front-door.md` §4/§5），無任何 deterministic 後盾 — `--gc`/`--reap` 只清 `/tmp` worktree，`scripts/` 無 repo-branch reaper ⇒ TWGameProject 留下 ~70 條 20260710 branch（O(engines×tasks×rounds) 爆炸）+ 46-commit `ceo-integration-candidate-r1` 懸空。修法三件：(1) finish-flow / ceo-agent 收尾 gate — `git branch --list 'ceo-integration-candidate-*'` 存在且 `develop..<it>` ahead>0 ⇒ 擋 clean exit、要求 merge/保留記 handoff/丟棄三選一明確裁決；(2) 新 `scripts/reap-dispatch-branches.sh` — dispatch-owned branch（`ceo-*-<date>`、`agent/*-r?-<date>`）凡被 authoritative branch contain（`merge-base --is-ancestor`）或被高輪 sibling 取代 ⇒ bundle 存證後 `branch -D`；未 contain 一律保留並列出（preserve-first、fail-closed，對照 PEACE 2026-07-14 GC 紀律）；(3) 中間輪收斂 — dispatch 層在整合成功時自動刪被取代的 `-r<n-1>` 中間輪（或改單一 per-task branch force-update）。附帶小修：`autopilot-orphan-worktrees.log` 的 permission-denied 陳舊條目定期 prune（目前留著已消失檔案的殘影）。
@@ -569,6 +575,8 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - ✅ RESOLVED 2026-07-05 — counting semantics implemented (this commit); entry retained for history.
 
 ### 🔬 foreman↔depth-0 協調：liveness query + ownership lease + 插隊/steer 通道（l6-resilience R6-research）
+- **部分結案 (v2.32.27)**: 缺口 (1) liveness/state query 的「感知」半邊由 `scripts/watch-foreman.js` 落地（ledger stage/heartbeat + leaf manifest 合流事件；QUIET/STALL 皆 report-only、內嵌「別搶 stage」守則；front-door § Live sensing 儀式化：派遣前指定 ledger 路徑、foreman 心跳義務、depth-0 Monitor）。仍開放：{working/waiting/blocked/dead} 的**可靠分辨**（心跳靜默仍是模糊訊號）、(2) ownership lease 結構性防撞、(3) 插隊/steer 通道。
+- **再部分結案 (v2.32.32-33, 2026-07-15 /l5 兩連 ship)**: 缺口 (1) 的葉歸屬升級為譜系真相（v2.32.32 dispatch lineage：manifest `parent_run_id`/`root_run_id`/`depth` + env 契約 + `watch-foreman.js --root` 零交叉歸屬 + `autopilot status runs --tree`；時間窗啟發式僅剩無譜系舊 manifest 的誠實退路,標 `attribution=time-window`）。缺口 (3) 以 **advisory 層級** land（v2.32.33 directive channel：`run-ledger.sh directive-send/poll/ack` generation+nonce 圍籬、pi-rpc supervisor mid-run steer 遞送＋供應方 ack、CC foreman stage 邊界 poll 儀式、batch runner 誠實標不可達；queue-and-deliver-at-boundary、絕不奪權）。仍開放：{working/waiting/blocked/dead} 可靠分辨、(2) ownership lease 結構性防撞、Stage 3 自適應調度 policy（steer 探詢→無回應才砍、re-dispatch — directive 通道是其遞送底座,policy 本身未做）。
 - **Trigger**: 下次多 foreman 並行 /l6 campaign；或 R0 ledger（run-ledger.sh）已 land 可當協調底座時。
 - **Context**: 2026-07-08 l6-resilience 實作 campaign 實痛——depth-0 把 foreman **回合間的正常驗證**誤判成 stall → 跳進去搶做同一 handler → two-cooks 撞 shared `.git`/worktree → 再加 depth-0↔foreman 訊息交錯（crossed messages）對 R5 擁有權誤解、差點互等死鎖。根因＝foreman↔depth-0 缺可靠協調機制。
 - **缺口三塊**:
@@ -614,6 +622,12 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S 每件。
 - **Source**: l6-resilience campaign deviations ledger，2026-07-08。
 
+### capability-state quota 身分缺 endpoint 維度＋local runner 語意未定
+- **Trigger**: 第一次要記錄 metered endpoint（MiniMax/GLM via cc-shim / anthropic-compatible）的 quota 觀測時；或第一個 local runner（ollama 類/pi 指本機）接線時。
+- **Context**: 2026-07-14 status CLI 設計檢討（cookys 指出 hetero 引擎多來源）：quota 的錢包身分依來源類別不同——訂閱=vendor 池（runner+model 夠用）；**metered endpoint=錢包在 NAMED ENDPOINT**（同 model 走不同 endpoint 是不同錢包，store 事件目前無 `endpoint` 欄→身分歧義）；**local=根本沒有額度概念**（該記 availability/load）。顯示層已修（v2.32.30 source-class 分組＋各類正確措辭＋metered 標明歧義），store 端待做：(a) capability 事件加 optional `endpoint` 欄並進 merge 身分（比照 scorecard effort/model 的 tuple 擴充經驗——注意 R7 教訓：身分鍵要保留既有維度只加不減）；(b) local 類的 capability shape（availability 而非 quota enum）。**別提前建**：等 producer 出現才加，避免無人寫入的 schema 面。部分供應商可能有餘額查詢 API（如 MiniMax）——未驗證，接線前先 Spike。
+- **Effort**: S（endpoint 欄）＋S（local shape）。
+- **Source**: 2026-07-14 status-cli 設計討論。
+
 ### ✅ DONE (v2.32.25) — engine in-loop 去相關 review 對預設 roster（openai×openai）結構性死路
 - **Trigger**: 下次調 review-loop 預設 roster、改 `modelFamilyOfEngine`、或發現 /l5 run 的收斂全靠 verify-first 而 review round 一直 `reviewer_family` blocked 時。
 - **Context**: 2026-07-13 /l5 e2e 實測發現（非本次 tier 引入，是既存結構）：`ensureDistinctReviewFamily` 把 gpt-5.5 / gpt-5.6-sol / gpt-5.3-codex-spark 全映成 `openai`（regex `(gpt|codex|o1|o3|o4)`），而預設 roster 的 implementer（codex-spark）與 reviewer（gpt-5.5）同家族 → engine `implement-review` 的 in-loop review **永遠**在 `reviewer_family` 閘被擋，收斂實質上只靠 verify-first；低風險 tier（sol，亦 openai）同樣過不了這關。深層問題：家族去相關要求與「reviewer 選同 vendor 最強模型」的 roster 選擇互斥——真去相關的 in-loop reviewer 得選 MiniMax/GLM/gemini/claude 家族（claude-haiku 已 qualified，但 tier 設計是同 runner，claude-native ≠ codex → 單一 `reviewer_runner` 欄位的限制也一起浮出）。候選修法：(a) roster 預設改跨家族 reviewer；(b) tier 欄位補 `reviewer_runner_low_risk`；(c) family gate 對 low-risk 降為 warn。需要設計討論，不宜順手改。
@@ -638,7 +652,9 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S。
 - **Source**: 2026-07-13 session 實地診斷＋v2.32.22 fix/tmp-residue-retention。
 
-## commit-secret-scan hook 掃 deletion 行造成 false positive 死路
+### commit-secret-scan hook 掃 deletion 行造成 false positive 死路
 - **Context**: 2026-07-15 TWGameProject 落地時，staged diff 的 `-` 行含 HEAD 既有、`.gitleaks.toml` 已 allowlist 的 AWS 文件範例金鑰（AKIA…EXAMPLE），hook 掃 `git diff --cached` 全文（含 deletion 行）→ 任何修改/移除該行的 commit 都被硬擋；照此邏輯「從 repo 移除真洩漏密鑰」的 commit 也會被擋。當次以 hook 自身的 `--amend --no-edit` 豁免分兩步落地。
 - **Fix 方向**: `hooks/commit-secret-scan.js` 只掃新增行（`^+` 且非 `+++`），並考慮讀取 repo `.gitleaks.toml` allowlist。
 - **Trigger**: 下次碰 hooks/_shared/secret-patterns.js 或有人再撞此 FP。
+- **Effort**: S。
+- **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。

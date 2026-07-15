@@ -20,6 +20,17 @@ const CONTRACT_SCHEMA = JSON.parse(
     'utf8',
   ),
 );
+const VERIFICATION_AUTHOR_ENDPOINT_SCHEMA = CONTRACT_SCHEMA.properties &&
+  CONTRACT_SCHEMA.properties.verification_author_endpoint;
+const VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE = (
+  VERIFICATION_AUTHOR_ENDPOINT_SCHEMA && VERIFICATION_AUTHOR_ENDPOINT_SCHEMA.pattern
+);
+if (typeof VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE !== 'string') {
+  throw new Error('review-loop-contract schema missing verification_author_endpoint.pattern');
+}
+const VERIFICATION_AUTHOR_ENDPOINT_PATTERN = new RegExp(
+  VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE,
+);
 const REVIEW_LOOP_FIELDS = CONTRACT_SCHEMA['x-field-order'];
 if (
   !Array.isArray(REVIEW_LOOP_FIELDS)
@@ -49,6 +60,10 @@ function assertField(value, field, predicate, expected) {
 
 function nonEmptyString(value) {
   return typeof value === 'string' && value.length > 0;
+}
+
+function emptyString(value) {
+  return typeof value === 'string' && value.length === 0;
 }
 
 function assertOneOf(value, field, allowed) {
@@ -119,8 +134,45 @@ function validateReviewLoopConfig(value) {
       throw new Error('review-loop output JSON field capability_warnings must contain only strings');
     }
   }
-  for (const field of ['reviewer_endpoint', 'implementer_endpoint']) {
+  for (const field of [
+    'reviewer_endpoint',
+    'implementer_endpoint',
+    'verification_author_engine',
+    'verification_author_runner',
+    'verification_author_effort',
+    'verification_author_endpoint',
+    'verification_author_family',
+    'implementer_family',
+    'config_path',
+  ]) {
     assertField(value, field, (v) => typeof v === 'string', 'a string');
+  }
+  assertField(value, 'verification_author_present', (v) => typeof v === 'boolean', 'a boolean');
+  assertOneOf(value, 'verification_author_runner', schemaEnum('verification_author_runner'));
+  assertOneOf(value, 'verification_author_effort', schemaEnum('verification_author_effort'));
+  if (value.verification_author_present) {
+    for (const field of [
+      'verification_author_engine',
+      'verification_author_runner',
+      'verification_author_effort',
+    ]) {
+      assertField(value, field, nonEmptyString, 'a non-empty string');
+    }
+    assertField(
+      value,
+      'verification_author_endpoint',
+      (value) => VERIFICATION_AUTHOR_ENDPOINT_PATTERN.test(value),
+      `must match ${VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE}`,
+    );
+  } else {
+    for (const field of [
+      'verification_author_engine',
+      'verification_author_runner',
+      'verification_author_effort',
+      'verification_author_endpoint',
+    ]) {
+      assertField(value, field, emptyString, 'an empty string');
+    }
   }
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
   assertOneOf(value, 'on_engine_unavailable', schemaEnum('on_engine_unavailable'));

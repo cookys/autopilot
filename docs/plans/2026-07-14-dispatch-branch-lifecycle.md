@@ -73,7 +73,7 @@ most valuable output is the thing that never lands) and unbounded branch accumul
 | `skills/ceo-agent/references/level-front-door.md` | §4/§5: replace bare `git branch -D` prose with reaper invocations; add the post-integration `--reap-superseded` step |
 | `references/hetero-dispatch.md` | New § "Repo-branch lifecycle" — recipe + outcome table for the reaper (sibling of the existing worktree-GC §) |
 | `CLAUDE.md` | Scripts inventory row |
-| `CHANGELOG.md` + version mirrors | v2.32.28 (PATCH: new script + gate wiring) via `sync-version.js` |
+| `CHANGELOG.md` + version mirrors | v2.32.37 (PATCH: new script + gate wiring) via `sync-version.js` |
 | `platforms/codex/plugin/**` | Payload sync via `sync-codex-plugin-skills.sh` (pre-commit gate enforces) |
 | `docs/BACKLOG.md` | Mark the entry shipped at finish |
 
@@ -134,7 +134,7 @@ reap, reaped only with `--reap-superseded`.
    contained ⇒ `reap` clears it.
 3. `references/hetero-dispatch.md`: new § "Repo-branch lifecycle (reap-dispatch-branches.sh)"
    with grammar table + outcome table + the preserve-first contract.
-4. CLAUDE.md inventory row; CHANGELOG v2.32.28 entry; `sync-version.js --version 2.32.28`;
+4. CLAUDE.md inventory row; CHANGELOG v2.32.37 entry; `sync-version.js --version 2.32.37`;
    `sync-codex-plugin-skills.sh` payload refresh; BACKLOG entry marked shipped.
 
 **Acceptance**: `preflight-portability.sh` + `preflight-release.sh` + pre-commit gates green.

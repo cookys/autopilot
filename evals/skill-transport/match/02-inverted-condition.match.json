@@ -1,0 +1,12 @@
+{
+  "case": "02-inverted-condition",
+  "class": "critical",
+  "defect_summary": "DOA tier comparison reversed: dangerous high-tier actions auto-approved, safe low-tier escalated",
+  "any_of": [
+    {"all_of": ["tier", "approv"]},
+    {"all_of": ["high", "approv"]},
+    {"regex": "(revers|swap|backward|flip|opposite|wrong way)"},
+    {"all_of": ["escalat"]},
+    {"regex": "(dangerous|high)[^.\\n]{0,40}(auto|approv|allow)"}
+  ]
+}

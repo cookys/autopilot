@@ -1,0 +1,12 @@
+{
+  "case": "09-null-deref",
+  "class": "major",
+  "defect_summary": "'// empty' guard removed from jq; a null path/sha256 makes jq -r emit the literal string 'null', bypassing the non-empty guard",
+  "any_of": [
+    {"all_of": ["jq", "null"]},
+    {"all_of": ["// empty"]},
+    {"regex": "literal\\s+.?null.?"},
+    {"all_of": ["guard", "null"]},
+    {"regex": "null[^.\\n]{0,30}(bypass|slip|pass|through)"}
+  ]
+}

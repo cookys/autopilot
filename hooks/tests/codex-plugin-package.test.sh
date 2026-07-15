@@ -94,14 +94,20 @@ function compareTree(rel) {
   const sourceSet = new Set(sourceFiles);
   const copySet = new Set(copyFiles);
 
+  // Mirror sync-codex-plugin-skills.sh SCRIPT_EXCLUDES: the Codex payload
+  // deliberately omits the OpenCode installer scripts.
+  const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh']);
+  const excluded = (file) => rel === 'scripts' && scriptExcludes.has(file);
+
   for (const file of sourceFiles) {
+    if (excluded(file)) continue;
     if (!copySet.has(file)) failures.push(`missing ${rel}/${file}`);
   }
   for (const file of copyFiles) {
     if (!sourceSet.has(file)) failures.push(`extra ${rel}/${file}`);
   }
   for (const file of sourceFiles) {
-    if (!copySet.has(file)) continue;
+    if (excluded(file) || !copySet.has(file)) continue;
     const source = fs.readFileSync(path.join(sourceRoot, file));
     const copy = fs.readFileSync(path.join(copyRoot, file));
     if (!source.equals(copy)) failures.push(`content ${rel}/${file}`);

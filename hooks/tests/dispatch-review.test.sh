@@ -661,4 +661,32 @@ assert_eq "0" "$EXIT" "quotes stub exits 0"
 node -e 'JSON.parse(process.argv[1])' "$OUT"
 assert_eq "0" "$?" "emitted JSON with multi-line quotes is valid and parseable"
 
+# Regression Test: --pack-file injection present in prompt (skill-transport A/B, --pack-file flag)
+PACK="$TEST_TMP/methodology.pack"
+printf '# Review methodology\nTrace the control flow by hand before trusting a change.\nUNIQUEPACKSENTINEL42\n' > "$PACK"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" --pack-file "$PACK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "pack-file prompt-capture stub exits 0"
+PACK_PROMPT="$(cat "$CAPTURED_PROMPT_FILE")"
+assert_contains "$PACK_PROMPT" "Review methodology (DISPATCHER-AUTHORED, trusted" "prompt contains methodology header when --pack-file set"
+assert_contains "$PACK_PROMPT" "UNIQUEPACKSENTINEL42" "prompt contains the pack body when --pack-file set"
+assert_contains "$PACK_PROMPT" "--- end methodology ---" "prompt closes the methodology block"
+# The nonce output protocol must still precede the diff (pack must not displace it).
+assert_contains "$PACK_PROMPT" "Diff under review:" "pack-injected prompt still contains Diff under review:"
+pack_suffix="${PACK_PROMPT#*"--- end methodology ---"}"
+assert_contains "$pack_suffix" "Diff under review:" "methodology block appears before the diff"
+
+# Regression Test: absent --pack-file ⇒ prompt byte-identical to the no-pack prompt (additive-flag byte-compat).
+# Same diff, one run without --pack-file and one with an EMPTY pack argument path is invalid; instead compare
+# the no-pack prompt against the earlier captured no-pack baseline: it must NOT carry the methodology header.
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_CAPTURE" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "no-pack prompt-capture stub exits 0"
+NOPACK_PROMPT="$(cat "$CAPTURED_PROMPT_FILE")"
+assert_not_contains "$NOPACK_PROMPT" "Review methodology (DISPATCHER-AUTHORED, trusted" "prompt omits methodology block when --pack-file is absent"
+assert_not_contains "$NOPACK_PROMPT" "--- end methodology ---" "prompt omits methodology terminator when --pack-file is absent"
+
+# Regression Test: --pack-file precondition (unreadable path ⇒ exit 2)
+OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --pack-file /nonexistent-pack 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "missing pack-file exit 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "missing pack-file precondition"
+
 finalize_test

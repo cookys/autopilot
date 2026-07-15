@@ -24,6 +24,130 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.35 — /l6 verification-author roster gate
+
+**Headline**: active `/l6` verification authoring is now authorized by the consuming project's first-class roster tuple instead of manual model/runner prose; fail-closed selection while depth 0 retains artifact execution/QC/merge authority.
+
+### Added
+- Added five first-class contract/config fields (`verification_author_present`, `verification_author_engine`, `verification_author_runner`, `verification_author_effort`, `verification_author_endpoint`), plus resolver-derived `verification_author_family`, `implementer_family`, and `config_path` provenance for fail-closed roster resolution.
+- Added strict/endpoint/provenance/session coverage for active `/l6` author resolution and tuple execution gating.
+
+### Changed
+- The only canonical active `/l6` author call is now `dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
+- Active `/l6` tuple resolution is now internal and must be known + cross-family before run delegation; endpoint readiness is checked as a separate concern from the named endpoint selection.
+- Migration: consuming projects must explicitly configure the verification-author tuple; the template remains disabled/fail-closed and legacy explicit authoring remains available only outside active `/l6`.
+
+### Fixed
+- Active `/l6` manual `--runner/--model/--effort/--endpoint` selection cannot start a runner; only the roster tuple path is authoritative.
+- Active `/l6` run selection now fails early (before runner startup/logging) for absent/malformed/same-family/unknown-family/unready endpoints.
+- Result records now carry non-secret `selection_source`, `selection_path`, and `verification_author` provenance to make selection reasoning auditable.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.32.34`
+
+## v2.32.34 — skill-transport A/B: reviewer-arm H2 REFUTED with pre-registered evidence
+
+**Headline**: does packing skill methodology into a headless reviewer seat sharpen it? A pre-registration-locked A/B (plan `docs/plans/2026-07-15-skill-transport-payoff-ab.md`, R1 after a decorrelated plan-review round) ran a 312-cell matrix — haiku (claude-native, k=3, arms no-pack / methodology-pack / length-matched placebo) as the decision-bearing seat, MiniMax-M3 and agy Gemini as k=1 controls — over 13 known-bad + 11 clean diffs with **defect-matched caught predicates** (word-boundary-disjoint from pack vocabulary; any-fail "flagged something" explicitly rejected as the oracle). Verdict, applied at depth-0 from an independently recomputed report AND a hand-rolled discordant count off the raw JSONL: **H2 REFUTED** — haiku discordant delta −1 (adopt bar ≥ +2), placebo delta identical (−1, zero methodology-specific effect), pack arm run-to-run flip band inflated 1→4 (the pack made the weak seat LESS stable, not sharper), and the Gemini control bought its +1 catch by over-flagging the clean set 0→4 (specificity 1.0→0.636). Reviewer-seat `skill_mode: off` is now an **evidence-backed decision**, and the cross-family qc panel is confirmed as the load-bearing quality layer (matching the same week's live escapes: the panel, not prompt content, caught what haiku missed). Pre-registration edit logged in-plan: the numeric ≤2× token rule was dropped at Phase 0 (review raw_logs carry no usage surface); cost reported qualitatively. Implementer arm (H1, Phase 2) remains scoped for a follow-up run.
+
+### Added
+- `scripts/dispatch-review.sh --pack-file <path>` — additive prompt-pack injection inside the nonce wrapped-block protocol (absent flag byte-identical; missing/unreadable pack `precondition_failed` fail-closed; uniform across all six runner branches + the detach re-exec; pack content structurally cannot forge the fresh-nonce verdict block, and a duplicated `VERDICT:` fails closed via the single-verdict count). +4 test cases (file at 140 assertions).
+- `evals/known-bad/13-runstree-cycle-drop.{diff,expected.json}` — new planted-defect case from the real 2026-07-15 escape, admitted through the strong-seat gate (MiniMax-M3 no-pack caught it from the diff alone). The sibling escape (IS_PI coords non-forwarding) was **rejected** as a diff-review case — cross-file wiring omission, not diff-diagnosable — and is recorded in-plan so it is not re-added.
+- `evals/skill-transport/` — the A/B harness: frozen methodology-only packs (output-format directives stripped + grep-asserted), `match/*.match.json` defect predicates (13 cases), `run-matrix.sh` (resume-by-cell, recorded shuffle seeds, fail-closed `no_verdict` accounting), `report.js` (discordant pairs, flip band, per-arm no_verdict format-conflict guard, false-pass-on-major), `match-eval.js`, instrument assertions + stub-engine mechanics test (16 assertions), and the full 312-row matrix + reports as data artifacts.
+
+### Changed
+- Nothing behavioral outside the additive `--pack-file` flag. `schemas/`, `src/engine/review.js`, and all dispatch verdict rails untouched; no production config default flipped (the H2 verdict *keeps* `skill_mode: off`).
+
+### Rollback
+- Maintainer: `git revert 3e7d344`
+- User-side: `/plugin update autopilot @v2.32.33`; the experiment artifacts are inert files under `evals/skill-transport/`.
+
+## v2.32.33 — dispatch directive channel: advisory nudge queued-and-delivered at a boundary (Phase 2)
+
+**Headline**: depth-0 had no way to inject advisory guidance into a running dispatch chain — lineage (Phase 1) told you *who* was running, but there was no back-channel to *nudge* it. Phase 2 adds a one-way, **advisory** directive channel: queue-and-deliver-at-boundary, never a hard interrupt, never a seizure of authority. The R0 ledger (`scripts/run-ledger.sh`) gains three subcommands — `directive-send` (binds the nudge to the target stage's CURRENT lease generation+nonce; **refuses if no stage is leased** — you cannot nudge a stage nobody holds), `directive-poll`/`directive-list` (returns pending un-acked directives), and `directive-ack` (idempotent; a live matching lease ⇒ `directive_delivered`, a bumped generation ⇒ `directive_expired(stale_generation)`, `--reason run_ended` ⇒ the shutdown expiry — every send gets exactly one terminal ack row, a directive never vanishes silently). The pi RPC supervisor (`scripts/lib/pi-rpc-run.js`) is the only truly mid-run channel: when `--ledger/--run-id/--stage` are all passed it polls (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s) and delivers each pending directive as a native RPC `steer` prefixed `[depth-0 directive] …`, then acks `directive_delivered` **from the supervisor** (never the worker — worker bytes stay JSON-escaped inside tool events so a worker can't forge its own delivery); at shutdown/SIGTERM any still-pending directive is `directive_expired(run_ended)`. Reachability is stated honestly: pi-rpc = mid-run steer; a CC foreman = stage-boundary poll; one-shot batch runners (codex exec / agy -p / grok / cc-shim) are UNREACHABLE mid-run and a directive can only shape the NEXT round's dispatch — no pretend-channel. Implementer `gpt-5.3-codex-spark` (canonical `engine implement-review`); in-loop review fell back cross-family to `claude-haiku` (claude-native) while the `gpt-5.5` reviewer pool was exhausted; the engine loop was interrupted by a 2-minute foreground cap after round-1 `committed`, so depth-0 harvested the branch and held authoritative qc with its own adversarial harness (28 + 54 + 18 assertions, full suite green).
+
+### Added
+- `run-ledger.sh directive-send` / `directive-poll` (alias `directive-list`) / `directive-ack` — advisory directive rows (`directive` / `directive_delivered` / `directive_expired`) bound to a stage lease; append-only, flock-serialized, schema-strict, fail-closed.
+- `pi-rpc-run.js` optional directive delivery via `--ledger/--run-id/--stage` (poll → RPC steer → supervisor-written ack; shutdown `run_ended` expiry). `PI_RPC_DIRECTIVE_POLL_SECS` env (default 5).
+- Foreman ritual (front-door § Live sensing item 5) + directive-reachability table (`references/hetero-dispatch.md`).
+- Tests: `hooks/tests/run-ledger-directive.test.sh` (contract) + directive-delivery cases in `hooks/tests/dispatch-pi.test.sh` + a directive-send/ack absence invariant in `hooks/tests/watch-foreman.test.sh`.
+
+### Changed
+- Nothing existing: additive-only. Absent the three new flags / no directives, every existing code path is byte-identical. `schemas/` + `src/engine/review.js` untouched; `dispatch-review.sh` final JSON schema unchanged.
+
+### Fixed (depth-0 QC panel round — FIX-THEN-SHIP, folded into this release)
+- 🟠 `dispatch-hetero.sh --runner pi` now FORWARDS `--ledger/--run-id/--stage` to the supervisor (gated on all three) — previously the ONLY production pi path never enabled delivery, so a documented `directive-send` would sit permanently pending (violating both "exactly one terminal ack" and "no pretend-channel"). E2E test: real dispatch + mid-run send ⇒ `directive_delivered` + steer asserted from the committed git artifact.
+- 🟠 supervisor shutdown/SIGTERM: the child kill/EOF ladder is armed BEFORE the (blocking, ledger-only) directive expiry — a lock-contended ledger can no longer delay worker teardown on the external-kill path.
+- 🟡 `directive-ack` delivered-branch now validates the lease **nonce** as well as the generation (a same-generation nonce mismatch = fenced/replaced writer ⇒ `expired(stale_generation)`).
+- 🟡 validate-then-steer-then-ack: the supervisor checks the directive's bound lease against the CURRENT lease before writing to pi's stdin — a stale-generation directive is never steered to the current worker (observable as `supervisor_directive_stale_skipped`).
+- 🟡 ledger rotation (`RUN_LEDGER_MAX_BYTES`) no longer silently drops pending directives: `directive-poll`/`directive-ack` scan rotated `<ledger>.N` segments (appends still go to the live ledger only).
+- 🔵 a failed delivered-ack is emitted as a `supervisor_directive_ack_failed` log event instead of being silently swallowed (the in-memory re-steer suppression made silent failure an invisible accounting drift).
+
+### Authority boundary
+- A directive is **advisory** — the lease holder keeps the stage, there is **no auto-kill on non-response** (Stage 3 scheduling/steer stays BACKLOG'd), and the read-only `watch-foreman.js` never gains a directive-send surface (its no-`child_process` / report-only greppable invariant is unchanged).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.32 — dispatch lineage: trace-context parent/root/depth across the dispatch rails (Phase 1)
+
+**Headline**: dispatch run-manifests were flat — no `parent_run_id`, so a nested dispatch (foreman → leaf) was unattributable, and `watch-foreman.js` attributed leaves by a born-after-watcher-start time-window heuristic that mis-attributes when two foremen run concurrently. Phase 1 adds a trace-context contract: dispatchers inherit lineage from three env vars (`AUTOPILOT_PARENT_RUN_ID` / `AUTOPILOT_ROOT_RUN_ID` / `AUTOPILOT_DISPATCH_DEPTH`), stamp each manifest with `parent_run_id` + `root_run_id` + `depth`, and export the incremented lineage into the worker's env so chains compose. `watch-foreman.js --root <id>` now filters leaves to a lineage root with zero cross-attribution (pre-upgrade manifests fall back to the time-window heuristic and the emitted line is tagged `attribution=time-window`); `autopilot status runs --tree` folds runs into a parent→child tree with a synthetic `(external)` node for a CC-native foreman's referenced-but-manifest-less root. TELEMETRY ONLY — no verdict/scheduling/steer behavior (Phase 2 is a separate later run). **Honest boundary**: the tree covers only layers passing through autopilot dispatchers; engine-internal spawns (codex `spawn_agent`, agy recursion) never appear. Implementer `gpt-5.3-codex-spark` (canonical `engine implement-review`); in-loop review fell back cross-family to `claude-haiku` (claude-native) while the `gpt-5.5` reviewer pool was exhausted; converged round 1 SHIP-AS-IS.
+
+### Added
+- Lineage env contract + manifest fields (`parent_run_id`/`root_run_id`/`depth`) in `scripts/dispatch-hetero.sh` and `scripts/dispatch-review.sh` — ADDITIVE; absent env ⇒ output differs only by the three new keys (root default: parent null, root=own run_id, depth 0). Values survive the hetero detach `declare -p` state serialization.
+- `scripts/watch-foreman.js --root <run-id>` — lineage-filtered leaf attribution with `attribution=time-window` tagging for pre-upgrade manifests. Report-only invariant preserved (no child_process).
+- `scripts/dispatch-status.js --list` surfaces the lineage fields; `autopilot status runs --tree` (`src/status/cli.js`) renders the parent/child/synthetic-external tree (`--json` composes; default `runs` unchanged). Malformed lineage (self-referencing parent / A→B→A cycle) never hides runs: such nodes surface at root tagged `cycle_detected: true` (`--json`) / a visible `CYCLE(...)` marker (human) — the flat view stays the source of truth. Inherited lineage ids are sanitized to `[A-Za-z0-9._-]` and depth is forced base-10 (`"08"` would be octal-invalid and could corrupt the manifest JSON).
+- `hooks/tests/dispatch-lineage.test.sh` — artifact-based adversarial harness (real manifest files; detach survival; concurrent-root zero cross-attribution; legacy time-window fallback).
+
+### Changed
+- Docs: `references/hetero-dispatch.md` § Mid-run observability + `skills/ceo-agent/references/level-front-door.md` § Live sensing (foreman ritual: export lineage root + `watch-foreman.js --root`), each with the explicit honest boundary; CLAUDE.md inventory rows for `dispatch-status.js` / `watch-foreman.js`.
+
+## v2.32.31 — loop-convergence gates: verification-anchored + generation cap brake for hetero review loops
+
+**Headline**: downgrades the "a human should have pulled the brake on a spinning hetero review loop" rule from "someone remembers to watch" into machine gates (`ironlaw-to-gate`). Origin: the 2026-07-14 codex replay-driver incident — a self-directed hetero review loop ran 8 artifact generations (v1→v3.4) with `tests_executed:false` the ENTIRE run (zero execution), `ship_ready:false` monotonic, verdicts oscillating FAIL/PASS, hours unattended. Five gates: (1+3) a deterministic `scripts/check-loop-convergence.js` — ≥2 consecutive zero-execution rounds, or generation cap reached while still REWORK-shape ⇒ halt; (2) `scripts/rubric-freeze.js` spec-hash seal + drift; (4+5) depth-0 clock-owner (裸跑禁令) + dispatch-brief scale budget as brief-template hard constraints. Honest scope: all five stop HONEST-but-WEAK loops; a worker that FORGES status fields is out of scope (needs execution provenance). Rules→gates table: `docs/ironlaw-to-gate-map.md`.
+
+### Added
+- `scripts/check-loop-convergence.js` — gates 1 (verification-anchored: ≥2 consecutive zero-execution rounds) + 3 (generation cap; parses `artifact_generation` as number `2` OR string `"3.4"`). Data mode exit 0 (reports, like the resolve-* siblings); `--enforce` exit 3 on TRIP.
+- `scripts/rubric-freeze.js` — gate 2: `seal`/`check` round-0 acceptance rubric by sha256 (FROZEN/DRIFT).
+- `docs/ironlaw-to-gate-map.md` — rules→gates map + review-only list + "new gate" checklist.
+- Red-case proof + negative controls: `hooks/tests/check-loop-convergence.test.sh`, `hooks/tests/rubric-freeze.test.sh` (+ 7 real incident fixtures under `hooks/tests/fixtures/loop-convergence/`), wired into the CI hooks suite.
+
+### Changed
+- `skills/ceo-agent/references/level-front-door.md` — 裸跑禁令 (gate 4): a multi-hour autonomous hetero loop MUST have a named depth-0 clock owner wielding the convergence brake.
+- `skills/ceo-agent/references/task-prompt-templates.md` § HOW MUCH + `references/hetero-dispatch.md` invariants — gate 5 scale budget (LOC/files ceiling; over-budget ⇒ escalate) + gate 4 reference.
+
+## v2.32.30 — status quota: engine SOURCE CLASSES (subscription / metered-endpoint / provider-config / local)
+
+**Headline**: "hetero engine 有好幾家、可能從不一樣的地方來、可能有 local model" — the quota view now groups rows by SOURCE CLASS with class-correct semantics instead of implying every engine has a subscription pool: subscription (OAuth CLIs; per-MODEL pools, reset windows, no remaining-%), metered-endpoint (cc-shim / anthropic-compatible; the WALLET identity is the NAMED ENDPOINT which the capability store does not record yet — rows explicitly declared endpoint-ambiguous), provider-config (pi — follows ~/.pi/agent/models.json), local (reserved: no quota concept, availability is the signal). JSON rows gain `source_class`. Store-side identity extension (optional `endpoint` field + local capability shape) deliberately BACKLOG'd until a producer exists.
+
+### Changed
+- `src/status/cli.js` quota grouping + captions; `status-cli.test.sh` 26 assertions (metered caption declares "DIFFERENT wallet").
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.29 — `autopilot status`: one read-only surface for quota / runs / roster
+
+**Headline**: New CLI family `autopilot status [quota|runs|roster] [--json] [--probe]` — the human/agent front door over the three observation substrates that already existed: per-MODEL quota pools from engine-capability-state (status + reset_at + observation age; honesty ceiling stated in-output — subscription CLIs expose no remaining-%, TTL-expired observations are ABSENT = unknown, never shown as live truth; `--probe` refreshes via the safe no-spend surface), live dispatch runs from dispatch-status (phase/alive/stall enrichment, STALL marked report-only), and the resolved roster seats (high/low-risk reviewers, family-conflict policy, preference lists, fallback ladder, qc panel). Born of the 2026-07-14 per-model quota-pool incident and the "看得到才不是 YOLO" thread.
+
+### Added
+- `src/status/cli.js` + `bin/autopilot.js status` routing/help + `hooks/tests/status-cli.test.sh` (22 assertions, all substrates env-sandboxed; TTL-drop semantics pinned).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.28 — foreman live sensing: no YOLO window after /l4 /l5 /l6 dispatch
+
+**Headline**: Dispatching a foreman used to open a black box until its completion notification. New `scripts/watch-foreman.js` (S3-lite: sensing ONLY) composes the two substrates that already existed — the foreman run-ledger (`run-ledger.sh` stage acquire/transition/heartbeat) and the dispatch run-manifest dir — into one line-buffered event stream (`STAGE`/`LEAF_START`/`LEAF_END`/`QUIET`/`LEAF_STALL`/`WAIT`) designed to sit behind the CC Monitor tool, with `--once` as the harness-neutral snapshot poller. Front-door § "Live sensing" makes the ritual mandatory: depth-0 pre-assigns run-id + ledger path BEFORE dispatch and writes them into the foreman prompt; the foreman heartbeats ≥ every 5 minutes inside long stages. Report-only by construction (no child_process — greppable test invariant; QUIET/STALL lines embed the R6 "never grab a leased stage" rule from the 2026-07-08 two-cooks crash). Scheduling/steer policy stays open (R6/S3).
+
+### Added
+- `scripts/watch-foreman.js` + `hooks/tests/watch-foreman.test.sh` (16 assertions: real run-ledger records — never hand-forged; stage events, quiet detection, leaf start/end/stall, `--once`, WAIT, usage errors, no-spawn invariant).
+- Front-door § Live sensing (mandatory ritual) + l5/l6 reference pointers + CLAUDE.md inventory row; BACKLOG R6 entry annotated partially closed (sensing half of gap 1; lease + steer remain).
+- opt-in: `context-budget` and `orchestrator-edit-gate` (both opt-in, default-off) shipped in the concurrently-cut v2.32.27 entry below; this release inherits their wiring unchanged (version-collision renumber artifact — the stems are named here so the opt-in changelog gate anchors to the current version).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.27 — depth-0 economics: context-budget + orchestrator-edit-gate hooks
 
 **Headline**: The 2026-07-14 six-researcher transcript study of two consuming projects (TWGameProject + PEACE, ~22B tokens of Claude transcripts + ~88B of codex sessions) found 96%+ of all tokens were cache_read on ever-growing depth-0 sessions (worst case 1.12B tokens / 94.7h in ONE session; orchestration:implementation ≈ 30:1), and nominal /l5 sessions doing 48–54 inline depth-0 Edits — "pure orchestration" existed only in prose. Two new hooks make the depth-0 economics mechanical: **context-budget** reads the REAL context size (last assistant `usage` row, backward transcript scan 64KB→5MB) and advises session splitting at T1 (100k, user-visible nudge) / T2 (150k, exit-2 escalated advisory directing the model to write a handoff and the user to /clear); **orchestrator-edit-gate** arms in /l4-/l6 sessions (new `scripts/session-mode.js` marker at level entry) and warns (default) or denies (`block`) depth-0 product-file edits — subagents/foremen pass via the empirically-probed hook-payload identity (`agent_id` presence, CC 2.1.208, SPIKE-verified). Design adversarially reviewed by a 3-family hetero panel (Gemini 3.5 Flash High / GPT-OSS 120B / MiniMax-M3 — all FIX-THEN-SHIP, findings folded: WHERE-not-WHO worktree backdoor closed, >64KB-line scan brittleness fixed, narrow allowlist, no pretend enforcement at T2, T3 deny tier deferred pending warn-mode calibration).

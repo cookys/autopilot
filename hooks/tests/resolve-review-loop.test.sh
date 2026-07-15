@@ -41,6 +41,14 @@ OUT="$(bash "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "gpt-5.5"' "default reviewer engine"
 assert_contains "$OUT" '"implementer_engine": "gpt-5.3-codex-spark"' "default implementer (codex, NOT agy on this repo)"
+assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
+assert_contains "$OUT" '"verification_author_engine": "glm-5.2"' "default verification_author_engine"
+assert_contains "$OUT" '"verification_author_runner": "cc-shim"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
+assert_contains "$OUT" '"verification_author_endpoint": "glm"' "default verification_author_endpoint"
+assert_contains "$OUT" '"verification_author_family": "zhipu"' "default derived verification_author_family"
+assert_contains "$OUT" '"implementer_family": "openai"' "default derived implementer_family"
+assert_contains "$OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "default config_path is repo dogfood absolute path"
 assert_contains "$OUT" '"loop_convergence_verdict": "SHIP-AS-IS"' "default convergence verdict"
 assert_contains "$OUT" '"review_risk": "low"' "default review_risk"
 assert_contains "$OUT" '"required_review_families": 1' "default required_review_families"
@@ -57,6 +65,14 @@ assert_eq "1" "$(bash "$SCRIPT" --field required_review_families)" "--field requ
 assert_eq "false" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
+assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
+assert_eq "glm-5.2" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
+assert_eq "cc-shim" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
+assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
+assert_eq "glm" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
+assert_eq "zhipu" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
+assert_eq "openai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
+assert_eq "$REPO_ROOT/.claude/review-loop-config.md" "$(bash "$SCRIPT" --field config_path)" "--field config_path"
 EMPTY_SCDIR="$TEST_TMP/empty-scorecard"
 mkdir -p "$EMPTY_SCDIR"
 assert_eq "false" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "--field reviewer_qualified returns false when no reviewer scorecard row"
@@ -74,6 +90,12 @@ assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field im
 assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field loop_max_rounds)" "non-numeric rounds falls back to default"
 assert_eq "my-local-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_engine)" "valid override value is honored"
 assert_eq "override" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field source)" "override source reported"
+TEMPLATE_CFG="$REPO_ROOT/project-config-template/review-loop-config.md"
+assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_present)" "template override present is false"
+assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_engine)" "template override verification_author_engine is empty"
+assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_runner)" "template override verification_author_runner is empty"
+assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_effort)" "template override verification_author_effort is empty"
+assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_endpoint)" "template override verification_author_endpoint is empty"
 
 # 6b. new hetero runners are accepted (v2.26.6–2.26.8): grok (impl+reviewer), cc-shim (impl).
 #     Regression guard — these were silently reset to default before the enums were widened.
@@ -111,7 +133,7 @@ AC_CFG="$TEST_TMP/all-calibrated.md"
 printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
 assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
-assert_not_contains "$AC_OUT" "all-calibrated" "alias string is absent from emitted JSON"
+assert_not_contains "$(json_get "$AC_OUT" qc_panel)" "all-calibrated" "alias string is absent from parsed qc_panel value"
 
 # case/trim handling check
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
@@ -218,12 +240,12 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 # 13b. round-2 reviewer 🟡 — a NON-self-referential KR2 schema lock. The prefix check
 #      above derives its baseline by stripping the new keys from the already-modified
 #      output, so a rename/reorder/drop of a PRE-EXISTING field would slip through.
-#      Pin the exact key NAMES + ORDER (independent of values): the 19 legacy keys,
-#      then work_domain, then domain_source, the capability keys, reviewer/implementer_endpoint,
-#      and min_panel_size (appended last) — nothing else, nothing moved.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":'
+#      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
+#      provenance fields in schema order (verification-author tuple, family provenance, config path),
+#      then density-variant keys when scale/source flags are enabled.
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
-assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema is EXACTLY the 19 legacy keys + work_domain + domain_source + capability keys + reviewer/implementer_endpoint + min_panel_size, in order"
+assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
 # 14. non-git / empty / probe-failure paths:
 NON_GIT_DIR="$TEST_TMP/not-a-repo"

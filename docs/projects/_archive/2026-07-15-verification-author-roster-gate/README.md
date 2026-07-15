@@ -1,0 +1,126 @@
+# Verification-author roster gate
+
+> Status: SHIPPED in v2.32.35
+> Branch: `fix/verification-author-roster-gate`
+> Merge: `0a8ef087d310a868a41ada53dfe4daf196e5b253`
+> Push: `origin/develop` at `a79277f1c8d9f00a428c2081d7dbaa35c58adff1`
+> Plan: [`../../../plans/2026-07-15-verification-author-roster-gate.md`](../../../plans/2026-07-15-verification-author-roster-gate.md)
+
+## Goal
+
+Make `/l6` verification authoring fail closed: the author tuple must come from the consuming
+project roster, differ from the implementer family, pass endpoint readiness separately, and leave
+non-secret selection provenance in the result. Manual model/runner substitution must not start a
+runner during active l6.
+
+## Success criteria
+
+- Resolver has one schema-backed verification-author tuple with exact presence/validation rules.
+- Strict author dispatch rejects manual, absent, malformed, same-family, and unknown-family tuples
+  before endpoint lookup, temp logs, or runner start.
+- Active l6 requires strict roster mode; inactive legacy dispatch remains compatible.
+- Result provenance contains no URL, token value, token environment value, or raw credential.
+- Focused RED/GREEN proof, existing compatibility suite, dual-family review, depth-0 QC, payload
+  sync, merge, and push are all complete.
+
+## Scope boundary
+
+In scope: resolver/schema/config, JS validation, strict `dispatch-author.sh`, session-mode coupling,
+result provenance, l6/front-door docs, focused tests, and deterministic Codex mirrors. Out of scope:
+the general dispatch-unit-contract gate, automatic fallback, native Agent interception, or changing
+model qualification policy. Those remain in the separate follow-up plan.
+
+## Progress
+
+| Phase | State | Evidence / blocker |
+|---|---|---|
+| Contract + incident root cause | complete | `4b7ed12`, `97dd900` |
+| Unit 1a resolver oracle | complete | AGY `a827ffe` |
+| Unit 1a shell/schema | complete on feature branch | Spark `e61d75d`; focused QC green |
+| Unit 1b.i JS/schema compatibility | complete on feature branch | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
+| Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
+| Unit 1 aggregate review | complete | Final MiniMax-M3 + AGY `SHIP-AS-IS`; depth-0 full gate green at `05d0aad` |
+| Unit 2a strict CLI/authorization | complete | RED `c8ad68e` + amendments `6ae59b3`, `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 2b endpoint/valid dispatch | complete (test-only) | AGY oracle `15642bb` + executable mode `54cd881`; endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 2c result provenance | complete | AGY oracles `156f777`..`7469af6`, `c99278a`/`c79b335`; Spark `d1f407c`; failure 11 + provenance 9 + endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 3 session coupling | complete | AGY oracle `be6ca98`..`b9e69af` + isolation `8765610`; Spark `f89d49d`; session 28 + core 19 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 4 docs/payload | complete | Spark `d2f0cbb`, wording repair `8fa5600`; session 28 + provenance 9 + skill validation/payload parity green; MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Final aggregate QC / finish-flow | complete | Full 141-file suite + schema/payload/skills/completeness/secret/test-integrity gates green; three review packs each MiniMax-M3 + AGY `SHIP-AS-IS`; merge `0a8ef08` pushed in remote tip `a79277f` |
+
+## Decision log
+
+- Depth-0 owns and freezes specs; workers translate them, never redefine authorization.
+- Product implementer is `gpt-5.3-codex-spark` High.
+- Verification author is heterogeneous; GLM is primary when reachable, with an explicitly recorded
+  fallback rather than a silent substitution.
+- Required independent reviewers are MiniMax-M3 and AGY Gemini 3.5 Flash High.
+- Canonical files and repo-required generated mirrors are one declared atomic dispatch boundary.
+- Unit 2 is mechanically split into 2a CLI/authorization, 2b endpoint/runner ordering, and 2c
+  provenance/legacy compatibility. Session-marker coupling is Unit 3 and cannot enter these diffs.
+- Unit 1b independent test-author attempts: GLM-5.2 timed out with a zero-byte artifact; AGY timed
+  out; MiniMax-M3 returned only a tool-call request and was rejected despite the legacy rail saying
+  `authored`. Existing compatibility REDs remain authoritative; no fake oracle was accepted.
+- Unit 1 aggregate review found a real JS endpoint-name validation gap. GLM-5.2 again timed out with
+  a zero-byte artifact, so the recorded AGY fallback authored RED `55a1e55` (365 pass, 2 expected
+  assertion failures before product repair). MiniMax-M3 emitted a wrapped finding after a prose
+  preamble, so the legacy parser correctly returned `no_verdict`; it does not count as a panel pass.
+- The first AGY fallback author call also mutated the consuming feature worktree despite
+  `dispatch-author.sh` documenting a read-only posture. Only its declared three-line test diff was
+  present and it was isolated/verified before commit, but the rail behavior is a containment breach
+  to mechanize in the separate dispatch-unit contract project.
+- Unit 1 review converged after endpoint parity repairs `f2c5518`, `50c1c23`, and guard-order repair
+  `05d0aad`. Final artifacts: MiniMax-M3 `dispatch-review-log-wP7sJm` and AGY
+  `dispatch-review-log-Iw7OxK`, both `SHIP-AS-IS`. Depth-0 reran resolver 227, independent oracle 31,
+  runner 35, engine 367, parity 30, schema, mirror-sync, skill validation, and diff checks green.
+- The first Spark resolver-compatibility test run was killed at the 115-second outer limit after it
+  authored a complete diff. A bounded retry replayed that exact transcript diff, completed in 94
+  seconds as `40698b4`, and passed the full Unit 1 depth-0 gate.
+- Unit 2a was split again at the implementation boundary: `4290bb0` owns strict CLI/exact-config
+  preflight, while `ae22b67` owns the one-shot resolver JSON snapshot and tuple/family gates. Two
+  115-second Spark attempts left no commit and were rejected; bounded replay run
+  `hetero-1784090815-1847883-ec59` produced the accepted two-file commit.
+- Unit 2a depth-0 QC passed strict oracle 45, legacy author 65, verification-author resolver 31,
+  full resolver 227, schema parity, mirror sync, diff, and clean-tree checks. Initial reviewer
+  claims about Node `-e` argv, the `incomplete` diagnostic, and inherited override precedence were
+  disproved with executable reproductions. Final artifacts: MiniMax-M3
+  `dispatch-review-log-tkf1k8` and AGY `dispatch-review-log-yJ00fB`, both `SHIP-AS-IS`.
+- Unit 2b's independent AGY oracle was characterization-green against the existing endpoint/cc-shim
+  path, so no product patch was invented. Commits `15642bb` and mode-only `54cd881` prove exact
+  GLM tuple/endpoint delivery and unready-endpoint no-fallback. Depth-0 passed endpoint 17, strict
+  45, and legacy 65 assertions. Final artifacts: MiniMax-M3 `dispatch-review-log-kmFUsj` and AGY
+  `dispatch-review-log-OKnOdF`, both `SHIP-AS-IS`.
+- Unit 2c was split into envelope/authored and failure-matrix verification. AGY RED oracle commits
+  `156f777`..`7469af6` drove Spark shared serializer `d1f407c`; AGY matrix `c99278a` plus mode
+  `c79b335` then proved precondition/runner-failed/empty-output provenance and secret absence.
+  Depth-0 passed 11/9/17/45/65/31/227 assertions plus schema/mirror/clean gates. Final artifacts:
+  MiniMax-M3 `dispatch-review-log-F4huPQ` and AGY `dispatch-review-log-FIFKiI`, both `SHIP-AS-IS`.
+- Unit 3 AGY oracle `be6ca98`..`b9e69af` isolated a 24/4 active-l6 RED; compatibility-fixture
+  commit `8765610` prevented the real developer marker from contaminating legacy tests. Spark
+  `f89d49d` reuses exported `session-mode.js::readMarker()` and blocks only active l6 non-strict
+  author dispatch. Depth-0 passed session 28, core 19, failure/provenance/endpoint/strict 11/9/17/45,
+  and legacy 65. Final artifacts: MiniMax-M3 `dispatch-review-log-ofZacQ` and AGY
+  `dispatch-review-log-s6rNze`, both `SHIP-AS-IS`.
+- Unit 4 Spark commit `d2f0cbb` documented the strict active-l6 command, manual-parameter ban,
+  fail-closed behavior, and non-secret result provenance across canonical files and generated Codex
+  mirrors. Depth-0 found one inaccurate sentence conflating roster endpoint IDs with credentials;
+  two bounded retries timed out without a commit and were rejected, then exact two-file repair
+  `8fa5600` completed in 32 seconds. Depth-0 passed session 28, provenance 9, 28-skill validation,
+  syntax, diff, payload-sync, and byte-parity gates. Final artifacts: MiniMax-M3
+  `dispatch-review-log-QG08oy` and AGY `dispatch-review-log-CmfZoy`, both `SHIP-AS-IS`.
+- Final full-suite round 1 exposed two ambient/provenance fixture gaps, not product failures:
+  `dispatch-output-quiescence` read the real active-l6 marker, and engine-unavailable prefix parity
+  compared two now-observable config paths. Bounded AGY test-only commits `f402a31` and `34f2ed7`
+  isolated the legacy marker fixture and held one config path constant without weakening assertions.
+  Focused 19/10 assertions and the repeated full `hooks/tests/run.sh` then passed all 141 files.
+- Release metadata advanced to v2.32.35 in `754b20c` with factual CHANGELOG repair `834151e`.
+  An earlier release run used the correct root CHANGELOG despite an incorrect depth-0 allowlist and
+  was rejected; the corrected 8-path contract was rerun rather than retroactively widening scope.
+- Final aggregate review was split into product, tests, and docs/release packs. AGY artifacts
+  `dispatch-review-log-y7BRMA`, `dispatch-review-log-Upn9on`, and `dispatch-review-log-X8fezI`
+  were `SHIP-AS-IS`. MiniMax's initial speculative product/test findings were mechanically refuted;
+  evidence-constrained blind-safe reruns `dispatch-review-log-NONKfO` and
+  `dispatch-review-log-GTpFZ3` plus docs artifact `dispatch-review-log-V7d9v4` were `SHIP-AS-IS`.
+  Two separate zero-byte MiniMax transport failures were rejected as `no_verdict`, never counted as
+  panel passes.
+- The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
+  this incident fix does not expand into a dispatcher rewrite.

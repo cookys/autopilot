@@ -39,8 +39,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
 | Unit 1 aggregate review | complete | Final MiniMax-M3 + AGY `SHIP-AS-IS`; depth-0 full gate green at `05d0aad` |
 | Unit 2a strict CLI/authorization | complete | RED `c8ad68e` + amendments `6ae59b3`, `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
-| Unit 2b endpoint/valid dispatch | in progress | Next: independent RED for configured GLM tuple reaching the exact fake runner and endpoint failure with no fallback |
-| Unit 2c result provenance | pending | RED: strict vs legacy payload, selection path, secret hygiene |
+| Unit 2b endpoint/valid dispatch | complete (test-only) | AGY oracle `15642bb` + executable mode `54cd881`; endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 2c result provenance | in progress | Next: independent RED for strict vs legacy payload, selection path, and secret hygiene |
 | Unit 3 session coupling | pending | RED oracle first |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
 
@@ -81,5 +81,10 @@ model qualification policy. Those remain in the separate follow-up plan.
   claims about Node `-e` argv, the `incomplete` diagnostic, and inherited override precedence were
   disproved with executable reproductions. Final artifacts: MiniMax-M3
   `dispatch-review-log-tkf1k8` and AGY `dispatch-review-log-yJ00fB`, both `SHIP-AS-IS`.
+- Unit 2b's independent AGY oracle was characterization-green against the existing endpoint/cc-shim
+  path, so no product patch was invented. Commits `15642bb` and mode-only `54cd881` prove exact
+  GLM tuple/endpoint delivery and unready-endpoint no-fallback. Depth-0 passed endpoint 17, strict
+  45, and legacy 65 assertions. Final artifacts: MiniMax-M3 `dispatch-review-log-kmFUsj` and AGY
+  `dispatch-review-log-OKnOdF`, both `SHIP-AS-IS`.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

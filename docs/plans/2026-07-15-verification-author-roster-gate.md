@@ -114,8 +114,8 @@ the whole project as one authoring block.
 | 1b.ii configs/resolver compatibility | complete | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
 | 1 aggregate review | complete | Endpoint RED `55a1e55`; repairs through `05d0aad`; final MiniMax-M3 + AGY `SHIP-AS-IS`; full depth-0 gate green |
 | 2a strict CLI/authorization | complete | RED `c8ad68e` + `6ae59b3` + `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
-| 2b endpoint/valid dispatch | in progress | Independent RED oracle next; 2a frozen |
-| 2c result provenance | pending | Separate RED oracle after 2b green |
+| 2b endpoint/valid dispatch | complete (test-only) | AGY oracle `15642bb` + mode `54cd881`; endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| 2c result provenance | in progress | Independent RED oracle next; 2a/2b frozen |
 | 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |
 | 4 docs/payload | pending | Canonical l6 command, payload sync, full QC |
 

@@ -25,7 +25,8 @@ Depth-0 orchestration runs create three families of repo-local branches —
 integration), `ceo-<engine>-<task>-r<N>-<date>` (per-engine×task×round intermediates) — and
 nothing in the lifecycle (a) forces an explicit merge/keep/discard adjudication of integration
 candidates before clean session exit, (b) can reap branches whose content is already contained
-elsewhere, or (c) converges superseded intermediate rounds. Result: silent work loss risk (the
+by the integration target, or (c) surfaces superseded intermediate rounds for manual disposition.
+Result: silent work loss risk (the
 most valuable output is the thing that never lands) and unbounded branch accumulation.
 
 ## 2. OKR / KRs
@@ -38,8 +39,9 @@ most valuable output is the thing that never lands) and unbounded branch accumul
 - **KR2 (reaper)**: `scripts/reap-dispatch-branches.sh` exists, preserve-first: contained branches
   are bundled (verified) then deleted; un-contained branches are NEVER deleted, only listed.
 - **KR3 (convergence)**: superseded intermediate rounds (`-r<n-1>` with a higher-round sibling of
-  the same engine+task+date) have an explicit lifecycle: detectable by `scan`, reapable only via
-  opt-in `--reap-superseded` (bundle-first), wired as prose into the front-door integration step.
+  the same engine+task+date) have an explicit lifecycle: detectable by `scan`, preserved and
+  reported by `--reap-superseded` for manual disposition, and wired as prose into the front-door
+  integration step. Supersession alone never authorizes automatic deletion.
 - **KR4 (quality)**: plan converges through hetero loop review (no open Critical/Major);
   fixture-repo red/green tests pass; diff-scoped gates add zero regression. Board/finish-flow
   adjudicates documented pre-existing portability/full-suite failures; no fake pass.
@@ -53,7 +55,8 @@ most valuable output is the thing that never lands) and unbounded branch accumul
 - Preserve-first is non-waivable: a branch may be deleted ONLY after `git bundle create` +
   `git bundle verify` both exit 0 for that branch; bundle-verify failure ⇒ branch kept + finding
   reported + exit 1.
-- Un-contained AND un-superseded branches are never deleted regardless of flags.
+- Every branch un-contained by the authoritative integration target is preserved regardless of
+  supersession or flags; supersession is reporting metadata, never deletion proof.
 - `check` (the gate) never mutates refs or worktrees; only explicit `--ack` metadata and
   deterministic stale-ack pruning may write under the git common dir. Adjudication is the caller's.
 - Exit codes: 0 clean / 1 adjudication-needed-or-violation / 2 usage-or-environment. Exit 1's
@@ -83,11 +86,11 @@ most valuable output is the thing that never lands) and unbounded branch accumul
 
 | File | Responsibility |
 |------|----------------|
-| `scripts/reap-dispatch-branches.sh` (NEW) | The engine: `scan` (read-only classify+containment JSON) / `check` (session-end gate, exit 1 on unadjudicated candidates) / `reap` (bundle-verify-then-delete contained; `--reap-superseded` opt-in) |
+| `scripts/reap-dispatch-branches.sh` (NEW) | The engine: `scan` (read-only classify+containment JSON) / `check` (session-end gate, exit 1 on unadjudicated candidates) / `reap` (bundle-verify-then-delete target-contained branches; `--reap-superseded` reports preserved manual-disposition candidates) |
 | `hooks/tests/reap-dispatch-branches.test.sh` (NEW) | Fixture-repo red/green: containment, supersession, gate exits, bundle-verify failure path, ack behavior, non-git env |
 | `scripts/dispatch-hetero.sh` + `scripts/lib/worktree-reap.sh` | Orphan-log hygiene: `--gc` prunes `$ORPHAN_LOG` entries whose path no longer exists; own-user retry once (append site: `worktree-reap.sh:267-269`) |
 | `skills/finish-flow/SKILL.md` | L-5.6 row: add the gate call (`reap-dispatch-branches.sh check`) to the session-end checklist |
-| `skills/ceo-agent/references/level-front-door.md` | §4/§5: replace bare `git branch -D` prose with reaper invocations; add the post-integration `--reap-superseded` step |
+| `skills/ceo-agent/references/level-front-door.md` | §4/§5: replace bare `git branch -D` prose with reaper invocations; add the post-integration `--reap-superseded` report/manual-disposition step |
 | `references/hetero-dispatch.md` | New § "Repo-branch lifecycle" — recipe + outcome table for the reaper (sibling of the existing worktree-GC §) |
 | `CLAUDE.md` | Scripts inventory row |
 | `CHANGELOG.md` + version mirrors | v2.32.37 (PATCH: new script + gate wiring) via `sync-version.js` |
@@ -119,15 +122,11 @@ most valuable output is the thing that never lands) and unbounded branch accumul
    itself an integration candidate, its own ref is excluded from the target list (self is
    never evidence of containment). (R1: glm Minor; fresh R3: agy Major)
    Candidate-as-target safety (R2: agy Critical — two candidates at the SAME commit are
-   mutually `is-ancestor`, so a naive rule reaps BOTH, losing the live content entirely):
-   (a) containment of one integration candidate BY another requires STRICT ancestry
-   (`is-ancestor` holds AND tip shas differ); (b) a same-tip candidate group designates ONE
-   survivor (numerically highest round; tie → last in refname sort) — non-survivors are
-   reapable (content byte-identical to the survivor), the survivor is never reapable via
-   same-tip equivalence; (c) containment targets exclude branches classified reapable in the
-   same run (recompute until stable — with (a)+(b) this converges deterministically);
-   (d) defense-in-depth assertion after classification: no reapable branch may be the sole
-   containment proof of another reapable branch — violation keeps both + exit 1.
+   mutually `is-ancestor`, so candidate containment must never become delete authority):
+   a same-tip candidate group designates one canonical containment target (numerically highest
+   round; tie → last in refname sort), but every candidate remains preserved and gates while it
+   is ahead of the authoritative integration target. Only target containment enters `reapable`;
+   candidate-to-candidate containment is classification metadata, not deletion proof.
    `superseded_by` (intermediates and units only): a branch is superseded iff ANY live
    sibling with the same prefix+date key has a strictly greater round (the highest such
    sibling is reported — `r2` is superseded by `r4` even when `r3` was already deleted;
@@ -142,9 +141,9 @@ most valuable output is the thing that never lands) and unbounded branch accumul
    bucket); `branches[]` is the full classified list.
    Output JSON `{branches:[...], candidates_ahead:[...], reapable:[...], superseded:[...],
    kept:[...]}`; exit 0 (scan never gates).
-3. `check` = scan + gate: exit 1 iff ≥1 **non-reapable** integration-candidate branch has
-   `ahead>0` AND is not acked (an older candidate already contained by another live candidate
-   is handled by `reap`; the surviving candidate still gates). Ack mechanism: `check --ack
+3. `check` = scan + gate: exit 1 iff ≥1 integration-candidate branch has `ahead>0` AND is not
+   acked; candidate-to-candidate containment does not bypass the gate or enable reaping. Ack
+   mechanism: `check --ack
    <branch>` appends `<branch> <tip-sha>` to
    `$(git rev-parse --git-common-dir)/autopilot-reap-ack`; an entry suppresses the gate ONLY
    while the tip sha matches (new commits re-arm the gate). Ack matching is EXACT-FIELD:
@@ -174,7 +173,9 @@ supersession fixture includes `r2` vs `r10` (numeric-compare case).
    default bundle dir: `$(git rev-parse --git-common-dir)/autopilot-reap-bundles/<UTC-date>/`,
    created with `mkdir -p` before bundling (missing dir must never fail a create). (R1: agy
    Minor) Without `--yes` behaves as `--dry-run` (prints the would-reap set; exit 0).
-2. Eligible set: `reapable` (contained) always; `superseded` only under `--reap-superseded`.
+2. Eligible set: `reapable` only — branches proven contained by the authoritative integration
+   target. `--reap-superseded` adds uncontained superseded branches to the preserved `kept`
+   report for manual disposition; it never adds them to the delete/bundle set.
    ONE bundle per run — `<dir>/reap-<UTC-timestamp>-<pid>.bundle` naming both amortizes the
    full-history cost (one pack-sized artifact per run instead of per branch; R2: agy Major)
    and avoids path collisions (R2: glm Minor). Strictly ordered:
@@ -204,8 +205,9 @@ supersession fixture includes `r2` vs `r10` (numeric-compare case).
 un-contained branch survives every flag combination; same-tip integration candidates both
 survive until the authoritative target contains them; bundle-stage failure
 simulation (unwritable bundle path) → NOTHING deleted + exit 1; a checked-out branch is kept
-with a failure naming the worktree; superseded uncontained branches survive even with
-`--reap-superseded`; a git error message containing `"` lands in `failures[]` as valid JSON
+with a failure naming the worktree; superseded uncontained branches survive every flag,
+`--reap-superseded` reports them in `kept` for manual disposition, and a git error message
+containing `"` lands in `failures[]` as valid JSON
 (escape case).
 
 ### Phase C — wiring + docs · size S
@@ -268,7 +270,7 @@ first two pruned, own dir retried (removed ⇒ line dropped); no behavior change
 | Failure mode | Guard |
 |--------------|-------|
 | Bundle silently fails → branch deleted → work lost | Strict order create→verify→delete; any non-zero keeps the branch; failure surfaces in JSON + exit 1 (Global Constraint, non-waivable) |
-| Pattern over-match nukes a user branch | Anchored dated grammar; lookalike fixture test is a named acceptance case; deletion additionally requires containment/supersession proof |
+| Pattern over-match nukes a user branch | Anchored dated grammar; lookalike fixture test is a named acceptance case; deletion additionally requires authoritative-target containment proof |
 | Gate nags forever on a deliberately-kept candidate | sha-pinned `--ack` (re-arms on new commits); ack file lives in `.git/`, never committed |
 | Gate wired but skippable (prose again) | The gate line lands inside finish-flow L-5.6's checklist (an existing forcing function with per-line pass/fail output), not as a new free-floating paragraph |
 | Reaper deletes a checked-out branch | Complete worktree enumeration before/after CAS; occupancy/proof invalidation restores exact ref and names the path |

@@ -78,7 +78,6 @@ esac
 [ -n "$into_name" ] || die_env "integration target branch name is empty"
 git check-ref-format "refs/heads/$into_name" >/dev/null 2>&1 || die_env "invalid integration target branch: $into"
 into_ref="refs/heads/$into_name"
-into_sha="$(git -C "$repo" rev-parse --verify "${into_ref}^{commit}" 2>/dev/null)" || die_env "integration target local branch does not resolve: $into_ref"
 into="$into_name"
 
 for pattern in "${extra_patterns[@]}"; do
@@ -97,17 +96,46 @@ declare -a reapable=() superseded=() kept=() candidates_ahead=()
 declare -A family=() tip=() ahead=() contained_in=() superseded_by=()
 declare -A round=() sibling_key=() canonical_for_tip=() is_maximal_candidate=()
 declare -A highest_round=() highest_name=() partition=()
+declare -A snapshot_tip=()
+declare -a local_branch_names=()
 
-ref_list="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-refs.XXXXXX")" || die_env "cannot create branch enumeration temp file"
-ref_err="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-refs-err.XXXXXX")" || { rm -f "$ref_list"; die_env "cannot create branch enumeration error file"; }
-if ! git -C "$repo" for-each-ref --sort=refname --format='%(refname:lstrip=2)' refs/heads >"$ref_list" 2>"$ref_err"; then
-  enumeration_error="$(<"$ref_err")"
-  rm -f "$ref_list" "$ref_err"
-  die_env "cannot enumerate local branches${enumeration_error:+: $enumeration_error}"
-fi
-rm -f "$ref_err"
-mapfile -t local_branch_names < "$ref_list" || { rm -f "$ref_list"; die_env "cannot read complete local branch enumeration"; }
-rm -f "$ref_list"
+initial_heads_snapshot=""
+check_heads_final=""
+check_heads_post_evaluation=""
+trap 'rm -f "${initial_heads_snapshot:-}" "${check_heads_final:-}" "${check_heads_post_evaluation:-}"' EXIT
+
+snapshot_local_heads() {
+  local output="$1" err rc enumeration_error
+  err="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-refs-err.XXXXXX")" || return 1
+  git -C "$repo" for-each-ref --sort=refname --format='%(refname)%09%(objectname)' refs/heads >"$output" 2>"$err"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    enumeration_error="$(<"$err")"
+    rm -f "$err"
+    printf '%s' "${enumeration_error:-git for-each-ref failed}"
+    return 1
+  fi
+  rm -f "$err"
+  return 0
+}
+
+initial_heads_snapshot="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-refs.XXXXXX")" || die_env "cannot create branch enumeration temp file"
+enumeration_error="$(snapshot_local_heads "$initial_heads_snapshot")" || die_env "cannot enumerate local branches${enumeration_error:+: $enumeration_error}"
+while IFS= read -r ref_line || [ -n "$ref_line" ]; do
+  [[ "$ref_line" == *$'\t'* ]] || die_env "malformed local branch snapshot"
+  full_ref="${ref_line%%$'\t'*}"
+  ref_sha="${ref_line#*$'\t'}"
+  [[ "$ref_sha" != *$'\t'* ]] || die_env "malformed local branch snapshot"
+  case "$full_ref" in refs/heads/*) name="${full_ref#refs/heads/}" ;; *) die_env "non-local ref in branch snapshot: $full_ref" ;; esac
+  [ -n "$name" ] && [ -n "$ref_sha" ] || die_env "malformed local branch snapshot"
+  [ -z "${snapshot_tip[$name]:-}" ] || die_env "duplicate local branch in snapshot: $name"
+  snapshot_tip["$name"]="$ref_sha"
+  local_branch_names+=("$name")
+done < "$initial_heads_snapshot"
+
+into_sha="${snapshot_tip[$into_name]:-}"
+[ -n "$into_sha" ] || die_env "integration target local branch does not resolve: $into_ref"
+git -C "$repo" cat-file -e "${into_sha}^{commit}" 2>/dev/null || die_env "integration target local branch is not a commit: $into_ref"
 
 for name in "${local_branch_names[@]}"; do
   [ -n "$name" ] || continue
@@ -134,7 +162,7 @@ for name in "${local_branch_names[@]}"; do
   [ "$matched" -eq 1 ] || continue
 
   branches+=("$name")
-  tip["$name"]="$(git -C "$repo" rev-parse --verify "refs/heads/$name")" || die_env "cannot resolve local branch: $name"
+  tip["$name"]="${snapshot_tip[$name]}"
   ahead["$name"]="$(git -C "$repo" rev-list --count "$into_sha..${tip[$name]}" 2>/dev/null)" || die_env "cannot compare $name with $into_ref"
   contained_in["$name"]=""
   superseded_by["$name"]=""
@@ -320,22 +348,26 @@ if [ "$command_name" = check ]; then
     [ "$post_ack_tip" = "$ack_tip" ] || ack_race=1
   fi
 
+  # A successful check linearizes at check_heads_final: it is byte-identical to
+  # the complete refs/heads snapshot used for classification, and remains
+  # byte-identical after evaluation. Thus the snapshot contains the exact target
+  # SHA and the complete dispatch-candidate name/tip set acknowledged below.
+  check_heads_final="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-check-refs.XXXXXX")" || die_env "cannot create final branch snapshot"
+  enumeration_error="$(snapshot_local_heads "$check_heads_final")" || die_env "cannot enumerate local branches during final check${enumeration_error:+: $enumeration_error}"
+  cmp -s "$initial_heads_snapshot" "$check_heads_final" || die_env "local branch refs changed during check; retry from a fresh snapshot"
+
   gate="$ack_race"
-  current_into_sha="$(git -C "$repo" rev-parse --verify "${into_ref}^{commit}" 2>/dev/null)" || die_env "integration target disappeared during check: $into_ref"
   for name in "${candidates[@]}"; do
-    current_tip="$(git -C "$repo" rev-parse --verify "refs/heads/$name" 2>/dev/null)" || die_env "integration candidate disappeared during check: $name"
-    current_ahead="$(git -C "$repo" rev-list --count "$current_into_sha..$current_tip" 2>/dev/null)" || die_env "cannot recompare $name with $into_ref"
-    tip["$name"]="$current_tip"
-    ahead["$name"]="$current_ahead"
-    if git -C "$repo" merge-base --is-ancestor "$current_tip" "$current_into_sha" 2>/dev/null; then
-      contained_in["$name"]="$into_name"
-      partition["$name"]="reapable"
-      continue
-    fi
-    contained_in["$name"]=""
-    [ "$current_ahead" -gt 0 ] || continue
-    if [ "${acknowledged[$name]:-}" != "$current_tip" ]; then gate=1; fi
+    [ "${ahead[$name]}" -gt 0 ] || continue
+    if [ "${acknowledged[$name]:-}" != "${tip[$name]}" ]; then gate=1; fi
   done
+
+  if [ -n "${AUTOPILOT_REAP_TEST_HOOK_AFTER_CHECK_EVALUATION:-}" ]; then
+    "${AUTOPILOT_REAP_TEST_HOOK_AFTER_CHECK_EVALUATION}" "$repo" || die_env "post-evaluation race test hook failed"
+  fi
+  check_heads_post_evaluation="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-check-refs.XXXXXX")" || die_env "cannot create post-evaluation branch snapshot"
+  enumeration_error="$(snapshot_local_heads "$check_heads_post_evaluation")" || die_env "cannot enumerate local branches after check evaluation${enumeration_error:+: $enumeration_error}"
+  cmp -s "$check_heads_final" "$check_heads_post_evaluation" || die_env "local branch refs changed during check evaluation; retry from a fresh snapshot"
   emit_scan_json
   exit "$gate"
 fi

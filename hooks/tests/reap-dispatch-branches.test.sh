@@ -269,25 +269,13 @@ EOF
 test_enumeration_and_config_fail_closed
 
 test_ack_races_and_merged_gate() {
-  local repo="$TEST_TMP/ack-races" base t1 t2 hook rc
+  local repo="$TEST_TMP/ack-races" base t1 hook rc
   new_repo "$repo"
   base=$(git -C "$repo" rev-parse refs/heads/develop)
   t1=$(child_commit "$repo" "$base" candidate-one)
-  t2=$(child_commit "$repo" "$t1" candidate-two)
   git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t1"
 
-  hook="$TEST_TMP/advance-ack.sh"
-  cat > "$hook" <<EOF
-#!/usr/bin/env bash
-git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t2" "$t1"
-EOF
-  chmod +x "$hook"
-  set +e
-  AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE="$hook" bash "$SCRIPT" check --repo "$repo" --into develop --ack ceo-integration-candidate-r1 >/dev/null 2>/dev/null; rc=$?
-  set -e
-  assert_eq "$rc" 1 "candidate movement after ack write re-arms gate"
-
-  git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t1"
+  hook="$TEST_TMP/delete-ack.sh"
   cat > "$hook" <<EOF
 #!/usr/bin/env bash
 git -C "$repo" update-ref -d refs/heads/ceo-integration-candidate-r1 "$t1"
@@ -305,6 +293,66 @@ EOF
 }
 
 test_ack_races_and_merged_gate
+
+test_check_snapshot_linearization_races() {
+  local repo base t1 t2 hook out rc
+
+  repo="$TEST_TMP/check-new-candidate"
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse refs/heads/develop)
+  t1=$(child_commit "$repo" "$base" candidate-one)
+  t2=$(child_commit "$repo" "$base" candidate-two)
+  git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t1"
+  hook="$TEST_TMP/create-candidate-after-ack.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r2 "$t2"
+EOF
+  chmod +x "$hook"
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE="$hook" bash "$SCRIPT" check --repo "$repo" --into develop --ack ceo-integration-candidate-r1 2>&1); rc=$?
+  set -e
+  assert_neq "$rc" 0 "hook-after-ack new ahead candidate fails closed"
+  assert_not_contains "$out" '"branches"' "new candidate race never emits stale clean JSON"
+
+  repo="$TEST_TMP/check-candidate-cas"
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse refs/heads/develop)
+  t1=$(child_commit "$repo" "$base" candidate-one)
+  t2=$(child_commit "$repo" "$t1" candidate-two)
+  git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t1"
+  hook="$TEST_TMP/advance-candidate-cas-after-evaluation.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t2" "$t1"
+EOF
+  chmod +x "$hook"
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_CHECK_EVALUATION="$hook" bash "$SCRIPT" check --repo "$repo" --into develop --ack ceo-integration-candidate-r1 2>&1); rc=$?
+  set -e
+  assert_neq "$rc" 0 "existing candidate exact-CAS advance fails closed"
+  assert_not_contains "$out" '"branches"' "candidate advance never emits contradictory JSON"
+
+  repo="$TEST_TMP/check-target-move"
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse refs/heads/develop)
+  t1=$(child_commit "$repo" "$base" candidate-one)
+  t2=$(child_commit "$repo" "$base" target-move)
+  git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$t1"
+  hook="$TEST_TMP/move-target-after-ack.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" update-ref refs/heads/develop "$t2" "$base"
+EOF
+  chmod +x "$hook"
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE="$hook" bash "$SCRIPT" check --repo "$repo" --into develop --ack ceo-integration-candidate-r1 2>&1); rc=$?
+  set -e
+  assert_neq "$rc" 0 "integration target movement fails closed"
+  assert_not_contains "$out" '"branches"' "target movement never emits stale classification JSON"
+}
+
+test_check_snapshot_linearization_races
 
 test_worktree_and_delete_races() {
   local repo="$TEST_TMP/delete-races" real_git fake_bin hook wt out rc base unrelated
@@ -375,12 +423,38 @@ test_relative_bundle_dir_is_repo_relative() {
 
 test_relative_bundle_dir_is_repo_relative
 
+test_finish_flow_package_root_resolver() {
+  local package="$TEST_TMP/plugin-package" consumer="$TEST_TMP/consumer" resolver="$TEST_TMP/finish-flow-resolver.sh" out rc
+  mkdir -p "$package/skills/finish-flow" "$package/scripts" "$consumer"
+  cp "$REPO_ROOT/skills/finish-flow/SKILL.md" "$package/skills/finish-flow/SKILL.md"
+  cp "$SCRIPT" "$package/scripts/reap-dispatch-branches.sh"
+  chmod +x "$package/scripts/reap-dispatch-branches.sh"
+  git init -q -b develop "$consumer"
+  awk '/finish-flow-root-resolver:start/{capture=1; next} /finish-flow-root-resolver:end/{exit} capture && $0 !~ /^```/{print}' \
+    "$REPO_ROOT/skills/finish-flow/SKILL.md" > "$resolver"
+
+  out=$(cd "$consumer" && unset CLAUDE_PLUGIN_ROOT PLUGIN_ROOT && . "$resolver" && resolve_finish_flow_package_root "$package/skills/finish-flow/SKILL.md")
+  assert_eq "$out" "$package" "catalog-path fallback resolves package root, never consumer git root"
+  set +e
+  (cd "$consumer" && unset CLAUDE_PLUGIN_ROOT PLUGIN_ROOT && . "$resolver" && resolve_finish_flow_package_root >/dev/null 2>&1); rc=$?
+  set -e
+  assert_neq "$rc" 0 "missing active catalog path fails closed"
+  chmod -x "$package/scripts/reap-dispatch-branches.sh"
+  set +e
+  (cd "$consumer" && unset CLAUDE_PLUGIN_ROOT PLUGIN_ROOT && . "$resolver" && resolve_finish_flow_package_root "$package/skills/finish-flow/SKILL.md" >/dev/null 2>&1); rc=$?
+  set -e
+  assert_neq "$rc" 0 "non-executable package reaper fails closed"
+}
+
+test_finish_flow_package_root_resolver
+
 test_lifecycle_wiring_is_explicit() {
   local finish front
   finish=$(cat "$REPO_ROOT/skills/finish-flow/SKILL.md")
   front=$(cat "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md")
   assert_contains "$finish" '--into "$integration_target"' "finish-flow passes derived integration target explicitly"
-  assert_contains "$finish" 'CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT' "finish-flow resolves runtime plugin root"
+  assert_contains "$finish" 'resolve_finish_flow_package_root()' "finish-flow ships an executable fail-closed package-root resolver"
+  assert_contains "$finish" 'Never substitute the consumer git root or a newest-cache search' "finish-flow forbids consumer-root and newest-cache fallback"
   assert_contains "$front" 'does **not** make' "front-door does not claim cherry-pick ancestry containment"
   assert_contains "$front" 'Never use a bare branch -D' "front-door forbids unpreserved out-of-grammar deletion"
 }

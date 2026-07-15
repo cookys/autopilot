@@ -1,4 +1,4 @@
-# dispatch-branch-lifecycle — session-end 整合候選 gate + repo-branch reaper + 中間輪收斂
+# dispatch-branch-lifecycle — session-end 整合候選 gate + repo-branch reaper + 中間輪裁決
 
 > Source: 2026-07-14 codex-worktree audit（`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`）§5 autopilot 側修法；BACKLOG「Dispatch-branch lifecycle」條目。
 > Board 指令：CEO 寫 plan → hetero engine loop review 收斂 → 實作。
@@ -10,7 +10,7 @@
 **Key Results**:
 1. **KR1 — session-end gate**: finish-flow / front-door 收尾時存在一個 deterministic 檢查：dispatch-owned 整合候選 branch（`ceo-integration-candidate-*` 等）存在且 ahead>0 ⇒ 擋 clean exit、要求 merge/保留記 handoff/丟棄三選一明確裁決。
 2. **KR2 — reaper 工具**: `scripts/reap-dispatch-branches.sh` 存在且 preserve-first：contained（`merge-base --is-ancestor`）⇒ bundle 存證後刪；未 contained ⇒ 保留並列出。絕不 fail-open 刪未存證內容。
-3. **KR3 — 中間輪收斂**: 整合成功後被取代的 `-r<n-1>` 中間輪 branch 有明確 lifecycle（工具支援 + prose wiring），不再無限累積。
+3. **KR3 — 中間輪裁決**: 被取代的 `-r<n-1>` 中間輪 branch 可被 deterministic 偵測、保留並列入 manual-disposition 清單；只有已 contained 於 authoritative integration target 的 branch 可自動刪除，supersession 本身永不授權刪除。
 4. **KR4 — 品質**: plan/review 無未決 Critical/Major；fixture red/green 與 diff-scoped zero-regression 綠。既有 portability/full-suite 非零須 base 重現並標 PRE_EXISTING DEFERRED，不冒充 pass。
 
 ## Scope（Hold — L-1.5 audit 結果）

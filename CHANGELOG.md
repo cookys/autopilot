@@ -30,7 +30,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Added
 
-- Added `scripts/reap-dispatch-branches.sh` with read-only classification, exact-tip preservation acknowledgements, contained-branch reaping, and opt-in superseded-round cleanup.
+- Added `scripts/reap-dispatch-branches.sh` with read-only classification, exact-tip preservation acknowledgements, authoritative-target-contained branch reaping, and opt-in superseded-round reporting for manual disposition; uncontained branches are never auto-deleted.
 - Added fixture-repository coverage for candidate gating, base-10 round ordering, slash refs, bundle integrity, empty-pattern rejection, bundle-stage all-or-nothing failures, per-branch checked-out guards, and invalid environments.
 
 ### Changed

@@ -205,6 +205,25 @@ Any false item is NO-GO. Quota reset, model rename, missing mirror, dirty base, 
 or a unit that exceeds one semantic decision must be resolved by a new/smaller contract, not by a
 larger prompt.
 
+### C1 bootstrap exception (single use)
+
+C1 creates the checker, so it cannot honestly claim that the not-yet-existing checker authorized
+its own dispatch. C1 is the only bootstrap exception:
+
+- depth-0 writes a frozen C1 JSON contract conforming to this plan's v1 shape and records its SHA-256;
+- depth-0 mechanically checks exact base/dependency SHAs, clean tree, existing required paths,
+  live roster/readiness, exact canonical+mirror allowlist, budgets, and RED/acceptance argv before
+  runner start;
+- existing v2.32.35 strict roster/session gates remain active and no manual model substitution is
+  permitted;
+- the dispatch result records the bootstrap checklist and contract hash even though the new checker
+  did not execute it;
+- C1 acceptance must include running the new checker against its own valid/invalid fixtures.
+
+This exception expires when C1 is accepted. C2-C7 require the shipped checker and may not copy,
+extend, or reinterpret the bootstrap path. If C1 stops/rejects, a corrected C1 contract repeats the
+same depth-0 checklist; it does not authorize any later unit.
+
 ## Mechanical NO-GO and runtime stop
 
 Pre-dispatch NO-GO is any failed GO condition. Runtime stop is triggered by wall budget, explicit
@@ -277,7 +296,7 @@ scripts/dispatch-hetero.sh --strict-contract --contract-file <json> --prompt-fil
 
 | Unit | Size | Depends on | Scope | Acceptance |
 |---|---|---|---|---|
-| C1 schema/checker | S | v2.32.35 | schema, checker, one focused oracle | Invalid/spec/base/roster/readiness fixtures are NO-GO with zero fake-runner calls; valid fixture emits stable hashes and GO |
+| C1 schema/checker | S | v2.32.35 bootstrap checklist | schema, checker, one focused oracle | Frozen C1 contract/checklist/hash recorded; invalid/spec/base/roster/readiness fixtures are NO-GO with zero fake-runner calls; valid fixture emits stable hashes and GO |
 | C2 write-rail preflight | S | C1 | hetero rail plus focused oracle | Strict active L5/L6 derives base/timeout/tuple from contract and blocks all caller disagreements before worktree/runner |
 | C3 artifact boundary | S | C2 | post-return validator plus focused oracle | Out-of-path/deny/budget/output violations reject; acceptance argv runs on QC host using git truth |
 | C4 author rail | S | C1, C3 | author rail plus containment oracle | Roster gate composes with contract; consuming checkout mutation is containment breach and cannot be promoted |

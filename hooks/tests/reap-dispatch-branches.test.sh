@@ -100,6 +100,29 @@ test_reap_contained_and_preserve_uncontained() {
 
 test_reap_contained_and_preserve_uncontained
 
+test_symbolic_dispatch_ref_never_deletes_referent() {
+  local repo="$TEST_TMP/reap-symbolic-ref" out rc
+  new_repo "$repo"
+  git -C "$repo" branch ordinary-victim develop
+  git -C "$repo" symbolic-ref refs/heads/agent/symbolic-r1-20260715 refs/heads/ordinary-victim
+
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir "$TEST_TMP/symbolic-bundles"); rc=$?
+  assert_eq "$rc" 0 "contained symbolic dispatch ref reaps cleanly"
+  if git -C "$repo" show-ref --verify --quiet refs/heads/ordinary-victim; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "no-deref deletion must preserve symbolic ref referent"
+  fi
+  if git -C "$repo" symbolic-ref -q refs/heads/agent/symbolic-r1-20260715 >/dev/null 2>&1; then
+    fail "contained dispatch symref itself should be deleted"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+  assert_contains "$out" 'agent/symbolic-r1-20260715' "reap JSON names deleted dispatch symref"
+}
+
+test_symbolic_dispatch_ref_never_deletes_referent
+
 test_superseded_opt_in_and_same_tip_survivor() {
   local repo="$TEST_TMP/reap-superseded" base t1 t2 rc out
   new_repo "$repo"
@@ -125,15 +148,21 @@ test_superseded_opt_in_and_same_tip_survivor() {
 test_superseded_opt_in_and_same_tip_survivor
 
 test_bundle_failure_and_checked_out_guard() {
-  local repo="$TEST_TMP/reap-failures" bad_dir="$TEST_TMP/not-a-\"dir" wt rc out
+  local repo="$TEST_TMP/reap-failures" bad_dir="$TEST_TMP/not-a-\"dir" wt rc out base t1 t2
   new_repo "$repo"
+  base=$(git -C "$repo" rev-parse develop)
+  t1=$(child_commit "$repo" "$base" superseded-one)
+  t2=$(child_commit "$repo" "$base" superseded-two)
   git -C "$repo" branch agent/bundle-fail-r1-20260715 develop
+  git -C "$repo" update-ref refs/heads/ceo-failure-task-r1-20260715 "$t1"
+  git -C "$repo" update-ref refs/heads/ceo-failure-task-r2-20260715 "$t2"
   : > "$bad_dir"
   set +e
-  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir "$bad_dir" 2>/dev/null); rc=$?
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop --yes --reap-superseded --bundle-dir "$bad_dir" 2>/dev/null); rc=$?
   set -e
   assert_eq "$rc" 1 "bundle stage failure exits 1"
   if json_valid "$out"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "quoted git-path failure must remain valid JSON"; fi
+  assert_contains "$out" 'ceo-failure-task-r1-20260715' "early bundle failure reports preserved superseded branch in kept"
   if git -C "$repo" show-ref --verify --quiet refs/heads/agent/bundle-fail-r1-20260715; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "bundle failure must delete nothing"; fi
 
   wt="$TEST_TMP/checked-out-wt"
@@ -332,6 +361,11 @@ EOF
   set -e
   assert_neq "$rc" 0 "existing candidate exact-CAS advance fails closed"
   assert_not_contains "$out" '"branches"' "candidate advance never emits contradictory JSON"
+  assert_not_contains "$(cat "$repo/.git/autopilot-reap-ack" 2>/dev/null)" "$t2" "failed raced ack never persists the moved tip"
+  set +e
+  bash "$SCRIPT" check --repo "$repo" --into develop >/dev/null 2>/dev/null; rc=$?
+  set -e
+  assert_neq "$rc" 0 "plain check after failed raced ack remains gated"
 
   repo="$TEST_TMP/check-target-move"
   new_repo "$repo"
@@ -455,6 +489,10 @@ test_lifecycle_wiring_is_explicit() {
   assert_contains "$finish" '--into "$integration_target"' "finish-flow passes derived integration target explicitly"
   assert_contains "$finish" 'resolve_finish_flow_package_root()' "finish-flow ships an executable fail-closed package-root resolver"
   assert_contains "$finish" 'Never substitute the consumer git root or a newest-cache search' "finish-flow forbids consumer-root and newest-cache fallback"
+  assert_contains "$front" 'Reuse finish-flow' "front-door reuses finish-flow resolver and target derivation"
+  assert_contains "$front" '--repo "$consumer_repo" --into "$integration_target"' "front-door passes consumer repo and authoritative target explicitly"
+  assert_not_contains "$front" $'\nscripts/reap-dispatch-branches.sh reap' "front-door has no consumer-relative reaper command"
+  assert_not_contains "$front" 'reap --into develop' "front-door never hardcodes develop for reaping"
   assert_contains "$front" 'does **not** make' "front-door does not claim cherry-pick ancestry containment"
   assert_contains "$front" 'Never use a bare branch -D' "front-door forbids unpreserved out-of-grammar deletion"
 }

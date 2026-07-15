@@ -130,8 +130,25 @@ SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
 SKILL_PACK_CONTENT_TEMP=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
-# trap firing mid-run appends to a real path instead of an undefined one.
-ORPHAN_LOG="${TMPDIR:-/tmp}/autopilot-orphan-worktrees.log"
+# trap firing mid-run appends to a real path instead of an undefined one. Keep the
+# predictable log and lock inside a private per-user directory: shared /tmp names
+# let another user deny service or redirect either path before startup.
+ORPHAN_STATE_DIR="${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID:-$(id -u)}}"
+_init_orphan_state_dir() {
+  local dir="$1" mode
+  if [ -e "$dir" ] || [ -L "$dir" ]; then
+    [ -d "$dir" ] && [ ! -L "$dir" ] && [ -O "$dir" ] || return 1
+  else
+    (umask 077; mkdir "$dir") || return 1
+  fi
+  mode="$(stat -c '%a' "$dir" 2>/dev/null || stat -f '%Lp' "$dir" 2>/dev/null)" || return 1
+  case "$mode" in 700|0700) ;; *) return 1 ;; esac
+}
+if ! _init_orphan_state_dir "$ORPHAN_STATE_DIR"; then
+  printf 'ERROR: unsafe orphan state directory: %s\n' "$ORPHAN_STATE_DIR" >&2
+  exit 2
+fi
+ORPHAN_LOG="$ORPHAN_STATE_DIR/autopilot-orphan-worktrees.log"
 
 # Retry signal-handler orphan entries once before the normal marker/age GC pass.
 # The log can contain both paths and redirected git stderr, so only exact,
@@ -141,7 +158,8 @@ rewrite_orphan_log() {
   [ -e "$ORPHAN_LOG" ] || return 0
   local tmp lock_fd path gitfile_line common_raw common_dir registered line rc list err
   [ -f "$ORPHAN_LOG" ] || { printf 'WARN: orphan log is not a regular file: %s\n' "$ORPHAN_LOG" >&2; return 1; }
-  exec {lock_fd}>"${ORPHAN_LOG}.lock" || return 1
+  _wt_open_lock_fd "${ORPHAN_LOG}.lock" || return 1
+  lock_fd="$_WT_SAFE_LOCK_FD"
   flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
   mapfile -t orphan_entries < "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
   tmp="$(mktemp "${ORPHAN_LOG}.tmp.XXXXXX")" || { exec {lock_fd}>&-; return 1; }
@@ -736,7 +754,8 @@ _wt_lock_fail() {
   git branch -D "$BRANCH" >/dev/null 2>&1 || true
   die_precondition "$1"
 }
-exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
+_wt_open_lock_fd "$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
+WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
 flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
 # Keep bookkeeping files invisible to git status / git add -A inside the worktree.
 # For linked worktrees, git reads info/exclude from the COMMON git dir (shared
@@ -1184,7 +1203,7 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
       classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize \
-      reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
+      reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true
   } > "$state_file"

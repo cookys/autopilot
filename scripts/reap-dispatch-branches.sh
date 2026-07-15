@@ -102,7 +102,8 @@ declare -a local_branch_names=()
 initial_heads_snapshot=""
 check_heads_final=""
 check_heads_post_evaluation=""
-trap 'rm -f "${initial_heads_snapshot:-}" "${check_heads_final:-}" "${check_heads_post_evaluation:-}"' EXIT
+ack_tmp=""
+trap 'rm -f "${initial_heads_snapshot:-}" "${check_heads_final:-}" "${check_heads_post_evaluation:-}" "${ack_tmp:-}"' EXIT
 
 snapshot_local_heads() {
   local output="$1" err rc enumeration_error
@@ -313,9 +314,8 @@ if [ "$command_name" = check ]; then
     for ack_line in "${ack_lines[@]}"; do
       saved_name=""; saved_sha=""; extra=""
       IFS=' ' read -r saved_name saved_sha extra <<< "$ack_line"
-      if [ -n "${extra:-}" ] || [[ ! "${saved_sha:-}" =~ ^[0-9a-f]{40}$ ]] \
-         || ! git -C "$repo" show-ref --verify --quiet "refs/heads/${saved_name:-}" \
-         || [ "$(git -C "$repo" rev-parse "refs/heads/${saved_name:-}" 2>/dev/null)" != "$saved_sha" ]; then
+      if [ -z "${saved_name:-}" ] || [ -n "${extra:-}" ] || [[ ! "${saved_sha:-}" =~ ^[0-9a-f]{40}$ ]] \
+         || [ "${snapshot_tip[${saved_name:-}]:-}" != "$saved_sha" ]; then
         printf 'WARN: dropped stale or malformed ack for %s\n' "${saved_name:-<empty>}" >&2
         continue
       fi
@@ -323,29 +323,17 @@ if [ "$command_name" = check ]; then
       printf '%s %s\n' "$saved_name" "$saved_sha" >> "$ack_tmp" || { rm -f "$ack_tmp"; die_env "cannot rewrite ack state"; }
     done
   fi
-  ack_race=0
   if [ -n "$ack_branch" ]; then
     [ "${family[$ack_branch]:-}" = candidate ] || { rm -f "$ack_tmp"; die_env "--ack branch is not a live integration candidate: $ack_branch"; }
-    ack_tip="$(git -C "$repo" rev-parse --verify "refs/heads/$ack_branch" 2>/dev/null)" || { rm -f "$ack_tmp"; die_env "--ack branch disappeared before write: $ack_branch"; }
-    [ "$ack_tip" = "${tip[$ack_branch]}" ] || ack_race=1
+    ack_tip="${tip[$ack_branch]}"
     if [ "${acknowledged[$ack_branch]:-}" != "$ack_tip" ]; then
       printf '%s %s\n' "$ack_branch" "$ack_tip" >> "$ack_tmp" || { rm -f "$ack_tmp"; die_env "cannot append ack state"; }
     fi
     acknowledged["$ack_branch"]="$ack_tip"
   fi
-  if [ -s "$ack_tmp" ]; then
-    mv -f "$ack_tmp" "$ack_file" || die_env "cannot atomically rewrite ack file"
-  else
-    rm -f "$ack_tmp" || die_env "cannot remove empty ack rewrite"
-    rm -f "$ack_file" || die_env "cannot prune empty ack file"
-  fi
 
   if [ -n "${AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE:-}" ]; then
     "${AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE}" "$repo" "$ack_branch" || die_env "ack race test hook failed"
-  fi
-  if [ -n "$ack_branch" ]; then
-    post_ack_tip="$(git -C "$repo" rev-parse --verify "refs/heads/$ack_branch" 2>/dev/null)" || die_env "--ack branch disappeared after write: $ack_branch"
-    [ "$post_ack_tip" = "$ack_tip" ] || ack_race=1
   fi
 
   # A successful check linearizes at check_heads_final: it is byte-identical to
@@ -356,7 +344,7 @@ if [ "$command_name" = check ]; then
   enumeration_error="$(snapshot_local_heads "$check_heads_final")" || die_env "cannot enumerate local branches during final check${enumeration_error:+: $enumeration_error}"
   cmp -s "$initial_heads_snapshot" "$check_heads_final" || die_env "local branch refs changed during check; retry from a fresh snapshot"
 
-  gate="$ack_race"
+  gate=0
   for name in "${candidates[@]}"; do
     [ "${ahead[$name]}" -gt 0 ] || continue
     if [ "${acknowledged[$name]:-}" != "${tip[$name]}" ]; then gate=1; fi
@@ -368,6 +356,14 @@ if [ "$command_name" = check ]; then
   check_heads_post_evaluation="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-check-refs.XXXXXX")" || die_env "cannot create post-evaluation branch snapshot"
   enumeration_error="$(snapshot_local_heads "$check_heads_post_evaluation")" || die_env "cannot enumerate local branches after check evaluation${enumeration_error:+: $enumeration_error}"
   cmp -s "$check_heads_final" "$check_heads_post_evaluation" || die_env "local branch refs changed during check evaluation; retry from a fresh snapshot"
+  if [ -s "$ack_tmp" ]; then
+    mv -f "$ack_tmp" "$ack_file" || die_env "cannot atomically rewrite ack file"
+  else
+    rm -f "$ack_tmp" || die_env "cannot remove empty ack rewrite"
+    ack_tmp=""
+    rm -f "$ack_file" || die_env "cannot prune empty ack file"
+  fi
+  ack_tmp=""
   emit_scan_json
   exit "$gate"
 fi
@@ -417,7 +413,7 @@ config_rc=$?
 if [ "$config_rc" -ne 0 ] && [ "$config_rc" -ne 1 ]; then
   config_error="$(<"$config_err")"
   rm -f "$config_list" "$config_err"
-  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
   printf ',"failures":[{"branch":null,"stage":"config-query","error":"%s"}],"dry_run":false}\n' \
     "$(json_escape "${config_error:-cannot enumerate local branch config}")"
   exit 1
@@ -436,7 +432,7 @@ for name in "${eligible[@]}"; do
   refs+=("refs/heads/$name")
 done
 if [ -n "$bundle_error" ]; then
-  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
   printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false}\n' "$(json_escape "$bundle_error")"
   exit 1
 fi
@@ -447,7 +443,7 @@ elif [[ "$bundle_dir" != /* ]]; then
   bundle_dir="$repo/$bundle_dir"
 fi
 mkdir -p "$bundle_dir" 2>/dev/null || {
-  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
   printf ',"failures":[{"branch":null,"stage":"bundle-create","error":"%s"}],"dry_run":false}\n' "$(json_escape "cannot create bundle directory: $bundle_dir")"
   exit 1
 }
@@ -473,7 +469,7 @@ if [ -z "$bundle_error" ]; then
   fi
 fi
 if [ -n "$bundle_error" ]; then
-  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
   printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false}\n' "$(json_escape "$bundle_error")"
   exit 1
 fi
@@ -578,7 +574,7 @@ for name in "${eligible[@]}"; do
   fi
 
   delete_err="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-delete-err.XXXXXX")" || { record_failure "$name" "compare-delete" "cannot create ref deletion error file"; continue; }
-  if ! git -C "$repo" update-ref -d "refs/heads/$name" "$expected_tip" 2>"$delete_err"; then
+  if ! git -C "$repo" update-ref --no-deref -d "refs/heads/$name" "$expected_tip" 2>"$delete_err"; then
     delete_error="$(<"$delete_err")"; rm -f "$delete_err"
     record_failure "$name" "compare-delete" "${delete_error:-tip moved or ref deletion failed}"
     continue

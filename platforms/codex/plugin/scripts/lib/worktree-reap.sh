@@ -128,6 +128,30 @@ _wt_validate_path() {
   return 0
 }
 
+# --- _wt_open_lock_fd ---------------------------------------------------------
+# Open a lock without truncating through a hostile symlink. The pre/post checks
+# reject symlinks, non-regular files, foreign ownership, and path↔fd swaps. Bash
+# has no portable O_NOFOLLOW redirection, so append-open plus an inode check is
+# the strongest shell-only posture; this code never writes bytes to the lock fd.
+_wt_open_lock_fd() {
+  local lock="$1" fd fd_path
+  _WT_SAFE_LOCK_FD=""
+  if [ -e "$lock" ] || [ -L "$lock" ]; then
+    [ -f "$lock" ] && [ ! -L "$lock" ] && [ -O "$lock" ] || return 2
+  fi
+  exec {fd}>>"$lock" || return 2
+  fd_path="/proc/$$/fd/$fd"
+  [ -e "$fd_path" ] || fd_path="/dev/fd/$fd"
+  if [ -L "$lock" ] || [ ! -f "$lock" ] || [ ! -O "$lock" ] \
+     || [ ! -e "$fd_path" ] || [ ! -f "$fd_path" ] || [ ! -O "$fd_path" ] \
+     || ! [ "$fd_path" -ef "$lock" ]; then
+    exec {fd}>&- || true
+    return 2
+  fi
+  _WT_SAFE_LOCK_FD="$fd"
+  return 0
+}
+
 # --- _wt_is_live --------------------------------------------------------------
 # Atomic ownership probe via flock -n on $WT/.autopilot-worktree.lock.
 # Side effect on "owned" (dead owner): sets _WT_PROBE_FD to the held probe fd
@@ -149,8 +173,9 @@ _wt_is_live() {
     :
   fi
 
-  # Open (create if missing) on a dedicated fd.
-  exec {probe}>"$lock" || return 2
+  # Open (create if missing) on a dedicated, non-truncating, verified fd.
+  _wt_open_lock_fd "$lock" || return 2
+  probe="$_WT_SAFE_LOCK_FD"
   flock -n "$probe"
   frc=$?
   if [ "$frc" -eq 0 ]; then
@@ -258,7 +283,8 @@ reap_worktree() {
 _wt_append_orphan_path() {
   local path="$1" log="${ORPHAN_LOG:-}" lock_fd rc
   [ -n "$log" ] || return 1
-  exec {lock_fd}>"${log}.lock" || return 1
+  _wt_open_lock_fd "${log}.lock" || return 1
+  lock_fd="$_WT_SAFE_LOCK_FD"
   flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
   printf '%s\n' "$path" >> "$log"; rc=$?
   exec {lock_fd}>&-
@@ -314,11 +340,12 @@ gc_stale_worktrees() {
   # whole process; it would silence every later stderr diagnostic in this run
   # (the no-op notice, orphan WARNs). A failed open prints bash's own error,
   # which is acceptable alongside our WARN.
-  exec {gcfd}>"$gc_lock" || {
+  _wt_open_lock_fd "$gc_lock" || {
     printf 'WARN: cannot open global gc lock %s; aborting --gc\n' "$gc_lock" >&2
     printf '{ "reaped": [], "skipped_live": 0, "skipped_fresh": 0, "skipped_unmatched": 0, "lock_unsupported": 0, "kept_orphan": [] }\n'
-    return 0
+    return 1
   }
+  gcfd="$_WT_SAFE_LOCK_FD"
   flock -n "$gcfd"
   frc=$?
   if [ "$frc" -ne 0 ]; then

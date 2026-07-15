@@ -2,6 +2,18 @@
 # Tests for dispatch-hetero.sh --gc (stale worktree reaper)
 . "$(dirname "$0")/lib.sh"
 
+private_orphan_state_dir() {
+    printf '%s/autopilot-%s' "$TMPDIR" "${UID:-$(id -u)}"
+}
+
+prepare_private_orphan_state_dir() {
+    local dir
+    dir="$(private_orphan_state_dir)"
+    mkdir -m 700 -p "$dir"
+    chmod 700 "$dir"
+    printf '%s' "$dir"
+}
+
 # Test 1: Default behavior - reaper disabled (no config or age 0)
 test_reaper_disabled() {
     export TMPDIR="$TEST_TMP/tmp"
@@ -396,7 +408,9 @@ test_orphan_log_hygiene_retries_registered_worktree() {
     local wt_path="$scratch/wt-orphan-retry"
     git -C "$scratch" worktree add -q "$wt_path" -b orphan-retry
 
-    local orphan_log="$TMPDIR/autopilot-orphan-worktrees.log"
+    local orphan_dir orphan_log
+    orphan_dir="$(prepare_private_orphan_state_dir)"
+    orphan_log="$orphan_dir/autopilot-orphan-worktrees.log"
     printf '%s\n' \
         'fatal: quoted "remove" failure' \
         "$TMPDIR/does-not-exist" \
@@ -432,7 +446,9 @@ test_orphan_log_hygiene_absent_and_retry_failure() {
     git -C "$scratch" config user.name "Test User"
     git -C "$scratch" commit -q --allow-empty -m "initial"
 
-    local orphan_log="$TMPDIR/autopilot-orphan-worktrees.log"
+    local orphan_dir orphan_log
+    orphan_dir="$(prepare_private_orphan_state_dir)"
+    orphan_log="$orphan_dir/autopilot-orphan-worktrees.log"
     local output exit_code
     cd "$scratch"
     output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
@@ -480,7 +496,9 @@ test_orphan_log_hygiene_absent_and_retry_failure
 
 test_orphan_log_rewrite_failures_and_concurrent_append() {
     export TMPDIR="$TEST_TMP/tmp-orphan-atomic"; mkdir -p "$TMPDIR"
-    local log="$TMPDIR/autopilot-orphan-worktrees.log" rc before fake hook done appended i
+    local orphan_dir log rc before fake hook done appended i
+    orphan_dir="$(prepare_private_orphan_state_dir)"
+    log="$orphan_dir/autopilot-orphan-worktrees.log"
 
     mkdir "$log"
     set +e; bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
@@ -510,5 +528,60 @@ EOF
 }
 
 test_orphan_log_rewrite_failures_and_concurrent_append
+
+test_lock_symlink_victims_are_never_modified() {
+    export TMPDIR="$TEST_TMP/tmp-lock-symlink"; mkdir -p "$TMPDIR"
+    local victim="$TEST_TMP/lock-victim" expected='0123456789abcdef'
+    local orphan_dir log scratch="$TEST_TMP/repo-lock-symlink"
+    local wt_path rc now aged_ts
+    orphan_dir="$(prepare_private_orphan_state_dir)"
+    log="$orphan_dir/autopilot-orphan-worktrees.log"
+    printf '%s' "$expected" > "$victim"
+
+    printf '%s\n' "$TMPDIR/gone" > "$log"
+    ln -s "$victim" "${log}.lock"
+    set +e; bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
+    assert_eq "$rc" 2 "orphan-log symlink lock fails closed"
+    assert_eq "$(cat "$victim")" "$expected" "orphan-log lock open never truncates symlink victim"
+    rm -f "${log}.lock" "$log"
+
+    git init -q "$scratch"
+    git -C "$scratch" config user.email test@example.com
+    git -C "$scratch" config user.name "Test User"
+    git -C "$scratch" commit -q --allow-empty -m initial
+    mkdir -p "$scratch/.claude"
+    printf -- '- stale_reaper_age_days: 1\n' > "$scratch/.claude/worktree-teardown-config.md"
+    wt_path="$scratch/wt-lock-symlink"
+    git -C "$scratch" worktree add -q "$wt_path" -b branch-lock-symlink
+    now=$(date +%s); aged_ts=$((now - 200000))
+    printf 'created_at=%s\nbranch=branch-lock-symlink\nschema=1\n' "$aged_ts" > "$wt_path/.autopilot-worktree"
+    ln -s "$victim" "$TMPDIR/.autopilot-gc.lock"
+    set +e; (cd "$scratch" && bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1); rc=$?; set -e
+    assert_eq "$rc" 1 "global GC symlink lock fails closed"
+    [ -d "$wt_path" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "GC lock failure must preserve worktree"
+    assert_eq "$(cat "$victim")" "$expected" "global GC lock open never truncates symlink victim"
+}
+
+test_lock_symlink_victims_are_never_modified
+
+test_orphan_state_dir_is_private_and_rejects_symlink() {
+    export TMPDIR="$TEST_TMP/tmp-private-state"; mkdir -p "$TMPDIR"
+    local state_dir victim expected='0123456789abcdef' rc mode
+    state_dir="$(private_orphan_state_dir)"
+
+    bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1
+    mode="$(stat -c '%a' "$state_dir")"
+    assert_eq "$mode" 700 "orphan state directory is owner-only"
+
+    rm -rf "$state_dir"
+    victim="$TEST_TMP/state-dir-victim"
+    printf '%s' "$expected" > "$victim"
+    ln -s "$victim" "$state_dir"
+    set +e; bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
+    assert_eq "$rc" 2 "symlink orphan state directory fails closed"
+    assert_eq "$(cat "$victim")" "$expected" "state-directory validation never modifies symlink victim"
+}
+
+test_orphan_state_dir_is_private_and_rejects_symlink
 
 finalize_test

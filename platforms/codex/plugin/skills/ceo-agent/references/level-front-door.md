@@ -541,11 +541,17 @@ exact-tip ack/handoff) until depth 0 explicitly discards it; the reaper must kee
 it uncontained. On conflict, retry once, else escalate — never auto-resolve.
 
 After an identity-preserving merge, retire dispatch-owned dated branches through
-the deterministic reaper, not an ad-hoc broad branch glob:
+the deterministic reaper, not an ad-hoc broad branch glob. Reuse finish-flow
+L-5.6's exact `autopilot_root` resolver and authoritative `integration_target`
+derivation; do not create a second resolver here. If those values have not yet
+been resolved, run that L-5.6 procedure first and halt on any ambiguity. Bind the
+consumer independently so a plugin-package script is never resolved from its git
+root:
 
 ```bash
-scripts/reap-dispatch-branches.sh reap --into develop --yes
-scripts/reap-dispatch-branches.sh reap --into develop --reap-superseded --dry-run
+consumer_repo="$(git rev-parse --show-toplevel)"
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap --repo "$consumer_repo" --into "$integration_target" --yes
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap --repo "$consumer_repo" --into "$integration_target" --reap-superseded --dry-run
 # Uncontained superseded rounds remain preservation/manual-disposition items.
 ```
 

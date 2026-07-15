@@ -1,4 +1,4 @@
-# Plan — Dispatch-branch lifecycle: session-end integration-candidate gate + preserve-first branch reaper + intermediate-round convergence
+# Plan — Dispatch-branch lifecycle: session-end integration-candidate gate + preserve-first branch reaper + intermediate-round detection/preservation/manual disposition
 
 > Status: CONVERGED (5 external review generations; no open Critical/Major) · Owner: CEO (depth-0, Fable) · Branch: `feature/dispatch-branch-lifecycle` · Frame: Hold scope
 > Source: 2026-07-14 codex-worktree audit (`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`) §5; BACKLOG「Dispatch-branch lifecycle」.
@@ -115,12 +115,14 @@ most valuable output is the thing that never lands) and unbounded branch accumul
    prefix+date rule.)
 2. `scan [--repo <dir>] [--into <branch>=develop] [--pattern <regex>]...` →
    for each matching local branch: `{name, family, tip, ahead}` (`git rev-list --count
-   <into>..<tip>`), `contained_in`: first of [`--into`, every live integration-candidate branch]
-   for which `git merge-base --is-ancestor <tip> <target>` holds — candidate order is
-   deterministic: `--into` first, then live integration-candidate branches in
-   `git for-each-ref --sort=refname` order, first match reported; when the scanned branch is
-   itself an integration candidate, its own ref is excluded from the target list (self is
-   never evidence of containment). (R1: glm Minor; fresh R3: agy Major)
+   <into>..<tip>`), `contained_in`: first the authoritative `--into`, otherwise the first
+   canonical maximal live integration-candidate target for which `git merge-base
+   --is-ancestor <tip> <target>` holds. Canonical means one survivor per same-tip group
+   (highest numeric round, then last refname); maximal means its distinct tip is not an
+   ancestor of another canonical candidate tip. Candidate enumeration is deterministic from
+   `git for-each-ref --sort=refname`, and the scanned branch itself is excluded (self is never
+   evidence of containment). Non-maximal candidates therefore cannot become the sole proof
+   behind another branch's `contained_in`. (R1: glm Minor; fresh R3: agy Major)
    Candidate-as-target safety (R2: agy Critical — two candidates at the SAME commit are
    mutually `is-ancestor`, so candidate containment must never become delete authority):
    a same-tip candidate group designates one canonical containment target (numerically highest
@@ -187,8 +189,12 @@ supersession fixture includes `r2` vs `r10` (numeric-compare case).
    `git bundle list-heads <bundle>` must report EVERY eligible ref at its recorded sha →
    then per branch capture a complete successful worktree list, re-read exact tip + target
    containment + occupancy immediately around exact-tip compare-delete, and repeat proof /
-   occupancy after deletion; invalidation restores the ref and fails. Git cannot transact ref
-   and worktree metadata together, so no stronger concurrency claim is made.
+   occupancy after deletion. On invalidation, exact-ref restoration is only attempted through
+   a prepared `git update-ref --stdin` transaction with `option no-deref`; the ref lock is held
+   while the raw ref is checked, and a raced direct ref or symref aborts/fails closed rather
+   than being overwritten. A restore failure remains a recorded failure; the already-verified
+   bundle is the authoritative recovery artifact. Git cannot transact ref and worktree
+   metadata together, so no stronger concurrency claim is made.
    On successful ref deletion, remove the local `branch.<name>` config section if present;
    config cleanup failure is reported but never rolls back the already preserved+deleted ref.
    Bundle-stage failure (create/verify/list-heads) ⇒ NOTHING is deleted this run, exit 1.
@@ -229,8 +235,11 @@ containing `"` lands in `failures[]` as valid JSON
 zero-regression with reproduced base failures recorded PRE_EXISTING DEFERRED.
 
 ### Phase D — orphan-log hygiene · size Fix
-**Steps**: in `dispatch-hetero.sh` `--gc` path (before `gc_stale_worktrees`): rewrite
-`$ORPHAN_LOG`. Writer and rewrite share a lock; the writer records paths only (legacy
+**Steps**: startup initializes the private state root
+`${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID}}` as an owner-owned mode-0700
+real directory. An existing symlink, non-directory, foreign-owned directory, or unsafe mode
+fails startup closed with exit 2. In `dispatch-hetero.sh` `--gc` (before
+`gc_stale_worktrees`), rewrite `$ORPHAN_LOG`. Writer and rewrite share a lock; the writer records paths only (legacy
 interleaved stderr lines remain tolerated and are pruned):
 1. A line is a RETRY CANDIDATE iff it is an absolute path (`/...`) to an existing directory;
    every other line (error text, nonexistent path) is pruned on rewrite.
@@ -244,13 +253,17 @@ interleaved stderr lines remain tolerated and are pruned):
    `worktree <absolute-path>` record for `$path` in `git -C <owner-repo> worktree list
    --porcelain`; an unregistered path is kept. Only then attempt ONE `git -C <owner-repo>
    worktree remove --force "$path"` (retry stderr goes to /dev/null, never back into the
-   log); drop the line on success, keep on failure.
+   log), while continuously holding the same worktree lifetime-flock proof used by normal GC;
+   a held or unsafe/unsupported lifetime lock preserves the worktree and log entry. Drop the
+   line on success, keep on failure.
 3. Non-own-user existing paths are kept verbatim (report-only). Empty file after rewrite ⇒
    remove it.
 
 **Acceptance**: unit test: log with {nonexistent path, error-text line, existing own dir} →
 first two pruned, own dir retried (removed ⇒ line dropped); no behavior change when
-`$ORPHAN_LOG` absent; retry failure keeps the line and the log gains no new error text.
+`$ORPHAN_LOG` absent; retry failure keeps the line and the log gains no new error text;
+lifetime-locked orphan retry is preserved; private state is mode 0700 and unsafe state roots
+fail closed with exit 2.
 
 **Dependency order**: A → B → C; D independent (may land with C).
 

@@ -156,7 +156,7 @@ ORPHAN_LOG="$ORPHAN_STATE_DIR/autopilot-orphan-worktrees.log"
 # pruned as noise/stale state or preserved as a recoverable live path.
 rewrite_orphan_log() {
   [ -e "$ORPHAN_LOG" ] || return 0
-  local tmp lock_fd path gitfile_line common_raw common_dir registered line rc list err
+  local tmp lock_fd path gitfile_line common_raw common_dir registered line rc list err probe_fd
   [ -f "$ORPHAN_LOG" ] || { printf 'WARN: orphan log is not a regular file: %s\n' "$ORPHAN_LOG" >&2; return 1; }
   _wt_open_lock_fd "${ORPHAN_LOG}.lock" || return 1
   lock_fd="$_WT_SAFE_LOCK_FD"
@@ -214,9 +214,23 @@ rewrite_orphan_log() {
       continue
     fi
 
-    if ! git --git-dir="$common_dir" worktree remove --force "$path" >/dev/null 2>&1; then
+    _wt_is_live "$path"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      # A held lifetime lock is live; an unsupported/unsafe probe is ambiguous.
+      # Both stay actionable in the orphan log and must never be removed.
       printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
     fi
+    probe_fd="$_WT_PROBE_FD"
+    if ! git --git-dir="$common_dir" worktree remove --force "$path" >/dev/null 2>&1; then
+      printf '%s\n' "$path" >> "$tmp" || {
+        exec {probe_fd}>&- || true
+        rm -f "$tmp"; exec {lock_fd}>&-; return 1
+      }
+    fi
+    # Hold the lifetime proof continuously across worktree removal.
+    exec {probe_fd}>&- || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
   done
 
   if [ -n "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK:-}" ]; then

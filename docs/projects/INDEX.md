@@ -9,7 +9,7 @@
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
 | 2026-07-15 | [dispatch-unit-contract-gate](2026-07-15-dispatch-unit-contract-gate/README.md) — strict L5/L6 派遣的 machine-readable unit contract：depth-0 凍結 spec/邊界/依賴/預算，deterministic checker 獨占 GO/NO-GO，runtime STOP 與 post-return REJECT 分離；worker 不得自擴 scope，QC host 以 git truth 驗收。另納入 release probe 的 pre-spend model readiness，避免 hard-coded/quota-out 模型誤啟動。**目前僅完成立案與 spec freeze；v2.32.35 push/install/reload 前 implementation NO-GO。** | v2.32.36 | `feat/dispatch-unit-contract-gate` (not created; queued) |
-| 2026-07-14 | [dispatch-branch-lifecycle](2026-07-14-dispatch-branch-lifecycle/README.md) — session-end 整合候選 gate + `reap-dispatch-branches.sh` preserve-first reaper + 中間輪收斂（codex-worktree audit §5 修法） | v2.32.37 | `feature/dispatch-branch-lifecycle` |
+| 2026-07-14 | [dispatch-branch-lifecycle](2026-07-14-dispatch-branch-lifecycle/README.md) — session-end 整合候選 gate + `reap-dispatch-branches.sh` preserve-first reaper + 中間輪偵測／保全／人工處置（supersession 不自動授權刪除） | v2.32.37 | `feature/dispatch-branch-lifecycle` |
 
 ## 已完成 (Completed)
 

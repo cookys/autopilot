@@ -494,6 +494,39 @@ EOF
 
 test_orphan_log_hygiene_absent_and_retry_failure
 
+test_orphan_log_retry_preserves_lifetime_locked_worktree() {
+    export TMPDIR="$TEST_TMP/tmp-orphan-live"; mkdir -p "$TMPDIR"
+    local scratch="$TEST_TMP/repo-orphan-live" wt_path orphan_dir orphan_log output rc lock_pid
+    git init -q "$scratch"
+    git -C "$scratch" config user.email test@example.com
+    git -C "$scratch" config user.name "Test User"
+    git -C "$scratch" commit -q --allow-empty -m initial
+    wt_path="$scratch/wt-orphan-live"
+    git -C "$scratch" worktree add -q "$wt_path" -b orphan-live
+    orphan_dir="$(prepare_private_orphan_state_dir)"
+    orphan_log="$orphan_dir/autopilot-orphan-worktrees.log"
+    printf '%s\n' "$wt_path" > "$orphan_log"
+
+    (exec 200>"$wt_path/.autopilot-worktree.lock"; flock -x 200; sleep 30) &
+    lock_pid=$!
+    for _ in $(seq 1 50); do
+        flock -n "$wt_path/.autopilot-worktree.lock" true 2>/dev/null || break
+        sleep 0.1
+    done
+    output=$(cd "$scratch" && bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1); rc=$?
+    kill "$lock_pid" 2>/dev/null || true; wait "$lock_pid" 2>/dev/null || true
+
+    assert_eq "$rc" 0 "lifetime-locked orphan retry exits cleanly"
+    [ -d "$wt_path" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "orphan retry must preserve a lifetime-locked registered worktree"
+    assert_contains "$(cat "$orphan_log")" "$wt_path" "live orphan remains actionable in the retry log"
+    assert_not_contains "$output" "$wt_path\"" "live orphan is not reported as reaped by normal GC"
+    (cd "$scratch" && bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1)
+    [ ! -d "$wt_path" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "released orphan lock permits the next retry"
+    assert_file_absent "$orphan_log" "successful retry prunes released orphan entry"
+}
+
+test_orphan_log_retry_preserves_lifetime_locked_worktree
+
 test_orphan_log_rewrite_failures_and_concurrent_append() {
     export TMPDIR="$TEST_TMP/tmp-orphan-atomic"; mkdir -p "$TMPDIR"
     local orphan_dir log rc before fake hook done appended i

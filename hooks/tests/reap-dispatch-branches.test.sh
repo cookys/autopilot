@@ -323,6 +323,34 @@ EOF
 
 test_ack_races_and_merged_gate
 
+test_ack_publication_directory_race() {
+  local repo="$TEST_TMP/ack-publish-directory" base tip hook out rc ack_file
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse refs/heads/develop)
+  tip=$(child_commit "$repo" "$base" candidate)
+  git -C "$repo" update-ref refs/heads/ceo-integration-candidate-r1 "$tip"
+  ack_file="$repo/.git/autopilot-reap-ack"
+  hook="$TEST_TMP/replace-ack-with-directory.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+mkdir "$ack_file"
+EOF
+  chmod +x "$hook"
+
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_CHECK_EVALUATION="$hook" bash "$SCRIPT" check --repo "$repo" --into develop --ack ceo-integration-candidate-r1 2>&1); rc=$?
+  set -e
+  assert_eq "$rc" 2 "ack destination directory race fails closed"
+  assert_not_contains "$out" '"branches"' "failed ack publication never emits a clean check result"
+  if [ -f "$ack_file" ] && [ ! -L "$ack_file" ]; then
+    fail "successful --ack requires an exact regular-file publication"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+}
+
+test_ack_publication_directory_race
+
 test_check_snapshot_linearization_races() {
   local repo base t1 t2 hook out rc
 
@@ -444,6 +472,62 @@ EOF
 }
 
 test_worktree_and_delete_races
+
+test_restore_never_follows_concurrent_dangling_symref() {
+  local repo="$TEST_TMP/restore-dangling-symref" hook out rc victim_ref branch_ref bundle
+  new_repo "$repo"
+  branch_ref=refs/heads/agent/contained-r1-20260715
+  victim_ref=refs/heads/ordinary-victim
+  git -C "$repo" branch agent/contained-r1-20260715 develop
+  hook="$TEST_TMP/install-dangling-symref-after-delete.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" symbolic-ref "$branch_ref" "$victim_ref"
+EOF
+  chmod +x "$hook"
+
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir "$TEST_TMP/dangling-symref-bundles"); rc=$?
+  set -e
+  assert_eq "$rc" 1 "concurrent dangling symref makes exact restoration fail closed"
+  assert_contains "$out" '"stage":"restore-failed"' "dangling symref restoration reports its preservation fallback"
+  if git -C "$repo" show-ref --verify --quiet "$victim_ref"; then
+    fail "exact restoration must never create a concurrent symref's unrelated referent"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+  assert_eq "$(git -C "$repo" symbolic-ref -q "$branch_ref")" "$victim_ref" "prepared restoration aborts and preserves the raced symref"
+  bundle=$(find "$TEST_TMP/dangling-symref-bundles" -name '*.bundle' -type f | head -n1)
+  if git -C "$repo" bundle verify "$bundle" >/dev/null 2>&1; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "verified bundle remains the authoritative deleted-tip recovery"; fi
+  assert_contains "$(git -C "$repo" bundle list-heads "$bundle")" "$branch_ref" "authoritative bundle retains the exact dispatch ref"
+}
+
+test_restore_never_follows_concurrent_dangling_symref
+
+test_restore_preserves_concurrent_direct_ref() {
+  local repo="$TEST_TMP/restore-direct-ref" base raced hook out rc branch_ref
+  new_repo "$repo"
+  branch_ref=refs/heads/agent/contained-r1-20260715
+  base=$(git -C "$repo" rev-parse refs/heads/develop)
+  raced=$(child_commit "$repo" "$base" raced-direct-ref)
+  git -C "$repo" branch agent/contained-r1-20260715 develop
+  hook="$TEST_TMP/install-direct-ref-after-delete.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" update-ref "$branch_ref" "$raced"
+exit 1
+EOF
+  chmod +x "$hook"
+
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir "$TEST_TMP/direct-ref-bundles"); rc=$?
+  set -e
+  assert_eq "$rc" 1 "concurrent direct ref makes exact restoration fail closed"
+  assert_contains "$out" '"stage":"restore-failed"' "direct-ref recreation is never accepted as restoration"
+  assert_eq "$(git -C "$repo" rev-parse --verify "$branch_ref")" "$raced" "prepared restore preserves the concurrently recreated direct ref"
+}
+
+test_restore_preserves_concurrent_direct_ref
 
 test_relative_bundle_dir_is_repo_relative() {
   local repo="$TEST_TMP/relative-bundle-repo" caller="$TEST_TMP/relative-bundle-caller"

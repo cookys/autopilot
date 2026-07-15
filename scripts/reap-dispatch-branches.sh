@@ -357,7 +357,13 @@ if [ "$command_name" = check ]; then
   enumeration_error="$(snapshot_local_heads "$check_heads_post_evaluation")" || die_env "cannot enumerate local branches after check evaluation${enumeration_error:+: $enumeration_error}"
   cmp -s "$check_heads_final" "$check_heads_post_evaluation" || die_env "local branch refs changed during check evaluation; retry from a fresh snapshot"
   if [ -s "$ack_tmp" ]; then
+    ack_expected_oid="$(git -C "$repo" hash-object "$ack_tmp" 2>/dev/null)" || die_env "cannot fingerprint pending ack state"
     mv -f "$ack_tmp" "$ack_file" || die_env "cannot atomically rewrite ack file"
+    if [ ! -f "$ack_file" ] || [ -L "$ack_file" ]; then
+      die_env "ack publication did not produce a regular file"
+    fi
+    ack_actual_oid="$(git -C "$repo" hash-object "$ack_file" 2>/dev/null)" || die_env "cannot verify published ack state"
+    [ "$ack_actual_oid" = "$ack_expected_oid" ] || die_env "published ack state differs from the acknowledged snapshot"
   else
     rm -f "$ack_tmp" || die_env "cannot remove empty ack rewrite"
     ack_tmp=""
@@ -543,12 +549,51 @@ validate_delete_proof() {
 }
 
 restore_deleted_ref() {
-  local branch="$1" expected="$2" current=""
-  if current="$(git -C "$repo" rev-parse --verify "refs/heads/$branch" 2>/dev/null)"; then
-    [ "$current" = "$expected" ]
-    return $?
+  local branch="$1" expected="$2" ref="refs/heads/$1" current=""
+  local tx_dir tx_in tx_out tx_err tx_pid response action="" wait_rc=1
+  local in_open=0 out_open=0 protocol_ok=1
+  tx_dir="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-reap-restore.XXXXXX")" || return 1
+  tx_in="$tx_dir/in"; tx_out="$tx_dir/out"; tx_err="$tx_dir/err"
+  if ! mkfifo "$tx_in" "$tx_out"; then rm -rf "$tx_dir"; return 1; fi
+
+  git -C "$repo" update-ref --stdin <"$tx_in" >"$tx_out" 2>"$tx_err" &
+  tx_pid=$!
+  if exec 7>"$tx_in"; then in_open=1; else protocol_ok=0; fi
+  if [ "$protocol_ok" -eq 1 ]; then
+    if exec 8<"$tx_out"; then out_open=1; else protocol_ok=0; fi
   fi
-  git -C "$repo" update-ref "refs/heads/$branch" "$expected" 0000000000000000000000000000000000000000 >/dev/null 2>&1
+  if [ "$protocol_ok" -eq 1 ] && ! printf 'start\noption no-deref\nupdate %s %s %s\nprepare\n' \
+      "$ref" "$expected" 0000000000000000000000000000000000000000 >&7; then
+    protocol_ok=0
+  fi
+  if [ "$protocol_ok" -eq 1 ]; then
+    IFS= read -r -t 10 response <&8 || protocol_ok=0
+    [ "$response" = 'start: ok' ] || protocol_ok=0
+  fi
+  if [ "$protocol_ok" -eq 1 ]; then
+    IFS= read -r -t 10 response <&8 || protocol_ok=0
+    [ "$response" = 'prepare: ok' ] || protocol_ok=0
+  fi
+  if [ "$protocol_ok" -eq 1 ]; then
+    # prepare holds the ref lock. Inspect the raw ref while that lock is held;
+    # a raced symref is foreign state and must be preserved, never overwritten.
+    if git -C "$repo" symbolic-ref -q "$ref" >/dev/null 2>&1; then action=abort; else action=commit; fi
+    printf '%s\n' "$action" >&7 || protocol_ok=0
+  fi
+  if [ "$protocol_ok" -eq 1 ]; then
+    IFS= read -r -t 10 response <&8 || protocol_ok=0
+    [ "$response" = "$action: ok" ] || protocol_ok=0
+  fi
+
+  [ "$in_open" -eq 0 ] || exec 7>&-
+  [ "$out_open" -eq 0 ] || exec 8<&-
+  if [ "$protocol_ok" -ne 1 ]; then kill "$tx_pid" >/dev/null 2>&1 || true; fi
+  wait "$tx_pid" >/dev/null 2>&1; wait_rc=$?
+  rm -rf "$tx_dir"
+  [ "$protocol_ok" -eq 1 ] && [ "$action" = commit ] && [ "$wait_rc" -eq 0 ] || return 1
+  git -C "$repo" symbolic-ref -q "$ref" >/dev/null 2>&1 && return 1
+  current="$(git -C "$repo" rev-parse --verify "$ref" 2>/dev/null)" || return 1
+  [ "$current" = "$expected" ]
 }
 
 for name in "${eligible[@]}"; do
@@ -602,7 +647,8 @@ for name in "${eligible[@]}"; do
   if [ -n "${post_target:-}" ]; then
     git -C "$repo" merge-base --is-ancestor "$expected_tip" "$post_target" 2>/dev/null || { post_invalid=1; post_error="containment proof invalidated after deletion"; }
   fi
-  if git -C "$repo" show-ref --verify --quiet "refs/heads/$name"; then
+  if git -C "$repo" show-ref --verify --quiet "refs/heads/$name" \
+     || git -C "$repo" symbolic-ref -q "refs/heads/$name" >/dev/null 2>&1; then
     post_invalid=1
     post_error="branch ref was concurrently recreated after deletion"
   fi

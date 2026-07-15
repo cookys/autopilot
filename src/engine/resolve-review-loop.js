@@ -20,6 +20,17 @@ const CONTRACT_SCHEMA = JSON.parse(
     'utf8',
   ),
 );
+const VERIFICATION_AUTHOR_ENDPOINT_SCHEMA = CONTRACT_SCHEMA.properties &&
+  CONTRACT_SCHEMA.properties.verification_author_endpoint;
+const VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE = (
+  VERIFICATION_AUTHOR_ENDPOINT_SCHEMA && VERIFICATION_AUTHOR_ENDPOINT_SCHEMA.pattern
+);
+const VERIFICATION_AUTHOR_ENDPOINT_PATTERN = new RegExp(
+  VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE,
+);
+if (typeof VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE !== 'string') {
+  throw new Error('review-loop-contract schema missing verification_author_endpoint.pattern');
+}
 const REVIEW_LOOP_FIELDS = CONTRACT_SCHEMA['x-field-order'];
 if (
   !Array.isArray(REVIEW_LOOP_FIELDS)
@@ -147,6 +158,12 @@ function validateReviewLoopConfig(value) {
     ]) {
       assertField(value, field, nonEmptyString, 'a non-empty string');
     }
+    assertField(
+      value,
+      'verification_author_endpoint',
+      (value) => VERIFICATION_AUTHOR_ENDPOINT_PATTERN.test(value),
+      `must match ${VERIFICATION_AUTHOR_ENDPOINT_PATTERN_SOURCE}`,
+    );
   } else {
     for (const field of [
       'verification_author_engine',

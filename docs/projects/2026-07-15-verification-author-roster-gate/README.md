@@ -43,7 +43,7 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 2c result provenance | complete | AGY oracles `156f777`..`7469af6`, `c99278a`/`c79b335`; Spark `d1f407c`; failure 11 + provenance 9 + endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 3 session coupling | complete | AGY oracle `be6ca98`..`b9e69af` + isolation `8765610`; Spark `f89d49d`; session 28 + core 19 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 4 docs/payload | complete | Spark `d2f0cbb`, wording repair `8fa5600`; session 28 + provenance 9 + skill validation/payload parity green; MiniMax-M3 + AGY `SHIP-AS-IS` |
-| Final aggregate QC / finish-flow | in progress | Full feature gates, aggregate review, tracking closure, rebase/merge/push |
+| Final aggregate QC / finish-flow | QC complete; merge in progress | Full 141-file suite + schema/payload/skills/completeness/secret/test-integrity gates green; three review packs each MiniMax-M3 + AGY `SHIP-AS-IS`; next rebase/merge/push |
 
 ## Decision log
 
@@ -105,5 +105,20 @@ model qualification policy. Those remain in the separate follow-up plan.
   `8fa5600` completed in 32 seconds. Depth-0 passed session 28, provenance 9, 28-skill validation,
   syntax, diff, payload-sync, and byte-parity gates. Final artifacts: MiniMax-M3
   `dispatch-review-log-QG08oy` and AGY `dispatch-review-log-CmfZoy`, both `SHIP-AS-IS`.
+- Final full-suite round 1 exposed two ambient/provenance fixture gaps, not product failures:
+  `dispatch-output-quiescence` read the real active-l6 marker, and engine-unavailable prefix parity
+  compared two now-observable config paths. Bounded AGY test-only commits `f402a31` and `34f2ed7`
+  isolated the legacy marker fixture and held one config path constant without weakening assertions.
+  Focused 19/10 assertions and the repeated full `hooks/tests/run.sh` then passed all 141 files.
+- Release metadata advanced to v2.32.35 in `754b20c` with factual CHANGELOG repair `834151e`.
+  An earlier release run used the correct root CHANGELOG despite an incorrect depth-0 allowlist and
+  was rejected; the corrected 8-path contract was rerun rather than retroactively widening scope.
+- Final aggregate review was split into product, tests, and docs/release packs. AGY artifacts
+  `dispatch-review-log-y7BRMA`, `dispatch-review-log-Upn9on`, and `dispatch-review-log-X8fezI`
+  were `SHIP-AS-IS`. MiniMax's initial speculative product/test findings were mechanically refuted;
+  evidence-constrained blind-safe reruns `dispatch-review-log-NONKfO` and
+  `dispatch-review-log-GTpFZ3` plus docs artifact `dispatch-review-log-V7d9v4` were `SHIP-AS-IS`.
+  Two separate zero-byte MiniMax transport failures were rejected as `no_verdict`, never counted as
+  panel passes.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

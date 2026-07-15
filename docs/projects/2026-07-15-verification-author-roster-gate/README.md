@@ -40,8 +40,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 1 aggregate review | complete | Final MiniMax-M3 + AGY `SHIP-AS-IS`; depth-0 full gate green at `05d0aad` |
 | Unit 2a strict CLI/authorization | complete | RED `c8ad68e` + amendments `6ae59b3`, `ed7871c`; Spark `4290bb0`, `ae22b67`; strict 45 + legacy 65 + resolver 31/227 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 2b endpoint/valid dispatch | complete (test-only) | AGY oracle `15642bb` + executable mode `54cd881`; endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
-| Unit 2c result provenance | in progress | Next: independent RED for strict vs legacy payload, selection path, and secret hygiene |
-| Unit 3 session coupling | pending | RED oracle first |
+| Unit 2c result provenance | complete | AGY oracles `156f777`..`7469af6`, `c99278a`/`c79b335`; Spark `d1f407c`; failure 11 + provenance 9 + endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Unit 3 session coupling | in progress | Next: independent RED for active-l6 strict enforcement plus missing/expired/corrupt controls |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
 
 ## Decision log
@@ -86,5 +86,10 @@ model qualification policy. Those remain in the separate follow-up plan.
   GLM tuple/endpoint delivery and unready-endpoint no-fallback. Depth-0 passed endpoint 17, strict
   45, and legacy 65 assertions. Final artifacts: MiniMax-M3 `dispatch-review-log-kmFUsj` and AGY
   `dispatch-review-log-OKnOdF`, both `SHIP-AS-IS`.
+- Unit 2c was split into envelope/authored and failure-matrix verification. AGY RED oracle commits
+  `156f777`..`7469af6` drove Spark shared serializer `d1f407c`; AGY matrix `c99278a` plus mode
+  `c79b335` then proved precondition/runner-failed/empty-output provenance and secret absence.
+  Depth-0 passed 11/9/17/45/65/31/227 assertions plus schema/mirror/clean gates. Final artifacts:
+  MiniMax-M3 `dispatch-review-log-F4huPQ` and AGY `dispatch-review-log-FIFKiI`, both `SHIP-AS-IS`.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

@@ -69,6 +69,7 @@ from repository truth.
 | “換 minimax 3?” | Fresh-current-HEAD MiniMax-M3 strict author attempt with a focused prompt, containment proof, and empty-output classification |
 | “cont? 目前在哪個 phase? 還有多少 phase? 不是進 CEO mode /l6 了為什麼妳還停下來問我?” | Report P0 complete / C1 active / C2-C7 pending, re-arm l6, resume the configured strict GLM path, stop asking for `continue?`, and separately record the later autonomous Sonnet substitution as a protocol deviation rather than user-granted tuple authority |
 | “順便提醒，gpt-5.3-codex-spark 跟 grok 4.5 都回來了” | Refresh per-model live readiness: Spark capability event 45 and Grok 4.5 event 44 are `available/high`; preserve the distinction that Grok readiness is not C1 strict-roster authorization |
+| “你停下來了?” | Treat the reminder plus explicit rejection of another stop as Board continuation: authorize Grok through a tracked strict-roster config change that must be reviewed and committed before dispatch, then resume C1 author → RED → Spark without another human gate |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -92,7 +93,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | blocked — verification authoring | GLM 529 then fresh full-author timeout; MiniMax timeout then empty output; AGY Opus and Sonnet 4.6 timeouts; other AGY candidates rejected for containment, infrastructure, or semantic fixture failures | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — Grok author recovery | Temporary repository-wide strict-roster assignment to live `grok-4.5/grok`; atomically restore GLM, resolver-test expectations, and lifecycle docs at every terminal or aborted/non-started attempt before C2/other `/l6` work | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -210,9 +211,11 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   Spark direct inference returned `OK` and recorded implementer capability event 45 as
   `available/high`; canonical Grok inference recorded verification-author capability event 44 as
   `available/high`. `grok models` simultaneously printed `You are not authenticated`, so that banner
-  is weaker than the successful inference. Grok is not the configured C1 verification author, and
-  this availability reminder does not authorize a roster substitution; no new contract or author
-  dispatch was issued.
+  is weaker than the successful inference. The reminder alone was initially recorded as readiness,
+  not authorization, and no new contract was issued at that point. When the user immediately rejected
+  another orchestration stop, depth-0 treated the combined exchange as Board continuation and moved
+  Grok into the tracked repository strict roster. Once this config path is reviewed, committed, and
+  clean, it—not an isolated override—authorizes the next fresh C1 contract and author dispatch.
 
 ## Dispatch policy
 
@@ -228,6 +231,14 @@ and budgets. Model/quota selection must come from live readiness, not conversati
 - Contract JSON is authorization; the prompt only explains the authorized task.
 - GO is deterministic and pre-spend. NO-GO cannot be manually waived.
 - STOP never auto-retries or widens. REJECT never silently promotes a forensic artifact.
+- The 2026-07-16 Board continuation assigns `grok-4.5/grok` as the tracked C1 verification-author
+  tuple after capability event 44. The config is repository-wide because the resolver has no unit-id
+  scope, so it is temporary. Any C1 terminal (`accepted`, `STOP`, `REJECT`, or pre-dispatch `NO-GO`),
+  cancellation/abandonment, or inability to begin the authorized attempt requires an atomic reviewed
+  restoration of `glm-5.2/cc-shim/high/endpoint glm`, the matching resolver-test expectations, and
+  this README plus HANDOFF lifecycle record before C2 or unrelated strict `/l6` authoring.
+  Grok's recorded `high` effort is provenance only; its dispatch-author branch passes no effort flag.
+  Readiness alone remains insufficient for any later substitution.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

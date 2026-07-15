@@ -29,7 +29,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 **Headline**: active `/l6` verification authoring is now authorized by the consuming project's first-class roster tuple instead of manual model/runner prose; fail-closed selection while depth 0 retains artifact execution/QC/merge authority.
 
 ### Added
-- Added `verification_author_*` contract/config fields (`verification_author_runner`, `verification_author_model`, `verification_author_effort`, `verification_author_endpoint`, `verification_author_family`) and the derived author/implementer family + config-path family metadata for fail-closed roster resolution.
+- Added five first-class contract/config fields (`verification_author_present`, `verification_author_engine`, `verification_author_runner`, `verification_author_effort`, `verification_author_endpoint`), plus resolver-derived `verification_author_family`, `implementer_family`, and `config_path` provenance for fail-closed roster resolution.
 - Added strict/endpoint/provenance/session coverage for active `/l6` author resolution and tuple execution gating.
 
 ### Changed
@@ -44,10 +44,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`
-- User-side update back to v2.32.34
+- User-side: `/plugin update autopilot @v2.32.34`
 
 ## v2.32.34 — skill-transport A/B: reviewer-arm H2 REFUTED with pre-registered evidence
-
 
 **Headline**: does packing skill methodology into a headless reviewer seat sharpen it? A pre-registration-locked A/B (plan `docs/plans/2026-07-15-skill-transport-payoff-ab.md`, R1 after a decorrelated plan-review round) ran a 312-cell matrix — haiku (claude-native, k=3, arms no-pack / methodology-pack / length-matched placebo) as the decision-bearing seat, MiniMax-M3 and agy Gemini as k=1 controls — over 13 known-bad + 11 clean diffs with **defect-matched caught predicates** (word-boundary-disjoint from pack vocabulary; any-fail "flagged something" explicitly rejected as the oracle). Verdict, applied at depth-0 from an independently recomputed report AND a hand-rolled discordant count off the raw JSONL: **H2 REFUTED** — haiku discordant delta −1 (adopt bar ≥ +2), placebo delta identical (−1, zero methodology-specific effect), pack arm run-to-run flip band inflated 1→4 (the pack made the weak seat LESS stable, not sharper), and the Gemini control bought its +1 catch by over-flagging the clean set 0→4 (specificity 1.0→0.636). Reviewer-seat `skill_mode: off` is now an **evidence-backed decision**, and the cross-family qc panel is confirmed as the load-bearing quality layer (matching the same week's live escapes: the panel, not prompt content, caught what haiku missed). Pre-registration edit logged in-plan: the numeric ≤2× token rule was dropped at Phase 0 (review raw_logs carry no usage surface); cost reported qualitatively. Implementer arm (H1, Phase 2) remains scoped for a follow-up run.
 

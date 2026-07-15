@@ -16,13 +16,20 @@
 - GLM strict author failed twice with server-side 529 despite live endpoint probes. AGY fallback #1
   mutated checkout and was rejected; fallback #2 preserved containment but normalized oracle
   `4807ce54...` infrastructure-failed at `SIDE_SHA: unbound variable`. No implementation dispatch ran.
+- User authorized MiniMax-M3 or gpt-5.5 review/recovery. MiniMax endpoint probe returned `ok` and a
+  strict isolated roster resolved `MiniMax-M3/cc-shim/high/minimax` with family `minimax`, but the
+  author call timed out (`runner exited 124`) with an empty raw log. Full status/diff/file hashes prove
+  zero checkout mutation. gpt-5.5 then reviewed the quarantined AGY oracle and returned
+  `FIX-THEN-SHIP` with five additional test-infrastructure findings. C1 is still NO-GO.
 
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.
 - Depth-0 owns contract/spec; checker alone owns GO/NO-GO; worker prose is never artifact proof.
-- GLM is the configured author; AGY Gemini 3.5 Flash High is the only recorded fallback. Do not invent
-  GPT-OSS or silently substitute another family. New fallback authority requires Board/user approval.
+- GLM remains the repository-configured author. The user additionally authorized MiniMax-M3 or
+  gpt-5.5 on 2026-07-15: MiniMax is valid cross-family author/reviewer authority; gpt-5.5 is only a
+  supplementary reviewer because it shares the OpenAI family with Spark. Do not count gpt-5.5 as the
+  L6 independent verification author or silently substitute another family.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -32,9 +39,10 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger.
-2. Do not dispatch while author availability is unchanged. Either obtain fresh evidence that strict
-   GLM author inference (not merely `endpoints test`) is functioning, or ask the Board/user to approve
-   a new verification-author fallback. Preserve the existing no-more-retry record otherwise.
+2. Do not retry the same MiniMax author prompt silently: its one recorded run timed out with no bytes.
+   Either obtain fresh evidence that strict GLM full author inference (not merely `endpoints test`) is
+   functioning, or ask the Board/user to authorize a different cross-family author such as the
+   configured Claude Opus fallback. gpt-5.5 cannot fill that seat.
 3. From the then-current clean `HEAD`, issue a new C1 contract/hash with the same exact five-file
    boundary and a new independent author prompt. The new raw oracle must pass output-shape,
    checkout-containment, `bash -n`, portable-tool, and isolated base+oracle RED gates.
@@ -70,3 +78,7 @@
   syntax, fixture execution, and checkout containment independently.
 - The quarantined AGY files are evidence, not an allowlist shortcut. Do not copy them into the repo or
   repair their assertions at depth-0 under l6.
+- MiniMax evidence: `/tmp/dispatch-author-log-QzBekL` is an empty timeout log; its isolated roster
+  override lived only in `/tmp/autopilot-minimax-c1-author-775e1d1` and did not alter this branch.
+  gpt-5.5 review evidence is `/tmp/dispatch-review-log-48mObD`; it found marker-env, GO-side-effect,
+  repeat-hash, mixed-family-fixture, and negative-JSON-shape coverage defects.

@@ -120,6 +120,15 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   produced candidate SHA-256 `4807ce54bba22754edeacf4e29ebf811bde2ec5075c072bb58951fdf9ac4c270`.
   Isolated base+oracle RED exited 1 but then aborted at `SIDE_SHA: unbound variable`, so this is an
   infrastructure-red, not proof of product behavior. It is quarantined only.
+- User-authorized MiniMax-M3 recovery passed the endpoint probe and strict-family resolver
+  (`minimax` versus Spark's `openai`) in an isolated worktree. The full author call then timed out with
+  exit 124 and a zero-byte raw log (`/tmp/dispatch-author-log-QzBekL`); before/after status, tracked
+  diff, and complete file hashes were identical, so this was a contained no-artifact failure.
+- A supplementary gpt-5.5 review of the quarantined AGY oracle returned `FIX-THEN-SHIP`
+  (`/tmp/dispatch-review-log-48mObD`). Beyond the known unbound `SIDE_SHA`, it found an unexported
+  marker environment, no zero-runner proof on GO, a nondeterministic repeat-hash fixture, mixed-family
+  roster fixtures, and incomplete negative JSON-shape assertions. Because gpt-5.5 and Spark are both
+  OpenAI-family, this review is diagnostic evidence only and cannot satisfy the L6 author-family gate.
 - No product or accepted verification code was written. C1 remains NO-GO. A later session must issue
   a new contract/hash from its then-current immutable HEAD; this contract cannot be reused after the
   blocker documentation commit advances the branch.

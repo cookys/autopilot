@@ -84,7 +84,7 @@
     "verification_author_engine": { "type": "string" },
     "verification_author_runner": { "type": "string", "enum": ["", "codex", "agy", "grok", "cc-shim"] },
     "verification_author_effort": { "type": "string", "enum": ["", "low", "medium", "high", "xhigh", "max"] },
-    "verification_author_endpoint": { "type": "string" },
+    "verification_author_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9_]*$" },
     "verification_author_family": { "type": "string" },
     "implementer_family": { "type": "string" },
     "config_path": { "type": "string" },

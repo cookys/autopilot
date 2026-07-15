@@ -3190,6 +3190,7 @@ logPayloadCase('invalid_auth_effort', {
   verification_author_runner: 'agy',
   verification_author_effort: 'bogus-effort',
 });
+logPayloadCase('invalid_auth_endpoint', { ...validPayload, verification_author_present: true, verification_author_engine: 'glm-5.2', verification_author_runner: 'cc-shim', verification_author_effort: 'high', verification_author_endpoint: 'invalid-endpoint' });
 
 for (const [name, overrides] of [
   ['false_nonempty_engine', { verification_author_present: false, verification_author_engine: 'gpt-5.5' }],
@@ -3266,6 +3267,8 @@ assert_contains "$OUT" "nonstring_implementer_family=review-loop output JSON fie
 assert_contains "$OUT" "nonstring_config_path=review-loop output JSON field config_path must be a string" "validateReviewLoopConfig rejects non-string config_path"
 assert_contains "$OUT" "invalid_auth_runner=review-loop output JSON field verification_author_runner must be one of:" "validateReviewLoopConfig rejects invalid authorization runner"
 assert_contains "$OUT" "invalid_auth_effort=review-loop output JSON field verification_author_effort must be one of:" "validateReviewLoopConfig rejects invalid authorization effort"
+assert_contains "$OUT" "invalid_auth_endpoint=review-loop output JSON field verification_author_endpoint must be" "validateReviewLoopConfig rejects invalid endpoint name"
+assert_contains "$OUT" "[A-Za-z0-9_]" "validateReviewLoopConfig diagnostic allowed characters"
 assert_contains "$OUT" "false_nonempty_tuple=review-loop output JSON field verification_author_engine must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty values"
 assert_contains "$OUT" "false_nonempty_engine=review-loop output JSON field verification_author_engine must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty engine"
 assert_contains "$OUT" "false_nonempty_runner=review-loop output JSON field verification_author_runner must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty runner"

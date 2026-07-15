@@ -93,7 +93,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — Grok artifact rejected; GLM roster restored | A new current-HEAD author recovery must use the restored tracked strict roster and fresh full-author readiness; Grok's concatenated output is forensic evidence only | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active/blocked — GLM r4 timeout | Grok artifact is REJECT; restored GLM passed a small live probe but its one current-HEAD author call timed out with no artifact; another author seat requires fresh readiness plus tracked authorization | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -234,6 +234,16 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   `glm-5.2/cc-shim/high/endpoint glm`, dogfood resolver expectations match it, and these lifecycle
   docs record the terminal. The isolated Grok strict-roster fixture remains as permanent branch
   coverage and does not depend on the dogfood tuple.
+- From clean pushed restoration commit `b84cbd6a78c68b00997dce55c8d981ed05d60e1a`, an endpoint-backed
+  GLM live inference succeeded and recorded capability event 47 as `available/high`; this disproves
+  429/out-of-quota at probe time but does not guarantee a long author response. Depth-0 froze
+  `C1-bootstrap-glm-r4.contract.json` (SHA-256
+  `63903c72bf354c51cd0a2f70e1a8eef7e0c532a348285915ac631daa5f8ff11f`) and a new, non-replayed
+  `C1-verification-author-glm-r4.prompt.md` (SHA-256
+  `bccedcf1a93d051577ab6e4848a8b88b629b63cec38e6d46ebcff8f101fa19d9`). The exact strict-roster
+  call selected `cc-shim/glm-5.2/high/endpoint glm/zhipu`, preserved byte-for-byte containment across
+  all 1,459 files, then returned `runner_failed`, exit 124, with a zero-byte raw log. This is
+  `STOP/timeout-no-artifact`, not quota and not REJECT/RED; no Spark dispatch ran. Do not replay r4.
 
 ## Dispatch policy
 

@@ -6,12 +6,13 @@
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
   `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from clean pushed
-  authorization commit `3951f2671186ab65f80de642989f4860bf5d56ba`. Product tree remains clean;
+  restoration commit `b84cbd6a78c68b00997dce55c8d981ed05d60e1a`. Product tree remains clean;
   no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
-  nine project/bootstrap-and-blocker commits beyond that base before the restoration snapshot.
+  ten project/bootstrap-and-blocker commits beyond that base before this staged terminal snapshot.
 - l6 marker is active. Spark's refreshed direct live probe returned `OK`; capability event 45 is
-  `implementer/available/high`; Grok author event 46 was `verification_author/available/high`.
+  `implementer/available/high`; Grok author event 46 and later GLM probe event 47 were
+  `verification_author/available/high`.
 - C1 external run dir: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/`.
   Frozen attempt-1 contract hash: `1b6d6c46945b2df86554f04cb545e584d10ad8da81e6df2ee00bbabe401cb5e1`;
   do NOT reuse it after HEAD advances.
@@ -65,6 +66,12 @@
   harness sources, and two `finalize_test` calls, so it is `REJECT/output-shape` before RED. No Spark
   dispatch ran. The terminal triggered atomic restoration of the GLM tuple, dogfood resolver-test
   expectations, and lifecycle docs; the isolated Grok branch fixture remains tuple-independent.
+- From the clean pushed restoration commit `b84cbd6`, an endpoint-backed GLM live inference succeeded
+  (event 47), proving the endpoint was neither 429 nor out of quota at probe time. A new r4 contract
+  and non-replayed prompt were frozen from that exact HEAD. The one strict tracked
+  `cc-shim/glm-5.2/high/endpoint glm/zhipu` author call preserved all 1,459 file hashes but timed out
+  at exit 124 with a zero-byte raw log. This is `STOP/timeout-no-artifact`, not quota, REJECT, or RED;
+  no Spark dispatch ran and r4 must not be replayed.
 
 ## 已決事項(不重議)
 
@@ -91,6 +98,9 @@
 - The tracked Grok 4.5 authorization was consumed by one exact C1 author attempt and terminated at
   `REJECT/output-shape`. GLM is again the repository-configured author; Grok's isolated regression
   fixture is not standing authority and no later substitution follows from readiness alone.
+- GLM r4 was a fresh current-HEAD attempt after live capability event 47, but the full author call
+  timed out with no bytes. The small probe is quota evidence only, not full-author readiness; do not
+  replay r4 or reinterpret its exit 124 as 429/out-of-quota.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -102,12 +112,12 @@
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
    active/blocked, and seven phases remain including active C1; C2-C7 are pending.
 2. Keep the restored `glm-5.2/cc-shim/high/endpoint glm` dogfood roster and matching resolver
-   expectations clean. Do not replay any recorded MiniMax, Gemini, AGY Opus, resumed GLM, AGY Sonnet,
-   or Grok prompt; do not normalize, splice, or promote their terminal artifacts.
-3. Before another C1 author spend, obtain fresh full-author readiness for the tracked GLM tuple and
-   freeze a new contract/hash from the then-current clean HEAD. Endpoint/model-list success alone is
-   insufficient. The raw oracle must pass output-shape, checkout-containment, `bash -n`, portable-tool,
-   and isolated base+oracle RED gates.
+   expectations clean until a different previously Board-authorized cross-family seat has fresh live
+   readiness and a tracked, reviewed config commit. Do not use an isolated/manual tuple override.
+3. Do not replay any recorded MiniMax, Gemini, AGY Opus, GLM, AGY Sonnet, or Grok prompt; do not
+   normalize, splice, or promote their terminal artifacts. Any further author unit needs a new
+   current-HEAD contract/hash and a materially new prompt. Its raw oracle must pass output-shape,
+   checkout-containment, `bash -n`, portable-tool, and isolated base+oracle RED gates.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

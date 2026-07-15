@@ -149,6 +149,11 @@ After a write rail returns, actual git artifacts are checked:
   a legacy rail reports `status=authored`;
 - acceptance argv commands are executed by depth-0, never trusted from worker prose.
 
+Read-only author/review rails also snapshot the consuming checkout before runner start and compare
+git status plus tree identity after runner exit. Any mutation is `containment_breach` and NO-GO,
+even when the changed paths happen to match the requested artifact. The output artifact may be
+quarantined for forensic/recovery input, but it is never silently promoted to an authorized edit.
+
 Reuse `check-disjointness.sh` path semantics where possible. Its green result certifies paths only;
 semantic correctness remains review/QC work.
 
@@ -197,6 +202,9 @@ this whole plan as one implementation task.
 - Worker question/timeout returns stopped and cannot widen/retry past `max_attempts`.
 - Tool-call-only or prose-only author output is rejected as `artifact_invalid`, never promoted to
   authored/complete merely because the raw log is non-empty.
+- A fake or real author runner that mutates the consuming checkout is reported as
+  `containment_breach`; the pre-run tree is restored only in an isolated fixture, never by silently
+  resetting a user's working tree.
 - Legacy non-L5/L6 calls remain compatible during migration; strict L5/L6 prompt-only calls block.
 
 ## Migration and non-goals

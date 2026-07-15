@@ -37,7 +37,7 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 1a shell/schema | complete on feature branch | Spark `e61d75d`; focused QC green |
 | Unit 1b.i JS/schema compatibility | complete on feature branch | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
-| Unit 1 aggregate review | in progress | Depth-0 aggregate QC green; MiniMax-M3 + AGY next |
+| Unit 1 aggregate review | rework | AGY found shell/JS endpoint-name parity gap; RED `55a1e55`; MiniMax envelope parsed `no_verdict` |
 | Unit 2 strict dispatch | pending | RED oracle first |
 | Unit 3 session coupling | pending | RED oracle first |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
@@ -53,6 +53,14 @@ model qualification policy. Those remain in the separate follow-up plan.
 - Unit 1b independent test-author attempts: GLM-5.2 timed out with a zero-byte artifact; AGY timed
   out; MiniMax-M3 returned only a tool-call request and was rejected despite the legacy rail saying
   `authored`. Existing compatibility REDs remain authoritative; no fake oracle was accepted.
+- Unit 1 aggregate review found a real JS endpoint-name validation gap. GLM-5.2 again timed out with
+  a zero-byte artifact, so the recorded AGY fallback authored RED `55a1e55` (365 pass, 2 expected
+  assertion failures before product repair). MiniMax-M3 emitted a wrapped finding after a prose
+  preamble, so the legacy parser correctly returned `no_verdict`; it does not count as a panel pass.
+- The first AGY fallback author call also mutated the consuming feature worktree despite
+  `dispatch-author.sh` documenting a read-only posture. Only its declared three-line test diff was
+  present and it was isolated/verified before commit, but the rail behavior is a containment breach
+  to mechanize in the separate dispatch-unit contract project.
 - The first Spark resolver-compatibility test run was killed at the 115-second outer limit after it
   authored a complete diff. A bounded retry replayed that exact transcript diff, completed in 94
   seconds as `40698b4`, and passed the full Unit 1 depth-0 gate.

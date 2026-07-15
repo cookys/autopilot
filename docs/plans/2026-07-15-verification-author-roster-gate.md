@@ -1,6 +1,6 @@
 # Fail-closed verification-author roster gate for /l6 authoring
 
-Status: in-progress
+Status: ✅ Shipped in v2.32.35 — merged as 0a8ef087d310a868a41ada53dfe4daf196e5b253
 Branch: fix/verification-author-roster-gate
 Canonical source: `/home/cookys/projects/autopilot`
 

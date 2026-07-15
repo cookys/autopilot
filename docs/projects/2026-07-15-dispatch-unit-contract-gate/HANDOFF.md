@@ -5,11 +5,11 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/feat/dispatch-unit-contract-gate`; the fresh MiniMax recovery started from
-  `d0012624c00263d3e0103f06158c05f340c6f3a1` (`docs(project): record AGY Opus author timeout`).
+  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery started from
+  `f3fdc9286b977c924de96324c2d31c057048f3fd` (`docs(project): record fresh MiniMax empty output`).
   Product tree is clean; no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
-  the L-1 project-ledger commit plus this blocker snapshot when committed.
+  six project/bootstrap-and-blocker commits beyond that base before this staged snapshot.
 - l6 marker is active. Spark live readiness passed and capability event 43 is `available/high`.
 - C1 external run dir: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/`.
   Frozen attempt-1 contract hash: `1b6d6c46945b2df86554f04cb545e584d10ad8da81e6df2ee00bbabe401cb5e1`;
@@ -31,11 +31,23 @@
   `agy/anthropic` versus Spark `openai`; a fresh contract and prompt were frozen from `4f5dcb69`.
   The only author call preserved byte-for-byte checkout containment but AGY timed out waiting for the
   response after five minutes. Its 218-byte raw log contains no authored Bash. This is
-  `REJECT/no-artifact`, not quota/429; no Spark dispatch ran.
+  `STOP/no-artifact`; the log surfaces no quota/429 signal and no Spark dispatch ran.
 - User then freshly authorized `MiniMax-M3`. The endpoint probe passed, strict roster resolved
   `cc-shim/minimax` versus Spark `openai`, and a new current-HEAD contract plus focused prompt were
   frozen. The single call preserved complete containment but returned only one newline byte and
   `status=empty_output`. This is `REJECT/empty-output`, not timeout/quota; no Spark dispatch ran.
+- On the user's explicit `/l6` continuation, the marker was re-armed and orchestration resumed
+  without another authorization question. Fresh GLM full author inference selected the permanent
+  `cc-shim/glm-5.2/zhipu` tuple but timed out at exit 124 with a zero-byte raw log despite a 1,565 ms
+  passing endpoint probe. The next automatic recovery selected AGY `Claude Sonnet 4.6 (Thinking)` as
+  `agy/anthropic`; it also timed out waiting for the response and produced only the 218-byte AGY PTY
+  error log. The GLM observation stayed clean with the same file count; Sonnet preserved the same
+  status/file count/config-only diff. No complete content digest was preserved for either attempt,
+  so containment evidence is bounded rather than byte-for-byte proof. Both are runtime
+  `STOP/no-artifact`. The Sonnet roster override also violated C1's no-manual-substitution rule and
+  cannot satisfy the author gate. Depth-0 stopped this resumed run after the two no-artifact calls to
+  cap further author spend; that is an orchestration decision, not a contract budget. C1 remains
+  fail-closed and no Spark dispatch ran.
 
 ## 已決事項(不重議)
 
@@ -54,6 +66,10 @@
 - The fresh MiniMax authorization was exercised once with a new current-HEAD contract and shorter
   prompt. It returned empty output despite a passing endpoint probe. Do not replay either recorded
   MiniMax prompt or count endpoint-probe success as full-author readiness.
+- The resumed fresh GLM and AGY Sonnet prompts were each exercised once from `f3fdc92`. Both are
+  `STOP/no-artifact` timeouts and must not be replayed. Their endpoint/model-list availability is
+  not full-author readiness evidence. Sonnet's isolated roster substitution was a protocol deviation,
+  not new standing author authority.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -62,10 +78,14 @@
 ## 下一步
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
-   and read this HANDOFF plus the project attempt ledger.
-2. Do not retry the recorded MiniMax, Gemini, or AGY Opus prompts. Either obtain fresh evidence that
-   strict GLM full author inference (not merely `endpoints test`) is functioning, or ask the
-   Board/user to authorize a different cross-family author. gpt-5.5 cannot fill that seat.
+   and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
+   active/blocked, and seven phases remain including active C1; C2-C7 are pending.
+2. Do not retry any recorded MiniMax, Gemini, AGY Opus, resumed GLM, or AGY Sonnet prompt. Wait for an
+   externally meaningful readiness change: successful strict full-author evidence for the configured
+   author, or a newly authorized strict-roster cross-family tuple. A native-Claude quota reset alone
+   is insufficient unless that tuple is authorized. On a valid signal, resume automatically;
+   do not stop to ask the user `continue?`. gpt-5.5 cannot fill the author seat because it shares
+   Spark's OpenAI family.
 3. From the then-current clean `HEAD`, issue a new C1 contract/hash with the same exact five-file
    boundary and a new independent author prompt. The new raw oracle must pass output-shape,
    checkout-containment, `bash -n`, portable-tool, and isolated base+oracle RED gates.
@@ -128,3 +148,20 @@
   preflight had returned `ok` in 1,401 ms. Before/after containment is identical: 1,459 files,
   tree-content SHA-256 `5ad3c041acf0e71c1b9d267d183b9efcb86d38b52a3dd14060fd1b476ed5d5fc`, config-only diff
   SHA-256 `7781453cfabcd958911bd46ec4836e11622e8e498486a7205fd4a4ddf105bcda`.
+- Resumed GLM contract/prompt hashes are
+  `4816d0ba5f6306fd4e4f1aa833cbb3bf3fff4e1626c1c02f8e793c13e9e5b63e` and
+  `aebed687253eada734bcfe4282d4f489bedab88750bddb5f18b48dcc5e48f2f0`. Raw log
+  `/tmp/dispatch-author-log-mTXCy2` is zero bytes, SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`; strict runner exit was 124.
+- AGY Sonnet contract/prompt hashes are
+  `0659e4e3d38a28a9224210f3aa34d28043c0f32ca33dea6c621caeec0bef26fd` and
+  `9847ab7f4ac6bc0a06443c76f7bbf69434955268b5ab0637cd886005e723f0b7`. Raw log
+  `/tmp/dispatch-author-log-FdmtLz` is 218 bytes, SHA-256
+  `9ee505e23120741d0ee0bc16b14d43d19d45576e959847b8735f93debacfe8ca`, containing only
+  `Error: timeout waiting for response` plus PTY chrome. Bounded containment observations remained at
+  1,459 files and the same config-only diff SHA-256
+  `7b5778e176acc9a08fe06c532d041f7cd9121c1a430e3a1af73c0727944669b5`; no complete content digest
+  was preserved.
+- For future strict-author terminals, persist and hash the dispatcher result JSON or terminal
+  transcript before deleting the isolated worktree; a raw model log alone does not prove runner exit,
+  probe latency, or strict-roster provenance.

@@ -9,7 +9,7 @@ printf '%s' "Write a verification plan." > "$PROMPT"
 
 # Deterministic fake runner
 FAKE_RUNNER="$TEST_TMP/fake-runner"
-SENTINEL="$TEST_TMP/sentinel_touched"
+export SENTINEL="$TEST_TMP/sentinel_touched"
 
 cat <<'EOF' > "$FAKE_RUNNER"
 #!/usr/bin/env bash
@@ -39,6 +39,9 @@ except Exception as e:
 
 errors = []
 def check_val(key, expected):
+    if key not in data:
+        errors.append(f"Expected key {key} to be present in data")
+        return
     val = data.get(key)
     if val != expected:
         errors.append(f"Expected {key}={expected}, got {val}")
@@ -79,6 +82,9 @@ except Exception as e:
 
 errors = []
 def check_val(key, expected):
+    if key not in data:
+        errors.append(f"Expected key {key} to be present in data")
+        return
     val = data.get(key)
     if val != expected:
         errors.append(f"Expected {key}={expected}, got {val}")
@@ -152,6 +158,9 @@ except Exception as e:
 
 errors = []
 def check_val(key, expected):
+    if key not in data:
+        errors.append(f"Expected key {key} to be present in data")
+        return
     val = data.get(key)
     if val != expected:
         errors.append(f"Expected {key}={expected}, got {val}")
@@ -160,25 +169,31 @@ check_val("status", "authored")
 check_val("selection_source", "strict_roster")
 check_val("selection_path", sys.argv[2])
 
-va = data.get("verification_author")
-if not isinstance(va, dict):
-    errors.append(f"Expected verification_author to be dict, got {type(va)}")
+if "verification_author" not in data:
+    errors.append("Expected key verification_author to be present in data")
 else:
-    expected_keys = {"engine", "runner", "effort", "endpoint", "family"}
-    actual_keys = set(va.keys())
-    if actual_keys != expected_keys:
-        errors.append(f"Expected verification_author keys {expected_keys}, got {actual_keys}")
-    
-    def check_va_val(key, expected):
-        val = va.get(key)
-        if val != expected:
-            errors.append(f"Expected verification_author.{key}={expected}, got {val}")
-            
-    check_va_val("engine", "glm-5.2")
-    check_va_val("runner", "cc-shim")
-    check_va_val("effort", "high")
-    check_va_val("endpoint", "MY_UNIQUE_EP")
-    check_va_val("family", "zhipu")
+    va = data.get("verification_author")
+    if not isinstance(va, dict):
+        errors.append(f"Expected verification_author to be dict, got {type(va)}")
+    else:
+        expected_keys = {"engine", "runner", "effort", "endpoint", "family"}
+        actual_keys = set(va.keys())
+        if actual_keys != expected_keys:
+            errors.append(f"Expected verification_author keys {expected_keys}, got {actual_keys}")
+
+        def check_va_val(key, expected):
+            if key not in va:
+                errors.append(f"Expected key {key} to be present in verification_author")
+                return
+            val = va.get(key)
+            if val != expected:
+                errors.append(f"Expected verification_author.{key}={expected}, got {val}")
+
+        check_va_val("engine", "glm-5.2")
+        check_va_val("runner", "cc-shim")
+        check_va_val("effort", "high")
+        check_va_val("endpoint", "MY_UNIQUE_EP")
+        check_va_val("family", "zhipu")
 
 url_fixture = sys.argv[3]
 token_fixture = sys.argv[4]

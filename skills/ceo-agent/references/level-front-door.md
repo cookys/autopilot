@@ -533,29 +533,25 @@ branch off a pinned base and only remove the worktree on success. After the
 **authoritative qc verdict passes at depth 0**, the CEO integrates the foreman's
 commit. **Mind the base**: the foreman worktree branches off the *tracked* base
 (`develop`), NOT the CEO's checked-out HEAD (see Gotchas). When the CEO is on a
-feature branch, a two-dot `git diff <feature>..<foreman-branch>` shows phantom
-deletions of the absent feature work, and a plain `git merge` drags the base's
-history in — so **`git cherry-pick <foreman-commit>`** (the isolated commit) is the
-correct integration when the touched files don't overlap the feature work
-(empirically the case in the P1.f dogfood). Use a real branch merge only when the
-foreman built on the CEO's actual HEAD (STEP-0 bootstrap, Gotchas). On conflict
-(base moved during a long run): **rebase/cherry-pick-retry once, else escalate** —
-never auto-resolve unattended.
+feature branch, first verify the foreman base. Prefer an identity-preserving merge
+when that base is compatible; this makes containment mechanically provable. A
+tactical `git cherry-pick <foreman-commit>` copies a commit but does **not** make
+the source branch an ancestor. After cherry-pick, preserve that source (bundle +
+exact-tip ack/handoff) until depth 0 explicitly discards it; the reaper must keep
+it uncontained. On conflict, retry once, else escalate — never auto-resolve.
 
-After a successful cherry-pick or merge, retire dispatch-owned dated branches through
+After an identity-preserving merge, retire dispatch-owned dated branches through
 the deterministic reaper, not an ad-hoc broad branch glob:
 
 ```bash
 scripts/reap-dispatch-branches.sh reap --into develop --yes
 scripts/reap-dispatch-branches.sh reap --into develop --reap-superseded --dry-run
-# After reviewing the superseded-round preview:
-scripts/reap-dispatch-branches.sh reap --into develop --reap-superseded --yes
+# Uncontained superseded rounds remain preservation/manual-disposition items.
 ```
 
-The first command removes only branches proven contained by the authoritative branch;
-the opt-in second pass removes superseded intermediate rounds only after a preview.
-Every deletion is preceded by one verified full-history bundle. Branches outside the
-reaper's anchored grammar remain an explicit harness cleanup responsibility.
+Only branches contained by the authoritative branch are deletion-eligible. Every
+deletion is preceded by one verified full-history bundle. Branches outside the
+reaper grammar remain explicit preserve-first harness cleanup responsibility.
 
 ### 5. Worktree GC
 
@@ -565,7 +561,8 @@ and branches after handling the outcome:
 
 ```bash
 git worktree remove --force <path>        # `prune` ALONE is a no-op on an on-disk worktree
-git branch -D worktree-agent-<agentId>    # for a killed native foreman
+# Preserve an out-of-grammar branch tip in a verified bundle, then depth 0 may
+# compare-delete that exact ref. Never use a bare branch -D.
 git worktree prune
 ```
 
@@ -575,8 +572,9 @@ git worktree prune
   by `reap-dispatch-branches.sh`, let the reaper prove containment, create and verify
   its bundle, then delete it; do not use an unchecked `git branch -D`. On a
   `committed` outcome the worktree is already auto-removed (`worktree: null`); after
-  the depth-0 cherry-pick run the contained reaper pass above. Out-of-grammar
-  `hetero/<name>` branches still require explicit inspected cleanup.
+  an identity-preserving merge run the contained reaper pass above. After a
+  cherry-pick, keep + ack/handoff the uncontained source. Out-of-grammar
+  `hetero/<name>` branches require explicit preserve-first inspected cleanup.
 - For a killed native Claude foreman, the path is deterministic
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory

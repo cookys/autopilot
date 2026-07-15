@@ -22,7 +22,7 @@
 - Verification author: configured GLM-5.2 endpoint API 529 twice; Board-approved temporary roster override produced a strict-roster `cc-shim/MiniMax-M3@high` artifact; config restored byte-identically.
 - Recovery provenance note: the temporary `/tmp/dispatch-author-log-6GM37V` artifact was no longer present when generation 2 adopted git truth; it was not reconstructed. The durable ledger, runner/model provenance, converged plan, and executable tests remain the evidence rail.
 - Implementer: canonical `gpt-5.3-codex-spark@high` was attempted twice without creating a worktree; both stalled with zero artifacts. Board authorized foreman-native fallback for this unit.
-- Tests: qualified base+test-only orphan-GC RED (`RED_RC=1`, two behavior assertions) captured; GREEN = dispatch GC 23 assertions + reaper 35 assertions. Full suite 139/142 files green; all three nonzero groups reproduced on immutable `8250dc9` and are outside the diff. Portability 13/17 with all four nonzero checks likewise reproduced on base; deterministic canonical/payload/version gates pass.
+- Tests: P3 QC repair test-only diff on immutable `be8b1c2` gives reaper/GC `RED_RC=1` behavior failures; current GREEN = reaper 71 + dispatch GC 28 + worktree-reap 14. Portability/OpenCode/eval 13/17 remains PRE_EXISTING DEFERRED (trigger: related gate/file touch or baseline regression); deterministic gates remain mandatory.
 - Constraints preserved: no TWGameProject residue cleanup, no archive-tag merge, no push, no direct develop edits, protected temp plan twin and pre-existing stash untouched.
 
 ## 下一步

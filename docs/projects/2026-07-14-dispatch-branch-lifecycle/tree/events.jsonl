@@ -3,3 +3,4 @@
 {"schema_version":1,"ts":"2026-07-15T08:42:00Z","node":"root/p1","type":"phase_completed","title":"P1 hetero plan review converged after 5 external generations"}
 {"schema_version":1,"ts":"2026-07-15T09:35:40Z","node":"root/p2","type":"phase_completed","title":"P2 implemented reaper gate wiring and orphan-log hygiene; focused tests green"}
 {"schema_version":1,"ts":"2026-07-15T20:19:36Z","node":"root/p3","type":"phase_completed","title":"P3 full-diff hetero review converged; verified findings fixed; focused and project gates complete"}
+{"schema_version":1,"ts":"2026-07-15T21:02:42Z","node":"root/p3","type":"review_round_completed","title":"QC repair round 1 hardened fail-closed ref/worktree/ack/orphan races; qualified RED and focused GREEN captured"}

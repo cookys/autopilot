@@ -478,4 +478,37 @@ EOF
 
 test_orphan_log_hygiene_absent_and_retry_failure
 
+test_orphan_log_rewrite_failures_and_concurrent_append() {
+    export TMPDIR="$TEST_TMP/tmp-orphan-atomic"; mkdir -p "$TMPDIR"
+    local log="$TMPDIR/autopilot-orphan-worktrees.log" rc before fake hook done appended i
+
+    mkdir "$log"
+    set +e; bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
+    assert_eq "$rc" 2 "non-regular orphan log fails closed"
+    [ -d "$log" ] || fail "failed rewrite must preserve original orphan log"
+    rmdir "$log"
+
+    mkdir "$TMPDIR/keep-path"; printf '%s\n' "$TMPDIR/keep-path" > "$log"; before=$(cat "$log")
+    fake="$TEST_TMP/fail-mv-bin"; mkdir -p "$fake"
+    printf '#!/bin/sh\nprintf '\''injected mv failure\n'\'' >&2\nexit 1\n' > "$fake/mv"; chmod +x "$fake/mv"
+    set +e; PATH="$fake:$PATH" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1; rc=$?; set -e
+    assert_eq "$rc" 2 "orphan-log atomic replacement failure is nonzero"
+    assert_eq "$before" "$(cat "$log")" "replacement failure preserves original bytes"
+
+    rm -rf "$TMPDIR/keep-path"; printf '%s\n' "$TMPDIR/gone" > "$log"
+    appended="$TMPDIR/concurrent-entry"; done="$TEST_TMP/append-done"; hook="$TEST_TMP/orphan-append-hook.sh"
+    cat > "$hook" <<EOF
+#!/usr/bin/env bash
+eval "exec \${AUTOPILOT_ORPHAN_REWRITE_LOCK_FD}>&-"
+(. "$REPO_ROOT/scripts/lib/worktree-reap.sh"; ORPHAN_LOG="\$1"; _wt_append_orphan_path "$appended"; : > "$done") >/dev/null 2>&1 &
+EOF
+    chmod +x "$hook"
+    AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK="$hook" bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc >/dev/null 2>&1
+    for i in {1..100}; do [ -e "$done" ] && break; sleep 0.02; done
+    assert_file_exists "$done" "coordinated concurrent append completes"
+    assert_contains "$(cat "$log")" "$appended" "rewrite never loses concurrent writer append"
+}
+
+test_orphan_log_rewrite_failures_and_concurrent_append
+
 finalize_test

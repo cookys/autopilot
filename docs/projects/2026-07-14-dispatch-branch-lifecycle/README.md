@@ -11,7 +11,7 @@
 1. **KR1 — session-end gate**: finish-flow / front-door 收尾時存在一個 deterministic 檢查：dispatch-owned 整合候選 branch（`ceo-integration-candidate-*` 等）存在且 ahead>0 ⇒ 擋 clean exit、要求 merge/保留記 handoff/丟棄三選一明確裁決。
 2. **KR2 — reaper 工具**: `scripts/reap-dispatch-branches.sh` 存在且 preserve-first：contained（`merge-base --is-ancestor`）⇒ bundle 存證後刪；未 contained ⇒ 保留並列出。絕不 fail-open 刪未存證內容。
 3. **KR3 — 中間輪收斂**: 整合成功後被取代的 `-r<n-1>` 中間輪 branch 有明確 lifecycle（工具支援 + prose wiring），不再無限累積。
-4. **KR4 — 品質**: plan 經 hetero loop review 收斂（無未決 Critical/Major）；實作測試綠（fixture repo red/green）；`preflight-portability.sh` 過；版號 PATCH bump + 文件三處落地。
+4. **KR4 — 品質**: plan/review 無未決 Critical/Major；fixture red/green 與 diff-scoped zero-regression 綠。既有 portability/full-suite 非零須 base 重現並標 PRE_EXISTING DEFERRED，不冒充 pass。
 
 ## Scope（Hold — L-1.5 audit 結果）
 
@@ -52,4 +52,4 @@ Recovery 的 test-only negative control 在 immutable base `8250dc9` 得到 `RED
 
 完整 implementation diff 以 artifact-only canonical `dispatch-review.sh` 盲審；所有 round 2+ prompt 均先通過 suppression + redispatch linter。Gemini r1/r2/r3/r4 皆為結構化 `SHIP-AS-IS`；MiniMax-M3 額外 leg 為結構化 `SHIP-AS-IS`。Grok r2 raw block 為 `SHIP-AS-IS`，r3 raw block 為 `FIX-THEN-SHIP`，r4 raw block 回到 `SHIP-AS-IS`；三次皆因 wrapper 前 preamble 被 parser fail-closed 成 `no_verdict`，未被冒充為結構化 pass。Final frozen diff `/tmp/dispatch-branch-p3-r4.diff` sha256 `c735294fed6ee36c4a64dcc700c650fb38739d6e87ed73df0e004a69206acc4a`；final artifacts 為 Gemini `/tmp/dispatch-review-log-L16p0G` 與 Grok `/tmp/dispatch-review-log-WhDXir`。
 
-所有可驗證 finding 均先重現再修：空 `--pattern ''` 全 branch over-match、bundle/per-branch preservation 文件過度宣稱、plain `check` 建立空 ack state、同名 tag 令 `%(refname:short)` 造成 integration-candidate false-clean、以及 non-40-hex recorded tip 錯誤走 exit 2。Focused RED→GREEN 最終為 reaper 42 assertions + orphan-GC 23 assertions；bash syntax、canonical/payload/version、dogfood `scan`/`check` 全綠。兩次完整 suite：第一輪 139/142，三個非零 group 與 P2 baseline 完全相同；最終輪 140/142，engine-scorecard flaky case 轉綠，僅 L1 opt-in/session-marker 與 OpenCode 兩個既有 group 非零。`preflight-portability.sh` 仍為相同 baseline 13/17。Release deterministic gates 在明示 skip quota-blocked slash probes 時 8/8；未 skip 為 7/8，唯一失敗是上述 Claude weekly 429。最終 scope 為 26 product paths、changed LOC 1392/1500，risk counter 15/20，未擴 scope。
+所有可驗證 finding 均先重現再修；P3 首輪後 authoritative QC 再驗出 fail-open enumeration、非 local target、ack/worktree/CAS races、orphan-log rewrite、cherry-pick containment 與 preserve-first 文件缺口。Cohesive repair 的 test-only diff 在 immutable `be8b1c2` 得到 reaper/GC `RED_RC=1`（皆為行為 assertion）；current tree GREEN：reaper 71、orphan-GC 28、worktree-reap 14。Risk counter 依規則只加一次至 20；depth-0 因 mandatory mirrors 將 cap 修正為 ≤30 paths / ≤2250 LOC。Portability/OpenCode/eval 既有 13/17 維持 **PRE_EXISTING DEFERRED**，trigger：下次相關 gate/檔案被改動或 baseline 惡化時另案處理；本專案不修也不宣稱通過。Slash probe weekly quota 是外部限制，deterministic release gate 仍明列執行。

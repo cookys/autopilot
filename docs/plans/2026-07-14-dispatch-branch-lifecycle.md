@@ -41,8 +41,8 @@ most valuable output is the thing that never lands) and unbounded branch accumul
   the same engine+task+date) have an explicit lifecycle: detectable by `scan`, reapable only via
   opt-in `--reap-superseded` (bundle-first), wired as prose into the front-door integration step.
 - **KR4 (quality)**: plan converges through hetero loop review (no open Critical/Major);
-  implementation ships with fixture-repo red/green tests; `preflight-portability.sh` passes;
-  PATCH version bump + CLAUDE.md/reference/CHANGELOG wiring complete.
+  fixture-repo red/green tests pass; diff-scoped gates add zero regression. Board/finish-flow
+  adjudicates documented pre-existing portability/full-suite failures; no fake pass.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -184,13 +184,10 @@ supersession fixture includes `r2` vs `r10` (numeric-compare case).
    eligible refs, full history, positive refs only; stderr captured and `json_escape`d into
    `failures[]` on error — R2: glm Minor) → `git bundle verify <bundle>` →
    `git bundle list-heads <bundle>` must report EVERY eligible ref at its recorded sha →
-   then per branch: assert the branch is not checked out in any worktree
-   (`git worktree list --porcelain`, exact fixed-string equality on the complete `branch
-   refs/heads/<name>` field) →
-   atomic compare-and-delete `git update-ref -d refs/heads/<branch> <recorded-sha>` (fails
-   if the tip moved — closes the re-read→delete race; R2: agy Critical. NOTE: `update-ref`
-   does NOT refuse checked-out branches the way `git branch -D` does, which is exactly why
-   the worktree pre-check above is non-waivable).
+   then per branch capture a complete successful worktree list, re-read exact tip + target
+   containment + occupancy immediately around exact-tip compare-delete, and repeat proof /
+   occupancy after deletion; invalidation restores the ref and fails. Git cannot transact ref
+   and worktree metadata together, so no stronger concurrency claim is made.
    On successful ref deletion, remove the local `branch.<name>` config section if present;
    config cleanup failure is reported but never rolls back the already preserved+deleted ref.
    Bundle-stage failure (create/verify/list-heads) ⇒ NOTHING is deleted this run, exit 1.
@@ -204,10 +201,10 @@ supersession fixture includes `r2` vs `r10` (numeric-compare case).
 
 **Acceptance**: fixture: contained branch → run bundle exists + `git bundle verify` passes +
 `list-heads` covers its ref + branch gone; a slash-family branch (`agent/...`) reaps cleanly;
-un-contained branch survives every flag combination; two same-tip integration candidates →
-exactly the designated survivor remains (mutual-containment case); bundle-stage failure
+un-contained branch survives every flag combination; same-tip integration candidates both
+survive until the authoritative target contains them; bundle-stage failure
 simulation (unwritable bundle path) → NOTHING deleted + exit 1; a checked-out branch is kept
-with a failure naming the worktree; superseded branch survives default reap, reaped only with
+with a failure naming the worktree; superseded uncontained branches survive even with
 `--reap-superseded`; a git error message containing `"` lands in `failures[]` as valid JSON
 (escape case).
 
@@ -215,24 +212,24 @@ with a failure naming the worktree; superseded branch survives default reap, rea
 **Steps**:
 1. `skills/finish-flow/SKILL.md` L-5.6: add checklist line — run
    `scripts/reap-dispatch-branches.sh check`; exit 1 ⇒ adjudicate each listed candidate
-   (merge per L-front-door §4 / keep = `--ack` + handoff note / discard = `reap` after an
-   explicit user decision) before the session-end gate may pass.
+   (identity-preserving merge / keep = `--ack` + handoff / manual discard only after verified
+   preservation under human/depth-0 authority) before the gate may pass.
 2. `level-front-door.md` §5: replace the bare `git branch -D <branch>` bullets' surrounding prose
    with the reaper (`reap` for contained, `--reap-superseded --dry-run` preview after each
-   integrated round); §4 gains one line: after cherry-pick, the integrated branch is now
-   contained ⇒ `reap` clears it.
+   integrated round); §4 states cherry-pick does not establish ancestry: source stays
+   preserved+acked until explicit disposition, while a real merge enables reap.
 3. `references/hetero-dispatch.md`: new § "Repo-branch lifecycle (reap-dispatch-branches.sh)"
    with grammar table + outcome table + the preserve-first contract.
 4. CLAUDE.md inventory row; CHANGELOG v2.32.37 entry; `sync-version.js --version 2.32.37`;
    `sync-codex-plugin-skills.sh` payload refresh; BACKLOG entry marked shipped.
 
-**Acceptance**: `preflight-portability.sh` + `preflight-release.sh` + pre-commit gates green.
+**Acceptance**: deterministic release/pre-commit gates green; portability is diff-scoped
+zero-regression with reproduced base failures recorded PRE_EXISTING DEFERRED.
 
 ### Phase D — orphan-log hygiene · size Fix
 **Steps**: in `dispatch-hetero.sh` `--gc` path (before `gc_stale_worktrees`): rewrite
-`$ORPHAN_LOG`. Line semantics (the log is NOT paths-only: `reap_worktree_minimal` in
-`scripts/lib/worktree-reap.sh` both appends the worktree path via `printf` AND redirects
-`git worktree remove` stderr into the same file, so error-message lines are interleaved):
+`$ORPHAN_LOG`. Writer and rewrite share a lock; the writer records paths only (legacy
+interleaved stderr lines remain tolerated and are pruned):
 1. A line is a RETRY CANDIDATE iff it is an absolute path (`/...`) to an existing directory;
    every other line (error text, nonexistent path) is pruned on rewrite.
 2. For each candidate owned by the current user (`[ -O "$path" ]`), require `$path/.git` to
@@ -259,7 +256,8 @@ first two pruned, own dir retried (removed ⇒ line dropped); no behavior change
 
 - Script-gated: `hooks/tests/reap-dispatch-branches.test.sh` (fixture repo, ~15 assertions per
   the acceptance lists above; uses `mktemp -d` under `$TMPDIR` per the multi-user-/tmp lesson).
-- Script-gated: full `hooks/tests/run.sh` zero regression; `preflight-portability.sh` 17 checks.
+- Script-gated: full suite and portability diff-scoped zero regression; any nonzero group is
+  reproduced on immutable base and recorded PRE_EXISTING DEFERRED.
 - Human-gated: none beyond Board's standing qc — the reaper is never pointed at TWGameProject in
   this plan (user deferred that residue 2026-07-14).
 - Dogfood: `scan`/`check` on the autopilot repo itself (expected: zero dispatch-owned branches ⇒
@@ -273,7 +271,7 @@ first two pruned, own dir retried (removed ⇒ line dropped); no behavior change
 | Pattern over-match nukes a user branch | Anchored dated grammar; lookalike fixture test is a named acceptance case; deletion additionally requires containment/supersession proof |
 | Gate nags forever on a deliberately-kept candidate | sha-pinned `--ack` (re-arms on new commits); ack file lives in `.git/`, never committed |
 | Gate wired but skippable (prose again) | The gate line lands inside finish-flow L-5.6's checklist (an existing forcing function with per-line pass/fail output), not as a new free-floating paragraph |
-| Reaper deletes the branch a worktree sits on | `git branch -D` refuses on checked-out branches; recorded as failure, operator uses existing worktree GC first |
+| Reaper deletes a checked-out branch | Complete worktree enumeration before/after CAS; occupancy/proof invalidation restores exact ref and names the path |
 | Fixture tests collide on shared /tmp (known machine gotcha) | `mktemp -d`, no fixed paths (BACKLOG lesson `check-test-integrity-l1` flaky) |
 | `check` false-negative when repo has no develop | `--into` missing ref ⇒ exit 2 (environment), never a silent 0 |
 | Ack prefix collision unlocks the wrong branch (`r1` vs `r11`) | Exact-field ack parse (§4 Phase A step 3); named acceptance case |

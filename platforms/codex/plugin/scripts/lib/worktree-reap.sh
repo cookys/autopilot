@@ -253,6 +253,18 @@ reap_worktree() {
   return 0
 }
 
+# Append one path without racing rewrite_orphan_log. The separate lock file
+# survives atomic replacement of ORPHAN_LOG itself.
+_wt_append_orphan_path() {
+  local path="$1" log="${ORPHAN_LOG:-}" lock_fd rc
+  [ -n "$log" ] || return 1
+  exec {lock_fd}>"${log}.lock" || return 1
+  flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
+  printf '%s\n' "$path" >> "$log"; rc=$?
+  exec {lock_fd}>&-
+  return "$rc"
+}
+
 # --- reap_worktree_minimal ----------------------------------------------------
 # Signal-safe path: remove worktree only; on failure append path to ORPHAN_LOG.
 # Does NOT run the project hook. Does NOT delete a branch (caller does).
@@ -264,10 +276,8 @@ reap_worktree_minimal() {
   # Honor the WT_RM test seam (same as _wt_git_worktree_remove) so the failure
   # branch is testable; array-exec keeps this signal-handler-safe (no subshell).
   local _rm=(git); [ -n "${WT_RM:-}" ] && _rm=("$WT_RM")
-  if ! "${_rm[@]}" worktree remove --force "$wt" 2>>"${ORPHAN_LOG:-/dev/null}"; then
-    if [ -n "${ORPHAN_LOG:-}" ]; then
-      printf '%s\n' "$wt" >> "$ORPHAN_LOG"
-    fi
+  if ! "${_rm[@]}" worktree remove --force "$wt" >/dev/null 2>&1; then
+    _wt_append_orphan_path "$wt" || printf 'WARN: cannot record orphan worktree: %s\n' "$wt" >&2
   fi
   return 0
 }

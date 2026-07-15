@@ -70,7 +70,16 @@ done
 
 repo="$(cd "$repo" 2>/dev/null && pwd -P)" || die_env "repository directory is not readable"
 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || die_env "not a git repository: $repo"
-into_sha="$(git -C "$repo" rev-parse --verify "${into}^{commit}" 2>/dev/null)" || die_env "integration target does not resolve: $into"
+case "$into" in
+  refs/heads/*) into_name="${into#refs/heads/}" ;;
+  refs/*) die_env "integration target must be an exact local branch: $into" ;;
+  *) into_name="$into" ;;
+esac
+[ -n "$into_name" ] || die_env "integration target branch name is empty"
+git check-ref-format "refs/heads/$into_name" >/dev/null 2>&1 || die_env "invalid integration target branch: $into"
+into_ref="refs/heads/$into_name"
+into_sha="$(git -C "$repo" rev-parse --verify "${into_ref}^{commit}" 2>/dev/null)" || die_env "integration target local branch does not resolve: $into_ref"
+into="$into_name"
 
 for pattern in "${extra_patterns[@]}"; do
   [ -n "$pattern" ] || die_env "--pattern ERE must not be empty"
@@ -89,8 +98,22 @@ declare -A family=() tip=() ahead=() contained_in=() superseded_by=()
 declare -A round=() sibling_key=() canonical_for_tip=() is_maximal_candidate=()
 declare -A highest_round=() highest_name=() partition=()
 
-while IFS= read -r name; do
+ref_list="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-refs.XXXXXX")" || die_env "cannot create branch enumeration temp file"
+ref_err="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-refs-err.XXXXXX")" || { rm -f "$ref_list"; die_env "cannot create branch enumeration error file"; }
+if ! git -C "$repo" for-each-ref --sort=refname --format='%(refname:lstrip=2)' refs/heads >"$ref_list" 2>"$ref_err"; then
+  enumeration_error="$(<"$ref_err")"
+  rm -f "$ref_list" "$ref_err"
+  die_env "cannot enumerate local branches${enumeration_error:+: $enumeration_error}"
+fi
+rm -f "$ref_err"
+mapfile -t local_branch_names < "$ref_list" || { rm -f "$ref_list"; die_env "cannot read complete local branch enumeration"; }
+rm -f "$ref_list"
+
+for name in "${local_branch_names[@]}"; do
   [ -n "$name" ] || continue
+  # Defense in depth: even a custom catch-all pattern cannot classify the
+  # authoritative integration branch as dispatch-owned.
+  [ "$name" = "$into_name" ] && continue
   matched=0
   if [[ "$name" =~ $candidate_re ]]; then
     family["$name"]="candidate"
@@ -112,7 +135,7 @@ while IFS= read -r name; do
 
   branches+=("$name")
   tip["$name"]="$(git -C "$repo" rev-parse --verify "refs/heads/$name")" || die_env "cannot resolve local branch: $name"
-  ahead["$name"]="$(git -C "$repo" rev-list --count "$into_sha..${tip[$name]}" 2>/dev/null)" || die_env "cannot compare $name with $into"
+  ahead["$name"]="$(git -C "$repo" rev-list --count "$into_sha..${tip[$name]}" 2>/dev/null)" || die_env "cannot compare $name with $into_ref"
   contained_in["$name"]=""
   superseded_by["$name"]=""
 
@@ -120,7 +143,7 @@ while IFS= read -r name; do
     sibling_key["$name"]="${BASH_REMATCH[1]}|${BASH_REMATCH[3]}"
     round["$name"]=$((10#${BASH_REMATCH[2]}))
   fi
-done < <(git -C "$repo" for-each-ref --sort=refname --format='%(refname:lstrip=2)' refs/heads)
+done
 
 # One canonical survivor per same-tip integration-candidate group.
 for name in "${candidates[@]}"; do
@@ -179,7 +202,7 @@ for name in "${branches[@]}"; do
     done
   fi
 
-  if [ -n "${contained_in[$name]}" ]; then
+  if [ "${contained_in[$name]}" = "$into_name" ]; then
     partition["$name"]="reapable"
     reapable+=("$name")
   else
@@ -196,6 +219,21 @@ for name in "${branches[@]}"; do
   if [ "${family[$name]}" = candidate ] && [ "${ahead[$name]}" -gt 0 ]; then
     candidates_ahead+=("$name")
   fi
+done
+
+# Post-classification defense assertion (plan §4A): classification must be a
+# total, disjoint partition and the integration target must be absent from every
+# dispatch-owned set. Abort before emitting/deleting on any internal drift.
+declare -A partition_seen=()
+for bucket_name in "${reapable[@]}" "${superseded[@]}" "${kept[@]}"; do
+  [ "$bucket_name" != "$into_name" ] || die_env "defense assertion: integration target entered dispatch partition"
+  [ -z "${partition_seen[$bucket_name]:-}" ] || die_env "defense assertion: duplicate branch partition: $bucket_name"
+  partition_seen["$bucket_name"]=1
+done
+[ "${#partition_seen[@]}" -eq "${#branches[@]}" ] || die_env "defense assertion: incomplete branch partition"
+for name in "${branches[@]}"; do
+  [ "$name" != "$into_name" ] || die_env "defense assertion: integration target classified as dispatch-owned"
+  [ -n "${partition_seen[$name]:-}" ] || die_env "defense assertion: unpartitioned branch: $name"
 done
 
 emit_branch_object() {
@@ -236,11 +274,17 @@ common_dir="$(cd "$repo" && cd "$common_raw" 2>/dev/null && pwd -P)" || die_env 
 
 if [ "$command_name" = check ]; then
   ack_file="$common_dir/autopilot-reap-ack"
-  ack_tmp="$common_dir/autopilot-reap-ack.tmp.$$"
+  ack_tmp="$(mktemp "$common_dir/autopilot-reap-ack.tmp.XXXXXX")" || die_env "cannot create ack rewrite"
   declare -A acknowledged=()
-  : > "$ack_tmp" || die_env "cannot rewrite ack file"
+  if [ -e "$ack_file" ] && [ ! -f "$ack_file" ]; then
+    rm -f "$ack_tmp"
+    die_env "ack state is not a regular file"
+  fi
   if [ -f "$ack_file" ]; then
-    while IFS=' ' read -r saved_name saved_sha extra || [ -n "${saved_name:-}" ]; do
+    mapfile -t ack_lines < "$ack_file" || { rm -f "$ack_tmp"; die_env "cannot read complete ack state"; }
+    for ack_line in "${ack_lines[@]}"; do
+      saved_name=""; saved_sha=""; extra=""
+      IFS=' ' read -r saved_name saved_sha extra <<< "$ack_line"
       if [ -n "${extra:-}" ] || [[ ! "${saved_sha:-}" =~ ^[0-9a-f]{40}$ ]] \
          || ! git -C "$repo" show-ref --verify --quiet "refs/heads/${saved_name:-}" \
          || [ "$(git -C "$repo" rev-parse "refs/heads/${saved_name:-}" 2>/dev/null)" != "$saved_sha" ]; then
@@ -248,15 +292,18 @@ if [ "$command_name" = check ]; then
         continue
       fi
       acknowledged["$saved_name"]="$saved_sha"
-      printf '%s %s\n' "$saved_name" "$saved_sha" >> "$ack_tmp"
-    done < "$ack_file"
+      printf '%s %s\n' "$saved_name" "$saved_sha" >> "$ack_tmp" || { rm -f "$ack_tmp"; die_env "cannot rewrite ack state"; }
+    done
   fi
+  ack_race=0
   if [ -n "$ack_branch" ]; then
     [ "${family[$ack_branch]:-}" = candidate ] || { rm -f "$ack_tmp"; die_env "--ack branch is not a live integration candidate: $ack_branch"; }
-    if [ "${acknowledged[$ack_branch]:-}" != "${tip[$ack_branch]}" ]; then
-      printf '%s %s\n' "$ack_branch" "${tip[$ack_branch]}" >> "$ack_tmp"
+    ack_tip="$(git -C "$repo" rev-parse --verify "refs/heads/$ack_branch" 2>/dev/null)" || { rm -f "$ack_tmp"; die_env "--ack branch disappeared before write: $ack_branch"; }
+    [ "$ack_tip" = "${tip[$ack_branch]}" ] || ack_race=1
+    if [ "${acknowledged[$ack_branch]:-}" != "$ack_tip" ]; then
+      printf '%s %s\n' "$ack_branch" "$ack_tip" >> "$ack_tmp" || { rm -f "$ack_tmp"; die_env "cannot append ack state"; }
     fi
-    acknowledged["$ack_branch"]="${tip[$ack_branch]}"
+    acknowledged["$ack_branch"]="$ack_tip"
   fi
   if [ -s "$ack_tmp" ]; then
     mv -f "$ack_tmp" "$ack_file" || die_env "cannot atomically rewrite ack file"
@@ -265,10 +312,29 @@ if [ "$command_name" = check ]; then
     rm -f "$ack_file" || die_env "cannot prune empty ack file"
   fi
 
-  gate=0
-  for name in "${candidates_ahead[@]}"; do
-    [ "${partition[$name]}" = reapable ] && continue
-    if [ "${acknowledged[$name]:-}" != "${tip[$name]}" ]; then gate=1; fi
+  if [ -n "${AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE:-}" ]; then
+    "${AUTOPILOT_REAP_TEST_HOOK_AFTER_ACK_WRITE}" "$repo" "$ack_branch" || die_env "ack race test hook failed"
+  fi
+  if [ -n "$ack_branch" ]; then
+    post_ack_tip="$(git -C "$repo" rev-parse --verify "refs/heads/$ack_branch" 2>/dev/null)" || die_env "--ack branch disappeared after write: $ack_branch"
+    [ "$post_ack_tip" = "$ack_tip" ] || ack_race=1
+  fi
+
+  gate="$ack_race"
+  current_into_sha="$(git -C "$repo" rev-parse --verify "${into_ref}^{commit}" 2>/dev/null)" || die_env "integration target disappeared during check: $into_ref"
+  for name in "${candidates[@]}"; do
+    current_tip="$(git -C "$repo" rev-parse --verify "refs/heads/$name" 2>/dev/null)" || die_env "integration candidate disappeared during check: $name"
+    current_ahead="$(git -C "$repo" rev-list --count "$current_into_sha..$current_tip" 2>/dev/null)" || die_env "cannot recompare $name with $into_ref"
+    tip["$name"]="$current_tip"
+    ahead["$name"]="$current_ahead"
+    if git -C "$repo" merge-base --is-ancestor "$current_tip" "$current_into_sha" 2>/dev/null; then
+      contained_in["$name"]="$into_name"
+      partition["$name"]="reapable"
+      continue
+    fi
+    contained_in["$name"]=""
+    [ "$current_ahead" -gt 0 ] || continue
+    if [ "${acknowledged[$name]:-}" != "$current_tip" ]; then gate=1; fi
   done
   emit_scan_json
   exit "$gate"
@@ -278,7 +344,10 @@ fi
 [ "$yes" -eq 1 ] || dry_run=1
 declare -a eligible=()
 eligible+=("${reapable[@]}")
-[ "$reap_superseded" -eq 1 ] && eligible+=("${superseded[@]}")
+# Preserve-first is global: --reap-superseded exposes/report supersession but
+# never turns a branch uncontained by the authoritative integration target into
+# an automatic deletion. Deliberate discard is a separate human/depth-0 act
+# after preservation, outside this reaper.
 
 emit_name_array() {
   local first=1 value
@@ -291,16 +360,39 @@ emit_name_array() {
   printf ']'
 }
 
+declare -a preserved_superseded=()
+[ "$reap_superseded" -eq 1 ] && preserved_superseded+=("${superseded[@]}")
+
 if [ "$dry_run" -eq 1 ]; then
-  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
   printf ',"failures":[],"dry_run":true}\n'
   exit 0
 fi
 
 if [ "${#eligible[@]}" -eq 0 ]; then
-  printf '{"reaped":[],"kept":[],"failures":[],"dry_run":false}\n'
+  printf '{"reaped":[],"kept":'; emit_name_array "${preserved_superseded[@]}"
+  printf ',"failures":[],"dry_run":false}\n'
   exit 0
 fi
+
+# Enumerate branch-local config once, before any deletion. Exit 1 means no
+# matching keys; every other nonzero status is an environment failure and must
+# not be collapsed into "no config".
+config_list="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-config.XXXXXX")" || die_env "cannot create config enumeration temp file"
+config_err="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-config-err.XXXXXX")" || { rm -f "$config_list"; die_env "cannot create config enumeration error file"; }
+git -C "$repo" config --local --name-only --get-regexp '^branch\.' >"$config_list" 2>"$config_err"
+config_rc=$?
+if [ "$config_rc" -ne 0 ] && [ "$config_rc" -ne 1 ]; then
+  config_error="$(<"$config_err")"
+  rm -f "$config_list" "$config_err"
+  printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
+  printf ',"failures":[{"branch":null,"stage":"config-query","error":"%s"}],"dry_run":false}\n' \
+    "$(json_escape "${config_error:-cannot enumerate local branch config}")"
+  exit 1
+fi
+rm -f "$config_err"
+mapfile -t branch_config_keys < "$config_list" || { rm -f "$config_list"; die_env "cannot read complete branch config enumeration"; }
+rm -f "$config_list"
 
 declare -a refs=()
 bundle_error=""
@@ -319,6 +411,8 @@ fi
 
 if [ -z "$bundle_dir" ]; then
   bundle_dir="$common_dir/autopilot-reap-bundles/$(date -u +%Y-%m-%d)"
+elif [[ "$bundle_dir" != /* ]]; then
+  bundle_dir="$repo/$bundle_dir"
 fi
 mkdir -p "$bundle_dir" 2>/dev/null || {
   printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}"
@@ -352,29 +446,152 @@ if [ -n "$bundle_error" ]; then
   exit 1
 fi
 
-declare -a reaped_names=() kept_names=() failure_names=() failure_stages=() failure_errors=()
-for name in "${eligible[@]}"; do
+declare -a reaped_names=() kept_names=("${preserved_superseded[@]}") failure_names=() failure_stages=() failure_errors=()
+
+record_failure() {
+  kept_names+=("$1")
+  failure_names+=("$1")
+  failure_stages+=("$2")
+  failure_errors+=("$3")
+}
+
+# probe_checked_out <branch>: 0=clear, 1=checked out, 2=enumeration failure.
+# Process substitution is deliberately forbidden here: its producer status is
+# otherwise lost and a partial worktree list would become a fail-open delete.
+probe_checked_out() {
+  local branch="$1" list_file err_file rc line current_path=""
   checked_path=""
-  current_path=""
-  while IFS= read -r line; do
+  worktree_probe_error=""
+  list_file="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-worktrees.XXXXXX")" || { worktree_probe_error="cannot create worktree enumeration temp file"; return 2; }
+  err_file="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-worktrees-err.XXXXXX")" || { rm -f "$list_file"; worktree_probe_error="cannot create worktree enumeration error file"; return 2; }
+  git -C "$repo" worktree list --porcelain >"$list_file" 2>"$err_file"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    worktree_probe_error="$(<"$err_file")"
+    [ -n "$worktree_probe_error" ] || worktree_probe_error="git worktree list failed"
+    rm -f "$list_file" "$err_file"
+    return 2
+  fi
+  rm -f "$err_file"
+  while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       worktree\ *) current_path="${line#worktree }" ;;
-      "branch refs/heads/$name") checked_path="$current_path"; break ;;
+      "branch refs/heads/$branch") checked_path="$current_path"; rm -f "$list_file"; return 1 ;;
     esac
-  done < <(git -C "$repo" worktree list --porcelain)
-  if [ -n "$checked_path" ]; then
-    kept_names+=("$name"); failure_names+=("$name"); failure_stages+=("checked-out"); failure_errors+=("checked out at $checked_path")
+  done < "$list_file"
+  rc=$?
+  rm -f "$list_file"
+  [ "$rc" -eq 0 ] || { worktree_probe_error="cannot read complete worktree enumeration"; return 2; }
+  return 0
+}
+
+# validate_delete_proof <branch>: exact ref, current target containment, and
+# checked-out occupancy are all re-read immediately before CAS.
+validate_delete_proof() {
+  local branch="$1" expected="$2" current current_target merge_rc probe_rc
+  validation_stage="compare-delete"
+  validation_error="tip moved or local branch disappeared before deletion"
+  current="$(git -C "$repo" rev-parse --verify "refs/heads/$branch" 2>/dev/null)" || return 1
+  [ "$current" = "$expected" ] || return 1
+  current_target="$(git -C "$repo" rev-parse --verify "${into_ref}^{commit}" 2>/dev/null)" || {
+    validation_stage="containment-recheck"; validation_error="integration target disappeared before deletion"; return 1;
+  }
+  git -C "$repo" merge-base --is-ancestor "$expected" "$current_target" 2>/dev/null
+  merge_rc=$?
+  if [ "$merge_rc" -ne 0 ]; then
+    validation_stage="containment-recheck"
+    if [ "$merge_rc" -eq 1 ]; then validation_error="branch is no longer contained by $into_ref"; else validation_error="cannot revalidate containment against $into_ref"; fi
+    return 1
+  fi
+  probe_checked_out "$branch"
+  probe_rc=$?
+  if [ "$probe_rc" -eq 1 ]; then
+    validation_stage="checked-out"; validation_error="checked out at $checked_path"; return 1
+  fi
+  if [ "$probe_rc" -eq 2 ]; then
+    validation_stage="worktree-list"; validation_error="$worktree_probe_error"; return 1
+  fi
+  return 0
+}
+
+restore_deleted_ref() {
+  local branch="$1" expected="$2" current=""
+  if current="$(git -C "$repo" rev-parse --verify "refs/heads/$branch" 2>/dev/null)"; then
+    [ "$current" = "$expected" ]
+    return $?
+  fi
+  git -C "$repo" update-ref "refs/heads/$branch" "$expected" 0000000000000000000000000000000000000000 >/dev/null 2>&1
+}
+
+for name in "${eligible[@]}"; do
+  expected_tip="${tip[$name]}"
+  if ! validate_delete_proof "$name" "$expected_tip"; then
+    record_failure "$name" "$validation_stage" "$validation_error"
     continue
   fi
-  if ! git -C "$repo" update-ref -d "refs/heads/$name" "${tip[$name]}" 2>/dev/null; then
-    kept_names+=("$name"); failure_names+=("$name"); failure_stages+=("compare-delete"); failure_errors+=("tip moved or ref deletion failed")
+
+  if [ -n "${AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE:-}" ]; then
+    if ! "${AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE}" "$repo" "$name"; then
+      record_failure "$name" "pre-delete-hook" "pre-delete test hook failed"
+      continue
+    fi
+  fi
+
+  # Revalidate again after the race seam and immediately before the exact-tip
+  # update-ref CAS. Git has no transaction spanning refs + worktree metadata;
+  # the paired post-CAS check below closes the observable window and restores.
+  if ! validate_delete_proof "$name" "$expected_tip"; then
+    record_failure "$name" "$validation_stage" "$validation_error"
     continue
   fi
+
+  delete_err="$(mktemp "${TMPDIR:-/tmp}/autopilot-reap-delete-err.XXXXXX")" || { record_failure "$name" "compare-delete" "cannot create ref deletion error file"; continue; }
+  if ! git -C "$repo" update-ref -d "refs/heads/$name" "$expected_tip" 2>"$delete_err"; then
+    delete_error="$(<"$delete_err")"; rm -f "$delete_err"
+    record_failure "$name" "compare-delete" "${delete_error:-tip moved or ref deletion failed}"
+    continue
+  fi
+  rm -f "$delete_err"
+
+  if [ -n "${AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE:-}" ]; then
+    if ! "${AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE}" "$repo" "$name"; then
+      if restore_deleted_ref "$name" "$expected_tip"; then
+        record_failure "$name" "post-delete-race" "post-delete test hook failed; exact ref restored"
+      else
+        record_failure "$name" "restore-failed" "post-delete test hook failed; exact ref restoration failed (verified bundle retains tip)"
+      fi
+      continue
+    fi
+  fi
+
+  post_invalid=0
+  post_error=""
+  probe_checked_out "$name"
+  probe_rc=$?
+  if [ "$probe_rc" -eq 1 ]; then post_invalid=1; post_error="branch became checked out at $checked_path"; fi
+  if [ "$probe_rc" -eq 2 ]; then post_invalid=1; post_error="post-delete worktree enumeration failed: $worktree_probe_error"; fi
+  post_target="$(git -C "$repo" rev-parse --verify "${into_ref}^{commit}" 2>/dev/null)" || { post_invalid=1; post_error="integration target disappeared after deletion"; }
+  if [ -n "${post_target:-}" ]; then
+    git -C "$repo" merge-base --is-ancestor "$expected_tip" "$post_target" 2>/dev/null || { post_invalid=1; post_error="containment proof invalidated after deletion"; }
+  fi
+  if git -C "$repo" show-ref --verify --quiet "refs/heads/$name"; then
+    post_invalid=1
+    post_error="branch ref was concurrently recreated after deletion"
+  fi
+  if [ "$post_invalid" -eq 1 ]; then
+    if restore_deleted_ref "$name" "$expected_tip"; then
+      record_failure "$name" "post-delete-race" "$post_error; exact ref restored"
+    else
+      record_failure "$name" "restore-failed" "$post_error; exact ref restoration failed (verified bundle retains the tip)"
+    fi
+    continue
+  fi
+
   reaped_names+=("$name")
   config_present=0
-  while IFS= read -r config_key; do
+  for config_key in "${branch_config_keys[@]}"; do
     case "$config_key" in "branch.$name."*) config_present=1; break ;; esac
-  done < <(git -C "$repo" config --local --name-only --get-regexp '^branch\.' 2>/dev/null || true)
+  done
   if [ "$config_present" -eq 1 ] && ! git -C "$repo" config --local --remove-section "branch.$name" >/dev/null 2>&1; then
     failure_names+=("$name"); failure_stages+=("config-cleanup"); failure_errors+=("branch ref deleted and bundled, but local config cleanup failed")
   fi

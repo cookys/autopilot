@@ -138,13 +138,15 @@ ORPHAN_LOG="${TMPDIR:-/tmp}/autopilot-orphan-worktrees.log"
 # registered linked-worktree paths are actionable; everything else is either
 # pruned as noise/stale state or preserved as a recoverable live path.
 rewrite_orphan_log() {
-  [ -f "$ORPHAN_LOG" ] || return 0
+  [ -e "$ORPHAN_LOG" ] || return 0
+  local tmp lock_fd path gitfile_line common_raw common_dir registered line rc list err
+  [ -f "$ORPHAN_LOG" ] || { printf 'WARN: orphan log is not a regular file: %s\n' "$ORPHAN_LOG" >&2; return 1; }
+  exec {lock_fd}>"${ORPHAN_LOG}.lock" || return 1
+  flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
+  mapfile -t orphan_entries < "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
+  tmp="$(mktemp "${ORPHAN_LOG}.tmp.XXXXXX")" || { exec {lock_fd}>&-; return 1; }
 
-  local tmp="${ORPHAN_LOG}.tmp.$$"
-  local path gitfile_line common_raw common_dir registered line
-  : > "$tmp" || return 0
-
-  while IFS= read -r path || [ -n "$path" ]; do
+  for path in "${orphan_entries[@]}"; do
     case "$path" in
       /*) ;;
       *) continue ;;
@@ -152,50 +154,64 @@ rewrite_orphan_log() {
     [ -d "$path" ] || continue
 
     if [ ! -O "$path" ]; then
-      printf '%s\n' "$path" >> "$tmp"
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
       continue
     fi
     if [ ! -f "$path/.git" ]; then
-      printf '%s\n' "$path" >> "$tmp"
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
       continue
     fi
     IFS= read -r gitfile_line < "$path/.git" || gitfile_line=""
     case "$gitfile_line" in
       gitdir:\ *) ;;
-      *) printf '%s\n' "$path" >> "$tmp"; continue ;;
+      *) printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }; continue ;;
     esac
 
     common_raw="$(git -C "$path" rev-parse --git-common-dir 2>/dev/null)" || {
-      printf '%s\n' "$path" >> "$tmp"
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
       continue
     }
     common_dir="$(cd "$path" 2>/dev/null && cd "$common_raw" 2>/dev/null && pwd -P)" || {
-      printf '%s\n' "$path" >> "$tmp"
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
       continue
     }
 
+    list="$(mktemp "${ORPHAN_LOG}.worktrees.XXXXXX")" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+    err="$(mktemp "${ORPHAN_LOG}.worktrees-err.XXXXXX")" || { rm -f "$tmp" "$list"; exec {lock_fd}>&-; return 1; }
+    if ! git --git-dir="$common_dir" worktree list --porcelain >"$list" 2>"$err"; then
+      rm -f "$tmp" "$list" "$err"; exec {lock_fd}>&-; return 1
+    fi
+    rm -f "$err"
     registered=0
     while IFS= read -r line; do
       if [ "$line" = "worktree $path" ]; then
         registered=1
         break
       fi
-    done < <(git --git-dir="$common_dir" worktree list --porcelain 2>/dev/null)
+    done < "$list"
+    rc=$?; rm -f "$list"
+    [ "$rc" -eq 0 ] || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
     if [ "$registered" -ne 1 ]; then
-      printf '%s\n' "$path" >> "$tmp"
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
       continue
     fi
 
     if ! git --git-dir="$common_dir" worktree remove --force "$path" >/dev/null 2>&1; then
-      printf '%s\n' "$path" >> "$tmp"
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
     fi
-  done < "$ORPHAN_LOG"
+  done
+
+  if [ -n "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK:-}" ]; then
+    AUTOPILOT_ORPHAN_REWRITE_LOCK_FD="$lock_fd" "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK}" "$ORPHAN_LOG" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+  fi
 
   if [ -s "$tmp" ]; then
-    mv -f "$tmp" "$ORPHAN_LOG"
+    mv -f "$tmp" "$ORPHAN_LOG" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
   else
-    rm -f "$tmp" "$ORPHAN_LOG"
+    rm -f "$tmp" || { exec {lock_fd}>&-; return 1; }
+    rm -f "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
   fi
+  exec {lock_fd}>&-
 }
 # --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE) ---
 # A START-time manifest under $MANIFEST_DIR_PATH names this run's identity (run_id,
@@ -410,7 +426,7 @@ if [ "$DO_GC" -eq 1 ]; then
   fi
   # Export flags for gc_stale_worktrees (reads REAP_UNMARKED).
   export REAP_UNMARKED GC_YES
-  rewrite_orphan_log
+  rewrite_orphan_log || { echo "error: orphan-log rewrite failed; original preserved" >&2; exit 2; }
   gc_stale_worktrees
   exit $?
 fi
@@ -1168,7 +1184,7 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
       classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize \
-      reap_worktree reap_worktree_minimal _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
+      reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true
   } > "$state_file"

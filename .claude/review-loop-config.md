@@ -25,21 +25,10 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: grok-4.5
-- verification_author_runner: grok
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint:
-
-> Temporary repository-wide C1 authorization (2026-07-16): after live capability event 44 confirmed
-> Grok 4.5 had returned, the user explicitly rejected stopping the active `/l6` run. This tracked
-> roster change is the authorization path; isolated/manual tuple overrides remain prohibited. Because
-> the resolver has no unit-id scope, restore the prior `glm-5.2/cc-shim/high/endpoint glm` tuple
-> immediately after C1 reaches accepted, STOP, REJECT, or pre-dispatch NO-GO, or if this authorized
-> attempt is cancelled, abandoned, or cannot begin. The reviewed restoration is atomic: restore this
-> config, its resolver-test expectations, and the project README/HANDOFF lifecycle record before C2
-> or any unrelated strict `/l6` author dispatch. `high` is roster provenance only on the Grok path;
-> dispatch-author's
-> Grok branch does not pass an effort flag to the CLI.
+- verification_author_endpoint: glm
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

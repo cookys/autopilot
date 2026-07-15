@@ -93,7 +93,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — Grok author recovery | Temporary repository-wide strict-roster assignment to live `grok-4.5/grok`; atomically restore GLM, resolver-test expectations, and lifecycle docs at every terminal or aborted/non-started attempt before C2/other `/l6` work | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active — Grok artifact rejected; GLM roster restored | A new current-HEAD author recovery must use the restored tracked strict roster and fresh full-author readiness; Grok's concatenated output is forensic evidence only | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -214,8 +214,26 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   is weaker than the successful inference. The reminder alone was initially recorded as readiness,
   not authorization, and no new contract was issued at that point. When the user immediately rejected
   another orchestration stop, depth-0 treated the combined exchange as Board continuation and moved
-  Grok into the tracked repository strict roster. Once this config path is reviewed, committed, and
-  clean, it—not an isolated override—authorizes the next fresh C1 contract and author dispatch.
+  Grok into the tracked repository strict roster. That reviewed, committed, clean config path—not an
+  isolated override—authorized the next fresh C1 contract and author dispatch.
+- The tracked authorization commit `3951f2671186ab65f80de642989f4860bf5d56ba` passed two gpt-5.5
+  review rounds and was pushed before spend. Fresh Grok capability event 46 was `available/high`.
+  Depth-0 froze `C1-bootstrap-grok45-r1.contract.json` (SHA-256
+  `f86edcdf9e05240a0950ce5d0e41b3e3d5c4b46c861d2aa8f5bfffca18ed184d`) and prompt
+  `C1-verification-author-grok45-r1.prompt.md` (SHA-256
+  `9847ab7f4ac6bc0a06443c76f7bbf69434955268b5ab0637cd886005e723f0b7`) from that exact clean
+  HEAD. The one exact strict-roster call selected `grok-4.5/grok/high/endpoint ""/xai`, returned
+  `status=authored`, and preserved byte-for-byte containment across all 1,459 checkout files.
+- The raw artifact is 52,515 bytes / 1,422 lines, SHA-256
+  `8a75d419539ddce8385f5048d11091435f6e564d5d782a9d9ac3dbf90cf99b6b`. It passes `bash -n` but
+  concatenates multiple candidates: four shebangs, two harness-library sources, and two
+  `finalize_test` calls. That violates the required single raw Bash oracle shape, so the attempt is
+  `REJECT/output-shape`; it did not enter isolated RED and no Spark dispatch ran. The artifact is
+  quarantined as forensic evidence and cannot be normalized or promoted.
+- This terminal REJECT triggered the promised atomic restoration: the repository roster is again
+  `glm-5.2/cc-shim/high/endpoint glm`, dogfood resolver expectations match it, and these lifecycle
+  docs record the terminal. The isolated Grok strict-roster fixture remains as permanent branch
+  coverage and does not depend on the dogfood tuple.
 
 ## Dispatch policy
 
@@ -231,14 +249,11 @@ and budgets. Model/quota selection must come from live readiness, not conversati
 - Contract JSON is authorization; the prompt only explains the authorized task.
 - GO is deterministic and pre-spend. NO-GO cannot be manually waived.
 - STOP never auto-retries or widens. REJECT never silently promotes a forensic artifact.
-- The 2026-07-16 Board continuation assigns `grok-4.5/grok` as the tracked C1 verification-author
-  tuple after capability event 44. The config is repository-wide because the resolver has no unit-id
-  scope, so it is temporary. Any C1 terminal (`accepted`, `STOP`, `REJECT`, or pre-dispatch `NO-GO`),
-  cancellation/abandonment, or inability to begin the authorized attempt requires an atomic reviewed
-  restoration of `glm-5.2/cc-shim/high/endpoint glm`, the matching resolver-test expectations, and
-  this README plus HANDOFF lifecycle record before C2 or unrelated strict `/l6` authoring.
-  Grok's recorded `high` effort is provenance only; its dispatch-author branch passes no effort flag.
-  Readiness alone remains insufficient for any later substitution.
+- The 2026-07-16 Board continuation temporarily assigned `grok-4.5/grok` after capability event 44.
+  The repository-wide assignment was restored atomically to `glm-5.2/cc-shim/high/endpoint glm`
+  immediately after the Grok artifact reached terminal `REJECT/output-shape`. Grok's isolated test
+  fixture is regression coverage, not standing roster authority. Readiness alone remains
+  insufficient for any later substitution.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

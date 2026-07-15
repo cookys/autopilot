@@ -5,13 +5,13 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery started from
-  `f3fdc9286b977c924de96324c2d31c057048f3fd` (`docs(project): record fresh MiniMax empty output`).
-  Product tree is clean; no accepted product/test code。
+  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from clean pushed
+  authorization commit `3951f2671186ab65f80de642989f4860bf5d56ba`. Product tree remains clean;
+  no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
-  seven project/bootstrap-and-blocker commits beyond that base before this staged snapshot.
+  nine project/bootstrap-and-blocker commits beyond that base before the restoration snapshot.
 - l6 marker is active. Spark's refreshed direct live probe returned `OK`; capability event 45 is
-  `implementer/available/high`.
+  `implementer/available/high`; Grok author event 46 was `verification_author/available/high`.
 - C1 external run dir: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/`.
   Frozen attempt-1 contract hash: `1b6d6c46945b2df86554f04cb545e584d10ad8da81e6df2ee00bbabe401cb5e1`;
   do NOT reuse it after HEAD advances.
@@ -55,13 +55,16 @@
   but the canonical live inference succeeded, so the banner is not authoritative readiness evidence.
   The reminder alone was initially recorded as availability, not authorization, and no dispatch
   followed. The user then explicitly rejected that orchestration stop. The combined exchange is the
-  Board continuation for a tracked roster change: `.claude/review-loop-config.md` now assigns
-  `grok-4.5/grok/xai` as temporary repository-wide C1 verification author. Its `high` field is roster
+  Board continuation for a tracked roster change: `.claude/review-loop-config.md` temporarily assigned
+  `grok-4.5/grok/xai` as repository-wide C1 verification author. Its `high` field is roster
   provenance only; the Grok runner receives no effort flag. This is the strict authorization path;
-  isolated tuple overrides remain prohibited. Because the resolver has no unit-id scope, atomically
-  restore the prior GLM tuple, matching resolver-test expectations, and README/HANDOFF lifecycle
-  record through review at any C1 terminal or aborted/non-started attempt before C2 or unrelated
-  `/l6` work.
+  isolated tuple overrides remain prohibited. Authorization commit `3951f267` passed two gpt-5.5
+  reviews and was pushed before spend. Fresh Grok capability event 46 was `available/high`; the exact
+  strict-roster call from that clean HEAD returned an authored 52,515-byte raw artifact and preserved
+  byte-for-byte containment across all 1,459 files. The artifact concatenates four shebangs, two
+  harness sources, and two `finalize_test` calls, so it is `REJECT/output-shape` before RED. No Spark
+  dispatch ran. The terminal triggered atomic restoration of the GLM tuple, dogfood resolver-test
+  expectations, and lifecycle docs; the isolated Grok branch fixture remains tuple-independent.
 
 ## 已決事項(不重議)
 
@@ -85,13 +88,9 @@
   `STOP/no-artifact` timeouts and must not be replayed. Their endpoint/model-list availability is
   not full-author readiness evidence. Sonnet's isolated roster substitution was a protocol deviation,
   not new standing author authority.
-- After capability event 44 and the user's explicit rejection of another stop, Grok 4.5 is authorized
-  only through the tracked strict-roster config. This temporarily grants repository-wide author
-  authority because the resolver has no unit-id scope. At `accepted`, `STOP`, `REJECT`, pre-dispatch
-  `NO-GO`, cancellation/abandonment, or inability to begin the authorized attempt, atomically restore
-  GLM, the matching resolver-test expectations, and README/HANDOFF lifecycle record through review
-  before C2 or unrelated `/l6` authoring. It does not retroactively authorize Sonnet or another
-  manual substitution.
+- The tracked Grok 4.5 authorization was consumed by one exact C1 author attempt and terminated at
+  `REJECT/output-shape`. GLM is again the repository-configured author; Grok's isolated regression
+  fixture is not standing authority and no later substitution follows from readiness alone.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -102,20 +101,19 @@
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
    active/blocked, and seven phases remain including active C1; C2-C7 are pending.
-2. Do not retry any recorded MiniMax, Gemini, AGY Opus, resumed GLM, or AGY Sonnet prompt. Verify the
-   tracked resolver selects `grok-4.5/grok/xai` against Spark `openai`, refresh event 44 if its
-   TTL has expired, and continue automatically without asking `continue?`.
-3. After the roster change is reviewed, committed, and the tree is clean, issue a new C1 contract/hash
-   from that immutable commit with the same exact five-file boundary and a new independent author
-   prompt. The new raw oracle must pass output-shape,
-   checkout-containment, `bash -n`, portable-tool, and isolated base+oracle RED gates.
+2. Keep the restored `glm-5.2/cc-shim/high/endpoint glm` dogfood roster and matching resolver
+   expectations clean. Do not replay any recorded MiniMax, Gemini, AGY Opus, resumed GLM, AGY Sonnet,
+   or Grok prompt; do not normalize, splice, or promote their terminal artifacts.
+3. Before another C1 author spend, obtain fresh full-author readiness for the tracked GLM tuple and
+   freeze a new contract/hash from the then-current clean HEAD. Endpoint/model-list success alone is
+   insufficient. The raw oracle must pass output-shape, checkout-containment, `bash -n`, portable-tool,
+   and isolated base+oracle RED gates.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.
-5. At any C1 terminal—accepted, STOP, REJECT, or pre-dispatch NO-GO—or if the authorized attempt is
-   cancelled, abandoned, or cannot begin, atomically restore `glm-5.2/cc-shim/high/endpoint glm`,
-   `hooks/tests/resolve-review-loop.test.sh` expectations, and the README/HANDOFF lifecycle record
-   through review before starting C2 or unrelated strict `/l6` authoring.
+5. If a future temporary repository-wide assignment is reviewed and committed, retain the same
+   atomic restoration rule at every terminal or aborted/non-started attempt before C2 or unrelated
+   strict `/l6` authoring.
 
 ## 驗證方式
 

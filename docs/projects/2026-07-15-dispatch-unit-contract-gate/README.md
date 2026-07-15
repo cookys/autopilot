@@ -65,6 +65,7 @@ from repository truth.
 | `read /home/cookys/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md 接續` | Resume Mode reality check, then execute HANDOFF `下一步` without reopening settled decisions; L-1 through C1 |
 | “還有誰可以 review ? 用 gpt-5.5 or minimax 3” | C1 recovery evidence: MiniMax author attempt plus gpt-5.5 artifact and ledger reviews |
 | “用 agy 的 gemini 3.1 pro 試試?” | C1 AGY Gemini 3.1 Pro High author attempt, isolated RED/fidelity gate, and one review-driven repair |
+| “agy 有 opus 4.6 將就用?” | One strict-roster AGY Claude Opus 4.6 Thinking author attempt, containment proof, and no-artifact timeout classification |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -88,7 +89,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | blocked — verification authoring | GLM 529; MiniMax timeout; AGY candidates rejected for containment, infrastructure, or semantic fixture failures; Gemini 3.1 Pro two-round recovery also rejected | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | blocked — verification authoring | GLM 529; MiniMax and AGY Opus 4.6 timeouts; AGY candidates rejected for containment, infrastructure, or semantic fixture failures; Gemini 3.1 Pro two-round recovery also rejected | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -148,6 +149,16 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   invalid scorecard/capability records while swallowing record errors, and invoked Node scripts as
   executables. Its isolated run reached `finalize_test` only with 86 infrastructure-tainted failures
   (exit 127/permission denied/invalid record), so it is REJECT rather than assertion-red evidence.
+- User-authorized AGY `Claude Opus 4.6 (Thinking)` was then selected through a strict isolated roster:
+  `agy/anthropic` versus Spark `openai`. Depth-0 froze contract
+  `C1-bootstrap-opus46.contract.json` at base `4f5dcb69` (SHA-256
+  `81e1202b16ef5d230751f07f5eed06a9c1e69de6e36de63757bf8bc2dfe0177a`) and prompt SHA-256
+  `f6c521f76d1f71c74e75af3a789a31a19713cf45912db0c75513bbb87ab49be1`. The single author call
+  preserved the complete 1,459-file checkout snapshot and exact config-only diff, but AGY returned
+  `runner_failed` after its five-minute response timeout. Raw log `/tmp/dispatch-author-log-DhdUUZ`
+  is 218 bytes, SHA-256 `ec5fdb3c0f1c8c8c1d9cc3f080f7e4e698b3316cf805b0c4d25d12be60e92b39`, and contains only PTY
+  chrome plus `Error: timeout waiting for response`; no Bash artifact exists. Classified
+  `REJECT/no-artifact`, not quota/429 and not eligible for normalization or repair.
 - No product or accepted verification code was written. C1 remains NO-GO. A later session must issue
   a new contract/hash from its then-current immutable HEAD; this contract cannot be reused after the
   blocker documentation commit advances the branch.

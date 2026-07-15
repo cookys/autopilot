@@ -5,8 +5,8 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/develop`; Gemini recovery started from `38699e7daf82afe6df1ce72e167bd6950ff8f39e`
-  (`docs(project): record MiniMax recovery review`). Product tree is clean; no accepted product/test code。
+  `origin/develop`; the Opus recovery started from `4f5dcb69eb8af0979cf6f219d2aa83812945514e`
+  (`docs(project): record Gemini author rejection`). Product tree is clean; no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
   the L-1 project-ledger commit plus this blocker snapshot when committed.
 - l6 marker is active. Spark live readiness passed and capability event 43 is `available/high`.
@@ -26,6 +26,11 @@
   checkout containment. Round 1 produced a normal assertion RED but an invalid valid-fixture; gpt-5.5
   returned `FIX-THEN-SHIP`. The one repair round rewrote the frozen contract shape and infrastructure-
   failed on exit 127/invalid record fixtures. Both artifacts are REJECT; no Spark dispatch ran.
+- User then authorized AGY `Claude Opus 4.6 (Thinking)`. An isolated strict roster correctly resolved
+  `agy/anthropic` versus Spark `openai`; a fresh contract and prompt were frozen from `4f5dcb69`.
+  The only author call preserved byte-for-byte checkout containment but AGY timed out waiting for the
+  response after five minutes. Its 218-byte raw log contains no authored Bash. This is
+  `REJECT/no-artifact`, not quota/429; no Spark dispatch ran.
 
 ## 已決事項(不重議)
 
@@ -38,6 +43,9 @@
 - The later AGY `Gemini 3.1 Pro (High)` authorization was exercised for one author round plus one
   reviewer-driven repair round. It is a valid Google-family seat, but neither emitted oracle passed
   the artifact-fidelity gate. Do not retry either prompt or promote their quarantined files.
+- The later AGY `Claude Opus 4.6 (Thinking)` authorization was exercised once through strict roster.
+  It produced only a timeout log and no artifact. Do not retry its recorded prompt or interpret the
+  runner exit as a quota result.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -47,10 +55,9 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger.
-2. Do not retry the recorded MiniMax or Gemini prompts. Either obtain fresh evidence that strict GLM
-   full author inference (not merely `endpoints test`) is functioning, or ask the Board/user to
-   authorize a different cross-family author such as the configured Claude Opus fallback. gpt-5.5
-   cannot fill that seat.
+2. Do not retry the recorded MiniMax, Gemini, or AGY Opus prompts. Either obtain fresh evidence that
+   strict GLM full author inference (not merely `endpoints test`) is functioning, or ask the
+   Board/user to authorize a different cross-family author. gpt-5.5 cannot fill that seat.
 3. From the then-current clean `HEAD`, issue a new C1 contract/hash with the same exact five-file
    boundary and a new independent author prompt. The new raw oracle must pass output-shape,
    checkout-containment, `bash -n`, portable-tool, and isolated base+oracle RED gates.
@@ -101,3 +108,9 @@
   `71504d2b6c795e7b48d4b759f8a45bc93adefa514e52551f28c5055a177d2255`. It invented a different
   contract schema and its isolated run was infrastructure-red (`engine-scorecard.js` permission
   denied, invalid capability record, checker exit 127). Evidence log: `C1-gemini31-repair-red.log`.
+- AGY Opus raw log is `/tmp/dispatch-author-log-DhdUUZ`, 218 bytes, SHA-256
+  `ec5fdb3c0f1c8c8c1d9cc3f080f7e4e698b3316cf805b0c4d25d12be60e92b39`. The rail selected
+  `Claude Opus 4.6 (Thinking)/agy/high/anthropic`, then returned `runner_failed` with
+  `Error: timeout waiting for response`. Before/after containment digest is identical:
+  1,459 files, tree-content SHA-256 `f0a37af2dd75828cf1446f14e2b0232483688597619d502b5bae60c9917a03b8`,
+  config-only diff SHA-256 `3799aade09cf60495a6c2307e94d8af2021025239a8b231bb40dfa1428a095b0`.

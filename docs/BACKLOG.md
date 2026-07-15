@@ -38,6 +38,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S–M。
 - **Source**: v2.32.37 post-merge doc-sync / security QC。
 
+### Inherited OpenCode V2 / eval-doc-drift portability baselines
+- **Trigger**: 下次修改 OpenCode V2 plugin group、對應 eval/doc-drift validator 或其測試；或 full-suite／portability baseline 比下述數字惡化時。
+- **Context**: dispatch-branch lifecycle 專案 final run 為 2/142 groups non-green（其中產品 baseline 為 inherited OpenCode V2；另一組是 active-session L1 marker），portability 為 13/17，殘餘 OpenCode/eval/doc-drift failures 均已在 base 重現，與本專案變更無因果。這些結果必須維持 `PRE_EXISTING DEFERRED`，不得冒充 full-suite 或 portability pass。
+- **Effort**: S / Fix。
+- **Source**: [`docs/projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md`](projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md) final QC evidence。
+
 ### codex-native `spawn_agent` 盲區納管（codex 當 depth-0 時）
 - **Trigger**: 下次 codex 擔任 depth-0 orchestrator 跑 /l4-/l6 前；或下次改版 `platforms/codex/plugin/skills/ceo-agent` payload 時。
 - **Context**: 同上稽核：codex 原生 `spawn_agent`（該次 976 呼叫）完全在 autopilot 軌道外 — 非 Agent-tool（無 TaskStop）、非 shell-dispatched（無 pgid 可 reap），schema 無 model 參數（無法 pin cheap model），autopilot 兩種 teardown primitive 都無效，merge-back/GC 零覆蓋。codex 並自承因此「沒有維持純 CEO context」自己下海 implement。修法：codex-orchestrator 路徑在 payload 內明文禁用原生 `spawn_agent`（一切走 autopilot dispatch 軌道），或至少收尾 gate 偵測 `~/.codex/sessions` 的 spawn_agent 殘留並警示。

@@ -3,6 +3,10 @@
 # Unit 2c.i verification oracle: result envelope and authored paths test.
 . "$(dirname "$0")/lib.sh"
 
+# Isolate from ambient session markers
+export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session_isolation"
+mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
+
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s' "Write a verification plan." > "$PROMPT"

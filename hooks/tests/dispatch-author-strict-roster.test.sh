@@ -66,7 +66,7 @@ CASE2_DIR="$TEST_TMP/case2"
 mkdir -p "$CASE2_DIR"
 
 rm -f "$SENTINEL"
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE2_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 REVIEW_LOOP_CONFIG_OVERRIDE="$CASE1_DIR/.claude/review-loop-config.md" "$SCRIPT" --strict-roster --repo-root "$CASE2_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
 assert_precondition_failed "$OUT" "$EXIT" "config" "Case 2: lacking config fails closed"
 
 # Case 3: project roster with verification_author_present:false and an empty tuple fails closed.

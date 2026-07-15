@@ -57,6 +57,18 @@ deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
 6. Convergence-by-verification gates continue/rework; merge only after the
    QC-Verdict is earned.
 
+The `/l6` verification-author handoff is strict roster-only and must use:
+
+`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`
+
+`--bin <test-seam>` is only a test seam. `/l6` never passes `--runner`, `--model`,
+`--effort`, or `--endpoint` to that call; the tuple family/credentials comes from
+`<consuming-repo>/.claude/review-loop-config.md` via `resolve-review-loop.sh`.
+
+Failure modes are fail-closed: unresolved/malformed strict roster state (including
+same-family, unknown-family, or endpoint-unready) preconditions abort before runner
+start and emit `status=precondition_failed`.
+
 ### Outcome → action table (R3 recovery branch)
 
 When the foreman itself fails or is killed before emitting a normal outcome, depth 0 uses:

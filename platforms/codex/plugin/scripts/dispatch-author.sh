@@ -26,14 +26,14 @@
 #   ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN retained.
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim --model <name> --prompt-file <file>
-#       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
-#       [--timeout 5m]          # agy --print-timeout / grok/cc-shim timeout (default 5m)
-#       [--bin <path>]          # override the runner binary (test seam)
-#       [--endpoint <name>]     # cc-shim: resolve named-endpoint creds via resolve-endpoint.sh
-#                               #   (AUTOPILOT_ENDPOINT_<NAME>_*); raw env still used when omitted
-#       [--strict-roster]      # enforce project roster-only selection
-#       [--repo-root <path>]   # required with --strict-roster for strict-mode config resolution
+#   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
+#       # active `/l6` contract: strict roster selection only.
+#   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
+#       # test seam only: override the runner binary for seam/fake tests.
+#   In strict roster mode, do not pass `--runner`, `--model`, `--effort`, or `--endpoint`.
+#   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
+#   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
+#   or endpoint resolution is not ready.
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
 #   shell script), which drops trailing prompt newlines. This mirrors dispatch-review
 #   and is safe for prompt semantics.
@@ -43,7 +43,23 @@
 #                               #   (default: 3000ms; cc-shim: 10000ms)
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "authored|empty_output|precondition_failed|runner_failed", "raw_log": "<path>", "error": "..." }
+#   {
+#     "runner": "codex|agy|grok|cc-shim",
+#     "model": "...",
+#     "status": "authored|empty_output|precondition_failed|runner_failed",
+#     "raw_log": "<path>",
+#     "error": "...",
+#     "selection_source": "explicit_cli|strict_roster",
+#     "selection_path": "<path>|null",
+#     "verification_author": null|{
+#       "engine": "...",
+#       "runner": "...",
+#       "effort": "...",
+#       "endpoint": "<name>",
+#       "family": "..."
+#     }
+#   }
+#   Non-secret provenance: verification_author.endpoint is the endpoint name only, not URL/token.
 #
 # EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed.
 

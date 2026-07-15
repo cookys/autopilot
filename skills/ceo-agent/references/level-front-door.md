@@ -355,6 +355,13 @@ finish-flow closing). The marker arms two opt-in hooks:
   transcript study: 96%+ of tokens were cache_read on unsplit depth-0 sessions).
   At T2 (150k) stop taking on new work and hand off NOW.
 
+For `/l6` only, verification AUTHORING is dispatched only through strict roster:
+`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
+This is the session-mode control-loop boundary contract, not optional guidance.
+It resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`
+via `resolve-review-loop.sh`; caller-supplied `--runner`, `--model`, `--effort`,
+or `--endpoint` must not be used in that path.
+
 Corollary (always, hooks on or off): dispatch outputs land in FILES; depth-0
 reads only the emitted JSON summary — never scroll raw worker logs into the
 depth-0 context.

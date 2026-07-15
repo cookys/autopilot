@@ -175,4 +175,46 @@ assert_not_contains "$GROK_ARG_TEXT" '--runner' "Case 7: no manual runner flag"
 assert_not_contains "$GROK_ARG_TEXT" '--effort' "Case 7: no manual effort flag"
 assert_not_contains "$GROK_ARG_TEXT" '--endpoint' "Case 7: no manual endpoint flag"
 
+# Case 8: isolated roster selects the Board-authorized Gemini 3.1 Pro (High)
+# AGY verification author for the Spark implementer.
+CASE8_DIR="$TEST_TMP/case8"
+mkdir -p "$CASE8_DIR/.claude"
+cat <<'EOF' > "$CASE8_DIR/.claude/review-loop-config.md"
+- verification_author_present: true
+- verification_author_engine: Gemini 3.1 Pro (High)
+- verification_author_runner: agy
+- verification_author_effort: high
+- verification_author_endpoint:
+- implementer_engine: gpt-5.3-codex-spark
+EOF
+
+AGY_ARGS="$TEST_TMP/agy-args"
+export AGY_ARGS
+FAKE_AGY_RUNNER="$TEST_TMP/fake-agy-runner"
+cat <<'EOF' > "$FAKE_AGY_RUNNER"
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$AGY_ARGS"
+touch "$SENTINEL"
+printf '%s\n' "AGY-AUTHORED"
+EOF
+chmod +x "$FAKE_AGY_RUNNER"
+
+rm -f "$SENTINEL" "$AGY_ARGS"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE8_DIR" --prompt-file "$PROMPT" --bin "$FAKE_AGY_RUNNER" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 8: isolated Gemini roster succeeds"
+assert_contains "$OUT" '"status": "authored"' "Case 8: status authored"
+assert_contains "$OUT" '"selection_source": "strict_roster"' "Case 8: strict_roster selection"
+assert_contains "$OUT" '"selection_path": "'"$CASE8_DIR/.claude/review-loop-config.md"'"' "Case 8: selection path is isolated config"
+assert_contains "$OUT" '"verification_author": { "engine": "Gemini 3.1 Pro (High)", "runner": "agy", "effort": "high", "endpoint": "", "family": "google" }' "Case 8: resolved Gemini verification-author tuple"
+assert_file_exists "$SENTINEL" "Case 8: fake AGY runner executed"
+AGY_ARG_TEXT="$(cat "$AGY_ARGS")"
+assert_contains "$AGY_ARG_TEXT" '-p' "Case 8: AGY prompt flag composition"
+assert_contains "$AGY_ARG_TEXT" 'Write a verification plan.' "Case 8: AGY prompt composition"
+assert_contains "$AGY_ARG_TEXT" '--model' "Case 8: AGY model flag composition"
+assert_contains "$AGY_ARG_TEXT" 'Gemini 3.1 Pro (High)' "Case 8: AGY model composition"
+assert_contains "$AGY_ARG_TEXT" '--dangerously-skip-permissions' "Case 8: AGY permission composition"
+assert_not_contains "$AGY_ARG_TEXT" '--runner' "Case 8: no manual runner flag"
+assert_not_contains "$AGY_ARG_TEXT" '--effort' "Case 8: no manual effort flag"
+assert_not_contains "$AGY_ARG_TEXT" '--endpoint' "Case 8: no manual endpoint flag"
+
 finalize_test

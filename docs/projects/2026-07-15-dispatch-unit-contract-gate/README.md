@@ -93,7 +93,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active/blocked — GLM r4 timeout | Grok artifact is REJECT; restored GLM passed a small live probe but its one current-HEAD author call timed out with no artifact; another author seat requires fresh readiness plus tracked authorization | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — tracked Gemini recovery | Previously Board-authorized `Gemini 3.1 Pro (High)` has fresh event 48 and a staged repository-wide strict-roster assignment; restore GLM atomically at every terminal/aborted attempt | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -244,6 +244,13 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   call selected `cc-shim/glm-5.2/high/endpoint glm/zhipu`, preserved byte-for-byte containment across
   all 1,459 files, then returned `runner_failed`, exit 124, with a zero-byte raw log. This is
   `STOP/timeout-no-artifact`, not quota and not REJECT/RED; no Spark dispatch ran. Do not replay r4.
+- The active `/l6` recovery next selected the user's previously authorized AGY Gemini seat without
+  replaying either old prompt. AGY 1.1.2 still lists exact model `Gemini 3.1 Pro (High)` and a fresh
+  live inference recorded event 48 as `available/high`. The repository strict roster is temporarily
+  assigned to `Gemini 3.1 Pro (High)/agy/high/endpoint ""/google`; this reviewed, committed path is
+  required before a new current-HEAD contract can spend. Isolated/manual substitution is forbidden,
+  and every terminal or aborted/non-started attempt atomically restores GLM config, dogfood resolver
+  expectations, and lifecycle docs. Old Gemini artifacts remain terminal forensic evidence only.
 
 ## Dispatch policy
 
@@ -264,6 +271,11 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   immediately after the Grok artifact reached terminal `REJECT/output-shape`. Grok's isolated test
   fixture is regression coverage, not standing roster authority. Readiness alone remains
   insufficient for any later substitution.
+- The same explicit CEO continuation, combined with the user's prior AGY Gemini authorization and
+  fresh event 48, authorizes one new tracked `Gemini 3.1 Pro (High)/agy` current-HEAD recovery. It does
+  not authorize replay of either old Gemini prompt. Because the resolver is repository-wide, every
+  terminal/aborted attempt restores `glm-5.2/cc-shim/high/endpoint glm`, matching resolver-test
+  expectations, and README/HANDOFF lifecycle state atomically before unrelated strict work.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

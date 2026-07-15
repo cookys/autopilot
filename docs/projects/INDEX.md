@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-15 | [verification-author-roster-gate](2026-07-15-verification-author-roster-gate/README.md) — fail-closed `/l6` verification-author roster, family decorrelation, session coupling, and non-secret provenance | TBD | `fix/verification-author-roster-gate` |
 
 ## 已完成 (Completed)
 

@@ -38,6 +38,11 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - implementer_runner: auto
 - reviewer_endpoint:
 - implementer_endpoint:
+- verification_author_present: false
+- verification_author_engine:
+- verification_author_runner:
+- verification_author_effort:
+- verification_author_endpoint:
 - on_engine_unavailable: ask
 - on_family_conflict: fallback
 - reviewer_fallback_preference:

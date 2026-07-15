@@ -52,6 +52,11 @@ DEF_IMPL_EFFORT="high"
 DEF_IMPL_RUNNER="auto"
 DEF_REV_ENDPOINT=""
 DEF_IMPL_ENDPOINT=""
+DEF_VER_AUTHOR_PRESENT="false"
+DEF_VER_AUTHOR_ENGINE=""
+DEF_VER_AUTHOR_RUNNER=""
+DEF_VER_AUTHOR_EFFORT=""
+DEF_VER_AUTHOR_ENDPOINT=""
 DEF_REV_ENGINE_LOW_RISK=""   # risk-tiered overlay: empty = tiering OFF (loop reviewer = reviewer_engine at every risk)
 DEF_REV_EFFORT_LOW_RISK=""
 DEF_MAX_ROUNDS="5"
@@ -85,6 +90,7 @@ DEF_ON_FAMILY_CONFLICT="fallback"
 
 FIELD=""
 SOURCE_TRUST=""
+CONFIG_PATH=""
 DIFF_LINES=0
 PROTECTED_PATH=0
 ORACLE_AVAILABLE=1
@@ -173,11 +179,56 @@ IMPL_EFFORT="$(read_field implementer_effort "$DEF_IMPL_EFFORT")"
 IMPL_RUNNER="$(read_field implementer_runner "$DEF_IMPL_RUNNER")"
 REV_ENDPOINT="$(read_field reviewer_endpoint "$DEF_REV_ENDPOINT")"
 IMPL_ENDPOINT="$(read_field implementer_endpoint "$DEF_IMPL_ENDPOINT")"
+VER_AUTH_PRESENT="$(read_field verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
+VER_AUTH_ENGINE="$(read_field verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
+VER_AUTH_RUNNER="$(read_field verification_author_runner "$DEF_VER_AUTHOR_RUNNER")"
+VER_AUTH_EFFORT="$(read_field verification_author_effort "$DEF_VER_AUTHOR_EFFORT")"
+VER_AUTH_ENDPOINT="$(read_field verification_author_endpoint "$DEF_VER_AUTHOR_ENDPOINT")"
 # Endpoint names feed dispatch-*.sh --endpoint (→ resolve-endpoint.sh env-var suffix); allow
 # [A-Za-z0-9_] only (empty = none). A bad value → "" so it can't inject into the --endpoint
 # arg or the emitted JSON (same fail-closed stance as resolve-endpoint.sh's NAME_RE).
 [[ -z "$REV_ENDPOINT"  || "$REV_ENDPOINT"  =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid reviewer_endpoint (must be [A-Za-z0-9_]): $REV_ENDPOINT" >&2; REV_ENDPOINT=""; }
 [[ -z "$IMPL_ENDPOINT" || "$IMPL_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid implementer_endpoint (must be [A-Za-z0-9_]): $IMPL_ENDPOINT" >&2; IMPL_ENDPOINT=""; }
+[[ -z "$VER_AUTH_ENDPOINT" || "$VER_AUTH_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: invalid verification_author_endpoint (must be [A-Za-z0-9_]): $VER_AUTH_ENDPOINT" >&2; exit 3; }
+case "$VER_AUTH_PRESENT" in
+  true|false) ;;
+  *)
+    echo "resolve-review-loop: invalid verification_author_present (must be true|false): $VER_AUTH_PRESENT" >&2
+    exit 3
+    ;;
+esac
+if [[ "$VER_AUTH_PRESENT" == "false" ]]; then
+  if [[ -n "$VER_AUTH_ENGINE" || -n "$VER_AUTH_RUNNER" || -n "$VER_AUTH_EFFORT" || -n "$VER_AUTH_ENDPOINT" ]]; then
+    echo "resolve-review-loop: inconsistent verification_author tuple: present=false requires all empty values" >&2
+    exit 3
+  fi
+else
+  if [[ -z "$VER_AUTH_ENGINE" || -z "$VER_AUTH_RUNNER" || -z "$VER_AUTH_EFFORT" ]]; then
+    echo "resolve-review-loop: incomplete verification_author tuple: present=true requires engine, runner, effort" >&2
+    exit 3
+  fi
+  case "$VER_AUTH_RUNNER" in
+    codex|agy|grok|cc-shim) ;;
+    *)
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim): $VER_AUTH_RUNNER" >&2
+      exit 3
+      ;;
+  esac
+  case "$VER_AUTH_EFFORT" in
+    low|medium|high|xhigh|max) ;;
+    *)
+      echo "resolve-review-loop: invalid verification_author_effort (must be low|medium|high|xhigh|max): $VER_AUTH_EFFORT" >&2
+      exit 3
+      ;;
+  esac
+fi
+if [[ -n "$CONFIG" ]]; then
+  if ! CONFIG_DIR="$(cd "$(dirname -- "$CONFIG")" 2>/dev/null && pwd -P)"; then
+    echo "resolve-review-loop: unable to canonicalize config path from CONFIG: $CONFIG" >&2
+    exit 3
+  fi
+  CONFIG_PATH="$CONFIG_DIR/$(basename -- "$CONFIG")"
+fi
 # Risk-tiered low-risk reviewer overlay (ADDITIVE): when BOTH keys are set the caller
 # (/l5 /l6 front-door) uses this pair as the LOOP reviewer for computed review_risk=low;
 # high risk always uses reviewer_engine/reviewer_effort. Empty = tiering off (unchanged
@@ -323,6 +374,7 @@ case "$SECURITY_SURFACE" in 0|1) ;; *) SECURITY_SURFACE=0 ;; esac
 # if NO panel member is a different family from the implementer, the panel can't catch the
 # implementer's family-correlated blind spots.
 IMPL_FAMILY="$(family_of "$IMPL_ENGINE")"
+VER_AUTH_FAMILY="$(family_of "$VER_AUTH_ENGINE")"
 _diff_family=0
 _distinct_families=""
 _distinct_count=0
@@ -830,6 +882,14 @@ if [[ -n "$FIELD" ]]; then
     implementer_runner) printf '%s\n' "$IMPL_RUNNER" ;;
     reviewer_endpoint) printf '%s\n' "$REV_ENDPOINT" ;;
     implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
+    verification_author_present) printf '%s\n' "$VER_AUTH_PRESENT" ;;
+    verification_author_engine) printf '%s\n' "$VER_AUTH_ENGINE" ;;
+    verification_author_runner) printf '%s\n' "$VER_AUTH_RUNNER" ;;
+    verification_author_effort) printf '%s\n' "$VER_AUTH_EFFORT" ;;
+    verification_author_endpoint) printf '%s\n' "$VER_AUTH_ENDPOINT" ;;
+    verification_author_family) printf '%s\n' "$VER_AUTH_FAMILY" ;;
+    implementer_family) printf '%s\n' "$IMPL_FAMILY" ;;
+    config_path) printf '%s\n' "$CONFIG_PATH" ;;
     reviewer_engine_low_risk) printf '%s\n' "$REV_ENGINE_LOW_RISK" ;;
     reviewer_effort_low_risk) printf '%s\n' "$REV_EFFORT_LOW_RISK" ;;
     on_family_conflict) printf '%s\n' "$ON_FAMILY_CONFLICT" ;;
@@ -922,7 +982,7 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -930,15 +990,17 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" "$IMPL_FAMILY" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${ARGS_SUFFIX[@]}"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${ARGS_SUFFIX[@]}"
+    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

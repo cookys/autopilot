@@ -1,5 +1,6 @@
 # dispatch-branch-lifecycle — session-end 整合候選 gate + repo-branch reaper + 中間輪偵測／保全／人工處置
 
+> Status: ✅ SHIPPED in v2.32.37 — merged as `d8ab47811be0f16bfab9f57278aae7cd6f1a895c` on 2026-07-16.
 > Source: 2026-07-14 codex-worktree audit（`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`）§5 autopilot 側修法；BACKLOG「Dispatch-branch lifecycle」條目。
 > Board 指令：CEO 寫 plan → hetero engine loop review 收斂 → 實作。
 
@@ -36,7 +37,7 @@
 | P1 | Hetero loop review of plan（agy Gemini + cc-shim GLM，5 generations；無未決 Critical/Major） | complete |
 | P2 | 實作（TDD：fixture tests 先行；MiniMax verification-author artifact + foreman fallback） | complete |
 | P3 | 實作 diff hetero review loop + 文件 wiring | complete |
-| L-5 | finish-flow（quality gate → merge develop → archive） | pending |
+| L-5 | finish-flow（quality gate → merge develop → archive） | complete |
 
 ## 已知限制（引擎面）
 
@@ -53,3 +54,11 @@ Recovery 的 test-only negative control 在 immutable base `8250dc9` 得到 `RED
 完整 implementation diff 以 artifact-only canonical `dispatch-review.sh` 盲審；所有 round 2+ prompt 均先通過 suppression + redispatch linter。Gemini r1/r2/r3/r4 皆為結構化 `SHIP-AS-IS`；MiniMax-M3 額外 leg 為結構化 `SHIP-AS-IS`。Grok r2 raw block 為 `SHIP-AS-IS`，r3 raw block 為 `FIX-THEN-SHIP`，r4 raw block 回到 `SHIP-AS-IS`；三次皆因 wrapper 前 preamble 被 parser fail-closed 成 `no_verdict`，未被冒充為結構化 pass。最終 evidence 以 git diff、結構化 verdict 紀錄與可重跑 gates 為準；不宣稱暫存 review log/diff 是持久 artifact。
 
 所有可驗證 finding 均先重現再修；P3 首輪後 authoritative QC 再驗出 fail-open enumeration、非 local target、ack/worktree/CAS races、orphan-log rewrite、cherry-pick containment 與 preserve-first 文件缺口。舊的 risk-20 pipeline 已正式以 **BLOCK** 關閉；其後另起 fresh bounded repair pipeline，risk 重置並更新為 15，兩條 pipeline 的 verdict/risk 不合併記錄。Fresh pipeline 對應的 focused GREEN 為 reaper 103、orphan-GC 42、worktree-reap 18；exact-ref 回復僅透過 prepared no-deref transaction 嘗試，raced direct ref/symref 一律 abort/fail closed，且 verified bundle 仍是 authoritative recovery artifact。最終 cap 與 full-suite residual 以上段實際數字為準。
+
+## L-5 completion evidence（2026-07-16）
+
+- Merge: `d8ab47811be0f16bfab9f57278aae7cd6f1a895c` on `develop`.
+- Final goal/security audit: PASS. Cross-family evidence: Spark full formal SHIP；Gemini exact-union 3× formal SHIP；Grok full raw SHIP，但 canonical parser 誠實回報 `no_verdict`。
+- Focused GREEN: reaper 103、orphan-GC 42、worktree-reap 18。
+- Umbrella suite: 2/142 groups failed，均為 inherited baseline groups，不冒充 full pass；portability/OpenCode/eval case 13/17 為 inherited `PRE_EXISTING DEFERRED`。
+- Post-merge doc-sync 補上 SHA-1-only 限制：durable ack 與 destructive reap 目前只支援 40-hex SHA-1 object IDs；SHA-256 repos 的 `scan` 仍為唯讀可用，寫入／刪除路徑 fail closed，並以 trigger-bearing BACKLOG follow-up 追蹤泛化。

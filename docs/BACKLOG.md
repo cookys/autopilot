@@ -32,13 +32,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S。
 - **Source**: 2026-07-14 /l6 loop-convergence-gates foreman ledger + depth-0 qc probe。
 
-### ~~Dispatch-branch lifecycle：session-end 整合候選 gate + repo-branch reaper + 中間輪偵測／保全／人工處置~~（shipped v2.32.37）
-- **Trigger**: 下次任何 /l4-/l6 campaign 結束時發現未併回 develop 的整合候選或 dispatch branch；或 TWGameProject 2026-07-10 殘骸 triage 動工時。
-- **Context**: 2026-07-14 稽核判定 merge-back/worktree GC 缺 deterministic 後盾；當時 TWGameProject 快照約 70 條 branch + 46-commit candidate。修法：exact-tip check/ack、僅刪 authoritative target 已 contain 且已 bundle 驗證的 local branch、superseded 預覽、orphan-log hygiene；未 contain 一律保留，discard 另由 human/depth-0 在存證後處理。
-- **Status**: shipped in v2.32.37. 本專案沒有執行 TWGameProject cleanup；2026-07-14 數量只是歷史快照，外部狀態可能已變，仍明確 out of scope。
-- **Effort**: M（gate S + reaper M + 收斂 S）
-- **Source**: 2026-07-14 codex-worktree audit §3/§5；handoff 2026-07-14。
-- **殘骸現況（2026-07-14 使用者裁決）**：TWGameProject 殘骸**全部擱置**（含 46-commit `ceo-integration-candidate-r1` 的併/棄裁決、5 條 contained branch、`platform-authz-r1-recovered` worktree）— 未 bundle、未刪、原樣保留；動工時先讀 audit 報告 §5「立即清理」的 preserve-first 順序。
+### Dispatch-branch lifecycle：支援 SHA-256 object format
+- **Trigger**: 第一個 SHA-256 Git consumer 出現，或下次修改 `scripts/reap-dispatch-branches.sh`。
+- **Context**: v2.32.37 rail 刻意假設 SHA-1 40-hex object IDs。SHA-256 repos 的 `scan` 仍可唯讀使用，但 durable `check --ack` 會因非 40-hex ack 被 prune 而重新觸發 gate，`reap --yes` 則在任何 ref deletion 前的 tip validation fail closed。泛化 OID validation、ack persistence 與 bundle verification 時，不得弱化 preserve-first。
+- **Effort**: S–M。
+- **Source**: v2.32.37 post-merge doc-sync / security QC。
 
 ### codex-native `spawn_agent` 盲區納管（codex 當 depth-0 時）
 - **Trigger**: 下次 codex 擔任 depth-0 orchestrator 跑 /l4-/l6 前；或下次改版 `platforms/codex/plugin/skills/ceo-agent` payload 時。

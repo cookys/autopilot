@@ -1,6 +1,6 @@
 # Plan — Dispatch-branch lifecycle: session-end integration-candidate gate + preserve-first branch reaper + intermediate-round detection/preservation/manual disposition
 
-> Status: CONVERGED (5 external review generations; no open Critical/Major) · Owner: CEO (depth-0, Fable) · Branch: `feature/dispatch-branch-lifecycle` · Frame: Hold scope
+> Status: ✅ SHIPPED in v2.32.37 — merged as `d8ab47811be0f16bfab9f57278aae7cd6f1a895c` on 2026-07-16 · Owner: CEO (depth-0, Fable) · Frame: Hold scope
 > Source: 2026-07-14 codex-worktree audit (`/home/twgs-dev/reports/2026-07-14-codex-worktree-audit.md`) §5; BACKLOG「Dispatch-branch lifecycle」.
 
 ## 0. Context / thesis
@@ -310,6 +310,10 @@ fail closed with exit 2.
 None blocking — Board delegated pipeline and scope 2026-07-14. (Deliberate default worth
 flagging: gate wiring targets L-size finish-flow; S/Fix flows don't run the gate. Rationale:
 dispatch-owned branches only arise from /l4-/l6 L-size campaigns.)
+
+## 9. L-5 completion（2026-07-16）
+
+Merged to `develop` as `d8ab47811be0f16bfab9f57278aae7cd6f1a895c`. Final goal/security audit passed；Spark full formal SHIP、Gemini exact-union 3× formal SHIP、Grok full raw SHIP（canonical parser `no_verdict`）。Focused GREEN remained 103/42/18；the umbrella suite retained 2/142 inherited baseline failures, and portability/OpenCode/eval case 13/17 remained `PRE_EXISTING DEFERRED` rather than being reported as passes. Post-merge doc-sync closed the SHA-1-only disclosure gap and opened a trigger-bearing SHA-256 object-format follow-up.
 
 ## Review log
 

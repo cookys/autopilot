@@ -6,6 +6,11 @@
 > and [`../../l5/references/hetero-impl-loop.md`](../../l5/references/hetero-impl-loop.md) —
 > read those FIRST. This file covers only what `/l6` adds on top of `/l5`.
 
+## Live sensing
+
+Same ritual as `/l5`: pre-assigned run-ledger path + foreman heartbeats +
+depth-0 `watch-foreman.js` watcher (front-door § "Live sensing"; report-only).
+
 ## What /l6 changes vs /l5
 
 Verification AUTHORING is additionally leaf-dispatched through the canonical
@@ -51,6 +56,20 @@ deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
    checks, and compares the results.
 6. Convergence-by-verification gates continue/rework; merge only after the
    QC-Verdict is earned.
+
+The `/l6` verification-author handoff is strict roster-only and must use:
+
+`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`
+
+`--bin <test-seam>` is only a test seam. `/l6` never passes `--runner`, `--model`,
+`--effort`, or `--endpoint` to that call. The authorized tuple, derived family tags,
+and named endpoint ID come from `<consuming-repo>/.claude/review-loop-config.md`
+via `resolve-review-loop.sh`; named-endpoint readiness and credentials are resolved
+separately after authorization, and secret values never enter result provenance.
+
+Failure modes are fail-closed: unresolved/malformed strict roster state (including
+same-family, unknown-family, or endpoint-unready) preconditions abort before runner
+start and emit `status=precondition_failed`.
 
 ### Outcome → action table (R3 recovery branch)
 

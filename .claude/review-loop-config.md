@@ -24,6 +24,11 @@
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_effort: high
 - implementer_runner: auto
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
+- verification_author_effort: high
+- verification_author_endpoint: glm
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

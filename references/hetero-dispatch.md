@@ -18,6 +18,8 @@ Not for: anything needing autopilot skills inside the executor (unverified — s
 2. **Verify by artifacts, never by self-report.** Observed failure mode: the agent claimed success while skipping the requested commit-hash output. The script reports commit presence, diff stats, and tree cleanliness from `git`, not from the agent's prose.
 3. **Verdict stays at depth 0.** The shelled-out engine implements; the dispatching Claude Code session reviews the branch diff (quality-pipeline) before merge. A hetero implementer never self-certifies — same invariant as [`blind-dispatch.md`](blind-dispatch.md) § Nested dispatch.
 4. **The contract is the prompt.** The executor has no autopilot plugin; methodology travels inside the six-element Task Prompt (goal / scope / input / output / acceptance / boundaries). Planner output is the native input format.
+5. **Every brief carries a scale budget (gate 5).** The Task Prompt's HOW MUCH element MUST state a LOC-delta / files-touched ceiling (see [`skills/ceo-agent/references/task-prompt-templates.md`](../skills/ceo-agent/references/task-prompt-templates.md) § HOW MUCH). A worker that would exceed it STOPS and returns an `[ESCALATION]` to re-scope — it never silently grinds past the budget. A brief with no budget is incomplete.
+6. **No bare multi-hour autonomous loop (gate 4).** A hetero implement/review loop that runs for hours MUST have a named depth-0 clock owner armed with the sensing watcher and the convergence brake ([`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) — gates 1 + 3; see [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § 裸跑禁令). Unwatched hours-long self-directed loops are the banned "bare run" shape.
 
 ## Script
 
@@ -64,6 +66,33 @@ pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` s
 Evidence + residuals: [`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
 (`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
+### Directive reachability (Phase 2 — advisory nudge channel)
+
+Depth-0 can queue a one-way **advisory** directive to a running stage's lease holder via the R0
+ledger ([`scripts/run-ledger.sh`](../scripts/run-ledger.sh) `directive-send` / `directive-poll` /
+`directive-ack`): `directive-send` binds the nudge to the target stage's CURRENT lease
+(generation+nonce) and **refuses if no stage is leased** — you cannot nudge a stage nobody holds.
+Every send is terminalized by exactly one ack row (`directive_delivered`, or `directive_expired`
+with reason `run_ended` / `stale_generation` — the stale reason covers BOTH a generation advance
+and a same-generation nonce mismatch, i.e. a fenced/replaced writer) — a directive never vanishes
+silently. This holds across ledger rotation too: `directive-poll`/`directive-ack` scan the rotated
+`<ledger>.N` segments, so a directive whose row rotated out of the live ledger stays visible and
+still terminalizes. Delivery is **queue-and-deliver-at-boundary**, never a hard interrupt. How far a directive actually reaches
+depends on the runner:
+
+| Runner | Reachability | Mechanism |
+|--------|--------------|-----------|
+| `pi` (RPC duplex) | **mid-run** | the supervisor ([`pi-rpc-run.js`](../scripts/lib/pi-rpc-run.js)) polls the ledger on its own cadence (`PI_RPC_DIRECTIVE_POLL_SECS`, default 5s), **validates the directive's bound lease (generation+nonce) against the CURRENT lease before steering** — a stale directive is never steered to the current worker, only terminalized as expired — then delivers a native RPC `steer` prefixed `[depth-0 directive] …` and acks `directive_delivered` **from the supervisor** (never the worker; an ack failure is emitted as a `supervisor_directive_ack_failed` log event, not swallowed). At shutdown any still-pending directive is `directive_expired(run_ended)` — the expiry runs AFTER the child teardown ladder is armed, so a lock-contended ledger can't delay worker teardown. Enabled only when `--ledger/--run-id/--stage` are all passed (`dispatch-hetero.sh --runner pi` forwards its own coords automatically) — otherwise byte-identical to before. |
+| CC foreman (dev-flow inline) | **stage boundary** | the foreman polls its own run-id at each stage boundary (before `stage-acquire` of the next stage), honors + records, then acks. |
+| one-shot batch runners (`codex exec` / `agy -p` / `grok` / `cc-shim`) | **UNREACHABLE mid-run** | no duplex channel — a directive can only shape the **NEXT** round's dispatch prompt. No pretend-channel is offered. |
+
+AUTHORITY LINES (non-negotiable): a directive is **advisory** — the lease holder keeps the stage,
+there is **no auto-kill on non-response** (Stage 3 scheduling/steer stays BACKLOG'd), and the
+read-only [`watch-foreman.js`](../scripts/watch-foreman.js) NEVER gains a directive-send surface
+(its no-`child_process` / report-only invariant is unchanged). The delivering supervisor — not the
+worker — writes every ack (worker bytes stay JSON-escaped inside tool events, so a worker can't
+forge its own delivery).
+
 ### Deferred — stream-json "live question" rail (spike-gated, NOT built)
 
 A richer signal — a *live* "the model is asking a question" event from `--output-format stream-json` — is **deferred behind an existence spike, not committed**. `claude -p --output-format stream-json` is known to emit `assistant` / `tool_use` / `tool_result` / `result`; whether any of `claude` / `codex exec` / `gemini -p` emits a **machine-distinguishable** "asking a question" event is unverified. **Before any parser code**, a spike must capture real runs and answer "does the event even exist." If it does not, the rail is invalid (a question-mark heuristic would be scrape-equivalent) and stays unbuilt. Recorded sample files are the spike deliverable; any future parser is tested against the recording, never a live CLI. Tracked in the plan's §8, not here.
@@ -73,8 +102,25 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 ### Cleanup (caller's responsibility — both are deliberate persistence)
 
 - `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
-- Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
+- Kept worktrees (exit 1, or `--keep-worktree`): inspect, then `git worktree remove --force <path>`. Preserve the exact branch tip in a verified bundle before any human/depth-0 compare-delete; never use a bare `git branch -D`. If interrupted, use `git worktree list` / `git worktree prune` first, then the same preserve-first branch disposition.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
+
+## Repo-branch lifecycle
+
+`scripts/reap-dispatch-branches.sh` is the preserve-first lifecycle rail for dispatch-owned **local** branches. Its built-in anchored grammar is:
+
+* `ceo-integration-candidate-r<N>` — integration candidates.
+* `ceo-<task>-r<N>-<YYYYMMDD>` — dated intermediate rounds.
+* `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
+* Repeated `--pattern <bash-ere>` adds an explicit local family; an empty ERE is rejected because it would match every local branch. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
+
+`scan` emits JSON classification without mutating the repo. `check` is the finish-flow gate: exit 0 means no unacknowledged ahead integration candidate; exit 1 means depth 0 must integrate, explicitly preserve, or discard. `--ack <branch>` records preservation against the exact current tip; malformed, missing, or moved-tip acks are pruned fail-closed.
+
+`scan` reports containment against the authoritative integration target first, otherwise against a canonical maximal live candidate target (one canonical candidate per same-tip group; non-maximal candidate tips cannot become sole containment proof). `reap` is dry-run unless `--yes` is supplied, and it only deletes branches contained by the authoritative integration target. `--reap-superseded` exposes supersession in the preview but never authorizes deletion of an uncontained branch; discard is manual depth-0/human work after preservation. Before deletion the tool creates and verifies one positive-ref full-history bundle, checks every head, and revalidates exact tip + containment + complete worktree occupancy around the compare-delete CAS. If post-delete proof invalidates, exact-ref restoration is attempted only with a prepared `update-ref --stdin` transaction using `option no-deref`; a raced direct ref or symref aborts/fails closed rather than being overwritten, and the verified bundle remains the authoritative recovery artifact. Git has no transaction spanning ref and worktree metadata, so a hostile concurrent actor can still race after the final validation; the script never overclaims stronger serialization.
+
+Exit 2 is a usage/environment failure. Bundles default under the git common dir; a relative `--bundle-dir` resolves against the repo root, never caller CWD. The tool never touches remote refs and never treats a name match alone as deletion authority.
+
+Signal-handler orphan paths use the private state root `${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID}}`. It must be a real owner-owned mode-0700 directory; unsafe mode, symlink, non-directory, or foreign ownership fails startup closed with exit 2. `--gc` retries only exact registered own-user worktrees and holds the normal lifetime-flock proof through removal, so a live or unsafe/unsupported lock preserves the worktree and its retry entry.
 
 ## Mid-run observability — run manifest + [`scripts/dispatch-status.js`](../scripts/dispatch-status.js)
 
@@ -111,6 +157,13 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   with `--usage-only`.
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
+- **Trace lineage contract (telemetry only):** dispatchers inherit lineage from incoming env
+  (`AUTOPILOT_PARENT_RUN_ID`, `AUTOPILOT_ROOT_RUN_ID`, `AUTOPILOT_DISPATCH_DEPTH`) and stamp
+  each manifest with `parent_run_id` + `root_run_id` + `depth` so dispatch trees are auditable.
+- **HONEST BOUNDARY (observability scope):** lineage spans only layers passing through
+  `dispatch-hetero.sh` / `dispatch-review.sh`; engine-internal spawns (e.g. codex `spawn_agent`,
+  agy recursion) and depth-0-only tooling do not appear unless they emit one of those
+  dispatch manifests.
 
 ## Residue retention — startup log prune + manifest reaper
 

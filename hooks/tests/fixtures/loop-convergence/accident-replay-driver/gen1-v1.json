@@ -1,0 +1,15 @@
+{
+  "artifact_status": "NOT_REVIEWED_NOT_AUTHORIZED_TO_EXECUTE",
+  "authorization_present": false,
+  "candidate_execution_enabled": false,
+  "independent_review_completed": false,
+  "source_executed": false,
+  "source_imported": false,
+  "source_compiled": false,
+  "tests_executed": false,
+  "validate_only_executed": false,
+  "replay_executed": false,
+  "clone_created": false,
+  "worktree_created": false,
+  "ship_ready": false
+}

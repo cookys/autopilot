@@ -53,9 +53,8 @@ CFG_ASK="$TEST_TMP/cfg-ask.md"
 printf -- '- on_engine_unavailable: ask\n' > "$CFG_ASK"
 json_ask=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ASK" bash "$SCRIPT")
 
-CFG_WR="$TEST_TMP/cfg-wait-reset-compat.md"
-printf -- '- on_engine_unavailable: wait-reset\n' > "$CFG_WR"
-json_wr=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_WR" bash "$SCRIPT")
+printf -- '- on_engine_unavailable: wait-reset\n' > "$CFG_ASK"
+json_wr=$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ASK" bash "$SCRIPT")
 
 prefix_ask=$(printf '%s' "$json_ask" | sed 's/, "on_engine_unavailable":.*//')
 prefix_wr=$(printf '%s' "$json_wr" | sed 's/, "on_engine_unavailable":.*//')

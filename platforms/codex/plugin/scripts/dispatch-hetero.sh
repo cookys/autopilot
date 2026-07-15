@@ -130,8 +130,121 @@ SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
 SKILL_PACK_CONTENT_TEMP=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
-# trap firing mid-run appends to a real path instead of an undefined one.
-ORPHAN_LOG="${TMPDIR:-/tmp}/autopilot-orphan-worktrees.log"
+# trap firing mid-run appends to a real path instead of an undefined one. Keep the
+# predictable log and lock inside a private per-user directory: shared /tmp names
+# let another user deny service or redirect either path before startup.
+ORPHAN_STATE_DIR="${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID:-$(id -u)}}"
+_init_orphan_state_dir() {
+  local dir="$1" mode
+  if [ -e "$dir" ] || [ -L "$dir" ]; then
+    [ -d "$dir" ] && [ ! -L "$dir" ] && [ -O "$dir" ] || return 1
+  else
+    (umask 077; mkdir "$dir") || return 1
+  fi
+  mode="$(stat -c '%a' "$dir" 2>/dev/null || stat -f '%Lp' "$dir" 2>/dev/null)" || return 1
+  case "$mode" in 700|0700) ;; *) return 1 ;; esac
+}
+if ! _init_orphan_state_dir "$ORPHAN_STATE_DIR"; then
+  printf 'ERROR: unsafe orphan state directory: %s\n' "$ORPHAN_STATE_DIR" >&2
+  exit 2
+fi
+ORPHAN_LOG="$ORPHAN_STATE_DIR/autopilot-orphan-worktrees.log"
+
+# Retry signal-handler orphan entries once before the normal marker/age GC pass.
+# The log can contain both paths and redirected git stderr, so only exact,
+# registered linked-worktree paths are actionable; everything else is either
+# pruned as noise/stale state or preserved as a recoverable live path.
+rewrite_orphan_log() {
+  [ -e "$ORPHAN_LOG" ] || return 0
+  local tmp lock_fd path gitfile_line common_raw common_dir registered line rc list err probe_fd
+  [ -f "$ORPHAN_LOG" ] || { printf 'WARN: orphan log is not a regular file: %s\n' "$ORPHAN_LOG" >&2; return 1; }
+  _wt_open_lock_fd "${ORPHAN_LOG}.lock" || return 1
+  lock_fd="$_WT_SAFE_LOCK_FD"
+  flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
+  mapfile -t orphan_entries < "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
+  tmp="$(mktemp "${ORPHAN_LOG}.tmp.XXXXXX")" || { exec {lock_fd}>&-; return 1; }
+
+  for path in "${orphan_entries[@]}"; do
+    case "$path" in
+      /*) ;;
+      *) continue ;;
+    esac
+    [ -d "$path" ] || continue
+
+    if [ ! -O "$path" ]; then
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
+    fi
+    if [ ! -f "$path/.git" ]; then
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
+    fi
+    IFS= read -r gitfile_line < "$path/.git" || gitfile_line=""
+    case "$gitfile_line" in
+      gitdir:\ *) ;;
+      *) printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }; continue ;;
+    esac
+
+    common_raw="$(git -C "$path" rev-parse --git-common-dir 2>/dev/null)" || {
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
+    }
+    common_dir="$(cd "$path" 2>/dev/null && cd "$common_raw" 2>/dev/null && pwd -P)" || {
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
+    }
+
+    list="$(mktemp "${ORPHAN_LOG}.worktrees.XXXXXX")" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+    err="$(mktemp "${ORPHAN_LOG}.worktrees-err.XXXXXX")" || { rm -f "$tmp" "$list"; exec {lock_fd}>&-; return 1; }
+    if ! git --git-dir="$common_dir" worktree list --porcelain >"$list" 2>"$err"; then
+      rm -f "$tmp" "$list" "$err"; exec {lock_fd}>&-; return 1
+    fi
+    rm -f "$err"
+    registered=0
+    while IFS= read -r line; do
+      if [ "$line" = "worktree $path" ]; then
+        registered=1
+        break
+      fi
+    done < "$list"
+    rc=$?; rm -f "$list"
+    [ "$rc" -eq 0 ] || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+    if [ "$registered" -ne 1 ]; then
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
+    fi
+
+    _wt_is_live "$path"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      # A held lifetime lock is live; an unsupported/unsafe probe is ambiguous.
+      # Both stay actionable in the orphan log and must never be removed.
+      printf '%s\n' "$path" >> "$tmp" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+      continue
+    fi
+    probe_fd="$_WT_PROBE_FD"
+    if ! git --git-dir="$common_dir" worktree remove --force "$path" >/dev/null 2>&1; then
+      printf '%s\n' "$path" >> "$tmp" || {
+        exec {probe_fd}>&- || true
+        rm -f "$tmp"; exec {lock_fd}>&-; return 1
+      }
+    fi
+    # Hold the lifetime proof continuously across worktree removal.
+    exec {probe_fd}>&- || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+  done
+
+  if [ -n "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK:-}" ]; then
+    AUTOPILOT_ORPHAN_REWRITE_LOCK_FD="$lock_fd" "${AUTOPILOT_ORPHAN_REWRITE_TEST_HOOK}" "$ORPHAN_LOG" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+  fi
+
+  if [ -s "$tmp" ]; then
+    mv -f "$tmp" "$ORPHAN_LOG" || { rm -f "$tmp"; exec {lock_fd}>&-; return 1; }
+  else
+    rm -f "$tmp" || { exec {lock_fd}>&-; return 1; }
+    rm -f "$ORPHAN_LOG" || { exec {lock_fd}>&-; return 1; }
+  fi
+  exec {lock_fd}>&-
+}
 # --- dispatch-observability Stage 1 (run manifest; ALL ADDITIVE) ---
 # A START-time manifest under $MANIFEST_DIR_PATH names this run's identity (run_id,
 # log path, worktree, lock, predicted containment) so depth-0 / dispatch-status.js can
@@ -281,13 +394,16 @@ write_manifest() {
   [ -n "${MANIFEST_ENDED_AT:-}" ] && ended_json="\"$MANIFEST_ENDED_AT\""
   [ -n "${MANIFEST_ENDED_EPOCH:-}" ] && endep_json="$MANIFEST_ENDED_EPOCH"
   [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$MANIFEST_FINAL_STATUS")\""
+  local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
+  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
+  local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
       "$(json_escape "$DISPATCH_RUN_ID")" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(json_escape "${WT:-}")" "$(json_escape "${WT:-}/.autopilot-worktree.lock")" "$(json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(json_escape "${PROMPT_FILE:-}")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -342,6 +458,7 @@ if [ "$DO_GC" -eq 1 ]; then
   fi
   # Export flags for gc_stale_worktrees (reads REAP_UNMARKED).
   export REAP_UNMARKED GC_YES
+  rewrite_orphan_log || { echo "error: orphan-log rewrite failed; original preserved" >&2; exit 2; }
   gc_stale_worktrees
   exit $?
 fi
@@ -355,6 +472,28 @@ if [ -n "$RUN_ID" ]; then
 else
   DISPATCH_RUN_ID="hetero-${DISPATCH_STARTED_EPOCH}-$$-$(head -c2 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 fi
+LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
+LINEAGE_ROOT=""
+LINEAGE_DEPTH=0
+if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
+  LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID}"
+  LINEAGE_ROOT="${AUTOPILOT_ROOT_RUN_ID:-$LINEAGE_PARENT}"
+  LINEAGE_DEPTH="${AUTOPILOT_DISPATCH_DEPTH:-1}"
+  case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
+else
+  LINEAGE_ROOT="$DISPATCH_RUN_ID"
+  LINEAGE_DEPTH=0
+fi
+# Sanitize inherited lineage ids (a hostile/odd env value with control chars would
+# corrupt the manifest JSON — readers then skip the whole file: telemetry blackout)
+# and force base-10 depth ("08"/"09" pass the digits-only case but are octal-invalid
+# in $((...)), freezing the child depth un-incremented).
+[ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
+[ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
+LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))
+export AUTOPILOT_PARENT_RUN_ID="$DISPATCH_RUN_ID"
+export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
+export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 
 # Runner selection. Explicit --runner wins; `auto` detects codex from the model
 # name. The OLD bug: only `*gpt-5.5*` matched, so other codex models
@@ -629,7 +768,8 @@ _wt_lock_fail() {
   git branch -D "$BRANCH" >/dev/null 2>&1 || true
   die_precondition "$1"
 }
-exec {WT_LOCK_FD}>"$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
+_wt_open_lock_fd "$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
+WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
 flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
 # Keep bookkeeping files invisible to git status / git add -A inside the worktree.
 # For linked worktrees, git reads info/exclude from the COMMON git dir (shared
@@ -801,7 +941,16 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_PI" -eq 1 ]; then
-  run_worker bash -c 'cd "$1" && exec node "$2" --pi-bin "$3" --provider "$4" --model "$5" --cwd "$1" --prompt-file "$6"' _ "$WT" "$SELF_DIR/lib/pi-rpc-run.js" "$PI_BIN" "${PI_RPC_PROVIDER:-minimax}" "$MODEL" "$PROMPT_FILE"
+  # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
+  # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
+  # supervisor polls + steers + acks; it gates cleanly on absence). Gated on ALL three
+  # coords — a partial set forwards nothing (supervisor would refuse anyway; keep the
+  # no-coords invocation byte-identical to pre-Phase-2).
+  if [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ]; then
+    run_worker bash -c 'cd "$1" && exec node "$2" --pi-bin "$3" --provider "$4" --model "$5" --cwd "$1" --prompt-file "$6" --ledger "$7" --run-id "$8" --stage "$9"' _ "$WT" "$SELF_DIR/lib/pi-rpc-run.js" "$PI_BIN" "${PI_RPC_PROVIDER:-minimax}" "$MODEL" "$PROMPT_FILE" "$LEDGER" "$RUN_ID" "$STAGE"
+  else
+    run_worker bash -c 'cd "$1" && exec node "$2" --pi-bin "$3" --provider "$4" --model "$5" --cwd "$1" --prompt-file "$6"' _ "$WT" "$SELF_DIR/lib/pi-rpc-run.js" "$PI_BIN" "${PI_RPC_PROVIDER:-minimax}" "$MODEL" "$PROMPT_FILE"
+  fi
 else
   printf '%s\n' "dispatch-hetero: NOTE — agy/Gemini directory-targeting is now RELIABLE: the directive below PREPENDS an absolute-worktree anchor (agy -p ignores process cwd, so a relative-path prompt made it invent a scratch project = the old no_op; the anchor points its edits at the real worktree — verified single- and multi-file). agy stays EDIT-ONLY for a DIFFERENT reason: run_command foreground-caps at ~10s then AUTO-BACKGROUNDS longer commands and waits (empirically a 75s command DID complete and return stdout, bounded by --print-timeout — the old 'hard 10s cap / cannot run build/test' framing is REFUTED, agy 1.0.14 2026-07-02); what stays unreliable is chaining run-long-command THEN git-commit in ONE -p turn (the turn can yield after the backgrounded task). So agy edits, the wrapper commits, the reviewer verifies. For tasks where the agent itself must run build/test AND self-commit mid-flight, prefer --model gpt-5.5 (codex). See memory: agy-writes-install-dir (RESOLVED)." >&2
   # agy (Gemini) in -p print mode CANNOT reliably run a long command THEN commit in
@@ -1062,13 +1211,13 @@ dispatch_detached_run() {
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
-      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD \
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_DEPTH \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
       classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize \
-      reap_worktree reap_worktree_minimal _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
+      reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true
   } > "$state_file"

@@ -123,6 +123,70 @@ CEO (depth 0, this session)
     `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before). This closes the
     old "type `--endpoint` by hand every run" gap — the project config owns it now.
 
+### Live sensing — no YOLO window after dispatch (S3-lite)
+
+**裸跑禁令 (gate 4, non-negotiable): a multi-hour autonomous hetero loop MUST have a
+named depth-0 clock owner.** No `/l4 /l5 /l6` run — and no self-directed hetero review
+loop — may run unwatched for hours. Depth-0 is the clock owner: it arms the watcher
+(below), holds the wall-clock, and owns the brake. A loop with no clock owner is a
+banned bare run — the exact shape of the 2026-07-14 replay-driver incident (8 artifact
+generations, zero test execution, hours unattended). The clock owner's brake is a
+verification-anchored + generation ceiling, mechanized by
+[`scripts/check-loop-convergence.js`](../../../scripts/check-loop-convergence.js)
+(gates 1 + 3): ≥2 consecutive zero-execution rounds, or generation cap reached while
+still REWORK-shape ⇒ halt + escalate, do NOT open another round.
+
+Dispatching the foreman must not open a black-box window until its completion
+notification. Sensing is MANDATORY for `/l4 /l5 /l6`; it is observation-only
+(scheduling/steer stays future work — the R6 two-cooks crash came from depth-0
+REACTING too fast, not from seeing too little):
+
+1. **Before dispatch**, depth-0 chooses the run id + ledger path
+   (`${TMPDIR}/autopilot-dispatch-runs/<foreman-run-id>.ledger.jsonl` by
+   convention), exports the foreman lineage (`AUTOPILOT_PARENT_RUN_ID=<foreman-run-id>`,
+   `AUTOPILOT_ROOT_RUN_ID=<foreman-run-id>`, `AUTOPILOT_DISPATCH_DEPTH=1`), and writes both
+   the foreman run-id + watcher arg into the foreman prompt.
+2. **Foreman duties** (in the prompt, non-optional): `run-ledger.sh
+   stage-acquire` when starting a phase, `stage-transition` at phase
+   boundaries, `stage-heartbeat` at least every 5 minutes inside long stages.
+   The leaf dispatches need nothing extra — their run manifests are already
+   emitted by `dispatch-hetero.sh`/`dispatch-review.sh`.
+3. **Depth-0 arms ONE watcher** right after dispatch:
+   `node scripts/watch-foreman.js --ledger <path> --root <foreman-run-id>` behind the Monitor tool
+   (CC; `persistent: false`, timeout ≈ expected run length) — events: `STAGE`
+   (phase transitions), `LEAF_START/LEAF_END` (hetero dispatches), `QUIET` /
+   `LEAF_STALL` (silence beyond `--quiet-secs`, default 600). Non-CC fallback:
+   run the same tool with `--once` as a manual snapshot poller.
+4. **Report-only discipline** (R6): `QUIET`/`LEAF_STALL` are observations,
+   never verdicts. Cross-check first (`dispatch-status.js --run <id>`, ledger
+   tail, git activity); a quiet foreman is usually doing between-turns work;
+   NEVER grab a stage the foreman holds a lease on — escalate to the user if
+   genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
+   after the foreman is confirmed dead).
+5. **Advisory directive channel (Phase 2 — nudge, never seize).** Depth-0 may
+   queue a one-way *advisory* nudge to a running stage's lease holder — it does
+   NOT auto-kill, does NOT grab the lease, and never overrides the holder's
+   authority (Stage 3 scheduling/steer stays BACKLOG'd). Send side (depth-0):
+   `run-ledger.sh directive-send --ledger <path> --run-id <foreman-run-id>
+   --stage <stage> --text "<guidance>" --from depth-0` — refused (exit ≠ 0) if
+   that stage has no live lease (you cannot nudge a stage nobody holds); the
+   directive binds to the lease's current generation. Foreman duty (in the
+   prompt, non-optional): **at every stage boundary — before `stage-acquire` of
+   the next stage — poll your own directives** (`run-ledger.sh directive-poll
+   --ledger <path> --run-id <foreman-run-id> [--stage <stage>]`) and honor +
+   record any pending guidance, then ack it. Reachability differs by runner —
+   see [`references/hetero-dispatch.md`](../../../references/hetero-dispatch.md)
+   § Directive reachability: pi-rpc = mid-run steer; a CC foreman = stage
+   boundary; one-shot batch runners = only the NEXT round's dispatch. The
+   read-only `watch-foreman.js` NEVER gains a directive-send surface.
+
+HONEST BOUNDARY (SCOPE): dispatcher lineages only include runs emitted by
+`dispatch-hetero.sh`/`dispatch-review.sh`. Engine-native internal subprocesses
+(`spawn_agent`, agy recursion) and CC-native foremen are not observed as child
+runs in the watch tree; a CC-native foreman appears only as a synthetic
+`(external)` root, so no completeness claim is implied beyond dispatcher
+coverage.
+
 ### Heterogeneous engine loop details (/l5 and /l6)
 
 Level-specific long-form lives with each level (this section stays common-protocol only):
@@ -290,6 +354,13 @@ finish-flow closing). The marker arms two opt-in hooks:
   cost ≈ length × remaining messages, quadratic in session length (2026-07-14
   transcript study: 96%+ of tokens were cache_read on unsplit depth-0 sessions).
   At T2 (150k) stop taking on new work and hand off NOW.
+
+For `/l6` only, verification AUTHORING is dispatched only through strict roster:
+`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
+This is the session-mode control-loop boundary contract, not optional guidance.
+It resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`
+via `resolve-review-loop.sh`; caller-supplied `--runner`, `--model`, `--effort`,
+or `--endpoint` must not be used in that path.
 
 Corollary (always, hooks on or off): dispatch outputs land in FILES; depth-0
 reads only the emitted JSON summary — never scroll raw worker logs into the
@@ -462,14 +533,31 @@ branch off a pinned base and only remove the worktree on success. After the
 **authoritative qc verdict passes at depth 0**, the CEO integrates the foreman's
 commit. **Mind the base**: the foreman worktree branches off the *tracked* base
 (`develop`), NOT the CEO's checked-out HEAD (see Gotchas). When the CEO is on a
-feature branch, a two-dot `git diff <feature>..<foreman-branch>` shows phantom
-deletions of the absent feature work, and a plain `git merge` drags the base's
-history in — so **`git cherry-pick <foreman-commit>`** (the isolated commit) is the
-correct integration when the touched files don't overlap the feature work
-(empirically the case in the P1.f dogfood). Use a real branch merge only when the
-foreman built on the CEO's actual HEAD (STEP-0 bootstrap, Gotchas). On conflict
-(base moved during a long run): **rebase/cherry-pick-retry once, else escalate** —
-never auto-resolve unattended.
+feature branch, first verify the foreman base. Prefer an identity-preserving merge
+when that base is compatible; this makes containment mechanically provable. A
+tactical `git cherry-pick <foreman-commit>` copies a commit but does **not** make
+the source branch an ancestor. After cherry-pick, preserve that source (bundle +
+exact-tip ack/handoff) until depth 0 explicitly discards it; the reaper must keep
+it uncontained. On conflict, retry once, else escalate — never auto-resolve.
+
+After an identity-preserving merge, retire dispatch-owned dated branches through
+the deterministic reaper, not an ad-hoc broad branch glob. Reuse finish-flow
+L-5.6's exact `autopilot_root` resolver and authoritative `integration_target`
+derivation; do not create a second resolver here. If those values have not yet
+been resolved, run that L-5.6 procedure first and halt on any ambiguity. Bind the
+consumer independently so a plugin-package script is never resolved from its git
+root:
+
+```bash
+consumer_repo="$(git rev-parse --show-toplevel)"
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap --repo "$consumer_repo" --into "$integration_target" --yes
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap --repo "$consumer_repo" --into "$integration_target" --reap-superseded --dry-run
+# Uncontained superseded rounds remain preservation/manual-disposition items.
+```
+
+Only branches contained by the authoritative branch are deletion-eligible. Every
+deletion is preceded by one verified full-history bundle. Branches outside the
+reaper grammar remain explicit preserve-first harness cleanup responsibility.
 
 ### 5. Worktree GC
 
@@ -479,17 +567,20 @@ and branches after handling the outcome:
 
 ```bash
 git worktree remove --force <path>        # `prune` ALONE is a no-op on an on-disk worktree
-git branch -D worktree-agent-<agentId>    # for a killed native foreman
+# Preserve an out-of-grammar branch tip in a verified bundle, then depth 0 may
+# compare-delete that exact ref. Never use a bare branch -D.
 git worktree prune
 ```
 
 - For the `/l5`/`/l6` agy path, the worktree path is in the outcome JSON (`worktree`
   field) and the branch in the `branch` field — reap **both**:
-  `git worktree remove --force <worktree>` (if non-null) **and**
-  `git branch -D <branch>` (`git worktree remove` does NOT delete the branch, so a
-  non-success hetero dispatch leaves a stale branch otherwise). On a `committed`
-  outcome the worktree is already auto-removed (`worktree: null`); after the
-  depth-0 cherry-pick, still `git branch -D <branch>` to clear the integrated branch.
+  `git worktree remove --force <worktree>` (if non-null). For a dated branch covered
+  by `reap-dispatch-branches.sh`, let the reaper prove containment, create and verify
+  its bundle, then delete it; do not use an unchecked `git branch -D`. On a
+  `committed` outcome the worktree is already auto-removed (`worktree: null`); after
+  an identity-preserving merge run the contained reaper pass above. After a
+  cherry-pick, keep + ack/handoff the uncontained source. Out-of-grammar
+  `hetero/<name>` branches require explicit preserve-first inspected cleanup.
 - For a killed native Claude foreman, the path is deterministic
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory

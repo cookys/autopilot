@@ -117,4 +117,19 @@ git -C "$R9" rev-parse -q --verify b9 >/dev/null || fail "branch b9 must SURVIVE
 
 # (Known gap: the 120s hook-timeout branch is untestable without a timeout seam.)
 
+# --- 11. predictable lock symlinks fail closed without touching victim bytes ---
+LOCK_VICTIM="$TEST_TMP/lock-victim"; LOCK_BYTES='0123456789abcdef'
+printf '%s' "$LOCK_BYTES" > "$LOCK_VICTIM"
+ORPHAN_LOG="$TEST_TMP/symlink-orphans.log"
+ln -s "$LOCK_VICTIM" "${ORPHAN_LOG}.lock"
+_wt_append_orphan_path "$TEST_TMP/should-not-append" >/dev/null 2>&1
+assert_neq "$?" 0 "orphan append rejects symlink lock"
+assert_eq "$(cat "$LOCK_VICTIM")" "$LOCK_BYTES" "orphan append never truncates symlink victim"
+
+mkdir "$TEST_TMP/symlink-lock-wt"
+ln -s "$LOCK_VICTIM" "$TEST_TMP/symlink-lock-wt/.autopilot-worktree.lock"
+_wt_is_live "$TEST_TMP/symlink-lock-wt"
+assert_eq "$?" 2 "worktree liveness probe rejects symlink lock and preserves worktree"
+assert_eq "$(cat "$LOCK_VICTIM")" "$LOCK_BYTES" "worktree lock probe never truncates symlink victim"
+
 finalize_test

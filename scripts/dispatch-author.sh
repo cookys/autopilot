@@ -26,12 +26,14 @@
 #   ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN retained.
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim --model <name> --prompt-file <file>
-#       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
-#       [--timeout 5m]          # agy --print-timeout / grok/cc-shim timeout (default 5m)
-#       [--bin <path>]          # override the runner binary (test seam)
-#       [--endpoint <name>]     # cc-shim: resolve named-endpoint creds via resolve-endpoint.sh
-#                               #   (AUTOPILOT_ENDPOINT_<NAME>_*); raw env still used when omitted
+#   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
+#       # active `/l6` contract: strict roster selection only.
+#   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
+#       # test seam only: override the runner binary for seam/fake tests.
+#   In strict roster mode, do not pass `--runner`, `--model`, `--effort`, or `--endpoint`.
+#   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
+#   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
+#   or endpoint resolution is not ready.
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
 #   shell script), which drops trailing prompt newlines. This mirrors dispatch-review
 #   and is safe for prompt semantics.
@@ -41,7 +43,23 @@
 #                               #   (default: 3000ms; cc-shim: 10000ms)
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim", "model": "...", "status": "authored|empty_output|precondition_failed|runner_failed", "raw_log": "<path>", "error": "..." }
+#   {
+#     "runner": "codex|agy|grok|cc-shim",
+#     "model": "...",
+#     "status": "authored|empty_output|precondition_failed|runner_failed",
+#     "raw_log": "<path>",
+#     "error": "...",
+#     "selection_source": "explicit_cli|strict_roster",
+#     "selection_path": "<path>|null",
+#     "verification_author": null|{
+#       "engine": "...",
+#       "runner": "...",
+#       "effort": "...",
+#       "endpoint": "<name>",
+#       "family": "..."
+#     }
+#   }
+#   Non-secret provenance: verification_author.endpoint is the endpoint name only, not URL/token.
 #
 # EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed.
 
@@ -67,39 +85,196 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-author-*' || true
 
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
+REPO_ROOT=""; STRICT_ROSTER=0
+RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). See lib/dispatch-detach.sh.
 LEDGER=""; RUN_ID=""; STAGE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --runner)      RUNNER="${2:-}"; shift 2 ;;
-    --model)       MODEL="${2:-}"; shift 2 ;;
+    --runner)      RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
+    --model)       MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
-    --effort)      EFFORT="${2:-}"; shift 2 ;;
+    --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
-    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
+    --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; ENDPOINT_SUPPLIED=1; shift 2 ;;
+    --strict-roster) STRICT_ROSTER=1; shift ;;
+    --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 
+SELECTION_SOURCE="explicit_cli"
+if [[ "$STRICT_ROSTER" -eq 1 ]]; then
+  SELECTION_SOURCE="strict_roster"
+fi
+SELECTION_PATH=""
+SELECTION_PATH_RESOLVED=0
+VERIFICATION_AUTHOR_ENGINE=""
+VERIFICATION_AUTHOR_RUNNER=""
+VERIFICATION_AUTHOR_EFFORT=""
+VERIFICATION_AUTHOR_ENDPOINT=""
+VERIFICATION_AUTHOR_FAMILY=""
+
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
 
+read_review_loop_field() {
+  local key="$1"
+  node -e '
+const fs = require("fs");
+
+const key = process.argv[1];
+let raw;
+try {
+  raw = fs.readFileSync(0, "utf8");
+} catch {
+  process.exit(2);
+}
+
+let data;
+try {
+  data = JSON.parse(raw);
+} catch {
+  process.exit(2);
+}
+
+if (!Object.prototype.hasOwnProperty.call(data, key)) {
+  process.exit(3);
+}
+
+const value = data[key];
+if (typeof value === "boolean") {
+  process.stdout.write(value ? "true" : "false");
+  process.exit(0);
+}
+
+if (typeof value === "string" || typeof value === "number") {
+  process.stdout.write(String(value));
+  process.exit(0);
+}
+
+process.exit(4);
+' "$key"
+}
+
+emit_verification_author() {
+  if [[ "$SELECTION_PATH_RESOLVED" -ne 1 ]]; then
+    printf 'null'
+    return
+  fi
+
+  printf '{ "engine": "%s", "runner": "%s", "effort": "%s", "endpoint": "%s", "family": "%s" }' \
+    "$(json_escape "$VERIFICATION_AUTHOR_ENGINE")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_RUNNER")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_EFFORT")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_ENDPOINT")" \
+    "$(json_escape "$VERIFICATION_AUTHOR_FAMILY")"
+}
+
+emit_result() {
+  local status="$1"
+  local raw_log="$2"
+  local error_message="$3"
+  local exit_code="$4"
+
+  local raw_log_json="null"
+  if [[ "$raw_log" != "null" ]]; then
+    raw_log_json="\"$(json_escape "$raw_log")\""
+  fi
+
+  local error_json="null"
+  if [[ "$error_message" != "null" ]]; then
+    error_json="\"$(json_escape "$error_message")\""
+  fi
+
+  local selection_path_json="null"
+  if [[ "$SELECTION_PATH_RESOLVED" -eq 1 ]]; then
+    selection_path_json="\"$(json_escape "$SELECTION_PATH")\""
+  fi
+
+  printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s }\n' \
+    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
+    "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" "$(emit_verification_author)"
+  exit "$exit_code"
+}
+
 die_precondition() {
-  printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "raw_log": null, "error": "%s" }\n' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$1")"
-  exit 2
+  emit_result "precondition_failed" "null" "$1" "2"
 }
 
 die_runner_failed() {
   local -r runner_exit_code="$1"
-  printf '{ "runner": "%s", "model": "%s", "status": "runner_failed", "raw_log": "%s", "error": "runner exited %s" }\n' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$runner_exit_code")"
-  exit 3
+  emit_result "runner_failed" "$RAW_LOG" "runner exited $runner_exit_code" 3
 }
+
+ACTIVE_L6_MODE=0
+ACTIVE_L6_MARKER_LEVEL="$(node -e 'const m = require(process.argv[1]).readMarker(); if (m && m.level === "l6") { process.stdout.write("l6"); }' "$_AUTHOR_SELF_DIR/session-mode.js" 2>/dev/null || true)"
+[[ "$ACTIVE_L6_MARKER_LEVEL" == "l6" ]] && ACTIVE_L6_MODE=1 || true
+if [[ "$ACTIVE_L6_MODE" -eq 1 && "$STRICT_ROSTER" -ne 1 ]]; then
+  die_precondition "active session-mode=l6 requires --strict-roster"
+fi
+
+if [[ "$STRICT_ROSTER" -eq 1 ]]; then
+  [[ "$RUNNER_SUPPLIED" -eq 0 ]] || die_precondition "manual --runner is not allowed with --strict-roster"
+  [[ "$MODEL_SUPPLIED" -eq 0 ]] || die_precondition "manual --model is not allowed with --strict-roster"
+  [[ "$EFFORT_SUPPLIED" -eq 0 ]] || die_precondition "manual --effort is not allowed with --strict-roster"
+  [[ "$ENDPOINT_SUPPLIED" -eq 0 ]] || die_precondition "manual --endpoint is not allowed with --strict-roster"
+  [[ -n "$REPO_ROOT" ]] || die_precondition "--repo-root is required with --strict-roster"
+  [[ -d "$REPO_ROOT" ]] || die_precondition "--repo-root must point to an existing directory"
+  REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+  REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
+  [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
+  REVIEW_LOOP_JSON="$(
+    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
+  )"
+  REVIEW_LOOP_JSON_RC=$?
+  if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
+    die_precondition "resolve-review-loop failed"
+  fi
+
+  verification_author_present="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_present)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_present in review loop config"
+  verification_author_engine="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_engine)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_engine in review loop config"
+  verification_author_runner="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_runner)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_runner in review loop config"
+  verification_author_effort="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_effort)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_effort in review loop config"
+  verification_author_endpoint="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_endpoint)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_endpoint in review loop config"
+  verification_author_family="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_family)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_family in review loop config"
+  implementer_family="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field implementer_family)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid implementer_family in review loop config"
+  config_path="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field config_path)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid config_path in review loop config"
+
+  [[ "$verification_author_present" == true ]] || die_precondition "strict roster requires verification_author_present=true"
+  [[ -n "$verification_author_engine" ]] || die_precondition "strict roster requires verification_author_engine"
+  [[ -n "$verification_author_runner" ]] || die_precondition "strict roster requires verification_author_runner"
+  [[ -n "$verification_author_effort" ]] || die_precondition "strict roster requires verification_author_effort"
+  [[ -n "$verification_author_family" ]] || die_precondition "strict roster requires verification_author_family"
+  [[ -n "$implementer_family" ]] || die_precondition "strict roster requires implementer_family"
+  [[ "$verification_author_family" != unknown ]] || die_precondition "verification_author_family must not be unknown"
+  [[ "$implementer_family" != unknown ]] || die_precondition "implementer_family must not be unknown"
+  [[ "$verification_author_family" != "$implementer_family" ]] || die_precondition "strict roster requires distinct verification_author_family and implementer_family"
+  [[ "$config_path" == "$REVIEW_LOOP_CONFIG" ]] || die_precondition "strict roster requires config_path to equal --repo-root/.claude/review-loop-config.md"
+  RUNNER="$verification_author_runner"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster runner"
+  MODEL="$verification_author_engine"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster model"
+  EFFORT="$verification_author_effort"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster effort"
+  ENDPOINT="$verification_author_endpoint"; status=$?; [[ "$status" -eq 0 ]] || die_precondition "internal failure assigning strict roster endpoint"
+  SELECTION_PATH="$REVIEW_LOOP_CONFIG"
+  SELECTION_PATH_RESOLVED=1
+  VERIFICATION_AUTHOR_ENGINE="$verification_author_engine"
+  VERIFICATION_AUTHOR_RUNNER="$verification_author_runner"
+  VERIFICATION_AUTHOR_EFFORT="$verification_author_effort"
+  VERIFICATION_AUTHOR_ENDPOINT="$verification_author_endpoint"
+  VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
+fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
 case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must be codex, agy, grok, or cc-shim (got: $RUNNER)" ;; esac
@@ -237,11 +412,7 @@ fi
 if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
   | grep -c '[^[:space:]]' > /dev/null; then
-  printf '{ "runner": "%s", "model": "%s", "status": "empty_output", "raw_log": "%s", "error": "no non-whitespace output from runner — fail-closed" }\n' \
-    "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
-  exit 1
+  emit_result "empty_output" "$RAW_LOG" "no non-whitespace output from runner — fail-closed" 1
 fi
 
-printf '{ "runner": "%s", "model": "%s", "status": "authored", "raw_log": "%s", "error": null }\n' \
-  "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")"
-exit 0
+emit_result "authored" "$RAW_LOG" "null" 0

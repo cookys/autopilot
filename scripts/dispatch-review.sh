@@ -32,6 +32,7 @@
 # USAGE:
 #   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
+#       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
@@ -96,7 +97,7 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-review-*' || true
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
 # DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
 # heartbeats to the ledger and lands its JSON result atomically (lib/dispatch-detach.sh).
@@ -107,6 +108,7 @@ while [[ $# -gt 0 ]]; do
     --model)     MODEL="${2:-}"; shift 2 ;;
     --diff-file) DIFF_FILE="${2:-}"; shift 2 ;;
     --spec-file) SPEC_FILE="${2:-}"; shift 2 ;;
+    --pack-file) PACK_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
@@ -115,7 +117,7 @@ while [[ $# -gt 0 ]]; do
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
-    -h|--help)   sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -128,6 +130,13 @@ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native) ;; 
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
   [[ -f "$SPEC_FILE" && -r "$SPEC_FILE" ]] || die_precondition "--spec-file must be a readable regular file"
+fi
+# --pack-file (ADDITIVE): a trusted, dispatcher-authored methodology pack prepended to the
+# review prompt inside the nonce protocol (the output-format instructions still come first
+# and are reinforced after the diff, so the pack cannot displace the wrapped-block protocol).
+# Absent flag ⇒ byte-identical prompt. Same trust posture as --spec-file (dispatcher-authored).
+if [[ -n "$PACK_FILE" ]]; then
+  [[ -f "$PACK_FILE" && -r "$PACK_FILE" ]] || die_precondition "--pack-file must be a readable regular file"
 fi
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
@@ -312,6 +321,27 @@ if [ -n "$RUN_ID" ]; then
 else
   REVIEW_RUN_ID="review-${REVIEW_STARTED_EPOCH}-$$-$(head -c2 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 fi
+LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
+LINEAGE_ROOT=""
+LINEAGE_DEPTH=0
+if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
+  LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID}"
+  LINEAGE_ROOT="${AUTOPILOT_ROOT_RUN_ID:-$LINEAGE_PARENT}"
+  LINEAGE_DEPTH="${AUTOPILOT_DISPATCH_DEPTH:-1}"
+  case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
+else
+  LINEAGE_ROOT="$REVIEW_RUN_ID"
+  LINEAGE_DEPTH=0
+fi
+# Sanitize inherited lineage ids (control chars would corrupt the manifest JSON —
+# readers then skip the whole file) and force base-10 depth ("08" is octal-invalid
+# in $((...))). Mirrors dispatch-hetero.sh.
+[ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
+[ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
+LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))
+export AUTOPILOT_PARENT_RUN_ID="$REVIEW_RUN_ID"
+export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
+export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 REVIEW_MANIFEST_ENDED=""
 if [ "$RUNNER" = "codex" ]; then
   # Created EARLY (normally inside the codex branch) so the manifest can point at the
@@ -346,13 +376,16 @@ write_review_manifest() {
   fi
   local final_json="null"
   [ -n "${REVIEW_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$REVIEW_FINAL_STATUS")\""
+  local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
+  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
+  local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
       "$(json_escape "$REVIEW_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$REVIEW_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -401,6 +434,17 @@ EOF
 
 Do NOT echo the diff or instructions. Output ONLY the wrapped block, nothing after.
 EOF
+  if [[ -n "$PACK_FILE" ]]; then
+    cat <<'EOF'
+
+Review methodology (DISPATCHER-AUTHORED, trusted — apply when reviewing; do NOT echo it):
+EOF
+    cat "$PACK_FILE"
+    cat <<'EOF'
+
+--- end methodology ---
+EOF
+  fi
 if [[ -n "$SPEC_FILE" ]]; then
   cat <<'EOF'
 

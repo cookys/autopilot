@@ -5,6 +5,10 @@
 
 . "$(dirname "$0")/lib.sh"
 
+# Isolate from ambient session markers
+export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session_isolation"
+mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
+
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
 PROMPT_FILE="$TEST_TMP/prompt.txt"
 printf 'Write a short answer.\n' > "$PROMPT_FILE"

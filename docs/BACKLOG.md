@@ -38,9 +38,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S–M。
 - **Source**: v2.32.37 post-merge doc-sync / security QC。
 
-### Inherited OpenCode V2 / eval-doc-drift portability baselines
-- **Trigger**: 下次修改 OpenCode V2 plugin group、對應 eval/doc-drift validator 或其測試；或 full-suite／portability baseline 比下述數字惡化時。
-- **Context**: dispatch-branch lifecycle 專案 final run 為 2/142 groups non-green（其中產品 baseline 為 inherited OpenCode V2；另一組是 active-session L1 marker），portability 為 13/17，殘餘 OpenCode/eval/doc-drift failures 均已在 base 重現，與本專案變更無因果。這些結果必須維持 `PRE_EXISTING DEFERRED`，不得冒充 full-suite 或 portability pass。
+### Inherited L1 hook-config hermeticity / OpenCode V2 / eval-doc-drift portability baselines
+- **Trigger**: 下次修改 `hooks/*.test.js` 的 opt-in/config isolation、OpenCode V2 plugin group、對應 eval/doc-drift validator 或其測試；或 full-suite／portability baseline 比下述數字惡化時。
+- **Context**: dispatch-branch lifecycle 專案 final run 為 2/142 groups non-green：L1 group 是 inherited host-config hermeticity（真 HOME 的 `~/.autopilot/config.json` 啟用 context-budget/orchestrator-edit-gate；測試只清 env，故 `node --test hooks/*.test.js` 為 121/123、兩個 disabled assertions exit 2；clean HOME 為 123/123），另一組是 inherited OpenCode V2。Portability 為 13/17，殘餘 OpenCode/eval/doc-drift failures 均已在 base 重現，與本專案變更無因果。這些結果必須維持 `PRE_EXISTING DEFERRED`，不得冒充 full-suite 或 portability pass。
 - **Effort**: S / Fix。
 - **Source**: [`docs/projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md`](projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md) final QC evidence。
 

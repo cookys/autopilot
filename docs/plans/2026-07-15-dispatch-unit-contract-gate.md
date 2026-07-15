@@ -1,7 +1,9 @@
 # Dispatch unit contract gate — spec / boundary / GO / NO-GO
 
-Status: PROPOSED (follow-up; do not expand the verification-author roster fix)
+Status: APPROVED / QUEUED (project bootstrapped; implementation has not started)
 Spec owner: depth-0 CEO
+Target: v2.32.36
+Project: [`../projects/2026-07-15-dispatch-unit-contract-gate/README.md`](../projects/2026-07-15-dispatch-unit-contract-gate/README.md)
 Origin: 2026-07-15 verification-author incident and repeated oversized author dispatches
 Depends on: verification-author roster gate; existing rubric-freeze, disjointness, session-mode, and dispatch-manifest machinery
 
@@ -19,6 +21,9 @@ This caused two distinct failures:
    prose-only.
 2. Test-author tasks carried the whole project instead of a small unit, so multiple engines spent
    their wall-time reading/replanning and produced no artifact.
+3. Release preflight started a quota-spending Sonnet probe before depth-0 had checked the live model
+   roster. It was killed and rerun with the explicit skip flag, but the launcher had no common
+   machine-readable authorization boundary.
 
 ## Decision
 
@@ -27,6 +32,59 @@ is task detail, not authorization. No valid contract and no mechanical GO verdic
 
 This plan does not replace the existing six/seven-element methodology. It makes its load-bearing
 parts executable at the dispatch boundary.
+
+## Authority and lifecycle
+
+The dispatch contract separates four responsibilities that prose currently blurs:
+
+| Responsibility | Authority | May not do |
+|---|---|---|
+| Author and freeze the spec, unit boundary, dependencies, acceptance, and budget | depth-0 CEO | Delegate authorization policy to the worker |
+| Compute `GO` or `NO-GO` from repo, contract, roster, quota/readiness, and base facts | deterministic contract checker | Accept a prose override or infer missing fields |
+| Execute the declared unit | selected worker/runner | Widen paths, budget, attempts, dependencies, or model tuple |
+| Validate the returned git/artifact truth and run acceptance | depth-0 QC host | Trust worker self-report as proof |
+
+Lifecycle states are explicit and monotonic for one contract hash:
+
+```text
+draft -> GO-checked -> running -> returned -> accepted
+             |           |          `------> rejected
+             |           `-----------------> stopped
+             `-----------------------------> NO-GO
+```
+
+- **NO-GO** is pre-dispatch: no runner, temp worktree, endpoint call, or quota spend may start.
+- **STOP** is runtime: timeout, clarification, quota/engine loss, or observed boundary breach ends the
+  attempt. It does not authorize a retry or wider scope.
+- **REJECT** is post-return: the process ran, but git truth, output shape, or acceptance does not match
+  the contract. The artifact stays forensic input, not an accepted implementation.
+- Only depth-0 may issue a new contract. Nobody, including depth-0, may override a NO-GO on the same
+  hash; changing any field creates a new hash and requires a fresh check.
+
+## OKR and global constraints
+
+**Objective:** make every strict L5/L6 model-spending unit bounded and mechanically authorized before
+execution, then mechanically contained and attributable after execution.
+
+Key results:
+
+1. Every strict write/author dispatch records one immutable contract hash, one spec hash, and one GO
+   verdict before runner start.
+2. All negative preconditions prove zero runner/endpoint invocation.
+3. All returned artifacts are checked against exact path, file-count, diff-line, output, and
+   acceptance boundaries using repository truth.
+4. Active L5/L6 prompt-only write/author dispatch is impossible; legacy inactive calls remain
+   compatible during migration.
+5. Status output exposes the authorized unit and actual usage without secrets.
+
+Global constraints copied verbatim into every implementation, verification, and review dispatch:
+
+- `A prompt is task detail, never dispatch authorization.`
+- `NO valid contract plus deterministic GO verdict means zero runner, endpoint, worktree, or quota spend.`
+- `No prose override, silent fallback, automatic scope widening, or worker-authored authorization.`
+- `Canonical sources and every mandatory generated mirror are one declared atomic path boundary.`
+- `Depth-0 owns spec and acceptance; workers implement or verify only the frozen unit.`
+- `A changed contract, base, dependency, roster tuple, or required readiness fact requires a fresh GO check.`
 
 ## Frozen v1 contract
 
@@ -131,6 +189,22 @@ GO requires all of the following before a runner process or temp worktree is cre
 The checker emits `{verdict, unit_id, contract_sha256, spec_sha256, reasons, resolved_engine}`.
 There is no LLM override and no silent fallback. A changed contract is a new hash and a new GO check.
 
+### Project-start GO / NO-GO
+
+This project itself may enter implementation only after all of these are true:
+
+- v2.32.35 is pushed, installed, reloaded, and its l6 session marker is cleared;
+- the feature branch is based on that pushed `origin/develop` SHA and starts clean;
+- the roster names an available implementer, a heterogeneous verification author, and both QC
+  reviewer families; no model is substituted from memory;
+- C1's exact file boundary, mandatory mirrors, RED command, acceptance commands, and budgets are
+  frozen in the first contract;
+- the base checkout proves all proposed canonical and mirror paths before dispatch.
+
+Any false item is NO-GO. Quota reset, model rename, missing mirror, dirty base, ambiguous spec section,
+or a unit that exceeds one semantic decision must be resolved by a new/smaller contract, not by a
+larger prompt.
+
 ## Mechanical NO-GO and runtime stop
 
 Pre-dispatch NO-GO is any failed GO condition. Runtime stop is triggered by wall budget, explicit
@@ -176,14 +250,40 @@ scripts/dispatch-hetero.sh --strict-contract --contract-file <json> --prompt-fil
   write/author rails prove stable.
 - Native harness Agent calls are out of scope for v1 because their tool schema has no contract-file
   field. A later hook/adapter may gate them; do not scrape free-form prompts in a security boundary.
+- Direct quota-spending launchers outside the two write rails must either compose the checker or be
+  explicitly inventoried as migration debt. `scripts/preflight-release.sh` must preflight/skip an
+  unavailable configured slash-probe model before it spawns a CLI; it may not silently select or
+  start a hard-coded fallback during active L5/L6.
+
+## File-structure map
+
+| Path | Responsibility |
+|---|---|
+| `schemas/dispatch-unit-contract.schema.json` | Closed v1 contract shape and enums |
+| `scripts/dispatch-contract.js` | Schema/spec/base/roster/readiness GO checker and stable JSON/exit contract |
+| `scripts/dispatch-hetero.sh` | Strict write-rail preflight, derived base/timeout, post-return artifact enforcement |
+| `scripts/dispatch-author.sh` | Strict verification-author composition and read-only containment proof |
+| `scripts/dispatch-status.js` | Contract hash, unit, GO, budget, and actual observability |
+| `scripts/preflight-release.sh` | Explicit no-spend behavior when its configured probe engine is unavailable |
+| `hooks/tests/dispatch-contract.test.sh` | Schema, spec, base, dependency, readiness, and zero-runner GO/NO-GO oracle |
+| `hooks/tests/dispatch-contract-artifact.test.sh` | Path/budget/output/acceptance post-return oracle |
+| `hooks/tests/dispatch-author-contract.test.sh` | Author-rail composition and consuming-checkout containment oracle |
+| `hooks/tests/preflight-release-routing.test.sh` | Unavailable probe proves zero CLI spawn; explicit skip remains observable |
+| `skills/l5/SKILL.md`, `skills/l6/SKILL.md` | Canonical operator commands and no-override rules |
+| `skills/ceo-agent/references/level-front-door.md` | Shared lifecycle and responsibility boundary |
+| `platforms/codex/plugin/**` mirrors | Deterministic payload parity generated only by the declared sync command |
 
 ## Units
 
-1. **C1 schema/checker**: schema, validator, spec hash, generated-mirror declaration, GO/NO-GO fixtures.
-2. **C2 write-rail preflight**: strict flag, base/timeout derivation, zero-runner negative proofs.
-3. **C3 artifact boundary**: allow/deny/max-files/max-lines validation using git truth.
-4. **C4 author rail**: verification-author role plus roster gate composition.
-5. **C5 observability/docs**: manifest/status fields, L5/L6 canonical commands, migration.
+| Unit | Size | Depends on | Scope | Acceptance |
+|---|---|---|---|---|
+| C1 schema/checker | S | v2.32.35 | schema, checker, one focused oracle | Invalid/spec/base/roster/readiness fixtures are NO-GO with zero fake-runner calls; valid fixture emits stable hashes and GO |
+| C2 write-rail preflight | S | C1 | hetero rail plus focused oracle | Strict active L5/L6 derives base/timeout/tuple from contract and blocks all caller disagreements before worktree/runner |
+| C3 artifact boundary | S | C2 | post-return validator plus focused oracle | Out-of-path/deny/budget/output violations reject; acceptance argv runs on QC host using git truth |
+| C4 author rail | S | C1, C3 | author rail plus containment oracle | Roster gate composes with contract; consuming checkout mutation is containment breach and cannot be promoted |
+| C5 observability/docs | S | C2-C4 | status/manifests, L5/L6/front-door, generated mirrors | Live/final status exposes contract and actuals; canonical/mirror parity and skill validation pass |
+| C6 release-probe routing | S | C1 | release preflight plus zero-spawn oracle | Unavailable/unapproved probe returns explicit skip or NO-GO before CLI spawn; no hard-coded fallback |
+| C7 aggregate QC/release | L close | C1-C6 | no new product surface | Full suite, contract parity, payload sync, secret/completeness scans, dual-family review, finish-flow |
 
 Each unit has one immutable base, its own allowed paths, RED proof, commit, and review. Never dispatch
 this whole plan as one implementation task.
@@ -221,3 +321,31 @@ with later aggregate QC, rather than counting four related files as automaticall
   canonical schema after migration.
 - No natural-language parser, model-authored GO verdict, automatic scope widening, auto-fallback,
   or secret-bearing contract fields.
+
+## Risks and inversion
+
+- **Guaranteed failure: contract becomes a second prose prompt.** Mitigation: closed schema, hashes,
+  argv commands, exact paths, stable exit codes, and zero LLM authority in the checker.
+- **Guaranteed failure: one contract covers the whole project.** Mitigation: C1-C6 are separate
+  contracts; `max_files`, `max_diff_lines`, `wall_seconds`, and one-semantic-decision review are
+  pre-dispatch gates.
+- **Guaranteed failure: mirror discovery happens after authoring.** Mitigation: checker validates
+  canonical+mirror declarations before runner and rejects retroactive allowlist widening.
+- **Guaranteed failure: worker output is treated as proof.** Mitigation: QC host reads git/artifact
+  truth and executes acceptance; prose/tool-call-only/empty output never qualifies.
+- **Guaranteed failure: quota/model facts are recalled from conversation.** Mitigation: the roster
+  and live readiness result are contract inputs; changed facts invalidate GO.
+- **Guaranteed failure: compatibility mode becomes a permanent bypass.** Mitigation: migration is
+  time-boxed to inactive non-L5/L6 calls; active L5/L6 prompt-only writes are a tested hard block.
+
+## Review log
+
+- R0 (2026-07-15, depth-0 CEO): extracted from the verification-author incident; froze v1 schema,
+  mechanical GO/NO-GO, runtime STOP, artifact REJECT, and the initial bounded unit split.
+- R0 amendment (2026-07-15, Board): formally opened the project; made spec ownership, boundary,
+  GO/NO-GO authority, post-return QC, and direct quota-spending launcher debt explicit. Split release
+  probe routing into C6 instead of silently folding it into dispatcher work.
+- R1 plan review (2026-07-15): AGY Gemini 3.5 Flash High returned `SHIP-AS-IS` with no findings
+  (`dispatch-review-log-UmzXhb`). MiniMax-M3 twice returned a semantic `SHIP-AS-IS` inside legacy
+  `<<<` delimiters instead of the required nonce wrapper (`dispatch-review-log-ax3JQq`,
+  `dispatch-review-log-UM0v2c`); both are recorded as fail-closed `no_verdict`, not panel passes.

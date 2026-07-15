@@ -25,19 +25,10 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: Gemini 3.1 Pro (High)
-- verification_author_runner: agy
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint:
-
-> Temporary repository-wide C1 authorization (2026-07-16): the user previously authorized AGY
-> Gemini 3.1 Pro, the active `/l6` continuation requires automatic recovery, and fresh live event 48
-> confirmed `Gemini 3.1 Pro (High)` available. This tracked roster change is the only authorization
-> path; old Gemini prompts and isolated/manual tuple overrides remain prohibited. Because the resolver
-> has no unit-id scope, restore `glm-5.2/cc-shim/high/endpoint glm` after accepted, STOP, REJECT,
-> pre-dispatch NO-GO, cancellation/abandonment, or inability to begin. Restore this config, dogfood
-> resolver expectations, and README/HANDOFF lifecycle record atomically through review before C2 or
-> unrelated strict `/l6` authoring. The isolated AGY regression fixture is permanent and tuple-local.
+- verification_author_endpoint: glm
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

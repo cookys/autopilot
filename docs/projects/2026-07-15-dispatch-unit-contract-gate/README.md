@@ -93,7 +93,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — tracked Gemini recovery | Previously Board-authorized `Gemini 3.1 Pro (High)` has fresh event 48 and a staged repository-wide strict-roster assignment; restore GLM atomically at every terminal/aborted attempt | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active/blocked — Gemini r3 output-shape REJECT | The one new tracked Gemini recovery returned PTY/Markdown-polluted output before RED; GLM roster, dogfood expectations, and lifecycle docs are restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -251,6 +251,20 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   required before a new current-HEAD contract can spend. Isolated/manual substitution is forbidden,
   and every terminal or aborted/non-started attempt atomically restores GLM config, dogfood resolver
   expectations, and lifecycle docs. Old Gemini artifacts remain terminal forensic evidence only.
+- Authorization commit `b046ee1bc4739fe223c0747ddb78b89675953157` passed gpt-5.5 review and was
+  pushed clean before spend. Depth-0 froze `C1-bootstrap-gemini31-r3.contract.json` (SHA-256
+  `b7389313ee40c5736286a888883b7093af9b3f0968fcf4f66f06d5cd8ebada69`) and materially new prompt
+  `C1-verification-author-gemini31-r3.prompt.md` (SHA-256
+  `b855aa0ca1301a5213950fdc141f416c1441e9822f885f4276e3ab945db4b65d`). The one exact strict
+  call selected `Gemini 3.1 Pro (High)/agy/high/endpoint ""/google`, returned `status=authored`, and
+  preserved byte-for-byte containment across all 1,459 checkout files.
+- Raw artifact SHA-256 is `521cf00b91565612bd6a304e84d36f67fa35a6331dfa48aea90424541894279c`
+  (10,155 bytes / 308 lines). Although `bash -n` returns 0, it starts and ends with `script(1)` PTY
+  chrome, has 305 CRLF lines, and contains four Markdown fence markers including a nested JSON fence.
+  It therefore violates the exact raw-Bash output shape and is `REJECT/output-shape` before RED; no
+  normalization, isolated oracle run, or Spark dispatch occurred. The terminal atomically restored
+  `glm-5.2/cc-shim/high/endpoint glm`, matching dogfood expectations, and lifecycle docs. Permanent
+  isolated AGY coverage remains independent of the dogfood tuple.
 
 ## Dispatch policy
 
@@ -271,11 +285,10 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   immediately after the Grok artifact reached terminal `REJECT/output-shape`. Grok's isolated test
   fixture is regression coverage, not standing roster authority. Readiness alone remains
   insufficient for any later substitution.
-- The same explicit CEO continuation, combined with the user's prior AGY Gemini authorization and
-  fresh event 48, authorizes one new tracked `Gemini 3.1 Pro (High)/agy` current-HEAD recovery. It does
-  not authorize replay of either old Gemini prompt. Because the resolver is repository-wide, every
-  terminal/aborted attempt restores `glm-5.2/cc-shim/high/endpoint glm`, matching resolver-test
-  expectations, and README/HANDOFF lifecycle state atomically before unrelated strict work.
+- The same explicit CEO continuation, prior AGY Gemini authorization, and event 48 authorized one new
+  tracked current-HEAD recovery. It terminated at `REJECT/output-shape`; GLM was restored atomically.
+  Neither the r3 prompt nor raw artifact may be replayed, normalized, spliced, or promoted. The
+  isolated AGY fixture is regression coverage, not standing roster authority.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

@@ -6,10 +6,10 @@
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
   `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from clean pushed
-  terminal-ledger commit `bde8c6b9d9b2254988f57d802234670c8ccca23a`. Product tree remains clean;
+  Gemini-authorization commit `b046ee1bc4739fe223c0747ddb78b89675953157`. Product tree remains clean;
   no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
-  eleven project/bootstrap-and-blocker commits beyond that base before this staged roster snapshot.
+  twelve project/bootstrap-and-blocker commits beyond that base before this staged terminal snapshot.
 - l6 marker is active. Spark's refreshed direct live probe returned `OK`; capability event 45 is
   `implementer/available/high`; Grok author event 46 and later GLM probe event 47 were
   `verification_author/available/high`; AGY Gemini event 48 is also `verification_author/available/high`.
@@ -75,9 +75,12 @@
 - The continuing CEO run then used the user's prior AGY Gemini authorization without replaying either
   old prompt. AGY 1.1.2 lists exact `Gemini 3.1 Pro (High)` and fresh live event 48 is
   `available/high`. The staged tracked roster assigns `Gemini 3.1 Pro (High)/agy/high/endpoint ""/google`
-  against Spark/OpenAI. This repository-wide assignment must be reviewed and committed before spend;
-  at every terminal or aborted/non-started attempt, restore GLM config, dogfood resolver expectations,
-  and lifecycle docs atomically. Isolated/manual substitution remains prohibited.
+  against Spark/OpenAI. Authorization commit `b046ee1` passed gpt-5.5 review and was pushed before
+  spend. The one exact strict call preserved all 1,459 checkout hashes and returned an authored
+  10,155-byte/308-line artifact, but it is wrapped in PTY chrome and Markdown fences with 305 CRLF
+  lines. This is `REJECT/output-shape` before RED; no normalization or Spark dispatch ran. The terminal
+  restored GLM config, dogfood resolver expectations, and lifecycle docs atomically. Isolated/manual
+  substitution remains prohibited; permanent isolated AGY coverage is tuple-independent.
 
 ## 已決事項(不重議)
 
@@ -107,9 +110,9 @@
 - GLM r4 was a fresh current-HEAD attempt after live capability event 47, but the full author call
   timed out with no bytes. The small probe is quota evidence only, not full-author readiness; do not
   replay r4 or reinterpret its exit 124 as 429/out-of-quota.
-- The prior Board-authorized AGY Gemini seat is now live again at event 48. Its old two prompts remain
-  terminal and may not be replayed; only the staged tracked roster plus a new current-HEAD contract
-  and materially new prompt can authorize one recovery attempt. Restore GLM atomically at terminal.
+- The prior Board-authorized AGY Gemini seat was live at event 48 and received one new tracked
+  current-HEAD recovery. Its r3 artifact is terminal `REJECT/output-shape`; all three Gemini prompts
+  and artifacts are non-replayable/non-normalizable. GLM is again the tracked repository author.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -120,11 +123,11 @@
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
    active/blocked, and seven phases remain including active C1; C2-C7 are pending.
-2. Review and commit the tracked Gemini roster plus resolver expectations and permanent isolated AGY
-   strict-roster regression. Confirm `agy/google` stays cross-family from Spark/OpenAI; no manual tuple.
-3. From that clean pushed commit, freeze a new current-HEAD contract/hash and materially new prompt;
-   never replay/normalize/splice/promote old terminal artifacts. The raw oracle must pass output-shape,
-   checkout-containment, `bash -n`, portable-tool, and isolated base+oracle RED gates.
+2. Keep restored `glm-5.2/cc-shim/high/endpoint glm` plus matching dogfood expectations clean. Treat
+   Grok, GLM r4, and Gemini r3 as terminal; do not replay/normalize/splice/promote their artifacts.
+3. Any further C1 author seat needs separate Board authority, fresh live readiness, and a tracked
+   reviewed config before a new current-HEAD contract/hash and materially new prompt. The raw oracle
+   must pass output-shape, checkout-containment, `bash -n`, portable-tool, and isolated RED gates.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

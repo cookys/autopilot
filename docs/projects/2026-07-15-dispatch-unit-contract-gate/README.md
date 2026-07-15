@@ -63,6 +63,8 @@ from repository truth.
 | Requirement | Mapping |
 |---|---|
 | `read /home/cookys/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md 接續` | Resume Mode reality check, then execute HANDOFF `下一步` without reopening settled decisions; L-1 through C1 |
+| “還有誰可以 review ? 用 gpt-5.5 or minimax 3” | C1 recovery evidence: MiniMax author attempt plus gpt-5.5 artifact and ledger reviews |
+| “用 agy 的 gemini 3.1 pro 試試?” | C1 AGY Gemini 3.1 Pro High author attempt, isolated RED/fidelity gate, and one review-driven repair |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -86,7 +88,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | blocked — verification authoring | Contract/checklist frozen; GLM returned 529 twice; AGY fallback breached containment once and its corrected candidate infrastructure-failed RED | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | blocked — verification authoring | GLM 529; MiniMax timeout; AGY candidates rejected for containment, infrastructure, or semantic fixture failures; Gemini 3.1 Pro two-round recovery also rejected | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -129,6 +131,23 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   marker environment, no zero-runner proof on GO, a nondeterministic repeat-hash fixture, mixed-family
   roster fixtures, and incomplete negative JSON-shape assertions. Because gpt-5.5 and Spark are both
   OpenAI-family, this review is diagnostic evidence only and cannot satisfy the L6 author-family gate.
+- User-authorized AGY `Gemini 3.1 Pro (High)` was present in the local AGY 1.1.2 model list and an
+  isolated strict roster resolved family `google` against Spark `openai`. Round 1 preserved complete
+  containment; raw-log SHA-256 is
+  `7750dcfb986663c6c546baa40a2b34a889a93f1829d57bcacf18402b6adb0b0e`, and normalization produced
+  SHA-256
+  `baff7a34a9e1fd0aa4ffb0b7fb843f7427b286705d91a2e9301aeaa72c93c61a`; `bash -n` passed and the
+  isolated absent-product run reached a normal `8 passed, 52 failed` assertion summary. It was still
+  rejected: its so-called valid fixture changed the spec after `BASE_SHA`, reversed base/dependency
+  ancestry, bypassed `lib.sh` finalization, under-specified engine tuples/reasons, and missed marker
+  checks. gpt-5.5 independently returned `FIX-THEN-SHIP` (`/tmp/dispatch-review-log-qpTLHX`).
+- One feedback-driven Gemini repair round also preserved containment and normalized to SHA-256
+  `71504d2b6c795e7b48d4b759f8a45bc93adefa514e52551f28c5055a177d2255` from raw-log SHA-256
+  `6cb8ef190c5329fac95ed701648675f4504a1f60d82fea125e4ed07fd32196d4`, but rewrote the frozen v1
+  contract into invented `schema_version/repository/permissions/commands/budgets` fields, emitted
+  invalid scorecard/capability records while swallowing record errors, and invoked Node scripts as
+  executables. Its isolated run reached `finalize_test` only with 86 infrastructure-tainted failures
+  (exit 127/permission denied/invalid record), so it is REJECT rather than assertion-red evidence.
 - No product or accepted verification code was written. C1 remains NO-GO. A later session must issue
   a new contract/hash from its then-current immutable HEAD; this contract cannot be reused after the
   blocker documentation commit advances the branch.

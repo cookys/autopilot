@@ -3075,6 +3075,17 @@ const path = require('path');
 const root = process.argv[2];
 const { validateReviewLoopConfig } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
 
+function logPayloadCase(name, payload) {
+  try {
+    const validated = validateReviewLoopConfig(payload);
+    console.log(`${name}=ok`);
+    return validated;
+  } catch (err) {
+    console.log(`${name}=${err.message}`);
+    return null;
+  }
+}
+
 const validPayload = {
   reviewer_engine: 'test-review-model',
   reviewer_effort: 'high',
@@ -3106,6 +3117,14 @@ const validPayload = {
   capability_warnings: ['warning 1'],
   reviewer_endpoint: '',
   implementer_endpoint: '',
+  verification_author_present: false,
+  verification_author_engine: '',
+  verification_author_runner: '',
+  verification_author_effort: '',
+  verification_author_endpoint: '',
+  verification_author_family: 'unknown',
+  implementer_family: 'unknown',
+  config_path: '',
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
@@ -3115,8 +3134,8 @@ const validPayload = {
   reviewer_fallback_preference_low_risk: [],
 };
 
-try {
-  const validated = validateReviewLoopConfig(validPayload);
+const validated = logPayloadCase('validated', validPayload);
+if (validated) {
   console.log(`validated=true`);
   console.log(`capability_state_source=${validated.capability_state_source}`);
   console.log(`quota_status=${validated.quota_status}`);
@@ -3126,8 +3145,6 @@ try {
   console.log(`capability_warnings_0=${validated.capability_warnings[0]}`);
   console.log(`reviewer_endpoint=${validated.reviewer_endpoint}`);
   console.log(`implementer_endpoint=${validated.implementer_endpoint}`);
-} catch (err) {
-  console.log(`error=${err.message}`);
 }
 
 const payloadWithResetString = {
@@ -3136,14 +3153,92 @@ const payloadWithResetString = {
   reviewer_endpoint: 'http://reviewer',
   implementer_endpoint: 'http://implementer',
 };
-try {
-  const validated2 = validateReviewLoopConfig(payloadWithResetString);
+const validated2 = logPayloadCase('validated2', payloadWithResetString);
+if (validated2) {
   console.log(`validated2=true`);
   console.log(`quota_reset_at2=${validated2.quota_reset_at}`);
   console.log(`reviewer_endpoint2=${validated2.reviewer_endpoint}`);
   console.log(`implementer_endpoint2=${validated2.implementer_endpoint}`);
-} catch (err) {
-  console.log(`error2=${err.message}`);
+}
+
+logPayloadCase('invalid_primitive_type', {
+  ...validPayload,
+  verification_author_present: 'false',
+});
+for (const [name, overrides] of [
+  ['nonstring_engine', { verification_author_engine: 1 }],
+  ['nonstring_runner', { verification_author_runner: 1 }],
+  ['nonstring_effort', { verification_author_effort: 1 }],
+  ['nonstring_endpoint', { verification_author_endpoint: 1 }],
+  ['nonstring_family', { verification_author_family: 1 }],
+  ['nonstring_implementer_family', { implementer_family: 1 }],
+  ['nonstring_config_path', { config_path: 1 }],
+]) {
+  logPayloadCase(name, { ...validPayload, ...overrides });
+}
+logPayloadCase('invalid_auth_runner', {
+  ...validPayload,
+  verification_author_present: true,
+  verification_author_engine: 'gpt-5.5',
+  verification_author_runner: 'bogus-runner',
+  verification_author_effort: 'high',
+});
+logPayloadCase('invalid_auth_effort', {
+  ...validPayload,
+  verification_author_present: true,
+  verification_author_engine: 'gpt-5.5',
+  verification_author_runner: 'agy',
+  verification_author_effort: 'bogus-effort',
+});
+
+for (const [name, overrides] of [
+  ['false_nonempty_engine', { verification_author_present: false, verification_author_engine: 'gpt-5.5' }],
+  ['false_nonempty_runner', { verification_author_present: false, verification_author_runner: 'agy' }],
+  ['false_nonempty_effort', { verification_author_present: false, verification_author_effort: 'high' }],
+  ['false_nonempty_endpoint', { verification_author_present: false, verification_author_endpoint: 'http://verification' }],
+]) {
+  logPayloadCase(name, { ...validPayload, ...overrides });
+}
+
+const falseTupleNonempty = {
+  ...validPayload,
+  verification_author_present: false,
+  verification_author_engine: 'gpt-5.5',
+  verification_author_runner: 'agy',
+  verification_author_effort: 'high',
+};
+logPayloadCase('false_nonempty_tuple', falseTupleNonempty);
+
+const trueMissingTuple = {
+  ...validPayload,
+  verification_author_present: true,
+};
+delete trueMissingTuple.verification_author_engine;
+delete trueMissingTuple.verification_author_runner;
+delete trueMissingTuple.verification_author_effort;
+logPayloadCase('true_missing_tuple', trueMissingTuple);
+
+for (const [name, overrides] of [
+  ['true_empty_engine', { verification_author_present: true, verification_author_engine: '' }],
+  ['true_empty_runner', { verification_author_present: true, verification_author_runner: '' }],
+  ['true_empty_effort', { verification_author_present: true, verification_author_effort: '' }],
+]) {
+  logPayloadCase(name, { ...validPayload, ...overrides, verification_author_engine: overrides.verification_author_engine ?? 'gpt-5.5', verification_author_runner: overrides.verification_author_runner ?? 'agy', verification_author_effort: overrides.verification_author_effort ?? 'high', });
+}
+
+const presentTrueAccepted = {
+  ...validPayload,
+  verification_author_present: true,
+  verification_author_engine: 'gpt-5.5',
+  verification_author_runner: 'agy',
+  verification_author_effort: 'high',
+  verification_author_endpoint: '',
+  verification_author_family: 'unknown',
+};
+const presentTrue = logPayloadCase('present_true_empty_endpoint', presentTrueAccepted);
+if (presentTrue) {
+  console.log(`present_true_endpoint=${presentTrue.verification_author_endpoint}`);
+  console.log(`present_true_family=${presentTrue.verification_author_family}`);
 }
 NODE
 )"; EXIT=$?
@@ -3161,6 +3256,28 @@ assert_contains "$OUT" "validated2=true" "validateReviewLoopConfig validates pay
 assert_contains "$OUT" "quota_reset_at2=2026-07-04T00:00:00Z" "validateReviewLoopConfig carries string quota_reset_at"
 assert_contains "$OUT" "reviewer_endpoint2=http://reviewer" "validateReviewLoopConfig carries string reviewer_endpoint"
 assert_contains "$OUT" "implementer_endpoint2=http://implementer" "validateReviewLoopConfig carries string implementer_endpoint"
+assert_contains "$OUT" "invalid_primitive_type=review-loop output JSON field verification_author_present must be a boolean" "validateReviewLoopConfig rejects wrong primitive type"
+assert_contains "$OUT" "nonstring_engine=review-loop output JSON field verification_author_engine must be a string" "validateReviewLoopConfig rejects non-string verification_author_engine"
+assert_contains "$OUT" "nonstring_runner=review-loop output JSON field verification_author_runner must be a string" "validateReviewLoopConfig rejects non-string verification_author_runner"
+assert_contains "$OUT" "nonstring_effort=review-loop output JSON field verification_author_effort must be a string" "validateReviewLoopConfig rejects non-string verification_author_effort"
+assert_contains "$OUT" "nonstring_endpoint=review-loop output JSON field verification_author_endpoint must be a string" "validateReviewLoopConfig rejects non-string verification_author_endpoint"
+assert_contains "$OUT" "nonstring_family=review-loop output JSON field verification_author_family must be a string" "validateReviewLoopConfig rejects non-string verification_author_family"
+assert_contains "$OUT" "nonstring_implementer_family=review-loop output JSON field implementer_family must be a string" "validateReviewLoopConfig rejects non-string implementer_family"
+assert_contains "$OUT" "nonstring_config_path=review-loop output JSON field config_path must be a string" "validateReviewLoopConfig rejects non-string config_path"
+assert_contains "$OUT" "invalid_auth_runner=review-loop output JSON field verification_author_runner must be one of:" "validateReviewLoopConfig rejects invalid authorization runner"
+assert_contains "$OUT" "invalid_auth_effort=review-loop output JSON field verification_author_effort must be one of:" "validateReviewLoopConfig rejects invalid authorization effort"
+assert_contains "$OUT" "false_nonempty_tuple=review-loop output JSON field verification_author_engine must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty values"
+assert_contains "$OUT" "false_nonempty_engine=review-loop output JSON field verification_author_engine must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty engine"
+assert_contains "$OUT" "false_nonempty_runner=review-loop output JSON field verification_author_runner must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty runner"
+assert_contains "$OUT" "false_nonempty_effort=review-loop output JSON field verification_author_effort must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty effort"
+assert_contains "$OUT" "false_nonempty_endpoint=review-loop output JSON field verification_author_endpoint must be an empty string" "validateReviewLoopConfig rejects false auth tuple with non-empty endpoint"
+assert_contains "$OUT" "true_missing_tuple=review-loop output JSON missing field: verification_author_engine" "validateReviewLoopConfig rejects missing auth tuple fields when present"
+assert_contains "$OUT" "true_empty_engine=review-loop output JSON field verification_author_engine must be a non-empty string" "validateReviewLoopConfig rejects true auth tuple with empty engine"
+assert_contains "$OUT" "true_empty_runner=review-loop output JSON field verification_author_runner must be a non-empty string" "validateReviewLoopConfig rejects true auth tuple with empty runner"
+assert_contains "$OUT" "true_empty_effort=review-loop output JSON field verification_author_effort must be a non-empty string" "validateReviewLoopConfig rejects true auth tuple with empty effort"
+assert_contains "$OUT" "present_true_empty_endpoint=ok" "validateReviewLoopConfig accepts present auth tuple with empty endpoint"
+assert_contains "$OUT" "present_true_endpoint=" "validateReviewLoopConfig preserves empty authorization endpoint for accepted tuple"
+assert_contains "$OUT" "present_true_family=unknown" "validateReviewLoopConfig accepts unknown authorization family"
 
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');

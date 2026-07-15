@@ -35,7 +35,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Contract + incident root cause | complete | `4b7ed12`, `97dd900` |
 | Unit 1a resolver oracle | complete | AGY `a827ffe` |
 | Unit 1a shell/schema | complete on feature branch | Spark `e61d75d`; focused QC green |
-| Unit 1b JS/config compatibility | in progress | Existing resolver/runner/engine fixtures are RED until updated |
+| Unit 1b.i JS/schema compatibility | in progress | Conditional enum mismatch + runner/engine fixture REDs identified |
+| Unit 1b.ii configs/resolver compatibility | pending | Template/dogfood tuple + exact-key/alias fixture repairs |
 | Unit 1 aggregate review | pending | MiniMax-M3 + AGY after 1b |
 | Unit 2 strict dispatch | pending | RED oracle first |
 | Unit 3 session coupling | pending | RED oracle first |
@@ -49,5 +50,8 @@ model qualification policy. Those remain in the separate follow-up plan.
   fallback rather than a silent substitution.
 - Required independent reviewers are MiniMax-M3 and AGY Gemini 3.5 Flash High.
 - Canonical files and repo-required generated mirrors are one declared atomic dispatch boundary.
+- Unit 1b independent test-author attempts: GLM-5.2 timed out with a zero-byte artifact; AGY timed
+  out; MiniMax-M3 returned only a tool-call request and was rejected despite the legacy rail saying
+  `authored`. Existing compatibility REDs remain authoritative; no fake oracle was accepted.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

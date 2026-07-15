@@ -41,6 +41,10 @@ Validation is exact:
 - Any partial/inconsistent tuple, invalid author runner/effort/endpoint, or `present=false` with a
   non-empty tuple exits resolver status `3` with a semantic diagnostic; it is never defaulted.
 - Unknown family may resolve successfully for observability, but strict dispatch always blocks it.
+- The always-emitted JSON schema must represent both authorized and unauthorized states: runner and
+  effort enums include the empty string, while JS/shell cross-field validation permits that empty
+  value only when `present=false`. These conditional fields are not falsely marked as a simple
+  unconditional `x-shell-validated` enum.
 
 ### Strict author CLI
 
@@ -101,7 +105,8 @@ the whole project as one authoring block.
 | D0 frozen contract | complete | `4b7ed12`, generated-mirror amendment `97dd900` |
 | 1a resolver RED oracle | complete | AGY-authored `a827ffe`; 21 behavioral RED assertions before product change |
 | 1a shell/schema implementation | complete, not independently shippable | Spark `e61d75d`; focused oracle 31/31 green; schema/mirror/skill validation green |
-| 1b JS/config compatibility | in progress | Existing compatibility sweep is intentionally red until 1b closes it |
+| 1b.i JS/schema compatibility | in progress | Close conditional schema + JS validation and runner/engine fixture REDs |
+| 1b.ii configs/resolver compatibility | pending | Add template/dogfood tuple and close resolver exact-key/alias REDs |
 | 1 aggregate review | pending | MiniMax-M3 + AGY on complete Unit 1 diff |
 | 2 strict dispatch | pending | Separate RED oracle, Spark implementation, dual review |
 | 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |

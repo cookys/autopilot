@@ -9,8 +9,9 @@
   `f3fdc9286b977c924de96324c2d31c057048f3fd` (`docs(project): record fresh MiniMax empty output`).
   Product tree is clean; no accepted product/test code。
 - `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
-  six project/bootstrap-and-blocker commits beyond that base before this staged snapshot.
-- l6 marker is active. Spark live readiness passed and capability event 43 is `available/high`.
+  seven project/bootstrap-and-blocker commits beyond that base before this staged snapshot.
+- l6 marker is active. Spark's refreshed direct live probe returned `OK`; capability event 45 is
+  `implementer/available/high`.
 - C1 external run dir: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/`.
   Frozen attempt-1 contract hash: `1b6d6c46945b2df86554f04cb545e584d10ad8da81e6df2ee00bbabe401cb5e1`;
   do NOT reuse it after HEAD advances.
@@ -48,6 +49,12 @@
   cannot satisfy the author gate. Depth-0 stopped this resumed run after the two no-artifact calls to
   cap further author spend; that is an orchestration decision, not a contract budget. C1 remains
   fail-closed and no Spark dispatch ran.
+- The user then reminded that Spark and Grok 4.5 were back. Fresh probes confirmed Spark event 45
+  (`codex/gpt-5.3-codex-spark/implementer/available/high`) and Grok event 44
+  (`grok/grok-4.5/verification_author/available/high`). `grok models` printed an unauthenticated banner,
+  but the canonical live inference succeeded, so the banner is not authoritative readiness evidence.
+  Grok is still absent from the configured C1 strict author tuple; the reminder records availability,
+  not authorization. No new C1 contract or runner dispatch followed.
 
 ## 已決事項(不重議)
 

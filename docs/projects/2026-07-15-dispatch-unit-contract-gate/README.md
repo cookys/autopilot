@@ -68,6 +68,7 @@ from repository truth.
 | “agy 有 opus 4.6 將就用?” | One strict-roster AGY Claude Opus 4.6 Thinking author attempt, containment proof, and no-artifact timeout classification |
 | “換 minimax 3?” | Fresh-current-HEAD MiniMax-M3 strict author attempt with a focused prompt, containment proof, and empty-output classification |
 | “cont? 目前在哪個 phase? 還有多少 phase? 不是進 CEO mode /l6 了為什麼妳還停下來問我?” | Report P0 complete / C1 active / C2-C7 pending, re-arm l6, resume the configured strict GLM path, stop asking for `continue?`, and separately record the later autonomous Sonnet substitution as a protocol deviation rather than user-granted tuple authority |
+| “順便提醒，gpt-5.3-codex-spark 跟 grok 4.5 都回來了” | Refresh per-model live readiness: Spark capability event 45 and Grok 4.5 event 44 are `available/high`; preserve the distinction that Grok readiness is not C1 strict-roster authorization |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -114,9 +115,9 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   SHA-256 `1b6d6c46945b2df86554f04cb545e584d10ad8da81e6df2ee00bbabe401cb5e1`.
   It authorized exactly three canonical outputs plus two generator-only Codex mirrors, five files,
   1600 diff lines, 300 seconds, one implementation attempt, and six argv-only acceptance checks.
-- Live readiness: Spark's direct read-only scratch probe passed and capability event 43 records
-  `available/high`; two GLM endpoint tests returned `outcome=ok`, but both strict-roster author calls
-  ended in server-side 529 overload with no artifact and no checkout mutation.
+- Live readiness: Spark's refreshed direct read-only scratch probe passed and capability event 45
+  records `available/high`; two GLM endpoint tests returned `outcome=ok`, but both strict-roster
+  author calls ended in server-side 529 overload with no artifact and no checkout mutation.
 - Recorded AGY fallback attempt 1 returned a syntactic candidate but mutated the consuming checkout;
   quarantined SHA-256 `ada044001c60b600c4e35c9b7eb4f18c18262dd07ccd2598a94575dcc9774ee8`.
   It was rejected for `containment_breach` and an unavailable `sha256sum` assumption.
@@ -205,6 +206,13 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   Any later recovery must issue a new contract/hash from its then-current immutable HEAD and start
   only on new full-author readiness evidence for an authorized strict-roster tuple; it must continue
   automatically rather than ask whether to continue.
+- The user later reported that Spark and Grok 4.5 had returned. Fresh live probes confirmed both:
+  Spark direct inference returned `OK` and recorded implementer capability event 45 as
+  `available/high`; canonical Grok inference recorded verification-author capability event 44 as
+  `available/high`. `grok models` simultaneously printed `You are not authenticated`, so that banner
+  is weaker than the successful inference. Grok is not the configured C1 verification author, and
+  this availability reminder does not authorize a roster substitution; no new contract or author
+  dispatch was issued.
 
 ## Dispatch policy
 

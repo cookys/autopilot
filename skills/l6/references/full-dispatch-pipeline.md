@@ -62,8 +62,10 @@ The `/l6` verification-author handoff is strict roster-only and must use:
 `scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`
 
 `--bin <test-seam>` is only a test seam. `/l6` never passes `--runner`, `--model`,
-`--effort`, or `--endpoint` to that call; the tuple family/credentials comes from
-`<consuming-repo>/.claude/review-loop-config.md` via `resolve-review-loop.sh`.
+`--effort`, or `--endpoint` to that call. The authorized tuple, derived family tags,
+and named endpoint ID come from `<consuming-repo>/.claude/review-loop-config.md`
+via `resolve-review-loop.sh`; named-endpoint readiness and credentials are resolved
+separately after authorization, and secret values never enter result provenance.
 
 Failure modes are fail-closed: unresolved/malformed strict roster state (including
 same-family, unknown-family, or endpoint-unready) preconditions abort before runner

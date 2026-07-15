@@ -117,4 +117,20 @@ rm -f "$SENTINEL"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE5_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
 assert_precondition_failed "$OUT" "$EXIT" "unknown" "Case 5: unknown family fails closed"
 
+# Case 6: present=true but incomplete tuple (missing/empty runner) fails closed.
+CASE6_DIR="$TEST_TMP/case6"
+mkdir -p "$CASE6_DIR/.claude"
+cat <<EOF > "$CASE6_DIR/.claude/review-loop-config.md"
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner:
+- verification_author_effort: high
+- verification_author_endpoint:
+- implementer_engine: gpt-5.3-codex-spark
+EOF
+
+rm -f "$SENTINEL"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE6_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+assert_precondition_failed "$OUT" "$EXIT" "incomplete" "Case 6: incomplete tuple fails closed"
+
 finalize_test

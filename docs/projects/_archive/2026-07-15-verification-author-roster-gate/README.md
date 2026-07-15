@@ -3,6 +3,7 @@
 > Status: SHIPPED in v2.32.35
 > Branch: `fix/verification-author-roster-gate`
 > Merge: `0a8ef087d310a868a41ada53dfe4daf196e5b253`
+> Push: `origin/develop` at `a79277f1c8d9f00a428c2081d7dbaa35c58adff1`
 > Plan: [`../../../plans/2026-07-15-verification-author-roster-gate.md`](../../../plans/2026-07-15-verification-author-roster-gate.md)
 
 ## Goal
@@ -44,7 +45,7 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 2c result provenance | complete | AGY oracles `156f777`..`7469af6`, `c99278a`/`c79b335`; Spark `d1f407c`; failure 11 + provenance 9 + endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 3 session coupling | complete | AGY oracle `be6ca98`..`b9e69af` + isolation `8765610`; Spark `f89d49d`; session 28 + core 19 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 4 docs/payload | complete | Spark `d2f0cbb`, wording repair `8fa5600`; session 28 + provenance 9 + skill validation/payload parity green; MiniMax-M3 + AGY `SHIP-AS-IS` |
-| Final aggregate QC / finish-flow | merged | Full 141-file suite + schema/payload/skills/completeness/secret/test-integrity gates green; three review packs each MiniMax-M3 + AGY `SHIP-AS-IS`; merged as `0a8ef08`, push/session cleanup follows |
+| Final aggregate QC / finish-flow | complete | Full 141-file suite + schema/payload/skills/completeness/secret/test-integrity gates green; three review packs each MiniMax-M3 + AGY `SHIP-AS-IS`; merge `0a8ef08` pushed in remote tip `a79277f` |
 
 ## Decision log
 

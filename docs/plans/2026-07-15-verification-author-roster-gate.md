@@ -90,7 +90,12 @@ Existing status/exit semantics remain: `authored=0`, `empty_output=1`, `precondi
    Canonical source plus its repo-declared generated mirrors is one atomic subunit boundary, not a
    later scope expansion. A green 1a focused oracle does not authorize shipping while 1b or existing
    resolver/runner/engine tests are red.
-2. Strict dispatch unit: only authorization/family/endpoint ordering and result provenance.
+2. Strict dispatch unit, executed as three bounded subunits:
+   - **2a CLI/authorization**: strict/manual exclusivity, exact project roster, absent/malformed,
+     same-family, and unknown-family gates before endpoint/binary/log creation.
+   - **2b endpoint/runner ordering**: authorized tuple reaches its exact fake runner; missing endpoint
+     blocks without model/runner fallback.
+   - **2c result provenance**: strict/legacy result fields and secret hygiene across every outcome.
 3. Session compatibility unit: active-l6 enforcement plus legacy/expired/corrupt controls.
 4. Docs/payload unit: l6/front-door canonical command and any remaining generated Codex payload
    sync not already owned atomically by units 1-3.
@@ -108,7 +113,9 @@ the whole project as one authoring block.
 | 1b.i JS/schema compatibility | complete | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | 1b.ii configs/resolver compatibility | complete | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
 | 1 aggregate review | complete | Endpoint RED `55a1e55`; repairs through `05d0aad`; final MiniMax-M3 + AGY `SHIP-AS-IS`; full depth-0 gate green |
-| 2 strict dispatch | next | Separate bounded RED oracles, Spark implementation, dual review |
+| 2a strict CLI/authorization | in progress | Separate RED oracle; no endpoint/runner/provenance implementation yet |
+| 2b endpoint/valid dispatch | pending | Separate RED oracle after 2a green |
+| 2c result provenance | pending | Separate RED oracle after 2b green |
 | 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |
 | 4 docs/payload | pending | Canonical l6 command, payload sync, full QC |
 

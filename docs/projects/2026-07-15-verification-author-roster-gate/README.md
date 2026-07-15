@@ -38,7 +38,9 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 1b.i JS/schema compatibility | complete on feature branch | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
 | Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
 | Unit 1 aggregate review | complete | Final MiniMax-M3 + AGY `SHIP-AS-IS`; depth-0 full gate green at `05d0aad` |
-| Unit 2 strict dispatch | next | RED oracle first; split authorization, endpoint-ordering, and result-provenance cases |
+| Unit 2a strict CLI/authorization | in progress | RED: manual args, missing roster, absent tuple, same/unknown family; zero runner/log |
+| Unit 2b endpoint/valid dispatch | pending | RED: configured GLM tuple reaches fake runner; endpoint failure has no fallback |
+| Unit 2c result provenance | pending | RED: strict vs legacy payload, selection path, secret hygiene |
 | Unit 3 session coupling | pending | RED oracle first |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
 
@@ -50,6 +52,8 @@ model qualification policy. Those remain in the separate follow-up plan.
   fallback rather than a silent substitution.
 - Required independent reviewers are MiniMax-M3 and AGY Gemini 3.5 Flash High.
 - Canonical files and repo-required generated mirrors are one declared atomic dispatch boundary.
+- Unit 2 is mechanically split into 2a CLI/authorization, 2b endpoint/runner ordering, and 2c
+  provenance/legacy compatibility. Session-marker coupling is Unit 3 and cannot enter these diffs.
 - Unit 1b independent test-author attempts: GLM-5.2 timed out with a zero-byte artifact; AGY timed
   out; MiniMax-M3 returned only a tool-call request and was rejected despite the legacy rail saying
   `authored`. Existing compatibility REDs remain authoritative; no fake oracle was accepted.

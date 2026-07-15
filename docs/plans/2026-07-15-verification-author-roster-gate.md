@@ -105,9 +105,9 @@ the whole project as one authoring block.
 | D0 frozen contract | complete | `4b7ed12`, generated-mirror amendment `97dd900` |
 | 1a resolver RED oracle | complete | AGY-authored `a827ffe`; 21 behavioral RED assertions before product change |
 | 1a shell/schema implementation | complete, not independently shippable | Spark `e61d75d`; focused oracle 31/31 green; schema/mirror/skill validation green |
-| 1b.i JS/schema compatibility | in progress | Close conditional schema + JS validation and runner/engine fixture REDs |
-| 1b.ii configs/resolver compatibility | pending | Add template/dogfood tuple and close resolver exact-key/alias REDs |
-| 1 aggregate review | pending | MiniMax-M3 + AGY on complete Unit 1 diff |
+| 1b.i JS/schema compatibility | complete | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
+| 1b.ii configs/resolver compatibility | complete | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
+| 1 aggregate review | in progress | Depth-0 aggregate QC green; MiniMax-M3 + AGY on complete Unit 1 diff |
 | 2 strict dispatch | pending | Separate RED oracle, Spark implementation, dual review |
 | 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |
 | 4 docs/payload | pending | Canonical l6 command, payload sync, full QC |

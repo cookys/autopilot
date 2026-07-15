@@ -35,9 +35,9 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Contract + incident root cause | complete | `4b7ed12`, `97dd900` |
 | Unit 1a resolver oracle | complete | AGY `a827ffe` |
 | Unit 1a shell/schema | complete on feature branch | Spark `e61d75d`; focused QC green |
-| Unit 1b.i JS/schema compatibility | in progress | Conditional enum mismatch + runner/engine fixture REDs identified |
-| Unit 1b.ii configs/resolver compatibility | pending | Template/dogfood tuple + exact-key/alias fixture repairs |
-| Unit 1 aggregate review | pending | MiniMax-M3 + AGY after 1b |
+| Unit 1b.i JS/schema compatibility | complete on feature branch | Spark `9ddc9b3`, `7471cb3`; runner 35 + engine 365 assertions green |
+| Unit 1b.ii configs/resolver compatibility | complete on feature branch | Spark `3b773a0`, `40698b4`; resolver 227 + parity 30 assertions green |
+| Unit 1 aggregate review | in progress | Depth-0 aggregate QC green; MiniMax-M3 + AGY next |
 | Unit 2 strict dispatch | pending | RED oracle first |
 | Unit 3 session coupling | pending | RED oracle first |
 | Unit 4 docs/payload/final QC | pending | finish-flow before merge/push |
@@ -53,5 +53,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 - Unit 1b independent test-author attempts: GLM-5.2 timed out with a zero-byte artifact; AGY timed
   out; MiniMax-M3 returned only a tool-call request and was rejected despite the legacy rail saying
   `authored`. Existing compatibility REDs remain authoritative; no fake oracle was accepted.
+- The first Spark resolver-compatibility test run was killed at the 115-second outer limit after it
+  authored a complete diff. A bounded retry replayed that exact transcript diff, completed in 94
+  seconds as `40698b4`, and passed the full Unit 1 depth-0 gate.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

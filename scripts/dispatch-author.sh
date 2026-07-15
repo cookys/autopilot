@@ -195,6 +195,13 @@ die_runner_failed() {
   emit_result "runner_failed" "$RAW_LOG" "runner exited $runner_exit_code" 3
 }
 
+ACTIVE_L6_MODE=0
+ACTIVE_L6_MARKER_LEVEL="$(node -e 'const m = require(process.argv[1]).readMarker(); if (m && m.level === "l6") { process.stdout.write("l6"); }' "$_AUTHOR_SELF_DIR/session-mode.js" 2>/dev/null || true)"
+[[ "$ACTIVE_L6_MARKER_LEVEL" == "l6" ]] && ACTIVE_L6_MODE=1 || true
+if [[ "$ACTIVE_L6_MODE" -eq 1 && "$STRICT_ROSTER" -ne 1 ]]; then
+  die_precondition "active session-mode=l6 requires --strict-roster"
+fi
+
 if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   [[ "$RUNNER_SUPPLIED" -eq 0 ]] || die_precondition "manual --runner is not allowed with --strict-roster"
   [[ "$MODEL_SUPPLIED" -eq 0 ]] || die_precondition "manual --model is not allowed with --strict-roster"

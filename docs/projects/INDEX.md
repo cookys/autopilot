@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-07-15 | [dispatch-unit-contract-gate](2026-07-15-dispatch-unit-contract-gate/README.md) — strict L5/L6 派遣的 machine-readable unit contract：depth-0 凍結 spec/邊界/依賴/預算，deterministic checker 獨占 GO/NO-GO，runtime STOP 與 post-return REJECT 分離；worker 不得自擴 scope，QC host 以 git truth 驗收。另納入 release probe 的 pre-spend model readiness，避免 hard-coded/quota-out 模型誤啟動。**目前僅完成立案與 spec freeze；v2.32.35 push/install/reload 前 implementation NO-GO。** | v2.32.36 | `feat/dispatch-unit-contract-gate` (not created; queued) |
+| 2026-07-15 | [dispatch-unit-contract-gate](2026-07-15-dispatch-unit-contract-gate/README.md) — strict L5/L6 派遣的 machine-readable unit contract：depth-0 凍結 spec/邊界/依賴/預算，deterministic checker 獨占 GO/NO-GO，runtime STOP 與 post-return REJECT 分離；worker 不得自擴 scope，QC host 以 git truth 驗收。另納入 release probe 的 pre-spend model readiness，避免 hard-coded/quota-out 模型誤啟動。**已進入 C1 contract freeze；runner 仍須通過 bootstrap checklist 才可啟動。** | v2.32.36 | `feat/dispatch-unit-contract-gate` (active) |
 
 ## 已完成 (Completed)
 

@@ -1,11 +1,21 @@
 # Dispatch unit contract gate
 
-> Status: APPROVED / QUEUED — implementation has not started
+> Status: IN PROGRESS — C1 contract freeze
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
+> Branch: `feat/dispatch-unit-contract-gate` from `edad7025486ad196d1124785794c39ff86e092b2`
 
-## Goal
+## Project Goal
+
+> **Final goal**: Make every strict L5/L6 write and verification-author unit mechanically
+> authorized before spend, bounded during execution, and accepted only from repository truth.
+> **Success criteria**: all six named criteria below pass their focused or aggregate commands with
+> zero failures, and active L5/L6 prompt-only dispatch is proven to stop before runner creation.
+> **Scope boundary**: C1-C7 in the frozen plan, their canonical sources, mandatory Codex mirrors,
+> focused oracles, operator docs, v2.32.36 metadata, aggregate QC, and release/install evidence are
+> included. Native harness Agent contract adapters, natural-language contract parsing, automatic
+> scope widening/fallback, and any post-v1 review-rail enforcement are excluded.
 
 Make strict L5/L6 delegation a mechanically authorized unit of work. Depth-0 freezes the spec,
 file boundary, dependencies, model role, acceptance, and budget; a deterministic checker alone may
@@ -21,6 +31,42 @@ from repository truth.
 - Active L5/L6 prompt-only dispatch is blocked while inactive legacy compatibility remains tested.
 - Run status exposes non-secret contract, authorization, budget, and actual provenance.
 - Release preflight does not start an unavailable or unapproved hard-coded model probe.
+
+## Verification contract
+
+| Criterion | Objective proof |
+|---|---|
+| C1 GO / NO-GO | `bash hooks/tests/dispatch-contract.test.sh` exits 0 and includes valid, malformed, spec, base, dependency, roster, readiness, and zero-runner cases |
+| C2-C4 rail enforcement | Each focused `hooks/tests/dispatch-*-contract*.test.sh` oracle exits 0 and RED/GREEN validation is recorded against the unit's immutable base |
+| Canonical / mirror parity | `scripts/sync-codex-plugin-skills.sh --check` exits 0 and the declared canonical schema/script are byte-identical to their plugin mirrors |
+| Full regression | `bash hooks/tests/run.sh` exits 0 with zero failed files before release close |
+| Completeness / secret safety | `scripts/completeness-scan.sh` and `node scripts/secret-scan-diff.js` report zero blocking findings on the release diff |
+| Release routing | `AUTOPILOT_SKIP_SLASH_PROBE=1 scripts/preflight-release.sh` reports 8/8 and explicitly reports the unavailable live slash probe as skipped |
+
+## L-1.5 scope completeness audit
+
+| Dimension | In scope? | Phase or explicit exclusion |
+|---|---:|---|
+| Source code + tests | yes | C1-C4 and C6 own the checker/rails and their focused shell oracles; C7 owns aggregate regressions |
+| User-facing docs | yes | C5 updates L5/L6/front-door operator contracts and project docs |
+| API / interface reference | yes | The closed JSON schema, checker CLI, exit codes, manifest/status fields, and strict dispatcher flags are the interface; C1-C5 cover them |
+| Config templates / examples | yes | C1 fixtures and canonical contract example cover v1; no user secret/config format is added |
+| CHANGELOG | yes | C7 records v2.32.36 behavior and migration boundary |
+| Version bump + tracked-file sync | yes | C7 runs the canonical version sync and checks all tracked `2.32.35` occurrences before changing every required mirror |
+| Migration guide / notes | yes | C5 documents opt-in migration, active-L5/L6 hard block, and inactive legacy compatibility |
+| Dependent repos / external consumers | no | v1 changes only this plugin's dispatch rails; native harness adapters are explicitly out of scope |
+| Credit / attribution | no | No external OSS or third-party design is absorbed by this implementation |
+| Dogfood target | yes | C1 uses the single-use bootstrap checklist; C2-C7 must consume the checker they ship |
+
+### User-stated requirements ledger
+
+| Requirement | Mapping |
+|---|---|
+| `read /home/cookys/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md 接續` | Resume Mode reality check, then execute HANDOFF `下一步` without reopening settled decisions; L-1 through C1 |
+| “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
+| “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
+| “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
+| “C1 is the sole bootstrap exception.” | C1 checklist/hash evidence; C2-C7 require the shipped checker |
 
 ## Ownership boundary
 
@@ -40,7 +86,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | pending | v2.32.35 pushed/reloaded | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | in progress — contract freeze | v2.32.35 pushed/reloaded; branch + l6 marker active | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -50,10 +96,10 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 
 ## Start gate
 
-Implementation remains NO-GO until v2.32.35 is pushed, installed, reloaded, its l6 marker is cleared,
-the new branch is based on that remote SHA, and C1 has a bounded contract with exact mirrors, RED
-command, acceptance, roster tuple, and budgets. Model/quota selection must come from live readiness,
-not conversation memory.
+The repository/session prerequisites now pass: v2.32.35 is pushed, installed, reloaded, the stale
+l6 marker was cleared, and this branch is based on the pushed remote SHA. C1 runner dispatch remains
+NO-GO until its bounded contract freezes exact mirrors, RED command, acceptance, live roster tuple,
+and budgets. Model/quota selection must come from live readiness, not conversation memory.
 
 ## Dispatch policy
 

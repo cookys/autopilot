@@ -42,7 +42,8 @@ model qualification policy. Those remain in the separate follow-up plan.
 | Unit 2b endpoint/valid dispatch | complete (test-only) | AGY oracle `15642bb` + executable mode `54cd881`; endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 2c result provenance | complete | AGY oracles `156f777`..`7469af6`, `c99278a`/`c79b335`; Spark `d1f407c`; failure 11 + provenance 9 + endpoint 17 + strict 45 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
 | Unit 3 session coupling | complete | AGY oracle `be6ca98`..`b9e69af` + isolation `8765610`; Spark `f89d49d`; session 28 + core 19 + legacy 65 green; final MiniMax-M3 + AGY `SHIP-AS-IS` |
-| Unit 4 docs/payload/final QC | in progress | Canonical l6/front-door docs, output contract, payload sync, full QC, then finish-flow |
+| Unit 4 docs/payload | complete | Spark `d2f0cbb`, wording repair `8fa5600`; session 28 + provenance 9 + skill validation/payload parity green; MiniMax-M3 + AGY `SHIP-AS-IS` |
+| Final aggregate QC / finish-flow | in progress | Full feature gates, aggregate review, tracking closure, rebase/merge/push |
 
 ## Decision log
 
@@ -97,5 +98,12 @@ model qualification policy. Those remain in the separate follow-up plan.
   author dispatch. Depth-0 passed session 28, core 19, failure/provenance/endpoint/strict 11/9/17/45,
   and legacy 65. Final artifacts: MiniMax-M3 `dispatch-review-log-ofZacQ` and AGY
   `dispatch-review-log-s6rNze`, both `SHIP-AS-IS`.
+- Unit 4 Spark commit `d2f0cbb` documented the strict active-l6 command, manual-parameter ban,
+  fail-closed behavior, and non-secret result provenance across canonical files and generated Codex
+  mirrors. Depth-0 found one inaccurate sentence conflating roster endpoint IDs with credentials;
+  two bounded retries timed out without a commit and were rejected, then exact two-file repair
+  `8fa5600` completed in 32 seconds. Depth-0 passed session 28, provenance 9, 28-skill validation,
+  syntax, diff, payload-sync, and byte-parity gates. Final artifacts: MiniMax-M3
+  `dispatch-review-log-QG08oy` and AGY `dispatch-review-log-CmfZoy`, both `SHIP-AS-IS`.
 - The general machine-readable spec/boundary/GO/NO-GO dispatch contract is a separate follow-up so
   this incident fix does not expand into a dispatcher rewrite.

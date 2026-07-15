@@ -78,9 +78,14 @@ Existing status/exit semantics remain: `authored=0`, `empty_output=1`, `precondi
 
 ### Unit boundaries
 
-1. Resolver/schema/config unit: resolver contract, schema/JS parity, project templates, and the
-   deterministic Codex payload mirrors required by the repo pre-commit gate. Canonical source plus
-   its repo-declared generated mirrors is one atomic scope boundary, not a later scope expansion.
+1. Resolver/schema/config unit, executed as two bounded commits before one aggregate review:
+   - **1a shell/schema**: shell resolver contract, schema, focused resolver oracle, and deterministic
+     Codex mirrors.
+   - **1b JS/config compatibility**: JS validation, consuming-project template, dogfood roster,
+     affected existing fixtures/assertions, and deterministic Codex mirrors.
+   Canonical source plus its repo-declared generated mirrors is one atomic subunit boundary, not a
+   later scope expansion. A green 1a focused oracle does not authorize shipping while 1b or existing
+   resolver/runner/engine tests are red.
 2. Strict dispatch unit: only authorization/family/endpoint ordering and result provenance.
 3. Session compatibility unit: active-l6 enforcement plus legacy/expired/corrupt controls.
 4. Docs/payload unit: l6/front-door canonical command and any remaining generated Codex payload
@@ -88,6 +93,19 @@ Existing status/exit semantics remain: `authored=0`, `empty_output=1`, `precondi
 
 Each unit gets its own immutable-base RED proof, commit, focused test, and review. No agent receives
 the whole project as one authoring block.
+
+### Progress ledger
+
+| Unit | State | Evidence / next gate |
+|---|---|---|
+| D0 frozen contract | complete | `4b7ed12`, generated-mirror amendment `97dd900` |
+| 1a resolver RED oracle | complete | AGY-authored `a827ffe`; 21 behavioral RED assertions before product change |
+| 1a shell/schema implementation | complete, not independently shippable | Spark `e61d75d`; focused oracle 31/31 green; schema/mirror/skill validation green |
+| 1b JS/config compatibility | in progress | Existing compatibility sweep is intentionally red until 1b closes it |
+| 1 aggregate review | pending | MiniMax-M3 + AGY on complete Unit 1 diff |
+| 2 strict dispatch | pending | Separate RED oracle, Spark implementation, dual review |
+| 3 session compatibility | pending | Separate RED oracle, Spark implementation, dual review |
+| 4 docs/payload | pending | Canonical l6 command, payload sync, full QC |
 
 ## Problem
 
@@ -124,7 +142,10 @@ Distinction requirements:
 - Resolver reads and validates the tuple from consuming-project config with the same precedence chain as existing fields (`REVIEW_LOOP_CONFIG_OVERRIDE`, `<repo>/.claude/review-loop-config.md`, repo template, builtin default).
 - Resolver emits tuple and provenance in the canonical JSON payload:
   - `verification_author_*` + `verification_author_present`
-  - `selection_source` and `selection_path` for traceability
+  - derived `verification_author_family`, `implementer_family`, and `config_path`
+  - existing `source` remains the resolver selection-slot provenance
+- `selection_source` and `selection_path` belong only to the later `dispatch-author.sh` result
+  contract; they are not resolver/schema keys.
 - Mapping logic for family derivation and eligibility is computed inside the resolver and surfaced as explicit fields to downstream consumers; `dispatch-author.sh` does not implement its own model-family parser.
 
 ## Strict dispatch-author roster mode
@@ -166,8 +187,9 @@ Distinction requirements:
 
 1. GLM RED oracle first:
    - author and run red cases for all unauthorized/unsafe conditions before Spark implementation changes.
-2. Spark resolver:
-   - schema + `scripts/resolve-review-loop.sh` + `schemas/review-loop-contract.schema.json` + `src/engine/resolve-review-loop.js`.
+2. Spark resolver, bounded as 1a then 1b:
+   - 1a: schema + `scripts/resolve-review-loop.sh` + `schemas/review-loop-contract.schema.json` + mirrors.
+   - 1b: `src/engine/resolve-review-loop.js` + configs/templates + affected compatibility fixtures + mirrors.
 3. Spark dispatch guard:
    - strict-mode controls in `scripts/dispatch-author.sh` and tuple-family gate.
 4. Spark docs/payload sync:
@@ -205,6 +227,8 @@ Distinction requirements:
 - `src/engine/autopilot-engine.js` (only for verification-family gate/result handling if verification author tuple enters engine-visible payload)
 - `skills/l6/references/full-dispatch-pipeline.md`
 - `skills/ceo-agent/references/level-front-door.md`
+- Required generated counterparts under `platforms/codex/plugin/` for every touched path copied by
+  `scripts/sync-codex-plugin-skills.sh`; these mirrors are part of the same subunit boundary.
 
 ## Compatibility and migration
 

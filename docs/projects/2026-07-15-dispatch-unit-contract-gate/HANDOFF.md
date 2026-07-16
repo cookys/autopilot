@@ -288,6 +288,14 @@
   caller-disagreement rejection, contract fields in the final JSON, and the l5/l6 session-mode
   marker block for non-strict write dispatch.
 
+- **C3 in flight (2026-07-16)**: contract mechanically GO'd; oracle accepted (`042c371`,
+  SHA-256 f8c5d156…, RED 10/19, 3 repair rounds: record-tool naming, output capture,
+  mirror-allowance case per gpt-5.5 Major). MILESTONE: the C3 implementation dispatch itself
+  was BLOCKED by the new l5/l6 marker gate when issued non-strict — the shipped C2 rail
+  enforcing on its own builder — and then ran as the project's FIRST contract-authorized
+  strict dispatch (contract a193720b…, base/timeout derived from contract, run
+  hetero-1784193093-1455973-206d).
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

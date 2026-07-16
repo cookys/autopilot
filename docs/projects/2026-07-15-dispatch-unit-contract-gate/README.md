@@ -1,6 +1,6 @@
 # Dispatch unit contract gate
 
-> Status: BLOCKED — C1 independent oracle did not produce a valid RED artifact
+> Status: ACTIVE — C1 COMPLETE (oracle GREEN, checker merged); C2-C7 pending
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — ORACLE ACCEPTED (SHIP-AS-IS); implementation dispatch next | GLM authored the oracle through the direct-HTTP rail (r10 + 6 surgical repair rounds); isolated RED exit 1, 32 passed / 155 failed, zero infrastructure errors; committed RED-state as hooks/tests/dispatch-contract.test.sh (sha256 cfac848a…) | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | **COMPLETE** — oracle GREEN (119 assertions), checker merged `9e3c21b` | GLM-authored oracle (direct-HTTP rail, 6 repair rounds, gpt-5.5 SHIP-AS-IS) + Spark-implemented checker (six acceptance checks green at depth-0, oracle bytes pinned, MiniMax-M3 cross-family review no false-GO defect) | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |

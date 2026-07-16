@@ -239,6 +239,22 @@
 - Depth-0 convergence rule applied from repair-5: only false-GREEN / false-RED class findings
   drive the verdict; the final round returned none.
 
+- **C1 COMPLETE (2026-07-16)**. Implementation contract `C1-impl-spark-r1.contract.json`
+  (SHA-256 `d06fa9f3bf8fbe6189ed1602548f8a2c6ec499c51adef25ded3b9070e655441a`, base `65d92fe`)
+  went GO; ONE Spark dispatch (run `hetero-1784188196-1112536-0f0b`, cgroup-contained,
+  273s) returned schema + checker + both mirrors (+2,156 raw / 1,078 canonical lines ≤ 1,600
+  budget — mirrors are declared generated copies). Depth-0 executed all six acceptance checks
+  on the returned branch: **oracle GREEN, 119 assertions, exit 0**; oracle bytes verified
+  pinned (`cfac848a…`); node --check / bash -n / sync --check / 2× cmp all green; secret scan
+  clean. MiniMax-M3 cross-family review: FIX-THEN-SHIP with only self-adjudicated
+  fail-closed nits, zero false-GO class defects (nits: hasPathAtCommit endsWith suffix
+  false-positive potential; pathsOverlap literal-vs-glob false negatives; git env passthrough
+  on error paths — candidates for C3 hardening). Merge `9e3c21b` on the feature branch.
+- Next phases: C2 (write-rail preflight consuming the shipped checker), C3 (artifact
+  boundary), C4 (author rail), C5 (observability/docs), C6 (release-probe routing), C7
+  (aggregate QC/release, v2.32.36). C2-C7 must consume `scripts/dispatch-contract.js` — the
+  bootstrap exception is closed.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.
@@ -319,26 +335,23 @@
 ## 下一步
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
-   and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
-   active/blocked after the MiniMax r5 timeout terminal (cc-shim author rail condemned; direct-HTTP
-   author runner approved as recovery), and seven phases remain including active C1; C2-C7 are pending.
+   and read this HANDOFF plus the project attempt ledger. P0 and C1 are COMPLETE (oracle GREEN +
+   checker merged `9e3c21b`); C2-C7 are pending and MUST consume the shipped
+   `scripts/dispatch-contract.js` (bootstrap exception closed).
 2. (done `91c1f3f`) Atomic GLM restoration; (done `92c78f6`) reviewed r5 authorization; r5 ran
    and is terminal `STOP/timeout-no-artifact`; GLM tuple restored atomically in the r5 terminal
    restoration commit.
-3. Implement the `anthropic-compatible` direct-HTTP author runner as reviewed harness work
-   (dispatch-author.sh runner branch + resolve-review-loop.sh / review-loop-contract schema enum
-   + dogfood tests + hetero-dispatch reference), implementation leaf-dispatched (Spark),
-   cross-family reviewed, committed and pushed on this branch.
-4. Tracked roster change to `glm-5.2/anthropic-compatible/high/endpoint glm` (or MiniMax
-   equivalent) through review, then freeze a new current-HEAD r6 contract/prompt and run ONE
-   strict author call through the new rail. The raw oracle must pass output-shape,
-   checkout-containment, `bash -n`, portable-tool, and isolated RED.
-5. Only after assertion-red succeeds without fixture/import/tool failure, author the
-   implementation prompt with the accepted oracle hash, dispatch Spark once, then run GREEN,
-   mirror parity, boundary, budgets, and cross-family review.
+3. (done) Direct-HTTP author runner shipped (`e12843a`), roster permanent (`d3806e8`),
+   max-tokens remedy (`0cf6994`), oracle accepted (`65d92fe`), checker merged (`9e3c21b`).
+4. C2 write-rail preflight: freeze a C2 unit contract with the SHIPPED checker
+   (`node scripts/dispatch-contract.js check …`) as its GO gate; strict hetero dispatch derives
+   immutable base/timeout/tuple and blocks mismatch before start. Author its focused oracle
+   through the standing `glm-5.2/anthropic-compatible` seat (same gauntlet: shape → bash -n →
+   isolated RED → gpt-5.5 review loop), then Spark implements to GREEN.
+5. C3-C7 follow the same unit ritual per the frozen plan phase table. Every unit: checker GO
+   pre-spend, one implementation dispatch, depth-0 acceptance by artifact, cross-family review.
 6. If a future temporary repository-wide assignment is reviewed and committed, retain the same
-   atomic restoration rule at every terminal or aborted/non-started attempt before C2 or unrelated
-   strict `/l6` authoring.
+   atomic restoration rule at every terminal or aborted/non-started attempt.
 
 ## 驗證方式
 

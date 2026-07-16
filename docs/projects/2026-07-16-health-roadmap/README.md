@@ -50,3 +50,9 @@
   /l5 foreman 直作＋MiniMax-M3 去相關審（FIX-THEN-SHIP 的兩「真 bug」經 artifact 反證為誤報，
   採 1 條 whitespace-trigger fail-loud 硬化）。sync-all.test.sh 22 斷言、全套件綠、preflight 15/17
   ＋release 8/8。depth-0 持權威 QC＋merge。
+- 2026-07-17: **P5 完成**（無版本 bump，純測試/CI 基建）— 時窗修復（poll_until＋timing factor）、
+  version-keyed 離線 npm cache（斷網證明）、run.sh `--parallel`（462s→72s，6.4×；serial 預設不變）。
+  三單元全程 in-loop（grok×MiniMax 各 1 輪 SHIP-AS-IS——v2.32.46 endpoint wiring 首戰即通）。
+  QC 留三個 Minor 追蹤：①workflow↔script 的 jest/vitest version-key 無 parity gate（可掛進
+  sync-manifest）②npm cache 併發 mv 巢狀 cruft（`mv -T` 一旗修）③CI parallel 下 timing 斷言
+  放寬 3×（已知取捨，記錄即可）。

@@ -12,6 +12,25 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ---
 
+### Codex payload install-time generation（C-Spike，think-tank 2026-07-17 P6 裁決）
+- **Trigger**: 下一個 symlink-hostile 平台要接入之前；或 payload 鏡像 churn 噪音升級為 blocking；或有 live Codex 環境可 Spike 時
+- **Context**: think-tank（Architect C-conditional / Ops A-high / QA A-high）一致否決 release-time payload branch（B）於現階段；Architect 路線＝驗證 Codex plugin loader 能否吃 install 時才由 `sync-codex-plugin-skills.sh` 生成的 git-ignored 目錄（agy export-then-install 先例）——Spike 通過即可退役 committed mirror＋其 drift gates；Spike 失敗則 A 維持
+- **Effort**: S（Spike）＋L（若遷移）
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）
+
+### Release-time payload branch（B）重啟條件
+- **Trigger**: CI 連續數週綠＋真實 tag/release 節奏存在（非每 push 即 shippable）＋ C-Spike 已否決 install-time 路線
+- **Context**: B 需要從零建 tag→CI→push-credential 基建；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user install 時才爆）
+- **Effort**: L
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）
+
+### jest/vitest version-key parity gate（P5 QC Minor）
+- **Trigger**: 下次 bump check-test-integrity-l1 的 jest/vitest pin 時；或下次動 sync-manifest 時順手
+- **Context**: `.github/workflows/test.yml` 的 actions/cache key 與 test 腳本內 pin 是兩份手抄常數，飄移＝CI 每輪重裝＋registry flake 時 L1 real-runtime 案例靜默 SKIP（綠著失去覆蓋）；natural home＝sync-manifest parity 檢查
+- **Effort**: Fix
+- **Source**: P5 depth-0 QC（opus lens）2026-07-17
+
+
 ## Format example
 
 ```markdown

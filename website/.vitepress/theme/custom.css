@@ -4629,3 +4629,106 @@ html:not(.dark) .rail-tl__id--human {
   line-height: 1.5;
   color: var(--text-3);
 }
+
+/* Proof page: receipt link on each public-scar card */
+.proof-receipt {
+  display: inline-block;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--vp-c-brand-1, #818cf8);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(129, 140, 248, 0.35);
+}
+.proof-receipt:hover {
+  border-bottom-color: currentColor;
+}
+
+/* Landing dual-day timeline (same work order, two kinds of day) */
+.dday {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.dday__colhead {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 1fr;
+  gap: 0.75rem;
+  align-items: end;
+}
+.dday__colname {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-bottom: 0.35rem;
+}
+.dday__colname--always {
+  color: var(--text-3);
+}
+.dday__colname--auto {
+  color: #f5a524;
+}
+.dday__row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 1fr;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+.dday__beat {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--vp-c-text-1);
+}
+.dday__cell {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background: var(--vp-c-bg-soft);
+}
+.dday__cell--always {
+  opacity: 0.86;
+}
+.dday__cell--auto {
+  border-color: rgba(245, 165, 36, 0.4);
+}
+.dday__cell p {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.dday__tag {
+  display: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.dday__tag--always {
+  color: var(--text-3);
+}
+.dday__tag--auto {
+  color: #f5a524;
+}
+.dday__close {
+  font-weight: 600;
+}
+@media (max-width: 780px) {
+  .dday__colhead {
+    display: none;
+  }
+  .dday__row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .dday__beat {
+    font-size: 1rem;
+    margin-top: 0.5rem;
+  }
+  .dday__tag {
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+}

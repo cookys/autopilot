@@ -14,44 +14,76 @@ const scars = computed(() =>
         {
           t: 'H2 被推翻',
           d: '假設：reviewer 席塞 skill 會更銳。預鎖 A/B：沒有。',
-          state: '打臉在 DECIDE 前的「經驗法則」'
+          state: '打臉在 DECIDE 前的「經驗法則」',
+          receipt: {
+            label: 'A/B 實驗資料',
+            href: 'https://github.com/cookys/autopilot/tree/develop/evals/skill-transport'
+          }
         },
         {
           t: '弱×弱必逃',
           d: 'IMPLEMENT 弱 + REVIEW 弱 → 假 done 幾乎必過 GATE 前的人審。',
-          state: 'REVIEW 必須是真 reviewer'
+          state: 'REVIEW 必須是真 reviewer',
+          receipt: {
+            label: 'pipeline bench',
+            href: 'https://github.com/cookys/autopilot/tree/develop/evals/pipeline-bench'
+          }
         },
         {
           t: 'Pipeline 有稅',
           d: '能救弱 implementer 的流程，也可能拖慢本來就強的。',
-          state: 'GATE 密度是 tradeoff，不是越多越好'
+          state: 'GATE 密度是 tradeoff，不是越多越好',
+          receipt: {
+            label: '交換率量測',
+            href: 'https://github.com/cookys/autopilot/blob/develop/evals/pipeline-bench/README.md'
+          }
         },
         {
           t: '空 review 誤判',
           d: 'flush／pipefail 曾把空 capture 當過。改機制，不靠感覺。',
-          state: 'GATE fail-closed：no_verdict ≠ SHIP'
+          state: 'GATE fail-closed：no_verdict ≠ SHIP',
+          receipt: {
+            label: 'fail-closed 回歸測試',
+            href: 'https://github.com/cookys/autopilot/blob/develop/hooks/tests/dispatch-output-quiescence.test.sh'
+          }
         }
       ]
     : [
         {
           t: 'H2 refuted',
           d: 'Hypothesis: skill on reviewer seat sharpens. Locked A/B: no.',
-          state: 'Challenged a DECIDE-time rule of thumb'
+          state: 'Challenged a DECIDE-time rule of thumb',
+          receipt: {
+            label: 'A/B experiment data',
+            href: 'https://github.com/cookys/autopilot/tree/develop/evals/skill-transport'
+          }
         },
         {
           t: 'Weak × weak',
           d: 'Weak IMPLEMENT + weak REVIEW → fake done almost always escapes.',
-          state: 'REVIEW needs a real reviewer'
+          state: 'REVIEW needs a real reviewer',
+          receipt: {
+            label: 'pipeline bench',
+            href: 'https://github.com/cookys/autopilot/tree/develop/evals/pipeline-bench'
+          }
         },
         {
           t: 'Pipeline tax',
           d: 'Flows that save weak writers can slow strong ones.',
-          state: 'GATE density is a tradeoff'
+          state: 'GATE density is a tradeoff',
+          receipt: {
+            label: 'exchange-rate bench',
+            href: 'https://github.com/cookys/autopilot/blob/develop/evals/pipeline-bench/README.md'
+          }
         },
         {
           t: 'Empty-review bugs',
           d: 'Flush/pipefail once treated empty capture as pass. Fixed mechanically.',
-          state: 'GATE fail-closed: no_verdict ≠ SHIP'
+          state: 'GATE fail-closed: no_verdict ≠ SHIP',
+          receipt: {
+            label: 'fail-closed regression test',
+            href: 'https://github.com/cookys/autopilot/blob/develop/hooks/tests/dispatch-output-quiescence.test.sh'
+          }
         }
       ]
 )
@@ -153,6 +185,12 @@ const c = computed(() =>
             <h3>{{ s.t }}</h3>
             <p>{{ s.d }}</p>
             <p class="lp-who__sub">{{ s.state }}</p>
+            <a
+              class="proof-receipt"
+              :href="s.receipt.href"
+              target="_blank"
+              rel="noreferrer"
+            >{{ s.receipt.label }} ↗</a>
           </article>
         </div>
         <div class="lp-cta-row" style="margin-top: 1.5rem">

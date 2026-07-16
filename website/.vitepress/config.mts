@@ -20,6 +20,7 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   ignoreDeadLinks: true,
+  sitemap: { hostname: 'https://cookys.github.io/autopilot' },
   // Mission-control surface: dark is designed primary; light is a cold slate twin.
   // appearance: 'dark' = default dark (does NOT follow system preference; use true for that).
   appearance: 'dark',
@@ -55,7 +56,9 @@ export default defineConfig({
         content:
           'Get the decision right. Let the system finish. For would-be CEOs, founders, and people burned out by AI output.'
       }
-    ]
+    ],
+    ['meta', { property: 'og:image', content: 'https://cookys.github.io/autopilot/assets/og.png' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }]
   ],
 
   transformHead({ siteConfig }) {

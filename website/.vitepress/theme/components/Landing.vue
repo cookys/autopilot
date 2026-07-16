@@ -51,76 +51,37 @@ const t = computed(() =>
             sub: '信 diff 跟測試，不信「我覺得過了」'
           }
         ],
-        // Nested loops (aligned with /demo): human in every ring vs outer-only
-        loopTitle: '你的時間，差在哪',
-        loopThesis: '人卡在幾層 loop 裡',
-        loopLeads: [
-          '一般 AI coding 是三層 loop 套在一起，人卡在每一層。',
-          'Autopilot 把內兩層吃掉，人只留最外圍。'
+        // Dual-day timeline (frozen centerpiece): same work order, two kinds of day
+        dayTitle: '你的時間，差在要不要一直坐在那裡',
+        dayLead: [
+          '同一張工單，差別不是 AI 會不會寫。',
+          '差別是每個小規格都要你回來點頭，還是只有踩到紅線才找你。'
         ],
-        loopLegendHuman: '人在 loop 裡',
-        loopLegendSys: '系統在 loop 裡',
-        alwaysTag: '一直在場',
-        alwaysSub: '三層 loop 都卡你',
-        alwaysNotes: [
-          '多發想解法是真的。',
-          '代價：中層 spec、內層驗證也一直叫你回來。'
-        ],
-        autoTag: '可以離席',
-        autoSub: '只剩最外圍 loop',
-        autoNotes: [
-          '內兩層交給系統。',
-          '有內建用內建，沒有就找業界 best practice。',
-          '你講死 no-go，不是每一行。'
-        ],
-        nestBad: [
+        dayColAlways: '一直在場',
+        dayColAuto: 'Autopilot 接手',
+        dayRows: [
           {
-            depth: 1,
-            who: 'human',
-            title: '外層 · 任務',
-            cycle: '目標 → 做完？→ 再補一句',
-            beats: ['你定方向', '你收尾']
+            beat: '開始',
+            always: '你丟一句需求，模型開始寫。方向不清時，它很快就回來問你。',
+            auto: '你先講目標、限制、不能碰的紅線。剩下交給系統拆工作、排順序、推進。'
           },
           {
-            depth: 2,
-            who: 'human',
-            title: '中層 · 發想／spec',
-            cycle: '方案 → 你決 → 細節 → 你再決',
-            beats: ['取捨 A/B', '每個細節 spec 拍板']
+            beat: '發想',
+            always: '它給幾個方案，你要逐一判斷。每個取捨都變成你的即時會議。',
+            auto: '內建做法先用。沒有內建，就查業界做法，再用 CEO 視角取捨。'
           },
           {
-            depth: 3,
-            who: 'human',
-            title: '內層 · 寫完了嗎',
-            cycle: '改檔 →「好了」→ 你驗 → 再回嘴',
-            beats: ['模型 tool use', '你當驗證中繼']
+            beat: '實作',
+            always: '每個 micro-spec 都等你回覆。你一離開，工作就停在半路。',
+            auto: '可以代決的就代決。碰到紅線、不可逆決策、硬卡住，才叫你回來。'
+          },
+          {
+            beat: '交付',
+            always: '模型說 done，你還是得自己查。因為「寫完」不等於「驗過」。',
+            auto: '交付要過 gate。用測試、檔案、截圖或執行結果當證據，不用自我報告。'
           }
         ],
-        nestGood: [
-          {
-            depth: 1,
-            who: 'human',
-            title: '外層 · 任務（只這層是你）',
-            cycle: '目標＋no-go → 產物／越線才叫你',
-            beats: ['進場講死紅線', '看 artifact', '真卡死才補一句']
-          },
-          {
-            depth: 2,
-            who: 'sys',
-            title: '中層 · 發想／spec（系統 ↺）',
-            cycle: '內建 → 否則 survey → CEO 取捨',
-            beats: ['有內建先走', '沒有找 best practice', 'no-go 內擴砍選路']
-          },
-          {
-            depth: 3,
-            who: 'sys',
-            title: '內層 · 寫→審→閘（系統 ↺）',
-            cycle: '實作 ⇄ 異質審 ⇄ 機械閘',
-            beats: ['tool use 改檔', '寫審分家', '不靠自報 done']
-          }
-        ],
-        badNote: '三層都 ↺ 你 → 你是最慢的那一環',
-        loopClose: 'Autopilot 不是少步驟——是內兩層 loop 不再把你拉進去。',
+        dayClose: '你仍然是負責的人，只是不用負責每一次小停頓。',
         loopFoot: '巢狀 loop 與工程狀態總表收在「完整流程」，當工程附錄看。',
         loopDemo: '看完整控制流',
         meteorTitle: '「隕石」一句話',
@@ -223,75 +184,36 @@ const t = computed(() =>
             sub: 'Diffs and tests—not “I feel done”'
           }
         ],
-        loopTitle: 'Where your time goes',
-        loopThesis: 'How many loops are you stuck inside?',
-        loopLeads: [
-          'Default AI coding is three nested loops—with you in every layer.',
-          'Autopilot eats the inner two; you only keep the outer ring.'
+        dayTitle: 'Your time: do you have to stay in the chair?',
+        dayLead: [
+          'Same work order. The difference isn’t whether the AI can write.',
+          'It’s whether every micro-spec pulls you back to nod, or only a red line does.'
         ],
-        loopLegendHuman: 'Human in the loop',
-        loopLegendSys: 'System in the loop',
-        alwaysTag: 'Always on',
-        alwaysSub: 'Stuck in all three loops',
-        alwaysNotes: [
-          'More solution ideation is real.',
-          'Cost: mid-layer specs and inner verify still page you every turn.'
-        ],
-        autoTag: 'Step away',
-        autoSub: 'Only the outer loop is yours',
-        autoNotes: [
-          'Inner two layers are the system’s.',
-          'Built-ins first; else industry best practice.',
-          'You lock no-gos, not every line.'
-        ],
-        nestBad: [
+        dayColAlways: 'Always on',
+        dayColAuto: 'Autopilot takes it',
+        dayRows: [
           {
-            depth: 1,
-            who: 'human',
-            title: 'Outer · mission',
-            cycle: 'goal → done? → re-prompt',
-            beats: ['you set direction', 'you close out']
+            beat: 'Start',
+            always: 'You drop a request; the model starts writing. When direction is unclear, it comes right back to ask.',
+            auto: 'You state the goal, limits, and red lines up front. The system splits the work, orders it, and advances.'
           },
           {
-            depth: 2,
-            who: 'human',
-            title: 'Mid · ideation / spec',
-            cycle: 'options → you decide → details → you again',
-            beats: ['tradeoff A/B', 'every micro-spec stamp']
+            beat: 'Ideate',
+            always: 'It offers options; you judge each one. Every tradeoff becomes your live meeting.',
+            auto: 'Built-ins first. No built-in? It surveys industry practice, then makes a CEO-level tradeoff.'
           },
           {
-            depth: 3,
-            who: 'human',
-            title: 'Inner · is it done?',
-            cycle: 'edit → “done” → you verify → re-prompt',
-            beats: ['model tool use', 'you as verification glue']
+            beat: 'Build',
+            always: 'Every micro-spec waits on your reply. Step away and the work stalls halfway.',
+            auto: 'It decides what it can. Red lines, irreversible calls, or a hard block are the only reasons to page you.'
+          },
+          {
+            beat: 'Ship',
+            always: 'The model says done; you still verify yourself. “Written” isn’t “verified.”',
+            auto: 'Delivery passes a gate. Tests, files, screenshots, or run output are the evidence—no self-report.'
           }
         ],
-        nestGood: [
-          {
-            depth: 1,
-            who: 'human',
-            title: 'Outer · mission (your only ring)',
-            cycle: 'goal + no-go → artifacts / page on breach',
-            beats: ['lock red lines up front', 'inspect artifacts', 'amend only if hard stuck']
-          },
-          {
-            depth: 2,
-            who: 'sys',
-            title: 'Mid · ideation / spec (system ↺)',
-            cycle: 'built-in → else survey → CEO tradeoff',
-            beats: ['built-ins first', 'survey best practice', 'cut/expand inside no-gos']
-          },
-          {
-            depth: 3,
-            who: 'sys',
-            title: 'Inner · write→review→gate (system ↺)',
-            cycle: 'implement ⇄ hetero review ⇄ gates',
-            beats: ['tool-use edits', 'write ≠ review', 'no self-report done']
-          }
-        ],
-        badNote: 'All three ↺ you → you are the slowest link',
-        loopClose: 'Autopilot isn’t fewer steps—it’s the inner two loops no longer pulling you in.',
+        dayClose: 'You’re still the one accountable—just not for every small pause.',
         loopFoot: 'Nested loops + the full state table live on Demo, as the engineering appendix.',
         loopDemo: 'See full control flow',
         meteorTitle: '“Meteor” in one line',
@@ -434,108 +356,37 @@ function href(h: string) {
       </div>
     </section>
 
-    <!-- Nested loops: human in every ring vs outer-only (same spine as /demo) -->
+    <!-- Dual-day timeline: same work order, two kinds of day (frozen centerpiece) -->
     <section class="lp-section lp-section--alt">
       <div class="lp-wrap">
         <div class="lp-section-head">
-          <p class="lp-kicker">{{ t.loopTitle }}</p>
-          <p class="eng-h2 lp-loop-thesis">{{ t.loopThesis }}</p>
+          <p class="lp-kicker">{{ t.dayTitle }}</p>
           <div class="lp-lead-stack lp-lead-stack--tight lp-day-leads">
-            <p v-for="(line, i) in t.loopLeads" :key="'ld' + i" class="lp-lead">{{ line }}</p>
-          </div>
-          <div class="nest-legend" aria-hidden="true">
-            <span class="nest-legend__item nest-legend__item--human">
-              <i />{{ t.loopLegendHuman }}
-            </span>
-            <span class="nest-legend__item nest-legend__item--sys">
-              <i />{{ t.loopLegendSys }}
-            </span>
+            <p v-for="(line, i) in t.dayLead" :key="'dl' + i" class="lp-lead">{{ line }}</p>
           </div>
         </div>
 
-        <div class="demo-compare demo-compare--nest" role="group" :aria-label="t.loopThesis">
-          <article class="demo-compare__col demo-compare__col--bad">
-            <header class="demo-compare__head">
-              <span class="demo-compare__tag demo-compare__tag--bad">{{ t.alwaysTag }}</span>
-              <h2>{{ t.alwaysSub }}</h2>
-              <p v-for="(line, i) in t.alwaysNotes" :key="'an' + i">{{ line }}</p>
-            </header>
-
-            <div class="nest-stack nest-stack--bad" role="list">
-              <div
-                v-for="ring in t.nestBad"
-                :key="'nb' + ring.depth"
-                class="nest-ring nest-ring--human"
-                role="listitem"
-                :style="{ '--nest-d': ring.depth }"
-              >
-                <div class="nest-ring__bar">
-                  <span class="nest-ring__depth">L{{ ring.depth }}</span>
-                  <span class="nest-ring__title">{{ ring.title }}</span>
-                  <span class="nest-ring__who">{{ zh ? '人' : 'you' }}</span>
-                  <span class="nest-ring__spin" aria-hidden="true">↺</span>
-                </div>
-                <p class="nest-ring__cycle">{{ ring.cycle }}</p>
-                <div class="nest-ring__beats">
-                  <span v-for="(b, bi) in ring.beats" :key="bi" class="nest-ring__beat">{{ b }}</span>
-                </div>
-              </div>
-            </div>
-
-            <p class="rail-tl__cycle" role="note">
-              <span class="rail-tl__cycle-icon" aria-hidden="true">↺</span>
-              {{ t.badNote }}
-            </p>
-          </article>
-
-          <div class="demo-compare__mid">
-            <span class="demo-compare__mid-label" aria-hidden="true">
-              <span class="demo-compare__mid-text">{{ zh ? '改成' : 'becomes' }}</span>
-              <span class="demo-compare__mid-arrow">↓</span>
-            </span>
-            <span class="sr-only">{{
-              zh
-                ? '左邊：三層 loop 都卡人。右邊：內兩層系統跑，人只留最外圍。'
-                : 'Left: human inside all three loops. Right: system owns the inner two; human only the outer ring.'
-            }}</span>
+        <div class="dday" role="table" :aria-label="t.dayTitle">
+          <div class="dday__colhead" aria-hidden="true">
+            <span class="dday__beat-spacer" />
+            <span class="dday__colname dday__colname--always">{{ t.dayColAlways }}</span>
+            <span class="dday__colname dday__colname--auto">{{ t.dayColAuto }}</span>
           </div>
-
-          <article class="demo-compare__col demo-compare__col--good">
-            <header class="demo-compare__head">
-              <span class="demo-compare__tag demo-compare__tag--good">{{ t.autoTag }}</span>
-              <h2>{{ t.autoSub }}</h2>
-              <p v-for="(line, i) in t.autoNotes" :key="'on' + i">{{ line }}</p>
-            </header>
-
-            <div class="nest-stack nest-stack--good" role="list">
-              <div
-                v-for="ring in t.nestGood"
-                :key="'ng' + ring.depth"
-                class="nest-ring"
-                :class="ring.who === 'human' ? 'nest-ring--human nest-ring--outer' : 'nest-ring--sys'"
-                role="listitem"
-                :style="{ '--nest-d': ring.depth }"
-              >
-                <div class="nest-ring__bar">
-                  <span class="nest-ring__depth">L{{ ring.depth }}</span>
-                  <span class="nest-ring__title">{{ ring.title }}</span>
-                  <span class="nest-ring__who">{{
-                    ring.who === 'human' ? (zh ? '人' : 'you') : zh ? '系統' : 'sys'
-                  }}</span>
-                  <span class="nest-ring__spin" aria-hidden="true">↺</span>
-                </div>
-                <p class="nest-ring__cycle">{{ ring.cycle }}</p>
-                <div class="nest-ring__beats">
-                  <span v-for="(b, bi) in ring.beats" :key="bi" class="nest-ring__beat">{{ b }}</span>
-                </div>
-              </div>
+          <div v-for="(row, i) in t.dayRows" :key="'dr' + i" class="dday__row" role="row">
+            <span class="dday__beat" role="rowheader">{{ row.beat }}</span>
+            <div class="dday__cell dday__cell--always" role="cell">
+              <span class="dday__tag dday__tag--always">{{ t.dayColAlways }}</span>
+              <p>{{ row.always }}</p>
             </div>
-
-            <p class="rail-tl__payoff">{{ t.loopClose }}</p>
-          </article>
+            <div class="dday__cell dday__cell--auto" role="cell">
+              <span class="dday__tag dday__tag--auto">{{ t.dayColAuto }}</span>
+              <p>{{ row.auto }}</p>
+            </div>
+          </div>
         </div>
 
         <div class="lp-beats__foot lp-day-foot">
+          <p class="dday__close">{{ t.dayClose }}</p>
           <p>{{ t.loopFoot }}</p>
           <a class="lp-btn lp-btn--ghost" :href="p('/demo')">{{ t.loopDemo }}</a>
         </div>

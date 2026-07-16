@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-17 | [ci-l1-go-detect-timeout](../../CHANGELOG.md) — CI 穩定紅根因：L1 `test-integrity-l1.py` `detect_go_tool()` 的 `go version` 偵測探針 timeout=5s，但測試釘 `GOTOOLCHAIN=go1.26.3`＋CI 冷快取需先下載工具鏈（~10s）→ 探針被殺→`runner_missing`→case 5 掉 `"shrink"`；亦是 GOTOOLCHAIN-pinned 消費 repo 的 fail-closed 誤擋類。修：偵測探針改 `GOTOOLCHAIN=local`（collection 仍付下載成本、吃 180s timeout）＋無真 go 也會跑的 fake-shim 回歸案（6b）。/l5 grok×MiniMax-M3 派遣、red-green 驗證。 | v2.32.48 | `develop`（/l5 派遣落地） |
 | 2026-07-17 | [dev-mode-three-layers](../../CHANGELOG.md) — dogfood 靜默失效根因：dev mode 第三層（marketplace clone）凍結在 6/4 餵 2.17.2 給 session；dev-setup --check 補版本比對、dev-update 順手刷新 clone、installation.md 記三層模型。 | v2.32.47 | `develop`（直接落地） |
 | 2026-07-16 | [ci-runner-kill-race](../../CHANGELOG.md) — CI 百紅第二層根因：dispatch-batch kill-trap 的 setsid pgid race 在慢 runner 上註冊到測試自身 process group，reap SIGTERM 誤殺整台 CI runner（"The operation was canceled"）。測試端 poll-until-flip＋reap 端拒殺自身 pgroup 雙層修。 | v2.32.40 | `develop`（直接落地） |
 | 2026-07-16 | [code-audit-doc-sync](../../CHANGELOG.md) — 深度 code audit＋doc-sync 全掃：CI 去紅（harness 測試期望落後資料刷新）、grok-build→grok-4.5 runtime 預設、OpenCode 1.17 schema 遷移、doc-drift gate fixture 誤報豁免、eval 模型預設現代化。 | v2.32.39 | `develop`（直接落地） |

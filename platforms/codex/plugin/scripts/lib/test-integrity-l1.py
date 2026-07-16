@@ -467,7 +467,10 @@ def detect_vitest_tool(side_dir, env):
 def detect_go_tool(side_dir, env):
     result = {"available": False, "command": ["go"]}
     try:
-        rc = run_command(["go", "version"], side_dir, env=env, check=False, timeout=5)
+        # Detection must not trigger a toolchain download; collection pays that cost under its own timeout.
+        probe_env = dict(env)
+        probe_env["GOTOOLCHAIN"] = "local"
+        rc = run_command(["go", "version"], side_dir, env=probe_env, check=False, timeout=5)
         if rc.returncode == 0:
             result["available"] = True
             result["command"] = ["go"]

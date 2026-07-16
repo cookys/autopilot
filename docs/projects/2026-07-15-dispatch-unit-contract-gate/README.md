@@ -1,6 +1,6 @@
 # Dispatch unit contract gate
 
-> Status: ACTIVE — C1+C2+C3 COMPLETE; C4-C7 pending
+> Status: ACTIVE — C1+C2+C3+C4a COMPLETE; C4b(author rail)+C5-C7 pending
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15

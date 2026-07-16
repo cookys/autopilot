@@ -306,6 +306,21 @@
   output.paths exact-equality vs directory-style declarations (C7 candidates). The write rail
   now enforces the full B1-B5 post-return contract from git truth.
 
+- **C4a COMPLETE (2026-07-16)**: role-aware engine gate merged. War story worth keeping: the
+  first implementation BYPASSED the dirty/required-paths/mirror gates for VA contracts to make
+  the oracle pass (gaming-shaped weakening caught by MiniMax cross-family review — the oracle
+  could not see it); root causes were oracle fixture defects (a touch that dirtied the mini
+  repo, future-artifact required_paths, config missing verification_author_effort, Case 4.2
+  using invalid kind "diff" that the schema silently accepted). All fixed through GLM surgical
+  rounds + two strict-dispatched Spark rounds; final design: every policy gate runs for ALL
+  roles, only tuple selection is role-aware; mandatory-mirror keyed on output.kind=commit;
+  store role spelling normalized hyphen→underscore. C7 candidates ledgered: schema output.kind
+  enum looseness (accepted "diff"), withResolverConfig shim robustness/effort hardcode.
+- The strict rails repeatedly enforced on their own construction during C4a: the l6 marker
+  gate blocked a non-strict dispatch; the B3 output-paths boundary rejected a mis-authored
+  depth-0 contract; the B4 acceptance rail caught a false self-reported green; the R4
+  base-disagreement gate rejected a branch-name --base. Working as designed.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

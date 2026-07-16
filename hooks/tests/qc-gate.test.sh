@@ -32,6 +32,11 @@ assert_eq "$(QC_GATE_CONFIG_OVERRIDE=/nonexistent/nope.md "$RESOLVE" --field mod
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX/scripts" "$SBX/.githooks"
 cp "$RESOLVE" "$SBX/scripts/resolve-qc-gate.sh"; chmod +x "$SBX/scripts/resolve-qc-gate.sh"
+# resolve-qc-gate.sh sources its sibling libs (scripts/lib/{json-emit,resolve-config}.sh);
+# the sandbox must replicate that layout or the source fails and the gate reads fail-open.
+mkdir -p "$SBX/scripts/lib"
+cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$SBX/scripts/lib/json-emit.sh"
+cp "$REPO_ROOT/scripts/lib/resolve-config.sh" "$SBX/scripts/lib/resolve-config.sh"
 cp "$HOOK" "$SBX/.githooks/pre-push"; chmod +x "$SBX/.githooks/pre-push"
 git -C "$SBX" init -q
 git -C "$SBX" config user.email t@local; git -C "$SBX" config user.name t

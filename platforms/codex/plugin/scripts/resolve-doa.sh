@@ -145,6 +145,7 @@ tier_to_preset() {
 #   3. $REPO_ROOT/.claude/doa-config.md — autopilot's own repo (dogfooding)
 # When autopilot runs as a plugin, REPO_ROOT is the plugin install dir, NOT the
 # project being worked on — so cwd ($PWD) is what carries the project override.
+# NOTE: intentionally NOT migrated to scripts/lib/resolve-config.sh — this ladder is -f/3-tier/no-template/unconditional-else, a different contract.
 if [[ -n "${DOA_CONFIG_OVERRIDE:-}" ]]; then
   PROJECT_CONFIG="$DOA_CONFIG_OVERRIDE"
 elif [[ -f "$PWD/.claude/doa-config.md" ]]; then

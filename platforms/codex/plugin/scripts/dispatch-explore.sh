@@ -88,7 +88,8 @@ done
 # Defined before die_precondition so the precondition JSON can escape user-controlled
 # values (--runner/--model/--repo can carry quotes/backslashes/newlines; raw interpolation
 # would emit invalid JSON a caller's parser chokes on — decorrelated review, gpt-5.5).
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
+# shellcheck source=lib/json-emit.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "read_probe": "skipped", "sandbox": "n/a", "raw_log": null, "error": "%s" }\n' "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$1")"; exit 2; }
 

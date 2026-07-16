@@ -128,6 +128,30 @@ _wt_validate_path() {
   return 0
 }
 
+# --- _wt_open_lock_fd ---------------------------------------------------------
+# Open a lock without truncating through a hostile symlink. The pre/post checks
+# reject symlinks, non-regular files, foreign ownership, and path↔fd swaps. Bash
+# has no portable O_NOFOLLOW redirection, so append-open plus an inode check is
+# the strongest shell-only posture; this code never writes bytes to the lock fd.
+_wt_open_lock_fd() {
+  local lock="$1" fd fd_path
+  _WT_SAFE_LOCK_FD=""
+  if [ -e "$lock" ] || [ -L "$lock" ]; then
+    [ -f "$lock" ] && [ ! -L "$lock" ] && [ -O "$lock" ] || return 2
+  fi
+  exec {fd}>>"$lock" || return 2
+  fd_path="/proc/$$/fd/$fd"
+  [ -e "$fd_path" ] || fd_path="/dev/fd/$fd"
+  if [ -L "$lock" ] || [ ! -f "$lock" ] || [ ! -O "$lock" ] \
+     || [ ! -e "$fd_path" ] || [ ! -f "$fd_path" ] || [ ! -O "$fd_path" ] \
+     || ! [ "$fd_path" -ef "$lock" ]; then
+    exec {fd}>&- || true
+    return 2
+  fi
+  _WT_SAFE_LOCK_FD="$fd"
+  return 0
+}
+
 # --- _wt_is_live --------------------------------------------------------------
 # Atomic ownership probe via flock -n on $WT/.autopilot-worktree.lock.
 # Side effect on "owned" (dead owner): sets _WT_PROBE_FD to the held probe fd
@@ -149,8 +173,9 @@ _wt_is_live() {
     :
   fi
 
-  # Open (create if missing) on a dedicated fd.
-  exec {probe}>"$lock" || return 2
+  # Open (create if missing) on a dedicated, non-truncating, verified fd.
+  _wt_open_lock_fd "$lock" || return 2
+  probe="$_WT_SAFE_LOCK_FD"
   flock -n "$probe"
   frc=$?
   if [ "$frc" -eq 0 ]; then
@@ -253,6 +278,19 @@ reap_worktree() {
   return 0
 }
 
+# Append one path without racing rewrite_orphan_log. The separate lock file
+# survives atomic replacement of ORPHAN_LOG itself.
+_wt_append_orphan_path() {
+  local path="$1" log="${ORPHAN_LOG:-}" lock_fd rc
+  [ -n "$log" ] || return 1
+  _wt_open_lock_fd "${log}.lock" || return 1
+  lock_fd="$_WT_SAFE_LOCK_FD"
+  flock -x "$lock_fd" || { exec {lock_fd}>&-; return 1; }
+  printf '%s\n' "$path" >> "$log"; rc=$?
+  exec {lock_fd}>&-
+  return "$rc"
+}
+
 # --- reap_worktree_minimal ----------------------------------------------------
 # Signal-safe path: remove worktree only; on failure append path to ORPHAN_LOG.
 # Does NOT run the project hook. Does NOT delete a branch (caller does).
@@ -264,10 +302,8 @@ reap_worktree_minimal() {
   # Honor the WT_RM test seam (same as _wt_git_worktree_remove) so the failure
   # branch is testable; array-exec keeps this signal-handler-safe (no subshell).
   local _rm=(git); [ -n "${WT_RM:-}" ] && _rm=("$WT_RM")
-  if ! "${_rm[@]}" worktree remove --force "$wt" 2>>"${ORPHAN_LOG:-/dev/null}"; then
-    if [ -n "${ORPHAN_LOG:-}" ]; then
-      printf '%s\n' "$wt" >> "$ORPHAN_LOG"
-    fi
+  if ! "${_rm[@]}" worktree remove --force "$wt" >/dev/null 2>&1; then
+    _wt_append_orphan_path "$wt" || printf 'WARN: cannot record orphan worktree: %s\n' "$wt" >&2
   fi
   return 0
 }
@@ -304,11 +340,12 @@ gc_stale_worktrees() {
   # whole process; it would silence every later stderr diagnostic in this run
   # (the no-op notice, orphan WARNs). A failed open prints bash's own error,
   # which is acceptable alongside our WARN.
-  exec {gcfd}>"$gc_lock" || {
+  _wt_open_lock_fd "$gc_lock" || {
     printf 'WARN: cannot open global gc lock %s; aborting --gc\n' "$gc_lock" >&2
     printf '{ "reaped": [], "skipped_live": 0, "skipped_fresh": 0, "skipped_unmatched": 0, "lock_unsupported": 0, "kept_orphan": [] }\n'
-    return 0
+    return 1
   }
+  gcfd="$_WT_SAFE_LOCK_FD"
   flock -n "$gcfd"
   frc=$?
   if [ "$frc" -ne 0 ]; then

@@ -102,8 +102,27 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 ### Cleanup (caller's responsibility — both are deliberate persistence)
 
 - `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
-- Kept worktrees (exit 1, or `--keep-worktree`): `git worktree remove --force <path>` **then `git branch -D <branch>`** (the JSON `branch` field) when done — `git worktree remove` does NOT delete the branch, so a non-success dispatch leaves a stale `hetero/<name>` branch otherwise. If the script was interrupted mid-run, the worktree may be orphaned — `git worktree list` / `git worktree prune` to find and clear, then `git branch -D` the orphan branch.
+- Kept worktrees (exit 1, or `--keep-worktree`): inspect, then `git worktree remove --force <path>`. Preserve the exact branch tip in a verified bundle before any human/depth-0 compare-delete; never use a bare `git branch -D`. If interrupted, use `git worktree list` / `git worktree prune` first, then the same preserve-first branch disposition.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
+
+## Repo-branch lifecycle
+
+`scripts/reap-dispatch-branches.sh` is the preserve-first lifecycle rail for dispatch-owned **local** branches. Its built-in anchored grammar is:
+
+* `ceo-integration-candidate-r<N>` — integration candidates.
+* `ceo-<task>-r<N>-<YYYYMMDD>` — dated intermediate rounds.
+* `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
+* Repeated `--pattern <bash-ere>` adds an explicit local family; an empty ERE is rejected because it would match every local branch. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
+
+`scan` emits JSON classification without mutating the repo. `check` is the finish-flow gate: exit 0 means no unacknowledged ahead integration candidate; exit 1 means depth 0 must integrate, explicitly preserve, or discard. `--ack <branch>` records preservation against the exact current tip; malformed, missing, or moved-tip acks are pruned fail-closed.
+
+Durable acknowledgement and destructive reap currently support SHA-1 object-format repositories only (40 lowercase hexadecimal object IDs). On SHA-256 repositories `scan` remains available/read-only, but a durable `check --ack` is unavailable (non-40-hex stored acks are pruned and re-arm the gate) and `reap --yes` fails closed during tip validation before any ref deletion.
+
+`scan` reports containment against the authoritative integration target first, otherwise against a canonical maximal live candidate target (one canonical candidate per same-tip group; non-maximal candidate tips cannot become sole containment proof). `reap` is dry-run unless `--yes` is supplied, and it only deletes branches contained by the authoritative integration target. `--reap-superseded` exposes supersession in the preview but never authorizes deletion of an uncontained branch; discard is manual depth-0/human work after preservation. Before deletion the tool creates and verifies one positive-ref full-history bundle, checks every head, and revalidates exact tip + containment + complete worktree occupancy around the compare-delete CAS. If post-delete proof invalidates, exact-ref restoration is attempted only with a prepared `update-ref --stdin` transaction using `option no-deref`; a raced direct ref or symref aborts/fails closed rather than being overwritten, and the verified bundle remains the authoritative recovery artifact. Git has no transaction spanning ref and worktree metadata, so a hostile concurrent actor can still race after the final validation; the script never overclaims stronger serialization.
+
+Exit 2 is a usage/environment failure. Bundles default under the git common dir; a relative `--bundle-dir` resolves against the repo root, never caller CWD. The tool never touches remote refs and never treats a name match alone as deletion authority.
+
+Signal-handler orphan paths use the private state root `${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID}}`. It must be a real owner-owned mode-0700 directory; unsafe mode, symlink, non-directory, or foreign ownership fails startup closed with exit 2. `--gc` retries only exact registered own-user worktrees and holds the normal lifetime-flock proof through removal, so a live or unsafe/unsupported lock preserves the worktree and its retry entry.
 
 ## Mid-run observability — run manifest + [`scripts/dispatch-status.js`](../scripts/dispatch-status.js)
 

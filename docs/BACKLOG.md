@@ -32,6 +32,24 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S。
 - **Source**: 2026-07-14 /l6 loop-convergence-gates foreman ledger + depth-0 qc probe。
 
+### Dispatch-branch lifecycle：支援 SHA-256 object format
+- **Trigger**: 第一個 SHA-256 Git consumer 出現，或下次修改 `scripts/reap-dispatch-branches.sh`。
+- **Context**: v2.32.37 rail 刻意假設 SHA-1 40-hex object IDs。SHA-256 repos 的 `scan` 仍可唯讀使用，但 durable `check --ack` 會因非 40-hex ack 被 prune 而重新觸發 gate，`reap --yes` 則在任何 ref deletion 前的 tip validation fail closed。泛化 OID validation、ack persistence 與 bundle verification 時，不得弱化 preserve-first。
+- **Effort**: S–M。
+- **Source**: v2.32.37 post-merge doc-sync / security QC。
+
+### Inherited L1 hook-config hermeticity / OpenCode V2 / eval-doc-drift portability baselines
+- **Trigger**: 下次修改 `hooks/*.test.js` 的 opt-in/config isolation、OpenCode V2 plugin group、對應 eval/doc-drift validator 或其測試；或 full-suite／portability baseline 比下述數字惡化時。
+- **Context**: dispatch-branch lifecycle 專案 final run 為 2/142 groups non-green：L1 group 是 inherited host-config hermeticity（真 HOME 的 `~/.autopilot/config.json` 啟用 context-budget/orchestrator-edit-gate；測試只清 env，故 `node --test hooks/*.test.js` 為 121/123、兩個 disabled assertions exit 2；clean HOME 為 123/123），另一組是 inherited OpenCode V2。Portability 為 13/17，殘餘 OpenCode/eval/doc-drift failures 均已在 base 重現，與本專案變更無因果。這些結果必須維持 `PRE_EXISTING DEFERRED`，不得冒充 full-suite 或 portability pass。
+- **Effort**: S / Fix。
+- **Source**: [`docs/projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md`](projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md) final QC evidence。
+
+### codex-native `spawn_agent` 盲區納管（codex 當 depth-0 時）
+- **Trigger**: 下次 codex 擔任 depth-0 orchestrator 跑 /l4-/l6 前；或下次改版 `platforms/codex/plugin/skills/ceo-agent` payload 時。
+- **Context**: 同上稽核：codex 原生 `spawn_agent`（該次 976 呼叫）完全在 autopilot 軌道外 — 非 Agent-tool（無 TaskStop）、非 shell-dispatched（無 pgid 可 reap），schema 無 model 參數（無法 pin cheap model），autopilot 兩種 teardown primitive 都無效，merge-back/GC 零覆蓋。codex 並自承因此「沒有維持純 CEO context」自己下海 implement。修法：codex-orchestrator 路徑在 payload 內明文禁用原生 `spawn_agent`（一切走 autopilot dispatch 軌道），或至少收尾 gate 偵測 `~/.codex/sessions` 的 spawn_agent 殘留並警示。
+- **Effort**: S（payload prose 禁令）/ M（收尾偵測 gate）
+- **Source**: 2026-07-14 codex-worktree audit §2/§4/§5。
+
 ### check-test-integrity-l1.test.sh 固定 /tmp 路徑在多使用者機器上撞牆（flaky）
 - **Trigger**: 下次碰 hooks/tests/check-test-integrity-l1.test.sh 或 run.sh 全套件又因它紅掉時。
 - **Context**: test 寫死 `/tmp/autopilot-l1-js-install.log`；共用機上被其他使用者（實測 codepower）的舊檔佔走 ⇒ Permission denied ⇒ 套件級 flaky（單獨跑 exit 0、run.sh 下偶紅）。修法：mktemp 或 `${TMPDIR}` + 使用者隔離路徑。同場另一個 run.sh 紅是 engine-scorecard case 13（efforts collapsed）— PRE_EXISTING on develop，屬另一個既有問題。
@@ -50,7 +68,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Trigger**: 下次發現 depth-0 繞過 dispatch 路徑手做實作（如 2026-07-14 研究中 92d8784a 用裸 codex exec 繞 dispatch-hetero、user 質問才自白），或 orchestrator-edit-gate 進 block 模式時（Bash 寫檔是它宣告的盲區，E1 是 backstop）。
 - **Context**: merge 時驗「product commits 是否可溯源到 dispatch run manifests」（`${TMPDIR}/autopilot-dispatch-runs/*.manifest.json` 已存在）+ depth-0 Edit 計數；不符 ⇒ 擋 merge（qc-gate 同級）。A1 是事前預防（honest-agent 級），E1 是事後偵測 — 兩者合起來才閉環。
 - **Effort**: M。
-- **Source**: 2026-07-14 transcript 研究 S3（協議合規無 gate、adjudicate-findings 零呼叫）；plan § Declared limits。
+- **Source**: 2026-07-14 transcript 研究 S3（協議合規無 gate、adjudicate-findings 零呼叫）；plan § Declared limits。**追加證據（2026-07-14 codex-worktree audit）**：codex 當 depth-0 時自承下海 implement + 用原生 `spawn_agent`（976 次）完全繞過 dispatch 軌道 — 又一筆「協議合規純靠模型自覺、無機器可驗」的 S3 實例。
 
 ### B1/B2 review 路徑效率（diff-only 強制 + delta re-review）
 - **Trigger**: 下次任何 /l5 /l6 run 的 review dispatch 出現 repo 爬讀（review session token 中位數異常）或 marathon loop（>5 輪）時；或 Board 排程。
@@ -638,3 +656,10 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Context**: 2026-07-13 /tmp usrquota 撐爆事故（cookys 名下 ~21.3 GiB → EDQUOT → 整台機器 Claude Code Bash 假死；`df -h` 全域量誤導，probe 法=直接寫檔看 "disk quota exceeded"）。四個修法中 (a) 各 dispatch 腳本啟動 prune 自家過期 log/scratch（`scripts/lib/prune-tmp-residue.sh`）、(b) manifest reaper（`dispatch-status.js --reap`）、(c) hooks/tests 全域 TMPDIR 重導＋trap 鏈修復 —— **均已於 v2.32.22 出貨**。剩 (d)：`swe-calibrate-*`（44 個 ×~110M）這類大型校準 clone 仍寫 `${TMPDIR}`，單體大、非逐日累積，mtime prune 不合適；候選 = 改預設寫 `~/.autopilot/scratch/`（非配額路徑）+ 完跑即清。附帶教訓（已入 memory）：清理腳本的排除清單必須套用到**所有** phase——dirty-skip 的 worktree 曾被後續 glob 撈走刪掉。
 - **Effort**: S。
 - **Source**: 2026-07-13 session 實地診斷＋v2.32.22 fix/tmp-residue-retention。
+
+### commit-secret-scan hook 掃 deletion 行造成 false positive 死路
+- **Context**: 2026-07-15 TWGameProject 落地時，staged diff 的 `-` 行含 HEAD 既有、`.gitleaks.toml` 已 allowlist 的 AWS 文件範例金鑰（AKIA…EXAMPLE），hook 掃 `git diff --cached` 全文（含 deletion 行）→ 任何修改/移除該行的 commit 都被硬擋；照此邏輯「從 repo 移除真洩漏密鑰」的 commit 也會被擋。當次以 hook 自身的 `--amend --no-edit` 豁免分兩步落地。
+- **Fix 方向**: `hooks/commit-secret-scan.js` 只掃新增行（`^+` 且非 `+++`），並考慮讀取 repo `.gitleaks.toml` allowlist。
+- **Trigger**: 下次碰 hooks/_shared/secret-patterns.js 或有人再撞此 FP。
+- **Effort**: S。
+- **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。

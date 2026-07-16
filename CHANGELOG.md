@@ -24,6 +24,30 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.37 — Dispatch branch lifecycle gate and preserve-first reaper
+
+**Headline**: finish-flow can no longer silently leave an ahead integration candidate behind, and dispatch-owned local branches can be retired through a deterministic bundle-before-delete lifecycle rail.
+
+### Added
+
+- Added `scripts/reap-dispatch-branches.sh` with read-only classification, exact-tip preservation acknowledgements, authoritative-target-contained branch reaping, and superseded-round detection/preservation/reporting for manual disposition; supersession never authorizes automatic deletion.
+- Added fixture-repository coverage for candidate gating, canonical maximal-candidate containment targets, base-10 round ordering, slash refs, bundle integrity, empty-pattern rejection, bundle-stage all-or-nothing failures, per-branch checked-out guards, prepared no-deref exact-ref restoration, and invalid environments.
+
+### Changed
+
+- L-size session end now runs the dispatch-branch gate before clearing orchestrator mode.
+- CEO merge-back and heterogeneous-dispatch cleanup guidance now routes dated dispatch branches through the preserve-first reaper.
+
+### Fixed
+
+- Dispatch orphan-log state now lives at `${AUTOPILOT_ORPHAN_STATE_DIR:-${TMPDIR:-/tmp}/autopilot-${UID}}` in an owner-owned mode-0700 real directory; unsafe/symlink/non-directory/foreign-owner startup state fails closed with exit 2. GC retries valid registered own-user worktrees while honoring their lifetime flock, retains failed/live retries without duplicating diagnostics, and prunes non-actionable stale/noise entries.
+- Post-delete exact-ref restoration is attempted only through a prepared no-deref ref transaction; raced direct refs or symrefs abort/fail closed, with the verified preservation bundle remaining authoritative.
+
+### Rollback
+
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.35`; the new reaper is additive and creates no persistent state unless `check --ack` or `reap --yes` is explicitly used.
+
 ## v2.32.35 — /l6 verification-author roster gate
 
 **Headline**: active `/l6` verification authoring is now authorized by the consuming project's first-class roster tuple instead of manual model/runner prose; fail-closed selection while depth 0 retains artifact execution/QC/merge authority.

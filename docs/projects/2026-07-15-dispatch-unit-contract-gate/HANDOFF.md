@@ -6,10 +6,10 @@
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
   `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from clean pushed
-  Gemini-terminal commit `77cc559acf551e19f40ede5a3d8882053fe0d70e`. Product tree remains clean;
+  Grok-authorization commit `5fe894969668c703a2e9feaff494d44fbc358524`. Product tree remains clean;
   no accepted product/test code。
-- `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; local feature branch has
-  fourteen project/bootstrap-and-blocker commits beyond that base including this roster authorization.
+- `origin/develop` remains `edad7025486ad196d1124785794c39ff86e092b2`; after this terminal-restoration
+  commit, the feature branch has fifteen project/bootstrap-and-blocker commits beyond that base.
 - l6 marker is active. The newest live probes are Grok verification-author event 49 and Spark
   implementer event 50, both `available/high`; Spark's direct scratch inference returned `OK`.
   Earlier terminal seats remain recorded as Grok event 46, GLM event 47, and AGY Gemini event 48.
@@ -82,12 +82,15 @@
   restored GLM config, dogfood resolver expectations, and lifecycle docs atomically. Isolated/manual
   substitution remains prohibited; permanent isolated AGY coverage is tuple-independent.
 - The user then explicitly reported Grok 4.5 and Spark quota had returned. Fresh live probes recorded
-  Grok verification-author event 49 and Spark implementer event 50 as `available/high`; Spark returned
-  `OK`. This is new Board continuation after the prior Grok terminal. The tracked roster assigns
-  `grok-4.5/grok/high/endpoint ""/xai` against Spark/OpenAI for one materially new current-HEAD attempt.
-  Old Grok prompt/artifact replay, normalization, splicing, promotion, and isolated/manual tuple
-  override remain prohibited. At any terminal or aborted/non-started attempt, atomically restore GLM
-  config, dogfood resolver expectations, and README/HANDOFF through review.
+  events 49/50 as `available/high`; Spark returned `OK`. Authorization commit `5fe8949` passed gpt-5.5
+  review and was pushed clean. Depth-0 froze r2 contract hash
+  `d230bc885dd56e4ce158f9537bf82589562c4b4b3c0f8576d84395cef6f0ecee` and materially new prompt hash
+  `146e4b4724a4f5bd49d6c7c0edb8414447ea4492d819006940cc08d292a37679`. The exact strict Grok call
+  preserved all 1,459 checkout hashes but returned only one 135-byte planning sentence (raw hash
+  `518f07e52850f9c4577569ea2936786ee2a034e7fbc0aa59558532c6ee953b14`) with no shebang, source, or
+  finalizer. This is terminal `REJECT/output-shape`; no syntax/RED/normalization/Spark step ran. GLM
+  config, matching dogfood expectations, and lifecycle docs are restored atomically. All Grok prompts
+  and artifacts are non-replayable; isolated/manual tuple override remains prohibited.
 
 ## 已決事項(不重議)
 
@@ -120,9 +123,10 @@
 - The prior Board-authorized AGY Gemini seat was live at event 48 and received one new tracked
   current-HEAD recovery. Its r3 artifact is terminal `REJECT/output-shape`; all three Gemini prompts
   and artifacts are non-replayable/non-normalizable. GLM is again the tracked repository author.
-- The new Grok/Spark quota-return statement separately authorizes one materially new tracked Grok
-  recovery backed by events 49/50. It does not reopen the old Grok prompt or artifact. The temporary
-  repository-wide seat restores GLM atomically at terminal or aborted/non-started attempt.
+- The new Grok/Spark quota-return statement authorized exactly one materially new tracked Grok
+  recovery backed by events 49/50. R2 consumed that authority and terminated at
+  `REJECT/output-shape`; it does not authorize a retry or reopen any Grok prompt/artifact. GLM is
+  again the tracked repository author and the isolated Grok fixture is not standing authority.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -132,13 +136,13 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
-   active on tracked Grok recovery r2, and seven phases remain including active C1; C2-C7 are pending.
-2. From the clean pushed Grok r2 roster-authorization commit, freeze a new current-HEAD contract/hash
-   and materially new Grok prompt; verify `grok/xai` remains cross-family from Spark/OpenAI and the
-   permanent isolated Grok fixture passes.
-3. Dispatch only through the tracked strict roster. Never replay/normalize/splice/promote any old
-   terminal artifact. The raw oracle must pass output-shape, checkout-containment, `bash -n`,
-   portable-tool, and isolated RED gates.
+   active/blocked after Grok r2 terminal, and seven phases remain including active C1; C2-C7 are pending.
+2. Keep restored `glm-5.2/cc-shim/high/endpoint glm` plus matching dogfood expectations clean. Treat
+   every prior Grok, GLM, MiniMax, Claude, and Gemini attempt as terminal; never replay, retry,
+   normalize, splice, or promote their prompts/artifacts.
+3. Any further C1 author seat needs separate Board authority, fresh live readiness, and a tracked,
+   reviewed config before a new current-HEAD contract/hash and materially new prompt. The raw oracle
+   must pass output-shape, checkout-containment, `bash -n`, portable-tool, and isolated RED gates.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

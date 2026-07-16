@@ -25,19 +25,10 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: grok-4.5
-- verification_author_runner: grok
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint:
-
-> Temporary repository-wide C1 authorization (2026-07-16, Grok recovery r2): the user explicitly
-> reported both Grok 4.5 and Spark quota had returned, and live events 49/50 confirmed both roles
-> available. This tracked roster change authorizes one materially new current-HEAD Grok recovery;
-> the old Grok prompt/artifact and isolated/manual tuple overrides remain prohibited. Because the
-> resolver has no unit-id scope, restore `glm-5.2/cc-shim/high/endpoint glm` after accepted, STOP,
-> REJECT, pre-dispatch NO-GO, cancellation/abandonment, or inability to begin. Restore this config,
-> dogfood resolver expectations, and README/HANDOFF lifecycle record atomically through review before
-> C2 or unrelated strict `/l6` authoring. The isolated Grok regression fixture remains permanent.
+- verification_author_endpoint: glm
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

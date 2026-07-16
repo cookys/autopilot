@@ -70,7 +70,7 @@ from repository truth.
 | “cont? 目前在哪個 phase? 還有多少 phase? 不是進 CEO mode /l6 了為什麼妳還停下來問我?” | Report P0 complete / C1 active / C2-C7 pending, re-arm l6, resume the configured strict GLM path, stop asking for `continue?`, and separately record the later autonomous Sonnet substitution as a protocol deviation rather than user-granted tuple authority |
 | “順便提醒，gpt-5.3-codex-spark 跟 grok 4.5 都回來了” | Refresh per-model live readiness: Spark capability event 45 and Grok 4.5 event 44 are `available/high`; preserve the distinction that Grok readiness is not C1 strict-roster authorization |
 | “你停下來了?” | Treat the reminder plus explicit rejection of another stop as Board continuation: authorize Grok through a tracked strict-roster config change that must be reviewed and committed before dispatch, then resume C1 author → RED → Spark without another human gate |
-| “grok 4.5 / gpt-5.3-codex-spark 額度都回來了” | New Board continuation after all prior seats reached terminal: refresh Grok/Spark inference as events 49/50, authorize one materially new tracked Grok current-HEAD recovery, and retain atomic GLM restoration at terminal |
+| “grok 4.5 / gpt-5.3-codex-spark 額度都回來了” | New Board continuation after all prior seats reached terminal: events 49/50 authorized one materially new tracked Grok recovery; its one-line prose result is terminal output-shape REJECT and atomically restores GLM |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -94,7 +94,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — tracked Grok recovery r2 | New Board continuation plus fresh Grok/Spark events 49/50; temporary repository-wide Grok strict roster must restore GLM atomically at every terminal/aborted attempt | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active/blocked — Grok r2 output-shape REJECT | The new tracked Grok attempt preserved containment but returned only one planning sentence; GLM roster, dogfood expectations, and lifecycle docs are restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -268,13 +268,16 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   isolated AGY coverage remains independent of the dogfood tuple.
 - The user then explicitly reported both Grok 4.5 and Spark quota had returned. Fresh real inference
   confirmed Grok verification-author event 49 and Spark implementer event 50 as `available/high`;
-  Spark's direct scratch probe returned `OK`. This is new Board continuation after the prior Grok
-  attempt reached terminal, not mere conversation-memory readiness. The repository strict roster is
-  temporarily assigned to `grok-4.5/grok/high/endpoint ""/xai` against Spark/OpenAI for one materially
-  new current-HEAD recovery. Review+commit+clean-base remain mandatory before spend; the old Grok
-  prompt/artifact may not be replayed, spliced, normalized, or promoted. Every terminal or aborted/
-  non-started attempt atomically restores GLM config, dogfood resolver expectations, and lifecycle
-  docs. Permanent isolated Grok coverage does not depend on the dogfood tuple.
+  Spark's direct scratch probe returned `OK`. Authorization commit
+  `5fe894969668c703a2e9feaff494d44fbc358524` passed independent gpt-5.5 review and was pushed clean.
+  Depth-0 froze r2 contract SHA-256 `d230bc885dd56e4ce158f9537bf82589562c4b4b3c0f8576d84395cef6f0ecee`
+  and materially new prompt SHA-256 `146e4b4724a4f5bd49d6c7c0edb8414447ea4492d819006940cc08d292a37679`.
+  The one exact strict call selected `grok-4.5/grok/high/endpoint ""/xai`, preserved all 1,459 file
+  hashes and clean HEAD/status/diff, then returned only a 135-byte planning sentence (raw SHA-256
+  `518f07e52850f9c4577569ea2936786ee2a034e7fbc0aa59558532c6ee953b14`) with zero shebangs, zero
+  `lib.sh` sources, and zero finalizers. This is terminal `REJECT/output-shape`; no `bash -n`, RED,
+  normalization, replay, or Spark dispatch ran. GLM config, dogfood expectations, and lifecycle docs
+  are restored atomically. Permanent isolated Grok coverage remains tuple-independent.
 
 ## Dispatch policy
 
@@ -299,10 +302,10 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   tracked current-HEAD recovery. It terminated at `REJECT/output-shape`; GLM was restored atomically.
   Neither the r3 prompt nor raw artifact may be replayed, normalized, spliced, or promoted. The
   isolated AGY fixture is regression coverage, not standing roster authority.
-- The user's later explicit Grok/Spark quota-return report is a fresh Board authorization for one new
-  tracked Grok recovery after the earlier Grok terminal. Events 49/50 are the live readiness evidence.
-  It grants no replay or isolated/manual override; repository-wide authority must restore GLM plus
-  matching tests/docs atomically at any terminal or aborted/non-started attempt.
+- The user's later explicit Grok/Spark quota-return report authorized exactly one new tracked recovery
+  after the earlier Grok terminal, backed by events 49/50. That authority was consumed by r2 and ended
+  at `REJECT/output-shape`; it grants no replay, retry, or isolated/manual override. The repository
+  roster, matching dogfood expectations, and lifecycle docs are again restored to GLM atomically.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

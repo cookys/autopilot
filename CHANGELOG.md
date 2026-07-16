@@ -24,6 +24,47 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.45 — One manifest-driven entry point for the repo's scattered sync/check rituals
+
+**Headline**: The repo's sync/check rituals (version mirrors, agent-bodies, model-routing,
+Codex + OpenCode payloads, README parity, hook inventory, canonical invariants) lived in
+FOUR hand-copied lists — `.githooks/pre-commit`, `.github/workflows/test.yml`,
+`preflight-portability.sh`, `preflight-release.sh` — so a new ritual meant editing every
+consumer, `sync-opencode-plugin.sh --check` was wired NOWHERE, and the ~80-row CLAUDE.md
+scripts inventory had no membership gate. This ships a single manifest + driver so a ritual
+is registered in ONE place, closes the OpenCode-check gap, and adds a CLAUDE.md membership
+check. Gate semantics are unchanged — pure plumbing consolidation.
+
+### Added
+- **`scripts/sync-manifest.json`** — DATA. One row per ritual: `{id, generator, check, fix,
+  trigger (path-glob list), tier (pre-commit|preflight|both)}`. Trigger glob forms: entry
+  ending `/` = directory prefix; entry starting `*` = suffix; else exact path.
+- **`scripts/sync-all.sh`** — the driver. `sync-all.sh` runs every generator; `--check`
+  runs every check (CI/preflight full); `--check --changed [base]` scopes checks to the
+  staged diff (or a git range) via manifest triggers, preserving pre-commit conditionality;
+  `--check --only <id>…` runs single rituals (preflight delegation); `--list` prints ids.
+  Emits a JSON summary naming any failed ritual id + its fix command; exit 1 on failure or
+  an unknown `--only` id. Registers `sync-opencode-plugin --check` (previously unwired).
+- **`scripts/check-claude-md-inventory.js`** — membership gate: every `scripts/*.{sh,js}` +
+  `scripts/lib/*` basename (tests excluded) must be named in CLAUDE.md, else exit 1 listing
+  the unlisted script(s). Closes the "new script is dead code" gap. Node built-ins.
+- **`hooks/tests/sync-all.test.sh`** — 22 assertions: real-manifest schema validity, `--list`,
+  `--check` green on clean tree, a seeded failing ritual is caught, `--changed` trigger + tier
+  filtering (scratch git repo), unknown `--only` id fails loud, malformed manifest → exit 2.
+
+### Changed
+- `.githooks/pre-commit`, `.github/workflows/test.yml`, `scripts/preflight-portability.sh`
+  now delegate their sync/check gates to `scripts/sync-all.sh` (portability keeps its 5
+  sync checks as separate entries via `--only`, so its 17-check count is unchanged). The
+  bespoke blind-dispatch issue-ref grep stays in pre-commit; `preflight-release.sh` is
+  untouched (release-scoped, different concern).
+- CLAUDE.md scripts inventory: added rows for `sync-all.sh` + manifest,
+  `check-claude-md-inventory.js`, `dispatch-contract.js`, `lib/dispatch-detach.sh`,
+  `lib/output-quiescence.sh` (the last three were pre-existing membership-gate misses).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.44 — Shared JSONL-store concurrency lib: one flock + PID-stale-breaker for three Node stores
 
 **Headline**: The `flock` + PID-liveness stale-lock breaker + atomic-append + monotonic-`event_id`

@@ -43,3 +43,10 @@
 - 2026-07-16: v2.32.40（`4cb7888`）reap self-kill guard＋workflow 三修
   （skip slash probe／timeout／concurrency）已 push，CI run 29493921810 等判決中。
   這是 P1 的前半。
+- 2026-07-16: **P4 完成** — v2.32.45 `sync-manifest.json`（DATA）＋`sync-all.sh` 單一入口
+  ＋`check-claude-md-inventory.js` membership gate；pre-commit／CI／preflight-portability 三
+  consumer 全改 delegate（portability 5 sync check 保留為 5 個 `--only` 席次，17-count 不變）；
+  補上 `sync-opencode-plugin --check`（原本 wired NOWHERE）。閘語意不變（plumbing consolidation）。
+  /l5 foreman 直作＋MiniMax-M3 去相關審（FIX-THEN-SHIP 的兩「真 bug」經 artifact 反證為誤報，
+  採 1 條 whitespace-trigger fail-loud 硬化）。sync-all.test.sh 22 斷言、全套件綠、preflight 15/17
+  ＋release 8/8。depth-0 持權威 QC＋merge。

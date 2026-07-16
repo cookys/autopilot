@@ -95,13 +95,15 @@ check_session_start_plain_envelope() {
 }
 
 # ─── 6. sync-version --check: canonical/mirror parity ───
+# Delegates to the single sync ritual driver (scripts/sync-manifest.json) so the
+# actual command lives in ONE place.
 check_sync_version() {
-  node "$REPO/scripts/sync-version.js" --check >/dev/null 2>&1
+  bash "$REPO/scripts/sync-all.sh" --check --only sync-version >/dev/null 2>&1
 }
 
 # ─── 7. sync-agent-bodies --check: _bodies/ parity ───
 check_sync_agent_bodies() {
-  "$REPO/scripts/sync-agent-bodies.sh" --check >/dev/null 2>&1
+  bash "$REPO/scripts/sync-all.sh" --check --only sync-agent-bodies >/dev/null 2>&1
 }
 
 # ─── 8. .agents/skills symlink physically resolves ───
@@ -122,14 +124,14 @@ check_validate_skills() {
 # every doc agrees on counts AND tier membership (catches the count-blind class:
 # a disabled hook listed as Tier-A default-on while the doc count is still "right").
 check_hook_inventory() {
-  node "$REPO/scripts/check-hook-inventory.js" --check >/dev/null 2>&1
+  bash "$REPO/scripts/sync-all.sh" --check --only check-hook-inventory >/dev/null 2>&1
 }
 
 # ─── 15. README parity: README.md ↔ README.zh-TW.md badges + section count ───
 # Catches the zh-TW translation silently falling behind the EN README (stale badge
 # numbers / a section added to one file only).
 check_readme_parity() {
-  node "$REPO/scripts/check-readme-parity.js" >/dev/null 2>&1
+  bash "$REPO/scripts/sync-all.sh" --check --only check-readme-parity >/dev/null 2>&1
 }
 
 # ─── 16. Codex plugin payload mirror drift check ───
@@ -137,7 +139,7 @@ check_readme_parity() {
 # This check is the read-only counterpart to sync-codex-plugin-skills.sh and
 # keeps the package installable when shared support files change.
 check_codex_plugin_payload_sync() {
-  "$REPO/scripts/sync-codex-plugin-skills.sh" --check >/dev/null 2>&1
+  bash "$REPO/scripts/sync-all.sh" --check --only sync-codex-plugin-skills >/dev/null 2>&1
 }
 
 # ─── 17. doc-drift gate (Layer 1 baseline): internal links + code-fence balance ───

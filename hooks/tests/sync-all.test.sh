@@ -60,10 +60,20 @@ OUT=$(bash "$SYNC_ALL" --check --only no-such-ritual 2>/dev/null); RC=$?
 assert_exit_code "$RC" "1" "--only unknown id exits 1"
 assert_contains "$(field "$OUT" unknown_only)" "no-such-ritual" "unknown_only names the bad id"
 
-# 5. malformed manifest (no rituals[]) → usage error exit 2
+# 5. malformed manifest (no rituals[]) → content error exit 3 (fail-closed, distinct from usage)
 echo '{"schema":1}' > "$TEST_TMP/bad-manifest.json"
 bash "$SYNC_ALL" --check --manifest "$TEST_TMP/bad-manifest.json" >/dev/null 2>&1; RC=$?
-assert_exit_code "$RC" "2" "manifest without rituals[] → exit 2"
+assert_exit_code "$RC" "3" "manifest without rituals[] → exit 3"
+
+# 5b. a valid-but-EMPTY rituals[] must ALSO fail closed (exit 3), never ok:true/exit 0
+echo '{"schema":1,"rituals":[]}' > "$TEST_TMP/empty-manifest.json"
+OUT=$(bash "$SYNC_ALL" --check --manifest "$TEST_TMP/empty-manifest.json" 2>/dev/null); RC=$?
+assert_exit_code "$RC" "3" "empty rituals[] → exit 3 (fail-closed)"
+assert_not_contains "$OUT" '"ok":true' "empty rituals[] never reports ok:true"
+
+# 5c. a MISSING manifest file stays a usage error (exit 2), distinct from content-invalid
+bash "$SYNC_ALL" --check --manifest "$TEST_TMP/does-not-exist.json" >/dev/null 2>&1; RC=$?
+assert_exit_code "$RC" "2" "missing manifest file → exit 2 (usage)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Fixture scratch repo: deterministic --changed trigger + tier filtering and
@@ -83,7 +93,8 @@ cat > "$SCRATCH/scripts/fixture-manifest.json" <<'JSON'
     { "id": "on-foo",         "generator": null, "check": "true",  "fix": "n/a",    "tier": "both",      "trigger": ["foo/"] },
     { "id": "on-bar",         "generator": null, "check": "true",  "fix": "n/a",    "tier": "both",      "trigger": ["bar.txt"] },
     { "id": "preflight-only", "generator": null, "check": "true",  "fix": "n/a",    "tier": "preflight", "trigger": [] },
-    { "id": "boom",           "generator": null, "check": "false", "fix": "fix-me", "tier": "both",      "trigger": ["boom.txt"] }
+    { "id": "boom",           "generator": null, "check": "false", "fix": "fix-me", "tier": "both",      "trigger": ["boom.txt"] },
+    { "id": "on-json",        "generator": null, "check": "true",  "fix": "n/a",    "tier": "both",      "trigger": ["*plugin.json"] }
   ]
 }
 JSON
@@ -127,5 +138,26 @@ OUT=$(run_scratch --check)
 RAN=",$(field "$OUT" ran),"
 assert_contains "$RAN" ",preflight-only," "full --check runs preflight-tier rituals"
 assert_contains "$RAN" ",boom," "full --check ignores triggers (boom runs without boom.txt staged)"
+
+# 6e. suffix-glob trigger (*plugin.json) must NOT be pathname-globbed against cwd.
+#     A root plugin.json exists in the scratch tree; staging a NESTED plugin.json must
+#     still fire the suffix rule. Without `set -f` the split glob-collapses `*plugin.json`
+#     to the existing root file (exact match), so the nested change silently fails to fire.
+( cd "$SCRATCH" && git rm -q --cached boom.txt >/dev/null 2>&1
+  : > plugin.json                       # root file that a naive glob would expand to
+  mkdir -p nested/deep && : > nested/deep/plugin.json && git add nested/deep/plugin.json
+) >/dev/null 2>&1
+OUT=$(run_scratch --check --changed)
+RAN=",$(field "$OUT" ran),"
+assert_contains "$RAN" ",on-json," "suffix *plugin.json fires on a NESTED plugin.json (no cwd globbing)"
+
+# 6f. git failure in --changed mode → FULL fallback, never an empty-set fail-open skip.
+#     A bad base ref makes `git diff --name-only <bad>` fail; every ritual must run —
+#     including trigger-scoped ones that would NOT fire with the (now unavailable) diff.
+OUT=$(run_scratch --check --changed no-such-ref-xyz)
+RAN=",$(field "$OUT" ran),"
+assert_contains "$RAN" ",on-foo," "git-diff failure → FULL set (trigger-scoped on-foo runs)"
+assert_contains "$RAN" ",on-bar," "git-diff failure → FULL set (trigger-scoped on-bar runs)"
+assert_contains "$RAN" ",preflight-only," "git-diff failure → FULL set (preflight-tier ritual runs)"
 
 finalize_test

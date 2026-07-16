@@ -21,7 +21,8 @@
 #
 # Output: a JSON summary object on stdout; human progress on stderr.
 # Exit:   0 = all ran clean; 1 = a ritual failed (summary names id + fix) OR unknown --only id;
-#         2 = usage/env error.
+#         2 = CLI usage / missing-manifest-file error; 3 = manifest content invalid
+#         (parse fail / empty or absent rituals[] / bad field) — fail-closed, nothing run.
 
 set -uo pipefail
 
@@ -71,6 +72,7 @@ manifest_rows() {
     try { m = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); }
     catch (e) { process.stderr.write("manifest parse error: " + e.message + "\n"); process.exit(3); }
     if (!m || !Array.isArray(m.rituals)) { process.stderr.write("manifest missing rituals[]\n"); process.exit(3); }
+    if (m.rituals.length === 0) { process.stderr.write("manifest has empty rituals[] (nothing to run — refusing, fail-closed)\n"); process.exit(3); }
     for (const r of m.rituals) {
       const trig = r.trigger || [];
       // Triggers are space-joined in the row and word-split by the shell, so a
@@ -87,7 +89,14 @@ manifest_rows() {
   ' "$MANIFEST"
 }
 
-ROWS="$(manifest_rows)" || { echo "sync-all: could not read manifest" >&2; exit 2; }
+# Propagate manifest-content errors (parse fail / no rituals[] / empty rituals[] /
+# bad field) as the manifest_rows exit code (3), distinct from CLI-usage errors (2)
+# and missing-manifest-file (2). Fail-closed: never run with an unreadable manifest.
+ROWS="$(manifest_rows)"; MANIFEST_RC=$?
+if [ "$MANIFEST_RC" -ne 0 ]; then
+  echo "sync-all: manifest invalid (rc=$MANIFEST_RC) — refusing to run (fail-closed)" >&2
+  exit "$MANIFEST_RC"
+fi
 
 if [ "$LIST" = 1 ]; then
   printf '%s\n' "$ROWS" | cut -d"$US" -f1
@@ -95,12 +104,20 @@ if [ "$LIST" = 1 ]; then
 fi
 
 # ── changed-file set (for --changed trigger filtering) ──
+# On a git error in --changed mode we must NOT proceed with an empty changed-set: that
+# would silently skip every trigger-scoped ritual (fail-open). Instead fall back to the
+# FULL check set (fail-closed) so a broken git never suppresses a gate.
 CHANGED_FILES=""
+CHANGED_FAIL_FULL=0
 if [ "$CHANGED" = 1 ]; then
   if [ -n "$BASE" ]; then
-    CHANGED_FILES="$(git diff --name-only "$BASE" 2>/dev/null || true)"
+    CHANGED_FILES="$(git diff --name-only "$BASE" 2>/dev/null)"; GIT_RC=$?
   else
-    CHANGED_FILES="$(git diff --cached --name-only 2>/dev/null || true)"
+    CHANGED_FILES="$(git diff --cached --name-only 2>/dev/null)"; GIT_RC=$?
+  fi
+  if [ "$GIT_RC" -ne 0 ]; then
+    echo "sync-all: git diff failed (rc=$GIT_RC) in --changed mode — running the FULL check set (fail-closed)" >&2
+    CHANGED_FAIL_FULL=1
   fi
 fi
 
@@ -119,7 +136,17 @@ trigger_matches() {
   # trigger_matches <space-joined-triggers>; uses $CHANGED_FILES
   local trig="$1" entry f
   [ -z "$trig" ] && return 0   # empty trigger = always
-  for entry in $trig; do
+  # Split the space-joined triggers WITH pathname globbing DISABLED (set -f): an
+  # unquoted `for entry in $trig` would glob-expand a pattern like `*plugin.json`
+  # against cwd, silently converting a suffix trigger into whatever files exist
+  # there (proven: a root plugin.json collapses `*plugin.json` to an exact match,
+  # so a nested plugin.json change no longer fires the rule). noglob keeps tokens literal.
+  local -a entries=()
+  set -f
+  # shellcheck disable=SC2206
+  entries=($trig)
+  set +f
+  for entry in "${entries[@]}"; do
     while IFS= read -r f; do
       [ -z "$f" ] && continue
       match_one "$f" "$entry" && return 0
@@ -142,7 +169,8 @@ while IFS="$US" read -r id gen check fix tier trig; do
   if [ "${#WANT_ONLY[@]}" -gt 0 ]; then
     in_list "$id" "${WANT_ONLY[@]}" || { continue; }
     SEEN_ONLY+=("$id")
-  elif [ "$CHANGED" = 1 ]; then
+  elif [ "$CHANGED" = 1 ] && [ "$CHANGED_FAIL_FULL" = 0 ]; then
+    # (CHANGED_FAIL_FULL=1 ⇒ git-diff failed ⇒ skip filtering, run the FULL set)
     case "$tier" in
       pre-commit|both) : ;;
       *) SKIPPED+=("$id (tier=$tier)"); continue ;;

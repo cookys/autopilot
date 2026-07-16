@@ -142,6 +142,15 @@ STRICT_UNIT_ID=""
 STRICT_CONTRACT_SHA=""
 STRICT_SPEC_SHA=""
 STRICT_GO=""
+STRICT_SCOPE_ALLOW_PATHS=()
+STRICT_SCOPE_DENY_PATHS=()
+STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS=()
+STRICT_SCOPE_MAX_FILES=""
+STRICT_SCOPE_MAX_DIFF_LINES=""
+STRICT_OUTPUT_PATHS=()
+STRICT_POSTCHECK_OK=0
+STRICT_POSTCHECK_STATUS=""
+STRICT_POSTCHECK_ERROR=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
 # trap firing mid-run appends to a real path instead of an undefined one. Keep the
 # predictable log and lock inside a private per-user directory: shared /tmp names
@@ -309,7 +318,15 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
 
 extract_json_value() {
-  local json="$1" key="$2"
+  local key="" json=""
+  if [ "$#" -eq 1 ]; then
+    key="$1"
+    json="$(cat)"
+  else
+    json="${1-}"
+    key="${2-}"
+  fi
+  [ -n "$json" ] || return 1
   printf '%s' "$json" | node -e '
 const fs = require("fs");
 const key = process.argv[1];
@@ -373,6 +390,88 @@ if (typeof cur === "object") {
   process.stdout.write(String(cur));
 }
 ' "$path" "$key"
+}
+
+read_contract_array_lines() { # $1=contract-json $2=dot-path
+  local contract_path="$1" dot_path="$2"
+  node -e '
+const fs = require("fs");
+const contractPath = process.argv[1];
+const dotPath = process.argv[2];
+const parts = String(dotPath || "").split(".").filter(Boolean);
+let data;
+try {
+  data = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+} catch (e) {
+  process.exit(1);
+}
+let cur = data;
+for (const part of parts) {
+  if (cur === null || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, part)) {
+    process.exit(0);
+  }
+  cur = cur[part];
+}
+if (!Array.isArray(cur)) process.exit(0);
+for (const value of cur) {
+  if (typeof value === "string") {
+    console.log(value);
+  }
+}
+' "$contract_path" "$dot_path"
+}
+
+json_array_to_lines() {
+  local json=""
+  if [ "$#" -ge 1 ]; then
+    json="$1"
+  else
+    json="$(cat)"
+  fi
+  node -e '
+const fs = require("fs");
+const raw = fs.readFileSync(0, "utf8").trim();
+if (!raw) process.exit(0);
+let values;
+try {
+  values = JSON.parse(raw);
+} catch (e) {
+  process.exit(0);
+}
+if (!Array.isArray(values)) process.exit(0);
+for (const value of values) {
+  if (typeof value === "string") {
+    console.log(value);
+  }
+}'
+ <<< "$json"
+}
+
+json_array_first() {
+  local json=""
+  if [ "$#" -ge 1 ]; then
+    json="$1"
+  else
+    json="$(cat)"
+  fi
+  node -e '
+const fs = require("fs");
+const raw = fs.readFileSync(0, "utf8").trim();
+if (!raw) process.exit(0);
+let values;
+try {
+  values = JSON.parse(raw);
+} catch (e) {
+  process.exit(0);
+}
+if (!Array.isArray(values) || values.length === 0) process.exit(0);
+const value = values[0];
+if (typeof value === "string") {
+  process.stdout.write(value);
+} else if (value !== undefined && value !== null) {
+  process.stdout.write(String(value));
+}
+' <<< "$json"
 }
 
 normalize_timeout_seconds() {
@@ -448,12 +547,16 @@ emit() { # status commit files ins del worktree error
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_fields=", \"unit_id\": $strict_unit_json, \"contract_sha256\": $strict_contract_sha_json, \"spec_sha256\": $strict_spec_sha_json, \"go\": $strict_go_json"
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s }\n' \
+  local strict_boundary_fields=""
+  if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ] && [ "$1" = "committed" ] && [ "${STRICT_POSTCHECK_OK:-0}" -eq 1 ]; then
+    strict_boundary_fields=', "boundary": "ok", "acceptance": "ok"'
+  fi
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields"
+    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$strict_boundary_fields"
 }
 
 check_session_mode_gate() {
@@ -517,6 +620,25 @@ run_strict_contract_preflight() {
   [ -n "$contract_base" ] || die_precondition "contract missing base_sha"
   contract_wall_seconds="$(extract_file_json_value "$CONTRACT_FILE" "budget.wall_seconds" 2>/dev/null || true)"
   [ -n "$contract_wall_seconds" ] || die_precondition "contract missing budget.wall_seconds"
+  STRICT_SCOPE_MAX_FILES="$(extract_file_json_value "$CONTRACT_FILE" "scope.max_files" 2>/dev/null || true)"
+  [ -n "$STRICT_SCOPE_MAX_FILES" ] || die_precondition "contract missing scope.max_files"
+  STRICT_SCOPE_MAX_DIFF_LINES="$(extract_file_json_value "$CONTRACT_FILE" "scope.max_diff_lines" 2>/dev/null || true)"
+  [ -n "$STRICT_SCOPE_MAX_DIFF_LINES" ] || die_precondition "contract missing scope.max_diff_lines"
+
+  while IFS= read -r __strict_path; do
+    [ -n "$__strict_path" ] && STRICT_SCOPE_ALLOW_PATHS+=("$__strict_path")
+  done < <(read_contract_array_lines "$CONTRACT_FILE" "scope.allow_paths")
+  while IFS= read -r __strict_path; do
+    [ -n "$__strict_path" ] && STRICT_SCOPE_DENY_PATHS+=("$__strict_path")
+  done < <(read_contract_array_lines "$CONTRACT_FILE" "scope.deny_paths")
+  while IFS= read -r __strict_path; do
+    [ -n "$__strict_path" ] && STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS+=("$__strict_path")
+  done < <(read_contract_array_lines "$CONTRACT_FILE" "scope.generated_mirrors.allow_paths")
+  while IFS= read -r __strict_path; do
+    [ -n "$__strict_path" ] && STRICT_OUTPUT_PATHS+=("$__strict_path")
+  done < <(read_contract_array_lines "$CONTRACT_FILE" "output.paths")
+  unset __strict_path
+  [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -gt 0 ] || die_precondition "contract missing scope.allow_paths"
 
   if [ "$BASE_SUPPLIED" -eq 0 ]; then
     BASE="$contract_base"
@@ -1226,13 +1348,219 @@ fi
 # --- verify by artifacts, never by self-report ---
 HEAD_SHA="$(git -C "$WT" rev-parse HEAD)"
 DIRTY="$(git -C "$WT" status --porcelain)"
-FILES=0; INS=0; DEL=0
-if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
+  FILES=0; INS=0; DEL=0
+  if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
   SHORTSTAT="$(git -C "$WT" diff --shortstat "$BASE_SHA..$HEAD_SHA")"
   FILES="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ file' | grep -o '[0-9]\+' || echo 0)"
   INS="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ insertion' | grep -o '[0-9]\+' || echo 0)"
   DEL="$(printf '%s' "$SHORTSTAT" | grep -o '[0-9]\+ deletion' | grep -o '[0-9]\+' || echo 0)"
 fi
+}
+
+run_strict_acceptance_checks() {
+  STRICT_POSTCHECK_ERROR=""
+  STRICT_POSTCHECK_STATUS=""
+  local acceptance_out acceptance_status index expected actual command err
+  acceptance_out="$(node -e '
+const fs = require("fs");
+const cp = require("child_process");
+const contractPath = process.argv[1];
+const worktree = process.argv[2];
+const logPath = process.argv[3];
+
+function emit(payload) {
+  process.stdout.write(JSON.stringify(payload));
+}
+
+let contract;
+try {
+  contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+} catch (e) {
+  emit({ status: "acceptance_failed", error: "invalid contract json" });
+  process.exit(1);
+}
+
+const acceptance = Array.isArray(contract.acceptance) ? contract.acceptance : [];
+if (!acceptance.length) {
+  emit({ status: "acceptance_failed", error: "contract acceptance list is empty" });
+  process.exit(1);
+}
+
+let logFd = null;
+if (logPath) {
+  try { logFd = fs.openSync(logPath, "a"); } catch (e) { logFd = null; }
+}
+
+const stdio = logFd !== null ? ["ignore", logFd, logFd] : ["ignore", "ignore", "ignore"];
+
+for (let i = 0; i < acceptance.length; i++) {
+  const entry = acceptance[i] || {};
+  const argv = Array.isArray(entry.argv) ? entry.argv : [];
+  const expected = Number(entry.exit);
+  if (!Array.isArray(argv) || argv.length === 0) {
+    if (logFd !== null) fs.closeSync(logFd);
+    emit({ status: "acceptance_failed", index: i + 1, command: JSON.stringify(argv || []), expected: expected, actual: 1, error: "acceptance argv must be a non-empty array" });
+    process.exit(1);
+  }
+  if (!Number.isInteger(expected) || expected < 0 || expected > 255) {
+    if (logFd !== null) fs.closeSync(logFd);
+    emit({ status: "acceptance_failed", index: i + 1, command: JSON.stringify(argv), expected: expected, actual: 1, error: "acceptance exit must be an integer 0..255" });
+    process.exit(1);
+  }
+
+  let result;
+  try {
+    result = cp.spawnSync(argv[0], argv.slice(1), { cwd: worktree, stdio });
+  } catch (err) {
+    if (logFd !== null) fs.closeSync(logFd);
+    emit({ status: "acceptance_failed", index: i + 1, command: JSON.stringify(argv), expected: expected, actual: 1, error: String(err && err.message ? err.message : err) });
+    process.exit(1);
+  }
+
+  const actual = (typeof result.status === "number") ? result.status : (result.signal ? 128 : 1);
+  if (actual !== expected) {
+    if (logFd !== null) fs.closeSync(logFd);
+    emit({ status: "acceptance_failed", index: i + 1, command: JSON.stringify(argv), expected: expected, actual: actual, error: "exit-code mismatch" });
+    process.exit(1);
+  }
+}
+
+if (logFd !== null) {
+  fs.closeSync(logFd);
+}
+emit({ status: "ok" });
+process.exit(0);
+  ' "$CONTRACT_FILE" "$WT" "$LOG")"
+  local acceptance_rc=$?
+  acceptance_status="$(printf '%s' "$acceptance_out" | extract_json_value status 2>/dev/null || true)"
+  if [ "$acceptance_rc" -ne 0 ] || [ "$acceptance_status" != "ok" ]; then
+    index="$(printf '%s' "$acceptance_out" | extract_json_value index 2>/dev/null || true)"
+    command="$(printf '%s' "$acceptance_out" | extract_json_value command 2>/dev/null || true)"
+    expected="$(printf '%s' "$acceptance_out" | extract_json_value expected 2>/dev/null || true)"
+    actual="$(printf '%s' "$acceptance_out" | extract_json_value actual 2>/dev/null || true)"
+    err="$(printf '%s' "$acceptance_out" | extract_json_value error 2>/dev/null || true)"
+    STRICT_POSTCHECK_STATUS="acceptance_failed"
+    STRICT_POSTCHECK_ERROR="acceptance_failed"
+    if [ -n "$command" ]; then
+      STRICT_POSTCHECK_ERROR="acceptance_failed: command #${index:-?} $command (expected exit ${expected:-?}, got ${actual:-?})"
+      [ -n "$err" ] && STRICT_POSTCHECK_ERROR="$STRICT_POSTCHECK_ERROR: $err"
+    elif [ -n "$err" ]; then
+      STRICT_POSTCHECK_ERROR="acceptance_failed: $err"
+    fi
+    return 1
+  fi
+
+  STRICT_POSTCHECK_STATUS="ok"
+  return 0
+}
+
+run_strict_contract_postchecks() {
+  local allow_file deny_file boundary_out boundary_rc diff_total changed_json
+  local undeclared deny_hits missing_out
+  local -a changed_paths=()
+  local -A changed_set=()
+  local output_path
+  local out_dir
+  local temp_path
+  STRICT_POSTCHECK_ERROR=""
+  STRICT_POSTCHECK_STATUS=""
+  STRICT_POSTCHECK_OK=0
+
+  if [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -eq 0 ] && [ "${#STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}" -eq 0 ]; then
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    STRICT_POSTCHECK_ERROR="boundary_rejected: missing scope allow paths"
+    return 1
+  fi
+
+  allow_file="$(mktemp -t "hetero-strict-allow-XXXXXX")" || {
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    STRICT_POSTCHECK_ERROR="boundary_rejected: failed to allocate allow path temp file"
+    return 1
+  }
+  for out_dir in "${STRICT_SCOPE_ALLOW_PATHS[@]}" "${STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}"; do
+    [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$allow_file"
+  done
+
+  deny_file=""
+  if [ "${#STRICT_SCOPE_DENY_PATHS[@]}" -gt 0 ]; then
+    deny_file="$(mktemp -t "hetero-strict-deny-XXXXXX")" || {
+      rm -f "$allow_file"
+      STRICT_POSTCHECK_STATUS="boundary_rejected"
+      STRICT_POSTCHECK_ERROR="boundary_rejected: failed to allocate deny path temp file"
+      return 1
+    }
+    for out_dir in "${STRICT_SCOPE_DENY_PATHS[@]}"; do
+      [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$deny_file"
+    done
+  fi
+
+  if [ -n "$deny_file" ]; then
+    if boundary_out="$( "$SELF_DIR/check-disjointness.sh" validate --range "$BASE_SHA..$HEAD_SHA" --repo "$WT" --no-default-deny --allow-file "$allow_file" --deny-file "$deny_file" 2>&1 )"; then
+      boundary_rc=0
+    else
+      boundary_rc=$?
+    fi
+  else
+    if boundary_out="$( "$SELF_DIR/check-disjointness.sh" validate --range "$BASE_SHA..$HEAD_SHA" --repo "$WT" --no-default-deny --allow-file "$allow_file" 2>&1 )"; then
+      boundary_rc=0
+    else
+      boundary_rc=$?
+    fi
+  fi
+  rm -f "$allow_file"
+  [ -n "$deny_file" ] && rm -f "$deny_file"
+
+  if [ "$boundary_rc" -ne 0 ]; then
+    undeclared="$(printf '%s' "$boundary_out" | extract_json_value undeclared_touches 2>/dev/null || true)"
+    deny_hits="$(printf '%s' "$boundary_out" | extract_json_value denylist_hits 2>/dev/null || true)"
+    if [ -n "$deny_hits" ] && [ "$deny_hits" != "null" ]; then
+      temp_path="$(printf '%s' "$deny_hits" | json_array_first)"
+    elif [ -n "$undeclared" ] && [ "$undeclared" != "null" ]; then
+      temp_path="$(printf '%s' "$undeclared" | json_array_first)"
+    else
+      temp_path=""
+    fi
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    if [ -n "$temp_path" ]; then
+      STRICT_POSTCHECK_ERROR="boundary_rejected: changed path violates scope '${temp_path}'"
+    else
+      STRICT_POSTCHECK_ERROR="boundary_rejected: changed path violates scope (see diff below); ${boundary_out}"
+    fi
+    return 1
+  fi
+
+  # budget checks from shortstat to avoid re-parsing git output twice
+  diff_total=$((INS + DEL))
+  if [ "$FILES" -gt "$STRICT_SCOPE_MAX_FILES" ] || [ "$diff_total" -gt "$STRICT_SCOPE_MAX_DIFF_LINES" ]; then
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    STRICT_POSTCHECK_ERROR="boundary_rejected: budget exceeded (max_files=$STRICT_SCOPE_MAX_FILES, max_diff_lines=$STRICT_SCOPE_MAX_DIFF_LINES; files=$FILES, insertions+deletions=$diff_total)"
+    return 1
+  fi
+
+  # output.paths must be a subset of changed files (exact paths, exact paths)
+  while IFS= read -r temp_path; do
+    [ -n "$temp_path" ] && changed_paths+=("$temp_path")
+  done < <(git -C "$WT" diff --name-only "$BASE_SHA..$HEAD_SHA")
+
+  for temp_path in "${changed_paths[@]}"; do
+    changed_set["$temp_path"]=1
+  done
+
+  for output_path in "${STRICT_OUTPUT_PATHS[@]}"; do
+    if [ -z "${changed_set["$output_path"]+x}" ]; then
+      STRICT_POSTCHECK_STATUS="boundary_rejected"
+      STRICT_POSTCHECK_ERROR="boundary_rejected: output path '$output_path' missing from changed files"
+      return 1
+    fi
+  done
+
+  if ! run_strict_acceptance_checks; then
+    return 1
+  fi
+
+  STRICT_POSTCHECK_STATUS="ok"
+  STRICT_POSTCHECK_OK=1
+  return 0
 }
 
 passive_capture() {
@@ -1305,15 +1633,23 @@ classify_outcome() {
       OUTCOME_STATUS="failure"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
     else
-      # new commit + clean tree + agent exit 0 → the only success path
-      if [ "$KEEP" = "0" ]; then
-        # Full reap (project teardown_hook + remove). NEVER branch -D here — the
-        # branch survives for review/merge. On remove failure: loud WARN +
-        # OUTCOME_ORPHAN set; exit code unchanged (D4).
-        OUTCOME_ORPHAN=""
-        reap_worktree "$WT"
+      if [ "$STRICT_CONTRACT" -eq 1 ] && ! run_strict_contract_postchecks; then
+        # strict-mode post-return boundary and acceptance checks are authoritative.
+        OUTCOME_STATUS="$STRICT_POSTCHECK_STATUS"
+        OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
+        OUTCOME_ERR="$STRICT_POSTCHECK_ERROR"
+        OUTCOME_EXIT=1
+      else
+        # new commit + clean tree + agent exit 0 → the only success path
+        if [ "$KEEP" = "0" ]; then
+          # Full reap (project teardown_hook + remove). NEVER branch -D here — the
+          # branch survives for review/merge. On remove failure: loud WARN +
+          # OUTCOME_ORPHAN set; exit code unchanged (D4).
+          OUTCOME_ORPHAN=""
+          reap_worktree "$WT"
+        fi
+        OUTCOME_STATUS="committed"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=0
       fi
-      OUTCOME_STATUS="committed"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=0
     fi
   else
     # --- no new commit: split by HOW the worker ended ---
@@ -1423,11 +1759,12 @@ dispatch_detached_run() {
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_DEPTH \
+      STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
-      classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize \
+      classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_acceptance_checks \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true

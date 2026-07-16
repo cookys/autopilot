@@ -61,8 +61,11 @@ DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
 WRAPPER_PID=$!
 cd "$_prev_pwd"
 
-# Let it get past worktree setup + into the detached run, then SIGKILL the wrapper.
-sleep 2
+# Wait until the detached worker is provably running (first heartbeat row), then
+# SIGKILL the wrapper. Fixed sleep races under parallel CPU contention.
+if ! poll_until 20 grep -q '"kind":"heartbeat"' "$LEDGER_A"; then
+  fail "kill-survival: detached worker never heartbeated before SIGKILL (readiness timeout)"
+fi
 kill -9 "$WRAPPER_PID" 2>/dev/null || true
 wait "$WRAPPER_PID" 2>/dev/null || true
 

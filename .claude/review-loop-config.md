@@ -13,17 +13,27 @@
 
 ## Settings
 
-- reviewer_engine: gpt-5.5
-- reviewer_effort: xhigh
-- reviewer_runner: codex
-- reviewer_engine_low_risk: gpt-5.6-sol
-- reviewer_effort_low_risk: high
+<!-- 2026-07-16 Board decision A (codex pool exhausted: spark resets Jul 23,
+     gpt-5.5 limited — capability store event 5): implementer → grok-4.5 (xai),
+     reviewer seat → MiniMax-M3 via cc-shim @ endpoint minimax (engine-qualify
+     13/13 known-bad, false_pass_on_critical=0, scorecard event 9; cc-shim is
+     fine at review-sized payloads per the transport note below). claude-haiku/
+     opus are ALSO qualified (events 5-6) but claude-native is deliberately not
+     roster-eligible — they stay fallback-ladder + qc-panel seats. Low-risk tier
+     cleared: it shares reviewer_runner and there is no second calibrated
+     cc-shim engine. Restore the gpt seats + spark implementer after Jul 23. -->
+- reviewer_engine: MiniMax-M3
+- reviewer_effort: high
+- reviewer_runner: cc-shim
+- reviewer_endpoint: minimax
+- reviewer_engine_low_risk:
+- reviewer_effort_low_risk:
 - on_family_conflict: fallback
 - reviewer_fallback_preference: claude-opus
 - reviewer_fallback_preference_low_risk: claude-haiku
-- implementer_engine: gpt-5.3-codex-spark
+- implementer_engine: grok-4.5
 - implementer_effort: high
-- implementer_runner: codex
+- implementer_runner: grok
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible

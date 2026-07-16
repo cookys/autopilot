@@ -7,6 +7,13 @@
 #
 # Pure bash (no subprocess) for json_escape so sandboxed/agy hosts stay safe.
 # Double-source is a no-op (worktree-reap.sh and dispatch-hetero.sh both may source this).
+#
+# INTENDED divergence from the pre-consolidation flatten-class emitters
+# (2026-07-16 P2 QC note): the old `sed|tr '\n' ' '` idiom passed raw
+# TAB/CR/control bytes THROUGH (technically-invalid JSON); this lib escapes
+# them (\t/\r/\uXXXX). Newline-free control-char-bearing inputs therefore
+# differ from the old bytes — deliberately, in the valid-JSON direction.
+# Do not mistake that for a migration regression.
 
 [ -n "${_AUTOPILOT_JSON_EMIT_SH:-}" ] && return 0
 _AUTOPILOT_JSON_EMIT_SH=1

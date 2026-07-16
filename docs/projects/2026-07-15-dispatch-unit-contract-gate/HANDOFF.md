@@ -321,6 +321,17 @@
   depth-0 contract; the B4 acceptance rail caught a false self-reported green; the R4
   base-disagreement gate rejected a branch-name --base. Working as designed.
 
+- **C4b COMPLETE (2026-07-16)**: dispatch-author.sh strict-contract mode merged — checker GO
+  gate (VA role), tuple-derived runner/model, disagreement rejection, l5/l6 marker block for
+  non-strict author dispatch, and MECHANIZED containment (porcelain+HEAD snapshot; mutation =
+  containment_breach exit 4, quarantined). The manual manifest ritual is now code. r1 was
+  boundary_rejected by depth-0's own recurring contract-authoring slip (pre-existing oracle
+  file listed in output.paths — template note: output.paths = only what the worker will
+  produce). MiniMax final findings verified-refuted empirically. NOTE FOR NEXT SESSION: from
+  now on, oracle-authoring GLM calls on this repo must ALSO go through --strict-contract (the
+  author rail now blocks non-strict dispatch under the active l6 marker) — freeze a VA-role
+  contract per authoring round; the checker + roster handle VA natively since C4a.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

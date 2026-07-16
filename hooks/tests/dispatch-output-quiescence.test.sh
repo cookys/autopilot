@@ -103,21 +103,21 @@ empty_stub=$(make_stub "codex-genuine-empty" 'exit 0')
 run_dispatch "$empty_stub" env AUTOPILOT_EMPTY_GRACE_MS=1000
 assert_eq "$DISPATCH_EXIT" "1" "genuine-empty-fast exit"
 assert_eq "$DISPATCH_STATUS" "empty_output" "genuine-empty-fast status"
-assert_le "$DISPATCH_ELAPSED" "5" "genuine-empty-fast uses tuned empty grace"
+assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 5)" "genuine-empty-fast uses tuned empty grace"
 
 immediate_stub=$(make_stub "codex-immediate-content" 'printf "OK\n"
 exit 0')
 run_dispatch "$immediate_stub" env
 assert_eq "$DISPATCH_EXIT" "0" "immediate-content exit"
 assert_eq "$DISPATCH_STATUS" "authored" "immediate-content status"
-assert_le "$DISPATCH_ELAPSED" "5" "immediate-content returns quickly"
+assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 5)" "immediate-content returns quickly"
 
 drip_stub=$(make_stub "codex-drip-writer" 'setsid bash -c '"'"'for i in $(seq 1 50); do printf x; sleep 0.2; done'"'"' &
 exit 0')
 run_dispatch "$drip_stub" env AUTOPILOT_SETTLE_MS=1500
 assert_eq "$DISPATCH_EXIT" "0" "drip-writer-deadline-bounded exit"
 assert_eq "$DISPATCH_STATUS" "authored" "drip-writer-deadline-bounded status"
-assert_le "$DISPATCH_ELAPSED" "7" "drip-writer-deadline-bounded capped by settle deadline"
+assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 7)" "drip-writer-deadline-bounded capped by settle deadline"
 
 timeout_stub=$(make_stub "codex-runner-timeout" 'exec sleep 30')
 EXTRA_ARGS=(--timeout 2s)
@@ -125,7 +125,7 @@ run_dispatch "$timeout_stub" env AUTOPILOT_EMPTY_GRACE_MS=500
 EXTRA_ARGS=()
 assert_eq "$DISPATCH_EXIT" "3" "runner-timeout-parity exit"
 assert_eq "$DISPATCH_STATUS" "runner_failed" "runner-timeout-parity status"
-assert_le "$DISPATCH_ELAPSED" "10" "runner-timeout-parity bounded by timeout"
+assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 10)" "runner-timeout-parity bounded by timeout"
 
 # big-output-pipefail regression: THE root cause of the 2026-07-05 empty_output
 # epidemic — bash `set -o pipefail` + a piped `grep -q` early-exit SIGPIPEs the
@@ -136,6 +136,6 @@ exit 0')
 run_dispatch "$big_stub" env
 assert_eq "$DISPATCH_EXIT" "0" "big-output-pipefail exit"
 assert_eq "$DISPATCH_STATUS" "authored" "big-output-pipefail status (must not false-empty)"
-assert_le "$DISPATCH_ELAPSED" "6" "big-output-pipefail returns promptly"
+assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 6)" "big-output-pipefail returns promptly"
 
 finalize_test

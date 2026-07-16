@@ -187,6 +187,61 @@ setup_sync_version_sandbox() {
   echo "$sandbox/scripts/sync-version.js"
 }
 
+# ---------------------------------------------------------------------------
+# Timing helpers (load-sensitive test windows under --parallel contention)
+# ---------------------------------------------------------------------------
+# AUTOPILOT_TEST_TIMING_FACTOR: positive integer multiplier (default 1).
+# factor=1 keeps serial timings byte-identical to the historical suite;
+# raise under CPU load to widen upper-bound margins and poll timeouts.
+_AUTOPILOT_TEST_TIMING_FACTOR_RAW="${AUTOPILOT_TEST_TIMING_FACTOR:-1}"
+case "$_AUTOPILOT_TEST_TIMING_FACTOR_RAW" in
+  ''|*[!0-9]*) AUTOPILOT_TEST_TIMING_FACTOR=1 ;;
+  0)           AUTOPILOT_TEST_TIMING_FACTOR=1 ;;
+  *)           AUTOPILOT_TEST_TIMING_FACTOR="$_AUTOPILOT_TEST_TIMING_FACTOR_RAW" ;;
+esac
+unset _AUTOPILOT_TEST_TIMING_FACTOR_RAW
+
+# test_timing_scale <base_int>
+# Echoes base_int * factor (integer arithmetic). Never smaller than base_int
+# (floor is implicit in bash $(( )); overflow / zero-factor clamp to base).
+test_timing_scale() {
+  local base="${1:?test_timing_scale: base_int required}"
+  local factor="${AUTOPILOT_TEST_TIMING_FACTOR:-1}"
+  local scaled=$(( base * factor ))
+  if [ "$scaled" -lt "$base" ]; then
+    scaled=$base
+  fi
+  printf '%s\n' "$scaled"
+}
+
+# poll_until <timeout_secs> <shell-cmd...>
+# Re-evaluate the command every ~0.1s until it exits 0 (return 0) or the
+# (timing-factor-scaled) timeout elapses (return 1). Dependency-free (bash +
+# sleep). Safe under `set -uo pipefail`: a failing command is expected while
+# waiting and does not abort the helper.
+poll_until() {
+  local timeout_base="${1:?poll_until: timeout_secs required}"
+  shift
+  if [ "$#" -lt 1 ]; then
+    echo "poll_until: command required" >&2
+    return 1
+  fi
+  local timeout
+  timeout="$(test_timing_scale "$timeout_base")"
+  local start now
+  start=$(date +%s)
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+    now=$(date +%s)
+    if [ $(( now - start )) -ge "$timeout" ]; then
+      return 1
+    fi
+    sleep 0.1
+  done
+}
+
 # Call once at end of each *.test.sh file.
 finalize_test() {
   if [ "${#__TEST_FAIL_MSGS[@]}" -eq 0 ]; then

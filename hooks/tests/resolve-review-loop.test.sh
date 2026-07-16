@@ -353,7 +353,7 @@ cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -388,7 +388,7 @@ cat <<'JSON' > "$TEST_TMP/event-unknown.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -410,7 +410,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -445,7 +445,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -473,7 +473,7 @@ cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "claude-3-5-sonnet",
   "role": "implementer",
   "capability": {

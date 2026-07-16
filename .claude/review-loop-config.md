@@ -23,7 +23,7 @@
 - reviewer_fallback_preference_low_risk: claude-haiku
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_effort: high
-- implementer_runner: auto
+- implementer_runner: codex
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible

@@ -71,6 +71,7 @@ from repository truth.
 | “順便提醒，gpt-5.3-codex-spark 跟 grok 4.5 都回來了” | Refresh per-model live readiness: Spark capability event 45 and Grok 4.5 event 44 are `available/high`; preserve the distinction that Grok readiness is not C1 strict-roster authorization |
 | “你停下來了?” | Treat the reminder plus explicit rejection of another stop as Board continuation: authorize Grok through a tracked strict-roster config change that must be reviewed and committed before dispatch, then resume C1 author → RED → Spark without another human gate |
 | “grok 4.5 / gpt-5.3-codex-spark 額度都回來了” | New Board continuation after all prior seats reached terminal: events 49/50 authorized one materially new tracked Grok recovery; its one-line prose result is terminal output-shape REJECT and atomically restores GLM |
+| “什麼意思? 你就繼續啊?” | Fresh Board continuation after r2 terminal: do not stop at the authorization boundary; use one new tracked Grok r3 attempt with events 51/52, a non-inspection direct-output prompt, and the same atomic restoration rule |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -94,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active/blocked — Grok r2 output-shape REJECT | The new tracked Grok attempt preserved containment but returned only one planning sentence; GLM roster, dogfood expectations, and lifecycle docs are restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — tracked Grok recovery r3 | Fresh Board continuation plus live Grok/Spark events 51/52; one materially new no-inspection prompt is authorized through the temporary tracked roster | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -278,6 +279,17 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   `lib.sh` sources, and zero finalizers. This is terminal `REJECT/output-shape`; no `bash -n`, RED,
   normalization, replay, or Spark dispatch ran. GLM config, dogfood expectations, and lifecycle docs
   are restored atomically. Permanent isolated Grok coverage remains tuple-independent.
+- The user then explicitly directed the active `/l6` run to continue rather than stop at the consumed
+  r2 authority boundary. Fresh real inference recorded Grok verification-author event 51 and Spark
+  implementer event 52 as `available/high`; Spark again returned `OK`. This is new Board authority for
+  exactly one materially new current-HEAD Grok r3 attempt, not a replay or retry of the r2 prompt.
+  The tracked roster is temporarily `grok-4.5/grok/high/endpoint ""/xai`; the r3 prompt must state that
+  no inspection/tools are available and require an immediate shebang-first final artifact. During
+  review, remote feature HEAD concurrently advanced to merge commit `a93be61f40b12402fb8643854dd3ef59bb02f2f4`,
+  which already incorporates current develop. The stale local-base account was blocked; depth-0 then
+  fetched and fast-forwarded because the remote commit descends from local `9698ad5` and touches none
+  of the four roster/lifecycle files. R3 now freezes from the actual synced feature HEAD. Any terminal
+  or aborted/non-started r3 atomically restores GLM config, dogfood expectations, and lifecycle docs.
 
 ## Dispatch policy
 
@@ -306,6 +318,10 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   after the earlier Grok terminal, backed by events 49/50. That authority was consumed by r2 and ended
   at `REJECT/output-shape`; it grants no replay, retry, or isolated/manual override. The repository
   roster, matching dogfood expectations, and lifecycle docs are again restored to GLM atomically.
+- The user's subsequent `你就繼續啊?` is separate Board continuation after r2 terminal. It authorizes
+  one tracked Grok r3 attempt backed by events 51/52 and a materially new direct-output prompt. It does
+  not reopen r1/r2 artifacts; repository-wide authority restores GLM plus matching tests/docs at every
+  terminal or aborted/non-started path.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

@@ -53,7 +53,7 @@ jobs:
         shell: bash
         env:
           AUTOPILOT_TEST_CACHE: ${{ runner.temp }}/autopilot-test-cache
-        run: bash hooks/tests/run.sh 2>&1 | tee "$RUNNER_TEMP/hooks-suite.log"
+        run: bash hooks/tests/run.sh --parallel 2>&1 | tee "$RUNNER_TEMP/hooks-suite.log"
 
       - name: Upload suite log on failure
         if: failure()

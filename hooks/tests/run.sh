@@ -8,8 +8,10 @@
 # Exit 0 only if every layer passes. Per-file pass/fail summary at the end.
 #
 # Usage:
-#   bash hooks/tests/run.sh              # run everything
+#   bash hooks/tests/run.sh                    # run everything (serial L2)
 #   bash hooks/tests/run.sh state-checkpoint   # filter (substring match on file)
+#   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; default nproc)
+#   bash hooks/tests/run.sh --parallel 8 filter
 
 set -uo pipefail
 
@@ -18,7 +20,66 @@ HOOKS_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-FILTER="${1:-}"
+# ── Argument parsing ──
+# Support, in any order: optional --parallel [N], optional substring FILTER.
+# Serial (no --parallel) is the default and must stay byte-identical to pre-flag.
+PARALLEL=0
+PARALLEL_N=""
+FILTER=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --parallel)
+      PARALLEL=1
+      shift
+      # Optional positive integer N immediately after --parallel
+      if [ $# -gt 0 ] && [[ "$1" =~ ^[1-9][0-9]*$ ]]; then
+        PARALLEL_N="$1"
+        shift
+      fi
+      ;;
+    --parallel=*)
+      PARALLEL=1
+      PARALLEL_N="${1#--parallel=}"
+      shift
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      echo "Usage: bash hooks/tests/run.sh [--parallel [N]] [filter]" >&2
+      exit 2
+      ;;
+    *)
+      if [ -n "$FILTER" ]; then
+        echo "Unexpected argument: $1 (filter already set to '$FILTER')" >&2
+        exit 2
+      fi
+      FILTER="$1"
+      shift
+      ;;
+  esac
+done
+
+# Resolve parallel worker count when requested.
+if [ "$PARALLEL" -eq 1 ]; then
+  if [ -n "$PARALLEL_N" ] && [[ "$PARALLEL_N" =~ ^[1-9][0-9]*$ ]]; then
+    : # use explicit N
+  else
+    # Invalid or missing N → default from nproc; fall back to 4 if unavailable.
+    if command -v nproc >/dev/null 2>&1; then
+      PARALLEL_N="$(nproc)"
+    else
+      PARALLEL_N=4
+    fi
+    if ! [[ "$PARALLEL_N" =~ ^[1-9][0-9]*$ ]]; then
+      PARALLEL_N=4
+    fi
+  fi
+  # Widen load-sensitive timing windows under contention unless already set.
+  if [ -z "${AUTOPILOT_TEST_TIMING_FACTOR+x}" ]; then
+    export AUTOPILOT_TEST_TIMING_FACTOR=3
+  fi
+fi
+
 TOTAL=0
 FAILED=0
 declare -a FAILED_TESTS=()
@@ -90,14 +151,137 @@ if [ "${#NON_EXEC[@]}" -gt 0 ]; then
   shopt -u nullglob
   exit 1
 fi
-for file in "$TESTS_DIR"/*.test.sh; do
-  run_one "$file"
-done
-# scripts/*.test.sh — same never-scanned gap as the L1 note above.
-for file in "$REPO_ROOT"/scripts/*.test.sh; do
-  run_one "$file"
-done
-shopt -u nullglob
+
+if [ "$PARALLEL" -eq 0 ]; then
+  # ── Serial path (default; byte-identical to pre--parallel) ──
+  for file in "$TESTS_DIR"/*.test.sh; do
+    run_one "$file"
+  done
+  # scripts/*.test.sh — same never-scanned gap as the L1 note above.
+  for file in "$REPO_ROOT"/scripts/*.test.sh; do
+    run_one "$file"
+  done
+  shopt -u nullglob
+else
+  # ── Parallel path: fan L2 files across N workers ──
+  # Collect candidate files (same set as serial), apply FILTER, count TOTAL.
+  declare -a L2_FILES=()
+  for file in "$TESTS_DIR"/*.test.sh "$REPO_ROOT"/scripts/*.test.sh; do
+    [ -f "$file" ] || continue
+    rel="${file#$REPO_ROOT/}"
+    if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
+      continue
+    fi
+    L2_FILES+=("$file")
+  done
+  shopt -u nullglob
+
+  TOTAL=$((TOTAL + ${#L2_FILES[@]}))
+
+  n_files="${#L2_FILES[@]}"
+  if [ "$n_files" -eq 0 ]; then
+    : # nothing to run
+  else
+    # Cap workers to file count (no point spawning idle slots).
+    N="$PARALLEL_N"
+    if [ "$N" -gt "$n_files" ]; then
+      N="$n_files"
+    fi
+
+    # Temp dir for per-file stdout/stderr buffers + exit codes + done markers.
+    PARALLEL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/hooks-run-parallel.XXXXXX")"
+    # shellcheck disable=SC2064
+    trap 'rm -rf "$PARALLEL_TMP"' EXIT
+
+    start_one() {
+      local file="$1"
+      local i="$2"
+      local out="$PARALLEL_TMP/$i.out"
+      local ecf="$PARALLEL_TMP/$i.ec"
+      local donef="$PARALLEL_TMP/$i.done"
+      (
+        bash "$file" >"$out" 2>&1
+        echo $? >"$ecf"
+        # Done marker last so readers only see complete buffers.
+        touch "$donef"
+      ) &
+    }
+
+    print_result() {
+      local i="$1"
+      local file="${L2_FILES[$i]}"
+      local rel="${file#$REPO_ROOT/}"
+      local out="$PARALLEL_TMP/$i.out"
+      local ecf="$PARALLEL_TMP/$i.ec"
+      local ec=1
+      if [ -f "$ecf" ]; then
+        ec="$(cat "$ecf")"
+        # Non-numeric guard
+        if ! [[ "$ec" =~ ^[0-9]+$ ]]; then
+          ec=1
+        fi
+      fi
+      # Atomic block: header + full file output (never interleaved).
+      echo ""
+      echo "──────── $rel ────────"
+      if [ -f "$out" ]; then
+        cat "$out"
+      fi
+      if [ "$ec" -ne 0 ]; then
+        FAILED=$((FAILED + 1))
+        FAILED_TESTS+=("$rel")
+      fi
+    }
+
+    started=0
+    finished=0
+    active=0
+
+    while [ "$finished" -lt "$n_files" ]; do
+      # Fill the worker pool.
+      while [ "$active" -lt "$N" ] && [ "$started" -lt "$n_files" ]; do
+        start_one "${L2_FILES[$started]}" "$started"
+        started=$((started + 1))
+        active=$((active + 1))
+      done
+
+      # Print one completed file's block (completion order).
+      found=0
+      i=0
+      while [ "$i" -lt "$started" ]; do
+        if [ -f "$PARALLEL_TMP/$i.done" ] && [ ! -f "$PARALLEL_TMP/$i.printed" ]; then
+          # Mark printed first to avoid double-print under any retry.
+          touch "$PARALLEL_TMP/$i.printed"
+          print_result "$i"
+          finished=$((finished + 1))
+          active=$((active - 1))
+          found=1
+          break
+        fi
+        i=$((i + 1))
+      done
+
+      if [ "$found" -eq 0 ]; then
+        # Block until some child exits so we don't busy-spin.
+        if [ "$active" -gt 0 ]; then
+          wait -n 2>/dev/null || {
+            # bash without wait -n: wait for any single known child via short poll.
+            sleep 0.05
+          }
+        else
+          # No active workers but not finished — should not happen; avoid hang.
+          break
+        fi
+      fi
+    done
+
+    # Reap any remaining children (should already be done).
+    wait 2>/dev/null || true
+
+    rm -rf "$PARALLEL_TMP"
+    trap - EXIT
+  fi
+fi
 
 # ── Summary ──
 echo ""

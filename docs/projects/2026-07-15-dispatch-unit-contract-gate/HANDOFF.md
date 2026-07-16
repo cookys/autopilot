@@ -360,6 +360,17 @@
   withResolverConfig shim; capability-query warn-on-failure; required_red_command
   required-vs-plan-optional.
 
+- **C7 COMPLETE (2026-07-16)**: gpt-5.5 aggregate review found four cross-unit bypasses (hetero
+  --runner disagreement unchecked; author rail accepting implementer-role contracts; author
+  --endpoint override; acceptance-argv able to smuggle post-boundary mutations) — all closed in
+  a strict-dispatched hardening unit; the full-suite run exposed two more (bare $HOME in marker
+  scans crashing env -i + set -u; the session-mode test encoding pre-C4b policy) — closed in a
+  second strict unit. Ten focused suites green; release scans clean (secret 0; completeness 0
+  new); v2.32.38 paperwork committed (plan's v2.32.36 target was taken by the
+  branch-lifecycle ship — retargeted). Remaining at session end: full-suite re-run
+  confirmation, preflight-release (slash probe may be loudly skipped), final merge to develop
+  (pre-push qc-gate needs QC-Verdict trailer), post-merge project archive.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

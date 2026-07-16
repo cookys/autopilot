@@ -1,6 +1,6 @@
 # Dispatch unit contract gate
 
-> Status: ACTIVE — C1-C6 COMPLETE; C7 (aggregate QC/release) pending
+> Status: C1-C7 COMPLETE — v2.32.38 release gates running; pending final merge to develop
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
@@ -101,7 +101,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | C4 author rail | **COMPLETE** — C4a role-aware gate + C4b strict author rail with mechanized containment (oracle 33 GREEN) | Verification-author contract composition and checkout containment proof |
 | C5 observability/docs | **COMPLETE** — manifests carry contract fields, dispatch-status surfaces them (oracle 8 GREEN); l5/l6/front-door operator docs updated | Status/manifest provenance, canonical docs, mirrors, payload parity |
 | C6 release-probe routing | **COMPLETE** — red-green proven (GREEN 6 / base RED) | Unavailable/unapproved probe proves zero CLI spawn; no hard-coded fallback |
-| C7 aggregate QC/release | pending | C1-C6 | Full suite, scans, payload/schema checks, dual-family review, finish-flow |
+| C7 aggregate QC/release | **COMPLETE** — 4 aggregate bypasses closed, \${HOME:-} guards, suite closure; dual-family aggregate reviews; scans clean | Full suite, scans, payload/schema checks, dual-family review, finish-flow |
 
 ## Start gate
 

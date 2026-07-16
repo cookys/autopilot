@@ -23,8 +23,12 @@
 </p>
 
 <p align="center">
-  <b>The AI project lead for your terminal.</b><br>
-  Claude Code is the full home base. Autopilot plans, delegates, reviews with a second engine, and remembers what it learned — with portable paths for Codex, OpenCode, agy, and Grok Build where their harnesses support them.
+  <b>The CEO-agent for development work.</b><br>
+  You toss in a rough idea; it maps the options, makes the tradeoffs, builds and reviews with a second engine — and only pages you when stuck or over a red line. Claude Code is the full home base, with portable paths for Codex, OpenCode, agy, and Grok Build where their harnesses support them.
+</p>
+
+<p align="center">
+  <a href="https://cookys.github.io/autopilot/"><b>🌐 Product site</b></a> — one full run, delegation levels, and the public crash log.
 </p>
 
 <p align="center">

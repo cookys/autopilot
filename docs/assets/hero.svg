@@ -88,7 +88,7 @@
   <g class="font">
     <text x="76" y="112" class="wordmark" fill="#5A67D8" opacity="0.24" filter="url(#softGlow)">Autopilot</text>
     <text x="76" y="112" class="wordmark" fill="url(#wordGradient)">Autopilot</text>
-    <text x="78" y="154" class="tagline" fill="#e6ebf5" opacity="0.92">AI coding-agent lifecycle &#8212; plan, delegate, review, and finish.</text>
+    <text x="78" y="154" class="tagline" fill="#e6ebf5" opacity="0.92">Get the decision right. Let the system finish.</text>
     <text x="80" y="56" class="micro" fill="#E8A838" opacity="0.88">Claude Code-first &#183; multi-harness paths</text>
 
     <g transform="translate(78 205)">
@@ -108,7 +108,7 @@
         <rect width="118" height="36" rx="18" fill="#141b2e" stroke="#6B8E6B" stroke-opacity="0.55"/>
         <rect width="118" height="36" rx="18" fill="url(#chipSheen)" opacity="0.35"/>
         <circle cx="20" cy="18" r="4.5" fill="#6B8E6B"/>
-        <text x="34" y="23" class="chip-text" fill="#e6ebf5">22 hooks</text>
+        <text x="34" y="23" class="chip-text" fill="#e6ebf5">25 hooks</text>
       </g>
       <g transform="translate(492 0)">
         <rect width="168" height="36" rx="18" fill="#141b2e" stroke="#E8A838" stroke-opacity="0.58"/>

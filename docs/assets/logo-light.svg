@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Autopilot">
+  <!-- Light: same geometry; no amber nose wedge -->
+  <g transform="translate(6 -6) rotate(45 32 32)">
+    <path d="M27 57 L23 63" stroke="#4338CA" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+    <path d="M32 57.5 L32 65" stroke="#B45309" stroke-width="3.8" stroke-linecap="round" fill="none"/>
+    <path d="M37 57 L41 63" stroke="#312E81" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+    <path fill="#1E293B" fill-rule="evenodd" d="M32 8 L36 18 L36 24 L54 40 L54 44 L36 36 L35 46 L45 54 L45 57 L34 52 L33.5 55 L30.5 55 L30 52 L19 57 L19 54 L29 46 L28 36 L10 44 L10 40 L28 24 L28 18 Z M30.5 15 L33.5 15 L33.5 20 L30.5 20 Z"/>
+  </g>
+</svg>

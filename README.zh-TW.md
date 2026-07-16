@@ -23,8 +23,12 @@
 </p>
 
 <p align="center">
-  <b>你終端機裡的 AI 專案負責人。</b><br>
-  Claude Code 是完整主場。Autopilot 負責規劃、委派、用第二個引擎審查、並記住學到的東西 —— 同時也為 Codex、OpenCode、agy、Grok Build 提供各自 harness 能支援的可攜路徑。
+  <b>開發流程的 CEO agent。</b><br>
+  你丟一個初步想法，它把選項想全、取捨做完、寫完也用第二個引擎審完——只有真的卡關或踩紅線才叫你。Claude Code 是完整主場；Codex、OpenCode、agy、Grok Build 依其 harness 支援度提供可攜路徑。
+</p>
+
+<p align="center">
+  <a href="https://cookys.github.io/autopilot/zh-TW/"><b>🌐 產品網站</b></a> —— 完整流程、委派層級、翻車紀錄。
 </p>
 
 <p align="center">

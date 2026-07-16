@@ -24,6 +24,48 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.42 — Dispatch-unit contract gate: mechanical GO/NO-GO for strict L5/L6
+
+Machine-validated dispatch authorization: under an active l5/l6 session marker, a prompt is
+task detail, not authorization — no valid contract and no mechanical GO verdict means no
+runner.
+
+- **New** [`schemas/dispatch-unit-contract.schema.json`](schemas/dispatch-unit-contract.schema.json)
+  — closed v1 unit contract (spec/base/deps/scope/go/no_go/output/acceptance/budget; 40-hex
+  bases; argv-only acceptance; object-form generated mirrors).
+- **New** [`scripts/dispatch-contract.js`](scripts/dispatch-contract.js) — deterministic
+  GO/NO-GO checker (`check --contract --repo --json`; exit 0/2/3): schema, clean-base, spec
+  section bytes at immutable base, dependency ancestry, required paths, mandatory-mirror
+  declaration (commit outputs only), scope/budget consistency, ROLE-AWARE engine gate
+  (implementer or verification-author tuple via the canonical resolver; store-role
+  hyphen→underscore) against scorecard qualification + fresh capability quota. No LLM
+  override; a changed contract is a new hash and a new GO check.
+- `dispatch-hetero.sh --strict-contract --contract-file` — checker GO gate before
+  worktree/runner; base/timeout pinned from the contract; caller-disagreement rejection;
+  post-return artifact boundary (allow/deny/file/diff/output from git truth) +
+  depth-0-executed acceptance argv (`boundary_rejected`/`acceptance_failed`); contract fields
+  in the final JSON and START manifest.
+- `dispatch-author.sh --strict-contract` — GO-gated verification authoring with runner/model
+  derived from the resolved VA tuple and MECHANIZED consuming-checkout containment (mutation ⇒
+  `containment_breach` exit 4, artifact quarantined).
+- l5/l6 session-marker gate: prompt-only write/author dispatch on a marked repo fails before
+  any runner spawn (expired/foreign markers do not block).
+- `preflight-release.sh --only-slash-probe` + probe-availability routing: an explicitly
+  exhausted configured probe model refuses loudly before any CLI spawn; no hard-coded
+  fallback.
+- `dispatch-status.js --run` surfaces `unit_id`/`contract_sha256`/`go` from strict manifests.
+- `engine-scorecard.js` roles gain `verification_author`.
+- Five focused RED→GREEN oracles ship with the rails
+  (`hooks/tests/dispatch-contract{,-artifact}.test.sh`,
+  `dispatch-hetero-contract.test.sh`, `dispatch-author-contract.test.sh`,
+  `preflight-release-routing.test.sh`, `dispatch-status-contract.test.sh`) — every one
+  authored by a heterogeneous engine (GLM-5.2 over the new direct-HTTP author rail) and
+  implemented by a second family (gpt-5.3-codex-spark) under the very contracts they enforce.
+- Also: `anthropic-compatible` direct-HTTP author runner (+ `--max-tokens`), permanent
+  verification-author transport move off the condemned Claude-CLI shim for large payloads
+  (z.ai deterministic-529 root cause), explicit implementer runner in the roster, and a
+  qualified Spark implementer scorecard row.
+
 ## v2.32.41 — engine implement-review pre-flight is family-conflict-fallback aware
 
 **Headline**: the v2.32.25 `on_family_conflict: fallback` design was dead on arrival for `engine implement-review` — the impl-loop pre-flight gate checked the PRIMARY reviewer's `reviewer_qualified` directly and blocked at rounds:0 before the fallback ladder walk could ever run, so the default openai×openai roster stayed permanently `reviewer_qualification`-blocked even with a fully qualified cross-family ladder (live repro during the health-roadmap /l5 run: calibrated claude-haiku/claude-opus rows changed nothing). Found by a /l5 foreman's fail-closed escalation; fixed as its own defect unit; verified by a three-track QC panel (opus correctness + sonnet fail-closed with live mutation testing + Gemini cross-family) — all SHIP-AS-IS.
@@ -78,7 +120,6 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 - **Grok Build host install path** — document and wire repo-root `grok plugin install <clone|git-url> --trust` (no `platforms/grok/` package). README harness tables (EN/zh-TW), `docs/installation.md` § Grok Build (host vs runner), and `scripts/dev-setup.sh --harness grok [--install|--check]`.
 - Refreshed `src/harness/capabilities/grok.json` (2026-07-16, grok 0.2.101): skills/agents/plugin_install **verified**, hooks **warning** (registered, runtime parity not claimed), mutation_dispatch/blocking_gate still unverified at H2.
-
 ## v2.32.37 — Dispatch branch lifecycle gate and preserve-first reaper
 
 **Headline**: finish-flow can no longer silently leave an ahead integration candidate behind, and dispatch-owned local branches can be retired through a deterministic bundle-before-delete lifecycle rail.

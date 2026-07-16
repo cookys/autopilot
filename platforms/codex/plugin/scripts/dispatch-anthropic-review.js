@@ -11,6 +11,8 @@
 //                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
 //       [--prompt-file <file>] # optional: exact message body to send instead of --diff-file
 //       [--raw]               # when present, output raw model response text only
+//       [--max-tokens <n>]    # response token cap (default 4096; large authoring
+//                             # payloads need more — a truncated response fail-closes)
 //
 // AUTH (env only — never accepted as a CLI argument):
 //   MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN for other
@@ -80,6 +82,7 @@ function parseArgs(argv) {
     diffFile: '',
     promptFile: '',
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    maxTokens: DEFAULT_MAX_TOKENS,
     baseUrl: '',
     tokenEnv: '',
     raw: false,
@@ -99,6 +102,9 @@ function parseArgs(argv) {
         break;
       case '--timeout-ms':
         out.timeoutMs = Number(argv[++i]);
+        break;
+      case '--max-tokens':
+        out.maxTokens = Number(argv[++i]);
         break;
       case '--base-url':
         out.baseUrl = argv[++i] || '';
@@ -396,11 +402,11 @@ function isTruncatedResponse(body) {
   return !!(body && typeof body === 'object' && body.stop_reason === 'max_tokens');
 }
 
-function postMessages({ endpointUrl, token, model, prompt, timeoutMs, rawLog }) {
+function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens, rawLog }) {
   const url = new URL(endpointUrl);
   const payload = JSON.stringify({
     model,
-    max_tokens: DEFAULT_MAX_TOKENS,
+    max_tokens: maxTokens,
     messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
   });
   const transport = url.protocol === 'https:' ? https : http;
@@ -548,6 +554,9 @@ async function main() {
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
     failPrecondition('--timeout-ms must be a positive integer');
   }
+  if (!Number.isInteger(args.maxTokens) || args.maxTokens <= 0 || args.maxTokens > 200000) {
+    failPrecondition('--max-tokens must be a positive integer no greater than 200000');
+  }
 
   const baseUrl = resolveBaseUrl(args.baseUrl);
   const baseUrlError = validateBaseUrl(baseUrl);
@@ -569,6 +578,7 @@ async function main() {
       model,
       prompt,
       timeoutMs: args.timeoutMs,
+      maxTokens: args.maxTokens,
       rawLog,
     });
   } catch (err) {

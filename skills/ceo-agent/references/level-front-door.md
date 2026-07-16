@@ -355,12 +355,31 @@ finish-flow closing). The marker arms two opt-in hooks:
   transcript study: 96%+ of tokens were cache_read on unsplit depth-0 sessions).
   At T2 (150k) stop taking on new work and hand off NOW.
 
-For `/l6` only, verification AUTHORING is dispatched only through strict roster:
-`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
-This is the session-mode control-loop boundary contract, not optional guidance.
-It resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`
-via `resolve-review-loop.sh`; caller-supplied `--runner`, `--model`, `--effort`,
-or `--endpoint` must not be used in that path.
+Under an active l5/l6 marker, write and author dispatch on the consuming repo are
+CONTRACT-GATED (v2.32.36) — this is the session-mode control-loop boundary contract, not
+optional guidance:
+
+- Depth-0 freezes an immutable dispatch-unit contract (schema
+  `schemas/dispatch-unit-contract.schema.json`) per unit — one semantic decision plus its
+  mandatory generated mirrors, base pinned to a full SHA, budgets, allow/deny scope,
+  acceptance argv, and the engine role.
+- GO is mechanical and pre-spend:
+  `node scripts/dispatch-contract.js check --contract <unit.json> --repo <repo> --json`
+  (exit 0 GO / 2 schema / 3 policy NO-GO). No LLM override, no silent fallback; a changed
+  contract is a new hash and a new GO check.
+- Write dispatch: `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json>
+  --branch <b> --prompt-file <task.md> ...` — base/timeout derive from the contract; caller
+  `--base`/`--model`/`--timeout` disagreements are precondition-rejected; post-return the
+  dispatcher enforces the artifact boundary (allow/deny/file/diff/output) from git truth and
+  EXECUTES the acceptance argv itself (`boundary_rejected` / `acceptance_failed`, worktree
+  kept).
+- Verification authoring (`/l6`): `scripts/dispatch-author.sh --strict-contract
+  --contract-file <unit.json> --repo-root <consuming-repo> --prompt-file <file>` — the checker
+  gates with the verification-author role, runner/model derive from the resolved VA tuple, and
+  the consuming checkout is containment-proven (any mutation ⇒ `containment_breach` exit 4,
+  artifact quarantined, never promoted).
+- Prompt-only (non-strict) write/author dispatch on a repo with an active l5/l6 marker fails
+  before any runner spawn. Expired or foreign-repo markers do not block.
 
 Corollary (always, hooks on or off): dispatch outputs land in FILES; depth-0
 reads only the emitted JSON summary — never scroll raw worker logs into the

@@ -371,8 +371,7 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverr
 
   const lastEventAge = logStat.mtime_age_s;
   const stall = alive === true && lastEventAge !== null ? lastEventAge > stallSecs : (alive === true ? null : false);
-
-  return {
+  const status = {
     schema: 1,
     run_id: manifest ? manifest.run_id || null : null,
     role: manifest ? manifest.role || null : null,
@@ -393,6 +392,16 @@ function buildStatus(manifest, manifestPath, logOverride, stallSecs, formatOverr
     stall,
     manifest: manifestPath || null,
   };
+  if (manifest && Object.prototype.hasOwnProperty.call(manifest, 'unit_id')) {
+    status.unit_id = manifest.unit_id;
+  }
+  if (manifest && Object.prototype.hasOwnProperty.call(manifest, 'contract_sha256')) {
+    status.contract_sha256 = manifest.contract_sha256;
+  }
+  if (manifest && Object.prototype.hasOwnProperty.call(manifest, 'go')) {
+    status.go = manifest.go;
+  }
+  return status;
 }
 
 function usageOnly(logPath, declaredFormat) {

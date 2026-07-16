@@ -43,7 +43,7 @@ assert_contains "$OUT" '"reviewer_engine": "gpt-5.5"' "default reviewer engine"
 assert_contains "$OUT" '"implementer_engine": "gpt-5.3-codex-spark"' "default implementer (codex, NOT agy on this repo)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
 assert_contains "$OUT" '"verification_author_engine": "glm-5.2"' "default verification_author_engine"
-assert_contains "$OUT" '"verification_author_runner": "cc-shim"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_runner": "anthropic-compatible"' "default verification_author_runner"
 assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
 assert_contains "$OUT" '"verification_author_endpoint": "glm"' "default verification_author_endpoint"
 assert_contains "$OUT" '"verification_author_family": "zhipu"' "default derived verification_author_family"
@@ -67,7 +67,7 @@ assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cros
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
 assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
 assert_eq "glm-5.2" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
-assert_eq "cc-shim" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
+assert_eq "anthropic-compatible" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
 assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
 assert_eq "glm" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
 assert_eq "zhipu" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
@@ -112,6 +112,9 @@ assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACRCFG" bash "
 ACI_CFG="$TEST_TMP/rl-anthropic-compatible-impl.md"
 printf -- '- implementer_runner: anthropic-compatible\n- implementer_engine: MiniMax-M3\n' > "$ACI_CFG"
 assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACI_CFG" bash "$SCRIPT" --field implementer_runner)" "anthropic-compatible implementer_runner rejected (dispatch-hetero does not support it)"
+VAA_CFG="$TEST_TMP/rl-ver-auth-runner-anthropic.md"
+printf -- '- verification_author_present: true\n- verification_author_engine: MiniMax-M3\n- verification_author_runner: anthropic-compatible\n- verification_author_effort: high\n- verification_author_endpoint: glm\n' > "$VAA_CFG"
+assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VAA_CFG" bash "$SCRIPT" --field verification_author_runner)" "anthropic-compatible verification_author_runner honored"
 GCFG="$TEST_TMP/rl-grok-impl.md"
 printf -- '- implementer_runner: grok\n- implementer_engine: grok-composer-2.5-fast\n' > "$GCFG"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field implementer_runner)" "grok implementer_runner honored"
@@ -350,7 +353,7 @@ cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -385,7 +388,7 @@ cat <<'JSON' > "$TEST_TMP/event-unknown.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -407,7 +410,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -442,7 +445,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -470,7 +473,7 @@ cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "claude-3-5-sonnet",
   "role": "implementer",
   "capability": {

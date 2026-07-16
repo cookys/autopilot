@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 const process = require('process');
 
-const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator']);
+const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator', 'verification_author']);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'planner']);
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
@@ -45,8 +45,8 @@ const CONFIGURED_IDENTITY_FIELDS = [
 
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
-  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner|verifier|orchestrator> [--now <ISO-date>]\n\
-  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner|verifier|orchestrator> [--key capability|cost]\n\
+  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner|verifier|orchestrator|verification_author> [--now <ISO-date>]\n\
+  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner|verifier|orchestrator|verification_author> [--key capability|cost]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|planner> [--implementer-family <family>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder.\n\

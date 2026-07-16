@@ -133,4 +133,88 @@ rm -f "$SENTINEL"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$CASE6_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
 assert_precondition_failed "$OUT" "$EXIT" "incomplete" "Case 6: incomplete tuple fails closed"
 
+# Case 7: an isolated tracked roster selects the Grok 4.5 verification author
+# for the Spark implementer without allowing caller-supplied tuple flags.
+CASE7_DIR="$TEST_TMP/case7"
+mkdir -p "$CASE7_DIR/.claude"
+cat <<'EOF' > "$CASE7_DIR/.claude/review-loop-config.md"
+- verification_author_present: true
+- verification_author_engine: grok-4.5
+- verification_author_runner: grok
+- verification_author_effort: high
+- verification_author_endpoint:
+- implementer_engine: gpt-5.3-codex-spark
+EOF
+
+GROK_ARGS="$TEST_TMP/grok-args"
+export GROK_ARGS
+FAKE_GROK_RUNNER="$TEST_TMP/fake-grok-runner"
+cat <<'EOF' > "$FAKE_GROK_RUNNER"
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$GROK_ARGS"
+touch "$SENTINEL"
+printf '%s\n' "GROK-AUTHORED"
+EOF
+chmod +x "$FAKE_GROK_RUNNER"
+
+rm -f "$SENTINEL" "$GROK_ARGS"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE7_DIR" --prompt-file "$PROMPT" --bin "$FAKE_GROK_RUNNER" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 7: tracked Grok roster succeeds"
+assert_contains "$OUT" '"status": "authored"' "Case 7: status authored"
+assert_contains "$OUT" '"selection_source": "strict_roster"' "Case 7: strict_roster selection"
+assert_contains "$OUT" '"selection_path": "'"$CASE7_DIR/.claude/review-loop-config.md"'"' "Case 7: selection path is temporary repo config"
+assert_contains "$OUT" '"verification_author": { "engine": "grok-4.5", "runner": "grok", "effort": "high", "endpoint": "", "family": "xai" }' "Case 7: resolved Grok verification-author tuple"
+assert_file_exists "$SENTINEL" "Case 7: fake Grok runner executed"
+GROK_ARG_TEXT="$(cat "$GROK_ARGS")"
+assert_contains "$GROK_ARG_TEXT" '--prompt-file' "Case 7: Grok prompt-file composition"
+assert_contains "$GROK_ARG_TEXT" 'grok-4.5' "Case 7: Grok model composition"
+assert_contains "$GROK_ARG_TEXT" '--output-format' "Case 7: Grok output-format composition"
+assert_contains "$GROK_ARG_TEXT" 'plain' "Case 7: Grok plain output composition"
+assert_contains "$GROK_ARG_TEXT" '--disable-web-search' "Case 7: Grok web-search disabled"
+assert_not_contains "$GROK_ARG_TEXT" '--runner' "Case 7: no manual runner flag"
+assert_not_contains "$GROK_ARG_TEXT" '--effort' "Case 7: no manual effort flag"
+assert_not_contains "$GROK_ARG_TEXT" '--endpoint' "Case 7: no manual endpoint flag"
+
+# Case 8: isolated roster selects the Board-authorized Gemini 3.1 Pro (High)
+# AGY verification author for the Spark implementer.
+CASE8_DIR="$TEST_TMP/case8"
+mkdir -p "$CASE8_DIR/.claude"
+cat <<'EOF' > "$CASE8_DIR/.claude/review-loop-config.md"
+- verification_author_present: true
+- verification_author_engine: Gemini 3.1 Pro (High)
+- verification_author_runner: agy
+- verification_author_effort: high
+- verification_author_endpoint:
+- implementer_engine: gpt-5.3-codex-spark
+EOF
+
+AGY_ARGS="$TEST_TMP/agy-args"
+export AGY_ARGS
+FAKE_AGY_RUNNER="$TEST_TMP/fake-agy-runner"
+cat <<'EOF' > "$FAKE_AGY_RUNNER"
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$AGY_ARGS"
+touch "$SENTINEL"
+printf '%s\n' "AGY-AUTHORED"
+EOF
+chmod +x "$FAKE_AGY_RUNNER"
+
+rm -f "$SENTINEL" "$AGY_ARGS"
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE8_DIR" --prompt-file "$PROMPT" --bin "$FAKE_AGY_RUNNER" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Case 8: isolated Gemini roster succeeds"
+assert_contains "$OUT" '"status": "authored"' "Case 8: status authored"
+assert_contains "$OUT" '"selection_source": "strict_roster"' "Case 8: strict_roster selection"
+assert_contains "$OUT" '"selection_path": "'"$CASE8_DIR/.claude/review-loop-config.md"'"' "Case 8: selection path is isolated config"
+assert_contains "$OUT" '"verification_author": { "engine": "Gemini 3.1 Pro (High)", "runner": "agy", "effort": "high", "endpoint": "", "family": "google" }' "Case 8: resolved Gemini verification-author tuple"
+assert_file_exists "$SENTINEL" "Case 8: fake AGY runner executed"
+AGY_ARG_TEXT="$(cat "$AGY_ARGS")"
+assert_contains "$AGY_ARG_TEXT" '-p' "Case 8: AGY prompt flag composition"
+assert_contains "$AGY_ARG_TEXT" 'Write a verification plan.' "Case 8: AGY prompt composition"
+assert_contains "$AGY_ARG_TEXT" '--model' "Case 8: AGY model flag composition"
+assert_contains "$AGY_ARG_TEXT" 'Gemini 3.1 Pro (High)' "Case 8: AGY model composition"
+assert_contains "$AGY_ARG_TEXT" '--dangerously-skip-permissions' "Case 8: AGY permission composition"
+assert_not_contains "$AGY_ARG_TEXT" '--runner' "Case 8: no manual runner flag"
+assert_not_contains "$AGY_ARG_TEXT" '--effort' "Case 8: no manual effort flag"
+assert_not_contains "$AGY_ARG_TEXT" '--endpoint' "Case 8: no manual endpoint flag"
+
 finalize_test

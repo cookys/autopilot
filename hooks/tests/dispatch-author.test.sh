@@ -232,7 +232,42 @@ OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "
 EXIT=$?
 assert_eq "2" "$EXIT" "non-cc-shim with --endpoint exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "non-cc-shim endpoint reports precondition_failed"
-assert_contains "$OUT" "--endpoint applies only to --runner cc-shim" "correct runner restriction error message"
+assert_contains "$OUT" "--endpoint applies only to --runner anthropic-compatible or cc-shim" "correct runner restriction error message"
+
+# --- 8b. anthropic-compatible seam + endpoint gate behavior ---
+STUB_ANTHRO_JS="$TEST_TMP/runner-anthropic-compatible-ok.js"
+cat > "$STUB_ANTHRO_JS" <<'EOF'
+#!/usr/bin/env node
+process.stdout.write("authoring body line 1\nauthoring body line 2");
+EOF
+chmod +x "$STUB_ANTHRO_JS"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_JS" 2>&1)"
+EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible with fake-js exits 0"
+assert_contains "$OUT" '"status": "authored"' "anthropic-compatible reports authored"
+ANTHRO_RAW_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("raw_log", ""))' <<<"$OUT")"
+ANTHRO_EXPECT=$'authoring body line 1\nauthoring body line 2'
+assert_eq "$ANTHRO_EXPECT" "$(cat "$ANTHRO_RAW_LOG_PATH")" "anthropic-compatible fake body is written to raw_log"
+
+STUB_ANTHRO_FAIL_JS="$TEST_TMP/runner-anthropic-compatible-fail.js"
+cat > "$STUB_ANTHRO_FAIL_JS" <<'EOF'
+#!/usr/bin/env node
+process.exit(7);
+EOF
+chmod +x "$STUB_ANTHRO_FAIL_JS"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_FAIL_JS" 2>&1)"
+EXIT=$?
+assert_eq "3" "$EXIT" "anthropic-compatible non-zero fake-js exits 3"
+assert_contains "$OUT" '"status": "runner_failed"' "anthropic-compatible non-zero maps to runner_failed"
+
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model mini --prompt-file "$PROMPT" --bin "$STUB_ANTHRO_JS" --endpoint UNKNOWN_EP 2>&1)"
+EXIT=$?
+assert_eq "2" "$EXIT" "anthropic-compatible unknown endpoint exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "anthropic-compatible unknown endpoint precondition failed"
+assert_not_contains "$OUT" "--endpoint applies only to --runner cc-shim" "anthropic-compatible endpoint gate no longer cc-shim-only"
+assert_contains "$OUT" "--endpoint 'UNKNOWN_EP' not ready" "anthropic-compatible endpoint resolution reports not-ready"
 
 # --- 9. late-flush and per-runner settle bound under cc-shim ---
 STUB_CC_LATE_FLUSH="$TEST_TMP/runner-cc-late-flush"
@@ -277,4 +312,3 @@ assert_eq "2" "$EXIT" "malformed AUTOPILOT_SETTLE_MS exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "malformed AUTOPILOT_SETTLE_MS reports precondition_failed"
 
 finalize_test
-

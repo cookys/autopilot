@@ -1,16 +1,16 @@
 <div align="center">
   <table border="0" cellspacing="0" cellpadding="0">
     <tr>
-      <td valign="middle"><img src="docs/assets/logo-app-icon.svg" alt="Autopilot" height="180"></td>
+      <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
       <td width="24"></td>
-      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — the CEO-agent for development work. Claude Code makes you faster; Autopilot lets you step away." height="180"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first lifecycle orchestration with portable paths for Codex, OpenCode, and agy" height="180"></td>
     </tr>
   </table>
 </div>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.32.41-E8A838?style=flat-square" alt="v2.32.41">
+  <img src="https://img.shields.io/badge/version-2.32.42-E8A838?style=flat-square" alt="v2.32.42">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
@@ -23,12 +23,8 @@
 </p>
 
 <p align="center">
-  <b>The CEO-agent for development work.</b><br>
-  You toss in a rough idea; it maps the options, makes the tradeoffs, builds and reviews with a second engine — and only pages you when stuck or over a red line. Claude Code is the full home base, with portable paths for Codex, OpenCode, agy, and Grok Build where their harnesses support them.
-</p>
-
-<p align="center">
-  <a href="https://cookys.github.io/autopilot/"><b>🌐 Product site</b></a> — one full run, delegation levels, and the public crash log.
+  <b>The AI project lead for your terminal.</b><br>
+  Claude Code is the full home base. Autopilot plans, delegates, reviews with a second engine, and remembers what it learned — with portable paths for Codex, OpenCode, and agy where their harnesses support them.
 </p>
 
 <p align="center">
@@ -55,7 +51,7 @@ Claude Code is still the most complete host. Autopilot makes AI coding agents **
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It ships first as a Claude Code plugin — **28 skills, 3 methodology agents, 25 hooks, zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It ships first as a Claude Code plugin — **28 skills, 3 methodology agents, 22 hooks, zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 
@@ -102,8 +98,7 @@ Autopilot is Claude Code-first, but not Claude Code-only. Pick the entry point t
 | **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills plus bundled support payload for linked scripts/references; no Claude hook parity claim |
 | **OpenCode user** | `.agents/skills/` plus `.opencode/opencode.json` | Shared skills and methodology agent bodies, with an OpenCode-specific in-process plugin wrapper |
 | **Antigravity (`agy`) user** | `scripts/install-antigravity.sh` | Guarded import as a Claude Code-source plugin; no loose skills-dir scan |
-| **Grok Build user** | `grok plugin install /path/to/autopilot --trust` (or `cookys/autopilot`) | 28 skills + 3 methodology agents as a Grok plugin; hooks register but Claude runtime parity is not claimed |
-| **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy/grok; mutating non-Claude setup requires `--harness <name> --install` |
+| **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy; mutating non-Claude setup requires `--harness <name> --install` |
 
 ## From Principle To Default
 
@@ -141,7 +136,7 @@ The course-sized idea is simple: teach the agent the collaboration discipline on
 |---|---|---|
 | **`/l3`** | inline, on this thread | full autonomy, but you want to watch it happen |
 | **`/l4`** | one background, worktree-isolated **foreman** | a long run you'd rather offload — your context stays clean, the authoritative quality verdict is held at depth 0 |
-| **`/l5`** | `/l4`, but the **implementer is a different engine** (Codex, Gemini, or agy) | cost-arbitrage, or a decorrelated second engine doing the mechanical coding |
+| **`/l5`** | `/l4`, but the **implementer is a different engine** (agy / Gemini) | cost-arbitrage, or a decorrelated second engine doing the mechanical coding |
 | **`/l6`** | `/l5`, plus **verification authoring is delegated** to a different engine | when you want implementation and verification labor offloaded, while depth 0 keeps merge authority |
 
 ```
@@ -183,11 +178,10 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 | Harness | How to start | Supported today | Known limits |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 25 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 22 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
 | **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` § Subagent model routing |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
-| **Grok Build** | `grok plugin install <clone\|git-url> --trust` (repo root is the payload) | 28 skills + 3 agents discoverable; hooks file registered (`grok inspect`) | Host ≠ runner. Hooks runtime / blocking-gate parity with Claude is partial/unverified. See `docs/installation.md` § Grok Build and `src/harness/capabilities/grok.json` |
 
 Full per-platform instructions, Windows notes, and the contributor **dev-mode** workflow are in **[docs/installation.md](docs/installation.md)**. Verified capability boundaries live in **[references/multi-agent-portability.md](references/multi-agent-portability.md)**.
 
@@ -202,9 +196,8 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** — 25 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
+| **Hooks** — 22 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
-| **Product website** (VitePress, not in plugin payload) | [website/](website/) · plan [docs/plans/2026-07-16-product-website.md](docs/plans/2026-07-16-product-website.md) |
 
 ## License
 

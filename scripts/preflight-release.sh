@@ -16,12 +16,18 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
+ONLY_SLASH_PROBE=0
+
 case "${1:-}" in
   ""|--update-baseline) ;;
+  --only-slash-probe)
+    ONLY_SLASH_PROBE=1
+    ;;
   --help|-h)
     echo "usage: $0 [--update-baseline]"
     echo "  (no args)          run the full release-hygiene gate — NOTE: check 7 runs 5 real"
     echo "                     LLM slash-entry probes; skip with AUTOPILOT_SKIP_SLASH_PROBE=1"
+    echo "  --only-slash-probe  run only the slash-entry probe gate (plus skip knob)"
     echo "  --update-baseline  recompute + write docs/metrics/surface-lines.json, then exit"
     exit 0
     ;;
@@ -127,6 +133,19 @@ check_slash_entry_probe() {
     echo "    SKIPPED by AUTOPILOT_SKIP_SLASH_PROBE=1 (thin-shell wiring NOT verified this release)"
     return 0
   fi
+
+  local probe_model="${SLASH_PROBE_MODEL:-claude-sonnet-5}"
+  local probe_status
+  local probe_state
+
+  probe_state="$(node scripts/engine-capability-state.js current --runner claude --model "$probe_model" --role probe)"
+  probe_status="$(printf '%s' "$probe_state" | node -e 'const fs = require("fs"); const payload = fs.readFileSync(0, "utf8").trim(); if (!payload) process.exit(0); try { const data = JSON.parse(payload); process.stdout.write((data && data.capability && data.capability.quota && data.capability.quota.status) || ""); } catch { process.exit(0); }')"
+
+  if [ "$probe_status" = "exhausted" ]; then
+    echo "    UNAVAILABLE: slash probe model '$probe_model' has exhausted quota; refusing to run."
+    return 1
+  fi
+
   AUTOPILOT_SLASH_PROBE=1 bash hooks/tests/slash-entry-probe.test.sh
 }
 
@@ -176,6 +195,14 @@ check_north_star() {
   fi
   return 0
 }
+
+if [ "$ONLY_SLASH_PROBE" = "1" ]; then
+  if check_slash_entry_probe; then
+    exit 0
+  else
+    exit 1
+  fi
+fi
 
 echo "preflight-release — autopilot release-hygiene gate"
 echo ""

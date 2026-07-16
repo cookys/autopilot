@@ -55,7 +55,7 @@ cat > "$VALID_CONTRACT" <<EOF_CONTRACT
   "unit_id": "c2-fixture-unit",
   "role": "implementer",
   "goal": "fixture",
-  "spec": {"path": "docs/plans/spec.md", "section": "## Unit spec"},
+  "spec": {"path": "docs/plans/spec.md", "section": "Unit spec"},
   "base_sha": "$BASE_SHA",
   "depends_on": ["$DEP_SHA"],
   "scope": {"allow_paths": ["done.txt"], "deny_paths": ["secret/**"], "max_files": 2, "max_diff_lines": 50},
@@ -72,7 +72,7 @@ cat > "$INVALID_CONTRACT" <<EOF_BAD_CONTRACT
   "schema": 1,
   "role": "implementer",
   "goal": "fixture",
-  "spec": {"path": "docs/plans/spec.md", "section": "## Unit spec"},
+  "spec": {"path": "docs/plans/spec.md", "section": "Unit spec"},
   "base_sha": "$BASE_SHA",
   "depends_on": ["$DEP_SHA"],
   "scope": {"allow_paths": ["done.txt"], "deny_paths": ["secret/**"], "max_files": 2, "max_diff_lines": 50},
@@ -88,8 +88,14 @@ ENGINE_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","
 RUNTIME_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ENGINE_EVENT="{\"schema_version\":1,\"observed_at\":\"$RUNTIME_UTC\",\"runner\":\"codex\",\"model\":\"gpt-5.3-codex-spark\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"reset_at\":null,\"evidence\":\"test\"}}}"
 
-ENGINE_SCORECARD_DIR="$ENGINE_SCORES_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$ENGINE_ROW" > /dev/null
-ENGINE_CAPABILITY_DIR="$ENGINE_CAPS_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$ENGINE_EVENT" > /dev/null
+printf '%s\n' "$ENGINE_ROW" > "$TEST_TMP/engine-row.json"
+printf '%s\n' "$ENGINE_EVENT" > "$TEST_TMP/engine-event.json"
+if ! ENGINE_SCORECARD_DIR="$ENGINE_SCORES_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$TEST_TMP/engine-row.json" > /dev/null; then
+    fail "Infrastructure error: scorecard seeding failed"
+fi
+if ! ENGINE_CAPABILITY_DIR="$ENGINE_CAPS_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/engine-event.json" > /dev/null; then
+    fail "Infrastructure error: capability seeding failed"
+fi
 
 json_get() {
     local json="$1"
@@ -98,11 +104,12 @@ json_get() {
 }
 
 CHECKER_OUT=$(ENGINE_SCORECARD_DIR="$ENGINE_SCORES_DIR" ENGINE_CAPABILITY_DIR="$ENGINE_CAPS_DIR" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$VALID_CONTRACT" --repo "$MINI_REPO" --json 2>&1)
-if ! echo "$CHECKER_OUT" | grep -q "GO"; then
-    fail "Infrastructure error: valid contract did not produce GO from checker. Out: $CHECKER_OUT"
+CHECKER_JSON=$(echo "$CHECKER_OUT" | grep '^{' | tail -n 1)
+GATE_VERDICT=$(json_get "$CHECKER_JSON" "verdict")
+if [ "$GATE_VERDICT" != "GO" ]; then
+    fail "Infrastructure error: valid contract did not produce exact GO from checker. Out: $CHECKER_OUT"
 fi
 
-CHECKER_JSON=$(echo "$CHECKER_OUT" | grep '^{' | tail -n 1)
 EXPECTED_CONTRACT_SHA=$(json_get "$CHECKER_JSON" "contract_sha256")
 EXPECTED_SPEC_SHA=$(json_get "$CHECKER_JSON" "spec_sha256")
 
@@ -153,7 +160,7 @@ assert_no_hetero_worktrees
 echo "--- R1: Contract file alone fails (precondition) ---"
 CASE_TMP="$TEST_TMP/case-r1b"
 mkdir -p "$CASE_TMP"
-out=$(run_dispatch "t1b" --contract-file "$VALID_CONTRACT")
+out=$(run_dispatch "t1b" --contract-file "$VALID_CONTRACT" --base main)
 rc=$?
 assert_eq "$rc" 2
 assert_contains "$out" "precondition_failed"
@@ -170,7 +177,7 @@ EOF_MARKER
 
 CASE_TMP="$TEST_TMP/case-r5a"
 mkdir -p "$CASE_TMP"
-out=$(run_dispatch "t2a")
+out=$(run_dispatch "t2a" --base main)
 rc=$?
 assert_eq "$rc" 2
 assert_contains "$out" "precondition_failed"
@@ -185,7 +192,7 @@ EOF_MARKER
 
 CASE_TMP="$TEST_TMP/case-r5b"
 mkdir -p "$CASE_TMP"
-out=$(run_dispatch "t2b")
+out=$(run_dispatch "t2b" --base main)
 rc=$?
 assert_eq "$rc" 2
 assert_contains "$out" "precondition_failed"
@@ -201,7 +208,7 @@ EOF_MARKER
 
 CASE_TMP="$TEST_TMP/case-r5c"
 mkdir -p "$CASE_TMP"
-out=$(run_dispatch "t2c")
+out=$(run_dispatch "t2c" --base main)
 rc=$?
 assert_eq "$rc" 0
 json=$(get_last_json "$out")
@@ -215,7 +222,7 @@ EOF_MARKER
 
 CASE_TMP="$TEST_TMP/case-r5d"
 mkdir -p "$CASE_TMP"
-out=$(run_dispatch "t2d")
+out=$(run_dispatch "t2d" --base main)
 rc=$?
 assert_eq "$rc" 0
 json=$(get_last_json "$out")
@@ -288,7 +295,7 @@ echo "--- R6: Legacy dispatch byte-compat ---"
 CASE_TMP="$TEST_TMP/case-r6"
 mkdir -p "$CASE_TMP"
 rm -f "$SESSION_MODE_DIR/s1.json"
-out=$(run_dispatch "t6")
+out=$(run_dispatch "t6" --base main)
 rc=$?
 assert_eq "$rc" 0
 json=$(get_last_json "$out")

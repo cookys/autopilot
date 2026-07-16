@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.41 — engine implement-review pre-flight is family-conflict-fallback aware
+
+**Headline**: the v2.32.25 `on_family_conflict: fallback` design was dead on arrival for `engine implement-review` — the impl-loop pre-flight gate checked the PRIMARY reviewer's `reviewer_qualified` directly and blocked at rounds:0 before the fallback ladder walk could ever run, so the default openai×openai roster stayed permanently `reviewer_qualification`-blocked even with a fully qualified cross-family ladder (live repro during the health-roadmap /l5 run: calibrated claude-haiku/claude-opus rows changed nothing). Found by a /l5 foreman's fail-closed escalation; fixed as its own defect unit; verified by a three-track QC panel (opus correctness + sonnet fail-closed with live mutation testing + Gemini cross-family) — all SHIP-AS-IS.
+
+### Fixed
+
+- `src/engine/autopilot-engine.js` extracts the family-conflict fallback-row selection (guards + `rowIsValid` + preference walk) into `selectFamilyConflictFallback`, shared by `reviewDiff` (byte-equivalent behavior) and the implement-review pre-flight: the gate now blocks only when the loop is genuinely unviable (no family conflict + qualified cross-family ladder row). Every fail-closed invariant preserved and mutation-tested: mode ≠ `fallback`, stale ladder provenance, all-invalid rows, cross-family-but-unqualified primary, empty ladder — all still block; `--allow-unqualified-reviewer` semantics unchanged.
+- `hooks/tests/autopilot-engine.test.sh` +15 assertions pinning the unblock path (fallback ledgered, round 1 reached) and all five preserved block paths; proven non-vacuous by revert/gate-deletion/per-guard mutation probes.
+
+### Reviewer-seat calibration (state, not code)
+
+- `claude-haiku` and `claude-opus` (runner `claude-native`, family `anthropic`) calibrated via `engine-qualify.sh` — 13/13 known-bad, `false_pass_on_critical=0` — and recorded into the engine scorecard, giving the openai implementer a real cross-family fallback ladder.
+
 ## v2.32.40 — reap self-kill guard: the setsid pgid race that kept CI red
 
 **Headline**: with the shallow-clone fix in (v2.32.39 → `8a08dc3`), CI exposed the *second* layer of the 100+-run red streak: `dispatch-batch.test.sh`'s kill-trap registered a worker pgid read **before** `setsid()` landed, so on a slow 2-core runner the file captured the test session's own process group and `reap` SIGTERM'd the entire CI runner — reported as "The operation was canceled", never as a test failure. Reproduced 2/2 in CI at the same spot; 0/300 locally (fast machines win the race).

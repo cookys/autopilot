@@ -675,3 +675,12 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Trigger**: 下次碰 hooks/_shared/secret-patterns.js 或有人再撞此 FP。
 - **Effort**: S。
 - **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。
+
+## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）
+
+- **Trigger**: C4a r3 worker 在 worktree 跑裸 `git config user.name "Test Bot"` → worktree 共享主
+  repo `.git/config` → 主 clone 28 commits（含 origin/develop 的 76daeb8）作者變 Test Bot。
+- **修復設計**（下一 session；codex 池 2026-07-23 前不可用，implementer 用 grok-4.5 或 MiniMax）：
+  dispatch-hetero.sh / dispatch-author.sh 在 run 前快照消費 repo 的 `user.name`/`user.email`，
+  teardown 比對；變動 ⇒ 修回 + 結果 JSON 加 `identity_drift: true` + 大聲警告。oracle fixtures
+  一律 `git -C` / inline `-c` identity。詳見 .claude/knowledge/debug-patterns.md。

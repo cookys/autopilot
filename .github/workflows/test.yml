@@ -7,9 +7,17 @@ on:
     branches: [develop, main]
   workflow_dispatch:
 
+# A superseded push's run is dead signal — cancel it instead of queueing.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-suite:
     runs-on: ubuntu-latest
+    # The suite spawns process groups and plays with setsid/flock; a hang here
+    # must not burn the 6-hour default. Full run is ~8 min.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +45,11 @@ jobs:
         run: bash scripts/sync-agent-bodies.sh --check
 
       - name: Release-hygiene gate
+        # Check 7 (slash-entry probe) needs a `claude` binary + auth — neither
+        # exists on a CI runner. The skip is loud by design; giving CI an API
+        # key instead would leak probe transcripts into the log. Never do that.
+        env:
+          AUTOPILOT_SKIP_SLASH_PROBE: "1"
         run: bash scripts/preflight-release.sh
 
       - name: Cross-agent portability gate

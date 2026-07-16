@@ -297,14 +297,29 @@ REAPDIR="$TEST_TMP/reap/runK"
 mkdir -p "$REAPDIR"
 # Launch two fake long-running workers, each in its OWN process group (setsid),
 # and register each group's pgid — exactly what the dispatch loop does.
+# setsid() RACES with `$!`: until the syscall lands the child still reports the
+# TEST's own pgid, and registering that would make reap SIGTERM this whole
+# session — on a slow CI runner this killed the runner itself ("The operation
+# was canceled", 2026-07-16). Poll until the group flips; register ONLY then.
+wait_own_pgroup() { # <pid> → echoes pgid once it equals pid; empty on timeout
+  local pid="$1" pg="" _i
+  for _i in $(seq 50); do
+    pg="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    [ "$pg" = "$pid" ] && { echo "$pg"; return 0; }
+    sleep 0.1
+  done
+  return 1
+}
 setsid bash -c 'sleep 300' &
 W1=$!
-PG1="$(ps -o pgid= -p "$W1" | tr -d ' ')"
-echo "$PG1" > "$REAPDIR/u1.pgid"
+PG1="$(wait_own_pgroup "$W1")" || true
+assert_eq "$W1" "$PG1" "kill-trap: u1 worker became its own process group"
+[ "$PG1" = "$W1" ] && echo "$PG1" > "$REAPDIR/u1.pgid"
 setsid bash -c 'sleep 300' &
 W2=$!
-PG2="$(ps -o pgid= -p "$W2" | tr -d ' ')"
-echo "$PG2" > "$REAPDIR/u2.pgid"
+PG2="$(wait_own_pgroup "$W2")" || true
+assert_eq "$W2" "$PG2" "kill-trap: u2 worker became its own process group"
+[ "$PG2" = "$W2" ] && echo "$PG2" > "$REAPDIR/u2.pgid"
 
 # Both alive before any reap.
 kill -0 "$W1" 2>/dev/null && U1_BEFORE=alive || U1_BEFORE=gone
@@ -338,7 +353,9 @@ OUT="$("$SCRIPT" reap --run-id runK --store "$TEST_TMP/no-such-dir" --abort 2>/d
 assert_eq "2" "$EXIT" "reap missing reap dir → exit 2"
 
 # defensive cleanup of any straggler groups (the test must not leak sleeps).
-kill -TERM "-$PG1" "-$PG2" 2>/dev/null || true
+# Same self-kill guard as above: only TERM a group that is really the worker's.
+[ "$PG1" = "$W1" ] && kill -TERM "-$PG1" 2>/dev/null || true
+[ "$PG2" = "$W2" ] && kill -TERM "-$PG2" 2>/dev/null || true
 wait 2>/dev/null || true
 
 # ════════════════════════════════════════════════════════════════════════════

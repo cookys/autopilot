@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.40 — reap self-kill guard: the setsid pgid race that kept CI red
+
+**Headline**: with the shallow-clone fix in (v2.32.39 → `8a08dc3`), CI exposed the *second* layer of the 100+-run red streak: `dispatch-batch.test.sh`'s kill-trap registered a worker pgid read **before** `setsid()` landed, so on a slow 2-core runner the file captured the test session's own process group and `reap` SIGTERM'd the entire CI runner — reported as "The operation was canceled", never as a test failure. Reproduced 2/2 in CI at the same spot; 0/300 locally (fast machines win the race).
+
+### Fixed
+
+- `scripts/dispatch-batch.sh` `reap_one_pgid` now refuses to TERM the process group it itself runs in (a legit worker group is always setsid'd, so pgid==own-group can only mean a raced/corrupt registration) — the runner-kill class is closed even if a caller registers a bad pgid.
+- `hooks/tests/dispatch-batch.test.sh` kill-trap polls until each worker's pgid flips to its own pid before registering it (+2 assertions), and the defensive cleanup kill is gated on the same check.
+
+### Changed
+
+- (none — codex payload mirror resynced for `dispatch-batch.sh`.)
+
 ## v2.32.39 — Deep code-audit + doc-sync sweep fixes
 
 **Headline**: a full deterministic-gate + three-finder audit of scripts/hooks/src against current reality. Un-reds CI (the harness-capabilities expectation lagged the grok.json refresh), retires the renamed `grok-build` id from the runtime `all-calibrated` qc-panel preset (→ `grok-4.5`), migrates `.opencode/opencode.json` to the OpenCode 1.17 config schema, and hardens the doc-drift gate against fixture false positives.

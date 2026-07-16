@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-07-16 | [ci-runner-kill-race](../../CHANGELOG.md) — CI 百紅第二層根因：dispatch-batch kill-trap 的 setsid pgid race 在慢 runner 上註冊到測試自身 process group，reap SIGTERM 誤殺整台 CI runner（"The operation was canceled"）。測試端 poll-until-flip＋reap 端拒殺自身 pgroup 雙層修。 | v2.32.40 | `develop`（直接落地） |
 | 2026-07-16 | [code-audit-doc-sync](../../CHANGELOG.md) — 深度 code audit＋doc-sync 全掃：CI 去紅（harness 測試期望落後資料刷新）、grok-build→grok-4.5 runtime 預設、OpenCode 1.17 schema 遷移、doc-drift gate fixture 誤報豁免、eval 模型預設現代化。 | v2.32.39 | `develop`（直接落地） |
 | 2026-07-16 | [narrative-alignment](../../website/NARRATIVE.md) — 全 repo 理解面對齊網站凍結敘事：plugin/marketplace/Codex descriptions 改 CEO-agent 開場（計數片段不動）、`docs/architecture.md` 22→25 hooks、內部敘事文件 閘→gate；「No-go zones→紅線」系統性改名記 BACKLOG（routing-sensitive）。 | v2.32.38 | `develop`（直接落地，無獨立分支） |
 | 2026-07-15 | [dispatch-unit-contract-gate](2026-07-15-dispatch-unit-contract-gate/README.md) — strict L5/L6 派遣的 machine-readable unit contract：depth-0 凍結 spec/邊界/依賴/預算，deterministic checker 獨占 GO/NO-GO，runtime STOP 與 post-return REJECT 分離；worker 不得自擴 scope，QC host 以 git truth 驗收。另納入 release probe 的 pre-spend model readiness，避免 hard-coded/quota-out 模型誤啟動。**目前僅完成立案與 spec freeze；v2.32.35 push/install/reload 前 implementation NO-GO。** | v2.32.36 | `feat/dispatch-unit-contract-gate` (not created; queued) |

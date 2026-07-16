@@ -532,6 +532,11 @@ if [ "$MODE" = reap ]; then
     # a corrupt pgid file must never become a self/ system kill. Only legit groups.
     case "$pgid" in ''|*[!0-9]*) return 0 ;; esac
     [ "$pgid" -gt 1 ] 2>/dev/null || return 0
+    # NEVER kill the group this script itself runs in: a worker group is always
+    # setsid'd, so a registered pgid equal to our own means the registration
+    # raced setsid() and captured the ORCHESTRATOR's group — TERMing it would
+    # take down the caller (and in CI the runner: "The operation was canceled").
+    [ "$pgid" = "$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')" ] && return 0
     # Only the negative-pgid form signals the whole GROUP. Guard a bogus/dead pgid.
     if kill -0 "-$pgid" 2>/dev/null; then
       kill -TERM "-$pgid" 2>/dev/null || true

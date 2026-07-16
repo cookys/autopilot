@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — tracked MiniMax-M3 recovery r3 | Grok r5 terminal restoration is reviewed/pushed; MiniMax event 55 and Spark event 54 authorize one new current-HEAD attempt | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active/blocked — MiniMax r3 output-shape REJECT | R3 preserved containment and produced one coherent test, but wrapped it in Markdown fences; GLM config/tests/docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -343,6 +343,17 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`. All old MiniMax and Grok prompts/artifacts stay
   terminal and cannot be replayed or reused. Every terminal or aborted/non-started path restores GLM
   config, dogfood expectations, and lifecycle docs atomically through independent review.
+- MiniMax authorization commit `720024b4af480b53edd844add46f1174bc8b1228` passed gpt-5.5 review
+  and was pushed clean. R3 contract SHA-256 is
+  `c951968759022610f81cafc771272bb178b5dbe6b3dbc9676868813252469814`; prompt SHA-256 is
+  `758ac0ca674359b91b6b8755dc0e94c4a40d6b2132e92506c683c0041368b244`. The exact strict call
+  selected `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`, preserved all 1,466 checkout file
+  hashes plus clean HEAD/status/diff, and returned one coherent 28,138-byte/562-line test (raw
+  SHA-256 `87c9066caf5b80b765e4082356bb03b9a0e23af068589f2d0b990b86709c5555`). It has exactly one
+  shebang/source/finalizer and no CR/EOS, but wraps the file in opening/closing Markdown fences at
+  lines 1/562. This is terminal `REJECT/output-shape` before syntax/RED; stripping fences would be
+  forbidden normalization, so no Spark dispatch ran. After atomic restoration, persistent
+  continuation permits a new MiniMax current-HEAD prompt that makes raw-stdout byte zero explicit.
 
 ## Dispatch policy
 
@@ -386,7 +397,9 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   and is terminal `REJECT/output-shape`. After restoration, the next tracked attempt selects
   MiniMax-M3 under the user's explicit `換 minimax 3?` authority; no Grok artifact is reused.
 - MiniMax r3 is that next attempt, backed by event 55 plus Spark event 54. It is a materially new
-  current-HEAD prompt/contract and may not replay either prior MiniMax prompt or empty artifact.
+  current-HEAD prompt/contract and did not replay prior MiniMax artifacts. It produced a coherent but
+  fenced file and is terminal `REJECT/output-shape`; any next attempt must be new and cannot strip or
+  reuse the fenced code.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

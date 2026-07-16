@@ -220,6 +220,25 @@
   `AUTOPILOT_AUTHOR_MAX_TOKENS:-30000` in the author branch, mirrors synced, suites green,
   live-verified. R7 is the next tracked attempt with the cap fixed and a materially new prompt.
 
+- **C1 ORACLE ACCEPTED (2026-07-16)**. After the max-tokens remedy, the new rail authored
+  every round in-budget. R7 (`REJECT/infrastructure-red` — root cause was DEPTH-0's own prompt
+  spec error: lib.sh's helper is `assert_file_absent`, every prompt since r4 advertised a
+  nonexistent `assert_file_not_exists`) → r8 (`REJECT/infrastructure-red`, artifact used
+  unsupported `record --file -` stdin form) → r9 (`REJECT/refusal`, GLM argued impossibility;
+  depth-0 refuted: captured nonzero checker exits are assertion data) → r10 with the
+  feasibility/capture-pattern clause produced a valid assertion-RED (7/52, zero infra), then
+  SIX gpt-5.5 review-driven surgical repair rounds (fixture parents, env-export reach,
+  fail-loud stores, exact key-set + parsed re-run + order-independent JSON via json_get,
+  valid-`failed`-status row supplied by depth-0, `fail`-not-`fail_test`, marker-referencing
+  valid contract, exit-3 JSON-shape assertions via assert_nogo_json) converged to
+  **SHIP-AS-IS**. Accepted oracle: `hooks/tests/dispatch-contract.test.sh`, SHA-256
+  `cfac848acb1f75097eb5157776c04dadac5d46803e9d0016e24cee2b353a299e` (586 lines), isolated RED
+  exit 1 / 32 passed / 155 failed / zero infrastructure lines. Committed on this branch in RED
+  state (checker absent by design). All round evidence: run dir
+  `C1-bootstrap-glm-r{6..10}.checklist.md` + raw logs listed there.
+- Depth-0 convergence rule applied from repair-5: only false-GREEN / false-RED class findings
+  drive the verdict; the final round returned none.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

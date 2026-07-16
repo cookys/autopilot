@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — direct-HTTP author runner shipped (merge `e12843a`); roster permanently on `glm-5.2/anthropic-compatible`; r6 next | Spark implemented the runner, depth-0 verified 433 assertions + mirrors, MiniMax-M3 cross-family review findings verified-resolved; r6 runs through the new rail | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — ORACLE ACCEPTED (SHIP-AS-IS); implementation dispatch next | GLM authored the oracle through the direct-HTTP rail (r10 + 6 surgical repair rounds); isolated RED exit 1, 32 passed / 155 failed, zero infrastructure errors; committed RED-state as hooks/tests/dispatch-contract.test.sh (sha256 cfac848a…) | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |

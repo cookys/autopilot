@@ -4667,7 +4667,7 @@ html:not(.dark) .rail-tl__id--human {
   color: var(--text-3);
 }
 .dday__colname--auto {
-  color: #f5a524;
+  color: var(--amber-text);
 }
 .dday__row {
   display: grid;
@@ -4710,7 +4710,7 @@ html:not(.dark) .rail-tl__id--human {
   color: var(--text-3);
 }
 .dday__tag--auto {
-  color: #f5a524;
+  color: var(--amber-text);
 }
 .dday__close {
   font-weight: 600;

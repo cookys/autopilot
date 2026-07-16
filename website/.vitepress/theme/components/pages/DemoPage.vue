@@ -321,6 +321,97 @@ const rail = computed(() =>
       }
 )
 
+/** Three kinds of "review" on one rail + what /l4→/l6 actually delegates. */
+const court = computed(() =>
+  zh.value
+    ? {
+        kicker: '同一條軌上，其實有三種「審」',
+        lead: '/l6 說「全委派」，第一個問題通常是：那還有誰在把關？答案是把關拆成三層，而且每層刻意用不同廠牌的模型。',
+        cards: [
+          {
+            t: '動工前 · plan 先審',
+            st: 'spec review',
+            d: '計畫本身先被另一個引擎批一輪，plan ⇄ 審來回到收斂。方向錯就死在紙上，不用等 code 寫完才發現。'
+          },
+          {
+            t: '寫的路上 · loop review',
+            st: 'IMPLEMENT ⇄ REVIEW',
+            d: '每輪 commit 都有跨廠牌 reviewer 讀 diff 給 VERDICT，有 blocking 就退回去改。抓的是「這一輪寫錯什麼」——快、跟著節奏、陪跑到底。'
+          },
+          {
+            t: '寫完之後 · 眾議會 QC',
+            st: 'qc panel · 終裁',
+            d: '跨廠牌 panel（例：OpenAI＋Anthropic＋Google）各自獨立審「整包」diff。任何一席驗證過的 Critical 都能擋下 merge——聯集裁決，不是多數決。loop review 過了，不代表這關會過。'
+          }
+        ],
+        familyLine:
+          '為什麼堅持不同廠牌？同家族模型共享盲點——寫跟審同廠牌，等於自己改自己的考卷。眾議會跟 loop review 的席位，都刻意跟寫 code 的引擎錯開家族。',
+        delegTitle: '/l4 → /l6：委出去的是勞力，留下來的是裁決',
+        delegLead:
+          '每升一級就多外包一件勞務。但不管到哪一級，「檢查的執行」與「過不過的裁決」都釘在 depth-0——用真 git artifact 判，不聽任何模型自報。',
+        delegHead: ['層級', '誰寫 code', '隨寫審查', '驗收題誰出', '終裁與 merge'],
+        delegRows: [
+          {
+            lv: '/l4',
+            cells: ['Claude 工頭', 'Claude 自審＋工頭 QC', 'depth-0 自己出', 'depth-0 終裁＋merge']
+          },
+          {
+            lv: '/l5',
+            cells: ['外廠牌引擎', '另一廠牌 reviewer', 'depth-0 自己出', '眾議會＋depth-0 merge']
+          },
+          {
+            lv: '/l6',
+            cells: ['外廠牌引擎', '另一廠牌 reviewer', '再一個廠牌出題', '眾議會＋depth-0 merge']
+          }
+        ],
+        delegNote:
+          '所以 /l6 的「全委派」是：寫 code、審 code、連驗收清單怎麼出，都交給彼此錯開的廠牌——但那份清單由 depth-0 親自執行，過不過由 artifact 說話。委派勞力，不委派信任。'
+      }
+    : {
+        kicker: 'One rail, three different kinds of “review”',
+        lead: '“Full delegation” at /l6 raises the obvious question: who still holds the line? The checking splits into three layers — each deliberately on a different model vendor.',
+        cards: [
+          {
+            t: 'Before work · plan review',
+            st: 'spec review',
+            d: 'The plan itself gets reviewed by another engine, looping until it converges. Wrong directions die on paper, not after the code exists.'
+          },
+          {
+            t: 'While writing · loop review',
+            st: 'IMPLEMENT ⇄ REVIEW',
+            d: 'Every commit round a cross-vendor reviewer reads the diff and returns a VERDICT; blocking findings loop it back. Catches what this round got wrong — fast, in rhythm, all the way.'
+          },
+          {
+            t: 'After writing · the QC panel',
+            st: 'qc panel · final',
+            d: 'A cross-vendor panel (e.g. OpenAI + Anthropic + Google) independently reviews the whole diff. Any single verified Critical blocks the merge — union, never majority vote. Passing loop review does not imply passing here.'
+          }
+        ],
+        familyLine:
+          'Why insist on different vendors? Same-family models share blind spots — writer and reviewer from one vendor is grading your own exam. Both the panel seats and the loop reviewer are deliberately family-disjoint from the code writer.',
+        delegTitle: '/l4 → /l6: the labor is delegated, the verdict is not',
+        delegLead:
+          'Each level externalizes one more piece of labor. At every level, executing the checks and ruling pass/fail stay pinned at depth-0 — judged on real git artifacts, never a model’s self-report.',
+        delegHead: ['Level', 'Writes code', 'In-loop review', 'Authors the checks', 'Final QC & merge'],
+        delegRows: [
+          {
+            lv: '/l4',
+            cells: ['Claude foreman', 'Claude self + foreman QC', 'depth-0 itself', 'depth-0 verdict + merge']
+          },
+          {
+            lv: '/l5',
+            cells: ['outside-vendor engine', 'different-vendor reviewer', 'depth-0 itself', 'panel + depth-0 merge']
+          },
+          {
+            lv: '/l6',
+            cells: ['outside-vendor engine', 'different-vendor reviewer', 'yet another vendor', 'panel + depth-0 merge']
+          }
+        ],
+        delegNote:
+          'So /l6 “full delegation” means: writing, reviewing, even authoring the acceptance checks go to mutually disjoint vendors — but depth-0 runs that checklist itself, and artifacts decide pass/fail. Delegate the labor, never the trust.'
+      }
+)
+
 /** Schematic /l5 replay — topology-true, not a recorded run_id */
 const trace = computed(() =>
   zh.value
@@ -774,6 +865,40 @@ IDLE ──/l*──► INTAKE ──► DECIDE ──► DISPATCH ──► IMP
 
     <section class="lp-section">
       <div class="lp-wrap">
+        <p class="lp-kicker">{{ court.kicker }}</p>
+        <p class="lp-lead srail-lead">{{ court.lead }}</p>
+        <div class="lp-who court-cards">
+          <article v-for="cc in court.cards" :key="cc.t" class="lp-who__card">
+            <code class="st-code-label">{{ cc.st }}</code>
+            <h3>{{ cc.t }}</h3>
+            <p>{{ cc.d }}</p>
+          </article>
+        </div>
+        <p class="court-family">{{ court.familyLine }}</p>
+
+        <p class="lp-kicker" style="margin-top: 2.25rem">{{ court.delegTitle }}</p>
+        <p class="lp-lead srail-lead">{{ court.delegLead }}</p>
+        <div class="eng-table-wrap" style="margin-top: 1rem">
+          <table class="eng-table">
+            <thead>
+              <tr>
+                <th v-for="h in court.delegHead" :key="h">{{ h }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in court.delegRows" :key="r.lv">
+                <td><code>{{ r.lv }}</code></td>
+                <td v-for="(cell, ci) in r.cells" :key="ci">{{ cell }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="court-note">{{ court.delegNote }}</p>
+      </div>
+    </section>
+
+    <section class="lp-section lp-section--alt">
+      <div class="lp-wrap">
         <p class="lp-kicker">{{ trace.title }}</p>
         <p class="lp-lead srail-lead">{{ trace.lead }}</p>
         <pre class="st-terminal eng-cmd"><code>{{ trace.cmd }}</code></pre>
@@ -794,7 +919,7 @@ IDLE ──/l*──► INTAKE ──► DECIDE ──► DISPATCH ──► IMP
       </div>
     </section>
 
-    <section class="lp-section lp-section--alt">
+    <section class="lp-section">
       <div class="lp-wrap">
         <details class="spec-details">
           <summary>{{ rail.specSummary }}</summary>

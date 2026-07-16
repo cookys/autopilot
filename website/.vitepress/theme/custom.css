@@ -4870,3 +4870,18 @@ html:not(.dark) .trail__ev--human .trail__st { color: #b91c1c; }
 .spec-details > summary::-webkit-details-marker {
   display: none;
 }
+
+/* ========== Review court (demo): three kinds of review + delegation table ========== */
+.court-cards {
+  margin-top: 1.25rem;
+}
+.court-family,
+.court-note {
+  margin: 1.1rem 0 0;
+  max-width: 46rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-2);
+  padding-left: 0.9rem;
+  border-left: 3px solid color-mix(in srgb, var(--amber) 50%, transparent);
+}

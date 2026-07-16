@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-07-16 | [health-roadmap](2026-07-16-health-roadmap/README.md) — /l5 CEO 全權委任：健檢 roadmap 執行到底（CI 安全網、lib 收斂、sync-all、測試平行化、Codex payload 模式）。 | v2.32.41+（P2 bash lib 收斂 v2.32.43；P3 JSONL-store 併發 lib 收斂 v2.32.44；P4 sync-all 統一 sync/check 儀式 v2.32.45） | `develop`（/l5 dispatch 分支 merge-back） |
+| 2026-07-16 | [health-roadmap](2026-07-16-health-roadmap/README.md) — /l5 CEO 全權委任：健檢 roadmap 執行到底（CI 安全網、lib 收斂、sync-all、測試平行化、Codex payload 模式）。 | v2.32.41+（P2 bash lib 收斂 v2.32.43；P3 JSONL-store 併發 lib 收斂 v2.32.44；P4 sync-all 統一 sync/check 儀式 v2.32.45；P2b engine endpoint wiring＋--resume v2.32.46） | `develop`（/l5 dispatch 分支 merge-back） |
 | 2026-07-16 | [ci-runner-kill-race](../../CHANGELOG.md) — CI 百紅第二層根因：dispatch-batch kill-trap 的 setsid pgid race 在慢 runner 上註冊到測試自身 process group，reap SIGTERM 誤殺整台 CI runner（"The operation was canceled"）。測試端 poll-until-flip＋reap 端拒殺自身 pgroup 雙層修。 | v2.32.40 | `develop`（直接落地） |
 | 2026-07-16 | [code-audit-doc-sync](../../CHANGELOG.md) — 深度 code audit＋doc-sync 全掃：CI 去紅（harness 測試期望落後資料刷新）、grok-build→grok-4.5 runtime 預設、OpenCode 1.17 schema 遷移、doc-drift gate fixture 誤報豁免、eval 模型預設現代化。 | v2.32.39 | `develop`（直接落地） |
 | 2026-07-16 | [narrative-alignment](../../website/NARRATIVE.md) — 全 repo 理解面對齊網站凍結敘事：plugin/marketplace/Codex descriptions 改 CEO-agent 開場（計數片段不動）、`docs/architecture.md` 22→25 hooks、內部敘事文件 閘→gate；「No-go zones→紅線」系統性改名記 BACKLOG（routing-sensitive）。 | v2.32.38 | `develop`（直接落地，無獨立分支） |

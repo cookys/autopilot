@@ -24,6 +24,15 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.46 — engine wires reviewer_endpoint + --resume re-entry
+
+**Headline**: the two `engine implement-review` gaps that bit the health-roadmap /l5 run three times in one day are closed. A cc-shim / anthropic-compatible roster reviewer's declarative `reviewer_endpoint` now actually reaches `dispatch-review.sh` as `--endpoint` (name-validated `[A-Za-z0-9_]+`; a family-conflict fallback substitution still blanks it, so a substituted reviewer never inherits the incumbent's endpoint), and a committed-but-review-blocked run is no longer a destroyed-state trap: explicit `--resume` re-enters verify+review on the existing branch via a read-only git precheck (`resume_invalid` fail-closed on missing/not-ahead/non-ancestor branches; absent flag = byte-identical behavior).
+
+### Fixed
+
+- `src/engine/autopilot-engine.js` + `bin/autopilot.js`: endpoint wiring (endpoint-capable runners only) and the `--resume` flag; `--endpoint` reserved in extra-args so the validated roster field is the only source.
+- QC hardening: the resume happy-path test asserts the review leg actually fires (proven load-bearing — a review-skip mutation fails exactly the three new assertions); `autopilot-engine.test.sh` → 414 assertions.
+
 ## v2.32.45 — One manifest-driven entry point for the repo's scattered sync/check rituals
 
 **Headline**: The repo's sync/check rituals (version mirrors, agent-bodies, model-routing,

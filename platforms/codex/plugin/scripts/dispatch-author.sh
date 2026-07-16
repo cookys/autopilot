@@ -33,6 +33,8 @@
 #   does not export `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`, and resolves base URL
 #   from `--endpoint` or `ANTHROPIC_COMPATIBLE_BASE_URL` / `AUTOPILOT_MINIMAX_BASE_URL`
 #   (default `https://api.minimax.io/anthropic`). (`--effort` is accepted but unused.)
+#   Response cap: `--max-tokens ${AUTOPILOT_AUTHOR_MAX_TOKENS:-30000}` (authoring payloads
+#   exceed the JS's 4096 review default; a truncated response fail-closes in the JS).
 #
 # USAGE:
 #   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible --model <name> --prompt-file <file>
@@ -409,11 +411,17 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   else
     ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
   fi
+  # Authoring payloads are large single files; the JS's 4096 review default truncates them
+  # and the truncated response fail-closes (verified live: GLM r6 oracle stopped at
+  # max_tokens). Env override for calibration; validated as a positive integer.
+  AUTHOR_MAX_TOKENS="${AUTOPILOT_AUTHOR_MAX_TOKENS:-30000}"
+  [[ "$AUTHOR_MAX_TOKENS" =~ ^[1-9][0-9]*$ ]] || die_precondition "AUTOPILOT_AUTHOR_MAX_TOKENS must be a positive integer (got: $AUTHOR_MAX_TOKENS)"
   ANTHROPIC_ARGS=(
     --raw
     --prompt-file "$PROMPT_FILE"
     --model "$MODEL"
     --timeout-ms "$TIMEOUT_MS"
+    --max-tokens "$AUTHOR_MAX_TOKENS"
     --base-url "$ANTHROPIC_BASE_URL"
   )
   if [[ -n "$ANTHROPIC_TOKEN_ENV" ]]; then

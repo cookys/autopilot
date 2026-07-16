@@ -209,6 +209,17 @@
   a materially new prompt already drafted; classification and atomic-restoration rules are
   unchanged (restoration target is now the anthropic-compatible GLM tuple).
 
+- R6 ran once through the new rail from `d3806e8` (contract
+  `ded41709ba737e91f51bd5ced0c24981495e76fbb1378251a15359b09068bbe3`, prompt
+  `7d10c20c607599fdf21efe96b1f675c928c1e208efcd66eac264e0ba39227f63`, GLM event 68
+  same-transport readiness). The endpoint responded and generated, but the JS's review-sized
+  `max_tokens=4096` default truncated the response and the JS correctly fail-closed (evidence
+  `/tmp/dispatch-anthropic-review-VVgFw1/raw.log`). Terminal `STOP/truncated-by-harness-cap`;
+  checkout untouched; the partial text is quarantined/non-promotable; the r6 prompt is
+  consumed. Remedy shipped: `--max-tokens` flag (default 4096 unchanged for reviews) +
+  `AUTOPILOT_AUTHOR_MAX_TOKENS:-30000` in the author branch, mirrors synced, suites green,
+  live-verified. R7 is the next tracked attempt with the cap fixed and a materially new prompt.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

@@ -1,9 +1,9 @@
 <div align="center">
   <table border="0" cellspacing="0" cellpadding="0">
     <tr>
-      <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
+      <td valign="middle"><img src="docs/assets/logo-app-icon.svg" alt="Autopilot" height="180"></td>
       <td width="24"></td>
-      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first 的生命週期編排，並為 Codex、OpenCode、agy、Grok Build 提供可攜路徑" height="180"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — 開發流程的 CEO agent。Claude Code 讓你寫得快；Autopilot 讓你不用一直坐在位子上。" height="180"></td>
     </tr>
   </table>
 </div>

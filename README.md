@@ -1,9 +1,9 @@
 <div align="center">
   <table border="0" cellspacing="0" cellpadding="0">
     <tr>
-      <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
+      <td valign="middle"><img src="docs/assets/logo-app-icon.svg" alt="Autopilot" height="180"></td>
       <td width="24"></td>
-      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first lifecycle orchestration with portable paths for Codex, OpenCode, agy, and Grok Build" height="180"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — the CEO-agent for development work. Claude Code makes you faster; Autopilot lets you step away." height="180"></td>
     </tr>
   </table>
 </div>

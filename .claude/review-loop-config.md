@@ -25,10 +25,20 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: glm-5.2
+- verification_author_engine: MiniMax-M3
 - verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint: glm
+- verification_author_endpoint: minimax
+
+> Temporary repository-wide C1 authorization (2026-07-16, MiniMax-M3 recovery r3): after reviewed,
+> pushed Grok-r5 terminal restoration, the user's persistent `/l6` continuation plus explicit
+> `換 minimax 3?` authorizes exactly one materially new current-HEAD MiniMax attempt. Direct
+> endpoint-backed Claude CLI event 55 and Spark event 54 are fresh `available/high`. All older
+> MiniMax/Grok prompts and artifacts remain terminal and non-replayable/non-normalizable/non-spliceable.
+> Because the resolver has no unit-id scope, restore `glm-5.2/cc-shim/high/endpoint glm` after
+> accepted, STOP, REJECT, pre-dispatch NO-GO, cancellation/abandonment, inability to begin, or before
+> C2/unrelated strict authoring. Restore this config, dogfood expectations, and README/HANDOFF
+> atomically through independent review. Permanent isolated runner fixtures remain tuple-independent.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active/blocked — Grok r5 output-shape REJECT | R5 preserved containment but returned only a planning sentence; GLM roster, dogfood expectations, and lifecycle docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — tracked MiniMax-M3 recovery r3 | Grok r5 terminal restoration is reviewed/pushed; MiniMax event 55 and Spark event 54 authorize one new current-HEAD attempt | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -335,6 +335,14 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   shebangs, sources, or finalizers. This is terminal `REJECT/output-shape` before syntax/RED; no
   normalization or Spark dispatch ran. After atomic GLM restoration, persistent continuation will
   use the user's explicitly authorized MiniMax-M3 seat rather than spend another immediate Grok call.
+- Grok-r5 terminal restoration commit `d2eea55bad2601470def6db5397e93281c018982` passed gpt-5.5
+  review and was pushed clean. A fresh endpoint-backed direct Claude CLI inference for `MiniMax-M3`
+  returned `OK` and recorded verification-author event 55 as `available/high`; Spark event 54 remains
+  fresh/high. Persistent continuation plus the user's explicit `換 minimax 3?` authority now issues
+  exactly one new tracked current-HEAD MiniMax r3 attempt. The temporary tuple is
+  `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`. All old MiniMax and Grok prompts/artifacts stay
+  terminal and cannot be replayed or reused. Every terminal or aborted/non-started path restores GLM
+  config, dogfood expectations, and lifecycle docs atomically through independent review.
 
 ## Dispatch policy
 
@@ -377,6 +385,8 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   failure with a new hard-stop output contract and reuses no old code. It returned only planning prose
   and is terminal `REJECT/output-shape`. After restoration, the next tracked attempt selects
   MiniMax-M3 under the user's explicit `換 minimax 3?` authority; no Grok artifact is reused.
+- MiniMax r3 is that next attempt, backed by event 55 plus Spark event 54. It is a materially new
+  current-HEAD prompt/contract and may not replay either prior MiniMax prompt or empty artifact.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

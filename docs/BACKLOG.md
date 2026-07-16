@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### 「No-go zones」→「red lines／紅線」系統性改名 — 產品敘事詞彙與 CEO 啟動問答的術語分裂
+- **Trigger**: 下次改動 `skills/ceo-agent/SKILL.md` 或 `/l3`–`/l6` 前門的啟動問答／preset 文字時（順路做），或決定做一次 routing-regression 驗證時。
+- **Context**: 網站凍結敘事已統一 紅線/red lines（no-go 已從 site/README 清除），但 CEO 啟動 Q4 的概念名仍是「No-Go Zones (Hard Constraints)」，散佈於 ceo-agent/l3–l6 SKILL.md frontmatter descriptions（含 `no-go=none` preset 字串）、level-front-door.md、docs/skills.md。frontmatter description 是 routing trigger——改字有 routing 位移風險，需搭配 skill-routing 回歸驗證（slash-entry probe＋手測觸發語），不可 drive-by。2026-07-16 敘事對齊掃描（narrative-drift scan）flag 為系統性項目。
+- **Effort**: Fix（改名本身小；驗證成本是主體）
+- **Source**: 2026-07-16 narrative-alignment sweep（v2.32.38）
+
 ### engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用
 - **Trigger**: 下次要在 `engine implement-review` 迴圈裡用 endpoint-backed reviewer（GLM/MiniMax via cc-shim `--endpoint`），或碰 `src/engine/autopilot-engine.js` buildReviewArgs 段時。
 - **Context**: 2026-07-14 loop-convergence-gates run（foreman escalation #1）：`autopilot-engine.js:1222` 組 reviewer dispatch 參數時不傳 `reviewer_endpoint` → cc-shim reviewer 缺 endpoint creds 結構性失敗；foreman 被迫換 agy/Gemini。獨立佐證：MiniMax-M3 即使 endpoint 通、在 dispatch-review 的 wrapped block 下也結構性 no_verdict（fail-closed 正確；GLM-5.2 standalone probe 可用）。修法：wire `reviewer_endpoint`（roster/resolver 已有此概念）into buildReviewArgs，並補一條 red-case（endpoint reviewer 配置下組出的 args 必含 --endpoint）。

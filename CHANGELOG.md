@@ -24,7 +24,14 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased
+## v2.32.38 — Narrative-aligned plugin descriptions
+
+**Headline**: the marketplace-facing plugin descriptions now lead with the frozen product narrative ("The CEO-agent for development work — hand it a rough idea…") instead of a bare skills/hooks catalog tally; the tally stays as the secondary clause and all machine-checked count fragments are unchanged. Companion docs sweep aligns stray pre-freeze text (a stale "22 hooks" in `docs/architecture.md`, 閘→gate in the internal narrative/panel notes) with the site's canonical vocabulary.
+
+### Changed
+
+- Plugin descriptions (canonical `.claude-plugin/plugin.json`, root mirror, `marketplace.json`, Codex payload manifest + `interface.longDescription`) lead with the CEO-agent positioning sentence; count fragments and routing surfaces untouched.
+- `docs/architecture.md` stale "22 hooks" → 25; internal narrative docs (`website/NARRATIVE.md`, `GROWTH-PANEL.md`, `WEEKLY.md`) converge on the gate/眾議會 vocabulary the shipped site uses.
 
 ### Added
 

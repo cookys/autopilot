@@ -12,7 +12,7 @@ Growth / IA panel: [`GROWTH-PANEL.md`](GROWTH-PANEL.md)
 
 | 你 | CEO agent | 審查系統 |
 |----|-----------|----------|
-| 目標／紅線 | 取捨、推進 | peer／會／閘 |
+| 目標／紅線 | 取捨、推進 | peer／眾議會／gate |
 
 ## Hero CTA（現行）
 

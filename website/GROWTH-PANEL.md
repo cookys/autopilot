@@ -18,7 +18,7 @@ This doc is **advisory product IA** — not a commit to re-route the live site t
 |----|------|
 | **敵人** | 不是「寫 code 慢」，是 **AI 產能↑ → 人變全職 reviewer / 核對員 / 最慢的 API** |
 | **英雄** | 想當 CEO／創業者視角、被雜事與覆核地獄壓垮的人（**不是** CEO agent 本體） |
-| **武器** | 你丟隕石（目標／紅線）→ 多元補視角 → CEO 取捨往前 → 收斂閘／artifact 擋假 done |
+| **武器** | 你丟隕石（目標／紅線）→ 多元補視角 → CEO 取捨往前 → 收斂 gate／artifact 擋假 done |
 | **結局** | 人不在 loop；只在越線／真卡死時被叫回來 |
 | **Landing 骨架** | Hero 承諾 → 痛點 → 契約（隕石）→ 多元／收斂 → 離場等級 → 證據（含打臉）→ 安裝／第一顆隕石 |
 | **首屏 CTA** | 不要四顆並列；**主＝看一次真實 run／次＝安裝**（sol 最硬） |
@@ -68,7 +68,7 @@ This doc is **advisory product IA** — not a commit to re-route the live site t
 
 1. 別再當 AI 程式碼的廉價監工：定義紅線，讓 CEO Agent 帶多模型工廠自動收斂。  
 2. 從被 AI 寫爛的 code 淹沒 → 只發送隕石的決策者。  
-3. 拒絕人肉覆核與假 done；多元智囊 + 收斂機械閘，真正 remove human from the loop。
+3. 拒絕人肉覆核與假 done；多元智囊 + 收斂機械 gate，真正 remove human from the loop。
 
 ### 合成用法
 
@@ -91,7 +91,7 @@ This doc is **advisory product IA** — not a commit to re-route the live site t
 | 3 | **你發隕石，系統接手** | 心智契約 | 三格：目標紅線／取捨推進／越線才找你 | 你定義不能輸的條件；其餘分岔，由 CEO agent 往前選。 | sol + NARRATIVE |
 | 4 | **看它跑一次** | 取代功能宣稱 | run replay：survey → 爭論 → CEO → worktree → peer → gate → artifact | 不要相信「全自動」三個字；看一次它怎麼決定、怎麼失敗、怎麼拉回。 | sol **NOW 關鍵洞** |
 | 5 | **多元 ≠ 開會秀** | 為什麼 multi-engine | 異質觀點地圖；CEO 標取捨理由，不是投票 | 多個模型不是為了聲量，而是讓重要盲點在動工前浮出來。 | sol |
-| 6 | **收斂不靠人肉盯** | 為什麼敢離場 | 漏斗：peer / 眾議會 / unit contract / 機械閘 → artifact | 模型可以發散；交付必須通過能被機器檢查的窄門。 | sol + glm |
+| 6 | **收斂不靠人肉盯** | 為什麼敢離場 | 漏斗：peer / 眾議會 / unit contract / 機械 gate → artifact | 模型可以發散；交付必須通過能被機器檢查的窄門。 | sol + glm |
 | 7 | **離場旋鈕** | /l3–/l6 結果化 | 四級：一段 thread → 一條任務 → lifecycle → 只收終局 | 從少管一個 thread，到只在紅線被碰到時出現。 | 四家 |
 | 8 | **證據，包括打臉** | 信任 | 成功 run ∥ known-bad / H2 被推翻 | 不展示 agent 自報完成；只展示留下什麼，以及哪裡曾經錯。 | 四家 |
 | 9 | **發出第一顆隕石** | 轉化 | 左：3 分鐘 run · 右：安裝 · 下：3 個起跑任務 | 挑一件你不想再親自追的工作，讓 Autopilot 接住。 | sol |
@@ -125,7 +125,7 @@ This doc is **advisory product IA** — not a commit to re-route the live site t
 | 開始使用 | `/start` | 第一次怎麼安全跑？ | `/recipes` |
 | 任務配方 | `/recipes/*` | 哪種工作先交出去？ | recipe 詳 |
 | 離場等級 | `/autonomy` | 授權到哪？何時叫我？ | `/start` |
-| 概念 | `/concepts/*` | 多元／CEO／閘門 | `/proof` |
+| 概念 | `/concepts/*` | 多元／CEO／gate | `/proof` |
 | 證據 | `/proof` | 可檢查的成功／失敗／打臉 | `/demo` |
 | 參考 | `/reference/*` | 架構／skills／harness | deep GitHub |
 | 貢獻／治理 | `/contribute` `/about` | 能貢獻什麼、邊界 | GitHub |
@@ -165,14 +165,14 @@ This doc is **advisory product IA** — not a commit to re-route the live site t
 （不是「寫 code 太慢」。）
 
 **武器**  
-Autopilot：丟目標與紅線 → 異質模型補視角 → CEO agent 取捨 → 執行往前 → peer／機械閘／artifact 擋自嗨。
+Autopilot：丟目標與紅線 → 異質模型補視角 → CEO agent 取捨 → 執行往前 → peer／機械 gate／artifact 擋自嗨。
 
 **結局**  
 你離開 thread；系統繼續推；只在紅線、無法收斂、或需要新授權時把真正值得決定的事交還你。
 
 **30 秒旁白（sol，可進 about / demo 片頭）：**
 
-> AI 本來應該替你省時間，卻把你變成全職 reviewer。每個 agent 都很快，但每個分岔都等你決定，每個「完成」都等你驗屍。Autopilot 改變的是這個責任結構：你只丟下目標與不可退讓的紅線；多個模型補齊視角，CEO agent 做取捨，執行系統往前推，閘門與 artifact 負責阻止它自我感覺良好。最後，你不是更會管理 AI——你是不必一直在場。
+> AI 本來應該替你省時間，卻把你變成全職 reviewer。每個 agent 都很快，但每個分岔都等你決定，每個「完成」都等你驗屍。Autopilot 改變的是這個責任結構：你只丟下目標與不可退讓的紅線；多個模型補齊視角，CEO agent 做取捨，執行系統往前推，gate與 artifact 負責阻止它自我感覺良好。最後，你不是更會管理 AI——你是不必一直在場。
 
 **一句結局（minimax）：** 你不再是工頭，你重新是老闆。  
 （站內可用；勿蓋過 H1 的 sol 對比句。）
@@ -185,7 +185,7 @@ Autopilot：丟目標與紅線 → 異質模型補視角 → CEO agent 取捨 �
 |------|------|------|------|--------|
 | **P0** | **Autopilot Receipt（dogfood）** | 自家 PR 附 Meteor / CEO decisions / Gates / Human interrupts / Artifacts | sol | 零新產品面；立刻有 proof 素材 |
 | **P0** | **Meteor Clinic（隕石門診）** | 每週 1 個真實小任務：只收目標+≤3 紅線；公開 log（含失敗） | sol + minimax 變體 | 案例庫 + demo 素材 + 社群 |
-| **P0** | **Gate Pack 敘事入口** | 可獨立 MIT 的收斂閘（secret/scope/completeness…）+ known-bad；完整 lifecycle 為升級 | sol + agy GHA | 降低採用門檻＝創造使用者 |
+| **P0** | **Gate Pack 敘事入口** | 可獨立 MIT 的收斂 gate（secret/scope/completeness…）+ known-bad；完整 lifecycle 為升級 | sol + agy GHA | 降低採用門檻＝創造使用者 |
 | **P1** | **Human Interrupt 徽章** | 可驗證 run facts 徽章（禁止手填）；點進 replay | sol | 病毒鏈 repo→proof→站 |
 | **P1** | **Red-line / 翻車模擬器** | Landing 互動：輸入目標+紅線 或貼翻車 PR → 展示會在哪代被擋 | glm + agy | 體驗「定義邊界」而非寫 code |
 | **P1** | **Levels 互動旋鈕** | 「你願意出現幾次？」→ 對應 /l? + 建議 skill 包 | minimax | 比教學頁更可分享 |

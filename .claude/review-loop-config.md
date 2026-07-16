@@ -25,10 +25,25 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: glm-5.2
+- verification_author_engine: MiniMax-M3
 - verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint: glm
+- verification_author_endpoint: minimax
+
+> Temporary repository-wide C1 authorization (2026-07-16, MiniMax-M3 recovery r5): after reviewed,
+> pushed r4 terminal restoration, persistent `/l6` continuation authorizes one materially new
+> current-HEAD attempt. Depth-0 root-caused the GLM rail before this selection: z.ai returns
+> deterministic HTTP 529 to every Claude-CLI-shaped request while direct HTTP returns 200, so all
+> four GLM author failures are one transport failure and GLM cc-shim full-author readiness is
+> ABSENT (capability event 65, limited/high). The same cc-shim invocation shape against MiniMax-M3
+> returned OK live (event 66, available/high). R5 therefore uses the user-authorized MiniMax-M3
+> family with a materially new zero-backtick raw-stdout prompt and an extended 540-second author
+> budget (r4's 300s wall was never model-attributed). All older prompts/artifacts remain
+> terminal/non-replayable/non-normalizable. Because the resolver has no unit-id scope, restore
+> `glm-5.2/cc-shim/high/endpoint glm` after accepted, STOP, REJECT, pre-dispatch NO-GO,
+> cancellation/abandonment, inability to begin, or before C2/unrelated strict authoring. Restore
+> config, dogfood expectations, and README/HANDOFF atomically through independent review.
+> Permanent isolated runner fixtures remain tuple-independent.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

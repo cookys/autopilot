@@ -170,6 +170,19 @@
   bytes. This is `STOP/timeout-no-artifact`, not quota or RED; Spark was not dispatched. Restore GLM
   atomically, then use fresh GLM readiness and a new tracked contract/prompt rather than replay.
 
+- After the r4 timeout restoration (`91c1f3f`), depth-0 root-caused the GLM rail before any new
+  spend: a local logging proxy showed z.ai answering every Claude-CLI-shaped
+  `POST /v1/messages?beta=true` with deterministic HTTP 529 in ~500ms (10+ consecutive on a tiny
+  prompt) while the CLI silently retries until the outer timeout — exit 124 with zero bytes. The
+  same token via direct HTTP returns 200 `OK` in under 2s (non-stream, stream, and count_tokens all
+  pass). Small-body probes with the beta query/header alone also pass, so the trigger is the full
+  CLI request shape. The exact cc-shim invocation shape against MiniMax-M3 returned `OK` instantly.
+  Capability events 65 (glm-5.2/cc-shim `limited/high`, 24h TTL) and 66 (MiniMax-M3/cc-shim
+  `available/high`) are recorded. GLM cc-shim full-author readiness is ABSENT, so the step-3 "fresh
+  GLM readiness" precondition fails mechanically; persistent continuation selects the
+  user-authorized MiniMax-M3 family for one materially new current-HEAD r5 attempt with an extended
+  540-second author budget.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.
@@ -226,6 +239,13 @@
 - MiniMax r4 is that next tracked attempt. It corrects only the wrapper shape via a zero-backtick
   current-HEAD prompt and reused no r3 content. It is terminal `STOP/timeout-no-artifact`. Persistent
   continuation next selects GLM only after fresh endpoint-backed readiness and reviewed tracking.
+- The GLM-first preference is now closed by evidence, not skipped: GLM cc-shim readiness is
+  mechanically ABSENT (deterministic 529 transport failure, event 65) while the model itself
+  answers via direct HTTP. Endpoint tiny-test success remains non-evidence for cc-shim
+  full-author readiness — the readiness probe must exercise the same transport the author call
+  uses. R5 is the MiniMax-M3 attempt selected on that basis with a 540s budget; r1-r4 remain
+  terminal/non-replayable. A future GLM author seat requires either z.ai-side behavior change
+  (re-probe via the exact cc-shim shape) or a direct-HTTP author runner (BACKLOG candidate).
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -236,10 +256,13 @@
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
    active/blocked after MiniMax r4 timeout, and seven phases remain including active C1; C2-C7 are pending.
-2. Review/commit/push atomic GLM restoration with matching dogfood expectations and r4 evidence.
-3. Under persistent continuation, obtain fresh endpoint-backed GLM readiness, review a tracked GLM
-   attempt, and freeze a new current-HEAD contract/prompt. The raw oracle must pass output-shape,
-   checkout-containment, `bash -n`, portable-tool, and isolated RED.
+2. (done `91c1f3f`) Atomic GLM restoration with matching dogfood expectations and r4 evidence.
+3. Under persistent continuation, run the reviewed MiniMax r5 attempt: tracked roster
+   (`MiniMax-M3/cc-shim/high/endpoint minimax`), new current-HEAD contract/prompt with a 540s
+   budget, one strict call. The raw oracle must pass output-shape, checkout-containment,
+   `bash -n`, portable-tool, and isolated RED. GLM is NOT the next author: its cc-shim rail is
+   mechanically dead (deterministic 529; event 65) — do not re-select it without a same-transport
+   readiness probe passing.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

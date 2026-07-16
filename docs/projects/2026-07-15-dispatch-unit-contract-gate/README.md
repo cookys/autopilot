@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active/blocked — MiniMax r4 timeout STOP | R4 preserved containment but timed out at 5 minutes with zero raw bytes; GLM config/tests/docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — MiniMax r5 authorized after GLM-rail root-cause | Depth-0 proxy capture proved the GLM cc-shim rail dead (deterministic z.ai HTTP 529 to every Claude-CLI-shaped request; direct HTTP 200), retroactively explaining all four GLM failures; MiniMax cc-shim verified live; r5 uses a 540s budget | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -420,6 +420,15 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   failure with a zero-backtick prompt and grants no reuse of r3 content. It timed out with no artifact
   and is terminal `STOP/timeout-no-artifact`; any GLM continuation requires fresh readiness and a new
   tracked current-HEAD contract/prompt.
+- Before selecting r5, depth-0 root-caused the GLM rail with a logging proxy: z.ai returns
+  deterministic HTTP 529 to every Claude-CLI-shaped `POST /v1/messages?beta=true` while the same
+  token via direct HTTP returns 200 in under two seconds, so all four GLM author failures are one
+  transport failure and GLM cc-shim full-author readiness is ABSENT (capability event 65). The exact
+  cc-shim invocation shape against MiniMax-M3 returned `OK` live (event 66). The handoff's
+  "fresh GLM readiness" precondition therefore fails mechanically, and persistent continuation
+  selects the user-authorized MiniMax-M3 family for r5 with a materially new zero-backtick prompt
+  and an extended 540-second author budget (the prior 300s wall was never model-attributed). R1-r4
+  MiniMax and all GLM/Grok/Gemini artifacts remain terminal and non-replayable.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

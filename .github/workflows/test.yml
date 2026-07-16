@@ -52,11 +52,12 @@ jobs:
           path: ${{ runner.temp }}/hooks-suite.log
           if-no-files-found: ignore
 
-      - name: Version-manifest drift check
-        run: node scripts/sync-version.js --check
-
-      - name: Agent-bodies drift check
-        run: bash scripts/sync-agent-bodies.sh --check
+      - name: Sync/check rituals (manifest-driven)
+        # Single entry point for every sync/check ritual (version mirrors,
+        # agent-bodies, model-routing, codex + opencode payloads, README parity,
+        # hook inventory, canonical invariants, CLAUDE.md inventory). Registered
+        # in scripts/sync-manifest.json; replaces the hand-copied per-ritual steps.
+        run: bash scripts/sync-all.sh --check
 
       - name: Release-hygiene gate
         # Check 7 (slash-entry probe) needs a `claude` binary + auth — neither

@@ -1,53 +1,23 @@
 #!/usr/bin/env bash
-# autopilot pre-commit gate — run version-sync drift check.
+# autopilot pre-commit gate.
 #
 # Activated by:  scripts/install-hooks.sh  (sets core.hooksPath=.githooks)
 #
-# What it checks:
-#   - sync-version.js --check: version mirrors vs canonical plugin.json (always)
-#   - sync-agent-bodies.sh --check: agent body sync (always)
-#   - blind-dispatch.md issue-ref anti-rot grep (always)
-#   - check-canonical-invariants.sh: cross-file invariants (always)
-#   - sync-codex-plugin-skills.sh --check: Codex payload mirror
-#       (change-scoped: source payload or Codex package staged)
-#   - check-readme-parity.js: EN↔zh README lockstep (change-scoped: README staged)
-#   - check-hook-inventory.js --check: hook tally + tier membership
-#       (change-scoped: hooks/ or a count-bearing mirror staged)
-#
-# Each check is additive and fail-fast.
+# Two parts:
+#   1. blind-dispatch.md issue-ref anti-rot grep (bespoke provenance guard, always).
+#   2. scripts/sync-all.sh --check --changed — the manifest-driven sync/check rituals
+#      (version mirrors, agent-bodies, model-routing, codex + opencode payloads, README
+#      parity, hook inventory, canonical invariants, CLAUDE.md inventory). --changed
+#      scopes each ritual to the staged diff via its manifest triggers, so the common
+#      commit stays fast. A new ritual is registered once in scripts/sync-manifest.json;
+#      this hook never needs another hand-copied block.
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-# --- sync-version drift check ---
-if ! node scripts/sync-version.js --check >/dev/null 2>&1; then
-  echo "─────────────────────────────────────────────────────────────" >&2
-  echo "pre-commit: version-manifest drift detected" >&2
-  echo "─────────────────────────────────────────────────────────────" >&2
-  node scripts/sync-version.js --check >&2 || true
-  echo "" >&2
-  echo "To fix: edit .claude-plugin/plugin.json (canonical) then run sync-version.js" >&2
-  echo "with the new args, then re-commit." >&2
-  exit 1
-fi
-
-# --- sync-agent-bodies drift check ---
-# agents/<role>.md (with frontmatter) → .opencode/agent-bodies/<role>.body.md (no frontmatter)
-# OpenCode references agent-bodies/ via {file:..} cross-layer. Drift means body file is stale.
-if ! ./scripts/sync-agent-bodies.sh --check >/dev/null 2>&1; then
-  echo "─────────────────────────────────────────────────────────────" >&2
-  echo "pre-commit: agent body sync drift detected" >&2
-  echo "─────────────────────────────────────────────────────────────" >&2
-  ./scripts/sync-agent-bodies.sh --check >&2 || true
-  echo "" >&2
-  echo "To fix:" >&2
-  echo "  ./scripts/sync-agent-bodies.sh && git add .opencode/agent-bodies/" >&2
-  exit 1
-fi
-
-# --- blind-dispatch.md issue-ref anti-rot grep (P1) ---
+# --- blind-dispatch.md issue-ref anti-rot grep (always) ---
 # The "Clarifying questions survive auto-approve" subsection cites the two codex
 # issues that establish the auto-approve-vs-question distinction. If a reword
 # drops them, the claim loses its provenance. Keep this assertion in lockstep
@@ -57,72 +27,13 @@ if ! grep -q 'issues/10187' references/blind-dispatch.md || ! grep -q 'issues/21
   exit 1
 fi
 
-# --- canonical cross-file invariant check (P2) ---
-# Guards invariants the byte-for-byte mirror checks can't see (files intentionally
-# not byte-equal): repeated severity vocabulary + reviewer→code-review reference anchor.
-if ! ./scripts/check-canonical-invariants.sh >/dev/null 2>&1; then
+# --- manifest-driven sync/check rituals, scoped to the staged diff ---
+if ! SYNC_OUT="$(bash scripts/sync-all.sh --check --changed 2>&1)"; then
   echo "─────────────────────────────────────────────────────────────" >&2
-  echo "pre-commit: canonical cross-file invariant broken" >&2
+  echo "pre-commit: sync/check ritual drift detected" >&2
   echo "─────────────────────────────────────────────────────────────" >&2
-  ./scripts/check-canonical-invariants.sh >&2 || true
+  echo "$SYNC_OUT" >&2
   echo "" >&2
-  echo "To fix: restore the missing phrase/anchor, OR if you reworded a guarded rule," >&2
-  echo "update the inline seed table in scripts/check-canonical-invariants.sh in the" >&2
-  echo "SAME commit (see the script header's same-commit ritual)." >&2
+  echo "Each failing ritual above names its fix command. After fixing, re-stage and re-commit." >&2
   exit 1
-fi
-
-# --- README EN↔zh parity check (P3, change-scoped) ---
-# Runs only when a README is staged. sync-version now syncs both badges, but a
-# hand-edit (section add, badge tweak) can still drift them — preflight-portability
-# caught this only out-of-band (stale 2.26.3 vs 2.26.4 on 2026-06-29).
-# No --diff-filter: DELETIONS must trigger too (removing a hook file or a count-bearing
-# mirror changes the inventory/parity just as much as editing one).
-STAGED="$(git diff --cached --name-only 2>/dev/null || true)"
-
-# --- Codex plugin payload mirror drift check (P5, change-scoped) ---
-# platforms/codex/plugin/** is a committed generated payload. Any change to the
-# source payload roots must be mirrored before commit; any direct package edit
-# must match the generator output.
-CODEX_PAYLOAD_TRIGGER_RE='^(skills/|bin/|src/|hooks/_shared/|references/|scripts/|project-config-template/|docs/plans/2026-06-04-distill-consolidate\.md$|docs/plans/2026-06-22-ceo-fleet-autonomy\.md$|docs/plans/2026-06-26-trust-tiered-review-policy\.md$|docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec\.md$|platforms/codex/)'
-if echo "$STAGED" | grep -qE "$CODEX_PAYLOAD_TRIGGER_RE"; then
-  if ! ./scripts/sync-codex-plugin-skills.sh --check >/dev/null 2>&1; then
-    echo "─────────────────────────────────────────────────────────────" >&2
-    echo "pre-commit: Codex plugin payload mirror drift detected" >&2
-    echo "─────────────────────────────────────────────────────────────" >&2
-    ./scripts/sync-codex-plugin-skills.sh --check >&2 || true
-    echo "" >&2
-    echo "To fix:" >&2
-    echo "  ./scripts/sync-codex-plugin-skills.sh && git add platforms/codex/plugin" >&2
-    exit 1
-  fi
-fi
-
-if echo "$STAGED" | grep -qE '^README(\.zh-TW)?\.md$'; then
-  if ! node scripts/check-readme-parity.js >/dev/null 2>&1; then
-    echo "─────────────────────────────────────────────────────────────" >&2
-    echo "pre-commit: README.md ↔ README.zh-TW.md parity drift" >&2
-    echo "─────────────────────────────────────────────────────────────" >&2
-    node scripts/check-readme-parity.js >&2 || true
-    echo "" >&2
-    echo "To fix: align badge values + section headers across both READMEs." >&2
-    exit 1
-  fi
-fi
-
-# --- hook inventory drift check (P4, change-scoped) ---
-# Runs only when hook wiring or a hook-count-bearing mirror is staged. Counts +
-# per-tier membership are derived from real wiring; this catches the count-blind
-# class (a disabled hook listed as default-on while the total still "looks right").
-if echo "$STAGED" | grep -qE '^(hooks/|README\.md$|README\.zh-TW\.md$|\.claude-plugin/|plugin\.json$)'; then
-  if ! node scripts/check-hook-inventory.js --check >/dev/null 2>&1; then
-    echo "─────────────────────────────────────────────────────────────" >&2
-    echo "pre-commit: hook inventory drift (counts or tier membership)" >&2
-    echo "─────────────────────────────────────────────────────────────" >&2
-    node scripts/check-hook-inventory.js --check >&2 || true
-    echo "" >&2
-    echo "To fix: reconcile the docs with the canonical lists from" >&2
-    echo "  node scripts/check-hook-inventory.js   (no flag prints the oracle)" >&2
-    exit 1
-  fi
 fi

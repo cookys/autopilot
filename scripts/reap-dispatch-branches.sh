@@ -14,32 +14,8 @@ usage() {
 
 die_env() { printf 'error: %s\n' "$*" >&2; exit 2; }
 
-json_escape() {
-  local input="${1:-}" out="" ch esc code i
-  local LC_ALL=C
-  for ((i=0; i<${#input}; i++)); do
-    ch="${input:i:1}"
-    case "$ch" in
-      '"') out+='\"' ;;
-      '\') out+='\\' ;;
-      $'\b') out+='\b' ;;
-      $'\f') out+='\f' ;;
-      $'\n') out+='\n' ;;
-      $'\r') out+='\r' ;;
-      $'\t') out+='\t' ;;
-      *)
-        printf -v code '%d' "'$ch"
-        if [ "$code" -lt 32 ]; then
-          printf -v esc '\\u%04x' "$code"
-          out+="$esc"
-        else
-          out+="$ch"
-        fi
-        ;;
-    esac
-  done
-  printf '%s' "$out"
-}
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
 
 command_name="${1:-}"
 case "$command_name" in scan|check|reap) shift ;; *) usage ;; esac

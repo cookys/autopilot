@@ -51,9 +51,12 @@ _wt_has_control_chars() {
   esac
 }
 
-# _wt_json_escape <string>
+# shellcheck source=json-emit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/json-emit.sh"
+
+# _wt_json_escape <string> — Class A flatten then shared RFC escape (flatten stays VISIBLE).
 _wt_json_escape() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '
+  json_escape "$(printf '%s' "$1" | tr '\n' ' ')"
 }
 
 # _wt_resolve_repo_root

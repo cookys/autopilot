@@ -316,7 +316,10 @@ trap cleanup EXIT
 
 usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
+# shellcheck source=lib/json-emit.sh
+. "$SELF_DIR/lib/json-emit.sh"
+# Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
+_flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
 extract_json_value() {
   local key="" json=""
@@ -499,15 +502,15 @@ process.exit(2);
 emit() { # status commit files ins del worktree error
   local commit_json="null" wt_json="null" err_json="null" orphan_json="null"
   [ -n "${2:-}" ] && commit_json="\"$2\""
-  [ -n "${6:-}" ] && wt_json="\"$(json_escape "$6")\""
-  [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
-  [ -n "${OUTCOME_ORPHAN:-}" ] && orphan_json="\"$(json_escape "$OUTCOME_ORPHAN")\""
+  [ -n "${6:-}" ] && wt_json="\"$(_flat_json_escape "$6")\""
+  [ -n "${7:-}" ] && err_json="\"$(_flat_json_escape "$7")\""
+  [ -n "${OUTCOME_ORPHAN:-}" ] && orphan_json="\"$(_flat_json_escape "$OUTCOME_ORPHAN")\""
   local strict_unit_json="null" strict_contract_sha_json="null" strict_spec_sha_json="null" strict_go_json="null"
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
-    [ -n "${STRICT_UNIT_ID:-}" ] && strict_unit_json="\"$(json_escape "$STRICT_UNIT_ID")\""
-    [ -n "${STRICT_CONTRACT_SHA:-}" ] && strict_contract_sha_json="\"$(json_escape "$STRICT_CONTRACT_SHA")\""
-    [ -n "${STRICT_SPEC_SHA:-}" ] && strict_spec_sha_json="\"$(json_escape "$STRICT_SPEC_SHA")\""
-    [ -n "${STRICT_GO:-}" ] && strict_go_json="\"$(json_escape "$STRICT_GO")\""
+    [ -n "${STRICT_UNIT_ID:-}" ] && strict_unit_json="\"$(_flat_json_escape "$STRICT_UNIT_ID")\""
+    [ -n "${STRICT_CONTRACT_SHA:-}" ] && strict_contract_sha_json="\"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\""
+    [ -n "${STRICT_SPEC_SHA:-}" ] && strict_spec_sha_json="\"$(_flat_json_escape "$STRICT_SPEC_SHA")\""
+    [ -n "${STRICT_GO:-}" ] && strict_go_json="\"$(_flat_json_escape "$STRICT_GO")\""
   fi
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
@@ -520,7 +523,7 @@ emit() { # status commit files ins del worktree error
   # event stream in $LOG by dispatch-status.js (--usage-only prints ONE line: an object or
   # `null`, never fails) — NOT worker self-report. Any parse/node failure ⇒ null.
   local run_id_json="null"
-  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local usage_json="null"
   if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
      && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
@@ -553,9 +556,9 @@ emit() { # status commit files ins del worktree error
     strict_boundary_fields=', "boundary": "ok", "acceptance": "ok"'
   fi
   printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s }\n' \
-    "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
+    "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
-    "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
+    "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$strict_boundary_fields"
 }
@@ -679,11 +682,11 @@ die_precondition() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   local run_id_json="null"
-  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(json_escape "$DISPATCH_RUN_ID")\""
+  [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s }\n' \
-    "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" "$(json_escape "$1")" \
+    "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
   exit 2
 }
@@ -714,27 +717,27 @@ write_manifest() {
   [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(json_escape "$MANIFEST_SCOPE_UNIT")\""
-  local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
-  local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
+  local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(_flat_json_escape "$MANIFEST_SCOPE_UNIT")\""
+  local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(_flat_json_escape "$LEDGER")\""
+  local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(_flat_json_escape "$STAGE")\""
   local pid_json="null"; [ -n "${MANIFEST_PID_RECORDED:-}" ] && pid_json="$MANIFEST_PID_RECORDED"
   local ended_json="null" endep_json="null" final_json="null"
   [ -n "${MANIFEST_ENDED_AT:-}" ] && ended_json="\"$MANIFEST_ENDED_AT\""
   [ -n "${MANIFEST_ENDED_EPOCH:-}" ] && endep_json="$MANIFEST_ENDED_EPOCH"
-  [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(json_escape "$MANIFEST_FINAL_STATUS")\""
-  local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
-  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
+  [ -n "${MANIFEST_FINAL_STATUS:-}" ] && final_json="\"$(_flat_json_escape "$MANIFEST_FINAL_STATUS")\""
+  local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(_flat_json_escape "$LINEAGE_PARENT")\""
+  local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(_flat_json_escape "$LINEAGE_ROOT")\""
   local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   local strict_manifest_fields=""
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
-    strict_manifest_fields=", \"unit_id\": \"$(json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(json_escape "$STRICT_GO")\""
+    strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
-      "$(json_escape "$DISPATCH_RUN_ID")" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
-      "${BASE_SHA:-}" "$(json_escape "${WT:-}")" "$(json_escape "${WT:-}/.autopilot-worktree.lock")" "$(json_escape "${LOG:-}")" \
+      "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
+      "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(json_escape "${PROMPT_FILE:-}")" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
@@ -1791,7 +1794,7 @@ dispatch_detached_run() {
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
-    declare -f json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
       classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_acceptance_checks \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

@@ -142,7 +142,8 @@ VERIFICATION_AUTHOR_EFFORT=""
 VERIFICATION_AUTHOR_ENDPOINT=""
 VERIFICATION_AUTHOR_FAMILY=""
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | sed -e ':a;N;$!ba;s/\n/\\n/g'; }
+# shellcheck source=lib/json-emit.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
 
 read_review_loop_field() {
   local key="$1"

@@ -25,20 +25,10 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: grok-4.5
-- verification_author_runner: grok
+- verification_author_engine: glm-5.2
+- verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint:
-
-> Temporary repository-wide C1 authorization (2026-07-16, Grok recovery r4): the user's persistent
-> `/l6` continuation remains active after r3 terminal restoration. Events 51/52 are fresh/high and
-> this tracked change authorizes exactly one materially new current-HEAD attempt. R1-r3 prompts and
-> artifacts remain terminal and non-replayable/non-normalizable; r4 specifically forbids fixture
-> shebangs and literal EOS sentinel output. Because the resolver has no unit-id scope, restore
-> `glm-5.2/cc-shim/high/endpoint glm` after accepted, STOP, REJECT, pre-dispatch NO-GO,
-> cancellation/abandonment, inability to begin, or before C2/unrelated strict authoring. Restore this
-> config, dogfood resolver expectations, and README/HANDOFF atomically through review. The permanent
-> isolated Grok regression fixture remains tuple-independent.
+- verification_author_endpoint: glm
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

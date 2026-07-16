@@ -71,7 +71,7 @@ from repository truth.
 | “順便提醒，gpt-5.3-codex-spark 跟 grok 4.5 都回來了” | Refresh per-model live readiness: Spark capability event 45 and Grok 4.5 event 44 are `available/high`; preserve the distinction that Grok readiness is not C1 strict-roster authorization |
 | “你停下來了?” | Treat the reminder plus explicit rejection of another stop as Board continuation: authorize Grok through a tracked strict-roster config change that must be reviewed and committed before dispatch, then resume C1 author → RED → Spark without another human gate |
 | “grok 4.5 / gpt-5.3-codex-spark 額度都回來了” | New Board continuation after all prior seats reached terminal: events 49/50 authorized one materially new tracked Grok recovery; its one-line prose result is terminal output-shape REJECT and atomically restores GLM |
-| “什麼意思? 你就繼續啊?” | Persistent Board continuation after r2 terminal: do not stop at each consumed one-attempt contract; r3 restores atomically after output-shape REJECT, then CEO issues tracked r4 without another human gate |
+| “什麼意思? 你就繼續啊?” | Persistent Board continuation after r2 terminal: do not stop at each consumed one-attempt contract; r3 and r4 each restore atomically after output-shape REJECT, then CEO issues the next tracked attempt without another human gate |
 | “Depth-0 writes/freezes every spec and unit contract; implementers and verification authors do not redefine authorization.” | Ownership boundary plus every C1-C7 contract/prompt |
 | “The checker alone owns GO/NO-GO … runtime failure is STOP; returned boundary/acceptance failure is REJECT.” | C1 checker, C2-C4 enforcement, C5 status, C7 regressions |
 | “One unit is one semantic decision plus mandatory generated mirrors.” | C1-C6 unit contracts and generated-mirror allowlists |
@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — tracked Grok recovery r4 | Persistent Board continuation; r4 is materially new and specifically forbids fixture shebangs plus literal EOS output after r3 terminal restoration | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active/blocked — Grok r4 output-shape REJECT | R4 preserved containment but concatenated two complete candidates and appended literal EOS; GLM roster, dogfood expectations, and lifecycle docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -304,6 +304,17 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   exactly one artifact shebang, use no shebang inside any fixture heredoc, and never emit literal
   `<|eos|>`. R1-r3 remain terminal forensic evidence only. Every r4 terminal or aborted/non-started
   path atomically restores GLM config, dogfood expectations, and lifecycle docs before further work.
+- Authorization commit `8d0678144fee5016899bed5f50cae03d0f2a06dd` passed independent gpt-5.5
+  review and was pushed clean. Depth-0 froze r4 contract SHA-256
+  `326d0cdbec3d2df034f0178321f93d3732ba452428e0d3c6e5c53ada5be13e08` and materially new prompt
+  SHA-256 `210694c67890da352124132c29e0718cd6534b52f61e282dd57c6d3e7ddf053c`. The exact strict call
+  selected `grok-4.5/grok/high/endpoint ""/xai` and preserved all 1,466 checkout file hashes, clean
+  status/diff, and unchanged HEAD. Raw SHA-256 is
+  `d7cfe3d564032ea63f7aaa12dfdd2e35176ecd24d44d019f29777bff9a2136e8` (68,112 bytes / 1,762
+  lines). It concatenates two complete candidates: shebang/source/finalizer occur at lines 1/2/848
+  and 849/850/1761, followed by literal `<|eos|>` at line 1762. R4 is terminal
+  `REJECT/output-shape` before syntax/RED; no normalization or Spark dispatch ran. GLM config,
+  matching dogfood expectations, and lifecycle docs restore atomically before a new attempt.
 
 ## Dispatch policy
 
@@ -338,8 +349,10 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   artifact. Every terminal still restores GLM plus matching tests/docs first, and any next attempt
   still requires a materially new contract/prompt, fresh readiness, tracked roster, and review.
 - R4 is the first next attempt under that persistent continuation. It is exactly one new tracked
-  attempt and addresses only r3's observed output-shape failure; it grants no normalization or reuse
-  of the substantial r3 Bash artifact.
+  attempt and addressed only r3's observed output-shape failure. It ended at
+  `REJECT/output-shape` after concatenating two candidates and grants no normalization or reuse of
+  either r3 or r4 Bash artifact. Persistent continuation permits a new tracked current-HEAD attempt
+  after atomic GLM restoration; it does not enlarge or replay r4.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

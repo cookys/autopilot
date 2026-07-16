@@ -329,6 +329,9 @@ try {
 }
 
 const payload = JSON.stringify({
+  // Connectivity/auth probe only. Compatible gateways (GLM/MiniMax) map claude-* ids
+  // to their own models — same mechanism cc-shim relies on. Modernizing this id needs
+  // a live spike against each gateway; do not swap it blind.
   model: 'claude-3-haiku-20240307',
   max_tokens: 1,
   messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],

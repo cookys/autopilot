@@ -211,6 +211,24 @@ function isScriptRefExemptDoc(relPath) {
 // finding class where docs kept naming tree.sh/qc-panel.sh/risk-counter.sh after
 // they became .js. When the exact file is missing but a sibling with a different
 // known extension exists, the message points at the likely rename.
+// Shallow search (depth ≤ 3) for `base` under `dir` — used to clear bare script
+// refs that point at files living beside/under the doc (eval fixtures etc.).
+function existsNearDoc(dir, base, depth = 3) {
+  if (fs.existsSync(path.join(dir, base))) return true;
+  if (depth <= 0) return false;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name === 'node_modules' || e.name.startsWith('.')) continue;
+    if (existsNearDoc(path.join(dir, e.name), base, depth - 1)) return true;
+  }
+  return false;
+}
+
 function checkScriptRefs(files) {
   const bad = [];
   // Inventory of scripts/ stems → filenames, to catch BARE backticked renamed refs
@@ -272,6 +290,10 @@ function checkScriptRefs(files) {
       const base = bm[1];
       if (seen.has(base)) continue;
       if (fs.existsSync(path.join(REPO_ROOT, 'scripts', base))) continue; // real bare script ref
+      // A doc may describe a file that lives beside/under it (eval fixtures,
+      // project-local scripts) — local existence beats the repo-scripts rename
+      // heuristic. Shallow walk, only runs when a finding is about to be raised.
+      if (existsNearDoc(path.dirname(md), base)) continue;
       const siblings = scriptStems.get(base.replace(SCRIPT_EXT_RE, ''));
       if (siblings && siblings.size > 0) {
         seen.add(base);

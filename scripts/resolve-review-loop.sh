@@ -25,12 +25,13 @@
 #   4. project-config-template/review-loop-config.md  (shipped default)
 #   5. Built-in defaults below
 #
-# Output: JSON {reviewer_engine, reviewer_effort, reviewer_runner,
-#   implementer_engine, implementer_effort, implementer_runner,
-#   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
-#   qc_panel (array), qc_panel_aggregation, review_risk, required_review_families,
-#   l1_required, cross_family_required, cross_family_satisfied, review_diff_scope, source,
-#   work_domain, domain_source, min_panel_size, on_engine_unavailable}
+# Output: JSON — the authoritative field set lives in schemas/review-loop-contract.schema.json
+#   (SSOT; drift-gated by scripts/check-contract-schema.js). Core roster fields:
+#   reviewer_* / implementer_* / verification_author_* seats, loop policy
+#   (loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness),
+#   qc_panel(+aggregation, min_panel_size), risk tier (review_risk, required_review_families,
+#   l1_required, cross_family_*), endpoints, fallback ladder + preferences, telemetry
+#   (work_domain, domain_source, capability_state_source, quota_*), source / config_path.
 # (qc_panel = disjoint-family terminal gate; warns on stderr if the panel shares the
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
@@ -67,7 +68,7 @@ DEF_HARNESS="on"
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
 DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
 # Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
-QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-build, MiniMax-M3"
+QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-4.5, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
 # review_diff_scope: how much the per-round reviewer reads.
 #   full                  — re-read the whole base..HEAD diff every round (safe; cost

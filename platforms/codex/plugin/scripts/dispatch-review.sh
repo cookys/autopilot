@@ -45,7 +45,7 @@
 #   runs (exit 143) even though this script's own inner timeouts are longer. Persist it once
 #   with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
-#   --disable-web-search, --output-format plain). models: grok-build, grok-composer-2.5-fast
+#   --disable-web-search, --output-format plain). models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
 #   claude-native runner: drives the LOCAL Claude Code CLI with its own ambient/native auth
 #   (OAuth session / subscription / ANTHROPIC_API_KEY — whatever is already configured), for
 #   first-party Anthropic models (e.g. claude-haiku). Unlike cc-shim (a third-party

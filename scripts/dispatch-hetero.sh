@@ -21,7 +21,7 @@
 #       [--runner auto|codex|agy|grok|cc-shim|pi] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
-#                                              #   grok models: grok-build, grok-composer-2.5-fast
+#                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
 #                                              #   cc-shim (EXPLICIT only): Claude Code CLI
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
@@ -916,7 +916,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --dangerously-skip-permissions < "$3"' _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE"
   rm -f "$CCSHIM_PROMPT_FILE"
 elif [ "$IS_GROK" -eq 1 ]; then
-  # grok (xAI Grok Build CLI; models grok-build / grok-composer-2.5-fast). Unlike agy,
+  # grok (xAI Grok Build CLI; models grok-4.5 (ex-grok-build) / grok-composer-2.5-fast). Unlike agy,
   # grok `-p` HONORS --cwd (verified Spike 2026-06-29: grok-composer-2.5-fast and
   # grok-build both created files inside --cwd, exit 0) — so NO absolute-path anchor
   # is needed. We still run grok EDIT-ONLY + wrapper-commit (same robust rail as agy):

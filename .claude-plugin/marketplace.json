@@ -7,7 +7,7 @@
     {
       "name": "autopilot",
       "source": "./",
-      "version": "2.32.38",
+      "version": "2.32.39",
       "description": "The CEO-agent for development work — hand it a rough idea and it maps the options, makes the tradeoffs, builds and reviews, and only pages you at red lines. 28 skills + 3 methodology agents + 25 hooks (10 default-on, 15 opt-in) for lifecycle orchestration, strategic decisions, quality gates, and self-improvement. Standalone-capable; coexists with Superpowers when installed."
     }
   ]

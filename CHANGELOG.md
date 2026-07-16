@@ -24,6 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.39 — Deep code-audit + doc-sync sweep fixes
+
+**Headline**: a full deterministic-gate + three-finder audit of scripts/hooks/src against current reality. Un-reds CI (the harness-capabilities expectation lagged the grok.json refresh), retires the renamed `grok-build` id from the runtime `all-calibrated` qc-panel preset (→ `grok-4.5`), migrates `.opencode/opencode.json` to the OpenCode 1.17 config schema, and hardens the doc-drift gate against fixture false positives.
+
+### Fixed
+
+- `hooks/tests/harness-capabilities.test.sh` expected `stale=7` from before the grok.json capability refresh — CI had been red since; expectations now note they track `src/harness/capabilities/*.json`.
+- `hooks/tests/check-test-integrity-l1.test.sh` go-backed cases now skip loudly when no go toolchain is present (11 false failures on dev machines; CI unchanged).
+- `scripts/resolve-review-loop.sh` `all-calibrated` preset carried the retired `grok-build` id (upstream renamed 2026-07-14) — now `grok-4.5`; header field-list replaced by a pointer to the `schemas/review-loop-contract.schema.json` SSOT.
+- `scripts/doc-drift-gate.js` bare script-ref check now clears refs that resolve beside/under the doc itself (eval-fixture false positives).
+- Eval harness defaults `claude-sonnet-4-6`/`claude-opus-4-7` → `claude-sonnet-5`/`claude-opus-4-8` (`run-eval-batch.sh`, `run-skill-opt.sh`).
+- `.opencode/opencode.json` migrated to OpenCode 1.17 schema (`plugin`/`agent`/per-agent `permission` object/`prompt`, `skills.paths`); agent-body check green again, two remaining checks BACKLOG'd for a plugin-API spike.
+- Stale renamed-file comments (`tree.js`, `resolve-doa.sh`), incomplete consumer lists (`hooks/_shared/secret-patterns.js`), CLAUDE.md scripts-inventory gaps (7 rows), `docs/installation.md` opt-in list 12→15, blind-dispatch consumer table, `review-loop-config.md` template gains the `skill_mode` key.
+- `.claude/knowledge/INDEX.md` honestly marks a knowledge file that was never committed (content lost; mirror machine absent).
+
 ## v2.32.38 — Narrative-aligned plugin descriptions
 
 **Headline**: the marketplace-facing plugin descriptions now lead with the frozen product narrative ("The CEO-agent for development work — hand it a rough idea…") instead of a bare skills/hooks catalog tally; the tally stays as the secondary clause and all machine-checked count fragments are unchanged. Companion docs sweep aligns stray pre-freeze text (a stale "22 hooks" in `docs/architecture.md`, 閘→gate in the internal narrative/panel notes) with the site's canonical vocabulary.

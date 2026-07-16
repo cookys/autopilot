@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "2.32.38",
+  "version": "2.32.39",
   "description": "The CEO-agent for development work — hand it a rough idea and it maps the options, makes the tradeoffs, builds and reviews, and only pages you at red lines. Autopilot methodology skills for Codex with bundled support CLI/scripts. The manifest exposes skills only and does not load Claude Code hooks.",
   "author": {
     "name": "TWGS Team"

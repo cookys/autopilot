@@ -87,6 +87,13 @@ Standalone-capable lifecycle orchestration plugin for Claude Code. 28 skills, 3 
 | [`scripts/qc-panel.js`](scripts/qc-panel.js) | QC interrogation panel (task-tree engine P4): dispatches 2 judges × 3 question shapes (achieved/extras/missed) over a node report + artifacts; judge A = Claude haiku-class (`QC_CLAUDE_BIN`), judge B = Gemini via `agy` file-write mode (`QC_AGY_BIN`); deterministic merge + one haiku synthesizer pass → `{verdict, dissents, extras}` artifact JSON. Amendment 4 liveness: every run MUST write artifact AND append calibration sample; silently-dead shadow = failure. Shadow-wired into `skills/quality-pipeline/` (tree-conditional). |
 | [`scripts/run-eval-batch.sh`](scripts/run-eval-batch.sh) / [`run-skill-opt.sh`](scripts/run-skill-opt.sh) | Eval harness; see `evals/`. |
 | [`scripts/toggle-payload-capture.js`](scripts/toggle-payload-capture.js) | Hook payload capture (Tier B diagnostic — see hooks gotchas). |
+| [`scripts/doc-drift-gate.js`](scripts/doc-drift-gate.js) | Layer-1 deterministic doc↔code gate（links / fences / script-refs；`skills/doc-sync` 的 stopping condition；bare-ref 誤報以 doc 鄰近檔案存在性豁免）。 |
+| [`scripts/classify-diff-risk.sh`](scripts/classify-diff-risk.sh) | Diff → risk-tier 分類（engine `implement-review` 的 review_risk 輸入之一）。 |
+| [`scripts/check-loop-convergence.js`](scripts/check-loop-convergence.js) | Loop-convergence 煞車（gates 1+3：連續零執行輪 / generation cap 仍 REWORK ⇒ halt+escalate）；/l4-/l6 depth-0 clock owner 的機械閘。 |
+| [`scripts/check-escalation-coverage.js`](scripts/check-escalation-coverage.js) / [`scripts/rubric-freeze.js`](scripts/rubric-freeze.js) | Loop-convergence-gates 專案配套：escalation 出口覆蓋檢查 / rubric 凍結（防 mid-run 改分規）。 |
+| [`scripts/probe-mutation.js`](scripts/probe-mutation.js) | Mutation-validated probe 執行器（`adjudicate-findings.js` refute 路徑的機械後盾）。 |
+| [`scripts/resolve-worktree-teardown.sh`](scripts/resolve-worktree-teardown.sh) | Worktree teardown policy resolver（`scripts/lib/worktree-reap.sh` 消費）。 |
+| [`scripts/install-opencode.sh`](scripts/install-opencode.sh) / [`scripts/sync-opencode-plugin.sh`](scripts/sync-opencode-plugin.sh) | OpenCode 接入：安裝 / plugin payload 同步（`dev-setup.sh` 消費）。 |
 
 All scripts respond to `<script> --help`. JSON-emitting scripts have stable schemas; exit codes follow each script's header.
 

@@ -104,7 +104,7 @@ sys.argv = [
     'run_loop',
     '--eval-set', '$EVAL_FILE',
     '--skill-path', '$SKILL_PATH',
-    '--model', 'claude-sonnet-4-6',
+    '--model', 'claude-sonnet-5',
     '--max-iterations', '3',
     '--num-workers', '10',
     '--runs-per-query', '1',

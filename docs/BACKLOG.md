@@ -26,6 +26,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### OpenCode 1.17 遷移收尾 — plugin-load log 與 .agents/skills 掃描兩檢查仍紅
+- **Trigger**: 下次碰 `.opencode/` 或 OpenCode 支援聲明時；或 preflight-portability 15/16 兩檢查擋到事情時。
+- **Context**: OpenCode 1.17.15 破壞性改了 config schema（`plugins→plugin`、`agents→agent`、per-agent `permissions` 陣列→`permission` 物件、`system→prompt`、專案 skills 需 `skills.paths`）。2026-07-16 doc-sync 輪已完成 schema 遷移（check 17 agent-body 轉綠），但 check 15（`plugin loaded, version:` log 未出現——plugin API 可能也改版）與 check 16（`.agents/skills` symlink 未被 `skills.paths` 掃到——疑不跟 symlink 或需絕對路徑）仍紅，需要對 1.17 plugin API／skill loader 各做一次 Spike，不宜盲改。
+- **Effort**: Fix
+- **Source**: 2026-07-16 deep code-audit + doc-sync（v2.32.39）
+
 ### 「No-go zones」→「red lines／紅線」系統性改名 — 產品敘事詞彙與 CEO 啟動問答的術語分裂
 - **Trigger**: 下次改動 `skills/ceo-agent/SKILL.md` 或 `/l3`–`/l6` 前門的啟動問答／preset 文字時（順路做），或決定做一次 routing-regression 驗證時。
 - **Context**: 網站凍結敘事已統一 紅線/red lines（no-go 已從 site/README 清除），但 CEO 啟動 Q4 的概念名仍是「No-Go Zones (Hard Constraints)」，散佈於 ceo-agent/l3–l6 SKILL.md frontmatter descriptions（含 `no-go=none` preset 字串）、level-front-door.md、docs/skills.md。frontmatter description 是 routing trigger——改字有 routing 位移風險，需搭配 skill-routing 回歸驗證（slash-entry probe＋手測觸發語），不可 drive-by。2026-07-16 敘事對齊掃描（narrative-drift scan）flag 為系統性項目。

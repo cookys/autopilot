@@ -132,14 +132,14 @@ assert_eq "gpt-5.5 claude-opus gemini-flash" "$(bash "$SCRIPT" --field qc_panel)
 AC_CFG="$TEST_TMP/all-calibrated.md"
 printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
-assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
+assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
 assert_not_contains "$(json_get "$AC_OUT" qc_panel)" "all-calibrated" "alias string is absent from parsed qc_panel value"
 
 # case/trim handling check
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
 printf -- '- qc_panel:   All-Calibrated  \n' > "$AC_CFG_CASE"
 AC_OUT_CASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG_CASE" bash "$SCRIPT")"
-assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
+assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
 
 # cross-family field computed over the expanded list
 AC_CFG_XFAM="$TEST_TMP/all-calibrated-xfam.md"

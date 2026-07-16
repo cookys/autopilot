@@ -9,14 +9,14 @@
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
 | 2026-07-16 | arch | Git ref lifecycle races — enumeration status / stable snapshots / verified ack publication / prepared ref restore / lifetime flock / probe-first review / SHA-256 disclosure | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
-| 2026-05-14 | arch | Claude Code plugin dogfood 5 lessons — catalog snapshot vs disk drift / cross-cwd hook state merge / chain prose 同檔自相矛盾 / multi-round review progressive uncovery / dogfood observe-vs-invoke trade-off | [claude-code-plugin-dogfood-lessons.md](claude-code-plugin-dogfood-lessons.md) |
+| 2026-05-14 | arch | Claude Code plugin dogfood 5 lessons — catalog snapshot vs disk drift / cross-cwd hook state merge / chain prose 同檔自相矛盾 / multi-round review progressive uncovery / dogfood observe-vs-invoke trade-off | ⚠️ `claude-code-plugin-dogfood-lessons.md` 遺失（從未 commit 進本 repo；鏡像 repo 不在此機。2026-07-16 doc-sync 發現。若他機還有請補回並 commit） |
 
 ## 知識分類
 
 | 文件 | 內容 |
 |------|------|
 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) | Git refs / dispatch branch lifecycle 的 race-safe enumeration、ack publication、prepared restore、worktree lifetime lock 與 reviewer probe patterns |
-| [claude-code-plugin-dogfood-lessons.md](claude-code-plugin-dogfood-lessons.md) | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
+| ⚠️ `claude-code-plugin-dogfood-lessons.md`（遺失，見上） | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
 
 ## 跨 repo mirror
 

@@ -23,7 +23,7 @@ console.log(`copilot_reasons_unique=${new Set(copilot.readiness_reasons).size ==
 NODE
 )"
 assert_contains "$PARSED" "total=7" "harness report loads default records"
-assert_contains "$PARSED" "stale=7" "harness report marks old records stale"
+assert_contains "$PARSED" "stale=6" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
 assert_contains "$PARSED" "verified=4" "harness report counts verified records"
 assert_contains "$PARSED" "warning=2" "harness report counts warning records"
 assert_contains "$PARSED" "unverified=1" "harness report counts unverified records"

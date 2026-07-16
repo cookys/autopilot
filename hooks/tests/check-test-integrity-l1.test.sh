@@ -460,6 +460,8 @@ run_integrity "$repo" HEAD~1..HEAD --l1-runner pytest
 assert_exit_code "$__EXIT_CODE" 0 "pure additive pytest is ok"
 assert_contains "$__OUTPUT" '"l1": "ok"' "additive pytest case is l1 ok"
 
+# go-backed cases need a real toolchain; CI has one, dev machines may not — skip loudly, never fail on absence
+if command -v go >/dev/null 2>&1; then
 # 5) go t.Skip -> shrink
 repo="$(mkrepo l1-go-skip)"
 (
@@ -533,6 +535,9 @@ run_integrity_go "$repo" HEAD~1..HEAD --l1-runner go
 assert_exit_code "$__EXIT_CODE" 0 "pure additive go test is ok"
 assert_contains "$__OUTPUT" '"l1": "ok"' "additive go case is l1 ok"
 
+else
+  echo "  SKIP go cases 5-6 (no go toolchain on this machine)"
+fi
 # 7) no runner anywhere -> unavailable
 repo="$(mkrepo l1-no-runner)"
 (
@@ -551,6 +556,7 @@ run_integrity "$repo" HEAD~1..HEAD
 assert_exit_code "$__EXIT_CODE" 0 "no runner reports unavailable"
 assert_contains "$__OUTPUT" '"l1": "unavailable"' "no runner => l1 unavailable"
 
+if command -v go >/dev/null 2>&1; then
 # 8) head broken suite -> collection_failed
 repo="$(mkrepo l1-go-head-broken)"
 (
@@ -726,6 +732,9 @@ assert_contains "$__OUTPUT" '"l1": "collection_failed"' "go compile failure maps
 assert_contains "$__OUTPUT" '"reason": "build_failed' "build_failed reason mentions build_failed"
 assert_contains "$__OUTPUT" 'pkgB' "package name appears in reason"
 
+else
+  echo "  SKIP go cases 8-11 (no go toolchain on this machine)"
+fi
 # 12) --no-l1 suppresses L1
 repo="$(mkrepo l1-no-l1)"
 (

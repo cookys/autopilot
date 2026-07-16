@@ -716,13 +716,17 @@ write_manifest() {
   local parent_json="null"; [ -n "${LINEAGE_PARENT:-}" ] && parent_json="\"$(json_escape "$LINEAGE_PARENT")\""
   local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
   local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
+  local strict_manifest_fields=""
+  if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
+    strict_manifest_fields=", \"unit_id\": \"$(json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(json_escape "$STRICT_GO")\""
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
       "$(json_escape "$DISPATCH_RUN_ID")" "$runner" "$(json_escape "$MODEL")" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(json_escape "${WT:-}")" "$(json_escape "${WT:-}/.autopilot-worktree.lock")" "$(json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(json_escape "${PROMPT_FILE:-}")" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }

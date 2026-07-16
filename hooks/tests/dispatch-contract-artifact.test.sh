@@ -56,7 +56,7 @@ EOF_CONTRACT
 )
 printf '%s\n' "$BASE_CONTRACT" > "$CONTRACTS_DIR/base.json"
 
-CHECKER_OUT=$(ENGINE_SCORECARD_DIR="$SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$BASE_CONTRACT" --repo "$MINI_REPO" --json 2>&1)
+CHECKER_OUT=$(ENGINE_SCORECARD_DIR="$SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACTS_DIR/base.json" --repo "$MINI_REPO" --json 2>&1)
 CHECK_VERDICT=$(json_get "$CHECKER_OUT" "verdict")
 assert_eq "$CHECK_VERDICT" "GO" || fail "Contract checker failed to return GO. Output: $CHECKER_OUT"
 

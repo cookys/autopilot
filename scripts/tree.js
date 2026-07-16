@@ -134,6 +134,11 @@ function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+// Deliberately does NOT use scripts/lib/jsonl-store.js: this lock design is genuinely
+// different (JSON lock content with an ownership token, token-checked release, cross-host
+// time-TTL staleness, two-phase recovery-mutex steal, TREE_LOCK_TIMEOUT_MS override, and
+// process.exit-on-failure). Forcing it through the bare-PID jsonl-store contract would
+// change behavior its own suite observes.
 function acquireLock(lockFile, timeoutMs = Number(process.env.TREE_LOCK_TIMEOUT_MS) || 10000) {
   const start = Date.now();
   const token = crypto.randomUUID();

@@ -2,10 +2,10 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const process = require('process');
 const crypto = require('crypto');
+const { expandTilde, ensureDir, sleepMs, pidStringAlive, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 
 const HELP_TEXT = `Usage:
   node scripts/adjudicate-findings.js add --store <path> [--file <path>] [--now <ISO-date>]
@@ -48,38 +48,10 @@ function isHelpToken(token) {
   return token === '-h' || token === '--help' || token === 'help';
 }
 
-function expandTilde(raw) {
-  if (!raw) return raw;
-  if (raw === '~') return os.homedir();
-  if (raw.startsWith(`~${path.sep}`)) return path.join(os.homedir(), raw.slice(2));
-  return raw;
-}
-
-function ensureDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-  }
-}
-
 function readTextLines(filePath) {
   if (!fs.existsSync(filePath)) return [];
   const raw = fs.readFileSync(filePath, 'utf8');
   return raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
-}
-
-function toEventId(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  return Math.trunc(n);
-}
-
-function maxEventId(rows) {
-  let max = 0;
-  for (const row of rows) {
-    const id = toEventId(row.event_id);
-    if (id !== null && id > max) max = id;
-  }
-  return max;
 }
 
 function isValidISO8601(value) {
@@ -87,77 +59,6 @@ function isValidISO8601(value) {
   const regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
   if (!regex.test(value)) return false;
   return Number.isFinite(Date.parse(value));
-}
-
-function pidStringAlive(content) {
-  const pid = Number(content);
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    if (err.code === 'EPERM') return true;
-    return false;
-  }
-}
-
-function sleepMs(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, ms));
-}
-
-function acquireLock(storeDir, lockFile) {
-  ensureDir(storeDir);
-  const deadline = Date.now() + 8000;
-  let delayMs = 5;
-
-  while (true) {
-    try {
-      const fd = fs.openSync(lockFile, 'wx');
-      fs.writeSync(fd, String(process.pid));
-      fs.closeSync(fd);
-      return;
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      let holder;
-      try { holder = fs.readFileSync(lockFile, 'utf8').trim(); } catch { continue; }
-      if (!pidStringAlive(holder)) {
-        const stolen = `${lockFile}.stale.${process.pid}.${process.hrtime.bigint()}`;
-        try {
-          fs.renameSync(lockFile, stolen);
-          let stolenContent = '';
-          try { stolenContent = fs.readFileSync(stolen, 'utf8').trim(); } catch { }
-          if (stolenContent === holder && !pidStringAlive(stolenContent)) {
-            fs.unlinkSync(stolen);
-          } else {
-            try { fs.linkSync(stolen, lockFile); } catch { }
-            try { fs.unlinkSync(stolen); } catch { }
-          }
-        } catch { }
-        continue;
-      }
-      if (Date.now() > deadline) {
-        throw new Error('timed out waiting for findings lock (held by a live process)');
-      }
-      sleepMs(delayMs);
-      delayMs = Math.min(delayMs * 2, 50);
-    }
-  }
-}
-
-function releaseLock(lockFile) {
-  try {
-    fs.unlinkSync(lockFile);
-  } catch {
-  }
-}
-
-function withWriteLock(storeDir, lockFile, callback) {
-  acquireLock(storeDir, lockFile);
-  try {
-    return callback();
-  } finally {
-    releaseLock(lockFile);
-  }
 }
 
 function resolveStoreConfig(options) {
@@ -214,11 +115,6 @@ function readStoreRows(storeFile) {
     }
   }
   return rows;
-}
-
-function appendRow(storeFile, row) {
-  const line = `${JSON.stringify(row)}\n`;
-  fs.appendFileSync(storeFile, line, { mode: 0o600 });
 }
 
 function getObservedAt(options) {
@@ -649,7 +545,7 @@ function main() {
   const input = readInputJson(options);
   validateInputJson(input, command);
 
-  const writtenRow = withWriteLock(storeDir, lockFile, () => {
+  const writtenRow = withWriteLock({ storeDir, lockFile, name: 'findings' }, () => {
     const rows = readStoreRows(storeFile);
     for (let i = 0; i < rows.length; i++) {
       validateStoreEvent(rows[i], i + 1);

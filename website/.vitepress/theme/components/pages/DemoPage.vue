@@ -72,12 +72,12 @@ const states = computed(() =>
           name: 'FINALIZE',
           who: 'depth-0 / finish 節奏',
           entry: 'merge-back 或 PR、run-summary、worktree 清理節奏',
-          exit: '報告與產物就位 → DONE'
+          exit: '報告與 artifact 就位 → DONE'
         },
         {
           id: 'S9',
           name: 'DONE',
-          who: '產物',
+          who: 'artifact',
           entry: '可驗證 git leftovers + 報告',
           exit: '（終態）'
         },
@@ -182,7 +182,7 @@ const transitions = computed(() =>
         { from: 'IMPLEMENT', to: 'REVIEW', on: 'dispatch 回 committed + diff（artifact）' },
         { from: 'REVIEW', to: 'IMPLEMENT', on: 'VERDICT 仍 blocking（issuer 標明）' },
         { from: 'REVIEW', to: 'GATE', on: 'VERDICT 可進 gate（無 blocking findings）' },
-        { from: 'GATE', to: 'FINALIZE', on: '腳本 exit 0 +（可）panel 過' },
+        { from: 'GATE', to: 'FINALIZE', on: '腳本 exit 0 +（可）QC panel 過' },
         { from: 'GATE', to: 'IMPLEMENT', on: 'gate 失敗可修' },
         { from: 'FINALIZE', to: 'DONE', on: 'merge/PR + summary 就位' },
         { from: '*', to: 'ESCALATE', on: '紅線／授權／真卡死' },
@@ -340,12 +340,12 @@ const court = computed(() =>
           },
           {
             t: '寫完之後 · 眾議會 QC',
-            st: 'qc panel · 終裁',
-            d: '跨廠牌 panel（例：OpenAI＋Anthropic＋Google）各自獨立審「整包」diff。任何一席驗證過的 Critical 都能擋下 merge——聯集裁決，不是多數決。loop review 過了，不代表這關會過。'
+            st: 'QC panel · 終裁',
+            d: '跨廠牌眾議會（例：OpenAI＋Anthropic＋Google）各自獨立審「整包」diff。任何一席驗證過的 Critical 都能擋下 merge——聯集裁決，不是多數決。loop review 過了，不代表這關會過。'
           }
         ],
         familyLine:
-          '為什麼堅持不同廠牌？同家族模型共享盲點——寫跟審同廠牌，等於自己改自己的考卷。眾議會跟 loop review 的席位，都刻意跟寫 code 的引擎錯開家族。',
+          '為什麼堅持不同廠牌？同廠牌模型共享盲點——寫跟審同廠牌，等於自己改自己的考卷。眾議會跟 loop review 的席位，都刻意跟寫 code 的引擎錯開廠牌。',
         delegTitle: '/l4 → /l6：委出去的是勞力，留下來的是裁決',
         delegLead:
           '每升一級就多外包一件勞務。但不管到哪一級，「檢查的執行」與「過不過的裁決」都釘在 depth-0——用真 git artifact 判，不聽任何模型自報。',
@@ -428,7 +428,7 @@ const trace = computed(() =>
           { st: 'IMPLEMENT', actor: '異質 implementer', line: '照 findings 修完再 commit，回到審查桌。' },
           { st: 'GATE', actor: '機械腳本', line: '審過了，機密／完整度掃描 exit 0，才准往前。' },
           { st: 'QC', actor: 'depth-0', line: '終裁品管：merge 權一直在這層，不在寫 code 的人手上。' },
-          { st: 'DONE', actor: 'depth-0', line: '產物就位：run-summary、PR 或 merge、worktree 清乾淨。' }
+          { st: 'DONE', actor: 'depth-0', line: 'artifact 就位：run-summary、PR 或 merge、worktree 清乾淨。' }
         ]
       }
     : {
@@ -502,14 +502,14 @@ const c = computed(() =>
         goodLeadLines: [
           '內兩層交給系統。',
           '有內建用內建，沒有就找業界 best practice。',
-          '你講死 no-go，不是每一行。'
+          '你講死紅線，不是每一行。'
         ],
         nestGood: [
           {
             depth: 1,
             who: 'human',
             title: '外層 · 任務（只這層是你）',
-            cycle: '目標＋no-go → 產物／越線才叫你',
+            cycle: '目標＋紅線 → artifact／越線才叫你',
           },
           {
             depth: 2,
@@ -604,14 +604,14 @@ const c = computed(() =>
         goodLeadLines: [
           'Inner two layers are the system’s.',
           'Built-ins first; else industry best practice.',
-          'You lock no-gos, not every line.'
+          'You lock red lines, not every line.'
         ],
         nestGood: [
           {
             depth: 1,
             who: 'human',
             title: 'Outer · mission (your only ring)',
-            cycle: 'goal + no-go → artifacts / page on breach',
+            cycle: 'goal + red lines → artifacts / page on breach',
           },
           {
             depth: 2,

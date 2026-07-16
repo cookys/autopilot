@@ -47,7 +47,7 @@ const t = computed(() =>
           },
           {
             k: '審查系統',
-            d: '強模型當 peer、panel 挑問題、腳本當 gate',
+            d: '強模型當 peer、眾議會挑問題、腳本當 gate',
             sub: '信 diff 跟測試，不信「我覺得過了」'
           }
         ],
@@ -129,7 +129,7 @@ const t = computed(() =>
         day2Lines: [
           '/l3：你給目標＋紅線，系統跑內圈。',
           '/l4：更長任務丟背景，主線做別的。',
-          '你回來只看 no-go、裁決、證據。'
+          '你回來只看紅線、裁決、證據。'
         ],
         day2Cta: '看第一次委派',
         installTitle: '兩行裝起來',
@@ -261,7 +261,7 @@ const t = computed(() =>
         day2Lines: [
           '/l3: goal + red lines; system runs the inner loop.',
           '/l4: longer work in background; you do something else.',
-          'You return for no-go, adjudication, evidence only.'
+          'You return for red lines, adjudication, evidence only.'
         ],
         day2Cta: 'See first delegation',
         installTitle: 'Two commands in',

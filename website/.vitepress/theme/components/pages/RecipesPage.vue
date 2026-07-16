@@ -24,7 +24,7 @@ const recipes = computed(() =>
           youType:
             '/research-to-ship 或口語：研究 <主題> best practice，寫 plan，收斂後再實作。紅線：不擴 scope、測試必須綠',
           journeyThesis: '人只在兩端；中間兩格是系統 ↺。',
-          humanSummary: '進場定題＋出場收產物',
+          humanSummary: '進場定題＋出場收 artifact',
           sysSummary: '調查／plan 與寫審 gate',
           stages: [
             { who: 'human', layer: '外', title: '你進場', body: '主題、紅線、什麼叫完' },
@@ -45,14 +45,14 @@ const recipes = computed(() =>
           title: '情境 B：寫審分家（/l5 異質）',
           trigger: '你要功能落地，且不相信「同一個模型寫完又自己說過了」。',
           cause: '同模型 self-review 假 done 逃出，人被迫當第二審。',
-          effect: '寫跟審不同 runner／家族。轉移看 git artifact + VERDICT，人不用當中繼。',
+          effect: '寫跟審不同 runner／廠牌。轉移看 git artifact + VERDICT，人不用當中繼。',
           youType:
             '/l5 <功能目標>。紅線例：不碰 billing、不降覆蓋率。\n（roster 決定誰寫誰審，見 review-loop-config）',
           journeyThesis: '人在兩端；中間寫⇄審 ↺ 不把你當中繼。',
           humanSummary: '進場給目標＋出場看 PR',
           sysSummary: '輕決策＋異質寫審 loop',
           stages: [
-            { who: 'human', layer: '外', title: '你進場', body: '功能目標＋no-go' },
+            { who: 'human', layer: '外', title: '你進場', body: '功能目標＋紅線' },
             { who: 'sys', layer: '中', title: '輕決策', body: '清楚就略長調查，選座位' },
             { who: 'sys', layer: '內', title: '寫⇄審 ↺', body: 'blocking 回改，不算叫你' },
             { who: 'human', layer: '外', title: '你出場', body: 'gate 過＋可讀 PR／commit' }
@@ -129,7 +129,7 @@ const recipes = computed(() =>
           humanSummary: 'Enter with goal; exit with PR',
           sysSummary: 'Light decide + hetero write/review loop',
           stages: [
-            { who: 'human', layer: 'out', title: 'You enter', body: 'Feature goal + no-gos' },
+            { who: 'human', layer: 'out', title: 'You enter', body: 'Feature goal + red lines' },
             { who: 'sys', layer: 'mid', title: 'Light decide', body: 'Skip long survey; pick seats' },
             { who: 'sys', layer: 'in', title: 'Write⇄review ↺', body: 'Blocking → rewrite, not page you' },
             { who: 'human', layer: 'out', title: 'You exit', body: 'Gates pass + readable PR' }

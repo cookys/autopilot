@@ -208,6 +208,8 @@ cd ~/projects/autopilot && git pull --ff-only   # shell; then run /reload-plugin
 
 (`/reload-plugins` is a Claude Code slash command, not a shell command — run it in the Claude session after the pull.)
 
+> ⚠️ **Three layers must stay current, not two.** Dev mode = ① the dev cache symlink + ② the registry `installPath` + ③ **the Claude Code marketplace clone** (`~/.claude/plugins/marketplaces/autopilot`). Session start resolves the plugin *version* from ③'s catalog — a stale marketplace clone silently loads an old skill set even when ① and ② are perfect (observed 2026-07-17: a clone frozen at v2.17.2 fed 5-week-old skills to a session on a v2.32.46 repo, zero errors shown). `scripts/dev-update.sh` now refreshes ③ automatically, and `scripts/dev-setup.sh --check` warns when ③'s version differs from the repo's.
+
 The `version-drift-check` hook gives a one-line nudge at session start when your clone has fallen behind its git upstream. As of v2.26.1 it is wired default-on in the plugin's `hooks.json` (silent for everyone except a dev clone behind upstream), so **dev-mode users get it automatically — no settings change needed**. (It moved out of `settings.example.json` because `${CLAUDE_PLUGIN_ROOT}` does not expand in a user's `settings.json`.)
 
 To enable the **session-handoff** snapshot feature (write a machine handoff on `/clear`/logout and auto-inject it into the next session), set `~/.autopilot/config.json` to `{"handoff_inject": true}` (or `export AUTOPILOT_HANDOFF_INJECT=1`). Both the writer and reader are wired default-on in `hooks.json` but stay inert until this single switch is set.

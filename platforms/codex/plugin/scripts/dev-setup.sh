@@ -242,6 +242,23 @@ check_claude() {
   else
     status WARN "claude" "registry installPath does not point at dev symlink"
   fi
+
+  # Third layer (2026-07-17 lesson): Claude Code resolves the plugin VERSION from
+  # the marketplace clone's catalog at session start. A stale clone silently fed
+  # a 5-week-old 2.17.2 skill set to a session even though the dev symlink and
+  # registry were both correct — dogfood broke with zero errors. The symlink and
+  # registry checks above cannot see this layer.
+  local mkt_manifest="$CLAUDE_DIR/plugins/marketplaces/$MARKETPLACE_NAME/.claude-plugin/marketplace.json"
+  if [[ -f "$mkt_manifest" ]]; then
+    local repo_ver mkt_ver
+    repo_ver="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$REPO_DIR/.claude-plugin/plugin.json" | head -1 | grep -o '"[^"]*"$' | tr -d '"')"
+    mkt_ver="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$mkt_manifest" | head -1 | grep -o '"[^"]*"$' | tr -d '"')"
+    if [[ -n "$mkt_ver" && "$mkt_ver" == "$repo_ver" ]]; then
+      status OK "claude" "marketplace clone version matches repo ($mkt_ver)"
+    else
+      status WARN "claude" "marketplace clone is STALE (${mkt_ver:-unreadable} vs repo ${repo_ver:-unreadable}) — session start can resolve the old version; run scripts/dev-update.sh"
+    fi
+  fi
 }
 
 setup_claude() {

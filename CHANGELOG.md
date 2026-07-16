@@ -24,6 +24,16 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.47 — dev-mode has THREE layers; the marketplace clone was silently feeding stale skills
+
+**Headline**: dogfood was broken on the primary dev machine with zero errors shown — sessions loaded a 5-week-old v2.17.2 skill set on a v2.32.46 repo. Root cause: dev mode's known layers (dev cache symlink + registry `installPath`) were both correct, but Claude Code resolves the plugin VERSION from a third layer — the marketplace clone at `~/.claude/plugins/marketplaces/autopilot` — which had been frozen at a 2026-06-04 checkout (declaring 2.17.2) and even carried a stray hand-edit blocking `git pull`. `dev-setup.sh` never knew this layer existed.
+
+### Fixed
+
+- `scripts/dev-setup.sh --check` (claude section) now compares the marketplace clone's declared version against the repo's canonical `plugin.json` and WARNs on mismatch, naming the stale-session consequence and the fix command.
+- `scripts/dev-update.sh` now also refreshes the marketplace clone (best-effort `git pull --ff-only`; warns on dirty/failed, never fails the repo update).
+- `docs/installation.md` § Dev-mode update documents the three-layer model.
+
 ## v2.32.46 — engine wires reviewer_endpoint + --resume re-entry
 
 **Headline**: the two `engine implement-review` gaps that bit the health-roadmap /l5 run three times in one day are closed. A cc-shim / anthropic-compatible roster reviewer's declarative `reviewer_endpoint` now actually reaches `dispatch-review.sh` as `--endpoint` (name-validated `[A-Za-z0-9_]+`; a family-conflict fallback substitution still blanks it, so a substituted reviewer never inherits the incumbent's endpoint), and a committed-but-review-blocked run is no longer a destroyed-state trap: explicit `--resume` re-enters verify+review on the existing branch via a read-only git precheck (`resume_invalid` fail-closed on missing/not-ahead/non-ancestor branches; absent flag = byte-identical behavior).

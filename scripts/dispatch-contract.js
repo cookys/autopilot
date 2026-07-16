@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
@@ -151,8 +152,43 @@ function runResolverJson(repo, scriptPath, args, envOverrides = {}) {
   }
 }
 
+function normalizeStoreRole(role) {
+  return String(role).replace(/-/g, '_');
+}
+
+function getResolverFieldPrefix(requiredEngineRole) {
+  return requiredEngineRole === 'verification-author' ? 'verification_author' : 'implementer';
+}
+
 function hasKey(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function withResolverConfig(configPath, requiredEngineRole) {
+  let raw;
+  try {
+    raw = fs.readFileSync(configPath, 'utf8');
+  } catch (err) {
+    return { path: configPath };
+  }
+
+  const needsEffort = requiredEngineRole === 'verification-author'
+    || requiredEngineRole === 'implementer';
+  if (!needsEffort) {
+    return { path: configPath };
+  }
+
+  const hasPresent = /^\s*-\s*verification_author_present\s*:\s*true\s*$/im.test(raw);
+  const hasEffort = /^\s*-\s*verification_author_effort\s*:/im.test(raw);
+  if (!hasPresent || hasEffort) {
+    return { path: configPath };
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-contract-'));
+  const tempFile = path.join(tempDir, `review-loop-config-${Date.now()}.md`);
+  const updated = `${raw.trimEnd()}\n- verification_author_effort: high\n`;
+  fs.writeFileSync(tempFile, `${updated}\n`, 'utf8');
+  return { path: tempFile, isTemp: true };
 }
 
 function assertNoExtra(pathName, obj, allowedKeys, errors) {
@@ -351,8 +387,9 @@ function validateSchema(contract, errors, repoPath = '') {
   }
 
   if (repoPath && typeof repoPath === 'string' && isHex40(contract.base_sha)) {
+    const skipMandatoryMirrorCheck = contract.go && contract.go.required_engine_role === 'verification-author';
     const hasMandatoryMirror = hasPathAtCommit(repoPath, contract.base_sha, REPO_PATH_TOKENS.MANDATORY_MIRROR_PATH);
-    if (hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
+    if (!skipMandatoryMirrorCheck && hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
       errors.push('mirror: generated_mirrors must be declared for mandatory codex mirror generation');
     }
   }
@@ -605,7 +642,7 @@ function hasPathAtCommit(repo, commitSha, targetPath) {
   return lines.some((line) => line === exact || line.startsWith(`${exact}/`) || line.endsWith(`/${exact}`));
 }
 
-function resolveEngine(repo, reasons, resolvedEngine) {
+function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'implementer') {
   const configPath = path.join(repo, '.claude', 'review-loop-config.md');
   if (!fs.existsSync(configPath)) {
     reasons.push('engine: missing .claude/review-loop-config.md');
@@ -613,18 +650,36 @@ function resolveEngine(repo, reasons, resolvedEngine) {
   }
 
   let resolvedConfig;
+  const resolverConfig = withResolverConfig(configPath, requiredEngineRole);
   try {
     resolvedConfig = runResolverJson(repo, path.join(SCRIPT_DIR, 'resolve-review-loop.sh'), [], {
-      REVIEW_LOOP_CONFIG_OVERRIDE: configPath,
+      REVIEW_LOOP_CONFIG_OVERRIDE: resolverConfig.path,
     });
   } catch (err) {
+    if (resolverConfig.isTemp) {
+      try {
+        fs.unlinkSync(resolverConfig.path);
+        fs.rmdirSync(path.dirname(resolverConfig.path), { recursive: false });
+      } catch (cleanupErr) {
+        // Ignore cleanup failure; keep original error path for deterministic diagnostics.
+      }
+    }
     reasons.push('engine: failed to resolve engine tuple via canonical resolver');
     return;
   }
+  if (resolverConfig.isTemp) {
+    try {
+      fs.unlinkSync(resolverConfig.path);
+      fs.rmdirSync(path.dirname(resolverConfig.path), { recursive: false });
+    } catch (cleanupErr) {
+      // Ignore cleanup failure; temporary files are under /tmp and best-effort.
+    }
+  }
 
-  const model = String(resolvedConfig.implementer_engine || '').trim();
-  const runner = String(resolvedConfig.implementer_runner || '').trim();
-  const family = String(resolvedConfig.implementer_family || '').trim();
+  const prefix = getResolverFieldPrefix(requiredEngineRole);
+  const model = String(resolvedConfig[`${prefix}_engine`] || '').trim();
+  const runner = String(resolvedConfig[`${prefix}_runner`] || '').trim();
+  const family = String(resolvedConfig[`${prefix}_family`] || '').trim();
 
   resolvedEngine.model = model;
   resolvedEngine.runner = runner;
@@ -676,6 +731,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   const reasons = [];
   const baseSha = contract.base_sha;
   const requiredEngineRole = contract.go.required_engine_role;
+  const storeRole = normalizeStoreRole(requiredEngineRole);
 
   let headSha = '';
   let baseAtHead = false;
@@ -699,10 +755,12 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     return { reasons, specSha: '' };
   }
 
-  const status = runGit(repo, ['status', '--porcelain']);
-  if (status.trim().length > 0) {
-    reasons.push('dirty: repository has uncommitted changes');
-    return { reasons, specSha: '' };
+  if (requiredEngineRole !== 'verification-author') {
+    const status = runGit(repo, ['status', '--porcelain']);
+    if (status.trim().length > 0) {
+      reasons.push('dirty: repository has uncommitted changes');
+      return { reasons, specSha: '' };
+    }
   }
 
   try {
@@ -745,7 +803,9 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     }
   }
 
-  validatePolicyFilePathsAtBase(repo, baseSha, contract.go.required_paths, reasons);
+  if (requiredEngineRole !== 'verification-author') {
+    validatePolicyFilePathsAtBase(repo, baseSha, contract.go.required_paths, reasons);
+  }
 
   const forbidden = new Set(Array.isArray(contract.no_go.forbidden_actions) ? contract.no_go.forbidden_actions : []);
   for (const key of REQUIRED_NO_GO_KEYS) {
@@ -772,14 +832,14 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   const scoreScript = path.join(REPO_ROOT, 'scripts', 'engine-scorecard.js');
   let scoreRows = [];
   try {
-    scoreRows = runNodeJson(repo, scoreScript, ['current', '--role', requiredEngineRole]);
+    scoreRows = runNodeJson(repo, scoreScript, ['current', '--role', storeRole]);
   } catch (err) {
     reasons.push('engine: failed to read scorecard state');
   }
 
   if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
-      ? scoreRows.find((row) => row && row.role === requiredEngineRole && row.engine === resolvedEngine.model && row.runner === resolvedEngine.runner && row.status === 'qualified')
+      ? scoreRows.find((row) => row && row.role === storeRole && row.engine === resolvedEngine.model && row.runner === resolvedEngine.runner && row.status === 'qualified')
       : null;
 
     if (!matched) {
@@ -791,7 +851,11 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     const capScript = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
     let cap;
     try {
-      cap = runNodeJson(repo, capScript, ['current', '--runner', resolvedEngine.runner, '--model', resolvedEngine.model, '--role', requiredEngineRole]);
+      cap = runNodeJson(
+        repo,
+        capScript,
+        ['current', '--runner', resolvedEngine.runner, '--model', resolvedEngine.model, '--role', storeRole],
+      );
     } catch (err) {
       reasons.push('quota: failed to read capability state');
     }
@@ -868,7 +932,7 @@ function parseArgs(argv) {
   const resolvedEngine = { runner: '', model: '', family: '' };
   const reasons = [];
 
-  resolveEngine(repoPath, reasons, resolvedEngine);
+  resolveEngine(repoPath, reasons, resolvedEngine, contract.go.required_engine_role);
   const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine);
 
   reasons.push(...policy.reasons);

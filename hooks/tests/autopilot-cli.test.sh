@@ -119,12 +119,15 @@ OUT="$(node "$CLI" dispatch 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing dispatch subcommand exits 2"
 assert_contains "$OUT" "unknown dispatch subcommand" "missing dispatch subcommand explains failure"
 
-OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
+# Hermetic: EMPTY_CFG pins the resolver's built-in default reviewer (gpt-5.5) so this asserts
+# the delegation plumbing, not the repo's live dogfood roster (Board decision A → MiniMax-M3).
+EMPTY_CFG="$TEST_TMP/empty-review-loop.md"; : > "$EMPTY_CFG"
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "engine review-loop preserves resolver exit 0"
 assert_contains "$OUT" '"reviewer_engine": "gpt-5.5"' "engine review-loop emits delegated JSON"
 assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop preserves scorecard fields"
 
-OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" node "$CLI" engine review-loop --check-scorecard --enforce 2>&1)"; EXIT=$?
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" node "$CLI" engine review-loop --check-scorecard --enforce 2>&1)"; EXIT=$?
 assert_eq "3" "$EXIT" "engine review-loop preserves enforce exit 3"
 assert_contains "$OUT" '"reviewer_qualified": false' "engine review-loop emits data on enforce block"
 

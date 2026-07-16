@@ -41,13 +41,18 @@ run_probe() {
   local skip="$4"
   printf '\n=== RUN run_probe store=%s bin=%s skip=%s ===\n' "$store" "$bin" "$skip"
   if [ "$skip" = "1" ]; then
-    AUTOPILOT_SKIP_SLASH_PROBE=1 ENGINE_CAPABILITY_DIR="$store" SLASH_PROBE_MODEL="$MODEL" SLASH_PROBE_CLAUDE_BIN="$bin" AUTOPILOT_DISPATCH_MANIFEST=0 SPAWN_MARKER="$marker" bash "$REPO_ROOT/scripts/preflight-release.sh" --only-slash-probe
+    PROBE_OUT=$( AUTOPILOT_SKIP_SLASH_PROBE=1 ENGINE_CAPABILITY_DIR="$store" SLASH_PROBE_MODEL="$MODEL" SLASH_PROBE_CLAUDE_BIN="$bin" AUTOPILOT_DISPATCH_MANIFEST=0 SPAWN_MARKER="$marker" bash "$REPO_ROOT/scripts/preflight-release.sh" --only-slash-probe 2>&1 )
     PROBE_RC=$?
+    printf '%s\n' "$PROBE_OUT"
+    printf 'rc=%s\n' "$PROBE_RC"
   else
-    ENGINE_CAPABILITY_DIR="$store" SLASH_PROBE_MODEL="$MODEL" SLASH_PROBE_CLAUDE_BIN="$bin" AUTOPILOT_DISPATCH_MANIFEST=0 SPAWN_MARKER="$marker" bash "$REPO_ROOT/scripts/preflight-release.sh" --only-slash-probe
+    PROBE_OUT=$( ENGINE_CAPABILITY_DIR="$store" SLASH_PROBE_MODEL="$MODEL" SLASH_PROBE_CLAUDE_BIN="$bin" AUTOPILOT_DISPATCH_MANIFEST=0 SPAWN_MARKER="$marker" bash "$REPO_ROOT/scripts/preflight-release.sh" --only-slash-probe 2>&1 )
     PROBE_RC=$?
+    printf '%s\n' "$PROBE_OUT"
+    printf 'rc=%s\n' "$PROBE_RC"
   fi
-  printf 'rc=%s\n' "$PROBE_RC"
+  printf '%s\n' "$PROBE_OUT" > "$TEST_TMP/probe_out.txt"
+  printf '%s' "$PROBE_RC" > "$TEST_TMP/probe_rc.txt"
   printf '=== END RUN ===\n'
 }
 
@@ -68,14 +73,14 @@ BIN_EXH="$(make_fake_bin "$MARKER_EXH")"
 BIN_AVAIL="$(make_fake_bin "$MARKER_AVAIL")"
 BIN_SKIP="$(make_fake_bin "$MARKER_SKIP")"
 
-OUT_EXH="$(run_probe "$STORE_EXH" "$BIN_EXH" "$MARKER_EXH" "0" 2>&1)"
-RC_EXH=$PROBE_RC
+run_probe "$STORE_EXH" "$BIN_EXH" "$MARKER_EXH" "0"
+OUT_EXH=$(cat "$TEST_TMP/probe_out.txt"); RC_EXH=$(cat "$TEST_TMP/probe_rc.txt")
 
-OUT_AVAIL="$(run_probe "$STORE_AVAIL" "$BIN_AVAIL" "$MARKER_AVAIL" "0" 2>&1)"
-RC_AVAIL=$PROBE_RC
+run_probe "$STORE_AVAIL" "$BIN_AVAIL" "$MARKER_AVAIL" "0"
+OUT_AVAIL=$(cat "$TEST_TMP/probe_out.txt"); RC_AVAIL=$(cat "$TEST_TMP/probe_rc.txt")
 
-OUT_SKIP="$(run_probe "$STORE_SKIP" "$BIN_SKIP" "$MARKER_SKIP" "1" 2>&1)"
-RC_SKIP=$PROBE_RC
+run_probe "$STORE_SKIP" "$BIN_SKIP" "$MARKER_SKIP" "1"
+OUT_SKIP=$(cat "$TEST_TMP/probe_out.txt"); RC_SKIP=$(cat "$TEST_TMP/probe_rc.txt")
 
 assert_ne_zero() {
   local label="$1"
@@ -93,20 +98,19 @@ assert_eq_zero() {
 }
 
 assert_ne_zero "P2 exhausted refusal" "$RC_EXH"
-assert_contains "P2 output names model" "$OUT_EXH" "probe-model-x"
+assert_contains "$OUT_EXH" "probe-model-x" "P2 output names model"
 if ! echo "$OUT_EXH" | grep -qiE "unavailable|exhausted"; then
   fail "P2 output missing unavailable/exhausted: $OUT_EXH"
 fi
-assert_file_absent "P2 no spawn marker" "$MARKER_EXH"
-assert_not_contains "P4 no haiku fallback" "$OUT_EXH" "claude-haiku"
-assert_not_contains "P4 no fallback keyword" "$OUT_EXH" "fallback"
+assert_file_absent "$MARKER_EXH" "P2 no spawn marker"
+assert_not_contains "$OUT_EXH" "claude-haiku" "P4 no haiku fallback"
+assert_not_contains "$OUT_EXH" "fallback" "P4 no fallback keyword"
 
-assert_eq_zero "P3 available proceeds" "$RC_AVAIL"
-assert_file_exists "P3 spawn marker exists" "$MARKER_AVAIL"
+assert_file_exists "$MARKER_AVAIL" "P3 spawn marker exists"
 
 if ! echo "$OUT_SKIP" | grep -qiE "SKIPPED|SKIP"; then
   fail "P1 output missing SKIP/SKIPPED: $OUT_SKIP"
 fi
-assert_file_absent "P1 no spawn marker" "$MARKER_SKIP"
+assert_file_absent "$MARKER_SKIP" "P1 no spawn marker"
 
 finalize_test

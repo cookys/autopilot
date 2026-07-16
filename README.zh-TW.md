@@ -51,7 +51,7 @@ Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件�
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它優先以 Claude Code plugin 出貨 —— **28 個 skill、3 個方法論 agent、22 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **28 個 skill、3 個方法論 agent、25 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -137,7 +137,7 @@ Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際�
 |---|---|---|
 | **`/l3`** | inline，這條 thread 上 | 全自主，但你想盯著它跑 |
 | **`/l4`** | 一個背景、worktree 隔離的 **foreman** | 想把長時間自主跑的工作 offload — 你的 context 保持乾淨，權威品質判定握在 depth 0 |
-| **`/l5`** | 同 `/l4`，但**實作交給不同引擎**（agy / Gemini） | 成本套利，或讓一個去相關化的第二引擎做機械式實作 |
+| **`/l5`** | 同 `/l4`，但**實作交給不同引擎**（Codex、Gemini 或 agy） | 成本套利，或讓一個去相關化的第二引擎做機械式實作 |
 | **`/l6`** | 同 `/l5`，再把**驗證撰寫**交給不同引擎 | 想把實作與驗證撰寫都外包，但 depth 0 仍保留合併權限 |
 
 ```
@@ -179,7 +179,7 @@ Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證�
 
 | Harness | 如何開始 | 目前支援 | 已知限制 |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：28 個 skills、3 個方法論 agents、22 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：28 個 skills、3 個方法論 agents、25 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
 | **Codex** | `.agents/skills/`，或加入 `platforms/codex` marketplace 後 `codex plugin add autopilot@autopilot-local` | Skills-only package、generated support payload、repo-local marketplace | 預設 Codex package 刻意不載入 Claude hooks、apps 或 MCP servers。經 `spawn_agent` 的 subagent model 路由需 user 自行 opt-in — 見 `platforms/codex/README.md` § Subagent model routing |
 | **OpenCode** | 在這個 repo 使用 `.agents/skills/`；agents 走 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies、OpenCode plugin wrapper | Optional TypeScript deps 只在編輯 wrapper 時需要；hook parity 屬平台特定問題 |
 | **Antigravity（`agy`）** | `./scripts/install-antigravity.sh` | 受 guard 保護的 `agy plugin validate` / install / list 流程，採 export-then-install | Runtime hook firing 仍未驗證；install 不代表 hook behavior parity |
@@ -198,7 +198,7 @@ Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證�
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** —— 22 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
+| **Hooks** —— 25 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 | **產品網站**（VitePress，不在 plugin 包內） | [website/](website/) · 計畫 [docs/plans/2026-07-16-product-website.md](docs/plans/2026-07-16-product-website.md) |
 

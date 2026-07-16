@@ -490,7 +490,7 @@ run_strict_contract_preflight() {
 
   contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
   if [ "$rc" -ne 0 ] || [ -z "$contract_check_json" ]; then
-    checker_reasons="$(printf '%s' "$contract_check_json" | extract_json_value reasons 2>/dev/null || true)"
+    checker_reasons="$(extract_json_value "$contract_check_json" reasons 2>/dev/null || true)"
     if [ -z "$checker_reasons" ]; then
       checker_reasons="$(printf '%s' "$contract_check_out" | tr '\n' ' ')"
     fi
@@ -498,14 +498,14 @@ run_strict_contract_preflight() {
     die_precondition "contract checker failed: $checker_reasons"
   fi
 
-  verdict="$(printf '%s' "$contract_check_json" | extract_json_value verdict 2>/dev/null || true)"
+  verdict="$(extract_json_value "$contract_check_json" verdict 2>/dev/null || true)"
   [ "$verdict" = "GO" ] || die_precondition "contract checker verdict is $verdict"
 
   STRICT_CONTRACT_RESULT_FIELDS=1
-  STRICT_UNIT_ID="$(printf '%s' "$contract_check_json" | extract_json_value unit_id 2>/dev/null || true)"
-  STRICT_CONTRACT_SHA="$(printf '%s' "$contract_check_json" | extract_json_value contract_sha256 2>/dev/null || true)"
-  STRICT_SPEC_SHA="$(printf '%s' "$contract_check_json" | extract_json_value spec_sha256 2>/dev/null || true)"
-  strict_model="$(printf '%s' "$contract_check_json" | extract_json_value resolved_engine.model 2>/dev/null || true)"
+  STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
+  STRICT_CONTRACT_SHA="$(extract_json_value "$contract_check_json" contract_sha256 2>/dev/null || true)"
+  STRICT_SPEC_SHA="$(extract_json_value "$contract_check_json" spec_sha256 2>/dev/null || true)"
+  strict_model="$(extract_json_value "$contract_check_json" resolved_engine.model 2>/dev/null || true)"
   STRICT_GO="$verdict"
 
   [ -n "$STRICT_UNIT_ID" ] || die_precondition "contract checker returned empty unit_id"

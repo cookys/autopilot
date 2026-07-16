@@ -86,7 +86,7 @@ const dayCase = computed(() =>
           'You only show up at adjudication; the system ↺ the middle.'
         ],
         sourceLabel: 'Source',
-        sourceText: 'Workshop hands-on (deck #9–#17)',
+        sourceText: 'Workshop hands-on (zh-TW deck #9–#17)',
         sourceHref: DECK_DAY,
         phases: [
           {
@@ -129,10 +129,10 @@ const day2Case = computed(() =>
   zh.value
     ? {
         kicker: '第二天 · 第一次委派',
-        title: '冷啟動穩了，再交第一槍',
+        title: '冷啟動穩了，再開第一槍',
         thesisLines: [
-          '第一天先讓系統認識現場、跑通裁決與證據。',
-          '第二天才把目標交出去——你不接手 mid-loop 膠水。'
+          '第一天是校準，不是假裝已經全自動。你確認工作單與驗收標準。',
+          '完整委派從第二天 /l3 開始——你不接手 mid-loop 膠水。'
         ],
         sourceLabel: '細節與計時',
         sourceText: '課程 hands-on（deck #18–#20）',
@@ -166,7 +166,7 @@ const day2Case = computed(() =>
           'Day two: hand over a goal—don’t become mid-loop glue.'
         ],
         sourceLabel: 'Timed detail',
-        sourceText: 'Workshop hands-on (deck #18–#20)',
+        sourceText: 'Workshop hands-on (zh-TW deck #18–#20)',
         sourceHref: DECK_DAY2,
         steps: [
           {
@@ -186,7 +186,7 @@ const day2Case = computed(() =>
           }
         ],
         take: 'Write ≠ review. Artifact ≠ self-report. Human stays on the outer ring.',
-        ctaDeck: 'Open delegation hands-on',
+        ctaDeck: 'Open delegation hands-on (zh-TW)',
         ctaLevels: 'See levels'
       }
 )
@@ -446,7 +446,7 @@ const c = computed(() =>
             :href="DECK_DAY"
             target="_blank"
             rel="noreferrer"
-          >{{ zh ? '打開課程 hands-on' : 'Open workshop deck' }}</a>
+          >{{ zh ? '打開課程 hands-on' : 'Open workshop deck (zh-TW)' }}</a>
         </div>
       </div>
     </section>

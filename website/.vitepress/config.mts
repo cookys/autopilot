@@ -21,8 +21,27 @@ export default defineConfig({
   lastUpdated: true,
   ignoreDeadLinks: true,
   // Mission-control surface: dark is designed primary; light is a cold slate twin.
-  // 'dark' default respects system preference when unset, still toggleable.
+  // appearance: 'dark' = default dark (does NOT follow system preference; use true for that).
   appearance: 'dark',
+
+  // Working notes / panel dumps live under website/ for authors — never ship as public pages.
+  // Product copy lives in Vue components; md shells are thin. Local search would only index
+  // these notes if enabled — so search stays off this pass.
+  srcExclude: [
+    'NARRATIVE.md',
+    'WEEKLY.md',
+    'TA.md',
+    'README.md',
+    'LOOP-REVIEW.md',
+    'SITE-LOOP-REVIEW.md',
+    '**/DAY1-UX-PANEL.md',
+    '**/LANDING-UX-PANEL.md',
+    '**/GROWTH-PANEL.md',
+    '**/LOGO-PANEL.md',
+    '**/PANEL-ENG.md',
+    '**/*-PANEL.md',
+    '**/_dev/**'
+  ],
 
   head: [
     ['meta', { name: 'theme-color', content: '#07090f' }],
@@ -58,9 +77,8 @@ export default defineConfig({
 
     socialLinks: [{ icon: 'github', link: repo }],
 
-    search: {
-      provider: 'local'
-    },
+    // Search off: Vue-resident product copy is not in the MiniSearch index; leaving local
+    // search on only surfaces internal notes (and after srcExclude, near-empty results).
 
     footer: {
       message: `Plugin v${VERSION} · MIT · Site is not part of the installable plugin payload`,

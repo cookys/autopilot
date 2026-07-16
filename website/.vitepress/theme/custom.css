@@ -393,6 +393,24 @@ html:not(.dark) .lp-h1-accent {
   margin-top: 0.25rem;
 }
 
+/* Hero install: two-command stack (marketplace + install) */
+.lp-hero__install {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  max-width: 100%;
+}
+
+.lp-hero__install .lp-code--hero {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .lp-console {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -1238,16 +1256,27 @@ html:not(.dark) .lp-card--converge code { color: #0e7490; }
   margin-top: 0;
 }
 
-.vp-doc h1 {
-  display: none; /* PageHero owns title when present; fallback pages keep raw h1 via .doc-plain */
+/*
+ * Hide only *direct* Markdown h1 under .vp-doc (PageHero owns those titles).
+ * Do NOT use `.vp-doc h1` — that also zeroed every product hero
+ * (`.lp-hero h1`, `h1.ph__title`) which nest inside Vue components.
+ */
+.vp-doc > h1 {
+  display: none;
 }
 
-.vp-doc.doc-plain h1,
-.vp-doc h1:first-child {
+.vp-doc.doc-plain > h1,
+.vp-doc > h1:first-child {
   display: block;
   letter-spacing: -0.03em;
   border: none;
   margin-bottom: 1rem;
+}
+
+/* Product heroes always visible (explicit belt-and-suspenders vs cascade regressions) */
+.vp-doc .lp-hero h1,
+.vp-doc h1.ph__title {
+  display: block;
 }
 
 .vp-doc h2 {
@@ -1743,7 +1772,16 @@ html:not(.dark) .lp-card--converge code { color: #0e7490; }
   font-size: 0.82rem;
   line-height: 1.7;
   color: #d4e0f0;
-  white-space: pre;
+  /* Prose-like command examples wrap on narrow viewports; tables/ASCII keep their own scroll. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Fixed-nav offset for install day anchors */
+#day-one,
+#day-two {
+  scroll-margin-top: 5.5rem;
 }
 
 .st-terminal--hero {
@@ -1951,7 +1989,8 @@ html:not(.dark) .lp-card--converge code { color: #0e7490; }
   width: fit-content;
   max-width: 100%;
   overflow-x: auto;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   line-height: 1.5;
 }
 
@@ -2309,6 +2348,12 @@ html:not(.dark) .eng-loop-back {
   text-transform: uppercase;
   color: var(--text-3);
   background: rgba(0, 0, 0, 0.25);
+}
+
+/* Light mode: dark translucent th washed to grey on white — too weak for 0.72rem caps */
+html:not(.dark) .eng-table th {
+  background: rgba(15, 23, 42, 0.05);
+  color: #334155;
 }
 
 .eng-table tr:last-child td {
@@ -3745,7 +3790,7 @@ html:not(.dark) .lp-pipe__item strong {
 }
 
 html:not(.dark) .lp-pipe__h {
-  color: #64748b;
+  color: var(--text-3, #475569);
 }
 
 html:not(.dark) .lp-timeline__n {

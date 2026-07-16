@@ -54,17 +54,18 @@ function href(h: string) {
             </template>
             <template v-else>
               <p>Claude Code makes you faster.</p>
-              <p>Autopilot lets you leave the chair.</p>
+              <p>Autopilot lets you step away.</p>
             </template>
           </div>
           <div class="st-cta-card__cmd">
-            <span class="st-cta-card__cmd-label">{{ zh ? '安裝指令' : 'Install' }}</span>
+            <span class="st-cta-card__cmd-label">{{ zh ? '安裝指令（兩行）' : 'Install (two lines)' }}</span>
             <code class="lp-code">/plugin marketplace add cookys/autopilot</code>
+            <code class="lp-code">/plugin install autopilot@autopilot</code>
           </div>
         </div>
         <div class="st-cta-card__actions">
           <a class="lp-btn lp-btn--primary lp-btn--lg" :href="p('/install')">
-            {{ zh ? '快速安裝' : 'Install in 5 min' }}
+            {{ zh ? '快速安裝' : 'Open install guide' }}
           </a>
           <a class="lp-btn lp-btn--ghost lp-btn--lg" :href="p('/demo')">
             {{ zh ? '完整流程' : 'See one full run' }}
@@ -81,7 +82,7 @@ function href(h: string) {
         <p>
           {{
             zh
-              ? '想用 CEO 視角帶專案的人 · 也被雜事跟 AI 產出搞到爆的人'
+              ? '給想當 CEO 的人 · 也給快被雜事跟 AI 產能壓垮的人'
               : 'For would-be CEOs · and people crushed by chores & AI output'
           }}
         </p>

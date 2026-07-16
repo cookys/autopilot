@@ -194,25 +194,18 @@ const c = computed(() =>
           { code: '/l6', text: '連驗證怎麼寫也卸——主腦幾乎只協調與終裁' }
         ],
         leadFoot: '不變：最終閘與 merge 權一直在 depth-0。',
-        causeTitle: '前因',
+        causeTitle: '為什麼要分層',
         causeLines: [
           '四層不是「誰比較會寫 code」的排行榜',
-          '主因：把雜訊卸出 depth-0 的 context',
-          '讓主腦長時間活著做規劃協調',
-          '/l4 起用工頭',
-          '/l5 再卸實作',
-          '/l6 連 verification authoring 也卸'
+          '主因：把雜訊卸出 depth-0 的 context，讓主腦長時間活著做規劃協調',
+          '/l4 起用工頭；/l5 再卸實作；/l6 連 verification authoring 也卸'
         ],
-        effectTitle: '後果',
+        effectTitle: '分層之後你得到什麼',
         effectLines: [
-          '選層級＝選「有多少工作離開主腦 ctx」',
-          '附加：Claude Code 的 Fable 等高智慧模型就緒後',
-          '最聰明的腦只坐主腦做規劃協調',
-          '機械寫作卸異質／較省引擎',
-          '省 token／fee',
-          '你平常只在進場設紅線',
-          '真卡死才補一句',
-          'GATE 不因層級變鬆'
+          '選層級＝選「多少工作離開主腦 ctx」。',
+          '附加紅利：Fable 這類高智慧模型只坐主腦做規劃協調，機械實作卸給較省的異質引擎——省 token 也省 fee。',
+          '你平常只在進場設紅線，真卡死才補一句。',
+          'GATE 不因層級變鬆。'
         ],
         stackTitle: '四層細節',
         stackHint: '拓撲全表在上面。這裡只看：何時、為什麼、一句指令。',
@@ -237,25 +230,18 @@ const c = computed(() =>
           { code: '/l6', text: 'Also offload verification authoring—brain mostly coords + final QC' }
         ],
         leadFoot: 'Unchanged: final gate and merge authority stay at depth-0.',
-        causeTitle: 'Cause',
+        causeTitle: 'Why levels exist',
         causeLines: [
           'The four levels are not a “who writes better” ladder',
-          'Primary: offload noise from depth-0 ctx',
-          'So the orchestrator brain stays long-lived for plan/coord',
-          '/l4 adds a foreman',
-          '/l5 offloads implement',
-          '/l6 also offloads verification authoring'
+          'Primary: offload noise from depth-0 ctx so the orchestrator stays long-lived for plan/coord',
+          '/l4 adds a foreman; /l5 offloads implement; /l6 also offloads verification authoring'
         ],
-        effectTitle: 'Effect',
+        effectTitle: 'What you get',
         effectLines: [
-          'Picking a level picks how much work leaves brain ctx',
-          'Bonus: once Claude Code Fable-class models are in play',
-          'Smartest brain only plans/coords',
-          'Mechanical write rides hetero/cheaper engines',
-          'Saves token/fee',
-          'You mostly set red lines at intake',
-          'Amend when hard-stuck',
-          'GATE does not soften by level'
+          'Picking a level picks how much work leaves brain ctx.',
+          'Bonus: once Fable-class models are available, the smartest brain plans/coords while mechanical write rides hetero/cheaper engines—token and fee can drop too.',
+          'You mostly set red lines at intake; amend only when hard-stuck.',
+          'GATE does not soften by level.'
         ],
         stackTitle: 'Four levels in detail',
         stackHint: 'Full topology is in the matrix above. Here: when, why, one command.',

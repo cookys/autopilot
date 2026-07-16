@@ -15,8 +15,8 @@ const a = (name: string) => withBase(`/assets/${name}`)
 const t = computed(() =>
   zh.value
     ? {
-        badge: '想用 CEO 視角帶專案的人 · 也被雜事跟 AI 一堆 diff 收尾搞到很煩的人',
-        badge2: '今天，隕石丟給 CEO。',
+        badge: '給想當 CEO 的人 · 也給快被雜事跟 AI 產能壓垮的人',
+        badge2: '今天，我們發隕石給 CEO。',
         h1a: 'Claude Code 讓你寫得快。',
         h1b: 'Autopilot 讓你不用一直坐在位子上。',
         defLines: [
@@ -121,7 +121,7 @@ const t = computed(() =>
         ],
         badNote: '三層都 ↺ 你 → 你是最慢的那一環',
         loopClose: 'Autopilot 不是少步驟——是內兩層 loop 不再把你拉進去。',
-        loopFoot: '巢狀 loop 與工程狀態總表在「完整流程」——那是附錄，不是這頁主菜。',
+        loopFoot: '巢狀 loop 與工程狀態總表收在「完整流程」，當工程附錄看。',
         loopDemo: '看完整控制流',
         meteorTitle: '「隕石」一句話',
         meteorLines: [
@@ -162,7 +162,7 @@ const t = computed(() =>
           '日常：/next → 裁決 → 驗收 → 收尾',
           '隔天：第一次委派從 /l3 開始'
         ],
-        day1Cta: '看完整一天步驟',
+        day1Cta: '去快速安裝（含一天步驟）',
         day1Deck: '課程 hands-on',
         day2Title: '第二天 · 第一次委派',
         day2Lines: [
@@ -190,7 +190,7 @@ const t = computed(() =>
         badge: 'For would-be CEOs · and people crushed by chores & AI output',
         badge2: 'Today we hand meteors to CEOs.',
         h1a: 'Claude Code makes you faster.',
-        h1b: 'Autopilot lets you leave the chair.',
+        h1b: 'Autopilot lets you step away.',
         defLines: [
           'Autopilot is a CEO-agent for development work.',
           'Gather viewpoints, make tradeoffs, write and review end-to-end.',
@@ -201,7 +201,7 @@ const t = computed(() =>
           'Models tool-use, edit files, say “done”—the cost is the verification you still own.'
         ],
         cta: 'See one full run',
-        cta2: 'Install in 5 minutes',
+        cta2: 'Open install guide',
         cta3: 'GitHub',
         cta4: 'First jobs',
         installLine: '/plugin marketplace add cookys/autopilot',
@@ -237,7 +237,7 @@ const t = computed(() =>
           'More solution ideation is real.',
           'Cost: mid-layer specs and inner verify still page you every turn.'
         ],
-        autoTag: 'Leave the chair',
+        autoTag: 'Step away',
         autoSub: 'Only the outer loop is yours',
         autoNotes: [
           'Inner two layers are the system’s.',
@@ -292,7 +292,7 @@ const t = computed(() =>
         ],
         badNote: 'All three ↺ you → you are the slowest link',
         loopClose: 'Autopilot isn’t fewer steps—it’s the inner two loops no longer pulling you in.',
-        loopFoot: 'Nested loops + engineer state table live on Demo—as appendix, not this page’s meal.',
+        loopFoot: 'Nested loops + the full state table live on Demo, as the engineering appendix.',
         loopDemo: 'See full control flow',
         meteorTitle: '“Meteor” in one line',
         meteorLines: [
@@ -333,8 +333,8 @@ const t = computed(() =>
           'Daily: /next → adjudicate → accept → finish',
           'Next day: first delegation starts at /l3'
         ],
-        day1Cta: 'Full day-one steps',
-        day1Deck: 'Workshop hands-on',
+        day1Cta: 'Open install guide (incl. day one)',
+        day1Deck: 'Workshop hands-on (zh-TW)',
         day2Title: 'Day two · first delegation',
         day2Lines: [
           '/l3: goal + red lines; system runs the inner loop.',
@@ -395,7 +395,10 @@ function href(h: string) {
               rel="noreferrer"
             >{{ t.cta3 }}</a>
           </div>
-          <code class="lp-code lp-code--hero">{{ t.installLine }}</code>
+          <div class="lp-hero__install">
+            <code class="lp-code lp-code--hero">{{ t.code1 }}</code>
+            <code class="lp-code lp-code--hero">{{ t.code2 }}</code>
+          </div>
         </div>
         <div class="lp-hero__visual">
           <div class="lp-console" aria-hidden="true">
@@ -624,7 +627,7 @@ function href(h: string) {
           </div>
         </div>
         <div class="lp-day1__actions">
-          <a class="lp-btn lp-btn--primary" :href="p('/install') + '#day-one'">{{ t.day1Cta }}</a>
+          <a class="lp-btn lp-btn--primary" :href="p('/install')">{{ t.day1Cta }}</a>
           <a
             class="lp-btn lp-btn--ghost"
             href="https://cookys.github.io/ai-coding-slides/deck3-fable5.zh-TW.html#9"

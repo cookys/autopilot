@@ -24,8 +24,19 @@
 # - cc-shim: baseline `--setting-sources project`, `--strict-mcp-config`, `--tools ""`,
 #   `HOME=<scratch>`, `env -u ANTHROPIC_API_KEY`; preconditions on
 #   ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN retained.
+# - --bin: for `anthropic-compatible`, overrides the JS path only (test seam; must point
+#   at `dispatch-anthropic-review.js`-compatible logic).
+# - anthropic-compatible: direct HTTP POST of RAW PROMPT BYTES to an
+#   Anthropic-compatible /v1/messages endpoint via dispatch-anthropic-review.js --raw.
+#   Auth from env only (`MINIMAX_API_KEY` or `ANTHROPIC_COMPATIBLE_AUTH_TOKEN`).
+#   This runner intentionally ignores `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`,
+#   does not export `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`, and resolves base URL
+#   from `--endpoint` or `ANTHROPIC_COMPATIBLE_BASE_URL` / `AUTOPILOT_MINIMAX_BASE_URL`
+#   (default `https://api.minimax.io/anthropic`). (`--effort` is accepted but unused.)
 #
 # USAGE:
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible --model <name> --prompt-file <file>
+#       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
@@ -44,7 +55,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim",
+#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible",
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed",
 #     "raw_log": "<path>",
@@ -276,8 +287,8 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim)"
-case "$RUNNER" in codex|agy|grok|cc-shim) ;; *) die_precondition "--runner must be codex, agy, grok, or cc-shim (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, or anthropic-compatible (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -291,11 +302,11 @@ fi
 # inline behavior when no coords / DISPATCH_DETACH=0. NEVER returns when it engages.
 dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "$_AUTHOR_SELF_DIR" -- "${ORIG_ARGS[@]}"
 
-EP_URL=""; EP_TOKEN_ENV=""
+EP_URL=""; EP_TOKEN_ENV=""; ANTHROPIC_TOKEN_ENV=""
 if [[ -n "$ENDPOINT" ]]; then
   case "$RUNNER" in
-    cc-shim) ;;
-    *) die_precondition "--endpoint applies only to --runner cc-shim (got: $RUNNER)" ;;
+    cc-shim|anthropic-compatible) ;;
+    *) die_precondition "--endpoint applies only to --runner anthropic-compatible or cc-shim (got: $RUNNER)" ;;
   esac
   # Readiness = the resolver's EXIT CODE (0=ready), not a stdout grep (spoofable by
   # attacker-controlled field content); exit code is the authoritative fail-closed signal (gpt-5.5 R5).
@@ -310,9 +321,20 @@ if [[ -n "$ENDPOINT" ]]; then
     set +x
     export ANTHROPIC_BASE_URL="$EP_URL"
     export ANTHROPIC_AUTH_TOKEN="${!EP_TOKEN_ENV-}"
+  elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
+    ANTHROPIC_BASE_URL="$EP_URL"
+    ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
   fi
   unset _ep_json
 fi
+
+timeout_to_ms() {
+  local t="$1"
+  if [[ "$t" =~ ^([0-9]+)m$ ]]; then printf '%s' "$(( ${BASH_REMATCH[1]} * 60000 ))"; return; fi
+  if [[ "$t" =~ ^([0-9]+)s$ ]]; then printf '%s' "$(( ${BASH_REMATCH[1]} * 1000 ))"; return; fi
+  if [[ "$t" =~ ^[0-9]+$ ]]; then printf '%s' "$t"; return; fi
+  return 1
+}
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 RUNNER_EXIT=0
@@ -372,6 +394,35 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
+elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
+  ANTHROPIC_JS="${BIN:-$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js}"
+  [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-author.sh"
+  command -v node >/dev/null 2>&1 || die_precondition "node binary not found: node (required for anthropic-compatible author)"
+  TIMEOUT_MS="$(timeout_to_ms "$TIMEOUT")" || die_precondition "--timeout must be an integer millisecond value or use Ns/Nm syntax (got: $TIMEOUT)"
+  if [[ -n "$EP_URL" ]]; then
+    ANTHROPIC_BASE_URL="$EP_URL"
+    ANTHROPIC_TOKEN_ENV="$EP_TOKEN_ENV"
+  elif [[ -n "${ANTHROPIC_COMPATIBLE_BASE_URL:-}" ]]; then
+    ANTHROPIC_BASE_URL="$ANTHROPIC_COMPATIBLE_BASE_URL"
+  elif [[ -n "${AUTOPILOT_MINIMAX_BASE_URL:-}" ]]; then
+    ANTHROPIC_BASE_URL="$AUTOPILOT_MINIMAX_BASE_URL"
+  else
+    ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
+  fi
+  ANTHROPIC_ARGS=(
+    --raw
+    --prompt-file "$PROMPT_FILE"
+    --model "$MODEL"
+    --timeout-ms "$TIMEOUT_MS"
+    --base-url "$ANTHROPIC_BASE_URL"
+  )
+  if [[ -n "$ANTHROPIC_TOKEN_ENV" ]]; then
+    ANTHROPIC_ARGS+=(--token-env "$ANTHROPIC_TOKEN_ENV")
+  fi
+  set +e
+  node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
+  RUNNER_EXIT=$?
+  set -e
 else
   AGY_BIN="${BIN:-agy}"
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"

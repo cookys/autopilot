@@ -208,9 +208,9 @@ else
     exit 3
   fi
   case "$VER_AUTH_RUNNER" in
-    codex|agy|grok|cc-shim) ;;
+    codex|agy|grok|cc-shim|anthropic-compatible) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim): $VER_AUTH_RUNNER" >&2
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible): $VER_AUTH_RUNNER" >&2
       exit 3
       ;;
   esac

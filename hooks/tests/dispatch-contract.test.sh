@@ -535,7 +535,7 @@ cat > "$CONTRACT_DIR/no_mirror.json" <<EOF
     "on_clarification_needed": "stop",
     "forbidden_actions": ["push", "merge", "network", "dependency-change"]
   },
-  "output": {"kind": "diff", "paths": ["src/"]},
+  "output": {"kind": "commit", "paths": ["src/"]},
   "acceptance": [
     {"argv": ["tools/runner.sh"], "exit": 0}
   ],
@@ -711,7 +711,6 @@ if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
 
   echo "--- Case 7.2: VA-2 Unqualified (VA status failed, implementer qualified) ---"
   git checkout -- . 2>/dev/null
-  touch "$MINI_REPO/oracle.test.sh"
   out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/va_unqual" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_unqual" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 
   assert_eq "$rc" "3"
@@ -723,11 +722,9 @@ if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
 
   assert_not_contains "$out" "SECRET_FIXTURE"
   assert_red_green_clean "$MINI_REPO"
-  rm -f "$MINI_REPO/oracle.test.sh"
 
   echo "--- Case 7.3: VA-3 Quota exhausted ---"
   git checkout -- . 2>/dev/null
-  touch "$MINI_REPO/oracle.test.sh"
   out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/va_exhausted" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_exhausted" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 
   assert_eq "$rc" "3"
@@ -735,7 +732,6 @@ if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
 
   assert_not_contains "$out" "SECRET_FIXTURE"
   assert_red_green_clean "$MINI_REPO"
-  rm -f "$MINI_REPO/oracle.test.sh"
 fi
 
 finalize_test

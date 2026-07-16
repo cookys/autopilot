@@ -183,6 +183,22 @@
   user-authorized MiniMax-M3 family for one materially new current-HEAD r5 attempt with an extended
   540-second author budget.
 
+- R5 authorization commit `92c78f6` passed gpt-5.5 review (SHIP-AS-IS) and was pushed clean.
+  Contract SHA-256 `9fbf3f42de2ed47bb52d178e36ce544534ba268e6feaf43e1db57a3ef9856aa0` (540s
+  budget); zero-backtick prompt SHA-256
+  `227dc6824997007d48b2c746148d9469adf4416e842a43b8c1332b747dcdb1df`. The exact strict call
+  selected `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`, preserved all 1,467 manifest
+  entries byte-for-byte, and timed out at 540s with zero raw bytes (raw log
+  `/tmp/dispatch-author-log-TwisAq`, empty-hash). Terminal `STOP/timeout-no-artifact` — the
+  extended budget eliminates the 300s-wall hypothesis.
+- Post-terminal synthetic diagnosis (no replay): cc-shim×MiniMax 120-line generation returns in
+  11s; both full-author calls died silently. With the GLM 529 proxy capture, the Claude-CLI
+  transport is condemned for large authoring on BOTH endpoint families. Direct HTTP validation:
+  glm-5.2 emitted a perfectly shaped 400-line raw Bash file (shebang byte 0, no fence, end_turn)
+  in 18s. Decision: implement the `anthropic-compatible` direct-HTTP author runner
+  (dispatch-author.sh + resolve-review-loop/schema enum + dogfood tests) as reviewed harness
+  work, dispatched to Spark, then run C1 r6 through the new rail with a tracked roster change.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.
@@ -246,6 +262,15 @@
   uses. R5 is the MiniMax-M3 attempt selected on that basis with a 540s budget; r1-r4 remain
   terminal/non-replayable. A future GLM author seat requires either z.ai-side behavior change
   (re-probe via the exact cc-shim shape) or a direct-HTTP author runner (BACKLOG candidate).
+- MiniMax r5 is terminal `STOP/timeout-no-artifact` at 540s. Together with r4 it condemns the
+  cc-shim transport for LARGE authoring payloads on both endpoint families (mid-size synthetic
+  passes in seconds; full-author dies silently both rounds). No further cc-shim full-author
+  attempt may be tracked without new same-transport, same-payload-class readiness evidence.
+- The approved recovery is harness work, not another roster rotation: an `anthropic-compatible`
+  direct-HTTP author runner (validated by the 18s/400-line exact-shape GLM output), shipped
+  through normal review, then ONE tracked r6 attempt through the new rail. Direct HTTP evidence
+  at small/mid scale is transport-fix evidence, not full-author readiness proof — r6 keeps
+  fail-closed classification and the atomic-restoration rule unchanged.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -255,18 +280,23 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
-   active/blocked after MiniMax r4 timeout, and seven phases remain including active C1; C2-C7 are pending.
-2. (done `91c1f3f`) Atomic GLM restoration with matching dogfood expectations and r4 evidence.
-3. Under persistent continuation, run the reviewed MiniMax r5 attempt: tracked roster
-   (`MiniMax-M3/cc-shim/high/endpoint minimax`), new current-HEAD contract/prompt with a 540s
-   budget, one strict call. The raw oracle must pass output-shape, checkout-containment,
-   `bash -n`, portable-tool, and isolated RED. GLM is NOT the next author: its cc-shim rail is
-   mechanically dead (deterministic 529; event 65) — do not re-select it without a same-transport
-   readiness probe passing.
-4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
-   prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
-   budgets, and MiniMax-M3 + AGY review.
-5. If a future temporary repository-wide assignment is reviewed and committed, retain the same
+   active/blocked after the MiniMax r5 timeout terminal (cc-shim author rail condemned; direct-HTTP
+   author runner approved as recovery), and seven phases remain including active C1; C2-C7 are pending.
+2. (done `91c1f3f`) Atomic GLM restoration; (done `92c78f6`) reviewed r5 authorization; r5 ran
+   and is terminal `STOP/timeout-no-artifact`; GLM tuple restored atomically in the r5 terminal
+   restoration commit.
+3. Implement the `anthropic-compatible` direct-HTTP author runner as reviewed harness work
+   (dispatch-author.sh runner branch + resolve-review-loop.sh / review-loop-contract schema enum
+   + dogfood tests + hetero-dispatch reference), implementation leaf-dispatched (Spark),
+   cross-family reviewed, committed and pushed on this branch.
+4. Tracked roster change to `glm-5.2/anthropic-compatible/high/endpoint glm` (or MiniMax
+   equivalent) through review, then freeze a new current-HEAD r6 contract/prompt and run ONE
+   strict author call through the new rail. The raw oracle must pass output-shape,
+   checkout-containment, `bash -n`, portable-tool, and isolated RED.
+5. Only after assertion-red succeeds without fixture/import/tool failure, author the
+   implementation prompt with the accepted oracle hash, dispatch Spark once, then run GREEN,
+   mirror parity, boundary, budgets, and cross-family review.
+6. If a future temporary repository-wide assignment is reviewed and committed, retain the same
    atomic restoration rule at every terminal or aborted/non-started attempt before C2 or unrelated
    strict `/l6` authoring.
 

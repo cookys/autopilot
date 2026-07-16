@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — MiniMax r5 authorized after GLM-rail root-cause | Depth-0 proxy capture proved the GLM cc-shim rail dead (deterministic z.ai HTTP 529 to every Claude-CLI-shaped request; direct HTTP 200), retroactively explaining all four GLM failures; MiniMax cc-shim verified live; r5 uses a 540s budget | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active/blocked — MiniMax r5 timeout STOP; cc-shim author rail condemned; direct-HTTP author runner approved as recovery path | R5 preserved byte-for-byte containment but returned zero bytes at the extended 540s wall, eliminating the budget hypothesis; synthetic probes show cc-shim mid-size OK but full-author dead on BOTH endpoint families, while direct HTTP produces perfect-shape 400-line output in 18s | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -429,6 +429,18 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   selects the user-authorized MiniMax-M3 family for r5 with a materially new zero-backtick prompt
   and an extended 540-second author budget (the prior 300s wall was never model-attributed). R1-r4
   MiniMax and all GLM/Grok/Gemini artifacts remain terminal and non-replayable.
+- MiniMax r5 is the next tracked attempt after the GLM root-cause. Its contract extended the author
+  budget to 540s (the only untested lever for the observed exit-124 class) with a materially new
+  restructured prompt; readiness used exact-transport probes (events 66/67). It preserved
+  byte-for-byte containment (1,467-entry manifest) and returned zero bytes at 540s: terminal
+  `STOP/timeout-no-artifact`. This eliminates the budget hypothesis for the MiniMax rail.
+- Post-r5 synthetic diagnosis (no old prompt replayed): cc-shim×MiniMax mid-size generation
+  (120 lines) returns in 11s, but both r4/r5 full-author calls died silently; combined with the
+  GLM 529 capture, the Claude-CLI transport is condemned for LARGE authoring requests on both
+  endpoint families. Direct HTTP validation: glm-5.2 produced an exactly-shaped 400-line raw Bash
+  file (shebang byte 0, no fences, end_turn) in 18s. Decision: build the `anthropic-compatible`
+  direct-HTTP author runner (dispatch-author.sh + resolver/schema enum + dogfood tests) as reviewed
+  harness work, then run C1 r6 through it. cc-shim remains valid for review-sized payloads.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

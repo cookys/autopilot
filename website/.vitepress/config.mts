@@ -14,7 +14,7 @@ const repo = 'https://github.com/cookys/autopilot'
 export default defineConfig({
   title: 'Autopilot',
   description:
-    'CEO altitude for ordinary operators: diverge for fuller decisions, converge when runs drift, keep humans out of the loop. Claude Code home; portable paths for Codex, OpenCode, and agy.',
+    'CEO altitude for everyday engineers: diverge for fuller decisions, converge when a run drifts, and keep humans out of the loop. Claude Code is home; portable paths for Codex, OpenCode, and agy.',
   // GitHub project Pages: https://cookys.github.io/autopilot/
   base: process.env.VITEPRESS_BASE || '/autopilot/',
   cleanUrls: true,

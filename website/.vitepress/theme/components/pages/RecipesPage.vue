@@ -96,12 +96,12 @@ const recipes = computed(() =>
           id: 'research-to-ship',
           title: 'Recipe A: research → ship',
           trigger: 'You don’t know industry practice, but need a mergeable change—not a chat essay.',
-          cause: 'Jumping to /l5 freezes bad assumptions into code; review thrash; you research by hand anyway.',
-          effect: 'Harden assumptions before coding; less burn on a false path.',
+          cause: 'Jumping straight to /l5 freezes bad assumptions into code, review thrashes, and you end up researching by hand anyway.',
+          effect: 'Harden the assumptions before coding, and burn less on a false path.',
           youType:
             '/research-to-ship or: research best practice for <topic>, write a plan, implement after it tightens. Red lines: no scope creep, tests green',
-          journeyThesis: 'You only at both ends; middle two tiles are system ↺.',
-          humanSummary: 'Enter with topic; exit with leftovers',
+          journeyThesis: 'You appear at both ends; the middle two tiles are the system looping.',
+          humanSummary: 'Enter with a topic; exit with artifacts',
           sysSummary: 'Research/plan + write→review→gate',
           stages: [
             { who: 'human', layer: 'out', title: 'You enter', body: 'Topic, red lines, done-when' },
@@ -125,7 +125,7 @@ const recipes = computed(() =>
           effect: 'Writer and reviewer are different runners/families. Transitions need git + VERDICT—not you as glue.',
           youType:
             '/l5 <feature goal>. e.g. red lines: no billing, no coverage drop.\n(roster via review-loop-config)',
-          journeyThesis: 'You at both ends; middle write⇄review ↺ is not your glue job.',
+          journeyThesis: 'You sit at both ends; the middle write⇄review loop is not your glue job.',
           humanSummary: 'Enter with goal; exit with PR',
           sysSummary: 'Light decide + hetero write/review loop',
           stages: [
@@ -150,7 +150,7 @@ const recipes = computed(() =>
           effect: 'Map boundaries before edits. /onboard writes config; true read-only is explore.',
           youType:
             '1) Read-only map: “read-only architecture map; no edits without authority” (explore)\n   To wire autopilot config: /onboard (writes files)\n2) After you accept: /l3 or /l4 for a small first cut',
-          journeyThesis: 'You appear twice (read auth / first-cut gate); map + cut are system.',
+          journeyThesis: 'You appear twice — read authorization, then the first-cut gate; the map and the cut are the system.',
           humanSummary: 'Authorize read + unlock first cut',
           sysSummary: 'Map boundaries + small change through gates',
           stages: [

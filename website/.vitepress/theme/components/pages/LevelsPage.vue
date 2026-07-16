@@ -238,9 +238,9 @@ const c = computed(() =>
         ],
         effectTitle: 'What you get',
         effectLines: [
-          'Picking a level picks how much work leaves brain ctx.',
-          'Bonus: once Fable-class models are available, the smartest brain plans/coords while mechanical write rides hetero/cheaper engines—token and fee can drop too.',
-          'You mostly set red lines at intake; amend only when hard-stuck.',
+          'The level you pick decides how much work leaves brain ctx.',
+          'Bonus: once Fable-class models are available, the smartest brain plans and coordinates while the mechanical writing rides cheaper hetero engines — token and fee can drop too.',
+          'You mostly set red lines at intake, and amend only when it is hard-stuck.',
           'GATE does not soften by level.'
         ],
         stackTitle: 'Four levels in detail',

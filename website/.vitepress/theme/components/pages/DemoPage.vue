@@ -151,13 +151,13 @@ const states = computed(() =>
           name: 'FINALIZE',
           who: 'depth-0 / finish cadence',
           entry: 'merge-back or PR, run-summary, worktree cleanup',
-          exit: 'report + leftovers ready → DONE'
+          exit: 'report + artifacts ready → DONE'
         },
         {
           id: 'S9',
           name: 'DONE',
           who: 'artifacts',
-          entry: 'Verifiable git leftovers + report',
+          entry: 'Verifiable git artifacts + report',
           exit: '(terminal)'
         },
         {
@@ -444,7 +444,7 @@ const trace = computed(() =>
           { st: 'IMPLEMENT', actor: 'hetero implementer', line: 'Fixes against the findings, commits again, returns to the review desk.' },
           { st: 'GATE', actor: 'scripts', line: 'Review clears; secret and completeness scans exit 0 before it may advance.' },
           { st: 'QC', actor: 'depth-0', line: 'Final quality call: merge authority stays here, never with the code writer.' },
-          { st: 'DONE', actor: 'depth-0', line: 'Leftovers in place: run summary, PR or merge, worktree cleaned up.' }
+          { st: 'DONE', actor: 'depth-0', line: 'Artifacts in place: run summary, PR or merge, worktree cleaned up.' }
         ]
       }
 )
@@ -575,8 +575,8 @@ const c = computed(() =>
         whyTitle: 'Human always on',
         whySub: 'Stuck in all three loops',
         whyLeadLines: [
-          'More solution ideation is real.',
-          'Cost: mid-layer specs and inner verify still page you every turn.'
+          'You do get more solution ideas.',
+          'The cost: mid-layer specs and inner verification still page you every turn.'
         ],
         nestBad: [
           {
@@ -629,7 +629,7 @@ const c = computed(() =>
         goodPayoff:
           'Autopilot isn’t fewer steps—it’s the inner two loops no longer pulling you in.',
         detailTitle: 'Engineer appendix: internal state machine (maps to repo)',
-        detailLead: 'How the system runs (including how review/GATE take verification). Not a human checklist—humans are mostly intake + ESCALATE.',
+        detailLead: 'How the system runs, including where review and GATE take over verification. This is not a human checklist — humans mostly appear at intake and ESCALATE.',
         loopNotes: [
           'IMPLEMENT⇄REVIEW is an internal system loop, not a chat pull-in.',
           'Any blocking VERDICT loops write (not Critical-only).',

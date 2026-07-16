@@ -62,7 +62,7 @@ const c = computed(() =>
         nowItems: [
           {
             n: 'Contract check before spend',
-            d: 'Every delegated unit passes a GO/NO-GO check — goal, scope, acceptance all present — before any engine money burns.'
+            d: 'Every delegated unit clears a GO/NO-GO readiness check — goal, scope, acceptance all present — before any engine money burns.'
           },
           {
             n: 'A roster for check-authoring too',

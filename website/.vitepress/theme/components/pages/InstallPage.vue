@@ -162,8 +162,8 @@ const day2Case = computed(() =>
         kicker: 'Day two · first delegation',
         title: 'After cold start, hand off the first shot',
         thesisLines: [
-          'Day one: system knows the repo; you practiced adjudicate + evidence.',
-          'Day two: hand over a goal—don’t become mid-loop glue.'
+          'Day one: the system learns the repo, and you practice adjudication and evidence.',
+          'Day two: you hand over a goal and refuse to become mid-loop glue.'
         ],
         sourceLabel: 'Timed detail',
         sourceText: 'Workshop hands-on (zh-TW deck #18–#20)',
@@ -177,7 +177,7 @@ const day2Case = computed(() =>
           {
             n: '02',
             t: 'You check three things only',
-            d: 'No-go hit? Adjudication clear? Evidence re-runnable?'
+            d: 'Red line hit? Adjudication clear? Evidence re-runnable?'
           },
           {
             n: '03',

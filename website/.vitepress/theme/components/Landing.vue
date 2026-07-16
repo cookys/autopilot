@@ -158,7 +158,7 @@ const t = computed(() =>
         ],
         leadLines: [
           'Not another prompt pack. Not you as full-time babysitter.',
-          'Models tool-use, edit files, say “done”—the cost is the verification you still own.'
+          'Models call tools, edit files, and report “done” — the cost is the verification you still own.'
         ],
         cta: 'See one full run',
         cta2: 'Open install guide',
@@ -174,13 +174,13 @@ const t = computed(() =>
           },
           {
             k: 'CEO-agent',
-            d: 'Tradeoffs with fuller context, then advance',
-            sub: 'Fed by survey / debate / multi-engine takes'
+            d: 'Weighs the tradeoffs on fuller context, then advances',
+            sub: 'Fed by survey, debate, and multi-engine takes'
           },
           {
             k: 'Review system',
-            d: 'Hard peers, panel nags, mechanical gates',
-            sub: 'Diffs and tests—not “I feel done”'
+            d: 'Hard peer reviewers, a QC panel, mechanical gates',
+            sub: 'It trusts diffs and tests, not “I feel done”'
           }
         ],
         dayTitle: 'Your time: do you have to stay in the chair?',
@@ -222,12 +222,12 @@ const t = computed(() =>
         ],
         whoTitle: 'Who this is for',
         who: [
-          { t: 'CEO-altitude work', d: 'Show up at intake and real red lines' },
-          { t: 'Out of the small stuff', d: 'Mid-path stops waiting on “continue”' },
-          { t: 'AI-output burnout', d: 'Verification leaves your day job' }
+          { t: 'CEO-altitude work', d: 'You show up at intake and for real red lines' },
+          { t: 'Out of the small stuff', d: 'No mid-run stops waiting on “continue”' },
+          { t: 'AI-output burnout', d: 'Verification moves off your plate' }
         ],
         proofTitle: 'Why you can watch less',
-        proofSub: 'Not verbal guarantees—traceable leftovers',
+        proofSub: 'Not promises — artifacts you can trace',
         proof: [
           { k: 'artifacts', d: 'commits, diffs, test results' },
           { k: 'split roles', d: 'writer ≠ rubber-stamp reviewer' },
@@ -239,7 +239,7 @@ const t = computed(() =>
         day1Leads: [
           'Morning: /onboard → standing context → answer Qs → adjudicate settings.',
           'Afternoon: scan → plan/backlog → /next → you only adjudicate → acceptance pipeline.',
-          'You at decision points only; system ↺ the middle.'
+          'You appear only at the decision points; the system loops the middle.'
         ],
         day1Steps: [
           { n: '1', t: 'Install plugin' },

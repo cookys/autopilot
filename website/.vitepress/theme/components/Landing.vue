@@ -142,8 +142,7 @@ const t = computed(() =>
           { l: '起手任務', h: '/recipes' },
           { l: '設計理念', h: '/philosophy' },
           { l: '翻車紀錄', h: '/proof' },
-          { l: '委派層級', h: '/levels' },
-          { l: '敘事定稿', h: 'https://github.com/cookys/autopilot/blob/develop/website/NARRATIVE.md' }
+          { l: '委派層級', h: '/levels' }
         ],
         foot: '人盡量別卡在 loop 裡 · 多元想全 · 收斂防歪 · 隕石丟給 CEO'
       }
@@ -274,8 +273,7 @@ const t = computed(() =>
           { l: 'Recipes', h: '/recipes' },
           { l: 'Why', h: '/philosophy' },
           { l: 'Proof', h: '/proof' },
-          { l: 'Levels', h: '/levels' },
-          { l: 'Narrative freeze', h: 'https://github.com/cookys/autopilot/blob/develop/website/NARRATIVE.md' }
+          { l: 'Levels', h: '/levels' }
         ],
         foot: 'Humans mostly out · diverge · converge · meteors for CEOs'
       }

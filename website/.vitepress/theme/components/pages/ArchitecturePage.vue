@@ -50,8 +50,8 @@ const layers = computed(() =>
 const c = computed(() =>
   zh.value
     ? {
-        pill1: '給想當 CEO 的人 · 也給快被雜事跟 AI 產能壓垮的人',
-        pill2: '今天，我們發隕石給 CEO。',
+        pill1: '系統架構 · 跟著敘事疊',
+        pill2: '四層一條線',
         h1a: '故事怎麼疊，',
         h1b: '架構就怎麼疊。',
         lead: '不是文件裡的模組圖。是多元 → CEO → 收斂 的同一條敘事。',
@@ -64,8 +64,8 @@ const c = computed(() =>
         ]
       }
     : {
-        pill1: 'For would-be CEOs · and people crushed by chores & AI output',
-        pill2: 'Today we hand meteors to CEOs.',
+        pill1: 'Architecture · follows the story',
+        pill2: 'Four layers, one line',
         h1a: 'Architecture',
         h1b: 'matches the story.',
         lead: 'Not a module dump. Same spine: diverge → CEO → converge.',

@@ -10,8 +10,8 @@ const a = (n: string) => withBase(`/assets/${n}`)
 const c = computed(() =>
   zh.value
     ? {
-        pill1: '給想當 CEO 的人 · 也給快被雜事跟 AI 產能壓垮的人',
-        pill2: '今天，我們發隕石給 CEO。',
+        pill1: '工具邊界 · 只講驗證過的',
+        pill2: '主場是 Claude Code',
         h1a: 'Claude 是主場。',
         h1b: '別的量力而為。',
         lead: '這頁只做一件事：老實列出同一套 plugin 在每個工具上實際能跑多少。不硬吹對等；每一條聲明都真的跑過工具驗證。',
@@ -32,8 +32,8 @@ const c = computed(() =>
         ]
       }
     : {
-        pill1: 'For would-be CEOs · and people crushed by chores & AI output',
-        pill2: 'Today we hand meteors to CEOs.',
+        pill1: 'Host boundaries · verified claims only',
+        pill2: 'Claude Code is home turf',
         h1a: 'Claude is home.',
         h1b: 'Others are honest.',
         lead: 'This page does one thing: honestly list how much of the plugin actually runs on each tool. No parity theater; every claim was verified by running the real tool.',

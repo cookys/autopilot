@@ -163,7 +163,7 @@ const c = computed(() =>
         <div class="lp-section-head">
           <p class="lp-kicker">{{ c.causeTitle }}</p>
         </div>
-        <div class="lp-vs">
+        <div class="lp-vs lp-vs--pair">
           <article v-for="t in c.traps" :key="t.t" class="lp-vs__col lp-vs__col--bad">
             <header><span class="lp-vs__tag">{{ t.t }}</span></header>
             <p class="st-prose">{{ t.d }}</p>

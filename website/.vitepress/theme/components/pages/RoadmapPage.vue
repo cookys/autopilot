@@ -10,13 +10,13 @@ const a = (n: string) => withBase(`/assets/${n}`)
 const c = computed(() =>
   zh.value
     ? {
-        pill1: '給想當 CEO 的人 · 也給快被雜事跟 AI 產能壓垮的人',
-        pill2: '今天，我們發隕石給 CEO。',
+        pill1: '發展路線 · 手寫精選',
+        pill2: '含明確不做清單',
         h1a: '接下來，',
         h1b: '大概往哪。',
         lead: '手寫精選，不是 backlog 倒出來。只列真的在做、真的想做、跟明確不做的。',
         now: '剛上線',
-        later: '接下來',
+        later: '下一步',
         no: '明確不做（或還不敢說做得到）',
         noLead: '路線圖最廉價的就是願望。這三件我們反著寫——已經知道不成立或證據還不夠的：',
         nowItems: [
@@ -50,13 +50,13 @@ const c = computed(() =>
         ]
       }
     : {
-        pill1: 'For would-be CEOs · and people crushed by chores & AI output',
-        pill2: 'Today we hand meteors to CEOs.',
+        pill1: 'Roadmap · hand-curated',
+        pill2: 'Includes a won’t-do list',
         h1a: 'What’s next.',
         h1b: 'Curated.',
         lead: 'Hand-curated, not a backlog dump. Only what shipped, what’s next, and what we explicitly won’t claim.',
         now: 'Just shipped',
-        later: 'Next',
+        later: 'Up next',
         no: 'Won’t do (or won’t pretend yet)',
         noLead: 'The cheapest thing on a roadmap is a wish. These three are written in reverse — known-false or under-evidenced:',
         nowItems: [

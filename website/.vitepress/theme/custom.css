@@ -4965,3 +4965,11 @@ html:not(.dark) .trail__ev--human .trail__st { color: #b91c1c; }
   border-bottom: 1px dashed color-mix(in srgb, var(--amber) 45%, transparent);
 }
 .scar-receipt:hover { border-bottom-style: solid; }
+
+/* Two-card variant of .lp-vs (no middle arrow column) */
+.lp-vs--pair {
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 780px) {
+  .lp-vs--pair { grid-template-columns: 1fr; }
+}

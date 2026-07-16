@@ -4905,3 +4905,63 @@ html:not(.dark) .trail__ev--human .trail__st { color: #b91c1c; }
   color: var(--text-3);
   opacity: 0.85;
 }
+
+/* ========== Proof scars: hypothesis→test→result→change story cards ========== */
+.scar-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+@media (max-width: 860px) {
+  .scar-grid { grid-template-columns: 1fr; }
+}
+.scar-card {
+  padding: 1.15rem 1.25rem 1.2rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+}
+.scar-card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--vp-c-text-1);
+}
+.scar-story {
+  margin: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.scar-story > div {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.6rem;
+}
+.scar-story dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  padding-top: 0.15rem;
+}
+.scar-story dd {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.scar-story__change dt { color: var(--amber-text); }
+.scar-story__change dd { color: var(--vp-c-text-1); }
+.scar-receipt {
+  margin-top: 0.9rem;
+  align-self: flex-start;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--amber-text);
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--amber) 45%, transparent);
+}
+.scar-receipt:hover { border-bottom-style: solid; }

@@ -16,53 +16,53 @@ const c = computed(() =>
         h1a: '問題通常不是寫太慢，',
         h1b: '是每個分岔都踢回你。',
         leadLines: [
-          'Autopilot 改的是控制流。',
-          '你只在 IDLE 設條件、在 ESCALATE 補一句。',
-          '中間狀態由系統推；怎麼跳看 artifact。'
+          'Autopilot 改的是控制流，不是嘴上態度。',
+          '你只在進場設條件、在真的卡住時補一句。',
+          '中間全由系統推進；每一步過不過，看 artifact 說話。'
         ],
-        causeTitle: '前因：兩種死法（工程講法）',
+        causeTitle: '為什麼會累：兩種典型死法',
         traps: [
           {
             t: '決策太窄',
-            d: '單一模型在 DECIDE 瞎猜 → IMPLEMENT 蓋在錯假設上 → REVIEW 才爆 → 你從頭來。',
-            fix: '動工前先 DIVERGE（survey／think-tank／多引擎）把盲點攤開。'
+            d: '單一模型自己猜一個方向就開寫，寫到審查才發現假設錯了，整段重來——你陪著從頭再走一次。',
+            fix: '解法：動工前先發散——survey、think-tank、多引擎意見把盲點攤開，再做決定。'
           },
           {
             t: '執行太吵',
-            d: '每次 IMPLEMENT 完都等你肉眼過 → 你變最慢的 API；假 done 靠感覺放行。',
-            fix: '寫審分家 + GATE 用腳本；成功＝commit／diff／測試，不是「我覺得好了」。'
+            d: '每寫完一段就停下來等你點頭，你變成整條流程裡最慢的一環；「做完了」靠感覺放行。',
+            fix: '解法：寫審分家＋機械 gate。成功的定義是 commit、diff、測試綠——不是「我覺得好了」。'
           }
         ],
-        polesTitle: '想全／收斂＝狀態機上兩段',
+        polesTitle: '兩個動作：先想全，再收斂',
         poles: [
           {
-            k: 'DIVERGE',
-            d: '可略過的狀態：多觀點進決策地圖，不是開會投票表演。',
-            states: '→ 餵給 DECIDE'
+            k: '先想全（diverge）',
+            d: '有真取捨才開的調查段：把多方觀點攤進決策地圖，不是開會投票表演。',
+            states: '→ 餵給 CEO agent 做取捨'
           },
           {
-            k: 'CONVERGE',
-            d: 'REVIEW + GATE：模型可以發散，交付一定要過窄門。',
-            states: '→ DONE，或退回 IMPLEMENT'
+            k: '再收斂（converge）',
+            d: '審查＋機械 gate：模型可以發散，交付一定要過窄門。',
+            states: '→ 過了才算完；不過就退回去改'
           }
         ],
         contractTitle: '人機怎麼分工（三格）',
         contract: [
-          { k: '你', d: '目標、紅線、不能退讓（INTAKE 的 payload）' },
-          { k: 'CEO agent', d: 'DECIDE：要擴、要砍、派誰；不是每題都問你' },
-          { k: '系統', d: 'IMPLEMENT／REVIEW／GATE；ESCALATE 才敲門' }
+          { k: '你', d: '給目標、紅線、不能退讓的條件——進場講一次' },
+          { k: 'CEO agent', d: '做取捨：要擴、要砍、派誰；不是每題都回來問你' },
+          { k: '系統', d: '寫、審、gate 全在裡面跑；敲你門只有一種情況——真的過不去' }
         ],
-        redTitle: '審 code 三條紅線（給 reviewer）',
+        redTitle: '審 code 三條紅線（我們對 reviewer 的要求）',
         reds: [
-          { t: '講完', d: '影響 + 怎麼修，不是只喊嚴重' },
-          { t: '有證據', d: 'path:line，或可重跑的 probe' },
-          { t: '掃乾淨', d: '乾淨項也要列，別只報壞消息' }
+          { t: '講完整', d: '說清楚影響＋怎麼修，不是只喊嚴重' },
+          { t: '有證據', d: '指到 path:line，或給可重跑的驗證' },
+          { t: '掃乾淨', d: '沒問題的部分也要列——不能只報壞消息' }
         ],
         trustTitle: '信任邊界',
         trustLines: [
-          '信 git 產物跟腳本 exit code。',
+          '信 git artifact 跟腳本 exit code。',
           '不信 agent 自己說 done。',
-          '空的 capture → no_verdict、fail-closed，不當 SHIP。'
+          '拿不到審查結果就當「沒過」——fail-closed，絕不默認放行。'
         ],
         next: [
           { t: '完整流程', h: '/demo' },
@@ -76,53 +76,53 @@ const c = computed(() =>
         h1a: 'The bug isn’t slow typing.',
         h1b: 'It’s every fork returning to a human.',
         leadLines: [
-          'Autopilot changes control flow.',
-          'Humans at IDLE (contract) and ESCALATE (amend).',
-          'Mid states advance on artifact-based transitions.'
+          'Autopilot changes the control flow, not the vibes.',
+          'You set conditions at the start and add one line when it is genuinely stuck.',
+          'Everything in between advances on artifacts — every pass is checkable.'
         ],
-        causeTitle: 'Cause: two failure modes (engineering)',
+        causeTitle: 'Why it burns you out: two classic failure modes',
         traps: [
           {
-            t: 'Narrow decide',
-            d: 'One model guesses in DECIDE → IMPLEMENT on bad assumptions → REVIEW explodes → you restart.',
-            fix: 'DIVERGE (survey / think-tank / multi-engine) before build.'
+            t: 'Deciding too narrow',
+            d: 'One model guesses a direction and starts writing; review finally exposes the bad assumption and the whole stretch restarts — with you along for the ride.',
+            fix: 'Fix: diverge before building — survey, think-tank, multi-engine takes lay out the blind spots first.'
           },
           {
-            t: 'Noisy execute',
-            d: 'Every IMPLEMENT waits on your eye review → you are the slowest API; fake done ships on vibes.',
-            fix: 'Split REVIEW + mechanical GATE; success = commit/diff/tests.'
+            t: 'Executing too loud',
+            d: 'Every finished chunk waits for your nod; you become the slowest link, and “done” ships on feel.',
+            fix: 'Fix: writer ≠ reviewer, plus mechanical gates. Success means commit, diff, green tests — not “feels done”.'
           }
         ],
-        polesTitle: 'Diverge / converge on the state machine',
+        polesTitle: 'Two moves: widen first, then converge',
         poles: [
           {
-            k: 'DIVERGE',
-            d: 'State DIVERGE (skippable): more views into a decision map—not a vote show.',
-            states: '→ feeds DECIDE'
+            k: 'Widen first (diverge)',
+            d: 'A research leg that opens only for real tradeoffs: multiple views onto one decision map — not a voting show.',
+            states: '→ feeds the CEO-agent tradeoff'
           },
           {
-            k: 'CONVERGE',
-            d: 'States REVIEW + GATE: models may fan out; delivery must pass a narrow door.',
-            states: '→ DONE or back to IMPLEMENT'
+            k: 'Then converge',
+            d: 'Review + mechanical gates: models may fan out; delivery must pass a narrow door.',
+            states: '→ pass to finish; fail loops back for fixes'
           }
         ],
         contractTitle: 'Human–system contract',
         contract: [
-          { k: 'You', d: 'Goal, red lines, non-negotiables (INTAKE payload)' },
-          { k: 'CEO agent', d: 'DECIDE: expand/cut/dispatch; not every Q to you' },
-          { k: 'System', d: 'IMPLEMENT / REVIEW / GATE; knock only on ESCALATE' }
+          { k: 'You', d: 'Goal, red lines, non-negotiables — said once at intake' },
+          { k: 'CEO agent', d: 'Makes the tradeoffs: expand, cut, dispatch — without asking you every question' },
+          { k: 'System', d: 'Writing, review, gates all run inside; it knocks for one reason only — genuinely stuck' }
         ],
-        redTitle: 'Three review red lines (for reviewers)',
+        redTitle: 'Three review red lines (what we demand of reviewers)',
         reds: [
-          { t: 'Closure', d: 'Impact + fix path, not severity theater' },
-          { t: 'Evidence', d: 'path:line or re-runnable probe' },
-          { t: 'Exhaustiveness', d: 'List clean items too—no only-bad reporting' }
+          { t: 'Complete', d: 'State the impact and the fix path, not just severity' },
+          { t: 'Evidenced', d: 'Point at path:line, or give a re-runnable check' },
+          { t: 'Exhaustive', d: 'List what is clean too — never bad news only' }
         ],
         trustTitle: 'Trust boundary',
         trustLines: [
           'Trust git artifacts and script exit codes.',
-          'Never agent self-report.',
-          'Empty capture → no_verdict fail-closed, not SHIP.'
+          'Never an agent’s own “done”.',
+          'No review result means “did not pass” — fail-closed, never a silent pass.'
         ],
         next: [
           { t: 'Full state machine', h: '/demo' },

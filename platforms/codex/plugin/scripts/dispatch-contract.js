@@ -386,7 +386,7 @@ function validateSchema(contract, errors, repoPath = '') {
 
   if (repoPath && typeof repoPath === 'string' && isHex40(contract.base_sha)) {
     const hasMandatoryMirror = hasPathAtCommit(repoPath, contract.base_sha, REPO_PATH_TOKENS.MANDATORY_MIRROR_PATH);
-    if (hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
+    if (contract.output && contract.output.kind === 'commit' && hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
       errors.push('mirror: generated_mirrors must be declared for mandatory codex mirror generation');
     }
   }

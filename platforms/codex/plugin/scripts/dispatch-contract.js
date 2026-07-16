@@ -127,6 +127,30 @@ function runNodeJson(repo, scriptFile, args) {
   }
 }
 
+function runResolverJson(repo, scriptPath, args, envOverrides = {}) {
+  const result = spawnSync('bash', [scriptPath, ...args], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: { ...process.env, ...envOverrides },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  if (result.error) {
+    throw new Error(`resolver script failed to spawn: ${result.error.message}`);
+  }
+
+  const out = (result.stdout || '').trim();
+  if (typeof result.status !== 'number' || result.status !== 0) {
+    throw new Error('canonical resolver returned non-zero exit code');
+  }
+
+  try {
+    return JSON.parse(out);
+  } catch (err) {
+    throw new Error('canonical resolver output is not valid JSON');
+  }
+}
+
 function hasKey(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
@@ -581,59 +605,26 @@ function hasPathAtCommit(repo, commitSha, targetPath) {
   return lines.some((line) => line === exact || line.startsWith(`${exact}/`) || line.endsWith(`/${exact}`));
 }
 
-function configParseValue(value) {
-  if (typeof value !== 'string') return '';
-  let v = value.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1).trim();
-  }
-  return v;
-}
-
 function resolveEngine(repo, reasons, resolvedEngine) {
   const configPath = path.join(repo, '.claude', 'review-loop-config.md');
-  let content;
-  try {
-    content = fs.readFileSync(configPath, 'utf8');
-  } catch (err) {
+  if (!fs.existsSync(configPath)) {
     reasons.push('engine: missing .claude/review-loop-config.md');
     return;
   }
 
-  let model = '';
-  let runner = '';
-  let family = '';
-
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) {
-      continue;
-    }
-
-    const m = line.match(/^[\-\s]*([a-zA-Z0-9_\-]+)\s*:\s*(.*?)\s*$/);
-    if (!m) {
-      continue;
-    }
-
-    const key = m[1].toLowerCase();
-    const value = configParseValue(m[2]);
-
-    if (!value) {
-      continue;
-    }
-
-    if ((key === 'selected_engine' || key === 'engine' || key === 'model') && !model) {
-      model = value;
-    }
-
-    if (key === 'runner' && !runner) {
-      runner = value;
-    }
-
-    if (key === 'family' && !family) {
-      family = value;
-    }
+  let resolvedConfig;
+  try {
+    resolvedConfig = runResolverJson(repo, path.join(SCRIPT_DIR, 'resolve-review-loop.sh'), [], {
+      REVIEW_LOOP_CONFIG_OVERRIDE: configPath,
+    });
+  } catch (err) {
+    reasons.push('engine: failed to resolve engine tuple via canonical resolver');
+    return;
   }
+
+  const model = String(resolvedConfig.implementer_engine || '').trim();
+  const runner = String(resolvedConfig.implementer_runner || '').trim();
+  const family = String(resolvedConfig.implementer_family || '').trim();
 
   resolvedEngine.model = model;
   resolvedEngine.runner = runner;

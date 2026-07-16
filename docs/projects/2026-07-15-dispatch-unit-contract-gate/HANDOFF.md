@@ -351,6 +351,15 @@
   forbidden-action-missing oracle case; B3 directory-style outputs; withResolverConfig shim;
   capability-query warn-on-failure; required_red_command required-vs-plan-optional.
 
+- **C5 COMPLETE (2026-07-16)**: strict manifests carry unit_id/contract_sha256/go and
+  dispatch-status --run surfaces them additively (oracle 8 GREEN, strict-contract-authored);
+  l5/l6/front-door docs document the contract-gated boundary as canonical. Next: C7 aggregate
+  — full suite, contract parity, payload sync, secret/completeness scans, dual-family review,
+  v2.32.36 + CHANGELOG/INDEX, finish-flow. C7 hardening-candidate ledger: schema output.kind
+  enum looseness; forbidden-action-missing oracle case; B3 directory-style outputs;
+  withResolverConfig shim; capability-query warn-on-failure; required_red_command
+  required-vs-plan-optional.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

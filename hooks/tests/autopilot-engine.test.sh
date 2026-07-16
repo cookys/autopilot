@@ -4086,4 +4086,168 @@ assert_contains "$OUT" "tier_miss_model=true" "tier pair absent from qualified l
 assert_contains "$OUT" "tier_miss_ledger=true" "tier revert is ledger'd (tier_reviewer_unqualified)"
 assert_contains "$OUT" "tier_hit_model=true" "tier tuple present in ladder → tier holds"
 
+# --- GAP 1: reviewer_endpoint wiring into dispatch-review args (v2.32.45) ---
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+function mk(capture) {
+  return new AutopilotEngine({
+    clock: () => '2026-07-01T00:00:00.000Z',
+    reviewDispatcher(args) {
+      capture.args = args;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { runner: 'r', model: 'm', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', raw_log: '/tmp/l', error: null },
+      };
+    },
+  });
+}
+
+// (a) endpoint-capable runner + non-empty valid endpoint -> --endpoint minimax
+let capA = {};
+let a = mk(capA).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'minimax-m3', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'minimax',
+}});
+console.log(`a_status=${a.status}`);
+console.log(`a_args=${capA.args.join(' ')}`);
+
+// (c) non-endpoint runner never gets --endpoint (endpoint present but runner is codex)
+let capC = {};
+let c = mk(capC).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'gpt-5.5', reviewer_effort: 'high', reviewer_runner: 'codex', reviewer_endpoint: 'minimax',
+}});
+console.log(`c_status=${c.status}`);
+console.log(`c_has_endpoint=${capC.args.includes('--endpoint')}`);
+
+// endpoint-capable runner but INVALID endpoint name (a URL) -> no --endpoint (fail-safe)
+let capU = {};
+mk(capU).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'minimax-m3', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'http://x',
+}});
+console.log(`u_has_endpoint=${capU.args.includes('--endpoint')}`);
+
+// (b) family-conflict fallback substitution blanks the endpoint (never inherited)
+let capB = {};
+let b = mk(capB).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'minimax-m3', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'minimax',
+  implementer_engine: 'minimax-m3',
+  on_family_conflict: 'fallback',
+  fallback_ladder_implementer_family: 'minimax',
+  fallback_ladder: [{ engine: 'claude-haiku', model: 'haiku', runner: 'claude-native' }],
+}});
+console.log(`b_status=${b.status}`);
+console.log(`b_runner=${b.roster.reviewer_runner}`);
+console.log(`b_endpoint=${JSON.stringify(b.roster.reviewer_endpoint)}`);
+console.log(`b_has_endpoint=${capB.args.includes('--endpoint')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewer_endpoint wiring process exits 0"
+assert_contains "$OUT" "a_status=reviewed" "endpoint-capable reviewer runs"
+assert_contains "$OUT" "--endpoint minimax" "endpoint-capable runner + valid endpoint passes --endpoint minimax"
+assert_contains "$OUT" "c_status=reviewed" "non-endpoint reviewer runs"
+assert_contains "$OUT" "c_has_endpoint=false" "non-endpoint runner (codex) never receives --endpoint"
+assert_contains "$OUT" "u_has_endpoint=false" "endpoint-capable runner with invalid endpoint name gets no --endpoint (fail-safe)"
+assert_contains "$OUT" "b_status=reviewed" "family-conflict fallback still reviews"
+assert_contains "$OUT" "b_runner=claude-native" "family-conflict fallback substitutes the cross-family runner"
+assert_contains "$OUT" 'b_endpoint=""' "family-conflict fallback blanks the substituted reviewer's endpoint"
+assert_contains "$OUT" "b_has_endpoint=false" "substituted fallback reviewer never inherits the incumbent endpoint"
+
+# --- GAP 2: --resume re-enters review without re-dispatching implementation (v2.32.45) ---
+RESUME_PROMPT="$TEST_TMP/resume-loop-prompt.txt"
+printf 'resume prompt\n' > "$RESUME_PROMPT"
+OUT="$(node - "$REPO_ROOT" "$RESUME_PROMPT" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const BASE = '1111111111111111111111111111111111111111';
+const TIP = '2222222222222222222222222222222222222222';
+const roster = {
+  reviewer_engine: 'test-review-model', reviewer_effort: 'xhigh', reviewer_runner: 'test-review-runner', reviewer_qualified: true,
+  implementer_engine: 'test-impl-model', implementer_effort: 'high', implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1, loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+function mk(inspect, counter) {
+  return new AutopilotEngine({
+    clock: () => '2026-07-01T00:00:00.000Z',
+    gitResumeInspect() { return inspect; },
+    implementationDispatcher() {
+      counter.n += 1;
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { status: 'committed', runner: 'x', model: 'x', branch: 'b', base: BASE, commit: TIP, files_changed: 1, insertions: 1, deletions: 0, worktree: null, agent_log: null, error: null } };
+    },
+    reviewDispatcher() {
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { runner: 'r', model: 'm', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', raw_log: '/tmp/l', error: null } };
+    },
+    diffProvider() { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-')); const f = path.join(d, 'r.diff'); fs.writeFileSync(f, 'diff'); return f; },
+  });
+}
+
+// (d) resume happy path: enters review with ZERO implementation dispatch
+let cd = { n: 0 };
+let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`d_status=${d.status}`);
+console.log(`d_impl_calls=${cd.n}`);
+console.log(`d_rounds=${d.rounds}`);
+console.log(`d_commit=${d.implementationChain[0].implementation.commit}`);
+console.log(`d_runner=${d.implementationChain[0].implementation.runner}`);
+console.log(`d_ledger=${d.ledger.map((e) => `${e.unit}:${e.status}`).join(',')}`);
+
+// (e1) missing branch -> resume_invalid, nothing dispatched
+let e1 = { n: 0 };
+let r1 = mk({ error: null, exists: false, tipSha: null, baseAncestor: false }, e1).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`e1_status=${r1.status}`);
+console.log(`e1_phase=${r1.phase}`);
+console.log(`e1_impl_calls=${e1.n}`);
+console.log(`e1_rounds=${r1.rounds}`);
+
+// (e2) not ahead (tip === base) -> resume_invalid
+let e2 = { n: 0 };
+let r2 = mk({ error: null, exists: true, tipSha: BASE, baseAncestor: true }, e2).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`e2_status=${r2.status}`);
+console.log(`e2_phase=${r2.phase}`);
+console.log(`e2_impl_calls=${e2.n}`);
+
+// (e3) base not ancestor -> resume_invalid
+let e3 = { n: 0 };
+let r3 = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: false }, e3).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`e3_status=${r3.status}`);
+console.log(`e3_phase=${r3.phase}`);
+console.log(`e3_impl_calls=${e3.n}`);
+
+// (f) no --resume -> today's behavior: implementation IS dispatched
+let cf = { n: 0 };
+let f = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cf).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster });
+console.log(`f_status=${f.status}`);
+console.log(`f_impl_calls=${cf.n}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine --resume process exits 0"
+assert_contains "$OUT" "d_status=converged" "resume happy path converges"
+assert_contains "$OUT" "d_impl_calls=0" "resume happy path dispatches zero implementations"
+assert_contains "$OUT" "d_rounds=1" "resume happy path runs one review round"
+assert_contains "$OUT" "d_commit=2222222222222222222222222222222222222222" "resume happy path reviews the existing branch tip"
+assert_contains "$OUT" "d_runner=resume" "resume happy path marks the synthesized implementation as resume"
+assert_contains "$OUT" "resume_precheck:resumed" "resume happy path ledgers the precheck"
+assert_contains "$OUT" "e1_status=blocked" "resume missing branch blocks"
+assert_contains "$OUT" "e1_phase=resume_invalid" "resume missing branch reports resume_invalid"
+assert_contains "$OUT" "e1_impl_calls=0" "resume missing branch dispatches nothing"
+assert_contains "$OUT" "e1_rounds=0" "resume missing branch runs zero rounds"
+assert_contains "$OUT" "e2_status=blocked" "resume not-ahead branch blocks"
+assert_contains "$OUT" "e2_phase=resume_invalid" "resume not-ahead branch reports resume_invalid"
+assert_contains "$OUT" "e2_impl_calls=0" "resume not-ahead branch dispatches nothing"
+assert_contains "$OUT" "e3_status=blocked" "resume non-ancestor base blocks"
+assert_contains "$OUT" "e3_phase=resume_invalid" "resume non-ancestor base reports resume_invalid"
+assert_contains "$OUT" "e3_impl_calls=0" "resume non-ancestor base dispatches nothing"
+assert_contains "$OUT" "f_status=converged" "no --resume converges via normal dispatch"
+assert_contains "$OUT" "f_impl_calls=1" "no --resume dispatches implementation as today"
+
 finalize_test

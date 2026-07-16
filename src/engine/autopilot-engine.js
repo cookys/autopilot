@@ -262,6 +262,15 @@ function sourceTrustForEngine(engine) {
 const FALLBACK_REVIEW_RUNNERS = new Set(['codex', 'agy', 'grok', 'claude-native']);
 const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
+// Endpoint wiring (v2.32.45): the only reviewer runners that consume a named
+// endpoint credential (dispatch-review.sh --endpoint <name> → resolve-endpoint.sh
+// → AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN} from ~/.autopilot/endpoints.env). Every
+// other runner (codex/agy/grok/claude-native) authenticates natively and gets NO
+// --endpoint. The name must be env-var-compatible ([A-Za-z0-9_]+, matching the
+// resolve-endpoint.sh contract); anything else (a URL, empty string) is ignored.
+const ENDPOINT_CAPABLE_REVIEW_RUNNERS = new Set(['cc-shim', 'anthropic-compatible']);
+const VALID_ENDPOINT_NAME = /^[A-Za-z0-9_]+$/;
+
 function ensureDistinctReviewFamily({ implementerEngine, reviewerEngine }) {
   const iFamily = modelFamilyOfEngine(implementerEngine);
   const rFamily = modelFamilyOfEngine(reviewerEngine);
@@ -509,7 +518,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists', '--endpoint']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -532,6 +541,17 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
     '--effort',
     roster.reviewer_effort,
   );
+  // Named-endpoint wiring: pass --endpoint ONLY when the effective reviewer runner
+  // is endpoint-capable AND the roster carries a valid endpoint name. A substituted
+  // family-conflict fallback reviewer has its reviewer_endpoint blanked upstream (in
+  // reviewDiff), so it can never inherit the incumbent's endpoint here.
+  if (
+    ENDPOINT_CAPABLE_REVIEW_RUNNERS.has(roster.reviewer_runner)
+    && typeof roster.reviewer_endpoint === 'string'
+    && VALID_ENDPOINT_NAME.test(roster.reviewer_endpoint)
+  ) {
+    args.push('--endpoint', roster.reviewer_endpoint);
+  }
   if (specFile && typeof specFile === 'string') {
     args.push('--spec-file', specFile);
   }
@@ -540,7 +560,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists', '--endpoint']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -782,6 +802,64 @@ function branchForceResultBlocked(result) {
   return null;
 }
 
+// Resume-from-review precheck (v2.32.45): inspect the EXISTING branch WITHOUT any
+// mutation. Returns { error, exists, tipSha, baseAncestor } — READ-ONLY git probes
+// only (rev-parse + merge-base --is-ancestor). Never deletes, moves, or creates a
+// ref. Consumed by runImplementationReviewLoop's --resume path.
+function defaultResumeInspect({ base, branch, cwd }) {
+  const runGit = (gitArgs) => spawnSync('git', gitArgs, {
+    cwd: cwd || process.cwd(),
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let rev;
+  try {
+    rev = runGit(['rev-parse', '--verify', '--quiet', `${branch}^{commit}`]);
+  } catch (error) {
+    return { error, exists: false, tipSha: null, baseAncestor: false };
+  }
+  if (rev.error) {
+    return { error: rev.error, exists: false, tipSha: null, baseAncestor: false };
+  }
+  if (rev.status !== 0) {
+    return { error: null, exists: false, tipSha: null, baseAncestor: false };
+  }
+  const tipSha = String(rev.stdout || '').trim();
+  if (!isImmutableGitSha(tipSha)) {
+    return { error: null, exists: false, tipSha: null, baseAncestor: false };
+  }
+
+  let anc;
+  try {
+    anc = runGit(['merge-base', '--is-ancestor', base, branch]);
+  } catch (error) {
+    return { error, exists: true, tipSha, baseAncestor: false };
+  }
+  if (anc.error) {
+    return { error: anc.error, exists: true, tipSha, baseAncestor: false };
+  }
+  return { error: null, exists: true, tipSha, baseAncestor: anc.status === 0 };
+}
+
+function resumeInspectBlocked(inspect, { base, branch }) {
+  if (!inspect) return 'resume inspection produced no result';
+  if (inspect.error) {
+    return `resume inspection failed: ${inspect.error.message || String(inspect.error)}`;
+  }
+  if (!inspect.exists || typeof inspect.tipSha !== 'string' || !isImmutableGitSha(inspect.tipSha)) {
+    return `resume requested but branch ${branch} does not exist or has no commit`;
+  }
+  if (!inspect.baseAncestor) {
+    return `resume requested but base ${base} is not an ancestor of branch ${branch}`;
+  }
+  if (inspect.tipSha === base) {
+    return `resume requested but branch ${branch} is not ahead of base ${base}`;
+  }
+  return null;
+}
+
 function collectFindings(review) {
   let findings = null;
   if (review && review.review && Object.prototype.hasOwnProperty.call(review.review, 'findings')) {
@@ -866,6 +944,7 @@ class AutopilotEngine {
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
     this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
+    this.gitResumeInspect = options.gitResumeInspect || defaultResumeInspect;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
@@ -1233,11 +1312,12 @@ class AutopilotEngine {
           // certified by the selected row — not by the unused incumbent's
           // reviewer_qualified (gpt-5.5 R6 Minor).
           reviewer_qualified: true,
-          // Defense-in-depth (gpt-5.5 R8; inert today — the engine never wires
-          // roster.reviewer_endpoint into dispatch args, and endpoint-backed
-          // runners are excluded from the allowlist): the incumbent's named
-          // endpoint must not survive onto a substituted reviewer if endpoint
-          // wiring is ever added.
+          // Defense-in-depth (gpt-5.5 R8; LIVE since v2.32.45 — buildReviewArgs now
+          // wires roster.reviewer_endpoint into --endpoint for endpoint-capable
+          // runners): the incumbent's named endpoint must NOT survive onto a
+          // substituted reviewer. Fallback runners (codex/agy/grok/claude-native)
+          // are not endpoint-capable, but blanking keeps the invariant explicit and
+          // guards against a future endpoint-capable fallback rung.
           ...(Object.prototype.hasOwnProperty.call(roster, 'reviewer_endpoint')
             ? { reviewer_endpoint: '' }
             : {}),
@@ -1946,6 +2026,52 @@ class AutopilotEngine {
       }
     }
 
+    // Resume-from-review (v2.32.45): opt-in re-entry when the impl leg already
+    // committed but the review leg failed (e.g. a mis-wired endpoint). Instead of
+    // re-dispatching implementation (which fail-closes on "branch already exists"
+    // and forces destroying the verified commit), skip round-1's implementTask and
+    // enter the verify+review phase against the EXISTING base..branch diff. All
+    // guards fail closed to a `resume_invalid` block with ZERO mutation; absent
+    // --resume this whole block is skipped and behavior is byte-identical.
+    const resume = input.resume === true;
+    let resumeTipSha = null;
+    if (resume) {
+      const startedAt = this.now();
+      let inspect;
+      try {
+        inspect = this.gitResumeInspect({ base, branch, cwd: loopCwd });
+      } catch (error) {
+        inspect = { error, exists: false, tipSha: null, baseAncestor: false };
+      }
+      const invalidReason = resumeInspectBlocked(inspect, { base, branch });
+      if (invalidReason) {
+        ledger.push(this.ledgerEntry('resume_precheck', 'resume_invalid', startedAt, {
+          branch,
+          base,
+        }));
+        return finish({
+          status: 'blocked',
+          phase: 'resume_invalid',
+          reason: invalidReason,
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
+      resumeTipSha = inspect.tipSha;
+      ledger.push(this.ledgerEntry('resume_precheck', 'resumed', startedAt, {
+        branch,
+        base,
+        commit: resumeTipSha,
+      }));
+    }
+
     const implementationChain = [];
     const reviewChain = [];
     const immutableBase = base;
@@ -1965,25 +2091,64 @@ class AutopilotEngine {
           previousCommit: nextBase,
         });
 
-      implementation = this.implementTask({
-        promptFile: repairPromptFile,
-        branch: currentBranch,
-        base: nextBase,
-        roster,
-        runId: input.runId,
-        ledger: input.ledger,
-        implementationRound: round,
-        implementationStage: input.implementationStage,
-        resultJson: input.resultJson,
-        gitDir: input.gitDir,
-        extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
-          ? input.extraImplementationArgs
-          : [],
-        implementationOptions: {
-          ...(input.implementationOptions || {}),
-          cwd: loopCwd,
-        },
-      });
+      if (round === 1 && resume) {
+        // Synthesize the round-1 outcome from the already-committed branch tip
+        // (validated by the resume precheck above) instead of dispatching the
+        // implementer. The shared verify+diff+review code below runs unchanged
+        // against base..resumeTipSha. Repair rounds (round > 1) fall through to the
+        // normal implementTask dispatch.
+        const resumeStartedAt = this.now();
+        implementation = {
+          status: 'committed',
+          phase: 'resume_implementation',
+          reason: null,
+          roster,
+          resolveResult: null,
+          implementationResult: null,
+          implementationArgs: null,
+          implementation: {
+            status: 'committed',
+            runner: 'resume',
+            model: 'resume',
+            branch: currentBranch,
+            base: nextBase,
+            commit: resumeTipSha,
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+            worktree: null,
+            agent_log: null,
+            error: null,
+            containment: 'plain',
+            contained: true,
+          },
+          ledger: [this.ledgerEntry('resume_implementation', 'resumed', resumeStartedAt, {
+            branch: currentBranch,
+            base: nextBase,
+            commit: resumeTipSha,
+          })],
+        };
+      } else {
+        implementation = this.implementTask({
+          promptFile: repairPromptFile,
+          branch: currentBranch,
+          base: nextBase,
+          roster,
+          runId: input.runId,
+          ledger: input.ledger,
+          implementationRound: round,
+          implementationStage: input.implementationStage,
+          resultJson: input.resultJson,
+          gitDir: input.gitDir,
+          extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
+            ? input.extraImplementationArgs
+            : [],
+          implementationOptions: {
+            ...(input.implementationOptions || {}),
+            cwd: loopCwd,
+          },
+        });
+      }
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
       if (implementation.status !== 'committed') {

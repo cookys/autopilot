@@ -101,6 +101,21 @@ OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-
 assert_eq "2" "$EXIT" "implement-review rejects conflicting reviewer qualification flags"
 assert_contains "$OUT" "cannot be combined" "implement-review reports conflicting reviewer qualification flags"
 
+OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
+assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" --bogus-resume-flag 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review rejects unknown flags"
+assert_contains "$OUT" "unknown engine implement-review option: --bogus-resume-flag" "implement-review reports unknown flag"
+
+# --resume against a definitely-nonexistent branch fails closed as resume_invalid
+# (real gitResumeInspect); --allow-unqualified-reviewer bypasses the qualification
+# preflight so the resume precheck is reached. Nothing is mutated.
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch autopilot-no-such-resume-branch-xyz --base "$BASE_SHA" --allow-unqualified-reviewer --resume 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "implement-review --resume on a missing branch exits 1"
+assert_contains "$OUT" '"phase":"resume_invalid"' "implement-review --resume fails closed as resume_invalid on a missing branch"
+assert_contains "$OUT" "does not exist or has no commit" "implement-review --resume explains the missing branch"
+
 OUT="$(node "$CLI" dispatch review --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "dispatch review preserves reviewed exit 0"
 assert_contains "$OUT" '"status": "reviewed"' "dispatch review emits delegated JSON"

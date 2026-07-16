@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
-const { expandTilde, ensureDir, sleepMs, pidStringAlive, lockHolderAlive, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 
 const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js record [--file <path>] [--store <path>]

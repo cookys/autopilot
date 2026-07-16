@@ -24,6 +24,43 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.44 — Shared JSONL-store concurrency lib: one flock + PID-stale-breaker for three Node stores
+
+**Headline**: The `flock` + PID-liveness stale-lock breaker + atomic-append + monotonic-`event_id`
+logic was copied byte-for-byte across three Node append-only stores — a lock bug was a bug in three
+places (2026-07-16 health audit, architecture lens 🟠, project P3). Consolidated it into one shared
+lib and migrated the three holders. Zero consumer-observable change (JSON schemas, exit codes, CLI
+flags untouched); each store's existing adversarial test suite stays green.
+
+### Added
+- **New** [`scripts/lib/jsonl-store.js`](scripts/lib/jsonl-store.js) — the ONE canonical JSONL-store
+  concurrency primitive set (Node built-ins only, Node ≥ 20.10): O_EXCL PID lockfile, PID-liveness
+  stale-lock breaker (identity-checked atomic rename-steal, preserving the gpt-5.5 P6 F1 r3
+  semantics), atomic append, and `toEventId`/`maxEventId` monotonic-`event_id` derivation. Exports
+  the lock/append/id helpers plus `expandTilde`/`ensureDir`/`sleepMs`; the `acquireLock` `name`
+  option preserves each store's exact timeout error string.
+- **New** [`hooks/tests/jsonl-store.test.sh`](hooks/tests/jsonl-store.test.sh) — an independent
+  (dispatcher-authored, not implementer-authored) adversarial harness proving two-process writer
+  exclusion, empty- and dead-PID stale-lock break, atomic append under contention, monotonic
+  `event_id`, and that a live lock is never over-stolen (named timeout). Mutation-validated
+  red-green: it fails when the lock is removed or the stale-breaker is disabled.
+
+### Changed
+- [`scripts/engine-scorecard.js`](scripts/engine-scorecard.js),
+  [`scripts/engine-capability-state.js`](scripts/engine-capability-state.js), and
+  [`scripts/adjudicate-findings.js`](scripts/adjudicate-findings.js) now import the concurrency
+  primitives from the shared lib instead of hand-rolling them. Behavior-preserving; the only
+  internal change is `engine-scorecard.js`'s lock steal upgrading from the simple `unlink`-steal to
+  the atomic identity-checked steal (strictly safer, not consumer-observable).
+- [`scripts/tree.js`](scripts/tree.js) — a documented **carve-out**: its lock design genuinely
+  differs (JSON lock content with an ownership token, token-checked release, cross-host time-TTL
+  staleness, a two-phase recovery-mutex steal, `TREE_LOCK_TIMEOUT_MS`, process.exit-on-failure), so
+  it deliberately does NOT consume the bare-PID lib — forcing it through would change behavior its
+  own suite observes. Only a carve-out comment was added above its `acquireLock`; no logic changed.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.43 — Shared bash libs: one canonical `json_escape` + config-resolution ladder
 
 Consolidated the two most-duplicated bash primitives — JSON string escaping and the 4-tier

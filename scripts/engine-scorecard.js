@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
-const { expandTilde, ensureDir, sleepMs, lockHolderAlive, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 
 const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator', 'verification_author']);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'planner']);

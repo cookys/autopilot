@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const process = require('process');
 const crypto = require('crypto');
-const { expandTilde, ensureDir, sleepMs, pidStringAlive, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 
 const HELP_TEXT = `Usage:
   node scripts/adjudicate-findings.js add --store <path> [--file <path>] [--now <ISO-date>]

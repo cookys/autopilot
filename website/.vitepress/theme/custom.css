@@ -1663,7 +1663,14 @@ html:not(.dark) .lp-card--converge code { color: #0e7490; }
 }
 
 /* ========== Story pages (non-landing full narratives) ========== */
+/* Story heroes carry only badge + title + leads — the landing's 92vh void
+ * pushes ALL content below the fold at 1440x900. Cap them much lower. */
+.st-hero {
+  min-height: min(52vh, 480px);
+}
+
 .st-hero .lp-hero__content {
+  padding-top: 4.5rem;
   padding-bottom: 3rem;
 }
 
@@ -2366,6 +2373,7 @@ html:not(.dark) .eng-table th {
   background: transparent;
   border: none;
   padding: 0;
+  white-space: nowrap; /* DISPATCH/IMPLEMENT chips must never break mid-word */
 }
 
 .eng-cmd {
@@ -2653,18 +2661,27 @@ html:not(.dark) .day-take {
 
 .lp-day1__steps li {
   display: grid;
-  grid-template-columns: 1.5rem 1fr;
-  gap: 0.4rem;
+  grid-template-columns: 1.6rem 1fr;
+  gap: 0.55rem;
+  align-items: center;
   font-size: 0.92rem;
   line-height: 1.45;
   color: var(--text);
 }
 
 .lp-day1__steps span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
   font-family: var(--vp-font-family-mono);
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--text-3);
+  color: var(--amber-text);
 }
 
 .lp-day1__card {
@@ -4657,17 +4674,33 @@ html:not(.dark) .rail-tl__id--human {
   align-items: end;
 }
 .dday__colname {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dday__colname::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex: none;
 }
 .dday__colname--always {
-  color: var(--text-3);
+  color: var(--text-2);
+}
+.dday__colname--always::before {
+  background: #f87171;
 }
 .dday__colname--auto {
   color: var(--amber-text);
+}
+.dday__colname--auto::before {
+  background: var(--amber);
 }
 .dday__row {
   display: grid;
@@ -4689,10 +4722,15 @@ html:not(.dark) .rail-tl__id--human {
   background: var(--vp-c-bg-soft);
 }
 .dday__cell--always {
-  opacity: 0.86;
+  border-color: color-mix(in srgb, #f87171 26%, var(--vp-c-divider));
+  background: color-mix(in srgb, #f87171 5%, var(--vp-c-bg-soft));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #f87171 45%, transparent);
+  opacity: 0.92;
 }
 .dday__cell--auto {
   border-color: rgba(245, 165, 36, 0.4);
+  background: color-mix(in srgb, #f5a524 5%, var(--vp-c-bg-soft));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #f5a524 55%, transparent);
 }
 .dday__cell p {
   margin: 0.35rem 0 0;

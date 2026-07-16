@@ -26,9 +26,16 @@
 - implementer_runner: auto
 - verification_author_present: true
 - verification_author_engine: glm-5.2
-- verification_author_runner: cc-shim
+- verification_author_runner: anthropic-compatible
 - verification_author_effort: high
 - verification_author_endpoint: glm
+
+> Transport note (2026-07-16): verification_author_runner moved cc-shim → anthropic-compatible
+> PERMANENTLY. The Claude-CLI transport is condemned for large authoring payloads (z.ai answers
+> CLI-shaped requests with deterministic HTTP 529 and the CLI retries silently; MiniMax
+> full-author calls died the same way twice), while the direct-HTTP path is verified live
+> (400-line exact-shape output in 18s). Same engine, same endpoint, same effort — only the
+> transport changed. cc-shim remains valid for review-sized payloads.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

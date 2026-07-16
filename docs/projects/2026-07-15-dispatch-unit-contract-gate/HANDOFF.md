@@ -199,6 +199,16 @@
   (dispatch-author.sh + resolve-review-loop/schema enum + dogfood tests) as reviewed harness
   work, dispatched to Spark, then run C1 r6 through the new rail with a tracked roster change.
 
+- The direct-HTTP author runner SHIPPED: Spark implemented it in an isolated worktree (run
+  `hetero-1784184450-876254-6208`, 10 files, +163/−20), depth-0 verified 433 assertions across
+  six suites plus `bash -n` and mirror sync, MiniMax-M3 cross-family review returned
+  FIX-THEN-SHIP with every finding verified-resolved at depth-0, and merge `e12843a` landed on
+  the feature branch. The roster then moved `verification_author_runner` cc-shim →
+  `anthropic-compatible` PERMANENTLY (same GLM engine/endpoint/effort — transport-only change)
+  with matching dogfood expectations. R6 is the next tracked attempt through the new rail using
+  a materially new prompt already drafted; classification and atomic-restoration rules are
+  unchanged (restoration target is now the anthropic-compatible GLM tuple).
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

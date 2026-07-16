@@ -36,8 +36,12 @@ jobs:
         run: bash scripts/setup-symlinks.sh
 
       - name: Run hooks test suite (L1 unit + L2 integration)
-        # Default shell is `bash -e -o pipefail`, so tee preserves the suite's
-        # exit code while keeping a downloadable copy for CI-only failures.
+        # Explicit `shell: bash` is LOAD-BEARING: it makes GH run `bash -eo
+        # pipefail {0}`. The implicit default is `bash -e {0}` WITHOUT pipefail,
+        # which let `| tee` swallow the suite's exit 1 — CI showed green over
+        # real test failures on 2026-07-16 (caught by a foreman's honest local
+        # run disagreeing with a green CI on the same commit).
+        shell: bash
         run: bash hooks/tests/run.sh 2>&1 | tee "$RUNNER_TEMP/hooks-suite.log"
 
       - name: Upload suite log on failure

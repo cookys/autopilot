@@ -269,6 +269,63 @@ function ensureDistinctReviewFamily({ implementerEngine, reviewerEngine }) {
   return iFamily !== rFamily;
 }
 
+// Family-conflict fallback selection (v2.32.25 design; extracted v2.32.40).
+// Shared by reviewDiff's per-round substitution AND the implement-review
+// pre-flight viability check (so the pre-flight can tell whether the loop is
+// genuinely unviable vs. rescuable by the per-round fallback). Returns the first
+// qualified cross-family ladder row, or null. Every guard fails CLOSED to the
+// pre-v2.32.25 hard block:
+//   - mode: roster.on_family_conflict must be exactly 'fallback';
+//   - provenance: roster.fallback_ladder_implementer_family must equal the ACTUAL
+//     implementer's family (a stale ladder computed against a different
+//     implementer never selects);
+//   - candidate: first ladder row whose ENGINE-derived family (row.family is
+//     advisory only) differs from the implementer family and is not unknown, whose
+//     DISPATCH model (row.model, defaulting to row.engine) derives the same family
+//     (a cross-family display id pairing a same-family model is rejected), whose
+//     runner is in the validated dispatch-review allowlist, and — for the codex
+//     runner — whose row carries a calibrated effort.
+// Preference lists (v2.32.26): HUMAN-ordered engine ids consulted BEFORE raw
+// ladder order (a preferred row must still pass every guard); review_risk=low uses
+// the _low_risk list when non-empty. implFamily 'unknown' fails closed (returns
+// null) — an unclassified implementer must never reach ladder selection.
+function selectFamilyConflictFallback({ implementerEngine, roster, reviewRisk }) {
+  const implFamily = modelFamilyOfEngine(implementerEngine);
+  if (
+    implFamily === 'unknown'
+    || !roster
+    || roster.on_family_conflict !== 'fallback'
+    || !Array.isArray(roster.fallback_ladder)
+    || typeof roster.fallback_ladder_implementer_family !== 'string'
+    || roster.fallback_ladder_implementer_family !== implFamily
+  ) {
+    return null;
+  }
+  const rowIsValid = (row) => {
+    if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') return false;
+    const rowFamily = modelFamilyOfEngine(row.engine);
+    if (rowFamily === 'unknown' || rowFamily === implFamily) return false;
+    const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
+    if (modelFamilyOfEngine(rowModel) !== rowFamily) return false;
+    if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) return false;
+    if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) return false;
+    return true;
+  };
+  const prefList = (reviewRisk === 'low'
+    && Array.isArray(roster.reviewer_fallback_preference_low_risk)
+    && roster.reviewer_fallback_preference_low_risk.length > 0)
+    ? roster.reviewer_fallback_preference_low_risk
+    : (Array.isArray(roster.reviewer_fallback_preference) ? roster.reviewer_fallback_preference : []);
+  for (const preferred of prefList) {
+    const row = roster.fallback_ladder.find((r) => r && r.engine === preferred && rowIsValid(r));
+    if (row) return row;
+  }
+  for (const row of roster.fallback_ladder) {
+    if (rowIsValid(row)) return row;
+  }
+  return null;
+}
+
 function normalizeChecklistList(value) {
   const items = Array.isArray(value) ? value : `${value || ''}`.split(',');
   const normalized = [];
@@ -1143,56 +1200,14 @@ class AutopilotEngine {
       //   - no candidate → block.
       // A selected fallback substitutes engine+runner (+row effort when present;
       // non-codex runners ignore --effort, so an inherited roster effort is inert).
-      const implFamily = modelFamilyOfEngine(implementerEngine);
-      let fallbackRow = null;
+      // Selection extracted to the module-level selectFamilyConflictFallback so
+      // the implement-review pre-flight viability check reuses the SAME predicate
+      // (see gate below). Behavior here is byte-identical: same guards, same
+      // rowIsValid predicate, same preference-list-then-ladder-order walk.
       // implFamily 'unknown' is UNREACHABLE here today (ensureDistinctReviewFamily
-      // returns true — no conflict — when either family is unknown), but the
-      // explicit guard pins the invariant locally: if that gate's unknown-handling
-      // ever changes, an unclassified implementer must fall through to the hard
-      // block, never into ladder selection (gpt-5.5 R3 defense-in-depth).
-      if (
-        implFamily !== 'unknown'
-        && roster.on_family_conflict === 'fallback'
-        && Array.isArray(roster.fallback_ladder)
-        && typeof roster.fallback_ladder_implementer_family === 'string'
-        && roster.fallback_ladder_implementer_family === implFamily
-      ) {
-        const rowIsValid = (row) => {
-          if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') return false;
-          const rowFamily = modelFamilyOfEngine(row.engine);
-          if (rowFamily === 'unknown' || rowFamily === implFamily) return false;
-          // R2 (gpt-5.5): the family authorization must hold for the string we
-          // actually DISPATCH, not just the display engine id — a row pairing a
-          // cross-family engine with a same-family model would otherwise slip a
-          // same-family reviewer through the decorrelation gate. Both derived
-          // families must agree, be known, and differ from the implementer's.
-          const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
-          if (modelFamilyOfEngine(rowModel) !== rowFamily) return false;
-          if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) return false;
-          if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) return false;
-          return true;
-        };
-        // Preference lists (v2.32.26, "fallback haiku is too weak"): HUMAN-ordered
-        // engine ids from config are consulted BEFORE raw ladder order — a
-        // preferred row must still pass every guard above; no valid preferred row
-        // → plain ladder order. review_risk=low uses the _low_risk list when
-        // non-empty (cheap calibrated leg for cheap rounds; the strong list for
-        // everything else).
-        const prefList = (reviewRisk === 'low'
-          && Array.isArray(roster.reviewer_fallback_preference_low_risk)
-          && roster.reviewer_fallback_preference_low_risk.length > 0)
-          ? roster.reviewer_fallback_preference_low_risk
-          : (Array.isArray(roster.reviewer_fallback_preference) ? roster.reviewer_fallback_preference : []);
-        for (const preferred of prefList) {
-          const row = roster.fallback_ladder.find((r) => r && r.engine === preferred && rowIsValid(r));
-          if (row) { fallbackRow = row; break; }
-        }
-        if (!fallbackRow) {
-          for (const row of roster.fallback_ladder) {
-            if (rowIsValid(row)) { fallbackRow = row; break; }
-          }
-        }
-      }
+      // returns true — no conflict — when either family is unknown), and the helper
+      // pins that invariant (unclassified implementer → null → the hard block below).
+      const fallbackRow = selectFamilyConflictFallback({ implementerEngine, roster, reviewRisk });
       if (fallbackRow) {
         // row.model = the exact --model dispatch string when the engine id is a
         // display id (e.g. engine "claude-haiku" dispatches as claude-native
@@ -1881,26 +1896,54 @@ class AutopilotEngine {
     }
 
     if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
-      const startedAt = this.now();
-      ledger.push(
-        this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
-          reviewer_qualified: roster.reviewer_qualified === true,
-        }),
-      );
-      return finish({
-        status: 'blocked',
-        phase: 'reviewer_qualification',
-        reason: 'reviewer is not qualified or qualification is unknown',
-        rounds: 0,
-        verdict: null,
-        roster,
-        resolveResult,
-        implementation: null,
-        review: null,
-        implementationChain: [],
-        reviewChain: [],
-        ledger,
+      // Fallback-aware pre-flight (v2.32.40): the per-round reviewDiff substitutes
+      // a qualified cross-family fallback reviewer when — and only when — a family
+      // conflict exists between the implementer and the incumbent reviewer AND a
+      // valid ladder row is available (setting reviewer_qualified:true for that
+      // round). Hard-blocking here on the UNqualified incumbent made that
+      // substitution unreachable, leaving the v2.32.25 on_family_conflict:fallback
+      // design dead for implement-review (the default openai×openai roster stayed
+      // permanently reviewer_qualification-blocked at rounds:0). So block ONLY when
+      // the loop is genuinely unviable — NOT ( family conflict AND a valid fallback
+      // row exists ). Use the SAME implementer engine reviewDiff will use
+      // (roster.implementer_engine, matching the loop's reviewDiff call). For
+      // viability, the existence of ANY valid row is decisive; review_risk only
+      // reorders the preference walk (the plain ladder walk finds a valid row
+      // regardless), so pass the roster's computed review_risk honestly rather than
+      // probing both tiers.
+      const preflightImplementerEngine = roster.implementer_engine;
+      const familyConflict = !ensureDistinctReviewFamily({
+        implementerEngine: preflightImplementerEngine,
+        reviewerEngine: roster.reviewer_engine,
       });
+      const fallbackViable = familyConflict
+        && selectFamilyConflictFallback({
+          implementerEngine: preflightImplementerEngine,
+          roster,
+          reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
+        }) !== null;
+      if (!fallbackViable) {
+        const startedAt = this.now();
+        ledger.push(
+          this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
+            reviewer_qualified: roster.reviewer_qualified === true,
+          }),
+        );
+        return finish({
+          status: 'blocked',
+          phase: 'reviewer_qualification',
+          reason: 'reviewer is not qualified or qualification is unknown',
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
     }
 
     const implementationChain = [];

@@ -1633,6 +1633,135 @@ assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation 
 assert_contains "$OUT" "review_calls=0" "AutopilotEngine implementation loop does not dispatch review when qualification fails"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,reviewer_qualification:blocked" "AutopilotEngine implementation loop records qualification block"
 
+# --- implement-review pre-flight is family-conflict-fallback aware (v2.32.40) ----
+# The rounds:0 reviewer_qualification pre-flight used to hard-block on an
+# UNqualified incumbent reviewer without consulting the fallback ladder, so the
+# v2.32.25 on_family_conflict:fallback design was dead for implement-review (the
+# default openai×openai roster stayed permanently blocked). The pre-flight now
+# blocks ONLY when the loop is genuinely unviable — NOT ( family conflict AND a
+# valid fallback row ). Fail-closed invariants (empty/invalid/stale ladder, mode
+# block, cross-family unqualified primary) must still block exactly as before.
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/preflight-fb-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+fs.writeFileSync(prompt, 'implementer prompt');
+
+// mixed ladder: same-family row + codex row without calibrated effort (skipped);
+// claude-native haiku is the first valid cross-family row.
+const LADDER = [
+  { engine: 'gpt-5.6-terra', runner: 'codex', family: 'openai', effort: 'high' },
+  { engine: 'claude-opus', runner: 'codex', family: 'anthropic', effort: null },
+  { engine: 'claude-haiku', runner: 'claude-native', family: 'anthropic', effort: null, model: 'haiku' },
+];
+
+function makeEngine(counters) {
+  return new AutopilotEngine({
+    clock: () => '2026-07-01T00:00:00.000Z',
+    reviewLoopResolver() { throw new Error('resolver must not be called (pre-resolved roster)'); },
+    implementationDispatcher(args) {
+      counters.impl += 1;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          status: 'committed', runner: 'codex', model: 'gpt-5.3-codex-spark',
+          branch: args[args.indexOf('--branch') + 1], base: args[args.indexOf('--base') + 1],
+          commit: '2222222222222222222222222222222222222222',
+          files_changed: 1, insertions: 1, deletions: 0,
+          worktree: '/tmp/impl-worktree', agent_log: '/tmp/impl-log', error: null,
+        },
+      };
+    },
+    reviewDispatcher() {
+      counters.review += 1;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { runner: 'x', model: 'x', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: 'none', raw_log: '/tmp/log', error: null },
+      };
+    },
+    diffProvider({ branch, round }) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-preflight-fb-'));
+      const file = path.join(tmpDir, `${branch}-${round}.diff`);
+      fs.writeFileSync(file, `round ${round} diff`, 'utf8');
+      return file;
+    },
+  });
+}
+
+const baseRoster = {
+  reviewer_engine: 'gpt-5.5', reviewer_effort: 'xhigh', reviewer_runner: 'codex',
+  reviewer_qualified: false,
+  implementer_engine: 'gpt-5.3-codex-spark', implementer_effort: 'high', implementer_runner: 'codex',
+  loop_max_rounds: 1, loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+function run(extra) {
+  const counters = { impl: 0, review: 0 };
+  const engine = makeEngine(counters);
+  const result = engine.runImplementationReviewLoop({
+    promptFile: prompt,
+    branch: 'impl-loop',
+    base: '1111111111111111111111111111111111111111',
+    requireQualifiedReviewer: true,
+    roster: { ...baseRoster, ...extra },
+  });
+  return { result, counters };
+}
+
+// (a) unqualified SAME-family primary + valid cross-family ladder + mode fallback
+//     → NOT blocked at pre-flight; proceeds into round 1; reviewDiff substitutes
+//     the fallback reviewer and ledgers reviewer_family_fallback.
+const a = run({ on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`a_status=${a.result.status}`);
+console.log(`a_phase=${a.result.phase}`);
+console.log(`a_rounds=${a.result.rounds}`);
+console.log(`a_impl=${a.counters.impl}`);
+console.log(`a_review=${a.counters.review}`);
+console.log(`a_fb_ledger=${a.result.ledger.some((e) => e.unit === 'reviewer_family_fallback')}`);
+console.log(`a_no_preflight_block=${!a.result.ledger.some((e) => e.unit === 'reviewer_qualification' && e.status === 'blocked')}`);
+
+// (b) same-family primary + EMPTY ladder → blocked at pre-flight, no dispatch.
+const b = run({ on_family_conflict: 'fallback', fallback_ladder: [], fallback_ladder_implementer_family: 'openai' });
+console.log(`b_status=${b.result.status}:${b.result.phase}:${b.result.rounds}`);
+console.log(`b_impl=${b.counters.impl}:${b.counters.review}`);
+
+// (b2) same-family primary + ladder of only INVALID rows → blocked.
+const b2 = run({ on_family_conflict: 'fallback', fallback_ladder: [LADDER[0], { engine: 'claude-opus', runner: 'bogus', family: 'anthropic' }], fallback_ladder_implementer_family: 'openai' });
+console.log(`b2_status=${b2.result.status}:${b2.result.phase}:${b2.result.rounds}`);
+
+// (b3) same-family primary + valid ladder but STALE provenance → blocked.
+const b3 = run({ on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'anthropic' });
+console.log(`b3_status=${b3.result.status}:${b3.result.phase}:${b3.result.rounds}`);
+
+// (c) mode block (valid ladder present) → blocked.
+const c = run({ on_family_conflict: 'block', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`c_status=${c.result.status}:${c.result.phase}:${c.result.rounds}`);
+
+// (d) cross-family-but-unqualified primary (no conflict → fallback never fires) → blocked, no dispatch.
+const d = run({ reviewer_engine: 'gemini-flash', reviewer_runner: 'agy', on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`d_status=${d.result.status}:${d.result.phase}:${d.result.rounds}`);
+console.log(`d_impl=${d.counters.impl}:${d.counters.review}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implement-review pre-flight fallback process exits 0"
+assert_contains "$OUT" "a_status=converged" "pre-flight fallback: same-family unqualified primary + valid ladder proceeds to convergence"
+assert_contains "$OUT" "a_phase=converged" "pre-flight fallback: not blocked at reviewer_qualification"
+assert_contains "$OUT" "a_rounds=1" "pre-flight fallback: runs round 1"
+assert_contains "$OUT" "a_impl=1" "pre-flight fallback: dispatches implementation"
+assert_contains "$OUT" "a_review=1" "pre-flight fallback: dispatches review"
+assert_contains "$OUT" "a_fb_ledger=true" "pre-flight fallback: per-round review path ledgers reviewer_family_fallback"
+assert_contains "$OUT" "a_no_preflight_block=true" "pre-flight fallback: no reviewer_qualification block ledger entry"
+assert_contains "$OUT" "b_status=blocked:reviewer_qualification:0" "pre-flight fallback: empty ladder still blocks at rounds 0"
+assert_contains "$OUT" "b_impl=0:0" "pre-flight fallback: empty-ladder block dispatches nothing"
+assert_contains "$OUT" "b2_status=blocked:reviewer_qualification:0" "pre-flight fallback: all-invalid ladder still blocks"
+assert_contains "$OUT" "b3_status=blocked:reviewer_qualification:0" "pre-flight fallback: stale provenance still blocks"
+assert_contains "$OUT" "c_status=blocked:reviewer_qualification:0" "pre-flight fallback: mode block still blocks"
+assert_contains "$OUT" "d_status=blocked:reviewer_qualification:0" "pre-flight fallback: cross-family unqualified primary still blocks"
+assert_contains "$OUT" "d_impl=0:0" "pre-flight fallback: cross-family block dispatches nothing"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/malformed-roster-loop-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');

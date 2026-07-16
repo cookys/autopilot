@@ -95,6 +95,7 @@ BASE="develop"
 TIMEOUT="9m"
 MODEL_SUPPLIED=0
 BASE_SUPPLIED=0
+RUNNER_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 AGY_BIN="agy"
 GROK_BIN="grok"
@@ -560,9 +561,10 @@ emit() { # status commit files ins del worktree error
 }
 
 check_session_mode_gate() {
-  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-$HOME/.autopilot/session-mode}"
+  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   local marker level consumed_repo normalized_repo
   consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ "$marker_dir" != "/.autopilot/session-mode" ] || return 0
   [ -d "$marker_dir" ] || return 0
   [ -n "$consumed_repo" ] || return 0
   normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
@@ -576,7 +578,7 @@ check_session_mode_gate() {
 
 run_strict_contract_preflight() {
   local contract_check_out="" contract_check_json=""
-  local verdict strict_model contract_base contract_wall_seconds checker_reasons
+  local verdict strict_model strict_runner contract_base contract_wall_seconds checker_reasons
   local normalized_timeout caller_timeout
   local tmp_json
   local rc
@@ -609,12 +611,14 @@ run_strict_contract_preflight() {
   STRICT_CONTRACT_SHA="$(extract_json_value "$contract_check_json" contract_sha256 2>/dev/null || true)"
   STRICT_SPEC_SHA="$(extract_json_value "$contract_check_json" spec_sha256 2>/dev/null || true)"
   strict_model="$(extract_json_value "$contract_check_json" resolved_engine.model 2>/dev/null || true)"
+  strict_runner="$(extract_json_value "$contract_check_json" resolved_engine.runner 2>/dev/null || true)"
   STRICT_GO="$verdict"
 
   [ -n "$STRICT_UNIT_ID" ] || die_precondition "contract checker returned empty unit_id"
   [ -n "$STRICT_CONTRACT_SHA" ] || die_precondition "contract checker returned empty contract_sha256"
   [ -n "$STRICT_SPEC_SHA" ] || die_precondition "contract checker returned empty spec_sha256"
   [ -n "$strict_model" ] || die_precondition "contract checker returned empty resolved_engine.model"
+  [ -n "$strict_runner" ] || die_precondition "contract checker returned empty resolved_engine.runner"
 
   contract_base="$(extract_file_json_value "$CONTRACT_FILE" "base_sha" 2>/dev/null || true)"
   [ -n "$contract_base" ] || die_precondition "contract missing base_sha"
@@ -650,6 +654,11 @@ run_strict_contract_preflight() {
     MODEL="$strict_model"
   elif [ "$MODEL" != "$strict_model" ]; then
     die_precondition "caller --model ($MODEL) disagrees with checker resolved_engine.model ($strict_model)"
+  fi
+  if [ "$RUNNER_SUPPLIED" -eq 0 ]; then
+    RUNNER="$strict_runner"
+  elif [ "$RUNNER" != "$strict_runner" ]; then
+    die_precondition "caller --runner ($RUNNER) disagrees with checker resolved_engine.runner ($strict_runner)"
   fi
 
   if [ "$TIMEOUT_SUPPLIED" -eq 0 ]; then
@@ -746,7 +755,7 @@ while [ $# -gt 0 ]; do
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
-    --runner) RUNNER="${2:-}"; shift 2 ;;
+    --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
@@ -1458,17 +1467,13 @@ process.exit(0);
   return 0
 }
 
-run_strict_contract_postchecks() {
-  local allow_file deny_file boundary_out boundary_rc diff_total changed_json
-  local undeclared deny_hits missing_out
+run_strict_boundary_postcheck() {
+  local allow_file deny_file boundary_out boundary_rc diff_total
   local -a changed_paths=()
   local -A changed_set=()
-  local output_path
   local out_dir
   local temp_path
-  STRICT_POSTCHECK_ERROR=""
-  STRICT_POSTCHECK_STATUS=""
-  STRICT_POSTCHECK_OK=0
+  local undeclared deny_hits
 
   if [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -eq 0 ] && [ "${#STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}" -eq 0 ]; then
     STRICT_POSTCHECK_STATUS="boundary_rejected"
@@ -1485,7 +1490,6 @@ run_strict_contract_postchecks() {
     [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$allow_file"
   done
 
-  deny_file=""
   if [ "${#STRICT_SCOPE_DENY_PATHS[@]}" -gt 0 ]; then
     deny_file="$(mktemp -t "hetero-strict-deny-XXXXXX")" || {
       rm -f "$allow_file"
@@ -1496,6 +1500,8 @@ run_strict_contract_postchecks() {
     for out_dir in "${STRICT_SCOPE_DENY_PATHS[@]}"; do
       [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$deny_file"
     done
+  else
+    deny_file=""
   fi
 
   if [ -n "$deny_file" ]; then
@@ -1515,12 +1521,13 @@ run_strict_contract_postchecks() {
   [ -n "$deny_file" ] && rm -f "$deny_file"
 
   if [ "$boundary_rc" -ne 0 ]; then
-    undeclared="$(printf '%s' "$boundary_out" | extract_json_value undeclared_touches 2>/dev/null || true)"
-    deny_hits="$(printf '%s' "$boundary_out" | extract_json_value denylist_hits 2>/dev/null || true)"
-    if [ -n "$deny_hits" ] && [ "$deny_hits" != "null" ]; then
-      temp_path="$(printf '%s' "$deny_hits" | json_array_first)"
-    elif [ -n "$undeclared" ] && [ "$undeclared" != "null" ]; then
-      temp_path="$(printf '%s' "$undeclared" | json_array_first)"
+    local undeclared_touches deny_hits_json
+    undeclared_touches="$(printf '%s' "$boundary_out" | extract_json_value undeclared_touches 2>/dev/null || true)"
+    deny_hits_json="$(printf '%s' "$boundary_out" | extract_json_value denylist_hits 2>/dev/null || true)"
+    if [ -n "$deny_hits_json" ] && [ "$deny_hits_json" != "null" ]; then
+      temp_path="$(printf '%s' "$deny_hits_json" | json_array_first)"
+    elif [ -n "$undeclared_touches" ] && [ "$undeclared_touches" != "null" ]; then
+      temp_path="$(printf '%s' "$undeclared_touches" | json_array_first)"
     else
       temp_path=""
     fi
@@ -1550,15 +1557,32 @@ run_strict_contract_postchecks() {
     changed_set["$temp_path"]=1
   done
 
-  for output_path in "${STRICT_OUTPUT_PATHS[@]}"; do
-    if [ -z "${changed_set["$output_path"]+x}" ]; then
+  for out_dir in "${STRICT_OUTPUT_PATHS[@]}"; do
+    if [ -z "${changed_set["$out_dir"]+x}" ]; then
       STRICT_POSTCHECK_STATUS="boundary_rejected"
-      STRICT_POSTCHECK_ERROR="boundary_rejected: output path '$output_path' missing from changed files"
+      STRICT_POSTCHECK_ERROR="boundary_rejected: output path '$out_dir' missing from changed files"
       return 1
     fi
   done
 
+  STRICT_POSTCHECK_STATUS="ok"
+  return 0
+}
+
+run_strict_contract_postchecks() {
+  STRICT_POSTCHECK_ERROR=""
+  STRICT_POSTCHECK_STATUS=""
+  STRICT_POSTCHECK_OK=0
+
+  if ! run_strict_boundary_postcheck; then
+    return 1
+  fi
+
   if ! run_strict_acceptance_checks; then
+    return 1
+  fi
+
+  if ! run_strict_boundary_postcheck; then
     return 1
   fi
 

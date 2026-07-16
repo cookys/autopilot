@@ -351,13 +351,14 @@ die_runner_failed() {
 }
 
 check_session_mode_gate() {
-  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-$HOME/.autopilot/session-mode}"
+  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   local marker level consumed_repo normalized_repo
   if [[ -n "$REPO_ROOT" ]]; then
     consumed_repo="$(cd "$REPO_ROOT" 2>/dev/null && pwd -P || true)"
   else
     consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   fi
+  [ "$marker_dir" != "/.autopilot/session-mode" ] || return 0
   [ -d "$marker_dir" ] || return 0
   [ -n "$consumed_repo" ] || return 0
   normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
@@ -417,7 +418,7 @@ load_verification_author_from_review_loop() {
 
 run_strict_contract_preflight() {
   local contract_check_out contract_check_json contract_check_rc
-  local verdict contract_model contract_runner checker_reasons
+  local verdict contract_model contract_runner contract_role checker_reasons
   local contract_wall_seconds normalized_timeout
 
   [ "$STRICT_CONTRACT" -eq 1 ] || return 0
@@ -440,6 +441,9 @@ run_strict_contract_preflight() {
 
   verdict="$(extract_json_value "$contract_check_json" verdict 2>/dev/null || true)"
   [ "$verdict" = "GO" ] || die_precondition "contract checker failed: verdict=$verdict"
+  contract_role="$(extract_file_json_value "$CONTRACT_FILE" "go.required_engine_role" 2>/dev/null || true)"
+  [[ -n "$contract_role" ]] || die_precondition "contract has empty required_engine_role"
+  [[ "$contract_role" == "verification-author" ]] || die_precondition "contract required_engine_role is '$contract_role' (expected verification-author)"
 
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
@@ -478,6 +482,9 @@ run_strict_contract_preflight() {
 
   load_verification_author_contract_config
   EFFORT="$VERIFICATION_AUTHOR_EFFORT"
+  if [ "$ENDPOINT_SUPPLIED" -eq 1 ]; then
+    [[ "$ENDPOINT" == "$VERIFICATION_AUTHOR_ENDPOINT" ]] || die_precondition "caller --endpoint ($ENDPOINT) disagrees with verification_author_endpoint ($VERIFICATION_AUTHOR_ENDPOINT)"
+  fi
   if [ "$ENDPOINT_SUPPLIED" -eq 0 ]; then
     ENDPOINT="$VERIFICATION_AUTHOR_ENDPOINT"
   fi

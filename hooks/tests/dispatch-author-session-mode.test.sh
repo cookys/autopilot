@@ -49,8 +49,16 @@ assert_status_authored() {
   assert_eq "$status" "authored" "$case_name: status is authored"
 }
 
+assert_status_precondition_failed() {
+  local out="$1"
+  local case_name="$2"
+  local status
+  status="$(python3 -c 'import sys, json; print(json.loads(sys.argv[1]).get("status", ""))' "$out" 2>/dev/null)"
+  assert_eq "$status" "precondition_failed" "$case_name: status is precondition_failed"
+}
+
 # Case 1: active l6 + legacy explicit
-# -> exit 2, semantic strict-roster/l6 diagnostic, full null precondition provenance, runner/log absent;
+# -> exit 2, active non-strict session-mode diagnostic, full null precondition provenance, runner/log absent;
 reset_run_count
 node "$REPO_ROOT/scripts/session-mode.js" set --level l6 --repo-root "$REPO_ROOT" >/dev/null 2>&1
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
@@ -89,8 +97,8 @@ elif not isinstance(err, str):
     errors.append(f"Expected error to be a string, got {type(err).__name__}")
 else:
     err_lower = err.lower()
-    if "strict-roster" not in err_lower or "l6" not in err_lower:
-        errors.append(f"Expected error to contain both strict-roster and l6, got {err}")
+    if "active session-mode=l6" not in err_lower or "non-strict dispatch" not in err_lower:
+        errors.append(f"Expected active session-mode=l6 blocks non-strict dispatch diagnostic, got {err}")
 
 if errors:
     print("; ".join(errors))
@@ -122,15 +130,47 @@ assert_run_count "1" "Case 2"
 assert_status_authored "$OUT" "Case 2"
 
 
-# Case 3: active l5 + legacy explicit -> authored success;
+# Case 3: active l5 + strict-roster -> precondition gate; only --strict-contract can pass
 reset_run_count
 node "$REPO_ROOT/scripts/session-mode.js" set --level l5 --repo-root "$REPO_ROOT" >/dev/null 2>&1
-OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$REPO_ROOT" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
 
-assert_eq "0" "$EXIT" "Case 3: exit code 0"
-assert_file_exists "$SENTINEL" "Case 3: fake runner executed"
-assert_run_count "1" "Case 3"
-assert_status_authored "$OUT" "Case 3"
+assert_eq "2" "$EXIT" "Case 3: exit code 2"
+assert_file_absent "$SENTINEL" "Case 3: fake runner not executed"
+assert_run_count "0" "Case 3"
+assert_status_precondition_failed "$OUT" "Case 3"
+
+PY_OUT_3="$(python3 -c '
+import sys, json
+try:
+    data = json.loads(sys.argv[1])
+except Exception as e:
+    print(f"Failed to parse JSON: {e}")
+    sys.exit(1)
+
+errors = []
+def check_val(key, expected):
+    if key not in data:
+        errors.append(f"Expected key {key} to be present in data")
+        return
+    val = data.get(key)
+    if val != expected:
+        errors.append(f"Expected {key}={expected}, got {val}")
+
+check_val("raw_log", None)
+check_val("selection_source", "strict_roster")
+check_val("selection_path", None)
+check_val("verification_author", None)
+
+err = data.get("error", "").lower()
+if "active session-mode=l5" not in err or "non-strict dispatch" not in err:
+    errors.append(f"Expected active session-mode=l5 blocks non-strict dispatch diagnostic, got {err}")
+
+if errors:
+    print("; ".join(errors))
+    sys.exit(1)
+' "$OUT" 2>&1)"; PY_EXIT_3=$?
+assert_eq "0" "$PY_EXIT_3" "Case 3 schema: $PY_OUT_3"
 
 
 # Case 4: missing marker + legacy explicit -> authored success;

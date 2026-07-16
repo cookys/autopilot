@@ -114,6 +114,9 @@ cat > .claude/review-loop-config.md <<'EOF'
 # Review Loop Config
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner: anthropic-compatible
 SECRET_FIXTURE_DO_NOT_LEAK
 EOF
 
@@ -193,6 +196,44 @@ cat > "$CONTRACT_DIR/valid.json" <<EOF
 }
 EOF
 
+cat > "$CONTRACT_DIR/va_valid.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "feat-core-va",
+  "role": "verification-author",
+  "goal": "Verify core API",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$BASE_SHA",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["oracle.test.sh"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["oracle.test.sh"],
+    "required_engine_role": "verification-author",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "raw-artifact", "paths": ["oracle.test.sh"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+
 CONTRACT_SHA=$(sha256_hex "$CONTRACT_DIR/valid.json")
 
 # === ENGINE STORE SETUP ===
@@ -224,6 +265,62 @@ EOF
 }
 
 setup_qualified_store "$STORE_BASE/valid"
+
+VA_SEEDING_FAILED=0
+
+setup_va_qualified_store() {
+  local store_dir="$1"
+  local va_status="$2"
+  local quota_status="$3"
+  rm -rf "$store_dir"
+  mkdir -p "$store_dir"
+
+  local impl_scorecard_row="$store_dir/impl_score.json"
+  cat > "$impl_scorecard_row" <<'EOF'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$impl_scorecard_row" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (va impl)"; exit 1
+  }
+
+  local impl_cap_event="$store_dir/impl_cap.json"
+  cat > "$impl_cap_event" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$impl_cap_event" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (va impl)"; exit 1
+  }
+
+  local va_scorecard_row="$store_dir/va_score.json"
+  cat > "$va_scorecard_row" <<EOF
+{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$va_status","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$va_scorecard_row" > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
+      VA_SEEDING_FAILED=1
+      fail "VA role seeding rejected (role-aware gate not yet implemented)"
+    fi
+    return 1
+  fi
+
+  local va_cap_event="$store_dir/va_cap.json"
+  cat > "$va_cap_event" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"$quota_status","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$va_cap_event" > /dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
+      VA_SEEDING_FAILED=1
+      fail "VA role seeding rejected (role-aware gate not yet implemented)"
+    fi
+    return 1
+  fi
+}
+
+setup_va_qualified_store "$STORE_BASE/va_valid" "qualified" "available"
+setup_va_qualified_store "$STORE_BASE/va_unqual" "failed" "available"
+setup_va_qualified_store "$STORE_BASE/va_exhausted" "qualified" "exhausted"
 
 with_valid_stores() {
   local cmd=("$@")
@@ -577,5 +674,69 @@ field=$(json_get "$out2" "reasons") || fail "reasons extraction failed (run 2)"
 assert_eq "$field" "$(json_get "$out" "reasons")"
 
 assert_red_green_clean "$MINI_REPO"
+
+# === CASE 7: Verification Author Role Cases ===
+
+if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
+  echo "--- Case 7.1: VA-1 GO (Role-aware resolution) ---"
+  git checkout -- . 2>/dev/null
+  touch "$MINI_REPO/oracle.test.sh"
+  setup_va_qualified_store "$STORE_BASE/va_valid" "qualified" "available"
+  out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/va_valid" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_valid" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+
+  assert_eq "$rc" "0"
+
+  # Assert exact keyset
+  keys=$(json_keys "$out" 2>/dev/null) || keys=""
+  assert_eq "$keys" "contract_sha256,reasons,resolved_engine,spec_sha256,unit_id,verdict"
+
+  field=$(json_get "$out" "verdict") || fail "verdict extraction failed"
+  assert_eq "$field" "GO"
+
+  # Assert nested fields independently (proves we selected the VA tuple)
+  field=$(json_get "$out" "resolved_engine.runner") || fail "resolved_engine.runner extraction failed"
+  assert_eq "$field" "anthropic-compatible"
+
+  field=$(json_get "$out" "resolved_engine.model") || fail "resolved_engine.model extraction failed"
+  assert_eq "$field" "glm-5.2"
+
+  field=$(json_get "$out" "resolved_engine.family") || fail "resolved_engine.family extraction failed"
+  assert_eq "$field" "zhipu"
+
+  field=$(json_get "$out" "reasons") || fail "reasons extraction failed"
+  assert_eq "$field" "[]"
+
+  assert_not_contains "$out" "SECRET_FIXTURE"
+  assert_red_green_clean "$MINI_REPO"
+  rm -f "$MINI_REPO/oracle.test.sh"
+
+  echo "--- Case 7.2: VA-2 Unqualified (VA status failed, implementer qualified) ---"
+  git checkout -- . 2>/dev/null
+  touch "$MINI_REPO/oracle.test.sh"
+  out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/va_unqual" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_unqual" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "engine"
+
+  # Model must still be glm-5.2 (proves no silent substitution of implementer tuple)
+  field=$(json_get "$out" "resolved_engine.model") || fail "resolved_engine.model extraction failed (va unqual)"
+  assert_eq "$field" "glm-5.2"
+
+  assert_not_contains "$out" "SECRET_FIXTURE"
+  assert_red_green_clean "$MINI_REPO"
+  rm -f "$MINI_REPO/oracle.test.sh"
+
+  echo "--- Case 7.3: VA-3 Quota exhausted ---"
+  git checkout -- . 2>/dev/null
+  touch "$MINI_REPO/oracle.test.sh"
+  out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/va_exhausted" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_exhausted" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "quota"
+
+  assert_not_contains "$out" "SECRET_FIXTURE"
+  assert_red_green_clean "$MINI_REPO"
+  rm -f "$MINI_REPO/oracle.test.sh"
+fi
 
 finalize_test

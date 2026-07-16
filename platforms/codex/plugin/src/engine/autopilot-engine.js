@@ -544,7 +544,10 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
   // Named-endpoint wiring: pass --endpoint ONLY when the effective reviewer runner
   // is endpoint-capable AND the roster carries a valid endpoint name. A substituted
   // family-conflict fallback reviewer has its reviewer_endpoint blanked upstream (in
-  // reviewDiff), so it can never inherit the incumbent's endpoint here.
+  // reviewDiff), so it can never inherit the incumbent's endpoint here. --endpoint is
+  // builder-managed (reserved in extraReviewArgs alongside --runner/--model/…), so
+  // the ONLY source of a passed endpoint is this name-validated roster field; any
+  // --endpoint in extraReviewArgs is rejected, never a trusted-caller bypass.
   if (
     ENDPOINT_CAPABLE_REVIEW_RUNNERS.has(roster.reviewer_runner)
     && typeof roster.reviewer_endpoint === 'string'
@@ -816,6 +819,9 @@ function defaultResumeInspect({ base, branch, cwd }) {
 
   let rev;
   try {
+    // NOTE: no `--` end-of-options here — `git rev-parse` reinterprets post-`--`
+    // args as PATHSPECS, so `-- <rev>` fails to resolve the revision (verified).
+    // branch originates from the trusted --branch CLI value / resolved roster.
     rev = runGit(['rev-parse', '--verify', '--quiet', `${branch}^{commit}`]);
   } catch (error) {
     return { error, exists: false, tipSha: null, baseAncestor: false };

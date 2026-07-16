@@ -4184,6 +4184,7 @@ function mk(inspect, counter) {
         result: { status: 'committed', runner: 'x', model: 'x', branch: 'b', base: BASE, commit: TIP, files_changed: 1, insertions: 1, deletions: 0, worktree: null, agent_log: null, error: null } };
     },
     reviewDispatcher() {
+      counter.r += 1;
       return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
         result: { runner: 'r', model: 'm', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', raw_log: '/tmp/l', error: null } };
     },
@@ -4191,11 +4192,16 @@ function mk(inspect, counter) {
   });
 }
 
-// (d) resume happy path: enters review with ZERO implementation dispatch
-let cd = { n: 0 };
+// (d) resume happy path: enters review with ZERO implementation dispatch but the
+// REVIEW leg MUST fire (a mutation short-circuiting resume→converged without
+// review is caught by d_review_calls / d_review_chain).
+let cd = { n: 0, r: 0 };
 let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`d_status=${d.status}`);
 console.log(`d_impl_calls=${cd.n}`);
+console.log(`d_review_calls=${cd.r}`);
+console.log(`d_review_chain=${d.reviewChain.length}`);
+console.log(`d_has_review=${d.review && d.review.status === 'reviewed'}`);
 console.log(`d_rounds=${d.rounds}`);
 console.log(`d_commit=${d.implementationChain[0].implementation.commit}`);
 console.log(`d_runner=${d.implementationChain[0].implementation.runner}`);
@@ -4233,6 +4239,9 @@ NODE
 assert_eq "0" "$EXIT" "AutopilotEngine --resume process exits 0"
 assert_contains "$OUT" "d_status=converged" "resume happy path converges"
 assert_contains "$OUT" "d_impl_calls=0" "resume happy path dispatches zero implementations"
+assert_contains "$OUT" "d_review_calls=1" "resume happy path FIRES the review leg exactly once (guards against a resume→converged short-circuit that skips review)"
+assert_contains "$OUT" "d_review_chain=1" "resume happy path records one review in reviewChain"
+assert_contains "$OUT" "d_has_review=true" "resume happy path returns a reviewed review object"
 assert_contains "$OUT" "d_rounds=1" "resume happy path runs one review round"
 assert_contains "$OUT" "d_commit=2222222222222222222222222222222222222222" "resume happy path reviews the existing branch tip"
 assert_contains "$OUT" "d_runner=resume" "resume happy path marks the synthesized implementation as resume"

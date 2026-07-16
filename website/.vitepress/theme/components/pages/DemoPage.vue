@@ -206,137 +206,154 @@ const transitions = computed(() =>
       ]
 )
 
-/** Schematic /l5 event trace — topology-true, not a recorded run_id */
+/** One run, told as a story rail — happy path + the escalate side door. */
+const rail = computed(() =>
+  zh.value
+    ? {
+        kicker: '一條 run 怎麼走',
+        lead: '不用背狀態機。順著走一遍，你會發現自己只出現在頭尾兩站。',
+        stops: [
+          {
+            who: 'human',
+            st: 'INTAKE',
+            title: '你交代一次',
+            body: '一句話講清楚目標跟紅線，系統把它讀成契約：範圍、風險、什麼叫做完。'
+          },
+          {
+            who: 'sys',
+            st: 'DIVERGE',
+            opt: true,
+            title: '有取捨才調查',
+            body: '真的有技術取捨才開 survey／think-tank／多引擎意見；沒有就直接跳過這站。'
+          },
+          {
+            who: 'sys',
+            st: 'DECIDE',
+            title: 'CEO agent 拍板',
+            body: '選哪一層委派、誰寫誰審、砍掉什麼。決策會寫下來，不是心證。'
+          },
+          {
+            who: 'sys',
+            st: 'DISPATCH',
+            title: '開工前把後路修好',
+            body: '建隔離 worktree、派工頭，預算跟停損先寫死，才放手讓它跑。'
+          },
+          {
+            who: 'sys',
+            st: 'IMPLEMENT ⇄ REVIEW',
+            loop: true,
+            title: '寫跟審在裡面來回',
+            body: '寫的人改檔，審的人只認 git 上的 diff。審不過就回頭改——這個來回不會把你拉進聊天室。'
+          },
+          {
+            who: 'sys',
+            st: 'GATE',
+            loop: true,
+            title: '機械閘守最後一關',
+            body: '腳本掃機密、完整度、測試誠實度，掛了就退回去修。到 /l6 也不會放鬆。'
+          },
+          {
+            who: 'human',
+            st: 'FINALIZE → DONE',
+            title: '你驗收',
+            body: 'merge 權回到你手上：看報告、看 diff、看測試結果，點頭才合進主幹。'
+          }
+        ],
+        escTitle: 'ESCALATE：唯一的插隊通道',
+        escBody:
+          '任何一站都可能跳出來找你——踩到紅線、授權不夠、真的卡死。你補一句話，流程回到 INTAKE 或 DECIDE 繼續。除此之外系統不會中途敲你。',
+        specSummary: '完整狀態表與跳轉條件（對 repo 規格，給想核對的人）'
+      }
+    : {
+        kicker: 'How one run walks',
+        lead: 'No need to memorize the machine. Walk it once — you only appear at the two ends.',
+        stops: [
+          {
+            who: 'human',
+            st: 'INTAKE',
+            title: 'You brief it once',
+            body: 'One sentence of goal and red lines; the system reads it into a contract: scope, risk, what “done” means.'
+          },
+          {
+            who: 'sys',
+            st: 'DIVERGE',
+            opt: true,
+            title: 'Research only for real tradeoffs',
+            body: 'Survey / think-tank / multi-engine takes open only when there is a genuine tradeoff; otherwise this stop is skipped.'
+          },
+          {
+            who: 'sys',
+            st: 'DECIDE',
+            title: 'The CEO-agent calls it',
+            body: 'Which delegation level, who writes, who reviews, what gets cut. The decision is written down, not vibes.'
+          },
+          {
+            who: 'sys',
+            st: 'DISPATCH',
+            title: 'Escape routes before work',
+            body: 'Isolated worktree, a foreman, budget and stop conditions locked in — then it runs.'
+          },
+          {
+            who: 'sys',
+            st: 'IMPLEMENT ⇄ REVIEW',
+            loop: true,
+            title: 'Write and review loop inside',
+            body: 'The writer edits files; the reviewer only trusts the git diff. Blocking verdicts loop back to the writer — without pulling you in.'
+          },
+          {
+            who: 'sys',
+            st: 'GATE',
+            loop: true,
+            title: 'Mechanical gates hold the line',
+            body: 'Scripts scan secrets, completeness, test honesty; failures go back for fixes. Not softer at /l6.'
+          },
+          {
+            who: 'human',
+            st: 'FINALIZE → DONE',
+            title: 'You accept',
+            body: 'Merge authority returns to you: report, diff, test results — it merges when you nod.'
+          }
+        ],
+        escTitle: 'ESCALATE: the only interrupt',
+        escBody:
+          'Any stop can page you — a red line, missing authority, genuinely stuck. You add one line; the run resumes at INTAKE or DECIDE. Nothing else interrupts you mid-run.',
+        specSummary: 'Full state & transition tables (repo-spec, for those who want to audit)'
+      }
+)
+
+/** Schematic /l5 replay — topology-true, not a recorded run_id */
 const trace = computed(() =>
   zh.value
     ? {
-        title: '/l5 事件 trace（拓撲示意，不是某次 run_id 錄影）',
-        honestyLines: [
-          '講清楚：下面是依 repo 真實規格（/l5、dispatch-hetero、dispatch-review、depth-0 QC）排的事件順序。',
-          '沒有捏造 commit SHA 或 exit code。',
-          '真的 run 請看你本機的 manifest／git。'
-        ],
+        title: '走一遍：一次 /l5 修 bug 的重播（示意）',
+        lead: '把上面那條軌套進一個具體任務長什麼樣。事件順序照 repo 真實規格排；沒有捏造 SHA 或 exit code，真的 run 請看你本機的 manifest 與 git。',
         cmd: '/l5 修 login 的 null deref；紅線：不准動 auth schema、單元測試要綠',
         rows: [
-          {
-            st: 'IDLE→INTAKE',
-            actor: '你 / depth-0',
-            evidence: 'slash 指令 + 紅線文字',
-            next: 'DECIDE（這例略過長 DIVERGE）'
-          },
-          {
-            st: 'DECIDE',
-            actor: 'CEO agent',
-            evidence: '拓撲=/l5；寫的跟審的不同廠牌',
-            next: 'DISPATCH'
-          },
-          {
-            st: 'DISPATCH',
-            actor: 'depth-0',
-            evidence: 'worktree + 工頭座標；precondition 過',
-            next: 'IMPLEMENT'
-          },
-          {
-            st: 'IMPLEMENT',
-            actor: '異質 implementer',
-            evidence: 'dispatch-hetero → committed + diff（git）',
-            next: 'REVIEW（engine）'
-          },
-          {
-            st: 'REVIEW',
-            actor: 'engine reviewer',
-            evidence: 'diff 塞進 prompt；VERDICT + findings；issuer=engine',
-            next: 'VERDICT 仍 blocking → 回 IMPLEMENT'
-          },
-          {
-            st: 'IMPLEMENT',
-            actor: '異質 implementer',
-            evidence: '照 findings 再 committed',
-            next: 'REVIEW 再跑一輪'
-          },
-          {
-            st: 'REVIEW→GATE',
-            actor: 'engine → scripts',
-            evidence: 'VERDICT 可進閘；secret／completeness exit 0',
-            next: 'depth-0 QC（終裁）'
-          },
-          {
-            st: 'GATE/QC',
-            actor: 'depth-0（panel 有開就一起）',
-            evidence: '終裁 QC；merge 權還在 depth-0',
-            next: 'FINALIZE'
-          },
-          {
-            st: 'FINALIZE→DONE',
-            actor: 'depth-0',
-            evidence: 'run-summary／PR 或 merge；清 worktree',
-            next: 'DONE'
-          }
+          { st: 'INTAKE', actor: '你', line: '一行指令進場：目標＋兩條紅線。這是你這次唯一的輸入。' },
+          { st: 'DECIDE', actor: 'CEO agent', line: '選 /l5 拓撲：寫的跟審的用不同廠牌模型。' },
+          { st: 'DISPATCH', actor: 'depth-0', line: '開 worktree、派工頭，前置檢查通過才放行。' },
+          { st: 'IMPLEMENT', actor: '異質 implementer', line: '改完檔在 git 上留下 commit 跟 diff——用產物證明做了事，不是嘴巴說。' },
+          { st: 'REVIEW', actor: 'engine reviewer', line: '審查者讀 diff 給 VERDICT：這輪有 blocking finding，退回去改。' },
+          { st: 'IMPLEMENT', actor: '異質 implementer', line: '照 findings 修完再 commit，回到審查桌。' },
+          { st: 'GATE', actor: '機械腳本', line: '審過了，機密／完整度掃描 exit 0，才准往前。' },
+          { st: 'QC', actor: 'depth-0', line: '終裁品管：merge 權一直在這層，不在寫 code 的人手上。' },
+          { st: 'DONE', actor: 'depth-0', line: '產物就位：run-summary、PR 或 merge、worktree 清乾淨。' }
         ]
       }
     : {
-        title: '/l5 event trace (topology-true schematic — not a recorded run_id)',
-        honestyLines: [
-          'Honest: ordered from repo SSOT (/l5, dispatch-hetero, dispatch-review, depth-0 QC).',
-          'No invented SHAs or exit codes.',
-          'Real runs: local manifests / git.'
-        ],
+        title: 'Walkthrough: one /l5 bug-fix replay (schematic)',
+        lead: 'The rail above, applied to a concrete task. Event order follows the repo spec; no invented SHAs or exit codes — real runs live in your local manifests and git.',
         cmd: '/l5 fix login null deref; red lines: no auth schema change; unit tests green',
         rows: [
-          {
-            st: 'IDLE→INTAKE',
-            actor: 'you / depth-0',
-            evidence: 'slash cmd + red-line text',
-            next: 'DECIDE (skip long DIVERGE here)'
-          },
-          {
-            st: 'DECIDE',
-            actor: 'CEO agent',
-            evidence: 'topology=/l5; writer≠reviewer family',
-            next: 'DISPATCH'
-          },
-          {
-            st: 'DISPATCH',
-            actor: 'depth-0',
-            evidence: 'worktree + foreman coords; precondition OK',
-            next: 'IMPLEMENT'
-          },
-          {
-            st: 'IMPLEMENT',
-            actor: 'hetero implementer',
-            evidence: 'dispatch-hetero → committed + diff (git)',
-            next: 'REVIEW (engine)'
-          },
-          {
-            st: 'REVIEW',
-            actor: 'engine reviewer',
-            evidence: 'diff-in-prompt; VERDICT+findings; issuer=engine',
-            next: 'if VERDICT still blocking → IMPLEMENT (loop)'
-          },
-          {
-            st: 'IMPLEMENT',
-            actor: 'hetero implementer',
-            evidence: 're-committed against findings',
-            next: 'REVIEW again'
-          },
-          {
-            st: 'REVIEW→GATE',
-            actor: 'engine → scripts',
-            evidence: 'VERDICT gate-ready; secret/completeness exit 0',
-            next: 'depth-0 QC (authoritative)'
-          },
-          {
-            st: 'GATE/QC',
-            actor: 'depth-0 (+ panel if on)',
-            evidence: 'authoritative QC; merge authority stays depth-0',
-            next: 'FINALIZE'
-          },
-          {
-            st: 'FINALIZE→DONE',
-            actor: 'depth-0',
-            evidence: 'run-summary / PR or merge cadence; worktree cleanup',
-            next: 'DONE'
-          }
+          { st: 'INTAKE', actor: 'you', line: 'One command in: goal plus two red lines. Your only input this run.' },
+          { st: 'DECIDE', actor: 'CEO agent', line: 'Picks the /l5 topology: writer and reviewer from different model families.' },
+          { st: 'DISPATCH', actor: 'depth-0', line: 'Worktree and foreman set up; preconditions checked before anything runs.' },
+          { st: 'IMPLEMENT', actor: 'hetero implementer', line: 'Edits land as a git commit and diff — artifacts prove the work, not claims.' },
+          { st: 'REVIEW', actor: 'engine reviewer', line: 'Reads the diff, returns a VERDICT: one blocking finding — back it goes.' },
+          { st: 'IMPLEMENT', actor: 'hetero implementer', line: 'Fixes against the findings, commits again, returns to the review desk.' },
+          { st: 'GATE', actor: 'scripts', line: 'Review clears; secret and completeness scans exit 0 before it may advance.' },
+          { st: 'QC', actor: 'depth-0', line: 'Final quality call: merge authority stays here, never with the code writer.' },
+          { st: 'DONE', actor: 'depth-0', line: 'Leftovers in place: run summary, PR or merge, worktree cleaned up.' }
         ]
       }
 )
@@ -374,21 +391,18 @@ const c = computed(() =>
             who: 'human',
             title: '外層 · 任務',
             cycle: '目標 → 做完？→ 再補一句',
-            beats: ['你定方向', '你收尾']
           },
           {
             depth: 2,
             who: 'human',
             title: '中層 · 發想／spec',
             cycle: '方案 → 你決 → 細節 → 你再決',
-            beats: ['取捨 A/B', '每個細節 spec 拍板']
           },
           {
             depth: 3,
             who: 'human',
             title: '內層 · 寫完了嗎',
             cycle: '改檔 →「好了」→ 你驗 → 再回嘴',
-            beats: ['模型 tool use', '你當驗證中繼']
           }
         ],
         badNote: '三層都 ↺ 你 → 你是最慢的那一環',
@@ -405,27 +419,24 @@ const c = computed(() =>
             who: 'human',
             title: '外層 · 任務（只這層是你）',
             cycle: '目標＋no-go → 產物／越線才叫你',
-            beats: ['進場講死紅線', '看 artifact', '真卡死才補一句']
           },
           {
             depth: 2,
             who: 'sys',
-            title: '中層 · 發想／spec（系統 ↺）',
+            title: '中層 · 發想／spec',
             cycle: '內建 → 否則 survey → CEO 取捨',
-            beats: ['有內建先走', '沒有找 best practice', 'no-go 內擴砍選路']
           },
           {
             depth: 3,
             who: 'sys',
-            title: '內層 · 寫→審→閘（系統 ↺）',
+            title: '內層 · 寫→審→閘',
             cycle: '實作 ⇄ 異質審 ⇄ 機械閘',
-            beats: ['tool use 改檔', '寫審分家', '不靠自報 done']
           }
         ],
         goodPayoff:
           'Autopilot 不是少步驟——是內兩層 loop 不再把你拉進去。',
-        detailTitle: '工程師補刀：系統內部狀態機（可對 repo）',
-        detailLead: '下面是系統怎麼跑（含 review／GATE 怎麼接手驗證）。不是要你背流程；人幾乎只在進場與 ESCALATE。',
+        detailTitle: '系統內部怎麼跑（工程附錄）',
+        detailLead: '這一段給想核對 repo 的工程師：系統內部的迴圈長怎樣、驗證在哪裡接手。不用背；人幾乎只出現在進場跟 ESCALATE。',
         loopNotes: [
           'IMPLEMENT⇄REVIEW 是系統內部 loop，不是把你拉回聊天室。',
           'VERDICT 仍 blocking 就回去改（不限 Critical）。',
@@ -482,21 +493,18 @@ const c = computed(() =>
             who: 'human',
             title: 'Outer · mission',
             cycle: 'goal → done? → re-prompt',
-            beats: ['you set direction', 'you close out']
           },
           {
             depth: 2,
             who: 'human',
             title: 'Mid · ideation / spec',
             cycle: 'options → you decide → details → you again',
-            beats: ['tradeoff A/B', 'every micro-spec stamp']
           },
           {
             depth: 3,
             who: 'human',
             title: 'Inner · is it done?',
             cycle: 'edit → “done” → you verify → re-prompt',
-            beats: ['model tool use', 'you as verification glue']
           }
         ],
         badNote: 'All three ↺ you → you are the slowest link',
@@ -513,21 +521,18 @@ const c = computed(() =>
             who: 'human',
             title: 'Outer · mission (your only ring)',
             cycle: 'goal + no-go → artifacts / page on breach',
-            beats: ['lock red lines up front', 'inspect artifacts', 'amend only if hard stuck']
           },
           {
             depth: 2,
             who: 'sys',
-            title: 'Mid · ideation / spec (system ↺)',
+            title: 'Mid · ideation / spec',
             cycle: 'built-in → else survey → CEO tradeoff',
-            beats: ['built-ins first', 'survey best practice', 'cut/expand inside no-gos']
           },
           {
             depth: 3,
             who: 'sys',
-            title: 'Inner · write→review→gate (system ↺)',
+            title: 'Inner · write→review→gate',
             cycle: 'implement ⇄ hetero review ⇄ gates',
-            beats: ['tool-use edits', 'write ≠ review', 'no self-report done']
           }
         ],
         goodPayoff:
@@ -616,23 +621,29 @@ const c = computed(() =>
               <p v-for="(line, i) in c.whyLeadLines" :key="'wl' + i">{{ line }}</p>
             </header>
 
-            <div class="nest-stack nest-stack--bad" role="list">
-              <div
-                v-for="ring in c.nestBad"
-                :key="'nb' + ring.depth"
-                class="nest-ring nest-ring--human"
-                role="listitem"
-                :style="{ '--nest-d': ring.depth }"
-              >
-                <div class="nest-ring__bar">
-                  <span class="nest-ring__depth">L{{ ring.depth }}</span>
-                  <span class="nest-ring__title">{{ ring.title }}</span>
-                  <span class="nest-ring__who">{{ zh ? '人' : 'you' }}</span>
-                  <span class="nest-ring__spin" aria-hidden="true">↺</span>
+            <div class="nest2-stack">
+              <div class="nest2 nest2--human">
+                <div class="nest2__bar">
+                  <span class="nest2__depth">L1</span>
+                  <span class="nest2__title">{{ c.nestBad[0].title }}</span>
+                  <span class="nest2__who nest2__who--human">{{ zh ? '人 ↺' : 'you ↺' }}</span>
                 </div>
-                <p class="nest-ring__cycle">{{ ring.cycle }}</p>
-                <div class="nest-ring__beats">
-                  <span v-for="(b, bi) in ring.beats" :key="bi" class="nest-ring__beat">{{ b }}</span>
+                <p class="nest2__cycle">{{ c.nestBad[0].cycle }}</p>
+                <div class="nest2 nest2--human">
+                  <div class="nest2__bar">
+                    <span class="nest2__depth">L2</span>
+                    <span class="nest2__title">{{ c.nestBad[1].title }}</span>
+                    <span class="nest2__who nest2__who--human">{{ zh ? '人 ↺' : 'you ↺' }}</span>
+                  </div>
+                  <p class="nest2__cycle">{{ c.nestBad[1].cycle }}</p>
+                  <div class="nest2 nest2--human">
+                    <div class="nest2__bar">
+                      <span class="nest2__depth">L3</span>
+                      <span class="nest2__title">{{ c.nestBad[2].title }}</span>
+                      <span class="nest2__who nest2__who--human">{{ zh ? '人 ↺' : 'you ↺' }}</span>
+                    </div>
+                    <p class="nest2__cycle">{{ c.nestBad[2].cycle }}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -663,26 +674,29 @@ const c = computed(() =>
               <p v-for="(line, i) in c.goodLeadLines" :key="'gl' + i">{{ line }}</p>
             </header>
 
-            <div class="nest-stack nest-stack--good" role="list">
-              <div
-                v-for="ring in c.nestGood"
-                :key="'ng' + ring.depth"
-                class="nest-ring"
-                :class="ring.who === 'human' ? 'nest-ring--human nest-ring--outer' : 'nest-ring--sys'"
-                role="listitem"
-                :style="{ '--nest-d': ring.depth }"
-              >
-                <div class="nest-ring__bar">
-                  <span class="nest-ring__depth">L{{ ring.depth }}</span>
-                  <span class="nest-ring__title">{{ ring.title }}</span>
-                  <span class="nest-ring__who">{{
-                    ring.who === 'human' ? (zh ? '人' : 'you') : zh ? '系統' : 'sys'
-                  }}</span>
-                  <span class="nest-ring__spin" aria-hidden="true">↺</span>
+            <div class="nest2-stack">
+              <div class="nest2 nest2--human">
+                <div class="nest2__bar">
+                  <span class="nest2__depth">L1</span>
+                  <span class="nest2__title">{{ c.nestGood[0].title }}</span>
+                  <span class="nest2__who nest2__who--human">{{ zh ? '人 ↺' : 'you ↺' }}</span>
                 </div>
-                <p class="nest-ring__cycle">{{ ring.cycle }}</p>
-                <div class="nest-ring__beats">
-                  <span v-for="(b, bi) in ring.beats" :key="bi" class="nest-ring__beat">{{ b }}</span>
+                <p class="nest2__cycle">{{ c.nestGood[0].cycle }}</p>
+                <div class="nest2 nest2--sys">
+                  <div class="nest2__bar">
+                    <span class="nest2__depth">L2</span>
+                    <span class="nest2__title">{{ c.nestGood[1].title }}</span>
+                    <span class="nest2__who nest2__who--sys">{{ zh ? '系統 ↺' : 'sys ↺' }}</span>
+                  </div>
+                  <p class="nest2__cycle">{{ c.nestGood[1].cycle }}</p>
+                  <div class="nest2 nest2--sys">
+                    <div class="nest2__bar">
+                      <span class="nest2__depth">L3</span>
+                      <span class="nest2__title">{{ c.nestGood[2].title }}</span>
+                      <span class="nest2__who nest2__who--sys">{{ zh ? '系統 ↺' : 'sys ↺' }}</span>
+                    </div>
+                    <p class="nest2__cycle">{{ c.nestGood[2].cycle }}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -728,83 +742,105 @@ IDLE ──/l*──► INTAKE ──► DECIDE ──► DISPATCH ──► IMP
 
     <section class="lp-section lp-section--alt">
       <div class="lp-wrap">
-        <p class="lp-kicker">{{ c.smTitle }}</p>
-        <div class="eng-table-wrap">
-          <table class="eng-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>State</th>
-                <th>{{ zh ? '誰動' : 'Who' }}</th>
-                <th>{{ zh ? '進入條件' : 'Entry' }}</th>
-                <th>{{ zh ? '離開條件' : 'Exit' }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="s in states" :key="s.id">
-                <td><code>{{ s.id }}</code></td>
-                <td><code>{{ s.name }}</code></td>
-                <td>{{ s.who }}</td>
-                <td>{{ s.entry }}</td>
-                <td>{{ s.exit }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <p class="lp-kicker">{{ rail.kicker }}</p>
+        <p class="lp-lead srail-lead">{{ rail.lead }}</p>
+        <ol class="srail">
+          <li
+            v-for="(s, i) in rail.stops"
+            :key="i"
+            class="srail__stop"
+            :class="s.who === 'human' ? 'srail__stop--human' : 'srail__stop--sys'"
+          >
+            <div class="srail__head">
+              <code class="srail__st">{{ s.st }}</code>
+              <span class="srail__who" :class="'srail__who--' + s.who">{{
+                s.who === 'human' ? (zh ? '你' : 'you') : zh ? '系統' : 'system'
+              }}</span>
+              <span v-if="s.opt" class="srail__flag">{{ zh ? '可跳過' : 'skippable' }}</span>
+              <span v-if="s.loop" class="srail__flag srail__flag--loop">{{
+                zh ? '↺ 不過就回頭改' : '↺ fails loop back'
+              }}</span>
+            </div>
+            <strong class="srail__title">{{ s.title }}</strong>
+            <p class="srail__body">{{ s.body }}</p>
+          </li>
+        </ol>
+        <aside class="srail-esc">
+          <strong>{{ rail.escTitle }}</strong>
+          <p>{{ rail.escBody }}</p>
+        </aside>
       </div>
     </section>
 
     <section class="lp-section">
       <div class="lp-wrap">
-        <p class="lp-kicker">{{ c.trTitle }}</p>
-        <div class="eng-table-wrap">
-          <table class="eng-table">
-            <thead>
-              <tr>
-                <th>from</th>
-                <th>to</th>
-                <th>on</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(t, i) in transitions" :key="i">
-                <td><code>{{ t.from }}</code></td>
-                <td><code>{{ t.to }}</code></td>
-                <td>{{ t.on }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <p class="lp-kicker">{{ trace.title }}</p>
+        <p class="lp-lead srail-lead">{{ trace.lead }}</p>
+        <pre class="st-terminal eng-cmd"><code>{{ trace.cmd }}</code></pre>
+        <ol class="trail">
+          <li
+            v-for="(r, i) in trace.rows"
+            :key="i"
+            class="trail__ev"
+            :class="{ 'trail__ev--human': r.actor === '你' || r.actor === 'you' }"
+          >
+            <code class="trail__st">{{ r.st }}</code>
+            <div class="trail__txt">
+              <span class="trail__actor">{{ r.actor }}</span>
+              <p>{{ r.line }}</p>
+            </div>
+          </li>
+        </ol>
       </div>
     </section>
 
     <section class="lp-section lp-section--alt">
       <div class="lp-wrap">
-        <p class="lp-kicker">{{ trace.title }}</p>
-        <pre class="st-terminal eng-cmd"><code>{{ trace.cmd }}</code></pre>
-        <div class="lp-lead-stack lp-lead-stack--tight demo-honest">
-          <p v-for="(line, i) in trace.honestyLines" :key="i">{{ line }}</p>
-        </div>
-        <div class="eng-table-wrap" style="margin-top: 1rem">
-          <table class="eng-table">
-            <thead>
-              <tr>
-                <th>state</th>
-                <th>actor</th>
-                <th>{{ zh ? '證據' : 'evidence' }}</th>
-                <th>next</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(r, i) in trace.rows" :key="i">
-                <td><code>{{ r.st }}</code></td>
-                <td>{{ r.actor }}</td>
-                <td>{{ r.evidence }}</td>
-                <td>{{ r.next }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <details class="spec-details">
+          <summary>{{ rail.specSummary }}</summary>
+          <p class="lp-kicker" style="margin-top: 1.25rem">{{ c.smTitle }}</p>
+          <div class="eng-table-wrap">
+            <table class="eng-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>State</th>
+                  <th>{{ zh ? '誰動' : 'Who' }}</th>
+                  <th>{{ zh ? '進入條件' : 'Entry' }}</th>
+                  <th>{{ zh ? '離開條件' : 'Exit' }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="s in states" :key="s.id">
+                  <td><code>{{ s.id }}</code></td>
+                  <td><code>{{ s.name }}</code></td>
+                  <td>{{ s.who }}</td>
+                  <td>{{ s.entry }}</td>
+                  <td>{{ s.exit }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="lp-kicker" style="margin-top: 1.5rem">{{ c.trTitle }}</p>
+          <div class="eng-table-wrap">
+            <table class="eng-table">
+              <thead>
+                <tr>
+                  <th>from</th>
+                  <th>to</th>
+                  <th>on</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(t, i) in transitions" :key="i">
+                  <td><code>{{ t.from }}</code></td>
+                  <td><code>{{ t.to }}</code></td>
+                  <td>{{ t.on }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
       </div>
     </section>
 

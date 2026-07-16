@@ -184,21 +184,14 @@ const c = computed(() =>
           '人在哪一層、系統 ↺ 哪一層。',
           '怎樣算 DONE、什麼情況才叫你。'
         ],
-        legendTitle: '怎麼讀',
-        legend: [
-          { k: 'trigger', d: '什麼情況該用這條，而不是硬套 /l5' },
-          { k: 'cause → effect', d: '不用會怎樣、用了人少卡哪一段' },
-          { k: 'journey', d: '人／系統分層——不是狀態名流水帳' },
-          { k: 'done / escalate', d: '怎樣算做完 vs 才把人拉回來' }
-        ],
         labels: {
           trigger: '什麼時候用',
-          cause: '前因（若不用）',
-          effect: '後果（用了之後）',
+          cause: '不這樣做會怎樣',
+          effect: '用這條的差別',
           youType: '你下的指令',
           journey: '這條 flow 人在哪',
           trail: '工程對照（可略）',
-          notes: '對到實作',
+          notes: '工程備註（對到實作）',
           done: '怎樣算 DONE',
           esc: '怎樣才 ESCALATE'
         },
@@ -222,17 +215,10 @@ const c = computed(() =>
           'Which loop layer is human vs system ↺.',
           'DONE vs ESCALATE.'
         ],
-        legendTitle: 'How to read',
-        legend: [
-          { k: 'trigger', d: 'When this path—not a blind /l5' },
-          { k: 'cause → effect', d: 'What breaks if you skip; where you stop babysitting' },
-          { k: 'journey', d: 'Human / system layers—not a state-name dump' },
-          { k: 'done / escalate', d: 'Finish criteria vs human pull-in' }
-        ],
         labels: {
           trigger: 'Trigger',
-          cause: 'Cause (if you skip)',
-          effect: 'Effect (if you use it)',
+          cause: 'If you skip this',
+          effect: 'What changes with it',
           youType: 'What you type',
           journey: 'Where you sit in this flow',
           trail: 'Engineer map (optional)',
@@ -273,20 +259,6 @@ const c = computed(() =>
       </div>
     </header>
 
-    <section class="lp-section">
-      <div class="lp-wrap">
-        <div class="lp-section-head">
-          <p class="lp-kicker">{{ c.legendTitle }}</p>
-        </div>
-        <div class="lp-who">
-          <article v-for="l in c.legend" :key="l.k" class="lp-who__card">
-            <h3><code>{{ l.k }}</code></h3>
-            <p>{{ l.d }}</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
     <section
       v-for="(r, idx) in recipes"
       :key="r.id"
@@ -295,7 +267,7 @@ const c = computed(() =>
       :id="r.id"
     >
       <div class="lp-wrap">
-        <p class="lp-kicker">{{ r.id }}</p>
+        <p class="lp-kicker">{{ zh ? '起手情境' : 'starter scenario' }} 0{{ idx + 1 }} · <code>{{ r.id }}</code></p>
         <h2 class="eng-h2">{{ r.title }}</h2>
 
         <div class="recipe-ce">

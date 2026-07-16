@@ -45,6 +45,8 @@
 #       # test seam only: override the runner binary for seam/fake tests.
 #   In strict roster mode, do not pass `--runner`, `--model`, `--effort`, or `--endpoint`.
 #   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
+#   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
+#       # GO-gated verification-author contract mode.
 #   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
 #   or endpoint resolution is not ready.
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
@@ -74,7 +76,9 @@
 #   }
 #   Non-secret provenance: verification_author.endpoint is the endpoint name only, not URL/token.
 #
-# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed.
+#   On strict-contract containment violations (repo-state changed), status becomes
+#   containment_breach with exit code 4.
+# EXIT: 0 = authored (non-empty raw output), 1 = empty_output, 2 = precondition_failed, 3 = runner_failed, 4 = containment_breach.
 
 set -uo pipefail
 
@@ -98,8 +102,11 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-author-*' || true
 
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
-REPO_ROOT=""; STRICT_ROSTER=0
+REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
+TIMEOUT_SUPPLIED=0
 RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
+STRICT_CONTRACT_RESULT_FIELDS=0
+STRICT_UNIT_ID=""; STRICT_CONTRACT_SHA=""; STRICT_SPEC_SHA=""; STRICT_GO=""
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). See lib/dispatch-detach.sh.
 LEDGER=""; RUN_ID=""; STAGE=""
 while [[ $# -gt 0 ]]; do
@@ -108,13 +115,15 @@ while [[ $# -gt 0 ]]; do
     --model)       MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; shift 2 ;;
-    --timeout)     TIMEOUT="${2:-}"; shift 2 ;;
+    --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
     --endpoint)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; ENDPOINT_SUPPLIED=1; shift 2 ;;
     --strict-roster) STRICT_ROSTER=1; shift ;;
+    --strict-contract) STRICT_CONTRACT=1; shift ;;
+    --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
@@ -188,11 +197,125 @@ emit_verification_author() {
     "$(json_escape "$VERIFICATION_AUTHOR_FAMILY")"
 }
 
+extract_json_value() {
+  local key="" json=""
+  if [ "$#" -eq 1 ]; then
+    key="$1"
+    json="$(cat)"
+  else
+    json="${1-}"
+    key="${2-}"
+  fi
+  [ -n "$json" ] || return 1
+  printf '%s' "$json" | node -e '
+const fs = require("fs");
+const key = process.argv[1];
+const raw = fs.readFileSync(0, "utf8").trim();
+let data;
+try { data = JSON.parse(raw); } catch (e) { process.exit(1); }
+const parts = key.split(".");
+let cur = data;
+for (const part of parts) {
+  if (cur === null || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, part)) {
+    process.exit(2);
+  }
+  cur = cur[part];
+}
+if (cur === null || cur === undefined) process.exit(3);
+if (typeof cur === "object") {
+  process.stdout.write(JSON.stringify(cur));
+} else {
+  process.stdout.write(String(cur));
+}
+' "$key"
+}
+
+extract_last_json() {
+  node -e '
+const fs = require("fs");
+const lines = fs.readFileSync(0, "utf8").split(/\r?\n/);
+for (let i = lines.length - 1; i >= 0; i--) {
+  const line = String(lines[i] || "").trim();
+  if (!line) continue;
+  try {
+    JSON.parse(line);
+    process.stdout.write(line);
+    process.exit(0);
+  } catch (e) {}
+}
+process.exit(1);
+'
+}
+
+extract_file_json_value() {
+  local path="$1" key="$2"
+  node -e '
+const fs = require("fs");
+const path = process.argv[1];
+const key = process.argv[2];
+let data;
+try { data = JSON.parse(fs.readFileSync(path, "utf8")); } catch (e) { process.exit(1); }
+const parts = key.split(".");
+let cur = data;
+for (const part of parts) {
+  if (cur === null || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, part)) {
+    process.exit(2);
+  }
+  cur = cur[part];
+}
+if (cur === null || cur === undefined) process.exit(3);
+if (typeof cur === "object") {
+  process.stdout.write(JSON.stringify(cur));
+} else {
+  process.stdout.write(String(cur));
+}
+' "$path" "$key"
+}
+
+normalize_timeout_seconds() {
+  node -e '
+const v = String(process.argv[1] || "").trim().toLowerCase();
+if (!v) process.exit(1);
+if (/^\d+$/.test(v)) {
+  process.stdout.write(String(parseInt(v, 10)));
+  process.exit(0);
+}
+if (/^\d+\s*s$/.test(v)) {
+  process.stdout.write(String(parseInt(v.slice(0, -1), 10)));
+  process.exit(0);
+}
+if (/^\d+\s*m$/.test(v)) {
+  const m = parseInt(v, 10);
+  process.stdout.write(String(m * 60));
+  process.exit(0);
+}
+process.exit(2);
+' "$1"
+}
+
+strict_result_fields() {
+  local containment="$1"
+  local fields=""
+
+  [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ] || return 0
+  [ -n "${STRICT_UNIT_ID:-}" ] || return 0
+  [ -n "${STRICT_CONTRACT_SHA:-}" ] || return 0
+  [ -n "${STRICT_SPEC_SHA:-}" ] || return 0
+  [ -n "${STRICT_GO:-}" ] || return 0
+
+  fields=', "unit_id": "'$(json_escape "$STRICT_UNIT_ID")'", "contract_sha256": "'$(json_escape "$STRICT_CONTRACT_SHA")'", "spec_sha256": "'$(json_escape "$STRICT_SPEC_SHA")'", "go": "'$(json_escape "$STRICT_GO")'"'
+  if [ -n "$containment" ]; then
+    fields="$fields, \"containment\": \"$containment\""
+  fi
+  printf '%s' "$fields"
+}
+
 emit_result() {
   local status="$1"
   local raw_log="$2"
   local error_message="$3"
   local exit_code="$4"
+  local extra_fields="${5-}"
 
   local raw_log_json="null"
   if [[ "$raw_log" != "null" ]]; then
@@ -209,9 +332,12 @@ emit_result() {
     selection_path_json="\"$(json_escape "$SELECTION_PATH")\""
   fi
 
-  printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s }\n' \
+  local verification_author_json
+  verification_author_json="$(emit_verification_author)"
+  printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s%s }\n' \
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
-    "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" "$(emit_verification_author)"
+    "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" \
+    "$verification_author_json" "$extra_fields"
   exit "$exit_code"
 }
 
@@ -224,11 +350,178 @@ die_runner_failed() {
   emit_result "runner_failed" "$RAW_LOG" "runner exited $runner_exit_code" 3
 }
 
-ACTIVE_L6_MODE=0
-ACTIVE_L6_MARKER_LEVEL="$(node -e 'const m = require(process.argv[1]).readMarker(); if (m && m.level === "l6") { process.stdout.write("l6"); }' "$_AUTHOR_SELF_DIR/session-mode.js" 2>/dev/null || true)"
-[[ "$ACTIVE_L6_MARKER_LEVEL" == "l6" ]] && ACTIVE_L6_MODE=1 || true
-if [[ "$ACTIVE_L6_MODE" -eq 1 && "$STRICT_ROSTER" -ne 1 ]]; then
-  die_precondition "active session-mode=l6 requires --strict-roster"
+check_session_mode_gate() {
+  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-$HOME/.autopilot/session-mode}"
+  local marker level consumed_repo normalized_repo
+  if [[ -n "$REPO_ROOT" ]]; then
+    consumed_repo="$(cd "$REPO_ROOT" 2>/dev/null && pwd -P || true)"
+  else
+    consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  fi
+  [ -d "$marker_dir" ] || return 0
+  [ -n "$consumed_repo" ] || return 0
+  normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
+  for marker in "$marker_dir"/*.json; do
+    [ -f "$marker" ] || continue
+    if level="$(node -e 'const fs = require("fs"); const path = require("path"); const file = process.argv[1]; const root = path.resolve(process.argv[2] || ""); const now = Date.now(); try { const data = JSON.parse(fs.readFileSync(file, "utf8")); if (!data || typeof data !== "object") process.exit(1); if (data.level !== "l5" && data.level !== "l6") process.exit(1); if (!data.expires_at) process.exit(1); const exp = Date.parse(data.expires_at); if (!Number.isFinite(exp) || exp <= now) process.exit(1); if (path.resolve(String(data.repo_root || "")) !== root) process.exit(1); process.stdout.write(String(data.level || "")); process.exit(0); } catch (e) { process.exit(1); }' "$marker" "$normalized_repo")"; then
+      die_precondition "active session-mode=$level blocks non-strict dispatch (repo=$consumed_repo)"
+    fi
+  done
+}
+
+load_verification_author_from_review_loop() {
+  REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
+  [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
+  REVIEW_LOOP_JSON="$(
+    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
+  )"
+  REVIEW_LOOP_JSON_RC=$?
+  if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
+    die_precondition "resolve-review-loop failed"
+  fi
+
+  verification_author_present="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_present)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_present in review loop config"
+  verification_author_engine="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_engine)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_engine in review loop config"
+  verification_author_runner="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_runner)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_runner in review loop config"
+  verification_author_effort="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_effort)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_effort in review loop config"
+  verification_author_endpoint="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_endpoint)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_endpoint in review loop config"
+  verification_author_family="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_family)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_family in review loop config"
+  implementer_family="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field implementer_family)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid implementer_family in review loop config"
+  config_path="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field config_path)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid config_path in review loop config"
+
+  [[ "$verification_author_present" == true ]] || die_precondition "strict roster requires verification_author_present=true"
+  [[ -n "$verification_author_engine" ]] || die_precondition "strict roster requires verification_author_engine"
+  [[ -n "$verification_author_runner" ]] || die_precondition "strict roster requires verification_author_runner"
+  [[ -n "$verification_author_effort" ]] || die_precondition "strict roster requires verification_author_effort"
+  [[ -n "$verification_author_family" ]] || die_precondition "strict roster requires verification_author_family"
+  [[ -n "$implementer_family" ]] || die_precondition "strict roster requires implementer_family"
+  [[ "$verification_author_family" != unknown ]] || die_precondition "verification_author_family must not be unknown"
+  [[ "$implementer_family" != unknown ]] || die_precondition "implementer_family must not be unknown"
+  [[ "$verification_author_family" != "$implementer_family" ]] || die_precondition "strict roster requires distinct verification_author_family and implementer_family"
+  [[ "$config_path" == "$REVIEW_LOOP_CONFIG" ]] || die_precondition "strict roster requires config_path to equal --repo-root/.claude/review-loop-config.md"
+
+  VERIFICATION_AUTHOR_ENGINE="$verification_author_engine"
+  VERIFICATION_AUTHOR_RUNNER="$verification_author_runner"
+  VERIFICATION_AUTHOR_EFFORT="$verification_author_effort"
+  VERIFICATION_AUTHOR_ENDPOINT="$verification_author_endpoint"
+  VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
+}
+
+run_strict_contract_preflight() {
+  local contract_check_out contract_check_json contract_check_rc
+  local verdict contract_model contract_runner checker_reasons
+  local contract_wall_seconds normalized_timeout
+
+  [ "$STRICT_CONTRACT" -eq 1 ] || return 0
+  [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] || die_precondition "--strict-contract requires --contract-file"
+  [ -r "$CONTRACT_FILE" ] || die_precondition "contract file not readable: $CONTRACT_FILE"
+  [ -n "$REPO_ROOT" ] || die_precondition "--repo-root is required with --strict-contract"
+  [ -d "$REPO_ROOT" ] || die_precondition "--repo-root must point to an existing directory"
+  REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+
+  contract_check_out="$(node "$_AUTHOR_SELF_DIR/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$REPO_ROOT" --json 2>&1)"
+  contract_check_rc=$?
+
+  contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
+  if [ "$contract_check_rc" -ne 0 ] || [ -z "$contract_check_json" ]; then
+    checker_reasons="$(extract_json_value "$contract_check_json" reasons 2>/dev/null || true)"
+    [ -n "$checker_reasons" ] || checker_reasons="$(printf '%s' "$contract_check_out" | tr '\n' ' ')"
+    [ -n "$checker_reasons" ] || checker_reasons="contract check failed"
+    die_precondition "contract checker failed: $checker_reasons"
+  fi
+
+  verdict="$(extract_json_value "$contract_check_json" verdict 2>/dev/null || true)"
+  [ "$verdict" = "GO" ] || die_precondition "contract checker failed: verdict=$verdict"
+
+  STRICT_CONTRACT_RESULT_FIELDS=1
+  STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
+  STRICT_CONTRACT_SHA="$(extract_json_value "$contract_check_json" contract_sha256 2>/dev/null || true)"
+  STRICT_SPEC_SHA="$(extract_json_value "$contract_check_json" spec_sha256 2>/dev/null || true)"
+  contract_model="$(extract_json_value "$contract_check_json" resolved_engine.model 2>/dev/null || true)"
+  contract_runner="$(extract_json_value "$contract_check_json" resolved_engine.runner 2>/dev/null || true)"
+  STRICT_GO="$verdict"
+
+  [ -n "$STRICT_UNIT_ID" ] || die_precondition "contract checker returned empty unit_id"
+  [ -n "$STRICT_CONTRACT_SHA" ] || die_precondition "contract checker returned empty contract_sha256"
+  [ -n "$STRICT_SPEC_SHA" ] || die_precondition "contract checker returned empty spec_sha256"
+  [ -n "$contract_model" ] || die_precondition "contract checker returned empty resolved_engine.model"
+  [ -n "$contract_runner" ] || die_precondition "contract checker returned empty resolved_engine.runner"
+
+  if [ "$RUNNER_SUPPLIED" -eq 1 ]; then
+    [[ "$RUNNER" == "$contract_runner" ]] || die_precondition "caller --runner ($RUNNER) disagrees with checker resolved_engine.runner ($contract_runner)"
+  else
+    RUNNER="$contract_runner"
+  fi
+  if [ "$MODEL_SUPPLIED" -eq 1 ]; then
+    [[ "$MODEL" == "$contract_model" ]] || die_precondition "caller --model ($MODEL) disagrees with checker resolved_engine.model ($contract_model)"
+  else
+    MODEL="$contract_model"
+  fi
+
+  contract_wall_seconds="$(extract_file_json_value "$CONTRACT_FILE" "budget.wall_seconds" 2>/dev/null || true)"
+  [ -n "$contract_wall_seconds" ] || die_precondition "contract missing budget.wall_seconds"
+  if [ "$TIMEOUT_SUPPLIED" -eq 0 ]; then
+    TIMEOUT="${contract_wall_seconds}s"
+  else
+    normalized_timeout="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null || true)"
+    [ -n "$normalized_timeout" ] || die_precondition "invalid --timeout value: $TIMEOUT"
+    [[ "$normalized_timeout" -eq "$contract_wall_seconds" ]] || die_precondition "caller --timeout ($TIMEOUT) disagrees with contract budget.wall_seconds (${contract_wall_seconds}s)"
+  fi
+
+  load_verification_author_contract_config
+  EFFORT="$VERIFICATION_AUTHOR_EFFORT"
+  if [ "$ENDPOINT_SUPPLIED" -eq 0 ]; then
+    ENDPOINT="$VERIFICATION_AUTHOR_ENDPOINT"
+  fi
+}
+
+load_verification_author_contract_config() {
+  REVIEW_LOOP_CONFIG="$REPO_ROOT/.claude/review-loop-config.md"
+  [[ -r "$REVIEW_LOOP_CONFIG" ]] || die_precondition "config missing at --repo-root/.claude/review-loop-config.md"
+  REVIEW_LOOP_JSON="$(
+    cd "$REPO_ROOT" && REVIEW_LOOP_CONFIG_OVERRIDE="$REVIEW_LOOP_CONFIG" "$_AUTHOR_SELF_DIR/resolve-review-loop.sh"
+  )"
+  REVIEW_LOOP_JSON_RC=$?
+  if [[ "$REVIEW_LOOP_JSON_RC" -ne 0 ]]; then
+    die_precondition "resolve-review-loop failed"
+  fi
+
+  verification_author_present="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_present)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_present in review loop config"
+  verification_author_engine="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_engine)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_engine in review loop config"
+  verification_author_runner="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_runner)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_runner in review loop config"
+  verification_author_effort="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_effort)"; status=$?
+  [[ "$status" -eq 0 ]] || die_precondition "missing/invalid verification_author_effort in review loop config"
+  VERIFICATION_AUTHOR_ENGINE="$verification_author_engine"
+  VERIFICATION_AUTHOR_RUNNER="$verification_author_runner"
+  VERIFICATION_AUTHOR_EFFORT="$verification_author_effort"
+  VERIFICATION_AUTHOR_ENDPOINT="$(printf '%s' "$REVIEW_LOOP_JSON" | read_review_loop_field verification_author_endpoint || true)"
+  VERIFICATION_AUTHOR_FAMILY="$(extract_json_value "$REVIEW_LOOP_JSON" verification_author_family 2>/dev/null || true)"
+
+  [[ "$verification_author_present" == true ]] || die_precondition "strict contract requires verification_author_present=true"
+  [[ -n "$verification_author_engine" ]] || die_precondition "strict contract requires verification_author_engine"
+  [[ -n "$verification_author_runner" ]] || die_precondition "strict contract requires verification_author_runner"
+  [[ -n "$verification_author_effort" ]] || die_precondition "strict contract requires verification_author_effort"
+}
+
+[[ "$STRICT_CONTRACT" -eq 1 && "$CONTRACT_FILE_SUPPLIED" -eq 0 ]] && die_precondition "--strict-contract requires --contract-file"
+[[ "$CONTRACT_FILE_SUPPLIED" -eq 1 && "$STRICT_CONTRACT" -eq 0 ]] && die_precondition "--contract-file requires --strict-contract"
+
+if [[ "$STRICT_CONTRACT" -eq 1 ]]; then
+  run_strict_contract_preflight
+  SELECTION_SOURCE="strict_contract"
+else
+  check_session_mode_gate
 fi
 
 if [[ "$STRICT_ROSTER" -eq 1 ]]; then
@@ -340,6 +633,10 @@ timeout_to_ms() {
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 RUNNER_EXIT=0
+CONTAINMENT_PRE_STATUS=""
+CONTAINMENT_PRE_HEAD=""
+CONTAINMENT_POST_STATUS=""
+CONTAINMENT_POST_HEAD=""
 GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
@@ -349,6 +646,12 @@ cleanup() {
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
 }
 trap cleanup EXIT
+
+if [[ "$STRICT_CONTRACT" -eq 1 ]]; then
+  CONTAINMENT_PRE_STATUS="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)"
+  CONTAINMENT_PRE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  [ -n "$CONTAINMENT_PRE_HEAD" ] || die_precondition "not a git repository at --repo-root"
+fi
 
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: ${RUNNER}/${MODEL} (effort=${EFFORT}, timeout=${TIMEOUT})" >&2
 
@@ -466,6 +769,14 @@ else
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
 fi
 
+if [[ "$STRICT_CONTRACT" -eq 1 ]]; then
+  CONTAINMENT_POST_STATUS="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)"
+  CONTAINMENT_POST_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ "$CONTAINMENT_PRE_STATUS" != "$CONTAINMENT_POST_STATUS" || "$CONTAINMENT_PRE_HEAD" != "$CONTAINMENT_POST_HEAD" ]]; then
+    emit_result "containment_breach" "$RAW_LOG" "containment_breach: repo state changed during dispatch; output is quarantined for manual recovery" 4 "$(strict_result_fields "breach")"
+  fi
+fi
+
 # grep -c (not -q): -q exits at first match and SIGPIPEs tr/sed under pipefail — a
 # multi-KB capture then misclassifies as empty ~97% of the time (measured 2026-07-05).
 if ! tr -d '\r' < "$RAW_LOG" \
@@ -474,4 +785,4 @@ if ! tr -d '\r' < "$RAW_LOG" \
   emit_result "empty_output" "$RAW_LOG" "no non-whitespace output from runner — fail-closed" 1
 fi
 
-emit_result "authored" "$RAW_LOG" "null" 0
+emit_result "authored" "$RAW_LOG" "null" 0 "$(strict_result_fields "clean")"

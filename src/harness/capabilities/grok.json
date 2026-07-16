@@ -1,25 +1,34 @@
 {
   "id": "grok",
-  "display_name": "Grok CLI",
+  "display_name": "Grok Build (CLI)",
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-07-01",
-  "verified_at": "2026-07-01",
-  "expires_at": "2026-07-15",
+  "last_checked_at": "2026-07-16",
+  "verified_at": "2026-07-16",
+  "expires_at": "2026-08-16",
   "evidence": {
     "source": "local-probe",
-    "command": "grok --version && grok models && grok-build smoke",
-    "result": "grok 0.2.77 (44e77bec3a) [stable]; grok-build smoke returned AUTOPILOT_GROK_OK"
+    "command": "grok --version && grok plugin install /path/to/autopilot --trust && grok inspect && grok plugin details autopilot",
+    "result": "grok 0.2.101 (5bc4b5dfad) [stable]; install registers plugin autopilot v2.32.37; grok inspect lists 28 skills (source plugin: autopilot), 3 agents (autopilot:debugger|planner|reviewer), and hooks file entry plugin: autopilot; plugin details reports 1 skill dir, 1 agent dir, hooks"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
-    "skills": "unverified",
-    "hooks": "unverified",
+    "skills": "verified",
+    "agents": "verified",
+    "plugin_install": "verified",
+    "hooks": "warning",
     "mutation_dispatch": "unverified",
     "blocking_gate": "unverified"
   },
   "notes": [
-    "Treat grok-build as a read-only reviewer/worker candidate until mutation containment is separately proven."
+    "Host path: install the repo root as a Grok plugin (`grok plugin install <clone|git-url> --trust`). Root layout (plugin.json + skills/ + agents/ + hooks/) is enough — no platforms/grok package required.",
+    "Skills discovery verified: all 28 SKILL.md packages appear under plugin: autopilot in `grok inspect`.",
+    "Agents discovery verified: debugger, planner, reviewer load as autopilot:* agents.",
+    "Hooks: Grok registers the plugin hooks.json (inspect shows file plugin: autopilot). Runtime parity with Claude Code (event coverage, CLAUDE_PLUGIN_ROOT expansion, opt-in gates via ~/.autopilot/config.json) is NOT claimed — capability stays `warning` until event-level smoke is recorded.",
+    "mutation_dispatch remains unverified at H2 (same bar as codex/agy). Hetero runner paths that shell out to grok are separate from promoting this host to H3.",
+    "blocking_gate (pre-push / stop-hook style enforcement on the Grok host) remains unverified.",
+    "Working inside this clone also surfaces skills via .agents/skills as project skills; that path does not replace a user-level plugin install for other repos.",
+    "Local installs record source_path; `grok plugin update` reports local as live. If skills look stale after a pull, re-run `grok plugin install <path> --trust` or update and re-check with `grok inspect`."
   ]
 }

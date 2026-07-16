@@ -3,7 +3,7 @@
     <tr>
       <td valign="middle"><img src="docs/assets/icon.svg" alt="Autopilot" height="180"></td>
       <td width="24"></td>
-      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first lifecycle orchestration with portable paths for Codex, OpenCode, and agy" height="180"></td>
+      <td valign="middle"><img src="docs/assets/hero.svg" alt="Autopilot — Claude Code-first lifecycle orchestration with portable paths for Codex, OpenCode, agy, and Grok Build" height="180"></td>
     </tr>
   </table>
 </div>
@@ -24,7 +24,7 @@
 
 <p align="center">
   <b>The AI project lead for your terminal.</b><br>
-  Claude Code is the full home base. Autopilot plans, delegates, reviews with a second engine, and remembers what it learned — with portable paths for Codex, OpenCode, and agy where their harnesses support them.
+  Claude Code is the full home base. Autopilot plans, delegates, reviews with a second engine, and remembers what it learned — with portable paths for Codex, OpenCode, agy, and Grok Build where their harnesses support them.
 </p>
 
 <p align="center">
@@ -98,7 +98,8 @@ Autopilot is Claude Code-first, but not Claude Code-only. Pick the entry point t
 | **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills plus bundled support payload for linked scripts/references; no Claude hook parity claim |
 | **OpenCode user** | `.agents/skills/` plus `.opencode/opencode.json` | Shared skills and methodology agent bodies, with an OpenCode-specific in-process plugin wrapper |
 | **Antigravity (`agy`) user** | `scripts/install-antigravity.sh` | Guarded import as a Claude Code-source plugin; no loose skills-dir scan |
-| **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy; mutating non-Claude setup requires `--harness <name> --install` |
+| **Grok Build user** | `grok plugin install /path/to/autopilot --trust` (or `cookys/autopilot`) | 28 skills + 3 methodology agents as a Grok plugin; hooks register but Claude runtime parity is not claimed |
+| **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy/grok; mutating non-Claude setup requires `--harness <name> --install` |
 
 ## From Principle To Default
 
@@ -182,6 +183,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 | **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` § Subagent model routing |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
+| **Grok Build** | `grok plugin install <clone\|git-url> --trust` (repo root is the payload) | 28 skills + 3 agents discoverable; hooks file registered (`grok inspect`) | Host ≠ runner. Hooks runtime / blocking-gate parity with Claude is partial/unverified. See `docs/installation.md` § Grok Build and `src/harness/capabilities/grok.json` |
 
 Full per-platform instructions, Windows notes, and the contributor **dev-mode** workflow are in **[docs/installation.md](docs/installation.md)**. Verified capability boundaries live in **[references/multi-agent-portability.md](references/multi-agent-portability.md)**.
 

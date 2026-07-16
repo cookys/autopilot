@@ -51,7 +51,7 @@ Usage:
   scripts/dev-setup.sh
       Set up Claude Code dev mode (backward-compatible default).
 
-  scripts/dev-setup.sh --check [--harness claude|codex|opencode|agy|--all]
+  scripts/dev-setup.sh --check [--harness claude|codex|opencode|agy|grok|--all]
       Read-only readiness dashboard. Missing optional CLIs warn; repo drift or
       known hazardous state fails.
 
@@ -67,13 +67,16 @@ Usage:
   scripts/dev-setup.sh --harness agy --install
       Install through scripts/install-antigravity.sh only.
 
+  scripts/dev-setup.sh --harness grok --install
+      Install this clone as a Grok Build plugin (grok plugin install --trust).
+
   scripts/dev-setup.sh --all --install
       Run all setup paths. This can mutate user-level harness state.
 
 Options:
   --check       Read-only status checks.
   --install     Permit mutating setup for non-Claude harnesses.
-  --harness H   Select claude, codex, opencode, or agy.
+  --harness H   Select claude, codex, opencode, agy, or grok.
   --all         Select all harnesses.
   -h, --help    Show this help.
 EOF
@@ -415,12 +418,76 @@ setup_agy() {
   "$REPO_DIR/scripts/install-antigravity.sh"
 }
 
+check_grok() {
+  require_repo_manifest
+
+  if ! have_cmd grok; then
+    status WARN "grok" "grok CLI not found on PATH"
+    return 0
+  fi
+
+  local version
+  version="$(grok --version 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$version" ]]; then
+    status OK "grok" "grok CLI found: $version"
+  else
+    status WARN "grok" "grok CLI present but --version failed"
+  fi
+
+  if [[ ! -f "$REPO_DIR/plugin.json" ]]; then
+    status FAIL "grok" "repo root plugin.json missing (required for grok plugin install)"
+    return 1
+  fi
+  if [[ ! -d "$REPO_DIR/skills" ]]; then
+    status FAIL "grok" "repo root skills/ missing"
+    return 1
+  fi
+  status OK "grok" "repo root is a Grok-installable plugin payload"
+
+  if [[ "${AUTOPILOT_DEV_SETUP_ACTIVE_CLI_CHECKS:-0}" != "1" ]]; then
+    status WARN "grok" "plugin registry state not probed in strict read-only mode (set AUTOPILOT_DEV_SETUP_ACTIVE_CLI_CHECKS=1)"
+    return 0
+  fi
+
+  if grok plugin list 2>/dev/null | grep -qi 'autopilot'; then
+    status OK "grok" "autopilot appears in grok plugin list"
+  else
+    status WARN "grok" "autopilot not found in grok plugin list"
+  fi
+}
+
+setup_grok() {
+  require_repo_manifest
+
+  if ! have_cmd grok; then
+    die "grok CLI not found on PATH — install Grok Build first (https://x.ai/cli)"
+  fi
+
+  if [[ ! -f "$REPO_DIR/plugin.json" || ! -d "$REPO_DIR/skills" ]]; then
+    die "repo root is not a Grok plugin payload (need plugin.json + skills/)"
+  fi
+
+  echo "Installing local clone into Grok Build:"
+  echo "  grok plugin install $REPO_DIR --trust"
+  grok plugin install "$REPO_DIR" --trust
+
+  echo ""
+  echo "Installed. Verify with:"
+  echo "  grok plugin list"
+  echo "  grok plugin details autopilot"
+  echo "  grok inspect   # expect 28 skills under plugin: autopilot"
+  echo ""
+  echo "Note: Grok host ≠ Grok runner. Hooks runtime parity with Claude is partial;"
+  echo "see docs/installation.md § Grok Build and src/harness/capabilities/grok.json."
+}
+
 run_check_for() {
   case "$1" in
     claude) check_claude ;;
     codex) check_codex ;;
     opencode) check_opencode ;;
     agy) check_agy ;;
+    grok) check_grok ;;
     *) die "unknown harness: $1" ;;
   esac
 }
@@ -431,6 +498,7 @@ run_setup_for() {
     codex) setup_codex ;;
     opencode) setup_opencode ;;
     agy) setup_agy ;;
+    grok) setup_grok ;;
     *) die "unknown harness: $1" ;;
   esac
 }
@@ -460,7 +528,7 @@ parse_args() {
       --harness)
         [[ $# -ge 2 ]] || die "--harness requires a value"
         HARNESS="$2"
-        case "$HARNESS" in claude|codex|opencode|agy) ;; *) die "--harness must be claude|codex|opencode|agy" ;; esac
+        case "$HARNESS" in claude|codex|opencode|agy|grok) ;; *) die "--harness must be claude|codex|opencode|agy|grok" ;; esac
         shift 2
         ;;
       -h|--help)
@@ -511,7 +579,7 @@ main() {
 
   if [[ "$MODE" = "check" ]]; then
     if [[ "$ALL" = "1" ]]; then
-      for harness in claude codex opencode agy; do
+      for harness in claude codex opencode agy grok; do
         run_check_for "$harness"
       done
     else
@@ -527,7 +595,7 @@ main() {
   fi
 
   if [[ "$ALL" = "1" ]]; then
-    for harness in claude codex opencode agy; do
+    for harness in claude codex opencode agy grok; do
       run_setup_for "$harness"
     done
   else

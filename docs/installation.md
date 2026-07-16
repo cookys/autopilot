@@ -2,7 +2,7 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-Install paths beyond the two-command Claude Code default (OpenCode, Codex, Antigravity, Windows), plus the contributor dev-mode workflow.
+Install paths beyond the two-command Claude Code default (OpenCode, Codex, Antigravity, Grok Build, Windows), plus the contributor dev-mode workflow.
 
 > **Claude Code users**: the 2-command install is in the [main README](../README.md#install). This page covers everything else.
 
@@ -14,12 +14,13 @@ Install paths beyond the two-command Claude Code default (OpenCode, Codex, Antig
 
 ```bash
 ./scripts/dev-setup.sh                              # Claude Code dev mode (backward-compatible default)
-./scripts/dev-setup.sh --check                      # read-only dashboard for Claude/Codex/OpenCode/agy
+./scripts/dev-setup.sh --check                      # read-only dashboard for Claude/Codex/OpenCode/agy/grok
 ./scripts/dev-setup.sh --check --harness codex      # read-only check for one harness
 ./scripts/dev-setup.sh --harness codex --install    # explicit mutating install
+./scripts/dev-setup.sh --harness grok --install     # install this clone into Grok Build
 ```
 
-Check mode is read-only for repo and user harness state except temporary diagnostic files. Missing optional CLIs are warnings; repo drift and known hazardous states, such as a symlinked agy plugin destination, fail the check. Non-Claude harness installs require `--install`; `--harness codex`, `--harness opencode`, `--harness agy`, and `--all` without `--install` report status only. Strict check mode avoids plugin-list probes that may update harness caches; set `AUTOPILOT_DEV_SETUP_ACTIVE_CLI_CHECKS=1` when you explicitly want those active CLI probes.
+Check mode is read-only for repo and user harness state except temporary diagnostic files. Missing optional CLIs are warnings; repo drift and known hazardous states, such as a symlinked agy plugin destination, fail the check. Non-Claude harness installs require `--install`; `--harness codex`, `--harness opencode`, `--harness agy`, `--harness grok`, and `--all` without `--install` report status only. Strict check mode avoids plugin-list probes that may update harness caches; set `AUTOPILOT_DEV_SETUP_ACTIVE_CLI_CHECKS=1` when you explicitly want those active CLI probes.
 
 ---
 
@@ -88,6 +89,66 @@ Contributor shortcut:
 ./scripts/dev-setup.sh --harness agy --install       # delegates to install-antigravity.sh
 ```
 
+### Grok Build (host vs runner)
+
+Grok appears in autopilot in **two different roles**. Do not conflate them:
+
+| Role | Meaning | Status |
+|------|---------|--------|
+| **Host** | You run sessions *in* Grok Build with autopilot skills/agents loaded | Supported via Grok's native plugin install (skills + agents discovery verified; hooks registered but runtime parity with Claude Code not claimed) |
+| **Runner** | Claude Code (or another host) shells out to `grok` for hetero review/implement | Already covered under [Heterogeneous engine credentials](#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster) — OAuth `grok login`, no token file |
+
+#### Install as a Grok host plugin
+
+The **repo root** is a valid Grok plugin payload (`plugin.json` + `skills/` + `agents/` + `hooks/`). There is no separate `platforms/grok/` package.
+
+```bash
+# From a local clone (recommended while tracking develop)
+grok plugin install /path/to/autopilot --trust
+
+# Or from GitHub (public clone URL)
+grok plugin install cookys/autopilot --trust
+
+# Verify
+grok plugin list
+grok plugin details autopilot
+grok inspect          # expect 28 skills under plugin: autopilot + autopilot:* agents + hooks entry
+```
+
+Contributor shortcut:
+
+```bash
+./scripts/dev-setup.sh --check --harness grok
+./scripts/dev-setup.sh --harness grok --install
+```
+
+#### Skills-only alternative (no plugin install)
+
+If you only want the SKILL.md packages without registering the plugin (no agents/hooks bundle):
+
+```toml
+# ~/.grok/config.toml
+[skills]
+paths = ["/path/to/autopilot/skills"]
+```
+
+Working **inside this clone** also surfaces skills via `.agents/skills` as project skills; that does not install autopilot for other repos.
+
+#### What is verified (2026-07-16, grok 0.2.101)
+
+- **28 skills** discoverable as `plugin: autopilot` (`dev-flow`, `quality-pipeline`, `l3`–`l6`, …)
+- **3 methodology agents** as `autopilot:debugger`, `autopilot:planner`, `autopilot:reviewer`
+- **Hooks** file registered (`grok inspect` shows `file plugin: autopilot`)
+
+#### Known limits (honest)
+
+- **Not Claude Code parity.** Slash namespaces, hook event coverage, `${CLAUDE_PLUGIN_ROOT}`-style expansion, and opt-in gates that assume Claude's settings injection may behave differently or not at all.
+- **Hooks = discovery partial.** Registration is verified; per-event firing and blocking-gate strength on the Grok host are **not** claimed. See `src/harness/capabilities/grok.json`.
+- **Update after `git pull`.** Local installs record `source_path`. Prefer `grok plugin update` and re-check with `grok inspect`; if skills look stale, re-run `grok plugin install <path> --trust`.
+- **Uninstall:** `grok plugin uninstall autopilot` (confirm flag if prompted).
+
+Capability matrix: [`src/harness/capabilities/grok.json`](../src/harness/capabilities/grok.json).
+
 ### Windows
 
 Repo-tracked symlinks (`.agents/skills/`) require Developer Mode + `core.symlinks=true` **before** cloning:
@@ -121,6 +182,7 @@ Activates `.githooks/pre-commit` which runs `sync-version.js --check` and `sync-
 | **a local clone** (dev mode, [below](#development)) | `git pull --ff-only` (shell), then `/reload-plugins` (Claude Code) | **Recommended for tracking latest** — no reinstall, pulls apply instantly |
 | **release / marketplace only** (no clone) | clean reinstall ([below](#release--marketplace-reinstall-no-clone)) | `/plugin update` may not detect new versions |
 | **Codex local package** | `git pull --ff-only`, then `./scripts/sync-codex-plugin-skills.sh`, `codex plugin remove autopilot@autopilot-local`, and `codex plugin add autopilot@autopilot-local` | The repo-local marketplace points at your clone; reinstall refreshes Codex's plugin cache |
+| **Grok Build host plugin** | `git pull --ff-only` (if local clone), then `grok plugin update` and `grok inspect`; re-run `grok plugin install <path> --trust` if skills look stale | Local installs record `source_path`; do not assume Claude `/reload-plugins` applies |
 
 > **Why not just `/plugin update`?** Claude Code pins a plugin to its install-time commit, and `/plugin update` often does **not** detect new versions ([anthropics/claude-code#31462](https://github.com/anthropics/claude-code/issues/31462)). Dev mode sidesteps this entirely: your clone *is* the plugin, so `git pull --ff-only` (then `/reload-plugins` in Claude Code) is the whole update. If you want to follow autopilot closely, set up [dev mode](#development) once and updating becomes a one-liner.
 

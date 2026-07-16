@@ -24,6 +24,13 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased
+
+### Added
+
+- **Grok Build host install path** — document and wire repo-root `grok plugin install <clone|git-url> --trust` (no `platforms/grok/` package). README harness tables (EN/zh-TW), `docs/installation.md` § Grok Build (host vs runner), and `scripts/dev-setup.sh --harness grok [--install|--check]`.
+- Refreshed `src/harness/capabilities/grok.json` (2026-07-16, grok 0.2.101): skills/agents/plugin_install **verified**, hooks **warning** (registered, runtime parity not claimed), mutation_dispatch/blocking_gate still unverified at H2.
+
 ## v2.32.37 — Dispatch branch lifecycle gate and preserve-first reaper
 
 **Headline**: finish-flow can no longer silently leave an ahead integration candidate behind, and dispatch-owned local branches can be retired through a deterministic bundle-before-delete lifecycle rail.

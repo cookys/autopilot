@@ -1,15 +1,12 @@
 # Build and deploy the product site under website/ to GitHub Pages.
 # Not part of the installable plugin payload.
+#
+# Deploy is **opt-in only** — never auto-fires on push. Rebuild when you mean it:
+#   gh workflow run website.yml
+#   # or Actions UI → website → Run workflow
 name: website
 
 on:
-  push:
-    branches: [develop, main]
-    paths:
-      - 'website/**'
-      - '.claude-plugin/plugin.json'
-      - 'docs/assets/**'
-      - '.github/workflows/website.yml'
   workflow_dispatch:
 
 permissions:

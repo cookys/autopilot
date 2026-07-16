@@ -26,10 +26,19 @@ Hard rules:
 - Verification authoring goes through `dispatch-author.sh` (the raw-prompt rail —
   NOT `dispatch-review.sh`) on a DIFFERENT family than the implementer engine.
 - `/l6` strict verification-author dispatch is exactly:
-  `scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
-  The runner/model/effort/endpoint are resolved from the consuming project’s
-  `.claude/review-loop-config.md` via `resolve-review-loop.sh`; no caller-supplied
-  `--runner`, `--model`, `--effort`, or `--endpoint` in strict mode.
+  `scripts/dispatch-author.sh --strict-contract --contract-file <unit.json> --repo-root <consuming-repo> --prompt-file <file>`.
+  Depth-0 freezes the unit contract first; the checker
+  (`node scripts/dispatch-contract.js check --contract <unit.json> --repo <repo> --json`) must
+  return GO before ANY runner spend — a prompt is task detail, not authorization. The
+  runner/model derive from the checker's resolved verification-author tuple; caller-supplied
+  `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. Consuming-checkout
+  mutation is `containment_breach` (exit 4) and the artifact is quarantined, never promoted.
+  Write dispatches likewise run
+  `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json> ...` — base and
+  timeout pin from the contract; post-return boundary (allow/deny/budget/output) and
+  depth-0-executed acceptance argv gate the result. While an l5/l6 session marker is active,
+  prompt-only (non-strict) write or author dispatch on this repo fails before the runner.
+  No manual override of a NO-GO exists; a changed contract is a new hash and a new GO check.
 - `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
 - **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.
 - **Expensive-model thrift**: depth-0 assumes the session model is the most expensive engine in the fleet; inline fallback (`--solo` or authoring content itself) is an escalation event governed by `on_engine_unavailable` (from `resolve-review-loop.sh`), never a silent default.

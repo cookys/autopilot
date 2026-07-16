@@ -25,11 +25,11 @@ const recipes = computed(() =>
             '/research-to-ship 或口語：研究 <主題> best practice，寫 plan，收斂後再實作。紅線：不擴 scope、測試必須綠',
           journeyThesis: '人只在兩端；中間兩格是系統 ↺。',
           humanSummary: '進場定題＋出場收產物',
-          sysSummary: '調查／plan 與寫審閘',
+          sysSummary: '調查／plan 與寫審 gate',
           stages: [
             { who: 'human', layer: '外', title: '你進場', body: '主題、紅線、什麼叫完' },
             { who: 'sys', layer: '中', title: '先查再決', body: 'survey → plan，不急改 production' },
-            { who: 'sys', layer: '內', title: '寫→審→閘', body: '夠緊才寫；證據當 done' },
+            { who: 'sys', layer: '內', title: '寫→審→gate', body: '夠緊才寫；證據當 done' },
             { who: 'human', layer: '外', title: '你出場', body: '看 commit／測／scope' }
           ],
           stateTrail: 'IDLE → INTAKE → DIVERGE → DECIDE → … → DONE',
@@ -55,14 +55,14 @@ const recipes = computed(() =>
             { who: 'human', layer: '外', title: '你進場', body: '功能目標＋no-go' },
             { who: 'sys', layer: '中', title: '輕決策', body: '清楚就略長調查，選座位' },
             { who: 'sys', layer: '內', title: '寫⇄審 ↺', body: 'blocking 回改，不算叫你' },
-            { who: 'human', layer: '外', title: '你出場', body: '閘過＋可讀 PR／commit' }
+            { who: 'human', layer: '外', title: '你出場', body: 'gate 過＋可讀 PR／commit' }
           ],
           stateTrail: 'IDLE → INTAKE → DECIDE → DISPATCH → IMPLEMENT ⇄ REVIEW → GATE → DONE',
           notes: [
             'IMPLEMENT 成功 = dispatch-hetero 回 committed，不是 stream 裡「完成了」。',
             'GATE：secret-scan、completeness、（專案開）test-integrity…'
           ],
-          doneWhen: '異質 review 可進閘，機械閘過，你有可讀 PR／commit。',
+          doneWhen: '異質 review 可進 gate，機械 gate過，你有可讀 PR／commit。',
           escalate: '連續多輪 VERDICT 仍卡住、越紅線，或 implementer 一直 dirty／no_op。'
         },
         {
@@ -75,19 +75,19 @@ const recipes = computed(() =>
             '1) 只讀地圖：「只讀，畫架構地圖，未授權不改檔」（explore）\n   若要接 autopilot config：/onboard（會改檔）\n2) 你確認後再：/l3 或 /l4 做「第一刀」小變更',
           journeyThesis: '人出場兩次（讀授權／放行）；讀與小刀是系統。',
           humanSummary: '授權只讀＋放行第一刀',
-          sysSummary: '畫地圖＋小變更過閘',
+          sysSummary: '畫地圖＋小變更過 gate',
           stages: [
             { who: 'human', layer: '外', title: '你進場', body: '只讀授權＋protected paths' },
             { who: 'sys', layer: '中', title: '讀邊界', body: 'explore 出地圖，repo 應乾淨' },
             { who: 'human', layer: '外', title: '你放行', body: '看完地圖才開第一刀 scope' },
-            { who: 'sys', layer: '內', title: '小刀實作', body: '小變更＋審＋閘' }
+            { who: 'sys', layer: '內', title: '小刀實作', body: '小變更＋審＋gate' }
           ],
           stateTrail: 'IDLE → INTAKE → DIVERGE*（讀）→ DECIDE → IMPLEMENT → … → DONE',
           notes: [
             'DIVERGE* 這裡是讀 repo，不是產業 survey。',
             'explore 不該改追蹤檔；/onboard 本來就會寫 .claude config。'
           ],
-          doneWhen: '有地圖 artifact（文件或報告），可選第一刀小 PR 過閘。',
+          doneWhen: '有地圖 artifact（文件或報告），可選第一刀小 PR 過 gate。',
           escalate: '宣稱只讀卻改到追蹤檔、需要 secret，或第一刀 scope 不清。'
         }
       ]

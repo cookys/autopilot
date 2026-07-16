@@ -58,7 +58,7 @@ const states = computed(() =>
           name: 'REVIEW',
           who: 'issuer 必須標明：engine review / foreman QC / depth-0 QC',
           entry: 'diff 文本或 artifact；唯讀意圖',
-          exit: 'VERDICT 仍有 blocking（含 Major 未解）→ IMPLEMENT；可進閘 → GATE'
+          exit: 'VERDICT 仍有 blocking（含 Major 未解）→ IMPLEMENT；可進 gate → GATE'
         },
         {
           id: 'S7',
@@ -181,9 +181,9 @@ const transitions = computed(() =>
         { from: 'DISPATCH', to: 'IMPLEMENT', on: 'worktree/leaf 就緒（/l3 可縮成同 thread）' },
         { from: 'IMPLEMENT', to: 'REVIEW', on: 'dispatch 回 committed + diff（artifact）' },
         { from: 'REVIEW', to: 'IMPLEMENT', on: 'VERDICT 仍 blocking（issuer 標明）' },
-        { from: 'REVIEW', to: 'GATE', on: 'VERDICT 可進閘（無 blocking findings）' },
+        { from: 'REVIEW', to: 'GATE', on: 'VERDICT 可進 gate（無 blocking findings）' },
         { from: 'GATE', to: 'FINALIZE', on: '腳本 exit 0 +（可）panel 過' },
-        { from: 'GATE', to: 'IMPLEMENT', on: '閘失敗可修' },
+        { from: 'GATE', to: 'IMPLEMENT', on: 'gate 失敗可修' },
         { from: 'FINALIZE', to: 'DONE', on: 'merge/PR + summary 就位' },
         { from: '*', to: 'ESCALATE', on: '紅線／授權／真卡死' },
         { from: 'ESCALATE', to: 'INTAKE|DECIDE', on: '你補契約或決策' }
@@ -249,7 +249,7 @@ const rail = computed(() =>
             who: 'sys',
             st: 'GATE',
             loop: true,
-            title: '機械閘守最後一關',
+            title: '機械 gate守最後一關',
             body: '腳本掃機密、完整度、測試誠實度，掛了就退回去修。到 /l6 也不會放鬆。'
           },
           {
@@ -520,8 +520,8 @@ const c = computed(() =>
           {
             depth: 3,
             who: 'sys',
-            title: '內層 · 寫→審→閘',
-            cycle: '實作 ⇄ 異質審 ⇄ 機械閘',
+            title: '內層 · 寫→審→gate',
+            cycle: '實作 ⇄ 異質審 ⇄ 機械 gate',
           }
         ],
         goodPayoff:

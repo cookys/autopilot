@@ -21,7 +21,7 @@ const levels = computed(() =>
           chips: [
             { k: '寫', v: '同 thread' },
             { k: '工頭', v: '無' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '通常不用' }
           ],
           cmd: '/l3 那個 flaky reconnect 測資你全權搞定'
@@ -35,7 +35,7 @@ const levels = computed(() =>
           chips: [
             { k: '寫', v: '工頭 leaf' },
             { k: '工頭', v: '背景' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '隔離' }
           ],
           cmd: '/l4 把 WebSocket 重連做完。紅線：不准動 public API'
@@ -52,7 +52,7 @@ const levels = computed(() =>
           chips: [
             { k: '寫', v: '異質' },
             { k: '審', v: '另一家' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '隔離' }
           ],
           cmd: '/l5 修 login null deref。紅線：不准動 auth schema、測試要綠'
@@ -69,7 +69,7 @@ const levels = computed(() =>
           chips: [
             { k: '寫', v: '異質' },
             { k: '驗證寫', v: '異質 leaf' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '隔離' }
           ],
           cmd: '/l6 整個 parser 重寫，連測試怎麼寫也派出去'
@@ -185,7 +185,7 @@ const c = computed(() =>
         pill1: '工程師視角 · 委派拓撲',
         pill2: 'GATE 不會因為層級變鬆',
         h1a: '四層差在拓撲，',
-        h1b: '不是閘變鬆。',
+        h1b: '不是 gate 變鬆。',
         leadIntro: '先看一句話對照，細節在下面卡片與矩陣。',
         leadRows: [
           { code: '/l3', text: '同一個 thread 跑完——過程全在主腦 ctx' },
@@ -193,7 +193,7 @@ const c = computed(() =>
           { code: '/l5', text: '寫→審再卸異質——主因省 ctx，主腦長活做規劃協調' },
           { code: '/l6', text: '連驗證怎麼寫也卸——主腦幾乎只協調與終裁' }
         ],
-        leadFoot: '不變：最終閘與 merge 權一直在 depth-0。',
+        leadFoot: '不變：最終 gate與 merge 權一直在 depth-0。',
         causeTitle: '為什麼要分層',
         causeLines: [
           '四層不是「誰比較會寫 code」的排行榜',

@@ -21,8 +21,8 @@ const t = computed(() =>
         h1b: 'Autopilot 讓你不用一直坐在位子上。',
         defLines: [
           'Autopilot 是開發流程的 CEO agent。',
-          '選項先想清楚、取捨做完，code 寫完也審完。',
-          '只有真的卡關或踩紅線才叫你。'
+          '你丟一個初步想法，它把選項想全、取捨做完，展開成具體步驟並實作。',
+          'code 寫完也審完；只有真的卡關或踩紅線才叫你。'
         ],
         leadLines: [
           '不是又一套 prompt 模板，也不是要你當 full-time reviewer。',
@@ -47,7 +47,7 @@ const t = computed(() =>
           },
           {
             k: '審查系統',
-            d: '強模型當 peer、panel 挑問題、腳本當閘',
+            d: '強模型當 peer、panel 挑問題、腳本當 gate',
             sub: '信 diff 跟測試，不信「我覺得過了」'
           }
         ],
@@ -154,8 +154,8 @@ const t = computed(() =>
         h1b: 'Autopilot lets you step away.',
         defLines: [
           'Autopilot is a CEO-agent for development work.',
-          'Gather viewpoints, make tradeoffs, write and review end-to-end.',
-          'Only page you when stuck or out of bounds.'
+          'You toss in a rough idea; it maps the options, makes the tradeoffs, and expands it into concrete steps it then builds.',
+          'Code written and reviewed; it only pages you when stuck or over a red line.'
         ],
         leadLines: [
           'Not another prompt pack. Not you as full-time babysitter.',

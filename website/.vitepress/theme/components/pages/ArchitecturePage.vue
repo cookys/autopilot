@@ -13,7 +13,7 @@ const layers = computed(() =>
         { n: '多元 skills', d: 'survey / think-tank / r2s / 多引擎意見' },
         { n: 'CEO agent', d: '/l3–/l6 · 取捨往前 · 少問人' },
         { n: 'Dispatch', d: '跨引擎寫／審／讀 repo' },
-        { n: '收斂', d: 'peer · 眾議會 · 閘 · artifact' }
+        { n: '收斂', d: 'peer · 眾議會 · gate · artifact' }
       ]
     : [
         { n: 'Diverge skills', d: 'survey / think-tank / r2s / multi-engine' },

@@ -41,10 +41,10 @@ const bands = computed(() =>
         },
         {
           state: 'REVIEW → GATE',
-          title: '收斂與機械閘',
+          title: '收斂與機械 gate',
           items: [
             { n: 'quality-pipeline', d: '測 → 掃 → 完整 → 審' },
-            { n: 'scripts · 機械閘', d: 'completeness / secret / test-integrity… 對應 GATE' }
+            { n: 'scripts · 機械 gate', d: 'completeness / secret / test-integrity… 對應 GATE' }
           ]
         },
         {

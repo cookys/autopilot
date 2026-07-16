@@ -40,25 +40,21 @@
           "minItems": 0
         },
         "generated_mirrors": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["command", "allow_paths"],
-            "properties": {
-              "command": {
-                "type": "array",
-                "items": { "type": "string", "minLength": 1 },
-                "minItems": 1
-              },
-              "allow_paths": {
-                "type": "array",
-                "items": { "type": "string", "minLength": 1 },
-                "minItems": 1
-              }
+          "type": "object",
+          "required": ["command", "allow_paths"],
+          "properties": {
+            "command": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
             },
-            "additionalProperties": false
+            "allow_paths": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
           },
-          "minItems": 1
+          "additionalProperties": false
         },
         "max_files": { "type": "integer", "minimum": 1 },
         "max_diff_lines": { "type": "integer", "minimum": 1 }
@@ -89,23 +85,23 @@
     "no_go": {
       "type": "object",
       "required": [
-        "plan_changes_scope",
-        "plan_modifies_spec",
-        "plan_creates_deps",
-        "plan_removes_deps",
-        "plan_alters_budget",
-        "plan_disables_tests",
-        "plan_skips_ci",
+        "on_missing_spec",
+        "on_dirty_base",
+        "on_unknown_engine",
+        "on_quota_unavailable",
+        "on_scope_violation",
+        "on_budget_exceeded",
+        "on_clarification_needed",
         "forbidden_actions"
       ],
       "properties": {
-        "plan_changes_scope": { "type": "string", "enum": ["stop"] },
-        "plan_modifies_spec": { "type": "string", "enum": ["stop"] },
-        "plan_creates_deps": { "type": "string", "enum": ["stop"] },
-        "plan_removes_deps": { "type": "string", "enum": ["stop"] },
-        "plan_alters_budget": { "type": "string", "enum": ["stop"] },
-        "plan_disables_tests": { "type": "string", "enum": ["stop"] },
-        "plan_skips_ci": { "type": "string", "enum": ["stop"] },
+        "on_missing_spec": { "type": "string", "enum": ["stop"] },
+        "on_dirty_base": { "type": "string", "enum": ["stop"] },
+        "on_unknown_engine": { "type": "string", "enum": ["stop"] },
+        "on_quota_unavailable": { "type": "string", "enum": ["stop"] },
+        "on_scope_violation": { "type": "string", "enum": ["stop"] },
+        "on_budget_exceeded": { "type": "string", "enum": ["stop"] },
+        "on_clarification_needed": { "type": "string", "enum": ["stop"] },
         "forbidden_actions": {
           "type": "array",
           "items": {

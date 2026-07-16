@@ -11,6 +11,15 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 
 const STOP_TOKEN = 'stop';
 const SCHEMA_PATH = path.join(REPO_ROOT, 'schemas', 'dispatch-unit-contract.schema.json');
+const REQUIRED_NO_GO_KEYS = [
+  'on_missing_spec',
+  'on_dirty_base',
+  'on_unknown_engine',
+  'on_quota_unavailable',
+  'on_scope_violation',
+  'on_budget_exceeded',
+  'on_clarification_needed',
+];
 
 const ALLOWED_ROLES = new Set(['implementer', 'verification-author', 'reviewer', 'explorer', 'verifier', 'planner']);
 const ALLOWED_ENGINE_ROLES = new Set(['implementer', 'verification-author', 'reviewer', 'explorer', 'verifier', 'planner']);
@@ -253,41 +262,35 @@ function validateSchema(contract, errors, repoPath = '') {
     }
 
     if (hasKey(contract.scope, 'generated_mirrors')) {
-      if (!Array.isArray(contract.scope.generated_mirrors) || contract.scope.generated_mirrors.length < 1) {
-        errors.push('scope.generated_mirrors: must be non-empty array');
+      if (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors)) {
+        errors.push('scope.generated_mirrors: expected object');
       } else {
-        contract.scope.generated_mirrors.forEach((entry, idx) => {
-          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-            errors.push(`scope.generated_mirrors[${idx}]: expected object`);
-            return;
-          }
+        const gm = contract.scope.generated_mirrors;
+        const gmAllowed = new Set(['command', 'allow_paths']);
+        assertNoExtra('scope.generated_mirrors', gm, gmAllowed, errors);
 
-          const gmAllowed = new Set(['command', 'allow_paths']);
-          assertNoExtra(`scope.generated_mirrors[${idx}]`, entry, gmAllowed, errors);
+        if (!hasKey(gm, 'command')) errors.push('scope.generated_mirrors: missing command');
+        if (!hasKey(gm, 'allow_paths')) errors.push('scope.generated_mirrors: missing allow_paths');
 
-          if (!hasKey(entry, 'command')) errors.push(`scope.generated_mirrors[${idx}]: missing command`);
-          if (!hasKey(entry, 'allow_paths')) errors.push(`scope.generated_mirrors[${idx}]: missing allow_paths`);
+        if (!Array.isArray(gm.command) || gm.command.length < 1) {
+          errors.push('scope.generated_mirrors.command: must be non-empty array');
+        } else {
+          gm.command.forEach((arg, argIdx) => {
+            if (!isNonEmptyString(arg)) {
+              errors.push(`scope.generated_mirrors.command[${argIdx}]: must be non-empty string`);
+            }
+          });
+        }
 
-          if (!Array.isArray(entry.command) || entry.command.length < 1) {
-            errors.push(`scope.generated_mirrors[${idx}].command: must be non-empty array`);
-          } else {
-            entry.command.forEach((arg, argIdx) => {
-              if (!isNonEmptyString(arg)) {
-                errors.push(`scope.generated_mirrors[${idx}].command[${argIdx}]: must be non-empty string`);
-              }
-            });
-          }
-
-          if (!Array.isArray(entry.allow_paths) || entry.allow_paths.length < 1) {
-            errors.push(`scope.generated_mirrors[${idx}].allow_paths: must be non-empty array`);
-          } else {
-            entry.allow_paths.forEach((entryPath, entryIdx) => {
-              if (!isNonEmptyString(entryPath)) {
-                errors.push(`scope.generated_mirrors[${idx}].allow_paths[${entryIdx}]: must be non-empty string`);
-              }
-            });
-          }
-        });
+        if (!Array.isArray(gm.allow_paths) || gm.allow_paths.length < 1) {
+          errors.push('scope.generated_mirrors.allow_paths: must be non-empty array');
+        } else {
+          gm.allow_paths.forEach((entryPath, entryIdx) => {
+            if (!isNonEmptyString(entryPath)) {
+              errors.push(`scope.generated_mirrors.allow_paths[${entryIdx}]: must be non-empty string`);
+            }
+          });
+        }
       }
     }
   }
@@ -306,11 +309,9 @@ function validateSchema(contract, errors, repoPath = '') {
     }
   }
 
-  if (contract.scope && Array.isArray(contract.scope.generated_mirrors)) {
-    for (const gm of contract.scope.generated_mirrors) {
-      if (!gm || typeof gm !== 'object' || Array.isArray(gm) || !Array.isArray(gm.allow_paths)) {
-        continue;
-      }
+  if (contract.scope && contract.scope.generated_mirrors && typeof contract.scope.generated_mirrors === 'object' && !Array.isArray(contract.scope.generated_mirrors)) {
+    const gm = contract.scope.generated_mirrors;
+    if (Array.isArray(gm.allow_paths)) {
       for (const gmPath of gm.allow_paths) {
         if (!isNonEmptyString(gmPath) || !Array.isArray(contract.scope.allow_paths)) {
           continue;
@@ -327,7 +328,7 @@ function validateSchema(contract, errors, repoPath = '') {
 
   if (repoPath && typeof repoPath === 'string' && isHex40(contract.base_sha)) {
     const hasMandatoryMirror = hasPathAtCommit(repoPath, contract.base_sha, REPO_PATH_TOKENS.MANDATORY_MIRROR_PATH);
-    if (hasMandatoryMirror && (!Array.isArray(contract.scope.generated_mirrors) || contract.scope.generated_mirrors.length < 1)) {
+    if (hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
       errors.push('mirror: generated_mirrors must be declared for mandatory codex mirror generation');
     }
   }
@@ -373,38 +374,16 @@ function validateSchema(contract, errors, repoPath = '') {
     errors.push('no_go: expected object');
   } else {
     const allowed = new Set([
-      'plan_changes_scope',
-      'plan_modifies_spec',
-      'plan_creates_deps',
-      'plan_removes_deps',
-      'plan_alters_budget',
-      'plan_disables_tests',
-      'plan_skips_ci',
+      'on_missing_spec',
+      'on_dirty_base',
+      'on_unknown_engine',
+      'on_quota_unavailable',
+      'on_scope_violation',
+      'on_budget_exceeded',
+      'on_clarification_needed',
       'forbidden_actions',
     ]);
     assertNoExtra('no_go', contract.no_go, allowed, errors);
-
-    const required = [
-      'plan_changes_scope',
-      'plan_modifies_spec',
-      'plan_creates_deps',
-      'plan_removes_deps',
-      'plan_alters_budget',
-      'plan_disables_tests',
-      'plan_skips_ci',
-      'forbidden_actions',
-    ];
-    for (const key of required) {
-      if (!hasKey(contract.no_go, key)) {
-        errors.push(`no_go: missing required key '${key}'`);
-      }
-    }
-
-    for (const key of required.slice(0, -1)) {
-      if (contract.no_go[key] !== STOP_TOKEN) {
-        errors.push(`no_go.${key}: expected "stop"`);
-      }
-    }
 
     if (!Array.isArray(contract.no_go.forbidden_actions)) {
       errors.push('no_go.forbidden_actions: must be array');
@@ -778,6 +757,12 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   validatePolicyFilePathsAtBase(repo, baseSha, contract.go.required_paths, reasons);
 
   const forbidden = new Set(Array.isArray(contract.no_go.forbidden_actions) ? contract.no_go.forbidden_actions : []);
+  for (const key of REQUIRED_NO_GO_KEYS) {
+    if (!hasKey(contract.no_go, key) || contract.no_go[key] !== STOP_TOKEN) {
+      reasons.push(`forbidden: no_go.${key} must be "${STOP_TOKEN}"`);
+    }
+  }
+
   for (const action of FORBIDDEN_ACTIONS_REQUIRED) {
     if (!forbidden.has(action)) {
       reasons.push(`forbidden: missing forbidden action ${action}`);

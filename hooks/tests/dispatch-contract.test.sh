@@ -680,7 +680,6 @@ assert_red_green_clean "$MINI_REPO"
 if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
   echo "--- Case 7.1: VA-1 GO (Role-aware resolution) ---"
   git checkout -- . 2>/dev/null
-  touch "$MINI_REPO/oracle.test.sh"
   setup_va_qualified_store "$STORE_BASE/va_valid" "qualified" "available"
   out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/va_valid" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_valid" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 
@@ -708,7 +707,6 @@ if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
 
   assert_not_contains "$out" "SECRET_FIXTURE"
   assert_red_green_clean "$MINI_REPO"
-  rm -f "$MINI_REPO/oracle.test.sh"
 
   echo "--- Case 7.2: VA-2 Unqualified (VA status failed, implementer qualified) ---"
   git checkout -- . 2>/dev/null

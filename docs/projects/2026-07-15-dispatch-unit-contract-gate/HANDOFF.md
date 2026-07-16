@@ -255,6 +255,39 @@
   (aggregate QC/release, v2.32.36). C2-C7 must consume `scripts/dispatch-contract.js` — the
   bootstrap exception is closed.
 
+- **C1.1/C1.2 spec-fidelity corrections + first mechanical GO (2026-07-16)**. Real-world dogfood
+  of the checker exposed and closed three divergences: (a) oracle/checker used invented no_go
+  plan_* keys + array-form generated_mirrors — corrected to the plan's on_* keys/object shape
+  (oracle `ac9ce7d`, checker `96cfa19` merged); (b) checker parsed an invented config format —
+  now consumes the canonical resolver (oracle fixture `a5dfaf9`, checker via resolver merged
+  `b1cda63`-line); (c) the roster's implementer_runner "auto" can never match a qualified
+  scorecard row — made explicit codex (`870699d`, gpt-5.5 SHIP) and a qualified Spark
+  implementer row recorded (scorecard event 93, evidence: three accepted C1-day units).
+  The C2 contract then returned the project's FIRST mechanical GO (exit 0, hash f34e3030…
+  after oracle-commit re-freeze). Known shipped-schema divergence for C7: required_red_command
+  is required-in-practice though the plan marks it optional; Case 4.5 covers on-key-missing
+  instead of forbidden-action-missing.
+- **C2 oracle ACCEPTED** (`f993255`, RED state): hooks/tests/dispatch-hetero-contract.test.sh,
+  SHA-256 8e82d06a…, r1 + 5 surgical repair rounds (step-helper, required_red_command fixture,
+  env-prefix-subshell syntax, json_get ordering, wc -l empty-count false-RED). Isolated RED:
+  exit 1, 34 passed / 18 failed, zero infrastructure errors. Tests R1-R6: flag binding,
+  checker gate pre-worktree (run-marker + TMPDIR hetero-* proofs), GO fields in final JSON
+  (exact checker-derived hashes), caller-disagreement rejection, l5/l6 marker block
+  (AUTOPILOT_SESSION_MODE_DIR seam), legacy byte-compat. C2 implementation dispatched to Spark
+  (run hetero-1784190734-1310356-8de3).
+
+- **C2 COMPLETE (2026-07-16)**. Implementation dispatched twice (initial ...8de3 returned a
+  JSON-helper calling-convention bug caught by depth-0 GREEN verification — Spark self-report
+  again not trusted; fix run ...16ac). During GREEN verification depth-0 found and fixed FOUR
+  oracle false-RED defects through GLM surgical rounds (missing --base main in legacy cases;
+  spec.section must be heading text without the # prefix; sanity gate NO-GO-contains-GO
+  substring trap + wrong json key + ran before store seeding; ENGINE_ROW JSON passed as a file
+  path). Final: oracle GREEN 52 assertions, legacy 93, gc 42, mirror parity, secret scan clean,
+  MiniMax-M3 SHIP-AS-IS, merged to the feature branch. The write rail now enforces:
+  strict-contract flag binding, checker GO gate pre-spend, contract-derived base/timeout,
+  caller-disagreement rejection, contract fields in the final JSON, and the l5/l6 session-mode
+  marker block for non-strict write dispatch.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

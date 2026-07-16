@@ -24,6 +24,15 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.48 — L1 go runner-detection no longer waits on a Go toolchain download
+
+**Headline**: `hooks/tests/check-test-integrity-l1.test.sh` case 5 was a CI stable-red timing lottery, and behind it sat a real fail-closed engine bug. `scripts/lib/test-integrity-l1.py` `detect_go_tool()` probed `go version` with a 5s timeout using the caller's env. The test harness pins `GOTOOLCHAIN=go1.26.3` and the CI image ships a different go, so every go invocation — including the *presence* probe — first had to download/switch toolchains (~10s on a cold module cache). The probe got killed at 5s → `available:false` → `runner_missing` → `collection_failed` → exit 1 with no `"l1": "shrink"`; the actions/cache hit shifted case 5 into peak parallel contention, making green-vs-red a coin flip around the 5s line. Any consuming repo with a `GOTOOLCHAIN` pin would be spuriously blocked (fail-closed false positive) on its first run.
+
+### Fixed
+
+- `scripts/lib/test-integrity-l1.py`: `detect_go_tool()` runs its `go version` probe with `GOTOOLCHAIN=local` (on a copy of the incoming env — the actual `collect_go` run still honors the caller's `GOTOOLCHAIN`), so runner-presence detection never pays or waits on a toolchain download. The download cost belongs to the collection run, whose 180s timeout absorbs it. `timeout=5` unchanged.
+- `hooks/tests/check-test-integrity-l1.test.sh`: (a) a one-time untimed pre-warm (`GOTOOLCHAIN=go1.26.3 go version`) inside the real-go block makes the collection-phase download deterministic on CI cold caches; (b) a new regression case (6b) that runs WITHOUT a real go toolchain — a fake `go` shim exits instantly under `GOTOOLCHAIN=local` and otherwise sleeps past the 5s probe — asserting detection reports `tool_base:true` and never `runner_missing`. Red-green validated: reverting only the detection fix makes case 6b fail.
+
 ## v2.32.47 — dev-mode has THREE layers; the marketplace clone was silently feeding stale skills
 
 **Headline**: dogfood was broken on the primary dev machine with zero errors shown — sessions loaded a 5-week-old v2.17.2 skill set on a v2.32.46 repo. Root cause: dev mode's known layers (dev cache symlink + registry `installPath`) were both correct, but Claude Code resolves the plugin VERSION from a third layer — the marketplace clone at `~/.claude/plugins/marketplaces/autopilot` — which had been frozen at a 2026-06-04 checkout (declaring 2.17.2) and even carried a stray hand-edit blocking `git pull`. `dev-setup.sh` never knew this layer existed.

@@ -12,7 +12,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec]
+  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster] [--json] [--probe]
@@ -25,6 +25,10 @@ Commands:
                     Run implementer -> review -> repair through AutopilotEngine.
                     Reviewer qualification is fail-closed by default; use
                     --allow-unqualified-reviewer only as an explicit escape hatch.
+                    --resume re-enters the verify+review phase against an existing
+                    ahead branch (impl already committed) instead of re-dispatching
+                    implementation; fails closed (resume_invalid) on a missing /
+                    not-ahead / non-ancestor branch and never moves any ref.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
   status            Read-only state overview: per-pool quota (recorded, per-MODEL pools), live dispatch runs, resolved roster seats (quota|runs|roster; --json; --probe = safe surface refresh, no model spend).
@@ -46,6 +50,7 @@ function parseImplementReviewArgs(rawArgs) {
     requireQualifiedReviewer: true,
     verifyCmd: null,
     noVerifyFirst: false,
+    resume: false,
   };
   let sawRequireQualifiedReviewer = false;
   let sawAllowUnqualifiedReviewer = false;
@@ -130,6 +135,11 @@ function parseImplementReviewArgs(rawArgs) {
     }
     if (arg === '--no-review-spec') {
       output.noReviewSpec = true;
+      i += 1;
+      continue;
+    }
+    if (arg === '--resume') {
+      output.resume = true;
       i += 1;
       continue;
     }

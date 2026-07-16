@@ -5,15 +5,15 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from reviewed,
-  pushed MiniMax-r3 authorization commit `720024b4af480b53edd844add46f1174bc8b1228`. Product tree remains clean;
+  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery closed at reviewed,
+  pushed MiniMax-r3 terminal commit `3a5e11b7d942bdfb134be91af2d2594feec7563e`. Product tree remains clean;
   no accepted product/test code。
 - While the r3 roster diff was under review, remote feature commit
   `a93be61f40b12402fb8643854dd3ef59bb02f2f4` merged current `origin/develop`
   `22ed5672809f27e57ff64d6aa84c740e62dc1615` into this branch. The reviewer blocked the stale local
   branch story; depth-0 fetched and fast-forwarded because the remote commit descends from local
-  `9698ad5` and touches none of the four roster/lifecycle files. Authorization commit `720024b` is
-  zero behind / 23 ahead of develop; this MiniMax-r3 terminal restoration advances it to 24 ahead.
+  `9698ad5` and touches none of the four roster/lifecycle files. Terminal commit `3a5e11b` is zero
+  behind / 24 ahead of develop; this MiniMax-r4 authorization advances it to 25 ahead.
 - l6 marker is active. The newest verification-author probe is MiniMax-M3 event 55; Spark implementer
   event 54 remains fresh. Both are `available/high`, and both direct scratch inferences returned `OK`.
 - C1 external run dir: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/`.
@@ -156,6 +156,12 @@
   lines). It has one shebang/source/finalizer and no CR/EOS but is enclosed by Markdown fences at
   lines 1/562. This is terminal `REJECT/output-shape` before syntax/RED; fences are not stripped and
   Spark was not dispatched. Restore GLM atomically before issuing a new raw-stdout-focused attempt.
+- MiniMax-r3 terminal restoration commit `3a5e11b` passed gpt-5.5 review and was pushed clean. Events
+  55/54 remain fresh/high. Persistent continuation now authorizes one new tracked current-HEAD r4
+  attempt through `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`. Its materially new prompt has
+  zero backtick bytes, defines stdout as the executable, and requires ASCII `#` at byte zero. R3 code
+  remains forensic-only and is not reused. Every terminal, NO-GO, abandonment, or inability to begin
+  restores GLM config, matching expectations, and README/HANDOFF atomically through review.
 
 ## 已決事項(不重議)
 
@@ -210,6 +216,8 @@
   contract were new and reused no old artifact. Its fenced file is terminal `REJECT/output-shape`;
   neither the file nor stripped content may be promoted. Persistent continuation permits a new
   current-HEAD MiniMax attempt only after atomic restoration and review.
+- MiniMax r4 is that next tracked attempt. It corrects only the wrapper shape via a zero-backtick
+  current-HEAD prompt and may not reuse or strip r3 content.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -219,11 +227,11 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
-   active/blocked after MiniMax r3 terminal, and seven phases remain including active C1; C2-C7 are pending.
-2. Review/commit/push atomic GLM restoration with matching dogfood expectations and r3 evidence.
-3. Persistent continuation may then create a reviewed MiniMax r4 roster and a materially new
-   raw-stdout-focused current-HEAD prompt/contract. The raw oracle must pass output-shape,
-   checkout-containment, `bash -n`, portable-tool, and isolated RED.
+   active on tracked MiniMax r4, and seven phases remain including active C1; C2-C7 are pending.
+2. Review/commit/push the r4 tracked roster and matching dogfood expectations; verify events 55/54
+   and MiniMax/OpenAI separation.
+3. Freeze a new zero-backtick raw-stdout prompt/contract from the clean pushed HEAD. The raw oracle
+   must pass output-shape, checkout-containment, `bash -n`, portable-tool, and isolated RED.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

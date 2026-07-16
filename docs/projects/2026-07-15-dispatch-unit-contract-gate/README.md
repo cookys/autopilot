@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active/blocked — MiniMax r3 output-shape REJECT | R3 preserved containment and produced one coherent test, but wrapped it in Markdown fences; GLM config/tests/docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — tracked MiniMax-M3 recovery r4 | R3 terminal restoration is reviewed/pushed; r4 uses a zero-backtick raw-stdout prompt with byte-zero shebang requirement | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -354,6 +354,13 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   lines 1/562. This is terminal `REJECT/output-shape` before syntax/RED; stripping fences would be
   forbidden normalization, so no Spark dispatch ran. After atomic restoration, persistent
   continuation permits a new MiniMax current-HEAD prompt that makes raw-stdout byte zero explicit.
+- MiniMax-r3 terminal restoration commit `3a5e11b7d942bdfb134be91af2d2594feec7563e` passed gpt-5.5
+  review and was pushed clean. Events 55/54 remain fresh/high. Persistent continuation now issues
+  exactly one tracked current-HEAD MiniMax r4 attempt with a materially new prompt containing zero
+  backtick bytes, defining stdout as the executable, and requiring ASCII `#` at byte zero. R3's
+  coherent fenced code remains forensic-only and is not reused. The temporary tuple is again
+  `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`; every terminal or aborted/non-started path
+  restores GLM config, tests, and lifecycle docs atomically through review.
 
 ## Dispatch policy
 
@@ -400,6 +407,8 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   current-HEAD prompt/contract and did not replay prior MiniMax artifacts. It produced a coherent but
   fenced file and is terminal `REJECT/output-shape`; any next attempt must be new and cannot strip or
   reuse the fenced code.
+- MiniMax r4 is the next tracked attempt after reviewed restoration. It addresses only the raw wrapper
+  failure with a zero-backtick prompt and grants no reuse of r3 content.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

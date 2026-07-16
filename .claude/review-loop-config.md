@@ -25,10 +25,20 @@
 - implementer_effort: high
 - implementer_runner: auto
 - verification_author_present: true
-- verification_author_engine: glm-5.2
+- verification_author_engine: MiniMax-M3
 - verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint: glm
+- verification_author_endpoint: minimax
+
+> Temporary repository-wide C1 authorization (2026-07-16, MiniMax-M3 recovery r4): after reviewed,
+> pushed r3 terminal restoration, persistent `/l6` continuation plus `換 minimax 3?` authorizes one
+> materially new current-HEAD attempt. Events 55/54 remain fresh `available/high`. All older prompts
+> and artifacts are terminal/non-replayable/non-normalizable; r4 uses a zero-backtick prompt that
+> defines stdout as the executable and requires byte-zero shebang. Because the resolver has no
+> unit-id scope, restore `glm-5.2/cc-shim/high/endpoint glm` after accepted, STOP, REJECT,
+> pre-dispatch NO-GO, cancellation/abandonment, inability to begin, or before C2/unrelated strict
+> authoring. Restore config, dogfood expectations, and README/HANDOFF atomically through independent
+> review. Permanent isolated runner fixtures remain tuple-independent.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

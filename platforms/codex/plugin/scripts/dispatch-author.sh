@@ -351,13 +351,14 @@ die_runner_failed() {
 }
 
 check_session_mode_gate() {
-  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-$HOME/.autopilot/session-mode}"
+  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
   local marker level consumed_repo normalized_repo
   if [[ -n "$REPO_ROOT" ]]; then
     consumed_repo="$(cd "$REPO_ROOT" 2>/dev/null && pwd -P || true)"
   else
     consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   fi
+  [ "$marker_dir" != "/.autopilot/session-mode" ] || return 0
   [ -d "$marker_dir" ] || return 0
   [ -n "$consumed_repo" ] || return 0
   normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"

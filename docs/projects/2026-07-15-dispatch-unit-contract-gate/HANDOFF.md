@@ -5,15 +5,15 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery closed at reviewed,
-  pushed Grok-r4 terminal commit `847c34b10102bc9f99a91c5ebb257717c2b685c5`. Product tree remains clean;
+  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from reviewed,
+  pushed Grok-r5 authorization commit `590a4a39139fd6bae181ea3c72591096a97e0855`. Product tree remains clean;
   no accepted product/test code。
 - While the r3 roster diff was under review, remote feature commit
   `a93be61f40b12402fb8643854dd3ef59bb02f2f4` merged current `origin/develop`
   `22ed5672809f27e57ff64d6aa84c740e62dc1615` into this branch. The reviewer blocked the stale local
   branch story; depth-0 fetched and fast-forwarded because the remote commit descends from local
-  `9698ad5` and touches none of the four roster/lifecycle files. Terminal commit `847c34b` is zero
-  behind / 20 ahead of develop; this r5 roster-authorization commit advances it to 21 ahead.
+  `9698ad5` and touches none of the four roster/lifecycle files. Authorization commit `590a4a3` is
+  zero behind / 21 ahead of develop; this r5 terminal-restoration commit advances it to 22 ahead.
 - l6 marker is active. The newest live probes are Grok verification-author event 53 and Spark
   implementer event 54, both `available/high`; Spark's direct scratch inference returned `OK`.
   Earlier r3 evidence remains events 51/52.
@@ -132,6 +132,15 @@
   hard-stop after its sole finalizer, with no restart or literal EOS. R1-r4 remain terminal and no code
   is reused. Every terminal, pre-dispatch NO-GO, abandonment, or inability to begin restores GLM,
   matching dogfood expectations, and README/HANDOFF atomically through independent review.
+- R5 authorization commit `590a4a3` passed gpt-5.5 review and was pushed clean. Contract SHA-256 is
+  `c72c272fa4b0cc42c293c0fe8ef4fd761010ed57ce509febde2be3513a637463`; prompt SHA-256 is
+  `72556636306ec8ab5ef569f5adb7ecd9fceb380f0e5b2367481f467a1f457e07`. The exact strict call
+  selected `grok-4.5/grok/high/endpoint ""/xai`, preserved all 1,466 checkout hashes and clean
+  HEAD/status/diff, then returned only a 138-byte planning sentence promising inspection (raw hash
+  `51b2c4605b8c43a78a154dd6fffc83992fac8aff08874c2508ffda04ea947d6d`) with zero shebangs,
+  sources, and finalizers. This is terminal `REJECT/output-shape` before syntax/RED; no normalization
+  or Spark dispatch ran. Restore GLM atomically, then persistent continuation selects the user's
+  explicitly authorized MiniMax-M3 seat rather than another immediate Grok call.
 
 ## 已決事項(不重議)
 
@@ -178,7 +187,10 @@
   reuse of either r3 or r4's substantial Bash output. Persistent continuation permits a new tracked
   current-HEAD attempt only after atomic GLM restoration.
 - R5 is the next tracked attempt after that reviewed restoration, backed by fresh events 53/54. It
-  corrects only r4's concatenated-candidate failure with a new hard-stop prompt and reuses no old code.
+  corrected only r4's concatenated-candidate failure with a new hard-stop prompt and reused no old
+  code. Its planning-only response is terminal `REJECT/output-shape`. The next tracked attempt uses
+  MiniMax-M3 after atomic restoration and a fresh endpoint/readiness check; old MiniMax prompts remain
+  non-replayable.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -188,11 +200,12 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
-   active on tracked Grok recovery r5, and seven phases remain including active C1; C2-C7 are pending.
-2. Review/commit/push the r5 tracked roster and matching dogfood expectations; verify xAI/OpenAI
-   separation, events 53/54, and permanent isolated Grok fixture independence.
-3. Freeze a materially new single-candidate hard-stop prompt/contract from that clean pushed HEAD.
-   The raw oracle must pass output-shape, checkout-containment, `bash -n`, portable-tool, and isolated RED.
+   active/blocked after Grok r5 terminal, and seven phases remain including active C1; C2-C7 are pending.
+2. Review/commit/push atomic GLM restoration with matching dogfood expectations and r5 evidence;
+   verify permanent isolated Grok fixture independence.
+3. Under persistent Board continuation, refresh MiniMax-M3 readiness, create a reviewed tracked roster,
+   then freeze a materially new current-HEAD prompt/contract. The raw oracle must pass output-shape,
+   checkout-containment, `bash -n`, portable-tool, and isolated RED.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

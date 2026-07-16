@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — tracked Grok recovery r5 | R4 terminal restoration is reviewed/pushed; fresh events 53/54 authorize one new current-HEAD attempt whose prompt hard-stops after one candidate | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active/blocked — Grok r5 output-shape REJECT | R5 preserved containment but returned only a planning sentence; GLM roster, dogfood expectations, and lifecycle docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -325,6 +325,16 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   after its sole finalizer, and never restart or emit literal EOS. R1-r4 remain terminal forensic
   evidence. Every r5 terminal or aborted/non-started path restores GLM config, matching tests, and
   lifecycle docs atomically through review.
+- Authorization commit `590a4a39139fd6bae181ea3c72591096a97e0855` passed independent gpt-5.5
+  review and was pushed clean. R5 contract SHA-256 is
+  `c72c272fa4b0cc42c293c0fe8ef4fd761010ed57ce509febde2be3513a637463`; prompt SHA-256 is
+  `72556636306ec8ab5ef569f5adb7ecd9fceb380f0e5b2367481f467a1f457e07`. The exact strict call
+  selected `grok-4.5/grok/high/endpoint ""/xai`, preserved all 1,466 checkout file hashes and clean
+  HEAD/status/diff, then returned only one 138-byte planning sentence promising inspection (raw
+  SHA-256 `51b2c4605b8c43a78a154dd6fffc83992fac8aff08874c2508ffda04ea947d6d`) with zero
+  shebangs, sources, or finalizers. This is terminal `REJECT/output-shape` before syntax/RED; no
+  normalization or Spark dispatch ran. After atomic GLM restoration, persistent continuation will
+  use the user's explicitly authorized MiniMax-M3 seat rather than spend another immediate Grok call.
 
 ## Dispatch policy
 
@@ -364,7 +374,9 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   either r3 or r4 Bash artifact. Persistent continuation permits a new tracked current-HEAD attempt
   after atomic GLM restoration; it does not enlarge or replay r4.
 - R5 is that next tracked attempt, backed by events 53/54. It addresses r4's concatenated-candidate
-  failure with a new hard-stop output contract and does not reuse either candidate's code.
+  failure with a new hard-stop output contract and reuses no old code. It returned only planning prose
+  and is terminal `REJECT/output-shape`. After restoration, the next tracked attempt selects
+  MiniMax-M3 under the user's explicit `換 minimax 3?` authority; no Grok artifact is reused.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

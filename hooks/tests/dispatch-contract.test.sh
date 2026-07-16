@@ -112,10 +112,8 @@ EOF
 
 cat > .claude/review-loop-config.md <<'EOF'
 # Review Loop Config
-selected_engine: gpt-5.3-codex-spark
-runner: codex
-family: openai
-role: implementer
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
 SECRET_FIXTURE_DO_NOT_LEAK
 EOF
 

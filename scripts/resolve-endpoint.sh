@@ -50,13 +50,8 @@ NAME_RE='^[A-Za-z0-9_]+$'
 
 usage() { sed -n '2,36p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'; }
 
-# Escapes backslash, quote, AND control chars (tab/CR/newline) so EVERY code path emits a
-# single valid JSON line. Uses awk (whole input as one record via an unlikely RS) rather than
-# a sed `:a;N;$!ba` slurp — that idiom silently SKIPS its substitutions on single-line input
-# (GNU sed's N-on-last-line quits) and misses quotes on later lines. awk is uniform for both.
-json_escape() {
-  printf '%s' "$1" | awk 'BEGIN{RS="\001";ORS=""}{gsub(/\\/,"\\\\");gsub(/"/,"\\\"");gsub(/\t/,"\\t");gsub(/\r/,"\\r");gsub(/\n/,"\\n");print}'
-}
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
 
 # json_array <element>... -> a valid JSON array of the (escaped) string elements.
 json_array() {

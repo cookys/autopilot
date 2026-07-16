@@ -24,6 +24,33 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.43 — Shared bash libs: one canonical `json_escape` + config-resolution ladder
+
+Consolidated the two most-duplicated bash primitives — JSON string escaping and the 4-tier
+config-file ladder — into sourceable libs, migrated every call site, and fixed a latent
+JSON-corruption bug in three resolvers along the way. Refactor is byte-compatible for
+realistic (newline-free) inputs; the only behavior change is the named bug fix.
+
+- **New** [`scripts/lib/json-emit.sh`](scripts/lib/json-emit.sh) — the ONE canonical
+  `json_escape` (pure-bash, no subprocess, RFC 8259-correct: `\`/`"`/`\b\f\n\r\t` +
+  `\uXXXX` for other `U+0000..001F`; `LC_ALL=C`) plus the byte-identical
+  `json_array_from_lines` helper. Replaces 15 divergent copies across three newline classes.
+- **New** [`scripts/lib/resolve-config.sh`](scripts/lib/resolve-config.sh) —
+  `resolve_config_ladder` (override-env → cwd `.claude/` → repo `.claude/` → template → none;
+  indirect NAME expansion, never `eval`) + `read_field` (case-insensitive markdown parser,
+  optional `--whitespace-empty` worktree-teardown semantic). Migrated from 3 resolvers.
+- **Fixed** — `resolve-qc-gate.sh` / `resolve-worktree-teardown.sh` / `resolve-review-loop.sh`
+  previously escaped only `\` and `"`, emitting **broken JSON** on any newline-bearing value.
+  They now route through the canonical `json_escape` and emit valid JSON.
+- **Migrated** all 15 `json_escape` holders + 3 `read_field` holders + 3 config-ladder holders.
+  Flatten sites keep their `tr '\n' ' '` flattening AT the call site. `resolve-doa.sh` is a
+  deliberate carve-out (its `-f`/3-tier/no-template/unconditional-else ladder is a different
+  contract) — documented in-file, not migrated.
+- **Tests** [`hooks/tests/json-emit.test.sh`](hooks/tests/json-emit.test.sh) +
+  [`hooks/tests/resolve-config.test.sh`](hooks/tests/resolve-config.test.sh) lock the behavior;
+  the `qc-gate.test.sh` pre-push sandbox now provisions `scripts/lib/` so it exercises the real
+  sourcing path.
+
 ## v2.32.42 — Dispatch-unit contract gate: mechanical GO/NO-GO for strict L5/L6
 
 Machine-validated dispatch authorization: under an active l5/l6 session marker, a prompt is

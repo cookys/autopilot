@@ -41,35 +41,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --- locate the config file ---
-CONFIG=""
-SOURCE="fail-closed-default"
-if [[ -n "${QC_GATE_CONFIG_OVERRIDE:-}" && -r "${QC_GATE_CONFIG_OVERRIDE:-}" ]]; then
-  CONFIG="$QC_GATE_CONFIG_OVERRIDE"; SOURCE="override"
-elif [[ -r "$PWD/.claude/qc-gate-config.md" ]]; then
-  CONFIG="$PWD/.claude/qc-gate-config.md"; SOURCE="project-cwd"
-elif [[ -r "$REPO_ROOT/.claude/qc-gate-config.md" ]]; then
-  CONFIG="$REPO_ROOT/.claude/qc-gate-config.md"; SOURCE="project-repo"
-elif [[ -r "$REPO_ROOT/project-config-template/qc-gate-config.md" ]]; then
-  CONFIG="$REPO_ROOT/project-config-template/qc-gate-config.md"; SOURCE="template"
-fi
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
+# shellcheck source=lib/resolve-config.sh
+. "$(dirname "$0")/lib/resolve-config.sh"
 
-# --- parse a `- key: value` (or `key: value`) line from the config's Settings block ---
-# Only reads the first match; tolerates leading "- " and surrounding whitespace.
-read_field() { # key default
-  local key="$1" def="$2" val=""
-  if [[ -n "$CONFIG" ]]; then
-    val="$(grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$CONFIG" 2>/dev/null \
-            | head -1 | sed -E "s/^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:[[:space:]]*//I" \
-            | sed -E 's/[[:space:]]+$//')"
-  fi
-  [[ -z "$val" ]] && val="$def"
-  printf '%s' "$val"
-}
+# --- locate the config file (4-tier -r ladder) ---
+resolve_config_ladder "qc-gate-config.md" "QC_GATE_CONFIG_OVERRIDE" "fail-closed-default"
 
-MODE="$(read_field mode "$DEF_MODE")"
-PATHS="$(read_field protected_paths "$DEF_PATHS")"
-EVIDENCE="$(read_field evidence "$DEF_EVIDENCE")"
+MODE="$(read_field "$CONFIG" mode "$DEF_MODE")"
+PATHS="$(read_field "$CONFIG" protected_paths "$DEF_PATHS")"
+EVIDENCE="$(read_field "$CONFIG" evidence "$DEF_EVIDENCE")"
 
 # Normalize the CSV: strip whitespace around commas + ends, so the natural human
 # spacing `skills/, agents/` does NOT yield a leading-space element that the hook's
@@ -79,9 +61,6 @@ PATHS="$(printf '%s' "$PATHS" | sed -E 's/[[:space:]]*,[[:space:]]*/,/g; s/^[[:s
 # --- validate enums; fall back fail-closed on garbage ---
 case "$MODE" in block|warn|off) ;; *) MODE="$DEF_MODE" ;; esac
 case "$EVIDENCE" in trailer|artifact|either) ;; *) EVIDENCE="$DEF_EVIDENCE" ;; esac
-
-# JSON-safe the only user-controlled value that reaches the JSON form (escape \ and ").
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in

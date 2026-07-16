@@ -46,37 +46,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# --- locate the config file ---
-CONFIG=""
-SOURCE="safe-default"
-if [[ -n "${WORKTREE_TEARDOWN_CONFIG_OVERRIDE:-}" && -r "${WORKTREE_TEARDOWN_CONFIG_OVERRIDE:-}" ]]; then
-  CONFIG="$WORKTREE_TEARDOWN_CONFIG_OVERRIDE"; SOURCE="override"
-elif [[ -r "$PWD/.claude/worktree-teardown-config.md" ]]; then
-  CONFIG="$PWD/.claude/worktree-teardown-config.md"; SOURCE="project-cwd"
-elif [[ -r "$REPO_ROOT/.claude/worktree-teardown-config.md" ]]; then
-  CONFIG="$REPO_ROOT/.claude/worktree-teardown-config.md"; SOURCE="project-repo"
-elif [[ -r "$REPO_ROOT/project-config-template/worktree-teardown-config.md" ]]; then
-  CONFIG="$REPO_ROOT/project-config-template/worktree-teardown-config.md"; SOURCE="template"
-fi
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
+# shellcheck source=lib/resolve-config.sh
+. "$(dirname "$0")/lib/resolve-config.sh"
 
-# --- parse a `- key: value` (or `key: value`) line from the config's Settings block ---
-read_field() { # key default
-  local key="$1" def="$2" val=""
-  if [[ -n "$CONFIG" ]]; then
-    val="$(grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$CONFIG" 2>/dev/null \
-            | head -1 | sed -E "s/^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:[[:space:]]*//I" \
-            | sed -E 's/[[:space:]]+$//')"
-  fi
-  # empty / whitespace-only → default (so `teardown_hook:` alone means none)
-  if [[ -z "${val//[[:space:]]/}" ]]; then
-    val="$def"
-  fi
-  printf '%s' "$val"
-}
+# --- locate the config file (4-tier -r ladder) ---
+resolve_config_ladder "worktree-teardown-config.md" "WORKTREE_TEARDOWN_CONFIG_OVERRIDE" "safe-default"
 
-HOOK="$(read_field teardown_hook "$DEF_HOOK")"
-AGE="$(read_field stale_reaper_age_days "$DEF_AGE")"
-SCOPE="$(read_field reaper_scope "$DEF_SCOPE")"
+HOOK="$(read_field "$CONFIG" teardown_hook "$DEF_HOOK" --whitespace-empty)"
+AGE="$(read_field "$CONFIG" stale_reaper_age_days "$DEF_AGE" --whitespace-empty)"
+SCOPE="$(read_field "$CONFIG" reaper_scope "$DEF_SCOPE" --whitespace-empty)"
 
 # --- validate; fall back safe-default on garbage ---
 # age: non-negative integer only
@@ -94,8 +74,6 @@ HOOK="${HOOK#\'}"; HOOK="${HOOK%\'}"
 case "$HOOK" in
   *[[:cntrl:]]*) HOOK="$DEF_HOOK" ;;
 esac
-
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in

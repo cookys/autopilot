@@ -459,9 +459,9 @@ const c = computed(() =>
         leadLines: [
           '你下目標跟紅線。',
           '系統靠「查得到的證據」往下推。',
-          '碰到授權邊界或真的走不下去才叫你。',
-          'Claude Code 的權限／登入彈窗不在這份保證裡。'
+          '碰到授權邊界或真的走不下去才叫你。'
         ],
+        heroNote: '※ Claude Code 本身的權限／登入彈窗不在這份保證裡。',
         compareKicker: '人花時間的地方，差在哪',
         compareLeadLines: [
           '不是「多一堆步驟比較強」。',
@@ -561,9 +561,9 @@ const c = computed(() =>
         leadLines: [
           'Give Autopilot a goal and hard limits.',
           'It advances on inspectable evidence.',
-          'It stops at an authority boundary or when it cannot safely continue.',
-          'Claude Code permission/auth prompts are outside this guarantee.'
+          'It stops at an authority boundary or when it cannot safely continue.'
         ],
+        heroNote: '※ Claude Code’s own permission/login prompts are outside this guarantee.',
         compareKicker: 'Where human time goes',
         compareLeadLines: [
           'Not “more steps = smarter.”',
@@ -675,6 +675,7 @@ const c = computed(() =>
           </h1>
           <div class="lp-lead-stack">
             <p v-for="(line, i) in c.leadLines" :key="i" class="lp-lead">{{ line }}</p>
+            <p class="hero-note">{{ c.heroNote }}</p>
           </div>
         </div>
       </div>

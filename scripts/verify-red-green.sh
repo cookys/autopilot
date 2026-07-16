@@ -51,45 +51,26 @@ usage() {
   sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-# Full JSON string escaping, pure bash (no new dependency): backslash, quote,
-# the named control escapes (\n \t \r \b \f), and every other char < 0x20 as
-# \u00XX — a crafted ref/path/reason string must never yield invalid JSON.
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
+# Preserve the shared RFC impl under a private name, then install a sed-extractable
+# entrypoint (hooks/tests/verify-red-green.test.sh does:
+#   eval "$(sed -n '/^json_escape()/,/^}$/p' "$SCRIPT")"
+# so this file must still contain a `json_escape()` definition).
+eval "$(declare -f json_escape | sed '1s/^json_escape/_json_escape_rfc/')"
 json_escape() {
-  local s="$1" out="" i c ord
-  for ((i = 0; i < ${#s}; i++)); do
-    c="${s:i:1}"
-    case "$c" in
-      \\)     out+='\\' ;;
-      '"')    out+='\"' ;;
-      $'\n')  out+='\n' ;;
-      $'\t')  out+='\t' ;;
-      $'\r')  out+='\r' ;;
-      $'\b')  out+='\b' ;;
-      $'\f')  out+='\f' ;;
-      *)
-        printf -v ord '%d' "'$c"
-        if (( ord < 32 )); then
-          printf -v c '\\u%04x' "$ord"
-        fi
-        out+="$c"
-        ;;
-    esac
-  done
-  printf '%s' "$out"
-}
-
-json_array_from_lines() {
-  local items="$1" out="" first=1 line
-  if [ -z "$items" ]; then
-    printf '[]'
-    return
+  if ! declare -F _json_escape_rfc >/dev/null 2>&1; then
+    local _je
+    if [ -n "${REPO_ROOT:-}" ] && [ -r "$REPO_ROOT/scripts/lib/json-emit.sh" ]; then
+      _je="$REPO_ROOT/scripts/lib/json-emit.sh"
+    else
+      _je="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
+    fi
+    # shellcheck disable=SC1090
+    . "$_je"
+    eval "$(declare -f json_escape | sed '1s/^json_escape/_json_escape_rfc/')"
   fi
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    if [ "$first" = 1 ]; then first=0; else out="$out, "; fi
-    out="$out\"$(json_escape "$line")\""
-  done <<< "$items"
-  printf '[%s]' "$out"
+  _json_escape_rfc "$1"
 }
 
 err_usage() {

@@ -30,12 +30,8 @@ err_usage() {
   exit 2
 }
 
-json_escape() {
-  printf '%s' "$1" \
-    | sed -e 's/\\/\\\\/g' \
-      -e 's/\"/\\\"/g' \
-      -e ':a;N;$!ba;s/\n/\\n/g'
-}
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/json-emit.sh"
 
 json_array() {
   local -n arr="$1"

@@ -545,6 +545,9 @@ assert_contains "$__OUTPUT" '"l1": "ok"' "additive pytest case is l1 ok"
 
 # go-backed cases need a real toolchain; CI has one, dev machines may not — skip loudly, never fail on absence
 if command -v go >/dev/null 2>&1; then
+# Pre-warm the pinned toolchain so the collection phase's download is deterministic
+# on CI cold caches (detection is now GOTOOLCHAIN=local, but collection still pays it).
+GOTOOLCHAIN=go1.26.3 go version >/dev/null 2>&1 || true
 # 5) go t.Skip -> shrink
 repo="$(mkrepo l1-go-skip)"
 (
@@ -621,6 +624,61 @@ assert_contains "$__OUTPUT" '"l1": "ok"' "additive go case is l1 ok"
 else
   echo "  SKIP go cases 5-6 (no go toolchain on this machine)"
 fi
+
+# 6b) go detect must not wait on toolchain download (fake go shim; no real toolchain needed)
+# Models: unfixed probe inherits a non-local GOTOOLCHAIN and stalls past timeout=5 → runner_missing;
+# fixed probe forces GOTOOLCHAIN=local so version exits instantly → tool_base true.
+repo="$(mkrepo l1-go-detect-local-toolchain)"
+(
+  cd "$repo"
+  printf "module l1godetect\ngo 1.26\n" > go.mod
+  mkdir -p tests .claude
+  printf "## Mode\nmode: block\n" > .claude/test-integrity-config.md
+  cat > tests/detect_test.go <<'GO'
+package tests
+
+import "testing"
+
+func TestOne(t *testing.T) {
+}
+GO
+  git add .claude/test-integrity-config.md go.mod tests/detect_test.go
+  git commit -qm "base"
+
+  cat > tests/detect_test.go <<'GO'
+package tests
+
+import "testing"
+
+func TestOne(t *testing.T) {
+    if true {
+    }
+}
+GO
+  git add tests/detect_test.go
+  git commit -qm "head"
+)
+fake_go_bin="$TEST_TMP/fake-go-detect-bin"
+mkdir -p "$fake_go_bin"
+cat > "$fake_go_bin/go" <<'SH'
+#!/usr/bin/env bash
+# version: instant under GOTOOLCHAIN=local; else sleep past the 5s detect probe.
+if [[ "${1:-}" == "version" ]]; then
+  if [[ "${GOTOOLCHAIN:-}" == "local" ]]; then
+    echo "go version go1.22.0 linux/amd64"
+    exit 0
+  fi
+  sleep 6
+  echo "go version go1.22.0 linux/amd64"
+  exit 0
+fi
+exit 1
+SH
+chmod +x "$fake_go_bin/go"
+PATH="$fake_go_bin:$PATH" run_integrity "$repo" HEAD~1..HEAD --l1-runner go
+assert_not_contains "$__OUTPUT" '"reason": "runner_missing"' "go detect does not report runner_missing with local probe"
+assert_contains "$__OUTPUT" '"tool_base": true' "go detect finds tool under GOTOOLCHAIN=local"
+
 # 7) no runner anywhere -> unavailable
 repo="$(mkrepo l1-no-runner)"
 (

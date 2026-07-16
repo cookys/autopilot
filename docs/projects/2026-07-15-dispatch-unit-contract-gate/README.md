@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active/blocked — Grok r4 output-shape REJECT | R4 preserved containment but concatenated two complete candidates and appended literal EOS; GLM roster, dogfood expectations, and lifecycle docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
+| C1 schema/checker | active — tracked Grok recovery r5 | R4 terminal restoration is reviewed/pushed; fresh events 53/54 authorize one new current-HEAD attempt whose prompt hard-stops after one candidate | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -314,7 +314,17 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   lines). It concatenates two complete candidates: shebang/source/finalizer occur at lines 1/2/848
   and 849/850/1761, followed by literal `<|eos|>` at line 1762. R4 is terminal
   `REJECT/output-shape` before syntax/RED; no normalization or Spark dispatch ran. GLM config,
-  matching dogfood expectations, and lifecycle docs restore atomically before a new attempt.
+  matching dogfood expectations, and lifecycle docs restored atomically in reviewed, pushed terminal
+  commit `847c34b10102bc9f99a91c5ebb257717c2b685c5` before a new attempt.
+- Persistent Board continuation then issued one new tracked current-HEAD r5 attempt. Fresh real
+  inference recorded Grok verification-author event 53 and Spark implementer event 54 as
+  `available/high`; Spark's direct read-only scratch probe returned `OK`. MiniMax's endpoint tiny-test
+  also passed, but its earlier full author call timed out empty, so it is not selected over Grok's
+  fresh full CLI proof and substantial contained output. The temporary roster is
+  `grok-4.5/grok/high/endpoint ""/xai`; r5 must emit exactly one candidate, terminate immediately
+  after its sole finalizer, and never restart or emit literal EOS. R1-r4 remain terminal forensic
+  evidence. Every r5 terminal or aborted/non-started path restores GLM config, matching tests, and
+  lifecycle docs atomically through review.
 
 ## Dispatch policy
 
@@ -353,6 +363,8 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   `REJECT/output-shape` after concatenating two candidates and grants no normalization or reuse of
   either r3 or r4 Bash artifact. Persistent continuation permits a new tracked current-HEAD attempt
   after atomic GLM restoration; it does not enlarge or replay r4.
+- R5 is that next tracked attempt, backed by events 53/54. It addresses r4's concatenated-candidate
+  failure with a new hard-stop output contract and does not reuse either candidate's code.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

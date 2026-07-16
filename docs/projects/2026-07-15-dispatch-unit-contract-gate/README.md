@@ -1,6 +1,6 @@
 # Dispatch unit contract gate
 
-> Status: ACTIVE — C1-C4 COMPLETE; C5-C7 pending
+> Status: ACTIVE — C1-C4+C6 COMPLETE; C5, C7 pending
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
@@ -100,7 +100,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | C3 artifact boundary | **COMPLETE** — merged with oracle GREEN (29 assertions) | Git-truth allow/deny/file/diff/output/acceptance enforcement; first contract-authorized strict dispatches (r1 dirty autopsied, r2 clean); MiniMax-M3 reviewed |
 | C4 author rail | **COMPLETE** — C4a role-aware gate + C4b strict author rail with mechanized containment (oracle 33 GREEN) | Verification-author contract composition and checkout containment proof |
 | C5 observability/docs | pending | C2-C4 | Status/manifest provenance, canonical docs, mirrors, payload parity |
-| C6 release-probe routing | pending | C1 | Unavailable/unapproved probe proves zero CLI spawn; no hard-coded fallback |
+| C6 release-probe routing | **COMPLETE** — red-green proven (GREEN 6 / base RED) | Unavailable/unapproved probe proves zero CLI spawn; no hard-coded fallback |
 | C7 aggregate QC/release | pending | C1-C6 | Full suite, scans, payload/schema checks, dual-family review, finish-flow |
 
 ## Start gate

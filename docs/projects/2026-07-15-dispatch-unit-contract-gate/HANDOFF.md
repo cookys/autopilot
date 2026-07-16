@@ -332,6 +332,16 @@
   author rail now blocks non-strict dispatch under the active l6 marker) — freeze a VA-role
   contract per authoring round; the checker + roster handle VA natively since C4a.
 
+- **C6 COMPLETE (2026-07-16)**. First unit whose ORACLE was authored end-to-end through the
+  C4b strict-contract author rail — 7 GLM rounds, each with its own GO-gated VA contract and
+  mechanized containment proof (the rail governing its own project). Oracle lessons: capture
+  exit codes at the invocation (not a later printf), never capture a global-setting function
+  in a subshell (file-based plumbing), lib.sh helper labels go LAST, and a fake-bin downstream
+  suite failing is out of routing scope. Implementation red-green proven (GREEN 6 / base RED
+  4/4). C7 hardening candidates ledgered: warn on capability-query infrastructure failure;
+  schema output.kind enum looseness; forbidden-action-missing oracle case; B3 directory-style
+  outputs; withResolverConfig shim robustness.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

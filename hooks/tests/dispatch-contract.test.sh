@@ -168,9 +168,7 @@ cat > "$CONTRACT_DIR/valid.json" <<EOF
   "scope": {
     "allow_paths": ["src/"],
     "deny_paths": ["vendor/"],
-    "generated_mirrors": [
-      {"command": ["tools/sync.sh"], "allow_paths": ["out/"]}
-    ],
+    "generated_mirrors": {"command": ["scripts/sync-codex-plugin-skills.sh"], "allow_paths": [".codex/mirror/"]},
     "max_files": 10,
     "max_diff_lines": 100
   },
@@ -180,13 +178,13 @@ cat > "$CONTRACT_DIR/valid.json" <<EOF
     "required_red_command": ["tools/red.sh"]
   },
   "no_go": {
-    "plan_changes_scope": "stop",
-    "plan_modifies_spec": "stop",
-    "plan_creates_deps": "stop",
-    "plan_removes_deps": "stop",
-    "plan_alters_budget": "stop",
-    "plan_disables_tests": "stop",
-    "plan_skips_ci": "stop",
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
     "forbidden_actions": ["push", "merge", "network", "dependency-change"]
   },
   "output": {"kind": "diff", "paths": ["src/"]},
@@ -432,13 +430,13 @@ cat > "$CONTRACT_DIR/no_mirror.json" <<EOF
     "required_red_command": ["tools/red.sh"]
   },
   "no_go": {
-    "plan_changes_scope": "stop",
-    "plan_modifies_spec": "stop",
-    "plan_creates_deps": "stop",
-    "plan_removes_deps": "stop",
-    "plan_alters_budget": "stop",
-    "plan_disables_tests": "stop",
-    "plan_skips_ci": "stop",
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
     "forbidden_actions": ["push", "merge", "network", "dependency-change"]
   },
   "output": {"kind": "diff", "paths": ["src/"]},
@@ -470,9 +468,7 @@ cat > "$CONTRACT_DIR/shell_accept.json" <<EOF
   "scope": {
     "allow_paths": ["src/"],
     "deny_paths": ["vendor/"],
-    "generated_mirrors": [
-      {"command": ["tools/sync.sh"], "allow_paths": ["out/"]}
-    ],
+    "generated_mirrors": {"command": ["scripts/sync-codex-plugin-skills.sh"], "allow_paths": [".codex/mirror/"]},
     "max_files": 10,
     "max_diff_lines": 100
   },
@@ -482,13 +478,13 @@ cat > "$CONTRACT_DIR/shell_accept.json" <<EOF
     "required_red_command": ["tools/red.sh"]
   },
   "no_go": {
-    "plan_changes_scope": "stop",
-    "plan_modifies_spec": "stop",
-    "plan_creates_deps": "stop",
-    "plan_removes_deps": "stop",
-    "plan_alters_budget": "stop",
-    "plan_disables_tests": "stop",
-    "plan_skips_ci": "stop",
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
     "forbidden_actions": ["push", "merge", "network", "dependency-change"]
   },
   "output": {"kind": "diff", "paths": ["src/"]},
@@ -501,8 +497,8 @@ EOF
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/shell_accept.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "2"
 
-echo "--- Case 4.5: One required forbidden action missing ---"
-sed 's/"push", "merge", "network"/"push", "network"/' "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/missing_forbid.json"
+echo "--- Case 4.5: One required no_go key missing ---"
+sed '/"on_clarification_needed": "stop",/d' "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/missing_forbid.json"
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/missing_forbid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "3"
 assert_nogo_json "$out" "forbidden"

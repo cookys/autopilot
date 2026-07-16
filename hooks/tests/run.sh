@@ -2,8 +2,8 @@
 # hooks/tests/run.sh — umbrella runner for autopilot's hook test suite.
 #
 # Discovers and runs:
-#   - L1 unit tests: `node --test` on hooks/*.test.js (Node built-in runner)
-#   - L2 integration tests: every hooks/tests/*.test.sh file
+#   - L1 unit tests: `node --test` on hooks/*.test.js + scripts/*.test.js
+#   - L2 integration tests: every hooks/tests/*.test.sh + scripts/*.test.sh file
 #
 # Exit 0 only if every layer passes. Per-file pass/fail summary at the end.
 #
@@ -44,8 +44,10 @@ run_one() {
 # ── L1 unit tests via node --test ──
 # Node's test runner reports its own pass/fail.
 echo "════════ L1 unit tests (node --test) ════════"
+# scripts/*.test.js rides the same node --test pass — scripts-side unit tests
+# used to live outside every scan glob and never ran in CI (found 2026-07-16).
 shopt -s nullglob
-UNIT_FILES=("$HOOKS_DIR"/*.test.js)
+UNIT_FILES=("$HOOKS_DIR"/*.test.js "$REPO_ROOT"/scripts/*.test.js)
 shopt -u nullglob
 if [ "${#UNIT_FILES[@]}" -eq 0 ]; then
   echo "(no L1 unit tests yet)"
@@ -89,6 +91,10 @@ if [ "${#NON_EXEC[@]}" -gt 0 ]; then
   exit 1
 fi
 for file in "$TESTS_DIR"/*.test.sh; do
+  run_one "$file"
+done
+# scripts/*.test.sh — same never-scanned gap as the L1 note above.
+for file in "$REPO_ROOT"/scripts/*.test.sh; do
   run_one "$file"
 done
 shopt -u nullglob

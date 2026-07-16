@@ -36,7 +36,17 @@ jobs:
         run: bash scripts/setup-symlinks.sh
 
       - name: Run hooks test suite (L1 unit + L2 integration)
-        run: bash hooks/tests/run.sh
+        # Default shell is `bash -e -o pipefail`, so tee preserves the suite's
+        # exit code while keeping a downloadable copy for CI-only failures.
+        run: bash hooks/tests/run.sh 2>&1 | tee "$RUNNER_TEMP/hooks-suite.log"
+
+      - name: Upload suite log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hooks-suite-log
+          path: ${{ runner.temp }}/hooks-suite.log
+          if-no-files-found: ignore
 
       - name: Version-manifest drift check
         run: node scripts/sync-version.js --check

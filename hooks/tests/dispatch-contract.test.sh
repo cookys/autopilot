@@ -117,6 +117,7 @@ cat > .claude/review-loop-config.md <<'EOF'
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
+- verification_author_effort: high
 SECRET_FIXTURE_DO_NOT_LEAK
 EOF
 
@@ -212,7 +213,7 @@ cat > "$CONTRACT_DIR/va_valid.json" <<EOF
     "max_diff_lines": 100
   },
   "go": {
-    "required_paths": ["oracle.test.sh"],
+    "required_paths": ["specs/feat/core.md"],
     "required_engine_role": "verification-author",
     "required_red_command": ["tools/red.sh"]
   },

@@ -43,6 +43,8 @@
 #       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
+#       [--strict-contract]                     # required together with --contract-file
+#       [--contract-file <path>]                # required together with --strict-contract
 #       [--keep-worktree]                      # keep worktree even on success
 #   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper
 #       [--reap-unmarked --yes]                # recovery: reap unmarked hetero-* only
@@ -91,6 +93,9 @@ set -uo pipefail
 MODEL="Gemini 3.5 Flash (High)"
 BASE="develop"
 TIMEOUT="9m"
+MODEL_SUPPLIED=0
+BASE_SUPPLIED=0
+TIMEOUT_SUPPLIED=0
 AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
@@ -129,6 +134,14 @@ EFFECTIVE_SKILL_MODE="off"
 SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
 SKILL_PACK_CONTENT_TEMP=""
+STRICT_CONTRACT=0
+CONTRACT_FILE=""
+CONTRACT_FILE_SUPPLIED=0
+STRICT_CONTRACT_RESULT_FIELDS=0
+STRICT_UNIT_ID=""
+STRICT_CONTRACT_SHA=""
+STRICT_SPEC_SHA=""
+STRICT_GO=""
 # ORPHAN_LOG must be set BEFORE the INT/TERM trap is armed (round-2 MiniMax §2f) so a
 # trap firing mid-run appends to a real path instead of an undefined one. Keep the
 # predictable log and lock inside a private per-user directory: shared /tmp names
@@ -295,12 +308,107 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
 
+extract_json_value() {
+  local json="$1" key="$2"
+  printf '%s' "$json" | node -e '
+const fs = require("fs");
+const key = process.argv[1];
+const raw = fs.readFileSync(0, "utf8").trim();
+let data;
+try { data = JSON.parse(raw); } catch (e) { process.exit(1); }
+const parts = key.split(".");
+let cur = data;
+for (const part of parts) {
+  if (cur === null || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, part)) {
+    process.exit(2);
+  }
+  cur = cur[part];
+}
+if (cur === null || cur === undefined) process.exit(3);
+if (typeof cur === "object") {
+  process.stdout.write(JSON.stringify(cur));
+} else {
+  process.stdout.write(String(cur));
+}
+' "$key"
+}
+
+extract_last_json() {
+  node -e '
+const fs = require("fs");
+const lines = fs.readFileSync(0, "utf8").split(/\r?\n/);
+for (let i = lines.length - 1; i >= 0; i--) {
+  const line = String(lines[i] || "").trim();
+  if (!line) continue;
+  try {
+    JSON.parse(line);
+    process.stdout.write(line);
+    process.exit(0);
+  } catch (e) {}
+}
+process.exit(1);
+'
+}
+
+extract_file_json_value() {
+  local path="$1" key="$2"
+  node -e '
+const fs = require("fs");
+const path = process.argv[1];
+const key = process.argv[2];
+let data;
+try { data = JSON.parse(fs.readFileSync(path, "utf8")); } catch (e) { process.exit(1); }
+const parts = key.split(".");
+let cur = data;
+for (const part of parts) {
+  if (cur === null || typeof cur !== "object" || !Object.prototype.hasOwnProperty.call(cur, part)) {
+    process.exit(2);
+  }
+  cur = cur[part];
+}
+if (cur === null || cur === undefined) process.exit(3);
+if (typeof cur === "object") {
+  process.stdout.write(JSON.stringify(cur));
+} else {
+  process.stdout.write(String(cur));
+}
+' "$path" "$key"
+}
+
+normalize_timeout_seconds() {
+  node -e '
+const v = String(process.argv[1] || "").trim().toLowerCase();
+if (!v) process.exit(1);
+if (/^\d+$/.test(v)) {
+  process.stdout.write(String(parseInt(v, 10)));
+  process.exit(0);
+}
+if (/^\d+\s*s$/.test(v)) {
+  process.stdout.write(String(parseInt(v.slice(0, -1), 10)));
+  process.exit(0);
+}
+if (/^\d+\s*m$/.test(v)) {
+  const m = parseInt(v, 10);
+  process.stdout.write(String(m * 60));
+  process.exit(0);
+}
+process.exit(2);
+' "$1"
+}
+
 emit() { # status commit files ins del worktree error
   local commit_json="null" wt_json="null" err_json="null" orphan_json="null"
   [ -n "${2:-}" ] && commit_json="\"$2\""
   [ -n "${6:-}" ] && wt_json="\"$(json_escape "$6")\""
   [ -n "${7:-}" ] && err_json="\"$(json_escape "$7")\""
   [ -n "${OUTCOME_ORPHAN:-}" ] && orphan_json="\"$(json_escape "$OUTCOME_ORPHAN")\""
+  local strict_unit_json="null" strict_contract_sha_json="null" strict_spec_sha_json="null" strict_go_json="null"
+  if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
+    [ -n "${STRICT_UNIT_ID:-}" ] && strict_unit_json="\"$(json_escape "$STRICT_UNIT_ID")\""
+    [ -n "${STRICT_CONTRACT_SHA:-}" ] && strict_contract_sha_json="\"$(json_escape "$STRICT_CONTRACT_SHA")\""
+    [ -n "${STRICT_SPEC_SHA:-}" ] && strict_spec_sha_json="\"$(json_escape "$STRICT_SPEC_SHA")\""
+    [ -n "${STRICT_GO:-}" ] && strict_go_json="\"$(json_escape "$STRICT_GO")\""
+  fi
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
@@ -336,12 +444,101 @@ emit() { # status commit files ins del worktree error
   [ -n "${DISPATCH_STARTED_EPOCH:-}" ] && wall_json="$(( $(date +%s) - DISPATCH_STARTED_EPOCH ))"
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s }\n' \
+  local strict_fields=""
+  if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
+    strict_fields=", \"unit_id\": $strict_unit_json, \"contract_sha256\": $strict_contract_sha_json, \"spec_sha256\": $strict_spec_sha_json, \"go\": $strict_go_json"
+  fi
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s }\n' \
     "$1" "$runner" "$(json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(json_escape "$BRANCH")" "$(json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json"
+    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields"
+}
+
+check_session_mode_gate() {
+  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-$HOME/.autopilot/session-mode}"
+  local marker level consumed_repo normalized_repo
+  consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -d "$marker_dir" ] || return 0
+  [ -n "$consumed_repo" ] || return 0
+  normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
+  for marker in "$marker_dir"/*.json; do
+    [ -f "$marker" ] || continue
+    if level="$(node -e 'const fs = require("fs"); const path = require("path"); const file = process.argv[1]; const root = path.resolve(process.argv[2] || ""); const now = Date.now(); try { const data = JSON.parse(fs.readFileSync(file, "utf8")); if (!data || typeof data !== "object") process.exit(1); if (data.level !== "l5" && data.level !== "l6") process.exit(1); if (!data.expires_at) process.exit(1); const exp = Date.parse(data.expires_at); if (!Number.isFinite(exp) || exp <= now) process.exit(1); if (path.resolve(String(data.repo_root || "")) !== root) process.exit(1); process.stdout.write(String(data.level || "")); process.exit(0); } catch (e) { process.exit(1); }' "$marker" "$normalized_repo")"; then
+      die_precondition "active session-mode=$level blocks non-strict dispatch (repo=$consumed_repo)"
+    fi
+  done
+}
+
+run_strict_contract_preflight() {
+  local contract_check_out="" contract_check_json=""
+  local verdict strict_model contract_base contract_wall_seconds checker_reasons
+  local normalized_timeout caller_timeout
+  local tmp_json
+  local rc
+
+  [ "$STRICT_CONTRACT" -eq 1 ] || return 0
+  [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] || die_precondition "--strict-contract requires --contract-file"
+  [ -r "$CONTRACT_FILE" ] || die_precondition "contract file not readable: $CONTRACT_FILE"
+
+  CONSUMING_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$CONSUMING_REPO_ROOT" ] || die_precondition "not inside a git repository"
+
+  contract_check_out="$(node "$SELF_DIR/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$CONSUMING_REPO_ROOT" --json 2>&1)"
+  rc=$?
+
+  contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
+  if [ "$rc" -ne 0 ] || [ -z "$contract_check_json" ]; then
+    checker_reasons="$(printf '%s' "$contract_check_json" | extract_json_value reasons 2>/dev/null || true)"
+    if [ -z "$checker_reasons" ]; then
+      checker_reasons="$(printf '%s' "$contract_check_out" | tr '\n' ' ')"
+    fi
+    [ -n "$checker_reasons" ] || checker_reasons="contract check failed"
+    die_precondition "contract checker failed: $checker_reasons"
+  fi
+
+  verdict="$(printf '%s' "$contract_check_json" | extract_json_value verdict 2>/dev/null || true)"
+  [ "$verdict" = "GO" ] || die_precondition "contract checker verdict is $verdict"
+
+  STRICT_CONTRACT_RESULT_FIELDS=1
+  STRICT_UNIT_ID="$(printf '%s' "$contract_check_json" | extract_json_value unit_id 2>/dev/null || true)"
+  STRICT_CONTRACT_SHA="$(printf '%s' "$contract_check_json" | extract_json_value contract_sha256 2>/dev/null || true)"
+  STRICT_SPEC_SHA="$(printf '%s' "$contract_check_json" | extract_json_value spec_sha256 2>/dev/null || true)"
+  strict_model="$(printf '%s' "$contract_check_json" | extract_json_value resolved_engine.model 2>/dev/null || true)"
+  STRICT_GO="$verdict"
+
+  [ -n "$STRICT_UNIT_ID" ] || die_precondition "contract checker returned empty unit_id"
+  [ -n "$STRICT_CONTRACT_SHA" ] || die_precondition "contract checker returned empty contract_sha256"
+  [ -n "$STRICT_SPEC_SHA" ] || die_precondition "contract checker returned empty spec_sha256"
+  [ -n "$strict_model" ] || die_precondition "contract checker returned empty resolved_engine.model"
+
+  contract_base="$(extract_file_json_value "$CONTRACT_FILE" "base_sha" 2>/dev/null || true)"
+  [ -n "$contract_base" ] || die_precondition "contract missing base_sha"
+  contract_wall_seconds="$(extract_file_json_value "$CONTRACT_FILE" "budget.wall_seconds" 2>/dev/null || true)"
+  [ -n "$contract_wall_seconds" ] || die_precondition "contract missing budget.wall_seconds"
+
+  if [ "$BASE_SUPPLIED" -eq 0 ]; then
+    BASE="$contract_base"
+  elif [ "$BASE" != "$contract_base" ]; then
+    die_precondition "caller --base ($BASE) disagrees with contract base_sha ($contract_base)"
+  fi
+
+  if [ "$MODEL_SUPPLIED" -eq 0 ]; then
+    MODEL="$strict_model"
+  elif [ "$MODEL" != "$strict_model" ]; then
+    die_precondition "caller --model ($MODEL) disagrees with checker resolved_engine.model ($strict_model)"
+  fi
+
+  if [ "$TIMEOUT_SUPPLIED" -eq 0 ]; then
+    TIMEOUT="${contract_wall_seconds}s"
+  else
+    normalized_timeout="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null || true)"
+    [ -n "$normalized_timeout" ] || die_precondition "invalid --timeout value: $TIMEOUT"
+    if [ "$normalized_timeout" -ne "$contract_wall_seconds" ]; then
+      die_precondition "caller --timeout ($TIMEOUT) disagrees with contract budget.wall_seconds (${contract_wall_seconds}s)"
+    fi
+  fi
 }
 
 die_precondition() {
@@ -422,16 +619,18 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
-    --model) MODEL="${2:-}"; shift 2 ;;
+    --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; shift 2 ;;
-    --base) BASE="${2:-}"; shift 2 ;;
-    --timeout) TIMEOUT="${2:-}"; shift 2 ;;
+    --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
+    --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
     --pi-bin) PI_BIN="${2:-}"; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
+    --strict-contract) STRICT_CONTRACT=1; shift ;;
+    --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --skill-mode) SKILL_MODE="${2:-}"; shift 2 ;;
     --skill) SKILLS+=("${2:-}"); shift 2 ;;
@@ -495,35 +694,37 @@ export AUTOPILOT_PARENT_RUN_ID="$DISPATCH_RUN_ID"
 export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
 export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 
-# Runner selection. Explicit --runner wins; `auto` detects codex from the model
-# name. The OLD bug: only `*gpt-5.5*` matched, so other codex models
-# (gpt-5.3-codex-spark, gpt-5.x-codex, …) silently fell through to the agy branch
-# — which on this repo writes its plugin install copy (no_op + false self-report,
-# memory: agy-writes-install-dir). Match the codex FAMILY, not one string.
-IS_CODEX=0
-IS_GROK=0
-IS_CCSHIM=0
-IS_PI=0
-case "$RUNNER" in
-  codex)   IS_CODEX=1 ;;
-  agy)     ;;
-  grok)    IS_GROK=1 ;;
-  cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
-  pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
-  auto)
-    # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
-    # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
-    # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
-    # a bare model name must NOT silently route there.
-    model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
-    if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
-      IS_CODEX=1
-    elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
-      IS_GROK=1
-    fi
-    ;;
-  *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi (got: $RUNNER)" ;;
-esac
+set_runner_flags() {
+  # Runner selection. Explicit --runner wins; `auto` detects codex from the model
+  # name. The OLD bug: only `*gpt-5.5*` matched, so other codex models
+  # (gpt-5.3-codex-spark, gpt-5.x-codex, …) silently fell through to the agy branch
+  # — which on this repo writes its plugin install copy (no_op + false self-report,
+  # memory: agy-writes-install-dir). Match the codex FAMILY, not one string.
+  IS_CODEX=0
+  IS_GROK=0
+  IS_CCSHIM=0
+  IS_PI=0
+  case "$RUNNER" in
+    codex)   IS_CODEX=1 ;;
+    agy)     ;;
+    grok)    IS_GROK=1 ;;
+    cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
+    pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
+    auto)
+      # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
+      # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
+      # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
+      # a bare model name must NOT silently route there.
+      model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
+      if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
+        IS_CODEX=1
+      elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
+        IS_GROK=1
+      fi
+      ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi (got: $RUNNER)" ;;
+  esac
+}
 
 case "$EFFORT" in
   low|medium|high|xhigh|max) ;;
@@ -539,6 +740,15 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+[ "$STRICT_CONTRACT" -eq 1 ] && [ "$CONTRACT_FILE_SUPPLIED" -eq 0 ] && die_precondition "--contract-file requires --strict-contract"
+[ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] && [ "$STRICT_CONTRACT" -eq 0 ] && die_precondition "--strict-contract requires --contract-file"
+
+if [ "$STRICT_CONTRACT" -eq 1 ]; then
+  run_strict_contract_preflight
+else
+  check_session_mode_gate
+fi
+set_runner_flags
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
   for skill in "${SKILLS[@]}"; do
@@ -1210,6 +1420,7 @@ dispatch_detached_run() {
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI PI_BIN CONTAINMENT CONTAINED EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
+      STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_DEPTH \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \

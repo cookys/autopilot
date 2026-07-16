@@ -172,9 +172,7 @@ function withResolverConfig(configPath, requiredEngineRole) {
     return { path: configPath };
   }
 
-  const needsEffort = requiredEngineRole === 'verification-author'
-    || requiredEngineRole === 'implementer';
-  if (!needsEffort) {
+  if (requiredEngineRole !== 'verification-author') {
     return { path: configPath };
   }
 
@@ -387,9 +385,8 @@ function validateSchema(contract, errors, repoPath = '') {
   }
 
   if (repoPath && typeof repoPath === 'string' && isHex40(contract.base_sha)) {
-    const skipMandatoryMirrorCheck = contract.go && contract.go.required_engine_role === 'verification-author';
     const hasMandatoryMirror = hasPathAtCommit(repoPath, contract.base_sha, REPO_PATH_TOKENS.MANDATORY_MIRROR_PATH);
-    if (!skipMandatoryMirrorCheck && hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
+    if (hasMandatoryMirror && (!contract.scope.generated_mirrors || typeof contract.scope.generated_mirrors !== 'object' || Array.isArray(contract.scope.generated_mirrors))) {
       errors.push('mirror: generated_mirrors must be declared for mandatory codex mirror generation');
     }
   }
@@ -755,12 +752,10 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     return { reasons, specSha: '' };
   }
 
-  if (requiredEngineRole !== 'verification-author') {
-    const status = runGit(repo, ['status', '--porcelain']);
-    if (status.trim().length > 0) {
-      reasons.push('dirty: repository has uncommitted changes');
-      return { reasons, specSha: '' };
-    }
+  const status = runGit(repo, ['status', '--porcelain']);
+  if (status.trim().length > 0) {
+    reasons.push('dirty: repository has uncommitted changes');
+    return { reasons, specSha: '' };
   }
 
   try {
@@ -803,9 +798,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     }
   }
 
-  if (requiredEngineRole !== 'verification-author') {
-    validatePolicyFilePathsAtBase(repo, baseSha, contract.go.required_paths, reasons);
-  }
+  validatePolicyFilePathsAtBase(repo, baseSha, contract.go.required_paths, reasons);
 
   const forbidden = new Set(Array.isArray(contract.no_go.forbidden_actions) ? contract.no_go.forbidden_actions : []);
   for (const key of REQUIRED_NO_GO_KEYS) {

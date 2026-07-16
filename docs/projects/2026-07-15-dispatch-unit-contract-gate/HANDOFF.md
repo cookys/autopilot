@@ -5,15 +5,15 @@
 ## 現況
 
 - Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
-  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery closed at reviewed,
-  pushed MiniMax-r3 terminal commit `3a5e11b7d942bdfb134be91af2d2594feec7563e`. Product tree remains clean;
+  `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from reviewed,
+  pushed MiniMax-r4 authorization commit `85425435b831a39a13d875c07c2bf1909a2e788a`. Product tree remains clean;
   no accepted product/test code。
 - While the r3 roster diff was under review, remote feature commit
   `a93be61f40b12402fb8643854dd3ef59bb02f2f4` merged current `origin/develop`
   `22ed5672809f27e57ff64d6aa84c740e62dc1615` into this branch. The reviewer blocked the stale local
   branch story; depth-0 fetched and fast-forwarded because the remote commit descends from local
-  `9698ad5` and touches none of the four roster/lifecycle files. Terminal commit `3a5e11b` is zero
-  behind / 24 ahead of develop; this MiniMax-r4 authorization advances it to 25 ahead.
+  `9698ad5` and touches none of the four roster/lifecycle files. Authorization commit `8542543` is
+  zero behind / 25 ahead of develop; this MiniMax-r4 terminal restoration advances it to 26 ahead.
 - l6 marker is active. The newest verification-author probe is MiniMax-M3 event 55; Spark implementer
   event 54 remains fresh. Both are `available/high`, and both direct scratch inferences returned `OK`.
 - C1 external run dir: `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/`.
@@ -162,6 +162,13 @@
   zero backtick bytes, defines stdout as the executable, and requires ASCII `#` at byte zero. R3 code
   remains forensic-only and is not reused. Every terminal, NO-GO, abandonment, or inability to begin
   restores GLM config, matching expectations, and README/HANDOFF atomically through review.
+- MiniMax-r4 authorization commit `8542543` passed gpt-5.5 review and was pushed clean. Contract hash
+  is `0162bded597a35caf8eeedaba44db24e97a8253d90cca9ed6d0b8082ff177a21`; zero-backtick prompt hash
+  is `886c1dce67f6db0f9eb11a9d31e4c3074d2509f08dc04ffe4571519367b3cde7`. The exact strict call
+  selected `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`, preserved all 1,466 checkout hashes and
+  clean HEAD/status/diff, then timed out after 5 minutes (`runner_failed`, exit 124) with zero raw
+  bytes. This is `STOP/timeout-no-artifact`, not quota or RED; Spark was not dispatched. Restore GLM
+  atomically, then use fresh GLM readiness and a new tracked contract/prompt rather than replay.
 
 ## 已決事項(不重議)
 
@@ -217,7 +224,8 @@
   neither the file nor stripped content may be promoted. Persistent continuation permits a new
   current-HEAD MiniMax attempt only after atomic restoration and review.
 - MiniMax r4 is that next tracked attempt. It corrects only the wrapper shape via a zero-backtick
-  current-HEAD prompt and may not reuse or strip r3 content.
+  current-HEAD prompt and reused no r3 content. It is terminal `STOP/timeout-no-artifact`. Persistent
+  continuation next selects GLM only after fresh endpoint-backed readiness and reviewed tracking.
 - `containment_breach`, prose/PTY-polluted output, and infrastructure-red are REJECT, even if useful
   code can be quarantined. Quarantine may inform a new author contract but is not accepted code.
 - The old contract is invalid once the blocker-doc commit advances HEAD. Re-freeze base/hash/budgets;
@@ -227,11 +235,11 @@
 
 1. Verify reality: `git fetch origin && git status --short --branch && node scripts/session-mode.js status`
    and read this HANDOFF plus the project attempt ledger. This is phase 2 of 8: P0 is complete, C1 is
-   active on tracked MiniMax r4, and seven phases remain including active C1; C2-C7 are pending.
-2. Review/commit/push the r4 tracked roster and matching dogfood expectations; verify events 55/54
-   and MiniMax/OpenAI separation.
-3. Freeze a new zero-backtick raw-stdout prompt/contract from the clean pushed HEAD. The raw oracle
-   must pass output-shape, checkout-containment, `bash -n`, portable-tool, and isolated RED.
+   active/blocked after MiniMax r4 timeout, and seven phases remain including active C1; C2-C7 are pending.
+2. Review/commit/push atomic GLM restoration with matching dogfood expectations and r4 evidence.
+3. Under persistent continuation, obtain fresh endpoint-backed GLM readiness, review a tracked GLM
+   attempt, and freeze a new current-HEAD contract/prompt. The raw oracle must pass output-shape,
+   checkout-containment, `bash -n`, portable-tool, and isolated RED.
 4. Only after assertion-red succeeds without fixture/import/tool failure, author the implementation
    prompt with the accepted oracle hash, dispatch Spark once, then run GREEN, mirror parity, boundary,
    budgets, and MiniMax-M3 + AGY review.

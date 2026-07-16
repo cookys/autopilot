@@ -95,7 +95,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | Phase | State | Dependency | Exit evidence |
 |---|---|---|---|
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
-| C1 schema/checker | active — tracked MiniMax-M3 recovery r4 | R3 terminal restoration is reviewed/pushed; r4 uses a zero-backtick raw-stdout prompt with byte-zero shebang requirement | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof, roster restored |
+| C1 schema/checker | active/blocked — MiniMax r4 timeout STOP | R4 preserved containment but timed out at 5 minutes with zero raw bytes; GLM config/tests/docs are being restored atomically | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | pending | C1 | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start |
 | C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
@@ -361,6 +361,15 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   coherent fenced code remains forensic-only and is not reused. The temporary tuple is again
   `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`; every terminal or aborted/non-started path
   restores GLM config, tests, and lifecycle docs atomically through review.
+- MiniMax-r4 authorization commit `85425435b831a39a13d875c07c2bf1909a2e788a` passed gpt-5.5
+  review and was pushed clean. Contract SHA-256 is
+  `0162bded597a35caf8eeedaba44db24e97a8253d90cca9ed6d0b8082ff177a21`; zero-backtick prompt
+  SHA-256 is `886c1dce67f6db0f9eb11a9d31e4c3074d2509f08dc04ffe4571519367b3cde7`. The exact strict call
+  selected `MiniMax-M3/cc-shim/high/endpoint minimax/minimax`, preserved all 1,466 checkout hashes
+  plus clean HEAD/status/diff, then reached the 5-minute timeout with `runner_failed` exit 124 and a
+  zero-byte raw log (empty SHA-256). This is `STOP/timeout-no-artifact`, not quota and not REJECT/RED;
+  no Spark dispatch ran. After atomic GLM restoration, persistent continuation selects a freshly
+  probed GLM attempt rather than replaying MiniMax.
 
 ## Dispatch policy
 
@@ -408,7 +417,9 @@ and budgets. Model/quota selection must come from live readiness, not conversati
   fenced file and is terminal `REJECT/output-shape`; any next attempt must be new and cannot strip or
   reuse the fenced code.
 - MiniMax r4 is the next tracked attempt after reviewed restoration. It addresses only the raw wrapper
-  failure with a zero-backtick prompt and grants no reuse of r3 content.
+  failure with a zero-backtick prompt and grants no reuse of r3 content. It timed out with no artifact
+  and is terminal `STOP/timeout-no-artifact`; any GLM continuation requires fresh readiness and a new
+  tracked current-HEAD contract/prompt.
 - Direct model-spending launchers are part of the migration inventory even when they are not named
   `dispatch-*`; the release slash-probe incident is C6.
 

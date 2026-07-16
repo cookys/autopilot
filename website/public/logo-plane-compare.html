@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Logo light / dark</title>
+<style>
+  body{margin:0;font-family:system-ui,"Noto Sans TC",sans-serif;background:#111;color:#e8ecf4;padding:1.5rem}
+  h1{font-size:1.15rem;margin:0 0 .5rem}
+  .sub{color:#9aa3b2;font-size:.9rem;line-height:1.5;max-width:42rem}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.1rem}
+  @media(max-width:720px){.row{grid-template-columns:1fr}}
+  .card{border-radius:14px;padding:1rem;border:1px solid #333}
+  .card h2{margin:0 0 .4rem;font-size:.95rem}
+  .stage{display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap;padding:.85rem;border-radius:10px}
+  .stage figure{margin:0;text-align:center}
+  .stage figcaption{font-size:.65rem;opacity:.7;margin-top:.2rem}
+  .bad{opacity:.55}
+  code{color:#a5b4fc;font-size:.8rem}
+</style>
+<body>
+  <h1>Light theme 怎麼處理</h1>
+  <p class="sub">
+    <b>不能</b>把 dark 的銀灰機體直接用在 light（幾乎隱形）。<br/>
+    Light 專用漆：深 slate 機體 <code>#1E293B</code> + 深靛尾流 + 琥珀鼻 <code>#D97706</code>。
+  </p>
+  <div class="row">
+    <article class="card" style="background:#f4f6f8;color:#0f172a;border-color:#e2e8f0">
+      <h2 style="color:#b45309">Light nav 正確（logo-light）</h2>
+      <div class="stage" style="background:#f4f6f8">
+        <figure><img src="/autopilot/assets/logo-light.svg" width="72" height="72"/><figcaption>64</figcaption></figure>
+        <figure><img src="/autopilot/assets/logo-light.svg" width="28" height="28"/><figcaption>28</figcaption></figure>
+        <figure><img src="/autopilot/assets/logo-light.svg" width="16" height="16"/><figcaption>16</figcaption></figure>
+      </div>
+    </article>
+    <article class="card" style="background:#f4f6f8;color:#0f172a;border-color:#e2e8f0">
+      <h2 style="color:#94a3b8">錯誤：dark 檔丟上 light</h2>
+      <div class="stage bad" style="background:#f4f6f8">
+        <figure><img src="/autopilot/assets/logo-dark.svg" width="72" height="72"/><figcaption>washed out</figcaption></figure>
+        <figure><img src="/autopilot/assets/logo-dark.svg" width="28" height="28"/><figcaption>28</figcaption></figure>
+      </div>
+    </article>
+    <article class="card" style="background:#0b0f14;border-color:#2a3348">
+      <h2 style="color:#f5a524">Dark nav（logo-dark）— 對照</h2>
+      <div class="stage" style="background:#0b0f14">
+        <figure><img src="/autopilot/assets/logo-dark.svg" width="72" height="72"/><figcaption>64</figcaption></figure>
+        <figure><img src="/autopilot/assets/logo-dark.svg" width="28" height="28"/><figcaption>28</figcaption></figure>
+      </div>
+    </article>
+  </div>
+</body>
+</html>

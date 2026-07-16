@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="線性棘輪">
+  <!-- bar -->
+  <path d="M10 40 L48 18" stroke="#5A67D8" stroke-width="7" stroke-linecap="round"/>
+  <!-- 3 teeth -->
+  <path d="M22 36 L28 24 L30 35 Z" fill="#5A67D8"/>
+  <path d="M34 30 L40 18 L42 29 Z" fill="#5A67D8"/>
+  <path d="M44 24 L50 12 L52 23 Z" fill="#5A67D8"/>
+  <!-- pawl (stop-back) -->
+  <path d="M16 22 L28 34 L18 38 Z" fill="#F5A524"/>
+  <circle cx="16" cy="22" r="4" fill="#F5A524"/>
+</svg>

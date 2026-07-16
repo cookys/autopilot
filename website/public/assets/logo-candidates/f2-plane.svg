@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Autopilot plane mark">
+  <!-- Cleaner top-down craft — primary candidate for production -->
+  <!-- trails -->
+  <path d="M6 20 C16 24 22 30 30 32" stroke="#7B87F0" stroke-width="3" stroke-linecap="round"/>
+  <path d="M4 32 H30" stroke="#A78BFA" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M6 44 C16 40 22 36 30 34" stroke="#34D399" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- wings: straight swept (top view) -->
+  <path fill="#F5A524" d="
+    M32 28
+    L12 12
+    L16 16
+    L30 30
+    L30 34
+    L16 48
+    L12 52
+    L32 36
+    Z"/>
+
+  <!-- fuselage + nose -->
+  <path fill="#F5A524" d="
+    M28 28
+    H48
+    L60 32
+    L48 36
+    H28
+    Z"/>
+  <path fill="#B45309" d="M48 28 L62 32 L48 36 Z"/>
+
+  <!-- tailplane (horizontal stabilizer — plane DNA) -->
+  <path fill="#5A67D8" d="M26 26 H36 V28 H26 Z"/>
+  <path fill="#5A67D8" d="M26 36 H36 V38 H26 Z"/>
+  <path fill="#5A67D8" d="M24 29 H28 V35 H24 Z"/>
+
+  <!-- canopy -->
+  <rect x="42" y="29.5" width="5" height="5" rx="0.6" fill="#0B0F14" opacity="0.5"/>
+</svg>

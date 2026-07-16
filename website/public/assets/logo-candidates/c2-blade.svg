@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="異聲成刃">
+  <!-- three input strokes (different cadence) -->
+  <path d="M8 18 C18 14 22 28 28 30" stroke="#7B87F0" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M6 36 L28 32" stroke="#A78BFA" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M10 50 C16 44 22 40 28 34" stroke="#34D399" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 4"/>
+  <!-- weave node -->
+  <circle cx="30" cy="32" r="4" fill="#F5A524"/>
+  <!-- single chisel blade out -->
+  <path d="M30 32 L58 28 L54 36 Z" fill="#F5A524"/>
+  <path d="M30 32 L52 40 L48 44 Z" fill="#B45309" opacity="0.9"/>
+</svg>

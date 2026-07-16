@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="隕石飛機 · autopilot">
+  <!--
+    f2 refined: airplane silhouette (not bird).
+    - Sharp nose + straight swept wings + twin tails = craft, not organic wing curves
+    - 3 engine trails = multi-engine / diverge→converge into locked course
+    - Reads as "you threw the hard constraint; the craft flies itself forward"
+  -->
+  <!-- multi-engine trails (converge into airframe) -->
+  <path d="M4 22 C14 24 20 30 28 34" stroke="#7B87F0" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M2 36 H28" stroke="#A78BFA" stroke-width="3.8" stroke-linecap="round"/>
+  <path d="M4 50 C14 46 20 40 28 36" stroke="#34D399" stroke-width="3.2" stroke-linecap="round"/>
+
+  <!-- fuselage (elongated, flat sides — aircraft not avian) -->
+  <path fill="#F5A524"
+    d="M28 30
+       H46
+       L58 34
+       L46 38
+       H28
+       Z"/>
+  <!-- nose cone (pointed, not beak-round) -->
+  <path fill="#B45309" d="M46 30 L60 34 L46 38 Z"/>
+  <!-- cockpit canopy (small rect, machine) -->
+  <rect x="40" y="31.5" width="5" height="5" rx="0.8" fill="#0B0F14" opacity="0.55"/>
+
+  <!-- main wing: hard swept delta, straight edges -->
+  <path fill="#F5A524"
+    d="M30 34
+       L18 18
+       L24 20
+       L34 32
+       L34 36
+       L24 48
+       L18 50
+       L30 34
+       Z"/>
+  <!-- wing root thicken (geometric) -->
+  <path fill="#E8A838" d="M30 31 L36 34 L30 37 Z"/>
+
+  <!-- twin vertical stabilizers (reads as plane, kills bird reading) -->
+  <path fill="#5A67D8" d="M29 28 L33 22 L35 28 Z"/>
+  <path fill="#5A67D8" d="M29 40 L33 46 L35 40 Z"/>
+</svg>

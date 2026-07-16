@@ -198,6 +198,7 @@ Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證�
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
 | **Hooks** —— 22 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
+| **產品網站**（VitePress，不在 plugin 包內） | [website/](website/) · 計畫 [docs/plans/2026-07-16-product-website.md](docs/plans/2026-07-16-product-website.md) |
 
 ## License
 

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="U 已離席">
+  <!-- continuous run line -->
+  <path d="M6 44 H58" stroke="#5A67D8" stroke-width="5" stroke-linecap="round"/>
+  <!-- baseline nubs where letters sit -->
+  <rect x="8" y="40" width="6" height="8" rx="1" fill="#5A67D8"/>
+  <rect x="50" y="40" width="6" height="8" rx="1" fill="#5A67D8"/>
+  <!-- U lifted off baseline (chair / you left) -->
+  <path d="M24 14 V28 C24 36 40 36 40 28 V14" stroke="#F5A524" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- tiny gap glow under U -->
+  <path d="M26 44 H38" stroke="#34D399" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+</svg>

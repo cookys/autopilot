@@ -1,0 +1,62 @@
+# Build and deploy the product site under website/ to GitHub Pages.
+# Not part of the installable plugin payload.
+name: website
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'website/**'
+      - '.claude-plugin/plugin.json'
+      - 'docs/assets/**'
+      - '.github/workflows/website.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-website
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Sync brand assets from docs/assets
+        run: |
+          mkdir -p website/public/assets
+          cp -f docs/assets/*.svg website/public/assets/
+
+      - name: Install and build
+        working-directory: website
+        env:
+          VITEPRESS_BASE: /autopilot/
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

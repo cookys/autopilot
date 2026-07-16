@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Autopilot">
+  <!-- Squircle app / favicon — solid plate so 16px tab stays legible -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#0B0F14"/>
+  <circle cx="32" cy="32" r="22" stroke="#7B87F0" stroke-width="4.5" fill="none"/>
+  <circle cx="32" cy="32" r="15" stroke="#7B87F0" stroke-width="1.8" fill="none" opacity="0.4"/>
+  <path d="M32 46 V20" stroke="#F5A524" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <circle cx="32" cy="39" r="2.8" fill="#F5A524"/>
+  <circle cx="32" cy="29" r="2.8" fill="#F5A524"/>
+  <path d="M32 10 L41 22 H23 Z" fill="#F5A524"/>
+  <circle cx="32" cy="17.5" r="2" fill="#6EE7B7"/>
+</svg>

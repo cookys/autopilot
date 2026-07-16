@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Autopilot app icon</title>
+  <rect width="64" height="64" rx="14" fill="#0B0F14"/>
+  <path fill="#34D399" d="M3 18h6l11 11h-6L3 23ZM3 29h14l5 3-5 3H3ZM3 41l11-6h6L9 46H3Z"/>
+  <path fill="#5A67D8" d="M28 28 17 19h-7l9 9ZM28 36 17 45h-7l9-9Z"/>
+  <path fill="#5A67D8" d="M44 28 28 10h-8l10 18ZM44 36 28 54h-8l10-18Z"/>
+  <path fill="#F5A524" d="M19 28h27l14 4-14 4H19l-4-4Z"/>
+  <path fill="#34D399" d="M41 29h7l5 3-5 3h-7l2-3Z"/>
+</svg>

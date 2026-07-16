@@ -198,6 +198,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
 | **Hooks** — 22 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
+| **Product website** (VitePress, not in plugin payload) | [website/](website/) · plan [docs/plans/2026-07-16-product-website.md](docs/plans/2026-07-16-product-website.md) |
 
 ## License
 

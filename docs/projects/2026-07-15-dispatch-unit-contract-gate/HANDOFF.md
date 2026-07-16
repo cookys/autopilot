@@ -296,6 +296,16 @@
   strict dispatch (contract a193720b…, base/timeout derived from contract, run
   hetero-1784193093-1455973-206d).
 
+- **C3 COMPLETE (2026-07-16)**. Oracle: 4 GLM surgical rounds total (record-tool naming,
+  output capture, mirror-allowance false-GREEN per gpt-5.5, sanity-gate file-path arg).
+  Implementation ran as the project's first contract-authorized strict dispatches: r1 ended
+  dirty (worker SIGKILLed mid-mirror-sync, exit 137 — autopsied, reaped, non-hostile), r2
+  committed clean (+702/−28, strict fields in final JSON). Depth-0: oracle GREEN 29
+  assertions, C2 52, legacy 93, mirror parity. MiniMax-M3 review self-adjudicated all
+  findings satisfied; ledgered nits: contract absolute-path guard belongs in schema, B3
+  output.paths exact-equality vs directory-style declarations (C7 candidates). The write rail
+  now enforces the full B1-B5 post-return contract from git truth.
+
 ## 已決事項(不重議)
 
 - Keep every authority/boundary/model/fallback decision from the frozen plan and prior HANDOFF.

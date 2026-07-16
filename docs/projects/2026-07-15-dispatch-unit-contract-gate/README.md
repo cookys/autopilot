@@ -1,6 +1,6 @@
 # Dispatch unit contract gate
 
-> Status: ACTIVE — C1+C2 COMPLETE; C3-C7 pending
+> Status: ACTIVE — C1+C2+C3 COMPLETE; C4-C7 pending
 > Target: v2.32.36
 > Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
@@ -97,7 +97,7 @@ The worker may ask for clarification, which produces STOP; it may not widen its 
 | P0 spec freeze and project bootstrap | complete | v2.32.35 design evidence | Plan records schema, authority, boundaries, GO/NO-GO/STOP/REJECT, file map, risks, and units |
 | C1 schema/checker | **COMPLETE** — oracle GREEN (119 assertions), checker merged `9e3c21b` | GLM-authored oracle (direct-HTTP rail, 6 repair rounds, gpt-5.5 SHIP-AS-IS) + Spark-implemented checker (six acceptance checks green at depth-0, oracle bytes pinned, MiniMax-M3 cross-family review no false-GO defect) | Focused GO/NO-GO oracle, stable hashes/exit codes, zero-runner negative proof |
 | C2 write-rail preflight | **COMPLETE** — merged with oracle GREEN (52 assertions) | Strict hetero dispatch derives immutable base/timeout/tuple and blocks mismatch before start; mechanically GO'd contract f34e3030…; MiniMax-M3 SHIP-AS-IS |
-| C3 artifact boundary | pending | C2 | Git-truth allow/deny/file/diff/output/acceptance enforcement |
+| C3 artifact boundary | **COMPLETE** — merged with oracle GREEN (29 assertions) | Git-truth allow/deny/file/diff/output/acceptance enforcement; first contract-authorized strict dispatches (r1 dirty autopsied, r2 clean); MiniMax-M3 reviewed |
 | C4 author rail | pending | C1, C3 | Verification-author contract composition and checkout containment proof |
 | C5 observability/docs | pending | C2-C4 | Status/manifest provenance, canonical docs, mirrors, payload parity |
 | C6 release-probe routing | pending | C1 | Unavailable/unapproved probe proves zero CLI spawn; no hard-coded fallback |

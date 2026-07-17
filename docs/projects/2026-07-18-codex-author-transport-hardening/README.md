@@ -1,6 +1,6 @@
 # Codex author transport hardening
 
-**Status**: In progress  
+**Status**: Complete — merged to develop  
 **Target**: v2.32.54  
 **Branch**: `feat/v2.32.54-author-transport-hardening`  
 **Plan**: [2026-07-18-codex-author-transport-hardening.md](../../plans/2026-07-18-codex-author-transport-hardening.md)  
@@ -34,12 +34,12 @@
 |---|---|---|
 | L-1 preflight + scope audit | Complete | Fresh base/branch frozen; source/package/install and v4.1 invariant drift enumerated. |
 | Engine onboarding | Complete — failed closed | Exact `gpt-5.6-soul` reached Codex 0.144.4 but provider returned HTTP 400 unsupported; no edit/commit, no alias substitution, worktree reaped. |
-| P0 verification contract | In progress | Fresh-base baseline `156/156` test files GREEN; required transport fixtures are being authored and must RED against `661ac139`. |
-| P1 canonical implementation | Pending | Codex transport GREEN; compatibility preserved. |
-| P2 package/release integration | Pending | Payload sync + v2.32.54 metadata. |
-| P3 quality + independent review | Pending | Full gate + hetero verifier + multi-family panel. |
-| P4 reinstall/hash proof | Pending | Source = package = freshly resolved installed cache. |
-| L-5 finish-flow | Pending | Merge/archive/session closeout complete. |
+| P0 verification contract | Complete | Fresh-base baseline `156/156` test files GREEN; 74/37 RED vs base 661ac139; committed 42207d2. |
+| P1 canonical implementation | Complete | Codex transport GREEN; compatibility preserved. |
+| P2 package/release integration | Complete | Payload sync + v2.32.54 metadata. |
+| P3 quality + independent review | Complete | Full gate + hetero verifier + multi-family panel. |
+| P4 reinstall/hash proof | Complete | Source = package = freshly resolved installed cache. |
+| L-5 finish-flow | Complete | Merge/archive/session closeout complete. |
 
 ## Decision log
 

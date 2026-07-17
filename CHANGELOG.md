@@ -24,6 +24,24 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.53 — dispatch/classify/preflight honesty batch (four Fix-level hardenings)
+
+**Headline**: Four small correctness/robustness fixes surfaced by the grok×MiniMax hetero-dispatch working face: dispatch-hetero now names engine-unavailability as its own status instead of misfiling a quota/auth/overload death as `question_suspected`; the error classifier stops over-matching benign "payment required"/"balance exhausted" prose; the OpenCode plugin test gains a timeout guard and a hook-field-mapping regression assertion; and the portability preflight summary counts advisory warnings honestly instead of printing a green "ALL CHECKS PASSED" over a warned advisory.
+
+### Added
+- `engine_unavailable` dispatch-hetero status (ADDITIVE): when a worker exits non-zero and the outcome would be `failure`/`question_suspected`, the error log is classified once (reusing the existing passive-capture classify-error call) and, when it names a known engine-unavailability signal (`quota_exhausted`/`rate_limited`/`auth_failed`/`overloaded`), the status becomes `engine_unavailable` with the classification in the `error` field. Mirrored into `src/runners/implementer.js` `IMPLEMENT_STATUSES` (the fail-closed validate whitelist) and documented in `references/hetero-dispatch.md`. `network_failed`/`unknown` keep the prior status byte-for-byte. Closes the BACKLOG "402 death misclassified as question_suspected" gap.
+
+### Fixed
+- `engine-capability-state.js classify-error`: `payment required` / `balance exhausted` now require an error/status token (`402`/`status`/`error`/`http`) to co-occur before classifying as `quota_exhausted`, so benign prose ("the payment required field on the checkout form") is no longer misclassified. The real grok HTTP 402 log still classifies as `quota_exhausted`. Other quota substrings unchanged.
+- `hooks/tests/opencode-v2-plugin.test.sh`: wrap the `opencode debug config` probe in `timeout 60` (a hung opencode no longer blocks the suite) and add a static field-mapping assertion against `platforms/opencode/plugin/autopilot.ts` so a renamed `tool.execute.after` hook field (`hookInput.args`/`.tool`/`.sessionID`) is caught — the `AUTOPILOT_PLUGIN_SMOKE` path calls `captureIntent` directly and bypasses the hook.
+- `scripts/preflight-portability.sh`: advisory checks are counted independently; the pass summary now reads `ALL HARD CHECKS PASSED (N/N hard checks passed + M advisory-warned)` instead of `ALL CHECKS PASSED (17/17)` when an advisory warned. Exit semantics unchanged — advisory failures never contribute to the exit code.
+
+### Dispatch provenance
+- /l5 grok-4.5 × MiniMax-M3, four sequential units, each `engine implement-review` converged in 1 round (SHIP-AS-IS), artifact-verified (git diff + executable acceptance, never self-report). Codex payload mirror resynced as mechanical glue.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.52 — CEO concept rename: "No-Go Zones" → "Red Lines (紅線)"
 
 **Headline**: Systematic terminology rename of the CEO front-door's fourth startup concept from

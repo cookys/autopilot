@@ -109,3 +109,40 @@ Constraints: bash + git + standard coreutils + node only; no network; no writes 
 `mktemp -d` scratch; must be re-runnable (idempotent); every FAIL path names the failed
 check. The script must NOT source or trust the ported repo's own test files (independence
 from the implementer's oracle is the point).
+
+## U1b fix round — panel findings remediation
+
+Three verified findings from the authoritative review panel to remediate in
+`scripts/dispatch-hetero.sh` and `scripts/dispatch-author.sh` (then regenerate the codex
+payload mirrors):
+
+1. **Restore must never degrade to unset on a failed set.** The current
+   `[ -n "$PRE" ] && git -C ... config user.X "$PRE" || git -C ... config --unset user.X`
+   chains (both keys, both scripts) run the `--unset` branch whenever the SET fails (bash
+   `A && B || C` semantics) — e.g. under `config.lock` contention from concurrent dispatch —
+   removing the identity instead of restoring it. Replace each chain with an explicit
+   `if [ -n "$PRE" ]; then git ... config user.X "$PRE" || <loud warning to stderr>; else
+   git ... config --unset user.X 2>/dev/null || true; fi` so a failed set warns but never
+   unsets a non-empty original.
+2. **Scope-consistent snapshot/restore.** The snapshot reads EFFECTIVE config
+   (`git config user.name`, which falls back to `~/.gitconfig`), but restore writes LOCAL
+   scope — materializing a local override that did not exist pre-run when the repo relied on
+   global identity. The incident vector is the shared `.git/config` (LOCAL scope), so read
+   the snapshot with `git -C <root> config --local user.X` (empty when no local value), and
+   the drift compare + restore stay on local values; an empty pre-value then restores
+   original inheritance via `--unset`. Keep the post-run read on the same `--local` scope.
+   Update `hooks/tests/dispatch-identity-containment.test.sh` ONLY if an assertion depends
+   on effective-scope reads (the mini-repo fixtures set local identity, so behavior should
+   be unchanged); do not weaken any assertion.
+3. **Document the containment boundary honestly.** (a) CHANGELOG v2.32.49 entry: add one
+   line stating the rail contains ONLY `user.name`/`user.email` — other shared-config keys
+   (e.g. `core.hooksPath`, `credential.helper`) remain uncontained, per the repo's standing
+   "containment is teardown hygiene, NOT a malicious-worker boundary" stance. (b)
+   docs/BACKLOG.md: add a follow-up item for broader shared-config key containment /
+   per-worktree config isolation (`extensions.worktreeConfig`), noting two accepted
+   limitations: the drift compare is point-in-time (a worker that sets a bad identity,
+   commits, then restores it before exit is undetected on its own worktree commits), and an
+   escaped descendant could re-poison the shared config after emit-time restore.
+
+Acceptance for this round is unchanged (the same five commands from the U1 section must all
+exit 0 on the fixed tree).

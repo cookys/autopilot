@@ -275,11 +275,15 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
   let mergedSkill = null;
 
   for (const row of rows) {
-    if (row.runner !== runner || row.model !== model || row.role !== role) {
+    if (row.runner !== runner || row.model !== model) {
       continue;
     }
 
-    // Process capability.quota
+    // Process capability.quota — ROLE-AGNOSTIC: quota is a per-MODEL pool (subscription
+    // pools and endpoint wallets are account-level, not role-level). Keying the merge on
+    // role fragmented the pool: a live 'available' probe recorded under role=reviewer
+    // could never clear a stale-but-unexpired 'exhausted' recorded under role=implementer
+    // (2026-07-17 grok incident, events 13 vs 15). skill_transport below stays role-keyed.
     if (row.capability && row.capability.quota) {
       const q = row.capability.quota;
       const observedMs = toDateMs(row.observed_at) || nowMs;
@@ -308,6 +312,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
         ttl_seconds,
         isExpired,
         observedMs,
+        sourceRole: row.role,
         eventId: toEventId(row.event_id) || 0
       };
 
@@ -360,7 +365,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
     // INDEPENDENTLY): a native-only bench must NOT clobber a prior prompt_pack result and
     // vice versa. For each field, the latest event whose value is not 'unknown' wins;
     // last_bench_id follows the latest skill event overall. (gpt-5.5 batch2 R2 M1)
-    if (row.capability && row.capability.skill_transport) {
+    if (row.role === role && row.capability && row.capability.skill_transport) {
       const s = row.capability.skill_transport;
       const eid = toEventId(row.event_id) || 0;
       if (!mergedSkill) {
@@ -425,7 +430,10 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
         reset_at: quotaResetAt,
         confidence: quotaConfidence,
         evidence: quotaEvidence,
-        ttl_seconds: quotaTtlSeconds
+        ttl_seconds: quotaTtlSeconds,
+        // Output-only (not part of the recorded event schema): which role's observation
+        // won the role-agnostic per-model merge. Provenance for cross-role clears.
+        source_role: mergedQuota ? mergedQuota.sourceRole : null
       },
       skill_transport: {
         native: skillNative,
@@ -625,17 +633,24 @@ function main() {
     const { storeFile } = resolveStoreConfig(options);
     const rows = readStoreRows(storeFile, true);
 
-    // Group rows by runner, model, role
+    // Group rows by (runner, model) — quota is a per-MODEL pool (role-agnostic merge),
+    // so per-role grouping would emit duplicate/contradictory rows for the same pool.
     const groups = new Map();
     for (const row of rows) {
-      const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
-      groups.set(key, { runner: row.runner, model: row.model, role: row.role });
+      const key = `${row.runner}\u0000${row.model}`;
+      groups.set(key, { runner: row.runner, model: row.model });
     }
 
     const mergedList = [];
-    for (const { runner, model, role } of groups.values()) {
-      const merged = mergeCurrentState(rows, runner, model, role, nowMs);
-      if (merged.capability && merged.capability.quota && merged.capability.quota.status !== 'unknown') {
+    for (const { runner, model } of groups.values()) {
+      // First pass (role null) resolves the winning quota observation; the emitted row's
+      // role echoes that observation's source role, and skill_transport follows it.
+      const probe = mergeCurrentState(rows, runner, model, null, nowMs);
+      const q = probe.capability && probe.capability.quota;
+      if (q && q.status !== 'unknown') {
+        const merged = (q.source_role != null)
+          ? mergeCurrentState(rows, runner, model, q.source_role, nowMs)
+          : probe;
         mergedList.push(merged);
       }
     }

@@ -720,6 +720,11 @@ fi
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
+  # Honest timeout parse BEFORE any runner start: unparseable → precondition,
+  # never a silent 300s default inside the transport.
+  if ! codex_transport_timeout_seconds "$TIMEOUT" >/dev/null; then
+    die_precondition "invalid --timeout value: $TIMEOUT"
+  fi
   # READ-ONLY by posture only; codex is the same sandboxed runner used for
   # review in dispatch-review.sh and is the strongest default isolation option
   # available here.

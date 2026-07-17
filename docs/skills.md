@@ -118,7 +118,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 
 ### L3 / L4 / L5 / L6 — CEO Front-Door Ladder
 
-`/l3`, `/l4`, `/l5`, and `/l6` are **terse front-doors into `ceo-agent`**. Each pre-fills the four CEO startup questions — involvement = just-results (full autonomy, notify on done), scope = Hold, no-go = none — so a single line ships the goal without the startup Q&A. They differ only in **where the implementation and verification-authoring labor runs**; the depth-0 control loop and every quality gate are identical, nothing is skipped.
+`/l3`, `/l4`, `/l5`, and `/l6` are **terse front-doors into `ceo-agent`**. Each pre-fills the four CEO startup questions — involvement = just-results (full autonomy, notify on done), scope = Hold, red-lines = none — so a single line ships the goal without the startup Q&A. They differ only in **where the implementation and verification-authoring labor runs**; the depth-0 control loop and every quality gate are identical, nothing is skipped.
 
 | Level | Command | Where it runs | Reach for it when |
 |-------|---------|---------------|-------------------|

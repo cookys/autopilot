@@ -163,7 +163,7 @@ scope=Hold; red-lines=none) and set the execution posture:
   engine (different family than the implementer, via the `dispatch-author.sh` raw-prompt
   rail); depth-0 keeps merge authority and the authoritative qc.
 
-Overrides: `-x <csv>` (no-go), `--expand` (scope), `--solo` (autonomy without offload
+Overrides: `-x <csv>` (red lines), `--expand` (scope), `--solo` (autonomy without offload
 — also the degradation fallback when the foreman can't start). Full semantics
 (topology, the P0-verified kill+reap mechanism, run-summary ledger):
 [`references/level-front-door.md`](references/level-front-door.md).

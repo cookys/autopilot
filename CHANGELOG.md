@@ -35,17 +35,21 @@ trigger ("Use when:" / "Not for:" / skill names) was altered. The `-x <csv>` ove
 dispatch-contract "GO / NO-GO" term are untouched (different concepts).
 
 ### Changed
-- 14 occurrences across 7 files renamed: `skills/ceo-agent/SKILL.md` (4), `skills/l3/SKILL.md` (2),
-  `skills/l4/SKILL.md` (1), `skills/l5/SKILL.md` (1), `skills/l6/SKILL.md` (1),
-  `skills/ceo-agent/references/level-front-door.md` (3), `docs/skills.md` (2). Codex plugin payload
-  mirror re-synced (`sync-codex-plugin-skills.sh`).
+- 16 occurrences across 7 files renamed: `skills/ceo-agent/SKILL.md` (5 — incl. the `-x` override
+  gloss, aligned per QC panel), `skills/l3/SKILL.md` (2), `skills/l4/SKILL.md` (1),
+  `skills/l5/SKILL.md` (1), `skills/l6/SKILL.md` (1), `skills/ceo-agent/references/level-front-door.md`
+  (3), `docs/skills.md` (3 — incl. the spaced `no-go = none` variant at L121 the initial inventory
+  missed; caught by the depth-0 QC panel). Codex plugin payload mirror re-synced
+  (`sync-codex-plugin-skills.sh`).
 - Frontmatter `description:` fields (l3/l4/l5/l6) changed only the preset descriptor
   `no-go=none` → `red-lines=none`; per-skill frontmatter diff = exactly that one line each.
 
 ### Verification (routing-regression gate — the substance of this change)
 - **slash-entry probe 5/5 PASS** (`AUTOPILOT_SLASH_PROBE=1 hooks/tests/slash-entry-probe.test.sh`):
   all five thin-shell entries (/l3 /l4 /l5 /l6 /think-tank-dialectic) resolve their MUST-READ
-  references by Read-tool artifact — thin-shell routing intact.
+  references by Read-tool artifact — thin-shell routing intact. (Probe ran against the installed
+  pre-rename plugin baseline: it validates the routing mechanism; the change-specific proof is the
+  word-by-word description diff + validate.sh below.)
 - `validate.sh` 28/28 skills structurally valid; word-by-word description diff confirms only the
   intended tokens changed (no trigger displacement).
 - Natural-behavior probe: /l5 (renamed) PASSED; one FAIL on `think-tank-dialectic` (a skill NOT

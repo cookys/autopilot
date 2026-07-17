@@ -79,6 +79,19 @@ codex_transport_check_all_artifacts() {
   return 0
 }
 
+# True if pid is a live non-zombie process (excludes self and pid 0/1).
+codex_transport_pid_is_live() {
+  local pid="$1"
+  local state
+  case "$pid" in
+    ''|*[!0-9]*|0|1) return 1 ;;
+  esac
+  [ "$pid" = "$$" ] && return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  state="$(awk '{ print $3 }' "/proc/$pid/stat" 2>/dev/null || true)"
+  [ "$state" != "Z" ]
+}
+
 # True if any non-zombie process remains in the process group.
 codex_transport_pgid_has_live() {
   local pgid="$1"
@@ -97,6 +110,61 @@ codex_transport_pgid_has_live() {
   return 1
 }
 
+# Recursively emit children of pid via /proc/<pid>/task/*/children (setsid-safe walk).
+codex_transport_walk_children() {
+  local pid="$1"
+  local f child
+  case "$pid" in
+    ''|*[!0-9]*|0|1) return 0 ;;
+  esac
+  for f in /proc/"$pid"/task/*/children; do
+    [ -r "$f" ] || continue
+    # shellcheck disable=SC2013
+    for child in $(cat "$f" 2>/dev/null || true); do
+      case "$child" in ''|*[!0-9]*) continue ;; esac
+      printf '%s\n' "$child"
+      codex_transport_walk_children "$child"
+    done
+  done
+}
+
+# Snapshot worker descendants ∪ process-group members (unique pids, one per line).
+# Additive over pgid: keeps group members and also setsid-escaped PPID descendants.
+codex_transport_snapshot_tree_pids() {
+  local worker_pid="$1"
+  local pgid="$2"
+  {
+    case "$worker_pid" in
+      ''|*[!0-9]*) ;;
+      *)
+        printf '%s\n' "$worker_pid"
+        codex_transport_walk_children "$worker_pid"
+        ;;
+    esac
+    case "$pgid" in
+      ''|*[!0-9]*|0|1) ;;
+      *)
+        # shellcheck disable=SC2009
+        ps -o pid= -g "$pgid" 2>/dev/null || true
+        ;;
+    esac
+  } | tr -s '[:space:]' '\n' | while read -r pid; do
+    case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
+    [ "$pid" = "$$" ] && continue
+    printf '%s\n' "$pid"
+  done | sort -u
+}
+
+# True if any pid in the newline-separated set is still live (non-zombie).
+codex_transport_pidset_has_live() {
+  local pidset="$1"
+  local pid
+  while IFS= read -r pid; do
+    codex_transport_pid_is_live "$pid" && return 0
+  done <<< "$pidset"
+  return 1
+}
+
 codex_transport_kill_tree() {
   local pgid="$1"
   local signal="${2:-TERM}"
@@ -106,51 +174,117 @@ codex_transport_kill_tree() {
   kill "-$signal" -- "-$pgid" 2>/dev/null || true
 }
 
-# Reap remaining members of pgid within a fixed cleanup budget (seconds).
-# TERM first, then KILL after 1s; hard stop at budget. Returns 0 if clean.
+# Signal every pid in a newline-separated set (individual kills; covers setsid escapees).
+codex_transport_kill_pidset() {
+  local signal="$1"
+  local pidset="$2"
+  local pid
+  while IFS= read -r pid; do
+    case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
+    [ "$pid" = "$$" ] && continue
+    kill "-$signal" "$pid" 2>/dev/null || true
+  done <<< "$pidset"
+}
+
+# Union two newline-separated pid sets (unique, stable).
+codex_transport_merge_pidsets() {
+  printf '%s\n%s\n' "${1-}" "${2-}" | tr -s '[:space:]' '\n' | while read -r pid; do
+    case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
+    [ "$pid" = "$$" ] && continue
+    printf '%s\n' "$pid"
+  done | sort -u
+}
+
+# Reap remaining members of the worker tree within a fixed cleanup budget (seconds).
+# Snapshots descendants∪pgid before signalling; TERM first, then KILL after 1s;
+# hard stop at budget. Returns 0 if clean (no live survivors in the same set).
+# The initial snapshot is retained for the whole budget so setsid escapees remain
+# addressable after their PPID chain is torn down (orphans reparent to init).
+# Args: pgid [budget_s] [worker_pid]
 codex_transport_reap_tree() {
   local pgid="$1"
   local budget_s="${2:-10}"
-  local start now
+  local worker_pid="${3:-}"
+  local start now pidset fresh
   case "$pgid" in
-    ''|*[!0-9]*|0|1) return 0 ;;
+    ''|*[!0-9]*|0|1)
+      # Still try worker-rooted descendants when pgid is unusable.
+      case "$worker_pid" in
+        ''|*[!0-9]*) return 0 ;;
+      esac
+      ;;
   esac
-  if ! codex_transport_pgid_has_live "$pgid"; then
+
+  # Snapshot BEFORE any signal so setsid escapees are recorded while the
+  # PPID chain is still intact.
+  pidset="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+  if ! codex_transport_pidset_has_live "$pidset" && ! codex_transport_pgid_has_live "$pgid"; then
     return 0
   fi
+
   codex_transport_kill_tree "$pgid" TERM
+  codex_transport_kill_pidset TERM "$pidset"
+
   start="$(date +%s)"
-  while codex_transport_pgid_has_live "$pgid"; do
+  while codex_transport_pidset_has_live "$pidset" || codex_transport_pgid_has_live "$pgid"; do
     now="$(date +%s)"
+    # Additive re-snapshot: never drop pids already seen (PPID walk goes blind
+    # once parents die and children reparent to init).
+    fresh="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+    pidset="$(codex_transport_merge_pidsets "$pidset" "$fresh")"
     if [ $((now - start)) -ge 1 ]; then
       codex_transport_kill_tree "$pgid" KILL
+      codex_transport_kill_pidset KILL "$pidset"
     fi
     if [ $((now - start)) -ge "$budget_s" ]; then
       codex_transport_kill_tree "$pgid" KILL
+      codex_transport_kill_pidset KILL "$pidset"
       break
     fi
     sleep 0.1
   done
+  fresh="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+  pidset="$(codex_transport_merge_pidsets "$pidset" "$fresh")"
   codex_transport_kill_tree "$pgid" KILL
-  if codex_transport_pgid_has_live "$pgid"; then
+  codex_transport_kill_pidset KILL "$pidset"
+  if codex_transport_pidset_has_live "$pidset" || codex_transport_pgid_has_live "$pgid"; then
     return 1
   fi
   return 0
 }
 
-# Normalize timeout specs like "5m", "30s", or bare seconds → integer seconds.
+# GNU timeout duration grammar → ceiling integer seconds.
+# NUMBER[SUFFIX] with optional fractional NUMBER; SUFFIX ∈ s|m|h|d (bare = seconds).
+# Zero/negative clamp to 1. Unparseable → return 1 (caller fail-closes as precondition).
 codex_transport_timeout_seconds() {
   local t="$1"
-  if [[ "$t" =~ ^([0-9]+)m$ ]]; then
-    printf '%s' "$((BASH_REMATCH[1] * 60))"
-    return 0
-  fi
-  if [[ "$t" =~ ^([0-9]+)s$ ]]; then
-    printf '%s' "${BASH_REMATCH[1]}"
-    return 0
-  fi
-  if [[ "$t" =~ ^[0-9]+$ ]]; then
-    printf '%s' "$t"
+  local num suffix mult secs
+  case "$t" in
+    ''|*[!0-9smhd.]* ) return 1 ;;
+  esac
+  if [[ "$t" =~ ^([0-9]+(\.[0-9]*)?|\.[0-9]+)([smhd])?$ ]]; then
+    num="${BASH_REMATCH[1]}"
+    suffix="${BASH_REMATCH[3]:-s}"
+    case "$suffix" in
+      s) mult=1 ;;
+      m) mult=60 ;;
+      h) mult=3600 ;;
+      d) mult=86400 ;;
+      *) return 1 ;;
+    esac
+    # Ceiling of num*mult via awk (no bc dependency); clamp ≤0 → 1.
+    secs="$(awk -v n="$num" -v m="$mult" 'BEGIN {
+      v = n * m;
+      if (v <= 0) { print 1; exit }
+      c = int(v);
+      if (v > c) c = c + 1;
+      if (c < 1) c = 1;
+      printf "%d", c;
+    }')" || return 1
+    case "$secs" in
+      ''|*[!0-9]*) return 1 ;;
+    esac
+    printf '%s' "$secs"
     return 0
   fi
   return 1
@@ -176,7 +310,12 @@ codex_transport_run() {
   RUNNER_EXIT=0
 
   local deadline_secs
-  deadline_secs="$(codex_transport_timeout_seconds "$timeout_spec")" || deadline_secs=300
+  # Fail closed: unparseable timeout must never silently default (pre-validated
+  # by dispatch-author.sh; double-check here so a direct caller cannot mis-run).
+  if ! deadline_secs="$(codex_transport_timeout_seconds "$timeout_spec")"; then
+    RUNNER_EXIT=2
+    return 1
+  fi
   # Guard against zero/negative (would fire immediately).
   if [ "$deadline_secs" -lt 1 ]; then
     deadline_secs=1
@@ -184,8 +323,8 @@ codex_transport_run() {
 
   # New session ⇒ process-group identity is the session leader (setsid child).
   # Redirections attach before exec so the worker and same-group descendants
-  # inherit the private capture fds. setsid-escaped grandchildren intentionally
-  # leave the group (legacy settle path); same-group late writers are incomplete.
+  # inherit the private capture fds. setsid-escaped grandchildren leave the
+  # group; reap_tree walks PPID descendants so they are still reaped.
   setsid "$bin" exec --model "$model" \
     --sandbox read-only \
     -c "model_reasoning_effort=\"$effort\"" \
@@ -212,7 +351,7 @@ codex_transport_run() {
   # shellcheck disable=SC2034
   CODEX_WORKER_PGID="$pgid"
 
-  local start now state
+  local start now state pidset
   start="$(date +%s)"
   local timed_out=0
 
@@ -234,14 +373,16 @@ codex_transport_run() {
     # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
     # shellcheck disable=SC2034
     CODEX_DEADLINE_HIT=1
-    codex_transport_reap_tree "$pgid" 10 || CODEX_INCOMPLETE_TREE=1
+    codex_transport_reap_tree "$pgid" 10 "$worker_pid" || CODEX_INCOMPLETE_TREE=1
     wait "$worker_pid" 2>/dev/null || true
     # Canonical deadline status for consumers (matches GNU timeout).
     RUNNER_EXIT=124
-    # Final survivor check after wait.
-    if codex_transport_pgid_has_live "$pgid"; then
+    # Final survivor check after wait (descendants ∪ pgid, including setsid escapees).
+    pidset="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+    if codex_transport_pidset_has_live "$pidset" || codex_transport_pgid_has_live "$pgid"; then
       CODEX_INCOMPLETE_TREE=1
       codex_transport_kill_tree "$pgid" KILL
+      codex_transport_kill_pidset KILL "$pidset"
     fi
     return 0
   fi
@@ -251,17 +392,22 @@ codex_transport_run() {
   # shellcheck disable=SC2034
   RUNNER_EXIT=$?
 
-  # Frontend returned: same-group descendants mean incomplete tree (never recovery).
-  if codex_transport_pgid_has_live "$pgid"; then
+  # Frontend returned: live descendants (incl. setsid escapees) ⇒ incomplete tree.
+  pidset="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+  if codex_transport_pidset_has_live "$pidset" || codex_transport_pgid_has_live "$pgid"; then
     # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
     # shellcheck disable=SC2034
     CODEX_INCOMPLETE_TREE=1
-    codex_transport_reap_tree "$pgid" 10 || true
+    codex_transport_reap_tree "$pgid" 10 "$worker_pid" || true
   fi
   return 0
 }
 
-# True when stderr has a complete initial chrome frame (two -------- delimiters).
+# True when stderr has a complete INITIAL chrome frame anchored at start:
+# first non-empty line = version banner (not a delimiter), next line = opening
+# "--------", then body to the next "--------". Pre-banner content or a
+# delimiter before the banner invalidates the frame (fail closed). Delimiter
+# blocks after the initial frame are ignored.
 codex_transport_has_chrome_frame() {
   local stderr_path="$1"
   [ -r "$stderr_path" ] || return 1
@@ -269,13 +415,17 @@ codex_transport_has_chrome_frame() {
 const fs = require("fs");
 const raw = fs.readFileSync(process.argv[1]);
 const lines = raw.toString("binary").split("\n");
-let state = 0;
-for (const line of lines) {
-  const t = line.replace(/\r$/, "");
-  if (t === "--------") {
-    if (state === 0) { state = 1; continue; }
-    if (state === 1) { process.exit(0); }
-  }
+const strip = (s) => s.replace(/\r$/, "");
+let i = 0;
+while (i < lines.length && strip(lines[i]) === "") i++;
+if (i >= lines.length) process.exit(1);
+const banner = strip(lines[i]);
+if (banner === "--------") process.exit(1);
+i += 1;
+if (i >= lines.length || strip(lines[i]) !== "--------") process.exit(1);
+i += 1;
+for (; i < lines.length; i++) {
+  if (strip(lines[i]) === "--------") process.exit(0);
 }
 process.exit(1);
 ' "$stderr_path" 2>/dev/null
@@ -299,7 +449,10 @@ process.exit(1);
 ' "$stdout_path" "$sidecar_path" 2>/dev/null
 }
 
-# Extract exactly one canonical session id from the initial chrome frame.
+# Extract exactly one canonical session id from the INITIAL chrome frame only.
+# Frame anchoring matches codex_transport_has_chrome_frame: banner at first
+# non-empty line, opening -------- immediately after, body to next --------.
+# Delimiter blocks after the anchored frame never supply or override a session id.
 # Prints the UUID on success; exits nonzero on any ambiguity/malformed/missing.
 codex_transport_extract_session_id() {
   local stderr_path="$1"
@@ -308,18 +461,23 @@ codex_transport_extract_session_id() {
 const fs = require("fs");
 const raw = fs.readFileSync(process.argv[1]);
 const lines = raw.toString("binary").split("\n");
+const strip = (s) => s.replace(/\r$/, "");
+let i = 0;
+while (i < lines.length && strip(lines[i]) === "") i++;
+if (i >= lines.length) process.exit(1);
+const banner = strip(lines[i]);
+if (banner === "--------") process.exit(1);
+i += 1;
+if (i >= lines.length || strip(lines[i]) !== "--------") process.exit(1);
+i += 1;
 const frame = [];
-let state = 0;
-for (const line of lines) {
-  const t = line.replace(/\r$/, "");
-  if (t === "--------") {
-    if (state === 0) { state = 1; continue; }
-    if (state === 1) { state = 2; break; }
-  } else if (state === 1) {
-    frame.push(t);
-  }
+let closed = false;
+for (; i < lines.length; i++) {
+  const t = strip(lines[i]);
+  if (t === "--------") { closed = true; break; }
+  frame.push(t);
 }
-if (state !== 2) process.exit(1);
+if (!closed) process.exit(1);
 const re = /^session id: ([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
 const matches = [];
 for (const line of frame) {

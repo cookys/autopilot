@@ -24,12 +24,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: L
 - **Source**: health-roadmap P6 Decision Brief（2026-07-17）
 
-### jest/vitest version-key parity gate（P5 QC Minor）
-- **Trigger**: 下次 bump check-test-integrity-l1 的 jest/vitest pin 時；或下次動 sync-manifest 時順手
-- **Context**: `.github/workflows/test.yml` 的 actions/cache key 與 test 腳本內 pin 是兩份手抄常數，飄移＝CI 每輪重裝＋registry flake 時 L1 real-runtime 案例靜默 SKIP（綠著失去覆蓋）；natural home＝sync-manifest parity 檢查
-- **Effort**: Fix
-- **Source**: P5 depth-0 QC（opus lens）2026-07-17
-
 
 ## Format example
 
@@ -56,12 +50,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: 2026-07-17 grok 以 `API error (status 402 Payment Required): Grok Build usage balance exhausted` 死掉、exit 1，dispatch-hetero 走 `question_suspected`（agent exit 1、無 commit ⇒ 疑似停在澄清問題），depth-0 得手動記 quota。v2.32.50 已讓 `engine-capability-state classify-error` 認得該 pattern（`balance exhausted`／`payment required`→`quota_exhausted`），但 **dispatch-hetero 本身仍把它籠統標 `question_suspected`**——剩下的一半是：dispatch-hetero 在 exit≠0 時先跑 `classify-error`（吃 agent_log），若判到 `quota_exhausted`／`rate_limited`／`auth_failed`／`overloaded` 就標對應狀態（而非 `question_suspected`），讓 passive capture 與 depth-0 一眼看出是斷糧而非卡問題。
 - **Effort**: Fix
 - **Source**: 2026-07-17 /l5 run C（grok 402 事故）
-
-### 「No-go zones」→「red lines／紅線」系統性改名 — 產品敘事詞彙與 CEO 啟動問答的術語分裂
-- **Trigger**: 下次改動 `skills/ceo-agent/SKILL.md` 或 `/l3`–`/l6` 前門的啟動問答／preset 文字時（順路做），或決定做一次 routing-regression 驗證時。
-- **Context**: 網站凍結敘事已統一 紅線/red lines（no-go 已從 site/README 清除），但 CEO 啟動 Q4 的概念名仍是「No-Go Zones (Hard Constraints)」，散佈於 ceo-agent/l3–l6 SKILL.md frontmatter descriptions（含 `no-go=none` preset 字串）、level-front-door.md、docs/skills.md。frontmatter description 是 routing trigger——改字有 routing 位移風險，需搭配 skill-routing 回歸驗證（slash-entry probe＋手測觸發語），不可 drive-by。2026-07-16 敘事對齊掃描（narrative-drift scan）flag 為系統性項目。
-- **Effort**: Fix（改名本身小；驗證成本是主體）
-- **Source**: 2026-07-16 narrative-alignment sweep（v2.32.38）
 
 ### engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用
 - **Trigger**: 下次要在 `engine implement-review` 迴圈裡用 endpoint-backed reviewer（GLM/MiniMax via cc-shim `--endpoint`），或碰 `src/engine/autopilot-engine.js` buildReviewArgs 段時。

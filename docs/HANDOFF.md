@@ -7,6 +7,7 @@ Mid-work session-continuation scratchpad (untracked-by-convention; refreshed eac
 - **Run A**（shipped）— L1 harness 韌性修（cache-key parity gate v2.32.49、CI go-detect timeout v2.32.48、case-6b GOTOOLCHAIN hardening）。
 - **Run C**（shipped v2.32.50）— OpenCode 1.17 plugin 遷移（check 15 根治：prerelease `@opencode-ai/plugin/v2` subpath 不存在被 loader 靜默吞→改文件化 `{id, server}` shape）＋ preflight check 16 降級 advisory（上游 `opencode debug skill` 截斷）＋ `classify-error` 認得 grok 402 balance-exhausted 為 `quota_exhausted`。
 - **C-Spike**（SPIKE-PASS 2026-07-17）— codex loader 端到端接受 install 時生成的 payload（marketplace add + plugin add → `installed/enabled:true`），sync 腳本零 git 依賴。
+- **Run D**（shipped v2.32.52）— 「No-Go Zones」→「Red Lines (紅線)」16 處 7 檔改名；routing 驗證＝逐字 description diff（frontmatter 僅 preset token 一行）＋validate 28/28＋slash probe 5/5（機制驗證，跑在改名前安裝版——**變更後安裝版驗證留待下次重啟後自然發生**）；panel 抓回帶空格變體漏網＋`-x` gloss 對齊。natural-probe dialectic FAIL 裁定 PRE_EXISTING（未觸碰 skill＋pre-rename baseline）。BACKLOG 改名與 parity-gate 條目已核銷。
 
 ## 下一步 (next)
 

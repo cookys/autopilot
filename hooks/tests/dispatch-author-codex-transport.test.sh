@@ -34,6 +34,8 @@ FAKE_GRANDCHILD_PID_FILE="$TEST_TMP/fake.grandchild-pid"
 FAKE_SETSID_PID_FILE="$TEST_TMP/fake.setsid-pid"
 FAKE_LATE_PID_FILE="$TEST_TMP/fake.late-pid"
 FAKE_ORPHAN_PID_FILE="$TEST_TMP/fake.orphan-pid"
+FAKE_DEADLINE_ORPHAN_PID_FILE="$TEST_TMP/fake.deadline-orphan-pid"
+FAKE_DELETED_FD_PID_FILE="$TEST_TMP/fake.deleted-fd-pid"
 FAKE_PGID_FILE="$TEST_TMP/fake.pgid"
 FAKE_TERM_MARKER="$TEST_TMP/fake.term-observed"
 FAKE_ATTACK_MARKER="$TEST_TMP/fake.attack-observed"
@@ -43,7 +45,7 @@ FAKE_SYMLINK_TARGET="$TEST_TMP/attacker-sidecar-target"
 export UUID_A UUID_B CANDIDATE_BYTES STDERR_SECRET
 export FAKE_ARGV_LOG FAKE_RUN_COUNT_FILE FAKE_SIDECAR_PATH_FILE
 export FAKE_STDOUT_TARGET_FILE FAKE_STDERR_TARGET_FILE FAKE_PARENT_PID_FILE
-export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_SETSID_PID_FILE FAKE_LATE_PID_FILE FAKE_ORPHAN_PID_FILE
+export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_SETSID_PID_FILE FAKE_LATE_PID_FILE FAKE_ORPHAN_PID_FILE FAKE_DEADLINE_ORPHAN_PID_FILE FAKE_DELETED_FD_PID_FILE
 export FAKE_PGID_FILE FAKE_TERM_MARKER FAKE_ATTACK_MARKER
 export FAKE_HARDLINK_PATH FAKE_SYMLINK_TARGET
 
@@ -63,7 +65,7 @@ pid_file_alive() {
 recorded_survivor_count() {
   local count=0
   local file
-  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE"; do
+  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE" "$FAKE_DEADLINE_ORPHAN_PID_FILE" "$FAKE_DELETED_FD_PID_FILE"; do
     if pid_file_alive "$file"; then
       count=$((count + 1))
     fi
@@ -91,7 +93,7 @@ cleanup_transport_processes() {
       ;;
   esac
 
-  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE"; do
+  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE" "$FAKE_DEADLINE_ORPHAN_PID_FILE" "$FAKE_DELETED_FD_PID_FILE"; do
     [ -r "$file" ] || continue
     pid="$(cat "$file" 2>/dev/null || true)"
     case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
@@ -318,6 +320,32 @@ case "${FAKE_SCENARIO:-exact}" in
     write_complete_pair
     exit 0
     ;;
+  deadline_setsid_orphan)
+    setsid bash -c '
+      trap "" TERM
+      printf "%s\n" "$BASHPID" > "$FAKE_DEADLINE_ORPHAN_PID_FILE"
+      sleep 30
+    ' &
+    sleep 0.1
+    write_complete_pair
+    trap 'printf "%s" "LATE-BYTES-MUST-NOT-RECOVER"; : > "$FAKE_TERM_MARKER"; exit 0' TERM
+    sleep 30
+    exit 0
+    ;;
+  orphan_deleted_fd_holder)
+    setsid bash -c '
+      trap "" TERM
+      printf "%s\n" "$BASHPID" > "$FAKE_DELETED_FD_PID_FILE"
+      target_path="$(cat "$FAKE_STDOUT_TARGET_FILE" 2>/dev/null)"
+      if [ -n "$target_path" ]; then
+        rm -f "$target_path"
+      fi
+      sleep 30
+    ' &
+    sleep 0.1
+    write_complete_pair
+    exit 0
+    ;;
   *)
     printf 'unknown fake scenario: %s\n' "${FAKE_SCENARIO:-}" >&2
     exit 97
@@ -419,7 +447,9 @@ reset_observation() {
     "$FAKE_ARGV_LOG" "$FAKE_RUN_COUNT_FILE" "$FAKE_SIDECAR_PATH_FILE" \
     "$FAKE_STDOUT_TARGET_FILE" "$FAKE_STDERR_TARGET_FILE" \
     "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" \
-    "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE" "$FAKE_PGID_FILE" "$FAKE_TERM_MARKER" \
+    "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE" \
+    "$FAKE_DEADLINE_ORPHAN_PID_FILE" "$FAKE_DELETED_FD_PID_FILE" \
+    "$FAKE_PGID_FILE" "$FAKE_TERM_MARKER" \
     "$FAKE_ATTACK_MARKER" "$FAKE_HARDLINK_PATH" "$FAKE_SYMLINK_TARGET"
 }
 
@@ -762,6 +792,107 @@ else
   cleanup_transport_processes
   if ! poll_until 3 all_recorded_processes_dead; then
     fail "orphan writer exit0: test cleanup could not reap all recorded fixture processes"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Negative control: deadline_setsid_orphan
+# ---------------------------------------------------------------------------
+run_deadline_setsid_orphan_case() {
+  local out_file="$TEST_TMP/deadline-orphan-result.json"
+  local err_file="$TEST_TMP/deadline-orphan-wrapper.stderr"
+  local outer_pid start now max_wait
+
+  reset_observation
+  : > "$out_file"
+  : > "$err_file"
+  setsid env \
+    HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" \
+    DISPATCH_QUIET=1 DISPATCH_DETACH=0 AUTOPILOT_TMP_LOG_RETENTION_DAYS=0 \
+    AUTOPILOT_SETTLE_MS=0 AUTOPILOT_EMPTY_GRACE_MS=0 AUTOPILOT_STABLE_POLLS=1 \
+    FAKE_SCENARIO=deadline_setsid_orphan \
+    "$SCRIPT" --runner codex --model gpt-5.5 --effort xhigh --timeout 1s \
+    --prompt-file "$PROMPT_FILE" --bin "$FAKE_CODEX" \
+    > "$out_file" 2> "$err_file" &
+  outer_pid=$!
+  ORPHAN_OUTER_TIMEOUT=0
+  max_wait="$(test_timing_scale 16)"
+  start="$(date +%s)"
+
+  while pid_file_alive <(printf '%s\n' "$outer_pid"); do
+    now="$(date +%s)"
+    if [ $((now - start)) -ge "$max_wait" ]; then
+      ORPHAN_OUTER_TIMEOUT=1
+      break
+    fi
+    sleep 0.1
+  done
+
+  ORPHAN_SURVIVORS_BEFORE_CLEANUP="$(recorded_survivor_count)"
+  if [ "$ORPHAN_OUTER_TIMEOUT" -eq 1 ]; then
+    cleanup_transport_processes
+    kill -TERM "$outer_pid" 2>/dev/null || true
+    sleep 0.2
+    kill -KILL "$outer_pid" 2>/dev/null || true
+  fi
+  wait "$outer_pid" 2>/dev/null
+  ORPHAN_DISPATCH_RC=$?
+  ORPHAN_STATUS="$(json_field "$out_file" status || true)"
+
+  cleanup_transport_processes
+  if ! poll_until 3 all_recorded_processes_dead; then
+    fail "deadline setsid orphan: test cleanup could not reap all recorded fixture processes"
+  fi
+}
+
+if ! command -v setsid >/dev/null 2>&1; then
+  fail "deadline setsid orphan: infrastructure requires setsid"
+else
+  run_deadline_setsid_orphan_case
+  assert_file_exists "$FAKE_DEADLINE_ORPHAN_PID_FILE" "deadline setsid orphan: setsid descendant started"
+  assert_eq "$(fake_run_count)" "1" "deadline setsid orphan: one runner attempt"
+  assert_eq "$ORPHAN_OUTER_TIMEOUT" "0" "deadline setsid orphan: dispatcher returns within deadline + 10s cleanup"
+  assert_neq "$ORPHAN_DISPATCH_RC" "0" "deadline setsid orphan: dispatcher exit must be nonzero"
+  assert_neq "$ORPHAN_STATUS" "authored" "deadline setsid orphan: status must not be authored"
+  
+  deadline_orphan_dead() {
+    ! pid_file_alive "$FAKE_DEADLINE_ORPHAN_PID_FILE"
+  }
+  if ! poll_until 3 deadline_orphan_dead; then
+    fail "deadline setsid orphan: setsid orphan descendant survived dispatcher return"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+
+  if [ "$ORPHAN_SURVIVORS_BEFORE_CLEANUP" -ne 0 ]; then
+    fail "deadline setsid orphan: recorded processes survived dispatcher return"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Negative control: orphan_deleted_fd_holder
+# ---------------------------------------------------------------------------
+if ! command -v setsid >/dev/null 2>&1; then
+  fail "orphan deleted fd holder: infrastructure requires setsid"
+else
+  run_dispatch orphan_deleted_fd_holder --runner codex --model gpt-5.5 --effort xhigh
+  assert_rejected "orphan deleted fd holder"
+  assert_eq "$(fake_run_count)" "1" "orphan deleted fd holder: one runner attempt"
+
+  deleted_fd_holder_dead() {
+    ! pid_file_alive "$FAKE_DELETED_FD_PID_FILE"
+  }
+  if ! poll_until 3 deleted_fd_holder_dead; then
+    fail "orphan deleted fd holder: descendant survived dispatcher return"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+
+  cleanup_transport_processes
+  if ! poll_until 3 all_recorded_processes_dead; then
+    fail "orphan deleted fd holder: test cleanup could not reap all recorded fixture processes"
   fi
 fi
 

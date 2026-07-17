@@ -480,10 +480,15 @@ function classifyErrorContent(content) {
     text.includes('free tier limit') ||
     text.includes('run out of credits') ||
     text.includes('quota limit') ||
-    text.includes('billing quota') ||
-    text.includes('balance exhausted') ||
-    text.includes('payment required')
+    text.includes('billing quota')
   ) {
+    return 'quota_exhausted';
+  }
+  // payment/balance phrases need an error/status co-occurrence so benign prose
+  // ("the payment required field on the checkout form") is not misclassified
+  const hasErrCtx = text.includes('402') || text.includes('status')
+    || text.includes('error') || text.includes('http');
+  if ((text.includes('balance exhausted') || text.includes('payment required')) && hasErrCtx) {
     return 'quota_exhausted';
   }
 

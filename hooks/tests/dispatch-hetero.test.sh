@@ -257,8 +257,7 @@ assert_file_exists "$ANCHOR_OUT" "anchor capture file written"
 assert_eq "ANCHOR_OK" "$(cat "$ANCHOR_OUT" 2>/dev/null)" "agy directive injects absolute worktree anchor (Your ABSOLUTE working directory is: <wt>)"
 
 # 10. passive capture test: a runner failure that indicates quota exhaustion
-# does NOT alter the exit code (exit 1) or status (question_suspected), but
-# records the event in the capability store.
+# surfaces as engine_unavailable (exit 1) AND records the event in the capability store.
 STUB_QUOTA_FAIL="$TEST_TMP/agy-quota-fail"
 cat > "$STUB_QUOTA_FAIL" <<'EOF'
 #!/usr/bin/env bash
@@ -274,16 +273,33 @@ rm -rf "$CAP_TEST_DIR"
 
 # --runner agy is REQUIRED: without it, --model "gpt-5.5" auto-routes to codex and
 # the agy quota stub is never exercised (the whole point of this case). A non-zero
-# agy exit with no commit surfaces as question_suspected (exit propagates through the
-# script -qec wrapper — verified), and passive_capture records the quota event.
+# agy exit with no commit + quota_exhausted log → engine_unavailable (exit 1);
+# passive_capture still records the quota event.
 OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --branch feat/quota-fail --prompt-file "$PROMPT" --agy-bin "$STUB_QUOTA_FAIL" --model "gpt-5.5" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "quota failure exit code remains 1"
-assert_contains "$OUT" '"status": "question_suspected"' "quota failure status remains question_suspected"
+assert_contains "$OUT" '"status": "engine_unavailable"' "quota failure status is engine_unavailable"
+assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure error names the classification"
 
 # Verify that the event was recorded in the capability store
 assert_file_exists "$CAP_TEST_DIR/capability.jsonl" "capability store contains recorded event"
 recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_eq "exhausted" "$recorded_status" "recorded quota status is exhausted"
+
+# 10b. real grok 402 fixture string → engine_unavailable (the BACKLOG gap that
+# previously mislabelled HTTP 402 quota death as question_suspected).
+STUB_GROK_402="$TEST_TMP/agy-grok-402"
+cat > "$STUB_GROK_402" <<'EOF'
+#!/usr/bin/env bash
+echo "API error (status 402 Payment Required): Grok Build usage balance exhausted" >&2
+exit 1
+EOF
+chmod +x "$STUB_GROK_402"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --branch feat/grok-402 --prompt-file "$PROMPT" --agy-bin "$STUB_GROK_402" --model "gpt-5.5" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "grok 402 fixture exit code is 1"
+assert_contains "$OUT" '"status": "engine_unavailable"' "grok 402 fixture status is engine_unavailable"
+assert_contains "$OUT" "engine unavailable (quota_exhausted)" "grok 402 error names quota_exhausted"
+G402_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+git -C "$SBX" worktree remove --force "$G402_WT" >/dev/null 2>&1 || true
 
 # 11. Omission of --skill-mode defaults to off
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-default --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?

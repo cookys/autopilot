@@ -17,6 +17,9 @@ cd "$REPO"
 
 FAILS=0
 TOTAL=0
+HARD_TOTAL=0
+ADVISORY_TOTAL=0
+ADVISORY_WARNS=0
 
 pass() {
   echo "  ✓ $1"
@@ -30,6 +33,7 @@ fail() {
 run_check() {
   local name="$1"; shift
   TOTAL=$((TOTAL + 1))
+  HARD_TOTAL=$((HARD_TOTAL + 1))
   echo "[$TOTAL] $name"
   if "$@"; then
     pass "$name"
@@ -41,10 +45,12 @@ run_check() {
 run_advisory() {
   local name="$1"; shift
   TOTAL=$((TOTAL + 1))
+  ADVISORY_TOTAL=$((ADVISORY_TOTAL + 1))
   echo "[$TOTAL] $name"
   if "$@"; then
     pass "$name"
   else
+    ADVISORY_WARNS=$((ADVISORY_WARNS + 1))
     echo "  ⚠ [ADVISORY] $name: known upstream flakiness (opencode 1.17 debug skill truncation), 2026-07-17" >&2
   fi
 }
@@ -260,7 +266,8 @@ run_check "OpenCode agent body resolves without frontmatter leak" check_opencode
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then
-  echo "✅ ALL CHECKS PASSED ($TOTAL/$TOTAL)"
+  # hard_passed == hard_total when FAILS==0; advisory never contributes to FAILS
+  echo "✅ ALL HARD CHECKS PASSED ($HARD_TOTAL/$HARD_TOTAL hard checks passed + $ADVISORY_WARNS advisory-warned)"
   echo ""
   echo "Manual verification still required:"
   echo "  - Claude Code restart → SessionStart context injection visible"

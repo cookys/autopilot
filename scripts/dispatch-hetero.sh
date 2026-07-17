@@ -310,6 +310,7 @@ RESULT_FILE=""
 EXIT_FILE=""
 HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
 OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
+CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
 # shellcheck source=/dev/null
 . "$SELF_DIR/lib/worktree-reap.sh"
 cleanup() {
@@ -1642,12 +1643,14 @@ run_strict_contract_postchecks() {
 
 passive_capture() {
   local status="${1:-}"
+  CLASSIFIED_ERROR=""
   if { [ "$status" = "no_op" ] || [ "$status" = "question_suspected" ] || [ "$status" = "failure" ] || [ "$status" = "dirty" ] || [ "$status" = "no_verdict" ]; } && [ -n "${LOG:-}" ] && [ -r "${LOG}" ]; then
+    # Classify once, outside the recording subshell, so classify_outcome can reuse the result.
+    CLASSIFIED_ERROR="$("$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)" || CLASSIFIED_ERROR=""
     (
-      local classification; classification="$("$SELF_DIR/engine-capability-state.js" classify-error --file "$LOG" --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)"
-      if [ "$classification" = "quota_exhausted" ] || [ "$classification" = "rate_limited" ]; then
+      if [ "$CLASSIFIED_ERROR" = "quota_exhausted" ] || [ "$CLASSIFIED_ERROR" = "rate_limited" ]; then
         local quota_status="unknown" confidence="low"
-        case "$classification" in
+        case "$CLASSIFIED_ERROR" in
           quota_exhausted) quota_status="exhausted"; confidence="high" ;;
           rate_limited)    quota_status="limited"; confidence="medium" ;;
         esac
@@ -1689,6 +1692,14 @@ passive_capture() {
   fi
 }
 
+# True when classify-error named a known engine-unavailability signal (not network/unknown).
+_is_engine_unavailable() {
+  case "${1:-}" in
+    quota_exhausted|rate_limited|auth_failed|overloaded) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
 # inline path (→ emit to stdout + exit) and the detached child (→ write-result + ledger). It
 # sets OUTCOME_* and performs the outcome-specific side effects (passive_capture; worktree
@@ -1706,9 +1717,14 @@ classify_outcome() {
     elif [ "$AGENT_EXIT" -ne 0 ]; then
       # clean commit but the worker exited non-zero — NOT scored success (KR1):
       # the abnormal exit means the run can't be trusted as a clean implementation.
+      # Prefer engine_unavailable when the log is a known quota/auth/overload signal.
       passive_capture "failure"
       OUTCOME_STATUS="failure"; OUTCOME_COMMIT="$HEAD_SHA"; OUTCOME_FILES="$FILES"; OUTCOME_INS="$INS"; OUTCOME_DEL="$DEL"; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent left a clean commit but exited non-zero (agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
+      if _is_engine_unavailable "$CLASSIFIED_ERROR"; then
+        OUTCOME_STATUS="engine_unavailable"
+        OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
+      fi
     else
       if [ "$STRICT_CONTRACT" -eq 1 ] && ! run_strict_contract_postchecks; then
         # strict-mode post-return boundary and acceptance checks are authoritative.
@@ -1743,10 +1759,16 @@ classify_outcome() {
       OUTCOME_ERR="agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"; OUTCOME_EXIT=1
     else
       # timeout or non-zero exit, nothing committed → likely paused on a clarifying
-      # question (auto-approve does not silence the model's own question) or stalled
+      # question (auto-approve does not silence the model's own question) or stalled.
+      # Prefer engine_unavailable when the log is a known quota/auth/overload signal
+      # (closes the "402 misclassified as question_suspected" gap).
       passive_capture "question_suspected"
       OUTCOME_STATUS="question_suspected"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
       OUTCOME_ERR="agent produced no commit and ended abnormally (agent exit $AGENT_EXIT) — likely paused on a clarifying question or stalled; worktree kept"; OUTCOME_EXIT=1
+      if _is_engine_unavailable "$CLASSIFIED_ERROR"; then
+        OUTCOME_STATUS="engine_unavailable"
+        OUTCOME_ERR="engine unavailable ($CLASSIFIED_ERROR): worker exited non-zero (agent exit $AGENT_EXIT); worktree kept"
+      fi
     fi
   fi
   # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
@@ -1835,13 +1857,14 @@ dispatch_detached_run() {
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
+      CLASSIFIED_ERROR \
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_DEPTH \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape _flat_json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
-      classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_acceptance_checks \
+      _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_acceptance_checks \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true

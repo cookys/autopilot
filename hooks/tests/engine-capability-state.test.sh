@@ -117,6 +117,8 @@ c_auth=$(node "$CLI" classify-error --string "invalid API key authorization fail
 c_net=$(node "$CLI" classify-error --string "connection timed out network error fetch failed")
 c_unknown=$(node "$CLI" classify-error --string "some random successful or generic log message")
 c_grok402=$(node "$CLI" classify-error --string "API error (status 402 Payment Required): Grok Build usage balance exhausted")
+c_benign_payment=$(node "$CLI" classify-error --string "the payment required field on the checkout form")
+c_benign_balance=$(node "$CLI" classify-error --string "balance exhausted is a phrase used in docs")
 
 [ "$c_quota" = "quota_exhausted" ] && \
 [ "$c_rate" = "rate_limited" ] && \
@@ -124,8 +126,10 @@ c_grok402=$(node "$CLI" classify-error --string "API error (status 402 Payment R
 [ "$c_auth" = "auth_failed" ] && \
 [ "$c_net" = "network_failed" ] && \
 [ "$c_unknown" = "unknown" ] && \
-[ "$c_grok402" = "quota_exhausted" ] && ok "8: classify-error categories map correctly" || \
-bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown grok402=$c_grok402"
+[ "$c_grok402" = "quota_exhausted" ] && \
+[ "$c_benign_payment" = "unknown" ] && \
+[ "$c_benign_balance" = "unknown" ] && ok "8: classify-error categories map correctly" || \
+bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown grok402=$c_grok402 benign_payment=$c_benign_payment benign_balance=$c_benign_balance"
 
 # 9. (P6 F4) merged `current` exposes per-field native_observed_at — the native event's OWN
 #    time, NOT the aggregate observed_at (which follows the latest event of any field). A fresh

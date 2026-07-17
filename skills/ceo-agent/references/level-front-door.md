@@ -34,7 +34,7 @@ so the run does not re-ask on a clean goal:
 | 1. OKR / success criteria | Derived from `<goal>`. If `<goal>` has no verifiable end-state, the CEO restates one and proceeds (does **not** block on Q&A — that is the point of the front-door). |
 | 2. Involvement | `/l3 /l4 /l5 /l6` all preset **3 = just-results** (full autonomy, notify on done). |
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
-| 4. Red lines (紅線) | **none** (default DOA). Override with \`-x <csv>\`. |
+| 4. Red lines (紅線) | **none** (default DOA). Override with `-x <csv>`. |
 
 ### Mid-run question discipline (presets active)
 
@@ -65,7 +65,7 @@ to plan / decompose / synthesize / verify — the things that actually need it:
 
 | Flag | Effect |
 |------|--------|
-| \`-x <csv>\` | Red lines, e.g. \`-x payments,auth\`. |
+| `-x <csv>` | Red lines, e.g. `-x payments,auth`. |
 | `--expand` | Scope mode = Expand instead of Hold. |
 | `--solo` | `/l4`/`/l5`/`/l6` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4/5/6 posture respectively. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). |
 

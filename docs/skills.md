@@ -140,7 +140,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
 **Override flags** (all four levels):
 
 - `--expand` → scope = Expand (default is Hold — touch only what the goal names).
-- \`-x <csv>\` → red lines, e.g. \`-x payments,auth\` (default none).
+- `-x <csv>` → red lines, e.g. `-x payments,auth` (default none).
 - `--solo` (L4 / L5 / L6 only) → fall back to the L3 inline engine. This is also the automatic degradation when the foreman returns `precondition_failed`.
 
 The escalation is **inline → offloaded → offloaded + decorrelated implementation → offloaded + decorrelated implementation and verification authoring**. Start at L3; reach for L4 when you want it off your thread; reach for L5 when a second engine adds cost-arbitrage or decorrelation value; reach for L6 when verification authoring should also be delegated. For the depth-0 control loop, outcome→action table, and run-summary ledger, see the [ceo-agent front-door semantics](../skills/ceo-agent/references/level-front-door.md). For the roster/loop config, see [`review-loop-config.md`](../project-config-template/review-loop-config.md).

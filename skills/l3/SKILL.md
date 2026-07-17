@@ -17,7 +17,7 @@ goal **itself on this thread** and escalates only at the DOA boundary.
 
 Hard rules:
 - Startup pre-filled, never re-asked on a clean goal: OKR from `<goal>`;
-  involvement=3 just-results; scope=Hold (\`--expand\` → Expand); red-lines=none (\`-x <csv>\`).
+  involvement=3 just-results; scope=Hold (`--expand` → Expand); red-lines=none (`-x <csv>`).
 - Posture: **inline** — no foreman dispatch. `/l3` is also the `--solo` degradation
   target for `/l4`/`/l5`/`/l6`.
 - The front-door changes startup ONLY — every `ceo-agent` gate (size → project setup

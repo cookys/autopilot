@@ -147,8 +147,8 @@ For unattended *interval* re-runs (vs converge-until-done), see `project-config-
 ### Terse front-door — `/l3 /l4 /l5 /l6` and the dispatched foreman (Claude Code)
 
 `/l3 /l4 /l5 /l6 <goal>` are thin slash-command skills that enter CEO mode with the
-  four startup questions **pre-filled** (OKR from goal; involvement=just-results;
-  scope=Hold; red-lines=none) and set the execution posture:
+four startup questions **pre-filled** (OKR from goal; involvement=just-results;
+scope=Hold; red-lines=none) and set the execution posture:
 
 - **`/l3`** — CEO executes **inline** on this thread (the "全權處理" behavior as one command).
 - **`/l4`** — CEO dispatches **ONE background, worktree-isolated `sub-orchestrator` foreman**

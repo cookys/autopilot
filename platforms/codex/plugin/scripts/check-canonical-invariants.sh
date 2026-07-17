@@ -202,6 +202,24 @@ check_repeat "disjointness-carve-out" \
   "references/blind-dispatch.md" \
   "skills/ceo-agent/references/level-front-door.md"
 
+# repeat #2b — the engine-unavailable error-string format contract. dispatch-hetero.sh
+# authors "engine unavailable ($CLASSIFIED_ERROR): ..." (two emit sites) and
+# autopilot-engine.js parseEngineUnavailableClass parses the same prefix by regex to map
+# the on_engine_unavailable policy; a reworded prefix silently degrades every capacity
+# death to escalate (fails closed but wrong action). Reword ritual: change the prefix at
+# BOTH dispatch emit sites AND the engine regex AND this seed in one commit.
+check_repeat "engine-unavailable-error-prefix" \
+  "engine unavailable (" \
+  "scripts/dispatch-hetero.sh" \
+  "src/engine/autopilot-engine.js" \
+  "hooks/tests/autopilot-engine.test.sh"
+
+# The regex itself (escaped paren form) — pins the actual parse site, not just the
+# comment above it, so deleting/rewording parseEngineUnavailableClass trips the gate.
+check_repeat "engine-unavailable-parse-regex" \
+  'engine unavailable \(([a-z_]+)\)' \
+  "src/engine/autopilot-engine.js"
+
 # reference #1 — reviewer.md REFERENCES code-review.md's Invocation section (it does not
 # repeat the body). Assert reviewer.md still names the canonical anchor AND the heading
 # still exists in code-review.md. Catches a structural rename/deletion of "## Invocation".

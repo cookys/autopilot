@@ -33,6 +33,7 @@ FAKE_CHILD_PID_FILE="$TEST_TMP/fake.child-pid"
 FAKE_GRANDCHILD_PID_FILE="$TEST_TMP/fake.grandchild-pid"
 FAKE_SETSID_PID_FILE="$TEST_TMP/fake.setsid-pid"
 FAKE_LATE_PID_FILE="$TEST_TMP/fake.late-pid"
+FAKE_ORPHAN_PID_FILE="$TEST_TMP/fake.orphan-pid"
 FAKE_PGID_FILE="$TEST_TMP/fake.pgid"
 FAKE_TERM_MARKER="$TEST_TMP/fake.term-observed"
 FAKE_ATTACK_MARKER="$TEST_TMP/fake.attack-observed"
@@ -42,7 +43,7 @@ FAKE_SYMLINK_TARGET="$TEST_TMP/attacker-sidecar-target"
 export UUID_A UUID_B CANDIDATE_BYTES STDERR_SECRET
 export FAKE_ARGV_LOG FAKE_RUN_COUNT_FILE FAKE_SIDECAR_PATH_FILE
 export FAKE_STDOUT_TARGET_FILE FAKE_STDERR_TARGET_FILE FAKE_PARENT_PID_FILE
-export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_SETSID_PID_FILE FAKE_LATE_PID_FILE
+export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_SETSID_PID_FILE FAKE_LATE_PID_FILE FAKE_ORPHAN_PID_FILE
 export FAKE_PGID_FILE FAKE_TERM_MARKER FAKE_ATTACK_MARKER
 export FAKE_HARDLINK_PATH FAKE_SYMLINK_TARGET
 
@@ -62,7 +63,7 @@ pid_file_alive() {
 recorded_survivor_count() {
   local count=0
   local file
-  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE"; do
+  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE"; do
     if pid_file_alive "$file"; then
       count=$((count + 1))
     fi
@@ -90,7 +91,7 @@ cleanup_transport_processes() {
       ;;
   esac
 
-  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE"; do
+  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE"; do
     [ -r "$file" ] || continue
     pid="$(cat "$file" 2>/dev/null || true)"
     case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
@@ -305,6 +306,18 @@ case "${FAKE_SCENARIO:-exact}" in
     wait
     exit 0
     ;;
+  orphan_writer_exit0)
+    setsid bash -c '
+      trap "" TERM
+      printf "%s\n" "$BASHPID" > "$FAKE_ORPHAN_PID_FILE"
+      for i in {1..30}; do
+        sleep 1
+      done
+    ' &
+    sleep 0.1
+    write_complete_pair
+    exit 0
+    ;;
   *)
     printf 'unknown fake scenario: %s\n' "${FAKE_SCENARIO:-}" >&2
     exit 97
@@ -406,7 +419,7 @@ reset_observation() {
     "$FAKE_ARGV_LOG" "$FAKE_RUN_COUNT_FILE" "$FAKE_SIDECAR_PATH_FILE" \
     "$FAKE_STDOUT_TARGET_FILE" "$FAKE_STDERR_TARGET_FILE" \
     "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" \
-    "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_PGID_FILE" "$FAKE_TERM_MARKER" \
+    "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_ORPHAN_PID_FILE" "$FAKE_PGID_FILE" "$FAKE_TERM_MARKER" \
     "$FAKE_ATTACK_MARKER" "$FAKE_HARDLINK_PATH" "$FAKE_SYMLINK_TARGET"
 }
 
@@ -720,6 +733,36 @@ else
   assert_eq "$TREE_SURVIVORS_BEFORE_CLEANUP" "0" "term tree: no parent/child/grandchild/setsid survives dispatcher return"
   assert_neq "$TREE_DISPATCH_RC" "0" "term tree: deadline is terminal"
   assert_neq "$TREE_STATUS" "authored" "term tree: complete-looking pre-deadline bytes stay rejected"
+fi
+
+# ---------------------------------------------------------------------------
+# Negative control: orphan_writer_exit0
+# A runner exiting 0 with a surviving descendant that still holds the private
+# capture channels is an incomplete process tree, and must be rejected.
+# ---------------------------------------------------------------------------
+if ! command -v setsid >/dev/null 2>&1; then
+  fail "orphan writer exit0: infrastructure requires setsid"
+else
+  run_dispatch orphan_writer_exit0 --runner codex --model gpt-5.5 --effort xhigh
+  assert_rejected "orphan writer exit0"
+  assert_eq "$(fake_run_count)" "1" "orphan writer exit0: one runner attempt"
+
+  # The dispatcher owns cleanup of detected holders; the orphan should be killed.
+  # Poll with a 3s budget to check if the orphan PID is dead.
+  orphan_dead() {
+    ! pid_file_alive "$FAKE_ORPHAN_PID_FILE"
+  }
+  if ! poll_until 3 orphan_dead; then
+    fail "orphan writer exit0: descendant survived dispatcher return"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+
+  # Follow run_term_tree_case's cleanup discipline to avoid leak
+  cleanup_transport_processes
+  if ! poll_until 3 all_recorded_processes_dead; then
+    fail "orphan writer exit0: test cleanup could not reap all recorded fixture processes"
+  fi
 fi
 
 # ---------------------------------------------------------------------------

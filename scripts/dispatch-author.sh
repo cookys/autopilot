@@ -846,21 +846,12 @@ if [[ "$RUNNER_EXIT" -ne 0 ]]; then
 fi
 
 # Codex transport gates (only after exit 0 + fully reaped tree).
+# Artifact integrity precedes settle; hardened content checks run after settle on
+# the final bytes so empty_output stays the post-settle classification for blank
+# stdout, while any non-empty result must still clear chrome+witness+session.
 if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
   if ! codex_transport_check_all_artifacts "$CODEX_RUN_DIR"; then
     emit_result "runner_failed" "$RAW_LOG" "codex transport artifact integrity failed" 3
-  fi
-  # Hardened path when the initial chrome frame is present (real codex / transport
-  # fixtures). Stub runners without chrome keep the pre-hardening settle/empty
-  # contract so existing suites stay green.
-  if codex_transport_has_chrome_frame "$CODEX_STDERR"; then
-    if ! codex_transport_verify_witness "$CODEX_STDOUT" "$CODEX_SIDECAR"; then
-      emit_result "runner_failed" "$RAW_LOG" "codex transport witness verification failed" 3
-    fi
-    if ! CODEX_SESSION_ID="$(codex_transport_extract_session_id "$CODEX_STDERR")"; then
-      CODEX_SESSION_ID=""
-      emit_result "runner_failed" "$RAW_LOG" "codex transport session id extraction failed" 3
-    fi
   fi
 fi
 
@@ -868,8 +859,9 @@ fi
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
 # Bounded settle-wait for late-flush
-# (Codex: settle never converts a prior exit-first/incomplete/witness rejection
-# into authored — those paths already exited above.)
+# (Codex: settle never converts a prior exit-first/incomplete-tree rejection
+# into authored — those paths already exited above. Post-settle content still
+# faces unconditional chrome/witness/session gates below.)
 if [[ "$RUNNER" = "cc-shim" ]]; then
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
 else
@@ -890,6 +882,22 @@ if ! tr -d '\r' < "$RAW_LOG" \
   | sed '/^Script started on /d; /^Script done on /d' \
   | grep -c '[^[:space:]]' > /dev/null; then
   emit_result "empty_output" "$RAW_LOG" "no non-whitespace output from runner — fail-closed" 1
+fi
+
+# Codex hardened content checks — unconditional once stdout is non-empty.
+# Remove the has-chrome-frame bypass: missing chrome is runner_failed, same as
+# witness or session-id failure. No normalization / fallback / recovery path.
+if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
+  if ! codex_transport_has_chrome_frame "$CODEX_STDERR"; then
+    emit_result "runner_failed" "$RAW_LOG" "codex transport chrome frame missing" 3
+  fi
+  if ! codex_transport_verify_witness "$CODEX_STDOUT" "$CODEX_SIDECAR"; then
+    emit_result "runner_failed" "$RAW_LOG" "codex transport witness verification failed" 3
+  fi
+  if ! CODEX_SESSION_ID="$(codex_transport_extract_session_id "$CODEX_STDERR")"; then
+    CODEX_SESSION_ID=""
+    emit_result "runner_failed" "$RAW_LOG" "codex transport session id extraction failed" 3
+  fi
 fi
 
 AUTHOR_EXTRA="$(strict_result_fields "clean")"

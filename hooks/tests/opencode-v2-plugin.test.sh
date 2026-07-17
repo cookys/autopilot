@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
-if ! command -v opencode2 >/dev/null 2>&1; then
-  echo "SKIP [$TEST_NAME] opencode2 not found"
+if ! command -v opencode >/dev/null 2>&1; then
+  echo "SKIP [$TEST_NAME] opencode not found"
   exit 0
 fi
 
@@ -10,7 +10,7 @@ fi
 
 PORT="$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
 LOG="$TEST_TMP/server.log"
-HOME="$HOOK_HOME" AUTOPILOT_PLUGIN_SMOKE=1 opencode2 serve --hostname 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
+HOME="$HOOK_HOME" AUTOPILOT_PLUGIN_SMOKE=1 opencode serve --hostname 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
 SERVER_PID=$!
 
 cleanup_server() {

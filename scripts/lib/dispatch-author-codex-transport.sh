@@ -41,9 +41,14 @@ codex_transport_create_artifacts() {
       return 1
     fi
   done
+  # Caller-scope globals (consumed by sourcing scripts/dispatch-author.sh).
+  # shellcheck disable=SC2034
   CODEX_RUN_DIR="$dir"
+  # shellcheck disable=SC2034
   CODEX_STDOUT="$dir/stdout"
+  # shellcheck disable=SC2034
   CODEX_STDERR="$dir/stderr"
+  # shellcheck disable=SC2034
   CODEX_SIDECAR="$dir/last-message"
   return 0
 }
@@ -189,6 +194,7 @@ codex_transport_run() {
   local worker_pid=$!
 
   local pgid="" i
+  # shellcheck disable=SC2034  # retry counter only; body uses sleep/break
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     pgid="$(ps -o pgid= -p "$worker_pid" 2>/dev/null | tr -d '[:space:]' || true)"
     case "$pgid" in
@@ -202,6 +208,8 @@ codex_transport_run() {
   case "$pgid" in
     ''|*[!0-9]*) pgid="$worker_pid" ;;
   esac
+  # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
+  # shellcheck disable=SC2034
   CODEX_WORKER_PGID="$pgid"
 
   local start now state
@@ -223,6 +231,8 @@ codex_transport_run() {
 
   if [ "$timed_out" -eq 1 ]; then
     # Terminal BEFORE signalling — deadline is not author time.
+    # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
+    # shellcheck disable=SC2034
     CODEX_DEADLINE_HIT=1
     codex_transport_reap_tree "$pgid" 10 || CODEX_INCOMPLETE_TREE=1
     wait "$worker_pid" 2>/dev/null || true
@@ -237,10 +247,14 @@ codex_transport_run() {
   fi
 
   wait "$worker_pid" 2>/dev/null
+  # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
+  # shellcheck disable=SC2034
   RUNNER_EXIT=$?
 
   # Frontend returned: same-group descendants mean incomplete tree (never recovery).
   if codex_transport_pgid_has_live "$pgid"; then
+    # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
+    # shellcheck disable=SC2034
     CODEX_INCOMPLETE_TREE=1
     codex_transport_reap_tree "$pgid" 10 || true
   fi

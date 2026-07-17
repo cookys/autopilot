@@ -695,9 +695,9 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S。
 - **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。
 
-## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.49
+## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.50
 
-RESOLVED 2026-07-17（ported onto develop as v2.32.49）：dispatch-hetero.sh / dispatch-author.sh 快照消費
+RESOLVED 2026-07-17（ported onto develop as v2.32.50）：dispatch-hetero.sh / dispatch-author.sh 快照消費
 repo 的 user.name/user.email，drift ⇒ 用 `git -C <repo-root>` 還原 + 結果 JSON 加 `identity_drift:true`
 + 大聲警告（不回顯值）。Implemented by grok-4.5 under the strict-contract dispatch rail; ported
 onto v2.32.48 by grok-4.5.
@@ -719,11 +719,11 @@ onto v2.32.48 by grok-4.5.
 - **Trigger**: when a dispatched worker poisons a non-identity shared `.git/config` key
   (e.g. `core.hooksPath`, `credential.helper`) or when multi-worktree concurrent dispatch
   needs stronger isolation than emit-time restore.
-- **Context**: v2.32.49 identity rail contains ONLY `user.name`/`user.email` (local scope).
+- **Context**: v2.32.50 identity rail contains ONLY `user.name`/`user.email` (local scope).
   Other keys in the shared `.git/config` remain uncontained. Candidate directions: snapshot/
   restore a broader key denylist, or per-worktree config isolation via
   `extensions.worktreeConfig` so a worktree cannot write through to the shared config.
-- **Accepted limitations of the current rail** (do not re-litigate as bugs of v2.32.49):
+- **Accepted limitations of the current rail** (do not re-litigate as bugs of v2.32.50):
   1. Drift compare is **point-in-time** at emit — a worker that sets a bad identity, commits
      with it, then restores the original before exit is undetected on its own worktree commits.
   2. An **escaped descendant** could re-poison the shared config after emit-time restore

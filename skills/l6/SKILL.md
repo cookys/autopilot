@@ -4,7 +4,7 @@ description: >
   Terse CEO front-door — Level 6: like /l5 (worktree-isolated hetero implementer + authoritative
   qc) but the VERIFICATION AUTHORING is also leaf-dispatched to a heterogeneous engine; depth-0 remains
   pure orchestration. Use when: "/l6 <goal>", "L6 <goal>", "全委", "全部派遣", "省 token 全外包",
-  "delegate everything incl verification". Presets involvement=just-results, scope=Hold, no-go=none
+  "delegate everything incl verification". Presets involvement=just-results, scope=Hold, red-lines=none
   (override -x / --expand / --solo). Not for: /l5 when you still want to do verification yourself; /l4
   all-Claude; /l3 inline.
 ---

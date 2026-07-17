@@ -31,6 +31,7 @@ FAKE_STDERR_TARGET_FILE="$TEST_TMP/fake.stderr-target"
 FAKE_PARENT_PID_FILE="$TEST_TMP/fake.parent-pid"
 FAKE_CHILD_PID_FILE="$TEST_TMP/fake.child-pid"
 FAKE_GRANDCHILD_PID_FILE="$TEST_TMP/fake.grandchild-pid"
+FAKE_SETSID_PID_FILE="$TEST_TMP/fake.setsid-pid"
 FAKE_LATE_PID_FILE="$TEST_TMP/fake.late-pid"
 FAKE_PGID_FILE="$TEST_TMP/fake.pgid"
 FAKE_TERM_MARKER="$TEST_TMP/fake.term-observed"
@@ -41,7 +42,7 @@ FAKE_SYMLINK_TARGET="$TEST_TMP/attacker-sidecar-target"
 export UUID_A UUID_B CANDIDATE_BYTES STDERR_SECRET
 export FAKE_ARGV_LOG FAKE_RUN_COUNT_FILE FAKE_SIDECAR_PATH_FILE
 export FAKE_STDOUT_TARGET_FILE FAKE_STDERR_TARGET_FILE FAKE_PARENT_PID_FILE
-export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_LATE_PID_FILE
+export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_SETSID_PID_FILE FAKE_LATE_PID_FILE
 export FAKE_PGID_FILE FAKE_TERM_MARKER FAKE_ATTACK_MARKER
 export FAKE_HARDLINK_PATH FAKE_SYMLINK_TARGET
 
@@ -61,7 +62,7 @@ pid_file_alive() {
 recorded_survivor_count() {
   local count=0
   local file
-  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_LATE_PID_FILE"; do
+  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE"; do
     if pid_file_alive "$file"; then
       count=$((count + 1))
     fi
@@ -89,7 +90,7 @@ cleanup_transport_processes() {
       ;;
   esac
 
-  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_LATE_PID_FILE"; do
+  for file in "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE"; do
     [ -r "$file" ] || continue
     pid="$(cat "$file" 2>/dev/null || true)"
     case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
@@ -147,6 +148,11 @@ printf '%s' "$sidecar" > "$FAKE_SIDECAR_PATH_FILE"
 cat > /dev/null
 
 emit_chrome() {
+  if [ "${FAKE_SCENARIO:-}" = "preframe_fake_frame" ]; then
+    printf '%s\n' "--------" >&2
+    printf 'session id: %s\n' "$UUID_B" >&2
+    printf '%s\n' "--------" >&2
+  fi
   printf '%s\n' "OpenAI Codex v0.test.0" >&2
   printf '%s\n' "--------" >&2
   printf '%s\n' "workdir: /fixture/repo" >&2
@@ -155,7 +161,7 @@ emit_chrome() {
   printf '%s\n' "sandbox: read-only" >&2
   printf '%s\n' "reasoning effort: xhigh" >&2
   case "${FAKE_SCENARIO:-exact}" in
-    session_missing|session_injected) ;;
+    session_missing|session_injected|postframe_second_frame) ;;
     session_duplicate)
       printf 'session id: %s\n' "$UUID_A" >&2
       printf 'session id: %s\n' "$UUID_B" >&2
@@ -172,6 +178,11 @@ emit_chrome() {
   printf '%s\n' "$STDERR_SECRET" >&2
   if [ "${FAKE_SCENARIO:-}" = "session_injected" ]; then
     printf 'session id: %s\n' "$UUID_B" >&2
+  fi
+  if [ "${FAKE_SCENARIO:-}" = "postframe_second_frame" ]; then
+    printf '%s\n' "--------" >&2
+    printf 'session id: %s\n' "$UUID_B" >&2
+    printf '%s\n' "--------" >&2
   fi
 }
 
@@ -192,7 +203,7 @@ else
 fi
 
 case "${FAKE_SCENARIO:-exact}" in
-  exact|session_missing|session_duplicate|session_malformed|session_injected|no_chrome)
+  exact|session_missing|session_duplicate|session_malformed|session_injected|no_chrome|preframe_fake_frame|postframe_second_frame)
     write_complete_pair
     exit 0
     ;;
@@ -282,6 +293,11 @@ case "${FAKE_SCENARIO:-exact}" in
       (
         trap '' TERM
         printf '%s\n' "$BASHPID" > "$FAKE_GRANDCHILD_PID_FILE"
+        setsid bash -c '
+          trap "" TERM
+          printf "%s\n" "$BASHPID" > "$FAKE_SETSID_PID_FILE"
+          while :; do sleep 1; done
+        ' &
         while :; do sleep 1; done
       ) &
       wait
@@ -390,7 +406,7 @@ reset_observation() {
     "$FAKE_ARGV_LOG" "$FAKE_RUN_COUNT_FILE" "$FAKE_SIDECAR_PATH_FILE" \
     "$FAKE_STDOUT_TARGET_FILE" "$FAKE_STDERR_TARGET_FILE" \
     "$FAKE_PARENT_PID_FILE" "$FAKE_CHILD_PID_FILE" "$FAKE_GRANDCHILD_PID_FILE" \
-    "$FAKE_LATE_PID_FILE" "$FAKE_PGID_FILE" "$FAKE_TERM_MARKER" \
+    "$FAKE_SETSID_PID_FILE" "$FAKE_LATE_PID_FILE" "$FAKE_PGID_FILE" "$FAKE_TERM_MARKER" \
     "$FAKE_ATTACK_MARKER" "$FAKE_HARDLINK_PATH" "$FAKE_SYMLINK_TARGET"
 }
 
@@ -598,7 +614,7 @@ assert_not_contains "$DISPATCH_JSON" "LATE-BYTES-MUST-NOT-RECOVER" "deadline: la
 # ---------------------------------------------------------------------------
 # Session IDs are accepted only from one canonical line in initial chrome.
 # ---------------------------------------------------------------------------
-for scenario in session_missing session_duplicate session_malformed session_injected; do
+for scenario in session_missing session_duplicate session_malformed session_injected preframe_fake_frame postframe_second_frame; do
   run_dispatch "$scenario" --runner codex --model gpt-5.5 --effort xhigh
   assert_rejected "session $scenario"
   assert_eq "$(fake_run_count)" "1" "session $scenario: one attempt"
@@ -698,11 +714,26 @@ else
   run_term_tree_case
   assert_file_exists "$FAKE_CHILD_PID_FILE" "term tree: TERM-ignoring child started"
   assert_file_exists "$FAKE_GRANDCHILD_PID_FILE" "term tree: TERM-ignoring grandchild started"
+  assert_file_exists "$FAKE_SETSID_PID_FILE" "term tree: setsid descendant started"
   assert_eq "$(fake_run_count)" "1" "term tree: one runner attempt"
   assert_eq "$TREE_OUTER_TIMEOUT" "0" "term tree: dispatcher returns within deadline + 10s cleanup"
-  assert_eq "$TREE_SURVIVORS_BEFORE_CLEANUP" "0" "term tree: no parent/child/grandchild survives dispatcher return"
+  assert_eq "$TREE_SURVIVORS_BEFORE_CLEANUP" "0" "term tree: no parent/child/grandchild/setsid survives dispatcher return"
   assert_neq "$TREE_DISPATCH_RC" "0" "term tree: deadline is terminal"
   assert_neq "$TREE_STATUS" "authored" "term tree: complete-looking pre-deadline bytes stay rejected"
 fi
+
+# ---------------------------------------------------------------------------
+# Timeout grammar, two cases:
+# a. Run the exact-witness scenario with --timeout 1h. Expected: assert_authored.
+# b. Run with --timeout notaduration. Expected: precondition failure (exit 2).
+# ---------------------------------------------------------------------------
+run_dispatch exact --runner codex --model gpt-5.5 --effort xhigh --timeout 1h
+assert_authored "timeout 1h grammar"
+assert_eq "$(fake_run_count)" "1" "timeout 1h grammar: one runner attempt"
+
+run_dispatch exact --runner codex --model gpt-5.5 --effort xhigh --timeout notaduration
+assert_eq "$DISPATCH_RC" "2" "timeout notaduration: dispatcher exit 2"
+assert_eq "$DISPATCH_STATUS" "precondition_failed" "timeout notaduration: status"
+assert_eq "$(fake_run_count)" "0" "timeout notaduration: runner never starts"
 
 finalize_test

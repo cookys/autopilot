@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.32.50 — Dispatch worker git-identity containment
+## v2.32.51 — Dispatch worker git-identity containment
 
 Closes the incident where a dispatched worker's bare `git config user.name/email` inside its
 git worktree wrote through the **shared `.git/config`** and silently rewrote the parent
@@ -43,6 +43,21 @@ clone's commit identity for every later commit.
 - Focused RED→GREEN oracle `hooks/tests/dispatch-identity-containment.test.sh` proves the
   worktree-config passthrough is real (negative control) and that the rail flags + restores.
 - Implemented by grok-4.5 under the strict-contract dispatch rail; ported onto v2.32.48 by grok-4.5.
+
+## v2.32.50 — OpenCode plugin loads on 1.17 + check-16 advisory + grok 402 classified
+
+**Headline**: Three fixes surfaced by the OpenCode 1.17 / hetero-roster work. (1) The OpenCode extension silently never loaded on the installed `@opencode-ai/plugin@1.17.15`: it imported the prerelease `@opencode-ai/plugin/v2` subpath (`ERR_PACKAGE_PATH_NOT_EXPORTED`, swallowed by the loader), so `preflight-portability` check 15 was red. Migrated the plugin to the documented `{ id, server }` shape and bumped the dep; the plugin now loads and prints its version line. (2) `preflight-portability` check 16 (`opencode debug skill` discovery) is demoted to advisory — it fails non-deterministically from an upstream `opencode` 1.17 `debug skill` output-truncation, not an autopilot regression, and no reliable retry count fixes it. (3) `engine-capability-state classify-error` now recognizes a grok 402 "Payment Required / usage balance exhausted" billing error as `quota_exhausted` (previously `unknown`, so passive quota-capture missed it).
+
+### Changed
+- `platforms/opencode/plugin/autopilot.ts` — migrated from the removed `@opencode-ai/plugin/v2` `Plugin.define({ setup, ctx.tool.hook })` API to the documented default-export `{ id, server }` `PluginModule` shape: `server(input)` runs the setup (preserving the `[autopilot] plugin loaded, version:` line and the smoke path) and returns `{ "tool.execute.after": (input, output) => … }`. Hook field mapping updated (`event.input` → `input.args`). `platforms/opencode/plugin/package.json` dep `0.0.0-next-15493` → `^1.17.15`. `.opencode/plugin-package/` mirror regenerated.
+- `hooks/tests/opencode-v2-plugin.test.sh` — gate fixed `opencode2` → `opencode` (the old binary never existed → silent perma-skip). Body adapted to opencode 1.17: `serve` is unsecured by default (auth via `OPENCODE_SERVER_PASSWORD`, no emitted random password) and does not eagerly run plugin setup, so the opencode2-era serve + basic-auth + `/api/session` flow no longer applies; the test now drives plugin load deterministically via `opencode debug config --print-logs` (asserts the plugin-loaded line, the version read, and the `AUTOPILOT_PLUGIN_SMOKE` intent file — the same observable behaviors).
+- `scripts/preflight-portability.sh` — new `run_advisory` runner (counts toward `TOTAL`, never toward `FAILS`); check 16 (`check_opencode_skill_discovery`) rewired to it and prints a `⚠ [ADVISORY] … known upstream flakiness (opencode 1.17 debug skill truncation), 2026-07-17` line on failure. `CLAUDE.md` inventory row notes the 16 hard-fail + 1 advisory split.
+- `scripts/engine-capability-state.js` — `classifyErrorContent` quota block extended with `balance exhausted` + `payment required` substrings (no bare `402`, to avoid false positives). `hooks/tests/engine-capability-state.test.sh` gains a grok-402 case asserting `quota_exhausted`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+prose-justification: this release's prose growth is the release entry itself plus three BACKLOG entries (C-Spike SPIKE-PASS, OpenCode 1.17 close-out, dispatch-hetero mislabel), one INDEX row, and a refreshed HANDOFF — release/tracking documentation, not new skill/routing surface.
 
 ## v2.32.49 — L1 cache-key parity gate + case-6b hardened against ambient GOTOOLCHAIN
 

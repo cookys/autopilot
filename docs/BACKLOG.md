@@ -12,11 +12,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ---
 
-### Codex payload install-time generation（C-Spike，think-tank 2026-07-17 P6 裁決）
-- **Trigger**: 下一個 symlink-hostile 平台要接入之前；或 payload 鏡像 churn 噪音升級為 blocking；或有 live Codex 環境可 Spike 時
-- **Context**: think-tank（Architect C-conditional / Ops A-high / QA A-high）一致否決 release-time payload branch（B）於現階段；Architect 路線＝驗證 Codex plugin loader 能否吃 install 時才由 `sync-codex-plugin-skills.sh` 生成的 git-ignored 目錄（agy export-then-install 先例）——Spike 通過即可退役 committed mirror＋其 drift gates；Spike 失敗則 A 維持
-- **Effort**: S（Spike）＋L（若遷移）
-- **Source**: health-roadmap P6 Decision Brief（2026-07-17）
+### Codex payload install-time generation（C-Spike ✅ SPIKE-PASS 2026-07-17，think-tank P6 裁決）
+- **Trigger**: 下一個 symlink-hostile 平台要接入之前；或 payload 鏡像 churn 噪音升級為 blocking；或有 live Codex 環境可跑 `codex exec` e2e 時（quota 7/23 復位後）
+- **Context**: think-tank（Architect C-conditional / Ops A-high / QA A-high）一致否決 release-time payload branch（B）於現階段；Architect 路線＝驗證 Codex plugin loader 能否吃 install 時才由 `sync-codex-plugin-skills.sh` 生成的 git-ignored 目錄。**SPIKE-PASS 2026-07-17**：codex loader end-to-end 接受 install 時生成的 payload（marketplace add + plugin add → `installed:true`/`enabled:true`），且 sync 腳本零 git 依賴。**遷移 L 的殘餘前置**：(1) `codex exec` e2e 信心（blocked on quota until 7/23）；(2) `marketplace upgrade` live re-read 語意未測；(3) 需要一個 install-time hook 設計（何時觸發生成）。三者到位即可退役 committed mirror＋其 drift gates；否則 A 維持。
+- **Effort**: S（剩餘 Spike）＋L（若遷移）
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）；SPIKE-PASS 2026-07-17
 
 ### Release-time payload branch（B）重啟條件
 - **Trigger**: CI 連續數週綠＋真實 tag/release 節奏存在（非每 push 即 shippable）＋ C-Spike 已否決 install-time 路線
@@ -45,11 +45,17 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### OpenCode 1.17 遷移收尾 — plugin-load log 與 .agents/skills 掃描兩檢查仍紅
-- **Trigger**: 下次碰 `.opencode/` 或 OpenCode 支援聲明時；或 preflight-portability 15/16 兩檢查擋到事情時。
-- **Context**: OpenCode 1.17.15 破壞性改了 config schema（`plugins→plugin`、`agents→agent`、per-agent `permissions` 陣列→`permission` 物件、`system→prompt`、專案 skills 需 `skills.paths`）。2026-07-16 doc-sync 輪已完成 schema 遷移（check 17 agent-body 轉綠），但 check 15（`plugin loaded, version:` log 未出現——plugin API 可能也改版）與 check 16（`.agents/skills` symlink 未被 `skills.paths` 掃到——疑不跟 symlink 或需絕對路徑）仍紅，需要對 1.17 plugin API／skill loader 各做一次 Spike，不宜盲改。
+### OpenCode 1.17 遷移收尾 — ✅ check 15 根治、check 16 降級 advisory（v2.32.50）
+- **Trigger**: 上游 opencode 修復 `debug skill` 輸出截斷後（可回收 check 16 為 hard-fail 時）；或 opencode 再破壞性改 plugin/serve API 時。
+- **Context**: 2026-07-17 兩檢查都收尾。**check 15 根治**：`autopilot.ts` import 了 prerelease `@opencode-ai/plugin/v2` subpath，該 subpath 在裝好的 `@opencode-ai/plugin@1.17.15` 不存在（`ERR_PACKAGE_PATH_NOT_EXPORTED`），loader 靜默吞掉 import 失敗 → 插件從未載入。遷移到有文件的 default-export `{id, server}` PluginModule shape（server 跑 setup＋回傳 `{"tool.execute.after":…}` hooks），dep bump `^1.17.15`，插件現在載入並印版本行。**check 16 降級 advisory**：`opencode debug skill` grep `dev-flow` 因**上游** opencode 1.17 `debug skill` 輸出截斷（corpus-volume-dependent；symlink 假說已被 8/8×3＋full-corpus real-dir repro 反證；最小 repro＝~28 skills 的純目錄）非決定性失敗，非 autopilot config 迴歸，無可靠 retry 數；`preflight-portability.sh` 新 `run_advisory` runner 計入 TOTAL 不計 FAILS。**殘項**：向 opencode 上游開 `debug skill` truncation issue（推薦）；opencode 1.17 `serve` 為 unsecured-by-default（`OPENCODE_SERVER_PASSWORD` auth、不 eager 載 plugin），`opencode-v2-plugin.test.sh` 已改走 `debug config` 確定性驅動。
+- **Effort**: Fix（若上游修復要回收 check 16）
+- **Source**: 2026-07-17 /l5 run C（v2.32.50）；前身 2026-07-16 deep code-audit + doc-sync（v2.32.39）
+
+### dispatch-hetero 把 quota／auth 死亡誤標為 `question_suspected` — 分類器已認得 pattern，標籤修正是另一半
+- **Trigger**: 下次動 `dispatch-hetero.sh` 的 status 分類（exit-code→status）時順手做。
+- **Context**: 2026-07-17 grok 以 `API error (status 402 Payment Required): Grok Build usage balance exhausted` 死掉、exit 1，dispatch-hetero 走 `question_suspected`（agent exit 1、無 commit ⇒ 疑似停在澄清問題），depth-0 得手動記 quota。v2.32.50 已讓 `engine-capability-state classify-error` 認得該 pattern（`balance exhausted`／`payment required`→`quota_exhausted`），但 **dispatch-hetero 本身仍把它籠統標 `question_suspected`**——剩下的一半是：dispatch-hetero 在 exit≠0 時先跑 `classify-error`（吃 agent_log），若判到 `quota_exhausted`／`rate_limited`／`auth_failed`／`overloaded` 就標對應狀態（而非 `question_suspected`），讓 passive capture 與 depth-0 一眼看出是斷糧而非卡問題。
 - **Effort**: Fix
-- **Source**: 2026-07-16 deep code-audit + doc-sync（v2.32.39）
+- **Source**: 2026-07-17 /l5 run C（grok 402 事故）
 
 ### 「No-go zones」→「red lines／紅線」系統性改名 — 產品敘事詞彙與 CEO 啟動問答的術語分裂
 - **Trigger**: 下次改動 `skills/ceo-agent/SKILL.md` 或 `/l3`–`/l6` 前門的啟動問答／preset 文字時（順路做），或決定做一次 routing-regression 驗證時。
@@ -695,9 +701,9 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S。
 - **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。
 
-## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.50
+## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.51
 
-RESOLVED 2026-07-17（ported onto develop as v2.32.50）：dispatch-hetero.sh / dispatch-author.sh 快照消費
+RESOLVED 2026-07-17（ported onto develop as v2.32.51）：dispatch-hetero.sh / dispatch-author.sh 快照消費
 repo 的 user.name/user.email，drift ⇒ 用 `git -C <repo-root>` 還原 + 結果 JSON 加 `identity_drift:true`
 + 大聲警告（不回顯值）。Implemented by grok-4.5 under the strict-contract dispatch rail; ported
 onto v2.32.48 by grok-4.5.
@@ -719,11 +725,11 @@ onto v2.32.48 by grok-4.5.
 - **Trigger**: when a dispatched worker poisons a non-identity shared `.git/config` key
   (e.g. `core.hooksPath`, `credential.helper`) or when multi-worktree concurrent dispatch
   needs stronger isolation than emit-time restore.
-- **Context**: v2.32.50 identity rail contains ONLY `user.name`/`user.email` (local scope).
+- **Context**: v2.32.51 identity rail contains ONLY `user.name`/`user.email` (local scope).
   Other keys in the shared `.git/config` remain uncontained. Candidate directions: snapshot/
   restore a broader key denylist, or per-worktree config isolation via
   `extensions.worktreeConfig` so a worktree cannot write through to the shared config.
-- **Accepted limitations of the current rail** (do not re-litigate as bugs of v2.32.50):
+- **Accepted limitations of the current rail** (do not re-litigate as bugs of v2.32.51):
   1. Drift compare is **point-in-time** at emit — a worker that sets a bad identity, commits
      with it, then restores the original before exit is undetected on its own worktree commits.
   2. An **escaped descendant** could re-poison the shared config after emit-time restore

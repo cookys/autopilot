@@ -100,6 +100,15 @@
       "fix": "add a row (or inline mention) for each unlisted script to the CLAUDE.md 'Scripts inventory' table",
       "tier": "both",
       "trigger": ["scripts/", "CLAUDE.md"]
+    },
+    {
+      "id": "l1-cache-key-parity",
+      "title": "L1 JS-runtime cache key jest/vitest versions vs test pins",
+      "generator": null,
+      "check": "node scripts/check-l1-cache-key-parity.js",
+      "fix": "align jest/vitest versions in .github/workflows/test.yml cache key and hooks/tests/check-test-integrity-l1.test.sh (jest_ver/vitest_ver)",
+      "tier": "both",
+      "trigger": [".github/workflows/test.yml", "hooks/tests/check-test-integrity-l1.test.sh"]
     }
   ]
 }

@@ -17,7 +17,28 @@ RECEIVED="$TEST_TMP/prompt.received.codex"
 STUB_COD="$TEST_TMP/runner-codex"
 cat > "$STUB_COD" <<EOF
 #!/usr/bin/env bash
+echo "OpenAI Codex v0.test.0" >&2
+echo "--------" >&2
+echo "session id: 00000000-0000-4000-8000-000000000000" >&2
+echo "--------" >&2
+
+sidecar=""
+args=(\"\$@\")
+i=0
+while [ "\$i" -lt "\${#args[@]}" ]; do
+  if [ "\${args[\$i]}" = "--output-last-message" ]; then
+    i=\$((i + 1))
+    if [ "\$i" -lt "\${#args[@]}" ]; then
+      sidecar="\${args[\$i]}"
+    fi
+  fi
+  i=\$((i + 1))
+done
+
 cat > "$RECEIVED"
+if [ -n "\$sidecar" ]; then
+  printf '%s' "OK-WRITTEN" > "\$sidecar"
+fi
 echo "OK-WRITTEN"
 EOF
 chmod +x "$STUB_COD"
@@ -65,8 +86,30 @@ assert_contains "$(cat "$RUNNER_RAW_LOG_PATH")" "partial-output" "runner_failed 
 STUB_OK="$TEST_TMP/runner-ok"
 cat > "$STUB_OK" <<'EOF'
 #!/usr/bin/env bash
+echo "OpenAI Codex v0.test.0" >&2
+echo "--------" >&2
+echo "session id: 00000000-0000-4000-8000-000000000000" >&2
+echo "--------" >&2
+
+sidecar=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--output-last-message" ]; then
+    i=$((i + 1))
+    if [ "$i" -lt "${#args[@]}" ]; then
+      sidecar="${args[$i]}"
+    fi
+  fi
+  i=$((i + 1))
+done
+
 cat >/dev/null 2>&1 || true
-echo "Authoring result for ${MODEL}."
+msg="Authoring result for ${MODEL}."
+if [ -n "$sidecar" ]; then
+  printf '%s\n' "$msg" > "$sidecar"
+fi
+printf '%s\n' "$msg"
 EOF
 chmod +x "$STUB_OK"
 

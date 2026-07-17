@@ -185,10 +185,14 @@ write_complete_pair() {
   write_sidecar_exact
 }
 
-emit_chrome
+if [ "${FAKE_SCENARIO:-}" != "no_chrome" ]; then
+  emit_chrome
+else
+  printf '%s\n' "warning: bare warning line" >&2
+fi
 
 case "${FAKE_SCENARIO:-exact}" in
-  exact|session_missing|session_duplicate|session_malformed|session_injected)
+  exact|session_missing|session_duplicate|session_malformed|session_injected|no_chrome)
     write_complete_pair
     exit 0
     ;;
@@ -565,7 +569,7 @@ assert_eq "$DISPATCH_SESSION_ID" "$UUID_A" "stdout plus one LF: anchored session
 # ---------------------------------------------------------------------------
 # Witness failures. No repair, inverse-LF allowance, or channel substitution.
 # ---------------------------------------------------------------------------
-for scenario in sidecar_missing sidecar_empty sidecar_mismatch sidecar_inverse_lf sidecar_only; do
+for scenario in no_chrome sidecar_missing sidecar_empty sidecar_mismatch sidecar_inverse_lf sidecar_only; do
   run_dispatch "$scenario" --runner codex --model gpt-5.5 --effort xhigh
   assert_rejected "witness $scenario"
   assert_eq "$(fake_run_count)" "1" "witness $scenario: one attempt"

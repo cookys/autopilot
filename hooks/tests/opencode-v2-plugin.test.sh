@@ -6,48 +6,25 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 0
 fi
 
+# Regenerate the .opencode/plugin-package mirror that the opencode loader reads.
 "$REPO_ROOT/scripts/sync-opencode-plugin.sh" >/dev/null
 
-PORT="$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
-LOG="$TEST_TMP/server.log"
-HOME="$HOOK_HOME" AUTOPILOT_PLUGIN_SMOKE=1 opencode serve --hostname 127.0.0.1 --port "$PORT" >"$LOG" 2>&1 &
-SERVER_PID=$!
+# opencode 1.17's `serve` is unsecured by default (auth is via the OPENCODE_SERVER_PASSWORD
+# env var; it emits no random "server password" line) and does not eagerly run plugin setup,
+# so the opencode2-era serve + basic-auth + /api/session integration this test used no longer
+# applies. Drive plugin load deterministically through `debug config`, which loads plugins
+# (running the plugin's documented `server()` setup) and, with AUTOPILOT_PLUGIN_SMOKE=1,
+# exercises the intent-capture path — the same observable behaviors, without the removed API.
+REPO_REAL="$(cd "$REPO_ROOT" && pwd -P)"
+mkdir -p "$HOOK_HOME"
+LOG="$TEST_TMP/debug-config.log"
+( cd "$REPO_REAL" && HOME="$HOOK_HOME" AUTOPILOT_PLUGIN_SMOKE=1 \
+    opencode debug config --print-logs >"$LOG" 2>&1 )
 
-cleanup_server() {
-  kill "$SERVER_PID" 2>/dev/null || true
-  pkill -P "$SERVER_PID" 2>/dev/null || true
-  wait "$SERVER_PID" 2>/dev/null || true
-}
-trap 'cleanup_server; cleanup_test_tmp' EXIT
-
-PASSWORD=""
-for _ in $(seq 1 100); do
-  PASSWORD="$(sed -n 's/^server password //p' "$LOG" | head -1)"
-  [ -n "$PASSWORD" ] && break
-  kill -0 "$SERVER_PID" 2>/dev/null || break
-  sleep 0.1
-done
-
-assert_neq "$PASSWORD" "" "server emits authentication password"
-
-PLUGINS="$(curl --silent --show-error --max-time 20 -u "opencode:$PASSWORD" \
-  -G --data-urlencode "directory=$REPO_ROOT" \
-  "http://127.0.0.1:$PORT/api/plugin" 2>&1)"
-CURL_EXIT=$?
-assert_eq "$CURL_EXIT" "0" "plugin list completes without setup deadlock"
-
-SESSION="$(curl --silent --show-error --max-time 20 -u "opencode:$PASSWORD" \
-  -X POST -H 'Content-Type: application/json' \
-  -d "{\"location\":{\"directory\":\"$REPO_ROOT\"}}" \
-  "http://127.0.0.1:$PORT/api/session" 2>&1)"
-CURL_EXIT=$?
-assert_eq "$CURL_EXIT" "0" "session creation completes without plugin setup deadlock"
-assert_contains "$SESSION" '"id":"ses_' "session creation returns an ID"
-
-for _ in $(seq 1 50); do
-  find "$HOOK_HOME/.autopilot/intent" -type f -name '*.json' -print -quit 2>/dev/null | grep -q . && break
-  sleep 0.1
-done
+CONFIG_LOG="$(cat "$LOG")"
+assert_contains "$CONFIG_LOG" '[autopilot] plugin loaded' "OpenCode executes plugin setup"
+PLUGIN_VERSION="$(node -p "require('$REPO_ROOT/.claude-plugin/plugin.json').version")"
+assert_contains "$CONFIG_LOG" "version: $PLUGIN_VERSION" "plugin reads repository version"
 
 INTENT_FILE="$(find "$HOOK_HOME/.autopilot/intent" -type f -name '*.json' -print -quit 2>/dev/null)"
 assert_neq "$INTENT_FILE" "" "plugin setup writes isolated smoke intent"
@@ -55,13 +32,7 @@ if [ -n "$INTENT_FILE" ]; then
   INTENT="$(cat "$INTENT_FILE")"
   assert_contains "$INTENT" '"session_id": "autopilot-smoke"' "smoke intent identifies plugin probe"
   assert_contains "$INTENT" '"last_tool": "autopilot_smoke"' "smoke intent exercises capture path"
-  assert_contains "$INTENT" "\"cwd\": \"$REPO_ROOT\"" "smoke intent records project directory"
+  assert_contains "$INTENT" "\"cwd\": \"$REPO_REAL\"" "smoke intent records project directory"
 fi
 
-SERVER_LOG="$(cat "$LOG")"
-assert_contains "$SERVER_LOG" '[autopilot] plugin loaded' "OpenCode V2 executes plugin setup"
-PLUGIN_VERSION="$(node -p "require('$REPO_ROOT/.claude-plugin/plugin.json').version")"
-assert_contains "$SERVER_LOG" "version: $PLUGIN_VERSION" "plugin reads repository version"
-
-cleanup_server
 finalize_test

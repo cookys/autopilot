@@ -84,6 +84,7 @@ set -uo pipefail
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-author-codex-transport.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -671,6 +672,14 @@ timeout_to_ms() {
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 RUNNER_EXIT=0
+CODEX_TRANSPORT=0
+CODEX_DEADLINE_HIT=0
+CODEX_INCOMPLETE_TREE=0
+CODEX_SESSION_ID=""
+CODEX_RUN_DIR=""
+CODEX_STDOUT=""
+CODEX_STDERR=""
+CODEX_SIDECAR=""
 CONTAINMENT_PRE_STATUS=""
 CONTAINMENT_PRE_HEAD=""
 CONTAINMENT_POST_STATUS=""
@@ -686,6 +695,7 @@ cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
+  # Codex private run artifacts are retained for raw_log consumers (not deleted).
 }
 trap cleanup EXIT
 
@@ -710,14 +720,31 @@ fi
 if [[ "$RUNNER" = "codex" ]]; then
   CODEX_BIN="${BIN:-codex}"
   command -v "$CODEX_BIN" >/dev/null 2>&1 || die_precondition "codex binary not found: $CODEX_BIN"
+  # Honest timeout parse BEFORE any runner start: unparseable → precondition,
+  # never a silent 300s default inside the transport.
+  if ! codex_transport_timeout_seconds "$TIMEOUT" >/dev/null; then
+    die_precondition "invalid --timeout value: $TIMEOUT"
+  fi
   # READ-ONLY by posture only; codex is the same sandboxed runner used for
   # review in dispatch-review.sh and is the strongest default isolation option
   # available here.
+  #
+  # D0-T transport: private 0700/0600 artifacts, exit-first process-tree
+  # classification, stdout authority + last-message witness, chrome-frame
+  # session-id anchoring. Caller-supplied --output-last-message is already a
+  # usage error (unknown arg → exit 2) before we reach here.
+  if ! codex_transport_create_artifacts; then
+    die_precondition "failed to create private codex transport artifacts"
+  fi
+  # Drop the generic pre-allocated capture; stdout in the private run dir is
+  # the sole content authority and the raw_log path consumers receive.
+  rm -f "$RAW_LOG" 2>/dev/null || true
+  RAW_LOG="$CODEX_STDOUT"
+  CODEX_TRANSPORT=1
   set +e
-  timeout "$TIMEOUT" "$CODEX_BIN" exec --model "$MODEL" \
-    --sandbox read-only \
-    -c "model_reasoning_effort=\"$EFFORT\"" < "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
-  RUNNER_EXIT=$?
+  codex_transport_run \
+    "$CODEX_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" \
+    "$CODEX_STDOUT" "$CODEX_STDERR" "$CODEX_SIDECAR" "$TIMEOUT"
   set -e
 elif [[ "$RUNNER" = "grok" ]]; then
   GROK_BIN="${BIN:-grok}"
@@ -807,14 +834,39 @@ else
   rm -rf "$RUN_SH"
 fi
 
+# Exit-first classification: deadline / incomplete tree / any nonzero precede
+# ALL content reads (witness, session, empty check). Bytes written during
+# cleanup cannot recover an authored result.
+if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
+  if [[ "$CODEX_DEADLINE_HIT" -eq 1 ]]; then
+    die_runner_failed "${RUNNER_EXIT:-124}"
+  fi
+  if [[ "$CODEX_INCOMPLETE_TREE" -eq 1 ]]; then
+    die_runner_failed "${RUNNER_EXIT:-1}"
+  fi
+fi
+
 if [[ "$RUNNER_EXIT" -ne 0 ]]; then
   die_runner_failed "$RUNNER_EXIT"
+fi
+
+# Codex transport gates (only after exit 0 + fully reaped tree).
+# Artifact integrity precedes settle; hardened content checks run after settle on
+# the final bytes so empty_output stays the post-settle classification for blank
+# stdout, while any non-empty result must still clear chrome+witness+session.
+if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
+  if ! codex_transport_check_all_artifacts "$CODEX_RUN_DIR"; then
+    emit_result "runner_failed" "$RAW_LOG" "codex transport artifact integrity failed" 3
+  fi
 fi
 
 # Fail-closed checks model content, not pseudo-TTY chrome.
 # `script -qec` always emits chrome lines; strip CR and those lines before
 # checking for non-whitespace output.
 # Bounded settle-wait for late-flush
+# (Codex: settle never converts a prior exit-first/incomplete-tree rejection
+# into authored — those paths already exited above. Post-settle content still
+# faces unconditional chrome/witness/session gates below.)
 if [[ "$RUNNER" = "cc-shim" ]]; then
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
 else
@@ -837,4 +889,24 @@ if ! tr -d '\r' < "$RAW_LOG" \
   emit_result "empty_output" "$RAW_LOG" "no non-whitespace output from runner — fail-closed" 1
 fi
 
-emit_result "authored" "$RAW_LOG" "null" 0 "$(strict_result_fields "clean")"
+# Codex hardened content checks — unconditional once stdout is non-empty.
+# Remove the has-chrome-frame bypass: missing chrome is runner_failed, same as
+# witness or session-id failure. No normalization / fallback / recovery path.
+if [[ "$CODEX_TRANSPORT" -eq 1 ]]; then
+  if ! codex_transport_has_chrome_frame "$CODEX_STDERR"; then
+    emit_result "runner_failed" "$RAW_LOG" "codex transport chrome frame missing" 3
+  fi
+  if ! codex_transport_verify_witness "$CODEX_STDOUT" "$CODEX_SIDECAR"; then
+    emit_result "runner_failed" "$RAW_LOG" "codex transport witness verification failed" 3
+  fi
+  if ! CODEX_SESSION_ID="$(codex_transport_extract_session_id "$CODEX_STDERR")"; then
+    CODEX_SESSION_ID=""
+    emit_result "runner_failed" "$RAW_LOG" "codex transport session id extraction failed" 3
+  fi
+fi
+
+AUTHOR_EXTRA="$(strict_result_fields "clean")"
+if [[ "$CODEX_TRANSPORT" -eq 1 && -n "$CODEX_SESSION_ID" ]]; then
+  AUTHOR_EXTRA="${AUTHOR_EXTRA}, \"session_id\": \"$(json_escape "$CODEX_SESSION_ID")\""
+fi
+emit_result "authored" "$RAW_LOG" "null" 0 "$AUTHOR_EXTRA"

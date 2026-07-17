@@ -39,6 +39,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
+- **Trigger**: 下次動 `scripts/dispatch-author.sh` codex branch 或 `scripts/lib/dispatch-author-codex-transport.sh`；或首次出現真實 incomplete-tree 事故（result 被 orphan 汙染）。
+- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）。已文件化殘差：poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫偵測不到（gpt-5.5 round-4 flag，depth-0 裁決 accepted-documented-boundary）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。注意 repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation（v2.25.8 revert）；同 uid 對抗性 worker 本就在 threat model 外。
+- **Effort**: S–M。
+- **Source**: 2026-07-18 v2.32.54 P1 review round 4（gpt-5.5）＋ depth-0 adjudication（project ledger p1 round-4 event）。
+
 ### OpenCode 1.17 遷移收尾 — ✅ check 15 根治、check 16 降級 advisory（v2.32.50）
 - **Trigger**: 上游 opencode 修復 `debug skill` 輸出截斷後（可回收 check 16 為 hard-fail 時）；或 opencode 再破壞性改 plugin/serve API 時。
 - **Context**: 2026-07-17 兩檢查都收尾。**check 15 根治**：`autopilot.ts` import 了 prerelease `@opencode-ai/plugin/v2` subpath，該 subpath 在裝好的 `@opencode-ai/plugin@1.17.15` 不存在（`ERR_PACKAGE_PATH_NOT_EXPORTED`），loader 靜默吞掉 import 失敗 → 插件從未載入。遷移到有文件的 default-export `{id, server}` PluginModule shape（server 跑 setup＋回傳 `{"tool.execute.after":…}` hooks），dep bump `^1.17.15`，插件現在載入並印版本行。**check 16 降級 advisory**：`opencode debug skill` grep `dev-flow` 因**上游** opencode 1.17 `debug skill` 輸出截斷（corpus-volume-dependent；symlink 假說已被 8/8×3＋full-corpus real-dir repro 反證；最小 repro＝~28 skills 的純目錄）非決定性失敗，非 autopilot config 迴歸，無可靠 retry 數；`preflight-portability.sh` 新 `run_advisory` runner 計入 TOTAL 不計 FAILS。**殘項**：向 opencode 上游開 `debug skill` truncation issue（推薦）；opencode 1.17 `serve` 為 unsecured-by-default（`OPENCODE_SERVER_PASSWORD` auth、不 eager 載 plugin），`opencode-v2-plugin.test.sh` 已改走 `debug config` 確定性驅動。

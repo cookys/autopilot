@@ -29,6 +29,7 @@ const IMPLEMENT_STATUSES = [
   'dirty',
   'failure',
   'precondition_failed',
+  'engine_unavailable',
 ];
 
 

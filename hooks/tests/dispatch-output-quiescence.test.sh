@@ -37,7 +37,13 @@ json_field() {
 
 run_dispatch() {
   local stub="$1"
-  shift
+  local runner="codex"
+  if [[ "$2" == "cc-shim" || "$2" == "codex" ]]; then
+    runner="$2"
+    shift 2
+  else
+    shift 1
+  fi
 
   local stdout_file="$TEST_TMP/dispatch-stdout.$$"
   local stderr_file="$TEST_TMP/dispatch-stderr.$$"
@@ -45,7 +51,7 @@ run_dispatch() {
   START_TS=$(date +%s)
   set +e
   DISPATCH_QUIET=1 "$@" "$SCRIPT" \
-    --runner codex \
+    --runner "$runner" \
     --model test-model \
     --prompt-file "$PROMPT_FILE" \
     --bin "$stub" \
@@ -87,17 +93,17 @@ assert_ge() {
   fi
 }
 
-late_stub=$(make_stub "codex-late-flush" 'setsid bash -c '"'"'sleep 2; printf "LATE-ANSWER\n"'"'"' &
+late_stub=$(make_stub "ccshim-late-flush" 'setsid bash -c '"'"'sleep 2; printf "LATE-ANSWER\n"'"'"' &
 exit 0')
-run_dispatch "$late_stub" env
-assert_eq "$DISPATCH_EXIT" "0" "late-flush-authored exit"
-assert_eq "$DISPATCH_STATUS" "authored" "late-flush-authored status"
+run_dispatch "$late_stub" cc-shim env ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test-token
+assert_eq "$DISPATCH_EXIT" "0" "ccshim-late-flush exit"
+assert_eq "$DISPATCH_STATUS" "authored" "ccshim-late-flush status"
 if [ -n "$DISPATCH_RAW_LOG" ] && [ -r "$DISPATCH_RAW_LOG" ]; then
-  assert_contains "$(cat "$DISPATCH_RAW_LOG")" "LATE-ANSWER" "late-flush-authored raw log"
+  assert_contains "$(cat "$DISPATCH_RAW_LOG")" "LATE-ANSWER" "ccshim-late-flush raw log"
 else
-  fail "late-flush-authored raw log missing: $DISPATCH_RAW_LOG"
+  fail "ccshim-late-flush raw log missing: $DISPATCH_RAW_LOG"
 fi
-assert_ge "$DISPATCH_ELAPSED" "2" "late-flush-authored waits for late content"
+assert_ge "$DISPATCH_ELAPSED" "2" "ccshim-late-flush waits for late content"
 
 empty_stub=$(make_stub "codex-genuine-empty" 'exit 0')
 run_dispatch "$empty_stub" env AUTOPILOT_EMPTY_GRACE_MS=1000
@@ -105,19 +111,43 @@ assert_eq "$DISPATCH_EXIT" "1" "genuine-empty-fast exit"
 assert_eq "$DISPATCH_STATUS" "empty_output" "genuine-empty-fast status"
 assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 5)" "genuine-empty-fast uses tuned empty grace"
 
-immediate_stub=$(make_stub "codex-immediate-content" 'printf "OK\n"
-exit 0')
+immediate_body='echo "OpenAI Codex v0.test.0" >&2
+echo "--------" >&2
+echo "session id: 00000000-0000-4000-8000-000000000000" >&2
+echo "--------" >&2
+
+sidecar=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--output-last-message" ]; then
+    i=$((i + 1))
+    if [ "$i" -lt "${#args[@]}" ]; then
+      sidecar="${args[$i]}"
+    fi
+  fi
+  i=$((i + 1))
+done
+
+cat >/dev/null 2>&1 || true
+msg="OK"
+if [ -n "$sidecar" ]; then
+  printf "%s\n" "$msg" > "$sidecar"
+fi
+printf "%s\n" "$msg"
+exit 0'
+immediate_stub=$(make_stub "codex-immediate-content" "$immediate_body")
 run_dispatch "$immediate_stub" env
 assert_eq "$DISPATCH_EXIT" "0" "immediate-content exit"
 assert_eq "$DISPATCH_STATUS" "authored" "immediate-content status"
 assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 5)" "immediate-content returns quickly"
 
-drip_stub=$(make_stub "codex-drip-writer" 'setsid bash -c '"'"'for i in $(seq 1 50); do printf x; sleep 0.2; done'"'"' &
+drip_stub=$(make_stub "ccshim-drip-writer" 'setsid bash -c '"'"'for i in $(seq 1 50); do printf x; sleep 0.2; done'"'"' &
 exit 0')
-run_dispatch "$drip_stub" env AUTOPILOT_SETTLE_MS=1500
-assert_eq "$DISPATCH_EXIT" "0" "drip-writer-deadline-bounded exit"
-assert_eq "$DISPATCH_STATUS" "authored" "drip-writer-deadline-bounded status"
-assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 7)" "drip-writer-deadline-bounded capped by settle deadline"
+run_dispatch "$drip_stub" cc-shim env ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=test-token AUTOPILOT_SETTLE_MS=1500
+assert_eq "$DISPATCH_EXIT" "0" "ccshim-drip-writer-deadline-bounded exit"
+assert_eq "$DISPATCH_STATUS" "authored" "ccshim-drip-writer-deadline-bounded status"
+assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 7)" "ccshim-drip-writer-deadline-bounded capped by settle deadline"
 
 timeout_stub=$(make_stub "codex-runner-timeout" 'exec sleep 30')
 EXTRA_ARGS=(--timeout 2s)
@@ -131,8 +161,32 @@ assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 10)" "runner-timeout-parity b
 # epidemic — bash `set -o pipefail` + a piped `grep -q` early-exit SIGPIPEs the
 # upstream tr/sed on multi-KB captures, so found content is misclassified empty
 # ~97% of the time. A large payload must classify "authored", not empty.
-big_stub=$(make_stub "codex-big-output" 'head -c 6000 /dev/urandom | base64
-exit 0')
+big_body='echo "OpenAI Codex v0.test.0" >&2
+echo "--------" >&2
+echo "session id: 00000000-0000-4000-8000-000000000000" >&2
+echo "--------" >&2
+
+sidecar=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--output-last-message" ]; then
+    i=$((i + 1))
+    if [ "$i" -lt "${#args[@]}" ]; then
+      sidecar="${args[$i]}"
+    fi
+  fi
+  i=$((i + 1))
+done
+
+cat >/dev/null 2>&1 || true
+payload=$(head -c 6000 /dev/urandom | base64)
+if [ -n "$sidecar" ]; then
+  printf "%s\n" "$payload" > "$sidecar"
+fi
+printf "%s\n" "$payload"
+exit 0'
+big_stub=$(make_stub "codex-big-output" "$big_body")
 run_dispatch "$big_stub" env
 assert_eq "$DISPATCH_EXIT" "0" "big-output-pipefail exit"
 assert_eq "$DISPATCH_STATUS" "authored" "big-output-pipefail status (must not false-empty)"

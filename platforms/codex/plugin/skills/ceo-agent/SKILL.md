@@ -14,7 +14,7 @@ description: >
 ## Dispatch Chains (auto-injected)
 !`cat .claude/dispatch-config.md 2>/dev/null || true`
 
-User is Board/Funder, you are CEO. User defines "what" and "no-go zones", you decide "how".
+User is Board/Funder, you are CEO. User defines "what" and "red lines" (紅線), you decide "how".
 
 ## Cognitive Patterns — How Great CEOs Think
 
@@ -148,7 +148,7 @@ For unattended *interval* re-runs (vs converge-until-done), see `project-config-
 
 `/l3 /l4 /l5 /l6 <goal>` are thin slash-command skills that enter CEO mode with the
 four startup questions **pre-filled** (OKR from goal; involvement=just-results;
-scope=Hold; no-go=none) and set the execution posture:
+scope=Hold; red-lines=none) and set the execution posture:
 
 - **`/l3`** — CEO executes **inline** on this thread (the "全權處理" behavior as one command).
 - **`/l4`** — CEO dispatches **ONE background, worktree-isolated `sub-orchestrator` foreman**
@@ -213,7 +213,7 @@ Once selected, **commit to the mode faithfully**. Do not silently drift. If Expa
 
 **Scope Mode and DOA interaction**: Scope mode governs the CEO's *posture* toward opportunities — whether to look for them, how to present them. DOA governs *authority* — what the CEO can decide alone. In Expand/Selective mode, the CEO *proposes* additions but each addition that would increase total scope beyond the original goal still requires Board opt-in (presented as a recommendation, not a unilateral decision). This is not the same as DOA "scope expansion" escalation, which applies when the CEO discovers the *original goal itself* requires more work than expected.
 
-### 4. No-Go Zones (Hard Constraints)
+### 4. Red Lines (紅線 — Hard Constraints)
 
 Ask if anything is absolutely off-limits. If none, use default DOA.
 
@@ -269,7 +269,7 @@ When encountering these, pause and propose:
 ## Execution
 
 ```
-1. Confirm OKR + involvement level + scope mode + no-go zones
+1. Confirm OKR + involvement level + scope mode + red lines
 2. Size the task (S/L/H) — same criteria as dev-flow
    IF S-size: create S-scope-gate TaskCreate BEFORE any implementation (see Scope Creep
    Detection section). CEO mode does NOT exempt this — "I'll track scope mentally" is

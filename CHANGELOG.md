@@ -24,6 +24,37 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.52 — CEO concept rename: "No-Go Zones" → "Red Lines (紅線)"
+
+**Headline**: Systematic terminology rename of the CEO front-door's fourth startup concept from
+"No-Go Zones (Hard Constraints)" to "Red Lines (紅線)", aligning with the 2026-07-16 frozen product
+narrative (website/NARRATIVE.md; README/site already cleared). Implements the BACKLOG item recorded
+in the v2.32.38 narrative-alignment row. **Routing-preserving**: the edits touch only the human-readable
+concept text and the `no-go=none` → `red-lines=none` preset descriptor; no skill `description:` routing
+trigger ("Use when:" / "Not for:" / skill names) was altered. The `-x <csv>` override flag and the
+dispatch-contract "GO / NO-GO" term are untouched (different concepts).
+
+### Changed
+- 14 occurrences across 7 files renamed: `skills/ceo-agent/SKILL.md` (4), `skills/l3/SKILL.md` (2),
+  `skills/l4/SKILL.md` (1), `skills/l5/SKILL.md` (1), `skills/l6/SKILL.md` (1),
+  `skills/ceo-agent/references/level-front-door.md` (3), `docs/skills.md` (2). Codex plugin payload
+  mirror re-synced (`sync-codex-plugin-skills.sh`).
+- Frontmatter `description:` fields (l3/l4/l5/l6) changed only the preset descriptor
+  `no-go=none` → `red-lines=none`; per-skill frontmatter diff = exactly that one line each.
+
+### Verification (routing-regression gate — the substance of this change)
+- **slash-entry probe 5/5 PASS** (`AUTOPILOT_SLASH_PROBE=1 hooks/tests/slash-entry-probe.test.sh`):
+  all five thin-shell entries (/l3 /l4 /l5 /l6 /think-tank-dialectic) resolve their MUST-READ
+  references by Read-tool artifact — thin-shell routing intact.
+- `validate.sh` 28/28 skills structurally valid; word-by-word description diff confirms only the
+  intended tokens changed (no trigger displacement).
+- Natural-behavior probe: /l5 (renamed) PASSED; one FAIL on `think-tank-dialectic` (a skill NOT
+  touched by this change, on the installed baseline) — a documented model-variance non-gate probe,
+  not a routing regression from this rename.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.51 — Dispatch worker git-identity containment
 
 Closes the incident where a dispatched worker's bare `git config user.name/email` inside its

@@ -510,12 +510,24 @@ emit() { # status commit files ins del worktree error
   # Always use git -C "$IDENTITY_REPO_ROOT" so restore does not depend on dispatcher cwd.
   if [ -n "${IDENTITY_REPO_ROOT:-}" ]; then
     local post_name post_email
-    post_name="$(git -C "$IDENTITY_REPO_ROOT" config user.name 2>/dev/null || true)"
-    post_email="$(git -C "$IDENTITY_REPO_ROOT" config user.email 2>/dev/null || true)"
+    # --local: shared .git/config is local scope; empty pre restores inheritance via --unset.
+    post_name="$(git -C "$IDENTITY_REPO_ROOT" config --local user.name 2>/dev/null || true)"
+    post_email="$(git -C "$IDENTITY_REPO_ROOT" config --local user.email 2>/dev/null || true)"
     if [ "$post_name" != "$IDENTITY_PRE_NAME" ] || [ "$post_email" != "$IDENTITY_PRE_EMAIL" ]; then
       IDENTITY_DRIFT=1
-      [ -n "$IDENTITY_PRE_NAME" ] && git -C "$IDENTITY_REPO_ROOT" config user.name "$IDENTITY_PRE_NAME" || git -C "$IDENTITY_REPO_ROOT" config --unset user.name 2>/dev/null || true
-      [ -n "$IDENTITY_PRE_EMAIL" ] && git -C "$IDENTITY_REPO_ROOT" config user.email "$IDENTITY_PRE_EMAIL" || git -C "$IDENTITY_REPO_ROOT" config --unset user.email 2>/dev/null || true
+      # Explicit if/else — never fall through to --unset when a non-empty set fails.
+      if [ -n "$IDENTITY_PRE_NAME" ]; then
+        git -C "$IDENTITY_REPO_ROOT" config --local user.name "$IDENTITY_PRE_NAME" \
+          || echo "WARNING: identity restore failed — could not set local user.name" >&2
+      else
+        git -C "$IDENTITY_REPO_ROOT" config --local --unset user.name 2>/dev/null || true
+      fi
+      if [ -n "$IDENTITY_PRE_EMAIL" ]; then
+        git -C "$IDENTITY_REPO_ROOT" config --local user.email "$IDENTITY_PRE_EMAIL" \
+          || echo "WARNING: identity restore failed — could not set local user.email" >&2
+      else
+        git -C "$IDENTITY_REPO_ROOT" config --local --unset user.email 2>/dev/null || true
+      fi
       echo "WARNING: identity drift detected — worker changed the consuming repo's git identity; restored the original values" >&2
     fi
   fi
@@ -1177,8 +1189,9 @@ BASE_SHA="$(git rev-parse "$BASE")"
 # Capture host repo root once so emit() restore uses git -C (cwd-independent).
 IDENTITY_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$IDENTITY_REPO_ROOT" ]; then
-  IDENTITY_PRE_NAME="$(git -C "$IDENTITY_REPO_ROOT" config user.name 2>/dev/null || true)"
-  IDENTITY_PRE_EMAIL="$(git -C "$IDENTITY_REPO_ROOT" config user.email 2>/dev/null || true)"
+  # --local only: effective-scope reads would materialize a global identity as local on restore.
+  IDENTITY_PRE_NAME="$(git -C "$IDENTITY_REPO_ROOT" config --local user.name 2>/dev/null || true)"
+  IDENTITY_PRE_EMAIL="$(git -C "$IDENTITY_REPO_ROOT" config --local user.email 2>/dev/null || true)"
 fi
 
 # --- worker containment (BEST-EFFORT teardown — NOT a malicious-worker boundary) ---

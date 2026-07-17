@@ -713,3 +713,20 @@ onto v2.32.48 by grok-4.5.
 - detach path 已查核為正確（IDENTITY_REPO_ROOT 在 dispatch_detached_run 的 declare -p 序列化
   列表、snapshot 在 detach fork 前的 parent main flow、值傳入 child）——碼序＋序列化＋對抗實證
   三證，但尚無端到端 detach drift 實測（目前無呼叫者傳 ledger coords，低風險）。
+
+## broader shared-config containment / per-worktree isolation（2026-07-17, follow-up）
+
+- **Trigger**: when a dispatched worker poisons a non-identity shared `.git/config` key
+  (e.g. `core.hooksPath`, `credential.helper`) or when multi-worktree concurrent dispatch
+  needs stronger isolation than emit-time restore.
+- **Context**: v2.32.49 identity rail contains ONLY `user.name`/`user.email` (local scope).
+  Other keys in the shared `.git/config` remain uncontained. Candidate directions: snapshot/
+  restore a broader key denylist, or per-worktree config isolation via
+  `extensions.worktreeConfig` so a worktree cannot write through to the shared config.
+- **Accepted limitations of the current rail** (do not re-litigate as bugs of v2.32.49):
+  1. Drift compare is **point-in-time** at emit — a worker that sets a bad identity, commits
+     with it, then restores the original before exit is undetected on its own worktree commits.
+  2. An **escaped descendant** could re-poison the shared config after emit-time restore
+     (containment is teardown hygiene, not a malicious-worker boundary).
+- **Effort**: L (design + isolation semantics).
+- **Source**: 2026-07-17 U1b panel findings remediation on identity-containment port.

@@ -34,6 +34,12 @@ clone's commit identity for every later commit.
   `user.name`/`user.email` before the runner; on post-run drift they restore the originals
   (via `git -C <repo-root>`, cwd-independent), add an additive `"identity_drift": true` to the
   result JSON, and print a loud warning (without echoing the identity values).
+- Scope is LOCAL only (`git config --local`): matches the shared `.git/config` incident vector;
+  empty pre-values restore global inheritance via `--unset` rather than materializing a local
+  override. A failed restore SET warns to stderr and never falls through to unset.
+- Boundary: the rail contains ONLY `user.name`/`user.email` — other shared-config keys
+  (e.g. `core.hooksPath`, `credential.helper`) remain uncontained, per the standing stance that
+  containment is teardown hygiene, NOT a malicious-worker boundary.
 - Focused RED→GREEN oracle `hooks/tests/dispatch-identity-containment.test.sh` proves the
   worktree-config passthrough is real (negative control) and that the rail flags + restores.
 - Implemented by grok-4.5 under the strict-contract dispatch rail; ported onto v2.32.48 by grok-4.5.

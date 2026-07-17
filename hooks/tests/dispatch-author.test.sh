@@ -23,7 +23,7 @@ echo "session id: 00000000-0000-4000-8000-000000000000" >&2
 echo "--------" >&2
 
 sidecar=""
-args=(\"\$@\")
+args=("\$@")
 i=0
 while [ "\$i" -lt "\${#args[@]}" ]; do
   if [ "\${args[\$i]}" = "--output-last-message" ]; then

@@ -626,8 +626,10 @@ else
 fi
 
 # 6b) go detect must not wait on toolchain download (fake go shim; no real toolchain needed)
-# Models: unfixed probe inherits a non-local GOTOOLCHAIN and stalls past timeout=5 → runner_missing;
-# fixed probe forces GOTOOLCHAIN=local so version exits instantly → tool_base true.
+# Case pins GOTOOLCHAIN=go1.26.3 (non-local) via run_integrity_go so the red direction never
+# depends on the caller's ambient GOTOOLCHAIN. Models: unfixed probe keeps the pinned non-local
+# toolchain and stalls past timeout=5 → runner_missing; fixed probe forces GOTOOLCHAIN=local so
+# version exits instantly → tool_base true.
 repo="$(mkrepo l1-go-detect-local-toolchain)"
 (
   cd "$repo"
@@ -675,7 +677,7 @@ fi
 exit 1
 SH
 chmod +x "$fake_go_bin/go"
-PATH="$fake_go_bin:$PATH" run_integrity "$repo" HEAD~1..HEAD --l1-runner go
+PATH="$fake_go_bin:$PATH" run_integrity_go "$repo" HEAD~1..HEAD --l1-runner go
 assert_not_contains "$__OUTPUT" '"reason": "runner_missing"' "go detect does not report runner_missing with local probe"
 assert_contains "$__OUTPUT" '"tool_base": true' "go detect finds tool under GOTOOLCHAIN=local"
 

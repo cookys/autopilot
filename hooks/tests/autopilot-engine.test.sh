@@ -4259,4 +4259,157 @@ assert_contains "$OUT" "e3_impl_calls=0" "resume non-ancestor base dispatches no
 assert_contains "$OUT" "f_status=converged" "no --resume converges via normal dispatch"
 assert_contains "$OUT" "f_impl_calls=1" "no --resume dispatches implementation as today"
 
+# --- on_engine_unavailable policy wiring (2026-07-17 run E residual) -------------------
+# dispatch-hetero v2.32.53 emits status engine_unavailable on quota/rate/auth/overload
+# death; the resolver's on_engine_unavailable policy key (ask|solo-fallback|wait-reset)
+# must map to a machine-readable action on the engine result instead of depth-0 reading
+# raw JSON and applying the policy by hand.
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/impl-engine-unavailable.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+
+function mkEngine(dispatchStatus, errorText) {
+  return new AutopilotEngine({
+    implementationDispatcher() {
+      return {
+        error: null,
+        status: 1,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: dispatchStatus,
+          runner: 'test-impl-runner',
+          model: 'test-impl-model',
+          commit: null,
+          base: '1111111111111111111111111111111111111111',
+          branch: 'impl-branch',
+          files_changed: 0,
+          insertions: 0,
+          deletions: 0,
+          worktree: '/tmp/wt',
+          agent_log: '/tmp/impl-log',
+          error: errorText,
+        },
+      };
+    },
+  });
+}
+
+function run(policy, dispatchStatus, errorText) {
+  const roster = {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  };
+  if (policy !== undefined) roster.on_engine_unavailable = policy;
+  const result = mkEngine(dispatchStatus, errorText).implementTask({
+    promptFile: prompt,
+    branch: 'impl-branch',
+    base: '1111111111111111111111111111111111111111',
+    roster,
+  });
+  const eu = result.engine_unavailable || null;
+  return [
+    `status=${result.status}`,
+    `phase=${result.phase}`,
+    `eu=${eu ? `${eu.policy}/${eu.action}/${eu.error_class}` : 'null'}`,
+    `ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`,
+  ].join(' ');
+}
+
+const quotaErr = 'engine unavailable (quota_exhausted): worker exited non-zero (agent exit 1); worktree kept';
+const authErr = 'engine unavailable (auth_failed): worker exited non-zero (agent exit 1); worktree kept';
+
+console.log(`a_${run('ask', 'engine_unavailable', quotaErr)}`);
+console.log(`b_${run('wait-reset', 'engine_unavailable', quotaErr)}`);
+console.log(`c_${run('wait-reset', 'engine_unavailable', authErr)}`);
+console.log(`d_${run('solo-fallback', 'engine_unavailable', quotaErr)}`);
+console.log(`e_${run('solo-fallback', 'precondition_failed', 'missing binary')}`);
+console.log(`f_${run('wait-reset', 'precondition_failed', 'missing binary')}`);
+console.log(`g_${run(undefined, 'engine_unavailable', quotaErr)}`);
+console.log(`h_${run('ask', 'no_op', null)}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "on_engine_unavailable wiring process exits 0"
+assert_contains "$OUT" "a_status=blocked" "engine_unavailable stays blocked under ask"
+assert_contains "$OUT" "a_status=blocked phase=dispatch_implementation" "engine_unavailable keeps dispatch phase"
+assert_contains "$OUT" "eu=ask/escalate/quota_exhausted" "ask policy maps engine_unavailable to escalate with parsed error class"
+assert_contains "$OUT" "eu=wait-reset/wait-reset/quota_exhausted" "wait-reset policy maps quota death to wait-reset"
+assert_contains "$OUT" "eu=wait-reset/escalate/auth_failed" "auth death escalates even under wait-reset (waiting cannot fix auth)"
+assert_contains "$OUT" "eu=solo-fallback/wait-reset/quota_exhausted" "solo-fallback policy routes quota death to wait-reset per behavior matrix"
+assert_contains "$OUT" "eu=solo-fallback/solo-fallback/null" "solo-fallback policy maps precondition_failed to solo-fallback"
+assert_contains "$OUT" "eu=wait-reset/escalate/null" "wait-reset policy escalates non-quota precondition_failed"
+assert_contains "$OUT" "eu=ask/escalate/quota_exhausted" "missing policy fails closed to ask/escalate"
+assert_contains "$OUT" "h_status=blocked phase=dispatch_implementation eu=null" "non-unavailable statuses carry no engine_unavailable directive"
+assert_contains "$OUT" "a_status=blocked phase=dispatch_implementation eu=ask/escalate/quota_exhausted ledger=dispatch_implementation:engine_unavailable,engine_unavailable_policy:escalate" "engine_unavailable policy decision is ledgered"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/loop-engine-unavailable.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'engine_unavailable',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        commit: null,
+        base: '1111111111111111111111111111111111111111',
+        branch: 'impl-branch',
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: '/tmp/wt',
+        agent_log: '/tmp/impl-log',
+        error: 'engine unavailable (rate_limited): worker exited non-zero (agent exit 1); worktree kept',
+      },
+    };
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'high',
+    reviewer_runner: 'test-review-runner',
+    loop_max_rounds: 2,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    on_engine_unavailable: 'wait-reset',
+  },
+});
+const eu = result.engine_unavailable || null;
+console.log(`loop_status=${result.status}`);
+console.log(`loop_eu=${eu ? `${eu.policy}/${eu.action}/${eu.error_class}` : 'null'}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "loop on_engine_unavailable propagation process exits 0"
+assert_contains "$OUT" "loop_status=blocked" "loop blocks on engine_unavailable"
+assert_contains "$OUT" "loop_eu=wait-reset/wait-reset/rate_limited" "loop propagates the engine_unavailable directive to the final result"
+
 finalize_test

@@ -155,6 +155,40 @@ nat_after=$(node "$CLI" current --runner agy --model m --role implementer --now 
 [ "$nat_after" = "supported" ] && ok "10: prune protects the native-signal carrier row" \
   || bad "10: native after prune=$nat_after ($prune_out)"
 
+# 11. Quota is a per-MODEL pool: a newer live observation under ANOTHER role must clear a
+#     stale-but-unexpired signal recorded under this role (2026-07-17 grok incident: event 13
+#     implementer/exhausted ttl 7d vs event 15 reviewer/available live probe — report kept
+#     showing exhausted because the merge fragmented the pool by role).
+reset
+echo "$(event_json grok grok-4.5 implementer exhausted high 604800 2026-07-17T05:00:00Z)" | node "$CLI" record >/dev/null
+echo "$(event_json grok grok-4.5 reviewer available high 3600 2026-07-17T08:42:00Z)" | node "$CLI" record >/dev/null
+
+impl_status=$(node "$CLI" current --runner grok --model grok-4.5 --role implementer --now 2026-07-17T09:00:00Z | jq_get capability.quota.status)
+impl_src=$(node "$CLI" current --runner grok --model grok-4.5 --role implementer --now 2026-07-17T09:00:00Z | jq_get capability.quota.source_role)
+[ "$impl_status" = "available" ] && [ "$impl_src" = "reviewer" ] \
+  && ok "11: cross-role live observation clears the per-model pool (+source_role provenance)" \
+  || bad "11: impl_status=$impl_status (want available) source_role=$impl_src (want reviewer)"
+
+# 12. report dedupes to one row per (runner, model) — no contradictory per-role duplicates
+#     for the same pool; role echoes the winning observation's source role.
+report_out=$(node "$CLI" report --capability quota --now 2026-07-17T09:00:00Z)
+report_len=$(printf '%s' "$report_out" | arrlen)
+report_status=$(printf '%s' "$report_out" | jq_get 0.capability.quota.status)
+report_role=$(printf '%s' "$report_out" | jq_get 0.role)
+[ "$report_len" = "1" ] && [ "$report_status" = "available" ] && [ "$report_role" = "reviewer" ] \
+  && ok "12: report emits one per-model row with the winning observation" \
+  || bad "12: len=$report_len status=$report_status role=$report_role"
+
+# 13. Cross-role merge must NOT weaken the unknown-never-clobbers rule: an 'unknown'
+#     observation under another role never overwrites a valid real signal.
+reset
+echo "$(event_json grok grok-4.5 implementer exhausted high 604800 2026-07-17T05:00:00Z)" | node "$CLI" record >/dev/null
+echo "$(event_json grok grok-4.5 reviewer unknown medium 3600 2026-07-17T08:42:00Z)" | node "$CLI" record >/dev/null
+
+impl_status=$(node "$CLI" current --runner grok --model grok-4.5 --role implementer --now 2026-07-17T09:00:00Z | jq_get capability.quota.status)
+[ "$impl_status" = "exhausted" ] && ok "13: cross-role unknown never clobbers a valid real signal" \
+  || bad "13: impl_status=$impl_status (want exhausted)"
+
 echo "----"
 echo "engine-capability-state unit tests: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

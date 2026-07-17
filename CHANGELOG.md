@@ -24,6 +24,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.54 — run E residuals: per-model quota pool merge + on_engine_unavailable engine wiring
+
+**Headline**: The two automation halves left open by v2.32.53's `engine_unavailable` status land: the engine-capability-state quota merge now treats quota as the per-MODEL pool it actually is (a live `available` probe recorded under one role clears a stale `exhausted` recorded under another — `autopilot status quota` stops contradicting reality), and `engine implement-review` mechanically applies the resolver's `on_engine_unavailable` policy (ask/solo-fallback/wait-reset) to `engine_unavailable`/`precondition_failed` dispatch deaths, emitting a machine-readable action instead of leaving depth-0 to read raw dispatch JSON and apply the policy by hand.
+
+### Fixed
+- `engine-capability-state.js`: the quota merge was keyed on (runner, model, **role**), but quota is an account-level per-MODEL pool — the 2026-07-17 grok incident (event 13 implementer/`exhausted` ttl 7d vs event 15 reviewer/`available` live probe) left `report`/`autopilot status quota` showing `exhausted` after the pool had recovered. Quota now merges role-agnostically (skill_transport stays role-keyed); output gains an output-only `capability.quota.source_role` provenance key; `report` emits one row per (runner, model) instead of contradictory per-role duplicates. Negative control pinned: a cross-role `unknown` still never clobbers a valid real signal.
+
+### Added
+- `on_engine_unavailable` policy wiring (ADDITIVE): `implementTask`/`runImplementationReviewLoop` map (policy × death kind) to `engine_unavailable: {policy, action, error_class, dispatch_status}` on the engine result (ledgered as `engine_unavailable_policy:<action>`), serialized through `engine implement-review`'s JSON exit. Matrix per `review-loop-config.md`: `ask` ⇒ escalate always; `solo-fallback` ⇒ solo-fallback on `precondition_failed`, wait-reset on capacity deaths; `wait-reset` ⇒ wait-reset on capacity deaths, escalate on `precondition_failed`. Honesty carve-outs: `auth_failed`/unparseable classes always escalate (waiting can't fix auth); missing/garbage policy fails closed to `ask`; non-unavailable statuses carry `engine_unavailable: null`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.53 — dispatch/classify/preflight honesty batch (four Fix-level hardenings)
 
 **Headline**: Four small correctness/robustness fixes surfaced by the grok×MiniMax hetero-dispatch working face: dispatch-hetero now names engine-unavailability as its own status instead of misfiling a quota/auth/overload death as `question_suspected`; the error classifier stops over-matching benign "payment required"/"balance exhausted" prose; the OpenCode plugin test gains a timeout guard and a hook-field-mapping regression assertion; and the portability preflight summary counts advisory warnings honestly instead of printing a green "ALL CHECKS PASSED" over a warned advisory.

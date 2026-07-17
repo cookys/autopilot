@@ -468,6 +468,49 @@ function implementationResultBlocked(result) {
   return null;
 }
 
+// --- on_engine_unavailable policy wiring (2026-07-17 run E residual) ------------------
+// dispatch-hetero (v2.32.53) marks quota/rate/auth/overload worker deaths with status
+// engine_unavailable and embeds the classify-error kind in its error string as
+// "engine unavailable (<class>): ..." (dispatch-owned format). These helpers map the
+// resolver's on_engine_unavailable policy (ask|solo-fallback|wait-reset) to a
+// machine-readable action so depth-0/foreman no longer reads raw dispatch JSON and
+// applies the policy by hand. Behavior matrix per review-loop-config.md; every
+// unrecognized input fails closed to escalate.
+
+function parseEngineUnavailableClass(errorText) {
+  if (typeof errorText !== 'string') return null;
+  const match = /^engine unavailable \(([a-z_]+)\)/.exec(errorText);
+  return match ? match[1] : null;
+}
+
+function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
+  if (dispatchStatus !== 'engine_unavailable' && dispatchStatus !== 'precondition_failed') {
+    return null;
+  }
+  const raw = roster && typeof roster.on_engine_unavailable === 'string'
+    ? roster.on_engine_unavailable
+    : null;
+  const policy = (raw === 'ask' || raw === 'solo-fallback' || raw === 'wait-reset') ? raw : 'ask';
+  let action = 'escalate';
+  if (dispatchStatus === 'engine_unavailable') {
+    const errorClass = parseEngineUnavailableClass(errorText);
+    // Waiting only helps capacity-shaped deaths; auth (and unparseable classes) cannot
+    // recover on a timer — escalate regardless of policy.
+    const waitable = errorClass === 'quota_exhausted' || errorClass === 'rate_limited' || errorClass === 'overloaded';
+    if ((policy === 'wait-reset' || policy === 'solo-fallback') && waitable) {
+      action = 'wait-reset';
+    }
+    return { policy, action, error_class: errorClass, dispatch_status: dispatchStatus };
+  }
+  // precondition_failed: solo-fallback is the only policy that keeps the run moving
+  // ("falls back to --solo inline" is the ORCHESTRATOR's move — the engine surfaces the
+  // directive; it cannot implement inline itself). ask and wait-reset both escalate.
+  if (policy === 'solo-fallback') {
+    action = 'solo-fallback';
+  }
+  return { policy, action, error_class: null, dispatch_status: dispatchStatus };
+}
+
 function validateReviewRoster(roster) {
   if (!roster || typeof roster !== 'object') {
     throw new TypeError('review roster is required');
@@ -1731,6 +1774,16 @@ class AutopilotEngine {
     }
 
     if (!parsed || parsed.status !== 'committed') {
+      const engineUnavailable = parsed
+        ? resolveEngineUnavailableDirective(roster, parsed.status, parsed.error)
+        : null;
+      if (engineUnavailable) {
+        ledger.push(this.ledgerEntry('engine_unavailable_policy', engineUnavailable.action, this.now(), {
+          policy: engineUnavailable.policy,
+          error_class: engineUnavailable.error_class,
+          dispatch_status: engineUnavailable.dispatch_status,
+        }));
+      }
       return {
         status: 'blocked',
         phase: 'dispatch_implementation',
@@ -1740,6 +1793,7 @@ class AutopilotEngine {
         implementationResult,
         implementationArgs,
         implementation: parsed,
+        engine_unavailable: engineUnavailable,
         ledger,
       };
     }
@@ -2171,6 +2225,10 @@ class AutopilotEngine {
           review: null,
           implementationChain,
           reviewChain,
+          // Machine-readable on_engine_unavailable directive (additive; null unless the
+          // dispatch died engine_unavailable/precondition_failed) — depth-0 acts on
+          // action ∈ escalate | solo-fallback | wait-reset instead of re-deriving policy.
+          engine_unavailable: implementation.engine_unavailable || null,
           ledger,
         });
       }

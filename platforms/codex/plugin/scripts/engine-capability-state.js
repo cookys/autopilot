@@ -480,7 +480,9 @@ function classifyErrorContent(content) {
     text.includes('free tier limit') ||
     text.includes('run out of credits') ||
     text.includes('quota limit') ||
-    text.includes('billing quota')
+    text.includes('billing quota') ||
+    text.includes('balance exhausted') ||
+    text.includes('payment required')
   ) {
     return 'quota_exhausted';
   }

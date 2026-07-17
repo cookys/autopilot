@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.49 — L1 cache-key parity gate + case-6b hardened against ambient GOTOOLCHAIN
+
+**Headline**: Two small robustness fixes to the L1 test-integrity harness. First, a new deterministic gate (`scripts/check-l1-cache-key-parity.js`, registered in the `sync-all` ritual) asserts the jest/vitest versions embedded in the CI cache key (`.github/workflows/test.yml`) stay identical to the `jest_ver`/`vitest_ver` pins in `hooks/tests/check-test-integrity-l1.test.sh`. These were two hand-copied constants; on drift CI reinstalls the JS runtime every run and registry flakiness silently degrades the real-runtime L1 cases into SKIPs. Second, L1 test case 6b's red direction no longer depends on the caller's ambient `GOTOOLCHAIN`: a shell exporting `GOTOOLCHAIN=local` used to silently vacuate the regression (v2.32.48 QC panel 🔵). The case now pins a non-local toolchain itself.
+
+### Added
+- `scripts/check-l1-cache-key-parity.js` — Node built-ins only; parses `jest<v>-vitest<v>` from the workflow cache key and the `jest_ver`/`vitest_ver` pins from the L1 test file, resolves both paths from the script's own location, exit 0 on match / exit 1 naming both values on drift, optional `--json`. Registered as ritual `l1-cache-key-parity` in `scripts/sync-manifest.json` (check-only, `tier: both`, triggered by both source files) so pre-commit / CI / preflight all run it.
+- `hooks/tests/check-l1-cache-key-parity.test.sh` — green case (repo in parity) + red case (drifted sandbox copy → exit 1); the red case doubles as the mutation check.
+
+### Changed
+- `hooks/tests/check-test-integrity-l1.test.sh` case 6b now invokes `run_integrity_go` (which pins `GOTOOLCHAIN=go1.26.3`) instead of `run_integrity`, so the red direction holds regardless of ambient `GOTOOLCHAIN`. Assertions unchanged; on the fixed engine behavior is identical (detection overrides to local; the shim's `go version` exits instantly). Comment updated to describe the self-pinned toolchain.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.48 — L1 go runner-detection no longer waits on a Go toolchain download
 
 **Headline**: `hooks/tests/check-test-integrity-l1.test.sh` case 5 was a CI stable-red timing lottery, and behind it sat a real fail-closed engine bug. `scripts/lib/test-integrity-l1.py` `detect_go_tool()` probed `go version` with a 5s timeout using the caller's env. The test harness pins `GOTOOLCHAIN=go1.26.3` and the CI image ships a different go, so every go invocation — including the *presence* probe — first had to download/switch toolchains (~10s on a cold module cache). The probe got killed at 5s → `available:false` → `runner_missing` → `collection_failed` → exit 1 with no `"l1": "shrink"`; the actions/cache hit shifted case 5 into peak parallel contention, making green-vs-red a coin flip around the 5s line. Any consuming repo with a `GOTOOLCHAIN` pin would be spuriously blocked (fail-closed false positive) on its first run.

@@ -195,29 +195,72 @@ codex_transport_merge_pidsets() {
   done | sort -u
 }
 
+# Scan own-uid processes for open fds whose readlink target equals one of this
+# run's private capture paths (stdout, stderr, sidecar). Emits matching pids
+# (one per line), excluding the dispatcher itself. Permission errors on
+# /proc/<pid>/fd/* are ignored. CODEX-branch only.
+codex_transport_scan_fd_holders() {
+  local stdout_path="$1"
+  local stderr_path="$2"
+  local sidecar_path="$3"
+  local my_uid pid owner fd_path target
+  my_uid="$(id -u)"
+
+  for proc in /proc/[0-9]*; do
+    pid="${proc#/proc/}"
+    case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
+    [ "$pid" = "$$" ] && continue
+    # Own-uid only; unreadable /proc entries (other users) are skipped.
+    owner="$(stat -c '%u' "$proc" 2>/dev/null || true)"
+    [ "$owner" = "$my_uid" ] || continue
+    # Skip zombies — they hold no fds and are not "live" for incomplete-tree.
+    codex_transport_pid_is_live "$pid" || continue
+    for fd_path in "$proc"/fd/*; do
+      # readlink fails with EACCES/ENOENT for some entries; ignore those.
+      target="$(readlink "$fd_path" 2>/dev/null || true)"
+      [ -n "$target" ] || continue
+      if [ "$target" = "$stdout_path" ] \
+        || [ "$target" = "$stderr_path" ] \
+        || [ "$target" = "$sidecar_path" ]; then
+        printf '%s\n' "$pid"
+        break
+      fi
+    done
+  done | sort -u
+}
+
 # Reap remaining members of the worker tree within a fixed cleanup budget (seconds).
 # Snapshots descendants∪pgid before signalling; TERM first, then KILL after 1s;
 # hard stop at budget. Returns 0 if clean (no live survivors in the same set).
 # The initial snapshot is retained for the whole budget so setsid escapees remain
 # addressable after their PPID chain is torn down (orphans reparent to init).
-# Args: pgid [budget_s] [worker_pid]
+# Optional seed_pidset (arg 4) is unioned into the kill set — used by the normal-
+# exit path for supervision-time seen-set + post-exit fd-holder detections.
+# Args: pgid [budget_s] [worker_pid] [seed_pidset]
 codex_transport_reap_tree() {
   local pgid="$1"
   local budget_s="${2:-10}"
   local worker_pid="${3:-}"
+  local seed_pidset="${4:-}"
   local start now pidset fresh
   case "$pgid" in
     ''|*[!0-9]*|0|1)
-      # Still try worker-rooted descendants when pgid is unusable.
+      # Still try worker-rooted descendants / seed when pgid is unusable.
       case "$worker_pid" in
-        ''|*[!0-9]*) return 0 ;;
+        ''|*[!0-9]*)
+          if [ -z "$seed_pidset" ]; then
+            return 0
+          fi
+          ;;
       esac
       ;;
   esac
 
   # Snapshot BEFORE any signal so setsid escapees are recorded while the
-  # PPID chain is still intact.
+  # PPID chain is still intact. Seed retains pids from earlier supervision /
+  # fd-holder scans that reparented to init and are no longer walkable.
   pidset="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+  pidset="$(codex_transport_merge_pidsets "$pidset" "$seed_pidset")"
   if ! codex_transport_pidset_has_live "$pidset" && ! codex_transport_pgid_has_live "$pgid"; then
     return 0
   fi
@@ -351,9 +394,11 @@ codex_transport_run() {
   # shellcheck disable=SC2034
   CODEX_WORKER_PGID="$pgid"
 
-  local start now state pidset
+  local start now state pidset seen_set holders seed poll_i
   start="$(date +%s)"
   local timed_out=0
+  seen_set=""
+  poll_i=0
 
   while kill -0 "$worker_pid" 2>/dev/null; do
     state="$(awk '{ print $3 }' "/proc/$worker_pid/stat" 2>/dev/null || echo Z)"
@@ -365,6 +410,14 @@ codex_transport_run() {
       timed_out=1
       break
     fi
+    # Accumulate descendant∪pgid snapshots during supervision so a setsid
+    # escapee reparented to init after the worker exits is still remembered.
+    # Every ~5 polls (~250ms at 50ms sleep) keeps /proc walk cost bounded.
+    if [ $((poll_i % 5)) -eq 0 ]; then
+      seen_set="$(codex_transport_merge_pidsets "$seen_set" \
+        "$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")")"
+    fi
+    poll_i=$((poll_i + 1))
     sleep 0.05
   done
 
@@ -373,6 +426,8 @@ codex_transport_run() {
     # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
     # shellcheck disable=SC2034
     CODEX_DEADLINE_HIT=1
+    # Deadline path unchanged: post-wait liveness uses a fresh snapshot only
+    # (no seen-set / fd-holder extension — those are normal-exit path only).
     codex_transport_reap_tree "$pgid" 10 "$worker_pid" || CODEX_INCOMPLETE_TREE=1
     wait "$worker_pid" 2>/dev/null || true
     # Canonical deadline status for consumers (matches GNU timeout).
@@ -392,13 +447,32 @@ codex_transport_run() {
   # shellcheck disable=SC2034
   RUNNER_EXIT=$?
 
-  # Frontend returned: live descendants (incl. setsid escapees) ⇒ incomplete tree.
-  pidset="$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")"
+  # Normal-exit incomplete-tree detection (two complementary sources):
+  #   1) supervision-time seen-set ∪ post-wait snapshot ∪ pgid (FAST path —
+  #      must run before any expensive walk so a short-lived late writer in the
+  #      original group cannot finish and vanish before we classify)
+  #   2) post-exit fd-holder scan (SLOW; only when the fast path looks clean —
+  #      catches setsid orphans reparented to init that still hold private fds)
+  # Residual honesty: a descendant that never appeared in any live snapshot AND
+  # holds none of the private capture fds remains out of detection reach.
+  pidset="$(codex_transport_merge_pidsets \
+    "$(codex_transport_snapshot_tree_pids "$worker_pid" "$pgid")" \
+    "$seen_set")"
+  holders=""
+  if ! codex_transport_pidset_has_live "$pidset" \
+    && ! codex_transport_pgid_has_live "$pgid"; then
+    holders="$(codex_transport_scan_fd_holders \
+      "$stdout_path" "$stderr_path" "$sidecar_path")"
+    pidset="$(codex_transport_merge_pidsets "$pidset" "$holders")"
+  fi
+  seed="$(codex_transport_merge_pidsets "$seen_set" "$holders")"
   if codex_transport_pidset_has_live "$pidset" || codex_transport_pgid_has_live "$pgid"; then
     # Caller-scope global (consumed by sourcing scripts/dispatch-author.sh).
     # shellcheck disable=SC2034
     CODEX_INCOMPLETE_TREE=1
-    codex_transport_reap_tree "$pgid" 10 "$worker_pid" || true
+    # TERM→KILL within the existing 10s budget; seed keeps reparented holders
+    # addressable after the PPID walk goes blind.
+    codex_transport_reap_tree "$pgid" 10 "$worker_pid" "$seed" || true
   fi
   return 0
 }

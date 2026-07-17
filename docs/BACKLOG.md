@@ -45,11 +45,17 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Fix（若上游修復要回收 check 16）
 - **Source**: 2026-07-17 /l5 run C（v2.32.50）；前身 2026-07-16 deep code-audit + doc-sync（v2.32.39）
 
-### dispatch-hetero 把 quota／auth 死亡誤標為 `question_suspected` — 分類器已認得 pattern，標籤修正是另一半
-- **Trigger**: 下次動 `dispatch-hetero.sh` 的 status 分類（exit-code→status）時順手做。
-- **Context**: 2026-07-17 grok 以 `API error (status 402 Payment Required): Grok Build usage balance exhausted` 死掉、exit 1，dispatch-hetero 走 `question_suspected`（agent exit 1、無 commit ⇒ 疑似停在澄清問題），depth-0 得手動記 quota。v2.32.50 已讓 `engine-capability-state classify-error` 認得該 pattern（`balance exhausted`／`payment required`→`quota_exhausted`），但 **dispatch-hetero 本身仍把它籠統標 `question_suspected`**——剩下的一半是：dispatch-hetero 在 exit≠0 時先跑 `classify-error`（吃 agent_log），若判到 `quota_exhausted`／`rate_limited`／`auth_failed`／`overloaded` 就標對應狀態（而非 `question_suspected`），讓 passive capture 與 depth-0 一眼看出是斷糧而非卡問題。
+### `on_engine_unavailable` 政策尚未接到新 `engine_unavailable` status — 自動化 payoff 的另一半
+- **Trigger**: 下次動 `src/engine/autopilot-engine.js` 的 implement 結果分支，或下次 engine loop 內實際遇到 `engine_unavailable`。
+- **Context**: v2.32.53 讓 dispatch-hetero 對 quota/rate/auth/overload 死亡誠實標 `engine_unavailable`（取代籠統 `question_suspected`），engine 端以 generic non-committed 分支安全消化——但 resolver 既有的 `on_engine_unavailable` 政策鍵（ask/solo-fallback/wait-reset）尚未對這個 status 做程式化反應（目前仍由 depth-0/foreman 讀 JSON 後人工走政策）。接線後 engine loop 可自動走 ask→escalate/solo-fallback，關掉最後一段人工判讀。
+- **Effort**: S
+- **Source**: 2026-07-17 /l5 run E（v2.32.53）opus panel 🔵
+
+### engine-capability-state 的 quota merge 不認 `available` — 過期 exhausted 蓋掉活觀測
+- **Trigger**: 下次動 `engine-capability-state.js` 的 merge/current 邏輯；或 `status quota` 再次顯示與現實矛盾的 pool 狀態時。
+- **Context**: 2026-07-17 grok 儲值回歸後 live probe 記了 `available`（event 15），但 `current` report 仍顯示 `exhausted`（event 13）——merge 的 latest-valid 邏輯疑似不認 `available` 值（或 probe 的 role/欄位組合不參與 quota merge）。dispatch 不 gate 在這上面（僅 skill-mode 消費）故無事故，但 `autopilot status quota` 會給誤導讀數。順帶：U2 的共現 gate 仍偏寬（`status`/`error` 裸子串共現即判 quota——opus 對抗探針實證兩個假陽性），要精度就綁數字 HTTP token。
 - **Effort**: Fix
-- **Source**: 2026-07-17 /l5 run C（grok 402 事故）
+- **Source**: 2026-07-17 /l5 run E foreman 觀測＋opus panel 🔵
 
 ### engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用
 - **Trigger**: 下次要在 `engine implement-review` 迴圈裡用 endpoint-backed reviewer（GLM/MiniMax via cc-shim `--endpoint`），或碰 `src/engine/autopilot-engine.js` buildReviewArgs 段時。

@@ -19,7 +19,7 @@ REPO_REAL="$(cd "$REPO_ROOT" && pwd -P)"
 mkdir -p "$HOOK_HOME"
 LOG="$TEST_TMP/debug-config.log"
 ( cd "$REPO_REAL" && HOME="$HOOK_HOME" AUTOPILOT_PLUGIN_SMOKE=1 \
-    opencode debug config --print-logs >"$LOG" 2>&1 )
+    timeout 60 opencode debug config --print-logs >"$LOG" 2>&1 )
 
 CONFIG_LOG="$(cat "$LOG")"
 assert_contains "$CONFIG_LOG" '[autopilot] plugin loaded' "OpenCode executes plugin setup"
@@ -34,5 +34,20 @@ if [ -n "$INTENT_FILE" ]; then
   assert_contains "$INTENT" '"last_tool": "autopilot_smoke"' "smoke intent exercises capture path"
   assert_contains "$INTENT" "\"cwd\": \"$REPO_REAL\"" "smoke intent records project directory"
 fi
+
+# Static field-mapping guard: AUTOPILOT_PLUGIN_SMOKE calls captureIntent directly and
+# bypasses tool.execute.after, so a renamed hookInput.args (etc.) would not fail the
+# smoke path. Assert the canonical source still wires the real hook fields.
+PLUGIN_SRC="$(cat "$REPO_ROOT/platforms/opencode/plugin/autopilot.ts")"
+assert_contains "$PLUGIN_SRC" 'tool.execute.after' \
+  "canonical plugin registers tool.execute.after hook"
+assert_contains "$PLUGIN_SRC" 'hookInput.args' \
+  "tool.execute.after maps hookInput.args into capture"
+assert_contains "$PLUGIN_SRC" 'hookInput.tool' \
+  "tool.execute.after maps hookInput.tool into capture"
+assert_contains "$PLUGIN_SRC" 'hookInput.sessionID' \
+  "tool.execute.after maps hookInput.sessionID into capture"
+assert_contains "$PLUGIN_SRC" 'captureIntent(hookInput.tool, hookInput.args, hookInput.sessionID)' \
+  "tool.execute.after passes hook fields to captureIntent"
 
 finalize_test

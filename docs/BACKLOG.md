@@ -736,3 +736,27 @@ onto v2.32.48 by grok-4.5.
      (containment is teardown hygiene, not a malicious-worker boundary).
 - **Effort**: L (design + isolation semantics).
 - **Source**: 2026-07-17 U1b panel findings remediation on identity-containment port.
+
+## dispatch-hetero strict postcheck emits empty status（2026-07-17, /l6 identity-port 兩次重現）
+
+- **Symptom**: strict-contract + detach 座標（--ledger/--run-id/--stage）下，worker 正常
+  committed、boundary/acceptance 在 depth-0 重跑全綠，但 result JSON `status:""` + exit file=1、
+  `error:null`、無 `boundary`/`acceptance` 欄位。同一 session 兩個 run 皆重現
+  （u1-identity-port-1784269379、u1b-identity-fix-1784270435）。
+- **Evidence**: depth-0 以相同 range 重跑 `check-disjointness validate`（disjoint:true）與全部
+  5 條 acceptance argv（oracle PASS 12、hetero-contract PASS 52、sync/parity/payload check 全 0）。
+- **Suspects**: detached child 內 run_strict_contract_postchecks 的失敗路徑未設
+  STRICT_POSTCHECK_STATUS 即 return？或 acceptance 巢狀 dispatch（oracle 測試本身跑
+  dispatch-hetero）與 detach env 交互。需最小重現 + 修復；修復前 strict+detach 的空 status
+  一律視為「需 depth-0 重驗」而非失敗定論。
+- **Effort**: M。**Source**: 2026-07-17 /l6 identity-port run notes。
+
+## agy 模型名稱漂移：`gemini-flash` 不再被接受（2026-07-17）
+
+- **Symptom**: `dispatch-review.sh --runner agy --model gemini-flash` → agy 0.2.x 印模型選單、
+  no_verdict。現行合法值為顯示字串（如 `Gemini 3.5 Flash (High)`）。
+- **Impact**: `review-loop-config.md` qc_panel 的 `gemini-flash` 席位、所有硬寫 gemini-flash 的
+  呼叫點會 fail-closed（no_verdict）。本輪 workaround：手動改傳完整字串（verified 可 review）。
+- **Fix direction**: 在 dispatch-review/roster resolver 加 engine-id→agy 顯示名映射，或改
+  config 值 + 更新 references/model-routing.md；加一條 agy 模型名 probe 到 harness-maintenance。
+- **Effort**: S。**Source**: 2026-07-17 /l6 QC panel gemini 席 no_verdict 診斷。

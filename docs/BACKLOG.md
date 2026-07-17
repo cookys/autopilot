@@ -41,9 +41,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
 - **Trigger**: 下次動 `scripts/dispatch-author.sh` codex branch 或 `scripts/lib/dispatch-author-codex-transport.sh`；或首次出現真實 incomplete-tree 事故（result 被 orphan 汙染）。
-- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）。已文件化殘差：poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫偵測不到（gpt-5.5 round-4 flag，depth-0 裁決 accepted-documented-boundary）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。注意 repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation（v2.25.8 revert）；同 uid 對抗性 worker 本就在 threat model 外。
+- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。
 - **Effort**: S–M。
-- **Source**: 2026-07-18 v2.32.54 P1 review round 4（gpt-5.5）＋ depth-0 adjudication（project ledger p1 round-4 event）。
+- **Source**: 2026-07-18 v2.32.54 P1 review round 4 + P3 terminal qc panel（gpt-5.5/opus）＋ depth-0 mutation-validated adjudication（project ledger p1 round-4 / p3 finding_adjudicated events）。
 
 ### OpenCode 1.17 遷移收尾 — ✅ check 15 根治、check 16 降級 advisory（v2.32.50）
 - **Trigger**: 上游 opencode 修復 `debug skill` 輸出截斷後（可回收 check 16 為 hard-fail 時）；或 opencode 再破壞性改 plugin/serve API 時。

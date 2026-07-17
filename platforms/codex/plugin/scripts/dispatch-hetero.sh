@@ -129,6 +129,10 @@ GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TE
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
+IDENTITY_DRIFT=0      # 1 iff worker mutated consuming-repo user.name/email via shared .git/config
+IDENTITY_PRE_NAME=""  # snapshot of consuming-repo user.name before runner
+IDENTITY_PRE_EMAIL="" # snapshot of consuming-repo user.email before runner
+IDENTITY_REPO_ROOT="" # host repo root captured at pre-snapshot (for explicit git -C restore)
 SKILL_MODE="off"
 SKILLS=()
 EFFECTIVE_SKILL_MODE="off"
@@ -500,6 +504,21 @@ process.exit(2);
 }
 
 emit() { # status commit files ins del worktree error
+  # Identity containment rail (shared emit path — every outcome): compare post-run
+  # consuming-repo user.name/email to the pre-run snapshot; restore + flag on drift.
+  # A bare `git config user.*` inside a worktree writes through the shared .git/config.
+  # Always use git -C "$IDENTITY_REPO_ROOT" so restore does not depend on dispatcher cwd.
+  if [ -n "${IDENTITY_REPO_ROOT:-}" ]; then
+    local post_name post_email
+    post_name="$(git -C "$IDENTITY_REPO_ROOT" config user.name 2>/dev/null || true)"
+    post_email="$(git -C "$IDENTITY_REPO_ROOT" config user.email 2>/dev/null || true)"
+    if [ "$post_name" != "$IDENTITY_PRE_NAME" ] || [ "$post_email" != "$IDENTITY_PRE_EMAIL" ]; then
+      IDENTITY_DRIFT=1
+      [ -n "$IDENTITY_PRE_NAME" ] && git -C "$IDENTITY_REPO_ROOT" config user.name "$IDENTITY_PRE_NAME" || git -C "$IDENTITY_REPO_ROOT" config --unset user.name 2>/dev/null || true
+      [ -n "$IDENTITY_PRE_EMAIL" ] && git -C "$IDENTITY_REPO_ROOT" config user.email "$IDENTITY_PRE_EMAIL" || git -C "$IDENTITY_REPO_ROOT" config --unset user.email 2>/dev/null || true
+      echo "WARNING: identity drift detected — worker changed the consuming repo's git identity; restored the original values" >&2
+    fi
+  fi
   local commit_json="null" wt_json="null" err_json="null" orphan_json="null"
   [ -n "${2:-}" ] && commit_json="\"$2\""
   [ -n "${6:-}" ] && wt_json="\"$(_flat_json_escape "$6")\""
@@ -555,12 +574,17 @@ emit() { # status commit files ins del worktree error
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ] && [ "$1" = "committed" ] && [ "${STRICT_POSTCHECK_OK:-0}" -eq 1 ]; then
     strict_boundary_fields=', "boundary": "ok", "acceptance": "ok"'
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s }\n' \
+  # ADDITIVE identity_drift — only when the rail detected a mutation (clean runs omit the key).
+  local identity_fields=""
+  if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
+    identity_fields=', "identity_drift": true'
+  fi
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$strict_boundary_fields"
+    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$strict_boundary_fields" "$identity_fields"
 }
 
 check_session_mode_gate() {
@@ -1147,6 +1171,15 @@ fi
 unset _wt_common_dir _wt_exclude _wt_name
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 BASE_SHA="$(git rev-parse "$BASE")"
+
+# Snapshot consuming-repo git identity BEFORE the runner (worktrees share .git/config;
+# a bare `git config user.name` inside the worktree would silently rewrite the host repo).
+# Capture host repo root once so emit() restore uses git -C (cwd-independent).
+IDENTITY_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$IDENTITY_REPO_ROOT" ]; then
+  IDENTITY_PRE_NAME="$(git -C "$IDENTITY_REPO_ROOT" config user.name 2>/dev/null || true)"
+  IDENTITY_PRE_EMAIL="$(git -C "$IDENTITY_REPO_ROOT" config user.email 2>/dev/null || true)"
+fi
 
 # --- worker containment (BEST-EFFORT teardown — NOT a malicious-worker boundary) ---
 # Purpose: reap escaped descendants so a long/aborted run doesn't leak background
@@ -1784,7 +1817,7 @@ dispatch_detached_run() {
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI PI_BIN CONTAINMENT CONTAINED EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \

@@ -24,6 +24,20 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.49 — Dispatch worker git-identity containment
+
+Closes the incident where a dispatched worker's bare `git config user.name/email` inside its
+git worktree wrote through the **shared `.git/config`** and silently rewrote the parent
+clone's commit identity for every later commit.
+
+- `dispatch-hetero.sh` + `dispatch-author.sh` snapshot the consuming repo's
+  `user.name`/`user.email` before the runner; on post-run drift they restore the originals
+  (via `git -C <repo-root>`, cwd-independent), add an additive `"identity_drift": true` to the
+  result JSON, and print a loud warning (without echoing the identity values).
+- Focused RED→GREEN oracle `hooks/tests/dispatch-identity-containment.test.sh` proves the
+  worktree-config passthrough is real (negative control) and that the rail flags + restores.
+- Implemented by grok-4.5 under the strict-contract dispatch rail; ported onto v2.32.48 by grok-4.5.
+
 ## v2.32.48 — L1 go runner-detection no longer waits on a Go toolchain download
 
 **Headline**: `hooks/tests/check-test-integrity-l1.test.sh` case 5 was a CI stable-red timing lottery, and behind it sat a real fail-closed engine bug. `scripts/lib/test-integrity-l1.py` `detect_go_tool()` probed `go version` with a 5s timeout using the caller's env. The test harness pins `GOTOOLCHAIN=go1.26.3` and the CI image ships a different go, so every go invocation — including the *presence* probe — first had to download/switch toolchains (~10s on a cold module cache). The probe got killed at 5s → `available:false` → `runner_missing` → `collection_failed` → exit 1 with no `"l1": "shrink"`; the actions/cache hit shifted case 5 into peak parallel contention, making green-vs-red a coin flip around the 5s line. Any consuming repo with a `GOTOOLCHAIN` pin would be spuriously blocked (fail-closed false positive) on its first run.

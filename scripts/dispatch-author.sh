@@ -318,6 +318,24 @@ emit_result() {
   local exit_code="$4"
   local extra_fields="${5-}"
 
+  # Identity containment rail: compare + restore consuming-repo identity when a
+  # pre-run snapshot was taken. Drift FLAGS only (additive JSON field + warning);
+  # does NOT change the exit code (containment_breach is a separate rail).
+  if [ -n "$REPO_ROOT" ] && [ "${IDENTITY_SNAPSHOT_TAKEN:-0}" -eq 1 ]; then
+    local post_name post_email
+    post_name="$(git -C "$REPO_ROOT" config user.name 2>/dev/null || true)"
+    post_email="$(git -C "$REPO_ROOT" config user.email 2>/dev/null || true)"
+    if [ "$post_name" != "$IDENTITY_PRE_NAME" ] || [ "$post_email" != "$IDENTITY_PRE_EMAIL" ]; then
+      IDENTITY_DRIFT=1
+      [ -n "$IDENTITY_PRE_NAME" ] && git -C "$REPO_ROOT" config user.name "$IDENTITY_PRE_NAME" || git -C "$REPO_ROOT" config --unset user.name 2>/dev/null || true
+      [ -n "$IDENTITY_PRE_EMAIL" ] && git -C "$REPO_ROOT" config user.email "$IDENTITY_PRE_EMAIL" || git -C "$REPO_ROOT" config --unset user.email 2>/dev/null || true
+      echo "WARNING: identity drift detected — worker changed the consuming repo's git identity; restored the original values" >&2
+    fi
+  fi
+  if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
+    extra_fields="${extra_fields}, \"identity_drift\": true"
+  fi
+
   local raw_log_json="null"
   if [[ "$raw_log" != "null" ]]; then
     raw_log_json="\"$(json_escape "$raw_log")\""
@@ -645,6 +663,10 @@ CONTAINMENT_PRE_STATUS=""
 CONTAINMENT_PRE_HEAD=""
 CONTAINMENT_POST_STATUS=""
 CONTAINMENT_POST_HEAD=""
+IDENTITY_DRIFT=0
+IDENTITY_PRE_NAME=""
+IDENTITY_PRE_EMAIL=""
+IDENTITY_SNAPSHOT_TAKEN=0
 GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
@@ -659,6 +681,15 @@ if [[ "$STRICT_CONTRACT" -eq 1 ]]; then
   CONTAINMENT_PRE_STATUS="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null || true)"
   CONTAINMENT_PRE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
   [ -n "$CONTAINMENT_PRE_HEAD" ] || die_precondition "not a git repository at --repo-root"
+fi
+
+# Snapshot consuming-repo git identity BEFORE the runner (alongside CONTAINMENT_PRE_*).
+# A worker that reaches the shared .git/config can rewrite user.name/email; we restore
+# on emit. Only when --repo-root is known (strict-roster / strict-contract paths).
+if [ -n "$REPO_ROOT" ]; then
+  IDENTITY_PRE_NAME="$(git -C "$REPO_ROOT" config user.name 2>/dev/null || true)"
+  IDENTITY_PRE_EMAIL="$(git -C "$REPO_ROOT" config user.email 2>/dev/null || true)"
+  IDENTITY_SNAPSHOT_TAKEN=1
 fi
 
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: ${RUNNER}/${MODEL} (effort=${EFFORT}, timeout=${TIMEOUT})" >&2

@@ -695,11 +695,21 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Effort**: S。
 - **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。
 
-## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）
+## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.49
 
-- **Trigger**: C4a r3 worker 在 worktree 跑裸 `git config user.name "Test Bot"` → worktree 共享主
-  repo `.git/config` → 主 clone 28 commits（含 origin/develop 的 76daeb8）作者變 Test Bot。
-- **修復設計**（下一 session；codex 池 2026-07-23 前不可用，implementer 用 grok-4.5 或 MiniMax）：
-  dispatch-hetero.sh / dispatch-author.sh 在 run 前快照消費 repo 的 `user.name`/`user.email`，
-  teardown 比對；變動 ⇒ 修回 + 結果 JSON 加 `identity_drift: true` + 大聲警告。oracle fixtures
-  一律 `git -C` / inline `-c` identity。詳見 .claude/knowledge/debug-patterns.md。
+RESOLVED 2026-07-17（ported onto develop as v2.32.49）：dispatch-hetero.sh / dispatch-author.sh 快照消費
+repo 的 user.name/user.email，drift ⇒ 用 `git -C <repo-root>` 還原 + 結果 JSON 加 `identity_drift:true`
++ 大聲警告（不回顯值）。Implemented by grok-4.5 under the strict-contract dispatch rail; ported
+onto v2.32.48 by grok-4.5.
+
+## identity rail on dispatch-author non-strict path（2026-07-17, 低優先）
+
+- MiniMax aggregate review 指出：dispatch-author.sh 的 identity 快照/還原 gated on REPO_ROOT，
+  而 REPO_ROOT 只在 --strict-contract/--strict-roster 設；非 strict 的 explicit-CLI author 派遣
+  REPO_ROOT 空 ⇒ identity rail 靜默停用。**非 regression**（原本無 rail）、**非事故面**（author
+  是 read-only rail：scratch cwd、不建 worktree、不 commit，worker 改不到消費 repo config；
+  Test Bot 事故發生在 hetero write 路徑）。完整性 follow-up：讓 author 非 strict 路徑也 fallback
+  到 `git rev-parse --show-toplevel` 取 repo-root。
+- detach path 已查核為正確（IDENTITY_REPO_ROOT 在 dispatch_detached_run 的 declare -p 序列化
+  列表、snapshot 在 detach fork 前的 parent main flow、值傳入 child）——碼序＋序列化＋對抗實證
+  三證，但尚無端到端 detach drift 實測（目前無呼叫者傳 ledger coords，低風險）。

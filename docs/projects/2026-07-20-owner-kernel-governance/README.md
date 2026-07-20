@@ -117,8 +117,8 @@
 | Design | Complete | Board-approved five-family plan: `d98977c` |
 | L-1.5 scope audit | Complete | Dimension and verbatim-requirement ledgers above |
 | L-1.6 skill routing | Complete | dev-flow, l6, ceo-agent, test-strategy, harness-maintenance, quality-pipeline invoked in run `owner-kernel-p0-1784543437001` |
-| P0 | **Complete — verdict STOP** | [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); probe [`p0/host-trust-roots.json`](p0/host-trust-roots.json) |
-| P1 | **NOT AUTHORIZED** | P0 kill condition triggered (plan P0 step 7); requires a Board decision to proceed |
+| P0 | **INCOMPLETE — blocked at the evidence gate** | Step 4 not performed (2/8 attacks, 1/4 hosts); step 7 not evaluable. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); probe [`p0/host-trust-roots.json`](p0/host-trust-roots.json) |
+| P1 | **NOT AUTHORIZED** | Because the P0 pass bar is **unproven**, not because it was failed. Requires a Board decision on the step-4 circular dependency |
 | P2 | Blocked | Depends on P1 |
 | P3 | Blocked | Depends on P2 |
 | P4 | Blocked | Depends on P3 |
@@ -126,18 +126,27 @@
 
 ### P0 outcome
 
-**STOP.** No target host provides the trust roots the plan requires, so Owner Kernel product code
-is not funded. This is the gate working as designed, not a failure of execution — plan P0 step 7
-exists precisely to produce this result before schemas or engine modules are written.
+**INCOMPLETE — blocked at the evidence gate. P1 not authorized.**
+
+An earlier revision recorded a proven STOP. That was withdrawn: plan P0 step 4 requires probing
+each target harness with eight named attacks, and that work was not performed. A kill condition of
+the form *"no target host achieves full/partial"* cannot be established by not probing the hosts.
+P1 stays unauthorized because the pass bar is **unproven** — not because incapability was shown.
+
+**P0 cannot be completed as written**: 6 of the 8 named attacks target Owner Kernel surfaces that
+**P1 creates**, so the gate authorizing P1 depends on P1's artifacts. Board decision required.
 
 | P0 measurement | Value |
 |---|---|
-| Hosts **qualified** (all four roots proven) | **0 of 4** — Claude Code, Codex, OpenCode, Antigravity all `unverified` (no live probe; records are evidence insufficiency, **not** proof of incapability) |
-| Trust roots **proven** on the executing host | **0 of 4** — R1 `fail`, R2 `unverified`, R3 `fail`, R4 `fail` |
+| Plan step 4 (per-target probes) | **NOT PERFORMED** — 2 of 8 attacks, 1 of 4 hosts |
+| Step 7 kill condition | **NOT EVALUABLE** — requires step 4 |
+| Hosts **qualified** | **0 of 4** — none proven qualified; 3 of 4 never live-probed. **No host is claimed incapable** |
+| Trust roots on the executing host (Claude Code) | R1 `suspect`, R2 `unverified`, R3 `fail`, R4 `fail` — only R3/R4 rest on completed evidence |
+| Attacks actually executed | **witness-head rewrite** (succeeded, on a copy); policy/Kernel mutation (partial) |
 | Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
 | Projected post-P3 absolute target | **51** — KR10 fails, projecting a rise of 9 |
 | Mandatory model-review dispatch baseline (KR8/KR9 denominator) | **6** (distinct from 28 mandatory QC steps overall) |
-| Three-task spike | **Not run** — acceptance already unreachable; see findings § 3 |
+| Three-task spike | **Deferred pending step 4** — not cancelled as impossible |
 
 ## Verification Contract
 
@@ -166,7 +175,11 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | P0 remains a funding/kill gate | The host trust roots and 30% review reduction must be measured before architecture is funded |
 | 2026-07-20 | Ship aliases for one compatibility release; do not fake elapsed telemetry | Preserves the approved migration contract without inventing future evidence |
 | 2026-07-20 | Target v2.32.57 | Externally visible change without a new skill/agent uses a patch bump in this repo |
-| 2026-07-20 | **P0 = STOP; P1 not authorized** | Plan P0 step 7 kill condition met — zero hosts qualified. On the executing host 0 of 4 roots are proven (R1/R3/R4 disproven, R2 unverified); the four target hosts have had no live probe. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
+| 2026-07-20 | ~~P0 = STOP; kill condition met~~ **WITHDRAWN** | Not supported. Step 4 was never performed, so the universal-negative kill condition could not have been established. Superseded by the row below |
+| 2026-07-20 | **P0 = INCOMPLETE/BLOCKED; P1 not authorized** | Step 4 not performed (2/8 attacks, 1/4 hosts); step 7 not evaluable. P1 blocked because the pass bar is **unproven**, not failed. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
+| 2026-07-20 | Plan P0 step 4 is **unexecutable as written** — Board decision required | 6 of 8 named attacks target Owner Kernel surfaces P1 creates, so the gate authorizing P1 depends on P1's artifacts. Three options recorded; none recommended |
+| 2026-07-20 | R1 weakened `fail` → `suspect`; `suspect` value added | Writable transcript files are a record, not proof the live in-memory authenticated envelope is forgeable; the forge attack was never run. `suspect` (evidence of weakness) is now distinct from `candidate` (evidence toward passing) |
+| 2026-07-20 | Option (A) — real per-target probes — rejected as partly impossible | 3 of 4 harnesses would need live driving (codex quota recorded exhausted) and 6 of 8 attacks are unrunnable pre-P1. Chose (B) reclassify, per depth-0 QC |
 | 2026-07-20 | Probe verdicts made four-valued and fail-closed (depth-0 QC, Major) | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. Unreachable today, but it would have minted a false `pass` on a future host. `pass` now requires a named positive proof; none is implemented, so qualification is unreachable by construction |
 | 2026-07-20 | Two claims **weakened** as part of that fix | R2 `fail` → `unverified` (host-memory capability is not externally observable); target hosts tier `none` → `unverified` (no measurement supported `none`). STOP retained on the narrower claim that zero hosts are *qualified* |
 | 2026-07-20 | Three-task spike deliberately not run | KR9 requires a transcript-free resume from the ledger; the ledger is rewritable by the party it records, so the spike's acceptance was already unreachable. Spending on it would produce numbers the same evidence disproves |

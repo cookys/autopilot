@@ -231,6 +231,32 @@ without adding schemas, engine modules, or product code.
    release claims alone. Also stop if no target host achieves `full` or `partial` with the authenticated
    user channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.
 
+> **P0 EXECUTION STATUS (recorded 2026-07-20, run `owner-kernel-p0-1784543437001`): INCOMPLETE —
+> BLOCKED. Step 4 was NOT performed and step 7 is NOT EVALUABLE.** Evidence:
+> [`docs/projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md`](../projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md).
+>
+> **Step 4 as written cannot be executed in P0.** It requires eight named attacks per target
+> harness, but **six of the eight attack Owner Kernel surfaces that P1 creates** — protected-event
+> envelopes, the decision-append path, owner capability handles, the mediator, and the capability
+> set. A gate that authorizes P1 cannot depend on P1's artifacts. Actual coverage achieved: **2 of
+> 8 attacks on 1 of 4 hosts** (witness-head rewrite executed; policy/Kernel mutation partial).
+>
+> Consequently the step-7 kill condition — a universal negative over four hosts — **has not been
+> evaluated**, and must not be treated as met. Three target harnesses were never probed; an
+> unprobed host is *not qualified*, which is **not** the same as *proven incapable*. P1 remains
+> unauthorized because the pass bar is unproven, not because it was failed.
+>
+> **Board decision required before P0 can be completed or fairly failed.** Options: (1) split the
+> gate so P0 probes only pre-existing roots and the six Kernel-surface attacks become a P1-exit
+> gate; (2) authorize a throwaway probe harness in P0, which is product code and needs an explicit
+> exception to the no-core-code rule; (3) amend the kill condition to something P0 can evaluate.
+> No option is recommended here.
+>
+> Findings that DO survive, scoped to the executing host (Claude Code) only: an actively-executed
+> **witness-head rewrite succeeded** (no append-only attribute, no external receipt chain), and
+> **no pre-action mediation is currently active** (the only preventive gate is default-off,
+> unarmed, fails open, and its control surfaces are model-writable).
+
 ### P1 — Governance and durable owner events
 
 **Size**: L

@@ -34,7 +34,7 @@
 #   passed merely because known user-channel artifacts were not writable, and R4 passed merely
 #   because some ledger carried an append-only attribute. That is unsound: not finding the hole
 #   you looked for is not proof of the property. Those branches were unreachable today but would
-#   have silently minted a false `pass` on a future host. Each root now emits one of four values:
+#   have silently minted a false `pass` on a future host. Each root now emits one of FIVE values:
 #
 #     fail        — a COMPLETED active attack demonstrated the root is broken. Proof of absence.
 #     suspect     — partial evidence of WEAKNESS, but no completed attack. Not a disproof.
@@ -44,30 +44,43 @@
 #                   NEVER sufficient to qualify a host.
 #     pass        — the COMPLETE plan-defined live proof was executed and succeeded.
 #
-#   `suspect` and `candidate` point in OPPOSITE directions and are deliberately distinct: an
-#   earlier revision collapsed "evidence of weakness" into the toward-passing `candidate` bucket,
-#   which made weakness read as partial strength.
+#   The algebra is FIVE-VALUED. `suspect` and `candidate` point in OPPOSITE directions and are
+#   deliberately distinct: an earlier revision collapsed "evidence of weakness" into the
+#   toward-passing `candidate` bucket, which made weakness read as partial strength.
 #
 # SCOPE LIMIT — THIS SCRIPT DOES NOT SATISFY PLAN P0 STEP 4
 #
 #   Step 4 requires probing EACH target harness and recording full/partial/none, having attempted
-#   eight named attacks. This script attempts TWO of the eight, against ONE host (the one it runs
-#   on). It therefore CANNOT establish the step-4 kill condition for any host, and its output must
-#   not be read as doing so. See `named_attack_coverage` in the JSON for the exact gap.
+#   eight named attacks. This script executes NONE of the eight. It performs reachability and
+#   configuration MEASUREMENT only. It therefore cannot establish the step-4 kill condition for
+#   any host, and its output must not be read as doing so. See `named_attack_coverage`.
 #
-#   Six of the eight named attacks are NOT RUNNABLE before P1 exists, because they attack Owner
-#   Kernel surfaces P1 creates (protected-event envelopes, the decision-append path, owner
-#   capability handles, the mediator, the capability set). That is a circular dependency in the
-#   plan, not an omission by this probe.
+#   The remaining eight attacks are UNIMPLEMENTED / NOT RUN. That is a statement about this
+#   probe's coverage, NOT a claim that they cannot be run: plan P0 steps 5-6 explicitly permit
+#   frozen fixtures and a minimum proposed JSONL/manual spike, so a disposable no-core-code
+#   harness may well be able to exercise the Kernel-surface attacks against fixtures rather than
+#   production modules. No impossibility was demonstrated and none is claimed. Whether P0 should
+#   probe those surfaces via fixtures, or defer them to a P1-exit gate, is an UNRESOLVED PLAN
+#   PHASE-ORDER AMBIGUITY for Board amendment — not a structural blocker.
 #
-#   `pass` requires a positive proof probe. Those probes are NOT IMPLEMENTED in this script
-#   (each is named in `required_proof`), so no root can currently return `pass`. That is
-#   deliberate and honest: the gate must not be satisfiable by a probe that never looked.
+# DEPLOYMENT READINESS IS NOT HOST CAPABILITY
+#
+#   Step 4 probes what a HOST CAN SUPPORT. Whether THIS repo checkout currently has a gate armed
+#   is a separate, weaker fact. A default-off hook proves this deployment is unmediated; it does
+#   not disprove the harness's capability to mediate. The two are reported in separate fields and
+#   only an active deny/bypass test can settle capability.
+#
+# NEITHER DIRECTION IS REACHABLE BY THIS PROBE
+#
+#   `pass` requires a positive proof probe; `fail` requires a COMPLETED active attack. Neither is
+#   implemented here (each is named in the per-root `required_proof`), so no root can currently
+#   return `pass` OR `fail`. That is deliberate: the gate must not be satisfiable in either
+#   direction by a probe that never looked.
 #
 #   A host is `qualified` ONLY when all four roots are `pass`. Anything else is `not_qualified`.
 #   `not_qualified` explicitly does NOT mean "incapable" — it means "not proven capable".
 #
-# Usage: probe-host-trust-roots.sh [--repo <dir>] [--json]
+# Usage: probe-host-trust-roots.sh [--repo <dir>] [--executing-host <id>] [--json]
 # Exit:  0 always (telemetry probe; the verdict is in the payload, not the exit code)
 
 set -uo pipefail
@@ -84,7 +97,7 @@ while [ "$#" -gt 0 ]; do
     --repo) REPO="$2"; shift 2 ;;
     --executing-host) EXECUTING_HOST_ID="$2"; shift 2 ;;
     --json) JSON_ONLY=1; shift ;;
-    -h|--help) sed -n '1,32p' "$0"; exit 0 ;;
+    -h|--help) sed -n '1,84p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -214,26 +227,34 @@ R1_PROOF="TO DISPROVE: write a forged user-intent/approval envelope and observe 
 if [ "$CAPABILITY_BROKER" = "absent" ]; then r2="unverified"; else r2="candidate"; fi
 R2_PROOF="Authenticate the handle, then prove a worker process and a model tool can neither open, read, nor forge it. Socket presence alone is not evidence. Not implemented."
 
-# R3 — two distinct claims, only one of which this probe can complete:
-#   (a) "no pre-action mediation is ACTIVE"  — directly observable, no attack needed. If the only
-#       preventive gate is default-off and unarmed, there is no mediation. That is a COMPLETED
-#       disproof of R3 as it currently stands.
-#   (b) "mediation is DEFEATABLE"            — needs an active bypass attack. Writable control
-#       surfaces are evidence of weakness (suspect), not a completed bypass.
-if [ "$MEDIATION_ACTIVE" = "no" ]; then
-  r3="fail"          # (a) completed: nothing is mediating
-elif [ "$HOOK_SRC_WRITABLE" = "yes" ] || [ "$HOOK_DIR_WRITABLE" = "yes" ] || [ "$SETTINGS_WRITABLE" = "yes" ]; then
-  r3="suspect"       # something may be armed, but its control surfaces are model-writable
+# R3 — TWO SEPARATE FACTS. Conflating them was a defect in the previous revision.
+#   (a) DEPLOYMENT READINESS: is a gate armed in THIS checkout right now? Directly observable.
+#       Reported in `deployment_mediation_active`. A default-off hook makes this "no".
+#   (b) HOST CAPABILITY: can this HARNESS support pre-action mediation the governed party cannot
+#       disable? This is what step 4 probes, and (a) does NOT settle it — an unarmed gate says
+#       nothing about whether the harness could enforce one. Claude Code demonstrably exposes a
+#       PreToolUse deny path (exit 2), so capability is plausibly PRESENT but unproven.
+# Only an active deny/bypass test can settle (b), and none is implemented. Writable control
+# surfaces are evidence of weakness in the CURRENT wiring, hence `suspect` — never `fail`.
+if [ "$HOOK_SRC_WRITABLE" = "yes" ] || [ "$HOOK_DIR_WRITABLE" = "yes" ] || [ "$SETTINGS_WRITABLE" = "yes" ]; then
+  r3="suspect"
 else
-  r3="candidate"
+  r3="unverified"
 fi
-R3_PROOF="TO PASS: active deny-before-action smoke — attempt a red-line side effect with no approved matching decision, observe it BLOCKED before the effect, with the gate non-disableable by the governed party. Also required: an active bypass attempt (edit/disable the armed gate) that FAILS. Neither implemented."
+R3_PROOF="TO PASS: active deny-before-action smoke — attempt a red-line side effect with no approved matching decision, observe it BLOCKED before the effect, with the gate non-disableable by the governed party. TO FAIL: an active bypass that SUCCEEDS against an armed gate. Neither implemented, so host R3 capability is unsettled. Note: deployment_mediation_active is a separate, weaker fact and does not decide this root."
 
-# R4 — no append-only attribute is a positive disproof. Having one is only a candidate: the
-# append-only attr still permits same-UID APPENDS, so a model can extend the ledger with forged
-# rows even when it cannot rewrite history. Detecting that needs an external receipt chain.
-if [ "$WITNESS_APPEND_ONLY" = "yes" ]; then r4="candidate"; else r4="fail"; fi
-R4_PROOF="Prove (a) a forged same-UID APPEND is rejected or externally detectable, and (b) an external witness receipt/hash-chain exists that a full-chain recomputation cannot satisfy. The append-only attr alone blocks rewrite, not append. Not implemented."
+# R4 — THIS PROBE EXECUTES NO ATTACK. It measures the attribute and directory reachability only.
+# Absence of an append-only attribute on a ledger this script can see is evidence of WEAKNESS in
+# the observed witness, not a disproof of the root: an unknown host-side or external witness root
+# may exist that this script cannot enumerate. Hence `suspect`, never `fail`.
+#
+# A prior revision reported an "executed witness-head rewrite". That was performed as an ad-hoc
+# shell command against a COPY, is NOT performed by this committed reproducer, and would not have
+# been sound anyway: rewriting a copy proves the copy is writable and says nothing about the
+# authoritative witness or an external receipt chain. A SOUND active test must target the
+# authoritative witness, which is destructive, so it is deliberately not run here.
+if [ "$WITNESS_APPEND_ONLY" = "yes" ]; then r4="candidate"; else r4="suspect"; fi
+R4_PROOF="TO FAIL: a sound active test against the AUTHORITATIVE witness (not a copy) showing a rewrite or forged append is accepted and undetectable. TO PASS: prove (a) a forged same-UID APPEND is rejected or externally detectable, and (b) an external receipt/hash-chain exists that full-chain recomputation cannot satisfy. Neither implemented; the append-only attr alone would block rewrite, not append."
 
 # Host qualification: ALL FOUR roots must be `pass`. Nothing else qualifies.
 tier="not_qualified"
@@ -276,8 +297,8 @@ for h in claude-code codex opencode agy; do
     # RECONCILIATION: this target IS the host the probe ran on. Report its real live-probe state
     # instead of the record-only default, so the same host is never described as both
     # live-probed and never-probed.
-    htier="partially_live_probed_2_of_8_attacks"
-    hbasis="live_probe_on_executing_host_plus_capability_record"
+    htier="measured_only_no_attack_executed"
+    hbasis="reachability_measurement_on_executing_host_plus_capability_record_no_attack_executed"
   elif [ "$bg" = "verified" ]; then
     htier="candidate_r3_only_requires_live_probe"
     hbasis="capability_record_only_no_live_probe"
@@ -300,12 +321,15 @@ cat <<EOF
     "note": "This script runs in the same identity a model Bash tool runs in; its reach IS the model's reach."
   },
   "verdict_algebra": {
-    "values": ["fail", "candidate", "unverified", "pass"],
-    "fail": "a live probe positively demonstrated the root is broken (proof of absence)",
-    "candidate": "partial positive signal; plan-defined proof incomplete; never qualifies a host",
+    "value_count": 5,
+    "values": ["fail", "suspect", "unverified", "candidate", "pass"],
+    "fail": "a COMPLETED active attack demonstrated the root is broken (proof of absence)",
+    "suspect": "partial evidence of WEAKNESS, but no completed attack; not a disproof",
     "unverified": "no evidence either way — evidence insufficiency, NOT incapability",
+    "candidate": "partial evidence toward PASSING; proof incomplete; never qualifies a host",
     "pass": "the complete plan-defined live proof was executed and succeeded",
-    "note": "No positive-proof probe is implemented in this script, so no root can currently return pass. This is deliberate: a gate must not be satisfiable by a probe that never looked."
+    "direction_note": "suspect and candidate point in OPPOSITE directions and are not interchangeable.",
+    "note": "Neither a positive-proof probe nor any active attack is implemented in this script, so no root can currently return pass OR fail. This is deliberate: a gate must not be satisfiable — in either direction — by a probe that never looked."
   },
   "trust_roots_executing_host": {
     "R1_authenticated_user_channel": {
@@ -322,7 +346,10 @@ cat <<EOF
     },
     "R3_pre_action_mediation": {
       "verdict": "$r3",
+      "verdict_scope": "HOST CAPABILITY — unsettled without an active deny/bypass test",
       "required_proof": "$R3_PROOF",
+      "deployment_mediation_active": "$MEDIATION_ACTIVE",
+      "deployment_vs_capability": "deployment_mediation_active describes THIS checkout's current wiring only. It is a weaker, separate fact and does NOT decide the host-capability verdict. Claude Code exposes a PreToolUse deny path (exit 2), so mediation capability is plausibly present but unproven.",
       "hook_source_writable": "$HOOK_SRC_WRITABLE",
       "hook_dir_writable": "$HOOK_DIR_WRITABLE",
       "harness_settings_writable": "$SETTINGS_WRITABLE"
@@ -340,20 +367,22 @@ cat <<EOF
   "target_hosts_from_capability_records": [ $hosts_json ],
   "named_attack_coverage": {
     "required_by_plan_p0_step4": 8,
-    "attempted_by_this_probe": 2,
-    "hosts_covered": 1,
+    "executed_by_this_probe": 0,
+    "hosts_covered": 0,
     "hosts_required": 4,
+    "what_this_probe_does": "reachability and configuration MEASUREMENT only; it executes no attack",
     "attacks": {
-      "witness_head_rewrite":            {"status": "executed",  "result": "succeeded against a byte-identical copy; live ledger untouched"},
-      "policy_kernel_mutation":          {"status": "partial",   "result": "write REACHABILITY of gate/hook/settings sources shown; no mutation executed and no effect observed"},
-      "protected_event_envelope_forgery":{"status": "not_runnable_pre_p1", "result": "no owner-event schema or protected envelope exists yet"},
-      "direct_decision_append":          {"status": "not_runnable_pre_p1", "result": "no decision event type or append path exists yet"},
-      "worker_artifact_decision_injection":{"status":"not_runnable_pre_p1","result": "no decision mint path exists yet"},
-      "child_process_capability_theft":  {"status": "not_runnable_pre_p1", "result": "no owner capability handle exists yet"},
-      "mediated_action_bypass":          {"status": "not_runnable_pre_p1", "result": "no owner-kernel mediator exists yet"},
-      "capability_set_drift":            {"status": "not_runnable_pre_p1", "result": "no content-addressed capability set exists yet"}
+      "witness_head_rewrite":            {"status": "unimplemented_not_run", "result": "no sound active test implemented. A prior revision reported this as executed; that was an ad-hoc run against a COPY, is not performed by this reproducer, and was not sound scope — rewriting a copy proves only that the copy is writable."},
+      "policy_kernel_mutation":          {"status": "unimplemented_not_run", "result": "write REACHABILITY of gate/hook/settings sources measured; no mutation executed, no effect observed. Reachability is not a completed attack."},
+      "protected_event_envelope_forgery":{"status": "unimplemented_not_run", "result": "targets an Owner Kernel surface; exercising it in P0 would require a disposable fixture harness (plan steps 5-6 permit frozen fixtures). Not attempted; NOT shown impossible."},
+      "direct_decision_append":          {"status": "unimplemented_not_run", "result": "as above — fixture-based exercise not attempted, not shown impossible"},
+      "worker_artifact_decision_injection":{"status":"unimplemented_not_run","result": "as above — fixture-based exercise not attempted, not shown impossible"},
+      "child_process_capability_theft":  {"status": "unimplemented_not_run", "result": "as above — fixture-based exercise not attempted, not shown impossible"},
+      "mediated_action_bypass":          {"status": "unimplemented_not_run", "result": "as above — fixture-based exercise not attempted, not shown impossible"},
+      "capability_set_drift":            {"status": "unimplemented_not_run", "result": "as above — fixture-based exercise not attempted, not shown impossible"}
     },
-    "circular_dependency": "6 of 8 named attacks target Owner Kernel surfaces that P1 creates. They cannot be run in P0 against a codebase where those surfaces do not exist. This is a defect in the plan's phase ordering, not an omission by this probe.",
+    "impossibility_claimed": false,
+    "phase_order_question": "Plan P0 steps 5-6 permit frozen fixtures and a minimum proposed JSONL/manual spike, so a disposable no-core-code harness may be able to exercise the Kernel-surface attacks against fixtures rather than production modules. Whether P0 should do so, or defer those attacks to a P1-exit gate, is an UNRESOLVED PLAN PHASE-ORDER AMBIGUITY for Board amendment. No structural blocker is asserted and no impossibility was demonstrated.",
     "step4_satisfied": false
   },
   "gate": {

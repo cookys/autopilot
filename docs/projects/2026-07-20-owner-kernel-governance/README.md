@@ -133,16 +133,18 @@ each target harness with eight named attacks, and that work was not performed. A
 the form *"no target host achieves full/partial"* cannot be established by not probing the hosts.
 P1 stays unauthorized because the pass bar is **unproven** — not because incapability was shown.
 
-**P0 cannot be completed as written**: 6 of the 8 named attacks target Owner Kernel surfaces that
-**P1 creates**, so the gate authorizing P1 depends on P1's artifacts. Board decision required.
+**P0 is executable; it has not been executed.** Whether the Kernel-surface attacks belong in P0
+against frozen fixtures (steps 5–6 permit them) or in a P1-exit gate is an **unresolved plan
+ambiguity** for Board amendment — not a structural blocker, and no impossibility was demonstrated.
 
 | P0 measurement | Value |
 |---|---|
-| Plan step 4 (per-target probes) | **NOT PERFORMED** — 2 of 8 attacks, 1 of 4 hosts |
+| Plan step 4 (per-target probes) | **NOT PERFORMED** — **0 of 8 attacks executed, 0 of 4 hosts** |
 | Step 7 kill condition | **NOT EVALUABLE** — requires step 4 |
-| Hosts **qualified** | **0 of 4** — none proven qualified; 3 of 4 never live-probed. **No host is claimed incapable** |
-| Trust roots on the executing host (Claude Code) | R1 `suspect`, R2 `unverified`, R3 `fail`, R4 `fail` — only R3/R4 rest on completed evidence |
-| Attacks actually executed | **witness-head rewrite** (succeeded, on a copy); policy/Kernel mutation (partial) |
+| Hosts **qualified** | **0 of 4** — none proven qualified. **No host is claimed incapable** |
+| Trust roots on the executing host (Claude Code) | R1 `suspect`, R2 `unverified`, R3 `suspect`, R4 `suspect` — **none settled**; the committed probe measures reachability only and can reach neither `pass` nor `fail` |
+| Attacks actually executed | **none** — the earlier "witness-head rewrite executed" claim is withdrawn (not performed by the committed reproducer, and unsound scope) |
+| Deployment vs capability | `deployment_mediation_active: no` describes this checkout only; the harness's mediation **capability** is untested |
 | Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
 | Projected post-P3 absolute target | **51** — KR10 fails, projecting a rise of 9 |
 | Mandatory model-review dispatch baseline (KR8/KR9 denominator) | **6** (distinct from 28 mandatory QC steps overall) |
@@ -177,9 +179,14 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | Target v2.32.57 | Externally visible change without a new skill/agent uses a patch bump in this repo |
 | 2026-07-20 | ~~P0 = STOP; kill condition met~~ **WITHDRAWN** | Not supported. Step 4 was never performed, so the universal-negative kill condition could not have been established. Superseded by the row below |
 | 2026-07-20 | **P0 = INCOMPLETE/BLOCKED; P1 not authorized** | Step 4 not performed (2/8 attacks, 1/4 hosts); step 7 not evaluable. P1 blocked because the pass bar is **unproven**, not failed. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
-| 2026-07-20 | Plan P0 step 4 is **unexecutable as written** — Board decision required | 6 of 8 named attacks target Owner Kernel surfaces P1 creates, so the gate authorizing P1 depends on P1's artifacts. Three options recorded; none recommended |
+| 2026-07-20 | ~~Plan P0 step 4 is unexecutable as written~~ **WITHDRAWN** | Impossibility was never demonstrated. Steps 5–6 permit frozen fixtures and a minimum JSONL/manual spike, so a disposable no-core-code harness may exercise the Kernel-surface attacks. Superseded below |
+| 2026-07-20 | Phase ordering is an **unresolved plan ambiguity** — Board amendment | Should P0 exercise Kernel-surface attacks via frozen fixtures, or defer them to a P1-exit gate? The plan does not say. Three options recorded; none recommended. **Not** a structural blocker |
+| 2026-07-20 | All 8 attacks relabelled **unimplemented / not run**; 0 executed | Coverage statement, not an impossibility claim |
+| 2026-07-20 | R4 "executed witness-head rewrite" claim **withdrawn**; root → `suspect` | The committed reproducer does not perform it (artifact-not-self-report violation), and rewriting a copy proves only the copy is writable — it cannot disprove an unknown authoritative/external witness root |
+| 2026-07-20 | R3 `fail` → `suspect`; deployment split from capability | An unarmed default-off gate proves this **deployment** is unmediated; it does not disprove the **harness's capability** to mediate, which is what step 4 probes. Claude Code exposes a PreToolUse deny path |
+| 2026-07-20 | Codex-quota justification **removed** | Codex is the live depth-0 harness in this run and is demonstrably reachable; a stale quota record is not evidence about probe feasibility |
 | 2026-07-20 | R1 weakened `fail` → `suspect`; `suspect` value added | Writable transcript files are a record, not proof the live in-memory authenticated envelope is forgeable; the forge attack was never run. `suspect` (evidence of weakness) is now distinct from `candidate` (evidence toward passing) |
-| 2026-07-20 | Option (A) — real per-target probes — rejected as partly impossible | 3 of 4 harnesses would need live driving (codex quota recorded exhausted) and 6 of 8 attacks are unrunnable pre-P1. Chose (B) reclassify, per depth-0 QC |
+| 2026-07-20 | Option (A) — real per-target probes — **not performed**, not impossible | Recorded as work not done. The earlier "partly impossible" justification is withdrawn on both grounds (see the two rows above). Chose (B) reclassify, per depth-0 QC |
 | 2026-07-20 | Probe verdicts made four-valued and fail-closed (depth-0 QC, Major) | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. Unreachable today, but it would have minted a false `pass` on a future host. `pass` now requires a named positive proof; none is implemented, so qualification is unreachable by construction |
 | 2026-07-20 | Two claims **weakened** as part of that fix | R2 `fail` → `unverified` (host-memory capability is not externally observable); target hosts tier `none` → `unverified` (no measurement supported `none`). STOP retained on the narrower claim that zero hosts are *qualified* |
 | 2026-07-20 | Three-task spike deliberately not run | KR9 requires a transcript-free resume from the ledger; the ledger is rewritable by the party it records, so the spike's acceptance was already unreachable. Spending on it would produce numbers the same evidence disproves |

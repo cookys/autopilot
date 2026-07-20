@@ -235,27 +235,34 @@ without adding schemas, engine modules, or product code.
 > BLOCKED. Step 4 was NOT performed and step 7 is NOT EVALUABLE.** Evidence:
 > [`docs/projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md`](../projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md).
 >
-> **Step 4 as written cannot be executed in P0.** It requires eight named attacks per target
-> harness, but **six of the eight attack Owner Kernel surfaces that P1 creates** — protected-event
-> envelopes, the decision-append path, owner capability handles, the mediator, and the capability
-> set. A gate that authorizes P1 cannot depend on P1's artifacts. Actual coverage achieved: **2 of
-> 8 attacks on 1 of 4 hosts** (witness-head rewrite executed; policy/Kernel mutation partial).
+> **Step 4 was not executed. 0 of 8 named attacks were run, against 0 of 4 hosts.** The committed
+> probe performs reachability and configuration MEASUREMENT only. All eight attacks are recorded
+> **unimplemented / not run** — which is a statement about coverage, **not** a claim that they
+> cannot be run. No impossibility was demonstrated and none is asserted.
 >
 > Consequently the step-7 kill condition — a universal negative over four hosts — **has not been
-> evaluated**, and must not be treated as met. Three target harnesses were never probed; an
-> unprobed host is *not qualified*, which is **not** the same as *proven incapable*. P1 remains
-> unauthorized because the pass bar is unproven, not because it was failed.
+> evaluated**, and must not be treated as met. An unprobed host is *not qualified*, which is **not**
+> the same as *proven incapable*. P1 remains unauthorized because the pass bar is unproven, not
+> because it was failed.
 >
-> **Board decision required before P0 can be completed or fairly failed.** Options: (1) split the
-> gate so P0 probes only pre-existing roots and the six Kernel-surface attacks become a P1-exit
-> gate; (2) authorize a throwaway probe harness in P0, which is product code and needs an explicit
-> exception to the no-core-code rule; (3) amend the kill condition to something P0 can evaluate.
+> **Unresolved plan ambiguity for Board amendment (not a blocker).** P0 runs before the Kernel
+> exists, and this plan does not say whether the Kernel-surface attacks should be exercised in P0
+> against frozen fixtures — steps 5 and 6 explicitly permit frozen fixtures and a run against "the
+> minimum proposed JSONL event fields", so a disposable no-core-code harness may suffice — or
+> deferred to a P1-exit gate before any host is declared `full`/`partial`. Options: (1) exercise in
+> P0 via fixtures; (2) defer to a P1-exit gate; (3) amend the kill condition to match P0's scope.
 > No option is recommended here.
 >
-> Findings that DO survive, scoped to the executing host (Claude Code) only: an actively-executed
-> **witness-head rewrite succeeded** (no append-only attribute, no external receipt chain), and
-> **no pre-action mediation is currently active** (the only preventive gate is default-off,
-> unarmed, fails open, and its control surfaces are model-writable).
+> **Deployment readiness is not host capability.** Step 4 probes what a harness CAN SUPPORT. That
+> this checkout currently has no gate armed (`orchestrator-edit-gate` is opt-in default-off) shows
+> only that the current deployment is unmediated; Claude Code does expose a PreToolUse deny path,
+> so mediation capability is plausibly present but untested.
+>
+> Observations recorded on the executing host (Claude Code) — measurement, **not** attacks, and
+> sufficient only for `suspect`: the observed ledger has no append-only attribute and a writable
+> directory; the sole preventive gate is unarmed, fails open, and its control surfaces are
+> model-writable; transcript artifacts are model-writable. Root verdicts: R1 `suspect`,
+> R2 `unverified`, R3 `suspect`, R4 `suspect`.
 
 ### P1 — Governance and durable owner events
 

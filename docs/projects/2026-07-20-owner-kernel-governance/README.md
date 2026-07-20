@@ -103,7 +103,7 @@
 
 | Phase | Work | Gate |
 |---|---|---|
-| P0 | Semantic inventory, absolute surface baseline, host trust probes, frozen fixtures, and three-task no-core-code spike | All KR9 thresholds pass and at least one host is `full`/`partial` with enforceable trust roots, or stop |
+| P0 | Semantic inventory, absolute surface baseline, host trust probes, frozen fixtures, and three-task no-core-code spike | Pass only if at least one target host is `full`/`partial` and KR9 passes; stop only on completed disproof; otherwise `INCOMPLETE` |
 | P1 | Governance resolution, authenticated/witnessed event ledger, owner principal, approvals, checkpoints, resume, and disclosure | Policy/contract hashes stay frozen; replay is byte-identical; negative controls fail closed |
 | P2 | Unified transitions, authority, action mediation, reconciliation, exact acceptance transaction, assessment purposes | All transition/acceptance/concurrency/adversarial harnesses pass |
 | P3 | Compatibility aliases, skill simplification, docs/config migration, generated mirrors, dogfood, release metadata | One executable translation table; legacy paths no longer own trust/lifecycle semantics |

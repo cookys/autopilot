@@ -229,8 +229,11 @@ function classify(id) {
 }
 
 const hosts = HOSTS.map(classify);
-const qualified = hosts.filter((h) => h.qualified);
-const unverified = hosts.filter((h) => h.tier === 'unverified');
+const targetHostSet = new Set(TARGET_HOSTS);
+const targetHosts = hosts.filter((h) => targetHostSet.has(h.harness));
+const extraHosts = hosts.filter((h) => !targetHostSet.has(h.harness));
+const qualifiedTargets = targetHosts.filter((h) => h.qualified);
+const unverifiedTargets = targetHosts.filter((h) => h.tier === 'unverified');
 
 const payload = {
   probe: 'owner-kernel-p0-host-classification',
@@ -242,17 +245,21 @@ const payload = {
   hosts,
   summary: {
     hosts_evaluated: hosts.length,
-    hosts_qualified_full_or_partial: qualified.length,
-    hosts_none: hosts.filter((h) => h.tier === 'none').length,
-    hosts_unverified: unverified.length,
-    unverified_hosts: unverified.map((h) => ({ harness: h.harness, missing: h.missing_operations })),
+    target_hosts_evaluated: targetHosts.length,
+    extra_hosts_evaluated: extraHosts.map((h) => h.harness),
+    hosts_qualified_full_or_partial: qualifiedTargets.length,
+    hosts_none: targetHosts.filter((h) => h.tier === 'none').length,
+    hosts_unverified: unverifiedTargets.length,
+    unverified_hosts: unverifiedTargets.map((h) => ({ harness: h.harness, missing: h.missing_operations })),
   },
   gate: {
     criterion: 'P0 step 7: stop if no target host achieves full or partial with the authenticated user '
       + 'channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.',
-    any_host_qualified: qualified.length > 0,
-    kill_condition_evaluable: unverified.length === 0,
-    kill_condition_note: unverified.length === 0
+    any_host_qualified: qualifiedTargets.length > 0,
+    any_target_host_qualified: qualifiedTargets.length > 0,
+    qualified_extra_hosts_ignored_for_p0: extraHosts.filter((h) => h.qualified).map((h) => h.harness),
+    kill_condition_evaluable: unverifiedTargets.length === 0,
+    kill_condition_note: unverifiedTargets.length === 0
       ? 'every target host has completed evidence, so the universal negative is decidable'
       : 'at least one host lacks completed evidence; the universal negative is NOT decidable and P0 '
         + 'remains INCOMPLETE for that host rather than resolving to STOP',

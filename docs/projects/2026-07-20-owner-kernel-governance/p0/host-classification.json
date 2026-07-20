@@ -179,6 +179,8 @@
   ],
   "summary": {
     "hosts_evaluated": 4,
+    "target_hosts_evaluated": 4,
+    "extra_hosts_evaluated": [],
     "hosts_qualified_full_or_partial": 0,
     "hosts_none": 0,
     "hosts_unverified": 4,
@@ -218,6 +220,8 @@
   "gate": {
     "criterion": "P0 step 7: stop if no target host achieves full or partial with the authenticated user channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.",
     "any_host_qualified": false,
+    "any_target_host_qualified": false,
+    "qualified_extra_hosts_ignored_for_p0": [],
     "kill_condition_evaluable": false,
     "kill_condition_note": "at least one host lacks completed evidence; the universal negative is NOT decidable and P0 remains INCOMPLETE for that host rather than resolving to STOP"
   }

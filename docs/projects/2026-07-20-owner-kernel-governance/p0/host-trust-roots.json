@@ -1,4 +1,12 @@
 {
+  "superseded": true,
+  "current_artifact": false,
+  "superseded_by": [
+    "harness-capability-default-mode.json",
+    "harness-capability-bypass-mode.json",
+    "host-classification.json"
+  ],
+  "superseded_reason": "Historical shell-label probe output only. It measured the ambient shell and asserted a host name; current P0 host evidence is produced by run-harness-probes.sh through each harness and classified by classify-hosts.js.",
   "probe": "owner-kernel-p0-host-trust-roots",
   "executing_host": {
     "uid": 1000,

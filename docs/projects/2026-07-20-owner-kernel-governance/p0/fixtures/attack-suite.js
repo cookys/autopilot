@@ -118,9 +118,10 @@ const ATTACKS = {
       childSawEnv = out.trim();
     } catch (e) { childSawEnv = 'probe_error'; }
 
-    // ACTUAL same-uid parent-memory theft: a child reads THIS process's environment and memory,
-    // which is where the capability lives. Checking only disk and the child's own env would miss
-    // the real vector and score a false `held`.
+    // Same-uid parent-memory theft is recorded as host-substrate evidence only. It deliberately does
+    // not decide the fixture contract: the fixture proves the proposed design avoids serializing or
+    // exporting the capability, while host-capability-probe.js decides whether a real host can keep an
+    // in-memory capability out of model reach.
     const theft = { parent_environ: 'not_attempted', parent_mem: 'not_attempted' };
     try {
       const out = execFileSync(process.execPath, ['-e',
@@ -137,18 +138,19 @@ const ATTACKS = {
       theft.parent_mem = out.trim();
     } catch (e) { theft.parent_mem = 'probe_error'; }
 
-    const stolen = theft.parent_environ === 'yes' || theft.parent_mem === 'openable';
-    const leaked = onDisk.length > 0 || childSawEnv === 'yes' || stolen;
+    const hostSubstrateStolen = theft.parent_environ === 'yes' || theft.parent_mem === 'openable';
+    const fixtureLeak = onDisk.length > 0 || childSawEnv === 'yes';
     return {
-      fixture_contract: leaked ? 'violated' : 'held',
-      observed: leaked ? 'capability_recoverable_by_child' : 'capability_not_recoverable',
+      fixture_contract: fixtureLeak ? 'violated' : 'held',
+      observed: fixtureLeak ? 'capability_recoverable_from_fixture_exports'
+        : 'capability_not_recoverable_from_fixture_exports',
       capability_on_disk: onDisk.length,
       child_saw_capability_in_env: childSawEnv,
-      parent_memory_theft: theft,
-      parent_memory_theft_succeeded: stolen,
+      host_substrate_probe: theft,
+      host_substrate_theft_succeeded: hostSubstrateStolen,
       detail: 'capability is never serialized and never exported to the child environment. '
-        + 'Same-uid parent /proc environ and /proc mem theft are attempted directly, so a `held` '
-        + 'result reflects those vectors rather than only disk and child env.',
+        + 'Same-uid parent /proc environ and /proc mem theft are observed separately as host-substrate '
+        + 'signals and do not affect the fixture contract.',
     };
   },
 

@@ -28,6 +28,28 @@
 #   - NON-DESTRUCTIVE: writability is tested with `test -w` and a create-then-remove probe of a
 #     dotfile. No real hook, setting, ledger, or credential is ever modified.
 #
+# FAIL-CLOSED VERDICT ALGEBRA (revised after depth-0 QC of commit db31aee)
+#
+#   An earlier revision of this script derived `pass` from the ABSENCE of a disproof — e.g. R1
+#   passed merely because known user-channel artifacts were not writable, and R4 passed merely
+#   because some ledger carried an append-only attribute. That is unsound: not finding the hole
+#   you looked for is not proof of the property. Those branches were unreachable today but would
+#   have silently minted a false `pass` on a future host. Each root now emits one of four values:
+#
+#     fail        — a live probe POSITIVELY DEMONSTRATED the root is broken (model-reachable /
+#                   forgeable). This is proof of absence, not absence of proof.
+#     candidate   — a partial positive signal exists, but the plan-defined proof is incomplete.
+#                   NEVER sufficient to qualify a host.
+#     unverified  — no evidence either way. Evidence INSUFFICIENCY, not incapability.
+#     pass        — the COMPLETE plan-defined live proof was executed and succeeded.
+#
+#   `pass` requires a positive proof probe. Those probes are NOT IMPLEMENTED in this script
+#   (each is named in `required_proof`), so no root can currently return `pass`. That is
+#   deliberate and honest: the gate must not be satisfiable by a probe that never looked.
+#
+#   A host is `qualified` ONLY when all four roots are `pass`. Anything else is `not_qualified`.
+#   `not_qualified` explicitly does NOT mean "incapable" — it means "not proven capable".
+#
 # Usage: probe-host-trust-roots.sh [--repo <dir>] [--json]
 # Exit:  0 always (telemetry probe; the verdict is in the payload, not the exit code)
 
@@ -135,21 +157,40 @@ fi
 # Per-root verdicts for the executing host
 # ---------------------------------------------------------------------------
 
-r1="fail"; [ "$USER_CHANNEL_WRITABLE" = "no" ] && r1="pass"
-r2="fail"; [ "$CAPABILITY_BROKER" != "absent" ] && r2="pass"
-r3="fail"
-if [ "$HOOK_SRC_WRITABLE" = "no" ] && [ "$HOOK_DIR_WRITABLE" = "no" ] && [ "$SETTINGS_WRITABLE" = "no" ]; then
-  r3="pass"
-fi
-r4="fail"; [ "$WITNESS_APPEND_ONLY" = "yes" ] && r4="pass"
+# Each root: a disproof yields `fail`; a partial positive signal yields `candidate`; silence
+# yields `unverified`. `pass` is reachable ONLY through the named positive proof, none of which
+# is implemented here — so the ceiling is `candidate` by construction.
 
-tier="none"
+# R1 — writable user channel is a positive disproof. Unwritable proves nothing about whether an
+# authenticated witness key/channel exists at all.
+if [ "$USER_CHANNEL_WRITABLE" = "yes" ]; then r1="fail"; else r1="unverified"; fi
+R1_PROOF="Forge attempt against a harness-witnessed user-input envelope must be REJECTED, with the witness key/channel demonstrably outside model-readable env and repo. Not implemented."
+
+# R2 — a socket existing is not an authenticated, worker-unreachable capability. Its absence is
+# not a disproof either: the plan also permits a capability held in host memory, which cannot be
+# observed from outside the host process.
+if [ "$CAPABILITY_BROKER" = "absent" ]; then r2="unverified"; else r2="candidate"; fi
+R2_PROOF="Authenticate the handle, then prove a worker process and a model tool can neither open, read, nor forge it. Socket presence alone is not evidence. Not implemented."
+
+# R3 — any writable control surface is a positive disproof. All-unwritable is only a candidate:
+# it says nothing about whether a red-line action is actually denied before its side effect.
+if [ "$HOOK_SRC_WRITABLE" = "yes" ] || [ "$HOOK_DIR_WRITABLE" = "yes" ] || [ "$SETTINGS_WRITABLE" = "yes" ]; then
+  r3="fail"
+else
+  r3="candidate"
+fi
+R3_PROOF="Active deny-before-action smoke: attempt a red-line side effect with no approved matching decision and observe it BLOCKED before the effect occurs, with the gate non-disableable by the governed party. Not implemented."
+
+# R4 — no append-only attribute is a positive disproof. Having one is only a candidate: the
+# append-only attr still permits same-UID APPENDS, so a model can extend the ledger with forged
+# rows even when it cannot rewrite history. Detecting that needs an external receipt chain.
+if [ "$WITNESS_APPEND_ONLY" = "yes" ]; then r4="candidate"; else r4="fail"; fi
+R4_PROOF="Prove (a) a forged same-UID APPEND is rejected or externally detectable, and (b) an external witness receipt/hash-chain exists that a full-chain recomputation cannot satisfy. The append-only attr alone blocks rewrite, not append. Not implemented."
+
+# Host qualification: ALL FOUR roots must be `pass`. Nothing else qualifies.
+tier="not_qualified"
 if [ "$r1" = "pass" ] && [ "$r2" = "pass" ] && [ "$r3" = "pass" ] && [ "$r4" = "pass" ]; then
-  tier="full"
-elif [ "$r3" = "pass" ] && [ "$r4" = "pass" ] && [ "$r1" = "pass" ]; then
-  # partial still requires an enforceable mediator path + witness + authentic user channel;
-  # a missing owner-capability handle alone caps the host at partial, never full.
-  tier="partial"
+  tier="qualified"
 fi
 
 # ---------------------------------------------------------------------------
@@ -179,12 +220,19 @@ for h in claude-code codex opencode agy; do
   [ "$hk" = "unknown" ] && hk="$(record_field "$h" capabilities.tool_hooks)"
   # A host cannot reach `full`/`partial` without a VERIFIED blocking gate (R3), regardless of
   # what its hooks can observe. Observation is not prevention.
-  htier="none"
+  # A capability record can never qualify a host. `blocking_gate: verified` is evidence about ONE
+  # root (R3) and says nothing about R1, R2, or R4 — so on its own it is at most a candidate for
+  # a live probe, never a qualification. Equally, `unverified` in a record is EVIDENCE
+  # INSUFFICIENCY, not a live finding that the host is incapable.
   if [ "$bg" = "verified" ]; then
-    htier="candidate-requires-live-probe"
-    ANY_TARGET_QUALIFIES=true
+    htier="candidate_r3_only_requires_live_probe"
+  else
+    htier="unverified_no_live_probe"
   fi
-  hosts_json="${hosts_json}${hosts_json:+,}$(printf '{"host":"%s","harness_level":"%s","status":"%s","blocking_gate":"%s","hooks":"%s","tier":"%s"}' "$h" "$lvl" "$st" "$bg" "$hk" "$htier")"
+  # ANY_TARGET_QUALIFIES stays false: qualification requires all four roots live-proven on that
+  # host, which no record can establish. It is left in place so the union below is explicit
+  # rather than implied, and so a future live per-host probe has an obvious place to set it.
+  hosts_json="${hosts_json}${hosts_json:+,}$(printf '{"host":"%s","harness_level":"%s","status":"%s","blocking_gate":"%s","hooks":"%s","tier":"%s","qualified":false,"basis":"capability_record_only_no_live_probe"}' "$h" "$lvl" "$st" "$bg" "$hk" "$htier")"
 done
 
 cat <<EOF
@@ -195,39 +243,52 @@ cat <<EOF
     "user": "$PROBE_USER",
     "note": "This script runs in the same identity a model Bash tool runs in; its reach IS the model's reach."
   },
+  "verdict_algebra": {
+    "values": ["fail", "candidate", "unverified", "pass"],
+    "fail": "a live probe positively demonstrated the root is broken (proof of absence)",
+    "candidate": "partial positive signal; plan-defined proof incomplete; never qualifies a host",
+    "unverified": "no evidence either way — evidence insufficiency, NOT incapability",
+    "pass": "the complete plan-defined live proof was executed and succeeded",
+    "note": "No positive-proof probe is implemented in this script, so no root can currently return pass. This is deliberate: a gate must not be satisfiable by a probe that never looked."
+  },
   "trust_roots_executing_host": {
     "R1_authenticated_user_channel": {
       "verdict": "$r1",
+      "required_proof": "$R1_PROOF",
       "user_channel_writable_by_model": "$USER_CHANNEL_WRITABLE",
       "writable_artifacts": "$USER_CHANNEL_EVIDENCE"
     },
     "R2_active_owner_capability": {
       "verdict": "$r2",
+      "required_proof": "$R2_PROOF",
       "capability_broker": "$CAPABILITY_BROKER",
       "session_marker_writable_by_model": "$CAPABILITY_MARKER_WRITABLE"
     },
     "R3_pre_action_mediation": {
       "verdict": "$r3",
+      "required_proof": "$R3_PROOF",
       "hook_source_writable": "$HOOK_SRC_WRITABLE",
       "hook_dir_writable": "$HOOK_DIR_WRITABLE",
       "harness_settings_writable": "$SETTINGS_WRITABLE"
     },
     "R4_append_only_witness": {
       "verdict": "$r4",
+      "required_proof": "$R4_PROOF",
       "witness_dir_writable": "$WITNESS_WRITABLE",
       "witness_append_only_attr": "$WITNESS_APPEND_ONLY",
       "append_only_settable_by_this_uid": "$CHATTR_SETTABLE",
-      "interpretation": "append_only_settable_by_this_uid=no means a ROOT-installed append-only witness would be unforgeable by the model. It is a mechanism that is available but not currently deployed."
+      "interpretation": "append_only_settable_by_this_uid=no means a ROOT-installed append-only witness would resist model REWRITE. It would not by itself resist a same-UID forged APPEND, which is why the attribute alone is at most a candidate."
     }
   },
   "executing_host_tier": "$tier",
   "target_hosts_from_capability_records": [ $hosts_json ],
   "gate": {
     "criterion": "P0 stops if no target host achieves full or partial with authenticated user channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.",
-    "executing_host_qualifies": $( [ "$tier" = "none" ] && echo false || echo true ),
+    "qualification_rule": "A host qualifies ONLY when all four roots return pass. candidate and unverified never qualify.",
+    "executing_host_qualifies": $( [ "$tier" = "qualified" ] && echo true || echo false ),
     "any_target_host_qualifies": $ANY_TARGET_QUALIFIES,
-    "any_host_full_or_partial": $( { [ "$tier" != "none" ] || [ "$ANY_TARGET_QUALIFIES" = true ]; } && echo true || echo false ),
-    "field_semantics": "any_host_full_or_partial is the UNION over the live-probed executing host AND the four record-derived target hosts. executing_host_qualifies and any_target_host_qualifies are the two disjuncts, reported separately so the union is auditable rather than implied."
+    "any_host_qualified": $( { [ "$tier" = "qualified" ] || [ "$ANY_TARGET_QUALIFIES" = true ]; } && echo true || echo false ),
+    "field_semantics": "any_host_qualified is the UNION over the live-probed executing host AND the four record-derived target hosts; the two disjuncts are reported separately so the union is auditable rather than implied. A false value means NO HOST IS PROVEN QUALIFIED. It does NOT assert that any host is incapable — the four target hosts have had no live probe at all, and their capability records are evidence insufficiency. Renamed from any_host_full_or_partial, which wrongly implied a measured full/partial tier where none was measured."
   }
 }
 EOF

@@ -35,14 +35,38 @@ That bar is adversarial by construction. The probe therefore asks one question p
 control reachable by the model's own tool?** The probe runs in the same identity a model `Bash`
 tool runs in, so what the probe can reach, the model can reach.
 
-### Executing host (Claude Code) — all four roots FAIL
+### Verdict algebra — why "not failed" is not "passed"
 
-| Root | Verdict | Mechanical evidence |
-|---|---|---|
-| **R1** authenticated user channel | **fail** | **[LIVE]** `~/.claude/history.jsonl`, `projects/`, `sessions/` are all writable by the model tool. Mode `600` restricts *other* uids; the model runs *as* the owner (`uid=1000 cookys`), so it is unrestrained. No witness key exists outside model-readable space. |
-| **R2** active-owner capability | **fail** | **[LIVE]** No broker/IPC endpoint exists (`~/.autopilot/owner-kernel.sock`, `/run/owner-kernel.sock` absent). The nearest analogue, the session-mode marker dir, is a plain model-writable file tree. |
-| **R3** pre-action mediation | **fail** | **[LIVE]** Hook sources are mode `664` owner-writable; `hooks/` is directory-writable (so hook files can be replaced by rename); `~/.claude/settings.json` is writable. |
-| **R4** append-only witness | **fail** | **[LIVE]** The run ledger carries no append-only attribute (`lsattr` → `--------------e-------`, `e` only) and its directory is writable. A full-chain rewrite succeeded against a copy. |
+Each root returns one of four values, and the distinction is load-bearing:
+
+| Value | Meaning |
+|---|---|
+| `fail` | A live probe **positively demonstrated** the root is broken — proof of absence |
+| `candidate` | A partial positive signal exists, but the plan-defined proof is incomplete. **Never qualifies a host** |
+| `unverified` | No evidence either way — **evidence insufficiency, not incapability** |
+| `pass` | The **complete** plan-defined live proof was executed and succeeded |
+
+**No positive-proof probe is implemented, so no root can currently return `pass`.** This is
+deliberate: a gate must not be satisfiable by a probe that never looked. Mechanically verifiable —
+the script contains five assignments to the root verdict variables and none assigns `pass`:
+
+```bash
+grep -nE 'r[1-4]=' probe-host-trust-roots.sh | grep -v R[1-4]_PROOF   # 5 hits: fail/candidate/unverified only
+```
+
+A host is `qualified` **only** when all four roots are `pass`. `not_qualified` therefore means
+*"not proven capable"* — it does **not** assert the host is incapable.
+
+### Executing host (Claude Code) — 0 of 4 roots proven
+
+Three roots are positively disproven; one has no evidence either way.
+
+| Root | Verdict | Mechanical evidence | Proof still required for `pass` |
+|---|---|---|---|
+| **R1** authenticated user channel | **fail** | **[LIVE]** `~/.claude/history.jsonl`, `projects/`, `sessions/` are all writable by the model tool. Mode `600` restricts *other* uids; the model runs *as* the owner (`uid=1000 cookys`), so it is unrestrained. | Forge attempt against a harness-witnessed input envelope must be **rejected**, with the witness key/channel demonstrably outside model-readable env and repo |
+| **R2** active-owner capability | **unverified** | **[LIVE]** No broker/IPC endpoint exists (`~/.autopilot/owner-kernel.sock`, `/run/owner-kernel.sock` absent). **This is not a disproof**: the plan also permits a capability held in host memory, which cannot be observed from outside the host process. | Authenticate the handle, then prove a worker process and a model tool can neither open, read, nor forge it |
+| **R3** pre-action mediation | **fail** | **[LIVE]** Hook sources are mode `664` owner-writable; `hooks/` is directory-writable (so hook files can be replaced by rename); `~/.claude/settings.json` is writable. | Active deny-before-action smoke: a red-line side effect with no matching approved decision must be **blocked before the effect**, by a gate the governed party cannot disable |
+| **R4** append-only witness | **fail** | **[LIVE]** The run ledger carries no append-only attribute (`lsattr` → `--------------e-------`, `e` only) and its directory is writable. A full-chain rewrite succeeded against a copy. | Prove a forged **same-UID append** is rejected or externally detectable, **and** that an external receipt/hash-chain exists that full-chain recomputation cannot satisfy |
 
 ### R3 deserves a precise statement, not a caricature
 
@@ -83,21 +107,33 @@ witness receipt exists to attest against — which is the finding itself.
 **[SRC]** From the repo's own capability records (`src/harness/capabilities/*.json`), which
 `node bin/autopilot.js harness report` treats as the single source of truth:
 
-| Host | Level | Status | `blocking_gate` | Tier |
-|---|---|---|---|---|
-| Claude Code | H1 | warning | `unavailable` | **none** |
-| Codex | H2 | verified | `unverified` (hooks: `warning`) | **none** |
-| OpenCode | H2 | warning | `unverified` (session_hooks `unavailable`) | **none** |
-| Antigravity (agy) | H2 | verified | `unverified` (hooks: `unverified`) | **none** |
+| Host | Level | Status | `blocking_gate` | Tier | Qualified |
+|---|---|---|---|---|---|
+| Claude Code | H1 | warning | `unavailable` | `unverified_no_live_probe` | **false** |
+| Codex | H2 | verified | `unverified` (hooks: `warning`) | `unverified_no_live_probe` | **false** |
+| OpenCode | H2 | warning | `unverified` (session_hooks `unavailable`) | `unverified_no_live_probe` | **false** |
+| Antigravity (agy) | H2 | verified | `unverified` (hooks: `unverified`) | `unverified_no_live_probe` | **false** |
 
-**Not one target host has a verified blocking gate.** The whole fleet report reads
-`ready: 0, not_ready: 7`, and six of seven records are past TTL. OpenCode's record carries an
-explicit standing instruction: *"Do not promote OpenCode hooks to blocking gates without fresh
-probe evidence."*
+**A capability record can never qualify a host, and never disqualify one either.** Both directions
+matter:
 
-**[INF]** Observation is not prevention. Even a host with perfect audit fidelity cannot reach
-`partial`, because `partial` requires that every reachable red-line action be *preventively*
-observable or routed through a model-unwritable executor. None of the four can demonstrate that.
+- `blocking_gate: verified` would be evidence about **one** root (R3) and silent on R1, R2, and
+  R4 — so on its own it is at most a candidate for a live probe, never a qualification.
+- `blocking_gate: unverified` is **evidence insufficiency, not a live finding of incapability**.
+  None of these four hosts has been live-probed against the four roots at all.
+
+An earlier revision of this document recorded all four as tier `none`, which overstated the
+evidence: `none` is a measured plan tier meaning *cannot support autonomous governance*, and no
+measurement supporting it was taken. They are `unverified`.
+
+The fleet report reads `ready: 0, not_ready: 7` with six of seven records past TTL, and OpenCode's
+record carries an explicit standing instruction: *"Do not promote OpenCode hooks to blocking gates
+without fresh probe evidence."*
+
+**[INF]** Observation is not prevention: a host with perfect audit fidelity still would not reach
+`partial`, which requires every reachable red-line action to be *preventively* observable or routed
+through a model-unwritable executor. But that is an argument about what a live probe would need to
+show — **not** a substitute for running one.
 
 ## 2. What would change the verdict
 
@@ -106,10 +142,16 @@ matters here and cuts in the project's favour:
 
 **[LIVE]** `chattr +a` **fails** at uid 1000 (`Operation not permitted` — it needs
 `CAP_LINUX_IMMUTABLE`). The model can neither set *nor clear* that attribute. So a **root-installed
-append-only witness would be genuinely unforgeable by the model.**
+append-only witness would resist model REWRITE.**
 
-**[INF]** That separates *"architecturally impossible"* from *"not built yet"*. R4 is buildable
-today with a root-provisioned witness. R1–R3 need a real boundary the same UID cannot cross —
+Precisely scoped, since R4 is a `candidate` and not a `pass` even when the attribute is present:
+append-only blocks **rewriting** history, but a same-UID process can still **append**. So the
+attribute alone would stop a full-chain recomputation while still permitting forged rows to be
+added. Closing R4 needs the attribute **and** an external receipt/hash-chain that makes a forged
+append detectable.
+
+**[INF]** That still separates *"architecturally impossible"* from *"not built yet"*. R4 is buildable
+today with a root-provisioned witness **plus a receipt chain**. R1–R3 need a real boundary the same UID cannot cross —
 a separate UID, a sandbox, or a broker process holding the capability in its own memory. This is
 the same conclusion the repo already reached under a different name: `CLAUDE.md` records that the
 L1 block-mode override was **reverted UNSAFE** because *"no local-only mechanism is malicious-proof
@@ -173,6 +215,41 @@ kind of thing that should be visible.
 accuracy and honesty. The union-gate fix is the one that mattered: it corrected a field a future
 reader could have misread, and the corrected field still reads `false`.
 
+## 4c. Depth-0 QC finding against commit `db31aee` (Major) — fixed in the follow-up commit
+
+Depth-0 authoritative QC accepted the STOP but found the probe's **positive branches unsound**.
+The verdict was right; the mechanism that produced it would not have stayed right.
+
+Every root derived `pass` from the **absence of a disproof**. Those branches were unreachable on
+today's host, so the STOP was unaffected — but on a future host they would have silently minted a
+false `pass`, and a kill gate that can be satisfied by not looking is not a gate.
+
+| # | Unsafe branch | Why it was wrong | Fix |
+|---|---|---|---|
+| 1 | R1 passed when known user-channel artifacts were merely not writable | Not finding the hole you looked for is not proof of an authenticated witness key/channel | Unwritable now yields `unverified`; `pass` needs a rejected forge attempt |
+| 2 | R2 passed on the **existence of any socket path** | A socket is not an authenticated, worker-unreachable handle | Presence yields `candidate`; `pass` needs authentication + proof workers cannot open/read/forge it |
+| 3 | R3 passed when hook/settings paths were unwritable | Says nothing about whether a red-line action is actually denied before its side effect | Unwritable yields `candidate`; `pass` needs an active deny-before-action smoke |
+| 4 | R4 passed when any ledger carried the append-only attr | The attr blocks **rewrite**, not same-UID **append**; and no external receipt was proven | Attr yields `candidate`; `pass` needs forged-append rejection **and** an external receipt/hash-chain |
+| 5 | `ANY_TARGET_QUALIFIES` became true from `blocking_gate: verified` alone | That is evidence about one root (R3), silent on the other three | Records can no longer qualify a host; the flag stays `false` absent a live four-root probe |
+
+**Fix shape.** Verdicts are now four-valued (`fail` / `candidate` / `unverified` / `pass`) and
+fail-closed: `pass` requires a named positive proof, none of which is implemented, so `pass` is
+currently unassignable and qualification is unreachable by construction. Each root carries a
+`required_proof` string naming exactly what is missing, so the gap is legible rather than implied.
+
+**Two corrections this forced in the opposite direction**, recorded because they weaken the
+document's own rhetoric:
+
+- **R2 moved from `fail` to `unverified`.** Calling it `fail` overstated the evidence — the plan
+  permits a capability held in host memory, which cannot be observed from outside the host process.
+  The honest claim is that no capability was found, not that none exists.
+- **The four target hosts moved from tier `none` to `unverified`.** `none` is a measured plan tier
+  meaning *cannot support autonomous governance*; no such measurement was taken. Their capability
+  records are evidence insufficiency, not proof of incapability.
+
+**STOP is retained and unchanged**, on the narrower and better-supported claim: zero hosts are
+*qualified*. That conclusion never depended on the unsound positive branches.
+
 ## 5. Deliverables status against plan P0
 
 | P0 step | Status | Where |
@@ -193,10 +270,17 @@ reader could have misread, and the corrected field still reads `false`.
 achieves `full` or `partial` with the authenticated user channel, active-owner capability,
 mediator/pre-action enforcement, and append-only witness roots."*
 
-All four target hosts are `none`. All four trust roots fail on the executing host.
+**Zero hosts are qualified.** On the executing host, 0 of 4 roots are proven — R1, R3, and R4 are
+positively disproven, and R2 is unverified. The four target hosts have had no live probe at all and
+are `unverified`, not proven incapable. Either way none is qualified, and qualification requires
+all four roots to `pass`.
+
 [`host-trust-roots.json`](host-trust-roots.json) records all three gate fields as `false`:
-`executing_host_qualifies`, `any_target_host_qualifies`, and their union
-`any_host_full_or_partial`.
+`executing_host_qualifies`, `any_target_host_qualifies`, and their union `any_host_qualified`.
+
+The union field was renamed from `any_host_full_or_partial`: the old name implied a measured
+`full`/`partial` tier where none was measured. `any_host_qualified: false` states the honest
+claim — **no host is proven qualified** — without asserting incapability.
 
 **[INF]** Recommended next step, for Board decision rather than foreman action: treat "establish one
 host with real trust roots" as its own scoped project — root-provisioned append-only witness (R4,

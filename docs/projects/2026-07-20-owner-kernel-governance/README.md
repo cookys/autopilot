@@ -132,8 +132,8 @@ exists precisely to produce this result before schemas or engine modules are wri
 
 | P0 measurement | Value |
 |---|---|
-| Hosts at `full` or `partial` | **0 of 4** (Claude Code, Codex, OpenCode, Antigravity all `none`) |
-| Trust roots passing on the executing host | **0 of 4** (R1 user channel, R2 owner capability, R3 pre-action mediation, R4 append-only witness) |
+| Hosts **qualified** (all four roots proven) | **0 of 4** — Claude Code, Codex, OpenCode, Antigravity all `unverified` (no live probe; records are evidence insufficiency, **not** proof of incapability) |
+| Trust roots **proven** on the executing host | **0 of 4** — R1 `fail`, R2 `unverified`, R3 `fail`, R4 `fail` |
 | Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
 | Projected post-P3 absolute target | **51** — KR10 fails, projecting a rise of 9 |
 | Mandatory model-review dispatch baseline (KR8/KR9 denominator) | **6** (distinct from 28 mandatory QC steps overall) |
@@ -166,7 +166,9 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | P0 remains a funding/kill gate | The host trust roots and 30% review reduction must be measured before architecture is funded |
 | 2026-07-20 | Ship aliases for one compatibility release; do not fake elapsed telemetry | Preserves the approved migration contract without inventing future evidence |
 | 2026-07-20 | Target v2.32.57 | Externally visible change without a new skill/agent uses a patch bump in this repo |
-| 2026-07-20 | **P0 = STOP; P1 not authorized** | Plan P0 step 7 kill condition met — 0 of 4 target hosts reach `full`/`partial`, and all four trust roots fail on the executing host. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
+| 2026-07-20 | **P0 = STOP; P1 not authorized** | Plan P0 step 7 kill condition met — zero hosts qualified. On the executing host 0 of 4 roots are proven (R1/R3/R4 disproven, R2 unverified); the four target hosts have had no live probe. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
+| 2026-07-20 | Probe verdicts made four-valued and fail-closed (depth-0 QC, Major) | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. Unreachable today, but it would have minted a false `pass` on a future host. `pass` now requires a named positive proof; none is implemented, so qualification is unreachable by construction |
+| 2026-07-20 | Two claims **weakened** as part of that fix | R2 `fail` → `unverified` (host-memory capability is not externally observable); target hosts tier `none` → `unverified` (no measurement supported `none`). STOP retained on the narrower claim that zero hosts are *qualified* |
 | 2026-07-20 | Three-task spike deliberately not run | KR9 requires a transcript-free resume from the ledger; the ledger is rewritable by the party it records, so the spike's acceptance was already unreachable. Spending on it would produce numbers the same evidence disproves |
 | 2026-07-20 | No product code, schema, or engine module added | The gate is a funding gate. Writing Kernel code before a host has trust roots would build an authority boundary the host cannot enforce |
 | 2026-07-20 | KR10 arithmetic recorded as failing (42 → 51) | Independent second finding: the plan's deletions are prose, its additions are executed modules, and the deletion gate counts executed modules. Options handed to the Board without a recommendation |

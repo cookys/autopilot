@@ -24,6 +24,49 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.56 — context-budget: infer the window instead of assuming 200K
+
+**Headline**: The context-budget tiers were absolute token counts calibrated for a
+200K window (T1 100k = 50%, T2 150k = 75%). On a 1M-window model they start firing
+at 15% and never stop — and because the advisory reports a raw count, its reader
+mistakes "216k" for "nearly full" and tells the user to /clear at 22% utilisation.
+Observed in the field 2026-07-20. The hook now infers the window from evidence it
+already collects and states utilisation as a PERCENTAGE.
+
+### Added
+- `inferWindowTokens(observedMax)` — snaps to the smallest known window strictly
+  above the largest context observed this session. Observing N tokens *proves* the
+  window exceeds N, so no external signal is needed. Monotonic ratchet, so
+  auto-compaction (which lowers current context) cannot walk the inference back.
+- `scaleTiers(cfg, window)` — rescales tiers that are still at their defaults,
+  preserving the calibrated 50%/75% proportions (1M ⇒ 500k/750k).
+- T1/T2 messages now include `= N% of the ~Xk window`, so the absolute count can
+  no longer be misread as a proportion.
+
+### Fixed
+- **Test suite was not hermetic.** `_shared/opt-in.js` and `loadConfig()` both
+  resolve `~/.autopilot/config.json` via `os.homedir()`, so results depended on the
+  developer's personal config: a maintainer with `context_budget` thresholds set
+  turned the T1/T2 wrapper tests red, and one with the hook enabled in config broke
+  the "disabled ⇒ silent" test (config beats the env opt-out). `freshEnv()` now pins
+  `HOME` to an empty temp dir. Verified by running the suite under both a populated
+  and an empty HOME — 24/24 identical.
+
+### Notes
+- **Explicit config always wins.** Inference only rescales values still at their
+  defaults; `~/.autopilot/config.json` `context_budget.{t1,t2}` and the
+  `AUTOPILOT_CONTEXT_BUDGET_T1/T2` env vars are never silently overridden.
+- **Why not read the model name**: the transcript records `"claude-opus-4-8"` for
+  BOTH the 200K and the 1M variant (the `[1m]` suffix is not persisted), and no
+  `CLAUDE_*` env var carries the model or window. A model→window table would have
+  been wrong on exactly the case that motivated this change.
+- **Residual**: on a 1M session, a context between 150k and 200k is genuinely
+  ambiguous (it fits a 200K window), so one T2 may still fire there before evidence
+  arrives. Past 200k it self-corrects. Extension point: add tiers to
+  `KNOWN_WINDOWS`; snapping to the smallest window above the observation is
+  deliberate — over-guessing would push tiers past a real, lower ceiling and
+  silence the hook entirely.
+
 ## v2.32.55 — run E residuals: per-model quota pool merge + on_engine_unavailable engine wiring
 
 > Version note: originally authored as v2.32.54 in a concurrent session; renumbered to

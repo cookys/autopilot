@@ -109,6 +109,14 @@ function runHook(stdinObj, env) {
 function freshEnv(extra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxbud-state-'));
   return {
+    // HERMETICITY (v2.32.56): both the opt-in check (_shared/opt-in.js) and
+    // loadConfig() resolve ~/.autopilot/config.json via os.homedir(). Without
+    // pinning HOME the suite reads the DEVELOPER'S real config, so results
+    // depend on who runs it — a maintainer with {"context_budget":{"t2":...}}
+    // set turns the T1/T2 wrapper tests red, and one with the hook enabled
+    // in config breaks the "disabled ⇒ silent" test (config beats env opt-out).
+    // Found 2026-07-20 when exactly that happened. Pin it to an empty dir.
+    HOME: dir,
     AUTOPILOT_HOOK_CONTEXT_BUDGET: '1',
     AUTOPILOT_CONTEXT_BUDGET_DIR: dir,
     CLAUDE_CODE_SESSION_ID: `t-${path.basename(dir)}`,
@@ -118,9 +126,10 @@ function freshEnv(extra = {}) {
 
 test('wrapper: disabled (no opt-in) ⇒ silent exit 0', () => {
   const p = tmpFile([usageLine(999_999, 0, 0, 1)]);
-  const r = runHook({ transcript_path: p }, {
-    AUTOPILOT_HOOK_CONTEXT_BUDGET: '', AUTOPILOT_CONTEXT_BUDGET_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'x-')),
-  });
+  // Build on freshEnv so HOME stays pinned: a developer whose real
+  // ~/.autopilot/config.json enables the hook would otherwise see the config
+  // beat this env opt-out and the hook fire. (Hermeticity, v2.32.56.)
+  const r = runHook({ transcript_path: p }, freshEnv({ AUTOPILOT_HOOK_CONTEXT_BUDGET: '' }));
   assert.strictEqual(r.status, 0);
   assert.strictEqual(r.stderr.trim(), '');
 });
@@ -185,4 +194,83 @@ test('wrapper: subagent fire (agent_id present) ⇒ silent exit 0 (depth-0 only)
   const r = runHook({ transcript_path: p, agent_id: 'a326adc31e613f671', agent_type: 'general-purpose' }, freshEnv());
   assert.strictEqual(r.status, 0);
   assert.strictEqual(r.stderr.trim(), '');
+});
+
+// --- v2.32.56: context-window inference (A: ratchet + B: explicit config) ----
+//
+// Regression guarded: on a 1M-window model the 200K-calibrated defaults
+// (100k/150k) fire from 15% onward and never stop. Observed 2026-07-20 — a 1M
+// session sat at 216k (22%) with T2 firing every turn, and the reader relayed
+// "context nearly full / please /clear" to the user. There is NO harness signal
+// to key off (transcript model string is identical for the 200K and 1M variant;
+// no env var carries the window), so the window is inferred from evidence:
+// observing N tokens proves the window is > N.
+
+const { inferWindowTokens, scaleTiers, BASE_WINDOW } = require(LIB);
+
+test('inferWindowTokens: snaps to smallest known window above the observation', () => {
+  assert.strictEqual(inferWindowTokens(0), 200_000);          // no evidence ⇒ base
+  assert.strictEqual(inferWindowTokens(150_000), 200_000);    // still fits 200K
+  assert.strictEqual(inferWindowTokens(199_999), 200_000);
+  assert.strictEqual(inferWindowTokens(216_000), 1_000_000);  // proves >200K
+  assert.strictEqual(inferWindowTokens(999_999), 1_000_000);
+  // Garbage in ⇒ base window, never NaN/undefined tiers.
+  assert.strictEqual(inferWindowTokens(undefined), 200_000);
+  assert.strictEqual(inferWindowTokens(-5), 200_000);
+});
+
+test('scaleTiers: scales defaults proportionally, leaves explicit values alone', () => {
+  const dflt = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
+  assert.deepStrictEqual(
+    { t1: scaleTiers(dflt, 1_000_000).t1, t2: scaleTiers(dflt, 1_000_000).t2 },
+    { t1: 500_000, t2: 750_000 },   // 50% / 75% of 1M — same proportions as 200K
+  );
+  // Base window ⇒ untouched (no accidental drift for 200K sessions).
+  assert.deepStrictEqual(scaleTiers(dflt, BASE_WINDOW), dflt);
+
+  // B overlays A: a hand-set threshold must survive inference.
+  const pinned = { t1: 100_000, t2: 300_000, explicitT1: false, explicitT2: true };
+  const out = scaleTiers(pinned, 1_000_000);
+  assert.strictEqual(out.t2, 300_000, 'explicit t2 must not be rescaled');
+  assert.strictEqual(out.t1, 500_000, 'non-explicit t1 still scales');
+});
+
+test('budgetDecision: message states PROPORTION, not just absolute tokens', () => {
+  // The whole failure mode was "216k" reading as near-full. Percentage is the fix.
+  const d = budgetDecision(
+    { contextTokens: 800_000, calls: 1 },
+    { t1: 500_000, t2: 750_000, inferredWindow: 1_000_000 },
+  );
+  assert.strictEqual(d.tier, 't2');
+  assert.match(d.message, /80% of the ~1000k window/);
+});
+
+test('RED CHECK: pre-fix tiers would have fired T2 at 216k on a 1M window', () => {
+  // Proves this test file actually discriminates — with the old unscaled
+  // defaults, 216k trips T2. If this ever stops firing the guard below is vacuous.
+  const old = budgetDecision({ contextTokens: 216_000, calls: 1 }, { t1: 100_000, t2: 150_000 });
+  assert.strictEqual(old.tier, 't2', 'pre-fix behaviour must still reproduce');
+});
+
+test('GREEN: 216k on an inferred 1M window is silent (the reported bug)', () => {
+  const cfg = { t1: 100_000, t2: 150_000, explicitT1: false, explicitT2: false };
+  const scaled = scaleTiers(cfg, inferWindowTokens(216_000));
+  const d = budgetDecision({ contextTokens: 216_000, calls: 1 }, scaled);
+  assert.strictEqual(d.tier, null, '22% of a 1M window must not fire any tier');
+});
+
+test('wrapper end-to-end: 1M-scale context does not emit T2 (exit 0, no stderr)', () => {
+  // 216k total across the usage fields ⇒ ratchet infers 1M on this very call,
+  // so even the FIRST crossing is suppressed (evidence arrives with the reading).
+  const p = tmpFile([usageLine(6_000, 200_000, 10_000, 10)]);
+  const r = runHook({ transcript_path: p }, freshEnv());
+  assert.strictEqual(r.status, 0, 'must not exit 2 on a 1M-window session');
+  assert.strictEqual(r.stderr.trim(), '', 'must not nudge at 22% of window');
+});
+
+test('wrapper: 200K-window session still gets its T2 (no regression for small windows)', () => {
+  const p = tmpFile([usageLine(6_000, 150_000, 4_000, 10)]); // 160k ⇒ fits 200K
+  const r = runHook({ transcript_path: p }, freshEnv());
+  assert.strictEqual(r.status, 2, '200K sessions must keep the escalated advisory');
+  assert.match(r.stderr, /Context budget T2/);
 });

@@ -1,6 +1,12 @@
 {
   "probe": "owner-kernel-p0-host-classification",
-  "method": "two-mode captured evidence only; fixture/contract results are excluded by construction",
+  "method": "fixed target-host denominator plus status=probed captured evidence only; fixture/contract results are excluded by construction",
+  "target_hosts": [
+    "claude-code",
+    "codex",
+    "opencode",
+    "agy"
+  ],
   "exclusion_rule": "attack-suite.js results validate the PROPOSED CONTRACT against a disposable fixture and are deliberately NOT an input here. A sound contract does not qualify a host.",
   "hosts": [
     {

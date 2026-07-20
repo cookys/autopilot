@@ -177,8 +177,9 @@ class OwnerKernelFixture {
   }
 
   /**
-   * Verify the ledger against the independent witness receipt chain.
-   * Detects rewrite-from-genesis even when internal hashes are recomputed consistently.
+   * Verify the local ledger chain and the independent witness receipt chain.
+   * Detects single-row drift, broken prev links, and rewrite-from-genesis even when internal hashes
+   * are recomputed consistently.
    */
   verifyAgainstWitness() {
     const rows = fs.readFileSync(this.ledgerPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
@@ -186,10 +187,24 @@ class OwnerKernelFixture {
     if (rows.length !== receipts.length) {
       return { ok: false, reason: 'length_mismatch', rows: rows.length, receipts: receipts.length };
     }
+    let expectedPrev = 'genesis';
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i].content_hash !== receipts[i].event_head) {
+      const row = rows[i];
+      const receipt = receipts[i];
+      if (row.seq !== i || receipt.seq !== i) {
+        return { ok: false, reason: 'seq_mismatch', seq: i };
+      }
+      if (row.prev_hash !== expectedPrev || receipt.prev_witnessed_head !== expectedPrev) {
+        return { ok: false, reason: 'prev_hash_mismatch_at_seq', seq: i };
+      }
+      const expectedHash = sha256(canonical(row) + '|' + expectedPrev);
+      if (row.content_hash !== expectedHash) {
+        return { ok: false, reason: 'content_hash_mismatch_at_seq', seq: i };
+      }
+      if (row.content_hash !== receipt.event_head) {
         return { ok: false, reason: 'head_mismatch_at_seq', seq: i };
       }
+      expectedPrev = row.content_hash;
     }
     return { ok: true };
   }

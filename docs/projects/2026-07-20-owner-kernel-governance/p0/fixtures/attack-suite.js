@@ -41,6 +41,16 @@ const WITNESS_KEY = 'fixture-witness-key-DO-NOT-REUSE';
 const CAPABILITY = 'fixture-owner-capability-DO-NOT-REUSE';
 const POLICY = { mode: 'owner-led', red_lines: ['external_push', 'irreversible_delete'], max_uses_default: 1 };
 const CAP_SET = { hooks: ['pre-action'], tools: ['edit', 'bash'] };
+const REQUIRED_ATTACKS = [
+  'protected_event_envelope_forgery',
+  'direct_decision_append',
+  'worker_artifact_decision_injection',
+  'child_process_capability_theft',
+  'policy_kernel_mutation',
+  'mediated_action_bypass',
+  'capability_set_drift',
+  'witness_head_rewrite',
+];
 
 function newFixture(root, name) {
   return new OwnerKernelFixture(path.join(root, name), {
@@ -264,8 +274,10 @@ function main() {
 
   const payload = {
     probe: 'owner-kernel-p0-attack-suite',
-    attacks_required: 8,
+    attacks_required: REQUIRED_ATTACKS.length,
     attacks_executed: Object.keys(results).length,
+    missing_attacks: REQUIRED_ATTACKS.filter((name) => !Object.prototype.hasOwnProperty.call(results, name)),
+    extra_attacks: Object.keys(results).filter((name) => !REQUIRED_ATTACKS.includes(name)),
     contracts_violated: violations,
     scope_note: 'Fixture-contract results ONLY. These do NOT classify any host and cannot qualify one. '
       + 'Depth-0 Owner decision: every attack MUST be repeated against the production implementation '
@@ -273,7 +285,10 @@ function main() {
     results,
   };
   process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
-  process.exit(violations === 0 ? 0 : 1);
+  const complete = payload.attacks_executed === payload.attacks_required
+    && payload.missing_attacks.length === 0
+    && payload.extra_attacks.length === 0;
+  process.exit(violations === 0 && complete ? 0 : 1);
 }
 
 if (require.main === module) main();

@@ -1,6 +1,6 @@
 # Plan — Owner Kernel evolution
 
-> **Status**: Board-approved after five-family heterogeneous review — implementation authorized
+> **Status**: Board-approved after five-family heterogeneous review — P0 measurement authorized; implementation remains gated
 > **Owner**: a qualified depth-0 principal, persisted as a logical role through durable events
 > **Proposed branch**: `feat/owner-kernel-governance`
 > **Frame**: replace flow-led autonomy with owner-led governance without weakening executable evidence
@@ -199,8 +199,11 @@ deterministic `verify` scripts this plan commits to preserving. See
 
 **Size**: L, with a Size-S three-task spike as the funding gate
 **Depends on**: none
-**Acceptance**: the semantic/deletion matrix is complete and the manual spike meets KR9; otherwise stop
-without adding schemas, engine modules, or product code.
+**Acceptance**: the semantic/deletion matrix is complete, at least one target host is proven
+`full`/`partial`, and the manual spike meets KR9. If completed evidence proves no target host can
+qualify, stop without adding schemas, engine modules, or product code. If required evidence is
+missing, the gate is `INCOMPLETE` and P1 remains unauthorized; missing evidence is neither pass nor
+stop.
 
 1. Inventory every invocation of think-tank, dialectic, engine review, quality review, and depth-0 QC;
    classify it as `decide`, `counsel`, `repair`, `challenge`, or `verify` and name its current authority.
@@ -228,8 +231,10 @@ without adding schemas, engine modules, or product code.
    adjudicates acceptance and ledger completeness. Resume at least one task in a different session using
    only the ledger and durable evidence store.
 7. Stop the project if the spike misses any KR9 threshold. No architectural code is justified by model
-   release claims alone. Also stop if no target host achieves `full` or `partial` with the authenticated
-   user channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.
+   release claims alone. Also stop if completed evidence shows no target host achieves `full` or
+   `partial` with the authenticated user channel, active-owner capability, mediator/pre-action
+   enforcement, and append-only witness roots. If host evidence is incomplete, fail closed as
+   `INCOMPLETE` and do not open P1.
 
 > **P0 EXECUTION STATUS (run `owner-kernel-p0-1784543437001`, 2026-07-20): INCOMPLETE — 0 of 4
 > hosts qualify. Step 7 is NOT DECIDABLE. P1 NOT AUTHORIZED.** Evidence:

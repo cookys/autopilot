@@ -26,6 +26,16 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const SRC_DIR = __dirname;
+const REQUIRED_MUTATIONS = [
+  'protected_event_envelope_forgery',
+  'direct_decision_append',
+  'worker_artifact_decision_injection',
+  'policy_kernel_mutation',
+  'capability_set_drift',
+  'mediated_action_bypass',
+  'witness_head_rewrite',
+  'child_process_capability_theft',
+];
 
 /**
  * Each mutation removes exactly one guard. `attack` names the attack whose oracle must fire.
@@ -69,7 +79,7 @@ const MUTATIONS = [
     replace: `    // MUTATED: use-bound exhaustion check removed` },
 
   { attack: 'witness_head_rewrite', guard: 'witness receipt comparison',
-    find: `      if (rows[i].content_hash !== receipts[i].event_head) {
+    find: `      if (row.content_hash !== receipt.event_head) {
         return { ok: false, reason: 'head_mismatch_at_seq', seq: i };
       }`,
     replace: `      // MUTATED: witness receipt comparison removed` },
@@ -134,13 +144,19 @@ function main() {
   const payload = {
     probe: 'owner-kernel-p0-attack-oracle-mutation-validation',
     oracles_tested: Object.keys(results).length,
+    oracles_required: REQUIRED_MUTATIONS.length,
+    missing_oracles: REQUIRED_MUTATIONS.filter((name) => !Object.prototype.hasOwnProperty.call(results, name)),
+    extra_oracles: Object.keys(results).filter((name) => !REQUIRED_MUTATIONS.includes(name)),
     vacuous_oracles: vacuous,
     rule: 'An attack whose oracle does not flip to `violated` under an injected defect is VACUOUS; '
         + 'its green result in attack-suite.js is not evidence and must not be counted.',
     results,
   };
   process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
-  process.exit(vacuous === 0 ? 0 : 1);
+  const complete = payload.oracles_tested === payload.oracles_required
+    && payload.missing_oracles.length === 0
+    && payload.extra_oracles.length === 0;
+  process.exit(vacuous === 0 && complete ? 0 : 1);
 }
 
 if (require.main === module) main();

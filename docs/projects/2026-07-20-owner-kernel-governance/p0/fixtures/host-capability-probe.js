@@ -12,8 +12,9 @@
  * permits — not what a bare shell permits.
  *
  * ECHO NONCE: the caller passes --nonce <n> and the probe echoes it in the payload. A result
- * without the expected nonce means the harness did not actually run the probe and its output is
- * a guess. Same fail-closed read-probe rail as scripts/dispatch-explore.sh.
+ * without the expected nonce is stale/irrelevant. A matching nonce alone is NOT execution proof
+ * when the nonce was disclosed to an LLM harness; the driver must treat nonce-only payloads as
+ * unscored self-reports unless a separate execution witness is present.
  *
  * Non-destructive: all writes go to a fresh temp dir, plus ONE create-then-delete marker inside the
  * repo's hooks/ directory to test protected-path mediation. Nothing existing is modified.

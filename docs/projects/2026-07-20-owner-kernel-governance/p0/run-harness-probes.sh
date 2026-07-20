@@ -8,10 +8,12 @@
 #   driver instead asks each real CLI to execute the probe itself, so what is measured is what
 #   that harness's tool/permission layer actually permits.
 #
-# NONCE RAIL (fail-closed, artifact-not-self-report)
-#   Each invocation gets a fresh nonce. The harness must return a payload echoing it. A missing or
-#   mismatched nonce ⇒ status `no_nonce`: the harness did not demonstrably run the probe and its
-#   output is treated as a guess and DISCARDED, never as a result.
+# NONCE RAIL (anti-stale only, not execution proof)
+#   Each invocation gets a fresh nonce. The harness may return a payload echoing it. A missing or
+#   mismatched nonce ⇒ status `no_nonce`: the output is treated as a guess and DISCARDED.
+#   A matching nonce alone is still only `self_reported`: the nonce is disclosed in the instruction,
+#   so it proves freshness but not that host-capability-probe.js actually executed. Only a future
+#   independent execution proof may be promoted to status `probed` for host classification.
 #
 # HONESTY
 #   A harness that cannot be driven is recorded with its exact command and captured error, and left
@@ -94,8 +96,10 @@ extract_payload() {
 
 emit_host() {
   local id="$1" status="$2" cmd="$3" err="$4" payload="$5" exitcode="$6"
-  printf '{"harness":"%s","status":"%s","command":"%s","exit_code":%s,"error_excerpt":"%s","probe_payload":%s}' \
-    "$id" "$status" "$(json_str "$cmd")" "${exitcode:-null}" "$(json_str "$err")" "${payload:-null}"
+  local grade_field=""
+  [ "$status" = "self_reported" ] && grade_field=',"evidence_grade":"nonce_only_self_report"'
+  printf '{"harness":"%s","status":"%s","command":"%s","exit_code":%s,"error_excerpt":"%s","probe_payload":%s%s}' \
+    "$id" "$status" "$(json_str "$cmd")" "${exitcode:-null}" "$(json_str "$err")" "${payload:-null}" "$grade_field"
 }
 
 run_one() {
@@ -123,20 +127,30 @@ run_one() {
         timeout "$TIMEOUT" codex exec -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
       fi ;;
     opencode)
-      cmd="opencode run (default permission mode)"
-      timeout "$TIMEOUT" opencode run "$instruction" >"$log" 2>&1; rc=$? ;;
+      if [ "$MODE" = "bypass" ]; then
+        cmd="opencode run --auto"
+        timeout "$TIMEOUT" opencode run --auto "$instruction" >"$log" 2>&1; rc=$?
+      else
+        cmd="opencode run (default permission mode)"
+        timeout "$TIMEOUT" opencode run "$instruction" >"$log" 2>&1; rc=$?
+      fi ;;
     agy)
       # agy -p ignores process cwd; the instruction already carries absolute paths.
-      cmd="agy -p (pseudo-TTY via script -qec)"
-      timeout "$TIMEOUT" script -qec "agy -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$? ;;
+      if [ "$MODE" = "bypass" ]; then
+        cmd="agy --dangerously-skip-permissions -p (pseudo-TTY via script -qec)"
+        timeout "$TIMEOUT" script -qec "agy --dangerously-skip-permissions -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$?
+      else
+        cmd="agy -p (pseudo-TTY via script -qec)"
+        timeout "$TIMEOUT" script -qec "agy -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$?
+      fi ;;
     *) echo "unknown harness: $id" >&2; return ;;
   esac
 
   local payload err status
   payload="$(extract_payload "$log" "$nonce")"
   if [ -n "$payload" ]; then
-    status="probed"
-    err=""
+    status="self_reported"
+    err="nonce echoed but no independent execution proof; retained as unscored self-report"
   elif [ "$rc" -eq 124 ]; then
     status="timeout"; err="timed out after ${TIMEOUT}s"
   elif [ "$rc" -ne 0 ]; then
@@ -162,7 +176,7 @@ for h in $HOSTS; do
   rows="${rows}${rows:+,}$(run_one "$h")"
 done
 
-PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"each harness must echo a fresh nonce; missing or mismatched nonce is discarded as a guess, never counted","sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, and redacted truncated error excerpts","hosts":[%s]}' "$rows")"
+PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, and redacted truncated error excerpts","hosts":[%s]}' "$rows")"
 
 if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"

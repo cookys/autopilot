@@ -126,29 +126,41 @@
 
 ### P0 outcome
 
-**INCOMPLETE — blocked at the evidence gate. P1 not authorized.**
+**INCOMPLETE — 0 of 4 hosts qualify. P1 not authorized.**
 
-An earlier revision recorded a proven STOP. That was withdrawn: plan P0 step 4 requires probing
-each target harness with eight named attacks, and that work was not performed. A kill condition of
-the form *"no target host achieves full/partial"* cannot be established by not probing the hosts.
-P1 stays unauthorized because the pass bar is **unproven** — not because incapability was shown.
-
-**P0 is executable; it has not been executed.** Whether the Kernel-surface attacks belong in P0
-against frozen fixtures (steps 5–6 permit them) or in a P1-exit gate is an **unresolved plan
-ambiguity** for Board amendment — not a structural blocker, and no impossibility was demonstrated.
+Under the depth-0 Owner decision permitted by plan steps 5-6, all eight named step-4 attacks were
+executed against frozen disposable fixtures, and the host probe was driven through each locally
+installed harness in its own execution context. Two hosts are `none` on completed disproofs; two
+are `unverified`, so the step-7 universal negative is **not yet decidable** and this is not a STOP.
 
 | P0 measurement | Value |
 |---|---|
-| Plan step 4 (per-target probes) | **NOT PERFORMED** — **0 of 8 attacks executed, 0 of 4 hosts** |
-| Step 7 kill condition | **NOT EVALUABLE** — requires step 4 |
-| Hosts **qualified** | **0 of 4** — none proven qualified. **No host is claimed incapable** |
-| Trust roots on the executing host (Claude Code) | R1 `suspect`, R2 `unverified`, R3 `suspect`, R4 `suspect` — **none settled**; the committed probe measures reachability only and can reach neither `pass` nor `fail` |
-| Attacks actually executed | **none** — the earlier "witness-head rewrite executed" claim is withdrawn (not performed by the committed reproducer, and unsound scope) |
-| Deployment vs capability | `deployment_mediation_active: no` describes this checkout only; the harness's mediation **capability** is untested |
+| Step 4 — named attacks vs fixtures | **8 of 8 executed, all contracts held**; all 8 oracles mutation-proven LIVE (0 vacuous) |
+| Step 4 — per-harness capability | **3 of 4 harnesses driven** and nonce-verified (claude-code, codex, opencode); agy produced no payload |
+| Hosts **qualified** `full`/`partial` | **0 of 4** |
+| Hosts `none` (completed disproof) | **0** — depth-0 QC downgraded R2 and R4 to unverified |
+| Hosts `unverified` (missing ops named) | **4** — all |
+| Step 7 kill condition | **NOT DECIDABLE** — no host has a completed disproof; missing evidence is not proof of incapability |
+| Step 5 — baseline categories | **15 of 15 frozen**; only `event_log_tampering` exercised end-to-end (step 6 work) |
+| Step 6 — three-task spike | **Not run** — precondition (a qualifying host) unmet. Not claimed impossible |
 | Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
 | Projected post-P3 absolute target | **51** — KR10 fails, projecting a rise of 9 |
 | Mandatory model-review dispatch baseline (KR8/KR9 denominator) | **6** (distinct from 28 mandatory QC steps overall) |
-| Three-task spike | **Deferred pending step 4** — not cancelled as impossible |
+
+**Key host finding (completed, not inferred)**: Claude Code's default permission mode **denied** the
+probe (*"This command requires your approval"*), and the **same operation succeeded** under
+`--permission-mode bypassPermissions`. A pre-action gate exists and enforces — and the governed
+party can switch it off, because it holds shell access at the same uid. That fails R3's *"which the
+model cannot disable"* clause.
+
+**Named missing operations** (what would make the gate decidable):
+- **every host**: re-drive it so the same-uid parent/host-memory theft vectors
+  (`/proc/$PPID/environ`, `/proc/$PPID/mem`, ptrace) execute inside it; attack a real authoritative
+  witness/receipt root once one exists (R4 is unclassifiable until then).
+- **codex**: forge attempt against its live authenticated user-input envelope.
+- **agy**: run headless against its **real** credential home with an allow-rule in
+  `~/.gemini/settings.json`, or interactively. Both mutate user-owned config outside this run's
+  write scope; neither was done unilaterally. See [`p0/agy-probe-attempts.json`](p0/agy-probe-attempts.json).
 
 ## Verification Contract
 
@@ -176,19 +188,25 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | Strong qualified model owns; weaker models are bounded workers | Engineering process can expose failures but cannot manufacture judgment |
 | 2026-07-20 | P0 remains a funding/kill gate | The host trust roots and 30% review reduction must be measured before architecture is funded |
 | 2026-07-20 | Ship aliases for one compatibility release; do not fake elapsed telemetry | Preserves the approved migration contract without inventing future evidence |
+| 2026-07-20 | **P0 steps 4+5 EXECUTED under depth-0 Owner decision** | Steps 5-6 permit frozen fixtures, so all 8 named attacks were run against a disposable no-core-code fixture: 8/8 contracts held, 8/8 oracles mutation-proven LIVE. 15/15 baseline categories frozen |
+| 2026-07-20 | Per-harness probe replaces the shell-label probe | `run-harness-probes.sh` drives `host-capability-probe.js` through each real CLI behind a nonce rail; `probe-host-trust-roots.sh` marked SUPERSEDED (it measured the shell and asserted a host name) |
+| 2026-07-20 | Two-mode comparison adopted as the R3 active bypass test | Bypass-only would show "everything permitted" and prove nothing; default-only would miss that the gate is disableable. claude-code denied by default and permitted under bypass ⇒ R3 `fail` on a completed disproof |
+| 2026-07-20 | **P0 = INCOMPLETE, 0/4 hosts qualify; NOT a STOP** | 2 hosts `none` on completed disproofs, 2 `unverified`. A universal negative needs all four measured; declaring STOP would again convert missing evidence into proof of incapability |
+| 2026-07-20 | Fixture results excluded from host classification by construction | `classify-hosts.js` takes only captured harness evidence. A sound contract qualifies no host |
+| 2026-07-20 | Every attack must be re-run against production at P1 exit | Depth-0 Owner decision, recorded in the fixtures and findings. Fixture pass is a design gate, never a host qualification |
 | 2026-07-20 | Target v2.32.57 | Externally visible change without a new skill/agent uses a patch bump in this repo |
 | 2026-07-20 | ~~P0 = STOP; kill condition met~~ **WITHDRAWN** | Not supported. Step 4 was never performed, so the universal-negative kill condition could not have been established. Superseded by the row below |
-| 2026-07-20 | **P0 = INCOMPLETE/BLOCKED; P1 not authorized** | Step 4 not performed (2/8 attacks, 1/4 hosts); step 7 not evaluable. P1 blocked because the pass bar is **unproven**, not failed. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
+| 2026-07-20 | ~~P0 INCOMPLETE; step 4 not performed (2/8, 1/4)~~ **SUPERSEDED** | Superseded by the Owner-decision stage: 8/8 fixture attacks executed and 3/4 harnesses driven. P1 blocked because the pass bar is **unproven**, not failed. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
 | 2026-07-20 | ~~Plan P0 step 4 is unexecutable as written~~ **WITHDRAWN** | Impossibility was never demonstrated. Steps 5–6 permit frozen fixtures and a minimum JSONL/manual spike, so a disposable no-core-code harness may exercise the Kernel-surface attacks. Superseded below |
-| 2026-07-20 | Phase ordering is an **unresolved plan ambiguity** — Board amendment | Should P0 exercise Kernel-surface attacks via frozen fixtures, or defer them to a P1-exit gate? The plan does not say. Three options recorded; none recommended. **Not** a structural blocker |
+| 2026-07-20 | ~~Phase ordering is an unresolved ambiguity~~ **RESOLVED by Owner decision** | Depth-0 chose the fixture route under steps 5-6, and it worked: all 8 attacks ran pre-P1. The residual question is only whether the same attacks are *also* required at P1 exit — this run records them as required |
 | 2026-07-20 | All 8 attacks relabelled **unimplemented / not run**; 0 executed | Coverage statement, not an impossibility claim |
 | 2026-07-20 | R4 "executed witness-head rewrite" claim **withdrawn**; root → `suspect` | The committed reproducer does not perform it (artifact-not-self-report violation), and rewriting a copy proves only the copy is writable — it cannot disprove an unknown authoritative/external witness root |
 | 2026-07-20 | R3 `fail` → `suspect`; deployment split from capability | An unarmed default-off gate proves this **deployment** is unmediated; it does not disprove the **harness's capability** to mediate, which is what step 4 probes. Claude Code exposes a PreToolUse deny path |
 | 2026-07-20 | Codex-quota justification **removed** | Codex is the live depth-0 harness in this run and is demonstrably reachable; a stale quota record is not evidence about probe feasibility |
 | 2026-07-20 | R1 weakened `fail` → `suspect`; `suspect` value added | Writable transcript files are a record, not proof the live in-memory authenticated envelope is forgeable; the forge attack was never run. `suspect` (evidence of weakness) is now distinct from `candidate` (evidence toward passing) |
 | 2026-07-20 | Option (A) — real per-target probes — **not performed**, not impossible | Recorded as work not done. The earlier "partly impossible" justification is withdrawn on both grounds (see the two rows above). Chose (B) reclassify, per depth-0 QC |
-| 2026-07-20 | Probe verdicts made four-valued and fail-closed (depth-0 QC, Major) | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. Unreachable today, but it would have minted a false `pass` on a future host. `pass` now requires a named positive proof; none is implemented, so qualification is unreachable by construction |
-| 2026-07-20 | Two claims **weakened** as part of that fix | R2 `fail` → `unverified` (host-memory capability is not externally observable); target hosts tier `none` → `unverified` (no measurement supported `none`). STOP retained on the narrower claim that zero hosts are *qualified* |
+| 2026-07-20 | ~~Probe verdicts four-valued~~ **SUPERSEDED — now five-valued** | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. Unreachable today, but it would have minted a false `pass` on a future host. `pass` now requires a named positive proof; none is implemented, so qualification is unreachable by construction |
+| 2026-07-20 | ~~Two claims weakened; STOP retained~~ **SUPERSEDED — STOP withdrawn entirely** | R2 `fail` → `unverified` (host-memory capability is not externally observable); target hosts tier `none` → `unverified` (no measurement supported `none`). STOP retained on the narrower claim that zero hosts are *qualified* |
 | 2026-07-20 | Three-task spike deliberately not run | KR9 requires a transcript-free resume from the ledger; the ledger is rewritable by the party it records, so the spike's acceptance was already unreachable. Spending on it would produce numbers the same evidence disproves |
 | 2026-07-20 | No product code, schema, or engine module added | The gate is a funding gate. Writing Kernel code before a host has trust roots would build an authority boundary the host cannot enforce |
 | 2026-07-20 | KR10 arithmetic recorded as failing (42 → 51) | Independent second finding: the plan's deletions are prose, its additions are executed modules, and the deletion gate counts executed modules. Options handed to the Board without a recommendation |

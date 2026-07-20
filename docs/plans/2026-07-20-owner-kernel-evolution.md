@@ -231,38 +231,49 @@ without adding schemas, engine modules, or product code.
    release claims alone. Also stop if no target host achieves `full` or `partial` with the authenticated
    user channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.
 
-> **P0 EXECUTION STATUS (recorded 2026-07-20, run `owner-kernel-p0-1784543437001`): INCOMPLETE —
-> BLOCKED. Step 4 was NOT performed and step 7 is NOT EVALUABLE.** Evidence:
+> **P0 EXECUTION STATUS (run `owner-kernel-p0-1784543437001`, 2026-07-20): INCOMPLETE — 0 of 4
+> hosts qualify. Step 7 is NOT DECIDABLE. P1 NOT AUTHORIZED.** Evidence:
 > [`docs/projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md`](../projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md).
 >
-> **Step 4 was not executed. 0 of 8 named attacks were run, against 0 of 4 hosts.** The committed
-> probe performs reachability and configuration MEASUREMENT only. All eight attacks are recorded
-> **unimplemented / not run** — which is a statement about coverage, **not** a claim that they
-> cannot be run. No impossibility was demonstrated and none is asserted.
+> **Depth-0 Owner decision (reversible, exercised under steps 5-6)**: the eight named step-4 attacks
+> were executed against **frozen disposable no-core-code fixtures** rather than deferred. **Every
+> attack MUST be repeated against the production implementation at P1 exit before any host may be
+> classified `full` or `partial`.** A fixture pass is a design gate, never a host qualification.
 >
-> Consequently the step-7 kill condition — a universal negative over four hosts — **has not been
-> evaluated**, and must not be treated as met. An unprobed host is *not qualified*, which is **not**
-> the same as *proven incapable*. P1 remains unauthorized because the pass bar is unproven, not
-> because it was failed.
+> **Step 4 — contract axis**: 8 of 8 attacks executed, all 8 contracts held, and all 8 oracles were
+> **mutation-proven live** (each flips to `violated` under an injected defect; 0 vacuous).
 >
-> **Unresolved plan ambiguity for Board amendment (not a blocker).** P0 runs before the Kernel
-> exists, and this plan does not say whether the Kernel-surface attacks should be exercised in P0
-> against frozen fixtures — steps 5 and 6 explicitly permit frozen fixtures and a run against "the
-> minimum proposed JSONL event fields", so a disposable no-core-code harness may suffice — or
-> deferred to a P1-exit gate before any host is declared `full`/`partial`. Options: (1) exercise in
-> P0 via fixtures; (2) defer to a P1-exit gate; (3) amend the kill condition to match P0's scope.
-> No option is recommended here.
+> **Step 4 — host axis**: the probe was driven through each locally installed harness in its own
+> execution context behind a nonce rail. 3 of 4 produced nonce-verified payloads. Tiers:
+> all four **unverified**. **0 qualify, and none reaches `none` either** — depth-0 QC downgraded R2
+> (child env inheritance of an injected sentinel is not capability theft) and R4 (a probe-local temp
+> witness is not a host witness root) to unverified, leaving only R3 settled per host.
 >
-> **Deployment readiness is not host capability.** Step 4 probes what a harness CAN SUPPORT. That
-> this checkout currently has no gate armed (`orchestrator-edit-gate` is opt-in default-off) shows
-> only that the current deployment is unmediated; Claude Code does expose a PreToolUse deny path,
-> so mediation capability is plausibly present but untested.
+> The R3 result rests on a two-mode active bypass test: Claude Code's default permission mode
+> DENIED the operation, and the SAME operation succeeded under `--permission-mode
+> bypassPermissions`. A pre-action gate exists and enforces, and the governed party can switch it
+> off — failing R3's "which the model cannot disable" clause.
 >
-> Observations recorded on the executing host (Claude Code) — measurement, **not** attacks, and
-> sufficient only for `suspect`: the observed ledger has no append-only attribute and a writable
-> directory; the sole preventive gate is unarmed, fails open, and its control surfaces are
-> model-writable; transcript artifacts are model-writable. Root verdicts: R1 `suspect`,
-> R2 `unverified`, R3 `suspect`, R4 `suspect`.
+> **Step 5**: 15 of 15 baseline categories frozen. Only `event_log_tampering` is exercised
+> end-to-end; executing the rest is step 6 work and is not complete.
+>
+> **Step 6**: the three-task spike was NOT run because its precondition — a qualifying host — is
+> unmet. It is not claimed impossible.
+>
+> **Why this is INCOMPLETE and not STOP**: step 7 asserts a universal negative over four hosts.
+> After the QC downgrades none has a completed disproof. Declaring STOP would convert missing evidence into
+> proof of incapability. Named missing operations — **every host**: re-drive it so the same-uid
+> parent/host-memory theft vectors (`/proc/$PPID/environ`, `/proc/$PPID/mem`, ptrace) execute
+> inside it, and attack a real authoritative witness/receipt root once one exists (R4 is
+> unclassifiable for any host until then). **codex** additionally: a forge attempt against its live
+> authenticated user-input envelope. **agy**: a headless run against its real credential home with
+> an allow-rule in `~/.gemini/settings.json`, or an interactive run — both mutate user-owned
+> configuration outside this run's write scope and were not performed unilaterally.
+>
+> **Phase-order question for the Board (an ambiguity, not a blocker)**: the fixture route proved
+> workable, so P0 can exercise Kernel-surface attacks before the Kernel exists. Whether that
+> fixture evidence should also be required as a P1-exit gate against production is unspecified;
+> this run records it as required, and the Board may confirm or amend.
 
 ### P1 — Governance and durable owner events
 

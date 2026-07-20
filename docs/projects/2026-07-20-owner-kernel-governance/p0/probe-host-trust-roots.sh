@@ -1,4 +1,27 @@
 #!/usr/bin/env bash
+# probe-host-trust-roots.sh — SUPERSEDED. Retained as a historical record, not as evidence.
+#
+# ============================ SUPERSEDED 2026-07-20 ============================
+# This script measures the SHELL IT RUNS IN and then accepts a host name via --executing-host.
+# That is not a per-harness probe: it asserts a host label rather than measuring a host. Depth-0
+# QC identified this as the reason an earlier revision described Claude Code as both live-probed
+# and never-probed in the same document.
+#
+# REPLACED BY:
+#   p0/run-harness-probes.sh          — drives p0/fixtures/host-capability-probe.js through each
+#                                       real CLI in its OWN headless execution context, with a
+#                                       nonce rail so a harness that did not run is discarded.
+#   p0/fixtures/attack-suite.js       — executes all eight named step-4 attacks against a
+#                                       disposable fixture that IS authoritative within its run.
+#   p0/fixtures/mutation-validate.js  — proves those attack oracles are not vacuous.
+#
+# Its remaining value is the append-only-attribute and reachability measurements, which the
+# replacement probe now performs per harness. Nothing in this file should be cited as host
+# capability evidence. It is kept so the correction trail stays auditable.
+# ==============================================================================
+#
+# (original header follows)
+#
 # probe-host-trust-roots.sh — P0 host observability/trust-root probe (Owner Kernel gate).
 #
 # Answers ONE question mechanically, per host:

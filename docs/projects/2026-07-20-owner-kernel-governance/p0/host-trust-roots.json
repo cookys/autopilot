@@ -1,0 +1,42 @@
+{
+  "probe": "owner-kernel-p0-host-trust-roots",
+  "executing_host": {
+    "uid": 1000,
+    "user": "cookys",
+    "note": "This script runs in the same identity a model Bash tool runs in; its reach IS the model's reach."
+  },
+  "trust_roots_executing_host": {
+    "R1_authenticated_user_channel": {
+      "verdict": "fail",
+      "user_channel_writable_by_model": "yes",
+      "writable_artifacts": "history.jsonl,projects,sessions"
+    },
+    "R2_active_owner_capability": {
+      "verdict": "fail",
+      "capability_broker": "absent",
+      "session_marker_writable_by_model": "yes"
+    },
+    "R3_pre_action_mediation": {
+      "verdict": "fail",
+      "hook_source_writable": "yes",
+      "hook_dir_writable": "yes",
+      "harness_settings_writable": "yes"
+    },
+    "R4_append_only_witness": {
+      "verdict": "fail",
+      "witness_dir_writable": "yes",
+      "witness_append_only_attr": "no",
+      "append_only_settable_by_this_uid": "no",
+      "interpretation": "append_only_settable_by_this_uid=no means a ROOT-installed append-only witness would be unforgeable by the model. It is a mechanism that is available but not currently deployed."
+    }
+  },
+  "executing_host_tier": "none",
+  "target_hosts_from_capability_records": [ {"host":"claude-code","harness_level":"H1","status":"warning","blocking_gate":"unavailable","hooks":"known-existing-host","tier":"none"},{"host":"codex","harness_level":"H2","status":"verified","blocking_gate":"unverified","hooks":"warning","tier":"none"},{"host":"opencode","harness_level":"H2","status":"warning","blocking_gate":"unverified","hooks":"verified","tier":"none"},{"host":"agy","harness_level":"H2","status":"verified","blocking_gate":"unverified","hooks":"unverified","tier":"none"} ],
+  "gate": {
+    "criterion": "P0 stops if no target host achieves full or partial with authenticated user channel, active-owner capability, mediator/pre-action enforcement, and append-only witness roots.",
+    "executing_host_qualifies": false,
+    "any_target_host_qualifies": false,
+    "any_host_full_or_partial": false,
+    "field_semantics": "any_host_full_or_partial is the UNION over the live-probed executing host AND the four record-derived target hosts. executing_host_qualifies and any_target_host_qualifies are the two disjuncts, reported separately so the union is auditable rather than implied."
+  }
+}

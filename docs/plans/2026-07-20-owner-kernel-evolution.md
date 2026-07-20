@@ -161,6 +161,38 @@ load-bearing surfaces than both the legacy baseline and the projection. Splittin
 modules is not a regression by itself, but every executed module counts. If the total does not fall, the
 refactor has failed its simplification objective.
 
+#### P0 measurement (recorded 2026-07-20, run `owner-kernel-p0-1784543437001`)
+
+Method, per-class members, and exclusions:
+[`docs/projects/2026-07-20-owner-kernel-governance/p0/surface-baseline.md`](../projects/2026-07-20-owner-kernel-governance/p0/surface-baseline.md).
+
+| Field | Value |
+|---|---:|
+| **Legacy absolute baseline** (proven executed, normal width-1 `/l5` run) | **42** |
+| — with the two opt-in hooks `/l5` entry arms | 44 |
+| **Projected absolute post-P3 target** (derived from § 3 above) | **51** |
+| KR10 requirement | post-P3 < baseline |
+| **KR10 status against this projection** | **FAILS — projects a rise of 9** |
+
+The baseline is a **floor, not a ceiling**: scripts fired by the foreman's inline
+`dev-flow` → `finish-flow` → `quality-pipeline` phases were not traced in this pass and are
+excluded rather than assumed. An undercounted baseline makes the projection conservative in this
+plan's favour, and the projection still fails.
+
+The cause is structural: this plan's deletions are concentrated in **prose** (`/l3`–`/l6` bodies,
+`level-front-door.md`, duplicated trust narration), while its additions are concentrated in
+**executed modules** (a nine-module engine package, a CLI, a schema) — and the gate counts executed
+modules. Closing it requires either a named deletion manifest of ≥ 9 currently-executed surfaces, a
+revised KR10 that counts responsibility surfaces rather than module cardinality, or an explicit
+Board decision that KR10 is not a release gate. Changing a KR's definition after seeing its
+measurement is a Board decision, not an implementation choice — cf. § 6 *"The acceptance test is
+laundered."*
+
+Also recorded for KR8/KR9: the **mandatory model-review dispatch baseline is 6**, not the 28
+mandatory QC steps overall. Measuring "30% fewer" against 28 would mostly be measuring
+deterministic `verify` scripts this plan commits to preserving. See
+[`semantic-inventory.md`](../projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md).
+
 ## 4. Phases
 
 ### P0 — Semantic inventory, baseline, and no-core-code spike

@@ -116,13 +116,28 @@
 |---|---|---|
 | Design | Complete | Board-approved five-family plan: `d98977c` |
 | L-1.5 scope audit | Complete | Dimension and verbatim-requirement ledgers above |
-| L-1.6 skill routing | In progress | Required methodology table above; dispatch contract still to freeze |
-| P0 | Pending | Blocked by L-1.6 |
-| P1 | Pending | Blocked by P0 |
-| P2 | Pending | Blocked by P1 |
-| P3 | Pending | Blocked by P2 |
-| P4 | Pending | Blocked by P3 |
-| L-5 | Pending | Mandatory finish-flow parent |
+| L-1.6 skill routing | Complete | dev-flow, l6, ceo-agent, test-strategy, harness-maintenance, quality-pipeline invoked in run `owner-kernel-p0-1784543437001` |
+| P0 | **Complete — verdict STOP** | [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); probe [`p0/host-trust-roots.json`](p0/host-trust-roots.json) |
+| P1 | **NOT AUTHORIZED** | P0 kill condition triggered (plan P0 step 7); requires a Board decision to proceed |
+| P2 | Blocked | Depends on P1 |
+| P3 | Blocked | Depends on P2 |
+| P4 | Blocked | Depends on P3 |
+| L-5 | Not reached | Project halted at the P0 gate as designed |
+
+### P0 outcome
+
+**STOP.** No target host provides the trust roots the plan requires, so Owner Kernel product code
+is not funded. This is the gate working as designed, not a failure of execution — plan P0 step 7
+exists precisely to produce this result before schemas or engine modules are written.
+
+| P0 measurement | Value |
+|---|---|
+| Hosts at `full` or `partial` | **0 of 4** (Claude Code, Codex, OpenCode, Antigravity all `none`) |
+| Trust roots passing on the executing host | **0 of 4** (R1 user channel, R2 owner capability, R3 pre-action mediation, R4 append-only witness) |
+| Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
+| Projected post-P3 absolute target | **51** — KR10 fails, projecting a rise of 9 |
+| Mandatory model-review dispatch baseline (KR8/KR9 denominator) | **6** (distinct from 28 mandatory QC steps overall) |
+| Three-task spike | **Not run** — acceptance already unreachable; see findings § 3 |
 
 ## Verification Contract
 
@@ -151,3 +166,9 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | P0 remains a funding/kill gate | The host trust roots and 30% review reduction must be measured before architecture is funded |
 | 2026-07-20 | Ship aliases for one compatibility release; do not fake elapsed telemetry | Preserves the approved migration contract without inventing future evidence |
 | 2026-07-20 | Target v2.32.57 | Externally visible change without a new skill/agent uses a patch bump in this repo |
+| 2026-07-20 | **P0 = STOP; P1 not authorized** | Plan P0 step 7 kill condition met — 0 of 4 target hosts reach `full`/`partial`, and all four trust roots fail on the executing host. Evidence: [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
+| 2026-07-20 | Three-task spike deliberately not run | KR9 requires a transcript-free resume from the ledger; the ledger is rewritable by the party it records, so the spike's acceptance was already unreachable. Spending on it would produce numbers the same evidence disproves |
+| 2026-07-20 | No product code, schema, or engine module added | The gate is a funding gate. Writing Kernel code before a host has trust roots would build an authority boundary the host cannot enforce |
+| 2026-07-20 | KR10 arithmetic recorded as failing (42 → 51) | Independent second finding: the plan's deletions are prose, its additions are executed modules, and the deletion gate counts executed modules. Options handed to the Board without a recommendation |
+| 2026-07-20 | GLM-5.2 challenge discarded as vacuous | 143-byte raw log, bare `SHIP-AS-IS`, zero engagement. A favourable but contentless pass is not evidence; counting it would have manufactured a confirmation |
+| 2026-07-20 | MiniMax-M3 findings adjudicated individually | 4 accepted and fixed (incl. a genuinely misleading gate field), 1 rejected as a false positive with reasoning recorded, 2 acknowledged. None disturbed the verdict |

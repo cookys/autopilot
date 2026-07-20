@@ -17,8 +17,30 @@ export SENTINEL="$TEST_TMP/sentinel_touched"
 
 cat <<'EOF' > "$FAKE_RUNNER"
 #!/usr/bin/env bash
+echo "OpenAI Codex v0.test.0" >&2
+echo "--------" >&2
+echo "session id: 00000000-0000-4000-8000-000000000000" >&2
+echo "--------" >&2
+
+sidecar=""
+args=("$@")
+i=0
+while [ "$i" -lt "${#args[@]}" ]; do
+  if [ "${args[$i]}" = "--output-last-message" ]; then
+    i=$((i + 1))
+    if [ "$i" -lt "${#args[@]}" ]; then
+      sidecar="${args[$i]}"
+    fi
+  fi
+  i=$((i + 1))
+done
+
 touch "$SENTINEL"
-echo "Success from stub runner"
+msg="Success from stub runner"
+if [ -n "$sidecar" ]; then
+  printf '%s\n' "$msg" > "$sidecar"
+fi
+printf '%s\n' "$msg"
 exit 0
 EOF
 chmod +x "$FAKE_RUNNER"

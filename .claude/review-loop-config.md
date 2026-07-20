@@ -35,10 +35,17 @@
 - implementer_effort: high
 - implementer_runner: grok
 - verification_author_present: true
-- verification_author_engine: glm-5.2
-- verification_author_runner: anthropic-compatible
+- verification_author_engine: Gemini 3.5 Flash (High)
+- verification_author_runner: agy
 - verification_author_effort: high
-- verification_author_endpoint: glm
+- verification_author_endpoint:
+
+> Seat note (2026-07-18): verification_author moved glm-5.2/anthropic-compatible → Gemini/agy
+> for the v2.32.54 run — ~/.autopilot/endpoints.env is absent on this host session, so BOTH
+> glm and minimax endpoint-backed seats are not-ready (resolve-endpoint ready:false). Gemini
+> via agy needs no endpoint token, keeps three-way family disjointness (google author ×
+> xai implementer × openai loop-reviewer). Restore the glm seat when credentials return —
+> the transport-condemnation note below still holds for that seat.
 
 > Transport note (2026-07-16): verification_author_runner moved cc-shim → anthropic-compatible
 > PERMANENTLY. The Claude-CLI transport is condemned for large authoring payloads (z.ai answers

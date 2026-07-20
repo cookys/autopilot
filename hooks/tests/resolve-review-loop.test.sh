@@ -55,6 +55,8 @@ assert_eq "2" "$EXIT" "unknown flag exit code"
 # 3. default JSON carries the repo's DOGFOOD roster + is parseable.
 # DOGFOOD PIN (reads the live .claude/review-loop-config.md): as of 2026-07-16
 # Board decision A the reviewer is MiniMax-M3 and the implementer is grok-4.5 (xai).
+# 2026-07-18 seat refresh: verification_author glm-5.2/anthropic-compatible →
+# Gemini/agy (endpoints.env absent on host; restore note in the config file).
 # xai ∉ {openai,anthropic,google} ⇒ source-trust low ⇒ review_risk=high,
 # required_review_families=2, l1_required=true — BY DESIGN (resolve-review-loop.sh
 # §"Derive source trust"). Restore the gpt seats (reviewer gpt-5.5 / implementer
@@ -64,11 +66,11 @@ assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"
 assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "default implementer (grok, Board decision A)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
-assert_contains "$OUT" '"verification_author_engine": "glm-5.2"' "default verification_author_engine"
-assert_contains "$OUT" '"verification_author_runner": "anthropic-compatible"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_engine": "Gemini 3.5 Flash (High)"' "default verification_author_engine"
+assert_contains "$OUT" '"verification_author_runner": "agy"' "default verification_author_runner"
 assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
-assert_contains "$OUT" '"verification_author_endpoint": "glm"' "default verification_author_endpoint"
-assert_contains "$OUT" '"verification_author_family": "zhipu"' "default derived verification_author_family"
+assert_contains "$OUT" '"verification_author_endpoint": ""' "default verification_author_endpoint"
+assert_contains "$OUT" '"verification_author_family": "google"' "default derived verification_author_family"
 assert_contains "$OUT" '"implementer_family": "xai"' "default derived implementer_family"
 assert_contains "$OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "default config_path is repo dogfood absolute path"
 assert_contains "$OUT" '"loop_convergence_verdict": "SHIP-AS-IS"' "default convergence verdict"
@@ -89,11 +91,11 @@ assert_eq "true" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
 assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
-assert_eq "glm-5.2" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
-assert_eq "anthropic-compatible" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
+assert_eq "Gemini 3.5 Flash (High)" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
+assert_eq "agy" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
 assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
-assert_eq "glm" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
-assert_eq "zhipu" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
+assert_eq "" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
+assert_eq "google" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
 assert_eq "xai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
 assert_eq "$REPO_ROOT/.claude/review-loop-config.md" "$(bash "$SCRIPT" --field config_path)" "--field config_path"
 EMPTY_SCDIR="$TEST_TMP/empty-scorecard"

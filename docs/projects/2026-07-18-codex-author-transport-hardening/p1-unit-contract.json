@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "unit_id": "p1-codex-transport-hardening",
+  "role": "implementer",
+  "goal": "Harden the Codex branch of scripts/dispatch-author.sh so an authored result is possible only after exit-first process-tree classification and exact stdout/sidecar witness verification, turning the 37 RED assertions of hooks/tests/dispatch-author-codex-transport.test.sh GREEN while preserving all existing author/roster/contract/consumer and non-Codex behavior.",
+  "spec": {
+    "path": "docs/plans/2026-07-18-codex-author-transport-hardening.md",
+    "section": "P1 — Canonical Codex transport implementation"
+  },
+  "base_sha": "42207d258fc8e99a5916f5617632c22c7eeae685",
+  "depends_on": [],
+  "scope": {
+    "allow_paths": [
+      "scripts/dispatch-author.sh",
+      "scripts/lib/dispatch-author-codex-transport.sh"
+    ],
+    "deny_paths": [
+      "hooks/tests/**",
+      "docs/**",
+      "platforms/**",
+      "schemas/**",
+      ".claude/**",
+      "bin/**",
+      "src/**"
+    ],
+    "max_files": 2,
+    "max_diff_lines": 1200
+  },
+  "go": {
+    "required_paths": [
+      "docs/plans/2026-07-18-codex-author-transport-hardening.md",
+      "hooks/tests/dispatch-author-codex-transport.test.sh",
+      "scripts/dispatch-author.sh"
+    ],
+    "required_engine_role": "implementer",
+    "required_red_command": ["bash", "hooks/tests/dispatch-author-codex-transport.test.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {
+    "kind": "commit",
+    "paths": ["scripts/dispatch-author.sh"]
+  },
+  "acceptance": [
+    { "argv": ["bash", "-n", "scripts/dispatch-author.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-codex-transport.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-strict-roster.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-strict-endpoint.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-session-mode.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-result-failures.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-result-provenance.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-author-contract.test.sh"], "exit": 0 },
+    { "argv": ["bash", "hooks/tests/dispatch-output-quiescence.test.sh"], "exit": 0 }
+  ],
+  "budget": {
+    "wall_seconds": 1800,
+    "max_attempts": 2,
+    "max_context_files": 8
+  }
+}

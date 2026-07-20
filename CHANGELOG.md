@@ -24,7 +24,11 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.32.54 — run E residuals: per-model quota pool merge + on_engine_unavailable engine wiring
+## v2.32.55 — run E residuals: per-model quota pool merge + on_engine_unavailable engine wiring
+
+> Version note: originally authored as v2.32.54 in a concurrent session; renumbered to
+> v2.32.55 on integration because the author-transport ship below landed on origin first
+> under v2.32.54 (same collision ritual as the v2.32.27→28 renumber).
 
 **Headline**: The two automation halves left open by v2.32.53's `engine_unavailable` status land: the engine-capability-state quota merge now treats quota as the per-MODEL pool it actually is (a live `available` probe recorded under one role clears a stale `exhausted` recorded under another — `autopilot status quota` stops contradicting reality), and `engine implement-review` mechanically applies the resolver's `on_engine_unavailable` policy (ask/solo-fallback/wait-reset) to `engine_unavailable`/`precondition_failed` dispatch deaths, emitting a machine-readable action instead of leaving depth-0 to read raw dispatch JSON and apply the policy by hand.
 
@@ -36,6 +40,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`
+
+## v2.32.54 — Codex author transport hardening (D0-T v4.1 Track A)
+
+**Headline**: The Codex branch of `dispatch-author.sh` now fails closed unless an exit-0, completely-reaped process produces authoritative stdout exactly corroborated by a private last-message sidecar. New `scripts/lib/dispatch-author-codex-transport.sh` carries the transport engine: dispatcher-owned 0700 run dir with three exclusively-created 0600 capture files (post-run symlink/hardlink/owner/nlink checks), exactly one internal `--output-last-message` (a caller-supplied one is a usage error and the runner never starts), exit-first classification (deadline/signal/124/nonzero/incomplete-tree reject before any content read), whole-tree TERM→KILL reap within a 10s cleanup budget including setsid-escaped TERM-ignoring descendants (accumulating `/proc` children-walk snapshots + post-exit private-channel fd-holder scan), the two-relation stdout/sidecar witness (byte-exact or stdout = sidecar + one LF, nothing else), initial-position-anchored chrome-frame session-id extraction (pre-frame fake frames and post-frame injections rejected), GNU-parity timeout grammar with fail-closed parse, and metadata-only results (prompt/stderr/candidate bodies never enter result JSON).
+
+### Added
+- `scripts/lib/dispatch-author-codex-transport.sh` — Codex author transport engine (sourced by `dispatch-author.sh`).
+- `hooks/tests/dispatch-author-codex-transport.test.sh` — deterministic 146-assertion transport contract (fake-binary matrix: witness relations, session anchoring incl. pre/post-frame attacks, inode attacks, late flush, TERM-ignoring child/grandchild/setsid/orphan-writer reap, timeout grammar, caller-path refusal, metadata redaction, strict-roster/contract compatibility).
+
+### Changed
+- Legacy codex-runner authored-path stubs across the author suites emit a conforming chrome frame + sidecar (pre-hardening expectations retired per the frozen v4.1 contract).
+- `dispatch-output-quiescence.test.sh` settle-rail positive cases migrated to the cc-shim runner (late-flush recovery is prohibited for Codex by design; settle behavior for non-Codex runners unchanged).
+- Dogfood roster: verification_author seat glm-5.2/anthropic-compatible → Gemini/agy while `~/.autopilot/endpoints.env` is absent on this host (restore note in config).
+
+### Fixed
+- Round-1 review (gpt-5.5): chrome-frame-absence bypass of witness/session-id verification — closed with a red-green `no_chrome` fixture.
+- Round-2/3 review: pre-frame fake-frame session hijack (initial-position anchoring), pgid-only reap missing setsid escapees (descendant snapshots + fd-holder scan), silent 300s timeout fallback (GNU-parity parse, unparseable → precondition exit 2).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.53`
 
 ## v2.32.53 — dispatch/classify/preflight honesty batch (four Fix-level hardenings)
 

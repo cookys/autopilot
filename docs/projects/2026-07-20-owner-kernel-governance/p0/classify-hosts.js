@@ -123,6 +123,38 @@ function structurallyValidDriverTrace(host, payload) {
   return Boolean(execLine && writeLine);
 }
 
+function structurallyValidDriverFdWrite(host, payload) {
+  const witness = payload && payload.execution_witness;
+  const driver = host && host.execution_witness_driver;
+  if (!witness || !driver || typeof driver !== 'object') return false;
+  if (driver.kind !== 'strace_execve_fdwrite') return false;
+  if (driver.version !== 1) return false;
+  if (driver.trace_tool !== 'strace') return false;
+  if (driver.wrapper_pid !== witness.wrapper_pid) return false;
+  if (driver.wrapper_script !== witness.wrapper_script) return false;
+  if (driver.payload_sha256 !== witness.payload_sha256) return false;
+  if (driver.execve_matched !== true) return false;
+  if (driver.payload_hash_write_matched !== true) return false;
+  if (driver.stdout_payload_hash_matched !== false) return false;
+  if (!/^[0-9]+$/.test(String(driver.write_fd || ''))) return false;
+  if (String(driver.write_fd) === '1') return false;
+  if (!hex64(driver.trace_sha256)) return false;
+  if (!Array.isArray(driver.evidence) || driver.evidence.length < 2) return false;
+
+  const tracePid = String(driver.trace_pid || witness.wrapper_pid);
+  const nonce = String(payload.nonce_echo);
+  const payloadSha = String(witness.payload_sha256);
+  const execLine = driver.evidence.find((line) => String(line).startsWith(`${tracePid} `)
+    && String(line).includes('execve(')
+    && String(line).includes(witness.wrapper_script)
+    && String(line).includes(nonce));
+  const writeLine = driver.evidence.find((line) => String(line).startsWith(`${tracePid} `)
+    && String(line).includes(`write(${driver.write_fd},`)
+    && String(line).includes(nonce)
+    && String(line).includes(payloadSha));
+  return Boolean(execLine && writeLine);
+}
+
 function structurallyValidCodexJsonDriver(host, payload) {
   const witness = payload && payload.execution_witness;
   const driver = host && host.execution_witness_driver;
@@ -148,6 +180,7 @@ function structurallyValidDriver(host, payload) {
   const driver = host && host.execution_witness_driver;
   if (!driver || typeof driver !== 'object') return false;
   if (driver.kind === 'strace_execve_stdout') return structurallyValidDriverTrace(host, payload);
+  if (driver.kind === 'strace_execve_fdwrite') return structurallyValidDriverFdWrite(host, payload);
   if (driver.kind === 'codex_json_command_execution') return structurallyValidCodexJsonDriver(host, payload);
   return false;
 }
@@ -419,7 +452,8 @@ const payload = {
   probe: 'owner-kernel-p0-host-classification',
   method: 'fixed target-host denominator plus driver-verified execution witness status=probed '
     + 'captured evidence only; classifier re-checks witness nonce/probe/payload hash structure '
-    + 'and the driver proof shape (strace execve/stdout or Codex JSON command_execution); '
+    + 'and the driver proof shape (strace execve/stdout, strace execve/fdwrite, or Codex JSON '
+    + 'command_execution); '
     + 'R4 can score only from an explicit '
     + 'authoritative receipt-root attack result; nonce-only self-reports and fixture/contract '
     + 'results are excluded by construction',

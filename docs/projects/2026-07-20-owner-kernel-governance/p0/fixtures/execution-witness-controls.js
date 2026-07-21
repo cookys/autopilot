@@ -92,6 +92,19 @@ const namespaceVerified = JSON.parse(run(process.execPath, [
 assert.equal(namespaceVerified.driver.kind, 'strace_execve_stdout');
 assert.equal(namespaceVerified.driver.trace_pid, '2');
 
+const fdWriteTracePath = path.join(tmp, 'fdwrite.trace');
+const fdWriteTrace = fs.readFileSync(tracePath, 'utf8')
+  .replace(new RegExp(`^${signed.execution_witness.wrapper_pid} write\\(1,`, 'gm'),
+    `${signed.execution_witness.wrapper_pid} write(25,`);
+fs.writeFileSync(fdWriteTracePath, fdWriteTrace);
+const fdWriteVerified = JSON.parse(run(process.execPath, [
+  witness, '--verify', '--payload-file', signedPath, '--nonce', 'controlnonce', '--trace-file', fdWriteTracePath,
+], { cwd: repo }).stdout);
+assert.equal(fdWriteVerified.driver.kind, 'strace_execve_fdwrite');
+assert.equal(fdWriteVerified.driver.write_fd, '25');
+assert.equal(fdWriteVerified.driver.stdout_payload_hash_matched, false);
+assert.equal(fdWriteVerified.driver.payload_hash_write_matched, true);
+
 const tampered = JSON.parse(JSON.stringify(signed));
 tampered.findings.R3_pre_action_mediation_substrate.protected_path_write = 'blocked';
 const tamperedPath = path.join(tmp, 'tampered.json');
@@ -150,6 +163,36 @@ assert.equal(verifiedCodex.roots.R1.verdict, 'suspect');
 assert.equal(verifiedCodex.roots.R2.verdict, 'fail');
 assert.equal(verifiedCodex.roots.R3.verdict, 'fail');
 assert.equal(verifiedCodex.roots.R4.verdict, 'unverified');
+
+const fdWriteDir = path.join(tmp, 'fdwrite-verified');
+const fdWriteHost = {
+  ...forgedHost,
+  error_excerpt: 'driver strace fdwrite execution witness verified',
+  evidence_grade: 'driver_verified_execution_witness',
+  execution_witness_verified: true,
+  execution_witness_driver: fdWriteVerified.driver,
+};
+writeJson(path.join(fdWriteDir, 'harness-capability-default-mode.json'), hostDoc('default', fdWriteHost));
+writeJson(path.join(fdWriteDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', fdWriteHost));
+const fdWriteClass = classify(classifier, fdWriteDir);
+const fdWriteCodex = fdWriteClass.hosts.find((h) => h.harness === 'codex');
+assert.equal(fdWriteCodex.roots.R2.verdict, 'fail');
+assert.equal(fdWriteCodex.roots.R3.verdict, 'fail');
+
+const badFdWriteDir = path.join(tmp, 'bad-fdwrite-driver');
+const badFdWriteHost = {
+  ...fdWriteHost,
+  execution_witness_driver: {
+    ...fdWriteVerified.driver,
+    stdout_payload_hash_matched: true,
+  },
+};
+writeJson(path.join(badFdWriteDir, 'harness-capability-default-mode.json'), hostDoc('default', badFdWriteHost));
+writeJson(path.join(badFdWriteDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', badFdWriteHost));
+const badFdWriteClass = classify(classifier, badFdWriteDir);
+const badFdWriteCodex = badFdWriteClass.hosts.find((h) => h.harness === 'codex');
+assert.equal(badFdWriteCodex.roots.R2.verdict, 'unverified');
+assert.equal(badFdWriteCodex.roots.R3.verdict, 'unverified');
 
 const fakeHex = (ch) => ch.repeat(64);
 const codexJsonDriver = {
@@ -233,9 +276,12 @@ process.stdout.write(JSON.stringify({
     signed_payload_verified: true,
     tampered_payload_rejected: true,
     namespace_pid_trace_verified: true,
+    fdwrite_trace_verified: true,
     classifier_rejected_payload_self_claim: true,
     classifier_rejected_tampered_driver_marked_payload: true,
     classifier_accepted_driver_verified_payload: true,
+    classifier_accepted_fdwrite_verified_payload: true,
+    classifier_rejected_bad_fdwrite_driver: true,
     classifier_accepted_codex_json_driver: true,
     classifier_rejected_codex_json_driver_hash_mismatch: true,
     classifier_rejected_codex_json_driver_shape_variants: badCodexJsonShapes.length,

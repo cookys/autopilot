@@ -4,8 +4,9 @@
  *
  * The fresh nonce proves only freshness because it is shown to the model. This wrapper adds a
  * payload hash and process metadata, but that is not trusted by itself. The driver must observe
- * this wrapper's command/stdout with an independent rail (strace execve/stdout, or Codex
- * `command_execution` JSON events for Codex exec) before a row may be promoted to `status=probed`.
+ * this wrapper's command/output with an independent rail (strace execve plus a wrapper write to
+ * stdout or a tool-capture fd, or Codex `command_execution` JSON events for Codex exec) before a
+ * row may be promoted to `status=probed`.
  *
  * Threat boundary: this is a driver-side execution witness for the local harness run, not a
  * same-uid malicious-proof attestation. Stronger authoritative receipt roots remain P1+ work.
@@ -20,6 +21,7 @@ const { runHostCapabilityProbe } = require('./host-capability-probe.js');
 
 const WITNESS_KIND = 'host_wrapper_payload_hash';
 const DRIVER_WITNESS_KIND = 'strace_execve_stdout';
+const DRIVER_FDWRITE_KIND = 'strace_execve_fdwrite';
 const WITNESS_VERSION = 1;
 const EXECUTION_PROOF = 'host_process_witnessed';
 
@@ -127,25 +129,36 @@ function verifyTrace(payload, traceText) {
   }
   if (!execLine) throw new Error('trace_execve_missing');
 
-  const writeLine = lines.find((line) => line.includes('write(1,')
+  let writeFd = '1';
+  let writeLine = lines.find((line) => line.includes('write(1,')
     && line.includes(String(verifiedPayload.nonce_echo))
     && line.includes(witness.payload_sha256));
+  if (!writeLine) {
+    writeLine = lines.find((line) => /write\([0-9]+,/.test(line)
+      && line.includes(String(verifiedPayload.nonce_echo))
+      && line.includes(witness.payload_sha256));
+    if (writeLine) {
+      writeFd = writeLine.match(/write\(([0-9]+),/)[1];
+    }
+  }
   if (!writeLine) throw new Error('trace_stdout_payload_hash_missing');
 
   return {
-    kind: DRIVER_WITNESS_KIND,
+    kind: writeFd === '1' ? DRIVER_WITNESS_KIND : DRIVER_FDWRITE_KIND,
     version: WITNESS_VERSION,
     trace_tool: 'strace',
     wrapper_pid: witness.wrapper_pid,
     trace_pid: tracePid,
+    write_fd: writeFd,
     wrapper_script: witness.wrapper_script,
     payload_sha256: witness.payload_sha256,
     execve_matched: true,
-    stdout_payload_hash_matched: true,
+    stdout_payload_hash_matched: writeFd === '1',
+    payload_hash_write_matched: true,
     trace_sha256: sha256(traceText),
     evidence: [
       `${tracePid} execve(${witness.wrapper_script}) nonce=${verifiedPayload.nonce_echo} trace=${sha256(execLine)}`,
-      `${tracePid} write(1, ...) nonce=${verifiedPayload.nonce_echo} payload_sha256=${witness.payload_sha256} trace=${sha256(writeLine)}`,
+      `${tracePid} write(${writeFd}, ...) nonce=${verifiedPayload.nonce_echo} payload_sha256=${witness.payload_sha256} trace=${sha256(writeLine)}`,
     ],
   };
 }
@@ -200,6 +213,7 @@ if (require.main === module) {
 
 module.exports = {
   EXECUTION_PROOF,
+  DRIVER_FDWRITE_KIND,
   DRIVER_WITNESS_KIND,
   WITNESS_KIND,
   canonical,

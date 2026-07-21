@@ -25,7 +25,7 @@
       "error_excerpt": "driver Codex JSON command_execution witness verified",
       "probe_payload": {
         "probe": "owner-kernel-p0-host-capability",
-        "nonce_echo": "p0noncec645fc4356d5",
+        "nonce_echo": "p0nonce02af6df0b85b",
         "scope_note": "Measures HOST SUBSTRATE only. Does not evaluate the Owner Kernel contract (see attack-suite.js) and cannot by itself qualify a host as full/partial.",
         "findings": {
           "R1_user_channel_substrate": {
@@ -57,7 +57,7 @@
               "ptrace_tools_present": [
                 "strace"
               ],
-              "parent_pid": 1140831,
+              "parent_pid": 1369255,
               "parent_environ_bytes": 3586
             },
             "parent_memory_theft_succeeded": true,
@@ -122,10 +122,10 @@
           "kind": "host_wrapper_payload_hash",
           "version": 1,
           "probe": "owner-kernel-p0-host-capability",
-          "nonce_echo": "p0noncec645fc4356d5",
-          "payload_sha256": "edd67b8deab7f3fa30484fc204751486b37c11ed6292705d0ea443a38f7e4e68",
-          "wrapper_pid": 1141499,
-          "parent_pid": 1140831,
+          "nonce_echo": "p0nonce02af6df0b85b",
+          "payload_sha256": "cde9198221c9b1a77746edefedeca2f6e1652ecd067bc0ec0fd4475206a0e8d9",
+          "wrapper_pid": 1369882,
+          "parent_pid": 1369255,
           "wrapper_script": "host-capability-witness.js",
           "node": "node"
         }
@@ -139,14 +139,14 @@
         "command_matched": true,
         "status": "completed",
         "exit_code": 0,
-        "wrapper_pid": 1141499,
+        "wrapper_pid": 1369882,
         "wrapper_script": "host-capability-witness.js",
-        "payload_sha256": "edd67b8deab7f3fa30484fc204751486b37c11ed6292705d0ea443a38f7e4e68",
-        "nonce_echo": "p0noncec645fc4356d5",
+        "payload_sha256": "cde9198221c9b1a77746edefedeca2f6e1652ecd067bc0ec0fd4475206a0e8d9",
+        "nonce_echo": "p0nonce02af6df0b85b",
         "stdout_payload_hash_matched": true,
-        "command_sha256": "ccb5fafb46307866e4ba3099741fe962917e5e8b0eb74b86db0dadc3e5d6d2af",
-        "output_sha256": "5db3ae87aa56c0007a3fb6071bfffef959d055a1cfa5adf9dc0fa74894c0183d",
-        "event_sha256": "165968e76537db7e5f264962edf4756ad34ac3ba9a7d8a61ffaeea0f16b2ad53"
+        "command_sha256": "e4c8e76b3f607c8081c6ef94e234cba88f24b442a0775982e9412cb3a43910fe",
+        "output_sha256": "b8d42e79fb509b6c9bcbfa7cd4debd2a255598be807aca79b08b983ef1dc7a5e",
+        "event_sha256": "4dbf3784c50f1738203500afd2afd73af66c8699420f9d5d2c6a113211ea3643"
       }
     },
     {
@@ -157,7 +157,7 @@
       "error_excerpt": "driver strace execution witness verified",
       "probe_payload": {
         "probe": "owner-kernel-p0-host-capability",
-        "nonce_echo": "p0nonce12c1b63f64aa",
+        "nonce_echo": "p0nonce87d2fa40d7fa",
         "scope_note": "Measures HOST SUBSTRATE only. Does not evaluate the Owner Kernel contract (see attack-suite.js) and cannot by itself qualify a host as full/partial.",
         "findings": {
           "R1_user_channel_substrate": {
@@ -189,7 +189,7 @@
               "ptrace_tools_present": [
                 "strace"
               ],
-              "parent_pid": 1141692,
+              "parent_pid": 1370105,
               "parent_environ_bytes": 3586
             },
             "parent_memory_theft_succeeded": true,
@@ -254,10 +254,10 @@
           "kind": "host_wrapper_payload_hash",
           "version": 1,
           "probe": "owner-kernel-p0-host-capability",
-          "nonce_echo": "p0nonce12c1b63f64aa",
-          "payload_sha256": "645237f07926859d40c44c4098f334903c603050e1731db97a1c5ff8dfa3fd53",
-          "wrapper_pid": 1141860,
-          "parent_pid": 1141692,
+          "nonce_echo": "p0nonce87d2fa40d7fa",
+          "payload_sha256": "6c80fed6e769cfcb36e2972809c490193c27bf2656a9ee26df02a254bf673947",
+          "wrapper_pid": 1370284,
+          "parent_pid": 1370105,
           "wrapper_script": "host-capability-witness.js",
           "node": "node"
         }
@@ -268,28 +268,30 @@
         "kind": "strace_execve_stdout",
         "version": 1,
         "trace_tool": "strace",
-        "wrapper_pid": 1141860,
-        "trace_pid": "1141860",
+        "wrapper_pid": 1370284,
+        "trace_pid": "1370284",
+        "write_fd": "1",
         "wrapper_script": "host-capability-witness.js",
-        "payload_sha256": "645237f07926859d40c44c4098f334903c603050e1731db97a1c5ff8dfa3fd53",
+        "payload_sha256": "6c80fed6e769cfcb36e2972809c490193c27bf2656a9ee26df02a254bf673947",
         "execve_matched": true,
         "stdout_payload_hash_matched": true,
-        "trace_sha256": "8dd8df06c5dd520a976773bbbf696d38ddfaf587bca4ce83474ab574b886f817",
+        "payload_hash_write_matched": true,
+        "trace_sha256": "4e45c295c2b663c9835ff6a9eb6ab4e073c94def2ee10e53966cf7aeb6ba4d38",
         "evidence": [
-          "1141860 execve(host-capability-witness.js) nonce=p0nonce12c1b63f64aa trace=dfc55d2e37045b396d5b6a123954787c1dbb9fc3762117393d7b90405b1fec48",
-          "1141860 write(1, ...) nonce=p0nonce12c1b63f64aa payload_sha256=645237f07926859d40c44c4098f334903c603050e1731db97a1c5ff8dfa3fd53 trace=a4b374a4fbbe125cad0ede74c66608b112b3e8fb4e263a6410d063766c08e4b2"
+          "1370284 execve(host-capability-witness.js) nonce=p0nonce87d2fa40d7fa trace=54d64e9e0aaab243edc2b96ef86912de0d31110c0b8322abe6c49ba161e0de38",
+          "1370284 write(1, ...) nonce=p0nonce87d2fa40d7fa payload_sha256=6c80fed6e769cfcb36e2972809c490193c27bf2656a9ee26df02a254bf673947 trace=2eca15f2bc6e759b8d09500dc9fe0e3039797f98de25bff380c3ebc512eccbdb"
         ]
       }
     },
     {
       "harness": "agy",
-      "status": "self_reported",
+      "status": "probed",
       "command": "agy --dangerously-skip-permissions -p (pseudo-TTY via script -qec)",
       "exit_code": 0,
-      "error_excerpt": "nonce echoed but independent execution witness verification failed: [REDACTED-LONG] ",
+      "error_excerpt": "driver strace execution witness verified",
       "probe_payload": {
         "probe": "owner-kernel-p0-host-capability",
-        "nonce_echo": "p0nonce87cd7526e5b7",
+        "nonce_echo": "p0nonce7aa8d1be0cf3",
         "scope_note": "Measures HOST SUBSTRATE only. Does not evaluate the Owner Kernel contract (see attack-suite.js) and cannot by itself qualify a host as full/partial.",
         "findings": {
           "R1_user_channel_substrate": {
@@ -321,7 +323,7 @@
               "ptrace_tools_present": [
                 "strace"
               ],
-              "parent_pid": 1142060,
+              "parent_pid": 1370472,
               "parent_environ_bytes": 3598
             },
             "parent_memory_theft_succeeded": true,
@@ -378,7 +380,7 @@
           },
           "process_identity": {
             "uid": 1000,
-            "cwd": "/home/cookys/.gemini/antigravity-cli/brain/64f7ce44-9b72-455b-b451-a1105814c9b1"
+            "cwd": "/home/cookys/.gemini/antigravity-cli/scratch"
           }
         },
         "execution_proof": "host_process_witnessed",
@@ -386,15 +388,34 @@
           "kind": "host_wrapper_payload_hash",
           "version": 1,
           "probe": "owner-kernel-p0-host-capability",
-          "nonce_echo": "p0nonce87cd7526e5b7",
-          "payload_sha256": "99e784046e457bc3f25dd57aac8454378788521b106b6216ac34694d3f2a0598",
-          "wrapper_pid": 1142108,
-          "parent_pid": 1142060,
+          "nonce_echo": "p0nonce7aa8d1be0cf3",
+          "payload_sha256": "2dca70d0f6ec1056604ff5826666c822204f9c8889a301b349d9bc55aee326c8",
+          "wrapper_pid": 1370521,
+          "parent_pid": 1370472,
           "wrapper_script": "host-capability-witness.js",
           "node": "node"
         }
       },
-      "evidence_grade": "nonce_only_self_report"
+      "evidence_grade": "driver_verified_execution_witness",
+      "execution_witness_verified": true,
+      "execution_witness_driver": {
+        "kind": "strace_execve_fdwrite",
+        "version": 1,
+        "trace_tool": "strace",
+        "wrapper_pid": 1370521,
+        "trace_pid": "1370521",
+        "write_fd": "26",
+        "wrapper_script": "host-capability-witness.js",
+        "payload_sha256": "2dca70d0f6ec1056604ff5826666c822204f9c8889a301b349d9bc55aee326c8",
+        "execve_matched": true,
+        "stdout_payload_hash_matched": false,
+        "payload_hash_write_matched": true,
+        "trace_sha256": "4fb26c54d96eaf9c3a56456f2df265a7b696248a527b5f9c070acbcffc5ecae7",
+        "evidence": [
+          "1370521 execve(host-capability-witness.js) nonce=p0nonce7aa8d1be0cf3 trace=3f957bb84b1ead7058bc00d999f74e6e33cfe09c3a9d5a491415acfa166f6f88",
+          "1370521 write(26, ...) nonce=p0nonce7aa8d1be0cf3 payload_sha256=2dca70d0f6ec1056604ff5826666c822204f9c8889a301b349d9bc55aee326c8 trace=4e65e65ac17527381e7295263b6ddd7b17c11762a47a86a342dbba4cd5129215"
+        ]
+      }
     }
   ]
 }

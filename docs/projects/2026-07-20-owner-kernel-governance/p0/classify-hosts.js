@@ -37,6 +37,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DIR = (() => { const i = process.argv.indexOf('--dir'); return i >= 0 ? process.argv[i + 1] : __dirname; })();
 
@@ -54,10 +55,77 @@ const D = byHost(dflt), B = byHost(byp);
 const TARGET_HOSTS = ['claude-code', 'codex', 'opencode', 'agy'];
 const HOSTS = Array.from(new Set([...TARGET_HOSTS, ...Object.keys(D), ...Object.keys(B)]));
 
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => {
+      const v = value[key];
+      if (v === undefined) return null;
+      return `${JSON.stringify(key)}:${canonical(v)}`;
+    }).filter(Boolean).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(text) {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function stripWitness(payload) {
+  const copy = JSON.parse(JSON.stringify(payload));
+  delete copy.execution_proof;
+  delete copy.execution_witness;
+  return copy;
+}
+
+function structurallyValidWitness(payload) {
+  const witness = payload && payload.execution_witness;
+  if (!witness || typeof witness !== 'object') return false;
+  if (payload.execution_proof !== 'host_process_witnessed') return false;
+  if (witness.kind !== 'host_wrapper_payload_hash') return false;
+  if (witness.version !== 1) return false;
+  if (witness.probe !== payload.probe) return false;
+  if (witness.nonce_echo !== payload.nonce_echo) return false;
+  const expectedPayloadSha = sha256(canonical(stripWitness(payload)));
+  return witness.payload_sha256 === expectedPayloadSha;
+}
+
+function structurallyValidDriverTrace(host, payload) {
+  const witness = payload && payload.execution_witness;
+  const driver = host && host.execution_witness_driver;
+  if (!witness || !driver || typeof driver !== 'object') return false;
+  if (driver.kind !== 'strace_execve_stdout') return false;
+  if (driver.version !== 1) return false;
+  if (driver.trace_tool !== 'strace') return false;
+  if (driver.wrapper_pid !== witness.wrapper_pid) return false;
+  if (driver.wrapper_script !== witness.wrapper_script) return false;
+  if (driver.payload_sha256 !== witness.payload_sha256) return false;
+  if (driver.execve_matched !== true) return false;
+  if (driver.stdout_payload_hash_matched !== true) return false;
+  if (!/^[0-9a-f]{64}$/i.test(String(driver.trace_sha256 || ''))) return false;
+  if (!Array.isArray(driver.evidence) || driver.evidence.length < 2) return false;
+
+  const pid = String(witness.wrapper_pid);
+  const nonce = String(payload.nonce_echo);
+  const payloadSha = String(witness.payload_sha256);
+  const execLine = driver.evidence.find((line) => String(line).startsWith(`${pid} `)
+    && String(line).includes('execve(')
+    && String(line).includes(witness.wrapper_script)
+    && String(line).includes(nonce));
+  const writeLine = driver.evidence.find((line) => String(line).startsWith(`${pid} `)
+    && String(line).includes('write(1,')
+    && String(line).includes(nonce)
+    && String(line).includes(payloadSha));
+  return Boolean(execLine && writeLine);
+}
+
 function verifiedPayload(host) {
   if (host.status !== 'probed') return null;
+  if (host.evidence_grade !== 'driver_verified_execution_witness') return null;
+  if (host.execution_witness_verified !== true) return null;
   const payload = host.probe_payload;
-  if (!payload || payload.execution_proof !== 'host_process_witnessed') return null;
+  if (!payload || !structurallyValidWitness(payload)) return null;
+  if (!structurallyValidDriverTrace(host, payload)) return null;
   return payload.findings ? payload.findings : null;
 }
 
@@ -282,8 +350,10 @@ const unverifiedTargets = targetHosts.filter((h) => h.tier === 'unverified');
 
 const payload = {
   probe: 'owner-kernel-p0-host-classification',
-  method: 'fixed target-host denominator plus execution-proven status=probed captured evidence '
-    + 'only; nonce-only self-reports and fixture/contract results are excluded by construction',
+  method: 'fixed target-host denominator plus driver-verified execution witness status=probed '
+    + 'captured evidence only; classifier re-checks witness nonce/probe/payload hash structure '
+    + 'and the driver strace execve/stdout proof shape; nonce-only self-reports and '
+    + 'fixture/contract results are excluded by construction',
   target_hosts: TARGET_HOSTS,
   exclusion_rule: 'attack-suite.js results validate the PROPOSED CONTRACT against a disposable fixture '
     + 'and are deliberately NOT an input here. A sound contract does not qualify a host.',

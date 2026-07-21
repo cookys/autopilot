@@ -130,4 +130,37 @@ assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "--reasoning-effort" "driver 
 assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "high" "driver passes Grok effort value"
 assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "bypassPermissions" "driver passes Grok bypass permission mode"
 
+cat >"$STUB_BIN/claude" <<'STUB'
+#!/usr/bin/env bash
+[ -n "${STUB_CLAUDE_ARGS_FILE:-}" ] && printf '%s\n' "$@" >"$STUB_CLAUDE_ARGS_FILE"
+prompt="$(cat)"
+cmd="${prompt#*: }"
+set -f
+set -- $cmd
+if [ "$#" -ne 7 ] || [ "$1" != "node" ] || [ "$3" != "--nonce" ] || [ "$5" != "--repo" ] || [ "$7" != "--json" ]; then
+  echo "unexpected witness command shape" >&2
+  exit 64
+fi
+exec "$1" "$2" "$3" "$4" "$5" "$6" "$7"
+STUB
+chmod +x "$STUB_BIN/claude"
+
+DRIVER_CLAUDE_OUT="$TEST_TMP/driver-claude-model.json"
+DRIVER_CLAUDE_ERR="$TEST_TMP/driver-claude-model.err"
+STUB_CLAUDE_ARGS_FILE="$TEST_TMP/claude-args.txt" PATH="$STUB_BIN:$PATH" bash "$DRIVER" \
+  --only claude-code --mode bypass --model opus --effort high --timeout 15 --out "$DRIVER_CLAUDE_OUT" \
+  >"$TEST_TMP/driver-claude-model.stdout" 2>"$DRIVER_CLAUDE_ERR"
+DRIVER_CLAUDE_RC=$?
+
+assert_exit_code "$DRIVER_CLAUDE_RC" 0 "driver accepts model-pinned Claude Code probe"
+assert_eq "$(jq -r '.hosts[0].harness' "$DRIVER_CLAUDE_OUT")" "claude-code" "driver records Claude Code harness"
+assert_eq "$(jq -r '.hosts[0].status' "$DRIVER_CLAUDE_OUT")" "probed" "driver promotes verified Claude Code witness to probed"
+assert_eq "$(jq -r '.variant.model' "$DRIVER_CLAUDE_OUT")" "opus" "driver records pinned Claude model"
+assert_eq "$(jq -r '.variant.effort' "$DRIVER_CLAUDE_OUT")" "high" "driver records pinned Claude effort"
+assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "--model" "driver passes Claude --model"
+assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "opus" "driver passes Claude model value"
+assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "--effort" "driver passes Claude effort flag"
+assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "high" "driver passes Claude effort value"
+assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "bypassPermissions" "driver passes Claude bypass permission mode"
+
 finalize_test

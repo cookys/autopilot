@@ -89,8 +89,8 @@ case "$EFFORT" in
   *) echo "--effort must be one of low|medium|high|xhigh|max" >&2; exit 2 ;;
 esac
 if { [ -n "$MODEL" ] || [ -n "$EFFORT" ]; } \
-  && [ "$ONLY" != "codex" ] && [ "$ONLY" != "grok" ]; then
-  echo "--model/--effort require --only codex or --only grok so evidence is not mixed across harnesses" >&2
+  && [ "$ONLY" != "claude-code" ] && [ "$ONLY" != "codex" ] && [ "$ONLY" != "grok" ]; then
+  echo "--model/--effort require --only claude-code, --only codex, or --only grok so evidence is not mixed across harnesses" >&2
   exit 2
 fi
 
@@ -384,13 +384,23 @@ run_one() {
 
   case "$id" in
     claude-code)
+      local claude_args=(-p)
+      local claude_display="claude -p"
+      if [ -n "$MODEL" ]; then
+        claude_args+=(--model "$MODEL")
+        claude_display="${claude_display} --model ${MODEL}"
+      fi
+      if [ -n "$EFFORT" ]; then
+        claude_args+=(--effort "$EFFORT")
+        claude_display="${claude_display} --effort ${EFFORT}"
+      fi
       if [ "$MODE" = "bypass" ]; then
-        cmd="claude -p --permission-mode bypassPermissions"
-        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" claude -p --permission-mode bypassPermissions <<<"$instruction" >"$log" 2>&1; rc=$?
+        claude_args+=(--permission-mode bypassPermissions)
+        cmd="${claude_display} --permission-mode bypassPermissions"
       else
-        cmd="claude -p (default permission mode)"
-        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" claude -p <<<"$instruction" >"$log" 2>&1; rc=$?
-      fi ;;
+        cmd="${claude_display} (default permission mode)"
+      fi
+      AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" claude "${claude_args[@]}" <<<"$instruction" >"$log" 2>&1; rc=$? ;;
     codex)
       local codex_args=(exec --json)
       local codex_display="codex exec --json"

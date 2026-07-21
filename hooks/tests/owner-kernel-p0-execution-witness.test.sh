@@ -2,6 +2,7 @@
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/execution-witness-controls.js"
+DRIVER="$REPO_ROOT/docs/projects/2026-07-20-owner-kernel-governance/p0/run-harness-probes.sh"
 OUT="$TEST_TMP/execution-witness-controls.json"
 ERR="$TEST_TMP/execution-witness-controls.err"
 
@@ -28,6 +29,7 @@ STUB_BIN="$TEST_TMP/bin"
 mkdir -p "$STUB_BIN"
 cat >"$STUB_BIN/codex" <<'STUB'
 #!/usr/bin/env bash
+[ -n "${STUB_CODEX_ARGS_FILE:-}" ] && printf '%s\n' "$@" >"$STUB_CODEX_ARGS_FILE"
 last=""
 for arg in "$@"; do
   last="$arg"
@@ -51,7 +53,7 @@ chmod +x "$STUB_BIN/codex"
 
 DRIVER_OUT="$TEST_TMP/driver-codex.json"
 DRIVER_ERR="$TEST_TMP/driver-codex.err"
-PATH="$STUB_BIN:$PATH" bash "$REPO_ROOT/docs/projects/2026-07-20-owner-kernel-governance/p0/run-harness-probes.sh" \
+PATH="$STUB_BIN:$PATH" bash "$DRIVER" \
   --only codex --mode bypass --timeout 15 --out "$DRIVER_OUT" >"$TEST_TMP/driver-codex.stdout" 2>"$DRIVER_ERR"
 DRIVER_RC=$?
 
@@ -62,7 +64,7 @@ assert_eq "$(jq -r '.hosts[0].execution_witness_verified' "$DRIVER_OUT")" "true"
 
 DRIVER_FAKE_OUT="$TEST_TMP/driver-codex-fake.json"
 DRIVER_FAKE_ERR="$TEST_TMP/driver-codex-fake.err"
-STUB_CODEX_FAKE_WITNESS=1 PATH="$STUB_BIN:$PATH" bash "$REPO_ROOT/docs/projects/2026-07-20-owner-kernel-governance/p0/run-harness-probes.sh" \
+STUB_CODEX_FAKE_WITNESS=1 PATH="$STUB_BIN:$PATH" bash "$DRIVER" \
   --only codex --mode bypass --timeout 15 --out "$DRIVER_FAKE_OUT" >"$TEST_TMP/driver-codex-fake.stdout" 2>"$DRIVER_FAKE_ERR"
 DRIVER_FAKE_RC=$?
 
@@ -70,5 +72,62 @@ assert_exit_code "$DRIVER_FAKE_RC" 0 "driver completes fake witness probe"
 assert_eq "$(jq -r '.hosts[0].status' "$DRIVER_FAKE_OUT")" "self_reported" "driver rejects fake witness as self-reported"
 assert_eq "$(jq -r '.hosts[0].evidence_grade' "$DRIVER_FAKE_OUT")" "nonce_only_self_report" "driver records fake witness as nonce-only"
 assert_contains "$(jq -r '.hosts[0].error_excerpt' "$DRIVER_FAKE_OUT")" "execution witness verification failed" "driver reports fake witness verification failure"
+
+DRIVER_MODEL_OUT="$TEST_TMP/driver-codex-model.json"
+DRIVER_MODEL_ERR="$TEST_TMP/driver-codex-model.err"
+STUB_CODEX_ARGS_FILE="$TEST_TMP/codex-args.txt" PATH="$STUB_BIN:$PATH" bash "$DRIVER" \
+  --only codex --mode bypass --model gpt-test --effort high --timeout 15 --out "$DRIVER_MODEL_OUT" \
+  >"$TEST_TMP/driver-codex-model.stdout" 2>"$DRIVER_MODEL_ERR"
+DRIVER_MODEL_RC=$?
+
+assert_exit_code "$DRIVER_MODEL_RC" 0 "driver accepts model-pinned Codex probe"
+assert_eq "$(jq -r '.variant.model' "$DRIVER_MODEL_OUT")" "gpt-test" "driver records pinned Codex model"
+assert_eq "$(jq -r '.variant.effort' "$DRIVER_MODEL_OUT")" "high" "driver records pinned Codex effort"
+assert_contains "$(cat "$TEST_TMP/codex-args.txt")" "--model" "driver passes Codex --model"
+assert_contains "$(cat "$TEST_TMP/codex-args.txt")" "gpt-test" "driver passes Codex model value"
+assert_contains "$(cat "$TEST_TMP/codex-args.txt")" "model_reasoning_effort=\"high\"" "driver passes Codex reasoning effort config"
+assert_contains "$(jq -r '.hosts[0].command' "$DRIVER_MODEL_OUT")" "gpt-test" "driver command records Codex model"
+assert_contains "$(jq -r '.hosts[0].command' "$DRIVER_MODEL_OUT")" "model_reasoning_effort=<high>" "driver command records Codex effort"
+
+cat >"$STUB_BIN/grok" <<'STUB'
+#!/usr/bin/env bash
+[ -n "${STUB_GROK_ARGS_FILE:-}" ] && printf '%s\n' "$@" >"$STUB_GROK_ARGS_FILE"
+prompt=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -p|--single)
+      prompt="$2"; shift 2 ;;
+    *)
+      shift ;;
+  esac
+done
+cmd="${prompt#*: }"
+set -f
+set -- $cmd
+if [ "$#" -ne 7 ] || [ "$1" != "node" ] || [ "$3" != "--nonce" ] || [ "$5" != "--repo" ] || [ "$7" != "--json" ]; then
+  echo "unexpected witness command shape" >&2
+  exit 64
+fi
+exec "$1" "$2" "$3" "$4" "$5" "$6" "$7"
+STUB
+chmod +x "$STUB_BIN/grok"
+
+DRIVER_GROK_OUT="$TEST_TMP/driver-grok-model.json"
+DRIVER_GROK_ERR="$TEST_TMP/driver-grok-model.err"
+STUB_GROK_ARGS_FILE="$TEST_TMP/grok-args.txt" PATH="$STUB_BIN:$PATH" bash "$DRIVER" \
+  --only grok --mode bypass --model grok-4.5 --effort high --timeout 15 --out "$DRIVER_GROK_OUT" \
+  >"$TEST_TMP/driver-grok-model.stdout" 2>"$DRIVER_GROK_ERR"
+DRIVER_GROK_RC=$?
+
+assert_exit_code "$DRIVER_GROK_RC" 0 "driver accepts model-pinned Grok probe"
+assert_eq "$(jq -r '.hosts[0].harness' "$DRIVER_GROK_OUT")" "grok" "driver records Grok harness"
+assert_eq "$(jq -r '.hosts[0].status' "$DRIVER_GROK_OUT")" "probed" "driver promotes verified Grok witness to probed"
+assert_eq "$(jq -r '.variant.model' "$DRIVER_GROK_OUT")" "grok-4.5" "driver records pinned Grok model"
+assert_eq "$(jq -r '.variant.effort' "$DRIVER_GROK_OUT")" "high" "driver records pinned Grok effort"
+assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "--model" "driver passes Grok --model"
+assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "grok-4.5" "driver passes Grok model value"
+assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "--reasoning-effort" "driver passes Grok reasoning effort flag"
+assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "high" "driver passes Grok effort value"
+assert_contains "$(cat "$TEST_TMP/grok-args.txt")" "bypassPermissions" "driver passes Grok bypass permission mode"
 
 finalize_test

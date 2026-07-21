@@ -40,6 +40,17 @@ tmp="$(mktemp -d)"
 # ./run-harness-probes.sh --mode default --receipt-root "$RECEIPT_ROOT" --out "$tmp/harness-capability-default-mode.json"
 # ./run-harness-probes.sh --mode bypass  --receipt-root "$RECEIPT_ROOT" --out "$tmp/harness-capability-bypass-mode.json"
 node classify-hosts.js --dir "$tmp" --json  # tiers from a fresh local probe run
+
+# Optional model-pinned variant probes (stored under p0/variants/ in this repo)
+codex_variant="$tmp/codex-gpt-5.6-sol-high"
+grok_variant="$tmp/grok-4.5-high"
+mkdir -p "$codex_variant" "$grok_variant"
+./run-harness-probes.sh --only codex --mode default --model gpt-5.6-sol --effort high --receipt-root "$RECEIPT_ROOT" --out "$codex_variant/harness-capability-default-mode.json"
+./run-harness-probes.sh --only codex --mode bypass  --model gpt-5.6-sol --effort high --receipt-root "$RECEIPT_ROOT" --out "$codex_variant/harness-capability-bypass-mode.json"
+node classify-hosts.js --dir "$codex_variant" --json
+./run-harness-probes.sh --only grok  --mode default --model grok-4.5 --effort high --receipt-root "$RECEIPT_ROOT" --out "$grok_variant/harness-capability-default-mode.json"
+./run-harness-probes.sh --only grok  --mode bypass  --model grok-4.5 --effort high --receipt-root "$RECEIPT_ROOT" --out "$grok_variant/harness-capability-bypass-mode.json"
+node classify-hosts.js --dir "$grok_variant" --json
 ```
 
 ## The two axes, which must never be conflated
@@ -136,6 +147,20 @@ protected receipt-root evidence for OpenCode and Codex, and execution-proven byp
 receipt-root evidence for agy. The classifier stays fail-closed: a host does not resolve to `none`
 until the required host operations for that host are complete, and it cannot become `full`/`partial`
 while any root is failed, suspect, or unverified.
+
+### Model-pinned variant re-drive (2026-07-21)
+
+The variant artifacts live under [`variants/`](variants/). They are additive evidence and do not
+change the main P0 four-harness denominator.
+
+| Variant | Default mode | Bypass mode | Classification result |
+|---|---|---|---|
+| `codex-gpt-5.6-sol-high` | `probed`; Codex JSON `command_execution` driver | `probed`; Codex JSON `command_execution` driver | Codex `none` — R1 suspect, R2 fail, R3 fail, R4 pass |
+| `grok-4.5-high` | `no_nonce`; rc 0 but no execution-proven payload | `probed`; `strace_execve_stdout` driver | Grok extra host `unverified` — R2 fail and R4 pass observed in bypass, but default-mode R3 is not execution-proven |
+
+The Codex result means `gpt-5.6-sol/high` does not rescue the Codex host substrate. The Grok result
+is deliberately not scored as `none`: bypass-mode evidence is real, but the default-mode probe did
+not produce the protected-path write payload required to complete R3.
 
 The unsupported scorings **downgraded after depth-0 QC** were:
 

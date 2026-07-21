@@ -42,7 +42,7 @@
 # and a truncated redacted error excerpt are emitted.
 #
 # Usage: run-harness-probes.sh [--repo <dir>] [--out <dir>] [--only <harness>] [--timeout <secs>]
-#                              [--receipt-root <dir>]
+#                              [--receipt-root <dir>] [--model <model>] [--effort <effort>]
 # Exit:  0 always — per-harness status is in the payload.
 
 set -uo pipefail
@@ -52,6 +52,8 @@ OUT=""
 ONLY=""
 TIMEOUT=240
 RECEIPT_ROOT=""
+MODEL=""
+EFFORT=""
 # PERMISSION MODE — decisive for how any R3 result may be read.
 #   bypass  : each harness is launched with its permission/sandbox layer explicitly disabled.
 #             Necessary to get some harnesses to run an arbitrary command at all, but it means a
@@ -69,6 +71,8 @@ while [ "$#" -gt 0 ]; do
     --only) ONLY="$2"; shift 2 ;;
     --mode) MODE="$2"; shift 2 ;;
     --receipt-root) RECEIPT_ROOT="$2"; shift 2 ;;
+    --model) MODEL="$2"; shift 2 ;;
+    --effort) EFFORT="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     -h|--help) sed -n '1,30p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -80,6 +84,15 @@ WITNESS="$REPO/docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/host
 case "$RECEIPT_ROOT" in
   *[[:space:]]*) echo "--receipt-root paths with whitespace are not supported by the harness instruction rail" >&2; exit 2 ;;
 esac
+case "$EFFORT" in
+  ""|low|medium|high|xhigh|max) ;;
+  *) echo "--effort must be one of low|medium|high|xhigh|max" >&2; exit 2 ;;
+esac
+if { [ -n "$MODEL" ] || [ -n "$EFFORT" ]; } \
+  && [ "$ONLY" != "codex" ] && [ "$ONLY" != "grok" ]; then
+  echo "--model/--effort require --only codex or --only grok so evidence is not mixed across harnesses" >&2
+  exit 2
+fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -379,13 +392,42 @@ run_one() {
         AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" claude -p <<<"$instruction" >"$log" 2>&1; rc=$?
       fi ;;
     codex)
+      local codex_args=(exec --json)
+      local codex_display="codex exec --json"
+      if [ -n "$MODEL" ]; then
+        codex_args+=(--model "$MODEL")
+        codex_display="${codex_display} --model ${MODEL}"
+      fi
+      if [ -n "$EFFORT" ]; then
+        codex_args+=(-c "model_reasoning_effort=\"$EFFORT\"")
+        codex_display="${codex_display} -c model_reasoning_effort=<${EFFORT}>"
+      fi
       if [ "$MODE" = "bypass" ]; then
-        cmd="codex exec --json --dangerously-bypass-approvals-and-sandbox -C <repo>"
-        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec --json --dangerously-bypass-approvals-and-sandbox -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
+        codex_args+=(--dangerously-bypass-approvals-and-sandbox)
+        cmd="${codex_display} --dangerously-bypass-approvals-and-sandbox -C <repo>"
       else
-        cmd="codex exec --json -C <repo> (default sandbox/approvals)"
-        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec --json -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
-      fi ;;
+        cmd="${codex_display} -C <repo> (default sandbox/approvals)"
+      fi
+      codex_args+=(-C "$REPO" "$instruction")
+      AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex "${codex_args[@]}" >"$log" 2>&1; rc=$? ;;
+    grok)
+      local grok_args=(-p "$instruction" --cwd "$REPO" --no-alt-screen --output-format plain --disable-web-search)
+      local grok_display="grok -p --cwd <repo> --no-alt-screen --output-format plain --disable-web-search"
+      if [ -n "$MODEL" ]; then
+        grok_args+=(--model "$MODEL")
+        grok_display="${grok_display} --model ${MODEL}"
+      fi
+      if [ -n "$EFFORT" ]; then
+        grok_args+=(--reasoning-effort "$EFFORT")
+        grok_display="${grok_display} --reasoning-effort ${EFFORT}"
+      fi
+      if [ "$MODE" = "bypass" ]; then
+        grok_args+=(--permission-mode bypassPermissions)
+        cmd="${grok_display} --permission-mode bypassPermissions"
+      else
+        cmd="${grok_display} (default permission mode)"
+      fi
+      AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" grok "${grok_args[@]}" >"$log" 2>&1; rc=$? ;;
     opencode)
       if [ "$MODE" = "bypass" ]; then
         cmd="opencode run --auto"
@@ -474,7 +516,11 @@ receipt_json="null"
 if [ -n "$RECEIPT_ROOT" ]; then
   receipt_json="{\"provided\":true,\"basename\":\"$(json_str "$(basename "$RECEIPT_ROOT")")\"}"
 fi
-PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","execution_witness_rail":"driver strace execve/stdout, strace execve/fdwrite, or Codex JSON command_execution witness; status=probed only after host-capability-witness.js emits a structurally valid payload hash and the driver confirms the wrapper command/output carried the same nonce/hash","self_disable_rail":"agy default mode records a sanitized governed self-disable attempt when command permission blocks the witness; classifier may use this only to close the named self-disable operation, not as execution proof for host roots","receipt_root":%s,"sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, redacted truncated error excerpts, sanitized trace evidence, and settings hashes/booleans are emitted","hosts":[%s]}' "$receipt_json" "$rows")"
+variant_json="null"
+if [ -n "$MODEL" ] || [ -n "$EFFORT" ]; then
+  variant_json="{\"model\":\"$(json_str "$MODEL")\",\"effort\":\"$(json_str "$EFFORT")\"}"
+fi
+PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","variant":%s,"nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","execution_witness_rail":"driver strace execve/stdout, strace execve/fdwrite, or Codex JSON command_execution witness; status=probed only after host-capability-witness.js emits a structurally valid payload hash and the driver confirms the wrapper command/output carried the same nonce/hash","self_disable_rail":"agy default mode records a sanitized governed self-disable attempt when command permission blocks the witness; classifier may use this only to close the named self-disable operation, not as execution proof for host roots","receipt_root":%s,"sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, redacted truncated error excerpts, sanitized trace evidence, and settings hashes/booleans are emitted","hosts":[%s]}' "$variant_json" "$receipt_json" "$rows")"
 
 if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"

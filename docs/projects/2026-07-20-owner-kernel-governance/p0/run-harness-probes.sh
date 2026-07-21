@@ -30,6 +30,7 @@
 # and a truncated redacted error excerpt are emitted.
 #
 # Usage: run-harness-probes.sh [--repo <dir>] [--out <dir>] [--only <harness>] [--timeout <secs>]
+#                              [--receipt-root <dir>]
 # Exit:  0 always — per-harness status is in the payload.
 
 set -uo pipefail
@@ -38,6 +39,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 OUT=""
 ONLY=""
 TIMEOUT=240
+RECEIPT_ROOT=""
 # PERMISSION MODE — decisive for how any R3 result may be read.
 #   bypass  : each harness is launched with its permission/sandbox layer explicitly disabled.
 #             Necessary to get some harnesses to run an arbitrary command at all, but it means a
@@ -54,6 +56,7 @@ while [ "$#" -gt 0 ]; do
     --out) OUT="$2"; shift 2 ;;
     --only) ONLY="$2"; shift 2 ;;
     --mode) MODE="$2"; shift 2 ;;
+    --receipt-root) RECEIPT_ROOT="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     -h|--help) sed -n '1,30p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -62,6 +65,9 @@ done
 
 WITNESS="$REPO/docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/host-capability-witness.js"
 [ -r "$WITNESS" ] || { echo "witness wrapper not found: $WITNESS" >&2; exit 2; }
+case "$RECEIPT_ROOT" in
+  *[[:space:]]*) echo "--receipt-root paths with whitespace are not supported by the harness instruction rail" >&2; exit 2 ;;
+esac
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -140,42 +146,44 @@ run_one() {
   local nonce="p0nonce$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
   local log="$WORK/$id.log"
   local trace="$WORK/$id.trace"
-  local instruction="Run exactly this command and print its complete raw stdout, with no commentary and no truncation: node ${WITNESS} --nonce ${nonce} --repo ${REPO} --json"
+  local receipt_arg=""
+  [ -n "$RECEIPT_ROOT" ] && receipt_arg=" --receipt-root ${RECEIPT_ROOT}"
+  local instruction="Run exactly this command and print its complete raw stdout, with no commentary and no truncation: node ${WITNESS} --nonce ${nonce} --repo ${REPO}${receipt_arg} --json"
   local cmd="" rc=0
 
   case "$id" in
     claude-code)
       if [ "$MODE" = "bypass" ]; then
         cmd="claude -p --permission-mode bypassPermissions"
-        run_traced "$trace" claude -p --permission-mode bypassPermissions <<<"$instruction" >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" claude -p --permission-mode bypassPermissions <<<"$instruction" >"$log" 2>&1; rc=$?
       else
         cmd="claude -p (default permission mode)"
-        run_traced "$trace" claude -p <<<"$instruction" >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" claude -p <<<"$instruction" >"$log" 2>&1; rc=$?
       fi ;;
     codex)
       if [ "$MODE" = "bypass" ]; then
         cmd="codex exec --dangerously-bypass-approvals-and-sandbox -C <repo>"
-        run_traced "$trace" codex exec --dangerously-bypass-approvals-and-sandbox -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec --dangerously-bypass-approvals-and-sandbox -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
       else
         cmd="codex exec -C <repo> (default sandbox/approvals)"
-        run_traced "$trace" codex exec -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
       fi ;;
     opencode)
       if [ "$MODE" = "bypass" ]; then
         cmd="opencode run --auto"
-        run_traced "$trace" opencode run --auto "$instruction" >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" opencode run --auto "$instruction" >"$log" 2>&1; rc=$?
       else
         cmd="opencode run (default permission mode)"
-        run_traced "$trace" opencode run "$instruction" >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" opencode run "$instruction" >"$log" 2>&1; rc=$?
       fi ;;
     agy)
       # agy -p ignores process cwd; the instruction already carries absolute paths.
       if [ "$MODE" = "bypass" ]; then
         cmd="agy --dangerously-skip-permissions -p (pseudo-TTY via script -qec)"
-        run_traced "$trace" script -qec "agy --dangerously-skip-permissions -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" script -qec "agy --dangerously-skip-permissions -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$?
       else
         cmd="agy -p (pseudo-TTY via script -qec)"
-        run_traced "$trace" script -qec "agy -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$?
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" script -qec "agy -p $(printf '%q' "$instruction")" /dev/null >"$log" 2>&1; rc=$?
       fi ;;
     *) echo "unknown harness: $id" >&2; return ;;
   esac
@@ -220,7 +228,11 @@ for h in $HOSTS; do
   rows="${rows}${rows:+,}$(run_one "$h")"
 done
 
-PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","execution_witness_rail":"driver strace execve/stdout witness; status=probed only after host-capability-witness.js emits a structurally valid payload hash and strace confirms that wrapper process wrote the same nonce/hash to stdout","sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, redacted truncated error excerpts, and sanitized trace evidence are emitted","hosts":[%s]}' "$rows")"
+receipt_json="null"
+if [ -n "$RECEIPT_ROOT" ]; then
+  receipt_json="{\"provided\":true,\"basename\":\"$(json_str "$(basename "$RECEIPT_ROOT")")\"}"
+fi
+PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","execution_witness_rail":"driver strace execve/stdout witness; status=probed only after host-capability-witness.js emits a structurally valid payload hash and strace confirms that wrapper process wrote the same nonce/hash to stdout","receipt_root":%s,"sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, redacted truncated error excerpts, and sanitized trace evidence are emitted","hosts":[%s]}' "$receipt_json" "$rows")"
 
 if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"

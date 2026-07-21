@@ -139,10 +139,14 @@ function verifyTrace(payload, traceText) {
 function runProbe() {
   const repo = path.resolve(arg('--repo', path.resolve(__dirname, '../../../../..')));
   const nonce = arg('--nonce');
+  const receiptRoot = arg('--receipt-root', process.env.AUTOPILOT_P0_RECEIPT_ROOT || null);
   if (!nonce) throw new Error('--nonce required');
 
   const probe = path.join(repo, 'docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/host-capability-probe.js');
-  const child = spawnSync(process.execPath, [probe, '--nonce', nonce, '--repo', repo, '--json'], {
+  const probeArgs = [probe, '--nonce', nonce, '--repo', repo];
+  if (receiptRoot) probeArgs.push('--receipt-root', receiptRoot);
+  probeArgs.push('--json');
+  const child = spawnSync(process.execPath, probeArgs, {
     cwd: repo,
     env: process.env,
     encoding: 'utf8',

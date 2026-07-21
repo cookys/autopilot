@@ -280,12 +280,45 @@ function classify(id) {
         && r4.harness_authoritative_witness_attack_rejected === true
         && r4.external_receipt_chain_verified === true;
     });
+    const r4Fail = payloads.find(({ findings: p }) => {
+      const r4 = root(p, 'R4_append_only_witness_substrate');
+      return r4 && r4.harness_authoritative_witness_root_compromised === true;
+    });
+    const r4Detected = payloads.find(({ findings: p }) => {
+      const r4 = root(p, 'R4_append_only_witness_substrate');
+      return r4 && r4.harness_authoritative_witness_attack_detected === true;
+    });
+    const r4Inconsistent = payloads.find(({ findings: p }) => {
+      const r4 = root(p, 'R4_append_only_witness_substrate');
+      return r4
+        && r4.harness_authoritative_witness_attack_rejected === true
+        && r4.external_receipt_chain_verified !== true;
+    });
     const r4Observed = payloads.find(({ findings: p }) => root(p, 'R4_append_only_witness_substrate'));
     if (r4Pass) {
       roots.R4 = { verdict: 'pass', basis: 'authoritative_witness_root_proved_append_only',
         observed_in: r4Pass.mode,
         detail: 'a same-uid forged append/rewrite was rejected or externally detected against the '
           + 'harness authoritative witness root, and an external receipt chain was verified.' };
+    } else if (r4Fail) {
+      roots.R4 = { verdict: 'fail', basis: 'authoritative_witness_root_forge_succeeded',
+        observed_in: r4Fail.mode,
+        detail: 'a same-uid process rewrote the authoritative events and receipt chain into a '
+          + 'self-consistent forged state. This root is not outside the attacker write path.' };
+    } else if (r4Detected) {
+      roots.R4 = { verdict: 'suspect', basis: 'authoritative_witness_root_mutation_detected',
+        observed_in: r4Detected.mode,
+        detail: 'an unauthorized mutation landed but the receipt chain did not verify afterward. '
+          + 'This is detection evidence, not an append-only root pass.' };
+      missing.push('replace the receipt root with one that rejects same-uid rewrites before they land, '
+        + 'or define the detected-compromise recovery contract before scoring R4 as pass');
+    } else if (r4Inconsistent) {
+      roots.R4 = { verdict: 'suspect', basis: 'authoritative_witness_root_inconsistent_receipt_state',
+        observed_in: r4Inconsistent.mode,
+        detail: 'the attack-rejected flag was present, but the external receipt chain did not '
+          + 'verify. R4 pass requires both rejection and a verified external chain.' };
+      missing.push('re-run this harness with a marker-guarded disposable receipt root and require '
+        + 'both attack rejection and external receipt-chain verification before scoring R4 as pass');
     } else {
       const appendOnlySettable = r4Observed
         ? r4Observed.findings.R4_append_only_witness_substrate.append_only_settable_by_agent
@@ -295,8 +328,9 @@ function classify(id) {
         detail: 'probe-local temp-witness rewrite is fixture substrate only. append_only settable by '
           + 'agent: ' + String(appendOnlySettable)
           + ' (a kernel fact, not a host witness-root finding).' };
-      missing.push('attack this harness\'s real authoritative witness/receipt root once one exists; '
-        + 'until then R4 cannot be classified for any host');
+      missing.push('provision a disposable authoritative receipt root outside the harness write path '
+        + 'and re-run this harness with run-harness-probes.sh --receipt-root <dir>; until that '
+        + 'attack is observed, R4 cannot be classified for this host');
     }
   }
 
@@ -316,9 +350,9 @@ function classify(id) {
     // red-line capability is preventively observable or mediator-only. Mediation (R3), witness
     // integrity (R4) and an authentic user channel (R1) must all PASS; R2 must also be backed by a
     // positive mediator-only proof. `suspect` never qualifies.
-    // Unreachable from current inputs only because no root reaches `pass` yet — the branch exists
-    // so `partial` is a real outcome rather than prose, and so a future qualifying host is graded
-    // rather than silently forced to `none`.
+    // Unreached by current host evidence because no target host has the complete positive pattern;
+    // the branch exists so `partial` is a real outcome rather than prose, and so a future
+    // qualifying host is graded rather than silently forced to `none`.
     tier = 'partial';
     tierBasis = 'R1/R3/R4 pass and R2 has positive mediator-only proof; every reachable red-line '
       + 'capability is preventively observable or mediator-only';
@@ -326,7 +360,7 @@ function classify(id) {
     tier = 'none'; tierBasis = 'at least one required trust root is disproven by a completed test, '
       + 'so neither owner-led nor milestone-led autonomous intake may be entered';
   } else {
-    tier = 'unverified'; tierBasis = 'no root reaches pass; suspect and unverified cannot qualify';
+    tier = 'unverified'; tierBasis = 'no full/partial positive pattern; suspect and unverified cannot qualify';
   }
 
   return {
@@ -352,8 +386,9 @@ const payload = {
   probe: 'owner-kernel-p0-host-classification',
   method: 'fixed target-host denominator plus driver-verified execution witness status=probed '
     + 'captured evidence only; classifier re-checks witness nonce/probe/payload hash structure '
-    + 'and the driver strace execve/stdout proof shape; nonce-only self-reports and '
-    + 'fixture/contract results are excluded by construction',
+    + 'and the driver strace execve/stdout proof shape; R4 can score only from an explicit '
+    + 'authoritative receipt-root attack result; nonce-only self-reports and fixture/contract '
+    + 'results are excluded by construction',
   target_hosts: TARGET_HOSTS,
   exclusion_rule: 'attack-suite.js results validate the PROPOSED CONTRACT against a disposable fixture '
     + 'and are deliberately NOT an input here. A sound contract does not qualify a host.',

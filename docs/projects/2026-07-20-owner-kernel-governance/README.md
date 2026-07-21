@@ -117,7 +117,7 @@
 | Design | Complete | Board-approved five-family plan: `d98977c` |
 | L-1.5 scope audit | Complete | Dimension and verbatim-requirement ledgers above |
 | L-1.6 skill routing | Complete | dev-flow, l6, ceo-agent, test-strategy, harness-maintenance, quality-pipeline invoked in run `owner-kernel-p0-1784543437001` |
-| P0 | **INCOMPLETE — blocked at the evidence gate** | 8/8 fixture attacks executed; strace execution-witness rail implemented and re-driven; 2/4 harnesses produced at least one driver-verified payload, but 0/4 hosts qualify and all 4 remain unverified because R4/default-mode/Claude/agy evidence is still incomplete. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json) |
+| P0 | **INCOMPLETE — blocked at the evidence gate** | 8/8 fixture attacks executed; strace execution-witness rail and root-owned receipt-root attack rail implemented and re-driven; 0/4 hosts qualify, OpenCode resolves `none`, and Claude Code/Codex/agy remain unverified. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json) |
 | P1 | **NOT AUTHORIZED** | Because the P0 pass bar is **unproven**, not because it was failed. Missing P0 host operations must be executed before P1 can open |
 | P2 | Blocked | Depends on P1 |
 | P3 | Blocked | Depends on P2 |
@@ -131,17 +131,17 @@
 Under the depth-0 Owner decision permitted by plan steps 5-6, all eight named step-4 attacks were
 executed against frozen disposable fixtures, and the host probe was driven through each locally
 installed harness in its own execution context. The classifier now treats both self-report and
-missing evidence fail-closed: all four hosts are `unverified`, so the step-7 universal negative is
-**not yet decidable** and this is not a STOP.
+missing evidence fail-closed: OpenCode is `none`, while Claude Code, Codex, and agy are still
+`unverified`, so the step-7 universal negative is **not yet decidable** and this is not a STOP.
 
 | P0 measurement | Value |
 |---|---|
 | Step 4 — named attacks vs fixtures | **8 of 8 executed, all contracts held**; all 8 oracles mutation-proven LIVE (0 vacuous) |
-| Step 4 — per-harness capability | **4 of 4 harnesses driven**; driver strace execution witness added; OpenCode default+bypass and Codex bypass produced driver-verified payloads; agy bypass remained `self_reported`; Claude Code is blocked by weekly limit |
+| Step 4 — per-harness capability | **4 of 4 harnesses driven**; driver strace execution witness added; OpenCode default+bypass and Codex bypass produced driver-verified payloads; agy bypass remained `self_reported`; marker-guarded root-owned receipt-root attack rail gives OpenCode/Codex R4 pass; Claude Code is blocked by weekly limit |
 | Hosts **qualified** `full`/`partial` | **0 of 4** |
-| Hosts `none` (completed disproof) | **0** — no host has enough completed evidence to resolve to host-level `none` |
-| Hosts `unverified` (missing ops named) | **4** — all |
-| Step 7 kill condition | **NOT DECIDABLE** — every host still has at least one named missing operation; missing evidence is not proof of incapability |
+| Hosts `none` (completed disproof) | **1** — OpenCode |
+| Hosts `unverified` (missing ops named) | **3** — Claude Code, Codex, agy |
+| Step 7 kill condition | **NOT DECIDABLE** — three hosts still have at least one named missing operation; missing evidence is not proof of incapability |
 | Step 5 — baseline categories | **15 of 15 frozen**; only `event_log_tampering` exercised end-to-end (step 6 work) |
 | Step 6 — three-task spike | **Not run** — precondition (a qualifying host) unmet. Not claimed impossible |
 | Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
@@ -150,18 +150,19 @@ missing evidence fail-closed: all four hosts are `unverified`, so the step-7 uni
 
 **Key host finding (fail-closed)**: the execution-witness re-drive produced completed R2 same-uid
 parent-environment reads for OpenCode and Codex, and a completed OpenCode default-mode R3
-fail. Those findings do not qualify any host; P0 remains blocked on missing R4 authoritative
-witness-root attacks, Claude Code evidence, Codex default-mode mediation evidence, and agy
-execution-proven evidence.
+fail. The receipt-root re-drive also produced R4 pass evidence for OpenCode and Codex. Those
+findings do not qualify any host; OpenCode resolves to `none`, and P0 remains blocked on Claude
+Code evidence, Codex default-mode mediation evidence, and agy execution-proven evidence.
 
 **Named missing operations** (what would make the gate decidable):
-- **every host**: attack a real authoritative witness/receipt root once one exists. R4 is
-  unclassifiable until then.
 - **claude-code**: re-drive default and bypass/permissive modes after the weekly limit resets.
 - **codex**: obtain execution-proven default-mode mediation evidence plus captured self-disable
-  evidence before scoring R3 as a completed disproof.
+  evidence before scoring R3 as a completed disproof; R4 is already pass.
 - **agy**: obtain execution-proven bypass/permissive-mode evidence; the latest nonce-bearing bypass
-  payload failed the strace witness check and remains `self_reported`.
+  payload failed the strace witness check and remains `self_reported`, preferably through the same
+  marker-guarded disposable `--receipt-root` path.
+- **opencode**: no remaining P0 operation in the current classifier; it resolves `none` and cannot
+  enter autonomous governance modes.
 
 ## Verification Contract
 
@@ -192,7 +193,7 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | **P0 steps 4+5 EXECUTED under depth-0 Owner decision** | Steps 5-6 permit frozen fixtures, so all 8 named attacks were run against a disposable no-core-code fixture: 8/8 contracts held, 8/8 oracles mutation-proven LIVE. 15/15 baseline categories frozen |
 | 2026-07-20 | Per-harness probe replaces the shell-label probe | `run-harness-probes.sh` drives each real CLI and retains fresh nonce echoes as `self_reported`; `probe-host-trust-roots.sh` marked SUPERSEDED (it measured the shell and asserted a host name) |
 | 2026-07-20 | R3 scoring narrowed after root QC | Completed R3 requires execution-proven default-mode evidence or captured self-disable evidence; nonce-only self-reports are unscored |
-| 2026-07-20 | **P0 = INCOMPLETE, 0/4 hosts qualify; NOT a STOP** | 0 hosts `none`, 4 `unverified`. A universal negative needs every host classified from completed evidence; declaring STOP would again convert missing evidence into proof of incapability |
+| 2026-07-21 | **P0 = INCOMPLETE, 0/4 hosts qualify; NOT a STOP** | OpenCode resolves `none`; Claude Code, Codex, and agy remain `unverified`. A universal negative needs every host classified from completed evidence; declaring STOP would again convert missing evidence into proof of incapability |
 | 2026-07-20 | Nonce-only harness payloads downgraded to self-report | The nonce is disclosed in the model instruction, so it proves freshness but not execution of `host-capability-probe.js`; no R2/R3 host disproof is scored from it |
 | 2026-07-20 | Fixture results excluded from host classification by construction | `classify-hosts.js` takes only execution-proven harness evidence. A sound contract qualifies no host |
 | 2026-07-20 | Every attack must be re-run against production at P1 exit | Depth-0 Owner decision, recorded in the fixtures and findings. Fixture pass is a design gate, never a host qualification |
@@ -202,12 +203,12 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | ~~Plan P0 step 4 is unexecutable as written~~ **WITHDRAWN** | Impossibility was never demonstrated. Steps 5–6 permit frozen fixtures and a minimum JSONL/manual spike, so a disposable no-core-code harness may exercise the Kernel-surface attacks. Superseded below |
 | 2026-07-20 | ~~Phase ordering is an unresolved ambiguity~~ **RESOLVED by Owner decision** | Depth-0 chose the fixture route under steps 5-6, and it worked: all 8 attacks ran pre-P1. The residual question is only whether the same attacks are *also* required at P1 exit — this run records them as required |
 | 2026-07-20 | ~~All 8 attacks relabelled unimplemented / not run; 0 executed~~ **SUPERSEDED** | Superseded by the Owner-decision stage: 8/8 fixture attacks executed and mutation-proven live |
-| 2026-07-20 | ~~R4 "executed witness-head rewrite" claim withdrawn; root → `suspect`~~ **SUPERSEDED** | Current classifier marks R4 `unverified` until a real authoritative witness/receipt root exists and is attacked |
+| 2026-07-20 | ~~R4 "executed witness-head rewrite" claim withdrawn; root → `suspect`~~ **SUPERSEDED** | Superseded again by the 2026-07-21 root-owned receipt-root re-drive: OpenCode and Codex R4 pass; Claude Code and agy R4 remain unverified |
 | 2026-07-20 | ~~R3 `fail` → `suspect`; deployment split from capability~~ **SUPERSEDED** | Current classifier scores completed R3 fails only from execution-proven default-mode unapproved writes or captured self-disable evidence |
 | 2026-07-20 | Codex-quota justification **removed** | Codex is the live depth-0 harness in this run and is demonstrably reachable; a stale quota record is not evidence about probe feasibility |
 | 2026-07-20 | R1 weakened `fail` → `suspect`; `suspect` value added | Writable transcript files are a record, not proof the live in-memory authenticated envelope is forgeable; the forge attack was never run. `suspect` (evidence of weakness) is now distinct from `candidate` (evidence toward passing) |
 | 2026-07-20 | ~~Option (A) — real per-target probes — not performed, not impossible~~ **SUPERSEDED** | Per-harness probes were performed for available CLIs, but missing host operations remain; P0 is incomplete rather than impossible |
-| 2026-07-20 | ~~Probe verdicts four-valued~~ **SUPERSEDED — now five-valued** | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. Unreachable today, but it would have minted a false `pass` on a future host. `pass` now requires a named positive proof; none is implemented, so qualification is unreachable by construction |
+| 2026-07-20 | ~~Probe verdicts four-valued~~ **SUPERSEDED — now five-valued** | The first probe derived `pass` from absence of a disproof on all four roots, and let `blocking_gate: verified` alone qualify a host. That would have minted a false `pass` on a future host. `pass` now requires named positive proof per root |
 | 2026-07-20 | ~~Two claims weakened; STOP retained~~ **SUPERSEDED — STOP withdrawn entirely** | R2 `fail` → `unverified`, target hosts tier `none` → `unverified`, and later Claude Code R3 `fail` → `suspect`. The current claim is only that 0 hosts are *qualified* |
 | 2026-07-20 | Three-task spike deliberately not run | Step 6's precondition is a qualifying host. No host qualifies, so the spike is blocked by the P0 evidence gate; it is not claimed impossible |
 | 2026-07-20 | No product code, schema, or engine module added | The gate is a funding gate. Writing Kernel code before a host has trust roots would build an authority boundary the host cannot enforce |

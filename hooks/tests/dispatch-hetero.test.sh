@@ -67,6 +67,25 @@ touch codex_uncommitted.txt
 EOF
 chmod +x "$STUB_CODEX_UNCOMMITTED"
 
+# --- stub qoderclicn: accepts prompt on STDIN, honors --cwd, leaves edits uncommitted;
+# wrapper-commit must produce the artifact.
+STUB_QODERCN_UNCOMMITTED="$TEST_TMP/qoderclicn"
+cat > "$STUB_QODERCN_UNCOMMITTED" <<'EOF'
+#!/usr/bin/env bash
+cwd=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cwd) cwd="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$cwd" ] && cd "$cwd"
+cat >/dev/null 2>&1 || true
+echo qwen > qoder.txt
+echo "self-report: edited qoder.txt"
+EOF
+chmod +x "$STUB_QODERCN_UNCOMMITTED"
+
 # 1. --help exits 0 and mentions the worktree rail
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; HELP_EXIT=$?
 assert_eq "0" "$HELP_EXIT" "--help exit code"
@@ -97,6 +116,12 @@ assert_contains "$OUT" "effort must be one of" "bad --effort error text"
 OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
+
+# 3c. qoderclicn is explicit-only: qwen/qoder model names must not silently fall
+# through to agy under --runner auto.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "auto qwen model fails loud instead of falling through to agy"
+assert_contains "$OUT" "explicit --runner qoderclicn" "qwen auto error points at explicit qoderclicn"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
@@ -152,6 +177,15 @@ assert_contains "$OUT" '"status": "committed"' "codex wrapper-commit status"
 assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"
 assert_contains "$OUT" '"runner": "codex"' "codex wrapper-commit runner reported"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-no-commit)" "codex wrapper-commit message"
+
+# 5d2. qoderclicn wrapper-commit path: QoderCN runner leaves edits uncommitted and
+# dispatch-hetero commits by artifact, not by self-report.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/qoderclicn-no-commit --prompt-file "$PROMPT" --runner qoderclicn --model Qwen3.8-Max-Preview --qoder-bin "$STUB_QODERCN_UNCOMMITTED" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoderclicn wrapper-commit exit code"
+assert_contains "$OUT" '"status": "committed"' "qoderclicn wrapper-commit status"
+assert_contains "$OUT" '"runner": "qoderclicn"' "qoderclicn wrapper-commit runner reported"
+assert_eq "qwen" "$(git -C "$SBX" show feat/qoderclicn-no-commit:qoder.txt)" "qoderclicn wrapper-commit artifact"
+assert_eq "dispatch-hetero(qoderclicn): edits on feat/qoderclicn-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/qoderclicn-no-commit)" "qoderclicn wrapper-commit message"
 
 # 5e. wrapper-commit identity fallback covers author-only environments too.
 # `git commit` needs both author and committer identity; an author env alone is

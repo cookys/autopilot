@@ -304,6 +304,7 @@ family_of() {
     *claude*|*opus*|*sonnet*|*haiku*)        echo anthropic ;;
     *gemini*|*flash*|*bison*)                echo google ;;
     *grok*|*composer*)                       echo xai ;;
+    *qwen*|*qoder*)                          echo alibaba ;;
     *minimax*|*abab*)                        echo minimax ;;
     *glm*|*zhipu*)                           echo zhipu ;;
     *)                                       echo unknown ;;
@@ -333,10 +334,10 @@ QC_PANEL_JSON+="]"
 
 # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
 # claude-native (dispatch-review.sh) is deliberately NOT roster-eligible — it is a measurement/probe runner; an unknown reviewer_runner here silently falls back to the default.
-case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim|anthropic-compatible) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
+case "$REV_RUNNER" in codex|auto|agy|grok|qoderclicn|cc-shim|anthropic-compatible) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
-case "$IMPL_RUNNER" in auto|codex|agy|grok|cc-shim|pi) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
+case "$IMPL_RUNNER" in auto|codex|agy|grok|qoderclicn|cc-shim|pi) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
 case "$DIFF_SCOPE" in full|incremental-mitigated) ;; *) DIFF_SCOPE="$DEF_DIFF_SCOPE" ;; esac
@@ -791,6 +792,7 @@ function familyOf(engineName) {
   if (e.includes("claude") || e.includes("opus") || e.includes("sonnet") || e.includes("haiku")) return "anthropic";
   if (e.includes("gemini") || e.includes("flash") || e.includes("bison")) return "google";
   if (e.includes("grok") || e.includes("composer")) return "xai";
+  if (e.includes("qwen") || e.includes("qoder")) return "alibaba";
   if (e.includes("minimax") || e.includes("abab")) return "minimax";
   if (e.includes("glm") || e.includes("zhipu")) return "zhipu";
   return "unknown";

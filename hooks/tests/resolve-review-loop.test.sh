@@ -55,8 +55,9 @@ assert_eq "2" "$EXIT" "unknown flag exit code"
 # 3. default JSON carries the repo's DOGFOOD roster + is parseable.
 # DOGFOOD PIN (reads the live .claude/review-loop-config.md): as of 2026-07-16
 # Board decision A the reviewer is MiniMax-M3 and the implementer is grok-4.5 (xai).
-# 2026-07-18 seat refresh: verification_author glm-5.2/anthropic-compatible →
-# Gemini/agy (endpoints.env absent on host; restore note in the config file).
+# 2026-07-21 seat refresh: Claude native quota is unavailable, and GLM review
+# smoke is not enough to re-promote it to authoring, so verification author stays
+# Gemini/agy until a full authoring re-drive passes.
 # xai ∉ {openai,anthropic,google} ⇒ source-trust low ⇒ review_risk=high,
 # required_review_families=2, l1_required=true — BY DESIGN (resolve-review-loop.sh
 # §"Derive source trust"). Restore the gpt seats (reviewer gpt-5.5 / implementer
@@ -128,6 +129,10 @@ NCFG="$TEST_TMP/rl-new-runners.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- reviewer_runner: grok\n- reviewer_engine: grok-build\n' > "$NCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field implementer_runner)" "cc-shim implementer_runner honored"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field reviewer_runner)" "grok reviewer_runner honored"
+QCFG="$TEST_TMP/rl-qoderclicn.md"
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n' > "$QCFG"
+assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field implementer_runner)" "qoderclicn implementer_runner honored"
+assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field reviewer_runner)" "qoderclicn reviewer_runner honored"
 RCFG="$TEST_TMP/rl-ccshim-rev.md"
 printf -- '- reviewer_runner: cc-shim\n- reviewer_engine: MiniMax-M3\n' > "$RCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RCFG" bash "$SCRIPT" --field reviewer_runner)" "cc-shim reviewer_runner honored (dispatch-review supports it since v2.26.10)"
@@ -149,6 +154,9 @@ assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field i
 XFCFG="$TEST_TMP/rl-xfamily.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc_panel: grok-build\n' > "$XFCFG"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
+QXFCFG="$TEST_TMP/rl-qwen-xfamily.md"
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- qc_panel: grok-4.5\n' > "$QXFCFG"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QXFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok panel member satisfies cross-family vs qwen/alibaba implementer"
 
 # 7. qc_panel (v2.25.9): default array + aggregation default
 OUT="$(bash "$SCRIPT")"

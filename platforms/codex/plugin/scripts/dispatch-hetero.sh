@@ -18,10 +18,13 @@
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
 #       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
-#       [--runner auto|codex|agy|grok|cc-shim|pi] # default auto: *gpt*/*codex*→codex,
-#                                              #   *grok*/*composer*→grok, else agy.
+#       [--runner auto|codex|agy|grok|qoderclicn|cc-shim|pi] # default auto: *gpt*/*codex*→codex,
+#                                              #   *grok*/*composer*→grok, *qwen*/*qoder*
+#                                              #   fail loud (explicit qoderclicn required), else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
+#                                              #   qoderclicn models: Qwen/QoderCN CLI;
+#                                              #   explicit only until its implementer eval is promoted.
 #                                              #   cc-shim (EXPLICIT only): Claude Code CLI
 #                                              #   driving an Anthropic-compatible endpoint —
 #                                              #   needs ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN
@@ -40,6 +43,7 @@
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
 #       [--agy-bin agy]                        # alternate binary (test seam)
 #       [--grok-bin grok]                      # alternate binary (test seam)
+#       [--qoder-bin qoderclicn]               # alternate QoderCN binary (test seam)
 #       [--codex-bin codex]                    # alternate/pinned codex (test seam; avoids a
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
@@ -56,7 +60,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"qoderclicn"|"cc-shim"|"pi", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -99,6 +103,7 @@ RUNNER_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 AGY_BIN="agy"
 GROK_BIN="grok"
+QODER_BIN="qoderclicn"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
 KEEP=0
@@ -122,10 +127,12 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
        'hetero-*-log-*' 'dispatch-hetero-*' 'pi-rpc-session-*' 'hetero-detach-state-*' || true
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
+IS_QODER=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
 IS_PI=0
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
+QODER_PROMPT_FILE=""  # qoderclicn-only combined prompt temp; same trap-reap rationale
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
@@ -316,6 +323,9 @@ CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome)
 cleanup() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
+  [ -n "${GROK_PROMPT_FILE:-}" ] && rm -f "$GROK_PROMPT_FILE"
+  [ -n "${QODER_PROMPT_FILE:-}" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "${CCSHIM_PROMPT_FILE:-}" ] && rm -f "$CCSHIM_PROMPT_FILE"
 }
 trap cleanup EXIT
 
@@ -547,6 +557,7 @@ emit() { # status commit files ins del worktree error
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
@@ -716,6 +727,7 @@ die_precondition() {
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   local run_id_json="null"
@@ -743,6 +755,7 @@ write_manifest() {
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
@@ -802,6 +815,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; shift 2 ;;
+    --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
     --pi-bin) PI_BIN="${2:-}"; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
@@ -877,27 +891,31 @@ set_runner_flags() {
   # memory: agy-writes-install-dir). Match the codex FAMILY, not one string.
   IS_CODEX=0
   IS_GROK=0
+  IS_QODER=0
   IS_CCSHIM=0
   IS_PI=0
   case "$RUNNER" in
     codex)   IS_CODEX=1 ;;
     agy)     ;;
     grok)    IS_GROK=1 ;;
+    qoderclicn) IS_QODER=1 ;; # EXPLICIT only until QoderCN implementer eval is promoted.
     cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
-      # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
-      # a bare model name must NOT silently route there.
+      # cc-shim and qoderclicn are never auto-selected: cc-shim needs endpoint env, and
+      # QoderCN is a newly onboarded runner that must remain explicit until promoted.
       model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
       if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
         IS_CODEX=1
       elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
         IS_GROK=1
+      elif [[ "$model_lc" == *qwen* || "$model_lc" == *qoder* ]]; then
+        die_precondition "Qwen/QoderCN models require explicit --runner qoderclicn; auto never routes newly onboarded runners"
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|qoderclicn|cc-shim|pi (got: $RUNNER)" ;;
   esac
 }
 
@@ -1008,6 +1026,8 @@ elif [ "$IS_PI" -eq 1 ]; then
   [ -r "$_pi_models_json" ] || die_precondition "pi models.json not readable: $_pi_models_json"
 elif [ "$IS_GROK" -eq 1 ]; then
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
+elif [ "$IS_QODER" -eq 1 ]; then
+  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoderclicn binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -1024,6 +1044,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   local_runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && local_runner="codex"
   [ "${IS_GROK:-0}" -eq 1 ] && local_runner="grok"
+  [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
   [ "${IS_CCSHIM:-0}" -eq 1 ] && local_runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && local_runner="pi"
 
@@ -1245,7 +1266,7 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 # A TERM during the long run orphans the worktree + branch AND can leave worker
 # descendants. Trap it to reap the container first, then minimal worktree remove
 # (no project hook — signal-safe) + branch -D (sole branch-delete site) + exit 2.
-trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; reap_worktree_minimal "$WT"; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; reap_worktree_minimal "$WT"; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -1335,6 +1356,24 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --always-approve --no-alt-screen --output-format json' \
       _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
   rm -f "$GROK_PROMPT_FILE"
+elif [ "$IS_QODER" -eq 1 ]; then
+  # QoderCN CLI (`qoderclicn`) honors --cwd and accepts prompt-mode input via STDIN.
+  # It is a one-shot batch runner like grok: no mid-run steering channel, prompt-level
+  # EDIT-ONLY directive (not an OS sandbox), wrapper-commit, and artifact verification
+  # by git instead of self-report.
+  QODER_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  QODER_PROMPT_FILE="$(mktemp -t dispatch-hetero-qoderclicn-prompt-XXXXXX)"
+  printf '%s' "${QODER_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$QODER_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec "$2" -p --cwd "$1" --model "$3" \
+      --dangerously-skip-permissions --no-session-persistence --output-format text < "$4"' \
+      _ "$WT" "$QODER_BIN" "$MODEL" "$QODER_PROMPT_FILE"
+  rm -f "$QODER_PROMPT_FILE"
 elif [ "$IS_PI" -eq 1 ]; then
   # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
   # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
@@ -1398,7 +1437,7 @@ compute_artifacts() {
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"
   git -C "$WT" add -A
   _identity_args=()
   if ! git -C "$WT" var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
@@ -1657,6 +1696,7 @@ passive_capture() {
         local runner="agy"
         [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
         [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+        [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
         [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
         [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -1851,9 +1891,9 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN QODER_BIN CODEX_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_QODER IS_CCSHIM IS_PI PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE QODER_PROMPT_FILE CCSHIM_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \

@@ -162,6 +162,39 @@ EXIT_VALIDATE_AC=$?
 assert_eq "$EXIT_VALIDATE_AC" "0" "JS-side validator accepts anthropic-compatible reviewer_runner"
 assert_contains "$VALIDATE_AC" "parity-ok" "anthropic-compatible validation returns parity-ok"
 
+# Case C2: qoderclicn reviewer/implementer runner enum parity.
+QODER_CFG="$TEST_TMP/review-loop-qoderclicn.md"
+printf -- '- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n' > "$QODER_CFG"
+QODER_ERR="$TEST_TMP/review-loop-qoderclicn.stderr"
+QODER_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$QODER_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$QODER_ERR")"
+EXIT_QODER=$?
+assert_eq "$EXIT_QODER" "0" "resolve-review-loop exits 0 with qoderclicn runners"
+QODER_RUNNERS="$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(`${obj.reviewer_runner}/${obj.implementer_runner}`);' <<< "$QODER_OUT")"
+assert_eq "$QODER_RUNNERS" "qoderclicn/qoderclicn" "shell preserves qoderclicn reviewer and implementer runners"
+
+QODER_JS_RUNNERS="$(REVIEW_LOOP_CONFIG_OVERRIDE="$QODER_CFG" node -e '
+const { resolveReviewLoopJson } = require("./src/engine/resolve-review-loop.js");
+const resolved = resolveReviewLoopJson([]);
+if (resolved.error || resolved.parseError || resolved.status !== 0) {
+  console.error(JSON.stringify({
+    status: resolved.status,
+    error: resolved.error && resolved.error.message,
+    parseError: resolved.parseError && resolved.parseError.message,
+    stderr: resolved.stderr,
+  }));
+  process.exit(1);
+}
+console.log(`${resolved.result.reviewer_runner}/${resolved.result.implementer_runner}`);
+')"
+EXIT_QODER_JS=$?
+assert_eq "$EXIT_QODER_JS" "0" "JS module resolves qoderclicn runners without error"
+assert_eq "$QODER_JS_RUNNERS" "$QODER_RUNNERS" "JS module preserves same qoderclicn runners as shell"
+
+VALIDATE_QODER="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$QODER_OUT")"
+EXIT_VALIDATE_QODER=$?
+assert_eq "$EXIT_VALIDATE_QODER" "0" "JS-side validator accepts qoderclicn runners"
+assert_contains "$VALIDATE_QODER" "parity-ok" "qoderclicn validation returns parity-ok"
+
 
 # Case D: Negative check - unknown key added
 TAMPERED_UNKNOWN="$(node -e 'const obj = JSON.parse(process.argv[1]); obj.bogus_key = "unexpected_value"; console.log(JSON.stringify(obj));' "$NORMAL_OUT")"

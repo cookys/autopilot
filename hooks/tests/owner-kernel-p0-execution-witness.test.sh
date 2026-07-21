@@ -18,6 +18,8 @@ assert_contains "$(cat "$OUT")" '"classifier_rejected_tampered_driver_marked_pay
 assert_contains "$(cat "$OUT")" '"classifier_accepted_driver_verified_payload": true' "classifier accepts driver-verified proof"
 assert_contains "$(cat "$OUT")" '"classifier_accepted_fdwrite_verified_payload": true' "classifier accepts fdwrite driver-verified proof"
 assert_contains "$(cat "$OUT")" '"classifier_rejected_bad_fdwrite_driver": true' "classifier rejects malformed fdwrite proof"
+assert_contains "$(cat "$OUT")" '"classifier_accepted_agy_self_disable_denial_for_none": true' "classifier closes agy self-disable denial operation"
+assert_contains "$(cat "$OUT")" '"classifier_rejected_malformed_agy_self_disable_attempt": true' "classifier rejects malformed agy self-disable attempt"
 assert_contains "$(cat "$OUT")" '"classifier_accepted_codex_json_driver": true' "classifier accepts Codex JSON command execution proof"
 assert_contains "$(cat "$OUT")" '"classifier_rejected_codex_json_driver_hash_mismatch": true' "classifier rejects bad Codex JSON command execution proof"
 assert_contains "$(cat "$OUT")" '"classifier_rejected_codex_json_driver_shape_variants": 9' "classifier rejects malformed Codex JSON command execution shapes"

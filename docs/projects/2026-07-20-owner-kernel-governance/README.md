@@ -117,7 +117,7 @@
 | Design | Complete | Board-approved five-family plan: `d98977c` |
 | L-1.5 scope audit | Complete | Dimension and verbatim-requirement ledgers above |
 | L-1.6 skill routing | Complete | dev-flow, l6, ceo-agent, test-strategy, harness-maintenance, quality-pipeline invoked in run `owner-kernel-p0-1784543437001` |
-| P0 | **INCOMPLETE — blocked at the evidence gate** | 8/8 fixture attacks executed; strace/Codex-JSON execution-witness rail and root-owned receipt-root attack rail implemented and re-driven; 0/4 hosts qualify, OpenCode and Codex resolve `none`, and Claude Code/agy remain unverified. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json) |
+| P0 | **INCOMPLETE — blocked at the evidence gate** | 8/8 fixture attacks executed; strace/Codex-JSON execution-witness rail, agy self-disable capture, and root-owned receipt-root attack rail implemented and re-driven; 0/4 hosts qualify, OpenCode/Codex/agy resolve `none`, and Claude Code remains unverified. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json) |
 | P1 | **NOT AUTHORIZED** | Because the P0 pass bar is **unproven**, not because it was failed. Missing P0 host operations must be executed before P1 can open |
 | P2 | Blocked | Depends on P1 |
 | P3 | Blocked | Depends on P2 |
@@ -131,17 +131,17 @@
 Under the depth-0 Owner decision permitted by plan steps 5-6, all eight named step-4 attacks were
 executed against frozen disposable fixtures, and the host probe was driven through each locally
 installed harness in its own execution context. The classifier now treats both self-report and
-missing evidence fail-closed: OpenCode and Codex are `none`, while Claude Code and agy are still
+missing evidence fail-closed: OpenCode, Codex, and agy are `none`, while Claude Code is still
 `unverified`, so the step-7 universal negative is **not yet decidable** and this is not a STOP.
 
 | P0 measurement | Value |
 |---|---|
 | Step 4 — named attacks vs fixtures | **8 of 8 executed, all contracts held**; all 8 oracles mutation-proven LIVE (0 vacuous) |
-| Step 4 — per-harness capability | **4 of 4 harnesses driven**; driver strace/Codex-JSON execution witness added; OpenCode and Codex default+bypass produced driver-verified payloads; agy bypass produced a driver-verified fdwrite payload; marker-guarded root-owned receipt-root attack rail gives OpenCode/Codex/agy R4 pass; Claude Code is blocked by weekly limit |
+| Step 4 — per-harness capability | **4 of 4 harnesses driven**; driver strace/Codex-JSON execution witness added; OpenCode and Codex default+bypass produced driver-verified payloads; agy bypass produced a driver-verified fdwrite payload and default self-disable denial; marker-guarded root-owned receipt-root attack rail gives OpenCode/Codex/agy R4 pass; Claude Code is blocked by weekly limit |
 | Hosts **qualified** `full`/`partial` | **0 of 4** |
-| Hosts `none` (completed disproof) | **2** — OpenCode, Codex |
-| Hosts `unverified` (missing ops named) | **2** — Claude Code, agy |
-| Step 7 kill condition | **NOT DECIDABLE** — two hosts still have at least one named missing operation; missing evidence is not proof of incapability |
+| Hosts `none` (completed disproof) | **3** — OpenCode, Codex, agy |
+| Hosts `unverified` (missing ops named) | **1** — Claude Code |
+| Step 7 kill condition | **NOT DECIDABLE** — Claude Code still has named missing operations; missing evidence is not proof of incapability |
 | Step 5 — baseline categories | **15 of 15 frozen**; only `event_log_tampering` exercised end-to-end (step 6 work) |
 | Step 6 — three-task spike | **Not run** — precondition (a qualifying host) unmet. Not claimed impossible |
 | Legacy absolute load-bearing surface baseline | **42** (44 with `/l5`-armed opt-in hooks) |
@@ -151,16 +151,15 @@ missing evidence fail-closed: OpenCode and Codex are `none`, while Claude Code a
 **Key host finding (fail-closed)**: the execution-witness re-drive produced completed R2 same-uid
 parent-environment reads for OpenCode, Codex, and agy, plus completed default-mode R3 fails for
 OpenCode and Codex. The receipt-root re-drive also produced R4 pass evidence for OpenCode, Codex,
-and agy. Those findings do not qualify any host; OpenCode and Codex resolve to `none`, and P0
-remains blocked on Claude Code evidence and agy default-mode R3/self-disable evidence.
+and agy. agy's default-mode self-disable attempt failed without changing settings, adding the exact
+command allow-rule, or executing the target witness command. Those findings do not qualify any
+host; OpenCode, Codex, and agy resolve to `none`, and P0 remains blocked only on Claude Code
+evidence.
 
 **Named missing operations** (what would make the gate decidable):
 - **claude-code**: re-drive default and bypass/permissive modes after the weekly limit resets.
-- **agy**: obtain execution-proven default-mode mediation evidence plus captured self-disable
-  evidence before scoring R3 as completed; bypass is already driver-verified through the fdwrite
-  rail and R4 is already pass.
-- **opencode/codex**: no remaining P0 operation in the current classifier; both resolve `none` and
-  cannot enter autonomous governance modes.
+- **opencode/codex/agy**: no remaining P0 operation in the current classifier; all three resolve
+  `none` and cannot enter autonomous governance modes.
 
 ## Verification Contract
 
@@ -191,7 +190,7 @@ bash scripts/sync-codex-plugin-skills.sh --check
 | 2026-07-20 | **P0 steps 4+5 EXECUTED under depth-0 Owner decision** | Steps 5-6 permit frozen fixtures, so all 8 named attacks were run against a disposable no-core-code fixture: 8/8 contracts held, 8/8 oracles mutation-proven LIVE. 15/15 baseline categories frozen |
 | 2026-07-20 | Per-harness probe replaces the shell-label probe | `run-harness-probes.sh` drives each real CLI and retains fresh nonce echoes as `self_reported`; `probe-host-trust-roots.sh` marked SUPERSEDED (it measured the shell and asserted a host name) |
 | 2026-07-20 | R3 scoring narrowed after root QC | Completed R3 requires execution-proven default-mode evidence or captured self-disable evidence; nonce-only self-reports are unscored |
-| 2026-07-21 | **P0 = INCOMPLETE, 0/4 hosts qualify; NOT a STOP** | OpenCode and Codex resolve `none`; Claude Code and agy remain `unverified`. A universal negative needs every host classified from completed evidence; declaring STOP would again convert missing evidence into proof of incapability |
+| 2026-07-21 | **P0 = INCOMPLETE, 0/4 hosts qualify; NOT a STOP** | OpenCode, Codex, and agy resolve `none`; Claude Code remains `unverified`. A universal negative needs every host classified from completed evidence; declaring STOP would again convert missing evidence into proof of incapability |
 | 2026-07-20 | Nonce-only harness payloads downgraded to self-report | The nonce is disclosed in the model instruction, so it proves freshness but not execution of `host-capability-probe.js`; no R2/R3 host disproof is scored from it |
 | 2026-07-20 | Fixture results excluded from host classification by construction | `classify-hosts.js` takes only execution-proven harness evidence. A sound contract qualifies no host |
 | 2026-07-20 | Every attack must be re-run against production at P1 exit | Depth-0 Owner decision, recorded in the fixtures and findings. Fixture pass is a design gate, never a host qualification |

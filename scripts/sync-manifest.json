@@ -94,10 +94,10 @@
     },
     {
       "id": "check-claude-md-inventory",
-      "title": "every scripts/*.{sh,js} + scripts/lib/* is named in CLAUDE.md",
+      "title": "CLAUDE.md inventory: every scripts/*.{sh,js} + scripts/lib/* named + file/line size caps",
       "generator": null,
       "check": "node scripts/check-claude-md-inventory.js",
-      "fix": "add a row (or inline mention) for each unlisted script to the CLAUDE.md 'Scripts inventory' table",
+      "fix": "add an index row per unlisted script; for size violations trim the row and move detail to CHANGELOG.md / references/ (see CLAUDE.md Row shape rule)",
       "tier": "both",
       "trigger": ["scripts/", "CLAUDE.md"]
     },

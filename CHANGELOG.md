@@ -24,6 +24,44 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.57 — CLAUDE.md inventory slim + size gate
+
+**Headline**: CLAUDE.md had grown 11KB → 81KB in six weeks — release commits kept
+appending per-version behavior notes to Scripts-inventory rows, so every session
+(and every dispatched foreman/leaf in this repo) swallowed ~20k tokens of duplicated
+changelog. The inventory is an index again (one row = what it does + when to call
+it + pointer to the canonical detail; 81KB → 38.5KB), and the gate that watches it
+now has teeth: `check-claude-md-inventory.js` grew from a membership-only gate into
+a membership + size gate, so the file cannot silently regrow past the 40k harness
+warning threshold.
+
+### Changed
+- **CLAUDE.md Scripts inventory rewritten as index rows** — per-release behavior
+  notes, flag inventories, Spike dates and incident lore removed from rows; that
+  history already lives in `CHANGELOG.md` (release ritual enforces it) and the
+  details in `references/` / script headers / `--help`. Load-bearing safety
+  sentences kept verbatim (containment-not-security-attestation, FAIL-CLOSED,
+  telemetry-only, etc.). Previously inline-only `dispatch-author.sh` and
+  `run-ledger.sh` got their own rows. New **Row shape rule** under "When adding a
+  new script" + a matching "Don't" item.
+- **`scripts/check-claude-md-inventory.js`: membership + size gate** — adds a
+  whole-file byte cap (default 40000, the harness warning threshold) and a
+  per-line byte cap (default 800; an inventory row is an index entry). Byte-measured
+  (not chars) so multibyte rows can't dodge the cap; `--max-total-bytes` /
+  `--max-line-bytes` overrides; `--json` gains `total_bytes` / `long_lines`.
+  Violation output names the fix: history → CHANGELOG.md, details → references/.
+  `sync-manifest.json` ritual row title/fix updated (wiring unchanged — pre-commit,
+  CI and preflight-portability already delegate via `sync-all.sh`).
+
+### Added
+- `hooks/tests/check-claude-md-inventory.test.sh` — 24 assertions: membership drift
+  (scripts/ + scripts/lib/), `*.test.sh` exemption, byte-vs-char cap measurement
+  (CJK line), cap overrides, `--json` shape, non-numeric-cap usage error, and a
+  real-repo regression anchor (the shipped CLAUDE.md passes default caps).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
 ## v2.32.56 — context-budget: infer the window instead of assuming 200K
 
 **Headline**: The context-budget tiers were absolute token counts calibrated for a

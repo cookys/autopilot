@@ -11,9 +11,13 @@ RC=$?
 assert_exit_code "$RC" 0 "execution witness controls pass"
 assert_contains "$(cat "$OUT")" '"signed_payload_verified": true' "signed payload is verified"
 assert_contains "$(cat "$OUT")" '"tampered_payload_rejected": true' "tampered payload is rejected"
+assert_contains "$(cat "$OUT")" '"namespace_pid_trace_verified": true' "namespace trace pid is verified"
 assert_contains "$(cat "$OUT")" '"classifier_rejected_payload_self_claim": true' "classifier rejects self-claimed proof"
 assert_contains "$(cat "$OUT")" '"classifier_rejected_tampered_driver_marked_payload": true' "classifier rejects tampered driver-marked proof"
 assert_contains "$(cat "$OUT")" '"classifier_accepted_driver_verified_payload": true' "classifier accepts driver-verified proof"
+assert_contains "$(cat "$OUT")" '"classifier_accepted_codex_json_driver": true' "classifier accepts Codex JSON command execution proof"
+assert_contains "$(cat "$OUT")" '"classifier_rejected_codex_json_driver_hash_mismatch": true' "classifier rejects bad Codex JSON command execution proof"
+assert_contains "$(cat "$OUT")" '"classifier_rejected_codex_json_driver_shape_variants": 9' "classifier rejects malformed Codex JSON command execution shapes"
 
 STUB_BIN="$TEST_TMP/bin"
 mkdir -p "$STUB_BIN"

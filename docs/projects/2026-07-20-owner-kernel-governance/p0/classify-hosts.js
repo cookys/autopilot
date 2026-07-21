@@ -90,6 +90,10 @@ function structurallyValidWitness(payload) {
   return witness.payload_sha256 === expectedPayloadSha;
 }
 
+function hex64(value) {
+  return /^[0-9a-f]{64}$/i.test(String(value || ''));
+}
+
 function structurallyValidDriverTrace(host, payload) {
   const witness = payload && payload.execution_witness;
   const driver = host && host.execution_witness_driver;
@@ -102,7 +106,7 @@ function structurallyValidDriverTrace(host, payload) {
   if (driver.payload_sha256 !== witness.payload_sha256) return false;
   if (driver.execve_matched !== true) return false;
   if (driver.stdout_payload_hash_matched !== true) return false;
-  if (!/^[0-9a-f]{64}$/i.test(String(driver.trace_sha256 || ''))) return false;
+  if (!hex64(driver.trace_sha256)) return false;
   if (!Array.isArray(driver.evidence) || driver.evidence.length < 2) return false;
 
   const pid = String(witness.wrapper_pid);
@@ -119,13 +123,42 @@ function structurallyValidDriverTrace(host, payload) {
   return Boolean(execLine && writeLine);
 }
 
+function structurallyValidCodexJsonDriver(host, payload) {
+  const witness = payload && payload.execution_witness;
+  const driver = host && host.execution_witness_driver;
+  if (!witness || !driver || typeof driver !== 'object') return false;
+  if (driver.kind !== 'codex_json_command_execution') return false;
+  if (driver.version !== 1) return false;
+  if (driver.event_source !== 'codex_exec_jsonl') return false;
+  if (driver.command_matched !== true) return false;
+  if (driver.status !== 'completed') return false;
+  if (driver.exit_code !== 0) return false;
+  if (driver.wrapper_pid !== witness.wrapper_pid) return false;
+  if (driver.wrapper_script !== witness.wrapper_script) return false;
+  if (driver.payload_sha256 !== witness.payload_sha256) return false;
+  if (driver.nonce_echo !== payload.nonce_echo) return false;
+  if (driver.stdout_payload_hash_matched !== true) return false;
+  if (!hex64(driver.command_sha256)) return false;
+  if (!hex64(driver.output_sha256)) return false;
+  if (!hex64(driver.event_sha256)) return false;
+  return true;
+}
+
+function structurallyValidDriver(host, payload) {
+  const driver = host && host.execution_witness_driver;
+  if (!driver || typeof driver !== 'object') return false;
+  if (driver.kind === 'strace_execve_stdout') return structurallyValidDriverTrace(host, payload);
+  if (driver.kind === 'codex_json_command_execution') return structurallyValidCodexJsonDriver(host, payload);
+  return false;
+}
+
 function verifiedPayload(host) {
   if (host.status !== 'probed') return null;
   if (host.evidence_grade !== 'driver_verified_execution_witness') return null;
   if (host.execution_witness_verified !== true) return null;
   const payload = host.probe_payload;
   if (!payload || !structurallyValidWitness(payload)) return null;
-  if (!structurallyValidDriverTrace(host, payload)) return null;
+  if (!structurallyValidDriver(host, payload)) return null;
   return payload.findings ? payload.findings : null;
 }
 
@@ -386,7 +419,8 @@ const payload = {
   probe: 'owner-kernel-p0-host-classification',
   method: 'fixed target-host denominator plus driver-verified execution witness status=probed '
     + 'captured evidence only; classifier re-checks witness nonce/probe/payload hash structure '
-    + 'and the driver strace execve/stdout proof shape; R4 can score only from an explicit '
+    + 'and the driver proof shape (strace execve/stdout or Codex JSON command_execution); '
+    + 'R4 can score only from an explicit '
     + 'authoritative receipt-root attack result; nonce-only self-reports and fixture/contract '
     + 'results are excluded by construction',
   target_hosts: TARGET_HOSTS,

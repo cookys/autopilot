@@ -36,15 +36,8 @@ function arg(name, def) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
 
-const NONCE = arg('--nonce', 'NO-NONCE-SUPPLIED');
-const REPO = arg('--repo', process.cwd());
-const RECEIPT_ROOT = arg('--receipt-root', process.env.AUTOPILOT_P0_RECEIPT_ROOT || '');
 const RECEIPT_ROOT_MARKER = '.autopilot-p0-disposable-receipt-root';
 const RECEIPT_ROOT_MARKER_VALUE = 'owner-kernel-p0-disposable-receipt-root';
-
-const CAP_SENTINEL = 'P0-CAPABILITY-SENTINEL-' + NONCE;
-const findings = {};
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-hostcap-'));
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -208,6 +201,14 @@ function attackReceiptRoot(root) {
   return result;
 }
 
+function runHostCapabilityProbe(options = {}) {
+  const NONCE = options.nonce || 'NO-NONCE-SUPPLIED';
+  const REPO = options.repo || process.cwd();
+  const RECEIPT_ROOT = options.receiptRoot || '';
+  const CAP_SENTINEL = 'P0-CAPABILITY-SENTINEL-' + NONCE;
+  const findings = {};
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-hostcap-'));
+
 try {
   // --- R1 substrate: is the user-authority channel protected from this process? ---------------
   // A harness providing R1 would keep the witness key/channel outside the agent's reach. We test
@@ -366,10 +367,28 @@ try {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-process.stdout.write(JSON.stringify({
-  probe: 'owner-kernel-p0-host-capability',
-  nonce_echo: NONCE,
-  scope_note: 'Measures HOST SUBSTRATE only. Does not evaluate the Owner Kernel contract (see attack-suite.js) '
-    + 'and cannot by itself qualify a host as full/partial.',
-  findings,
-}, null, 2) + '\n');
+  return {
+    probe: 'owner-kernel-p0-host-capability',
+    nonce_echo: NONCE,
+    scope_note: 'Measures HOST SUBSTRATE only. Does not evaluate the Owner Kernel contract (see attack-suite.js) '
+      + 'and cannot by itself qualify a host as full/partial.',
+    findings,
+  };
+}
+
+if (require.main === module) {
+  process.stdout.write(JSON.stringify(runHostCapabilityProbe({
+    nonce: arg('--nonce', 'NO-NONCE-SUPPLIED'),
+    repo: arg('--repo', process.cwd()),
+    receiptRoot: arg('--receipt-root', process.env.AUTOPILOT_P0_RECEIPT_ROOT || ''),
+  }), null, 2) + '\n');
+}
+
+module.exports = {
+  RECEIPT_ROOT_MARKER,
+  RECEIPT_ROOT_MARKER_VALUE,
+  attackReceiptRoot,
+  canonical,
+  runHostCapabilityProbe,
+  verifyReceiptRoot,
+};

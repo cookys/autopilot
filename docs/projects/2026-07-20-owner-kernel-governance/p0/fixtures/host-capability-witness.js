@@ -4,7 +4,8 @@
  *
  * The fresh nonce proves only freshness because it is shown to the model. This wrapper adds a
  * payload hash and process metadata, but that is not trusted by itself. The driver must observe
- * this wrapper's execve/stdout with strace before a row may be promoted to `status=probed`.
+ * this wrapper's command/stdout with an independent rail (strace execve/stdout, or Codex
+ * `command_execution` JSON events for Codex exec) before a row may be promoted to `status=probed`.
  *
  * Threat boundary: this is a driver-side execution witness for the local harness run, not a
  * same-uid malicious-proof attestation. Stronger authoritative receipt roots remain P1+ work.
@@ -15,7 +16,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { runHostCapabilityProbe } = require('./host-capability-probe.js');
 
 const WITNESS_KIND = 'host_wrapper_payload_hash';
 const DRIVER_WITNESS_KIND = 'strace_execve_stdout';
@@ -105,13 +106,25 @@ function sanitizeTraceLine(line) {
 function verifyTrace(payload, traceText) {
   const verifiedPayload = verifyPayload(payload);
   const witness = verifiedPayload.execution_witness;
-  const pid = String(witness.wrapper_pid || '');
-  if (!/^[0-9]+$/.test(pid)) throw new Error('witness_pid_invalid');
+  const payloadPid = String(witness.wrapper_pid || '');
+  if (!/^[0-9]+$/.test(payloadPid)) throw new Error('witness_pid_invalid');
 
-  const lines = String(traceText).split(/\r?\n/).filter((line) => line.startsWith(`${pid} `));
-  const execLine = lines.find((line) => line.includes('execve(')
+  const allLines = String(traceText).split(/\r?\n/);
+  let tracePid = payloadPid;
+  let lines = allLines.filter((line) => line.startsWith(`${tracePid} `));
+  let execLine = lines.find((line) => line.includes('execve(')
     && line.includes(witness.wrapper_script)
     && line.includes(String(verifiedPayload.nonce_echo)));
+  if (!execLine) {
+    execLine = allLines.find((line) => /^[0-9]+ /.test(line)
+      && line.includes('execve(')
+      && line.includes(witness.wrapper_script)
+      && line.includes(String(verifiedPayload.nonce_echo)));
+    if (execLine) {
+      tracePid = execLine.match(/^([0-9]+) /)[1];
+      lines = allLines.filter((line) => line.startsWith(`${tracePid} `));
+    }
+  }
   if (!execLine) throw new Error('trace_execve_missing');
 
   const writeLine = lines.find((line) => line.includes('write(1,')
@@ -124,14 +137,15 @@ function verifyTrace(payload, traceText) {
     version: WITNESS_VERSION,
     trace_tool: 'strace',
     wrapper_pid: witness.wrapper_pid,
+    trace_pid: tracePid,
     wrapper_script: witness.wrapper_script,
     payload_sha256: witness.payload_sha256,
     execve_matched: true,
     stdout_payload_hash_matched: true,
     trace_sha256: sha256(traceText),
     evidence: [
-      `${pid} execve(${witness.wrapper_script}) nonce=${verifiedPayload.nonce_echo} trace=${sha256(execLine)}`,
-      `${pid} write(1, ...) nonce=${verifiedPayload.nonce_echo} payload_sha256=${witness.payload_sha256} trace=${sha256(writeLine)}`,
+      `${tracePid} execve(${witness.wrapper_script}) nonce=${verifiedPayload.nonce_echo} trace=${sha256(execLine)}`,
+      `${tracePid} write(1, ...) nonce=${verifiedPayload.nonce_echo} payload_sha256=${witness.payload_sha256} trace=${sha256(writeLine)}`,
     ],
   };
 }
@@ -142,29 +156,11 @@ function runProbe() {
   const receiptRoot = arg('--receipt-root', process.env.AUTOPILOT_P0_RECEIPT_ROOT || null);
   if (!nonce) throw new Error('--nonce required');
 
-  const probe = path.join(repo, 'docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/host-capability-probe.js');
-  const probeArgs = [probe, '--nonce', nonce, '--repo', repo];
-  if (receiptRoot) probeArgs.push('--receipt-root', receiptRoot);
-  probeArgs.push('--json');
-  const child = spawnSync(process.execPath, probeArgs, {
-    cwd: repo,
-    env: process.env,
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
+  const payload = runHostCapabilityProbe({
+    nonce,
+    repo,
+    receiptRoot,
   });
-
-  if (child.status !== 0) {
-    process.stderr.write(child.stderr || child.stdout || `probe exited ${child.status}\n`);
-    process.exit(child.status || 1);
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(child.stdout);
-  } catch (err) {
-    process.stderr.write(`probe_json_parse_failed: ${err.message}\n`);
-    process.exit(12);
-  }
   if (payload.nonce_echo !== nonce) {
     process.stderr.write('probe_nonce_mismatch\n');
     process.exit(13);

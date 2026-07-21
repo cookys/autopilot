@@ -21,6 +21,9 @@
 #   to `status=probed` only when strace observes that wrapper process execve and a stdout write
 #   carrying the same nonce and payload hash. A nonce-bearing payload without a valid driver-observed
 #   wrapper execution stays `self_reported`.
+#   Codex `exec --json` additionally emits host-side `command_execution` events. For Codex, those
+#   JSONL events are accepted as a second driver rail when they show the exact witness command
+#   completed with exit 0 and the aggregated command stdout contains the same nonce/hash payload.
 #
 # HONESTY
 #   A harness that cannot be driven is recorded with its exact command and captured error, and left
@@ -129,6 +132,130 @@ extract_payload() {
   ' "$file" "$nonce" 2>/dev/null
 }
 
+extract_codex_json_witness() {
+  local file="$1" nonce="$2" payload_file="$3" driver_file="$4"
+  node - "$file" "$nonce" "$payload_file" "$driver_file" <<'NODE'
+const fs = require('fs');
+const crypto = require('crypto');
+
+const [file, nonce, payloadFile, driverFile] = process.argv.slice(2);
+const raw = fs.readFileSync(file, 'utf8');
+let payloadParseFailures = 0;
+
+function sha256(text) {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function jsonObjects(text) {
+  const objects = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '{') continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let j = i; j < text.length; j++) {
+      const ch = text[j];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          objects.push(text.slice(i, j + 1));
+          i = j;
+          break;
+        }
+      }
+    }
+  }
+  return objects;
+}
+
+function extractPayload(text) {
+  for (const candidate of jsonObjects(text)) {
+    if (!candidate.includes(nonce)) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && parsed.nonce_echo === nonce) return parsed;
+    } catch (err) {
+      payloadParseFailures += 1;
+    }
+  }
+  return null;
+}
+
+let lastReason = 'codex_command_execution_event_missing';
+for (const line of raw.split(/\r?\n/)) {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('{')) continue;
+
+  let event;
+  try {
+    event = JSON.parse(trimmed);
+  } catch (err) {
+    lastReason = 'codex_json_event_parse_failed';
+    continue;
+  }
+  if (event.type !== 'item.completed') continue;
+
+  const item = event.item || {};
+  if (item.type !== 'command_execution') continue;
+  const command = String(item.command || '');
+  if (!command.includes('host-capability-witness.js') || !command.includes(nonce)) {
+    lastReason = 'codex_command_did_not_match_witness';
+    continue;
+  }
+  if (item.status !== 'completed' || item.exit_code !== 0) {
+    lastReason = 'codex_command_execution_not_successful';
+    continue;
+  }
+
+  const output = String(item.aggregated_output || '');
+  const payload = extractPayload(output);
+  if (!payload) {
+    lastReason = payloadParseFailures > 0
+      ? 'codex_aggregated_output_payload_parse_failed'
+      : 'codex_aggregated_output_payload_missing';
+    continue;
+  }
+
+  const witness = payload.execution_witness || {};
+  const payloadSha = String(witness.payload_sha256 || '');
+  if (!payloadSha || !output.includes(nonce) || !output.includes(payloadSha)) {
+    lastReason = 'codex_aggregated_output_hash_missing';
+    continue;
+  }
+
+  fs.writeFileSync(payloadFile, JSON.stringify(payload, null, 2) + '\n');
+  fs.writeFileSync(driverFile, JSON.stringify({
+    kind: 'codex_json_command_execution',
+    version: 1,
+    event_source: 'codex_exec_jsonl',
+    command_matched: true,
+    status: item.status,
+    exit_code: item.exit_code,
+    wrapper_pid: witness.wrapper_pid,
+    wrapper_script: witness.wrapper_script,
+    payload_sha256: witness.payload_sha256,
+    nonce_echo: payload.nonce_echo,
+    stdout_payload_hash_matched: true,
+    command_sha256: sha256(command),
+    output_sha256: sha256(output),
+    event_sha256: sha256(trimmed),
+  }) + '\n');
+  process.exit(0);
+}
+
+process.stderr.write(lastReason + '\n');
+process.exit(1);
+NODE
+}
+
 emit_host() {
   local id="$1" status="$2" cmd="$3" err="$4" payload="$5" exitcode="$6" driver="$7"
   local grade_field="" driver_field=""
@@ -162,11 +289,11 @@ run_one() {
       fi ;;
     codex)
       if [ "$MODE" = "bypass" ]; then
-        cmd="codex exec --dangerously-bypass-approvals-and-sandbox -C <repo>"
-        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec --dangerously-bypass-approvals-and-sandbox -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
+        cmd="codex exec --json --dangerously-bypass-approvals-and-sandbox -C <repo>"
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec --json --dangerously-bypass-approvals-and-sandbox -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
       else
-        cmd="codex exec -C <repo> (default sandbox/approvals)"
-        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
+        cmd="codex exec --json -C <repo> (default sandbox/approvals)"
+        AUTOPILOT_P0_RECEIPT_ROOT="$RECEIPT_ROOT" run_traced "$trace" codex exec --json -C "$REPO" "$instruction" >"$log" 2>&1; rc=$?
       fi ;;
     opencode)
       if [ "$MODE" = "bypass" ]; then
@@ -188,9 +315,29 @@ run_one() {
     *) echo "unknown harness: $id" >&2; return ;;
   esac
 
-  local payload err status payload_file verified verify_err driver
-  payload="$(extract_payload "$log" "$nonce")"
-  if [ -n "$payload" ]; then
+  local payload err status payload_file verified verify_err driver codex_payload_file codex_driver_file
+  if [ "$id" = "codex" ]; then
+    codex_payload_file="$WORK/$id.codex-json.payload.json"
+    codex_driver_file="$WORK/$id.codex-json.driver.json"
+    verify_err="$WORK/$id.codex-json.verify.err"
+    if extract_codex_json_witness "$log" "$nonce" "$codex_payload_file" "$codex_driver_file" 2>"$verify_err"; then
+      if verified="$(node "$WITNESS" --verify --payload-file "$codex_payload_file" --nonce "$nonce" 2>>"$verify_err")"; then
+        status="probed"
+        payload="$verified"
+        driver="$(cat "$codex_driver_file")"
+        err="driver Codex JSON command_execution witness verified"
+      else
+        status="self_reported"
+        payload="$(cat "$codex_payload_file" 2>/dev/null || printf 'null')"
+        err="nonce echoed but Codex JSON execution witness verification failed: $(redact <"$verify_err")"
+      fi
+    fi
+  fi
+
+  payload="${payload:-$(extract_payload "$log" "$nonce")}"
+  if [ -n "${status:-}" ]; then
+    :
+  elif [ -n "$payload" ]; then
     payload_file="$WORK/$id.payload.json"
     verify_err="$WORK/$id.verify.err"
     printf '%s\n' "$payload" >"$payload_file"
@@ -232,7 +379,7 @@ receipt_json="null"
 if [ -n "$RECEIPT_ROOT" ]; then
   receipt_json="{\"provided\":true,\"basename\":\"$(json_str "$(basename "$RECEIPT_ROOT")")\"}"
 fi
-PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","execution_witness_rail":"driver strace execve/stdout witness; status=probed only after host-capability-witness.js emits a structurally valid payload hash and strace confirms that wrapper process wrote the same nonce/hash to stdout","receipt_root":%s,"sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, redacted truncated error excerpts, and sanitized trace evidence are emitted","hosts":[%s]}' "$receipt_json" "$rows")"
+PAYLOAD="$(printf '{"probe":"owner-kernel-p0-per-harness-capability","permission_mode":"'"$MODE"'","nonce_rail":"fresh nonce is anti-stale only; nonce-only payloads are self_reported and must not be counted as execution-proven host evidence","execution_witness_rail":"driver strace execve/stdout witness or Codex JSON command_execution witness; status=probed only after host-capability-witness.js emits a structurally valid payload hash and the driver confirms the wrapper command/stdout carried the same nonce/hash","receipt_root":%s,"sanitization":"raw harness logs are not committed; only parsed payloads, exit codes, redacted truncated error excerpts, and sanitized trace evidence are emitted","hosts":[%s]}' "$receipt_json" "$rows")"
 
 if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"

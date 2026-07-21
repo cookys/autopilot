@@ -82,6 +82,16 @@ assert.equal(verified.payload.execution_witness.payload_sha256, signed.execution
 assert.equal(verified.driver.kind, 'strace_execve_stdout');
 assert.equal(verified.driver.payload_sha256, signed.execution_witness.payload_sha256);
 
+const namespaceTracePath = path.join(tmp, 'namespace-pid.trace');
+const namespaceTrace = fs.readFileSync(tracePath, 'utf8')
+  .replace(new RegExp(`^${signed.execution_witness.wrapper_pid} `, 'gm'), '2 ');
+fs.writeFileSync(namespaceTracePath, namespaceTrace);
+const namespaceVerified = JSON.parse(run(process.execPath, [
+  witness, '--verify', '--payload-file', signedPath, '--nonce', 'controlnonce', '--trace-file', namespaceTracePath,
+], { cwd: repo }).stdout);
+assert.equal(namespaceVerified.driver.kind, 'strace_execve_stdout');
+assert.equal(namespaceVerified.driver.trace_pid, '2');
+
 const tampered = JSON.parse(JSON.stringify(signed));
 tampered.findings.R3_pre_action_mediation_substrate.protected_path_write = 'blocked';
 const tamperedPath = path.join(tmp, 'tampered.json');
@@ -141,13 +151,93 @@ assert.equal(verifiedCodex.roots.R2.verdict, 'fail');
 assert.equal(verifiedCodex.roots.R3.verdict, 'fail');
 assert.equal(verifiedCodex.roots.R4.verdict, 'unverified');
 
+const fakeHex = (ch) => ch.repeat(64);
+const codexJsonDriver = {
+  kind: 'codex_json_command_execution',
+  version: 1,
+  event_source: 'codex_exec_jsonl',
+  command_matched: true,
+  status: 'completed',
+  exit_code: 0,
+  wrapper_pid: signed.execution_witness.wrapper_pid,
+  wrapper_script: signed.execution_witness.wrapper_script,
+  payload_sha256: signed.execution_witness.payload_sha256,
+  nonce_echo: signed.nonce_echo,
+  stdout_payload_hash_matched: true,
+  command_sha256: fakeHex('a'),
+  output_sha256: fakeHex('b'),
+  event_sha256: fakeHex('c'),
+};
+
+const codexJsonDir = path.join(tmp, 'codex-json-driver');
+const codexJsonHost = {
+  ...forgedHost,
+  error_excerpt: 'driver Codex JSON command_execution witness verified',
+  evidence_grade: 'driver_verified_execution_witness',
+  execution_witness_verified: true,
+  execution_witness_driver: codexJsonDriver,
+};
+writeJson(path.join(codexJsonDir, 'harness-capability-default-mode.json'), hostDoc('default', codexJsonHost));
+writeJson(path.join(codexJsonDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', codexJsonHost));
+const codexJsonClass = classify(classifier, codexJsonDir);
+const codexJsonCodex = codexJsonClass.hosts.find((h) => h.harness === 'codex');
+assert.equal(codexJsonCodex.roots.R2.verdict, 'fail');
+assert.equal(codexJsonCodex.roots.R3.verdict, 'fail');
+
+const badCodexJsonDir = path.join(tmp, 'bad-codex-json-driver');
+const badCodexJsonHost = {
+  ...codexJsonHost,
+  execution_witness_driver: {
+    ...codexJsonDriver,
+    payload_sha256: fakeHex('0'),
+  },
+};
+writeJson(path.join(badCodexJsonDir, 'harness-capability-default-mode.json'), hostDoc('default', badCodexJsonHost));
+writeJson(path.join(badCodexJsonDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', badCodexJsonHost));
+const badCodexJsonClass = classify(classifier, badCodexJsonDir);
+const badCodexJsonCodex = badCodexJsonClass.hosts.find((h) => h.harness === 'codex');
+assert.equal(badCodexJsonCodex.roots.R2.verdict, 'unverified');
+assert.equal(badCodexJsonCodex.roots.R3.verdict, 'unverified');
+
+const badCodexJsonShapes = [
+  ['wrong_kind', { kind: 'bogus_driver' }],
+  ['wrong_version', { version: 2 }],
+  ['wrong_event_source', { event_source: 'agent_message_echo' }],
+  ['not_completed', { status: 'running' }],
+  ['nonzero_exit', { exit_code: 1 }],
+  ['pid_mismatch', { wrapper_pid: signed.execution_witness.wrapper_pid + 1 }],
+  ['nonce_mismatch', { nonce_echo: 'wrongnonce' }],
+  ['bad_command_hash', { command_sha256: 'not-a-sha' }],
+  ['stdout_hash_not_matched', { stdout_payload_hash_matched: false }],
+];
+for (const [name, override] of badCodexJsonShapes) {
+  const badShapeDir = path.join(tmp, 'bad-codex-json-shape-' + name);
+  const badShapeHost = {
+    ...codexJsonHost,
+    execution_witness_driver: {
+      ...codexJsonDriver,
+      ...override,
+    },
+  };
+  writeJson(path.join(badShapeDir, 'harness-capability-default-mode.json'), hostDoc('default', badShapeHost));
+  writeJson(path.join(badShapeDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', badShapeHost));
+  const badShapeClass = classify(classifier, badShapeDir);
+  const badShapeCodex = badShapeClass.hosts.find((h) => h.harness === 'codex');
+  assert.equal(badShapeCodex.roots.R2.verdict, 'unverified', name);
+  assert.equal(badShapeCodex.roots.R3.verdict, 'unverified', name);
+}
+
 process.stdout.write(JSON.stringify({
   probe: 'owner-kernel-p0-execution-witness-controls',
   controls: {
     signed_payload_verified: true,
     tampered_payload_rejected: true,
+    namespace_pid_trace_verified: true,
     classifier_rejected_payload_self_claim: true,
     classifier_rejected_tampered_driver_marked_payload: true,
     classifier_accepted_driver_verified_payload: true,
+    classifier_accepted_codex_json_driver: true,
+    classifier_rejected_codex_json_driver_hash_mismatch: true,
+    classifier_rejected_codex_json_driver_shape_variants: badCodexJsonShapes.length,
   },
 }, null, 2) + '\n');

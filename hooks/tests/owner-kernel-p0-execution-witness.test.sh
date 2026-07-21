@@ -163,4 +163,22 @@ assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "--effort" "driver passes C
 assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "high" "driver passes Claude effort value"
 assert_contains "$(cat "$TEST_TMP/claude-args.txt")" "bypassPermissions" "driver passes Claude bypass permission mode"
 
+DRIVER_CLAUDE_DEFAULT_OUT="$TEST_TMP/driver-claude-default-model.json"
+DRIVER_CLAUDE_DEFAULT_ERR="$TEST_TMP/driver-claude-default-model.err"
+STUB_CLAUDE_ARGS_FILE="$TEST_TMP/claude-default-args.txt" PATH="$STUB_BIN:$PATH" bash "$DRIVER" \
+  --only claude-code --mode default --model opus --effort high --timeout 15 --out "$DRIVER_CLAUDE_DEFAULT_OUT" \
+  >"$TEST_TMP/driver-claude-default-model.stdout" 2>"$DRIVER_CLAUDE_DEFAULT_ERR"
+DRIVER_CLAUDE_DEFAULT_RC=$?
+
+assert_exit_code "$DRIVER_CLAUDE_DEFAULT_RC" 0 "driver accepts default-mode model-pinned Claude Code probe"
+assert_eq "$(jq -r '.hosts[0].harness' "$DRIVER_CLAUDE_DEFAULT_OUT")" "claude-code" "driver records default-mode Claude Code harness"
+assert_eq "$(jq -r '.variant.model' "$DRIVER_CLAUDE_DEFAULT_OUT")" "opus" "driver records default-mode pinned Claude model"
+assert_eq "$(jq -r '.variant.effort' "$DRIVER_CLAUDE_DEFAULT_OUT")" "high" "driver records default-mode pinned Claude effort"
+assert_contains "$(cat "$TEST_TMP/claude-default-args.txt")" "--model" "driver passes default-mode Claude --model"
+assert_contains "$(cat "$TEST_TMP/claude-default-args.txt")" "opus" "driver passes default-mode Claude model value"
+assert_contains "$(cat "$TEST_TMP/claude-default-args.txt")" "--effort" "driver passes default-mode Claude effort flag"
+assert_contains "$(cat "$TEST_TMP/claude-default-args.txt")" "high" "driver passes default-mode Claude effort value"
+assert_not_contains "$(cat "$TEST_TMP/claude-default-args.txt")" "bypassPermissions" "driver omits Claude bypass permission mode in default mode"
+assert_contains "$(jq -r '.hosts[0].command' "$DRIVER_CLAUDE_DEFAULT_OUT")" "(default permission mode)" "driver command records Claude default mode"
+
 finalize_test

@@ -271,6 +271,41 @@ assert.equal(agySelfDisableClass.roots.R4.verdict, 'pass');
 assert.equal(agySelfDisableClass.tier, 'none');
 assert(!agySelfDisableClass.missing_operations.some((m) => m.includes('self-disable')));
 
+const claudeSelfDisableDir = path.join(tmp, 'claude-self-disable-denied');
+writeJson(path.join(claudeSelfDisableDir, 'harness-capability-default-mode.json'), hostDoc('default', {
+  ...agyDefaultDeniedHost,
+  harness: 'claude-code',
+  default_self_disable_attempt: {
+    ...agyDefaultDeniedHost.default_self_disable_attempt,
+    settings_file: 'claude-code/settings.local.json',
+  },
+}));
+writeJson(path.join(claudeSelfDisableDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', {
+  ...agyBypassHost,
+  harness: 'claude-code',
+}));
+const claudeSelfDisableClass = classify(classifier, claudeSelfDisableDir).hosts.find((h) => h.harness === 'claude-code');
+assert.equal(claudeSelfDisableClass.roots.R2.verdict, 'fail');
+assert.equal(claudeSelfDisableClass.roots.R3.verdict, 'suspect');
+assert.equal(claudeSelfDisableClass.roots.R3.basis, 'permission_prompt_plus_bypass_with_self_disable_denial');
+assert.equal(claudeSelfDisableClass.roots.R4.verdict, 'pass');
+assert.equal(claudeSelfDisableClass.tier, 'none');
+assert(!claudeSelfDisableClass.missing_operations.some((m) => m.includes('self-disable')));
+
+const mismatchedSelfDisableDir = path.join(tmp, 'mismatched-self-disable-settings-file');
+writeJson(path.join(mismatchedSelfDisableDir, 'harness-capability-default-mode.json'), hostDoc('default', {
+  ...agyDefaultDeniedHost,
+  default_self_disable_attempt: {
+    ...agyDefaultDeniedHost.default_self_disable_attempt,
+    settings_file: 'claude-code/settings.local.json',
+  },
+}));
+writeJson(path.join(mismatchedSelfDisableDir, 'harness-capability-bypass-mode.json'), hostDoc('bypass', agyBypassHost));
+const mismatchedSelfDisableClass = classify(classifier, mismatchedSelfDisableDir).hosts.find((h) => h.harness === 'agy');
+assert.equal(mismatchedSelfDisableClass.tier, 'unverified');
+assert.equal(mismatchedSelfDisableClass.roots.R3.basis, 'permission_prompt_plus_separate_bypass_payload');
+assert(mismatchedSelfDisableClass.missing_operations.some((m) => m.includes('self-disable')));
+
 const badSelfDisableDir = path.join(tmp, 'agy-bad-self-disable');
 writeJson(path.join(badSelfDisableDir, 'harness-capability-default-mode.json'), hostDoc('default', {
   ...agyDefaultDeniedHost,
@@ -373,6 +408,8 @@ process.stdout.write(JSON.stringify({
     classifier_accepted_fdwrite_verified_payload: true,
     classifier_rejected_bad_fdwrite_driver: true,
     classifier_accepted_agy_self_disable_denial_for_none: true,
+    classifier_accepted_claude_self_disable_denial_for_none: true,
+    classifier_rejected_mismatched_self_disable_settings_file: true,
     classifier_rejected_malformed_agy_self_disable_attempt: true,
     classifier_accepted_codex_json_driver: true,
     classifier_rejected_codex_json_driver_hash_mismatch: true,

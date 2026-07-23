@@ -26,6 +26,21 @@ function requireNonEmptyString(value, label) {
   return value;
 }
 
+function requireProtocolToken(value, label) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
+    fail(`${label} must be a bounded protocol token`);
+  }
+  return value;
+}
+
+function normalizeFamily(value, label) {
+  const family = requireNonEmptyString(value, label).trim().toLowerCase();
+  if (!/^[a-z0-9._:-]{1,128}$/.test(family)) {
+    fail(`${label} must be a canonical family identifier`);
+  }
+  return family;
+}
+
 function requireIsoTimestamp(value, label) {
   requireNonEmptyString(value, label);
   const parsed = new Date(value);
@@ -87,7 +102,7 @@ function normalizeRosterEntry(raw, label, role) {
     identity: requireNonEmptyString(value.identity, `${label}.identity`),
     model_alias: requireNonEmptyString(value.model_alias, `${label}.model_alias`),
     model_version: typeof value.model_version === 'string' ? value.model_version : null,
-    family: requireNonEmptyString(value.family, `${label}.family`),
+    family: normalizeFamily(value.family, `${label}.family`),
     runner: requireNonEmptyString(value.runner, `${label}.runner`),
     role,
     attestation: normalizeAttestation(value.attestation, `${label}.attestation`),
@@ -232,9 +247,10 @@ function resolveGovernancePolicy(config, options = {}) {
 
 function freezeAcceptanceContract(raw) {
   const contract = requireObject(raw, 'acceptance contract');
+  if (contract.schema_version === 2) return freezeAcceptanceContractV2(contract);
   rejectUnknownKeys(contract, new Set(['schema_version', 'contract_id', 'legs']), 'acceptance contract');
   if (contract.schema_version !== 1) {
-    throw new OwnerKernelError('acceptance contract.schema_version must equal 1', 'INVALID_ACCEPTANCE_CONTRACT');
+    throw new OwnerKernelError('acceptance contract.schema_version must equal 1 or 2', 'INVALID_ACCEPTANCE_CONTRACT');
   }
   const contractId = requireNonEmptyString(contract.contract_id, 'acceptance contract.contract_id');
   if (!Array.isArray(contract.legs) || contract.legs.length === 0) {
@@ -279,6 +295,96 @@ function freezeAcceptanceContract(raw) {
     };
   });
   const frozen = cloneCanonical({ schema_version: 1, contract_id: contractId, legs });
+  return {
+    contract: frozen,
+    contract_hash: sha256(canonicalJson(frozen)),
+  };
+}
+
+function freezeAcceptanceContractV2(contract) {
+  rejectUnknownKeys(contract, new Set(['schema_version', 'contract_id', 'artifacts', 'legs']), 'acceptance contract');
+  const contractId = requireNonEmptyString(contract.contract_id, 'acceptance contract.contract_id');
+  if (!Array.isArray(contract.artifacts) || contract.artifacts.length === 0) {
+    throw new OwnerKernelError('acceptance contract.artifacts must be a non-empty array', 'INVALID_ACCEPTANCE_CONTRACT');
+  }
+  if (!Array.isArray(contract.legs) || contract.legs.length === 0) {
+    throw new OwnerKernelError('acceptance contract.legs must be a non-empty array', 'INVALID_ACCEPTANCE_CONTRACT');
+  }
+  const artifactIds = new Set();
+  const artifacts = contract.artifacts.map((rawArtifact, index) => {
+    const artifact = requireObject(rawArtifact, `acceptance contract.artifacts[${index}]`);
+    rejectUnknownKeys(artifact, new Set(['id', 'target']), `acceptance contract.artifacts[${index}]`);
+    const id = requireProtocolToken(artifact.id, `acceptance contract.artifacts[${index}].id`);
+    if (artifactIds.has(id)) {
+      throw new OwnerKernelError(`acceptance contract has duplicate artifact id "${id}"`, 'INVALID_ACCEPTANCE_CONTRACT');
+    }
+    if (typeof artifact.target !== 'string' || artifact.target.trim().length === 0 || /[*?]/.test(artifact.target)) {
+      throw new OwnerKernelError(
+        `acceptance contract.artifacts[${index}].target must be a bounded non-wildcard target`,
+        'INVALID_ACCEPTANCE_CONTRACT',
+      );
+    }
+    artifactIds.add(id);
+    return { id, target: artifact.target };
+  }).sort((left, right) => left.id.localeCompare(right.id));
+  const legIds = new Set();
+  const legs = contract.legs.map((rawLeg, index) => {
+    const leg = requireObject(rawLeg, `acceptance contract.legs[${index}]`);
+    rejectUnknownKeys(leg, new Set(['id', 'kind', 'command', 'artifact_ids']), `acceptance contract.legs[${index}]`);
+    const id = requireProtocolToken(leg.id, `acceptance contract.legs[${index}].id`);
+    if (legIds.has(id)) {
+      throw new OwnerKernelError(`acceptance contract has duplicate leg id "${id}"`, 'INVALID_ACCEPTANCE_CONTRACT');
+    }
+    legIds.add(id);
+    const hasCommand = Object.prototype.hasOwnProperty.call(leg, 'command');
+    const derivedKind = hasCommand ? 'executable' : 'non_executable';
+    if (leg.kind !== derivedKind) {
+      throw new OwnerKernelError(
+        `acceptance contract.legs[${index}].kind must be mechanically derived from command presence`,
+        'INVALID_ACCEPTANCE_CONTRACT',
+      );
+    }
+    if (hasCommand && (typeof leg.command !== 'string' || leg.command.trim().length === 0)) {
+      throw new OwnerKernelError(`acceptance contract.legs[${index}].command must be non-empty`, 'INVALID_ACCEPTANCE_CONTRACT');
+    }
+    if (!Array.isArray(leg.artifact_ids) || leg.artifact_ids.length === 0) {
+      throw new OwnerKernelError(`acceptance contract.legs[${index}].artifact_ids must be a non-empty array`, 'INVALID_ACCEPTANCE_CONTRACT');
+    }
+    const seen = new Set();
+    const artifactIdsForLeg = leg.artifact_ids.map((artifactId, artifactIndex) => {
+      const value = requireProtocolToken(
+        artifactId,
+        `acceptance contract.legs[${index}].artifact_ids[${artifactIndex}]`,
+      );
+      if (!artifactIds.has(value)) {
+        throw new OwnerKernelError(
+          `acceptance contract.legs[${index}].artifact_ids references unknown artifact "${value}"`,
+          'INVALID_ACCEPTANCE_CONTRACT',
+        );
+      }
+      if (seen.has(value)) {
+        throw new OwnerKernelError(`acceptance contract.legs[${index}].artifact_ids has duplicate artifact id`, 'INVALID_ACCEPTANCE_CONTRACT');
+      }
+      seen.add(value);
+      return value;
+    }).sort();
+    return {
+      id,
+      kind: derivedKind,
+      ...(hasCommand ? { command: leg.command } : {}),
+      artifact_ids: artifactIdsForLeg,
+    };
+  }).sort((left, right) => left.id.localeCompare(right.id));
+  const referencedArtifactIds = new Set(legs.flatMap((leg) => leg.artifact_ids));
+  for (const artifact of artifacts) {
+    if (!referencedArtifactIds.has(artifact.id)) {
+      throw new OwnerKernelError(
+        `acceptance contract artifact "${artifact.id}" is not covered by any acceptance leg`,
+        'INVALID_ACCEPTANCE_CONTRACT',
+      );
+    }
+  }
+  const frozen = cloneCanonical({ schema_version: 2, contract_id: contractId, artifacts, legs });
   return {
     contract: frozen,
     contract_hash: sha256(canonicalJson(frozen)),

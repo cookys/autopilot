@@ -119,7 +119,9 @@ function main() {
     if (!options.ledger || Object.keys(options).some((key) => key !== 'ledger')) {
       throw new Error(`${command} requires --ledger`);
     }
-    const verified = verifyLedger(readLedger(options.ledger));
+    const verified = verifyLedger(readLedger(options.ledger), {
+      allowUnverifiedAcceptanceProof: true,
+    });
     if (command === 'verify') {
       emit({
         status: 'structural_valid',
@@ -127,6 +129,7 @@ function main() {
         event_count: verified.event_count,
         ledger_head: verified.state.event_head,
         witness_status: 'receipt_chain_structural_only',
+        acceptance_proof: verified.acceptance_proof_unverified ? 'unverified' : 'not_applicable_or_verified',
         production_activation: 'blocked_without_external_witness_adapter',
       });
       return;
@@ -140,10 +143,23 @@ function main() {
         current_intent_id: verified.state.current_intent_id,
         ledger_head: verified.state.event_head,
         blocked_since: verified.state.blocked_since,
+        acceptance_attempt: verified.state.acceptance_attempt
+          ? {
+            attempt_id: verified.state.acceptance_attempt.attempt_id,
+            status: verified.state.acceptance_attempt.status,
+          }
+          : null,
+        acceptance_recovery_required: Boolean(verified.state.acceptance_attempt
+          && verified.state.acceptance_attempt.status === 'pending'),
+        acceptance_proof: verified.acceptance_proof_unverified ? 'unverified' : 'not_applicable_or_verified',
       });
       return;
     }
-    emit({ status: 'ok', disclosure: deriveDisclosure(verified.state) });
+    emit({
+      status: 'ok',
+      disclosure: deriveDisclosure(verified.state),
+      acceptance_proof: verified.acceptance_proof_unverified ? 'unverified' : 'not_applicable_or_verified',
+    });
   } catch (error) {
     fail(error && error.message ? error.message : String(error));
   }

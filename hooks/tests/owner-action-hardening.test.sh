@@ -686,15 +686,8 @@ async function main() {
   )));
 
   const challengedControls = { calls: 0, hold: false, release: null, last_request: null };
-  const challenged = startAuthorityRun('challenge-gate', challengedControls, { challenge: true });
-  const challengedDecision = mintWrite(challenged.kernel, challenged.owner_capability, 'challenge', 'tmp/challenge.txt');
-  await assert.rejects(
-    challenged.kernel.executeAuthorizedAction({
-      decisionId: challengedDecision.payload.decision_id,
-      action: { operation: 'write_file', tool_class: 'filesystem', targets: ['tmp/challenge.txt'] },
-    }),
-    /requires challenge evidence/i,
-  );
+  assert.throws(() => startAuthorityRun('challenge-gate', challengedControls, { challenge: true }),
+    /challenge-required.*schema_version 2 acceptance protocol/i);
   assert.equal(challengedControls.calls, 0);
 
   const abortControls = { calls: 0, hold: true, honor_abort: true, release: null, last_request: null };

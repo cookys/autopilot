@@ -33,7 +33,14 @@
         "decision",
         "evidence",
         "checkpoint",
+        "acceptance_attempt",
+        "acceptance_resolution",
         "acceptance",
+        "complete",
+        "terminal_control",
+        "abort_request",
+        "delegation",
+        "recovery",
         "suspension",
         "principal_change",
         "translation_used"
@@ -45,7 +52,7 @@
       "additionalProperties": false,
       "required": ["kind", "identity", "channel"],
       "properties": {
-        "kind": { "type": "string", "enum": ["user", "owner", "kernel", "runner", "translation"] },
+        "kind": { "type": "string", "enum": ["user", "owner", "kernel", "runner", "challenger", "translation"] },
         "identity": { "type": "string", "minLength": 1 },
         "channel": { "type": "string", "minLength": 1 }
       }
@@ -53,6 +60,7 @@
     "policy_hash": { "$ref": "#/$defs/sha256" },
     "contract_hash": { "$ref": "#/$defs/sha256" },
     "authority_hash": { "$ref": "#/$defs/sha256" },
+    "acceptance_authority_hash": { "$ref": "#/$defs/sha256" },
     "payload": { "type": "object" },
     "prev_event_hash": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
     "content_hash": { "$ref": "#/$defs/sha256" },
@@ -74,13 +82,23 @@
         "sequence": { "type": "integer", "minimum": 1 },
         "event_hash": { "$ref": "#/$defs/sha256" },
         "previous_witness_head": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
-        "witness_head": { "$ref": "#/$defs/sha256" }
+        "witness_head": { "$ref": "#/$defs/sha256" },
+        "batch_id": { "type": "string", "minLength": 1 },
+        "batch_index": { "type": "integer", "minimum": 0 },
+        "batch_size": { "type": "integer", "minimum": 1 },
+        "batch_event_hashes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "batch_commitment": { "$ref": "#/$defs/sha256" },
+        "coordinator_commitment": { "type": "object" }
       }
     }
   },
   "allOf": [
     {
-      "if": { "properties": { "type": { "enum": ["intent", "approval"] } }, "required": ["type"] },
+      "if": { "properties": { "type": { "enum": ["intent", "approval", "abort_request"] } }, "required": ["type"] },
       "then": { "properties": { "emitter": { "properties": { "kind": { "const": "user" } } } } }
     },
     {
@@ -88,8 +106,24 @@
       "then": { "properties": { "emitter": { "properties": { "kind": { "const": "owner" } } } } }
     },
     {
-      "if": { "properties": { "type": { "enum": ["evidence", "checkpoint", "acceptance"] } }, "required": ["type"] },
+      "if": { "properties": { "type": { "const": "evidence" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "enum": ["kernel", "runner", "challenger"] } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["checkpoint", "acceptance"] } }, "required": ["type"] },
       "then": { "properties": { "emitter": { "properties": { "kind": { "enum": ["kernel", "runner"] } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["acceptance_attempt", "acceptance_resolution"] } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "kernel" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "complete" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "kernel" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "terminal_control" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "user" } } } } }
     },
     {
       "if": { "properties": { "type": { "enum": ["suspension", "principal_change"] } }, "required": ["type"] },
@@ -98,6 +132,10 @@
     {
       "if": { "properties": { "type": { "const": "translation_used" } }, "required": ["type"] },
       "then": { "properties": { "emitter": { "properties": { "kind": { "const": "translation" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["delegation", "recovery"] } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "owner" } } } } }
     },
     {
       "if": { "properties": { "type": { "const": "abort" } }, "required": ["type"] },

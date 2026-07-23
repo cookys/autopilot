@@ -108,8 +108,16 @@ Kernel. Configuration alone never grants that authority.
 
 Each `(operation, tool_class)` pair is unique. The Kernel hashes an exact command when required and only
 accepts a finite, explicitly enumerated target set. An owner can raise a catalog action class but cannot
-lower it. `requires_mediator` requires a broker-only host route. `requires_challenge` is currently a
-fail-closed reservation: P2b must supply qualified challenge evidence before such an action can execute.
+lower it. `requires_mediator` requires a broker-only host route. `requires_challenge` is valid only with
+an acceptance-contract schema version 2: startup rejects a v1 contract because it cannot serialize the
+candidate-manifest-bound challenge proof. Historical v1 ledgers can still replay, but cannot authorize
+such an action. It requires a typed, qualified independent `action` challenge before the action executes.
+The challenge is bound to the frozen action descriptor hash and to the candidate manifest from the latest
+complete coordinator audit that covers the current action footprint. A clear finding for an older or
+different manifest cannot mint or execute the action; a blocking finding vetoes execution.
+A clear finding must remain current when it is used. A blocking action finding that was qualified when
+witnessed remains a durable veto for its frozen intent, descriptor, and candidate tuple; challenger expiry
+cannot turn it into an authorization bypass.
 
 The injected authority must provide a current content-addressed host-capability descriptor, nonce-bound
 host capability verifier, independently identified and attested receipt verifier and executor, and an
@@ -123,9 +131,65 @@ proposed claim, witness head, capability, descriptor, executor, and boundary aud
 direct executor or broker receives the full witnessed claim plus both raw bearer values and must atomically
 consume or revoke them at its durable effect boundary. Receipts and independent verification bind their
 hashes, effect ID/state/time, and cancellation acknowledgement; raw bearer values do not enter the ledger.
-An unresolved host claim blocks control-plane changes and another Kernel resume until the P2 recovery path
-settles it.
+An unresolved host claim blocks control-plane changes. For a schema-v2 acceptance run, resume asks a
+separately bound receipt-reconciliation adapter to settle the old claim as `unknown`; it never retries the
+side effect or receives the original raw permit/authorization. A second typed receipt reconciliation must
+then establish the final outcome before acceptance can continue. A schema-v1 action ledger remains
+non-resumable while its claim is pending.
 
 These are P2a protocol checks, not evidence that callback code is outside the model/workspace process or
 that a UID/attestation hash proves OS or IPC isolation. A production authority needs a trusted, bounded host
 adapter to enforce those properties; the current synchronous probe cannot be preempted by Kernel timers.
+
+## Serializable Acceptance Contract
+
+Schema version 2 opts a run into serializable acceptance. Version 1 ledgers remain replayable for
+compatibility, but `accept()` is unavailable for them because their artifact-hash shape cannot bind a final
+delivery snapshot.
+
+```json
+{
+  "schema_version": 2,
+  "contract_id": "release-artifact",
+  "artifacts": [
+    { "id": "workspace", "target": "dist/workspace.tar" }
+  ],
+  "legs": [
+    {
+      "id": "tests",
+      "kind": "executable",
+      "command": "node --test",
+      "artifact_ids": ["workspace"]
+    },
+    {
+      "id": "design-review",
+      "kind": "non_executable",
+      "artifact_ids": ["workspace"]
+    }
+  ]
+}
+```
+
+`kind` is mechanically derived: a leg with `command` is `executable`; one without it is
+`non_executable`. Artifacts and targets are finite and non-wildcard. The host injects an
+`acceptanceAuthority` separately from project JSON. It must be independent from the action verifier,
+executor, receipt verifier, broker, and witness, and exposes `acquire()`, `commit()`, `requestAbort()`,
+`cancel()`, `resolveAttempt()`, synchronous `verifyCommit()` / `verifyResolution()`, and `release()` for
+a fenced, host-owned candidate/delivery lease.
+
+The coordinator snapshot binds the run, transaction ID, fence, exact candidate and delivered manifests,
+audit head, current event head, current witness head, timestamp, and snapshot hash. Candidate and delivered
+manifests must match exactly. The witness must additionally implement atomic `appendBatchIfHead()`; only an
+atomic `acceptance` plus `complete` pair is terminal. The complete acceptance-authority header, including
+its witness binding, is hashed into every schema-v2 event, so replacing a coordinator header cannot replay
+an unfinished ledger under another coordinator.
+
+Acceptance requires a clear qualified challenge for every schema-v2 leg and green trusted verification for
+every executable leg, no blocking challenge, a complete coordinator-bound audit reconciliation, no
+pending or unreconciled action claim, the exact final artifact manifest, an active qualified owner, and no
+authenticated abort request. Generic evidence and self-review are advisory only.
+
+The coordinator/witness adapter is a trusted protocol boundary, not a proof of process isolation. It must
+enforce lease expiry, durable control ordering, and atomic batch/readback semantics outside the model
+process. If an acquire or batch result is ambiguous, the Kernel does not guess or replay the side effect;
+the host must recover from its durable witness/ledger record before another attempt.

@@ -133,7 +133,7 @@ governance validator, decision script, review schema, or review dispatcher is ad
 |---|---|---|
 | `project-config-template/governance-config.md` | Add | Project mode, red lines, approval classes, conservative profile, and run override syntax. The resolved policy is hash-pinned at intake. Replaces per-run involvement/scope/topology startup questions. |
 | `.claude/governance-config.md` | Add | Self-hosted policy for shadow and dogfood. |
-| `schemas/owner-event.schema.json` | Add | One hash-chained union for `intent`, `decision`, `approval`, `abort`, `evidence`, `principal_change`, `suspension`, `checkpoint`, `acceptance`, and non-authoritative `translation_used`, including emitter provenance and per-type minting constraints; unifies intent/decision/approval/evidence typing. |
+| `schemas/owner-event.schema.json` | Add | One hash-chained union for `intent`, `decision`, `approval`, `abort`, `abort_request`, `evidence`, `delegation`, `recovery`, `principal_change`, `suspension`, `checkpoint`, `acceptance`, `complete`, and non-authoritative `translation_used`, including emitter provenance and per-type minting constraints; unifies intent/decision/approval/evidence typing. |
 | `src/engine/owner-kernel/` | Add | Cohesive package: `index.js` public API plus narrowly scoped `policy.js`, `events.js`, `transitions.js`, `authority.js`, `acceptance.js`, `reconciliation.js`, `disclosure.js`, and `compatibility.js`. Compatibility calls the fixed `events.js` API and cannot import acceptance/transitions; no module owns both event minting and acceptance. |
 | `scripts/owner-kernel.js` | Add | Thin CLI over the engine package: `resolve`, `verify`, `reconcile`, `status`, `disclose`, `translate-level`. It exposes no generic event append path; host adapters and Kernel internals call typed package APIs. This is the only `/lN` translation table. |
 | `src/engine/autopilot-engine.js` | Extend | Calls Owner Kernel while retaining worktree and runner seams. |
@@ -388,15 +388,26 @@ The remaining `🟠 Major` and `🟡 Minor` findings were accepted and regressio
 **Acceptance**: low-risk owner-led runs use one authority path; every accepted action reconciles with a
 classified event; assessment purpose cannot escalate its own authority; the acceptance predicate is exact.
 
-> **P2a implementation status (2026-07-23):** catalog classification, nonce-bound host capability evidence,
-> two-stage preclaim permits and postclaim authorizations, broker/direct execution, witness
-> compare-and-append, immutable host-verifier/executor/receipt-verifier/witness commitments, durable claims,
-> receipt reconciliation, independently verified cancellation acknowledgement, and pending-claim resume
-> exclusion are implemented. A pending claim cannot be superseded or revoked by a second control-plane event.
-> P2a validates a host protocol but does not prove callback process isolation, IPC credentials, or signed
-> attestations; a stalled synchronous adapter also cannot be preempted by Kernel timers. The exact acceptance
-> transaction, durable reconciliation/recovery and delegation transitions, and qualified challenge evidence
-> remain P2b; `requires_challenge` is fail-closed until then.
+> **P2 protocol-core implementation status (2026-07-23):** P2a catalog classification, nonce-bound host
+> capability evidence, two-stage preclaim permits/postclaim authorizations, broker/direct execution, witness
+> compare-and-append, immutable verifier/executor/receipt/witness commitments, durable claims, and
+> cancellation acknowledgement are implemented. P2b adds opt-in acceptance-contract v2, a separately bound
+> acceptance coordinator, coordinator-header commitment in every v2 event, typed verification/challenge/audit
+> evidence, an exact final-manifest predicate, atomic witnessed `acceptance` + `complete`, pending-claim
+> `unknown` recovery without effect replay, action receipt reconciliation, and bounded delegation/recovery
+> counters. A v1 pending claim remains non-resumable. This validates trusted adapter messages only: it does
+> not prove callback process isolation, IPC credentials, signed attestations, durable coordinator leasing, or
+> atomic witness readback. Those host properties remain required before a production claim; P3 integrates the
+> protocol with live action sinks and the supervised host path.
+>
+> **P2b hardening record (2026-07-23):** Coordinator attempts are durable, recoverable after a lost commit
+> response, and require a bounded abort/cancel/resolve protocol before a pending run can proceed. A v2
+> action requiring challenge freezes both its exact descriptor and the candidate set of the latest complete
+> coordinator audit for the current action footprint; stale, different-manifest, blocking, forged, or
+> checkpoint-divergent challenge evidence fails closed. A clear action challenge must remain current, while
+> a blocker qualified when witnessed remains durable for its frozen intent/descriptor/candidate tuple.
+> Historical v1 ledgers remain structurally replayable,
+> but a new or resumed `requires_challenge` action cannot mint or execute through the legacy protocol.
 
 #### State transition table
 
@@ -445,8 +456,8 @@ immediately re-enters `blocked` while any other required approval remains open.
    drains any earlier authenticated control event, computes the delivered/final hash set, evaluates the
    predicate on that exact head, and mints witnessed `acceptance` plus `complete` events before releasing
    the locks. The transaction has a bounded timeout. Timeout or witness outage releases both locks without
-   minting any event or retrying inside the transaction, leaves the run in its source state, and routes to
-   `blocked`; a false predicate routes mechanically to `recover` for remediable evidence failure or
+   minting any event or retrying inside the transaction, leaves the run in its source state for host-level
+   recovery; a false predicate routes mechanically to `recover` for remediable evidence failure or
    `blocked` for missing authority/availability. No state can be stranded in `accept`.
    Define the predicate exactly as:
 

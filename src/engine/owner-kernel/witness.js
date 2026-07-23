@@ -1,6 +1,6 @@
 'use strict';
 
-const { canonicalJson, isSha256, sha256 } = require('./canonical');
+const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./canonical');
 const { OwnerKernelError } = require('./errors');
 
 function requireReceiptField(receipt, name) {
@@ -68,6 +68,7 @@ class MemoryWitness {
     this.protocol_version = 1;
     this._head = null;
     this._receipts = [];
+    this._batches = new Map();
   }
 
   append(request) {
@@ -94,6 +95,91 @@ class MemoryWitness {
     }
     const { expected_witness_head: _expectedWitnessHead, ...appendRequest } = request;
     return this.append(appendRequest);
+  }
+
+  appendBatchIfHead(request) {
+    if (!request || typeof request !== 'object' || request.expected_witness_head !== this._head
+      || request.stream_id !== this.streamId || typeof request.run_id !== 'string'
+      || typeof request.batch_id !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(request.batch_id)
+      || !Array.isArray(request.events) || request.events.length === 0) {
+      throw new OwnerKernelError('invalid witness atomic batch request', 'INVALID_WITNESS_REQUEST');
+    }
+    const eventHashes = request.events.map((event) => event && event.event_hash);
+    const batchCommitment = sha256(canonicalJson({
+      run_id: request.run_id,
+      stream_id: this.streamId,
+      batch_id: request.batch_id,
+      expected_witness_head: request.expected_witness_head,
+      event_hashes: eventHashes,
+    }));
+    if (request.batch_commitment !== undefined && request.batch_commitment !== batchCommitment) {
+      throw new OwnerKernelError('witness atomic batch commitment does not match requested event set', 'INVALID_WITNESS_REQUEST');
+    }
+    if (request.coordinator_commitment !== undefined
+      && (!request.coordinator_commitment || typeof request.coordinator_commitment !== 'object'
+        || Array.isArray(request.coordinator_commitment))) {
+      throw new OwnerKernelError('witness atomic batch coordinator commitment is invalid', 'INVALID_WITNESS_REQUEST');
+    }
+    let previousWitnessHead = this._head;
+    const receipts = [];
+    for (const [index, event] of request.events.entries()) {
+      if (!event || typeof event !== 'object' || !isSha256(event.event_hash)
+        || !Number.isInteger(event.sequence) || event.sequence < 1) {
+        throw new OwnerKernelError('invalid witness atomic batch event', 'INVALID_WITNESS_REQUEST');
+      }
+      if (index > 0 && event.sequence !== request.events[index - 1].sequence + 1) {
+        throw new OwnerKernelError('witness atomic batch sequences must be contiguous', 'INVALID_WITNESS_REQUEST');
+      }
+      const receiptBase = {
+        run_id: request.run_id,
+        stream_id: this.streamId,
+        sequence: event.sequence,
+        event_hash: event.event_hash,
+        previous_witness_head: previousWitnessHead,
+      };
+      const receipt = {
+        ...receiptBase,
+        witness_head: sha256(canonicalJson(receiptBase)),
+        batch_id: request.batch_id,
+        batch_index: index,
+        batch_size: request.events.length,
+        batch_event_hashes: [...eventHashes],
+        batch_commitment: batchCommitment,
+        ...(request.coordinator_commitment === undefined
+          ? {}
+          : { coordinator_commitment: cloneCanonical(request.coordinator_commitment) }),
+      };
+      receipts.push(receipt);
+      previousWitnessHead = receipt.witness_head;
+    }
+    this._head = previousWitnessHead;
+    this._receipts.push(...receipts);
+    this._batches.set(batchCommitment, {
+      batch_id: request.batch_id,
+      receipts: receipts.map((receipt) => ({ ...receipt })),
+    });
+    return { receipts: receipts.map((receipt) => ({ ...receipt })) };
+  }
+
+  verifyBatch(receipts) {
+    if (!Array.isArray(receipts) || receipts.length === 0) return false;
+    const first = receipts[0];
+    if (!first || typeof first.batch_id !== 'string' || !Number.isInteger(first.batch_size)
+      || first.batch_size !== receipts.length || !Array.isArray(first.batch_event_hashes)
+      || !isSha256(first.batch_commitment)) return false;
+    const known = this._batches.get(first.batch_commitment);
+    if (!known || known.batch_id !== first.batch_id || known.receipts.length !== receipts.length) return false;
+    return receipts.every((receipt, index) => {
+      const expected = known.receipts[index];
+      return receipt && receipt.batch_id === first.batch_id
+        && receipt.batch_index === index
+        && receipt.batch_size === receipts.length
+        && canonicalJson(receipt.batch_event_hashes) === canonicalJson(first.batch_event_hashes)
+        && receipt.batch_commitment === first.batch_commitment
+        && receipt.event_hash === first.batch_event_hashes[index]
+        && canonicalJson(receipt) === canonicalJson(expected)
+        && this.verify(receipt);
+    });
   }
 
   verify(receipt) {
@@ -128,6 +214,7 @@ class MemoryWitness {
 function assertWitnessAdapter(witness, {
   allowTestWitness = false,
   requireCompareAndAppend = false,
+  requireBatch = false,
   requireBinding = false,
 } = {}) {
   if (!witness || typeof witness !== 'object'
@@ -157,6 +244,18 @@ function assertWitnessAdapter(witness, {
         'WITNESS_HEAD_REQUIRED',
       );
     }
+  }
+  if (requireBatch && typeof witness.appendBatchIfHead !== 'function') {
+    throw new OwnerKernelError(
+      'serializable acceptance requires witness.appendBatchIfHead() atomic batch compare-and-append',
+      'WITNESS_BATCH_REQUIRED',
+    );
+  }
+  if (requireBatch && typeof witness.verifyBatch !== 'function') {
+    throw new OwnerKernelError(
+      'serializable acceptance requires witness.verifyBatch() atomic batch receipt verification',
+      'WITNESS_BATCH_REQUIRED',
+    );
   }
   if (requireBinding) normalizeWitnessBinding(witness);
   return witness;

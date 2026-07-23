@@ -2,6 +2,11 @@
 
 const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./canonical');
 const {
+  assertSynchronousCoordinatorVerification,
+  normalizeAcceptanceAuthority,
+  normalizeAcceptanceAuthorityHeader,
+} = require('./acceptance');
+const {
   assertIndependentAuthorityBindings,
   normalizeFrozenExecutorBinding,
   normalizeFrozenHostCapabilityVerifierBinding,
@@ -209,6 +214,27 @@ function normalizeAuthorityHeader(raw) {
   return cloneCanonical(normalized);
 }
 
+function assertAcceptanceHeaderIndependence(authority, acceptanceAuthority) {
+  if (acceptanceAuthority === null) return;
+  const bindings = [
+    { role: 'acceptance coordinator', binding: acceptanceAuthority.binding },
+    { role: 'witness', binding: acceptanceAuthority.witness_binding },
+  ];
+  if (authority !== null) {
+    bindings.push(
+      { role: 'host capability verifier', binding: authority.host_capability_verifier_binding },
+      { role: 'executor', binding: authority.executor_binding },
+      { role: 'receipt verifier', binding: authority.receipt_verifier_binding },
+      ...(authority.host_capability.broker === null ? [] : [{ role: 'broker', binding: authority.host_capability.broker }]),
+    );
+  }
+  try {
+    assertIndependentAuthorityBindings(bindings, { label: 'ledger acceptance coordinator binding' });
+  } catch (error) {
+    ledgerError(error.message);
+  }
+}
+
 function createLedgerHeader({
   runId,
   policy,
@@ -219,6 +245,7 @@ function createLedgerHeader({
   capabilityNonceCommitment,
   createdAt,
   authority = null,
+  acceptanceAuthority = null,
 }) {
   validateRunId(runId);
   if (typeof witnessStreamId !== 'string' || witnessStreamId.length === 0) {
@@ -229,6 +256,7 @@ function createLedgerHeader({
   const normalizedPolicy = normalizeFrozenPolicy(policy);
   const normalizedContract = freezeAcceptanceContract(contract);
   const normalizedAuthority = normalizeAuthorityHeader(authority);
+  const normalizedAcceptanceAuthority = normalizeAcceptanceAuthorityHeader(acceptanceAuthority);
   const actionCatalog = Array.isArray(normalizedPolicy.policy.action_catalog)
     ? normalizedPolicy.policy.action_catalog
     : [];
@@ -238,6 +266,21 @@ function createLedgerHeader({
   if (actionCatalog.length === 0 && normalizedAuthority !== null) {
     ledgerError('a ledger authority is not allowed when the action catalog is empty');
   }
+  if (actionCatalog.some((entry) => entry.requires_challenge)
+    && normalizedContract.contract.schema_version !== 2) {
+    ledgerError('challenge-required catalog actions require a schema_version 2 acceptance protocol');
+  }
+  if (normalizedContract.contract.schema_version === 2 && normalizedAcceptanceAuthority === null) {
+    ledgerError('a schema_version 2 acceptance contract requires an acceptance authority');
+  }
+  if (normalizedContract.contract.schema_version === 1 && normalizedAcceptanceAuthority !== null) {
+    ledgerError('an acceptance authority is only allowed for a schema_version 2 acceptance contract');
+  }
+  if (normalizedAuthority !== null && normalizedAcceptanceAuthority !== null
+    && normalizedAuthority.witness_binding_hash !== normalizedAcceptanceAuthority.witness_binding_hash) {
+    ledgerError('action and acceptance authorities must bind the same witness identity and attestation');
+  }
+  assertAcceptanceHeaderIndependence(normalizedAuthority, normalizedAcceptanceAuthority);
   if (normalizedAuthority !== null) {
     try {
       validateHostCapabilityCoverage(normalizedPolicy.policy, normalizedAuthority.host_capability, new Date(createdAt));
@@ -262,6 +305,10 @@ function createLedgerHeader({
       authority: normalizedAuthority,
       authority_hash: sha256(canonicalJson(normalizedAuthority)),
     }),
+    ...(normalizedAcceptanceAuthority === null ? {} : {
+      acceptance_authority: normalizedAcceptanceAuthority,
+      acceptance_authority_hash: sha256(canonicalJson(normalizedAcceptanceAuthority)),
+    }),
   });
 }
 
@@ -280,6 +327,8 @@ function validateLedgerHeader(header) {
     'capability_nonce_commitment',
     'authority',
     'authority_hash',
+    'acceptance_authority',
+    'acceptance_authority_hash',
   ]);
   for (const key of Object.keys(header)) {
     if (!allowed.has(key)) ledgerError(`ledger header has unsupported key "${key}"`);
@@ -299,6 +348,7 @@ function validateLedgerHeader(header) {
     ledgerError('ledger header authority must be omitted when action authority is absent');
   }
   const authority = normalizeAuthorityHeader(header.authority);
+  const acceptanceAuthority = normalizeAcceptanceAuthorityHeader(header.acceptance_authority);
   const actionCatalog = Array.isArray(policy.policy.action_catalog) ? policy.policy.action_catalog : [];
   if (actionCatalog.length > 0 && authority === null) {
     ledgerError('a non-empty action catalog requires a ledger authority');
@@ -306,6 +356,17 @@ function validateLedgerHeader(header) {
   if (actionCatalog.length === 0 && authority !== null) {
     ledgerError('a ledger authority is not allowed when the action catalog is empty');
   }
+  if (contract.contract.schema_version === 2 && acceptanceAuthority === null) {
+    ledgerError('a schema_version 2 acceptance contract requires an acceptance authority');
+  }
+  if (contract.contract.schema_version === 1 && acceptanceAuthority !== null) {
+    ledgerError('an acceptance authority is only allowed for a schema_version 2 acceptance contract');
+  }
+  if (authority !== null && acceptanceAuthority !== null
+    && authority.witness_binding_hash !== acceptanceAuthority.witness_binding_hash) {
+    ledgerError('action and acceptance authorities must bind the same witness identity and attestation');
+  }
+  assertAcceptanceHeaderIndependence(authority, acceptanceAuthority);
   if (authority === null) {
     if (Object.prototype.hasOwnProperty.call(header, 'authority_hash')) {
       ledgerError('ledger header authority_hash must be omitted when action authority is absent');
@@ -322,6 +383,17 @@ function validateLedgerHeader(header) {
       ledgerError(`ledger authority host capability coverage is invalid: ${error.message}`);
     }
   }
+  if (acceptanceAuthority === null) {
+    if (Object.prototype.hasOwnProperty.call(header, 'acceptance_authority_hash')) {
+      ledgerError('ledger header acceptance_authority_hash must be omitted when acceptance authority is absent');
+    }
+  } else {
+    const acceptanceAuthorityHash = sha256(canonicalJson(acceptanceAuthority));
+    if (!Object.prototype.hasOwnProperty.call(header, 'acceptance_authority_hash')
+      || header.acceptance_authority_hash !== acceptanceAuthorityHash) {
+      ledgerError('ledger header acceptance_authority_hash does not match acceptance_authority');
+    }
+  }
   if (header.policy_hash !== policy.policy_hash || header.contract_hash !== contract.contract_hash) {
     ledgerError('ledger header policy or contract hash does not match frozen data');
   }
@@ -330,6 +402,7 @@ function validateLedgerHeader(header) {
     policy: policy.policy,
     contract: contract.contract,
     authority,
+    acceptanceAuthority,
   };
 }
 
@@ -361,21 +434,47 @@ function parseLedgerJsonl(source) {
   return { header, events };
 }
 
-function verifyLedger(ledger, { witness, requireWitness = false } = {}) {
+function verifyLedger(ledger, {
+  witness,
+  requireWitness = false,
+  acceptanceAuthority = null,
+  allowTestAcceptanceCoordinator = false,
+  allowWitnessAheadForPendingAttempt = false,
+  allowUnverifiedAcceptanceProof = false,
+} = {}) {
   const { header, policy, contract } = validateLedgerHeader(ledger.header);
   if (!Array.isArray(ledger.events)) ledgerError('ledger.events must be an array');
   if (requireWitness && !witness) {
     throw new OwnerKernelError('external witness adapter is required to verify this ledger', 'WITNESS_REQUIRED');
   }
-  if (header.authority && witness) {
+  if ((header.authority || header.acceptance_authority) && witness) {
     let witnessBinding;
     try {
       witnessBinding = normalizeWitnessBinding(witness);
     } catch (error) {
       ledgerError(`authority ledger witness binding is invalid: ${error.message}`);
     }
-    if (sha256(canonicalJson(witnessBinding)) !== header.authority.witness_binding_hash) {
+    const witnessBindingHash = sha256(canonicalJson(witnessBinding));
+    if (header.authority && witnessBindingHash !== header.authority.witness_binding_hash) {
       ledgerError('verification witness does not exactly match the intake-frozen authority binding');
+    }
+    if (header.acceptance_authority
+      && witnessBindingHash !== header.acceptance_authority.witness_binding_hash) {
+      ledgerError('verification witness does not exactly match the intake-frozen acceptance authority binding');
+    }
+  }
+  let verifiedAcceptanceAuthority = null;
+  if (acceptanceAuthority !== null && acceptanceAuthority !== undefined) {
+    try {
+      verifiedAcceptanceAuthority = normalizeAcceptanceAuthority(acceptanceAuthority, {
+        allowTestCoordinator: allowTestAcceptanceCoordinator,
+      });
+    } catch (error) {
+      ledgerError(`verification acceptance coordinator is invalid: ${error.message}`);
+    }
+    if (!header.acceptance_authority
+      || verifiedAcceptanceAuthority.binding_hash !== header.acceptance_authority.binding_hash) {
+      ledgerError('verification acceptance coordinator does not exactly match the intake-frozen binding');
     }
   }
   let state = makeInitialState(header);
@@ -388,6 +487,98 @@ function verifyLedger(ledger, { witness, requireWitness = false } = {}) {
     });
     state = applyEvent(state, event, policy);
   }
+  if (state.status === 'accept') {
+    ledgerError('ledger ends with an incomplete serializable acceptance batch');
+  }
+  const requiresCoordinatorVerification = Boolean(header.acceptance_authority
+    && ledger.events.some((event) => event.type === 'acceptance' || event.type === 'acceptance_resolution'));
+  const acceptanceProofVerified = !requiresCoordinatorVerification
+    || Boolean(witness && verifiedAcceptanceAuthority);
+  if (requiresCoordinatorVerification && !witness && !allowUnverifiedAcceptanceProof) {
+    ledgerError('serializable acceptance proof verification requires the authoritative witness adapter');
+  }
+  if (requiresCoordinatorVerification && !verifiedAcceptanceAuthority && !allowUnverifiedAcceptanceProof) {
+    ledgerError('serializable acceptance proof verification requires the intake-frozen acceptance coordinator');
+  }
+  if (header.acceptance_authority && witness) {
+    if (typeof witness.getHead !== 'function') {
+      ledgerError('serializable acceptance verification requires witness.getHead() readback');
+    }
+    if (typeof witness.verifyBatch !== 'function') {
+      ledgerError('serializable acceptance verification requires witness.verifyBatch()');
+    }
+    for (let index = 0; index < ledger.events.length; index += 1) {
+      if (ledger.events[index].type !== 'acceptance') continue;
+      const complete = ledger.events[index + 1];
+      if (!complete || complete.type !== 'complete'
+        || !witness.verifyBatch([ledger.events[index].witness, complete.witness])) {
+        ledgerError('serializable acceptance terminal receipts are not one verified atomic witness batch');
+      }
+      if (!verifiedAcceptanceAuthority) continue;
+      const commitment = ledger.events[index].witness.coordinator_commitment;
+      let commitmentVerified;
+      try {
+        commitmentVerified = assertSynchronousCoordinatorVerification(verifiedAcceptanceAuthority.verifyCommit({
+          run_id: header.run_id,
+          coordinator_binding_hash: header.acceptance_authority.binding_hash,
+          attempt_id: ledger.events[index].payload.attempt_id,
+          attempt_hash: ledger.events[index].payload.attempt_hash,
+          transaction_id: ledger.events[index].payload.transaction_id,
+          fence: ledger.events[index].payload.fence,
+          expected_event_head: ledger.events[index].payload.evaluated_event_head,
+          expected_witness_head: ledger.events[index].payload.evaluated_witness_head,
+          expected_intent_id: ledger.events[index].payload.intent_id,
+          snapshot_hash: ledger.events[index].payload.snapshot_hash,
+          snapshot_at: ledger.events[index].payload.snapshot_at,
+          batch: {
+            batch_id: ledger.events[index].witness.batch_id,
+            batch_commitment: ledger.events[index].witness.batch_commitment,
+            expected_witness_head: ledger.events[index].witness.previous_witness_head,
+            events: [ledger.events[index], complete].map((event) => ({
+              sequence: event.sequence,
+              event_hash: event.event_hash,
+              type: event.type,
+            })),
+          },
+          disposition: 'accepted',
+          coordinator_commitment: commitment,
+          receipts: [ledger.events[index].witness, complete.witness],
+        }), 'acceptance coordinator verifyCommit()');
+      } catch (error) {
+        ledgerError(`serializable acceptance coordinator commit verification failed: ${error.message}`);
+      }
+      if (commitmentVerified !== true && (!commitmentVerified || commitmentVerified.ok !== true)) {
+        ledgerError('serializable acceptance coordinator commit commitment did not verify');
+      }
+    }
+    for (const event of ledger.events) {
+      if (event.type !== 'acceptance_resolution') continue;
+      if (!verifiedAcceptanceAuthority) continue;
+      let resolutionVerified;
+      try {
+        resolutionVerified = assertSynchronousCoordinatorVerification(verifiedAcceptanceAuthority.verifyResolution({
+          run_id: header.run_id,
+          coordinator_binding_hash: header.acceptance_authority.binding_hash,
+          attempt_id: event.payload.attempt_id,
+          attempt_hash: event.payload.attempt_hash,
+          disposition: event.payload.disposition,
+          coordinator_resolution: event.payload.coordinator_resolution,
+        }), 'acceptance coordinator verifyResolution()');
+      } catch (error) {
+        ledgerError(`serializable acceptance coordinator resolution verification failed: ${error.message}`);
+      }
+      if (resolutionVerified !== true && (!resolutionVerified || resolutionVerified.ok !== true)) {
+        ledgerError('serializable acceptance coordinator resolution commitment did not verify');
+      }
+    }
+    const authoritativeHead = witness.getHead();
+    const mayBeAhead = allowWitnessAheadForPendingAttempt
+      && state.acceptance_attempt && state.acceptance_attempt.status === 'pending'
+      && authoritativeHead !== state.witness_head;
+    if (authoritativeHead !== state.witness_head && !mayBeAhead) {
+      ledgerError('ledger is not the complete authoritative witness stream');
+    }
+  }
   return {
     header,
     policy,
@@ -397,6 +588,12 @@ function verifyLedger(ledger, { witness, requireWitness = false } = {}) {
     state_projection_hash: sha256(canonicalJson(stateProjection(state))),
     event_count: ledger.events.length,
     witness_verified: Boolean(witness),
+    acceptance_proof_verified: acceptanceProofVerified,
+    acceptance_proof_unverified: requiresCoordinatorVerification && !acceptanceProofVerified,
+    witness_prefix_ahead: Boolean(header.acceptance_authority && witness
+      && allowWitnessAheadForPendingAttempt
+      && state.acceptance_attempt && state.acceptance_attempt.status === 'pending'
+      && witness.getHead() !== state.witness_head),
   };
 }
 

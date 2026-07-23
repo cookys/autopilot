@@ -12,7 +12,14 @@ const EVENT_TYPES = new Set([
   'decision',
   'evidence',
   'checkpoint',
+  'acceptance_attempt',
+  'acceptance_resolution',
   'acceptance',
+  'complete',
+  'terminal_control',
+  'abort_request',
+  'delegation',
+  'recovery',
   'suspension',
   'principal_change',
   'translation_used',
@@ -28,6 +35,7 @@ const EVENT_KEYS = new Set([
   'policy_hash',
   'contract_hash',
   'authority_hash',
+  'acceptance_authority_hash',
   'payload',
   'prev_event_hash',
   'content_hash',
@@ -72,9 +80,17 @@ function assertEmitter(value, eventType) {
   const valid = (
     ((eventType === 'intent' || eventType === 'approval') && kind === 'user')
     || (eventType === 'abort' && (kind === 'user' || kind === 'kernel'))
+    || (eventType === 'abort_request' && kind === 'user')
     || (eventType === 'decision' && kind === 'owner')
-    || (eventType === 'evidence' && (kind === 'kernel' || kind === 'runner'))
-    || ((eventType === 'checkpoint' || eventType === 'acceptance') && (kind === 'kernel' || kind === 'runner'))
+    || (eventType === 'evidence' && (kind === 'kernel' || kind === 'runner' || kind === 'challenger'))
+    || (eventType === 'checkpoint' && (kind === 'kernel' || kind === 'runner'))
+    || ((eventType === 'acceptance_attempt' || eventType === 'acceptance_resolution') && kind === 'kernel')
+    // Legacy v1 acceptance remains replayable from historical runner-minted ledgers.
+    // State validation narrows v2 acceptance/complete to the bound Owner Kernel channel.
+    || (eventType === 'acceptance' && (kind === 'kernel' || kind === 'runner'))
+    || (eventType === 'complete' && kind === 'kernel')
+    || (eventType === 'terminal_control' && kind === 'user')
+    || ((eventType === 'delegation' || eventType === 'recovery') && kind === 'owner')
     || (eventType === 'suspension' && kind === 'kernel')
     || (eventType === 'principal_change' && kind === 'kernel')
     || (eventType === 'translation_used' && kind === 'translation')
@@ -98,6 +114,9 @@ function eventContent(event) {
     ...(Object.prototype.hasOwnProperty.call(event, 'authority_hash')
       ? { authority_hash: event.authority_hash }
       : {}),
+    ...(Object.prototype.hasOwnProperty.call(event, 'acceptance_authority_hash')
+      ? { acceptance_authority_hash: event.acceptance_authority_hash }
+      : {}),
     payload: event.payload,
   };
 }
@@ -111,6 +130,7 @@ function prepareEvent({
   policyHash,
   contractHash,
   authorityHash,
+  acceptanceAuthorityHash,
   payload,
   prevEventHash,
 }) {
@@ -124,6 +144,7 @@ function prepareEvent({
     policy_hash: policyHash,
     contract_hash: contractHash,
     ...(authorityHash === undefined ? {} : { authority_hash: authorityHash }),
+    ...(acceptanceAuthorityHash === undefined ? {} : { acceptance_authority_hash: acceptanceAuthorityHash }),
     payload: cloneCanonical(payload),
     prev_event_hash: prevEventHash,
   };
@@ -145,6 +166,7 @@ function buildEvent({
   policyHash,
   contractHash,
   authorityHash,
+  acceptanceAuthorityHash,
   payload,
   prevEventHash,
   witness,
@@ -158,6 +180,7 @@ function buildEvent({
     policyHash,
     contractHash,
     authorityHash,
+    acceptanceAuthorityHash,
     payload,
     prevEventHash,
   });
@@ -191,6 +214,10 @@ function validateEventShape(event, options = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(value, 'authority_hash') && !isSha256(value.authority_hash)) {
     eventError('event.authority_hash must be a SHA-256 digest when present');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'acceptance_authority_hash')
+    && !isSha256(value.acceptance_authority_hash)) {
+    eventError('event.acceptance_authority_hash must be a SHA-256 digest when present');
   }
   assertPlainObject(value.payload, 'event.payload');
   canonicalJson(value.payload);
@@ -256,6 +283,14 @@ function verifyEvent(event, { header, previousEventHash, previousWitnessHead, wi
     } else if (!Object.prototype.hasOwnProperty.call(event, 'authority_hash')
       || event.authority_hash !== header.authority_hash) {
       eventError('event authority_hash does not match the ledger authority commitment');
+    }
+    if (header.acceptance_authority_hash === undefined) {
+      if (Object.prototype.hasOwnProperty.call(event, 'acceptance_authority_hash')) {
+        eventError('legacy ledger event must not contain acceptance_authority_hash');
+      }
+    } else if (!Object.prototype.hasOwnProperty.call(event, 'acceptance_authority_hash')
+      || event.acceptance_authority_hash !== header.acceptance_authority_hash) {
+      eventError('event acceptance_authority_hash does not match the ledger acceptance authority commitment');
     }
   }
   if (event.witness.previous_witness_head !== previousWitnessHead) {

@@ -21,6 +21,16 @@ const {
 } = require('./engine-lifecycle-observation');
 
 const {
+  BoundedUnixLifecycleObserver,
+  EXTERNAL_LIFECYCLE_WITNESS_PROTOCOL_VERSION,
+  ExternalLifecycleWitnessDaemon,
+  createBoundedUnixLifecycleObserver,
+  invokeSocketRequest,
+  normalizeClientConfig: normalizeExternalLifecycleWitnessClientConfig,
+  normalizeDaemonConfig: normalizeExternalLifecycleWitnessDaemonConfig,
+} = require('./external-lifecycle-witness');
+
+const {
   resolveReviewLoop,
   resolveReviewLoopJson,
   parseReviewLoopOutput,
@@ -34,11 +44,15 @@ const ownerKernel = require('./owner-kernel');
 
 module.exports = {
   AutopilotEngine,
+  BoundedUnixLifecycleObserver,
   ENGINE_LIFECYCLE_OBSERVATION_SCHEMA_VERSION,
+  EXTERNAL_LIFECYCLE_WITNESS_PROTOCOL_VERSION,
   OBSERVATION_DISCLOSURE,
   EngineLifecycleObservationSession,
+  ExternalLifecycleWitnessDaemon,
   buildImplementationArgs,
   buildReviewArgs,
+  createBoundedUnixLifecycleObserver,
   createEngineLifecycleObservationSession,
   reviewLoopResultBlocked,
   reviewResultBlocked,
@@ -47,6 +61,8 @@ module.exports = {
   validateExtraReviewArgs,
   validateReviewRoster,
   normalizeEngineLifecycleObservationConfig,
+  normalizeExternalLifecycleWitnessClientConfig,
+  normalizeExternalLifecycleWitnessDaemonConfig,
   resolveReviewLoop,
   resolveReviewLoopJson,
   parseReviewLoopOutput,
@@ -54,5 +70,6 @@ module.exports = {
   findJsonObjectCandidates,
   looksLikeReviewLoopConfig,
   RESOLVE_REVIEW_LOOP,
+  invokeSocketRequest,
   ...ownerKernel,
 };

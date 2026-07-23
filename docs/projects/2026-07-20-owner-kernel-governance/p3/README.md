@@ -64,6 +64,61 @@ This is an observability seam for a future supervised host, not evidence of auth
 durable external witnessing, side-effect mediation, or v2 acceptance. It cannot be used to retire
 aliases or satisfy the full P3 gate.
 
+## P3.2 Bounded External Lifecycle Witness Transport
+
+`src/engine/external-lifecycle-witness.js` supplies an optional **Linux-local** transport
+implementation for the P3.1 observer. It requires `/usr/bin/flock` and `/proc/self/fd`, runs a
+separate Node process on a Unix-domain socket, and exposes only `open`, `append_if_head`, `close`,
+and `get_head`. `BoundedUnixLifecycleObserver` invokes its client helper in a child process with a
+finite socket and process timeout, so an unavailable or non-responsive observer becomes
+failed/partial P3.1 telemetry instead of an indefinitely running in-process callback.
+
+- The daemon permits only canonical, HMAC-bound requests. A request ID is the hash of the exact
+  method/request tuple: retries return the same stored receipt, while a different request cannot
+  reuse that ID. It maintains sequence and compare-and-append state separately for each hashed
+  `(engine_run_id, invocation_id)` stream; it has no global action-use counter.
+- The daemon writes a private `0600` JSONL journal. Its binding header freezes the daemon identity
+  hash and attestation hash; each receipt binds the previous journal head, request hash, stream hash,
+  content hash, and deterministic observation head. It durably fsyncs every newly-created runtime
+  directory and its parent, then writes the complete buffer and fsyncs the journal file plus pinned
+  parent directory. It accepts no further mutation after any write, fsync, close, or post-write
+  in-memory failure. A journal must end every record with a newline; malformed, unterminated, stale,
+  duplicate, wrong-binding, or internally inconsistent chains fail closed on restart.
+- Before creating files, daemon and client walk every ancestor without following symlinks. Every
+  ancestor must be root- or daemon-owned and non-group/world-writable; the final parent must be
+  daemon-owned. The socket final parent must additionally deny every group/world access bit before
+  bind. They retain that parent directory descriptor and operate through `/proc/self/fd`, so a later
+  replacement of the configured pathname cannot redirect the daemon's socket, journal, or client
+  request. The socket is checked as daemon-owned `0600` before the client sends a request.
+- A persistent private sidecar lock exists for both the journal and socket, acquired in one global
+  order with kernel `flock`. The lease holder is tied to a pipe owned by the daemon: daemon death
+  closes that pipe and releases both leases. Only after holding the socket lease may a restart remove
+  a stale private daemon socket. This prevents normal concurrent daemons from forking a journal or
+  replacing an active socket while still allowing crash recovery.
+- The journal deliberately stores hashes, not raw observer payloads. It does not retain the prompt,
+  branch, verification command, findings, raw logs, terminal payload, raw daemon identity, or client
+  key. Journal parents must be daemon-owned and non-group/world-writable; socket parents are private
+  to the daemon UID and the socket is forced to `0600`, never `0666`.
+- The helper verifies the daemon's response HMAC before returning the exact P3.1 receipt shape. Its
+  absolute socket deadline and killable child-process timeout bound a peer that trickles bytes or
+  never responds. Daemon shutdown destroys all open peer sockets before releasing either lease. This
+  is still an operating-system process-management mechanism, not a proof against a compromised host
+  or uninterruptible kernel state.
+
+This is an external-process durability and bounded-callback component, **not** the supervised host
+required by full P3. The `0600` socket intentionally has no cross-UID worker route yet; the HMAC key
+authenticates this transport request but is not an authenticated user/owner channel. It offers no
+action descriptor, permit, broker execution, user approval, Owner Kernel event minting, acceptance
+coordinator, peer-credential verification, namespace boundary, or independent remote witness root.
+The P0 corpus has not been re-run against it. Therefore its telemetry remains
+`owner_kernel_authority: "none"`, `acceptance: "not_available"`, and ineligible for alias retirement.
+
+The trusted boundary is only a normal same-UID Linux host filesystem: root, the daemon UID, and a
+compromised host are out of scope. P3.2 can replay and idempotently return an already-durable receipt,
+but P3.1 has no protocol to resume a partially open observation session from `get_head`; a new P3.1
+session can replay its idempotent `open`, but its first append against an advanced remote stream becomes
+partial rather than silently continuing it.
+
 ## Deferred Full P3 Gate
 
 Do not reduce `/l4` through `/l6` to aliases yet. Their worktree isolation, strict dispatch
@@ -90,3 +145,9 @@ host-witnessed event shape, replay idempotence, and no-authority negative contro
 `hooks/tests/engine-lifecycle-observation.test.sh` covers P3.1's explicit host binding, ordered
 compare-and-append observations, receipt-binding/replayed-head rejection, raw-data exclusion,
 observer-failure containment, and the `converged`-is-not-`accepted` negative control.
+`hooks/tests/external-lifecycle-witness.test.sh` covers P3.2's external process transport, strict
+receipt shapes, request/response authentication, per-stream compare-and-append/idempotency, raw-payload
+exclusion from the journal, crash replay, paired lease contention, close/short-write fail-stop,
+unterminated journal tails, durable runtime-directory creation, descriptor-pinned path replacement,
+private socket directories, bounded trickling peers/shutdown, same-instance replay, and
+unavailable-client FD cleanup.

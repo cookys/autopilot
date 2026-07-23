@@ -283,6 +283,29 @@ stop.
 **Acceptance**: low-risk owner-led dogfood resolves project policy, survives session replacement, blocks
 hash-invalid approvals, and renders complete disclosure from the unified event ledger.
 
+> **P1 IMPLEMENTATION STATUS (2026-07-23): IMPLEMENTED — P2 PENDING.**
+> `src/engine/owner-kernel/` now freezes the project default/one-run override policy and acceptance
+> contract, mints the typed event matrix through trusted host adapters only, maintains one in-memory owner
+> capability, validates exact approvals, checkpoints deterministic state, resumes from the latest checkpoint
+> after raw-chain verification, and derives decision-only disclosure. `MemoryWitness` is permanently
+> test-only; the CLI is ledger read-only and does not claim an external broker. P2 remains responsible for
+> action mediation, atomic approval consumption, reconciliation, and the acceptance transaction.
+
+#### P1 implementation review record (2026-07-23)
+
+| Reviewer | Scope | Verdict | Disposition |
+|---|---|---|---|
+| Claude Opus / `claude-native` | Policy, CLI, config, tests, integration packet | `SHIP-AS-IS` | Accepted |
+| Qwen3.8-Max-Preview / `qoderclicn` | Event, witness, Kernel, replay security packet | `FIX-THEN-SHIP` | Fixed missing-witness typed rejection and redundant supersession audit events; post-fix `SHIP-AS-IS` |
+| GPT-5.6-sol / Codex | Policy/contract/integration packet | `FIX-THEN-SHIP` | Empty executable command, same-value override provenance, and P2 tracking status fixed; post-fix `SHIP-AS-IS` |
+| Grok 4.5 / `grok` | Full canonical P1 packet | `no_verdict` | Raw text said `SHIP-AS-IS`, but runner did not parse a verdict; excluded fail-closed |
+| GLM | Additional panel seat | Not dispatched | Configured compatible endpoint had no credential; not represented as a completed review |
+
+The GPT-5.6-sol `🔴 Critical` claim that modules were absent was rejected as a review-packet scope
+artifact: the focused packet omitted files imported by `index.js`, while the staged canonical source and
+the generated Codex mirror both contain them and `sync-codex-plugin-skills.sh --check` verifies parity.
+The remaining `🟠 Major` and `🟡 Minor` findings were accepted and regression-tested.
+
 1. Support only two modes:
    - `owner-led`: the qualified owner continuously decides, delegates, monitors, and accepts;
    - `milestone-led`: the qualified owner is re-instantiated at plan, milestone, and acceptance boundaries;

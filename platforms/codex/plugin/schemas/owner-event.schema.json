@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/owner-event.schema.json",
+  "title": "OwnerKernelEvent",
+  "description": "Structural schema for a witnessed Owner Kernel event. State-dependent authorization is enforced by src/engine/owner-kernel.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sequence",
+    "run_id",
+    "type",
+    "emitted_at",
+    "emitter",
+    "policy_hash",
+    "contract_hash",
+    "payload",
+    "prev_event_hash",
+    "content_hash",
+    "event_hash",
+    "witness"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "intent",
+        "approval",
+        "abort",
+        "decision",
+        "evidence",
+        "checkpoint",
+        "acceptance",
+        "suspension",
+        "principal_change",
+        "translation_used"
+      ]
+    },
+    "emitted_at": { "type": "string", "format": "date-time" },
+    "emitter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "identity", "channel"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["user", "owner", "kernel", "runner", "translation"] },
+        "identity": { "type": "string", "minLength": 1 },
+        "channel": { "type": "string", "minLength": 1 }
+      }
+    },
+    "policy_hash": { "$ref": "#/$defs/sha256" },
+    "contract_hash": { "$ref": "#/$defs/sha256" },
+    "payload": { "type": "object" },
+    "prev_event_hash": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+    "content_hash": { "$ref": "#/$defs/sha256" },
+    "event_hash": { "$ref": "#/$defs/sha256" },
+    "witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "stream_id",
+        "sequence",
+        "event_hash",
+        "previous_witness_head",
+        "witness_head"
+      ],
+      "properties": {
+        "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" },
+        "stream_id": { "type": "string", "minLength": 1 },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "event_hash": { "$ref": "#/$defs/sha256" },
+        "previous_witness_head": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "witness_head": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "enum": ["intent", "approval"] } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "user" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "decision" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "owner" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["evidence", "checkpoint", "acceptance"] } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "enum": ["kernel", "runner"] } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["suspension", "principal_change"] } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "kernel" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "translation_used" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "const": "translation" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "abort" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": { "kind": { "enum": ["user", "kernel"] } } } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" }
+  }
+}

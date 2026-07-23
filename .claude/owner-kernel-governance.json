@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "governance": {
+    "default_mode": "owner-led",
+    "owner_roster": [
+      {
+        "identity": "p1-dogfood-owner-pending-p4",
+        "model_alias": "gpt-5.6-sol",
+        "model_version": "high",
+        "family": "openai",
+        "runner": "codex",
+        "role": "owner",
+        "attestation": {
+          "issuer": "autopilot-p1-dogfood",
+          "uri": "autopilot://p1-dogfood/owner-pending-p4",
+          "sha256": "34cfc45c4033bbf4e12b56458f376a768185a96213e09bc7e2dc676e01e6b2f0",
+          "issued_at": "2026-07-23T00:00:00.000Z",
+          "expires_at": "2026-12-31T00:00:00.000Z"
+        }
+      }
+    ],
+    "challenger_roster": [
+      {
+        "identity": "p1-dogfood-challenger-pending-p4",
+        "model_alias": "grok-4.5",
+        "model_version": "high",
+        "family": "xai",
+        "runner": "grok",
+        "role": "challenger",
+        "attestation": {
+          "issuer": "autopilot-p1-dogfood",
+          "uri": "autopilot://p1-dogfood/challenger-pending-p4",
+          "sha256": "e88e56dcfae309379e6bc2ca56c0ddaeadc79f6a52a33cb314c146bf15acb310",
+          "issued_at": "2026-07-23T00:00:00.000Z",
+          "expires_at": "2026-12-31T00:00:00.000Z"
+        }
+      }
+    ],
+    "trusted_runner_roster": [
+      {
+        "identity": "p1-dogfood-host-runner",
+        "model_alias": "owner-kernel-host",
+        "model_version": "p1",
+        "family": "host",
+        "runner": "owner-kernel-executor",
+        "role": "trusted_runner",
+        "attestation": {
+          "issuer": "autopilot-p1-dogfood",
+          "uri": "autopilot://p1-dogfood/runner-pending-production-broker",
+          "sha256": "5e5aa2f733bdb6fa36f42df4afef9e9cc77c31a0f4b7c67ce4d687cb3e78389c",
+          "issued_at": "2026-07-23T00:00:00.000Z",
+          "expires_at": "2026-12-31T00:00:00.000Z"
+        }
+      }
+    ],
+    "approval_policy": {
+      "read_only": { "requires_approval": false, "max_uses": 1 },
+      "reversible": { "requires_approval": false, "max_uses": 1 },
+      "external": { "requires_approval": true, "max_uses": 1 },
+      "irreversible": { "requires_approval": true, "max_uses": 1 }
+    },
+    "capability_ttl_seconds": 3600,
+    "checkpoint_interval_closed_events": 100,
+    "max_blocked_duration_seconds": 86400
+  }
+}

@@ -22,6 +22,8 @@ const {
   RESOLVE_REVIEW_LOOP,
 } = require('./resolve-review-loop');
 
+const ownerKernel = require('./owner-kernel');
+
 module.exports = {
   AutopilotEngine,
   buildImplementationArgs,
@@ -39,4 +41,5 @@ module.exports = {
   findJsonObjectCandidates,
   looksLikeReviewLoopConfig,
   RESOLVE_REVIEW_LOOP,
+  ...ownerKernel,
 };

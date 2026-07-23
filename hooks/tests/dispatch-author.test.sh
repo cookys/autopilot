@@ -52,6 +52,13 @@ assert_contains "$OUT" '"status": "authored"' "codex status authored"
 assert_not_contains "$OUT" "You are a code reviewer" "codex prompt is not reviewer-wrapped"
 assert_not_contains "$OUT" "Diff under review" "codex prompt is not diff-wrapper"
 
+# qoder author path (grok-shaped read-only, stderr discarded so the non-git-cwd git fatal
+# never pollutes the authored text): status authored, runner reported qoderclicn.
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --prompt-file "$PROMPT" --bin "$STUB_COD" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoder authored exit 0"
+assert_contains "$OUT" '"status": "authored"' "qoder status authored"
+assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
+
 # --- 2. empty output → empty_output, exit 1, fail-closed ---
 STUB_EMPTY="$TEST_TMP/runner-empty"
 cat > "$STUB_EMPTY" <<'EOF'

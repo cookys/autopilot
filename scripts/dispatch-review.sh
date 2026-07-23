@@ -439,7 +439,7 @@ EOF
   printf '%s\n' "$END"
   cat <<'EOF'
 
-Do NOT echo the diff or instructions. Output ONLY the wrapped block, nothing after.
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
 EOF
   if [[ -n "$PACK_FILE" ]]; then
     cat <<'EOF'

@@ -9,6 +9,7 @@ const { isImmutableGitSha } = require('../lib/common');
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
+const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const MISPLACEMENT_PATH_PATTERNS = [
@@ -998,6 +999,7 @@ class AutopilotEngine {
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
+    this.lifecycleObserver = options.lifecycleObserver || null;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -1818,6 +1820,7 @@ class AutopilotEngine {
     // unless the caller explicitly passes dynamicReviewRisk: true.
     const dynamicReviewRisk = input.dynamicReviewRisk === true;
     const ledger = [];
+    let lifecycleObservation = null;
     let promptFile = input.promptFile;
     const branch = input.branch;
     const base = input.base;
@@ -1835,7 +1838,10 @@ class AutopilotEngine {
       advisoryFindings: [],
       bestCommit: null,
     };
-    const finish = (result) => resultWithVerificationFields(result, verifyState);
+    const finish = (result) => {
+      const output = resultWithVerificationFields(result, verifyState);
+      return lifecycleObservation ? lifecycleObservation.finalize(output) : output;
+    };
 
     if (!promptFile || typeof promptFile !== 'string') {
       const startedAt = this.now();
@@ -1925,6 +1931,19 @@ class AutopilotEngine {
       });
     }
     promptFile = path.resolve(loopCwd, promptFile);
+
+    // P3.1 is a host-injected observation sidecar only. It never controls the
+    // existing loop, action sinks, acceptance, or terminal result.
+    lifecycleObservation = createEngineLifecycleObservationSession({
+      observer: this.lifecycleObserver,
+      config: input.lifecycleObservation,
+      promptFile,
+      base,
+      branch,
+      verifyCmd: verifyCmdProvided ? verifyCmd : null,
+      expectedEngineRunId: input.runId,
+    });
+    if (lifecycleObservation) lifecycleObservation.attach(ledger);
 
     let roster = input.roster || null;
     let resolveResult = null;
@@ -2212,6 +2231,7 @@ class AutopilotEngine {
       }
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
+      if (lifecycleObservation) lifecycleObservation.observeImplementationResult(implementation, round);
       if (implementation.status !== 'committed') {
         const implementationPhase = implementation.phase || 'dispatch_implementation';
         return finish({
@@ -2492,6 +2512,7 @@ class AutopilotEngine {
       });
       ledger.push(...review.ledger);
       reviewChain.push(review);
+      if (lifecycleObservation) lifecycleObservation.observeReviewResult(review, round);
       if (review.status !== 'reviewed') {
         if (verifyCmdProvided && currentVerifyPass === true && !noVerifyFirst) {
           verifyState.convergenceReason = 'verification';

@@ -129,7 +129,7 @@
 | P0 | **PASS FOR P1 FUNDING** | Canonical five-target classifier: `supervised-partial` is `partial`; Claude Code, Codex, OpenCode, and agy are `none`. Three actual bounded tasks passed independent family review, reduced mandatory reviews 6→3, and reconstructed from durable evidence only after exact external approval. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json); [spike evidence](p0/spike/evidence-2026-07-23-hardened-r2/) |
 | P1 | **Implemented — P2 pending** | Durable policy/event/principal/approval/checkpoint/replay/disclosure core: [`p1/README.md`](p1/README.md). Test-only witnesses cannot activate production mode; P2 must add mediated action and acceptance transaction |
 | P2 | **P2a + P2b protocol core implemented; P3 integration pending** | Enforced catalog, two-stage preclaim permits/postclaim authorizations, independently bound verifier/executor/receipt/witness roles, broker/direct execution, typed v2 verification/challenge/audit evidence, coordinator-bound atomic acceptance, pending-claim `unknown` recovery without effect replay, and bounded delegation/recovery transitions are in [`p2/README.md`](p2/README.md). This validates trusted adapter messages, not OS/IPC isolation or a production supervised host |
-| P3 | **P3.0 implemented; full activation blocked** | Deterministic `/lN` translation table, frozen red-line/profile policy, read-only CLI, and integrating-host witnessed `/l3` shadow telemetry are implemented: [`p3/README.md`](p3/README.md). This intermediate step does not bump v2.32.57 or release metadata; the live engine/broker/coordinator bridge, KR8/KR10, and alias deletion gates remain open. |
+| P3 | **P3.0 + P3.1 implemented; full activation blocked** | Deterministic `/lN` translation, frozen red-line/profile policy, read-only CLI, integrating-host witnessed `/l3` shadow telemetry, and a host-injected `/l5`/`/l6` lifecycle observation sidecar are implemented: [`p3/README.md`](p3/README.md). The sidecar is non-authoritative and does not change live execution or acceptance. This intermediate work does not bump v2.32.57 or release metadata; the supervised engine/broker/coordinator bridge, KR8/KR10, and alias deletion gates remain open. |
 | P4 | Blocked | Depends on P3 |
 | L-5 | Not reached | Begins only after P1-P4 complete |
 
@@ -175,6 +175,7 @@ bash hooks/tests/owner-kernel-adversarial.test.sh
 bash hooks/tests/owner-action-reconciliation.test.sh
 bash hooks/tests/owner-action-hardening.test.sh
 bash hooks/tests/level-governance-translation.test.sh
+bash hooks/tests/engine-lifecycle-observation.test.sh
 bash hooks/tests/run.sh
 scripts/validate.sh
 node scripts/sync-version.js --check

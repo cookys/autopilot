@@ -19,6 +19,8 @@ const {
 } = require(path.join(root, 'src', 'engine', 'supervised-engine-bridge-contract'));
 const {
   AUTHENTICATED_INTAKE_PURPOSE,
+  AUTHENTICATED_INTAKE_V2_PURPOSE,
+  AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
   AuthenticatedIntakeError,
   createFileReplayStore,
   createHostPinnedTrustedIntakeVerifier,
@@ -136,6 +138,29 @@ function bridgeInput(overrides = {}) {
   };
 }
 
+function bridgeInputV2(overrides = {}) {
+  return {
+    schema_version: 2,
+    ownerRunId: 'owner-run-p35d',
+    engineRunId: 'engine-run-p35d',
+    invocationId: 'invocation-p35d',
+    governanceConfig: governanceConfig(),
+    acceptanceContract: acceptanceContract(),
+    immutableBase: 'b'.repeat(40),
+    workspaceBinding: {
+      registrationId: 'p35d-workspace-main',
+      workspaceRootHash: hash('p35d-workspace-root'),
+      descriptorBindingHash: hash('p35d-descriptor-binding'),
+      ticketHash: hash('p35d-ticket'),
+    },
+    prompt: 'p35d prompt remains hash-only',
+    branch: 'feat/p35d',
+    verifyCommand: 'bash hooks/tests/run.sh --parallel 16',
+    actionCatalogBindings: Object.fromEntries(getRequiredActionCatalogBindingIds().map((id) => [id, id])),
+    ...overrides,
+  };
+}
+
 function trustedBinding(input) {
   return {
     schema_version: 1,
@@ -151,6 +176,28 @@ function trustedBinding(input) {
     verify_command_hash: hash(input.verifyCommand),
     sink_inventory_hash: hash(canonicalJson(getAutopilotEngineControlSinkInventory())),
     bridge_abi_hash: getSupervisedEngineBridgeAbiHash(),
+  };
+}
+
+function trustedBindingV2(input) {
+  const workspace = input.workspaceBinding;
+  return {
+    schema_version: 2,
+    owner_run_id: input.ownerRunId,
+    engine_run_id: input.engineRunId,
+    invocation_id: input.invocationId,
+    policy_hash: resolveGovernancePolicy(input.governanceConfig).policy_hash,
+    contract_hash: freezeAcceptanceContract(input.acceptanceContract).contract_hash,
+    immutable_base: input.immutableBase,
+    workspace_registration_id: workspace.registrationId,
+    workspace_root_hash: workspace.workspaceRootHash,
+    workspace_descriptor_binding_hash: workspace.descriptorBindingHash,
+    workspace_ticket_hash: workspace.ticketHash,
+    prompt_hash: hash(input.prompt),
+    branch_hash: hash(input.branch),
+    verify_command_hash: hash(input.verifyCommand),
+    sink_inventory_hash: hash(canonicalJson(getAutopilotEngineControlSinkInventory())),
+    bridge_abi_hash: getSupervisedEngineBridgeAbiHash(2),
   };
 }
 
@@ -199,15 +246,38 @@ function makeClaims(input, plan, overrides = {}) {
   };
 }
 
+function makeV2Claims(input, plan, overrides = {}) {
+  const binding = trustedBindingV2(input);
+  return {
+    schema_version: AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
+    purpose: AUTHENTICATED_INTAKE_V2_PURPOSE,
+    audience: 'autopilot-supervised-host',
+    issuer: rawKeyring.issuer,
+    signing_key_id: rawKeyring.keys[0].key_id,
+    keyring_epoch: rawKeyring.keyring_epoch,
+    jti: 'owner-intake-p35d',
+    issued_at_ms: nowBase - 10,
+    not_before_ms: nowBase - 10,
+    expires_at_ms: nowBase + 60000,
+    session_id: session.session_id,
+    session_challenge_hash: session.session_challenge_hash,
+    host_install_binding_hash: installBindingHash,
+    binding,
+    binding_hash: hash(canonicalJson(binding)),
+    plan_hash: hash(canonicalJson(plan)),
+    ...overrides,
+  };
+}
+
 function signClaims(claims, privateKey = keyPair.privateKey) {
   const payload = Buffer.from(canonicalJson(claims), 'utf8');
   const signature = crypto.sign(
     null,
-    Buffer.concat([Buffer.from(`${AUTHENTICATED_INTAKE_PURPOSE}\n`, 'utf8'), payload]),
+    Buffer.concat([Buffer.from(`${claims.purpose}\n`, 'utf8'), payload]),
     privateKey,
   );
   return {
-    schema_version: 1,
+    schema_version: claims.schema_version,
     protected_payload: payload.toString('base64url'),
     signature: signature.toString('base64url'),
   };
@@ -283,6 +353,88 @@ const bridgeReceipt = verifySupervisedEngineBridgeContract(plan, input, envelope
 assert.equal(bridgeReceipt.verified, true);
 assert.equal(bridgeReceipt.key_id, rawKeyring.keyring_id);
 assert.equal(bridgeReceipt.attestation_hash, normalizedKeyring.attestation_hash);
+
+const v2Input = bridgeInputV2();
+const v2Plan = compileSupervisedEngineBridgeContract(v2Input);
+const v2Claims = makeV2Claims(v2Input, v2Plan);
+const v2Envelope = signClaims(v2Claims);
+const v2Context = {
+  schema_version: AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
+  intake_binding_hash: v2Plan.intake_binding_hash,
+  sink_inventory_hash: v2Plan.sink_inventory_hash,
+  bridge_abi_hash: v2Plan.bridge_abi_hash,
+  plan_hash: hash(canonicalJson(v2Plan)),
+  owner_run_id: v2Input.ownerRunId,
+  engine_run_id: v2Input.engineRunId,
+  invocation_id: v2Input.invocationId,
+};
+const v2Result = verifyHostPinnedAuthenticatedIntake(
+  v2Envelope,
+  v2Context,
+  config(createInMemoryReplayStore()),
+);
+assert.equal(v2Result.receipt.schema_version, AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION);
+assert.equal(v2Result.receipt.owner_kernel_authority, 'none');
+assert.equal(v2Result.receipt.acceptance, 'not_available');
+assert.equal(JSON.stringify(v2Result).includes('workspaceRoot'), false);
+assert.equal(JSON.stringify(v2Result).includes('/private/raw-path'), false);
+const v2BridgeReceipt = verifySupervisedEngineBridgeContract(v2Plan, v2Input, v2Envelope, {
+  trustedIntakeVerifier: createHostPinnedTrustedIntakeVerifier(config(createInMemoryReplayStore())),
+  trustedIntakeAuthority: normalizedKeyring.authority,
+});
+assert.equal(v2BridgeReceipt.verified, true);
+assert.throws(
+  () => verifyHostPinnedAuthenticatedIntake(
+    v2Envelope,
+    { ...v2Context, schema_version: 1 },
+    config(createInMemoryReplayStore()),
+  ),
+  /compiled bridge plan|schema_version/i,
+);
+assert.throws(
+  () => verifyHostPinnedAuthenticatedIntake(
+    { ...v2Envelope, schema_version: 1 },
+    v2Context,
+    config(createInMemoryReplayStore()),
+  ),
+  /does not match protected claims/i,
+);
+const v2Payload = Buffer.from(canonicalJson(v2Claims), 'utf8');
+const v2SignedWithV1Domain = {
+  schema_version: AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
+  protected_payload: v2Payload.toString('base64url'),
+  signature: crypto.sign(
+    null,
+    Buffer.concat([Buffer.from(`${AUTHENTICATED_INTAKE_PURPOSE}\n`, 'utf8'), v2Payload]),
+    keyPair.privateKey,
+  ).toString('base64url'),
+};
+assert.throws(
+  () => verifyHostPinnedAuthenticatedIntake(
+    v2SignedWithV1Domain,
+    v2Context,
+    config(createInMemoryReplayStore()),
+  ),
+  /signature/i,
+);
+assert.throws(
+  () => verifyHostPinnedAuthenticatedIntake(
+    signClaims(makeV2Claims(v2Input, v2Plan, {
+      binding: { ...trustedBindingV2(v2Input), workspace_ticket_hash: hash('substituted-ticket') },
+      binding_hash: hash(canonicalJson({ ...trustedBindingV2(v2Input), workspace_ticket_hash: hash('substituted-ticket') })),
+    })),
+    v2Context,
+    config(createInMemoryReplayStore()),
+  ),
+  /compiled bridge plan/i,
+);
+assert.throws(
+  () => verifySupervisedEngineBridgeContract(v2Plan, v2Input, envelope, {
+    trustedIntakeVerifier: createHostPinnedTrustedIntakeVerifier(config(createInMemoryReplayStore())),
+    trustedIntakeAuthority: normalizedKeyring.authority,
+  }),
+  /protected claims|schema_version|binding/i,
+);
 
 const badSignature = `${envelope.signature.slice(0, -1)}${envelope.signature.endsWith('A') ? 'B' : 'A'}`;
 assert.throws(
@@ -376,6 +528,7 @@ console.log('session_install_plan_and_binding_bound=true');
 console.log('expiry_not_before_ttl_and_clock_rollback_fail_closed=true');
 console.log('durable_replay_idempotence_conflict_and_pending_fail_closed=true');
 console.log('shadow_receipt_has_no_authority=true');
+console.log('descriptor_bound_v2_domain_replay_and_ticket_binding=true');
 NODE
 )"
 STATUS=$?
@@ -388,5 +541,6 @@ assert_contains "$OUT" "session_install_plan_and_binding_bound=true" "session in
 assert_contains "$OUT" "expiry_not_before_ttl_and_clock_rollback_fail_closed=true" "time-window and clock rollback controls fail closed"
 assert_contains "$OUT" "durable_replay_idempotence_conflict_and_pending_fail_closed=true" "replay storage is durable and conflict-safe"
 assert_contains "$OUT" "shadow_receipt_has_no_authority=true" "verified intake remains non-authoritative"
+assert_contains "$OUT" "descriptor_bound_v2_domain_replay_and_ticket_binding=true" "v2 envelope domain and root ticket commitment reject cross-version substitution"
 
 finalize_test

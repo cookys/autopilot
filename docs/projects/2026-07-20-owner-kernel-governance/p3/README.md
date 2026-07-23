@@ -276,9 +276,11 @@ the first real P3.3 host adapter, but it remains evidence only: every successful
   fixed session cap. During this one-time worker-identity migration, the reaper accepts only exact old,
   current, sealed, or seal-in-progress P3.5a layouts. It removes only strict-pattern, identity-checked legacy
   request files and crash temporaries before removing an expired session, so an interrupted prior release does
-  not wedge `begin`. `submit` gets an exclusive root-owned claim,
-  treats stdin as opaque bounded bytes only until the session deadline, and cleans only the session it
-  claimed. A root-owned host lease serializes verifier transactions; a busy submit leaves its open session
+  not wedge `begin`. `submit` gets an exclusive root-owned claim. V1 treats stdin as opaque bounded bytes
+  until the session deadline; v2 root performs only a bounded, non-authenticating canonical structural
+  preflight to reject reserved raw workspace-path fields before a worker starts, then passes the original
+  bytes opaquely. It cleans only the session it claimed. A root-owned host lease serializes verifier
+  transactions; a busy submit leaves its open session
   retryable instead of consuming it on replay-lock contention. Root transfers raw intake only through a
   one-shot Unix socket after discovering the exact worker PID/cgroup. Its path is worker-UID-owned `0600`
   inside a root-owned worker directory; root verifies `SO_PEERCRED` and the cgroup before sending any bytes,
@@ -304,7 +306,8 @@ the first real P3.3 host adapter, but it remains evidence only: every successful
   binds its session challenge hash, install binding, expiry/not-before/TTL, issuer-scoped `jti`, complete
   P3.3 trusted-intake binding, and compiled-plan hash. The installed Node verifier re-compiles the bridge
   from the submitted raw input and invokes `verifySupervisedEngineBridgeContract()` through its own
-  host-pinned adapter. It is the single canonical parser for submitted UTF-8 request bytes and receives the
+  host-pinned adapter. It remains the only semantic and authentication parser; the v2 root preflight only
+  checks bounded canonical structure and reserved raw workspace-path field names. The verifier receives the
   immutable session expiry for a final verification-time expiry check.
 - Replay state is verifier-owned local durable state, not an independent witness. The gateway holds an
   advisory file lock; the verifier writes a durable high-water clock record, claims a `jti` with an
@@ -400,9 +403,52 @@ chain, checks root readback, proves a competing registry cannot remove the activ
 reuse, and leaves no registry socket, session, or transient unit.
 
 P3.5c does not prove repository content, grant an owner registration namespace, create P2 authority, start
-an Engine, broker an effect, or accept a result. P3.3/envelope v2 is mandatory before an effect-capable
-broker consumes this provenance, before a path-confidential verifier lane is claimed, or earlier if aliases,
-multiple policy mappings, project namespaces, or an owner-visible registration choice are introduced.
+an Engine, broker an effect, or accept a result. Its v1 lane remains available only for compatibility and
+still exposes the caller's workspace path to the verifier. P3.5d supplies the separate path-free shadow
+lane below; neither lane may be treated as an effect-capable broker or a production P2 witness.
+
+## P3.5d Descriptor-Bound Authenticated Intake v2
+
+P3.5d adds a parallel, explicitly selected descriptor-bound authenticated intake ABI. Its design is
+recorded in [the P3.5d plan](../../../plans/2026-07-23-p3-5d-descriptor-bound-intake-v2.md). It does not
+upgrade, reinterpret, or retire P3.3/authenticated-intake v1: a legacy request has no
+`schema_version` discriminator and continues through the original v1 path, while a v2 request must select
+every v2 discriminator exactly.
+
+- Root configuration registration is still the only point that accepts a raw workspace path. A v2
+  `begin --intake-protocol-version 2 --workspace-registration-id <id>` returns the root-issued hash-only
+  registration ID, workspace-root hash, immutable base, descriptor-binding hash, and one-use ticket hash.
+  The root-held descriptor, FD, inode, mount ID, and Git data never enter the worker handoff, verifier
+  request, receipt, shadow state, witness journal, or public result; its registration path never enters as
+  a structured workspace-path field. Free-form prompt, branch, and verification-command text remains
+  caller-provided opaque input and is not path-classified by this boundary.
+- The bridge plan uses `schema_version: 2`; its signed `workspace_binding` exact-matches all five values
+  from that root ticket. The authenticated envelope uses a separate `/v2` signing domain and v2 replay
+  fingerprint, and the host request carries its own explicit protocol version. Missing, mixed, extra,
+  replayed, expired, structured raw-path, or substituted registration/hash/base/binding/ticket fields fail
+  before shadow admission. Root preflight rejects a structured raw workspace field before worker launch;
+  the verifier repeats the guard before compilation.
+- The root verifier reads its own ticket and exact-matches the session's registration ID, workspace-root
+  hash, immutable base, descriptor-binding hash, and ticket hash. Registration ID alone is never workspace
+  authority. The worker receives no ticket file or descriptor and the shadow consumer persists only its
+  existing hash-safe capsule fields.
+- A v2 `begin` result and a successful v2 public result state `effect_authority: "none"`; the latter also
+  states `engine.status: "not_started"`, `owner_kernel_authority: "none"`, and
+  `acceptance: "not_available"`. Its v2 workspace assurance says only that the root-held descriptor
+  matched the signed ticket and base; it does not prove content, authorize an action, or accept a result.
+
+The privileged `AUTOPILOT_P35_LIVE=1` gate completed one real v2 session on this Linux host on 2026-07-23.
+It registers a real descriptor, begins a v2 session, signs the returned five commitments without a raw
+workspace field, submits through the separate-UID host, checks the exact v2 result/witness disclosure,
+scans the valid worker/verifier/witness/public artifacts for the root-derived path, and proves the completed
+descriptor cannot be reused. The deterministic host gate separately proves an injected structured raw
+workspace field is rejected before a worker launches or receives bytes.
+
+P3.5d does not construct `OwnerKernel`, call `AutopilotEngine`, invoke P2, mint a permit, execute through a
+broker, coordinate acceptance, prove repository content, add aliases or multi-mapping selection, replace the
+P3.5c local witness with a production witness, or make the P0 corpus production evidence. A supervised
+broker and Engine integration remain separate later gates; any future effect-capable use must consume this
+v2 boundary and a production P2 witness rather than reuse the shadow witness.
 
 ## Deferred Full P3 Gate
 
@@ -440,7 +486,9 @@ unavailable-client FD cleanup.
 injected-sink inventory, static inventory validation, exact distinct mediated action-catalog bindings
 and risk floors, v2-only acceptance contract, hash-only workspace/sensitive inputs, host-owned trusted
 intake verification, pinned issuer/key/attestation, ABI/inventory/compiled-plan binding, no-authority
-terminal mapping, deterministic verification, and mutation/tampering rejection.
+terminal mapping, deterministic verification, and mutation/tampering rejection. Its P3.5d cases preserve
+the v1 ABI while proving the separate v2 descriptor-binding compiler rejects raw path/mixed-version and
+commitment-substitution inputs.
 `hooks/tests/supervised-host-preflight.test.sh` covers P3.4a's exact frozen preflight, root/path/identity
 negative controls, one-use gateway arguments, bounded frame and response binding, and no-Owner-Kernel
 authority source scan. `AUTOPILOT_P34_LIVE=1` adds the host-specific systemd/SO_PEERCRED proof; it is
@@ -466,4 +514,7 @@ one-shot reserve/complete/expiry, symlink and replacement rejection, path exclus
 idempotency, corruption rejection, peer-before-payload ordering, and no P2/Engine surface. The expanded
 `hooks/tests/supervised-intake-host.test.sh` covers P3.5c ticket and root-readback validation. The opt-in
 `hooks/tests/supervised-intake-live-host.sh` gate additionally proves the installed descriptor and separate-
-UID witness path under root/systemd/SO_PEERCRED.
+UID witness path under root/systemd/SO_PEERCRED. Its P3.5d cases additionally prove the v2 ticket's five
+exact commitments, protocol forwarding, public no-effect disclosure, and root-derived path exclusion across
+the valid live worker/verifier/witness/result boundary; the deterministic host test proves an injected
+structured raw workspace field launches no worker and reaches no handoff.

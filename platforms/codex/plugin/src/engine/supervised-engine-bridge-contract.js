@@ -18,6 +18,7 @@ const {
 } = require('./owner-kernel/policy');
 
 const ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION = 1;
+const ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION = 2;
 const TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -435,9 +436,18 @@ function getAutopilotEngineControlSinkInventory() {
   return cloneCanonical(AUTOPILOT_ENGINE_CONTROL_SINKS);
 }
 
-function getSupervisedEngineBridgeAbi() {
+function requireBridgeSchemaVersion(value, label) {
+  if (value !== ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION
+    && value !== ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION) {
+    throw contractError(`${label} has an unsupported schema_version`);
+  }
+  return value;
+}
+
+function getSupervisedEngineBridgeAbi(schemaVersion = ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION) {
+  requireBridgeSchemaVersion(schemaVersion, 'supervised engine bridge ABI');
   return cloneCanonical({
-    schema_version: ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
+    schema_version: schemaVersion,
     ...BRIDGE_METADATA,
     sink_inventory: getAutopilotEngineControlSinkInventory(),
     required_runtime_stages: REQUIRED_RUNTIME_STAGES,
@@ -446,8 +456,8 @@ function getSupervisedEngineBridgeAbi() {
   });
 }
 
-function getSupervisedEngineBridgeAbiHash() {
-  return sha256(canonicalJson(getSupervisedEngineBridgeAbi()));
+function getSupervisedEngineBridgeAbiHash(schemaVersion = ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION) {
+  return sha256(canonicalJson(getSupervisedEngineBridgeAbi(schemaVersion)));
 }
 
 function requireActionCatalogRequirement(sink) {
@@ -527,7 +537,7 @@ function normalizeActionCatalogBindings(raw, policy) {
   });
 }
 
-function normalizeInput(raw) {
+function normalizeInputV1(raw) {
   const value = assertPlainObject(raw, 'supervised engine bridge contract input');
   assertOnlyKeys(value, new Set([
     'ownerRunId',
@@ -602,6 +612,7 @@ function normalizeInput(raw) {
     bridge_abi_hash: bridgeAbiHash,
   };
   return {
+    schema_version: ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
     owner_run_id: ownerRunId,
     engine_run_id: engineRunId,
     invocation_id: invocationId,
@@ -617,6 +628,134 @@ function normalizeInput(raw) {
     action_bindings: actionBindings,
     trusted_intake_binding: trustedIntakeBinding,
   };
+}
+
+function normalizeWorkspaceBindingV2(raw) {
+  const value = assertPlainObject(raw, 'supervised engine bridge v2 workspaceBinding');
+  assertOnlyKeys(value, new Set([
+    'registrationId',
+    'workspaceRootHash',
+    'descriptorBindingHash',
+    'ticketHash',
+  ]), 'supervised engine bridge v2 workspaceBinding');
+  for (const key of ['registrationId', 'workspaceRootHash', 'descriptorBindingHash', 'ticketHash']) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      throw contractError(`supervised engine bridge v2 workspaceBinding is missing ${key}`);
+    }
+  }
+  return {
+    registration_id: requireToken(value.registrationId, 'workspaceBinding.registrationId'),
+    workspace_root_hash: requireSha256(value.workspaceRootHash, 'workspaceBinding.workspaceRootHash'),
+    descriptor_binding_hash: requireSha256(value.descriptorBindingHash, 'workspaceBinding.descriptorBindingHash'),
+    ticket_hash: requireSha256(value.ticketHash, 'workspaceBinding.ticketHash'),
+  };
+}
+
+function normalizeInputV2(raw) {
+  const value = assertPlainObject(raw, 'supervised engine bridge v2 contract input');
+  assertOnlyKeys(value, new Set([
+    'schema_version',
+    'ownerRunId',
+    'engineRunId',
+    'invocationId',
+    'governanceConfig',
+    'modeOverride',
+    'acceptanceContract',
+    'immutableBase',
+    'workspaceBinding',
+    'prompt',
+    'branch',
+    'verifyCommand',
+    'actionCatalogBindings',
+  ]), 'supervised engine bridge v2 contract input');
+  if (value.schema_version !== ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION) {
+    throw contractError(`supervised engine bridge v2 contract input.schema_version must equal ${ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION}`);
+  }
+  for (const key of [
+    'ownerRunId',
+    'engineRunId',
+    'invocationId',
+    'governanceConfig',
+    'acceptanceContract',
+    'immutableBase',
+    'workspaceBinding',
+    'prompt',
+    'branch',
+    'verifyCommand',
+    'actionCatalogBindings',
+  ]) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      throw contractError(`supervised engine bridge v2 contract input is missing ${key}`);
+    }
+  }
+  const modeOverride = Object.prototype.hasOwnProperty.call(value, 'modeOverride')
+    ? value.modeOverride
+    : undefined;
+  if (modeOverride !== undefined && modeOverride !== null) requireToken(modeOverride, 'modeOverride');
+  const resolvedPolicy = resolveGovernancePolicy(value.governanceConfig, { modeOverride });
+  const frozenContract = freezeAcceptanceContract(value.acceptanceContract);
+  if (frozenContract.contract.schema_version !== 2) {
+    throw contractError(
+      'a supervised engine bridge v2 contract requires acceptanceContract.schema_version 2',
+      'ACCEPTANCE_CONTRACT_V2_REQUIRED',
+    );
+  }
+  const actionBindings = normalizeActionCatalogBindings(value.actionCatalogBindings, resolvedPolicy.policy);
+  const ownerRunId = requireToken(value.ownerRunId, 'ownerRunId');
+  const engineRunId = requireToken(value.engineRunId, 'engineRunId');
+  const invocationId = requireToken(value.invocationId, 'invocationId');
+  const immutableBase = requireImmutableBase(value.immutableBase);
+  const workspaceBinding = normalizeWorkspaceBindingV2(value.workspaceBinding);
+  const promptHash = sha256(requireText(value.prompt, 'prompt'));
+  const branchHash = sha256(requireText(value.branch, 'branch'));
+  const verifyCommand = requireText(value.verifyCommand, 'verifyCommand', { allowNull: true });
+  const verifyCommandHash = verifyCommand === null ? null : sha256(verifyCommand);
+  const sinkInventoryHash = sha256(canonicalJson(getAutopilotEngineControlSinkInventory()));
+  const bridgeAbiHash = getSupervisedEngineBridgeAbiHash(ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION);
+  const trustedIntakeBinding = {
+    schema_version: ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
+    owner_run_id: ownerRunId,
+    engine_run_id: engineRunId,
+    invocation_id: invocationId,
+    policy_hash: resolvedPolicy.policy_hash,
+    contract_hash: frozenContract.contract_hash,
+    immutable_base: immutableBase,
+    workspace_registration_id: workspaceBinding.registration_id,
+    workspace_root_hash: workspaceBinding.workspace_root_hash,
+    workspace_descriptor_binding_hash: workspaceBinding.descriptor_binding_hash,
+    workspace_ticket_hash: workspaceBinding.ticket_hash,
+    prompt_hash: promptHash,
+    branch_hash: branchHash,
+    verify_command_hash: verifyCommandHash,
+    sink_inventory_hash: sinkInventoryHash,
+    bridge_abi_hash: bridgeAbiHash,
+  };
+  return {
+    schema_version: ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
+    owner_run_id: ownerRunId,
+    engine_run_id: engineRunId,
+    invocation_id: invocationId,
+    policy_hash: resolvedPolicy.policy_hash,
+    contract_hash: frozenContract.contract_hash,
+    immutable_base: immutableBase,
+    workspace_binding: workspaceBinding,
+    prompt_hash: promptHash,
+    branch_hash: branchHash,
+    verify_command_hash: verifyCommandHash,
+    sink_inventory_hash: sinkInventoryHash,
+    bridge_abi_hash: bridgeAbiHash,
+    action_bindings: actionBindings,
+    trusted_intake_binding: trustedIntakeBinding,
+  };
+}
+
+function normalizeInput(raw) {
+  const value = assertPlainObject(raw, 'supervised engine bridge contract input');
+  if (Object.prototype.hasOwnProperty.call(value, 'schema_version')) {
+    if (value.schema_version === ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION) return normalizeInputV2(value);
+    throw contractError('supervised engine bridge contract v1 input must omit schema_version; v2 must use schema_version 2');
+  }
+  return normalizeInputV1(value);
 }
 
 function buildSinkMappings(actionBindings) {
@@ -638,7 +777,7 @@ function buildSinkMappings(actionBindings) {
   }));
 }
 
-function compileNormalizedInput(input) {
+function compileNormalizedInputV1(input) {
   return cloneCanonical({
     schema_version: ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
     ...BRIDGE_METADATA,
@@ -665,11 +804,48 @@ function compileNormalizedInput(input) {
   });
 }
 
+function compileNormalizedInputV2(input) {
+  return cloneCanonical({
+    schema_version: ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
+    ...BRIDGE_METADATA,
+    owner_run_id: input.owner_run_id,
+    engine_run_id: input.engine_run_id,
+    invocation_id: input.invocation_id,
+    policy_hash: input.policy_hash,
+    contract_hash: input.contract_hash,
+    immutable_base: input.immutable_base,
+    inputs: {
+      workspace_registration_id: input.workspace_binding.registration_id,
+      workspace_root_hash: input.workspace_binding.workspace_root_hash,
+      workspace_descriptor_binding_hash: input.workspace_binding.descriptor_binding_hash,
+      workspace_ticket_hash: input.workspace_binding.ticket_hash,
+      prompt_hash: input.prompt_hash,
+      branch_hash: input.branch_hash,
+      verify_command_hash: input.verify_command_hash,
+    },
+    intake_binding_hash: sha256(canonicalJson(input.trusted_intake_binding)),
+    sink_inventory_hash: input.sink_inventory_hash,
+    bridge_abi_hash: input.bridge_abi_hash,
+    sink_mappings: buildSinkMappings(input.action_bindings),
+    required_action_catalog_bindings: getRequiredActionCatalogBindingIds(),
+    required_runtime_stages: cloneCanonical(REQUIRED_RUNTIME_STAGES),
+    challenge_mapping: CHALLENGE_MAPPING,
+    terminal_mapping: TERMINAL_MAPPING,
+  });
+}
+
+function compileNormalizedInput(input) {
+  if (input.schema_version === ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION) {
+    return compileNormalizedInputV2(input);
+  }
+  return compileNormalizedInputV1(input);
+}
+
 function compileSupervisedEngineBridgeContract(raw) {
   return compileNormalizedInput(normalizeInput(raw));
 }
 
-function normalizeTrustedIntake(raw) {
+function normalizeTrustedIntakeV1(raw) {
   const value = assertPlainObject(raw, 'trusted supervised engine bridge intake');
   assertOnlyKeys(value, new Set([
     'schema_version',
@@ -706,6 +882,60 @@ function normalizeTrustedIntake(raw) {
     sink_inventory_hash: requireSha256(value.sink_inventory_hash, 'trusted intake sink_inventory_hash'),
     bridge_abi_hash: requireSha256(value.bridge_abi_hash, 'trusted intake bridge_abi_hash'),
   };
+}
+
+function normalizeTrustedIntakeV2(raw) {
+  const value = assertPlainObject(raw, 'trusted supervised engine bridge v2 intake');
+  assertOnlyKeys(value, new Set([
+    'schema_version',
+    'owner_run_id',
+    'engine_run_id',
+    'invocation_id',
+    'policy_hash',
+    'contract_hash',
+    'immutable_base',
+    'workspace_registration_id',
+    'workspace_root_hash',
+    'workspace_descriptor_binding_hash',
+    'workspace_ticket_hash',
+    'prompt_hash',
+    'branch_hash',
+    'verify_command_hash',
+    'sink_inventory_hash',
+    'bridge_abi_hash',
+  ]), 'trusted supervised engine bridge v2 intake');
+  if (value.schema_version !== ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION) {
+    throw contractError(`trusted supervised engine bridge v2 intake.schema_version must equal ${ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION}`);
+  }
+  return {
+    schema_version: ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
+    owner_run_id: requireToken(value.owner_run_id, 'trusted v2 intake owner_run_id'),
+    engine_run_id: requireToken(value.engine_run_id, 'trusted v2 intake engine_run_id'),
+    invocation_id: requireToken(value.invocation_id, 'trusted v2 intake invocation_id'),
+    policy_hash: requireSha256(value.policy_hash, 'trusted v2 intake policy_hash'),
+    contract_hash: requireSha256(value.contract_hash, 'trusted v2 intake contract_hash'),
+    immutable_base: requireImmutableBase(value.immutable_base),
+    workspace_registration_id: requireToken(value.workspace_registration_id, 'trusted v2 intake workspace_registration_id'),
+    workspace_root_hash: requireSha256(value.workspace_root_hash, 'trusted v2 intake workspace_root_hash'),
+    workspace_descriptor_binding_hash: requireSha256(
+      value.workspace_descriptor_binding_hash,
+      'trusted v2 intake workspace_descriptor_binding_hash',
+    ),
+    workspace_ticket_hash: requireSha256(value.workspace_ticket_hash, 'trusted v2 intake workspace_ticket_hash'),
+    prompt_hash: requireSha256(value.prompt_hash, 'trusted v2 intake prompt_hash'),
+    branch_hash: requireSha256(value.branch_hash, 'trusted v2 intake branch_hash'),
+    verify_command_hash: value.verify_command_hash === null
+      ? null
+      : requireSha256(value.verify_command_hash, 'trusted v2 intake verify_command_hash'),
+    sink_inventory_hash: requireSha256(value.sink_inventory_hash, 'trusted v2 intake sink_inventory_hash'),
+    bridge_abi_hash: requireSha256(value.bridge_abi_hash, 'trusted v2 intake bridge_abi_hash'),
+  };
+}
+
+function normalizeTrustedIntake(raw) {
+  const value = assertPlainObject(raw, 'trusted supervised engine bridge intake');
+  if (value.schema_version === ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION) return normalizeTrustedIntakeV2(value);
+  return normalizeTrustedIntakeV1(value);
 }
 
 function normalizeTrustedIntakeVerification(raw) {
@@ -773,7 +1003,7 @@ function verifySupervisedEngineBridgeContract(plan, raw, trustedIntakeEnvelope, 
   let verification;
   try {
     verification = trustedIntakeVerifier(trustedIntakeEnvelope, {
-      schema_version: ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
+      schema_version: input.schema_version,
       intake_binding_hash: expectedPlan.intake_binding_hash,
       sink_inventory_hash: expectedPlan.sink_inventory_hash,
       bridge_abi_hash: expectedPlan.bridge_abi_hash,
@@ -815,6 +1045,7 @@ module.exports = {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS,
   ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
+  ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
   TRUSTED_INTAKE_VERIFICATION_PATH,
   compileSupervisedEngineBridgeContract,
   getAutopilotEngineControlSinkInventory,

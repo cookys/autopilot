@@ -24,6 +24,8 @@ import time
 
 
 SCHEMA_VERSION = 1
+INTAKE_PROTOCOL_V1 = 1
+INTAKE_PROTOCOL_V2 = 2
 MAX_FRAME_BYTES = 262144
 MAX_RESULT_BYTES = 65536
 TOKEN_CHARS = frozenset(
@@ -367,7 +369,7 @@ def validate_shadow_witness_capsule(value, label):
     }
 
 
-def parse_verifier_output(output, expect_shadow_witness=False):
+def parse_verifier_output(output, expect_shadow_witness=False, intake_protocol_version=INTAKE_PROTOCOL_V1):
     if not output or len(output) > MAX_RESULT_BYTES:
         fail("installed verifier output is missing or too large")
     try:
@@ -388,6 +390,9 @@ def parse_verifier_output(output, expect_shadow_witness=False):
     }
     if expect_shadow_witness:
         expected.add("shadow_witness_capsule")
+    if intake_protocol_version == INTAKE_PROTOCOL_V2:
+        expected.add("intake_protocol_version")
+        expected.add("effect_authority")
     if not isinstance(value, dict) or set(value) != expected:
         fail("installed verifier output has an unexpected shape")
     if (
@@ -399,6 +404,14 @@ def parse_verifier_output(output, expect_shadow_witness=False):
         or not isinstance(value["bridge_receipt"], dict)
     ):
         fail("installed verifier output is not a non-authoritative intake receipt")
+    if (
+        intake_protocol_version == INTAKE_PROTOCOL_V2
+        and (
+            value["intake_protocol_version"] != INTAKE_PROTOCOL_V2
+            or value["effect_authority"] != "none"
+        )
+    ):
+        fail("installed verifier output does not match the v2 intake protocol")
     validate_shadow_summary(value["shadow"], "installed verifier shadow summary")
     if expect_shadow_witness:
         value["shadow_witness_capsule"] = validate_shadow_witness_capsule(
@@ -422,6 +435,8 @@ def run_node_verifier(args, payload):
         str(args.session_expires_at_ms),
         "--install-binding-hash",
         args.install_binding_hash,
+        "--intake-protocol-version",
+        str(args.intake_protocol_version),
     ]
     workspace_ticket = getattr(args, "workspace_ticket", None)
     if workspace_ticket is not None:
@@ -442,7 +457,9 @@ def run_node_verifier(args, payload):
     if result.returncode != 0:
         fail("installed verifier rejected the intake")
     return result.stdout, parse_verifier_output(
-        result.stdout, expect_shadow_witness=workspace_ticket is not None
+        result.stdout,
+        expect_shadow_witness=workspace_ticket is not None,
+        intake_protocol_version=args.intake_protocol_version,
     )
 
 
@@ -524,7 +541,11 @@ def append_shadow_witness(args, parsed):
             "effect_authority": "none",
             "acceptance": "not_available",
             "witness_assurance": "separate_uid_local_append_only_root_readback_not_p2",
-            "workspace_assurance": "root_held_descriptor_matches_signed_v1_path_and_base_only",
+            "workspace_assurance": (
+                "root_held_descriptor_matches_signed_v2_ticket_and_base"
+                if args.intake_protocol_version == INTAKE_PROTOCOL_V2
+                else "root_held_descriptor_matches_signed_v1_path_and_base_only"
+            ),
             "content_immutability": "not_available",
         },
     }
@@ -682,6 +703,7 @@ def parser():
     serve_parser.add_argument("--session-challenge-hash", required=True)
     serve_parser.add_argument("--session-expires-at-ms", type=int, required=True)
     serve_parser.add_argument("--install-binding-hash", required=True)
+    serve_parser.add_argument("--intake-protocol-version", type=int, default=INTAKE_PROTOCOL_V1)
     serve_parser.add_argument("--timeout-seconds", type=int, required=True)
     serve_parser.add_argument("--workspace-ticket")
     serve_parser.add_argument("--shadow-witness-binding")
@@ -708,6 +730,11 @@ def normalize_args(args):
         args.session_expires_at_ms, "session_expires_at_ms", 1
     )
     args.install_binding_hash = require_sha256(args.install_binding_hash, "install_binding_hash")
+    args.intake_protocol_version = require_nonnegative_int(
+        args.intake_protocol_version, "intake_protocol_version", INTAKE_PROTOCOL_V1
+    )
+    if args.intake_protocol_version not in {INTAKE_PROTOCOL_V1, INTAKE_PROTOCOL_V2}:
+        fail("intake_protocol_version is unsupported")
     args.expected_worker_pid = require_nonnegative_int(args.expected_worker_pid, "expected_worker_pid", 1)
     args.expected_worker_uid = require_nonnegative_int(args.expected_worker_uid, "expected_worker_uid", 1)
     args.expected_worker_gid = require_nonnegative_int(args.expected_worker_gid, "expected_worker_gid", 1)

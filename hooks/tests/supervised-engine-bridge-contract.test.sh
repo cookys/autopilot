@@ -12,6 +12,7 @@ const {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS,
   ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
+  ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
   TRUSTED_INTAKE_VERIFICATION_PATH,
   compileSupervisedEngineBridgeContract,
   getAutopilotEngineControlSinkInventory,
@@ -562,6 +563,133 @@ assert.throws(
   /trusted intake binding/i,
 );
 
+const v2WorkspaceBinding = {
+  registrationId: 'p35d-workspace-main',
+  workspaceRootHash: hash('p35d-root-held-workspace'),
+  descriptorBindingHash: hash('p35d-root-held-descriptor'),
+  ticketHash: hash('p35d-root-issued-ticket'),
+};
+const v2Input = {
+  schema_version: ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
+  ownerRunId: 'owner-run-p35d',
+  engineRunId: 'engine-run-p35d',
+  invocationId: 'invocation-p35d',
+  governanceConfig: governanceConfig(),
+  acceptanceContract: acceptanceContract(),
+  immutableBase: 'b'.repeat(40),
+  workspaceBinding: v2WorkspaceBinding,
+  prompt: 'v2 owner prompt remains hash-only',
+  branch: 'feat/p35d-path-free',
+  verifyCommand: 'bash hooks/tests/run.sh --parallel 16',
+  actionCatalogBindings: bindings(),
+};
+const v2Plan = compileSupervisedEngineBridgeContract(v2Input);
+const v2TrustedIntakeBinding = {
+  schema_version: ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
+  owner_run_id: v2Input.ownerRunId,
+  engine_run_id: v2Input.engineRunId,
+  invocation_id: v2Input.invocationId,
+  policy_hash: resolveGovernancePolicy(v2Input.governanceConfig).policy_hash,
+  contract_hash: freezeAcceptanceContract(v2Input.acceptanceContract).contract_hash,
+  immutable_base: v2Input.immutableBase,
+  workspace_registration_id: v2WorkspaceBinding.registrationId,
+  workspace_root_hash: v2WorkspaceBinding.workspaceRootHash,
+  workspace_descriptor_binding_hash: v2WorkspaceBinding.descriptorBindingHash,
+  workspace_ticket_hash: v2WorkspaceBinding.ticketHash,
+  prompt_hash: hash(v2Input.prompt),
+  branch_hash: hash(v2Input.branch),
+  verify_command_hash: hash(v2Input.verifyCommand),
+  sink_inventory_hash: hash(canonicalJson(getAutopilotEngineControlSinkInventory())),
+  bridge_abi_hash: getSupervisedEngineBridgeAbiHash(ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION),
+};
+const v2PlanHash = hash(canonicalJson(v2Plan));
+let v2VerifierContext = null;
+const v2Authority = {
+  issuer: 'test-host-v2',
+  key_id: 'test-host-v2-key',
+  attestation_hash: hash('test-host-v2-attestation'),
+};
+const v2Receipt = verifySupervisedEngineBridgeContract(
+  v2Plan,
+  v2Input,
+  { fixture: 'host-pinned-intake-p35d' },
+  {
+    trustedIntakeVerifier: (_envelope, context) => {
+      v2VerifierContext = context;
+      return {
+        ok: true,
+        verification_path: TRUSTED_INTAKE_VERIFICATION_PATH,
+        issuer: v2Authority.issuer,
+        key_id: v2Authority.key_id,
+        attestation_hash: v2Authority.attestation_hash,
+        envelope_hash: hash('host-pinned-intake-p35d'),
+        binding: v2TrustedIntakeBinding,
+        binding_hash: hash(canonicalJson(v2TrustedIntakeBinding)),
+        plan_hash: v2PlanHash,
+      };
+    },
+    trustedIntakeAuthority: v2Authority,
+  },
+);
+assert.equal(v2Plan.schema_version, ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION);
+assert.equal(v2Plan.inputs.workspace_registration_id, v2WorkspaceBinding.registrationId);
+assert.equal(v2Plan.inputs.workspace_ticket_hash, v2WorkspaceBinding.ticketHash);
+assert.equal(v2Plan.inputs.workspace_descriptor_binding_hash, v2WorkspaceBinding.descriptorBindingHash);
+assert.equal(JSON.stringify(v2Plan).includes('workspaceRoot'), false);
+assert.equal(JSON.stringify(v2Plan).includes('/private/raw-path'), false);
+assert.equal(v2Receipt.verified, true);
+assert.equal(v2VerifierContext.schema_version, ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION);
+assert.throws(
+  () => compileSupervisedEngineBridgeContract({ ...v2Input, workspaceRoot: '/private/raw-path' }),
+  /unsupported key/i,
+);
+assert.throws(
+  () => compileSupervisedEngineBridgeContract({ ...v2Input, schema_version: 1 }),
+  /must omit schema_version|schema_version 2/i,
+);
+for (const [label, mutate] of [
+  ['registration', (value) => { value.workspaceBinding.registrationId = 'p35d-other'; }],
+  ['workspace hash', (value) => { value.workspaceBinding.workspaceRootHash = hash('other-root'); }],
+  ['descriptor', (value) => { value.workspaceBinding.descriptorBindingHash = hash('other-descriptor'); }],
+  ['ticket', (value) => { value.workspaceBinding.ticketHash = hash('other-ticket'); }],
+  ['base', (value) => { value.immutableBase = 'c'.repeat(40); }],
+]) {
+  const mutated = clone(v2Input);
+  mutate(mutated);
+  assert.throws(
+    () => verifySupervisedEngineBridgeContract(
+      v2Plan,
+      mutated,
+      { fixture: 'host-pinned-intake-p35d' },
+      {
+        trustedIntakeVerifier: () => ({
+          ok: true,
+          verification_path: TRUSTED_INTAKE_VERIFICATION_PATH,
+          issuer: v2Authority.issuer,
+          key_id: v2Authority.key_id,
+          attestation_hash: v2Authority.attestation_hash,
+          envelope_hash: hash('host-pinned-intake-p35d'),
+          binding: v2TrustedIntakeBinding,
+          binding_hash: hash(canonicalJson(v2TrustedIntakeBinding)),
+          plan_hash: v2PlanHash,
+        }),
+        trustedIntakeAuthority: v2Authority,
+      },
+    ),
+    /does not match/i,
+    label,
+  );
+}
+assert.throws(
+  () => verifySupervisedEngineBridgeContract(
+    v2Plan,
+    v2Input,
+    baselineTrustedIntakeEnvelope,
+    verificationOptions,
+  ),
+  /trusted intake binding|host-pinned authority/i,
+);
+
 console.log(`sink_inventory=${AUTOPILOT_ENGINE_CONTROL_SINKS.length}`);
 console.log(`action_catalog_bindings=${getRequiredActionCatalogBindingIds().length}`);
 console.log('sensitive_inputs_omitted=true');
@@ -572,6 +700,7 @@ console.log('workspace_binding=true');
 console.log('mediated_mapping=true');
 console.log('host_mapping_pinned=true');
 console.log('host_authority_pinned=true');
+console.log('descriptor_bound_v2_is_path_free_and_cross_version_closed=true');
 NODE
 )"
 NODE_STATUS=$?
@@ -587,5 +716,6 @@ assert_contains "$OUT" "workspace_binding=true" "workspace substitution is bound
 assert_contains "$OUT" "mediated_mapping=true" "mutable sinks require mediated P2 action mappings"
 assert_contains "$OUT" "host_mapping_pinned=true" "host verification pins the static bridge mapping and compiled plan"
 assert_contains "$OUT" "host_authority_pinned=true" "host verification pins the configured intake authority"
+assert_contains "$OUT" "descriptor_bound_v2_is_path_free_and_cross_version_closed=true" "v2 binds the root ticket and rejects raw-path or cross-version input"
 
 finalize_test

@@ -15,6 +15,8 @@ const {
 } = require('./owner-kernel/canonical');
 
 const SHADOW_ENGINE_CONSUMER_SCHEMA_VERSION = 1;
+const BRIDGE_V1_SCHEMA_VERSION = 1;
+const BRIDGE_V2_SCHEMA_VERSION = 2;
 const SHADOW_ENGINE_STATE_DIRECTORY = 'shadow-engine';
 const SHADOW_INTAKE_RECORDED = 'shadow_intake_recorded';
 const SHADOW_INTAKE_RECOVERY_REQUIRED = 'shadow_intake_recovery_required';
@@ -338,13 +340,30 @@ function removePrivateTemporaryFile(directory, filename, targetName, label) {
 
 function normalizePlan(raw) {
   const value = requirePlainObject(raw, 'compiled supervised Engine bridge plan');
-  const inputs = requireExactKeys(value.inputs, new Set([
-    'workspace_root_hash',
-    'prompt_hash',
-    'branch_hash',
-    'verify_command_hash',
-  ]), 'compiled supervised Engine bridge plan.inputs');
+  const bridgeSchemaVersion = value.schema_version;
+  if (bridgeSchemaVersion !== BRIDGE_V1_SCHEMA_VERSION && bridgeSchemaVersion !== BRIDGE_V2_SCHEMA_VERSION) {
+    fail('compiled supervised Engine bridge plan schema is unsupported');
+  }
+  const inputs = requireExactKeys(value.inputs, new Set(
+    bridgeSchemaVersion === BRIDGE_V2_SCHEMA_VERSION
+      ? [
+        'workspace_registration_id',
+        'workspace_root_hash',
+        'workspace_descriptor_binding_hash',
+        'workspace_ticket_hash',
+        'prompt_hash',
+        'branch_hash',
+        'verify_command_hash',
+      ]
+      : [
+        'workspace_root_hash',
+        'prompt_hash',
+        'branch_hash',
+        'verify_command_hash',
+      ],
+  ), 'compiled supervised Engine bridge plan.inputs');
   return {
+    schema_version: bridgeSchemaVersion,
     plan_hash: sha256(canonicalJson(value)),
     owner_run_id: requireToken(value.owner_run_id, 'compiled supervised Engine bridge plan.owner_run_id'),
     engine_run_id: requireToken(value.engine_run_id, 'compiled supervised Engine bridge plan.engine_run_id'),
@@ -383,7 +402,8 @@ function normalizeAuthenticatedReceipt(raw) {
     'verified_at_ms',
     'replay_status',
   ]), 'authenticated supervised intake receipt');
-  if (value.schema_version !== SHADOW_ENGINE_CONSUMER_SCHEMA_VERSION
+  if ((value.schema_version !== SHADOW_ENGINE_CONSUMER_SCHEMA_VERSION
+      && value.schema_version !== BRIDGE_V2_SCHEMA_VERSION)
     || value.status !== 'verified_intake'
     || value.owner_kernel_authority !== 'none'
     || value.acceptance !== 'not_available'
@@ -442,9 +462,11 @@ function buildVerifiedIntakeCapsule(raw) {
   ]), 'verified supervised shadow intake capsule input');
   const plan = normalizePlan(value.plan);
   const authenticated = normalizeAuthenticatedReceipt(value.authenticatedReceipt);
+  const authenticatedSchemaVersion = value.authenticatedReceipt.schema_version;
   const bridge = normalizeBridgeReceipt(value.bridgeReceipt);
   const installBindingHash = requireDigest(value.installBindingHash, 'verified supervised shadow intake installBindingHash');
   if (plan.plan_hash !== bridge.plan_hash || authenticated.plan_hash !== plan.plan_hash
+    || authenticatedSchemaVersion !== plan.schema_version
     || authenticated.binding_hash !== plan.intake_binding_hash
     || bridge.intake_binding_hash !== plan.intake_binding_hash
     || bridge.sink_inventory_hash !== plan.sink_inventory_hash

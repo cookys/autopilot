@@ -3,9 +3,11 @@
 
 ``install`` is a root-operator trust handoff. It snapshots the host, gateway,
 worker, Node verifier, P3.3 contract dependencies, and an Ed25519 public
-keyring. ``begin`` creates a short-lived host challenge; ``submit`` only moves
-bounded opaque bytes from root stdin to the dedicated worker. The unprivileged
-verifier parses the request and produces a non-authoritative receipt.
+keyring. ``begin`` creates a short-lived host challenge; v1 ``submit`` moves
+bounded opaque bytes from root stdin to the dedicated worker, while v2 first
+performs a bounded non-authenticating structural path-field preflight. The
+unprivileged verifier parses the request and produces a non-authoritative
+receipt.
 """
 
 import argparse
@@ -29,6 +31,8 @@ import time
 
 
 SCHEMA_VERSION = 1
+INTAKE_PROTOCOL_V1 = 1
+INTAKE_PROTOCOL_V2 = 2
 WORKER_IDENTITY = "autopilot-intake-worker"
 VERIFIER_IDENTITY = "autopilot-verifier"
 SHADOW_WITNESS_IDENTITY = "autopilot-shadow-witness"
@@ -498,6 +502,79 @@ def read_bounded_stdin(timeout_seconds, descriptor=None):
     if total == 0:
         fail("P3.5 submit request is empty")
     return b"".join(blocks)
+
+
+def decode_canonical_base64url(value, label, maximum):
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > maximum * 2
+        or any(character not in BASE64URL_CHARS for character in value)
+    ):
+        fail(label + " must be bounded canonical base64url")
+    try:
+        padding = "=" * (-len(value) % 4)
+        decoded = base64.urlsafe_b64decode(value + padding)
+    except (ValueError, UnicodeEncodeError) as error:
+        fail(label + " is invalid base64url: " + str(error))
+    if (
+        len(decoded) == 0
+        or len(decoded) > maximum
+        or base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=") != value
+    ):
+        fail(label + " must be bounded canonical base64url")
+    return decoded
+
+
+def reject_v2_structured_workspace_path_fields(value, label):
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, dict):
+            for key, nested in current.items():
+                if key in {"workspaceRoot", "workspace_root"}:
+                    fail(label + " must not carry a raw workspace path field")
+                pending.append(nested)
+        elif isinstance(current, list):
+            pending.extend(current)
+
+
+def preflight_v2_request_before_worker_handoff(raw):
+    value = require_canonical_json_bytes(raw, "P3.5d v2 root preflight request", MAX_REQUEST_BYTES)
+    value = require_exact_keys(
+        value,
+        {"bridge_input", "envelope", "protocol_version", "session_id"},
+        "P3.5d v2 root preflight request",
+    )
+    if value["protocol_version"] != INTAKE_PROTOCOL_V2:
+        fail("P3.5d v2 root preflight request protocol_version is invalid")
+    require_token(value["session_id"], "P3.5d v2 root preflight session id")
+    bridge_input = require_plain_object(value["bridge_input"], "P3.5d v2 root preflight bridge input")
+    envelope = require_exact_keys(
+        value["envelope"],
+        {"schema_version", "protected_payload", "signature"},
+        "P3.5d v2 root preflight envelope",
+    )
+    if envelope["schema_version"] != INTAKE_PROTOCOL_V2:
+        fail("P3.5d v2 root preflight envelope schema_version is invalid")
+    decode_canonical_base64url(
+        envelope["signature"], "P3.5d v2 root preflight signature", MAX_REQUEST_BYTES
+    )
+    protected_claims = require_canonical_json_bytes(
+        decode_canonical_base64url(
+            envelope["protected_payload"],
+            "P3.5d v2 root preflight protected payload",
+            MAX_REQUEST_BYTES,
+        ),
+        "P3.5d v2 root preflight protected claims",
+        MAX_REQUEST_BYTES,
+    )
+    reject_v2_structured_workspace_path_fields(
+        bridge_input, "P3.5d v2 root preflight bridge input"
+    )
+    reject_v2_structured_workspace_path_fields(
+        protected_claims, "P3.5d v2 root preflight protected claims"
+    )
 
 
 def file_digest(path):
@@ -1287,24 +1364,32 @@ def require_reapable_session_layout(paths, worker, verifier):
 
 
 def normalize_session(value, config):
-    value = require_exact_keys(
-        value,
-        {
-            "expires_at_ms",
-            "install_binding_hash",
-            "schema_version",
-            "session_challenge_hash",
-            "session_id",
-            "status",
-        },
-        "P3.5 session state",
-    )
+    required = {
+        "expires_at_ms",
+        "install_binding_hash",
+        "schema_version",
+        "session_challenge_hash",
+        "session_id",
+        "status",
+    }
+    protocol_version = INTAKE_PROTOCOL_V1
+    if isinstance(value, dict) and "intake_protocol_version" in value:
+        required = required | {"intake_protocol_version"}
+        protocol_version = value["intake_protocol_version"]
+    value = require_exact_keys(value, required, "P3.5 session state")
     if value["schema_version"] != SCHEMA_VERSION:
         fail("P3.5 session state schema_version is unsupported")
     if value["status"] not in {"open", "submitting"}:
         fail("P3.5 session state is not open")
     if value["install_binding_hash"] != config["binding_hash"]:
         fail("P3.5 session does not match the installed host")
+    protocol_version = require_nonnegative_int(
+        protocol_version, "P3.5 session intake protocol", INTAKE_PROTOCOL_V1
+    )
+    if protocol_version not in {INTAKE_PROTOCOL_V1, INTAKE_PROTOCOL_V2}:
+        fail("P3.5 session intake protocol is unsupported")
+    if protocol_version == INTAKE_PROTOCOL_V1 and "intake_protocol_version" in value:
+        fail("P3.5 v1 session must omit intake protocol version")
     return {
         "schema_version": SCHEMA_VERSION,
         "status": value["status"],
@@ -1312,7 +1397,15 @@ def normalize_session(value, config):
         "session_challenge_hash": require_sha256(value["session_challenge_hash"], "P3.5 session_challenge_hash"),
         "install_binding_hash": config["binding_hash"],
         "expires_at_ms": require_nonnegative_int(value["expires_at_ms"], "P3.5 session expiry", 1),
+        "intake_protocol_version": protocol_version,
     }
+
+
+def session_storage_value(session):
+    value = dict(session)
+    if value.get("intake_protocol_version") == INTAKE_PROTOCOL_V1:
+        value.pop("intake_protocol_version", None)
+    return value
 
 
 def normalize_workspace_ticket(value, config, session_id=None, session_challenge_hash=None):
@@ -1408,24 +1501,32 @@ def require_workspace_binding_layout(paths, verifier):
 
 
 def normalize_reapable_session(value, session_id):
-    value = require_exact_keys(
-        value,
-        {
-            "expires_at_ms",
-            "install_binding_hash",
-            "schema_version",
-            "session_challenge_hash",
-            "session_id",
-            "status",
-        },
-        "P3.5 reaped session state",
-    )
+    required = {
+        "expires_at_ms",
+        "install_binding_hash",
+        "schema_version",
+        "session_challenge_hash",
+        "session_id",
+        "status",
+    }
+    protocol_version = INTAKE_PROTOCOL_V1
+    if isinstance(value, dict) and "intake_protocol_version" in value:
+        required = required | {"intake_protocol_version"}
+        protocol_version = value["intake_protocol_version"]
+    value = require_exact_keys(value, required, "P3.5 reaped session state")
     if value["schema_version"] != SCHEMA_VERSION:
         fail("P3.5 reaped session state schema_version is unsupported")
     if value["status"] not in {"open", "submitting"}:
         fail("P3.5 reaped session state has an unexpected status")
     if require_token(value["session_id"], "P3.5 reaped session_id") != session_id:
         fail("P3.5 reaped session state does not match its runtime directory")
+    protocol_version = require_nonnegative_int(
+        protocol_version, "P3.5 reaped session intake protocol", INTAKE_PROTOCOL_V1
+    )
+    if protocol_version not in {INTAKE_PROTOCOL_V1, INTAKE_PROTOCOL_V2}:
+        fail("P3.5 reaped session intake protocol is unsupported")
+    if protocol_version == INTAKE_PROTOCOL_V1 and "intake_protocol_version" in value:
+        fail("P3.5 reaped v1 session must omit intake protocol version")
     return {
         "schema_version": SCHEMA_VERSION,
         "status": value["status"],
@@ -1433,6 +1534,7 @@ def normalize_reapable_session(value, session_id):
         "session_challenge_hash": require_sha256(value["session_challenge_hash"], "P3.5 reaped session challenge"),
         "install_binding_hash": require_sha256(value["install_binding_hash"], "P3.5 reaped install binding"),
         "expires_at_ms": require_nonnegative_int(value["expires_at_ms"], "P3.5 reaped session expiry", 1),
+        "intake_protocol_version": protocol_version,
     }
 
 
@@ -1778,9 +1880,19 @@ def release_workspace_ticket(install_root, validated, ticket):
         fail("workspace registry did not release the descriptor")
 
 
-def create_session(config, validated, install_root, workspace_registration_id=None):
+def create_session(
+    config,
+    validated,
+    install_root,
+    workspace_registration_id=None,
+    intake_protocol_version=INTAKE_PROTOCOL_V1,
+):
     P34.require_root()
     P34.require_supported_host()
+    if intake_protocol_version not in {INTAKE_PROTOCOL_V1, INTAKE_PROTOCOL_V2}:
+        fail("P3.5 intake protocol version is unsupported")
+    if intake_protocol_version == INTAKE_PROTOCOL_V2 and workspace_registration_id is None:
+        fail("P3.5d v2 session requires a workspace registration id")
     reap_expired_sessions(validated)
     worker = validated["worker"]
     verifier = validated["verifier"]
@@ -1808,6 +1920,8 @@ def create_session(config, validated, install_root, workspace_registration_id=No
             "install_binding_hash": config["binding_hash"],
             "expires_at_ms": int(time.time() * 1000) + validated["limits"]["session_ttl_milliseconds"],
         }
+        if intake_protocol_version == INTAKE_PROTOCOL_V2:
+            session["intake_protocol_version"] = INTAKE_PROTOCOL_V2
         write_atomic_root_json(pending_paths["session"], session)
         if workspace_registration_id is not None:
             P34.create_directory(
@@ -1866,9 +1980,19 @@ def create_session(config, validated, install_root, workspace_registration_id=No
             "registration_id": workspace_ticket["registration_id"],
             "descriptor_binding_hash": workspace_ticket["descriptor_binding_hash"],
             "ticket_hash": workspace_ticket["ticket_hash"],
-            "assurance": "root_held_descriptor_matches_signed_v1_path_and_base_only",
+            "assurance": (
+                "root_held_descriptor_matches_signed_v2_ticket_and_base"
+                if intake_protocol_version == INTAKE_PROTOCOL_V2
+                else "root_held_descriptor_matches_signed_v1_path_and_base_only"
+            ),
             "content_immutability": "not_available",
         }
+        if intake_protocol_version == INTAKE_PROTOCOL_V2:
+            result["workspace_binding"]["workspace_root_hash"] = workspace_ticket["workspace_root_hash"]
+            result["workspace_binding"]["immutable_base"] = workspace_ticket["immutable_base"]
+    if intake_protocol_version == INTAKE_PROTOCOL_V2:
+        result["intake_protocol_version"] = INTAKE_PROTOCOL_V2
+        result["effect_authority"] = "none"
     return result
 
 
@@ -2289,7 +2413,9 @@ def validate_shadow_summary(value, label):
     return value
 
 
-def validate_shadow_witness_summary(value, ticket, label):
+def validate_shadow_witness_summary(
+    value, ticket, label, intake_protocol_version=INTAKE_PROTOCOL_V1
+):
     value = require_exact_keys(
         value,
         {
@@ -2336,7 +2462,11 @@ def validate_shadow_witness_summary(value, ticket, label):
         or disclosure["witness_assurance"]
         != "separate_uid_local_append_only_root_readback_not_p2"
         or disclosure["workspace_assurance"]
-        != "root_held_descriptor_matches_signed_v1_path_and_base_only"
+        != (
+            "root_held_descriptor_matches_signed_v2_ticket_and_base"
+            if intake_protocol_version == INTAKE_PROTOCOL_V2
+            else "root_held_descriptor_matches_signed_v1_path_and_base_only"
+        )
         or disclosure["content_immutability"] != "not_available"
     ):
         fail(label + " is not a non-authoritative shadow witness record")
@@ -2386,7 +2516,9 @@ def verify_shadow_witness_root_readback(install_root, paths, binding, ticket, su
         fail("root shadow witness readback does not match the verifier result")
 
 
-def validate_gateway_result(value, expected_worker, ticket=None):
+def validate_gateway_result(
+    value, expected_worker, ticket=None, intake_protocol_version=INTAKE_PROTOCOL_V1
+):
     if isinstance(value, dict) and set(value) == {"schema_version", "status"}:
         if value["schema_version"] == SCHEMA_VERSION and value["status"] == "rejected":
             fail("gateway rejected the intake before a verified receipt")
@@ -2412,6 +2544,9 @@ def validate_gateway_result(value, expected_worker, ticket=None):
     }
     if ticket is not None:
         expected_output.add("shadow_witness")
+    if intake_protocol_version == INTAKE_PROTOCOL_V2:
+        expected_output.add("intake_protocol_version")
+        expected_output.add("effect_authority")
     output = require_exact_keys(value["output"], expected_output, "gateway verifier output")
     if (
         output["schema_version"] != SCHEMA_VERSION
@@ -2422,10 +2557,21 @@ def validate_gateway_result(value, expected_worker, ticket=None):
         or not isinstance(output["bridge_receipt"], dict)
     ):
         fail("gateway verifier output is not non-authoritative")
+    if (
+        intake_protocol_version == INTAKE_PROTOCOL_V2
+        and (
+            output["intake_protocol_version"] != INTAKE_PROTOCOL_V2
+            or output["effect_authority"] != "none"
+        )
+    ):
+        fail("gateway verifier output does not match the v2 intake protocol")
     validate_shadow_summary(output["shadow"], "gateway verifier shadow summary")
     if ticket is not None:
         validate_shadow_witness_summary(
-            output["shadow_witness"], ticket, "gateway verifier shadow witness summary"
+            output["shadow_witness"],
+            ticket,
+            "gateway verifier shadow witness summary",
+            intake_protocol_version,
         )
     return {"peer": peer, "receipt_hash": value["receipt_hash"], "output": output}
 
@@ -2514,12 +2660,14 @@ def submit_session(session_id):
                 "session shadow witness root",
             )
         session["status"] = "submitting"
-        write_atomic_root_json(paths["session"], session, replace=True)
+        write_atomic_root_json(paths["session"], session_storage_value(session), replace=True)
         request = read_bounded_stdin(
             min(REQUEST_TIMEOUT_SECONDS, (session["expires_at_ms"] - now) / 1000)
         )
         if int(time.time() * 1000) >= session["expires_at_ms"]:
             fail("P3.5 session expired while reading the request")
+        if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2:
+            preflight_v2_request_before_worker_handoff(request)
         release_token = secrets.token_urlsafe(24).rstrip("=")
         worker_command = [
             system_paths["python_path"],
@@ -2573,6 +2721,7 @@ def submit_session(session_id):
             "--session-challenge-hash", session["session_challenge_hash"],
             "--session-expires-at-ms", str(session["expires_at_ms"]),
             "--install-binding-hash", config["binding_hash"],
+            "--intake-protocol-version", str(session["intake_protocol_version"]),
             "--timeout-seconds", str(REQUEST_TIMEOUT_SECONDS),
         ]
         if workspace_ticket is not None:
@@ -2665,6 +2814,7 @@ def submit_session(session_id):
             result,
             {"pid": worker_pid, "uid": worker["uid"], "gid": worker["gid"]},
             ticket=workspace_ticket,
+            intake_protocol_version=session["intake_protocol_version"],
         )
         if workspace_ticket is not None:
             if shadow_witness_binding is None:
@@ -2720,10 +2870,20 @@ def submit_session(session_id):
                 "registration_id": workspace_ticket["registration_id"],
                 "descriptor_binding_hash": workspace_ticket["descriptor_binding_hash"],
                 "ticket_hash": workspace_ticket["ticket_hash"],
-                "assurance": "root_held_descriptor_matches_signed_v1_path_and_base_only",
+                "assurance": (
+                    "root_held_descriptor_matches_signed_v2_ticket_and_base"
+                    if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2
+                    else "root_held_descriptor_matches_signed_v1_path_and_base_only"
+                ),
                 "content_immutability": "not_available",
             }
+            if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2:
+                output["workspace_binding"]["workspace_root_hash"] = workspace_ticket["workspace_root_hash"]
+                output["workspace_binding"]["immutable_base"] = workspace_ticket["immutable_base"]
             output["shadow_witness"] = checked["output"]["shadow_witness"]
+        if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2:
+            output["intake_protocol_version"] = INTAKE_PROTOCOL_V2
+            output["effect_authority"] = "none"
         return output
     finally:
         if witness_started:
@@ -2846,7 +3006,22 @@ def begin(args):
             if args.workspace_registration_id is not None
             else None
         )
-        return create_session(config, validated, install_root, registration_id)
+        intake_protocol_version = require_nonnegative_int(
+            args.intake_protocol_version,
+            "intake protocol version",
+            INTAKE_PROTOCOL_V1,
+        )
+        if intake_protocol_version not in {INTAKE_PROTOCOL_V1, INTAKE_PROTOCOL_V2}:
+            fail("intake protocol version is unsupported")
+        if intake_protocol_version == INTAKE_PROTOCOL_V2 and registration_id is None:
+            fail("P3.5d v2 begin requires a workspace registration id")
+        return create_session(
+            config,
+            validated,
+            install_root,
+            registration_id,
+            intake_protocol_version,
+        )
     finally:
         release_root_lease(lease)
 
@@ -2967,6 +3142,9 @@ def parser():
     install_parser.set_defaults(handler=install)
     begin_parser = commands.add_parser("begin")
     begin_parser.add_argument("--workspace-registration-id")
+    begin_parser.add_argument(
+        "--intake-protocol-version", type=int, default=INTAKE_PROTOCOL_V1
+    )
     begin_parser.set_defaults(handler=begin)
     submit_parser = commands.add_parser("submit")
     submit_parser.add_argument("--session-id", required=True)

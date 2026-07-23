@@ -175,11 +175,271 @@ session = host.normalize_session({
 }, config)
 assert session['session_challenge_hash'] == 'c' * 64
 assert 'session_challenge' not in session
+assert host.session_storage_value(session).get('intake_protocol_version') is None
+v2_session = host.normalize_session({
+    'schema_version': 1,
+    'status': 'open',
+    'session_id': 'p35d-session',
+    'session_challenge_hash': 'd' * 64,
+    'install_binding_hash': 'b' * 64,
+    'expires_at_ms': 11,
+    'intake_protocol_version': 2,
+}, config)
+assert v2_session['intake_protocol_version'] == 2
+assert host.session_storage_value(v2_session)['intake_protocol_version'] == 2
+try:
+    host.normalize_session({
+        'schema_version': 1,
+        'status': 'open',
+        'session_id': 'p35-v1-explicit',
+        'session_challenge_hash': 'e' * 64,
+        'install_binding_hash': 'b' * 64,
+        'expires_at_ms': 12,
+        'intake_protocol_version': 1,
+    }, config)
+    raise AssertionError('v1 session with a v2 discriminator field was accepted')
+except host.HostError:
+    pass
 try:
     host.normalize_session({**session, 'status': 'complete'}, config)
     raise AssertionError('completed session was accepted for submit')
 except host.HostError:
     pass
+
+
+def v2_preflight_request(bridge_input, protected_claims):
+    protected_payload = base64.urlsafe_b64encode(
+        host.canonical(protected_claims).encode('utf-8')
+    ).decode('ascii').rstrip('=')
+    signature = base64.urlsafe_b64encode(b'v2-preflight-signature').decode('ascii').rstrip('=')
+    return host.canonical({
+        'protocol_version': 2,
+        'session_id': 'p35-v2-preflight',
+        'bridge_input': bridge_input,
+        'envelope': {
+            'schema_version': 2,
+            'protected_payload': protected_payload,
+            'signature': signature,
+        },
+    }).encode('utf-8')
+
+
+valid_v2_preflight_request = v2_preflight_request(
+    {
+        'schema_version': 2,
+        'workspaceBinding': {'workspaceRootHash': 'a' * 64},
+        'prompt': 'opaque task input',
+    },
+    {'schema_version': 2, 'binding': {'workspace_root_hash': 'a' * 64}},
+)
+assert host.preflight_v2_request_before_worker_handoff(valid_v2_preflight_request) is None
+raw_v2_workspace_request = v2_preflight_request(
+    {'schema_version': 2, 'workspaceRoot': '/root/registered-workspace'},
+    {'schema_version': 2, 'binding': {}},
+)
+try:
+    host.preflight_v2_request_before_worker_handoff(raw_v2_workspace_request)
+    raise AssertionError('v2 root preflight accepted a raw bridge workspace path')
+except host.HostError:
+    pass
+try:
+    host.preflight_v2_request_before_worker_handoff(v2_preflight_request(
+        {'schema_version': 2, 'workspaceBinding': {'workspaceRoot': '/root/registered-workspace'}},
+        {'schema_version': 2, 'binding': {}},
+    ))
+    raise AssertionError('v2 root preflight accepted a nested raw bridge workspace path')
+except host.HostError:
+    pass
+try:
+    host.preflight_v2_request_before_worker_handoff(v2_preflight_request(
+        {'schema_version': 2, 'workspaceBinding': {'workspaceRootHash': 'a' * 64}},
+        {'schema_version': 2, 'binding': {'workspace_root': '/root/registered-workspace'}},
+    ))
+    raise AssertionError('v2 root preflight accepted a raw signed workspace path')
+except host.HostError:
+    pass
+top_level_raw_v2_request = json.loads(valid_v2_preflight_request.decode('utf-8'))
+top_level_raw_v2_request['workspaceRoot'] = '/root/registered-workspace'
+try:
+    host.preflight_v2_request_before_worker_handoff(
+        host.canonical(top_level_raw_v2_request).encode('utf-8')
+    )
+    raise AssertionError('v2 root preflight accepted a top-level raw workspace path')
+except host.HostError:
+    pass
+bad_envelope_v2_request = json.loads(valid_v2_preflight_request.decode('utf-8'))
+bad_envelope_v2_request['envelope']['schema_version'] = 1
+try:
+    host.preflight_v2_request_before_worker_handoff(
+        host.canonical(bad_envelope_v2_request).encode('utf-8')
+    )
+    raise AssertionError('v2 root preflight accepted a v1 envelope')
+except host.HostError:
+    pass
+bad_payload_v2_request = json.loads(valid_v2_preflight_request.decode('utf-8'))
+bad_payload_v2_request['envelope']['protected_payload'] = 'not!base64'
+try:
+    host.preflight_v2_request_before_worker_handoff(
+        host.canonical(bad_payload_v2_request).encode('utf-8')
+    )
+    raise AssertionError('v2 root preflight accepted a malformed protected payload')
+except host.HostError:
+    pass
+
+with tempfile.TemporaryDirectory(prefix='p35-v2-preflight-', dir='/tmp') as temporary:
+    original_p34 = host.P34
+    original_installed_root = host.installed_root_from_self
+    original_load_config = host.load_installed_config
+    original_validate_config = host.validate_installed_config
+    original_acquire_lease = host.acquire_global_submit_lease
+    original_release_lease = host.release_root_lease
+    original_session_paths = host.session_paths
+    original_require_session_layout = host.require_session_layout
+    original_read_root_private_json = host.read_root_private_json
+    original_normalize_session = host.normalize_session
+    original_create_submit_claim = host.create_submit_claim
+    original_write_atomic_root_json = host.write_atomic_root_json
+    original_read_bounded_stdin = host.read_bounded_stdin
+    original_cleanup_session_paths = host.cleanup_session_paths
+    original_launch_unit = host.launch_unit
+    original_deliver_request = host.deliver_request_to_exact_worker
+    launches = []
+    handoffs = []
+    fake_paths = {
+        'binding': os.path.join(temporary, 'no-binding'),
+        'session': os.path.join(temporary, 'session.json'),
+        'root': os.path.join(temporary, 'session-root'),
+    }
+    future = int(time.time() * 1000) + 60000
+    fake_session = {
+        'schema_version': 1,
+        'status': 'open',
+        'session_id': 'p35-v2-preflight',
+        'session_challenge_hash': 'c' * 64,
+        'install_binding_hash': 'b' * 64,
+        'expires_at_ms': future,
+        'intake_protocol_version': 2,
+    }
+
+    class PreflightP34:
+        class LauncherError(Exception):
+            pass
+
+        @staticmethod
+        def require_root():
+            return None
+
+        @staticmethod
+        def require_supported_host():
+            return None
+
+        @staticmethod
+        def create_tracked_resource(resources, key, action):
+            action(lambda: resources.__setitem__(key, True))
+
+    host.P34 = PreflightP34
+    host.installed_root_from_self = lambda: '/test-install'
+    host.load_installed_config = lambda _root: {'binding_hash': 'b' * 64}
+    host.validate_installed_config = lambda _root, _config: {
+        'worker': {'uid': 991, 'gid': 991},
+        'verifier': {'uid': 992, 'gid': 992},
+        'shadow_witness': {'uid': 993, 'gid': 993},
+        'paths': {},
+    }
+    host.acquire_global_submit_lease = lambda: object()
+    host.release_root_lease = lambda _lease: None
+    host.session_paths = lambda _session_id: fake_paths
+    host.require_session_layout = lambda _paths, _worker, _verifier: None
+    host.read_root_private_json = lambda _path, _label: dict(fake_session)
+    host.normalize_session = lambda value, _config: dict(value)
+    host.create_submit_claim = lambda _paths, _session_id, on_created: on_created()
+    host.write_atomic_root_json = lambda *_args, **_kwargs: None
+    host.read_bounded_stdin = lambda _timeout: raw_v2_workspace_request
+    host.cleanup_session_paths = lambda *_args, **_kwargs: []
+    host.launch_unit = lambda *args: launches.append(args)
+    host.deliver_request_to_exact_worker = lambda *args: handoffs.append(args)
+    try:
+        try:
+            host.submit_session('p35-v2-preflight')
+            raise AssertionError('v2 raw workspace request reached submit completion')
+        except host.HostError as error:
+            assert 'raw workspace path field' in str(error)
+        assert launches == [], 'v2 root preflight launched a worker before rejecting the raw path'
+        assert handoffs == [], 'v2 root preflight handed bytes to a worker before rejecting the raw path'
+    finally:
+        host.P34 = original_p34
+        host.installed_root_from_self = original_installed_root
+        host.load_installed_config = original_load_config
+        host.validate_installed_config = original_validate_config
+        host.acquire_global_submit_lease = original_acquire_lease
+        host.release_root_lease = original_release_lease
+        host.session_paths = original_session_paths
+        host.require_session_layout = original_require_session_layout
+        host.read_root_private_json = original_read_root_private_json
+        host.normalize_session = original_normalize_session
+        host.create_submit_claim = original_create_submit_claim
+        host.write_atomic_root_json = original_write_atomic_root_json
+        host.read_bounded_stdin = original_read_bounded_stdin
+        host.cleanup_session_paths = original_cleanup_session_paths
+        host.launch_unit = original_launch_unit
+        host.deliver_request_to_exact_worker = original_deliver_request
+
+reapable_v2_session = host.normalize_reapable_session({
+    'schema_version': 1,
+    'status': 'open',
+    'session_id': 'p35d-reap',
+    'session_challenge_hash': 'f' * 64,
+    'install_binding_hash': 'b' * 64,
+    'expires_at_ms': 1,
+    'intake_protocol_version': 2,
+}, 'p35d-reap')
+assert reapable_v2_session['intake_protocol_version'] == 2
+with tempfile.TemporaryDirectory(prefix='p35-reap-v2-', dir='/tmp') as temporary:
+    stale_session_id = 'p35-' + 'a' * 32
+    stale_root = os.path.join(temporary, stale_session_id)
+    os.mkdir(stale_root, 0o700)
+    original_runtime_parent = host.RUNTIME_PARENT
+    original_ensure_runtime_parent = host.ensure_runtime_parent
+    original_reapable_layout = host.require_reapable_session_layout
+    original_read_root_private_json = host.read_root_private_json
+    original_read_submit_claim = host.read_submit_claim
+    original_cleanup_session_paths = host.cleanup_session_paths
+    host.RUNTIME_PARENT = temporary
+    host.ensure_runtime_parent = lambda: None
+    host.require_reapable_session_layout = lambda _paths, _worker, _verifier: {
+        'legacy_request_gid': None,
+        'worker': {'uid': 991, 'gid': 991},
+    }
+    host.read_root_private_json = lambda _path, _label: {
+        'schema_version': 1,
+        'status': 'open',
+        'session_id': stale_session_id,
+        'session_challenge_hash': 'f' * 64,
+        'install_binding_hash': 'b' * 64,
+        'expires_at_ms': 1,
+        'intake_protocol_version': 2,
+    }
+    host.read_submit_claim = lambda _paths, _session_id: None
+
+    def cleanup_stale_v2(paths, **_kwargs):
+        assert paths['root'] == stale_root
+        os.rmdir(stale_root)
+        return []
+
+    host.cleanup_session_paths = cleanup_stale_v2
+    try:
+        host.reap_expired_sessions({
+            'worker': {'uid': 991, 'gid': 991},
+            'verifier': {'uid': 992, 'gid': 992},
+        })
+        assert not os.path.exists(stale_root)
+    finally:
+        host.RUNTIME_PARENT = original_runtime_parent
+        host.ensure_runtime_parent = original_ensure_runtime_parent
+        host.require_reapable_session_layout = original_reapable_layout
+        host.read_root_private_json = original_read_root_private_json
+        host.read_submit_claim = original_read_submit_claim
+        host.cleanup_session_paths = original_cleanup_session_paths
 
 read_fd, write_fd = os.pipe()
 try:
@@ -589,6 +849,28 @@ shadow_summary = {
 }
 assert host.validate_shadow_summary(shadow_summary, 'test shadow summary') == shadow_summary
 assert gateway.validate_shadow_summary(shadow_summary, 'test shadow summary') == shadow_summary
+v2_verifier_output = {
+    'schema_version': 1,
+    'status': 'verified_intake',
+    'owner_kernel_authority': 'none',
+    'acceptance': 'not_available',
+    'receipt': {},
+    'bridge_receipt': {},
+    'shadow': shadow_summary,
+    'intake_protocol_version': 2,
+    'effect_authority': 'none',
+}
+assert gateway.parse_verifier_output(
+    (gateway.canonical(v2_verifier_output) + '\n').encode('utf-8'),
+    intake_protocol_version=2,
+) == v2_verifier_output
+try:
+    gateway.parse_verifier_output(
+        (gateway.canonical(v2_verifier_output) + '\n').encode('utf-8')
+    )
+    raise AssertionError('v1 gateway parser accepted a v2 verifier output')
+except gateway.GatewayError:
+    pass
 try:
     host.validate_shadow_summary(
         {**shadow_summary, 'disclosure': {**shadow_summary['disclosure'], 'effect_authority': 'available'}},
@@ -670,6 +952,29 @@ try:
     raise AssertionError('host accepted an authoritative shadow witness summary')
 except host.HostError:
     pass
+v2_shadow_witness_summary = {
+    **shadow_witness_summary,
+    'disclosure': {
+        **shadow_witness_summary['disclosure'],
+        'workspace_assurance': 'root_held_descriptor_matches_signed_v2_ticket_and_base',
+    },
+}
+assert host.validate_shadow_witness_summary(
+    v2_shadow_witness_summary,
+    normalized_ticket,
+    'v2 shadow witness summary',
+    intake_protocol_version=2,
+) == v2_shadow_witness_summary
+try:
+    host.validate_shadow_witness_summary(
+        shadow_witness_summary,
+        normalized_ticket,
+        'v1 shadow witness summary in v2 session',
+        intake_protocol_version=2,
+    )
+    raise AssertionError('v2 session accepted a v1 workspace-assurance disclosure')
+except host.HostError:
+    pass
 
 class MismatchedRootReadbackClient:
     class ShadowWitnessClientError(Exception):
@@ -714,6 +1019,9 @@ finally:
 submit_source = inspect.getsource(host.submit_session)
 assert 'json.loads' not in submit_source
 assert 'read_bounded_stdin(' in submit_source
+assert submit_source.index('preflight_v2_request_before_worker_handoff(request)') < submit_source.index('worker_command = [')
+assert submit_source.index('preflight_v2_request_before_worker_handoff(request)') < submit_source.index('launch_unit(system_paths, worker_unit')
+assert submit_source.index('preflight_v2_request_before_worker_handoff(request)') < submit_source.index('deliver_request_to_exact_worker(')
 assert 'create_submit_claim' in submit_source
 assert submit_source.index('acquire_global_submit_lease') < submit_source.index('require_session_layout(paths, worker, verifier)')
 assert submit_source.index('create_submit_claim') < submit_source.index('write_atomic_root_json(paths["session"]')
@@ -825,7 +1133,9 @@ print('host_config_utf8_matches_node=true')
 print('installer_fsyncs_nested_snapshot_directories_before_publish=true')
 print('no_runtime_config_or_keyring_override=true')
 print('session_challenge_is_hash_only_at_rest=true')
-print('root_submit_treats_request_as_opaque_bytes=true')
+print('expired_v2_session_is_reaped=true')
+print('v1_root_submit_keeps_payload_opaque=true')
+print('v2_raw_workspace_path_is_rejected_before_worker_handoff=true')
 print('root_submit_claims_once_and_bounds_input=true')
 print('root_submit_claim_uses_atomic_link=true')
 print('root_private_results_are_opened_race_safely=true')
@@ -861,7 +1171,9 @@ assert_contains "$PY_OUT" "host_config_utf8_matches_node=true" "host config uses
 assert_contains "$PY_OUT" "installer_fsyncs_nested_snapshot_directories_before_publish=true" "installer fsyncs nested snapshot directories before publication"
 assert_contains "$PY_OUT" "no_runtime_config_or_keyring_override=true" "begin and submit reject alternate trust inputs"
 assert_contains "$PY_OUT" "session_challenge_is_hash_only_at_rest=true" "root session state retains only a challenge hash"
-assert_contains "$PY_OUT" "root_submit_treats_request_as_opaque_bytes=true" "root launcher does not parse submit payloads"
+assert_contains "$PY_OUT" "expired_v2_session_is_reaped=true" "expired v2 sessions do not wedge later begins"
+assert_contains "$PY_OUT" "v1_root_submit_keeps_payload_opaque=true" "v1 root launcher keeps the legacy payload opaque"
+assert_contains "$PY_OUT" "v2_raw_workspace_path_is_rejected_before_worker_handoff=true" "v2 root preflight rejects raw workspace fields before any worker handoff"
 assert_contains "$PY_OUT" "root_submit_claims_once_and_bounds_input=true" "root submit claims one session and bounds a trickling request"
 assert_contains "$PY_OUT" "root_submit_claim_uses_atomic_link=true" "root submit claim publication uses an atomic no-replace link"
 assert_contains "$PY_OUT" "root_private_results_are_opened_race_safely=true" "root opens verifier-owned results without a pathname race"

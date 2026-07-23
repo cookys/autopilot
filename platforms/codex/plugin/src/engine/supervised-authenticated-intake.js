@@ -11,6 +11,7 @@ const { TextDecoder } = require('util');
 
 const {
   ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
+  ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION,
   TRUSTED_INTAKE_VERIFICATION_PATH,
   normalizeSupervisedEngineTrustedIntakeBinding,
 } = require('./supervised-engine-bridge-contract');
@@ -21,7 +22,9 @@ const {
 } = require('./owner-kernel/canonical');
 
 const AUTHENTICATED_INTAKE_SCHEMA_VERSION = 1;
+const AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION = 2;
 const AUTHENTICATED_INTAKE_PURPOSE = 'autopilot-supervised-owner-intake/v1';
+const AUTHENTICATED_INTAKE_V2_PURPOSE = 'autopilot-supervised-owner-intake/v2';
 const AUTHENTICATED_INTAKE_AUDIENCE = 'autopilot-supervised-host';
 const AUTHENTICATED_INTAKE_ALGORITHM = 'ed25519';
 const MAX_CANONICAL_REQUEST_BYTES = 262144;
@@ -158,9 +161,24 @@ function parseCanonicalJsonBytes(bytes, label, maximum = MAX_CANONICAL_REQUEST_B
   return parsed;
 }
 
-function signedMessage(payloadBytes) {
+function requireAuthenticatedIntakeSchemaVersion(value, label) {
+  if (value !== AUTHENTICATED_INTAKE_SCHEMA_VERSION
+    && value !== AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION) {
+    fail(`${label} has an unsupported schema_version`);
+  }
+  return value;
+}
+
+function authenticatedIntakePurposeForSchema(schemaVersion) {
+  requireAuthenticatedIntakeSchemaVersion(schemaVersion, 'authenticated intake purpose');
+  return schemaVersion === AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION
+    ? AUTHENTICATED_INTAKE_V2_PURPOSE
+    : AUTHENTICATED_INTAKE_PURPOSE;
+}
+
+function signedMessage(payloadBytes, purpose) {
   return Buffer.concat([
-    Buffer.from(`${AUTHENTICATED_INTAKE_PURPOSE}\n`, 'utf8'),
+    Buffer.from(`${purpose}\n`, 'utf8'),
     payloadBytes,
   ]);
 }
@@ -272,11 +290,18 @@ function normalizeBridgeContext(raw) {
     'schema_version',
     'sink_inventory_hash',
   ]), 'authenticated intake bridge context');
-  if (value.schema_version !== ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION) {
-    fail(`authenticated intake bridge context schema_version must equal ${ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION}`);
+  const schemaVersion = requireAuthenticatedIntakeSchemaVersion(
+    value.schema_version,
+    'authenticated intake bridge context',
+  );
+  if ((schemaVersion === AUTHENTICATED_INTAKE_SCHEMA_VERSION
+      && schemaVersion !== ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION)
+    || (schemaVersion === AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION
+      && schemaVersion !== ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION)) {
+    fail('authenticated intake bridge context schema_version does not match the bridge ABI');
   }
   return {
-    schema_version: ENGINE_BRIDGE_CONTRACT_SCHEMA_VERSION,
+    schema_version: schemaVersion,
     intake_binding_hash: requireDigest(value.intake_binding_hash, 'authenticated intake bridge context intake_binding_hash'),
     sink_inventory_hash: requireDigest(value.sink_inventory_hash, 'authenticated intake bridge context sink_inventory_hash'),
     bridge_abi_hash: requireDigest(value.bridge_abi_hash, 'authenticated intake bridge context bridge_abi_hash'),
@@ -306,10 +331,12 @@ function normalizeClaims(raw) {
     'session_id',
     'signing_key_id',
   ]), 'authenticated intake protected claims');
-  if (value.schema_version !== AUTHENTICATED_INTAKE_SCHEMA_VERSION) {
-    fail(`authenticated intake protected claims schema_version must equal ${AUTHENTICATED_INTAKE_SCHEMA_VERSION}`);
-  }
-  if (value.purpose !== AUTHENTICATED_INTAKE_PURPOSE) {
+  const schemaVersion = requireAuthenticatedIntakeSchemaVersion(
+    value.schema_version,
+    'authenticated intake protected claims',
+  );
+  const expectedPurpose = authenticatedIntakePurposeForSchema(schemaVersion);
+  if (value.purpose !== expectedPurpose) {
     fail('authenticated intake protected claims purpose is invalid');
   }
   if (value.audience !== AUTHENTICATED_INTAKE_AUDIENCE) {
@@ -327,13 +354,16 @@ function normalizeClaims(raw) {
   } catch (error) {
     fail(`authenticated intake bridge binding is invalid: ${error.message}`);
   }
+  if (binding.schema_version !== schemaVersion) {
+    fail('authenticated intake bridge binding schema_version does not match protected claims');
+  }
   const bindingHash = requireDigest(value.binding_hash, 'authenticated intake binding_hash');
   if (bindingHash !== sha256(canonicalJson(binding))) {
     fail('authenticated intake binding_hash does not match binding');
   }
   return {
-    schema_version: AUTHENTICATED_INTAKE_SCHEMA_VERSION,
-    purpose: AUTHENTICATED_INTAKE_PURPOSE,
+    schema_version: schemaVersion,
+    purpose: expectedPurpose,
     audience: AUTHENTICATED_INTAKE_AUDIENCE,
     issuer: requireToken(value.issuer, 'authenticated intake issuer'),
     signing_key_id: requireToken(value.signing_key_id, 'authenticated intake signing_key_id'),
@@ -357,9 +387,10 @@ function normalizeEnvelope(raw) {
     'schema_version',
     'signature',
   ]), 'authenticated intake envelope');
-  if (value.schema_version !== AUTHENTICATED_INTAKE_SCHEMA_VERSION) {
-    fail(`authenticated intake envelope schema_version must equal ${AUTHENTICATED_INTAKE_SCHEMA_VERSION}`);
-  }
+  const schemaVersion = requireAuthenticatedIntakeSchemaVersion(
+    value.schema_version,
+    'authenticated intake envelope',
+  );
   const protectedPayload = decodeBase64url(
     value.protected_payload,
     'authenticated intake protected_payload',
@@ -375,15 +406,18 @@ function normalizeEnvelope(raw) {
     'authenticated intake protected payload',
     MAX_SIGNED_PAYLOAD_BYTES,
   ));
+  if (claims.schema_version !== schemaVersion) {
+    fail('authenticated intake envelope schema_version does not match protected claims');
+  }
   return {
-    schema_version: AUTHENTICATED_INTAKE_SCHEMA_VERSION,
+    schema_version: schemaVersion,
     protected_payload: value.protected_payload,
     signature: value.signature,
     protected_payload_bytes: protectedPayload,
     signature_bytes: signature,
     claims,
     envelope_hash: sha256(canonicalJson({
-      schema_version: AUTHENTICATED_INTAKE_SCHEMA_VERSION,
+      schema_version: schemaVersion,
       protected_payload: value.protected_payload,
       signature: value.signature,
     })),
@@ -481,6 +515,7 @@ function assertClaimsMatchHost(claims, context, config, now) {
   }
   if (claims.binding_hash !== context.intake_binding_hash
     || claims.plan_hash !== context.plan_hash
+    || claims.schema_version !== context.schema_version
     || claims.binding.owner_run_id !== context.owner_run_id
     || claims.binding.engine_run_id !== context.engine_run_id
     || claims.binding.invocation_id !== context.invocation_id
@@ -492,6 +527,23 @@ function assertClaimsMatchHost(claims, context, config, now) {
 }
 
 function buildReplayFingerprint(claims, envelopeHash, keyring, installBindingHash) {
+  if (claims.schema_version === AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION) {
+    return sha256(canonicalJson({
+      schema_version: AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
+      purpose: AUTHENTICATED_INTAKE_V2_PURPOSE,
+      replay_schema_version: AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
+      issuer: claims.issuer,
+      keyring_epoch: claims.keyring_epoch,
+      jti: claims.jti,
+      envelope_hash: envelopeHash,
+      binding_hash: claims.binding_hash,
+      plan_hash: claims.plan_hash,
+      session_id: claims.session_id,
+      session_challenge_hash: claims.session_challenge_hash,
+      host_install_binding_hash: installBindingHash,
+      keyring_attestation_hash: keyring.attestation_hash,
+    }));
+  }
   return sha256(canonicalJson({
     schema_version: AUTHENTICATED_INTAKE_SCHEMA_VERSION,
     issuer: claims.issuer,
@@ -509,7 +561,7 @@ function buildReplayFingerprint(claims, envelopeHash, keyring, installBindingHas
 
 function buildShadowReceipt(claims, envelopeHash, keyring, installBindingHash, verifiedAt) {
   return {
-    schema_version: AUTHENTICATED_INTAKE_SCHEMA_VERSION,
+    schema_version: claims.schema_version,
     status: 'verified_intake',
     owner_kernel_authority: 'none',
     acceptance: 'not_available',
@@ -790,7 +842,7 @@ function verifyHostPinnedAuthenticatedIntake(envelopeRaw, contextRaw, configRaw)
   const key = assertClaimsMatchHost(envelope.claims, context, config, now);
   if (!crypto.verify(
     null,
-    signedMessage(envelope.protected_payload_bytes),
+    signedMessage(envelope.protected_payload_bytes, envelope.claims.purpose),
     key.public_key,
     envelope.signature_bytes,
   )) {
@@ -848,7 +900,9 @@ module.exports = {
   AUTHENTICATED_INTAKE_ALGORITHM,
   AUTHENTICATED_INTAKE_AUDIENCE,
   AUTHENTICATED_INTAKE_PURPOSE,
+  AUTHENTICATED_INTAKE_V2_PURPOSE,
   AUTHENTICATED_INTAKE_SCHEMA_VERSION,
+  AUTHENTICATED_INTAKE_V2_SCHEMA_VERSION,
   AuthenticatedIntakeError,
   MAX_CANONICAL_REQUEST_BYTES,
   createFileReplayStore,

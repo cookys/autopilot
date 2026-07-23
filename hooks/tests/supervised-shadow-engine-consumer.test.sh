@@ -100,13 +100,126 @@ function sourceInput(overrides = {}) {
   };
 }
 
+function v2SourceInput() {
+  const compiled = plan({
+    schema_version: 2,
+    immutable_base: 'b'.repeat(40),
+    inputs: {
+      workspace_registration_id: 'p35d-workspace-main',
+      workspace_root_hash: digest('p35d-workspace-root'),
+      workspace_descriptor_binding_hash: digest('p35d-descriptor-binding'),
+      workspace_ticket_hash: digest('p35d-ticket'),
+      prompt_hash: digest('p35d-prompt'),
+      branch_hash: digest('p35d-branch'),
+      verify_command_hash: digest('p35d-command'),
+    },
+    intake_binding_hash: digest('p35d-intake-binding'),
+    bridge_abi_hash: digest('p35d-bridge-abi'),
+  });
+  const planHash = sha256(canonicalJson(compiled));
+  const shared = {
+    intake_binding_hash: compiled.intake_binding_hash,
+    sink_inventory_hash: compiled.sink_inventory_hash,
+    bridge_abi_hash: compiled.bridge_abi_hash,
+    plan_hash: planHash,
+    issuer: 'owner-control-v2',
+    key_id: 'owner-keyring-v2',
+    attestation_hash: digest('attestation-v2'),
+    envelope_hash: digest('envelope-v2'),
+  };
+  return {
+    plan: compiled,
+    authenticatedReceipt: {
+      schema_version: 2,
+      status: 'verified_intake',
+      owner_kernel_authority: 'none',
+      acceptance: 'not_available',
+      verification_path: 'host_pinned_authenticated_intake',
+      issuer: shared.issuer,
+      key_id: shared.key_id,
+      attestation_hash: shared.attestation_hash,
+      signing_key_id: 'signing-key-v2',
+      keyring_epoch: 1,
+      envelope_hash: shared.envelope_hash,
+      binding_hash: compiled.intake_binding_hash,
+      plan_hash: planHash,
+      install_binding_hash: digest('install-binding-v2'),
+      session_id: 'session-shadow-p35d',
+      session_challenge_hash: digest('session-challenge-v2'),
+      verified_at_ms: 1760000000000,
+      replay_status: 'new',
+    },
+    bridgeReceipt: {
+      verified: true,
+      ...shared,
+      verification_path: 'host_pinned_authenticated_intake',
+    },
+    installBindingHash: digest('install-binding-v2'),
+  };
+}
+
+function legacyV1Capsule(input = sourceInput()) {
+  const current = buildVerifiedIntakeCapsule(input);
+  const authenticated = input.authenticatedReceipt;
+  const bridge = input.bridgeReceipt;
+  const legacyAuthenticatedEvidence = {
+    issuer: authenticated.issuer,
+    key_id: authenticated.key_id,
+    signing_key_id: authenticated.signing_key_id,
+    keyring_epoch: authenticated.keyring_epoch,
+    attestation_hash: authenticated.attestation_hash,
+    envelope_hash: authenticated.envelope_hash,
+    binding_hash: authenticated.binding_hash,
+    plan_hash: authenticated.plan_hash,
+    install_binding_hash: authenticated.install_binding_hash,
+    verified_at_ms: authenticated.verified_at_ms,
+  };
+  const legacyBridgeEvidence = {
+    intake_binding_hash: bridge.intake_binding_hash,
+    sink_inventory_hash: bridge.sink_inventory_hash,
+    bridge_abi_hash: bridge.bridge_abi_hash,
+    plan_hash: bridge.plan_hash,
+    issuer: bridge.issuer,
+    key_id: bridge.key_id,
+    attestation_hash: bridge.attestation_hash,
+    envelope_hash: bridge.envelope_hash,
+  };
+  return {
+    ...current,
+    intake_evidence_hash: sha256(canonicalJson({
+      authenticated: legacyAuthenticatedEvidence,
+      bridge: legacyBridgeEvidence,
+    })),
+  };
+}
+
 const capsule = buildVerifiedIntakeCapsule(sourceInput());
+const legacyCapsule = legacyV1Capsule();
 const capsuleText = canonicalJson(capsule);
 equal(capsule.kind, 'verified_supervised_engine_shadow_intake', 'capsule has the fixed intake kind');
 check(!capsuleText.includes('raw-prompt-never-persisted'), 'capsule omits raw prompt text');
 check(!capsuleText.includes('workspace-locator-never-persisted'), 'capsule omits raw workspace path');
 check(!capsuleText.includes('raw-command-never-persisted'), 'capsule omits raw command text');
 equal(capsule.bridge.plan_hash, sha256(canonicalJson(sourceInput().plan)), 'capsule binds the exact compiled plan');
+equal(canonicalJson(capsule), canonicalJson(legacyCapsule), 'v1 capsule bytes preserve the pre-v2 evidence hash');
+
+const v2Capsule = buildVerifiedIntakeCapsule(v2SourceInput());
+equal(v2Capsule.kind, 'verified_supervised_engine_shadow_intake', 'v2 capsule retains the non-authoritative intake kind');
+check(!canonicalJson(v2Capsule).includes('p35d-workspace-main'), 'v2 capsule omits the owner-visible workspace registration identifier');
+check(!canonicalJson(v2Capsule).includes('p35d-ticket'), 'v2 capsule omits raw ticket material');
+rejects(
+  () => buildVerifiedIntakeCapsule({
+    ...v2SourceInput(),
+    authenticatedReceipt: { ...v2SourceInput().authenticatedReceipt, schema_version: 1 },
+  }),
+  'SUPERVISED_SHADOW_ENGINE_BINDING_MISMATCH',
+  'v1 receipt cannot be attached to a v2 bridge plan',
+);
+rejects(
+  () => buildVerifiedIntakeCapsule({ ...sourceInput(), authenticatedReceipt: null }),
+  'SUPERVISED_SHADOW_ENGINE_INVALID',
+  'malformed authenticated receipts retain the typed validation failure',
+);
 
 rejects(
   () => buildVerifiedIntakeCapsule({ ...sourceInput(), bridgeReceipt: { ...sourceInput().bridgeReceipt, plan_hash: digest('wrong-plan') } }),
@@ -118,6 +231,35 @@ rejects(
   'SUPERVISED_SHADOW_ENGINE_BINDING_MISMATCH',
   'install binding drift is rejected',
 );
+
+const legacyReplayRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-shadow-v1-replay-'));
+fs.chmodSync(legacyReplayRoot, 0o700);
+try {
+  const consumer = createFileShadowEngineConsumer({ state_directory: legacyReplayRoot });
+  const legacyRecord = recordForCapsule(legacyCapsule);
+  const legacyState = {
+    schema_version: 1,
+    state: 'recorded',
+    intake_id: legacyRecord.intake_id,
+    capsule: legacyCapsule,
+    capsule_hash: legacyRecord.capsule_hash,
+    record: legacyRecord,
+    record_hash: legacyRecord.record_hash,
+  };
+  const stateDirectory = path.join(legacyReplayRoot, 'shadow-engine');
+  fs.writeFileSync(
+    path.join(stateDirectory, `${legacyRecord.intake_id}.recorded.json`),
+    canonicalJson(legacyState),
+    { mode: 0o600 },
+  );
+  fs.chmodSync(path.join(stateDirectory, `${legacyRecord.intake_id}.recorded.json`), 0o600);
+  const replay = consumer.consumeVerifiedIntake(capsule);
+  equal(replay.idempotent, true, 'current v1 replay accepts an old persisted v1 record');
+  equal(replay.record_hash, legacyRecord.record_hash, 'current v1 replay preserves the old record hash');
+  consumer.close();
+} finally {
+  fs.rmSync(legacyReplayRoot, { recursive: true, force: true });
+}
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-shadow-engine-'));
 fs.chmodSync(temporary, 0o700);

@@ -69,6 +69,14 @@ bound_submit_err="$stage_root/bound-submit.err"
 bound_witness_meta="$stage_root/bound-witness-meta.json"
 bound_reuse_out="$stage_root/bound-reuse.out"
 bound_reuse_err="$stage_root/bound-reuse.err"
+v2_register_out="$stage_root/v2-register.out"
+v2_begin_out="$stage_root/v2-begin.out"
+v2_request_path="$stage_root/v2-request.json"
+v2_submit_out="$stage_root/v2-submit.out"
+v2_submit_err="$stage_root/v2-submit.err"
+v2_witness_meta="$stage_root/v2-witness-meta.json"
+v2_reuse_out="$stage_root/v2-reuse.out"
+v2_reuse_err="$stage_root/v2-reuse.err"
 created_runtime_parent=0
 workspace_registry_pid=""
 
@@ -612,6 +620,126 @@ fs.writeFileSync(outputPath, canonicalJson(request), { mode: 0o600 });
 NODE
 }
 
+generate_v2_request() {
+  local output_path="$1"
+  local begin_path="$2"
+  local jti="$3"
+  node - "$REPO_ROOT" "$private_key_path" "$output_path" "$begin_path" "$install_binding_hash" "$jti" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+
+const [root, privatePath, outputPath, beginPath, installBindingHash, jti] = process.argv.slice(2);
+const {
+  AUTOPILOT_ENGINE_CONTROL_SINKS,
+  compileSupervisedEngineBridgeContract,
+  getAutopilotEngineControlSinkInventory,
+  getRequiredActionCatalogBindingIds,
+  getSupervisedEngineBridgeAbiHash,
+} = require(path.join(root, 'src', 'engine', 'supervised-engine-bridge-contract'));
+const {
+  canonicalJson,
+  freezeAcceptanceContract,
+  resolveGovernancePolicy,
+  sha256,
+} = require(path.join(root, 'src', 'engine', 'owner-kernel'));
+
+const begin = JSON.parse(fs.readFileSync(beginPath, 'utf8'));
+const workspace = begin.workspace_binding;
+if (begin.intake_protocol_version !== 2 || !workspace || begin.status !== 'session_open') process.exit(1);
+if (!/^[0-9a-f]{64}$/.test(workspace.workspace_root_hash || '')
+  || !/^[0-9a-f]{64}$/.test(workspace.descriptor_binding_hash || '')
+  || !/^[0-9a-f]{64}$/.test(workspace.ticket_hash || '')
+  || !/^[0-9a-f]{40}$/.test(workspace.immutable_base || '')) process.exit(1);
+const hash = (value) => sha256(value);
+const requirement = {
+  'review-dispatch': ['engine_review_dispatch', 'model_runner', 'external'],
+  'implementation-dispatch': ['engine_implementation_dispatch', 'model_runner', 'external'],
+  'diff-provenance': ['engine_diff_materialization', 'filesystem_git', 'reversible'],
+  'repair-prompt-write': ['engine_repair_prompt_write', 'filesystem', 'reversible'],
+  'verification-execution': ['engine_verification_command', 'shell', 'external'],
+  'verify-worktree-add': ['engine_verify_worktree_add', 'git', 'external'],
+  'verify-worktree-remove': ['engine_verify_worktree_remove', 'git', 'external'],
+  'verify-worktree-cleanup': ['engine_verify_worktree_cleanup', 'filesystem', 'irreversible'],
+  'branch-force': ['engine_branch_force', 'git', 'external'],
+};
+const attestation = (identity) => ({
+  issuer: 'test', uri: `test://${identity}`, sha256: hash(identity),
+  issued_at: '2026-07-23T00:00:00.000Z', expires_at: '2027-07-23T00:00:00.000Z',
+});
+const roster = (identity, role) => ({ identity, model_alias: identity, model_version: '1', family: 'test', runner: 'test', role, attestation: attestation(identity) });
+const actionCatalog = AUTOPILOT_ENGINE_CONTROL_SINKS.filter((sink) => sink.requires_action_catalog_binding).map((sink) => {
+  const [operation, toolClass, actionClass] = requirement[sink.id];
+  return {
+    id: sink.id, operation, tool_class: toolClass, action_class: actionClass,
+    command_required: sink.id === 'verification-execution', requires_mediator: true, requires_challenge: false,
+  };
+});
+const input = {
+  schema_version: 2,
+  ownerRunId: 'owner-run-p35d-live', engineRunId: 'engine-run-p35d-live', invocationId: 'invocation-p35d-live',
+  governanceConfig: {
+    schema_version: 1,
+    governance: {
+      default_mode: 'owner-led', owner_roster: [roster('owner-a', 'owner')], challenger_roster: [roster('challenger-a', 'challenger')], trusted_runner_roster: [roster('runner-a', 'trusted_runner')],
+      approval_policy: {
+        read_only: { requires_approval: false, max_uses: 1 }, reversible: { requires_approval: false, max_uses: 1 },
+        external: { requires_approval: true, max_uses: 1 }, irreversible: { requires_approval: true, max_uses: 1 },
+      },
+      capability_ttl_seconds: 3600, checkpoint_interval_closed_events: 100, max_blocked_duration_seconds: 86400, action_catalog: actionCatalog,
+    },
+  },
+  acceptanceContract: {
+    schema_version: 2, contract_id: 'p35d-live-contract', artifacts: [{ id: 'source', target: 'src/engine/autopilot-engine.js' }],
+    legs: [{ id: 'verification', kind: 'executable', command: 'bash hooks/tests/autopilot-engine.test.sh', artifact_ids: ['source'] }],
+  },
+  immutableBase: workspace.immutable_base,
+  workspaceBinding: {
+    registrationId: workspace.registration_id,
+    workspaceRootHash: workspace.workspace_root_hash,
+    descriptorBindingHash: workspace.descriptor_binding_hash,
+    ticketHash: workspace.ticket_hash,
+  },
+  prompt: 'P3.5d v2 descriptor-bound intake must stay path-free',
+  branch: 'feat/p35d-live', verifyCommand: 'bash hooks/tests/run.sh --parallel 16',
+  actionCatalogBindings: Object.fromEntries(getRequiredActionCatalogBindingIds().map((id) => [id, id])),
+};
+const binding = {
+  schema_version: 2,
+  owner_run_id: input.ownerRunId, engine_run_id: input.engineRunId, invocation_id: input.invocationId,
+  policy_hash: resolveGovernancePolicy(input.governanceConfig).policy_hash,
+  contract_hash: freezeAcceptanceContract(input.acceptanceContract).contract_hash,
+  immutable_base: input.immutableBase,
+  workspace_registration_id: input.workspaceBinding.registrationId,
+  workspace_root_hash: input.workspaceBinding.workspaceRootHash,
+  workspace_descriptor_binding_hash: input.workspaceBinding.descriptorBindingHash,
+  workspace_ticket_hash: input.workspaceBinding.ticketHash,
+  prompt_hash: hash(input.prompt), branch_hash: hash(input.branch), verify_command_hash: hash(input.verifyCommand),
+  sink_inventory_hash: hash(canonicalJson(getAutopilotEngineControlSinkInventory())), bridge_abi_hash: getSupervisedEngineBridgeAbiHash(2),
+};
+const plan = compileSupervisedEngineBridgeContract(input);
+if (plan.schema_version !== 2 || JSON.stringify(plan).includes('"workspaceRoot"')) process.exit(1);
+const now = Date.now();
+const claims = {
+  schema_version: 2, purpose: 'autopilot-supervised-owner-intake/v2', audience: 'autopilot-supervised-host',
+  issuer: 'owner-control', signing_key_id: 'owner-ed25519-live', keyring_epoch: 1, jti,
+  issued_at_ms: now - 5, not_before_ms: now - 5, expires_at_ms: now + 60000,
+  session_id: begin.session_id, session_challenge_hash: begin.session_challenge_hash, host_install_binding_hash: installBindingHash,
+  binding, binding_hash: hash(canonicalJson(binding)), plan_hash: hash(canonicalJson(plan)),
+};
+const protectedPayload = Buffer.from(canonicalJson(claims));
+const signature = crypto.sign(null, Buffer.concat([Buffer.from('autopilot-supervised-owner-intake/v2\n'), protectedPayload]), fs.readFileSync(privatePath));
+const request = {
+  protocol_version: 2, session_id: begin.session_id,
+  envelope: { schema_version: 2, protected_payload: protectedPayload.toString('base64url'), signature: signature.toString('base64url') },
+  bridge_input: input,
+};
+const serialized = canonicalJson(request);
+if (serialized.includes('"workspaceRoot"') || serialized.includes('/run/')) process.exit(1);
+fs.writeFileSync(outputPath, serialized, { mode: 0o600 });
+NODE
+}
+
 generate_request "$request_path" "$session_id" "$challenge_hash" "p35-live-replay-jti"
 sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" submit --session-id "$session_id" <"$request_path" >"$submit_out" 2>"$submit_err"
 
@@ -751,6 +879,115 @@ if entries[1].get('observation_hash') != expected['observation_hash'] or entries
 if any('workspace' in key or 'prompt' in key for entry in entries for key in entry):
     raise SystemExit('witness journal schema gained raw workspace or prompt fields')
 PY
+
+sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" workspace-register \
+  --registration-id p35d-workspace-main \
+  --workspace-root "$bound_workspace_root" \
+  --immutable-base "$(printf 'a%.0s' {1..40})" \
+  --ttl-milliseconds 600000 >"$v2_register_out"
+sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" begin \
+  --workspace-registration-id p35d-workspace-main \
+  --intake-protocol-version 2 >"$v2_begin_out"
+node - "$v2_begin_out" "$bound_workspace_root" <<'NODE'
+const fs = require('fs');
+const [beginPath, workspaceRoot] = process.argv.slice(2);
+const raw = fs.readFileSync(beginPath, 'utf8');
+const value = JSON.parse(raw);
+const binding = value.workspace_binding;
+if (value.status !== 'session_open' || value.intake_protocol_version !== 2
+  || value.effect_authority !== 'none' || !binding) process.exit(1);
+if (binding.registration_id !== 'p35d-workspace-main'
+  || binding.assurance !== 'root_held_descriptor_matches_signed_v2_ticket_and_base'
+  || binding.content_immutability !== 'not_available') process.exit(1);
+if (!/^[0-9a-f]{64}$/.test(binding.workspace_root_hash || '')
+  || !/^[0-9a-f]{64}$/.test(binding.descriptor_binding_hash || '')
+  || !/^[0-9a-f]{64}$/.test(binding.ticket_hash || '')
+  || !/^[0-9a-f]{40}$/.test(binding.immutable_base || '')) process.exit(1);
+if (raw.includes(workspaceRoot)) process.exit(1);
+NODE
+generate_v2_request "$v2_request_path" "$v2_begin_out" "p35d-live-bound-jti"
+if grep -Fq "$bound_workspace_root" "$v2_request_path"; then
+  printf 'FAIL [supervised-intake-live-host] v2 worker payload retained a raw workspace path\n' >&2
+  exit 1
+fi
+v2_session="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).session_id)" "$v2_begin_out")"
+if ! sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" submit --session-id "$v2_session" \
+  <"$v2_request_path" >"$v2_submit_out" 2>"$v2_submit_err"; then
+  printf 'FAIL [supervised-intake-live-host] descriptor-bound v2 submission failed\n' >&2
+  sed -n '1,120p' "$v2_submit_err" >&2 || true
+  exit 1
+fi
+node - "$v2_submit_out" "$v2_begin_out" "$bound_workspace_root" "$v2_witness_meta" <<'NODE'
+const fs = require('fs');
+const [outputPath, beginPath, workspaceRoot, metaPath] = process.argv.slice(2);
+const raw = fs.readFileSync(outputPath, 'utf8');
+const value = JSON.parse(raw);
+const begin = JSON.parse(fs.readFileSync(beginPath, 'utf8'));
+const expected = begin.workspace_binding;
+const binding = value.workspace_binding;
+const witness = value.shadow_witness;
+const hashes = ['shadow_admission_id', 'ticket_hash', 'capsule_hash', 'observation_hash', 'close_hash', 'shadow_chain_head'];
+const fail = (message) => { throw new Error(`p35d v2 live assertion failed: ${message}`); };
+if (value.status !== 'p35_shadow_intake_complete' || value.intake_protocol_version !== 2) fail('top-level status or protocol');
+if (value.owner_kernel_authority !== 'none'
+  || value.effect_authority !== 'none'
+  || value.acceptance !== 'not_available') fail('top-level authority disclosure');
+if (!binding || binding.registration_id !== expected.registration_id
+  || binding.workspace_root_hash !== expected.workspace_root_hash
+  || binding.immutable_base !== expected.immutable_base
+  || binding.descriptor_binding_hash !== expected.descriptor_binding_hash
+  || binding.ticket_hash !== expected.ticket_hash
+  || binding.assurance !== 'root_held_descriptor_matches_signed_v2_ticket_and_base') fail('workspace ticket binding');
+if (!/^[0-9a-f]{64}$/.test(value.receipt_hash || '')
+  || !/^[0-9a-f]{64}$/.test(value.binding_hash || '')) fail('v2 receipt binding');
+if (!witness || witness.status !== 'shadow_witness_recorded' || witness.idempotent !== false) fail('shadow witness status');
+if (!hashes.every((key) => /^[0-9a-f]{64}$/.test(witness[key] || ''))) fail('shadow witness hashes');
+if (witness.disclosure?.workspace_assurance !== 'root_held_descriptor_matches_signed_v2_ticket_and_base') fail('shadow witness v2 assurance');
+if (witness.disclosure?.owner_kernel_authority !== 'none'
+  || witness.disclosure?.effect_authority !== 'none'
+  || witness.disclosure?.acceptance !== 'not_available') fail('shadow witness authority disclosure');
+if (raw.includes(workspaceRoot) || raw.includes('"workspaceRoot"')) fail('public output path disclosure');
+fs.writeFileSync(metaPath, JSON.stringify({
+  shadow_admission_id: witness.shadow_admission_id,
+  ticket_hash: witness.ticket_hash,
+  capsule_hash: witness.capsule_hash,
+  observation_hash: witness.observation_hash,
+  close_hash: witness.close_hash,
+  shadow_chain_head: witness.shadow_chain_head,
+}, null, 0) + '\n', { mode: 0o600 });
+NODE
+if sudo -n test -e "/run/autopilot-intake/$v2_session"; then
+  printf 'FAIL [supervised-intake-live-host] completed v2 workspace session remained after cleanup\n' >&2
+  exit 1
+fi
+sudo -n /usr/bin/python3 - "$witness_state_root" "$v2_witness_meta" "$bound_workspace_root" "$state_root" <<'PY'
+import json
+import os
+import sys
+
+state_root, meta_path, workspace_root, verifier_state_root = sys.argv[1:]
+with open(meta_path, 'r', encoding='utf-8') as source:
+    expected = json.load(source)
+journal_path = os.path.join(state_root, 'journal', expected['shadow_admission_id'] + '.jsonl')
+with open(journal_path, 'rb') as source:
+    raw = source.read()
+if workspace_root.encode('utf-8') in raw:
+    raise SystemExit('v2 witness journal retained the raw workspace path')
+entries = [json.loads(line) for line in raw.splitlines()]
+if len(entries) != 3 or entries[-1].get('entry_hash') != expected['shadow_chain_head']:
+    raise SystemExit('v2 witness journal did not preserve the verified chain')
+for current, _directories, files in os.walk(verifier_state_root):
+    for name in files:
+        with open(os.path.join(current, name), 'rb') as source:
+            if workspace_root.encode('utf-8') in source.read():
+                raise SystemExit('v2 verifier state retained the raw workspace path')
+PY
+if sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" begin \
+  --workspace-registration-id p35d-workspace-main \
+  --intake-protocol-version 2 >"$v2_reuse_out" 2>"$v2_reuse_err"; then
+  printf 'FAIL [supervised-intake-live-host] completed v2 descriptor registration was reused\n' >&2
+  exit 1
+fi
 if sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" begin \
   --workspace-registration-id p35c-workspace-main >"$bound_reuse_out" 2>"$bound_reuse_err"; then
   printf 'FAIL [supervised-intake-live-host] completed workspace descriptor registration was reused\n' >&2

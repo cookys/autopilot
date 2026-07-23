@@ -26,6 +26,8 @@ const {
 const { canonicalJson, sha256 } = require('./owner-kernel/canonical');
 
 const HOST_SCHEMA_VERSION = 1;
+const INTAKE_PROTOCOL_V1 = 1;
+const INTAKE_PROTOCOL_V2 = 2;
 const CONFIG_RELATIVE_PATH = 'etc/supervised-intake-host.json';
 const VERIFIER_RELATIVE_PATH = 'lib/supervised-intake-verifier.js';
 const MAX_CONFIG_BYTES = 65536;
@@ -104,6 +106,14 @@ function requireDecimalCliInteger(value, label, minimum = 0, maximum = Number.MA
     fail(`${label} must be a bounded decimal integer`);
   }
   return parsed;
+}
+
+function requireIntakeProtocolVersion(value, label) {
+  const protocolVersion = requireDecimalCliInteger(value, label, INTAKE_PROTOCOL_V1);
+  if (protocolVersion !== INTAKE_PROTOCOL_V1 && protocolVersion !== INTAKE_PROTOCOL_V2) {
+    fail(`${label} is unsupported`);
+  }
+  return protocolVersion;
 }
 
 function requireAbsolutePath(value, label) {
@@ -195,8 +205,8 @@ function readBoundedStdin() {
 }
 
 function parseArgs(argv) {
-  if ((argv.length !== 11 && argv.length !== 13) || argv[0] !== 'verify') {
-    fail('usage is verify --config PATH --session-id ID --session-challenge-hash HASH --session-expires-at-ms TIME --install-binding-hash HASH [--workspace-ticket PATH]');
+  if (argv.length < 11 || argv[0] !== 'verify') {
+    fail('usage is verify --config PATH --session-id ID --session-challenge-hash HASH --session-expires-at-ms TIME --install-binding-hash HASH [--intake-protocol-version 1|2] [--workspace-ticket PATH]');
   }
   const expected = ['--config', '--session-id', '--session-challenge-hash', '--session-expires-at-ms', '--install-binding-hash'];
   const values = {};
@@ -204,18 +214,32 @@ function parseArgs(argv) {
     if (argv[index * 2 + 1] !== expected[index]) fail('verifier arguments must use the fixed ordered protocol');
     values[expected[index].slice(2).replaceAll('-', '_')] = argv[index * 2 + 2];
   }
-  const workspaceTicket = argv.length === 13
-    ? (() => {
-      if (argv[11] !== '--workspace-ticket') fail('verifier workspace ticket argument must use the fixed ordered protocol');
-      return requireAbsolutePath(argv[12], 'verifier workspace ticket');
-    })()
-    : null;
+  let cursor = 11;
+  let intakeProtocolVersion = INTAKE_PROTOCOL_V1;
+  if (argv[cursor] === '--intake-protocol-version') {
+    if (cursor + 1 >= argv.length) fail('verifier intake protocol version argument is incomplete');
+    intakeProtocolVersion = requireIntakeProtocolVersion(
+      argv[cursor + 1],
+      'verifier intake_protocol_version',
+    );
+    cursor += 2;
+  }
+  let workspaceTicket = null;
+  if (cursor < argv.length) {
+    if (argv[cursor] !== '--workspace-ticket' || cursor + 2 !== argv.length) {
+      fail('verifier workspace ticket argument must use the fixed ordered protocol');
+    }
+    workspaceTicket = requireAbsolutePath(argv[cursor + 1], 'verifier workspace ticket');
+    cursor += 2;
+  }
+  if (cursor !== argv.length) fail('verifier arguments must use the fixed ordered protocol');
   return {
     config: requireAbsolutePath(values.config, 'verifier config'),
     session_id: requireToken(values.session_id, 'verifier session_id'),
     session_challenge_hash: requireDigest(values.session_challenge_hash, 'verifier session_challenge_hash'),
     session_expires_at_ms: requireDecimalCliInteger(values.session_expires_at_ms, 'verifier session_expires_at_ms', 1),
     install_binding_hash: requireDigest(values.install_binding_hash, 'verifier install_binding_hash'),
+    intake_protocol_version: intakeProtocolVersion,
     workspace_ticket: workspaceTicket,
   };
 }
@@ -431,7 +455,29 @@ function readRootVerifierWorkspaceTicket(ticketPath, config, args) {
   };
 }
 
-function assertWorkspaceTicketMatchesPlan(ticket, plan) {
+function assertWorkspaceTicketMatchesPlan(ticket, plan, intakeProtocolVersion) {
+  if (intakeProtocolVersion === INTAKE_PROTOCOL_V2) {
+    if (ticket === null || plan.schema_version !== INTAKE_PROTOCOL_V2) {
+      fail('P3.5d v2 intake requires a root-held workspace ticket and v2 plan');
+    }
+    const inputs = requireExactKeys(plan.inputs, new Set([
+      'workspace_registration_id',
+      'workspace_root_hash',
+      'workspace_descriptor_binding_hash',
+      'workspace_ticket_hash',
+      'prompt_hash',
+      'branch_hash',
+      'verify_command_hash',
+    ]), 'P3.5d v2 compiled plan inputs');
+    if (inputs.workspace_registration_id !== ticket.registration_id
+      || inputs.workspace_root_hash !== ticket.workspace_root_hash
+      || plan.immutable_base !== ticket.immutable_base
+      || inputs.workspace_descriptor_binding_hash !== ticket.descriptor_binding_hash
+      || inputs.workspace_ticket_hash !== ticket.ticket_hash) {
+      fail('workspace ticket does not exact-match the signed P3.5d descriptor-bound claims');
+    }
+    return;
+  }
   if (ticket === null) return;
   if (plan.inputs.workspace_root_hash !== ticket.workspace_root_hash || plan.immutable_base !== ticket.immutable_base) {
     fail('workspace ticket does not exact-match the signed P3.3 workspace and immutable-base claims');
@@ -491,9 +537,18 @@ function readRequest() {
     'protocol_version',
     'session_id',
   ]), 'P3.5 verifier request');
-  if (value.protocol_version !== HOST_SCHEMA_VERSION) fail('P3.5 verifier request protocol_version is unsupported');
+  if (value.protocol_version !== INTAKE_PROTOCOL_V1 && value.protocol_version !== INTAKE_PROTOCOL_V2) {
+    fail('P3.5 verifier request protocol_version is unsupported');
+  }
+  const bridgeInput = requirePlainObject(value.bridge_input, 'P3.5 verifier bridge_input');
+  if (value.protocol_version === INTAKE_PROTOCOL_V2
+    && (Object.prototype.hasOwnProperty.call(bridgeInput, 'workspaceRoot')
+      || Object.prototype.hasOwnProperty.call(bridgeInput, 'workspace_root'))) {
+    fail('P3.5d v2 verifier request must not carry a raw workspace path');
+  }
   return {
-    bridge_input: requirePlainObject(value.bridge_input, 'P3.5 verifier bridge_input'),
+    protocol_version: value.protocol_version,
+    bridge_input: bridgeInput,
     envelope: requirePlainObject(value.envelope, 'P3.5 verifier envelope'),
     session_id: requireToken(value.session_id, 'P3.5 verifier request session_id'),
   };
@@ -529,6 +584,9 @@ function execute() {
   const workspaceTicket = readRootVerifierWorkspaceTicket(args.workspace_ticket, config, args);
   const request = readRequest();
   if (request.session_id !== args.session_id) fail('verifier request does not match the host session');
+  if (request.protocol_version !== args.intake_protocol_version) {
+    fail('verifier request protocol_version does not match the root-opened session');
+  }
   const keyring = loadInstalledKeyring(config);
   const shadowConsumer = createFileShadowEngineConsumer({ state_directory: config.state_root });
   try {
@@ -562,7 +620,10 @@ function execute() {
       },
     };
     const plan = compileSupervisedEngineBridgeContract(request.bridge_input);
-    assertWorkspaceTicketMatchesPlan(workspaceTicket, plan);
+    if (plan.schema_version !== request.protocol_version) {
+      fail('compiled bridge plan schema_version does not match the intake request protocol');
+    }
+    assertWorkspaceTicketMatchesPlan(workspaceTicket, plan, request.protocol_version);
     let authenticated = null;
     const bridgeReceipt = verifySupervisedEngineBridgeContract(plan, request.bridge_input, request.envelope, {
       trustedIntakeVerifier: (envelope, context) => {
@@ -587,6 +648,10 @@ function execute() {
       receipt: authenticated.receipt,
       bridge_receipt: bridgeReceipt,
       shadow,
+      ...(request.protocol_version === INTAKE_PROTOCOL_V2 ? {
+        intake_protocol_version: INTAKE_PROTOCOL_V2,
+        effect_authority: 'none',
+      } : {}),
       ...(workspaceTicket === null ? {} : {
         shadow_witness_capsule: buildShadowWitnessCapsule({
           ticket: workspaceTicket,

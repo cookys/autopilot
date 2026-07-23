@@ -281,6 +281,8 @@ GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak 
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
+QODER_OUT=""  # qoder reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
+QODER_ERR=""  # qoder reviewer stderr capture (chrome); reaped on EXIT
 cleanup() {
   # $? at trap entry = the script's exit code — its authoritative status contract
   # (0 reviewed / 1 no_verdict / 2 precondition_failed; anything else = killed/aborted).
@@ -293,6 +295,8 @@ cleanup() {
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD"
+  [ -n "$QODER_OUT" ] && rm -f "$QODER_OUT"
+  [ -n "$QODER_ERR" ] && rm -f "$QODER_ERR"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
   # every emit path already honors) so dispatch-status.js reports phase:"exited" with
   # the outcome on every exit path. declare -F guard: the trap is armed a few lines

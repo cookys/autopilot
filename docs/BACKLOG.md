@@ -917,3 +917,6 @@ onto v2.32.48 by grok-4.5.
 - **Context**: Move sealed zero-diff receipt validation into one deterministic shared helper consumed by shell, Engine, and runner boundaries.
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0-adjudication-760b
+## engine implement-review：verify_pass=false 非阻塞、可在 reviewer SHIP 下收斂
+- **Context**: 2026-07-24 codepower /l6 P0a run（foreman-p0a-1784819842）兩度實測：U3 與 qc-fix round 的全部 verify_round 皆 `verify_pass:false`，loop 仍以 reviewer SHIP-AS-IS 收斂並回報 committed。實際缺陷（AppSurface class TS2322、AppButton disabled bg、8 個測試紅）全靠 foreman 自驗第二層攔下。root cause 候選：verify-first wiring 只在 roster 發 `verify_first:true` 時 gating，未發時 verify 結果純 telemetry。**Fix 方向**：loop 收斂條件改為 `reviewer SHIP ∧ (verify_pass ∨ verify 缺席原因白名單)`，verify 紅=強制 rework round；至少在 run summary 對 `verify_pass:false + converged` 發 WARNING。
+- **Trigger**: 下次動 engine implement-review 收斂邏輯或 resolve-review-loop verify 欄位時。

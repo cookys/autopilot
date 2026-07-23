@@ -329,9 +329,39 @@ provisioning; the test key, release snapshot, replay state, and runtime session 
 
 P3.5a must not be read as owner-action authority. It does not construct `OwnerKernel`, instantiate or call
 `AutopilotEngine`, mint or execute an action, run a dispatcher/verification command/git operation, append a
-production witness, issue a permit, or map `verified_intake` to acceptance. P3.5b still needs a shadow
-Engine consumer, externally durable independent witness/restart recovery, descriptor-pinned workspace
-identity, and the P0 corpus before any mediated effect is considered.
+production witness, issue a permit, or map `verified_intake` to acceptance.
+
+## P3.5b Fail-Closed Shadow Admission
+
+`src/engine/supervised-shadow-engine-consumer.js` is snapshot-pinned beside the P3.5a verifier. After the
+verifier has recompiled the P3.3 plan and authenticated the owner envelope, it creates one private,
+hash-only shadow capsule and records it under the verifier-owned `0700` state root. The component does not
+instantiate `AutopilotEngine`, construct `OwnerKernel`, import a dispatcher, invoke a command/Git/worktree
+seam, mint a P2 permit, or call a P2/external witness API.
+
+- The capsule binds the signed-intake issuer/key/attestation/envelope/install provenance, P3.3 plan,
+  intake-binding, sink-inventory, and ABI hashes, and the owner/Engine/invocation IDs plus policy,
+  contract, immutable-base, workspace, prompt, branch, and verification-command hashes. It does not retain
+  raw envelope bytes, bridge input, prompt, workspace path, branch, command, or a caller-supplied state
+  path.
+- A record uses a deterministic intake ID and contains fixed evidence-only disclosure:
+  `engine.status: "not_started"`, `owner_kernel_authority: "none"`,
+  `legacy_execution_authority: "unchanged"`, `effect_authority: "none"`,
+  `broker_authority: "not_available"`, `acceptance: "not_available"`, and
+  `witness_assurance: "local_verifier_state_not_independent_witness"`. Gateway and root independently
+  reject a verifier result with any other authority or acceptance vocabulary before returning the compact
+  summary to the caller.
+- State moves from an exclusive, fsynced `pending` file to an exclusive `recorded` file. An exact recorded
+  capsule is idempotent. A same-ID mismatch, symlink, noncanonical state, mode/owner/link drift, or
+  conflicting state fails closed. On the next verifier transaction, a surviving pending record is converted
+  only to `recovery_required`; it is never promoted to recorded, re-verified, replayed, closed, or used to
+  start an Engine. The gateway's existing verifier/replay lock covers this sweep.
+
+P3.5b is restart diagnosis for a pure hash record, not end-to-end intake recovery. It is not an independent
+witness and it does not descriptor-pin a workspace. P3.5c must add a root-owned workspace registration and
+retained descriptor protocol plus a separate-UID, append-only shadow witness with readback/idempotency. The
+P0 production corpus remains mandatory before a mediated effect, P2 authority, acceptance, or alias
+retirement is considered.
 
 ## Deferred Full P3 Gate
 
@@ -384,5 +414,10 @@ payload parsing, keyring/attestation pinning, host-session/install/plan/binding 
 clock-rollback rejection, P3.3 adapter integration, durable replay idempotence/conflict/pending state, and
 the no-authority receipt. `hooks/tests/supervised-intake-host.test.sh` covers the root snapshot material,
 no runtime trust-input override, hash-only challenge state, opaque root submit, peer-before-frame ordering,
-replay serialization, worker peer verification, and no-authority source controls.
+replay serialization, worker peer verification, strict non-authoritative shadow-summary validation, and
+no-authority source controls. `hooks/tests/supervised-shadow-engine-consumer.test.sh` covers exact
+plan/receipt/install binding, raw-data exclusion, durable idempotency, symlink rejection, cleanup of an
+unpublished interrupted temporary, `pending` to `recovery_required` restart behavior, and no live Engine or
+action dependency. The live P3.5 gate also verifies the compact shadow summary over the real root/systemd/
+SO_PEERCRED path.
 `hooks/tests/supervised-intake-live-host.sh` is the opt-in root/systemd/SO_PEERCRED evidence gate.

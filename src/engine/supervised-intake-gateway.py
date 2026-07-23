@@ -65,6 +65,57 @@ def require_sha256(value, label):
     return value
 
 
+def require_exact_keys(value, expected, label):
+    if not isinstance(value, dict) or set(value) != set(expected):
+        fail(label + " has an unexpected key set")
+    return value
+
+
+def validate_shadow_summary(value, label):
+    value = require_exact_keys(
+        value,
+        {"schema_version", "status", "intake_id", "record_hash", "idempotent", "disclosure"},
+        label,
+    )
+    disclosure = require_exact_keys(
+        value["disclosure"],
+        {
+            "engine",
+            "owner_kernel_authority",
+            "legacy_execution_authority",
+            "effect_authority",
+            "broker_authority",
+            "witness_assurance",
+            "acceptance",
+            "alias_retirement_eligible",
+        },
+        label + " disclosure",
+    )
+    engine = require_exact_keys(
+        disclosure["engine"],
+        {"status", "dispatch_authority"},
+        label + " disclosure engine",
+    )
+    if (
+        value["schema_version"] != SCHEMA_VERSION
+        or value["status"] != "shadow_intake_recorded"
+        or not isinstance(value["idempotent"], bool)
+        or engine["status"] != "not_started"
+        or engine["dispatch_authority"] != "not_available"
+        or disclosure["owner_kernel_authority"] != "none"
+        or disclosure["legacy_execution_authority"] != "unchanged"
+        or disclosure["effect_authority"] != "none"
+        or disclosure["broker_authority"] != "not_available"
+        or disclosure["witness_assurance"] != "local_verifier_state_not_independent_witness"
+        or disclosure["acceptance"] != "not_available"
+        or disclosure["alias_retirement_eligible"] is not False
+    ):
+        fail(label + " is not a non-authoritative shadow admission")
+    require_sha256(value["intake_id"], label + " intake_id")
+    require_sha256(value["record_hash"], label + " record_hash")
+    return value
+
+
 def require_nonnegative_int(value, label, minimum=0):
     if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
         fail(label + " must be a bounded integer")
@@ -230,6 +281,7 @@ def parse_verifier_output(output):
         "owner_kernel_authority",
         "receipt",
         "schema_version",
+        "shadow",
         "status",
     }:
         fail("installed verifier output has an unexpected shape")
@@ -242,6 +294,7 @@ def parse_verifier_output(output):
         or not isinstance(value["bridge_receipt"], dict)
     ):
         fail("installed verifier output is not a non-authoritative intake receipt")
+    validate_shadow_summary(value["shadow"], "installed verifier shadow summary")
     return value
 
 

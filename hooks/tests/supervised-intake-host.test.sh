@@ -538,6 +538,43 @@ assert gateway_source.index('peer_credentials(candidate)') < gateway_source.inde
 assert 'while connection is None' in gateway_source
 assert 'candidate.close()' in gateway_source
 assert 'fcntl.flock' in gateway_source
+assert host.FILE_LAYOUT['shadow_engine_consumer'] == 'lib/supervised-shadow-engine-consumer.js'
+assert host.installation_sources()['shadow_engine_consumer'].endswith('supervised-shadow-engine-consumer.js')
+shadow_summary = {
+    'schema_version': 1,
+    'status': 'shadow_intake_recorded',
+    'intake_id': 'a' * 64,
+    'record_hash': 'b' * 64,
+    'idempotent': False,
+    'disclosure': {
+        'engine': {'status': 'not_started', 'dispatch_authority': 'not_available'},
+        'owner_kernel_authority': 'none',
+        'legacy_execution_authority': 'unchanged',
+        'effect_authority': 'none',
+        'broker_authority': 'not_available',
+        'witness_assurance': 'local_verifier_state_not_independent_witness',
+        'acceptance': 'not_available',
+        'alias_retirement_eligible': False,
+    },
+}
+assert host.validate_shadow_summary(shadow_summary, 'test shadow summary') == shadow_summary
+assert gateway.validate_shadow_summary(shadow_summary, 'test shadow summary') == shadow_summary
+try:
+    host.validate_shadow_summary(
+        {**shadow_summary, 'disclosure': {**shadow_summary['disclosure'], 'effect_authority': 'available'}},
+        'invalid shadow summary',
+    )
+    raise AssertionError('host accepted an authoritative shadow summary')
+except host.HostError:
+    pass
+try:
+    gateway.validate_shadow_summary(
+        {**shadow_summary, 'disclosure': {**shadow_summary['disclosure'], 'acceptance': 'accepted'}},
+        'invalid shadow summary',
+    )
+    raise AssertionError('gateway accepted an accepting shadow summary')
+except gateway.GatewayError:
+    pass
 submit_source = inspect.getsource(host.submit_session)
 assert 'json.loads' not in submit_source
 assert 'read_bounded_stdin(' in submit_source
@@ -634,6 +671,7 @@ for filename in (
     'supervised-intake-worker.py',
     'supervised-intake-verifier.js',
     'supervised-authenticated-intake.js',
+    'supervised-shadow-engine-consumer.js',
 ):
     source = open(os.path.join(root, 'src', 'engine', filename), encoding='utf-8').read()
     assert 'shell=True' not in source
@@ -669,6 +707,7 @@ print('sealed_gateway_socket_has_no_verifier_path_race=true')
 print('systemd_runtime_cap_is_frozen=true')
 print('root_submit_lease_is_outside_verifier_state=true')
 print('shadow_host_has_no_authority_calls=true')
+print('shadow_admission_summary_is_strict_and_non_authoritative=true')
 PY
 )"
 PY_STATUS=$?
@@ -702,5 +741,6 @@ assert_contains "$PY_OUT" "sealed_gateway_socket_has_no_verifier_path_race=true"
 assert_contains "$PY_OUT" "systemd_runtime_cap_is_frozen=true" "P3.5 transient units have a fixed crash-lifecycle runtime cap"
 assert_contains "$PY_OUT" "root_submit_lease_is_outside_verifier_state=true" "root submit serialization is not stored in verifier-writable state"
 assert_contains "$PY_OUT" "shadow_host_has_no_authority_calls=true" "P3.5 host stays outside Kernel/action authority"
+assert_contains "$PY_OUT" "shadow_admission_summary_is_strict_and_non_authoritative=true" "P3.5 host validates a strict non-authoritative shadow summary"
 
 finalize_test

@@ -19,6 +19,10 @@ const {
   compileSupervisedEngineBridgeContract,
   verifySupervisedEngineBridgeContract,
 } = require('./supervised-engine-bridge-contract');
+const {
+  buildVerifiedIntakeCapsule,
+  createFileShadowEngineConsumer,
+} = require('./supervised-shadow-engine-consumer');
 const { canonicalJson, sha256 } = require('./owner-kernel/canonical');
 
 const HOST_SCHEMA_VERSION = 1;
@@ -32,6 +36,7 @@ const REQUIRED_FILE_KEYS = Object.freeze([
   'canonical',
   'errors',
   'policy',
+  'shadow_engine_consumer',
   'verifier',
 ]);
 const TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -368,52 +373,67 @@ function execute() {
   const request = readRequest();
   if (request.session_id !== args.session_id) fail('verifier request does not match the host session');
   const keyring = loadInstalledKeyring(config);
-  const replayStore = createFileReplayStore({ state_directory: config.state_root });
-  const verifierConfig = {
-    install_binding_hash: config.binding_hash,
-    keyring: {
-      schema_version: keyring.schema_version,
-      issuer: keyring.issuer,
-      keyring_id: keyring.keyring_id,
-      keyring_epoch: keyring.keyring_epoch,
-      keys: keyring.keys.map((key) => ({
-        algorithm: key.algorithm,
-        key_id: key.key_id,
-        not_before_ms: key.not_before_ms,
-        not_after_ms: key.not_after_ms,
-        public_key_spki_base64: key.public_key_spki_base64,
-      })),
-    },
-    max_clock_rollback_milliseconds: config.limits.max_clock_rollback_milliseconds,
-    max_envelope_lifetime_milliseconds: config.limits.max_envelope_lifetime_milliseconds,
-    max_future_skew_milliseconds: config.limits.max_future_skew_milliseconds,
-    now: () => Date.now(),
-    replay_store: replayStore,
-    session: {
-      session_id: args.session_id,
-      session_challenge_hash: args.session_challenge_hash,
-    },
-  };
-  const plan = compileSupervisedEngineBridgeContract(request.bridge_input);
-  let authenticated = null;
-  const bridgeReceipt = verifySupervisedEngineBridgeContract(plan, request.bridge_input, request.envelope, {
-    trustedIntakeVerifier: (envelope, context) => {
-      assertSessionActive(args);
-      authenticated = verifyHostPinnedAuthenticatedIntake(envelope, context, verifierConfig);
-      return authenticated.bridge_verification;
-    },
-    trustedIntakeAuthority: keyring.authority,
-  });
-  if (authenticated === null) fail('P3.5 host adapter did not produce a verification receipt');
-  const output = {
-    schema_version: HOST_SCHEMA_VERSION,
-    status: 'verified_intake',
-    owner_kernel_authority: 'none',
-    acceptance: 'not_available',
-    receipt: authenticated.receipt,
-    bridge_receipt: bridgeReceipt,
-  };
-  process.stdout.write(`${canonicalJson(output)}\n`);
+  const shadowConsumer = createFileShadowEngineConsumer({ state_directory: config.state_root });
+  try {
+    // The gateway holds the verifier-wide replay lock for this complete call.
+    // A restarted pending shadow record becomes only a durable diagnostic.
+    shadowConsumer.recoverPending();
+    const replayStore = createFileReplayStore({ state_directory: config.state_root });
+    const verifierConfig = {
+      install_binding_hash: config.binding_hash,
+      keyring: {
+        schema_version: keyring.schema_version,
+        issuer: keyring.issuer,
+        keyring_id: keyring.keyring_id,
+        keyring_epoch: keyring.keyring_epoch,
+        keys: keyring.keys.map((key) => ({
+          algorithm: key.algorithm,
+          key_id: key.key_id,
+          not_before_ms: key.not_before_ms,
+          not_after_ms: key.not_after_ms,
+          public_key_spki_base64: key.public_key_spki_base64,
+        })),
+      },
+      max_clock_rollback_milliseconds: config.limits.max_clock_rollback_milliseconds,
+      max_envelope_lifetime_milliseconds: config.limits.max_envelope_lifetime_milliseconds,
+      max_future_skew_milliseconds: config.limits.max_future_skew_milliseconds,
+      now: () => Date.now(),
+      replay_store: replayStore,
+      session: {
+        session_id: args.session_id,
+        session_challenge_hash: args.session_challenge_hash,
+      },
+    };
+    const plan = compileSupervisedEngineBridgeContract(request.bridge_input);
+    let authenticated = null;
+    const bridgeReceipt = verifySupervisedEngineBridgeContract(plan, request.bridge_input, request.envelope, {
+      trustedIntakeVerifier: (envelope, context) => {
+        assertSessionActive(args);
+        authenticated = verifyHostPinnedAuthenticatedIntake(envelope, context, verifierConfig);
+        return authenticated.bridge_verification;
+      },
+      trustedIntakeAuthority: keyring.authority,
+    });
+    if (authenticated === null) fail('P3.5 host adapter did not produce a verification receipt');
+    const shadow = shadowConsumer.consumeVerifiedIntake(buildVerifiedIntakeCapsule({
+      plan,
+      authenticatedReceipt: authenticated.receipt,
+      bridgeReceipt,
+      installBindingHash: config.binding_hash,
+    }));
+    const output = {
+      schema_version: HOST_SCHEMA_VERSION,
+      status: 'verified_intake',
+      owner_kernel_authority: 'none',
+      acceptance: 'not_available',
+      receipt: authenticated.receipt,
+      bridge_receipt: bridgeReceipt,
+      shadow,
+    };
+    process.stdout.write(`${canonicalJson(output)}\n`);
+  } finally {
+    shadowConsumer.close();
+  }
 }
 
 try {

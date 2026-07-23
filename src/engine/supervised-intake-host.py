@@ -44,6 +44,7 @@ FILE_LAYOUT = {
     "verifier": "lib/supervised-intake-verifier.js",
     "authenticated_intake": "lib/supervised-authenticated-intake.js",
     "bridge_contract": "lib/supervised-engine-bridge-contract.js",
+    "shadow_engine_consumer": "lib/supervised-shadow-engine-consumer.js",
     "canonical": "lib/owner-kernel/canonical.js",
     "actions": "lib/owner-kernel/actions.js",
     "errors": "lib/owner-kernel/errors.js",
@@ -654,6 +655,7 @@ def installation_sources():
         "verifier": os.path.join(source_root, "supervised-intake-verifier.js"),
         "authenticated_intake": os.path.join(source_root, "supervised-authenticated-intake.js"),
         "bridge_contract": os.path.join(source_root, "supervised-engine-bridge-contract.js"),
+        "shadow_engine_consumer": os.path.join(source_root, "supervised-shadow-engine-consumer.js"),
         "canonical": os.path.join(source_root, "owner-kernel", "canonical.js"),
         "actions": os.path.join(source_root, "owner-kernel", "actions.js"),
         "errors": os.path.join(source_root, "owner-kernel", "errors.js"),
@@ -1766,6 +1768,51 @@ def validate_gateway_ready(value, expected_pid, verifier, worker):
         fail("gateway readiness does not match the fixed host identities")
 
 
+def validate_shadow_summary(value, label):
+    value = require_exact_keys(
+        value,
+        {"schema_version", "status", "intake_id", "record_hash", "idempotent", "disclosure"},
+        label,
+    )
+    disclosure = require_exact_keys(
+        value["disclosure"],
+        {
+            "engine",
+            "owner_kernel_authority",
+            "legacy_execution_authority",
+            "effect_authority",
+            "broker_authority",
+            "witness_assurance",
+            "acceptance",
+            "alias_retirement_eligible",
+        },
+        label + " disclosure",
+    )
+    engine = require_exact_keys(
+        disclosure["engine"],
+        {"status", "dispatch_authority"},
+        label + " disclosure engine",
+    )
+    if (
+        value["schema_version"] != SCHEMA_VERSION
+        or value["status"] != "shadow_intake_recorded"
+        or not isinstance(value["idempotent"], bool)
+        or engine["status"] != "not_started"
+        or engine["dispatch_authority"] != "not_available"
+        or disclosure["owner_kernel_authority"] != "none"
+        or disclosure["legacy_execution_authority"] != "unchanged"
+        or disclosure["effect_authority"] != "none"
+        or disclosure["broker_authority"] != "not_available"
+        or disclosure["witness_assurance"] != "local_verifier_state_not_independent_witness"
+        or disclosure["acceptance"] != "not_available"
+        or disclosure["alias_retirement_eligible"] is not False
+    ):
+        fail(label + " is not a non-authoritative shadow admission")
+    require_sha256(value["intake_id"], label + " intake_id")
+    require_sha256(value["record_hash"], label + " record_hash")
+    return value
+
+
 def validate_gateway_result(value, expected_worker):
     if isinstance(value, dict) and set(value) == {"schema_version", "status"}:
         if value["schema_version"] == SCHEMA_VERSION and value["status"] == "rejected":
@@ -1783,7 +1830,7 @@ def validate_gateway_result(value, expected_worker):
     require_sha256(value["receipt_hash"], "gateway receipt_hash")
     output = require_exact_keys(
         value["output"],
-        {"schema_version", "status", "owner_kernel_authority", "acceptance", "receipt", "bridge_receipt"},
+        {"schema_version", "status", "owner_kernel_authority", "acceptance", "receipt", "bridge_receipt", "shadow"},
         "gateway verifier output",
     )
     if (
@@ -1795,6 +1842,7 @@ def validate_gateway_result(value, expected_worker):
         or not isinstance(output["bridge_receipt"], dict)
     ):
         fail("gateway verifier output is not non-authoritative")
+    validate_shadow_summary(output["shadow"], "gateway verifier shadow summary")
     return {"peer": peer, "receipt_hash": value["receipt_hash"], "output": output}
 
 
@@ -1935,6 +1983,7 @@ def submit_session(session_id):
             "plan_hash": checked["output"]["receipt"].get("plan_hash"),
             "binding_hash": checked["output"]["receipt"].get("binding_hash"),
             "install_binding_hash": config["binding_hash"],
+            "shadow": checked["output"]["shadow"],
             "owner_kernel_authority": "none",
             "acceptance": "not_available",
         }

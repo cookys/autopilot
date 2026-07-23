@@ -532,6 +532,13 @@ const fs = require('fs');
 const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 if (value.status !== 'p35_shadow_intake_complete' || value.owner_kernel_authority !== 'none' || value.acceptance !== 'not_available') process.exit(1);
 if (!/^[0-9a-f]{64}$/.test(value.receipt_hash) || !/^[0-9a-f]{64}$/.test(value.plan_hash) || !/^[0-9a-f]{64}$/.test(value.binding_hash)) process.exit(1);
+const shadow = value.shadow;
+if (!shadow || shadow.status !== 'shadow_intake_recorded' || shadow.idempotent !== false) process.exit(1);
+if (!/^[0-9a-f]{64}$/.test(shadow.intake_id) || !/^[0-9a-f]{64}$/.test(shadow.record_hash)) process.exit(1);
+if (shadow.disclosure?.engine?.status !== 'not_started' || shadow.disclosure?.engine?.dispatch_authority !== 'not_available') process.exit(1);
+if (shadow.disclosure?.owner_kernel_authority !== 'none' || shadow.disclosure?.effect_authority !== 'none') process.exit(1);
+if (shadow.disclosure?.broker_authority !== 'not_available' || shadow.disclosure?.acceptance !== 'not_available') process.exit(1);
+if (shadow.disclosure?.witness_assurance !== 'local_verifier_state_not_independent_witness' || shadow.disclosure?.alias_retirement_eligible !== false) process.exit(1);
 NODE
 
 if sudo -n test -e "/run/autopilot-intake/$session_id"; then

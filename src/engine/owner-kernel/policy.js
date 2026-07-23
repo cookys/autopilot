@@ -1,6 +1,7 @@
 'use strict';
 
 const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./canonical');
+const { normalizeActionCatalog } = require('./actions');
 const { OwnerKernelError } = require('./errors');
 
 const GOVERNANCE_SCHEMA_VERSION = 1;
@@ -159,6 +160,9 @@ function resolveGovernancePolicy(config, options = {}) {
     'capability_ttl_seconds',
     'checkpoint_interval_closed_events',
     'max_blocked_duration_seconds',
+    'action_catalog',
+    'max_recover_cycles',
+    'max_delegate_per_decision',
   ]), 'governance');
 
   const defaultMode = requireNonEmptyString(governance.default_mode, 'governance.default_mode');
@@ -206,6 +210,17 @@ function resolveGovernancePolicy(config, options = {}) {
       1,
     ),
     max_blocked_duration_seconds: maxBlockedDuration,
+    action_catalog: normalizeActionCatalog(governance.action_catalog),
+    max_recover_cycles: requirePositiveInteger(
+      governance.max_recover_cycles === undefined ? 3 : governance.max_recover_cycles,
+      'governance.max_recover_cycles',
+      1,
+    ),
+    max_delegate_per_decision: requirePositiveInteger(
+      governance.max_delegate_per_decision === undefined ? 3 : governance.max_delegate_per_decision,
+      'governance.max_delegate_per_decision',
+      1,
+    ),
   };
 
   const normalized = cloneCanonical(resolved);

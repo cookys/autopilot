@@ -52,6 +52,7 @@
     },
     "policy_hash": { "$ref": "#/$defs/sha256" },
     "contract_hash": { "$ref": "#/$defs/sha256" },
+    "authority_hash": { "$ref": "#/$defs/sha256" },
     "payload": { "type": "object" },
     "prev_event_hash": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
     "content_hash": { "$ref": "#/$defs/sha256" },

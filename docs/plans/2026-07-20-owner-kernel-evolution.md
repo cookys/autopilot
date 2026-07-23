@@ -388,6 +388,16 @@ The remaining `🟠 Major` and `🟡 Minor` findings were accepted and regressio
 **Acceptance**: low-risk owner-led runs use one authority path; every accepted action reconciles with a
 classified event; assessment purpose cannot escalate its own authority; the acceptance predicate is exact.
 
+> **P2a implementation status (2026-07-23):** catalog classification, nonce-bound host capability evidence,
+> two-stage preclaim permits and postclaim authorizations, broker/direct execution, witness
+> compare-and-append, immutable host-verifier/executor/receipt-verifier/witness commitments, durable claims,
+> receipt reconciliation, independently verified cancellation acknowledgement, and pending-claim resume
+> exclusion are implemented. A pending claim cannot be superseded or revoked by a second control-plane event.
+> P2a validates a host protocol but does not prove callback process isolation, IPC credentials, or signed
+> attestations; a stalled synchronous adapter also cannot be preempted by Kernel timers. The exact acceptance
+> transaction, durable reconciliation/recovery and delegation transitions, and qualified challenge evidence
+> remain P2b; `requires_challenge` is fail-closed until then.
+
 #### State transition table
 
 | From | Allowed next | Gate |

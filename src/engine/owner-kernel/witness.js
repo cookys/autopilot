@@ -35,6 +35,25 @@ function verifyReceiptShape(receipt, expected = {}) {
   return true;
 }
 
+function normalizeWitnessBinding(witness) {
+  if (!witness || typeof witness !== 'object'
+    || !Object.prototype.hasOwnProperty.call(witness, 'identity')
+    || !Object.prototype.hasOwnProperty.call(witness, 'attestation_hash')
+    || !Object.prototype.hasOwnProperty.call(witness, 'protocol_version')
+    || typeof witness.identity !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(witness.identity)
+    || !isSha256(witness.attestation_hash) || witness.protocol_version !== 1) {
+    throw new OwnerKernelError(
+      'authority-enabled Owner Kernel runs require witness identity, attestation_hash, and protocol_version 1',
+      'WITNESS_BINDING_REQUIRED',
+    );
+  }
+  return {
+    identity: witness.identity,
+    attestation_hash: witness.attestation_hash.toLowerCase(),
+    protocol_version: 1,
+  };
+}
+
 class MemoryWitness {
   constructor({ streamId } = {}) {
     if (typeof streamId !== 'string' || streamId.length === 0) {
@@ -44,6 +63,9 @@ class MemoryWitness {
     // This class lives in the model-process runtime and is permanently test-only.
     // Production callers must inject a separate host-resident witness adapter.
     this.trustTier = 'test';
+    this.identity = `memory-witness:${streamId}`;
+    this.attestation_hash = sha256(`memory-witness:${streamId}`);
+    this.protocol_version = 1;
     this._head = null;
     this._receipts = [];
   }
@@ -64,6 +86,14 @@ class MemoryWitness {
     this._head = witnessHead;
     this._receipts.push(receipt);
     return { ...receipt };
+  }
+
+  appendIfHead(request) {
+    if (request.expected_witness_head !== this._head) {
+      throw new OwnerKernelError('witness compare-and-append head does not match', 'WITNESS_HEAD_STALE');
+    }
+    const { expected_witness_head: _expectedWitnessHead, ...appendRequest } = request;
+    return this.append(appendRequest);
   }
 
   verify(receipt) {
@@ -89,9 +119,17 @@ class MemoryWitness {
   get head() {
     return this._head;
   }
+
+  getHead() {
+    return this._head;
+  }
 }
 
-function assertWitnessAdapter(witness, { allowTestWitness = false } = {}) {
+function assertWitnessAdapter(witness, {
+  allowTestWitness = false,
+  requireCompareAndAppend = false,
+  requireBinding = false,
+} = {}) {
   if (!witness || typeof witness !== 'object'
     || typeof witness.streamId !== 'string' || witness.streamId.length === 0
     || typeof witness.append !== 'function' || typeof witness.verify !== 'function') {
@@ -106,11 +144,27 @@ function assertWitnessAdapter(witness, { allowTestWitness = false } = {}) {
       'UNTRUSTED_WITNESS',
     );
   }
+  if (requireCompareAndAppend) {
+    if (typeof witness.appendIfHead !== 'function') {
+      throw new OwnerKernelError(
+        'authority-enabled Owner Kernel runs require witness.appendIfHead() compare-and-append',
+        'WITNESS_COMPARE_AND_APPEND_REQUIRED',
+      );
+    }
+    if (typeof witness.getHead !== 'function') {
+      throw new OwnerKernelError(
+        'authority-enabled Owner Kernel runs require witness.getHead() head probing',
+        'WITNESS_HEAD_REQUIRED',
+      );
+    }
+  }
+  if (requireBinding) normalizeWitnessBinding(witness);
   return witness;
 }
 
 module.exports = {
   MemoryWitness,
   assertWitnessAdapter,
+  normalizeWitnessBinding,
   verifyReceiptShape,
 };

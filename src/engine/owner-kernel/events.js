@@ -27,6 +27,7 @@ const EVENT_KEYS = new Set([
   'emitter',
   'policy_hash',
   'contract_hash',
+  'authority_hash',
   'payload',
   'prev_event_hash',
   'content_hash',
@@ -94,6 +95,9 @@ function eventContent(event) {
     emitter: event.emitter,
     policy_hash: event.policy_hash,
     contract_hash: event.contract_hash,
+    ...(Object.prototype.hasOwnProperty.call(event, 'authority_hash')
+      ? { authority_hash: event.authority_hash }
+      : {}),
     payload: event.payload,
   };
 }
@@ -106,6 +110,7 @@ function prepareEvent({
   emitter,
   policyHash,
   contractHash,
+  authorityHash,
   payload,
   prevEventHash,
 }) {
@@ -118,6 +123,7 @@ function prepareEvent({
     emitter,
     policy_hash: policyHash,
     contract_hash: contractHash,
+    ...(authorityHash === undefined ? {} : { authority_hash: authorityHash }),
     payload: cloneCanonical(payload),
     prev_event_hash: prevEventHash,
   };
@@ -138,6 +144,7 @@ function buildEvent({
   emitter,
   policyHash,
   contractHash,
+  authorityHash,
   payload,
   prevEventHash,
   witness,
@@ -150,6 +157,7 @@ function buildEvent({
     emitter,
     policyHash,
     contractHash,
+    authorityHash,
     payload,
     prevEventHash,
   });
@@ -180,6 +188,9 @@ function validateEventShape(event, options = {}) {
   assertEmitter(value.emitter, value.type);
   if (!isSha256(value.policy_hash) || !isSha256(value.contract_hash)) {
     eventError('event policy_hash and contract_hash must be SHA-256 digests');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'authority_hash') && !isSha256(value.authority_hash)) {
+    eventError('event.authority_hash must be a SHA-256 digest when present');
   }
   assertPlainObject(value.payload, 'event.payload');
   canonicalJson(value.payload);
@@ -237,6 +248,14 @@ function verifyEvent(event, { header, previousEventHash, previousWitnessHead, wi
       || event.contract_hash !== header.contract_hash
       || event.witness.stream_id !== header.witness_stream_id) {
       eventError('event does not belong to the ledger header run, policy, contract, or witness stream');
+    }
+    if (header.authority_hash === undefined) {
+      if (Object.prototype.hasOwnProperty.call(event, 'authority_hash')) {
+        eventError('legacy ledger event must not contain authority_hash');
+      }
+    } else if (!Object.prototype.hasOwnProperty.call(event, 'authority_hash')
+      || event.authority_hash !== header.authority_hash) {
+      eventError('event authority_hash does not match the ledger authority commitment');
     }
   }
   if (event.witness.previous_witness_head !== previousWitnessHead) {

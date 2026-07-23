@@ -127,7 +127,7 @@
 | L-1.6 skill routing | Complete | dev-flow, l6, ceo-agent, test-strategy, harness-maintenance, quality-pipeline invoked in run `owner-kernel-p0-1784543437001` |
 | P0 | **PASS FOR P1 FUNDING** | Canonical five-target classifier: `supervised-partial` is `partial`; Claude Code, Codex, OpenCode, and agy are `none`. Three actual bounded tasks passed independent family review, reduced mandatory reviews 6→3, and reconstructed from durable evidence only after exact external approval. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json); [spike evidence](p0/spike/evidence-2026-07-23-hardened-r2/) |
 | P1 | **Implemented — P2 pending** | Durable policy/event/principal/approval/checkpoint/replay/disclosure core: [`p1/README.md`](p1/README.md). Test-only witnesses cannot activate production mode; P2 must add mediated action and acceptance transaction |
-| P2 | Pending | P1 core is complete; action mediation, reconciliation, and acceptance transaction are next |
+| P2 | **P2a implemented; P2b pending** | Enforced catalog, two-stage preclaim permits/postclaim authorizations, independently bound verifier/executor/receipt/witness roles, broker or direct execution, cancellation acknowledgement, and single-writer pending claims are in [`p2/README.md`](p2/README.md). P2a is protocol enforcement, not OS/IPC isolation; exact acceptance/recovery/challenge evidence remains P2b |
 | P3 | Blocked | Depends on P2 |
 | P4 | Blocked | Depends on P3 |
 | L-5 | Not reached | Begins only after P1-P4 complete |
@@ -171,6 +171,8 @@ node scripts/owner-kernel.js resolve --check
 bash hooks/tests/owner-kernel.test.sh
 bash hooks/tests/owner-kernel-cli.test.sh
 bash hooks/tests/owner-kernel-adversarial.test.sh
+bash hooks/tests/owner-action-reconciliation.test.sh
+bash hooks/tests/owner-action-hardening.test.sh
 bash hooks/tests/level-governance-translation.test.sh
 bash hooks/tests/run.sh
 scripts/validate.sh

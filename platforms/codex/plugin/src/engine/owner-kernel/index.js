@@ -1,6 +1,25 @@
 'use strict';
 
 const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./canonical');
+const {
+  ACTION_CLASS_RANK,
+  assertIndependentAuthorityBindings,
+  actionDescriptorHash,
+  actionMatchesDescriptor,
+  normalizeActionAuthority,
+  normalizeActionCancellationResult,
+  normalizeActionCatalog,
+  normalizeActionDescriptor,
+  normalizeActionExecutionResult,
+  normalizeExecutionAuthorization,
+  normalizeExecutionPermit,
+  normalizeFrozenActionDescriptor,
+  normalizeFrozenHostCapabilityVerifierBinding,
+  normalizeHostCapability,
+  normalizeVerifiedActionOutcome,
+  receiptIsWithinBrokerRoot,
+  validateHostCapabilityCoverage,
+} = require('./actions');
 const { OwnerKernelBlockedError, OwnerKernelError } = require('./errors');
 const { EVENT_TYPES, OWNER_EVENT_SCHEMA_VERSION, validateEventShape, verifyEvent } = require('./events');
 const { OwnerKernel } = require('./kernel');
@@ -22,10 +41,12 @@ const {
   resolveGovernancePolicy,
 } = require('./policy');
 const { deriveDisclosure, stateProjection } = require('./state');
-const { MemoryWitness } = require('./witness');
+const { MemoryWitness, normalizeWitnessBinding } = require('./witness');
 
 module.exports = {
   ACTION_CLASSES,
+  ACTION_CLASS_RANK,
+  assertIndependentAuthorityBindings,
   EVENT_TYPES,
   GOVERNANCE_SCHEMA_VERSION,
   HEADER_RECORD_TYPE,
@@ -42,13 +63,29 @@ module.exports = {
   deriveDisclosure,
   freezeAcceptanceContract,
   isSha256,
+  actionDescriptorHash,
+  actionMatchesDescriptor,
+  normalizeActionAuthority,
+  normalizeActionCancellationResult,
+  normalizeActionCatalog,
+  normalizeActionDescriptor,
+  normalizeActionExecutionResult,
+  normalizeExecutionAuthorization,
+  normalizeExecutionPermit,
+  normalizeFrozenActionDescriptor,
+  normalizeFrozenHostCapabilityVerifierBinding,
+  normalizeHostCapability,
+  normalizeWitnessBinding,
+  normalizeVerifiedActionOutcome,
   parseLedgerJsonl,
   replayFromLatestCheckpoint,
   resolveGovernancePolicy,
+  receiptIsWithinBrokerRoot,
   serializeLedger,
   sha256,
   stateProjection,
   validateEventShape,
+  validateHostCapabilityCoverage,
   validateLedgerHeader,
   verifyEvent,
   verifyLedger,

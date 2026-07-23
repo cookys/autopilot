@@ -66,14 +66,16 @@ evidence is independently reviewed.
 - Add `src/engine/supervised-host-preflight.js` for strict configuration validation,
   fixed UID/path/command normalization, immutable probe bindings, root-owned-path
   preflight, and frozen gateway/worker/systemd arguments. It does not spawn a child or
-  create a runtime layout. Its root-owned-path checks are meaningful only when a future
-  P3.4b trusted installer runs it from a root-owned snapshot and uses only its result.
+  create a runtime layout. P3.4b supplies a separate root-installed preflight for its
+  dedicated-worker schema; this P3.4a API remains a strict contract check for the
+  original `nobody:nogroup` mechanism probe.
 - Add `src/engine/supervised-host-peercred.py`, a small standard-library Linux helper
   that obtains `SO_PEERCRED` directly. Node's Unix socket API does not expose peer
   credentials, so a caller-provided JSON field is not accepted. The only operation is
   `p34_hello`; the endpoint accepts one connection, rejects anything invalid, removes
   the socket, and cannot be retried or reused. The worker checks the socket ancestry,
-  inode ownership/mode, and receipt binding before accepting a response.
+  inode ownership/mode, the connected broker's `SO_PEERCRED` UID/GID, and receipt
+  binding before accepting a response.
 - Add a focused deterministic contract test. Its live cross-UID section remains
   opt-in so ordinary CI never needs sudo. The explicit
   `hooks/tests/supervised-host-live-preflight.sh` wrapper runs the manual privileged
@@ -140,5 +142,5 @@ authority, P3.3 trusted intake verification, durable witness evidence, or P3 act
   integration.
 - Network/remote supervision, cross-platform support, alias retirement, and release
   metadata.
-- The root-installed P3.4b launcher, dedicated worker account, P3.3 verifier pinning,
-  per-run PID/endpoint binding, and unattended operation.
+- The P3.3 verifier pinning, durable witness coordination, Engine action mediation,
+  acceptance, and unattended autonomous operation.

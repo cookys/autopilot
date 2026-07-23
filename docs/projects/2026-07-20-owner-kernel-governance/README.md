@@ -129,7 +129,7 @@
 | P0 | **PASS FOR P1 FUNDING** | Canonical five-target classifier: `supervised-partial` is `partial`; Claude Code, Codex, OpenCode, and agy are `none`. Three actual bounded tasks passed independent family review, reduced mandatory reviews 6→3, and reconstructed from durable evidence only after exact external approval. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json); [spike evidence](p0/spike/evidence-2026-07-23-hardened-r2/) |
 | P1 | **Implemented — P2 pending** | Durable policy/event/principal/approval/checkpoint/replay/disclosure core: [`p1/README.md`](p1/README.md). Test-only witnesses cannot activate production mode; P2 must add mediated action and acceptance transaction |
 | P2 | **P2a + P2b protocol core implemented; P3 integration pending** | Enforced catalog, two-stage preclaim permits/postclaim authorizations, independently bound verifier/executor/receipt/witness roles, broker/direct execution, typed v2 verification/challenge/audit evidence, coordinator-bound atomic acceptance, pending-claim `unknown` recovery without effect replay, and bounded delegation/recovery transitions are in [`p2/README.md`](p2/README.md). This validates trusted adapter messages, not OS/IPC isolation or a production supervised host |
-| P3 | **P3.0-P3.4a mechanism probe implemented; full activation blocked** | Deterministic `/lN` translation, frozen red-line/profile policy, read-only CLI, integrating-host witnessed `/l3` shadow telemetry, a host-injected `/l5`/`/l6` lifecycle observation sidecar, a Linux-local bounded external-process receipt transport, a hash-bound Engine-to-Kernel sink/acceptance/workspace bridge contract, and a Linux cross-UID `SO_PEERCRED`/exact-systemd-cgroup mechanism probe are implemented: [`p3/README.md`](p3/README.md). P3.4a's opt-in manual probe uses a root-owned helper snapshot, rejects the broker UID and a correct `nobody:nogroup` peer outside the expected cgroup, denies root-only state access, accepts the matching transient worker, and verifies both units are collected. It is not a root-owned launcher or unattended host boundary; P3.4b must add that boundary with a dedicated worker identity. P3.4a also does not implement P3.3 trusted intake verification, durable witness coordination, a live Engine action broker, or acceptance. This intermediate work does not bump v2.32.57 or release metadata; authenticated owner intake, live engine/broker/coordinator integration, KR8/KR10, and alias deletion gates remain open. |
+| P3 | **P3.0-P3.4b installed mechanism boundary implemented; full activation blocked** | Deterministic `/lN` translation, frozen red-line/profile policy, read-only CLI, integrating-host witnessed `/l3` shadow telemetry, a host-injected `/l5`/`/l6` lifecycle observation sidecar, a Linux-local bounded external-process receipt transport, a hash-bound Engine-to-Kernel sink/acceptance/workspace bridge contract, and a Linux cross-UID installed launcher are implemented: [`p3/README.md`](p3/README.md). P3.4b's root-owned snapshot uses a dedicated no-supplementary-group `autopilot-worker`, fixed root-owned config/path hashes, an exclusive runtime lease, a release-gated systemd unit, exact `MainPID` plus cgroup-v2 gateway verification, and client-side `SO_PEERCRED`; user-writable staging cannot alter an installed run, and successful/failed units are collected. This is still non-authoritative: it does not implement P3.3 trusted intake verification, durable witness coordination, a live Engine action broker, or acceptance. This intermediate work does not bump v2.32.57 or release metadata; authenticated owner intake, live engine/broker/coordinator integration, KR8/KR10, and alias deletion gates remain open. |
 | P4 | Blocked | Depends on P3 |
 | L-5 | Not reached | Begins only after P1-P4 complete |
 
@@ -179,6 +179,7 @@ bash hooks/tests/engine-lifecycle-observation.test.sh
 bash hooks/tests/external-lifecycle-witness.test.sh
 bash hooks/tests/supervised-engine-bridge-contract.test.sh
 bash hooks/tests/supervised-host-preflight.test.sh
+bash hooks/tests/supervised-host-launcher.test.sh
 bash hooks/tests/run.sh
 scripts/validate.sh
 node scripts/sync-version.js --check
@@ -187,12 +188,13 @@ bash scripts/check-canonical-invariants.sh
 bash scripts/sync-codex-plugin-skills.sh --check
 ```
 
-Before a release or project status may cite P3.4a's mechanism evidence, the named
+Before a release or project status may cite P3.4a/P3.4b mechanism evidence, the named
 self-hosted Linux runner must also execute the privileged gate. It requires passwordless
 `sudo -n`; it is deliberately not folded into ordinary CI:
 
 ```bash
 bash hooks/tests/supervised-host-live-preflight.sh
+bash hooks/tests/supervised-host-live-launcher.sh
 ```
 
 ## Decision Log
@@ -208,6 +210,7 @@ bash hooks/tests/supervised-host-live-preflight.sh
 | 2026-07-23 | P3.3 freezes the Engine-to-Kernel bridge before live activation | The P3.1/P3.2 same-UID observer cannot establish production authority. A deterministic, hash-only contract prevents an accidental live wiring while P3.4 builds the required cross-UID host boundary |
 | 2026-07-23 | P3.3 verification authoring falls back from `/l6` to depth-0 | The strict verifier-author contract has no qualified tuple for its configured engine. The fallback preserves the qualification gate rather than treating an unqualified model as an acceptance authority |
 | 2026-07-23 | P3.4a records a host-specific cross-UID mechanism probe, not a host boundary | A manual privileged fixture uses a root-owned helper snapshot + systemd `nobody:nogroup` worker + exact `SO_PEERCRED`/cgroup check to reject the broker UID and a wrong-cgroup worker while preserving root-only state and collecting transient units. P3.4b must add the root-owned launcher and dedicated worker; P3.3 intake verification, witness durability, and Engine action mediation remain deliberately absent |
+| 2026-07-23 | P3.4b installs a bounded root-owned launcher, not autonomous authority | A root operator snapshots fixed launcher/helper/wrapper bytes and a private `autopilot-worker` account; each run freezes its unit/endpoint/nonce, binds the gateway to systemd `MainPID` plus cgroup-v2, and removes the unit/runtime afterward. P3.3 intake verification, witness durability, Engine action mediation, and acceptance remain absent |
 | 2026-07-20 | **P0 steps 4+5 EXECUTED under depth-0 Owner decision** | Steps 5-6 permit frozen fixtures, so all 8 named attacks were run against a disposable no-core-code fixture: 8/8 contracts held, 8/8 oracles mutation-proven LIVE. 15/15 baseline categories frozen |
 | 2026-07-20 | Per-harness probe replaces the shell-label probe | `run-harness-probes.sh` drives each real CLI and retains fresh nonce echoes as `self_reported`; `probe-host-trust-roots.sh` marked SUPERSEDED (it measured the shell and asserted a host name) |
 | 2026-07-20 | R3 scoring narrowed after root QC | Completed R3 requires execution-proven default-mode evidence or captured self-disable evidence; nonce-only self-reports are unscored |

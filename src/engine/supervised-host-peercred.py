@@ -9,6 +9,7 @@ Kernel, action, broker, witness, or acceptance code.
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import socket
@@ -22,6 +23,7 @@ PROTOCOL_VERSION = 1
 MAX_FRAME_BYTES = 4096
 TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+CGROUP_PATH_PATTERN = re.compile(r"^/system\.slice/autopilot-p34-[A-Za-z0-9_-]{1,96}\.service$")
 
 
 def canonical(value):
@@ -59,6 +61,18 @@ def require_sha256(value, label):
 def require_nonnegative_int(value, label):
     if not isinstance(value, int) or value < 0:
         fail(label + " must be a non-negative integer")
+    return value
+
+
+def require_timeout_seconds(value):
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or value <= 0
+        or value > 30
+    ):
+        fail("timeout_seconds must be greater than zero and at most 30")
     return value
 
 
@@ -151,12 +165,12 @@ def peer_credentials(connection):
 
 def require_cgroup_path(value, label):
     value = require_absolute_path(value, label)
-    if not value.startswith("/system.slice/autopilot-p34-") or not value.endswith(".service"):
+    if CGROUP_PATH_PATTERN.fullmatch(value) is None:
         fail(label + " must be an autopilot-p34 system.slice path")
     return value
 
 
-def cgroup_matches(pid, expected_path):
+def cgroup_matches(pid, expected_path, require_unified_v2=False):
     try:
         with open("/proc/{}/cgroup".format(pid), "r", encoding="utf-8") as source:
             body = source.read(8192)
@@ -166,7 +180,9 @@ def cgroup_matches(pid, expected_path):
         fields = line.split(":", 2)
         if len(fields) != 3:
             continue
-        if fields[2] == expected_path:
+        if fields[2] == expected_path and (
+            not require_unified_v2 or (fields[0] == "0" and fields[1] == "")
+        ):
             return True
     return False
 
@@ -281,6 +297,11 @@ def serve(args):
     broker_uid = require_nonnegative_int(args.broker_uid, "broker_uid")
     broker_gid = require_nonnegative_int(args.broker_gid, "broker_gid")
     socket_gid = require_nonnegative_int(args.socket_gid, "socket_gid")
+    expected_pid = args.expected_pid
+    if expected_pid is not None:
+        expected_pid = require_nonnegative_int(expected_pid, "expected_pid")
+        if expected_pid == 0:
+            fail("expected_pid must be greater than zero")
     if broker_uid == 0 or broker_gid == 0:
         fail("gateway broker identity must be unprivileged")
     if os.geteuid() != broker_uid or os.getegid() != broker_gid:
@@ -300,8 +321,7 @@ def serve(args):
     require_sha256(args.nonce_hash, "nonce_hash")
     require_sha256(args.binding_hash, "binding_hash")
     expected_cgroup_path = require_cgroup_path(args.expected_cgroup_path, "expected_cgroup_path")
-    if args.timeout_seconds <= 0 or args.timeout_seconds > 30:
-        fail("timeout_seconds must be greater than zero and at most 30")
+    timeout_seconds = require_timeout_seconds(args.timeout_seconds)
 
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
@@ -320,8 +340,8 @@ def serve(args):
             "socket_gid": socket_gid,
             "request_lifecycle": "single_use",
         })
-        deadline = time.monotonic() + args.timeout_seconds
-        listener.settimeout(args.timeout_seconds)
+        deadline = time.monotonic() + timeout_seconds
+        listener.settimeout(timeout_seconds)
         try:
             connection, _ = listener.accept()
         except TimeoutError:
@@ -329,7 +349,12 @@ def serve(args):
             return 1
         with connection:
             pid, uid, gid = peer_credentials(connection)
-            if uid != expected_uid or gid != expected_gid or not cgroup_matches(pid, expected_cgroup_path):
+            if (
+                uid != expected_uid
+                or gid != expected_gid
+                or (expected_pid is not None and pid != expected_pid)
+                or not cgroup_matches(pid, expected_cgroup_path, args.require_unified_cgroup_v2)
+            ):
                 emit({
                     "status": "peer_rejected",
                     "pid": pid,
@@ -338,7 +363,7 @@ def serve(args):
                 })
                 return 1
             try:
-                validate_hello(receive_one_frame(connection, args.timeout_seconds, deadline), args)
+                validate_hello(receive_one_frame(connection, timeout_seconds, deadline), args)
             except (ValueError, TimeoutError, OSError) as error:
                 emit({
                     "status": "request_rejected",
@@ -375,6 +400,7 @@ def serve(args):
 
 
 def client(args):
+    require_linux_peercred()
     socket_path = require_absolute_path(args.socket, "socket")
     args.expected_server_uid = require_nonnegative_int(args.expected_server_uid, "expected_server_uid")
     args.expected_server_gid = require_nonnegative_int(args.expected_server_gid, "expected_server_gid")
@@ -385,8 +411,7 @@ def client(args):
     require_sha256(args.plan_hash, "plan_hash")
     require_sha256(args.binding_hash, "binding_hash")
     nonce = require_token(args.nonce, "nonce")
-    if args.timeout_seconds <= 0 or args.timeout_seconds > 30:
-        fail("timeout_seconds must be greater than zero and at most 30")
+    timeout_seconds = require_timeout_seconds(args.timeout_seconds)
     request = {
         "op": "p34_hello",
         "run_id": args.run_id,
@@ -395,19 +420,22 @@ def client(args):
         "nonce": nonce,
     }
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    deadline = time.monotonic() + args.timeout_seconds
+    deadline = time.monotonic() + timeout_seconds
     try:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("connect_timeout")
         connection.settimeout(remaining)
         connection.connect(socket_path)
+        _server_pid, server_uid, server_gid = peer_credentials(connection)
+        if server_uid != args.expected_server_uid or server_gid != args.expected_server_gid:
+            raise ValueError("server_peer_identity_mismatch")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("send_timeout")
         connection.settimeout(remaining)
         connection.sendall((canonical(request) + "\n").encode("utf-8"))
-        response = receive_one_frame(connection, args.timeout_seconds, deadline)
+        response = receive_one_frame(connection, timeout_seconds, deadline)
         value = validate_response(response, args)
     except (OSError, TimeoutError, ValueError) as error:
         emit({"ok": False, "error": str(error)})
@@ -426,7 +454,9 @@ def parser():
     serve_parser.add_argument("--socket", required=True)
     serve_parser.add_argument("--expected-uid", required=True, type=int)
     serve_parser.add_argument("--expected-gid", required=True, type=int)
+    serve_parser.add_argument("--expected-pid", type=int)
     serve_parser.add_argument("--expected-cgroup-path", required=True)
+    serve_parser.add_argument("--require-unified-cgroup-v2", action="store_true")
     serve_parser.add_argument("--broker-uid", required=True, type=int)
     serve_parser.add_argument("--broker-gid", required=True, type=int)
     serve_parser.add_argument("--socket-gid", required=True, type=int)

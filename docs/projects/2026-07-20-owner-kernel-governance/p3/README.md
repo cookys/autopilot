@@ -151,16 +151,59 @@ from the declared control or runtime-context allowlist.
   hash. This makes a self-consistent worker-side change to destinations or mappings fail against the
   host-issued envelope; the plan hash also binds the resolved catalog mappings. P3.3 validates this
   adapter protocol and exact comparison only: it does not verify signatures, credentials, replay,
-  expiry, or peer identity itself. P3.4 must provide and pin that adapter in the cross-UID host rather
+  expiry, or peer identity itself. P3.4b/P3.5 must provide and pin that adapter in the cross-UID host rather
   than letting the worker select it. The contract does not construct an Owner Kernel, mint a permit,
   invoke a dispatcher, run a command, change a worktree, or alter the existing review loop.
 
 This is intentionally a coverage and integration contract, not a live bridge. A workspace-root hash is
 not a descriptor-pinned filesystem identity, and the legacy Engine still allows its ordinary `cwd`
-overrides. P3.4 must reject unbound workspace overrides and provide a Linux supervised substrate with a
+overrides. P3.4b/P3.5 must reject unbound workspace overrides and add a Linux supervised substrate with a
 cross-UID authenticated channel, peer-credential checks, a sandboxed worker, broker-held effects,
 durable independent witnessing, and an externally run P0 corpus before it can consume this contract for
 real authority.
+
+## P3.4a Cross-UID Supervised Host Mechanism Probe
+
+`src/engine/supervised-host-preflight.js` and
+`src/engine/supervised-host-peercred.py` implement a manual Linux-host mechanism probe, not a reusable
+host boundary. A strict compiler freezes one unprivileged broker identity, the existing
+`nobody:nogroup` worker identity (`65534:65534`), a per-run runtime root, helper/python/systemd path
+strings, a plan hash, nonce hash, and fixed systemd hardening. The compiler rejects a same UID or GID, a
+root broker, noncanonical paths, and an altered plan. Separately,
+`preflightSupervisedHostRuntime()` rejects a non-Linux host, a non-root caller, or an untrusted helper
+ancestry when a root-owned launcher calls it. P3.4a has no such runtime caller: its live fixture is a
+user-writable checkout that manually copies the helper to a root-owned snapshot and invokes root commands.
+It must never be treated as the authoritative execution path.
+
+- The manual root fixture creates a `root:nogroup 0710` run directory, a `root:root 0700` state directory,
+  a root-owned helper snapshot, and a `broker:nogroup 0710` socket parent. The broker retains its frozen
+  primary UID/GID and joins `nogroup` only as a supplementary group to create its `0660` socket. Thus the
+  worker can traverse the known endpoint but cannot list or mutate its parent and cannot read state. This
+  is not a filesystem or socket allowlist.
+- The Python gateway has exactly one `p34_hello` operation. Before parsing any bytes it reads Linux
+  `SO_PEERCRED`, requires the frozen worker UID/GID, and requires an exact
+  `/system.slice/<service-unit>` cgroup path. It then checks a bounded canonical frame and nonce hash. Any
+  peer or request failure consumes the one-use endpoint; a successful receipt is hash-bound to the run,
+  invocation, plan, gateway identity, and actual peer identity. The worker independently checks socket
+  ancestry/inode ownership/mode and the entire receipt binding before treating the hello as successful.
+- The opt-in privileged live probe runs a root-owned helper snapshot, demonstrates that a broker-UID
+  connection is rejected before request parsing, demonstrates that a correct `nobody:nogroup` peer outside
+  the expected cgroup is rejected, demonstrates that `nobody` cannot read the state directory, and then
+  accepts the real `nobody:nogroup` transient-systemd peer. Its systemd invocations use `--collect` and
+  `CollectMode=inactive-or-failed`, and the test verifies that passed and failed transient units vanish.
+  On the local Linux host it passed 30
+  assertions on 2026-07-23. The probe removes its unique `/run/autopilot-supervisor` directory afterward.
+
+P3.4a remains `owner_kernel_authority: "none"` and `acceptance: "not_available"`. It contains no Owner
+Kernel construction, P3.3 trusted-intake verifier, action permit, broker-held effect, witness append,
+acceptance coordinator, or live `AutopilotEngine` integration. `SO_PEERCRED` is local process evidence,
+not authenticated owner approval or a remote identity. The current account's unrestricted passwordless
+sudo also means this is a trusted-host probe rather than a deployment profile for an untrusted outer
+runner. The shared `nobody:nogroup` endpoint can also be consumed by another same-group local process,
+which causes a fail-closed denial but cannot pass the exact cgroup gate. P3.4b/P3.5 must replace the probe
+fixture with a narrowly installed root-owned launcher, a dedicated non-login worker identity, per-run
+PID/endpoint binding, the pinned P3.3 verifier, durable witness coordination, and only then an Engine
+action sink.
 
 ## Deferred Full P3 Gate
 
@@ -199,3 +242,7 @@ injected-sink inventory, static inventory validation, exact distinct mediated ac
 and risk floors, v2-only acceptance contract, hash-only workspace/sensitive inputs, host-owned trusted
 intake verification, pinned issuer/key/attestation, ABI/inventory/compiled-plan binding, no-authority
 terminal mapping, deterministic verification, and mutation/tampering rejection.
+`hooks/tests/supervised-host-preflight.test.sh` covers P3.4a's exact frozen preflight, root/path/identity
+negative controls, one-use gateway arguments, bounded frame and response binding, and no-Owner-Kernel
+authority source scan. `AUTOPILOT_P34_LIVE=1` adds the host-specific systemd/SO_PEERCRED proof; it is
+explicitly opt-in because ordinary CI must not require sudo.

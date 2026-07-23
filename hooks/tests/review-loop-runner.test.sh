@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
-OUT="$(node - "$REPO_ROOT" "$TEST_TMP/missing-scorecard" <<'NODE'
+# Hermetic: an empty config override pins the resolver's built-in default reviewer (gpt-5.5)
+# so this asserts the runner's capture plumbing, not the repo's live dogfood roster
+# (Board decision A → MiniMax-M3). Roster-flip-proof.
+EMPTY_CFG="$TEST_TMP/empty-review-loop.md"; : > "$EMPTY_CFG"
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/missing-scorecard" "$EMPTY_CFG" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
 const scorecard = process.argv[3];
+const emptyCfg = process.argv[4];
 const { resolveReviewLoopJson } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
 const run = resolveReviewLoopJson(['--check-scorecard'], {
   env: {
     ...process.env,
     ENGINE_SCORECARD_DIR: scorecard,
+    REVIEW_LOOP_CONFIG_OVERRIDE: emptyCfg,
   },
 });
 console.log(`status=${run.status}`);

@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "description": "Single source of truth for the repo's sync/check rituals. Each row: id, generator cmd (null for check-only rituals), check cmd, fix hint, trigger path-globs (empty = always run in --changed mode), tier (pre-commit|preflight|both). Consumed by scripts/sync-all.sh; the pre-commit hook, CI, and preflight-portability delegate to sync-all so a new ritual is wired in ONE place. Trigger glob forms: entry ending '/' = directory prefix match; entry starting '*' = suffix match; otherwise exact path. Contract/tests: hooks/tests/sync-all.test.sh.",
+  "rituals": [
+    {
+      "id": "sync-version",
+      "title": "version mirrors vs canonical plugin.json",
+      "generator": null,
+      "check": "node scripts/sync-version.js --check",
+      "fix": "node scripts/sync-version.js --version <V> --hook-count <N> --skill-count <M>",
+      "tier": "both",
+      "trigger": []
+    },
+    {
+      "id": "sync-agent-bodies",
+      "title": "agents/<role>.md -> .opencode/agent-bodies/<role>.body.md parity",
+      "generator": "bash scripts/sync-agent-bodies.sh",
+      "check": "bash scripts/sync-agent-bodies.sh --check",
+      "fix": "bash scripts/sync-agent-bodies.sh && git add .opencode/agent-bodies/",
+      "tier": "both",
+      "trigger": []
+    },
+    {
+      "id": "check-canonical-invariants",
+      "title": "cross-file invariants (severity vocab, reviewer anchor, model-routing mirror)",
+      "generator": null,
+      "check": "bash scripts/check-canonical-invariants.sh",
+      "fix": "restore the missing phrase/anchor, or update the inline seed table in scripts/check-canonical-invariants.sh (same-commit ritual in its header)",
+      "tier": "both",
+      "trigger": []
+    },
+    {
+      "id": "sync-model-routing",
+      "title": "in-skill model-routing.md copies vs canonical references/model-routing.md",
+      "generator": "bash scripts/sync-model-routing.sh",
+      "check": "bash scripts/sync-model-routing.sh --check",
+      "fix": "bash scripts/sync-model-routing.sh && git add references/model-routing.md skills/*/references/model-routing.md",
+      "tier": "both",
+      "trigger": ["*model-routing.md"]
+    },
+    {
+      "id": "sync-codex-plugin-skills",
+      "title": "committed Codex plugin payload under platforms/codex/plugin/",
+      "generator": "bash scripts/sync-codex-plugin-skills.sh",
+      "check": "bash scripts/sync-codex-plugin-skills.sh --check",
+      "fix": "bash scripts/sync-codex-plugin-skills.sh && git add platforms/codex/plugin",
+      "tier": "both",
+      "trigger": [
+        "skills/",
+        "bin/",
+        "src/",
+        "hooks/_shared/",
+        "references/",
+        "scripts/",
+        "project-config-template/",
+        "platforms/codex/",
+        "docs/plans/2026-06-04-distill-consolidate.md",
+        "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
+        "docs/plans/2026-06-26-trust-tiered-review-policy.md",
+        "docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md"
+      ]
+    },
+    {
+      "id": "sync-opencode-plugin",
+      "title": "committed OpenCode plugin payload under .opencode/plugin-package/",
+      "generator": "bash scripts/sync-opencode-plugin.sh",
+      "check": "bash scripts/sync-opencode-plugin.sh --check",
+      "fix": "bash scripts/sync-opencode-plugin.sh && git add .opencode/plugin-package",
+      "tier": "both",
+      "trigger": [
+        "platforms/opencode/plugin/",
+        "src/hooks/handlers/intent-capture.js",
+        "src/hooks/normalize/opencode.js",
+        ".opencode/plugin-package/"
+      ]
+    },
+    {
+      "id": "check-readme-parity",
+      "title": "README.md <-> README.zh-TW.md badges + section-header count",
+      "generator": null,
+      "check": "node scripts/check-readme-parity.js",
+      "fix": "align README.md and README.zh-TW.md badge values + section headers by hand",
+      "tier": "both",
+      "trigger": ["README.md", "README.zh-TW.md"]
+    },
+    {
+      "id": "check-hook-inventory",
+      "title": "hook tally + per-tier membership vs real wiring",
+      "generator": null,
+      "check": "node scripts/check-hook-inventory.js --check",
+      "fix": "node scripts/check-hook-inventory.js (no flag prints the oracle); reconcile the docs with it",
+      "tier": "both",
+      "trigger": ["hooks/", ".claude-plugin/", "README.md", "README.zh-TW.md", "*plugin.json"]
+    },
+    {
+      "id": "check-claude-md-inventory",
+      "title": "CLAUDE.md inventory: every scripts/*.{sh,js} + scripts/lib/* named + file/line size caps",
+      "generator": null,
+      "check": "node scripts/check-claude-md-inventory.js",
+      "fix": "add an index row per unlisted script; for size violations trim the row and move detail to CHANGELOG.md / references/ (see CLAUDE.md Row shape rule)",
+      "tier": "both",
+      "trigger": ["scripts/", "CLAUDE.md"]
+    },
+    {
+      "id": "l1-cache-key-parity",
+      "title": "L1 JS-runtime cache key jest/vitest versions vs test pins",
+      "generator": null,
+      "check": "node scripts/check-l1-cache-key-parity.js",
+      "fix": "align jest/vitest versions in .github/workflows/test.yml cache key and hooks/tests/check-test-integrity-l1.test.sh (jest_ver/vitest_ver)",
+      "tier": "both",
+      "trigger": [".github/workflows/test.yml", "hooks/tests/check-test-integrity-l1.test.sh"]
+    }
+  ]
+}

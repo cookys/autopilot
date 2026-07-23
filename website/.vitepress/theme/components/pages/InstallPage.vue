@@ -146,7 +146,7 @@ const day2Case = computed(() =>
           {
             n: '02',
             t: '你只看三件事',
-            d: '有沒有踩 no-go？裁決點清不清楚？證據能不能重跑？'
+            d: '有沒有踩紅線？裁決點清不清楚？證據能不能重跑？'
           },
           {
             n: '03',
@@ -162,8 +162,8 @@ const day2Case = computed(() =>
         kicker: 'Day two · first delegation',
         title: 'After cold start, hand off the first shot',
         thesisLines: [
-          'Day one: system knows the repo; you practiced adjudicate + evidence.',
-          'Day two: hand over a goal—don’t become mid-loop glue.'
+          'Day one: the system learns the repo, and you practice adjudication and evidence.',
+          'Day two: you hand over a goal and refuse to become mid-loop glue.'
         ],
         sourceLabel: 'Timed detail',
         sourceText: 'Workshop hands-on (zh-TW deck #18–#20)',
@@ -177,7 +177,7 @@ const day2Case = computed(() =>
           {
             n: '02',
             t: 'You check three things only',
-            d: 'No-go hit? Adjudication clear? Evidence re-runnable?'
+            d: 'Red line hit? Adjudication clear? Evidence re-runnable?'
           },
           {
             n: '03',
@@ -208,14 +208,16 @@ const c = computed(() =>
           '/plugin marketplace add cookys/autopilot',
           '/plugin install autopilot@autopilot'
         ],
-        hostTitle: '主場講清楚',
+        hostTitle: '平台支援度（老實講）',
+        hostLead: '同一套 plugin 在不同工具上能跑多少，先說清楚，免得裝完才發現缺一半。',
         engTitle: '第二家引擎（可以晚點再接）',
         engLines: [
           '光 Claude 就能跑 /l3 與冷啟動。',
           '若要 /l5 異質寫審，或 QC panel 多家，再裝 codex／agy／grok。',
           '並設好 review-loop／endpoints（細節在 repo docs）。'
         ],
-        wrongTitle: '別這樣',
+        wrongTitle: '第一天常見誤區',
+        wrongLead: '這四件事最常把第一天搞砸——先繞開。',
         wrong: [
           '別去找 npx install autopilot 這種假路徑',
           '別跳過 onboard 直接 /l6 整包重寫',
@@ -243,14 +245,16 @@ const c = computed(() =>
           '/plugin marketplace add cookys/autopilot',
           '/plugin install autopilot@autopilot'
         ],
-        hostTitle: 'Host honesty',
+        hostTitle: 'Platform support (honestly)',
+        hostLead: 'How much of the plugin runs on each tool — said upfront, so nothing surprises you after install.',
         engTitle: 'Second engine (later OK)',
         engLines: [
           'Claude alone covers /l3 and cold start.',
           'For /l5 hetero write/review or multi-family QC, add subscription CLIs (codex/agy/grok).',
           'Wire review-loop/endpoints (repo docs).'
         ],
-        wrongTitle: 'Don’t',
+        wrongTitle: 'Day-one pitfalls',
+        wrongLead: 'Four habits that most often ruin day one — route around them.',
         wrong: [
           'No invented npx install paths',
           'No skip-onboard /l6 whole-repo rewrite',
@@ -410,6 +414,7 @@ const c = computed(() =>
       <div class="lp-wrap">
         <div class="lp-section-head">
           <p class="lp-kicker">{{ c.hostTitle }}</p>
+          <p class="lp-lead srail-lead">{{ c.hostLead }}</p>
         </div>
         <div class="lp-bento">
           <article
@@ -435,6 +440,7 @@ const c = computed(() =>
       <div class="lp-wrap">
         <div class="lp-section-head">
           <p class="lp-kicker">{{ c.wrongTitle }}</p>
+          <p class="lp-lead srail-lead">{{ c.wrongLead }}</p>
         </div>
         <div class="recipe-notes">
           <p v-for="w in c.wrong" :key="w" class="recipe-notes__line">{{ w }}</p>

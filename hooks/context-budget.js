@@ -36,7 +36,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { isEnabled } = require('./_shared/opt-in');
-const { readContextTokens, budgetDecision } = require('./context-budget-lib.js');
+const {
+  readContextTokens, budgetDecision, inferWindowTokens, scaleTiers,
+} = require('./context-budget-lib.js');
 
 const PARSE_EVERY_BELOW_T1 = 5;
 
@@ -51,21 +53,24 @@ function stateDir() {
 }
 
 function loadConfig() {
-  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn' };
+  // explicitT1/T2 track whether the value came from the USER (config/env) or is
+  // still the 200K-calibrated default. Window inference may rescale defaults;
+  // it must never override a value the user set by hand. (v2.32.56)
+  const cfg = { t1: 100_000, t2: 150_000, mode: 'warn', explicitT1: false, explicitT2: false };
   try {
     const file = path.join(os.homedir(), '.autopilot', 'config.json');
     const user = JSON.parse(fs.readFileSync(file, 'utf8'));
     const cb = user && user.context_budget;
     if (cb && typeof cb === 'object') {
-      if (Number.isFinite(cb.t1)) cfg.t1 = cb.t1;
-      if (Number.isFinite(cb.t2)) cfg.t2 = cb.t2;
+      if (Number.isFinite(cb.t1)) { cfg.t1 = cb.t1; cfg.explicitT1 = true; }
+      if (Number.isFinite(cb.t2)) { cfg.t2 = cb.t2; cfg.explicitT2 = true; }
       if (cb.mode === 'off' || cb.mode === 'warn') cfg.mode = cb.mode;
     }
   } catch { /* absent/corrupt config → defaults */ }
   const envT1 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T1);
   const envT2 = Number(process.env.AUTOPILOT_CONTEXT_BUDGET_T2);
-  if (Number.isFinite(envT1) && envT1 > 0) cfg.t1 = envT1;
-  if (Number.isFinite(envT2) && envT2 > 0) cfg.t2 = envT2;
+  if (Number.isFinite(envT1) && envT1 > 0) { cfg.t1 = envT1; cfg.explicitT1 = true; }
+  if (Number.isFinite(envT2) && envT2 > 0) { cfg.t2 = envT2; cfg.explicitT2 = true; }
   if (process.env.AUTOPILOT_CONTEXT_BUDGET_MODE === 'off') cfg.mode = 'off';
   return cfg;
 }
@@ -75,7 +80,7 @@ function loadState(file) {
     const st = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (st && typeof st === 'object' && Number.isFinite(st.calls)) return st;
   } catch { /* corrupt/absent ⇒ reset-and-continue */ }
-  return { calls: 0, lastT1Call: 0, lastT2Call: 0, lastContext: 0 };
+  return { calls: 0, lastT1Call: 0, lastT2Call: 0, lastContext: 0, observedMax: 0 };
 }
 
 function saveState(file, st) {
@@ -107,16 +112,25 @@ function saveState(file, st) {
     const st = loadState(stateFile);
     st.calls += 1;
 
+    // Window inference (v2.32.56): scale the 200K-calibrated defaults to the
+    // window implied by the largest context this session has actually reached.
+    // Applied to the mustParse gate too, so the cheap path uses the same tiers.
+    const effCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
+
     // Cheap path below T1: parse only every Nth call. Once T1 territory has
     // been seen, parse every call (a burst can overshoot fast).
-    const mustParse = st.lastContext >= cfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
+    const mustParse = st.lastContext >= effCfg.t1 || st.calls % PARSE_EVERY_BELOW_T1 === 0 || st.calls === 1;
     if (mustParse) {
       const tokens = readContextTokens(tpath);
       if (tokens !== null) {
         st.lastContext = tokens;
+        // Ratchet: observing N tokens proves the window is > N. Monotonic, so
+        // auto-compaction (which lowers current context) cannot walk it back.
+        st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, tokens);
+        const liveCfg = scaleTiers(cfg, inferWindowTokens(st.observedMax));
         const d = budgetDecision(
           { contextTokens: tokens, calls: st.calls, lastT1Call: st.lastT1Call, lastT2Call: st.lastT2Call },
-          cfg,
+          liveCfg,
         );
         if (d.tier === 't1') {
           st.lastT1Call = st.calls;

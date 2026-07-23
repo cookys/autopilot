@@ -356,6 +356,7 @@ Three clauses hold at **every nesting depth**:
 |------|-------------------------------|
 | `skills/quality-pipeline/references/code-review.md` (Re-review Loop) | Cites this doc; round 2+ reviewer dispatch follows the checklist above |
 | `skills/audit/SKILL.md` (Phase 2 + Phase 4) | Cites this doc; re-audit on the same segment after fix follows the checklist above |
+| `skills/ceo-agent/references/level-front-door.md` (§3 qc@depth-0) | Cites clause 1 for the depth-0 qc-panel re-review after fixes |
 
 > Maintenance: this table is hand-maintained. If you add a new consumer site
 > that re-dispatches a methodology agent after a fix, add a row here so the

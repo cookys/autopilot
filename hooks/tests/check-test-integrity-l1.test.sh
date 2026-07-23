@@ -226,27 +226,110 @@ run_with_verdict_file_go() {
 }
 
 ensure_js_runtime() {
+  # Cache design: machine-local version-keyed tree at
+  #   ${AUTOPILOT_TEST_CACHE:-$HOME/.autopilot/test-cache}/l1-js-runtime/<jest>-<vitest>/
+  # with a `.ready` marker written only after a full populate; CI persists the
+  # same root via actions/cache@v4 (key includes the pinned versions + OS).
+  # Why: after a one-time warm, resolve jest+vitest OFFLINE (no 72s×2 network
+  # install, no registry flake); install logs stay under $TEST_TMP (kills the
+  # /tmp/autopilot-l1-*.log leak class). Atomic temp-then-rename so an
+  # interrupted populate never marks a half-tree ready.
+  # Fallback: cold cache + offline/install-fail → return 1; caller leaves
+  # js_runtime_ready=0 and real-runtime cases graceful-SKIP (suite still passes).
+
+  local jest_ver="29.7.0"
+  local vitest_ver="2.1.8"
+  local version_key="jest${jest_ver}-vitest${vitest_ver}"
+  local cache_base="${AUTOPILOT_TEST_CACHE:-${HOME:-}/.autopilot/test-cache}"
+  local cache_root="$cache_base/l1-js-runtime"
+  local cache_dir="$cache_root/$version_key"
+  local marker="$cache_dir/.ready"
   local root="$TEST_TMP/js-runtime"
+  local install_log="$TEST_TMP/l1-js-install.log"
+  local staging=""
+
   mkdir -p "$root"
-  if [ -f "$root/.ready" ]; then
+  if [ -f "$root/.ready" ] && [ -d "$root/node_modules" ] && [ -n "$(ls -A "$root/node_modules" 2>/dev/null || true)" ]; then
     return 0
   fi
 
-  if [ -s "$HOME/.nvm/nvm.sh" ]; then
-    . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
+  _l1_js_cache_valid() {
+    local dir="$1"
+    [ -f "$dir/.ready" ] \
+      && [ -d "$dir/node_modules" ] \
+      && [ -n "$(ls -A "$dir/node_modules" 2>/dev/null || true)" ]
+  }
+
+  _l1_js_copy_into_root() {
+    local src="$1"
+    rm -rf "$root/node_modules"
+    mkdir -p "$root"
+    cp -a "$src/node_modules" "$root/"
+    if [ -f "$src/package.json" ]; then
+      cp -a "$src/package.json" "$root/"
+    fi
+    if [ -f "$src/package-lock.json" ]; then
+      cp -a "$src/package-lock.json" "$root/"
+    fi
+    touch "$root/.ready"
+  }
+
+  # 1) Cache HIT — pure local copy, zero network.
+  if _l1_js_cache_valid "$cache_dir"; then
+    _l1_js_copy_into_root "$cache_dir"
+    return 0
   fi
 
+  # Corrupt/partial cache (marker without node_modules, or empty tree) → MISS.
+  if [ -e "$cache_dir" ]; then
+    rm -rf "$cache_dir"
+  fi
+
+  if [ -s "${HOME:-}/.nvm/nvm.sh" ]; then
+    # shellcheck disable=SC1090
+    . "${HOME:-}/.nvm/nvm.sh" >/dev/null 2>&1 || true
+  fi
+
+  # 2) Cache MISS — install into a temp sibling, then atomic rename into place.
+  mkdir -p "$cache_root"
+  staging="$cache_root/.staging-${version_key}.$$"
+  rm -rf "$staging"
+  mkdir -p "$staging"
+
   (
-    cd "$root" || exit 1
-    if [ ! -f package.json ]; then
-      npm init -y -q >/dev/null 2>&1
-    fi
-    npm i -D jest@29.7.0 vitest@2.1.8 >/tmp/autopilot-l1-js-install.log 2>&1
+    cd "$staging" || exit 1
+    npm init -y -q >/dev/null 2>&1
+    npm i -D "jest@${jest_ver}" "vitest@${vitest_ver}" \
+      --prefer-offline --no-audit --no-fund \
+      >"$install_log" 2>&1
   )
-  if [ $? -ne 0 ]; then
+  if [ $? -ne 0 ] || [ ! -d "$staging/node_modules" ] \
+    || [ -z "$(ls -A "$staging/node_modules" 2>/dev/null || true)" ]; then
+    rm -rf "$staging"
     return 1
   fi
-  touch "$root/.ready"
+
+  # Marker last inside staging; only publish when the tree is complete.
+  touch "$staging/.ready"
+  if ! mv "$staging" "$cache_dir" 2>/dev/null; then
+    # Race: another process may have published a valid cache.
+    if _l1_js_cache_valid "$cache_dir"; then
+      rm -rf "$staging"
+    else
+      rm -rf "$cache_dir"
+      if ! mv "$staging" "$cache_dir" 2>/dev/null; then
+        # Last resort: copy into TEST_TMP only (don't leave half-cache marked).
+        _l1_js_copy_into_root "$staging"
+        rm -rf "$staging"
+        return 0
+      fi
+    fi
+  fi
+
+  if ! _l1_js_cache_valid "$cache_dir"; then
+    return 1
+  fi
+  _l1_js_copy_into_root "$cache_dir"
   return 0
 }
 
@@ -460,6 +543,11 @@ run_integrity "$repo" HEAD~1..HEAD --l1-runner pytest
 assert_exit_code "$__EXIT_CODE" 0 "pure additive pytest is ok"
 assert_contains "$__OUTPUT" '"l1": "ok"' "additive pytest case is l1 ok"
 
+# go-backed cases need a real toolchain; CI has one, dev machines may not — skip loudly, never fail on absence
+if command -v go >/dev/null 2>&1; then
+# Pre-warm the pinned toolchain so the collection phase's download is deterministic
+# on CI cold caches (detection is now GOTOOLCHAIN=local, but collection still pays it).
+GOTOOLCHAIN=go1.26.3 go version >/dev/null 2>&1 || true
 # 5) go t.Skip -> shrink
 repo="$(mkrepo l1-go-skip)"
 (
@@ -533,6 +621,66 @@ run_integrity_go "$repo" HEAD~1..HEAD --l1-runner go
 assert_exit_code "$__EXIT_CODE" 0 "pure additive go test is ok"
 assert_contains "$__OUTPUT" '"l1": "ok"' "additive go case is l1 ok"
 
+else
+  echo "  SKIP go cases 5-6 (no go toolchain on this machine)"
+fi
+
+# 6b) go detect must not wait on toolchain download (fake go shim; no real toolchain needed)
+# Case pins GOTOOLCHAIN=go1.26.3 (non-local) via run_integrity_go so the red direction never
+# depends on the caller's ambient GOTOOLCHAIN. Models: unfixed probe keeps the pinned non-local
+# toolchain and stalls past timeout=5 → runner_missing; fixed probe forces GOTOOLCHAIN=local so
+# version exits instantly → tool_base true.
+repo="$(mkrepo l1-go-detect-local-toolchain)"
+(
+  cd "$repo"
+  printf "module l1godetect\ngo 1.26\n" > go.mod
+  mkdir -p tests .claude
+  printf "## Mode\nmode: block\n" > .claude/test-integrity-config.md
+  cat > tests/detect_test.go <<'GO'
+package tests
+
+import "testing"
+
+func TestOne(t *testing.T) {
+}
+GO
+  git add .claude/test-integrity-config.md go.mod tests/detect_test.go
+  git commit -qm "base"
+
+  cat > tests/detect_test.go <<'GO'
+package tests
+
+import "testing"
+
+func TestOne(t *testing.T) {
+    if true {
+    }
+}
+GO
+  git add tests/detect_test.go
+  git commit -qm "head"
+)
+fake_go_bin="$TEST_TMP/fake-go-detect-bin"
+mkdir -p "$fake_go_bin"
+cat > "$fake_go_bin/go" <<'SH'
+#!/usr/bin/env bash
+# version: instant under GOTOOLCHAIN=local; else sleep past the 5s detect probe.
+if [[ "${1:-}" == "version" ]]; then
+  if [[ "${GOTOOLCHAIN:-}" == "local" ]]; then
+    echo "go version go1.22.0 linux/amd64"
+    exit 0
+  fi
+  sleep 6
+  echo "go version go1.22.0 linux/amd64"
+  exit 0
+fi
+exit 1
+SH
+chmod +x "$fake_go_bin/go"
+PATH="$fake_go_bin:$PATH" run_integrity_go "$repo" HEAD~1..HEAD --l1-runner go
+assert_not_contains "$__OUTPUT" '"reason": "runner_missing"' "go detect does not report runner_missing with local probe"
+assert_contains "$__OUTPUT" '"tool_base": true' "go detect finds tool under GOTOOLCHAIN=local"
+
 # 7) no runner anywhere -> unavailable
 repo="$(mkrepo l1-no-runner)"
 (
@@ -551,6 +699,7 @@ run_integrity "$repo" HEAD~1..HEAD
 assert_exit_code "$__EXIT_CODE" 0 "no runner reports unavailable"
 assert_contains "$__OUTPUT" '"l1": "unavailable"' "no runner => l1 unavailable"
 
+if command -v go >/dev/null 2>&1; then
 # 8) head broken suite -> collection_failed
 repo="$(mkrepo l1-go-head-broken)"
 (
@@ -726,6 +875,9 @@ assert_contains "$__OUTPUT" '"l1": "collection_failed"' "go compile failure maps
 assert_contains "$__OUTPUT" '"reason": "build_failed' "build_failed reason mentions build_failed"
 assert_contains "$__OUTPUT" 'pkgB' "package name appears in reason"
 
+else
+  echo "  SKIP go cases 8-11 (no go toolchain on this machine)"
+fi
 # 12) --no-l1 suppresses L1
 repo="$(mkrepo l1-no-l1)"
 (
@@ -947,6 +1099,7 @@ if [ "$js_runtime_ready" -eq 1 ]; then
     cd "$repo"
     mkdir -p tests .claude
     printf "## Mode\nmode: block\n" > .claude/test-integrity-config.md
+    # Cached js-runtime already includes vitest@2.1.8 — no second network install.
     cp -a "$TEST_TMP/js-runtime/node_modules" "$repo/" || true
     cat > package.json <<'JSON'
 {
@@ -958,10 +1111,6 @@ if [ "$js_runtime_ready" -eq 1 ]; then
   }
 }
 JSON
-
-    if [ ! -x "node_modules/.bin/vitest" ]; then
-      npm install -D vitest@2.1.8 >/tmp/autopilot-l1-vitest-install.log 2>&1
-    fi
 
     cat > tests/vitest.test.js <<'JS'
 import { describe, it, expect } from 'vitest'

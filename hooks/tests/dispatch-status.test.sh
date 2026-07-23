@@ -109,11 +109,16 @@ write_manifest_fixture() { # $1 run_id  $2 extra-ended (json or empty)
 EOF
 }
 write_manifest_fixture live-1
-# hold the lock in a background subshell (kernel-held flock — same probe contract
-# as lib/worktree-reap.sh _wt_is_live)
-( exec 9>"$LOCK"; flock -x 9; sleep 8 ) &
+# Hold the lock until a sentinel is removed (not a fixed wall-clock window).
+# Under parallel load node startup can exceed a fixed 8s hold → false failure.
+LOCK_SENTINEL="$TEST_TMP/lock-held.sentinel"
+touch "$LOCK_SENTINEL"
+( exec 9>"$LOCK"; flock -x 9; while [ -e "$LOCK_SENTINEL" ]; do sleep 0.2; done ) &
 LOCK_HOLDER=$!
-sleep 0.5
+# Wait until the holder actually acquired the flock (not a fixed pre-assert sleep).
+if ! poll_until 5 bash -c '! flock -n "$0" true' "$LOCK"; then
+  fail "lock held: background holder never acquired flock (readiness timeout)"
+fi
 OUT="$(node "$STATUS_JS" --run live-1)"
 assert_contains "$OUT" '"alive":true' "lock held: alive"
 assert_contains "$OUT" '"phase":"running"' "lock held: phase running"
@@ -126,8 +131,12 @@ OUT="$(node "$STATUS_JS" --run live-1 --stall-secs 60)"
 assert_contains "$OUT" '"alive":true' "stall case: still alive"
 assert_contains "$OUT" '"stall":true' "stall case: mtime age exceeds --stall-secs while alive"
 
-kill "$LOCK_HOLDER" 2>/dev/null; wait "$LOCK_HOLDER" 2>/dev/null
-sleep 0.2
+rm -f "$LOCK_SENTINEL"
+wait "$LOCK_HOLDER" 2>/dev/null
+# Short poll for lock free (post-release) instead of a fixed sleep.
+if ! poll_until 5 flock -n "$LOCK" true; then
+  fail "lock released: flock never became free after holder exit"
+fi
 OUT="$(node "$STATUS_JS" --run live-1)"
 assert_contains "$OUT" '"alive":false' "lock released: not alive"
 assert_contains "$OUT" '"phase":"exited"' "lock released: phase exited"
@@ -216,17 +225,35 @@ chmod +x "$STUB_SLOW"
 MIDOUT_FILE="$TEST_TMP/mid.json"
 ( cd "$SBX" && "$HETERO" --branch t/obs-mid --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" > "$MIDOUT_FILE" 2>/dev/null ) &
 DISPATCH_PID=$!
+# Poll for a mid-run observation (manifest present AND alive:true) rather than
+# assuming a fixed offset into the stub's sleep window (load can consume the
+# whole 4s before a one-shot assert runs).
 MID_RUN_ID=""
-for _i in $(seq 1 40); do
+MID_ALIVE_OUT=""
+_mid_deadline=$(( $(date +%s) + $(test_timing_scale 15) ))
+while [ "$(date +%s)" -lt "$_mid_deadline" ]; do
   MID_MANIFEST="$(ls "$RUNS_DIR" 2>/dev/null | grep -v -e "^$E2E_RUN_ID" -e '^live-' | grep '\.manifest\.json$' | head -1)"
-  [ -n "$MID_MANIFEST" ] && { MID_RUN_ID="${MID_MANIFEST%.manifest.json}"; break; }
+  if [ -n "$MID_MANIFEST" ]; then
+    MID_RUN_ID="${MID_MANIFEST%.manifest.json}"
+    MID_ALIVE_OUT="$(node "$STATUS_JS" --run "$MID_RUN_ID" 2>/dev/null || true)"
+    case "$MID_ALIVE_OUT" in
+      *'"alive":true'*) break ;;
+    esac
+  fi
   sleep 0.25
 done
 assert_neq "$MID_RUN_ID" "" "mid-run: manifest discoverable while dispatch is still running"
 if [ -n "$MID_RUN_ID" ]; then
-  OUT="$(node "$STATUS_JS" --run "$MID_RUN_ID")"
-  assert_contains "$OUT" '"alive":true' "mid-run: alive:true while worker runs (失聯 fixed)"
-  assert_contains "$OUT" '"phase":"running"' "mid-run: phase running"
+  case "$MID_ALIVE_OUT" in
+    *'"alive":true'*)
+      OUT="$MID_ALIVE_OUT"
+      assert_contains "$OUT" '"alive":true' "mid-run: alive:true while worker runs (失聯 fixed)"
+      assert_contains "$OUT" '"phase":"running"' "mid-run: phase running"
+      ;;
+    *)
+      fail "mid-run: never observed alive:true while worker runs (readiness timeout)"
+      ;;
+  esac
 fi
 wait "$DISPATCH_PID" 2>/dev/null
 OUT="$(node "$STATUS_JS" --run "$MID_RUN_ID")"

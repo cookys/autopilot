@@ -5,7 +5,7 @@ description: >
   loop + authoritative qc) but the IMPLEMENTER is orchestrated by the engine CLI and dispatched
   through the canonical `engine implement-review` path. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
   or a decorrelated second engine doing the mechanical impl. Presets involvement=just-results,
-  scope=Hold, no-go=none (override -x / --expand / --solo). Not for: all-Claude run (→ /l4), inline
+  scope=Hold, red-lines=none (override -x / --expand / --solo). Not for: all-Claude run (→ /l4), inline
   (→ /l3).
 ---
 
@@ -23,6 +23,13 @@ Hard rules:
   is the ONLY source of truth — never hardcode model/runner/effort inline.
 - Implementation dispatch uses an **immutable base SHA**; verification is by **git
   artifacts** (commit/diff/cleanliness), never agent self-report.
+- **Strict dispatch-unit contracts (v2.32.36)**: while the l5/l6 session marker is active,
+  write dispatch is `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json>`
+  — depth-0 freezes the unit contract, `node scripts/dispatch-contract.js check` must return
+  GO pre-spend, base/timeout pin from the contract, caller disagreements are
+  precondition-rejected, and the post-return boundary + depth-0-executed acceptance argv gate
+  the artifact. Prompt-only write dispatch on the repo fails before the runner; a NO-GO has no
+  manual override (new contract = new hash = new GO check).
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 

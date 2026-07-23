@@ -1,49 +1,58 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./plugin-package/autopilot.ts"],
-  "agents": {
+  "instructions": [
+    ".opencode/README.md"
+  ],
+  "plugin": [
+    "./plugin-package/autopilot.ts"
+  ],
+  "agent": {
     "autopilot-reviewer": {
       "description": "Autopilot methodology code reviewer — Three Red Lines discipline (closure / fact-driven / exhaustiveness). Use when performing pre-commit/pre-merge review, security audit, or plan critique.",
       "mode": "subagent",
-      "permissions": [
-        { "action": "edit", "resource": "*", "effect": "deny" },
-        { "action": "shell", "resource": "*", "effect": "deny" },
-        { "action": "read", "resource": "*", "effect": "allow" },
-        { "action": "glob", "resource": "*", "effect": "allow" },
-        { "action": "grep", "resource": "*", "effect": "allow" },
-        { "action": "webfetch", "resource": "*", "effect": "allow" },
-        { "action": "websearch", "resource": "*", "effect": "allow" }
-      ],
-      "system": "{file:agent-bodies/reviewer.body.md}"
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "websearch": "allow"
+      },
+      "prompt": "{file:agent-bodies/reviewer.body.md}"
     },
     "autopilot-debugger": {
       "description": "Systematic debugging agent for root cause analysis. Use when: 'debug', 'investigate', 'root cause', '為什麼會壞', '追蹤問題'.",
       "mode": "subagent",
-      "permissions": [
-        { "action": "edit", "resource": "*", "effect": "deny" },
-        { "action": "read", "resource": "*", "effect": "allow" },
-        { "action": "glob", "resource": "*", "effect": "allow" },
-        { "action": "grep", "resource": "*", "effect": "allow" },
-        { "action": "shell", "resource": "*", "effect": "ask" },
-        { "action": "webfetch", "resource": "*", "effect": "allow" },
-        { "action": "websearch", "resource": "*", "effect": "allow" }
-      ],
-      "system": "{file:agent-bodies/debugger.body.md}"
+      "permission": {
+        "edit": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "bash": "ask",
+        "webfetch": "allow",
+        "websearch": "allow"
+      },
+      "prompt": "{file:agent-bodies/debugger.body.md}"
     },
     "autopilot-planner": {
       "description": "Task decomposition and planning agent. Use when: 'plan', 'decompose', 'break down', '規劃', '拆解任務'.",
       "mode": "subagent",
-      "permissions": [
-        { "action": "edit", "resource": "*", "effect": "deny" },
-        { "action": "read", "resource": "*", "effect": "allow" },
-        { "action": "glob", "resource": "*", "effect": "allow" },
-        { "action": "grep", "resource": "*", "effect": "allow" },
-        { "action": "shell", "resource": "*", "effect": "ask" },
-        { "action": "webfetch", "resource": "*", "effect": "allow" },
-        { "action": "websearch", "resource": "*", "effect": "allow" }
-      ],
-      "system": "{file:agent-bodies/planner.body.md}"
+      "permission": {
+        "edit": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "bash": "ask",
+        "webfetch": "allow",
+        "websearch": "allow"
+      },
+      "prompt": "{file:agent-bodies/planner.body.md}"
     }
   },
-  "instructions": [".opencode/README.md"]
+  "skills": {
+    "paths": [
+      ".agents/skills"
+    ]
+  }
 }

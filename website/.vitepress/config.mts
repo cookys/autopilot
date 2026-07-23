@@ -14,12 +14,13 @@ const repo = 'https://github.com/cookys/autopilot'
 export default defineConfig({
   title: 'Autopilot',
   description:
-    'CEO altitude for ordinary operators: diverge for fuller decisions, converge when runs drift, keep humans out of the loop. Claude Code home; portable paths for Codex, OpenCode, and agy.',
+    'CEO altitude for everyday engineers: diverge for fuller decisions, converge when a run drifts, and keep humans out of the loop. Claude Code is home; portable paths for Codex, OpenCode, and agy.',
   // GitHub project Pages: https://cookys.github.io/autopilot/
   base: process.env.VITEPRESS_BASE || '/autopilot/',
   cleanUrls: true,
   lastUpdated: true,
   ignoreDeadLinks: true,
+  sitemap: { hostname: 'https://cookys.github.io/autopilot' },
   // Mission-control surface: dark is designed primary; light is a cold slate twin.
   // appearance: 'dark' = default dark (does NOT follow system preference; use true for that).
   appearance: 'dark',
@@ -55,7 +56,9 @@ export default defineConfig({
         content:
           'Get the decision right. Let the system finish. For would-be CEOs, founders, and people burned out by AI output.'
       }
-    ]
+    ],
+    ['meta', { property: 'og:image', content: 'https://cookys.github.io/autopilot/assets/og.png' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }]
   ],
 
   transformHead({ siteConfig }) {

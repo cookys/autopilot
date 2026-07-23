@@ -23,6 +23,58 @@ const CAP_BYTES = 5 * 1024 * 1024;
 const T1_THROTTLE_CALLS = 20; // T1 refires at most every 20 tool calls
 const T2_THROTTLE_CALLS = 10; // T2 refires at most every 10 tool calls
 
+// --- Context-window inference (v2.32.56) -------------------------------------
+//
+// The default tiers (100k/150k) are 50%/75% of a 200K window. On a 1M-window
+// model they fire from 15% onward and never stop — the hook reports an absolute
+// token count that the reader then mistakes for "nearly full". Observed
+// 2026-07-20: a 1M session sat at 216k (22%) while T2 fired every single turn.
+//
+// The harness gives us NO clean signal to key off:
+//   - transcript `message.model` is "claude-opus-4-8" for BOTH the 200K and the
+//     1M variant — the `[1m]` suffix is not recorded.
+//   - no CLAUDE_* env var carries the model or the window size.
+//
+// So infer it from evidence we already collect: observing N context tokens
+// PROVES the window is > N (usage can never exceed the window). Ratchet the
+// observed maximum and snap to the smallest known window above it. Safe under
+// auto-compaction — context drops, but the historical max stays a valid lower
+// bound on the window.
+//
+// Cost: on a 1M session the very first crossing of 150k still fires once (no
+// evidence yet). It self-corrects past 200k. One spurious fire, not dozens.
+//
+// Extension point: add tiers to KNOWN_WINDOWS as new windows ship. Snapping to
+// the SMALLEST known window above the observation is deliberate — over-guessing
+// the window (e.g. assuming 1M when it is really 500k) would push the tiers
+// past the real ceiling and silence the hook entirely.
+const KNOWN_WINDOWS = [200_000, 1_000_000];
+const BASE_WINDOW = 200_000; // the window the default tiers were calibrated for
+
+/** Smallest known context window strictly greater than the largest observation. */
+function inferWindowTokens(observedMax, windows = KNOWN_WINDOWS) {
+  if (!Number.isFinite(observedMax) || observedMax <= 0) return windows[0];
+  for (const w of windows) if (observedMax < w) return w;
+  return windows[windows.length - 1];
+}
+
+/**
+ * Scale non-explicit tiers to the inferred window, preserving their calibrated
+ * proportions (t1=50%, t2=75% of window by default).
+ * Explicit user config/env ALWAYS wins — inference only fills what was left
+ * to the defaults, so a hand-set threshold is never silently overridden.
+ */
+function scaleTiers(cfg, inferredWindow) {
+  const ratio = inferredWindow / BASE_WINDOW;
+  if (!Number.isFinite(ratio) || ratio <= 1) return cfg;
+  return {
+    ...cfg,
+    t1: cfg.explicitT1 ? cfg.t1 : Math.round(cfg.t1 * ratio),
+    t2: cfg.explicitT2 ? cfg.t2 : Math.round(cfg.t2 * ratio),
+    inferredWindow,
+  };
+}
+
 // Extract context tokens from one parsed transcript line, or null.
 function usageOf(line) {
   let obj;
@@ -75,13 +127,19 @@ function readContextTokens(tpath, opts = {}) {
 function budgetDecision(state, cfg) {
   const { contextTokens, calls, lastT1Call = 0, lastT2Call = 0 } = state;
   const k = Math.round(contextTokens / 1000);
+  // Always state the PROPORTION, not just the absolute count. An absolute "216k"
+  // reads as "nearly full" on a 200K window and as "barely started" on 1M; the
+  // hook's own reader cannot disambiguate without this. (2026-07-20 finding.)
+  const win = Number.isFinite(cfg.inferredWindow) ? cfg.inferredWindow : null;
+  const pct = win ? ` = ${Math.round((contextTokens / win) * 100)}% of the ` +
+    `~${Math.round(win / 1000)}k window inferred from observed usage` : '';
   if (cfg.t2 > 0 && contextTokens >= cfg.t2) {
     // lastT2Call 0 = never fired ⇒ always eligible (first crossing must not be throttled)
     if (lastT2Call > 0 && calls - lastT2Call < T2_THROTTLE_CALLS) return { tier: null, message: null };
     return {
       tier: 't2',
       message:
-        `Context budget T2: context is ${k}k tokens (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
+        `Context budget T2: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t2 / 1000)}k). ` +
         'Directive: STOP taking on new work. Write a handoff doc NOW (autopilot:handoff), ' +
         'then tell the user to /clear or restart the session — context cost compounds ' +
         'quadratically with session length. [USER: after the handoff lands, /clear or ' +
@@ -93,7 +151,7 @@ function budgetDecision(state, cfg) {
     return {
       tier: 't1',
       message:
-        `Context budget T1: context is ${k}k tokens (threshold ${Math.round(cfg.t1 / 1000)}k). ` +
+        `Context budget T1: context is ${k}k tokens${pct} (threshold ${Math.round(cfg.t1 / 1000)}k). ` +
         'Plan a milestone checkpoint/handoff at the next phase boundary; avoid loading ' +
         'large files inline — dispatch instead.',
     };
@@ -105,8 +163,12 @@ module.exports = {
   readContextTokens,
   budgetDecision,
   usageOf,
+  inferWindowTokens,
+  scaleTiers,
   START_WINDOW_BYTES,
   CAP_BYTES,
   T1_THROTTLE_CALLS,
   T2_THROTTLE_CALLS,
+  KNOWN_WINDOWS,
+  BASE_WINDOW,
 };

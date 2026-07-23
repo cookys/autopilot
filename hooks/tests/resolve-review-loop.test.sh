@@ -9,6 +9,22 @@ SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
 # resolver overrides or live engine-state paths.
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
 
+# Hermetic fixtures (roster-flip-proof). The autopilot repo ships a dogfood
+# .claude/review-loop-config.md that the resolver reads by default (precedence
+# slot 3). Its roster is a moving target — as of 2026-07-16 (Board decision A,
+# while the codex pool is dead) the reviewer is MiniMax-M3 and the implementer is
+# grok-4.5 (xai). Behavior/fixture cases below must NOT depend on that live roster:
+# they pin their own configured reviewer/implementer identity so they exercise a
+# KNOWN engine that matches their scorecard/capability fixtures on ANY machine.
+#   EMPTY_CFG       — keyless override → resolver built-in defaults (reviewer gpt-5.5,
+#                     implementer gpt-5.3-codex-spark @ openai → high-trust → low risk).
+#   CODEX_IMPL_CFG  — pins the pre-Board-A openai/codex implementer so capability-state
+#                     (§20) and density-scaling (§22–23) fixtures match by runner+model.
+EMPTY_CFG="$TEST_TMP/empty-config.md"
+: > "$EMPTY_CFG"
+CODEX_IMPL_CFG="$TEST_TMP/impl-codex.md"
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$CODEX_IMPL_CFG"
+
 json_get() { # json key -> raw json value
   local json="$1" key="$2"
   export JSON_VALUE="$json"
@@ -36,42 +52,51 @@ assert_contains "$HELP_OUT" "review-loop" "--help mentions review-loop"
 OUT="$(bash "$SCRIPT" --bogus x 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unknown flag exit code"
 
-# 3. default (template) JSON carries the codex roster + is parseable
+# 3. default JSON carries the repo's DOGFOOD roster + is parseable.
+# DOGFOOD PIN (reads the live .claude/review-loop-config.md): as of 2026-07-16
+# Board decision A the reviewer is MiniMax-M3 and the implementer is grok-4.5 (xai).
+# 2026-07-18 seat refresh: verification_author glm-5.2/anthropic-compatible →
+# Gemini/agy (endpoints.env absent on host; restore note in the config file).
+# xai ∉ {openai,anthropic,google} ⇒ source-trust low ⇒ review_risk=high,
+# required_review_families=2, l1_required=true — BY DESIGN (resolve-review-loop.sh
+# §"Derive source trust"). Restore the gpt seats (reviewer gpt-5.5 / implementer
+# gpt-5.3-codex-spark, low-risk baseline) after the codex pool resets ~2026-07-23.
 OUT="$(bash "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "default exit code"
-assert_contains "$OUT" '"reviewer_engine": "gpt-5.5"' "default reviewer engine"
-assert_contains "$OUT" '"implementer_engine": "gpt-5.3-codex-spark"' "default implementer (codex, NOT agy on this repo)"
+assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"
+assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "default implementer (grok, Board decision A)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
-assert_contains "$OUT" '"verification_author_engine": "glm-5.2"' "default verification_author_engine"
-assert_contains "$OUT" '"verification_author_runner": "cc-shim"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_engine": "Gemini 3.5 Flash (High)"' "default verification_author_engine"
+assert_contains "$OUT" '"verification_author_runner": "agy"' "default verification_author_runner"
 assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
-assert_contains "$OUT" '"verification_author_endpoint": "glm"' "default verification_author_endpoint"
-assert_contains "$OUT" '"verification_author_family": "zhipu"' "default derived verification_author_family"
-assert_contains "$OUT" '"implementer_family": "openai"' "default derived implementer_family"
+assert_contains "$OUT" '"verification_author_endpoint": ""' "default verification_author_endpoint"
+assert_contains "$OUT" '"verification_author_family": "google"' "default derived verification_author_family"
+assert_contains "$OUT" '"implementer_family": "xai"' "default derived implementer_family"
 assert_contains "$OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "default config_path is repo dogfood absolute path"
 assert_contains "$OUT" '"loop_convergence_verdict": "SHIP-AS-IS"' "default convergence verdict"
-assert_contains "$OUT" '"review_risk": "low"' "default review_risk"
-assert_contains "$OUT" '"required_review_families": 1' "default required_review_families"
-assert_contains "$OUT" '"l1_required": false' "default l1_required"
+assert_contains "$OUT" '"review_risk": "high"' "default review_risk (xai impl → low-trust → high by design)"
+assert_contains "$OUT" '"required_review_families": 2' "default required_review_families"
+assert_contains "$OUT" '"l1_required": true' "default l1_required"
 assert_contains "$OUT" '"cross_family_required": true' "default cross_family_required"
 assert_contains "$OUT" '"cross_family_satisfied": true' "default cross_family_satisfied"
 
 # 4. --field accessors
-assert_eq "gpt-5.5" "$(bash "$SCRIPT" --field reviewer_engine)" "--field reviewer_engine"
-assert_eq "xhigh" "$(bash "$SCRIPT" --field reviewer_effort)" "--field reviewer_effort"
+# DOGFOOD PIN (Board decision A roster — see §3 rationale).
+assert_eq "MiniMax-M3" "$(bash "$SCRIPT" --field reviewer_engine)" "--field reviewer_engine"
+assert_eq "high" "$(bash "$SCRIPT" --field reviewer_effort)" "--field reviewer_effort"
 assert_eq "on" "$(bash "$SCRIPT" --field independent_harness)" "--field independent_harness"
-assert_eq "low" "$(bash "$SCRIPT" --field review_risk)" "--field review_risk"
-assert_eq "1" "$(bash "$SCRIPT" --field required_review_families)" "--field required_review_families"
-assert_eq "false" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
+assert_eq "high" "$(bash "$SCRIPT" --field review_risk)" "--field review_risk (xai impl → high by design)"
+assert_eq "2" "$(bash "$SCRIPT" --field required_review_families)" "--field required_review_families"
+assert_eq "true" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
 assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
-assert_eq "glm-5.2" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
-assert_eq "cc-shim" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
+assert_eq "Gemini 3.5 Flash (High)" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
+assert_eq "agy" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
 assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
-assert_eq "glm" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
-assert_eq "zhipu" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
-assert_eq "openai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
+assert_eq "" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
+assert_eq "google" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
+assert_eq "xai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
 assert_eq "$REPO_ROOT/.claude/review-loop-config.md" "$(bash "$SCRIPT" --field config_path)" "--field config_path"
 EMPTY_SCDIR="$TEST_TMP/empty-scorecard"
 mkdir -p "$EMPTY_SCDIR"
@@ -112,6 +137,9 @@ assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACRCFG" bash "
 ACI_CFG="$TEST_TMP/rl-anthropic-compatible-impl.md"
 printf -- '- implementer_runner: anthropic-compatible\n- implementer_engine: MiniMax-M3\n' > "$ACI_CFG"
 assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACI_CFG" bash "$SCRIPT" --field implementer_runner)" "anthropic-compatible implementer_runner rejected (dispatch-hetero does not support it)"
+VAA_CFG="$TEST_TMP/rl-ver-auth-runner-anthropic.md"
+printf -- '- verification_author_present: true\n- verification_author_engine: MiniMax-M3\n- verification_author_runner: anthropic-compatible\n- verification_author_effort: high\n- verification_author_endpoint: glm\n' > "$VAA_CFG"
+assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VAA_CFG" bash "$SCRIPT" --field verification_author_runner)" "anthropic-compatible verification_author_runner honored"
 GCFG="$TEST_TMP/rl-grok-impl.md"
 printf -- '- implementer_runner: grok\n- implementer_engine: grok-composer-2.5-fast\n' > "$GCFG"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field implementer_runner)" "grok implementer_runner honored"
@@ -132,14 +160,14 @@ assert_eq "gpt-5.5 claude-opus gemini-flash" "$(bash "$SCRIPT" --field qc_panel)
 AC_CFG="$TEST_TMP/all-calibrated.md"
 printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
-assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
+assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
 assert_not_contains "$(json_get "$AC_OUT" qc_panel)" "all-calibrated" "alias string is absent from parsed qc_panel value"
 
 # case/trim handling check
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
 printf -- '- qc_panel:   All-Calibrated  \n' > "$AC_CFG_CASE"
 AC_OUT_CASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG_CASE" bash "$SCRIPT")"
-assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-build", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
+assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
 
 # cross-family field computed over the expanded list
 AC_CFG_XFAM="$TEST_TMP/all-calibrated-xfam.md"
@@ -183,8 +211,10 @@ assert_eq "0" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$FCFG" bash "$SCRIPT" >/dev/null 2
 assert_eq "high" "$(bash "$SCRIPT" --security-surface 1 --field review_risk)" "security-surface sets high risk"
 assert_eq "2" "$(bash "$SCRIPT" --security-surface 1 --field required_review_families)" "high risk requires two families"
 assert_eq "true" "$(bash "$SCRIPT" --security-surface 1 --field l1_required)" "high risk sets l1_required"
-assert_eq "high" "$(bash "$SCRIPT" --diff-lines 200 --field review_risk)" "large diff sets high risk"
-assert_eq "low" "$(bash "$SCRIPT" --diff-lines 10 --field review_risk)" "small diff keeps low risk"
+# --source-trust high pins a high-trust baseline so these prove the DIFF-LINES escalator,
+# independent of the repo's live implementer family (grok/xai is low-trust → always high).
+assert_eq "high" "$(bash "$SCRIPT" --source-trust high --diff-lines 200 --field review_risk)" "large diff sets high risk"
+assert_eq "low" "$(bash "$SCRIPT" --source-trust high --diff-lines 10 --field review_risk)" "small diff keeps low risk"
 
 # 11. --enforce opt-in hard gate (default stays exit-0 data mode; gate exits 3 only on
 # high-risk + cross_family_required + !satisfied). JSON/field still emitted under enforce-fail.
@@ -286,11 +316,14 @@ cat > "$RECQUAL_JSON" <<'JSON'
 JSON
 ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECQUAL_JSON" > /dev/null
 EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
-QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard)"
+# ISOLATED: EMPTY_CFG pins the default reviewer (gpt-5.5/codex) + openai implementer so
+# reviewer_qualified matches the gpt-5.5 fixture row and the ladder's implementer-family
+# matches EXPECTED_LADDER's --implementer-family openai — independent of the live roster.
+QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard)"
 assert_eq "true" "$(json_get "$QUAL_OUT" reviewer_qualified)" "qualified reviewer row => reviewer_qualified true"
 assert_eq "$EXPECTED_LADDER" "$(json_get "$QUAL_OUT" fallback_ladder)" "fallback_ladder matches scorecard ladder output"
-assert_eq "true" "$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "field reviewer_qualified true for qualified row"
-assert_eq "$EXPECTED_LADDER" "$(ENGINE_SCORECARD_DIR="$SCDIR" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "field fallback_ladder matches scorecard ladder output"
+assert_eq "true" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "field reviewer_qualified true for qualified row"
+assert_eq "$EXPECTED_LADDER" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "field fallback_ladder matches scorecard ladder output"
 
 # 18. --check-scorecard with NO matching row fail-closes as unqualified
 EMPTY_SCDIR="$TEST_TMP/check-miss"
@@ -350,7 +383,7 @@ cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -365,13 +398,16 @@ JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-exhausted.json" > /dev/null
 
 # D. Query fresh event (now is 2026-07-02T20:30:00Z -> within 3600s TTL)
-FRESH_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
+# ISOLATED: the store fixtures are keyed to runner=codex/model=gpt-5.3-codex-spark, so pin
+# that implementer via CODEX_IMPL_CFG — the resolver matches capability by runner+model and
+# the live roster's grok/grok-4.5 implementer would never match (giving a false "unknown").
+FRESH_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
 assert_eq "store" "$(json_get "$FRESH_OUT" capability_state_source)" "valid store query => capability_state_source is store"
 assert_eq "exhausted" "$(json_get "$FRESH_OUT" quota_status)" "fresh exhausted quota => quota_status is exhausted"
 assert_contains "$(json_get "$FRESH_OUT" capability_warnings)" "Demoted implementer" "fresh exhausted high event => demotion warning is present"
 
 # E. Query expired event (now is 2026-07-02T22:00:00Z -> past 3600s TTL)
-EXPIRED_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T22:00:00Z)"
+EXPIRED_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T22:00:00Z)"
 assert_eq "unknown" "$(json_get "$EXPIRED_OUT" quota_status)" "expired quota => quota_status is unknown"
 assert_eq "[]" "$(json_get "$EXPIRED_OUT" capability_warnings)" "expired quota => no demotion warning"
 
@@ -385,7 +421,7 @@ cat <<'JSON' > "$TEST_TMP/event-unknown.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -398,7 +434,7 @@ cat <<'JSON' > "$TEST_TMP/event-unknown.json"
 }
 JSON
 ENGINE_CAPABILITY_DIR="$UNK_STORE" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-unknown.json" > /dev/null
-UNK_OUT="$(ENGINE_CAPABILITY_DIR="$UNK_STORE" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
+UNK_OUT="$(ENGINE_CAPABILITY_DIR="$UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z)"
 assert_eq "unknown" "$(json_get "$UNK_OUT" quota_status)" "quota status unknown => quota_status is unknown"
 assert_eq "[]" "$(json_get "$UNK_OUT" capability_warnings)" "quota status unknown => no demotion warning"
 
@@ -407,7 +443,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-unsupported.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -426,13 +462,13 @@ JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-unsupported.json" > /dev/null
 
 # G1. Request skill mode native -> should produce warning
-SKILL_NATIVE_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
+SKILL_NATIVE_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode native)"
 assert_eq "native" "$(json_get "$SKILL_NATIVE_OUT" skill_mode_requested)" "skill_mode_requested matches native"
 assert_eq "native" "$(json_get "$SKILL_NATIVE_OUT" skill_mode_effective)" "skill_mode_effective matches native"
 assert_contains "$(json_get "$SKILL_NATIVE_OUT" capability_warnings)" "does not support native skills" "native skill warning is present"
 
 # G2. Request skill mode auto -> native is unsupported, but prompt_pack is supported -> should resolve to prompt and no warning
-SKILL_AUTO_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
+SKILL_AUTO_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "auto" "$(json_get "$SKILL_AUTO_OUT" skill_mode_requested)" "skill_mode_requested matches auto"
 assert_eq "prompt" "$(json_get "$SKILL_AUTO_OUT" skill_mode_effective)" "skill_mode_effective resolves to prompt"
 assert_eq "[]" "$(json_get "$SKILL_AUTO_OUT" capability_warnings)" "auto fallback to prompt => no warning"
@@ -442,7 +478,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "gpt-5.3-codex-spark",
   "role": "implementer",
   "capability": {
@@ -459,7 +495,7 @@ cat <<'JSON' > "$TEST_TMP/event-skill-supported.json"
 }
 JSON
 ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/event-skill-supported.json" > /dev/null
-SKILL_AUTO_OK_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
+SKILL_AUTO_OK_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --now 2026-07-02T20:30:00Z --skill-mode auto)"
 assert_eq "native" "$(json_get "$SKILL_AUTO_OK_OUT" skill_mode_effective)" "native supported => skill_mode_effective resolves to native"
 assert_eq "[]" "$(json_get "$SKILL_AUTO_OK_OUT" capability_warnings)" "native supported => no warning"
 
@@ -470,7 +506,7 @@ cat <<'JSON' > "$TEST_TMP/event-claude-exhausted.json"
 {
   "schema_version": 1,
   "observed_at": "2026-07-02T20:00:00Z",
-  "runner": "auto",
+  "runner": "codex",
   "model": "claude-3-5-sonnet",
   "role": "implementer",
   "capability": {
@@ -487,7 +523,9 @@ L4_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$L4_CFG" ENGINE_CAPABILITY_DIR="$CAP_TEST
 assert_eq "[]" "$(json_get "$L4_OUT" capability_warnings)" "L4 path (Claude implementer) => no demotion or native skill warning is ever emitted"
 
 # 20. reviewer_endpoint / implementer_endpoint (declarative invoke infra)
-EP_DEFAULT_OUT="$(bash "$SCRIPT")"
+# ISOLATED: the repo dogfood config sets reviewer_endpoint=minimax (Board decision A),
+# so pin the UNCONFIGURED default via EMPTY_CFG to test the true empty-endpoint semantics.
+EP_DEFAULT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT")"
 assert_eq "" "$(json_get "$EP_DEFAULT_OUT" reviewer_endpoint)" "default reviewer_endpoint is empty"
 assert_eq "" "$(json_get "$EP_DEFAULT_OUT" implementer_endpoint)" "default implementer_endpoint is empty"
 
@@ -519,7 +557,10 @@ assert_eq "2" "$(bash "$SCRIPT" --field verify_first >/dev/null 2>&1; echo $?)" 
 # 22. --scale-by-capability with no implementer row -> unknown tier, fail-closed scaling
 DENS_UNK_STORE="$TEST_TMP/dens-unk"
 mkdir -p "$DENS_UNK_STORE"
-DENS_UNK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability)"
+# ISOLATED (§22–23): CODEX_IMPL_CFG pins the openai/codex implementer so the scorecard
+# tier fixtures match by engine+runner AND the risk baseline is low (openai high-trust) —
+# the live roster's grok/xai implementer would give a false "unknown" tier + high baseline.
+DENS_UNK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability)"
 assert_eq "unknown" "$(json_get "$DENS_UNK_OUT" capability_tier)" "no implementer row -> unknown tier"
 assert_eq "true" "$(json_get "$DENS_UNK_OUT" density_scaled)" "unknown tier -> density_scaled true"
 assert_eq "flag" "$(json_get "$DENS_UNK_OUT" density_source)" "source is flag"
@@ -527,8 +568,8 @@ assert_eq "7" "$(json_get "$DENS_UNK_OUT" loop_max_rounds)" "bumped max rounds (
 assert_eq "2" "$(json_get "$DENS_UNK_OUT" required_review_families)" "bumped review families to 2"
 assert_eq "true" "$(json_get "$DENS_UNK_OUT" l1_required)" "l1_required is true"
 assert_eq "false" "$(json_get "$DENS_UNK_OUT" verify_first)" "unknown tier -> verify_first false"
-assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field capability_tier)" "field capability_tier unknown"
-assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first false for unknown tier"
+assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field capability_tier)" "field capability_tier unknown"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first false for unknown tier"
 assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field cross_family_satisfied)" "density-scaled with 1 distinct non-impl family -> satisfied=false"
 
 # 23. --scale-by-capability with qualified implementer row -> high tier + low risk scales down
@@ -539,14 +580,14 @@ cat > "$RECIMPL_HIGH_JSON" <<'JSON'
 {"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
 JSON
 ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
-DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability)"
+DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability)"
 assert_eq "high" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "qualified implementer -> high tier"
 assert_eq "true" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "high tier + low risk -> density_scaled true"
 assert_eq "2" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "high tier + low risk -> max rounds capped at 2"
 assert_eq "1" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "high tier + low risk -> required_review_families unchanged"
 assert_eq "false" "$(json_get "$DENS_HIGH_OUT" l1_required)" "high tier + low risk -> l1_required unchanged"
 assert_eq "true" "$(json_get "$DENS_HIGH_OUT" verify_first)" "high tier + low risk -> verify_first true"
-assert_eq "true" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first true for high tier + low risk"
+assert_eq "true" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first true for high tier + low risk"
 
 DENS_HIGH_BASE1_CFG="$TEST_TMP/dens-high-base1.md"
 printf -- '- loop_max_rounds: 1\n' > "$DENS_HIGH_BASE1_CFG"
@@ -554,7 +595,7 @@ DENS_HIGH_BASE1_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_HIGH_BASE1_CFG" ENGINE
 assert_eq "1" "$(json_get "$DENS_HIGH_BASE1_OUT" loop_max_rounds)" "high tier + base rounds 1 -> stays 1"
 assert_eq "true" "$(json_get "$DENS_HIGH_BASE1_OUT" verify_first)" "high tier + base rounds 1 -> verify_first true"
 
-DENS_HIGH_RISK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability --security-surface 1)"
+DENS_HIGH_RISK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --security-surface 1)"
 assert_eq "high" "$(json_get "$DENS_HIGH_RISK_OUT" capability_tier)" "qualified implementer high risk -> high tier"
 assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" density_scaled)" "high tier + high risk -> no density reduction"
 assert_eq "5" "$(json_get "$DENS_HIGH_RISK_OUT" loop_max_rounds)" "high tier + high risk -> max rounds unchanged"

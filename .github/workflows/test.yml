@@ -7,13 +7,23 @@ on:
     branches: [develop, main]
   workflow_dispatch:
 
+# A superseded push's run is dead signal — cancel it instead of queueing.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-suite:
     runs-on: ubuntu-latest
+    # The suite spawns process groups and plays with setsid/flock; a hang here
+    # must not burn the 6-hour default. Full run is ~8 min.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # check-node-report (evidence pointers via git show) and check-optin-changelog
+          # (base-ref walk) need real history — shallow clone kept CI red for 100+ runs.
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -25,16 +35,47 @@ jobs:
       - name: Ensure repo-tracked symlinks resolve
         run: bash scripts/setup-symlinks.sh
 
+      # Persist the L1 JS runtime (jest+vitest) so check-test-integrity-l1.test.sh
+      # resolves offline after the first warm. Path must match AUTOPILOT_TEST_CACHE
+      # below; key rotates when the pinned versions in ensure_js_runtime change.
+      - name: Cache L1 JS test runtime
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/autopilot-test-cache
+          key: ${{ runner.os }}-l1-js-runtime-jest29.7.0-vitest2.1.8
+
       - name: Run hooks test suite (L1 unit + L2 integration)
-        run: bash hooks/tests/run.sh
+        # Explicit `shell: bash` is LOAD-BEARING: it makes GH run `bash -eo
+        # pipefail {0}`. The implicit default is `bash -e {0}` WITHOUT pipefail,
+        # which let `| tee` swallow the suite's exit 1 — CI showed green over
+        # real test failures on 2026-07-16 (caught by a foreman's honest local
+        # run disagreeing with a green CI on the same commit).
+        shell: bash
+        env:
+          AUTOPILOT_TEST_CACHE: ${{ runner.temp }}/autopilot-test-cache
+        run: bash hooks/tests/run.sh --parallel 2>&1 | tee "$RUNNER_TEMP/hooks-suite.log"
 
-      - name: Version-manifest drift check
-        run: node scripts/sync-version.js --check
+      - name: Upload suite log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hooks-suite-log
+          path: ${{ runner.temp }}/hooks-suite.log
+          if-no-files-found: ignore
 
-      - name: Agent-bodies drift check
-        run: bash scripts/sync-agent-bodies.sh --check
+      - name: Sync/check rituals (manifest-driven)
+        # Single entry point for every sync/check ritual (version mirrors,
+        # agent-bodies, model-routing, codex + opencode payloads, README parity,
+        # hook inventory, canonical invariants, CLAUDE.md inventory). Registered
+        # in scripts/sync-manifest.json; replaces the hand-copied per-ritual steps.
+        run: bash scripts/sync-all.sh --check
 
       - name: Release-hygiene gate
+        # Check 7 (slash-entry probe) needs a `claude` binary + auth — neither
+        # exists on a CI runner. The skip is loud by design; giving CI an API
+        # key instead would leak probe transcripts into the log. Never do that.
+        env:
+          AUTOPILOT_SKIP_SLASH_PROBE: "1"
         run: bash scripts/preflight-release.sh
 
       - name: Cross-agent portability gate

@@ -98,23 +98,14 @@ REAP_UNIT=""
 
 usage() { sed -n '2,84p' "$0" | sed 's/^# \{0,1\}//'; }
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
-
-# json_array_from_lines <newline-separated> → ["a","b",...] (empty → [])
-json_array_from_lines() {
-  local items="$1" out="" first=1 line
-  [ -z "$items" ] && { printf '[]'; return; }
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    if [ "$first" = 1 ]; then first=0; else out="$out, "; fi
-    out="$out\"$(json_escape "$line")\""
-  done <<< "$items"
-  printf '[%s]' "$out"
-}
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/json-emit.sh"
+# Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
+_flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
 err_usage() { # message
-  printf '{ "mode": "%s", "error": "%s", "exit": 2 }\n' "${MODE:-none}" "$(json_escape "$1")" >&2
-  printf '{ "mode": "%s", "error": "%s", "exit": 2 }\n' "${MODE:-none}" "$(json_escape "$1")"
+  printf '{ "mode": "%s", "error": "%s", "exit": 2 }\n' "${MODE:-none}" "$(_flat_json_escape "$1")" >&2
+  printf '{ "mode": "%s", "error": "%s", "exit": 2 }\n' "${MODE:-none}" "$(_flat_json_escape "$1")"
   exit 2
 }
 
@@ -306,7 +297,7 @@ if [ "$MODE" = plan ]; then
 
   if [ "$MIXED_BASE" = 1 ]; then
     printf '{ "mode": "plan", "run_id": "%s", "valid": false, "verdict": "abort", "reason": "not a valid decomposition: mixed base per batch (all units must share one base)", "base": "%s" }\n' \
-      "$(json_escape "$RUN_ID")" "$(json_escape "$RESOLVED_BASE")"
+      "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$RESOLVED_BASE")"
     exit 1
   fi
 
@@ -322,11 +313,11 @@ if [ "$MODE" = plan ]; then
   for i in "${!U_ID[@]}"; do
     br="$(branch_name "${U_ID[$i]}" "$RUN_ID")"
     scope_lines="$(printf '%s' "${U_SCOPE[$i]}" | tr ',' '\n')"
-    units_json="$units_json${units_json:+, }{ \"id\": \"$(json_escape "${U_ID[$i]}")\", \"branch\": \"$(json_escape "$br")\", \"scope\": $(json_array_from_lines "$scope_lines"), \"base\": \"$(json_escape "$RESOLVED_BASE")\" }"
+    units_json="$units_json${units_json:+, }{ \"id\": \"$(_flat_json_escape "${U_ID[$i]}")\", \"branch\": \"$(_flat_json_escape "$br")\", \"scope\": $(json_array_from_lines "$scope_lines"), \"base\": \"$(_flat_json_escape "$RESOLVED_BASE")\" }"
   done
 
   printf '{ "mode": "plan", "run_id": "%s", "valid": true, "verdict": "ready", "base": "%s", "width": %s, "advisory_disjoint": "%s", "units": [%s] }\n' \
-    "$(json_escape "$RUN_ID")" "$(json_escape "$RESOLVED_BASE")" "${#U_ID[@]}" "$ADV_DISJOINT" "$units_json"
+    "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$RESOLVED_BASE")" "${#U_ID[@]}" "$ADV_DISJOINT" "$units_json"
   exit 0
 fi
 
@@ -348,7 +339,7 @@ if [ "$MODE" = verify ]; then
     if [ "$st" != "committed" ] || [ "$disjoint_ok" != "true" ]; then any_abort=1; fi
     commit_json="null"; [ -n "$commit" ] && commit_json="\"$commit\""
     br="$(branch_name "${U_ID[$i]}" "$RUN_ID")"
-    units_json="$units_json${units_json:+, }{ \"id\": \"$(json_escape "${U_ID[$i]}")\", \"branch\": \"$(json_escape "$br")\", \"status\": \"$st\", \"commit\": $commit_json, \"files_changed\": ${nfiles:-0}, \"disjoint\": $disjoint_ok, \"undeclared_touches\": $(json_array_from_lines "$undeclared_lines") }"
+    units_json="$units_json${units_json:+, }{ \"id\": \"$(_flat_json_escape "${U_ID[$i]}")\", \"branch\": \"$(_flat_json_escape "$br")\", \"status\": \"$st\", \"commit\": $commit_json, \"files_changed\": ${nfiles:-0}, \"disjoint\": $disjoint_ok, \"undeclared_touches\": $(json_array_from_lines "$undeclared_lines") }"
   done
 
   if [ "$any_abort" = 1 ]; then
@@ -357,7 +348,7 @@ if [ "$MODE" = verify ]; then
     verdict="all_committed"; ec=0
   fi
   printf '{ "mode": "verify", "run_id": "%s", "base": "%s", "verdict": "%s", "units": [%s] }\n' \
-    "$(json_escape "$RUN_ID")" "$(json_escape "$RESOLVED_BASE")" "$verdict" "$units_json"
+    "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$RESOLVED_BASE")" "$verdict" "$units_json"
   exit "$ec"
 fi
 
@@ -382,7 +373,7 @@ if [ "$MODE" = merge-back ]; then
   done
   if [ "$any_abort" = 1 ]; then
     printf '{ "mode": "merge-back", "run_id": "%s", "base": "%s", "verdict": "abort", "reason": "verify re-check failed: not all units committed-and-clean; merged nothing", "merged": [] }\n' \
-      "$(json_escape "$RUN_ID")" "$(json_escape "$RESOLVED_BASE")"
+      "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$RESOLVED_BASE")"
     exit 1
   fi
 
@@ -425,7 +416,7 @@ if [ "$MODE" = merge-back ]; then
     [ -n "$prev_id" ] && collapse_ids="$prev_id,$conflict_id"
     collapse_lines="$(printf '%s' "$collapse_ids" | tr ',' '\n')"
     printf '{ "mode": "merge-back", "run_id": "%s", "base": "%s", "verdict": "serial_collapse", "reason": "merge conflict on unit %s — re-run the named ids as ONE Tier-1 serial unit; never auto-resolve, never coordinated round-2 re-dispatch", "conflict_unit": "%s", "serial_collapse_ids": %s, "merged": [] }\n' \
-      "$(json_escape "$RUN_ID")" "$(json_escape "$BASE")" "$(json_escape "$conflict_id")" "$(json_escape "$conflict_id")" "$(json_array_from_lines "$collapse_lines")"
+      "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$conflict_id")" "$(_flat_json_escape "$conflict_id")" "$(json_array_from_lines "$collapse_lines")"
     exit 1
   fi
 
@@ -452,12 +443,12 @@ if [ "$MODE" = merge-back ]; then
   new_base_sha="$(git -C "$REPO" rev-parse --verify --quiet "refs/heads/$BASE" 2>/dev/null || true)"
   if [ "$new_base_sha" != "$integ_sha" ]; then
     printf '{ "mode": "merge-back", "run_id": "%s", "base": "%s", "verdict": "base_advance_failed", "reason": "units committed cleanly but the base ref did NOT advance to the integration tip (dirty base worktree / non-fast-forward / concurrent base move). Merged NOTHING — escalate: resolve the base worktree, then re-run merge-back. Do NOT GC the unit branches.", "base_worktree": "%s", "detail": "%s", "merged": [] }\n' \
-      "$(json_escape "$RUN_ID")" "$(json_escape "$BASE")" "$(json_escape "${base_wt:-<direct-ref-update>}")" "$(json_escape "$advance_err")"
+      "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "${base_wt:-<direct-ref-update>}")" "$(_flat_json_escape "$advance_err")"
     exit 1
   fi
   merged_lines="$(printf '%s' "$merged_ok" | tr ',' '\n')"
   printf '{ "mode": "merge-back", "run_id": "%s", "base": "%s", "verdict": "merged", "merge_commit": "%s", "merged": %s }\n' \
-    "$(json_escape "$RUN_ID")" "$(json_escape "$BASE")" "$integ_sha" "$(json_array_from_lines "$merged_lines")"
+    "$(_flat_json_escape "$RUN_ID")" "$(_flat_json_escape "$BASE")" "$integ_sha" "$(json_array_from_lines "$merged_lines")"
   exit 0
 fi
 
@@ -487,7 +478,7 @@ if [ "$MODE" = telemetry ]; then
       # serial fraction f = serial / wall ; Amdahl speedup bound = 1/f as width→∞.
       sf="$(awk -v s="$ser" -v w="$wall" 'BEGIN{ if(w>0) printf "%.3f", s/w; else print "0" }')"
       sp="$(awk -v s="$ser" -v w="$wall" 'BEGIN{ if(s>0) printf "%.2f", w/s; else print "inf" }')"
-      rows="$rows${rows:+, }{ \"run_id\": \"$(json_escape "$rid")\", \"parallel_s\": $par, \"serial_s\": $ser, \"wall_s\": $wall, \"serial_fraction\": $sf, \"amdahl_speedup_bound\": \"$sp\" }"
+      rows="$rows${rows:+, }{ \"run_id\": \"$(_flat_json_escape "$rid")\", \"parallel_s\": $par, \"serial_s\": $ser, \"wall_s\": $wall, \"serial_fraction\": $sf, \"amdahl_speedup_bound\": \"$sp\" }"
       n_runs=$((n_runs+1))
     done
     printf '{ "mode": "telemetry", "report": true, "runs": %s, "rows": [%s] }\n' "$n_runs" "$rows"
@@ -503,9 +494,9 @@ if [ "$MODE" = telemetry ]; then
   EPOCH="$(date +%s)"
   ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf '{ "run_id": "%s", "event": "%s", "epoch": %s, "iso": "%s" }\n' \
-    "$(json_escape "$RUN_ID")" "$EVENT" "$EPOCH" "$ISO" >> "$STORE_PATH"
+    "$(_flat_json_escape "$RUN_ID")" "$EVENT" "$EPOCH" "$ISO" >> "$STORE_PATH"
   printf '{ "mode": "telemetry", "run_id": "%s", "event": "%s", "epoch": %s, "store": "%s" }\n' \
-    "$(json_escape "$RUN_ID")" "$EVENT" "$EPOCH" "$(json_escape "$STORE_PATH")"
+    "$(_flat_json_escape "$RUN_ID")" "$EVENT" "$EPOCH" "$(_flat_json_escape "$STORE_PATH")"
   exit 0
 fi
 
@@ -532,6 +523,11 @@ if [ "$MODE" = reap ]; then
     # a corrupt pgid file must never become a self/ system kill. Only legit groups.
     case "$pgid" in ''|*[!0-9]*) return 0 ;; esac
     [ "$pgid" -gt 1 ] 2>/dev/null || return 0
+    # NEVER kill the group this script itself runs in: a worker group is always
+    # setsid'd, so a registered pgid equal to our own means the registration
+    # raced setsid() and captured the ORCHESTRATOR's group — TERMing it would
+    # take down the caller (and in CI the runner: "The operation was canceled").
+    [ "$pgid" = "$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')" ] && return 0
     # Only the negative-pgid form signals the whole GROUP. Guard a bogus/dead pgid.
     if kill -0 "-$pgid" 2>/dev/null; then
       kill -TERM "-$pgid" 2>/dev/null || true
@@ -558,7 +554,7 @@ if [ "$MODE" = reap ]; then
 
   reaped_lines="$(printf '%s' "$reaped" | tr ',' '\n')"
   printf '{ "mode": "reap", "run_id": "%s", "scope": "%s", "reaped": %s }\n' \
-    "$(json_escape "$RUN_ID")" "$scope_label" "$(json_array_from_lines "$reaped_lines")"
+    "$(_flat_json_escape "$RUN_ID")" "$scope_label" "$(json_array_from_lines "$reaped_lines")"
   exit 0
 fi
 

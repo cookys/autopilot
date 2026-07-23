@@ -24,13 +24,456 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased
+## v2.32.57 — CLAUDE.md inventory slim + size gate
+
+**Headline**: CLAUDE.md had grown 11KB → 81KB in six weeks — release commits kept
+appending per-version behavior notes to Scripts-inventory rows, so every session
+(and every dispatched foreman/leaf in this repo) swallowed ~20k tokens of duplicated
+changelog. The inventory is an index again (one row = what it does + when to call
+it + pointer to the canonical detail; 81KB → 38.5KB), and the gate that watches it
+now has teeth: `check-claude-md-inventory.js` grew from a membership-only gate into
+a membership + size gate, so the file cannot silently regrow past the 40k harness
+warning threshold.
+
+### Changed
+- **CLAUDE.md Scripts inventory rewritten as index rows** — per-release behavior
+  notes, flag inventories, Spike dates and incident lore removed from rows; that
+  history already lives in `CHANGELOG.md` (release ritual enforces it) and the
+  details in `references/` / script headers / `--help`. Load-bearing safety
+  sentences kept verbatim (containment-not-security-attestation, FAIL-CLOSED,
+  telemetry-only, etc.). Previously inline-only `dispatch-author.sh` and
+  `run-ledger.sh` got their own rows. New **Row shape rule** under "When adding a
+  new script" + a matching "Don't" item.
+- **`scripts/check-claude-md-inventory.js`: membership + size gate** — adds a
+  whole-file byte cap (default 40000, the harness warning threshold) and a
+  per-line byte cap (default 800; an inventory row is an index entry). Byte-measured
+  (not chars) so multibyte rows can't dodge the cap; `--max-total-bytes` /
+  `--max-line-bytes` overrides; `--json` gains `total_bytes` / `long_lines`.
+  Violation output names the fix: history → CHANGELOG.md, details → references/.
+  `sync-manifest.json` ritual row title/fix updated (wiring unchanged — pre-commit,
+  CI and preflight-portability already delegate via `sync-all.sh`).
+
+### Added
+- `hooks/tests/check-claude-md-inventory.test.sh` — 24 assertions: membership drift
+  (scripts/ + scripts/lib/), `*.test.sh` exemption, byte-vs-char cap measurement
+  (CJK line), cap overrides, `--json` shape, non-numeric-cap usage error, and a
+  real-repo regression anchor (the shipped CLAUDE.md passes default caps).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.56 — context-budget: infer the window instead of assuming 200K
+
+**Headline**: The context-budget tiers were absolute token counts calibrated for a
+200K window (T1 100k = 50%, T2 150k = 75%). On a 1M-window model they start firing
+at 15% and never stop — and because the advisory reports a raw count, its reader
+mistakes "216k" for "nearly full" and tells the user to /clear at 22% utilisation.
+Observed in the field 2026-07-20. The hook now infers the window from evidence it
+already collects and states utilisation as a PERCENTAGE.
+
+### Added
+- `inferWindowTokens(observedMax)` — snaps to the smallest known window strictly
+  above the largest context observed this session. Observing N tokens *proves* the
+  window exceeds N, so no external signal is needed. Monotonic ratchet, so
+  auto-compaction (which lowers current context) cannot walk the inference back.
+- `scaleTiers(cfg, window)` — rescales tiers that are still at their defaults,
+  preserving the calibrated 50%/75% proportions (1M ⇒ 500k/750k).
+- T1/T2 messages now include `= N% of the ~Xk window`, so the absolute count can
+  no longer be misread as a proportion.
+
+### Fixed
+- **Test suite was not hermetic.** `_shared/opt-in.js` and `loadConfig()` both
+  resolve `~/.autopilot/config.json` via `os.homedir()`, so results depended on the
+  developer's personal config: a maintainer with `context_budget` thresholds set
+  turned the T1/T2 wrapper tests red, and one with the hook enabled in config broke
+  the "disabled ⇒ silent" test (config beats the env opt-out). `freshEnv()` now pins
+  `HOME` to an empty temp dir. Verified by running the suite under both a populated
+  and an empty HOME — 24/24 identical.
+
+### Notes
+- **Explicit config always wins.** Inference only rescales values still at their
+  defaults; `~/.autopilot/config.json` `context_budget.{t1,t2}` and the
+  `AUTOPILOT_CONTEXT_BUDGET_T1/T2` env vars are never silently overridden.
+- **Why not read the model name**: the transcript records `"claude-opus-4-8"` for
+  BOTH the 200K and the 1M variant (the `[1m]` suffix is not persisted), and no
+  `CLAUDE_*` env var carries the model or window. A model→window table would have
+  been wrong on exactly the case that motivated this change.
+- **Residual**: on a 1M session, a context between 150k and 200k is genuinely
+  ambiguous (it fits a 200K window), so one T2 may still fire there before evidence
+  arrives. Past 200k it self-corrects. Extension point: add tiers to
+  `KNOWN_WINDOWS`; snapping to the smallest window above the observation is
+  deliberate — over-guessing would push tiers past a real, lower ceiling and
+  silence the hook entirely.
+
+## v2.32.55 — run E residuals: per-model quota pool merge + on_engine_unavailable engine wiring
+
+> Version note: originally authored as v2.32.54 in a concurrent session; renumbered to
+> v2.32.55 on integration because the author-transport ship below landed on origin first
+> under v2.32.54 (same collision ritual as the v2.32.27→28 renumber).
+
+**Headline**: The two automation halves left open by v2.32.53's `engine_unavailable` status land: the engine-capability-state quota merge now treats quota as the per-MODEL pool it actually is (a live `available` probe recorded under one role clears a stale `exhausted` recorded under another — `autopilot status quota` stops contradicting reality), and `engine implement-review` mechanically applies the resolver's `on_engine_unavailable` policy (ask/solo-fallback/wait-reset) to `engine_unavailable`/`precondition_failed` dispatch deaths, emitting a machine-readable action instead of leaving depth-0 to read raw dispatch JSON and apply the policy by hand.
+
+### Fixed
+- `engine-capability-state.js`: the quota merge was keyed on (runner, model, **role**), but quota is an account-level per-MODEL pool — the 2026-07-17 grok incident (event 13 implementer/`exhausted` ttl 7d vs event 15 reviewer/`available` live probe) left `report`/`autopilot status quota` showing `exhausted` after the pool had recovered. Quota now merges role-agnostically (skill_transport stays role-keyed); output gains an output-only `capability.quota.source_role` provenance key; `report` emits one row per (runner, model) instead of contradictory per-role duplicates. Negative control pinned: a cross-role `unknown` still never clobbers a valid real signal.
+
+### Added
+- `on_engine_unavailable` policy wiring (ADDITIVE): `implementTask`/`runImplementationReviewLoop` map (policy × death kind) to `engine_unavailable: {policy, action, error_class, dispatch_status}` on the engine result (ledgered as `engine_unavailable_policy:<action>`), serialized through `engine implement-review`'s JSON exit. Matrix per `review-loop-config.md`: `ask` ⇒ escalate always; `solo-fallback` ⇒ solo-fallback on `precondition_failed`, wait-reset on capacity deaths; `wait-reset` ⇒ wait-reset on capacity deaths, escalate on `precondition_failed`. Honesty carve-outs: `auth_failed`/unparseable classes always escalate (waiting can't fix auth); missing/garbage policy fails closed to `ask`; non-unavailable statuses carry `engine_unavailable: null`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.54 — Codex author transport hardening (D0-T v4.1 Track A)
+
+**Headline**: The Codex branch of `dispatch-author.sh` now fails closed unless an exit-0, completely-reaped process produces authoritative stdout exactly corroborated by a private last-message sidecar. New `scripts/lib/dispatch-author-codex-transport.sh` carries the transport engine: dispatcher-owned 0700 run dir with three exclusively-created 0600 capture files (post-run symlink/hardlink/owner/nlink checks), exactly one internal `--output-last-message` (a caller-supplied one is a usage error and the runner never starts), exit-first classification (deadline/signal/124/nonzero/incomplete-tree reject before any content read), whole-tree TERM→KILL reap within a 10s cleanup budget including setsid-escaped TERM-ignoring descendants (accumulating `/proc` children-walk snapshots + post-exit private-channel fd-holder scan), the two-relation stdout/sidecar witness (byte-exact or stdout = sidecar + one LF, nothing else), initial-position-anchored chrome-frame session-id extraction (pre-frame fake frames and post-frame injections rejected), GNU-parity timeout grammar with fail-closed parse, and metadata-only results (prompt/stderr/candidate bodies never enter result JSON).
+
+### Added
+- `scripts/lib/dispatch-author-codex-transport.sh` — Codex author transport engine (sourced by `dispatch-author.sh`).
+- `hooks/tests/dispatch-author-codex-transport.test.sh` — deterministic 146-assertion transport contract (fake-binary matrix: witness relations, session anchoring incl. pre/post-frame attacks, inode attacks, late flush, TERM-ignoring child/grandchild/setsid/orphan-writer reap, timeout grammar, caller-path refusal, metadata redaction, strict-roster/contract compatibility).
+
+### Changed
+- Legacy codex-runner authored-path stubs across the author suites emit a conforming chrome frame + sidecar (pre-hardening expectations retired per the frozen v4.1 contract).
+- `dispatch-output-quiescence.test.sh` settle-rail positive cases migrated to the cc-shim runner (late-flush recovery is prohibited for Codex by design; settle behavior for non-Codex runners unchanged).
+- Dogfood roster: verification_author seat glm-5.2/anthropic-compatible → Gemini/agy while `~/.autopilot/endpoints.env` is absent on this host (restore note in config).
+
+### Fixed
+- Round-1 review (gpt-5.5): chrome-frame-absence bypass of witness/session-id verification — closed with a red-green `no_chrome` fixture.
+- Round-2/3 review: pre-frame fake-frame session hijack (initial-position anchoring), pgid-only reap missing setsid escapees (descendant snapshots + fd-holder scan), silent 300s timeout fallback (GNU-parity parse, unparseable → precondition exit 2).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.53`
+
+## v2.32.53 — dispatch/classify/preflight honesty batch (four Fix-level hardenings)
+
+**Headline**: Four small correctness/robustness fixes surfaced by the grok×MiniMax hetero-dispatch working face: dispatch-hetero now names engine-unavailability as its own status instead of misfiling a quota/auth/overload death as `question_suspected`; the error classifier stops over-matching benign "payment required"/"balance exhausted" prose; the OpenCode plugin test gains a timeout guard and a hook-field-mapping regression assertion; and the portability preflight summary counts advisory warnings honestly instead of printing a green "ALL CHECKS PASSED" over a warned advisory.
+
+### Added
+- `engine_unavailable` dispatch-hetero status (ADDITIVE): when a worker exits non-zero and the outcome would be `failure`/`question_suspected`, the error log is classified once (reusing the existing passive-capture classify-error call) and, when it names a known engine-unavailability signal (`quota_exhausted`/`rate_limited`/`auth_failed`/`overloaded`), the status becomes `engine_unavailable` with the classification in the `error` field. Mirrored into `src/runners/implementer.js` `IMPLEMENT_STATUSES` (the fail-closed validate whitelist) and documented in `references/hetero-dispatch.md`. `network_failed`/`unknown` keep the prior status byte-for-byte. Closes the BACKLOG "402 death misclassified as question_suspected" gap.
+
+### Fixed
+- `engine-capability-state.js classify-error`: `payment required` / `balance exhausted` now require an error/status token (`402`/`status`/`error`/`http`) to co-occur before classifying as `quota_exhausted`, so benign prose ("the payment required field on the checkout form") is no longer misclassified. The real grok HTTP 402 log still classifies as `quota_exhausted`. Other quota substrings unchanged.
+- `hooks/tests/opencode-v2-plugin.test.sh`: wrap the `opencode debug config` probe in `timeout 60` (a hung opencode no longer blocks the suite) and add a static field-mapping assertion against `platforms/opencode/plugin/autopilot.ts` so a renamed `tool.execute.after` hook field (`hookInput.args`/`.tool`/`.sessionID`) is caught — the `AUTOPILOT_PLUGIN_SMOKE` path calls `captureIntent` directly and bypasses the hook.
+- `scripts/preflight-portability.sh`: advisory checks are counted independently; the pass summary now reads `ALL HARD CHECKS PASSED (N/N hard checks passed + M advisory-warned)` instead of `ALL CHECKS PASSED (17/17)` when an advisory warned. Exit semantics unchanged — advisory failures never contribute to the exit code.
+
+### Dispatch provenance
+- /l5 grok-4.5 × MiniMax-M3, four sequential units, each `engine implement-review` converged in 1 round (SHIP-AS-IS), artifact-verified (git diff + executable acceptance, never self-report). Codex payload mirror resynced as mechanical glue.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.52 — CEO concept rename: "No-Go Zones" → "Red Lines (紅線)"
+
+**Headline**: Systematic terminology rename of the CEO front-door's fourth startup concept from
+"No-Go Zones (Hard Constraints)" to "Red Lines (紅線)", aligning with the 2026-07-16 frozen product
+narrative (website/NARRATIVE.md; README/site already cleared). Implements the BACKLOG item recorded
+in the v2.32.38 narrative-alignment row. **Routing-preserving**: the edits touch only the human-readable
+concept text and the `no-go=none` → `red-lines=none` preset descriptor; no skill `description:` routing
+trigger ("Use when:" / "Not for:" / skill names) was altered. The `-x <csv>` override flag and the
+dispatch-contract "GO / NO-GO" term are untouched (different concepts).
+
+### Changed
+- 16 occurrences across 7 files renamed: `skills/ceo-agent/SKILL.md` (5 — incl. the `-x` override
+  gloss, aligned per QC panel), `skills/l3/SKILL.md` (2), `skills/l4/SKILL.md` (1),
+  `skills/l5/SKILL.md` (1), `skills/l6/SKILL.md` (1), `skills/ceo-agent/references/level-front-door.md`
+  (3), `docs/skills.md` (3 — incl. the spaced `no-go = none` variant at L121 the initial inventory
+  missed; caught by the depth-0 QC panel). Codex plugin payload mirror re-synced
+  (`sync-codex-plugin-skills.sh`).
+- Frontmatter `description:` fields (l3/l4/l5/l6) changed only the preset descriptor
+  `no-go=none` → `red-lines=none`; per-skill frontmatter diff = exactly that one line each.
+
+### Verification (routing-regression gate — the substance of this change)
+- **slash-entry probe 5/5 PASS** (`AUTOPILOT_SLASH_PROBE=1 hooks/tests/slash-entry-probe.test.sh`):
+  all five thin-shell entries (/l3 /l4 /l5 /l6 /think-tank-dialectic) resolve their MUST-READ
+  references by Read-tool artifact — thin-shell routing intact. (Probe ran against the installed
+  pre-rename plugin baseline: it validates the routing mechanism; the change-specific proof is the
+  word-by-word description diff + validate.sh below.)
+- `validate.sh` 28/28 skills structurally valid; word-by-word description diff confirms only the
+  intended tokens changed (no trigger displacement).
+- Natural-behavior probe: /l5 (renamed) PASSED; one FAIL on `think-tank-dialectic` (a skill NOT
+  touched by this change, on the installed baseline) — a documented model-variance non-gate probe,
+  not a routing regression from this rename.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.51 — Dispatch worker git-identity containment
+
+Closes the incident where a dispatched worker's bare `git config user.name/email` inside its
+git worktree wrote through the **shared `.git/config`** and silently rewrote the parent
+clone's commit identity for every later commit.
+
+- `dispatch-hetero.sh` + `dispatch-author.sh` snapshot the consuming repo's
+  `user.name`/`user.email` before the runner; on post-run drift they restore the originals
+  (via `git -C <repo-root>`, cwd-independent), add an additive `"identity_drift": true` to the
+  result JSON, and print a loud warning (without echoing the identity values).
+- Scope is LOCAL only (`git config --local`): matches the shared `.git/config` incident vector;
+  empty pre-values restore global inheritance via `--unset` rather than materializing a local
+  override. A failed restore SET warns to stderr and never falls through to unset.
+- Boundary: the rail contains ONLY `user.name`/`user.email` — other shared-config keys
+  (e.g. `core.hooksPath`, `credential.helper`) remain uncontained, per the standing stance that
+  containment is teardown hygiene, NOT a malicious-worker boundary.
+- Focused RED→GREEN oracle `hooks/tests/dispatch-identity-containment.test.sh` proves the
+  worktree-config passthrough is real (negative control) and that the rail flags + restores.
+- Implemented by grok-4.5 under the strict-contract dispatch rail; ported onto v2.32.48 by grok-4.5.
+
+## v2.32.50 — OpenCode plugin loads on 1.17 + check-16 advisory + grok 402 classified
+
+**Headline**: Three fixes surfaced by the OpenCode 1.17 / hetero-roster work. (1) The OpenCode extension silently never loaded on the installed `@opencode-ai/plugin@1.17.15`: it imported the prerelease `@opencode-ai/plugin/v2` subpath (`ERR_PACKAGE_PATH_NOT_EXPORTED`, swallowed by the loader), so `preflight-portability` check 15 was red. Migrated the plugin to the documented `{ id, server }` shape and bumped the dep; the plugin now loads and prints its version line. (2) `preflight-portability` check 16 (`opencode debug skill` discovery) is demoted to advisory — it fails non-deterministically from an upstream `opencode` 1.17 `debug skill` output-truncation, not an autopilot regression, and no reliable retry count fixes it. (3) `engine-capability-state classify-error` now recognizes a grok 402 "Payment Required / usage balance exhausted" billing error as `quota_exhausted` (previously `unknown`, so passive quota-capture missed it).
+
+### Changed
+- `platforms/opencode/plugin/autopilot.ts` — migrated from the removed `@opencode-ai/plugin/v2` `Plugin.define({ setup, ctx.tool.hook })` API to the documented default-export `{ id, server }` `PluginModule` shape: `server(input)` runs the setup (preserving the `[autopilot] plugin loaded, version:` line and the smoke path) and returns `{ "tool.execute.after": (input, output) => … }`. Hook field mapping updated (`event.input` → `input.args`). `platforms/opencode/plugin/package.json` dep `0.0.0-next-15493` → `^1.17.15`. `.opencode/plugin-package/` mirror regenerated.
+- `hooks/tests/opencode-v2-plugin.test.sh` — gate fixed `opencode2` → `opencode` (the old binary never existed → silent perma-skip). Body adapted to opencode 1.17: `serve` is unsecured by default (auth via `OPENCODE_SERVER_PASSWORD`, no emitted random password) and does not eagerly run plugin setup, so the opencode2-era serve + basic-auth + `/api/session` flow no longer applies; the test now drives plugin load deterministically via `opencode debug config --print-logs` (asserts the plugin-loaded line, the version read, and the `AUTOPILOT_PLUGIN_SMOKE` intent file — the same observable behaviors).
+- `scripts/preflight-portability.sh` — new `run_advisory` runner (counts toward `TOTAL`, never toward `FAILS`); check 16 (`check_opencode_skill_discovery`) rewired to it and prints a `⚠ [ADVISORY] … known upstream flakiness (opencode 1.17 debug skill truncation), 2026-07-17` line on failure. `CLAUDE.md` inventory row notes the 16 hard-fail + 1 advisory split.
+- `scripts/engine-capability-state.js` — `classifyErrorContent` quota block extended with `balance exhausted` + `payment required` substrings (no bare `402`, to avoid false positives). `hooks/tests/engine-capability-state.test.sh` gains a grok-402 case asserting `quota_exhausted`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+prose-justification: this release's prose growth is the release entry itself plus three BACKLOG entries (C-Spike SPIKE-PASS, OpenCode 1.17 close-out, dispatch-hetero mislabel), one INDEX row, and a refreshed HANDOFF — release/tracking documentation, not new skill/routing surface.
+
+## v2.32.49 — L1 cache-key parity gate + case-6b hardened against ambient GOTOOLCHAIN
+
+**Headline**: Two small robustness fixes to the L1 test-integrity harness. First, a new deterministic gate (`scripts/check-l1-cache-key-parity.js`, registered in the `sync-all` ritual) asserts the jest/vitest versions embedded in the CI cache key (`.github/workflows/test.yml`) stay identical to the `jest_ver`/`vitest_ver` pins in `hooks/tests/check-test-integrity-l1.test.sh`. These were two hand-copied constants; on drift CI reinstalls the JS runtime every run and registry flakiness silently degrades the real-runtime L1 cases into SKIPs. Second, L1 test case 6b's red direction no longer depends on the caller's ambient `GOTOOLCHAIN`: a shell exporting `GOTOOLCHAIN=local` used to silently vacuate the regression (v2.32.48 QC panel 🔵). The case now pins a non-local toolchain itself.
+
+### Added
+- `scripts/check-l1-cache-key-parity.js` — Node built-ins only; parses `jest<v>-vitest<v>` from the workflow cache key and the `jest_ver`/`vitest_ver` pins from the L1 test file, resolves both paths from the script's own location, exit 0 on match / exit 1 naming both values on drift, optional `--json`. Registered as ritual `l1-cache-key-parity` in `scripts/sync-manifest.json` (check-only, `tier: both`, triggered by both source files) so pre-commit / CI / preflight all run it.
+- `hooks/tests/check-l1-cache-key-parity.test.sh` — green case (repo in parity) + red case (drifted sandbox copy → exit 1); the red case doubles as the mutation check.
+
+### Changed
+- `hooks/tests/check-test-integrity-l1.test.sh` case 6b now invokes `run_integrity_go` (which pins `GOTOOLCHAIN=go1.26.3`) instead of `run_integrity`, so the red direction holds regardless of ambient `GOTOOLCHAIN`. Assertions unchanged; on the fixed engine behavior is identical (detection overrides to local; the shim's `go version` exits instantly). Comment updated to describe the self-pinned toolchain.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.48 — L1 go runner-detection no longer waits on a Go toolchain download
+
+**Headline**: `hooks/tests/check-test-integrity-l1.test.sh` case 5 was a CI stable-red timing lottery, and behind it sat a real fail-closed engine bug. `scripts/lib/test-integrity-l1.py` `detect_go_tool()` probed `go version` with a 5s timeout using the caller's env. The test harness pins `GOTOOLCHAIN=go1.26.3` and the CI image ships a different go, so every go invocation — including the *presence* probe — first had to download/switch toolchains (~10s on a cold module cache). The probe got killed at 5s → `available:false` → `runner_missing` → `collection_failed` → exit 1 with no `"l1": "shrink"`; the actions/cache hit shifted case 5 into peak parallel contention, making green-vs-red a coin flip around the 5s line. Any consuming repo with a `GOTOOLCHAIN` pin would be spuriously blocked (fail-closed false positive) on its first run.
+
+### Fixed
+
+- `scripts/lib/test-integrity-l1.py`: `detect_go_tool()` runs its `go version` probe with `GOTOOLCHAIN=local` (on a copy of the incoming env — the actual `collect_go` run still honors the caller's `GOTOOLCHAIN`), so runner-presence detection never pays or waits on a toolchain download. The download cost belongs to the collection run, whose 180s timeout absorbs it. `timeout=5` unchanged.
+- `hooks/tests/check-test-integrity-l1.test.sh`: (a) a one-time untimed pre-warm (`GOTOOLCHAIN=go1.26.3 go version`) inside the real-go block makes the collection-phase download deterministic on CI cold caches; (b) a new regression case (6b) that runs WITHOUT a real go toolchain — a fake `go` shim exits instantly under `GOTOOLCHAIN=local` and otherwise sleeps past the 5s probe — asserting detection reports `tool_base:true` and never `runner_missing`. Red-green validated: reverting only the detection fix makes case 6b fail.
+
+## v2.32.47 — dev-mode has THREE layers; the marketplace clone was silently feeding stale skills
+
+**Headline**: dogfood was broken on the primary dev machine with zero errors shown — sessions loaded a 5-week-old v2.17.2 skill set on a v2.32.46 repo. Root cause: dev mode's known layers (dev cache symlink + registry `installPath`) were both correct, but Claude Code resolves the plugin VERSION from a third layer — the marketplace clone at `~/.claude/plugins/marketplaces/autopilot` — which had been frozen at a 2026-06-04 checkout (declaring 2.17.2) and even carried a stray hand-edit blocking `git pull`. `dev-setup.sh` never knew this layer existed.
+
+### Fixed
+
+- `scripts/dev-setup.sh --check` (claude section) now compares the marketplace clone's declared version against the repo's canonical `plugin.json` and WARNs on mismatch, naming the stale-session consequence and the fix command.
+- `scripts/dev-update.sh` now also refreshes the marketplace clone (best-effort `git pull --ff-only`; warns on dirty/failed, never fails the repo update).
+- `docs/installation.md` § Dev-mode update documents the three-layer model.
+
+## v2.32.46 — engine wires reviewer_endpoint + --resume re-entry
+
+**Headline**: the two `engine implement-review` gaps that bit the health-roadmap /l5 run three times in one day are closed. A cc-shim / anthropic-compatible roster reviewer's declarative `reviewer_endpoint` now actually reaches `dispatch-review.sh` as `--endpoint` (name-validated `[A-Za-z0-9_]+`; a family-conflict fallback substitution still blanks it, so a substituted reviewer never inherits the incumbent's endpoint), and a committed-but-review-blocked run is no longer a destroyed-state trap: explicit `--resume` re-enters verify+review on the existing branch via a read-only git precheck (`resume_invalid` fail-closed on missing/not-ahead/non-ancestor branches; absent flag = byte-identical behavior).
+
+### Fixed
+
+- `src/engine/autopilot-engine.js` + `bin/autopilot.js`: endpoint wiring (endpoint-capable runners only) and the `--resume` flag; `--endpoint` reserved in extra-args so the validated roster field is the only source.
+- QC hardening: the resume happy-path test asserts the review leg actually fires (proven load-bearing — a review-skip mutation fails exactly the three new assertions); `autopilot-engine.test.sh` → 414 assertions.
+
+## v2.32.45 — One manifest-driven entry point for the repo's scattered sync/check rituals
+
+**Headline**: The repo's sync/check rituals (version mirrors, agent-bodies, model-routing,
+Codex + OpenCode payloads, README parity, hook inventory, canonical invariants) lived in
+FOUR hand-copied lists — `.githooks/pre-commit`, `.github/workflows/test.yml`,
+`preflight-portability.sh`, `preflight-release.sh` — so a new ritual meant editing every
+consumer, `sync-opencode-plugin.sh --check` was wired NOWHERE, and the ~80-row CLAUDE.md
+scripts inventory had no membership gate. This ships a single manifest + driver so a ritual
+is registered in ONE place, closes the OpenCode-check gap, and adds a CLAUDE.md membership
+check. Gate semantics are unchanged — pure plumbing consolidation.
+
+### Added
+- **`scripts/sync-manifest.json`** — DATA. One row per ritual: `{id, generator, check, fix,
+  trigger (path-glob list), tier (pre-commit|preflight|both)}`. Trigger glob forms: entry
+  ending `/` = directory prefix; entry starting `*` = suffix; else exact path.
+- **`scripts/sync-all.sh`** — the driver. `sync-all.sh` runs every generator; `--check`
+  runs every check (CI/preflight full); `--check --changed [base]` scopes checks to the
+  staged diff (or a git range) via manifest triggers, preserving pre-commit conditionality;
+  `--check --only <id>…` runs single rituals (preflight delegation); `--list` prints ids.
+  Emits a JSON summary naming any failed ritual id + its fix command; exit 1 on failure or
+  an unknown `--only` id. Registers `sync-opencode-plugin --check` (previously unwired).
+- **`scripts/check-claude-md-inventory.js`** — membership gate: every `scripts/*.{sh,js}` +
+  `scripts/lib/*` basename (tests excluded) must be named in CLAUDE.md, else exit 1 listing
+  the unlisted script(s). Closes the "new script is dead code" gap. Node built-ins.
+- **`hooks/tests/sync-all.test.sh`** — 22 assertions: real-manifest schema validity, `--list`,
+  `--check` green on clean tree, a seeded failing ritual is caught, `--changed` trigger + tier
+  filtering (scratch git repo), unknown `--only` id fails loud, malformed manifest → exit 2.
+
+### Changed
+- `.githooks/pre-commit`, `.github/workflows/test.yml`, `scripts/preflight-portability.sh`
+  now delegate their sync/check gates to `scripts/sync-all.sh` (portability keeps its 5
+  sync checks as separate entries via `--only`, so its 17-check count is unchanged). The
+  bespoke blind-dispatch issue-ref grep stays in pre-commit; `preflight-release.sh` is
+  untouched (release-scoped, different concern).
+- CLAUDE.md scripts inventory: added rows for `sync-all.sh` + manifest,
+  `check-claude-md-inventory.js`, `dispatch-contract.js`, `lib/dispatch-detach.sh`,
+  `lib/output-quiescence.sh` (the last three were pre-existing membership-gate misses).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.44 — Shared JSONL-store concurrency lib: one flock + PID-stale-breaker for three Node stores
+
+**Headline**: The `flock` + PID-liveness stale-lock breaker + atomic-append + monotonic-`event_id`
+logic was copied byte-for-byte across three Node append-only stores — a lock bug was a bug in three
+places (2026-07-16 health audit, architecture lens 🟠, project P3). Consolidated it into one shared
+lib and migrated the three holders. Zero consumer-observable change (JSON schemas, exit codes, CLI
+flags untouched); each store's existing adversarial test suite stays green.
+
+### Added
+- **New** [`scripts/lib/jsonl-store.js`](scripts/lib/jsonl-store.js) — the ONE canonical JSONL-store
+  concurrency primitive set (Node built-ins only, Node ≥ 20.10): O_EXCL PID lockfile, PID-liveness
+  stale-lock breaker (identity-checked atomic rename-steal, preserving the gpt-5.5 P6 F1 r3
+  semantics), atomic append, and `toEventId`/`maxEventId` monotonic-`event_id` derivation. Exports
+  the lock/append/id helpers plus `expandTilde`/`ensureDir`/`sleepMs`; the `acquireLock` `name`
+  option preserves each store's exact timeout error string.
+- **New** [`hooks/tests/jsonl-store.test.sh`](hooks/tests/jsonl-store.test.sh) — an independent
+  (dispatcher-authored, not implementer-authored) adversarial harness proving two-process writer
+  exclusion, empty- and dead-PID stale-lock break, atomic append under contention, monotonic
+  `event_id`, and that a live lock is never over-stolen (named timeout). Mutation-validated
+  red-green: it fails when the lock is removed or the stale-breaker is disabled.
+
+### Changed
+- [`scripts/engine-scorecard.js`](scripts/engine-scorecard.js),
+  [`scripts/engine-capability-state.js`](scripts/engine-capability-state.js), and
+  [`scripts/adjudicate-findings.js`](scripts/adjudicate-findings.js) now import the concurrency
+  primitives from the shared lib instead of hand-rolling them. Behavior-preserving; the only
+  internal change is `engine-scorecard.js`'s lock steal upgrading from the simple `unlink`-steal to
+  the atomic identity-checked steal (strictly safer, not consumer-observable).
+- [`scripts/tree.js`](scripts/tree.js) — a documented **carve-out**: its lock design genuinely
+  differs (JSON lock content with an ownership token, token-checked release, cross-host time-TTL
+  staleness, a two-phase recovery-mutex steal, `TREE_LOCK_TIMEOUT_MS`, process.exit-on-failure), so
+  it deliberately does NOT consume the bare-PID lib — forcing it through would change behavior its
+  own suite observes. Only a carve-out comment was added above its `acquireLock`; no logic changed.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+## v2.32.43 — Shared bash libs: one canonical `json_escape` + config-resolution ladder
+
+Consolidated the two most-duplicated bash primitives — JSON string escaping and the 4-tier
+config-file ladder — into sourceable libs, migrated every call site, and fixed a latent
+JSON-corruption bug in three resolvers along the way. Refactor is byte-compatible for
+realistic (newline-free) inputs; the only behavior change is the named bug fix.
+
+- **New** [`scripts/lib/json-emit.sh`](scripts/lib/json-emit.sh) — the ONE canonical
+  `json_escape` (pure-bash, no subprocess, RFC 8259-correct: `\`/`"`/`\b\f\n\r\t` +
+  `\uXXXX` for other `U+0000..001F`; `LC_ALL=C`) plus the byte-identical
+  `json_array_from_lines` helper. Replaces 15 divergent copies across three newline classes.
+- **New** [`scripts/lib/resolve-config.sh`](scripts/lib/resolve-config.sh) —
+  `resolve_config_ladder` (override-env → cwd `.claude/` → repo `.claude/` → template → none;
+  indirect NAME expansion, never `eval`) + `read_field` (case-insensitive markdown parser,
+  optional `--whitespace-empty` worktree-teardown semantic). Migrated from 3 resolvers.
+- **Fixed** — `resolve-qc-gate.sh` / `resolve-worktree-teardown.sh` / `resolve-review-loop.sh`
+  previously escaped only `\` and `"`, emitting **broken JSON** on any newline-bearing value.
+  They now route through the canonical `json_escape` and emit valid JSON.
+- **Migrated** all 15 `json_escape` holders + 3 `read_field` holders + 3 config-ladder holders.
+  Flatten sites keep their `tr '\n' ' '` flattening AT the call site. `resolve-doa.sh` is a
+  deliberate carve-out (its `-f`/3-tier/no-template/unconditional-else ladder is a different
+  contract) — documented in-file, not migrated.
+- **Tests** [`hooks/tests/json-emit.test.sh`](hooks/tests/json-emit.test.sh) +
+  [`hooks/tests/resolve-config.test.sh`](hooks/tests/resolve-config.test.sh) lock the behavior;
+  the `qc-gate.test.sh` pre-push sandbox now provisions `scripts/lib/` so it exercises the real
+  sourcing path.
+
+## v2.32.42 — Dispatch-unit contract gate: mechanical GO/NO-GO for strict L5/L6
+
+Machine-validated dispatch authorization: under an active l5/l6 session marker, a prompt is
+task detail, not authorization — no valid contract and no mechanical GO verdict means no
+runner.
+
+- **New** [`schemas/dispatch-unit-contract.schema.json`](schemas/dispatch-unit-contract.schema.json)
+  — closed v1 unit contract (spec/base/deps/scope/go/no_go/output/acceptance/budget; 40-hex
+  bases; argv-only acceptance; object-form generated mirrors).
+- **New** [`scripts/dispatch-contract.js`](scripts/dispatch-contract.js) — deterministic
+  GO/NO-GO checker (`check --contract --repo --json`; exit 0/2/3): schema, clean-base, spec
+  section bytes at immutable base, dependency ancestry, required paths, mandatory-mirror
+  declaration (commit outputs only), scope/budget consistency, ROLE-AWARE engine gate
+  (implementer or verification-author tuple via the canonical resolver; store-role
+  hyphen→underscore) against scorecard qualification + fresh capability quota. No LLM
+  override; a changed contract is a new hash and a new GO check.
+- `dispatch-hetero.sh --strict-contract --contract-file` — checker GO gate before
+  worktree/runner; base/timeout pinned from the contract; caller-disagreement rejection;
+  post-return artifact boundary (allow/deny/file/diff/output from git truth) +
+  depth-0-executed acceptance argv (`boundary_rejected`/`acceptance_failed`); contract fields
+  in the final JSON and START manifest.
+- `dispatch-author.sh --strict-contract` — GO-gated verification authoring with runner/model
+  derived from the resolved VA tuple and MECHANIZED consuming-checkout containment (mutation ⇒
+  `containment_breach` exit 4, artifact quarantined).
+- l5/l6 session-marker gate: prompt-only write/author dispatch on a marked repo fails before
+  any runner spawn (expired/foreign markers do not block).
+- `preflight-release.sh --only-slash-probe` + probe-availability routing: an explicitly
+  exhausted configured probe model refuses loudly before any CLI spawn; no hard-coded
+  fallback.
+- `dispatch-status.js --run` surfaces `unit_id`/`contract_sha256`/`go` from strict manifests.
+- `engine-scorecard.js` roles gain `verification_author`.
+- Five focused RED→GREEN oracles ship with the rails
+  (`hooks/tests/dispatch-contract{,-artifact}.test.sh`,
+  `dispatch-hetero-contract.test.sh`, `dispatch-author-contract.test.sh`,
+  `preflight-release-routing.test.sh`, `dispatch-status-contract.test.sh`) — every one
+  authored by a heterogeneous engine (GLM-5.2 over the new direct-HTTP author rail) and
+  implemented by a second family (gpt-5.3-codex-spark) under the very contracts they enforce.
+- Also: `anthropic-compatible` direct-HTTP author runner (+ `--max-tokens`), permanent
+  verification-author transport move off the condemned Claude-CLI shim for large payloads
+  (z.ai deterministic-529 root cause), explicit implementer runner in the roster, and a
+  qualified Spark implementer scorecard row.
+
+## v2.32.41 — engine implement-review pre-flight is family-conflict-fallback aware
+
+**Headline**: the v2.32.25 `on_family_conflict: fallback` design was dead on arrival for `engine implement-review` — the impl-loop pre-flight gate checked the PRIMARY reviewer's `reviewer_qualified` directly and blocked at rounds:0 before the fallback ladder walk could ever run, so the default openai×openai roster stayed permanently `reviewer_qualification`-blocked even with a fully qualified cross-family ladder (live repro during the health-roadmap /l5 run: calibrated claude-haiku/claude-opus rows changed nothing). Found by a /l5 foreman's fail-closed escalation; fixed as its own defect unit; verified by a three-track QC panel (opus correctness + sonnet fail-closed with live mutation testing + Gemini cross-family) — all SHIP-AS-IS.
+
+### Fixed
+
+- `src/engine/autopilot-engine.js` extracts the family-conflict fallback-row selection (guards + `rowIsValid` + preference walk) into `selectFamilyConflictFallback`, shared by `reviewDiff` (byte-equivalent behavior) and the implement-review pre-flight: the gate now blocks only when the loop is genuinely unviable (no family conflict + qualified cross-family ladder row). Every fail-closed invariant preserved and mutation-tested: mode ≠ `fallback`, stale ladder provenance, all-invalid rows, cross-family-but-unqualified primary, empty ladder — all still block; `--allow-unqualified-reviewer` semantics unchanged.
+- `hooks/tests/autopilot-engine.test.sh` +15 assertions pinning the unblock path (fallback ledgered, round 1 reached) and all five preserved block paths; proven non-vacuous by revert/gate-deletion/per-guard mutation probes.
+
+### Reviewer-seat calibration (state, not code)
+
+- `claude-haiku` and `claude-opus` (runner `claude-native`, family `anthropic`) calibrated via `engine-qualify.sh` — 13/13 known-bad, `false_pass_on_critical=0` — and recorded into the engine scorecard, giving the openai implementer a real cross-family fallback ladder.
+
+## v2.32.40 — reap self-kill guard: the setsid pgid race that kept CI red
+
+**Headline**: with the shallow-clone fix in (v2.32.39 → `8a08dc3`), CI exposed the *second* layer of the 100+-run red streak: `dispatch-batch.test.sh`'s kill-trap registered a worker pgid read **before** `setsid()` landed, so on a slow 2-core runner the file captured the test session's own process group and `reap` SIGTERM'd the entire CI runner — reported as "The operation was canceled", never as a test failure. Reproduced 2/2 in CI at the same spot; 0/300 locally (fast machines win the race).
+
+### Fixed
+
+- `scripts/dispatch-batch.sh` `reap_one_pgid` now refuses to TERM the process group it itself runs in (a legit worker group is always setsid'd, so pgid==own-group can only mean a raced/corrupt registration) — the runner-kill class is closed even if a caller registers a bad pgid.
+- `hooks/tests/dispatch-batch.test.sh` kill-trap polls until each worker's pgid flips to its own pid before registering it (+2 assertions), and the defensive cleanup kill is gated on the same check.
+
+### Changed
+
+- (none — codex payload mirror resynced for `dispatch-batch.sh`.)
+
+## v2.32.39 — Deep code-audit + doc-sync sweep fixes
+
+**Headline**: a full deterministic-gate + three-finder audit of scripts/hooks/src against current reality. Un-reds CI (the harness-capabilities expectation lagged the grok.json refresh), retires the renamed `grok-build` id from the runtime `all-calibrated` qc-panel preset (→ `grok-4.5`), migrates `.opencode/opencode.json` to the OpenCode 1.17 config schema, and hardens the doc-drift gate against fixture false positives.
+
+### Fixed
+
+- `hooks/tests/harness-capabilities.test.sh` expected `stale=7` from before the grok.json capability refresh — CI had been red since; expectations now note they track `src/harness/capabilities/*.json`.
+- `hooks/tests/check-test-integrity-l1.test.sh` go-backed cases now skip loudly when no go toolchain is present (11 false failures on dev machines; CI unchanged).
+- `scripts/resolve-review-loop.sh` `all-calibrated` preset carried the retired `grok-build` id (upstream renamed 2026-07-14) — now `grok-4.5`; header field-list replaced by a pointer to the `schemas/review-loop-contract.schema.json` SSOT.
+- `scripts/doc-drift-gate.js` bare script-ref check now clears refs that resolve beside/under the doc itself (eval-fixture false positives).
+- Eval harness defaults `claude-sonnet-4-6`/`claude-opus-4-7` → `claude-sonnet-5`/`claude-opus-4-8` (`run-eval-batch.sh`, `run-skill-opt.sh`).
+- `.opencode/opencode.json` migrated to OpenCode 1.17 schema (`plugin`/`agent`/per-agent `permission` object/`prompt`, `skills.paths`); agent-body check green again, two remaining checks BACKLOG'd for a plugin-API spike.
+- Stale renamed-file comments (`tree.js`, `resolve-doa.sh`), incomplete consumer lists (`hooks/_shared/secret-patterns.js`), CLAUDE.md scripts-inventory gaps (7 rows), `docs/installation.md` opt-in list 12→15, blind-dispatch consumer table, `review-loop-config.md` template gains the `skill_mode` key.
+- `.claude/knowledge/INDEX.md` honestly marks a knowledge file that was never committed (content lost; mirror machine absent).
+
+## v2.32.38 — Narrative-aligned plugin descriptions
+
+**Headline**: the marketplace-facing plugin descriptions now lead with the frozen product narrative ("The CEO-agent for development work — hand it a rough idea…") instead of a bare skills/hooks catalog tally; the tally stays as the secondary clause and all machine-checked count fragments are unchanged. Companion docs sweep aligns stray pre-freeze text (a stale "22 hooks" in `docs/architecture.md`, 閘→gate in the internal narrative/panel notes) with the site's canonical vocabulary.
+
+### Changed
+
+- Plugin descriptions (canonical `.claude-plugin/plugin.json`, root mirror, `marketplace.json`, Codex payload manifest + `interface.longDescription`) lead with the CEO-agent positioning sentence; count fragments and routing surfaces untouched.
+- `docs/architecture.md` stale "22 hooks" → 25; internal narrative docs (`website/NARRATIVE.md`, `GROWTH-PANEL.md`, `WEEKLY.md`) converge on the gate/眾議會 vocabulary the shipped site uses.
 
 ### Added
 
 - **Grok Build host install path** — document and wire repo-root `grok plugin install <clone|git-url> --trust` (no `platforms/grok/` package). README harness tables (EN/zh-TW), `docs/installation.md` § Grok Build (host vs runner), and `scripts/dev-setup.sh --harness grok [--install|--check]`.
 - Refreshed `src/harness/capabilities/grok.json` (2026-07-16, grok 0.2.101): skills/agents/plugin_install **verified**, hooks **warning** (registered, runtime parity not claimed), mutation_dispatch/blocking_gate still unverified at H2.
-
 ## v2.32.37 — Dispatch branch lifecycle gate and preserve-first reaper
 
 **Headline**: finish-flow can no longer silently leave an ahead integration candidate behind, and dispatch-owned local branches can be retired through a deterministic bundle-before-delete lifecycle rail.

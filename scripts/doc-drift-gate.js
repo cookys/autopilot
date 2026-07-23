@@ -171,9 +171,9 @@ function checkFences(files) {
   return { name: "fences", ok: bad.length === 0, details: bad };
 }
 
-// Repo root resolved from this script's location (scripts/doc-drift-gate.js),
-// so `scripts/...` references resolve correctly regardless of the scan cwd.
-const REPO_ROOT = path.resolve(__dirname, '..');
+// The repository being audited, not the repository that installed this gate.
+// main() sets this from --repo-root or the caller's cwd before checks run.
+let AUDIT_ROOT = process.cwd();
 
 // Known executable-script extensions a `scripts/...` reference can carry.
 const SCRIPT_EXT_RE = /\.(sh|bash|js|mjs|cjs|ts|py|ps1)$/;
@@ -211,6 +211,24 @@ function isScriptRefExemptDoc(relPath) {
 // finding class where docs kept naming tree.sh/qc-panel.sh/risk-counter.sh after
 // they became .js. When the exact file is missing but a sibling with a different
 // known extension exists, the message points at the likely rename.
+// Shallow search (depth ≤ 3) for `base` under `dir` — used to clear bare script
+// refs that point at files living beside/under the doc (eval fixtures etc.).
+function existsNearDoc(dir, base, depth = 3) {
+  if (fs.existsSync(path.join(dir, base))) return true;
+  if (depth <= 0) return false;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name === 'node_modules' || e.name.startsWith('.')) continue;
+    if (existsNearDoc(path.join(dir, e.name), base, depth - 1)) return true;
+  }
+  return false;
+}
+
 function checkScriptRefs(files) {
   const bad = [];
   // Inventory of scripts/ stems → filenames, to catch BARE backticked renamed refs
@@ -218,7 +236,7 @@ function checkScriptRefs(files) {
   // is a no-op.
   const scriptStems = new Map();
   try {
-    for (const f of fs.readdirSync(path.join(REPO_ROOT, 'scripts'))) {
+    for (const f of fs.readdirSync(path.join(AUDIT_ROOT, 'scripts'))) {
       if (!SCRIPT_EXT_RE.test(f)) continue;
       const stem = f.replace(SCRIPT_EXT_RE, '');
       if (!scriptStems.has(stem)) scriptStems.set(stem, new Set());
@@ -227,7 +245,7 @@ function checkScriptRefs(files) {
   } catch { /* no scripts/ dir → skip bare check */ }
   for (const md of files) {
     const relMd = path.relative(process.cwd(), md);
-    if (isScriptRefExemptDoc(path.relative(REPO_ROOT, md))) {
+    if (isScriptRefExemptDoc(path.relative(AUDIT_ROOT, md))) {
       continue;
     }
     const text = readTextFileNormalized(md);
@@ -246,14 +264,14 @@ function checkScriptRefs(files) {
         continue;
       }
       seen.add(ref);
-      if (fs.existsSync(path.join(REPO_ROOT, ref))) {
+      if (fs.existsSync(path.join(AUDIT_ROOT, ref))) {
         continue;
       }
       // Missing — does a sibling with a different known extension exist?
       const stem = ref.replace(SCRIPT_EXT_RE, '');
       let hint = 'no such file';
       try {
-        const dir = path.dirname(path.join(REPO_ROOT, stem));
+        const dir = path.dirname(path.join(AUDIT_ROOT, stem));
         const base = path.basename(stem);
         const sibling = fs.readdirSync(dir).find(
           f => f.replace(SCRIPT_EXT_RE, '') === base && SCRIPT_EXT_RE.test(f)
@@ -271,7 +289,11 @@ function checkScriptRefs(files) {
     while ((bm = BARE_SCRIPT_RE.exec(text)) !== null) {
       const base = bm[1];
       if (seen.has(base)) continue;
-      if (fs.existsSync(path.join(REPO_ROOT, 'scripts', base))) continue; // real bare script ref
+      if (fs.existsSync(path.join(AUDIT_ROOT, 'scripts', base))) continue; // real bare script ref
+      // A doc may describe a file that lives beside/under it (eval fixtures,
+      // project-local scripts) — local existence beats the repo-scripts rename
+      // heuristic. Shallow walk, only runs when a finding is about to be raised.
+      if (existsNearDoc(path.dirname(md), base)) continue;
       const siblings = scriptStems.get(base.replace(SCRIPT_EXT_RE, ''));
       if (siblings && siblings.size > 0) {
         seen.add(base);
@@ -286,9 +308,11 @@ function checkScriptRefs(files) {
 const HELP = `doc-drift-gate.js — deterministic doc-drift gate (links + fences + script refs).
 
 Usage:
-  scripts/doc-drift-gate.js [root ...] [--exclude <dir-substring> ...]
+  scripts/doc-drift-gate.js [root ...] [--repo-root <path>] [--exclude <dir-substring> ...]
 
   root        one or more paths to scan for .md files (default: ".")
+  --repo-root repository against which repo-relative scripts/... refs resolve
+              (default: current working directory)
   --exclude   add a directory-name substring to the skip list (repeatable)
 
 Checks:
@@ -313,9 +337,17 @@ function main(argv) {
   }
   const roots = [];
   const excludes = [...DEFAULT_EXCLUDES];
+  let auditRoot = process.cwd();
   let i = 0;
   while (i < argv.length) {
-    if (argv[i] === "--exclude") {
+    if (argv[i] === "--repo-root") {
+      if (i + 1 >= argv.length) {
+        console.error("Error: --repo-root requires an argument.");
+        process.exit(2);
+      }
+      auditRoot = path.resolve(argv[i + 1]);
+      i += 2;
+    } else if (argv[i] === "--exclude") {
       if (i + 1 >= argv.length) {
         console.error("Error: --exclude requires an argument.");
         process.exit(2);
@@ -330,6 +362,14 @@ function main(argv) {
   if (roots.length === 0) {
     roots.push(".");
   }
+
+  try {
+    if (!fs.statSync(auditRoot).isDirectory()) throw new Error('not a directory');
+  } catch (err) {
+    console.error(`Error stating repository root ${auditRoot}:`, err.message);
+    process.exit(2);
+  }
+  AUDIT_ROOT = auditRoot;
 
   const files = getMdFiles(roots, excludes);
 

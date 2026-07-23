@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode-ai/plugin/v2"
+import type { Plugin, Hooks, PluginModule } from "@opencode-ai/plugin"
 import * as crypto from "node:crypto"
 import * as fs from "node:fs"
 import * as os from "node:os"
@@ -165,9 +165,9 @@ function captureIntent(tool: string, input: unknown, sessionID: string): void {
   }
 }
 
-export default Plugin.define({
+export default {
   id: "autopilot.lifecycle",
-  setup: async (ctx) => {
+  server: async (input) => {
     ensureDir(stateDir)
     console.error("[autopilot] plugin loaded, version:", getPluginVersion())
     console.error("[autopilot] working directory:", process.cwd())
@@ -176,8 +176,10 @@ export default Plugin.define({
       captureIntent("autopilot_smoke", { description: "v2 plugin setup smoke" }, "autopilot-smoke")
     }
 
-    await ctx.tool.hook("execute.after", (event) => {
-      captureIntent(event.tool, event.input, event.sessionID)
-    })
+    return {
+      "tool.execute.after": async (hookInput, hookOutput) => {
+        captureIntent(hookInput.tool, hookInput.args, hookInput.sessionID)
+      },
+    }
   },
-})
+} satisfies PluginModule

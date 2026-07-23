@@ -1633,6 +1633,135 @@ assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation 
 assert_contains "$OUT" "review_calls=0" "AutopilotEngine implementation loop does not dispatch review when qualification fails"
 assert_contains "$OUT" "ledger=resolve_roster:resolved,reviewer_qualification:blocked" "AutopilotEngine implementation loop records qualification block"
 
+# --- implement-review pre-flight is family-conflict-fallback aware (v2.32.40) ----
+# The rounds:0 reviewer_qualification pre-flight used to hard-block on an
+# UNqualified incumbent reviewer without consulting the fallback ladder, so the
+# v2.32.25 on_family_conflict:fallback design was dead for implement-review (the
+# default openai×openai roster stayed permanently blocked). The pre-flight now
+# blocks ONLY when the loop is genuinely unviable — NOT ( family conflict AND a
+# valid fallback row ). Fail-closed invariants (empty/invalid/stale ladder, mode
+# block, cross-family unqualified primary) must still block exactly as before.
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/preflight-fb-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+fs.writeFileSync(prompt, 'implementer prompt');
+
+// mixed ladder: same-family row + codex row without calibrated effort (skipped);
+// claude-native haiku is the first valid cross-family row.
+const LADDER = [
+  { engine: 'gpt-5.6-terra', runner: 'codex', family: 'openai', effort: 'high' },
+  { engine: 'claude-opus', runner: 'codex', family: 'anthropic', effort: null },
+  { engine: 'claude-haiku', runner: 'claude-native', family: 'anthropic', effort: null, model: 'haiku' },
+];
+
+function makeEngine(counters) {
+  return new AutopilotEngine({
+    clock: () => '2026-07-01T00:00:00.000Z',
+    reviewLoopResolver() { throw new Error('resolver must not be called (pre-resolved roster)'); },
+    implementationDispatcher(args) {
+      counters.impl += 1;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: {
+          status: 'committed', runner: 'codex', model: 'gpt-5.3-codex-spark',
+          branch: args[args.indexOf('--branch') + 1], base: args[args.indexOf('--base') + 1],
+          commit: '2222222222222222222222222222222222222222',
+          files_changed: 1, insertions: 1, deletions: 0,
+          worktree: '/tmp/impl-worktree', agent_log: '/tmp/impl-log', error: null,
+        },
+      };
+    },
+    reviewDispatcher() {
+      counters.review += 1;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { runner: 'x', model: 'x', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: 'none', raw_log: '/tmp/log', error: null },
+      };
+    },
+    diffProvider({ branch, round }) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-preflight-fb-'));
+      const file = path.join(tmpDir, `${branch}-${round}.diff`);
+      fs.writeFileSync(file, `round ${round} diff`, 'utf8');
+      return file;
+    },
+  });
+}
+
+const baseRoster = {
+  reviewer_engine: 'gpt-5.5', reviewer_effort: 'xhigh', reviewer_runner: 'codex',
+  reviewer_qualified: false,
+  implementer_engine: 'gpt-5.3-codex-spark', implementer_effort: 'high', implementer_runner: 'codex',
+  loop_max_rounds: 1, loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+function run(extra) {
+  const counters = { impl: 0, review: 0 };
+  const engine = makeEngine(counters);
+  const result = engine.runImplementationReviewLoop({
+    promptFile: prompt,
+    branch: 'impl-loop',
+    base: '1111111111111111111111111111111111111111',
+    requireQualifiedReviewer: true,
+    roster: { ...baseRoster, ...extra },
+  });
+  return { result, counters };
+}
+
+// (a) unqualified SAME-family primary + valid cross-family ladder + mode fallback
+//     → NOT blocked at pre-flight; proceeds into round 1; reviewDiff substitutes
+//     the fallback reviewer and ledgers reviewer_family_fallback.
+const a = run({ on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`a_status=${a.result.status}`);
+console.log(`a_phase=${a.result.phase}`);
+console.log(`a_rounds=${a.result.rounds}`);
+console.log(`a_impl=${a.counters.impl}`);
+console.log(`a_review=${a.counters.review}`);
+console.log(`a_fb_ledger=${a.result.ledger.some((e) => e.unit === 'reviewer_family_fallback')}`);
+console.log(`a_no_preflight_block=${!a.result.ledger.some((e) => e.unit === 'reviewer_qualification' && e.status === 'blocked')}`);
+
+// (b) same-family primary + EMPTY ladder → blocked at pre-flight, no dispatch.
+const b = run({ on_family_conflict: 'fallback', fallback_ladder: [], fallback_ladder_implementer_family: 'openai' });
+console.log(`b_status=${b.result.status}:${b.result.phase}:${b.result.rounds}`);
+console.log(`b_impl=${b.counters.impl}:${b.counters.review}`);
+
+// (b2) same-family primary + ladder of only INVALID rows → blocked.
+const b2 = run({ on_family_conflict: 'fallback', fallback_ladder: [LADDER[0], { engine: 'claude-opus', runner: 'bogus', family: 'anthropic' }], fallback_ladder_implementer_family: 'openai' });
+console.log(`b2_status=${b2.result.status}:${b2.result.phase}:${b2.result.rounds}`);
+
+// (b3) same-family primary + valid ladder but STALE provenance → blocked.
+const b3 = run({ on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'anthropic' });
+console.log(`b3_status=${b3.result.status}:${b3.result.phase}:${b3.result.rounds}`);
+
+// (c) mode block (valid ladder present) → blocked.
+const c = run({ on_family_conflict: 'block', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`c_status=${c.result.status}:${c.result.phase}:${c.result.rounds}`);
+
+// (d) cross-family-but-unqualified primary (no conflict → fallback never fires) → blocked, no dispatch.
+const d = run({ reviewer_engine: 'gemini-flash', reviewer_runner: 'agy', on_family_conflict: 'fallback', fallback_ladder: LADDER, fallback_ladder_implementer_family: 'openai' });
+console.log(`d_status=${d.result.status}:${d.result.phase}:${d.result.rounds}`);
+console.log(`d_impl=${d.counters.impl}:${d.counters.review}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine implement-review pre-flight fallback process exits 0"
+assert_contains "$OUT" "a_status=converged" "pre-flight fallback: same-family unqualified primary + valid ladder proceeds to convergence"
+assert_contains "$OUT" "a_phase=converged" "pre-flight fallback: not blocked at reviewer_qualification"
+assert_contains "$OUT" "a_rounds=1" "pre-flight fallback: runs round 1"
+assert_contains "$OUT" "a_impl=1" "pre-flight fallback: dispatches implementation"
+assert_contains "$OUT" "a_review=1" "pre-flight fallback: dispatches review"
+assert_contains "$OUT" "a_fb_ledger=true" "pre-flight fallback: per-round review path ledgers reviewer_family_fallback"
+assert_contains "$OUT" "a_no_preflight_block=true" "pre-flight fallback: no reviewer_qualification block ledger entry"
+assert_contains "$OUT" "b_status=blocked:reviewer_qualification:0" "pre-flight fallback: empty ladder still blocks at rounds 0"
+assert_contains "$OUT" "b_impl=0:0" "pre-flight fallback: empty-ladder block dispatches nothing"
+assert_contains "$OUT" "b2_status=blocked:reviewer_qualification:0" "pre-flight fallback: all-invalid ladder still blocks"
+assert_contains "$OUT" "b3_status=blocked:reviewer_qualification:0" "pre-flight fallback: stale provenance still blocks"
+assert_contains "$OUT" "c_status=blocked:reviewer_qualification:0" "pre-flight fallback: mode block still blocks"
+assert_contains "$OUT" "d_status=blocked:reviewer_qualification:0" "pre-flight fallback: cross-family unqualified primary still blocks"
+assert_contains "$OUT" "d_impl=0:0" "pre-flight fallback: cross-family block dispatches nothing"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/malformed-roster-loop-prompt.txt" <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -3956,5 +4085,331 @@ assert_contains "$OUT" "pref_empty_model=true" "empty preference keeps pure ladd
 assert_contains "$OUT" "tier_miss_model=true" "tier pair absent from qualified ladder reverts to incumbent"
 assert_contains "$OUT" "tier_miss_ledger=true" "tier revert is ledger'd (tier_reviewer_unqualified)"
 assert_contains "$OUT" "tier_hit_model=true" "tier tuple present in ladder → tier holds"
+
+# --- GAP 1: reviewer_endpoint wiring into dispatch-review args (v2.32.45) ---
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const diff = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+function mk(capture) {
+  return new AutopilotEngine({
+    clock: () => '2026-07-01T00:00:00.000Z',
+    reviewDispatcher(args) {
+      capture.args = args;
+      return {
+        error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { runner: 'r', model: 'm', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', raw_log: '/tmp/l', error: null },
+      };
+    },
+  });
+}
+
+// (a) endpoint-capable runner + non-empty valid endpoint -> --endpoint minimax
+let capA = {};
+let a = mk(capA).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'minimax-m3', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'minimax',
+}});
+console.log(`a_status=${a.status}`);
+console.log(`a_args=${capA.args.join(' ')}`);
+
+// (c) non-endpoint runner never gets --endpoint (endpoint present but runner is codex)
+let capC = {};
+let c = mk(capC).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'gpt-5.5', reviewer_effort: 'high', reviewer_runner: 'codex', reviewer_endpoint: 'minimax',
+}});
+console.log(`c_status=${c.status}`);
+console.log(`c_has_endpoint=${capC.args.includes('--endpoint')}`);
+
+// endpoint-capable runner but INVALID endpoint name (a URL) -> no --endpoint (fail-safe)
+let capU = {};
+mk(capU).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'minimax-m3', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'http://x',
+}});
+console.log(`u_has_endpoint=${capU.args.includes('--endpoint')}`);
+
+// (b) family-conflict fallback substitution blanks the endpoint (never inherited)
+let capB = {};
+let b = mk(capB).reviewDiff({ diffFile: diff, roster: {
+  reviewer_engine: 'minimax-m3', reviewer_effort: 'high', reviewer_runner: 'cc-shim', reviewer_endpoint: 'minimax',
+  implementer_engine: 'minimax-m3',
+  on_family_conflict: 'fallback',
+  fallback_ladder_implementer_family: 'minimax',
+  fallback_ladder: [{ engine: 'claude-haiku', model: 'haiku', runner: 'claude-native' }],
+}});
+console.log(`b_status=${b.status}`);
+console.log(`b_runner=${b.roster.reviewer_runner}`);
+console.log(`b_endpoint=${JSON.stringify(b.roster.reviewer_endpoint)}`);
+console.log(`b_has_endpoint=${capB.args.includes('--endpoint')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine reviewer_endpoint wiring process exits 0"
+assert_contains "$OUT" "a_status=reviewed" "endpoint-capable reviewer runs"
+assert_contains "$OUT" "--endpoint minimax" "endpoint-capable runner + valid endpoint passes --endpoint minimax"
+assert_contains "$OUT" "c_status=reviewed" "non-endpoint reviewer runs"
+assert_contains "$OUT" "c_has_endpoint=false" "non-endpoint runner (codex) never receives --endpoint"
+assert_contains "$OUT" "u_has_endpoint=false" "endpoint-capable runner with invalid endpoint name gets no --endpoint (fail-safe)"
+assert_contains "$OUT" "b_status=reviewed" "family-conflict fallback still reviews"
+assert_contains "$OUT" "b_runner=claude-native" "family-conflict fallback substitutes the cross-family runner"
+assert_contains "$OUT" 'b_endpoint=""' "family-conflict fallback blanks the substituted reviewer's endpoint"
+assert_contains "$OUT" "b_has_endpoint=false" "substituted fallback reviewer never inherits the incumbent endpoint"
+
+# --- GAP 2: --resume re-enters review without re-dispatching implementation (v2.32.45) ---
+RESUME_PROMPT="$TEST_TMP/resume-loop-prompt.txt"
+printf 'resume prompt\n' > "$RESUME_PROMPT"
+OUT="$(node - "$REPO_ROOT" "$RESUME_PROMPT" <<'NODE'
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+const BASE = '1111111111111111111111111111111111111111';
+const TIP = '2222222222222222222222222222222222222222';
+const roster = {
+  reviewer_engine: 'test-review-model', reviewer_effort: 'xhigh', reviewer_runner: 'test-review-runner', reviewer_qualified: true,
+  implementer_engine: 'test-impl-model', implementer_effort: 'high', implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1, loop_convergence_verdict: 'SHIP-AS-IS',
+};
+
+function mk(inspect, counter) {
+  return new AutopilotEngine({
+    clock: () => '2026-07-01T00:00:00.000Z',
+    gitResumeInspect() { return inspect; },
+    implementationDispatcher() {
+      counter.n += 1;
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { status: 'committed', runner: 'x', model: 'x', branch: 'b', base: BASE, commit: TIP, files_changed: 1, insertions: 1, deletions: 0, worktree: null, agent_log: null, error: null } };
+    },
+    reviewDispatcher() {
+      counter.r += 1;
+      return { error: null, status: 0, signal: null, stdout: '', stderr: '', parseError: null,
+        result: { runner: 'r', model: 'm', status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', raw_log: '/tmp/l', error: null } };
+    },
+    diffProvider() { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-')); const f = path.join(d, 'r.diff'); fs.writeFileSync(f, 'diff'); return f; },
+  });
+}
+
+// (d) resume happy path: enters review with ZERO implementation dispatch but the
+// REVIEW leg MUST fire (a mutation short-circuiting resume→converged without
+// review is caught by d_review_calls / d_review_chain).
+let cd = { n: 0, r: 0 };
+let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`d_status=${d.status}`);
+console.log(`d_impl_calls=${cd.n}`);
+console.log(`d_review_calls=${cd.r}`);
+console.log(`d_review_chain=${d.reviewChain.length}`);
+console.log(`d_has_review=${d.review && d.review.status === 'reviewed'}`);
+console.log(`d_rounds=${d.rounds}`);
+console.log(`d_commit=${d.implementationChain[0].implementation.commit}`);
+console.log(`d_runner=${d.implementationChain[0].implementation.runner}`);
+console.log(`d_ledger=${d.ledger.map((e) => `${e.unit}:${e.status}`).join(',')}`);
+
+// (e1) missing branch -> resume_invalid, nothing dispatched
+let e1 = { n: 0 };
+let r1 = mk({ error: null, exists: false, tipSha: null, baseAncestor: false }, e1).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`e1_status=${r1.status}`);
+console.log(`e1_phase=${r1.phase}`);
+console.log(`e1_impl_calls=${e1.n}`);
+console.log(`e1_rounds=${r1.rounds}`);
+
+// (e2) not ahead (tip === base) -> resume_invalid
+let e2 = { n: 0 };
+let r2 = mk({ error: null, exists: true, tipSha: BASE, baseAncestor: true }, e2).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`e2_status=${r2.status}`);
+console.log(`e2_phase=${r2.phase}`);
+console.log(`e2_impl_calls=${e2.n}`);
+
+// (e3) base not ancestor -> resume_invalid
+let e3 = { n: 0 };
+let r3 = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: false }, e3).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+console.log(`e3_status=${r3.status}`);
+console.log(`e3_phase=${r3.phase}`);
+console.log(`e3_impl_calls=${e3.n}`);
+
+// (f) no --resume -> today's behavior: implementation IS dispatched
+let cf = { n: 0 };
+let f = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cf).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster });
+console.log(`f_status=${f.status}`);
+console.log(`f_impl_calls=${cf.n}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine --resume process exits 0"
+assert_contains "$OUT" "d_status=converged" "resume happy path converges"
+assert_contains "$OUT" "d_impl_calls=0" "resume happy path dispatches zero implementations"
+assert_contains "$OUT" "d_review_calls=1" "resume happy path FIRES the review leg exactly once (guards against a resume→converged short-circuit that skips review)"
+assert_contains "$OUT" "d_review_chain=1" "resume happy path records one review in reviewChain"
+assert_contains "$OUT" "d_has_review=true" "resume happy path returns a reviewed review object"
+assert_contains "$OUT" "d_rounds=1" "resume happy path runs one review round"
+assert_contains "$OUT" "d_commit=2222222222222222222222222222222222222222" "resume happy path reviews the existing branch tip"
+assert_contains "$OUT" "d_runner=resume" "resume happy path marks the synthesized implementation as resume"
+assert_contains "$OUT" "resume_precheck:resumed" "resume happy path ledgers the precheck"
+assert_contains "$OUT" "e1_status=blocked" "resume missing branch blocks"
+assert_contains "$OUT" "e1_phase=resume_invalid" "resume missing branch reports resume_invalid"
+assert_contains "$OUT" "e1_impl_calls=0" "resume missing branch dispatches nothing"
+assert_contains "$OUT" "e1_rounds=0" "resume missing branch runs zero rounds"
+assert_contains "$OUT" "e2_status=blocked" "resume not-ahead branch blocks"
+assert_contains "$OUT" "e2_phase=resume_invalid" "resume not-ahead branch reports resume_invalid"
+assert_contains "$OUT" "e2_impl_calls=0" "resume not-ahead branch dispatches nothing"
+assert_contains "$OUT" "e3_status=blocked" "resume non-ancestor base blocks"
+assert_contains "$OUT" "e3_phase=resume_invalid" "resume non-ancestor base reports resume_invalid"
+assert_contains "$OUT" "e3_impl_calls=0" "resume non-ancestor base dispatches nothing"
+assert_contains "$OUT" "f_status=converged" "no --resume converges via normal dispatch"
+assert_contains "$OUT" "f_impl_calls=1" "no --resume dispatches implementation as today"
+
+# --- on_engine_unavailable policy wiring (2026-07-17 run E residual) -------------------
+# dispatch-hetero v2.32.53 emits status engine_unavailable on quota/rate/auth/overload
+# death; the resolver's on_engine_unavailable policy key (ask|solo-fallback|wait-reset)
+# must map to a machine-readable action on the engine result instead of depth-0 reading
+# raw JSON and applying the policy by hand.
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/impl-engine-unavailable.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+
+function mkEngine(dispatchStatus, errorText) {
+  return new AutopilotEngine({
+    implementationDispatcher() {
+      return {
+        error: null,
+        status: 1,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: dispatchStatus,
+          runner: 'test-impl-runner',
+          model: 'test-impl-model',
+          commit: null,
+          base: '1111111111111111111111111111111111111111',
+          branch: 'impl-branch',
+          files_changed: 0,
+          insertions: 0,
+          deletions: 0,
+          worktree: '/tmp/wt',
+          agent_log: '/tmp/impl-log',
+          error: errorText,
+        },
+      };
+    },
+  });
+}
+
+function run(policy, dispatchStatus, errorText) {
+  const roster = {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+  };
+  if (policy !== undefined) roster.on_engine_unavailable = policy;
+  const result = mkEngine(dispatchStatus, errorText).implementTask({
+    promptFile: prompt,
+    branch: 'impl-branch',
+    base: '1111111111111111111111111111111111111111',
+    roster,
+  });
+  const eu = result.engine_unavailable || null;
+  return [
+    `status=${result.status}`,
+    `phase=${result.phase}`,
+    `eu=${eu ? `${eu.policy}/${eu.action}/${eu.error_class}` : 'null'}`,
+    `ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`,
+  ].join(' ');
+}
+
+const quotaErr = 'engine unavailable (quota_exhausted): worker exited non-zero (agent exit 1); worktree kept';
+const authErr = 'engine unavailable (auth_failed): worker exited non-zero (agent exit 1); worktree kept';
+
+console.log(`a_${run('ask', 'engine_unavailable', quotaErr)}`);
+console.log(`b_${run('wait-reset', 'engine_unavailable', quotaErr)}`);
+console.log(`c_${run('wait-reset', 'engine_unavailable', authErr)}`);
+console.log(`d_${run('solo-fallback', 'engine_unavailable', quotaErr)}`);
+console.log(`e_${run('solo-fallback', 'precondition_failed', 'missing binary')}`);
+console.log(`f_${run('wait-reset', 'precondition_failed', 'missing binary')}`);
+console.log(`g_${run(undefined, 'engine_unavailable', quotaErr)}`);
+console.log(`h_${run('ask', 'no_op', null)}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "on_engine_unavailable wiring process exits 0"
+assert_contains "$OUT" "a_status=blocked" "engine_unavailable stays blocked under ask"
+assert_contains "$OUT" "a_status=blocked phase=dispatch_implementation" "engine_unavailable keeps dispatch phase"
+assert_contains "$OUT" "eu=ask/escalate/quota_exhausted" "ask policy maps engine_unavailable to escalate with parsed error class"
+assert_contains "$OUT" "eu=wait-reset/wait-reset/quota_exhausted" "wait-reset policy maps quota death to wait-reset"
+assert_contains "$OUT" "eu=wait-reset/escalate/auth_failed" "auth death escalates even under wait-reset (waiting cannot fix auth)"
+assert_contains "$OUT" "eu=solo-fallback/wait-reset/quota_exhausted" "solo-fallback policy routes quota death to wait-reset per behavior matrix"
+assert_contains "$OUT" "eu=solo-fallback/solo-fallback/null" "solo-fallback policy maps precondition_failed to solo-fallback"
+assert_contains "$OUT" "eu=wait-reset/escalate/null" "wait-reset policy escalates non-quota precondition_failed"
+assert_contains "$OUT" "eu=ask/escalate/quota_exhausted" "missing policy fails closed to ask/escalate"
+assert_contains "$OUT" "h_status=blocked phase=dispatch_implementation eu=null" "non-unavailable statuses carry no engine_unavailable directive"
+assert_contains "$OUT" "a_status=blocked phase=dispatch_implementation eu=ask/escalate/quota_exhausted ledger=dispatch_implementation:engine_unavailable,engine_unavailable_policy:escalate" "engine_unavailable policy decision is ledgered"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/loop-engine-unavailable.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'engine_unavailable',
+        runner: 'test-impl-runner',
+        model: 'test-impl-model',
+        commit: null,
+        base: '1111111111111111111111111111111111111111',
+        branch: 'impl-branch',
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: '/tmp/wt',
+        agent_log: '/tmp/impl-log',
+        error: 'engine unavailable (rate_limited): worker exited non-zero (agent exit 1); worktree kept',
+      },
+    };
+  },
+});
+
+const result = engine.runImplementationReviewLoop({
+  promptFile: prompt,
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  roster: {
+    implementer_engine: 'test-impl-model',
+    implementer_effort: 'high',
+    implementer_runner: 'test-impl-runner',
+    reviewer_engine: 'test-review-model',
+    reviewer_effort: 'high',
+    reviewer_runner: 'test-review-runner',
+    loop_max_rounds: 2,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+    on_engine_unavailable: 'wait-reset',
+  },
+});
+const eu = result.engine_unavailable || null;
+console.log(`loop_status=${result.status}`);
+console.log(`loop_eu=${eu ? `${eu.policy}/${eu.action}/${eu.error_class}` : 'null'}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "loop on_engine_unavailable propagation process exits 0"
+assert_contains "$OUT" "loop_status=blocked" "loop blocks on engine_unavailable"
+assert_contains "$OUT" "loop_eu=wait-reset/wait-reset/rate_limited" "loop propagates the engine_unavailable directive to the final result"
 
 finalize_test

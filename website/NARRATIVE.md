@@ -9,7 +9,7 @@ Audience: product site `website/` + anyone joining the project
 
 1. **Remove human from the loop** — 人盡量不待在中間覆核地獄。  
 2. **多元** 讓 **CEO agent** 做選擇時比單人／單模型更完整（survey、think-tank、research-to-ship、multi-engine）。  
-3. **收斂** 在執行跑歪時把路拉回（peer 審、眾議會、機械閘、artifact 真相）。  
+3. **收斂** 在執行跑歪時把路拉回（peer 審、眾議會、機械 gate、artifact 真相）。  
 
 CEO agent **不是**叫人當 Board 每題點頭；是 AI 在分岔用 CEO **取捨往前**。  
 人：丟**目標／紅線（隕石／no-go）**；真卡死或越線才出面。
@@ -35,7 +35,7 @@ CEO agent **不是**叫人當 Board 每題點頭；是 AI 在分岔用 CEO **取
 | 委派階梯 | /l3–/l6、ceo-agent、foreman、worktree | 人要離 thread，又要關卡還在 |
 | 異質工廠 | dispatch-hetero/review/author、多 runner | 寫≠審≠會；artifact 不當自報 |
 | 座位與額度 | roster、scorecard、endpoints、status | 誰有資格坐哪、額度政治 |
-| 觀測與收斂閘 | manifest、sensing、loop-convergence、unit contract | 失聯、8 代空轉、未授權開跑 |
+| 觀測與收斂 gate | manifest、sensing、loop-convergence、unit contract | 失聯、8 代空轉、未授權開跑 |
 | 量測誠實 | known-bad、A/B、H2 被推翻 | 敢公開認栽才配談信任 |
 
 **現在產品臉：** 不是「28 skills 目錄」，是 **CEO-altitude 作業系統**：多元決策 + 收斂執行 + 少人在 loop。

@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; padding: 0; }
+  .og {
+    width: 1200px; height: 630px; box-sizing: border-box;
+    background: radial-gradient(1200px 700px at 78% 30%, #131a2e 0%, #07090f 62%);
+    color: #E6EAF2; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 92px 96px; position: relative; overflow: hidden;
+  }
+  .og::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(129,140,248,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(129,140,248,0.06) 1px, transparent 1px);
+    background-size: 48px 48px; mask-image: radial-gradient(900px 520px at 70% 40%, #000 0%, transparent 75%);
+  }
+  .brand { display: flex; align-items: center; gap: 22px; margin-bottom: 40px; position: relative; }
+  .brand svg { width: 76px; height: 76px; }
+  .brand .name { font-size: 46px; font-weight: 800; letter-spacing: -0.01em; }
+  .h1 { position: relative; font-size: 60px; line-height: 1.12; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .h1 .accent { color: #A5B4FC; }
+  .sig { position: relative; margin-top: 34px; font-size: 26px; color: #F5A524; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="og">
+    <div class="brand">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="Autopilot">
+        <g transform="translate(6 -6) rotate(45 32 32)">
+          <path d="M27 57 L23 63" stroke="#A5B4FC" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+          <path d="M32 57.5 L32 65" stroke="#F5A524" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+          <path d="M37 57 L41 63" stroke="#818CF8" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+          <path fill="#C5CDDC" fill-rule="evenodd" d="M32 8 L36 18 L36 24 L54 40 L54 44 L36 36 L35 46 L45 54 L45 57 L34 52 L33.5 55 L30.5 55 L30 52 L19 57 L19 54 L29 46 L28 36 L10 44 L10 40 L28 24 L28 18 Z M30.5 15 L33.5 15 L33.5 20 L30.5 20 Z"/>
+        </g>
+      </svg>
+      <span class="name">Autopilot</span>
+    </div>
+    <h1 class="h1">Claude Code makes you faster.<br /><span class="accent">Autopilot lets you step away.</span></h1>
+    <p class="sig">CEO altitude for ordinary operators.</p>
+  </div>
+</body>
+</html>

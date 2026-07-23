@@ -34,11 +34,11 @@ so the run does not re-ask on a clean goal:
 | 1. OKR / success criteria | Derived from `<goal>`. If `<goal>` has no verifiable end-state, the CEO restates one and proceeds (does **not** block on Q&A — that is the point of the front-door). |
 | 2. Involvement | `/l3 /l4 /l5 /l6` all preset **3 = just-results** (full autonomy, notify on done). |
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
-| 4. No-go zones | **none** (default DOA). Override with `-x <csv>`. |
+| 4. Red lines (紅線) | **none** (default DOA). Override with `-x <csv>`. |
 
 ### Mid-run question discipline (presets active)
 
-With the front-door presets (involvement=just-results, no-go=none), "想確認一下 /
+With the front-door presets (involvement=just-results, red-lines=none), "想確認一下 /
 should I continue?" is **NOT an escalation trigger**. The run stops ONLY at: a DOA
 boundary (outcome/escalation tables), an irreversible op outside DOA, or input that
 genuinely cannot be self-derived. Near-misses (差點走錯路) are **recorded** — into the
@@ -65,7 +65,7 @@ to plan / decompose / synthesize / verify — the things that actually need it:
 
 | Flag | Effect |
 |------|--------|
-| `-x <csv>` | No-go zones, e.g. `-x payments,auth`. |
+| `-x <csv>` | Red lines, e.g. `-x payments,auth`. |
 | `--expand` | Scope mode = Expand instead of Hold. |
 | `--solo` | `/l4`/`/l5`/`/l6` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4/5/6 posture respectively. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). |
 
@@ -355,12 +355,31 @@ finish-flow closing). The marker arms two opt-in hooks:
   transcript study: 96%+ of tokens were cache_read on unsplit depth-0 sessions).
   At T2 (150k) stop taking on new work and hand off NOW.
 
-For `/l6` only, verification AUTHORING is dispatched only through strict roster:
-`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`.
-This is the session-mode control-loop boundary contract, not optional guidance.
-It resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`
-via `resolve-review-loop.sh`; caller-supplied `--runner`, `--model`, `--effort`,
-or `--endpoint` must not be used in that path.
+Under an active l5/l6 marker, write and author dispatch on the consuming repo are
+CONTRACT-GATED (v2.32.36) — this is the session-mode control-loop boundary contract, not
+optional guidance:
+
+- Depth-0 freezes an immutable dispatch-unit contract (schema
+  `schemas/dispatch-unit-contract.schema.json`) per unit — one semantic decision plus its
+  mandatory generated mirrors, base pinned to a full SHA, budgets, allow/deny scope,
+  acceptance argv, and the engine role.
+- GO is mechanical and pre-spend:
+  `node scripts/dispatch-contract.js check --contract <unit.json> --repo <repo> --json`
+  (exit 0 GO / 2 schema / 3 policy NO-GO). No LLM override, no silent fallback; a changed
+  contract is a new hash and a new GO check.
+- Write dispatch: `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json>
+  --branch <b> --prompt-file <task.md> ...` — base/timeout derive from the contract; caller
+  `--base`/`--model`/`--timeout` disagreements are precondition-rejected; post-return the
+  dispatcher enforces the artifact boundary (allow/deny/file/diff/output) from git truth and
+  EXECUTES the acceptance argv itself (`boundary_rejected` / `acceptance_failed`, worktree
+  kept).
+- Verification authoring (`/l6`): `scripts/dispatch-author.sh --strict-contract
+  --contract-file <unit.json> --repo-root <consuming-repo> --prompt-file <file>` — the checker
+  gates with the verification-author role, runner/model derive from the resolved VA tuple, and
+  the consuming checkout is containment-proven (any mutation ⇒ `containment_breach` exit 4,
+  artifact quarantined, never promoted).
+- Prompt-only (non-strict) write/author dispatch on a repo with an active l5/l6 marker fails
+  before any runner spawn. Expired or foreign-repo markers do not block.
 
 Corollary (always, hooks on or off): dispatch outputs land in FILES; depth-0
 reads only the emitted JSON summary — never scroll raw worker logs into the

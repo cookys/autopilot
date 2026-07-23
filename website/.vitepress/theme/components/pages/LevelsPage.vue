@@ -17,11 +17,11 @@ const levels = computed(() =>
           tone: 'near',
           n: '同一個 thread 跑完',
           when: '想看過程 · 範圍小 · 還沒異質',
-          why: ['主腦 ctx 會塞滿過程', '適合你要盯著看'],
+          why: ['depth-0 ctx 會塞滿過程', '適合你要盯著看'],
           chips: [
             { k: '寫', v: '同 thread' },
             { k: '工頭', v: '無' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '通常不用' }
           ],
           cmd: '/l3 那個 flaky reconnect 測資你全權搞定'
@@ -31,11 +31,11 @@ const levels = computed(() =>
           tone: 'mid',
           n: '背景工頭 + worktree',
           when: '長任務 · 主對話要乾淨',
-          why: ['執行卸給工頭', '主腦留座標'],
+          why: ['執行卸給工頭', 'depth-0 留座標'],
           chips: [
             { k: '寫', v: '工頭 leaf' },
             { k: '工頭', v: '背景' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '隔離' }
           ],
           cmd: '/l4 把 WebSocket 重連做完。紅線：不准動 public API'
@@ -44,15 +44,15 @@ const levels = computed(() =>
           id: '/l5',
           tone: 'far',
           n: '異質「寫→審」',
-          when: '主腦別塞爆 · 寫審分家',
+          when: 'depth-0 別塞爆 · 寫審分家',
           why: [
-            '主因：實作卸出 ctx，主腦長活',
+            '主因：實作卸出 ctx，depth-0 長活',
             '附加：Fable 規劃協調，寫走較省引擎'
           ],
           chips: [
             { k: '寫', v: '異質' },
             { k: '審', v: '另一家' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '隔離' }
           ],
           cmd: '/l5 修 login null deref。紅線：不准動 auth schema、測試要綠'
@@ -63,13 +63,13 @@ const levels = computed(() =>
           n: '驗證寫法也派',
           when: '範圍大 · roster 可信 · 只收終局',
           why: [
-            '主因：主腦只協調與終裁',
+            '主因：depth-0 只協調與終裁',
             '附加：Fable 專心協調，驗證 authoring 也可卸'
           ],
           chips: [
             { k: '寫', v: '異質' },
             { k: '驗證寫', v: '異質 leaf' },
-            { k: '閘', v: 'depth-0' },
+            { k: 'gate', v: 'depth-0' },
             { k: 'wt', v: '隔離' }
           ],
           cmd: '/l6 整個 parser 重寫，連測試怎麼寫也派出去'
@@ -148,7 +148,7 @@ const matrix = computed(() =>
         cols: ['角色', '/l3', '/l4', '/l5', '/l6'],
         rows: [
           {
-            k: '主腦 ctx',
+            k: 'depth-0 ctx',
             v: ['整段過程都在', '執行卸給工頭', '實作再卸異質', '驗證寫法也卸']
           },
           { k: 'caller', v: ['你 + depth-0', '你 + depth-0', '你 + depth-0', '你 + depth-0'] },
@@ -185,25 +185,25 @@ const c = computed(() =>
         pill1: '工程師視角 · 委派拓撲',
         pill2: 'GATE 不會因為層級變鬆',
         h1a: '四層差在拓撲，',
-        h1b: '不是閘變鬆。',
-        leadIntro: '先看一句話對照，細節在下面卡片與矩陣。',
+        h1b: '不是 gate 變鬆。',
+        leadIntro: '先看一句話對照，細節在下面卡片與矩陣。depth-0 ＝ 你正在對話的這條主 thread。',
         leadRows: [
-          { code: '/l3', text: '同一個 thread 跑完——過程全在主腦 ctx' },
-          { code: '/l4', text: '背景工頭 + worktree——主腦留乾淨，執行卸出去' },
-          { code: '/l5', text: '寫→審再卸異質——主因省 ctx，主腦長活做規劃協調' },
-          { code: '/l6', text: '連驗證怎麼寫也卸——主腦幾乎只協調與終裁' }
+          { code: '/l3', text: '同一個 thread 跑完——過程全在 depth-0 ctx' },
+          { code: '/l4', text: '背景工頭 + worktree——depth-0 留乾淨，執行卸出去' },
+          { code: '/l5', text: '寫→審再卸異質——主因省 ctx，depth-0 長活做規劃協調' },
+          { code: '/l6', text: '連驗證怎麼寫也卸——depth-0 幾乎只協調與終裁' }
         ],
-        leadFoot: '不變：最終閘與 merge 權一直在 depth-0。',
+        leadFoot: '不變：最終 gate 與 merge 權一直在 depth-0。',
         causeTitle: '為什麼要分層',
         causeLines: [
           '四層不是「誰比較會寫 code」的排行榜',
-          '主因：把雜訊卸出 depth-0 的 context，讓主腦長時間活著做規劃協調',
+          '主因：把雜訊卸出 depth-0 的 context，讓 depth-0 長時間活著做規劃協調',
           '/l4 起用工頭；/l5 再卸實作；/l6 連 verification authoring 也卸'
         ],
         effectTitle: '分層之後你得到什麼',
         effectLines: [
-          '選層級＝選「多少工作離開主腦 ctx」。',
-          '附加紅利：Fable 這類高智慧模型只坐主腦做規劃協調，機械實作卸給較省的異質引擎——省 token 也省 fee。',
+          '選層級＝選「多少工作離開 depth-0 ctx」。',
+          '附加紅利：Fable 這類高智慧模型只坐 depth-0 做規劃協調，機械實作卸給較省的異質引擎——省 token 也省 fee。',
           '你平常只在進場設紅線，真卡死才補一句。',
           'GATE 不因層級變鬆。'
         ],
@@ -238,9 +238,9 @@ const c = computed(() =>
         ],
         effectTitle: 'What you get',
         effectLines: [
-          'Picking a level picks how much work leaves brain ctx.',
-          'Bonus: once Fable-class models are available, the smartest brain plans/coords while mechanical write rides hetero/cheaper engines—token and fee can drop too.',
-          'You mostly set red lines at intake; amend only when hard-stuck.',
+          'The level you pick decides how much work leaves brain ctx.',
+          'Bonus: once Fable-class models are available, the smartest brain plans and coordinates while the mechanical writing rides cheaper hetero engines — token and fee can drop too.',
+          'You mostly set red lines at intake, and amend only when it is hard-stuck.',
           'GATE does not soften by level.'
         ],
         stackTitle: 'Four levels in detail',

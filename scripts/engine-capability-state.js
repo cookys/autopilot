@@ -2,9 +2,9 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const process = require('process');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 
 const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js record [--file <path>] [--store <path>]
@@ -49,19 +49,6 @@ function isHelpToken(token) {
   return token === '-h' || token === '--help' || token === 'help';
 }
 
-function expandTilde(raw) {
-  if (!raw) return raw;
-  if (raw === '~') return os.homedir();
-  if (raw.startsWith(`~${path.sep}`)) return path.join(os.homedir(), raw.slice(2));
-  return raw;
-}
-
-function ensureDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-  }
-}
-
 function readTextLines(filePath) {
   if (!fs.existsSync(filePath)) return [];
   const raw = fs.readFileSync(filePath, 'utf8');
@@ -70,21 +57,6 @@ function readTextLines(filePath) {
 
 function warnMalformedLine(lineNo, message) {
   process.stderr.write(`WARN: malformed capability line ${lineNo}: ${message}\n`);
-}
-
-function toEventId(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  return Math.trunc(n);
-}
-
-function maxEventId(rows) {
-  let max = 0;
-  for (const row of rows) {
-    const id = toEventId(row.event_id);
-    if (id !== null && id > max) max = id;
-  }
-  return max;
 }
 
 function toDateMs(value) {
@@ -230,112 +202,6 @@ function validateEvent(event) {
   }
 }
 
-// Pure-Node synchronous sleep
-function sleepMs(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, ms));
-}
-
-// Liveness probe for a lock-file content string (a pid). Split out so the caller can
-// hold the exact content it verified and re-check it right before unlinking. (gpt-5.5 P6 F1)
-function pidStringAlive(content) {
-  const pid = Number(content);
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    if (err.code === 'EPERM') return true;
-    return false;
-  }
-}
-
-// Liveness probe for lock file
-function lockHolderAlive(lockFile) {
-  let content;
-  try {
-    content = fs.readFileSync(lockFile, 'utf8').trim();
-  } catch {
-    return false;
-  }
-  return pidStringAlive(content);
-}
-
-// Lock strategy matching engine-scorecard.js
-function acquireLock(storeDir, lockFile) {
-  ensureDir(storeDir);
-  const deadline = Date.now() + 8000;
-  let delayMs = 5;
-
-  while (true) {
-    try {
-      const fd = fs.openSync(lockFile, 'wx');
-      fs.writeSync(fd, String(process.pid));
-      fs.closeSync(fd);
-      return;
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      // Read the current holder ONCE, then decide. If it is dead, re-read immediately
-      // before unlinking and only remove it when the content is unchanged — otherwise a
-      // second recoverer could unlink a lock a third process just recreated, letting two
-      // writers into the critical section. Best-effort (files have no atomic CAS); this
-      // narrows the TOCTOU window to a single readFileSync→unlink for this local,
-      // low-concurrency store. (gpt-5.5 P6 F1)
-      let holder;
-      try { holder = fs.readFileSync(lockFile, 'utf8').trim(); } catch { continue; }
-      if (!pidStringAlive(holder)) {
-        // Break a stale lock with an IDENTITY-CHECKED atomic steal. renameSync moves whatever
-        // inode is at lockFile to a unique name (only one concurrent recoverer wins; losers get
-        // ENOENT). But rename operates on whatever sits at lockFile NOW — which may be a fresh
-        // LIVE lock created between our read and the rename — so after stealing we re-check the
-        // stolen inode's content:
-        //   • still the exact dead holder we observed  → it really is the stale lock; remove it.
-        //   • anything else                            → we grabbed a lock created after our read
-        //     (possibly live); restore it with linkSync, which is atomic and FAILS if the slot was
-        //     already retaken (so we never clobber a new holder), then drop our copy and retry.
-        // We never acquire on this path; we only ever remove an inode we have proven is the dead
-        // holder. A residual restore-gap remains (a third writer can grab the free slot during
-        // rename→link restore) — but it is reachable only under compound near-simultaneous
-        // interleavings on this LOCAL single-user store, and Node built-ins offer no OS advisory
-        // lock to close it fully. Accepted as the practical floor. (gpt-5.5 P6 F1 r3)
-        const stolen = `${lockFile}.stale.${process.pid}.${process.hrtime.bigint()}`;
-        try {
-          fs.renameSync(lockFile, stolen);
-          let stolenContent = '';
-          try { stolenContent = fs.readFileSync(stolen, 'utf8').trim(); } catch { }
-          if (stolenContent === holder && !pidStringAlive(stolenContent)) {
-            fs.unlinkSync(stolen);
-          } else {
-            try { fs.linkSync(stolen, lockFile); } catch { }
-            try { fs.unlinkSync(stolen); } catch { }
-          }
-        } catch { /* lost the steal race (ENOENT) — just retry from the top */ }
-        continue;
-      }
-      if (Date.now() > deadline) {
-        throw new Error('timed out waiting for capability lock (held by a live process)');
-      }
-      sleepMs(delayMs);
-      delayMs = Math.min(delayMs * 2, 50);
-    }
-  }
-}
-
-function releaseLock(lockFile) {
-  try {
-    fs.unlinkSync(lockFile);
-  } catch {
-  }
-}
-
-function withWriteLock(storeDir, lockFile, callback) {
-  acquireLock(storeDir, lockFile);
-  try {
-    return callback();
-  } finally {
-    releaseLock(lockFile);
-  }
-}
-
 function resolveStoreConfig(options) {
   let storeFile = process.env.ENGINE_CAPABILITY_FILE;
   let storeDir = process.env.ENGINE_CAPABILITY_DIR;
@@ -403,22 +269,21 @@ function readStoreRows(storeFile, silentWarn = false) {
   return rows;
 }
 
-function appendRow(storeFile, row) {
-  const line = `${JSON.stringify(row)}\n`;
-  fs.appendFileSync(storeFile, line, { mode: 0o600 });
-}
-
 // Logic to merge events per runner, model, role
 function mergeCurrentState(rows, runner, model, role, nowMs) {
   let mergedQuota = null;
   let mergedSkill = null;
 
   for (const row of rows) {
-    if (row.runner !== runner || row.model !== model || row.role !== role) {
+    if (row.runner !== runner || row.model !== model) {
       continue;
     }
 
-    // Process capability.quota
+    // Process capability.quota — ROLE-AGNOSTIC: quota is a per-MODEL pool (subscription
+    // pools and endpoint wallets are account-level, not role-level). Keying the merge on
+    // role fragmented the pool: a live 'available' probe recorded under role=reviewer
+    // could never clear a stale-but-unexpired 'exhausted' recorded under role=implementer
+    // (2026-07-17 grok incident, events 13 vs 15). skill_transport below stays role-keyed.
     if (row.capability && row.capability.quota) {
       const q = row.capability.quota;
       const observedMs = toDateMs(row.observed_at) || nowMs;
@@ -447,6 +312,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
         ttl_seconds,
         isExpired,
         observedMs,
+        sourceRole: row.role,
         eventId: toEventId(row.event_id) || 0
       };
 
@@ -499,7 +365,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
     // INDEPENDENTLY): a native-only bench must NOT clobber a prior prompt_pack result and
     // vice versa. For each field, the latest event whose value is not 'unknown' wins;
     // last_bench_id follows the latest skill event overall. (gpt-5.5 batch2 R2 M1)
-    if (row.capability && row.capability.skill_transport) {
+    if (row.role === role && row.capability && row.capability.skill_transport) {
       const s = row.capability.skill_transport;
       const eid = toEventId(row.event_id) || 0;
       if (!mergedSkill) {
@@ -564,7 +430,10 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
         reset_at: quotaResetAt,
         confidence: quotaConfidence,
         evidence: quotaEvidence,
-        ttl_seconds: quotaTtlSeconds
+        ttl_seconds: quotaTtlSeconds,
+        // Output-only (not part of the recorded event schema): which role's observation
+        // won the role-agnostic per-model merge. Provenance for cross-role clears.
+        source_role: mergedQuota ? mergedQuota.sourceRole : null
       },
       skill_transport: {
         native: skillNative,
@@ -621,6 +490,13 @@ function classifyErrorContent(content) {
     text.includes('quota limit') ||
     text.includes('billing quota')
   ) {
+    return 'quota_exhausted';
+  }
+  // payment/balance phrases need an error/status co-occurrence so benign prose
+  // ("the payment required field on the checkout form") is not misclassified
+  const hasErrCtx = text.includes('402') || text.includes('status')
+    || text.includes('error') || text.includes('http');
+  if ((text.includes('balance exhausted') || text.includes('payment required')) && hasErrCtx) {
     return 'quota_exhausted';
   }
 
@@ -722,7 +598,7 @@ function main() {
     const storedRow = { ...event };
     delete storedRow.event_id;
 
-    const writtenRow = withWriteLock(storeDir, lockFile, () => {
+    const writtenRow = withWriteLock({ storeDir, lockFile, name: 'capability' }, () => {
       const rows = readStoreRows(storeFile, true);
       const assigned = maxEventId(rows) + 1;
       const row = { ...storedRow, event_id: assigned };
@@ -757,17 +633,24 @@ function main() {
     const { storeFile } = resolveStoreConfig(options);
     const rows = readStoreRows(storeFile, true);
 
-    // Group rows by runner, model, role
+    // Group rows by (runner, model) — quota is a per-MODEL pool (role-agnostic merge),
+    // so per-role grouping would emit duplicate/contradictory rows for the same pool.
     const groups = new Map();
     for (const row of rows) {
-      const key = `${row.runner}\u0000${row.model}\u0000${row.role}`;
-      groups.set(key, { runner: row.runner, model: row.model, role: row.role });
+      const key = `${row.runner}\u0000${row.model}`;
+      groups.set(key, { runner: row.runner, model: row.model });
     }
 
     const mergedList = [];
-    for (const { runner, model, role } of groups.values()) {
-      const merged = mergeCurrentState(rows, runner, model, role, nowMs);
-      if (merged.capability && merged.capability.quota && merged.capability.quota.status !== 'unknown') {
+    for (const { runner, model } of groups.values()) {
+      // First pass (role null) resolves the winning quota observation; the emitted row's
+      // role echoes that observation's source role, and skill_transport follows it.
+      const probe = mergeCurrentState(rows, runner, model, null, nowMs);
+      const q = probe.capability && probe.capability.quota;
+      if (q && q.status !== 'unknown') {
+        const merged = (q.source_role != null)
+          ? mergeCurrentState(rows, runner, model, q.source_role, nowMs)
+          : probe;
         mergedList.push(merged);
       }
     }
@@ -792,7 +675,7 @@ function main() {
     }
 
     let prunedCount = 0;
-    withWriteLock(storeDir, lockFile, () => {
+    withWriteLock({ storeDir, lockFile, name: 'capability' }, () => {
       const rows = readStoreRows(storeFile, true);
       const keptRows = [];
 

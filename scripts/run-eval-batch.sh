@@ -25,7 +25,7 @@
 # The "2.5% trigger rate baseline" observed at v2.7.0 (cookys-dogfood log
 # 2026-05-14_122359) is the description-in-isolation FLOOR — not a routing
 # regression metric. Stochasticity is ±1-2 cases / 10 with runs-per-query=1.
-# Use RUNS_PER_QUERY=5 + MODEL=claude-opus-4-7 for a high-fidelity baseline
+# Use RUNS_PER_QUERY=5 + MODEL=claude-opus-4-8 for a high-fidelity baseline
 # (~5-10x cost, far less noisy).
 #
 # For real routing fidelity check, augment with manual scenario walks
@@ -34,12 +34,12 @@
 #
 # Configurable via env vars:
 #   RUNS_PER_QUERY  (default: 1)   — runs per case; 5+ stabilises stochasticity
-#   MODEL           (default: claude-sonnet-4-6) — claude-opus-4-7 for less noise
+#   MODEL           (default: claude-sonnet-5) — claude-opus-4-8 for less noise
 #   NUM_WORKERS     (default: 10)  — parallelism per skill
 #   TIMEOUT         (default: 30)  — seconds per query
 #
 # Example high-fidelity baseline run:
-#   RUNS_PER_QUERY=5 MODEL=claude-opus-4-7 bash scripts/run-eval-batch.sh
+#   RUNS_PER_QUERY=5 MODEL=claude-opus-4-8 bash scripts/run-eval-batch.sh
 set -euo pipefail
 
 # Single-instance lock: two concurrent eval batches would each create
@@ -58,7 +58,7 @@ if command -v flock >/dev/null 2>&1; then
 fi
 
 RUNS_PER_QUERY="${RUNS_PER_QUERY:-1}"
-MODEL="${MODEL:-claude-sonnet-4-6}"
+MODEL="${MODEL:-claude-sonnet-5}"
 NUM_WORKERS="${NUM_WORKERS:-10}"
 TIMEOUT="${TIMEOUT:-30}"
 RUN_EVAL_CMD="${RUN_EVAL_CMD:-python3 -m scripts.run_eval}"

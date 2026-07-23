@@ -27,6 +27,26 @@ git pull --ff-only
 
 AFTER="$(git rev-parse --short HEAD 2>/dev/null || echo '?')"
 
+# Also refresh the Claude Code marketplace clone — session start resolves the
+# plugin VERSION from its catalog, so leaving it stale silently loads an old
+# skill set even with the dev symlink + registry correct (2026-07-17 lesson:
+# a 6/4-frozen clone fed 2.17.2 to a session on a 2.32.46 repo). Best-effort:
+# a dirty/absent clone warns but never fails the repo update.
+MKT_DIR="$HOME/.claude/plugins/marketplaces/autopilot"
+if [[ -d "$MKT_DIR/.git" ]]; then
+  if git -C "$MKT_DIR" diff --quiet && git -C "$MKT_DIR" diff --cached --quiet; then
+    if git -C "$MKT_DIR" pull --ff-only >/dev/null 2>&1; then
+      echo "Marketplace clone refreshed ($(git -C "$MKT_DIR" rev-parse --short HEAD))."
+    else
+      echo "WARN: marketplace clone pull failed ($MKT_DIR) — session start may resolve a stale version." >&2
+    fi
+  else
+    echo "WARN: marketplace clone has local changes ($MKT_DIR) — not pulled; clean it or session start may resolve a stale version." >&2
+  fi
+else
+  echo "(No Claude Code marketplace clone at $MKT_DIR — skipping that layer.)"
+fi
+
 echo ""
 if [[ "$BEFORE" == "$AFTER" ]]; then
   echo "Already up to date ($AFTER) — nothing pulled."

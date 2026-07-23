@@ -262,11 +262,77 @@ function sourceTrustForEngine(engine) {
 const FALLBACK_REVIEW_RUNNERS = new Set(['codex', 'agy', 'grok', 'claude-native']);
 const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
+// Endpoint wiring (v2.32.45): the only reviewer runners that consume a named
+// endpoint credential (dispatch-review.sh --endpoint <name> → resolve-endpoint.sh
+// → AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN} from ~/.autopilot/endpoints.env). Every
+// other runner (codex/agy/grok/claude-native) authenticates natively and gets NO
+// --endpoint. The name must be env-var-compatible ([A-Za-z0-9_]+, matching the
+// resolve-endpoint.sh contract); anything else (a URL, empty string) is ignored.
+const ENDPOINT_CAPABLE_REVIEW_RUNNERS = new Set(['cc-shim', 'anthropic-compatible']);
+const VALID_ENDPOINT_NAME = /^[A-Za-z0-9_]+$/;
+
 function ensureDistinctReviewFamily({ implementerEngine, reviewerEngine }) {
   const iFamily = modelFamilyOfEngine(implementerEngine);
   const rFamily = modelFamilyOfEngine(reviewerEngine);
   if (iFamily === 'unknown' || rFamily === 'unknown') return true;
   return iFamily !== rFamily;
+}
+
+// Family-conflict fallback selection (v2.32.25 design; extracted v2.32.40).
+// Shared by reviewDiff's per-round substitution AND the implement-review
+// pre-flight viability check (so the pre-flight can tell whether the loop is
+// genuinely unviable vs. rescuable by the per-round fallback). Returns the first
+// qualified cross-family ladder row, or null. Every guard fails CLOSED to the
+// pre-v2.32.25 hard block:
+//   - mode: roster.on_family_conflict must be exactly 'fallback';
+//   - provenance: roster.fallback_ladder_implementer_family must equal the ACTUAL
+//     implementer's family (a stale ladder computed against a different
+//     implementer never selects);
+//   - candidate: first ladder row whose ENGINE-derived family (row.family is
+//     advisory only) differs from the implementer family and is not unknown, whose
+//     DISPATCH model (row.model, defaulting to row.engine) derives the same family
+//     (a cross-family display id pairing a same-family model is rejected), whose
+//     runner is in the validated dispatch-review allowlist, and — for the codex
+//     runner — whose row carries a calibrated effort.
+// Preference lists (v2.32.26): HUMAN-ordered engine ids consulted BEFORE raw
+// ladder order (a preferred row must still pass every guard); review_risk=low uses
+// the _low_risk list when non-empty. implFamily 'unknown' fails closed (returns
+// null) — an unclassified implementer must never reach ladder selection.
+function selectFamilyConflictFallback({ implementerEngine, roster, reviewRisk }) {
+  const implFamily = modelFamilyOfEngine(implementerEngine);
+  if (
+    implFamily === 'unknown'
+    || !roster
+    || roster.on_family_conflict !== 'fallback'
+    || !Array.isArray(roster.fallback_ladder)
+    || typeof roster.fallback_ladder_implementer_family !== 'string'
+    || roster.fallback_ladder_implementer_family !== implFamily
+  ) {
+    return null;
+  }
+  const rowIsValid = (row) => {
+    if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') return false;
+    const rowFamily = modelFamilyOfEngine(row.engine);
+    if (rowFamily === 'unknown' || rowFamily === implFamily) return false;
+    const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
+    if (modelFamilyOfEngine(rowModel) !== rowFamily) return false;
+    if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) return false;
+    if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) return false;
+    return true;
+  };
+  const prefList = (reviewRisk === 'low'
+    && Array.isArray(roster.reviewer_fallback_preference_low_risk)
+    && roster.reviewer_fallback_preference_low_risk.length > 0)
+    ? roster.reviewer_fallback_preference_low_risk
+    : (Array.isArray(roster.reviewer_fallback_preference) ? roster.reviewer_fallback_preference : []);
+  for (const preferred of prefList) {
+    const row = roster.fallback_ladder.find((r) => r && r.engine === preferred && rowIsValid(r));
+    if (row) return row;
+  }
+  for (const row of roster.fallback_ladder) {
+    if (rowIsValid(row)) return row;
+  }
+  return null;
 }
 
 function normalizeChecklistList(value) {
@@ -402,6 +468,49 @@ function implementationResultBlocked(result) {
   return null;
 }
 
+// --- on_engine_unavailable policy wiring (2026-07-17 run E residual) ------------------
+// dispatch-hetero (v2.32.53) marks quota/rate/auth/overload worker deaths with status
+// engine_unavailable and embeds the classify-error kind in its error string as
+// "engine unavailable (<class>): ..." (dispatch-owned format). These helpers map the
+// resolver's on_engine_unavailable policy (ask|solo-fallback|wait-reset) to a
+// machine-readable action so depth-0/foreman no longer reads raw dispatch JSON and
+// applies the policy by hand. Behavior matrix per review-loop-config.md; every
+// unrecognized input fails closed to escalate.
+
+function parseEngineUnavailableClass(errorText) {
+  if (typeof errorText !== 'string') return null;
+  const match = /^engine unavailable \(([a-z_]+)\)/.exec(errorText);
+  return match ? match[1] : null;
+}
+
+function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
+  if (dispatchStatus !== 'engine_unavailable' && dispatchStatus !== 'precondition_failed') {
+    return null;
+  }
+  const raw = roster && typeof roster.on_engine_unavailable === 'string'
+    ? roster.on_engine_unavailable
+    : null;
+  const policy = (raw === 'ask' || raw === 'solo-fallback' || raw === 'wait-reset') ? raw : 'ask';
+  let action = 'escalate';
+  if (dispatchStatus === 'engine_unavailable') {
+    const errorClass = parseEngineUnavailableClass(errorText);
+    // Waiting only helps capacity-shaped deaths; auth (and unparseable classes) cannot
+    // recover on a timer — escalate regardless of policy.
+    const waitable = errorClass === 'quota_exhausted' || errorClass === 'rate_limited' || errorClass === 'overloaded';
+    if ((policy === 'wait-reset' || policy === 'solo-fallback') && waitable) {
+      action = 'wait-reset';
+    }
+    return { policy, action, error_class: errorClass, dispatch_status: dispatchStatus };
+  }
+  // precondition_failed: solo-fallback is the only policy that keeps the run moving
+  // ("falls back to --solo inline" is the ORCHESTRATOR's move — the engine surfaces the
+  // directive; it cannot implement inline itself). ask and wait-reset both escalate.
+  if (policy === 'solo-fallback') {
+    action = 'solo-fallback';
+  }
+  return { policy, action, error_class: null, dispatch_status: dispatchStatus };
+}
+
 function validateReviewRoster(roster) {
   if (!roster || typeof roster !== 'object') {
     throw new TypeError('review roster is required');
@@ -452,7 +561,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists', '--endpoint']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -475,6 +584,20 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
     '--effort',
     roster.reviewer_effort,
   );
+  // Named-endpoint wiring: pass --endpoint ONLY when the effective reviewer runner
+  // is endpoint-capable AND the roster carries a valid endpoint name. A substituted
+  // family-conflict fallback reviewer has its reviewer_endpoint blanked upstream (in
+  // reviewDiff), so it can never inherit the incumbent's endpoint here. --endpoint is
+  // builder-managed (reserved in extraReviewArgs alongside --runner/--model/…), so
+  // the ONLY source of a passed endpoint is this name-validated roster field; any
+  // --endpoint in extraReviewArgs is rejected, never a trusted-caller bypass.
+  if (
+    ENDPOINT_CAPABLE_REVIEW_RUNNERS.has(roster.reviewer_runner)
+    && typeof roster.reviewer_endpoint === 'string'
+    && VALID_ENDPOINT_NAME.test(roster.reviewer_endpoint)
+  ) {
+    args.push('--endpoint', roster.reviewer_endpoint);
+  }
   if (specFile && typeof specFile === 'string') {
     args.push('--spec-file', specFile);
   }
@@ -483,7 +606,7 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists', '--endpoint']), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -725,6 +848,67 @@ function branchForceResultBlocked(result) {
   return null;
 }
 
+// Resume-from-review precheck (v2.32.45): inspect the EXISTING branch WITHOUT any
+// mutation. Returns { error, exists, tipSha, baseAncestor } — READ-ONLY git probes
+// only (rev-parse + merge-base --is-ancestor). Never deletes, moves, or creates a
+// ref. Consumed by runImplementationReviewLoop's --resume path.
+function defaultResumeInspect({ base, branch, cwd }) {
+  const runGit = (gitArgs) => spawnSync('git', gitArgs, {
+    cwd: cwd || process.cwd(),
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let rev;
+  try {
+    // NOTE: no `--` end-of-options here — `git rev-parse` reinterprets post-`--`
+    // args as PATHSPECS, so `-- <rev>` fails to resolve the revision (verified).
+    // branch originates from the trusted --branch CLI value / resolved roster.
+    rev = runGit(['rev-parse', '--verify', '--quiet', `${branch}^{commit}`]);
+  } catch (error) {
+    return { error, exists: false, tipSha: null, baseAncestor: false };
+  }
+  if (rev.error) {
+    return { error: rev.error, exists: false, tipSha: null, baseAncestor: false };
+  }
+  if (rev.status !== 0) {
+    return { error: null, exists: false, tipSha: null, baseAncestor: false };
+  }
+  const tipSha = String(rev.stdout || '').trim();
+  if (!isImmutableGitSha(tipSha)) {
+    return { error: null, exists: false, tipSha: null, baseAncestor: false };
+  }
+
+  let anc;
+  try {
+    anc = runGit(['merge-base', '--is-ancestor', base, branch]);
+  } catch (error) {
+    return { error, exists: true, tipSha, baseAncestor: false };
+  }
+  if (anc.error) {
+    return { error: anc.error, exists: true, tipSha, baseAncestor: false };
+  }
+  return { error: null, exists: true, tipSha, baseAncestor: anc.status === 0 };
+}
+
+function resumeInspectBlocked(inspect, { base, branch }) {
+  if (!inspect) return 'resume inspection produced no result';
+  if (inspect.error) {
+    return `resume inspection failed: ${inspect.error.message || String(inspect.error)}`;
+  }
+  if (!inspect.exists || typeof inspect.tipSha !== 'string' || !isImmutableGitSha(inspect.tipSha)) {
+    return `resume requested but branch ${branch} does not exist or has no commit`;
+  }
+  if (!inspect.baseAncestor) {
+    return `resume requested but base ${base} is not an ancestor of branch ${branch}`;
+  }
+  if (inspect.tipSha === base) {
+    return `resume requested but branch ${branch} is not ahead of base ${base}`;
+  }
+  return null;
+}
+
 function collectFindings(review) {
   let findings = null;
   if (review && review.review && Object.prototype.hasOwnProperty.call(review.review, 'findings')) {
@@ -809,6 +993,7 @@ class AutopilotEngine {
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
     this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
+    this.gitResumeInspect = options.gitResumeInspect || defaultResumeInspect;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
@@ -1143,56 +1328,14 @@ class AutopilotEngine {
       //   - no candidate → block.
       // A selected fallback substitutes engine+runner (+row effort when present;
       // non-codex runners ignore --effort, so an inherited roster effort is inert).
-      const implFamily = modelFamilyOfEngine(implementerEngine);
-      let fallbackRow = null;
+      // Selection extracted to the module-level selectFamilyConflictFallback so
+      // the implement-review pre-flight viability check reuses the SAME predicate
+      // (see gate below). Behavior here is byte-identical: same guards, same
+      // rowIsValid predicate, same preference-list-then-ladder-order walk.
       // implFamily 'unknown' is UNREACHABLE here today (ensureDistinctReviewFamily
-      // returns true — no conflict — when either family is unknown), but the
-      // explicit guard pins the invariant locally: if that gate's unknown-handling
-      // ever changes, an unclassified implementer must fall through to the hard
-      // block, never into ladder selection (gpt-5.5 R3 defense-in-depth).
-      if (
-        implFamily !== 'unknown'
-        && roster.on_family_conflict === 'fallback'
-        && Array.isArray(roster.fallback_ladder)
-        && typeof roster.fallback_ladder_implementer_family === 'string'
-        && roster.fallback_ladder_implementer_family === implFamily
-      ) {
-        const rowIsValid = (row) => {
-          if (!row || typeof row.engine !== 'string' || typeof row.runner !== 'string') return false;
-          const rowFamily = modelFamilyOfEngine(row.engine);
-          if (rowFamily === 'unknown' || rowFamily === implFamily) return false;
-          // R2 (gpt-5.5): the family authorization must hold for the string we
-          // actually DISPATCH, not just the display engine id — a row pairing a
-          // cross-family engine with a same-family model would otherwise slip a
-          // same-family reviewer through the decorrelation gate. Both derived
-          // families must agree, be known, and differ from the implementer's.
-          const rowModel = typeof row.model === 'string' && row.model ? row.model : row.engine;
-          if (modelFamilyOfEngine(rowModel) !== rowFamily) return false;
-          if (!FALLBACK_REVIEW_RUNNERS.has(row.runner)) return false;
-          if (row.runner === 'codex' && !VALID_EFFORTS.has(row.effort)) return false;
-          return true;
-        };
-        // Preference lists (v2.32.26, "fallback haiku is too weak"): HUMAN-ordered
-        // engine ids from config are consulted BEFORE raw ladder order — a
-        // preferred row must still pass every guard above; no valid preferred row
-        // → plain ladder order. review_risk=low uses the _low_risk list when
-        // non-empty (cheap calibrated leg for cheap rounds; the strong list for
-        // everything else).
-        const prefList = (reviewRisk === 'low'
-          && Array.isArray(roster.reviewer_fallback_preference_low_risk)
-          && roster.reviewer_fallback_preference_low_risk.length > 0)
-          ? roster.reviewer_fallback_preference_low_risk
-          : (Array.isArray(roster.reviewer_fallback_preference) ? roster.reviewer_fallback_preference : []);
-        for (const preferred of prefList) {
-          const row = roster.fallback_ladder.find((r) => r && r.engine === preferred && rowIsValid(r));
-          if (row) { fallbackRow = row; break; }
-        }
-        if (!fallbackRow) {
-          for (const row of roster.fallback_ladder) {
-            if (rowIsValid(row)) { fallbackRow = row; break; }
-          }
-        }
-      }
+      // returns true — no conflict — when either family is unknown), and the helper
+      // pins that invariant (unclassified implementer → null → the hard block below).
+      const fallbackRow = selectFamilyConflictFallback({ implementerEngine, roster, reviewRisk });
       if (fallbackRow) {
         // row.model = the exact --model dispatch string when the engine id is a
         // display id (e.g. engine "claude-haiku" dispatches as claude-native
@@ -1218,11 +1361,12 @@ class AutopilotEngine {
           // certified by the selected row — not by the unused incumbent's
           // reviewer_qualified (gpt-5.5 R6 Minor).
           reviewer_qualified: true,
-          // Defense-in-depth (gpt-5.5 R8; inert today — the engine never wires
-          // roster.reviewer_endpoint into dispatch args, and endpoint-backed
-          // runners are excluded from the allowlist): the incumbent's named
-          // endpoint must not survive onto a substituted reviewer if endpoint
-          // wiring is ever added.
+          // Defense-in-depth (gpt-5.5 R8; LIVE since v2.32.45 — buildReviewArgs now
+          // wires roster.reviewer_endpoint into --endpoint for endpoint-capable
+          // runners): the incumbent's named endpoint must NOT survive onto a
+          // substituted reviewer. Fallback runners (codex/agy/grok/claude-native)
+          // are not endpoint-capable, but blanking keeps the invariant explicit and
+          // guards against a future endpoint-capable fallback rung.
           ...(Object.prototype.hasOwnProperty.call(roster, 'reviewer_endpoint')
             ? { reviewer_endpoint: '' }
             : {}),
@@ -1630,6 +1774,16 @@ class AutopilotEngine {
     }
 
     if (!parsed || parsed.status !== 'committed') {
+      const engineUnavailable = parsed
+        ? resolveEngineUnavailableDirective(roster, parsed.status, parsed.error)
+        : null;
+      if (engineUnavailable) {
+        ledger.push(this.ledgerEntry('engine_unavailable_policy', engineUnavailable.action, this.now(), {
+          policy: engineUnavailable.policy,
+          error_class: engineUnavailable.error_class,
+          dispatch_status: engineUnavailable.dispatch_status,
+        }));
+      }
       return {
         status: 'blocked',
         phase: 'dispatch_implementation',
@@ -1639,6 +1793,7 @@ class AutopilotEngine {
         implementationResult,
         implementationArgs,
         implementation: parsed,
+        engine_unavailable: engineUnavailable,
         ledger,
       };
     }
@@ -1881,26 +2036,100 @@ class AutopilotEngine {
     }
 
     if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
-      const startedAt = this.now();
-      ledger.push(
-        this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
-          reviewer_qualified: roster.reviewer_qualified === true,
-        }),
-      );
-      return finish({
-        status: 'blocked',
-        phase: 'reviewer_qualification',
-        reason: 'reviewer is not qualified or qualification is unknown',
-        rounds: 0,
-        verdict: null,
-        roster,
-        resolveResult,
-        implementation: null,
-        review: null,
-        implementationChain: [],
-        reviewChain: [],
-        ledger,
+      // Fallback-aware pre-flight (v2.32.40): the per-round reviewDiff substitutes
+      // a qualified cross-family fallback reviewer when — and only when — a family
+      // conflict exists between the implementer and the incumbent reviewer AND a
+      // valid ladder row is available (setting reviewer_qualified:true for that
+      // round). Hard-blocking here on the UNqualified incumbent made that
+      // substitution unreachable, leaving the v2.32.25 on_family_conflict:fallback
+      // design dead for implement-review (the default openai×openai roster stayed
+      // permanently reviewer_qualification-blocked at rounds:0). So block ONLY when
+      // the loop is genuinely unviable — NOT ( family conflict AND a valid fallback
+      // row exists ). Use the SAME implementer engine reviewDiff will use
+      // (roster.implementer_engine, matching the loop's reviewDiff call). For
+      // viability, the existence of ANY valid row is decisive; review_risk only
+      // reorders the preference walk (the plain ladder walk finds a valid row
+      // regardless), so pass the roster's computed review_risk honestly rather than
+      // probing both tiers.
+      const preflightImplementerEngine = roster.implementer_engine;
+      const familyConflict = !ensureDistinctReviewFamily({
+        implementerEngine: preflightImplementerEngine,
+        reviewerEngine: roster.reviewer_engine,
       });
+      const fallbackViable = familyConflict
+        && selectFamilyConflictFallback({
+          implementerEngine: preflightImplementerEngine,
+          roster,
+          reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
+        }) !== null;
+      if (!fallbackViable) {
+        const startedAt = this.now();
+        ledger.push(
+          this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
+            reviewer_qualified: roster.reviewer_qualified === true,
+          }),
+        );
+        return finish({
+          status: 'blocked',
+          phase: 'reviewer_qualification',
+          reason: 'reviewer is not qualified or qualification is unknown',
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
+    }
+
+    // Resume-from-review (v2.32.45): opt-in re-entry when the impl leg already
+    // committed but the review leg failed (e.g. a mis-wired endpoint). Instead of
+    // re-dispatching implementation (which fail-closes on "branch already exists"
+    // and forces destroying the verified commit), skip round-1's implementTask and
+    // enter the verify+review phase against the EXISTING base..branch diff. All
+    // guards fail closed to a `resume_invalid` block with ZERO mutation; absent
+    // --resume this whole block is skipped and behavior is byte-identical.
+    const resume = input.resume === true;
+    let resumeTipSha = null;
+    if (resume) {
+      const startedAt = this.now();
+      let inspect;
+      try {
+        inspect = this.gitResumeInspect({ base, branch, cwd: loopCwd });
+      } catch (error) {
+        inspect = { error, exists: false, tipSha: null, baseAncestor: false };
+      }
+      const invalidReason = resumeInspectBlocked(inspect, { base, branch });
+      if (invalidReason) {
+        ledger.push(this.ledgerEntry('resume_precheck', 'resume_invalid', startedAt, {
+          branch,
+          base,
+        }));
+        return finish({
+          status: 'blocked',
+          phase: 'resume_invalid',
+          reason: invalidReason,
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
+      resumeTipSha = inspect.tipSha;
+      ledger.push(this.ledgerEntry('resume_precheck', 'resumed', startedAt, {
+        branch,
+        base,
+        commit: resumeTipSha,
+      }));
     }
 
     const implementationChain = [];
@@ -1922,25 +2151,64 @@ class AutopilotEngine {
           previousCommit: nextBase,
         });
 
-      implementation = this.implementTask({
-        promptFile: repairPromptFile,
-        branch: currentBranch,
-        base: nextBase,
-        roster,
-        runId: input.runId,
-        ledger: input.ledger,
-        implementationRound: round,
-        implementationStage: input.implementationStage,
-        resultJson: input.resultJson,
-        gitDir: input.gitDir,
-        extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
-          ? input.extraImplementationArgs
-          : [],
-        implementationOptions: {
-          ...(input.implementationOptions || {}),
-          cwd: loopCwd,
-        },
-      });
+      if (round === 1 && resume) {
+        // Synthesize the round-1 outcome from the already-committed branch tip
+        // (validated by the resume precheck above) instead of dispatching the
+        // implementer. The shared verify+diff+review code below runs unchanged
+        // against base..resumeTipSha. Repair rounds (round > 1) fall through to the
+        // normal implementTask dispatch.
+        const resumeStartedAt = this.now();
+        implementation = {
+          status: 'committed',
+          phase: 'resume_implementation',
+          reason: null,
+          roster,
+          resolveResult: null,
+          implementationResult: null,
+          implementationArgs: null,
+          implementation: {
+            status: 'committed',
+            runner: 'resume',
+            model: 'resume',
+            branch: currentBranch,
+            base: nextBase,
+            commit: resumeTipSha,
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+            worktree: null,
+            agent_log: null,
+            error: null,
+            containment: 'plain',
+            contained: true,
+          },
+          ledger: [this.ledgerEntry('resume_implementation', 'resumed', resumeStartedAt, {
+            branch: currentBranch,
+            base: nextBase,
+            commit: resumeTipSha,
+          })],
+        };
+      } else {
+        implementation = this.implementTask({
+          promptFile: repairPromptFile,
+          branch: currentBranch,
+          base: nextBase,
+          roster,
+          runId: input.runId,
+          ledger: input.ledger,
+          implementationRound: round,
+          implementationStage: input.implementationStage,
+          resultJson: input.resultJson,
+          gitDir: input.gitDir,
+          extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
+            ? input.extraImplementationArgs
+            : [],
+          implementationOptions: {
+            ...(input.implementationOptions || {}),
+            cwd: loopCwd,
+          },
+        });
+      }
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
       if (implementation.status !== 'committed') {
@@ -1957,6 +2225,10 @@ class AutopilotEngine {
           review: null,
           implementationChain,
           reviewChain,
+          // Machine-readable on_engine_unavailable directive (additive; null unless the
+          // dispatch died engine_unavailable/precondition_failed) — depth-0 acts on
+          // action ∈ escalate | solo-fallback | wait-reset instead of re-deriving policy.
+          engine_unavailable: implementation.engine_unavailable || null,
           ledger,
         });
       }

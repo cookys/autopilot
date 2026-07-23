@@ -24,12 +24,12 @@ const recipes = computed(() =>
           youType:
             '/research-to-ship 或口語：研究 <主題> best practice，寫 plan，收斂後再實作。紅線：不擴 scope、測試必須綠',
           journeyThesis: '人只在兩端；中間兩格是系統 ↺。',
-          humanSummary: '進場定題＋出場收產物',
-          sysSummary: '調查／plan 與寫審閘',
+          humanSummary: '進場定題＋出場收 artifact',
+          sysSummary: '調查／plan 與寫審 gate',
           stages: [
             { who: 'human', layer: '外', title: '你進場', body: '主題、紅線、什麼叫完' },
             { who: 'sys', layer: '中', title: '先查再決', body: 'survey → plan，不急改 production' },
-            { who: 'sys', layer: '內', title: '寫→審→閘', body: '夠緊才寫；證據當 done' },
+            { who: 'sys', layer: '內', title: '寫→審→gate', body: '夠緊才寫；證據當 done' },
             { who: 'human', layer: '外', title: '你出場', body: '看 commit／測／scope' }
           ],
           stateTrail: 'IDLE → INTAKE → DIVERGE → DECIDE → … → DONE',
@@ -45,24 +45,24 @@ const recipes = computed(() =>
           title: '情境 B：寫審分家（/l5 異質）',
           trigger: '你要功能落地，且不相信「同一個模型寫完又自己說過了」。',
           cause: '同模型 self-review 假 done 逃出，人被迫當第二審。',
-          effect: '寫跟審不同 runner／家族。轉移看 git artifact + VERDICT，人不用當中繼。',
+          effect: '寫跟審不同 runner／廠牌。轉移看 git artifact + VERDICT，人不用當中繼。',
           youType:
             '/l5 <功能目標>。紅線例：不碰 billing、不降覆蓋率。\n（roster 決定誰寫誰審，見 review-loop-config）',
           journeyThesis: '人在兩端；中間寫⇄審 ↺ 不把你當中繼。',
           humanSummary: '進場給目標＋出場看 PR',
           sysSummary: '輕決策＋異質寫審 loop',
           stages: [
-            { who: 'human', layer: '外', title: '你進場', body: '功能目標＋no-go' },
+            { who: 'human', layer: '外', title: '你進場', body: '功能目標＋紅線' },
             { who: 'sys', layer: '中', title: '輕決策', body: '清楚就略長調查，選座位' },
             { who: 'sys', layer: '內', title: '寫⇄審 ↺', body: 'blocking 回改，不算叫你' },
-            { who: 'human', layer: '外', title: '你出場', body: '閘過＋可讀 PR／commit' }
+            { who: 'human', layer: '外', title: '你出場', body: 'gate 過＋可讀 PR／commit' }
           ],
           stateTrail: 'IDLE → INTAKE → DECIDE → DISPATCH → IMPLEMENT ⇄ REVIEW → GATE → DONE',
           notes: [
             'IMPLEMENT 成功 = dispatch-hetero 回 committed，不是 stream 裡「完成了」。',
             'GATE：secret-scan、completeness、（專案開）test-integrity…'
           ],
-          doneWhen: '異質 review 可進閘，機械閘過，你有可讀 PR／commit。',
+          doneWhen: '異質 review 可進 gate，機械 gate過，你有可讀 PR／commit。',
           escalate: '連續多輪 VERDICT 仍卡住、越紅線，或 implementer 一直 dirty／no_op。'
         },
         {
@@ -75,19 +75,19 @@ const recipes = computed(() =>
             '1) 只讀地圖：「只讀，畫架構地圖，未授權不改檔」（explore）\n   若要接 autopilot config：/onboard（會改檔）\n2) 你確認後再：/l3 或 /l4 做「第一刀」小變更',
           journeyThesis: '人出場兩次（讀授權／放行）；讀與小刀是系統。',
           humanSummary: '授權只讀＋放行第一刀',
-          sysSummary: '畫地圖＋小變更過閘',
+          sysSummary: '畫地圖＋小變更過 gate',
           stages: [
             { who: 'human', layer: '外', title: '你進場', body: '只讀授權＋protected paths' },
             { who: 'sys', layer: '中', title: '讀邊界', body: 'explore 出地圖，repo 應乾淨' },
             { who: 'human', layer: '外', title: '你放行', body: '看完地圖才開第一刀 scope' },
-            { who: 'sys', layer: '內', title: '小刀實作', body: '小變更＋審＋閘' }
+            { who: 'sys', layer: '內', title: '小刀實作', body: '小變更＋審＋gate' }
           ],
           stateTrail: 'IDLE → INTAKE → DIVERGE*（讀）→ DECIDE → IMPLEMENT → … → DONE',
           notes: [
             'DIVERGE* 這裡是讀 repo，不是產業 survey。',
             'explore 不該改追蹤檔；/onboard 本來就會寫 .claude config。'
           ],
-          doneWhen: '有地圖 artifact（文件或報告），可選第一刀小 PR 過閘。',
+          doneWhen: '有地圖 artifact（文件或報告），可選第一刀小 PR 過 gate。',
           escalate: '宣稱只讀卻改到追蹤檔、需要 secret，或第一刀 scope 不清。'
         }
       ]
@@ -96,12 +96,12 @@ const recipes = computed(() =>
           id: 'research-to-ship',
           title: 'Recipe A: research → ship',
           trigger: 'You don’t know industry practice, but need a mergeable change—not a chat essay.',
-          cause: 'Jumping to /l5 freezes bad assumptions into code; review thrash; you research by hand anyway.',
-          effect: 'Harden assumptions before coding; less burn on a false path.',
+          cause: 'Jumping straight to /l5 freezes bad assumptions into code, review thrashes, and you end up researching by hand anyway.',
+          effect: 'Harden the assumptions before coding, and burn less on a false path.',
           youType:
             '/research-to-ship or: research best practice for <topic>, write a plan, implement after it tightens. Red lines: no scope creep, tests green',
-          journeyThesis: 'You only at both ends; middle two tiles are system ↺.',
-          humanSummary: 'Enter with topic; exit with leftovers',
+          journeyThesis: 'You appear at both ends; the middle two tiles are the system looping.',
+          humanSummary: 'Enter with a topic; exit with artifacts',
           sysSummary: 'Research/plan + write→review→gate',
           stages: [
             { who: 'human', layer: 'out', title: 'You enter', body: 'Topic, red lines, done-when' },
@@ -125,11 +125,11 @@ const recipes = computed(() =>
           effect: 'Writer and reviewer are different runners/families. Transitions need git + VERDICT—not you as glue.',
           youType:
             '/l5 <feature goal>. e.g. red lines: no billing, no coverage drop.\n(roster via review-loop-config)',
-          journeyThesis: 'You at both ends; middle write⇄review ↺ is not your glue job.',
+          journeyThesis: 'You sit at both ends; the middle write⇄review loop is not your glue job.',
           humanSummary: 'Enter with goal; exit with PR',
           sysSummary: 'Light decide + hetero write/review loop',
           stages: [
-            { who: 'human', layer: 'out', title: 'You enter', body: 'Feature goal + no-gos' },
+            { who: 'human', layer: 'out', title: 'You enter', body: 'Feature goal + red lines' },
             { who: 'sys', layer: 'mid', title: 'Light decide', body: 'Skip long survey; pick seats' },
             { who: 'sys', layer: 'in', title: 'Write⇄review ↺', body: 'Blocking → rewrite, not page you' },
             { who: 'human', layer: 'out', title: 'You exit', body: 'Gates pass + readable PR' }
@@ -150,7 +150,7 @@ const recipes = computed(() =>
           effect: 'Map boundaries before edits. /onboard writes config; true read-only is explore.',
           youType:
             '1) Read-only map: “read-only architecture map; no edits without authority” (explore)\n   To wire autopilot config: /onboard (writes files)\n2) After you accept: /l3 or /l4 for a small first cut',
-          journeyThesis: 'You appear twice (read auth / first-cut gate); map + cut are system.',
+          journeyThesis: 'You appear twice — read authorization, then the first-cut gate; the map and the cut are the system.',
           humanSummary: 'Authorize read + unlock first cut',
           sysSummary: 'Map boundaries + small change through gates',
           stages: [
@@ -184,21 +184,14 @@ const c = computed(() =>
           '人在哪一層、系統 ↺ 哪一層。',
           '怎樣算 DONE、什麼情況才叫你。'
         ],
-        legendTitle: '怎麼讀',
-        legend: [
-          { k: 'trigger', d: '什麼情況該用這條，而不是硬套 /l5' },
-          { k: 'cause → effect', d: '不用會怎樣、用了人少卡哪一段' },
-          { k: 'journey', d: '人／系統分層——不是狀態名流水帳' },
-          { k: 'done / escalate', d: '怎樣算做完 vs 才把人拉回來' }
-        ],
         labels: {
           trigger: '什麼時候用',
-          cause: '前因（若不用）',
-          effect: '後果（用了之後）',
+          cause: '不這樣做會怎樣',
+          effect: '用這條的差別',
           youType: '你下的指令',
           journey: '這條 flow 人在哪',
           trail: '工程對照（可略）',
-          notes: '對到實作',
+          notes: '工程備註（對到實作）',
           done: '怎樣算 DONE',
           esc: '怎樣才 ESCALATE'
         },
@@ -222,17 +215,10 @@ const c = computed(() =>
           'Which loop layer is human vs system ↺.',
           'DONE vs ESCALATE.'
         ],
-        legendTitle: 'How to read',
-        legend: [
-          { k: 'trigger', d: 'When this path—not a blind /l5' },
-          { k: 'cause → effect', d: 'What breaks if you skip; where you stop babysitting' },
-          { k: 'journey', d: 'Human / system layers—not a state-name dump' },
-          { k: 'done / escalate', d: 'Finish criteria vs human pull-in' }
-        ],
         labels: {
           trigger: 'Trigger',
-          cause: 'Cause (if you skip)',
-          effect: 'Effect (if you use it)',
+          cause: 'If you skip this',
+          effect: 'What changes with it',
           youType: 'What you type',
           journey: 'Where you sit in this flow',
           trail: 'Engineer map (optional)',
@@ -273,20 +259,6 @@ const c = computed(() =>
       </div>
     </header>
 
-    <section class="lp-section">
-      <div class="lp-wrap">
-        <div class="lp-section-head">
-          <p class="lp-kicker">{{ c.legendTitle }}</p>
-        </div>
-        <div class="lp-who">
-          <article v-for="l in c.legend" :key="l.k" class="lp-who__card">
-            <h3><code>{{ l.k }}</code></h3>
-            <p>{{ l.d }}</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
     <section
       v-for="(r, idx) in recipes"
       :key="r.id"
@@ -295,7 +267,7 @@ const c = computed(() =>
       :id="r.id"
     >
       <div class="lp-wrap">
-        <p class="lp-kicker">{{ r.id }}</p>
+        <p class="lp-kicker">{{ zh ? '起手情境' : 'starter scenario' }} 0{{ idx + 1 }} · <code>{{ r.id }}</code></p>
         <h2 class="eng-h2">{{ r.title }}</h2>
 
         <div class="recipe-ce">

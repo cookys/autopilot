@@ -8,15 +8,18 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |
+| 2026-07-16 | debug | Git worktree 共享 .git/config — worker 裸 git config 寫穿主 clone 身分（Test Bot 事故）；teardown identity 校驗防線 BACKLOG | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-16 | arch | Git ref lifecycle races — enumeration status / stable snapshots / verified ack publication / prepared ref restore / lifetime flock / probe-first review / SHA-256 disclosure | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
-| 2026-05-14 | arch | Claude Code plugin dogfood 5 lessons — catalog snapshot vs disk drift / cross-cwd hook state merge / chain prose 同檔自相矛盾 / multi-round review progressive uncovery / dogfood observe-vs-invoke trade-off | [claude-code-plugin-dogfood-lessons.md](claude-code-plugin-dogfood-lessons.md) |
+| 2026-05-14 | arch | Claude Code plugin dogfood 5 lessons — catalog snapshot vs disk drift / cross-cwd hook state merge / chain prose 同檔自相矛盾 / multi-round review progressive uncovery / dogfood observe-vs-invoke trade-off | ⚠️ `claude-code-plugin-dogfood-lessons.md` 遺失（從未 commit 進本 repo；鏡像 repo 不在此機。2026-07-16 doc-sync 發現。若他機還有請補回並 commit） |
 
 ## 知識分類
 
 | 文件 | 內容 |
 |------|------|
 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) | Git refs / dispatch branch lifecycle 的 race-safe enumeration、ack publication、prepared restore、worktree lifetime lock 與 reviewer probe patterns |
-| [claude-code-plugin-dogfood-lessons.md](claude-code-plugin-dogfood-lessons.md) | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
+| [debug-patterns.md](debug-patterns.md) | 診斷技巧與假死 pattern：529 silent-retry 分層診斷、worktree config 寫穿身分污染 |
+| ⚠️ `claude-code-plugin-dogfood-lessons.md`（遺失，見上） | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
 
 ## 跨 repo mirror
 

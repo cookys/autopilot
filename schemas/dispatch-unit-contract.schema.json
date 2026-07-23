@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autopilot.local/schemas/dispatch-unit-contract.schema.json",
+  "title": "dispatch-unit-contract",
+  "description": "Closed v1 machine-readable dispatch-unit contract for GO/NO-GO checking.",
+  "type": "object",
+  "required": ["schema", "unit_id", "role", "goal", "spec", "base_sha", "depends_on", "scope", "go", "no_go", "output", "acceptance", "budget"],
+  "properties": {
+    "schema": { "type": "integer", "const": 1 },
+    "unit_id": { "type": "string", "minLength": 1 },
+    "role": { "type": "string", "enum": ["implementer", "verification-author", "reviewer", "explorer", "verifier", "planner"] },
+    "goal": { "type": "string", "minLength": 1 },
+    "spec": {
+      "type": "object",
+      "required": ["path", "section"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "section": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+      "minItems": 0
+    },
+    "scope": {
+      "type": "object",
+      "required": ["allow_paths", "deny_paths", "max_files", "max_diff_lines"],
+      "properties": {
+        "allow_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "deny_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 0
+        },
+        "generated_mirrors": {
+          "type": "object",
+          "required": ["command", "allow_paths"],
+          "properties": {
+            "command": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            },
+            "allow_paths": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "max_files": { "type": "integer", "minimum": 1 },
+        "max_diff_lines": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "go": {
+      "type": "object",
+      "required": ["required_paths", "required_engine_role", "required_red_command"],
+      "properties": {
+        "required_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "required_engine_role": {
+          "type": "string",
+          "enum": ["implementer", "verification-author", "reviewer", "explorer", "verifier", "planner"]
+        },
+        "required_red_command": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "no_go": {
+      "type": "object",
+      "required": [
+        "on_missing_spec",
+        "on_dirty_base",
+        "on_unknown_engine",
+        "on_quota_unavailable",
+        "on_scope_violation",
+        "on_budget_exceeded",
+        "on_clarification_needed",
+        "forbidden_actions"
+      ],
+      "properties": {
+        "on_missing_spec": { "type": "string", "enum": ["stop"] },
+        "on_dirty_base": { "type": "string", "enum": ["stop"] },
+        "on_unknown_engine": { "type": "string", "enum": ["stop"] },
+        "on_quota_unavailable": { "type": "string", "enum": ["stop"] },
+        "on_scope_violation": { "type": "string", "enum": ["stop"] },
+        "on_budget_exceeded": { "type": "string", "enum": ["stop"] },
+        "on_clarification_needed": { "type": "string", "enum": ["stop"] },
+        "forbidden_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["push", "merge", "network", "dependency-change"]
+          },
+          "minItems": 4,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "required": ["kind", "paths"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["commit", "raw-artifact", "verdict", "diff"] },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["argv", "exit"],
+        "properties": {
+          "argv": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 1
+          },
+          "exit": { "type": "integer", "minimum": 0, "maximum": 255 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["wall_seconds", "max_attempts", "max_context_files"],
+      "properties": {
+        "wall_seconds": { "type": "integer", "minimum": 10, "maximum": 3600 },
+        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "max_context_files": { "type": "integer", "minimum": 1, "maximum": 20 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

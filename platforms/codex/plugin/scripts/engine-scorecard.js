@@ -2,11 +2,11 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const process = require('process');
+const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 
-const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator']);
+const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator', 'verification_author']);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'planner']);
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
@@ -45,8 +45,8 @@ const CONFIGURED_IDENTITY_FIELDS = [
 
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
-  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner|verifier|orchestrator> [--now <ISO-date>]\n\
-  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner|verifier|orchestrator> [--key capability|cost]\n\
+  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner|verifier|orchestrator|verification_author> [--now <ISO-date>]\n\
+  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner|verifier|orchestrator|verification_author> [--key capability|cost]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|planner> [--implementer-family <family>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder.\n\
@@ -78,24 +78,11 @@ function isHelpToken(token) {
   return token === '-h' || token === '--help' || token === 'help';
 }
 
-function expandTilde(raw) {
-  if (!raw) return raw;
-  if (raw === '~') return os.homedir();
-  if (raw.startsWith(`~${path.sep}`)) return path.join(os.homedir(), raw.slice(2));
-  return raw;
-}
-
 const SCORECARD_DIR = path.resolve(
   expandTilde(process.env.ENGINE_SCORECARD_DIR || path.join('~', '.autopilot', 'engine-scorecard')),
 );
 const SCORECARD_FILE = path.join(SCORECARD_DIR, 'scorecard.jsonl');
 const LOCK_FILE = path.join(SCORECARD_DIR, '.lock');
-
-function ensureDir(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-  }
-}
 
 function readTextLines(filePath) {
   if (!fs.existsSync(filePath)) return [];
@@ -139,21 +126,6 @@ function readStoreRows(silentWarn = false) {
   }
 
   return rows;
-}
-
-function toEventId(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  return Math.trunc(n);
-}
-
-function maxEventId(rows) {
-  let max = 0;
-  for (const row of rows) {
-    const id = toEventId(row.event_id);
-    if (id !== null && id > max) max = id;
-  }
-  return max;
 }
 
 function toDateMs(value) {
@@ -244,84 +216,6 @@ function validateRecordRow(row) {
   if (!VALID_COST_SOURCES.has(row.cost.source)) {
     failValidation(`invalid cost.source '${row.cost.source}'`);
   }
-}
-
-// Pure-Node synchronous sleep (no child process — keeps the dependency-minimal premise).
-function sleepMs(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, ms));
-}
-
-// Liveness probe for the current lock holder. The lock file stores the holder's PID;
-// an EMPTY / non-numeric / unreadable lock (a writer that crashed before/after writing,
-// or a leftover) is treated as STALE so it can be stolen rather than wedging writes.
-function lockHolderAlive() {
-  let content;
-  try {
-    content = fs.readFileSync(LOCK_FILE, 'utf8').trim();
-  } catch {
-    return false; // vanished/unreadable → not a live holder
-  }
-  const pid = Number(content);
-  if (!Number.isInteger(pid) || pid <= 0) return false; // empty/garbage → stale
-  try {
-    process.kill(pid, 0); // signal 0 = existence probe, sends nothing
-    return true;
-  } catch (err) {
-    if (err.code === 'EPERM') return true; // exists but owned by another user → assume live
-    return false; // ESRCH (no such process) etc → dead → stale
-  }
-}
-
-// Lock strategy: exclusive O_CREAT|O_EXCL lock file holding the writer's PID, with a
-// PID-liveness STALE-LOCK BREAKER so a crashed writer cannot permanently wedge appends.
-function acquireLock() {
-  ensureDir(SCORECARD_DIR);
-  const deadline = Date.now() + 8000;
-  let delayMs = 5;
-
-  while (true) {
-    try {
-      const fd = fs.openSync(LOCK_FILE, 'wx');
-      fs.writeSync(fd, String(process.pid));
-      fs.closeSync(fd);
-      return;
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      // Stale-lock breaker: a dead/empty holder is stolen immediately (no wait).
-      if (!lockHolderAlive()) {
-        try { fs.unlinkSync(LOCK_FILE); } catch { /* another process won the steal; just retry */ }
-        continue;
-      }
-      // A genuinely live holder: back off, bounded by the deadline.
-      if (Date.now() > deadline) {
-        throw new Error('timed out waiting for scorecard lock (held by a live process)');
-      }
-      sleepMs(delayMs);
-      delayMs = Math.min(delayMs * 2, 50);
-    }
-  }
-}
-
-function releaseLock() {
-  try {
-    fs.unlinkSync(LOCK_FILE);
-  } catch {
-    // Ignore stale lock cleanup failures.
-  }
-}
-
-function withWriteLock(callback) {
-  acquireLock();
-  try {
-    return callback();
-  } finally {
-    releaseLock();
-  }
-}
-
-function appendRow(row) {
-  const line = `${JSON.stringify(row)}\n`;
-  fs.appendFileSync(SCORECARD_FILE, line, { mode: 0o600 });
 }
 
 function parseCurrentArgs(args) {
@@ -567,11 +461,11 @@ function cmdRecord(args) {
   const stored = { ...parsed };
   delete stored.event_id;
 
-  const writtenRow = withWriteLock(() => {
+  const writtenRow = withWriteLock({ storeDir: SCORECARD_DIR, lockFile: LOCK_FILE, name: 'scorecard' }, () => {
     const rows = readStoreRows(true);
     const assigned = maxEventId(rows) + 1;
     const row = { ...stored, event_id: assigned };
-    appendRow(row);
+    appendRow(SCORECARD_FILE, row);
     return row;
   });
 

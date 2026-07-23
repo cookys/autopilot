@@ -116,14 +116,20 @@ c_overload=$(node "$CLI" classify-error --string "529 error overloaded capacity"
 c_auth=$(node "$CLI" classify-error --string "invalid API key authorization failed")
 c_net=$(node "$CLI" classify-error --string "connection timed out network error fetch failed")
 c_unknown=$(node "$CLI" classify-error --string "some random successful or generic log message")
+c_grok402=$(node "$CLI" classify-error --string "API error (status 402 Payment Required): Grok Build usage balance exhausted")
+c_benign_payment=$(node "$CLI" classify-error --string "the payment required field on the checkout form")
+c_benign_balance=$(node "$CLI" classify-error --string "balance exhausted is a phrase used in docs")
 
 [ "$c_quota" = "quota_exhausted" ] && \
 [ "$c_rate" = "rate_limited" ] && \
 [ "$c_overload" = "overloaded" ] && \
 [ "$c_auth" = "auth_failed" ] && \
 [ "$c_net" = "network_failed" ] && \
-[ "$c_unknown" = "unknown" ] && ok "8: classify-error categories map correctly" || \
-bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown"
+[ "$c_unknown" = "unknown" ] && \
+[ "$c_grok402" = "quota_exhausted" ] && \
+[ "$c_benign_payment" = "unknown" ] && \
+[ "$c_benign_balance" = "unknown" ] && ok "8: classify-error categories map correctly" || \
+bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown grok402=$c_grok402 benign_payment=$c_benign_payment benign_balance=$c_benign_balance"
 
 # 9. (P6 F4) merged `current` exposes per-field native_observed_at — the native event's OWN
 #    time, NOT the aggregate observed_at (which follows the latest event of any field). A fresh
@@ -148,6 +154,40 @@ prune_out=$(node "$CLI" prune --now 2026-07-03T01:00:00Z)
 nat_after=$(node "$CLI" current --runner agy --model m --role implementer --now 2026-07-03T01:00:00Z | jq_get capability.skill_transport.native)
 [ "$nat_after" = "supported" ] && ok "10: prune protects the native-signal carrier row" \
   || bad "10: native after prune=$nat_after ($prune_out)"
+
+# 11. Quota is a per-MODEL pool: a newer live observation under ANOTHER role must clear a
+#     stale-but-unexpired signal recorded under this role (2026-07-17 grok incident: event 13
+#     implementer/exhausted ttl 7d vs event 15 reviewer/available live probe — report kept
+#     showing exhausted because the merge fragmented the pool by role).
+reset
+echo "$(event_json grok grok-4.5 implementer exhausted high 604800 2026-07-17T05:00:00Z)" | node "$CLI" record >/dev/null
+echo "$(event_json grok grok-4.5 reviewer available high 3600 2026-07-17T08:42:00Z)" | node "$CLI" record >/dev/null
+
+impl_status=$(node "$CLI" current --runner grok --model grok-4.5 --role implementer --now 2026-07-17T09:00:00Z | jq_get capability.quota.status)
+impl_src=$(node "$CLI" current --runner grok --model grok-4.5 --role implementer --now 2026-07-17T09:00:00Z | jq_get capability.quota.source_role)
+[ "$impl_status" = "available" ] && [ "$impl_src" = "reviewer" ] \
+  && ok "11: cross-role live observation clears the per-model pool (+source_role provenance)" \
+  || bad "11: impl_status=$impl_status (want available) source_role=$impl_src (want reviewer)"
+
+# 12. report dedupes to one row per (runner, model) — no contradictory per-role duplicates
+#     for the same pool; role echoes the winning observation's source role.
+report_out=$(node "$CLI" report --capability quota --now 2026-07-17T09:00:00Z)
+report_len=$(printf '%s' "$report_out" | arrlen)
+report_status=$(printf '%s' "$report_out" | jq_get 0.capability.quota.status)
+report_role=$(printf '%s' "$report_out" | jq_get 0.role)
+[ "$report_len" = "1" ] && [ "$report_status" = "available" ] && [ "$report_role" = "reviewer" ] \
+  && ok "12: report emits one per-model row with the winning observation" \
+  || bad "12: len=$report_len status=$report_status role=$report_role"
+
+# 13. Cross-role merge must NOT weaken the unknown-never-clobbers rule: an 'unknown'
+#     observation under another role never overwrites a valid real signal.
+reset
+echo "$(event_json grok grok-4.5 implementer exhausted high 604800 2026-07-17T05:00:00Z)" | node "$CLI" record >/dev/null
+echo "$(event_json grok grok-4.5 reviewer unknown medium 3600 2026-07-17T08:42:00Z)" | node "$CLI" record >/dev/null
+
+impl_status=$(node "$CLI" current --runner grok --model grok-4.5 --role implementer --now 2026-07-17T09:00:00Z | jq_get capability.quota.status)
+[ "$impl_status" = "exhausted" ] && ok "13: cross-role unknown never clobbers a valid real signal" \
+  || bad "13: impl_status=$impl_status (want exhausted)"
 
 echo "----"
 echo "engine-capability-state unit tests: $PASS passed, $FAIL failed"

@@ -25,12 +25,13 @@
 #   4. project-config-template/review-loop-config.md  (shipped default)
 #   5. Built-in defaults below
 #
-# Output: JSON {reviewer_engine, reviewer_effort, reviewer_runner,
-#   implementer_engine, implementer_effort, implementer_runner,
-#   loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness,
-#   qc_panel (array), qc_panel_aggregation, review_risk, required_review_families,
-#   l1_required, cross_family_required, cross_family_satisfied, review_diff_scope, source,
-#   work_domain, domain_source, min_panel_size, on_engine_unavailable}
+# Output: JSON — the authoritative field set lives in schemas/review-loop-contract.schema.json
+#   (SSOT; drift-gated by scripts/check-contract-schema.js). Core roster fields:
+#   reviewer_* / implementer_* / verification_author_* seats, loop policy
+#   (loop_max_rounds, loop_convergence_verdict, spec_review, independent_harness),
+#   qc_panel(+aggregation, min_panel_size), risk tier (review_risk, required_review_families,
+#   l1_required, cross_family_*), endpoints, fallback ladder + preferences, telemetry
+#   (work_domain, domain_source, capability_state_source, quota_*), source / config_path.
 # (qc_panel = disjoint-family terminal gate; warns on stderr if the panel shares the
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
@@ -67,7 +68,7 @@ DEF_HARNESS="on"
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
 DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
 # Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
-QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-build, MiniMax-M3"
+QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-4.5, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
 # review_diff_scope: how much the per-round reviewer reads.
 #   full                  — re-read the whole base..HEAD diff every round (safe; cost
@@ -146,44 +147,27 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-CONFIG=""
-SOURCE="builtin-default"
-if [[ -n "${REVIEW_LOOP_CONFIG_OVERRIDE:-}" && -r "${REVIEW_LOOP_CONFIG_OVERRIDE:-}" ]]; then
-  CONFIG="$REVIEW_LOOP_CONFIG_OVERRIDE"; SOURCE="override"
-elif [[ -r "$PWD/.claude/review-loop-config.md" ]]; then
-  CONFIG="$PWD/.claude/review-loop-config.md"; SOURCE="project-cwd"
-elif [[ -r "$REPO_ROOT/.claude/review-loop-config.md" ]]; then
-  CONFIG="$REPO_ROOT/.claude/review-loop-config.md"; SOURCE="project-repo"
-elif [[ -r "$REPO_ROOT/project-config-template/review-loop-config.md" ]]; then
-  CONFIG="$REPO_ROOT/project-config-template/review-loop-config.md"; SOURCE="template"
-fi
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
+# shellcheck source=lib/resolve-config.sh
+. "$(dirname "$0")/lib/resolve-config.sh"
 
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+# --- locate the config file (4-tier -r ladder) ---
+resolve_config_ladder "review-loop-config.md" "REVIEW_LOOP_CONFIG_OVERRIDE" "builtin-default"
 
-read_field() { # key default
-  local key="$1" def="$2" val=""
-  if [[ -n "$CONFIG" ]]; then
-    val="$(grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$CONFIG" 2>/dev/null \
-            | head -1 | sed -E "s/^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:[[:space:]]*//I" \
-            | sed -E 's/[[:space:]]+$//')"
-  fi
-  [[ -z "$val" ]] && val="$def"
-  printf '%s' "$val"
-}
-
-REV_ENGINE="$(read_field reviewer_engine "$DEF_REV_ENGINE")"
-REV_EFFORT="$(read_field reviewer_effort "$DEF_REV_EFFORT")"
-REV_RUNNER="$(read_field reviewer_runner "$DEF_REV_RUNNER")"
-IMPL_ENGINE="$(read_field implementer_engine "$DEF_IMPL_ENGINE")"
-IMPL_EFFORT="$(read_field implementer_effort "$DEF_IMPL_EFFORT")"
-IMPL_RUNNER="$(read_field implementer_runner "$DEF_IMPL_RUNNER")"
-REV_ENDPOINT="$(read_field reviewer_endpoint "$DEF_REV_ENDPOINT")"
-IMPL_ENDPOINT="$(read_field implementer_endpoint "$DEF_IMPL_ENDPOINT")"
-VER_AUTH_PRESENT="$(read_field verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
-VER_AUTH_ENGINE="$(read_field verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
-VER_AUTH_RUNNER="$(read_field verification_author_runner "$DEF_VER_AUTHOR_RUNNER")"
-VER_AUTH_EFFORT="$(read_field verification_author_effort "$DEF_VER_AUTHOR_EFFORT")"
-VER_AUTH_ENDPOINT="$(read_field verification_author_endpoint "$DEF_VER_AUTHOR_ENDPOINT")"
+REV_ENGINE="$(read_field "$CONFIG" reviewer_engine "$DEF_REV_ENGINE")"
+REV_EFFORT="$(read_field "$CONFIG" reviewer_effort "$DEF_REV_EFFORT")"
+REV_RUNNER="$(read_field "$CONFIG" reviewer_runner "$DEF_REV_RUNNER")"
+IMPL_ENGINE="$(read_field "$CONFIG" implementer_engine "$DEF_IMPL_ENGINE")"
+IMPL_EFFORT="$(read_field "$CONFIG" implementer_effort "$DEF_IMPL_EFFORT")"
+IMPL_RUNNER="$(read_field "$CONFIG" implementer_runner "$DEF_IMPL_RUNNER")"
+REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
+IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
+VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
+VER_AUTH_ENGINE="$(read_field "$CONFIG" verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
+VER_AUTH_RUNNER="$(read_field "$CONFIG" verification_author_runner "$DEF_VER_AUTHOR_RUNNER")"
+VER_AUTH_EFFORT="$(read_field "$CONFIG" verification_author_effort "$DEF_VER_AUTHOR_EFFORT")"
+VER_AUTH_ENDPOINT="$(read_field "$CONFIG" verification_author_endpoint "$DEF_VER_AUTHOR_ENDPOINT")"
 # Endpoint names feed dispatch-*.sh --endpoint (→ resolve-endpoint.sh env-var suffix); allow
 # [A-Za-z0-9_] only (empty = none). A bad value → "" so it can't inject into the --endpoint
 # arg or the emitted JSON (same fail-closed stance as resolve-endpoint.sh's NAME_RE).
@@ -208,9 +192,9 @@ else
     exit 3
   fi
   case "$VER_AUTH_RUNNER" in
-    codex|agy|grok|cc-shim) ;;
+    codex|agy|grok|cc-shim|anthropic-compatible) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim): $VER_AUTH_RUNNER" >&2
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible): $VER_AUTH_RUNNER" >&2
       exit 3
       ;;
   esac
@@ -234,13 +218,13 @@ fi
 # high risk always uses reviewer_engine/reviewer_effort. Empty = tiering off (unchanged
 # behavior). Garbage effort → "" (tiering off), never a bogus effort value — the
 # fail-safe direction is "review with the stronger incumbent", not "skip".
-REV_ENGINE_LOW_RISK="$(read_field reviewer_engine_low_risk "$DEF_REV_ENGINE_LOW_RISK")"
-REV_EFFORT_LOW_RISK="$(read_field reviewer_effort_low_risk "$DEF_REV_EFFORT_LOW_RISK")"
+REV_ENGINE_LOW_RISK="$(read_field "$CONFIG" reviewer_engine_low_risk "$DEF_REV_ENGINE_LOW_RISK")"
+REV_EFFORT_LOW_RISK="$(read_field "$CONFIG" reviewer_effort_low_risk "$DEF_REV_EFFORT_LOW_RISK")"
 case "$REV_EFFORT_LOW_RISK" in
   ''|low|medium|high|xhigh|max) ;;
   *) echo "resolve-review-loop: ignoring invalid reviewer_effort_low_risk (must be low|medium|high|xhigh|max): $REV_EFFORT_LOW_RISK" >&2; REV_EFFORT_LOW_RISK="" ;;
 esac
-ON_FAMILY_CONFLICT="$(read_field on_family_conflict "$DEF_ON_FAMILY_CONFLICT")"
+ON_FAMILY_CONFLICT="$(read_field "$CONFIG" on_family_conflict "$DEF_ON_FAMILY_CONFLICT")"
 case "$ON_FAMILY_CONFLICT" in
   fallback|block) ;;
   *) echo "resolve-review-loop: invalid on_family_conflict (must be fallback|block): $ON_FAMILY_CONFLICT — using block (fail-closed)" >&2; ON_FAMILY_CONFLICT="block" ;;
@@ -263,14 +247,14 @@ csv_to_json_array() { # csv -> compact-ish JSON array (qc_panel style ", " sep)
   [[ "$_out" == "[]" || "$_out" == "[" ]] && _out="[]"
   printf '%s' "$_out"
 }
-REV_FB_PREF_RAW="$(read_field reviewer_fallback_preference "")"
-REV_FB_PREF_LOW_RAW="$(read_field reviewer_fallback_preference_low_risk "")"
+REV_FB_PREF_RAW="$(read_field "$CONFIG" reviewer_fallback_preference "")"
+REV_FB_PREF_LOW_RAW="$(read_field "$CONFIG" reviewer_fallback_preference_low_risk "")"
 REV_FB_PREF_JSON="$(csv_to_json_array "$REV_FB_PREF_RAW")"
 REV_FB_PREF_LOW_JSON="$(csv_to_json_array "$REV_FB_PREF_LOW_RAW")"
-MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
-CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
-SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
-SKILL_MODE_REQ="$(read_field skill_mode "")"
+MAX_ROUNDS="$(read_field "$CONFIG" loop_max_rounds "$DEF_MAX_ROUNDS")"
+CONVERGE="$(read_field "$CONFIG" loop_convergence_verdict "$DEF_CONVERGE")"
+SPEC_REVIEW="$(read_field "$CONFIG" spec_review "$DEF_SPEC_REVIEW")"
+SKILL_MODE_REQ="$(read_field "$CONFIG" skill_mode "")"
 if [[ -n "${SKILL_MODE_OVERRIDE:-}" ]]; then
   SKILL_MODE_REQ="$SKILL_MODE_OVERRIDE"
 fi
@@ -289,18 +273,18 @@ case "$CAPABILITY_STATE" in
   off) ;;
   *) CAPABILITY_STATE="on" ;;
 esac
-HARNESS="$(read_field independent_harness "$DEF_HARNESS")"
-QC_PANEL_RAW="$(read_field qc_panel "$DEF_QC_PANEL")"
-QC_AGG="$(read_field qc_panel_aggregation "$DEF_QC_AGG")"
-DIFF_SCOPE="$(read_field review_diff_scope "$DEF_DIFF_SCOPE")"
-MIN_PANEL_SIZE="$(read_field min_panel_size "$DEF_MIN_PANEL_SIZE")"
+HARNESS="$(read_field "$CONFIG" independent_harness "$DEF_HARNESS")"
+QC_PANEL_RAW="$(read_field "$CONFIG" qc_panel "$DEF_QC_PANEL")"
+QC_AGG="$(read_field "$CONFIG" qc_panel_aggregation "$DEF_QC_AGG")"
+DIFF_SCOPE="$(read_field "$CONFIG" review_diff_scope "$DEF_DIFF_SCOPE")"
+MIN_PANEL_SIZE="$(read_field "$CONFIG" min_panel_size "$DEF_MIN_PANEL_SIZE")"
 # Fail-safe: must be an integer >= 1, else fall back to the safe default. Standalone —
 # NOT coupled to required_review_families (lens diversity != family decorrelation).
 if ! { [[ "$MIN_PANEL_SIZE" =~ ^[0-9]+$ ]] && [[ "$MIN_PANEL_SIZE" -ge 1 ]]; }; then
   MIN_PANEL_SIZE="$DEF_MIN_PANEL_SIZE"
 fi
 
-ON_ENGINE_UNAVAILABLE="$(read_field on_engine_unavailable "$DEF_ON_ENGINE_UNAVAILABLE")"
+ON_ENGINE_UNAVAILABLE="$(read_field "$CONFIG" on_engine_unavailable "$DEF_ON_ENGINE_UNAVAILABLE")"
 case "$ON_ENGINE_UNAVAILABLE" in
   ask|solo-fallback|wait-reset) ;;
   *)
@@ -309,7 +293,7 @@ case "$ON_ENGINE_UNAVAILABLE" in
     ;;
 esac
 
-DENSITY_SCALING_CFG="$(read_field density_scaling "off")"
+DENSITY_SCALING_CFG="$(read_field "$CONFIG" density_scaling "off")"
 case "$DENSITY_SCALING_CFG" in on|off) ;; *) DENSITY_SCALING_CFG="off" ;; esac
 
 # Map an engine name → vendor family (for the decorrelation overlap warning).

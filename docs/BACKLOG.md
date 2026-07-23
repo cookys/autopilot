@@ -12,6 +12,19 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ---
 
+### Codex payload install-time generation（C-Spike ✅ SPIKE-PASS 2026-07-17，think-tank P6 裁決）
+- **Trigger**: 下一個 symlink-hostile 平台要接入之前；或 payload 鏡像 churn 噪音升級為 blocking；或有 live Codex 環境可跑 `codex exec` e2e 時（quota 7/23 復位後）
+- **Context**: think-tank（Architect C-conditional / Ops A-high / QA A-high）一致否決 release-time payload branch（B）於現階段；Architect 路線＝驗證 Codex plugin loader 能否吃 install 時才由 `sync-codex-plugin-skills.sh` 生成的 git-ignored 目錄。**SPIKE-PASS 2026-07-17**：codex loader end-to-end 接受 install 時生成的 payload（marketplace add + plugin add → `installed:true`/`enabled:true`），且 sync 腳本零 git 依賴。**遷移 L 的殘餘前置**：(1) `codex exec` e2e 信心（blocked on quota until 7/23）；(2) `marketplace upgrade` live re-read 語意未測；(3) 需要一個 install-time hook 設計（何時觸發生成）。三者到位即可退役 committed mirror＋其 drift gates；否則 A 維持。
+- **Effort**: S（剩餘 Spike）＋L（若遷移）
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）；SPIKE-PASS 2026-07-17
+
+### Release-time payload branch（B）重啟條件
+- **Trigger**: CI 連續數週綠＋真實 tag/release 節奏存在（非每 push 即 shippable）＋ C-Spike 已否決 install-time 路線
+- **Context**: B 需要從零建 tag→CI→push-credential 基建；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user install 時才爆）
+- **Effort**: L
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）
+
+
 ## Format example
 
 ```markdown
@@ -25,6 +38,24 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 ---
 
 ## Active entries
+
+### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
+- **Trigger**: 下次動 `scripts/dispatch-author.sh` codex branch 或 `scripts/lib/dispatch-author-codex-transport.sh`；或首次出現真實 incomplete-tree 事故（result 被 orphan 汙染）。
+- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。
+- **Effort**: S–M。
+- **Source**: 2026-07-18 v2.32.54 P1 review round 4 + P3 terminal qc panel（gpt-5.5/opus）＋ depth-0 mutation-validated adjudication（project ledger p1 round-4 / p3 finding_adjudicated events）。
+
+### OpenCode 1.17 遷移收尾 — ✅ check 15 根治、check 16 降級 advisory（v2.32.50）
+- **Trigger**: 上游 opencode 修復 `debug skill` 輸出截斷後（可回收 check 16 為 hard-fail 時）；或 opencode 再破壞性改 plugin/serve API 時。
+- **Context**: 2026-07-17 兩檢查都收尾。**check 15 根治**：`autopilot.ts` import 了 prerelease `@opencode-ai/plugin/v2` subpath，該 subpath 在裝好的 `@opencode-ai/plugin@1.17.15` 不存在（`ERR_PACKAGE_PATH_NOT_EXPORTED`），loader 靜默吞掉 import 失敗 → 插件從未載入。遷移到有文件的 default-export `{id, server}` PluginModule shape（server 跑 setup＋回傳 `{"tool.execute.after":…}` hooks），dep bump `^1.17.15`，插件現在載入並印版本行。**check 16 降級 advisory**：`opencode debug skill` grep `dev-flow` 因**上游** opencode 1.17 `debug skill` 輸出截斷（corpus-volume-dependent；symlink 假說已被 8/8×3＋full-corpus real-dir repro 反證；最小 repro＝~28 skills 的純目錄）非決定性失敗，非 autopilot config 迴歸，無可靠 retry 數；`preflight-portability.sh` 新 `run_advisory` runner 計入 TOTAL 不計 FAILS。**殘項**：向 opencode 上游開 `debug skill` truncation issue（推薦）；opencode 1.17 `serve` 為 unsecured-by-default（`OPENCODE_SERVER_PASSWORD` auth、不 eager 載 plugin），`opencode-v2-plugin.test.sh` 已改走 `debug config` 確定性驅動。
+- **Effort**: Fix（若上游修復要回收 check 16）
+- **Source**: 2026-07-17 /l5 run C（v2.32.50）；前身 2026-07-16 deep code-audit + doc-sync（v2.32.39）
+
+### classify-error quota 共現 gate 偏寬 — 裸 `status`/`error` 子串共現即判 quota
+- **Trigger**: 下次 passive quota-capture 出現假陽性（把非額度錯誤記成 `quota_exhausted`）；或下次動 `engine-capability-state.js` 的 classify-error。
+- **Context**: v2.32.53 的 `payment required`/`balance exhausted` 共現 gate 用裸子串（`402`/`status`/`error`/`http` 任一共現即過）——opus 對抗探針實證兩個假陽性樣板可通過。要精度就把 gate 綁到數字 HTTP token（如 `\b402\b`/`status[ :=]4xx`）而非裸詞。前身兩項 run E 殘項（quota merge role 分片、`on_engine_unavailable` 接線）已於 v2.32.54 核銷。
+- **Effort**: Fix
+- **Source**: 2026-07-17 /l5 run E opus panel 🔵（殘留意見）；v2.32.54 核銷時拆出
 
 ### engine implement-review 不 wire reviewer_endpoint — endpoint-backed cc-shim reviewer 在 engine loop 內結構性不可用
 - **Trigger**: 下次要在 `engine implement-review` 迴圈裡用 endpoint-backed reviewer（GLM/MiniMax via cc-shim `--endpoint`），或碰 `src/engine/autopilot-engine.js` buildReviewArgs 段時。
@@ -663,3 +694,63 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Trigger**: 下次碰 hooks/_shared/secret-patterns.js 或有人再撞此 FP。
 - **Effort**: S。
 - **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。
+
+## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.51
+
+RESOLVED 2026-07-17（ported onto develop as v2.32.51）：dispatch-hetero.sh / dispatch-author.sh 快照消費
+repo 的 user.name/user.email，drift ⇒ 用 `git -C <repo-root>` 還原 + 結果 JSON 加 `identity_drift:true`
++ 大聲警告（不回顯值）。Implemented by grok-4.5 under the strict-contract dispatch rail; ported
+onto v2.32.48 by grok-4.5.
+
+## identity rail on dispatch-author non-strict path（2026-07-17, 低優先）
+
+- MiniMax aggregate review 指出：dispatch-author.sh 的 identity 快照/還原 gated on REPO_ROOT，
+  而 REPO_ROOT 只在 --strict-contract/--strict-roster 設；非 strict 的 explicit-CLI author 派遣
+  REPO_ROOT 空 ⇒ identity rail 靜默停用。**非 regression**（原本無 rail）、**非事故面**（author
+  是 read-only rail：scratch cwd、不建 worktree、不 commit，worker 改不到消費 repo config；
+  Test Bot 事故發生在 hetero write 路徑）。完整性 follow-up：讓 author 非 strict 路徑也 fallback
+  到 `git rev-parse --show-toplevel` 取 repo-root。
+- detach path 已查核為正確（IDENTITY_REPO_ROOT 在 dispatch_detached_run 的 declare -p 序列化
+  列表、snapshot 在 detach fork 前的 parent main flow、值傳入 child）——碼序＋序列化＋對抗實證
+  三證，但尚無端到端 detach drift 實測（目前無呼叫者傳 ledger coords，低風險）。
+
+## broader shared-config containment / per-worktree isolation（2026-07-17, follow-up）
+
+- **Trigger**: when a dispatched worker poisons a non-identity shared `.git/config` key
+  (e.g. `core.hooksPath`, `credential.helper`) or when multi-worktree concurrent dispatch
+  needs stronger isolation than emit-time restore.
+- **Context**: v2.32.51 identity rail contains ONLY `user.name`/`user.email` (local scope).
+  Other keys in the shared `.git/config` remain uncontained. Candidate directions: snapshot/
+  restore a broader key denylist, or per-worktree config isolation via
+  `extensions.worktreeConfig` so a worktree cannot write through to the shared config.
+- **Accepted limitations of the current rail** (do not re-litigate as bugs of v2.32.51):
+  1. Drift compare is **point-in-time** at emit — a worker that sets a bad identity, commits
+     with it, then restores the original before exit is undetected on its own worktree commits.
+  2. An **escaped descendant** could re-poison the shared config after emit-time restore
+     (containment is teardown hygiene, not a malicious-worker boundary).
+- **Effort**: L (design + isolation semantics).
+- **Source**: 2026-07-17 U1b panel findings remediation on identity-containment port.
+
+## dispatch-hetero strict postcheck emits empty status（2026-07-17, /l6 identity-port 兩次重現）
+
+- **Symptom**: strict-contract + detach 座標（--ledger/--run-id/--stage）下，worker 正常
+  committed、boundary/acceptance 在 depth-0 重跑全綠，但 result JSON `status:""` + exit file=1、
+  `error:null`、無 `boundary`/`acceptance` 欄位。同一 session 兩個 run 皆重現
+  （u1-identity-port-1784269379、u1b-identity-fix-1784270435）。
+- **Evidence**: depth-0 以相同 range 重跑 `check-disjointness validate`（disjoint:true）與全部
+  5 條 acceptance argv（oracle PASS 12、hetero-contract PASS 52、sync/parity/payload check 全 0）。
+- **Suspects**: detached child 內 run_strict_contract_postchecks 的失敗路徑未設
+  STRICT_POSTCHECK_STATUS 即 return？或 acceptance 巢狀 dispatch（oracle 測試本身跑
+  dispatch-hetero）與 detach env 交互。需最小重現 + 修復；修復前 strict+detach 的空 status
+  一律視為「需 depth-0 重驗」而非失敗定論。
+- **Effort**: M。**Source**: 2026-07-17 /l6 identity-port run notes。
+
+## agy 模型名稱漂移：`gemini-flash` 不再被接受（2026-07-17）
+
+- **Symptom**: `dispatch-review.sh --runner agy --model gemini-flash` → agy 0.2.x 印模型選單、
+  no_verdict。現行合法值為顯示字串（如 `Gemini 3.5 Flash (High)`）。
+- **Impact**: `review-loop-config.md` qc_panel 的 `gemini-flash` 席位、所有硬寫 gemini-flash 的
+  呼叫點會 fail-closed（no_verdict）。本輪 workaround：手動改傳完整字串（verified 可 review）。
+- **Fix direction**: 在 dispatch-review/roster resolver 加 engine-id→agy 顯示名映射，或改
+  config 值 + 更新 references/model-routing.md；加一條 agy 模型名 probe 到 harness-maintenance。
+- **Effort**: S。**Source**: 2026-07-17 /l6 QC panel gemini 席 no_verdict 診斷。

@@ -10,6 +10,8 @@
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX/scripts" \
          "$SBX/agents" \
+         "$SBX/src/engine" \
+         "$SBX/hooks/tests" \
          "$SBX/references" \
          "$SBX/skills/ceo-agent/references" \
          "$SBX/skills/dev-flow" \
@@ -30,6 +32,10 @@ cp "$REPO_ROOT/skills/quality-pipeline/references/code-review.md"     "$SBX/skil
 cp "$REPO_ROOT/skills/dev-flow/SKILL.md"                              "$SBX/skills/dev-flow/SKILL.md"
 cp "$REPO_ROOT/skills/ceo-agent/SKILL.md"                             "$SBX/skills/ceo-agent/SKILL.md"
 cp "$REPO_ROOT/references/model-routing.md"                           "$SBX/references/model-routing.md"
+# engine-unavailable error-prefix contract seeds (v2.32.54)
+cp "$REPO_ROOT/scripts/dispatch-hetero.sh"                            "$SBX/scripts/dispatch-hetero.sh"
+cp "$REPO_ROOT/src/engine/autopilot-engine.js"                        "$SBX/src/engine/autopilot-engine.js"
+cp "$REPO_ROOT/hooks/tests/autopilot-engine.test.sh"                  "$SBX/hooks/tests/autopilot-engine.test.sh"
 for c in dev-flow quality-pipeline survey think-tank; do
   cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/$c/references/model-routing.md"
 done

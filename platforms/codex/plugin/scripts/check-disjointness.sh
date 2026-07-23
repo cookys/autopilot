@@ -103,23 +103,14 @@ declare -a UNITS=()   # propose mode: "name=glob,glob,..."
 
 usage() { sed -n '2,75p' "$0" | sed 's/^# \{0,1\}//'; }
 
+# shellcheck source=lib/json-emit.sh
+. "$(dirname "$0")/lib/json-emit.sh"
+# Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
+_flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
+
 err_usage() { # message
-  printf '{ "mode": "%s", "error": "%s", "exit": 2 }\n' "${MODE:-none}" "$(json_escape "$1")"
+  printf '{ "mode": "%s", "error": "%s", "exit": 2 }\n' "${MODE:-none}" "$(_flat_json_escape "$1")"
   exit 2
-}
-
-json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
-
-# json_array_from_lines <newline-separated> → ["a","b",...] (empty → [])
-json_array_from_lines() {
-  local items="$1" out="" first=1 line
-  [ -z "$items" ] && { printf '[]'; return; }
-  while IFS= read -r line; do
-    [ -z "$line" ] && continue
-    if [ "$first" = 1 ]; then first=0; else out="$out, "; fi
-    out="$out\"$(json_escape "$line")\""
-  done <<< "$items"
-  printf '[%s]' "$out"
 }
 
 # glob_match <path> <glob> → exit 0 if path matches the glob.
@@ -276,7 +267,7 @@ if [ "$MODE" = "propose" ]; then
       if [ -n "$pair_files" ]; then
         any_overlap=1
         files_arr="$(json_array_from_lines "$pair_files")"
-        overlaps_json="$overlaps_json${overlaps_json:+, }{ \"a\": \"$(json_escape "${U_NAME[$a]}")\", \"b\": \"$(json_escape "${U_NAME[$b]}")\", \"files\": $files_arr }"
+        overlaps_json="$overlaps_json${overlaps_json:+, }{ \"a\": \"$(_flat_json_escape "${U_NAME[$a]}")\", \"b\": \"$(_flat_json_escape "${U_NAME[$b]}")\", \"files\": $files_arr }"
       fi
     done
   done
@@ -288,7 +279,7 @@ if [ "$MODE" = "propose" ]; then
     g_arr=(${U_GLOBS[$i]})
     g_lines=""
     for g in "${g_arr[@]}"; do g_lines="$g_lines${g_lines:+$'\n'}$g"; done
-    units_json="$units_json${units_json:+, }{ \"name\": \"$(json_escape "${U_NAME[$i]}")\", \"globs\": $(json_array_from_lines "$g_lines") }"
+    units_json="$units_json${units_json:+, }{ \"name\": \"$(_flat_json_escape "${U_NAME[$i]}")\", \"globs\": $(json_array_from_lines "$g_lines") }"
   done
 
   deny_json="$(json_array_from_lines "$deny_hits")"
@@ -362,5 +353,5 @@ disjoint="true"; exit_code=0
 if [ -n "$undeclared" ] || [ -n "$deny_hits" ]; then disjoint="false"; exit_code=1; fi
 
 printf '{ "mode": "validate", "range": "%s", "disjoint": %s, "declared": %s, "actual_touched_files": %s, "undeclared_touches": %s, "denylist_hits": %s }\n' \
-  "$(json_escape "$RANGE")" "$disjoint" "$declared_json" "$actual_json" "$undeclared_json" "$deny_json"
+  "$(_flat_json_escape "$RANGE")" "$disjoint" "$declared_json" "$actual_json" "$undeclared_json" "$deny_json"
 exit "$exit_code"

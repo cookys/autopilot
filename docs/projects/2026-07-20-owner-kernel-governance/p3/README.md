@@ -246,6 +246,93 @@ verification, action permit/execution, durable witness append, acceptance coordi
 integration. A caller with unrestricted root already lies outside this containment model. P3.5 must pin
 the P3.3 verifier and integrate the broker/witness/action path before any autonomous authority claim.
 
+## P3.5a Authenticated Intake Shadow Host
+
+`src/engine/supervised-authenticated-intake.js` implements the signed owner-intake verifier and durable
+local replay store. `src/engine/supervised-intake-host.py`,
+`src/engine/supervised-intake-gateway.py`, `src/engine/supervised-intake-worker.py`, and
+`src/engine/supervised-intake-verifier.js` compose it into a root-installed Linux shadow host. This is
+the first real P3.3 host adapter, but it remains evidence only: every successful record says
+`status: "verified_intake"`, `owner_kernel_authority: "none"`, and
+`acceptance: "not_available"`.
+
+- Installation is an explicit root-operator handoff. It snapshots the host, P3.4 support code, gateway,
+  worker, verifier, P3.3 contract and its minimal dependencies, canonical public keyring, and a Node
+  executable into a root-owned release tree. The Node executable is an install-time source input because
+  this host may not have a system Node binary; runtime executes only the hash-bound root-owned snapshot.
+  Installation runs a fixed Ed25519 crypto preflight against that copied snapshot before succeeding.
+  It assembles and validates the snapshot in a root-owned sibling staging directory, then atomically renames
+  it to the requested release root; a hard interruption leaves no partial release at that root and does not
+  block a later retry.
+  The installed `begin` and `submit` commands accept no alternate config, keyring, Node, module, policy,
+  executable, state-root, socket, or worker path.
+- A separate non-login `autopilot-verifier` identity owns the verifier and its `0700` durable state;
+  P3.5 creates `autopilot-intake-worker`, a distinct no-supplementary-group identity from the pre-existing
+  P3.4 `autopilot-worker` worker identity and its private group, which the P3.4 broker receives as a
+  supplementary group. Installation rejects any UID/GID alias between the P3.5 account and the legacy
+  identity. Root emits a one-time short-lived
+  session challenge on `begin`, stores only its SHA-256 hash, atomically publishes a fully assembled session,
+  and reaps expired/stale-pending sessions on a later `begin` under a root-owned begin lease that enforces the
+  fixed session cap. During this one-time worker-identity migration, the reaper accepts only exact old,
+  current, sealed, or seal-in-progress P3.5a layouts. It removes only strict-pattern, identity-checked legacy
+  request files and crash temporaries before removing an expired session, so an interrupted prior release does
+  not wedge `begin`. `submit` gets an exclusive root-owned claim,
+  treats stdin as opaque bounded bytes only until the session deadline, and cleans only the session it
+  claimed. A root-owned host lease serializes verifier transactions; a busy submit leaves its open session
+  retryable instead of consuming it on replay-lock contention. Root transfers raw intake only through a
+  one-shot Unix socket after discovering the exact worker PID/cgroup. Its path is worker-UID-owned `0600`
+  inside a root-owned worker directory; root verifies `SO_PEERCRED` and the cgroup before sending any bytes,
+  and closes every other peer without a payload. No raw request is written to a worker-readable file, so
+  confidentiality does not depend on enumerating every NSS account or private-group member. The worker
+  independently validates the root handoff server PID/UID/GID. The separate root-created,
+  `root:autopilot-intake-worker` `0440` release marker contains only verifier connection metadata. The common
+  session parent is root-owned `0711`, providing traversal of known children but neither directory listing nor
+  root-state access; the gateway socket directory starts verifier-owned, worker-group `2710`.
+- The verifier gateway reads `SO_PEERCRED` before any request parsing and requires the exact discovered
+  worker PID, UID/GID, and unified cgroup-v2 path. The worker independently checks socket ancestry, mode,
+  and the connected verifier PID/UID/GID through `SO_PEERCRED`. After the gateway ready record is verified,
+  root seals the socket directory through a held descriptor as `root:worker 0710`, then changes its socket
+  pathname to worker-UID-owned `0600` before releasing the worker. The verifier retains its listener FD but
+  cannot swap the pathname during root metadata changes. Both units retain P3.4's no-new-privileges,
+  private network/tmp, protected system/home, namespace/SUID restrictions, empty capabilities, collection,
+  and exact cleanup. `RuntimeMaxSec=45s` and `TimeoutStopSec=5s` bound each transient unit even when the
+  root host is killed before its normal cleanup. The verifier intentionally omits `ProtectProc=invisible`: it must read the peer PID's
+  cgroup evidence after `SO_PEERCRED`; retaining that property would hide the evidence and fail closed.
+- Owner envelopes use only Ed25519 over a domain-separated exact canonical JSON payload. They cannot select
+  an algorithm, verifier, key URL, issuer URL, or key. The root-owned keyring fixes issuer, keyring ID,
+  epoch, public SPKI keys, and key lifetime; its canonical SHA-256 is the P3.3 attestation hash. A claim
+  binds its session challenge hash, install binding, expiry/not-before/TTL, issuer-scoped `jti`, complete
+  P3.3 trusted-intake binding, and compiled-plan hash. The installed Node verifier re-compiles the bridge
+  from the submitted raw input and invokes `verifySupervisedEngineBridgeContract()` through its own
+  host-pinned adapter. It is the single canonical parser for submitted UTF-8 request bytes and receives the
+  immutable session expiry for a final verification-time expiry check.
+- Replay state is verifier-owned local durable state, not an independent witness. The gateway holds an
+  advisory file lock; the verifier writes a durable high-water clock record, claims a `jti` with an
+  exclusive pending file, then atomically publishes a complete receipt. The store can return its historical
+  receipt for an internal exact duplicate, but the public P3.5a host session is strictly one-shot and exposes
+  no receipt-recovery protocol. Conflicting `jti`, pending/corrupt state, overlong/future/expired claims,
+  unknown or inactive keys, and host-clock rollback fail closed. A crash after the pending claim intentionally
+  blocks automatic replay rather than silently reissuing evidence.
+
+The explicit `AUTOPILOT_P35_LIVE=1` gate passed on this Linux host on 2026-07-23. It installed a disposable
+`/run` snapshot with an ephemeral Ed25519 key, completed a genuine cross-UID signed P3.3 shadow verification
+with a UTF-8 prompt, rejected a conflicting durable `jti`, concurrent same-session submit, expiry while stdin
+was open, modified installed config, and modified support code before import. A root fork race proved one
+atomic session-claim winner; a direct cross-UID socket probe verified that an unexpected peer is closed before
+receiving bytes and the exact worker PID/cgroup receives the one bounded payload. The installer rejected both
+untraversable release-root and verifier-state-root parents. It reaped an expired
+  abandoned session, an exact legacy worker-layout session, sealed and seal-in-progress sessions, and their
+  strict-pattern release, handoff-socket, and gateway-state crash temporaries. It left no transient
+  `autopilot-p35-*` unit or runtime directory. The persistent P3.4
+`autopilot-worker`, P3.5 `autopilot-intake-worker`, and `autopilot-verifier` accounts are intentional
+provisioning; the test key, release snapshot, replay state, and runtime session are removed.
+
+P3.5a must not be read as owner-action authority. It does not construct `OwnerKernel`, instantiate or call
+`AutopilotEngine`, mint or execute an action, run a dispatcher/verification command/git operation, append a
+production witness, issue a permit, or map `verified_intake` to acceptance. P3.5b still needs a shadow
+Engine consumer, externally durable independent witness/restart recovery, descriptor-pinned workspace
+identity, and the P0 corpus before any mediated effect is considered.
+
 ## Deferred Full P3 Gate
 
 Do not reduce `/l4` through `/l6` to aliases yet. Their worktree isolation, strict dispatch
@@ -292,3 +379,10 @@ no-override parser surface, exact PID/cgroup-v2 helper path, timeout hardening, 
 exclusive runtime-parent lease, failure cleanup collection, and no-authority source scan.
 `AUTOPILOT_P34B_LIVE=1` adds the root-installed dedicated-worker proof and is likewise an explicit self-hosted
 gate.
+`hooks/tests/supervised-authenticated-intake.test.sh` covers real Ed25519 verification, exact canonical
+payload parsing, keyring/attestation pinning, host-session/install/plan/binding coupling, time-window and
+clock-rollback rejection, P3.3 adapter integration, durable replay idempotence/conflict/pending state, and
+the no-authority receipt. `hooks/tests/supervised-intake-host.test.sh` covers the root snapshot material,
+no runtime trust-input override, hash-only challenge state, opaque root submit, peer-before-frame ordering,
+replay serialization, worker peer verification, and no-authority source controls.
+`hooks/tests/supervised-intake-live-host.sh` is the opt-in root/systemd/SO_PEERCRED evidence gate.

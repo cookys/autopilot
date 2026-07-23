@@ -821,6 +821,7 @@ module.exports = {
   getRequiredActionCatalogBindingIds,
   getSupervisedEngineBridgeAbi,
   getSupervisedEngineBridgeAbiHash,
+  normalizeSupervisedEngineTrustedIntakeBinding: normalizeTrustedIntake,
   validateAutopilotEngineControlSinkInventory,
   verifySupervisedEngineBridgeContract,
 };

@@ -503,6 +503,8 @@ function rebuildAsLegacyPolicy(ledger) {
   delete header.policy.action_catalog;
   delete header.policy.max_recover_cycles;
   delete header.policy.max_delegate_per_decision;
+  delete header.policy.red_lines;
+  delete header.policy.assurance_profile;
   header.policy_hash = hash(header.policy);
   const witness = new MemoryWitness({ streamId: header.witness_stream_id });
   const events = [];

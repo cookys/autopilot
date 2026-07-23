@@ -7,6 +7,7 @@ const { OwnerKernelError } = require('./errors');
 const GOVERNANCE_SCHEMA_VERSION = 1;
 const SUPPORTED_MODES = new Set(['owner-led', 'milestone-led']);
 const ACTION_CLASSES = new Set(['read_only', 'reversible', 'external', 'irreversible']);
+const ASSURANCE_PROFILES = new Set(['standard', 'conservative']);
 
 function fail(message) {
   throw new OwnerKernelError(message, 'INVALID_GOVERNANCE_POLICY');
@@ -158,6 +159,26 @@ function normalizeApprovalPolicy(raw) {
   return normalized;
 }
 
+function normalizeRedLines(raw) {
+  if (!Array.isArray(raw)) fail('governance.red_lines must be an array');
+  const seen = new Set();
+  const normalized = raw.map((entry, index) => {
+    const token = requireProtocolToken(entry, `governance.red_lines[${index}]`);
+    if (seen.has(token)) fail('governance.red_lines must not contain duplicates');
+    seen.add(token);
+    return token;
+  });
+  return normalized.sort();
+}
+
+function normalizeAssuranceProfile(raw) {
+  const profile = raw === undefined ? 'standard' : requireProtocolToken(raw, 'governance.assurance_profile');
+  if (!ASSURANCE_PROFILES.has(profile)) {
+    fail(`governance.assurance_profile must be one of ${Array.from(ASSURANCE_PROFILES).join(', ')}`);
+  }
+  return profile;
+}
+
 function resolveGovernancePolicy(config, options = {}) {
   const root = requireObject(config, 'governance config');
   rejectUnknownKeys(root, new Set(['schema_version', 'governance']), 'governance config');
@@ -178,6 +199,8 @@ function resolveGovernancePolicy(config, options = {}) {
     'action_catalog',
     'max_recover_cycles',
     'max_delegate_per_decision',
+    'red_lines',
+    'assurance_profile',
   ]), 'governance');
 
   const defaultMode = requireNonEmptyString(governance.default_mode, 'governance.default_mode');
@@ -236,6 +259,8 @@ function resolveGovernancePolicy(config, options = {}) {
       'governance.max_delegate_per_decision',
       1,
     ),
+    red_lines: normalizeRedLines(governance.red_lines === undefined ? [] : governance.red_lines),
+    assurance_profile: normalizeAssuranceProfile(governance.assurance_profile),
   };
 
   const normalized = cloneCanonical(resolved);
@@ -393,6 +418,7 @@ function freezeAcceptanceContractV2(contract) {
 
 module.exports = {
   ACTION_CLASSES,
+  ASSURANCE_PROFILES,
   GOVERNANCE_SCHEMA_VERSION,
   SUPPORTED_MODES,
   freezeAcceptanceContract,

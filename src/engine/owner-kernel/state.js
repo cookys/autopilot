@@ -1784,10 +1784,33 @@ function validateCheckpointPayload(payload, state) {
 
 function validateTranslationPayload(payload) {
   assertObject(payload, 'translation_used payload');
-  assertOnlyKeys(payload, new Set(['translation_id', 'source', 'target']), 'translation_used payload');
-  assertString(payload.translation_id, 'translation_used payload.translation_id');
+  assertOnlyKeys(payload, new Set([
+    'translation_id',
+    'invocation_id',
+    'source',
+    'target',
+    'source_detail',
+    'target_detail',
+  ]), 'translation_used payload');
+  assertProtocolToken(payload.translation_id, 'translation_used payload.translation_id');
+  if (Object.prototype.hasOwnProperty.call(payload, 'invocation_id')) {
+    assertProtocolToken(payload.invocation_id, 'translation_used payload.invocation_id');
+  }
   assertHash(payload.source, 'translation_used payload.source');
   assertHash(payload.target, 'translation_used payload.target');
+  const hasSourceDetail = Object.prototype.hasOwnProperty.call(payload, 'source_detail');
+  const hasTargetDetail = Object.prototype.hasOwnProperty.call(payload, 'target_detail');
+  if (hasSourceDetail !== hasTargetDetail) {
+    stateError('translation_used payload details must include both source_detail and target_detail');
+  }
+  if (hasSourceDetail) {
+    assertObject(payload.source_detail, 'translation_used payload.source_detail');
+    assertObject(payload.target_detail, 'translation_used payload.target_detail');
+    if (sha256(canonicalJson(payload.source_detail)) !== payload.source.toLowerCase()
+      || sha256(canonicalJson(payload.target_detail)) !== payload.target.toLowerCase()) {
+      stateError('translation_used payload detail hashes do not match source and target');
+    }
+  }
 }
 
 function validateDelegationPayload(payload, state, policy, emitter) {

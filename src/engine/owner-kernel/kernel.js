@@ -3702,14 +3702,53 @@ class OwnerKernel {
       'translation envelope',
       { runId: internal.header.run_id },
     );
+    if (!isSha256(trusted.payload.source) || !isSha256(trusted.payload.target)) {
+      throw new OwnerKernelError('translation verifier did not return source and target hashes', 'UNVERIFIED_TRANSLATION');
+    }
+    const hasTranslationId = Object.prototype.hasOwnProperty.call(trusted.payload, 'translation_id');
+    const translationId = hasTranslationId ? trusted.payload.translation_id : nextIdentifier(internal, 'translation');
+    if (typeof translationId !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(translationId)) {
+      throw new OwnerKernelError('translation verifier returned an invalid translation_id', 'UNVERIFIED_TRANSLATION');
+    }
+    const hasInvocationId = Object.prototype.hasOwnProperty.call(trusted.payload, 'invocation_id');
+    const invocationId = hasInvocationId ? trusted.payload.invocation_id : null;
+    if (hasInvocationId && (typeof invocationId !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(invocationId))) {
+      throw new OwnerKernelError('translation verifier returned an invalid invocation_id', 'UNVERIFIED_TRANSLATION');
+    }
+    const hasSourceDetail = Object.prototype.hasOwnProperty.call(trusted.payload, 'source_detail');
+    const hasTargetDetail = Object.prototype.hasOwnProperty.call(trusted.payload, 'target_detail');
+    if (hasSourceDetail !== hasTargetDetail) {
+      throw new OwnerKernelError('translation verifier must return both source_detail and target_detail', 'UNVERIFIED_TRANSLATION');
+    }
+    const payload = {
+      translation_id: translationId,
+      ...(hasInvocationId ? { invocation_id: invocationId } : {}),
+      source: trusted.payload.source.toLowerCase(),
+      target: trusted.payload.target.toLowerCase(),
+      ...(hasSourceDetail ? {
+        source_detail: cloneCanonical(trusted.payload.source_detail),
+        target_detail: cloneCanonical(trusted.payload.target_detail),
+      } : {}),
+    };
+    if (hasSourceDetail && (sha256(canonicalJson(payload.source_detail)) !== payload.source
+      || sha256(canonicalJson(payload.target_detail)) !== payload.target)) {
+      throw new OwnerKernelError('translation verifier detail hashes do not match source and target', 'UNVERIFIED_TRANSLATION');
+    }
+    const existing = internal.events.find((event) => event.type === 'translation_used'
+      && event.payload.translation_id === translationId);
+    if (existing) {
+      if (canonicalJson(existing.payload) !== canonicalJson(payload)) {
+        throw new OwnerKernelError(
+          'translation_id was already witnessed with different source or target',
+          'TRANSLATION_REPLAY_CONFLICT',
+        );
+      }
+      return cloneCanonical(existing);
+    }
     return appendInternal(this, {
       type: 'translation_used',
       emitter: { kind: 'translation', identity: trusted.identity, channel: trusted.channel },
-      payload: {
-        translation_id: nextIdentifier(internal, 'translation'),
-        source: trusted.payload.source,
-        target: trusted.payload.target,
-      },
+      payload,
     });
   }
 

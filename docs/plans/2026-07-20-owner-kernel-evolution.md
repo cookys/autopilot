@@ -575,7 +575,7 @@ general benchmark promotes a model to owner or gate duty.
 ## 5. Test / validation
 
 ```bash
-node scripts/owner-kernel.js resolve --check
+node scripts/owner-kernel.js resolve --config .claude/owner-kernel-governance.json --check
 bash hooks/tests/owner-kernel.test.sh
 bash hooks/tests/owner-events.test.sh
 bash hooks/tests/owner-action-reconciliation.test.sh

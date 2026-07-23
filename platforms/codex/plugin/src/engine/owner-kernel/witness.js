@@ -62,7 +62,12 @@ class MemoryWitness {
     this.streamId = streamId;
     // This class lives in the model-process runtime and is permanently test-only.
     // Production callers must inject a separate host-resident witness adapter.
-    this.trustTier = 'test';
+    Object.defineProperty(this, 'trustTier', {
+      value: 'test',
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
     this.identity = `memory-witness:${streamId}`;
     this.attestation_hash = sha256(`memory-witness:${streamId}`);
     this.protocol_version = 1;

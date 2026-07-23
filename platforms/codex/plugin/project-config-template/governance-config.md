@@ -1,18 +1,30 @@
 # Owner Kernel Governance Config
 
-Place the resolved project policy in `.claude/owner-kernel-governance.json`.
-Use `node scripts/owner-kernel.js resolve --config .claude/owner-kernel-governance.json --check`
-to validate it. A one-run mode override is passed to the caller and does not edit this file.
+Place the resolved project policy in `.claude/owner-kernel-governance.json`. From a consuming
+project, validate it through an explicit Autopilot source checkout or project-provided installed
+copy: `node <autopilot-source>/scripts/owner-kernel.js resolve --config
+.claude/owner-kernel-governance.json --check`. `<autopilot-source>` is a literal path, not an
+assumed environment variable. A one-run mode override is passed to the caller and does not edit
+this file.
 
 `owner-led` keeps a qualified owner active across normal work. `milestone-led` replaces the
 owner at plan, milestone, and acceptance boundaries. Neither mode is a human result-approval
 gate. Human input is required only when the frozen policy class requires an exact approval.
+
+`red_lines` is a canonical token list frozen with the policy. A compatibility invocation can add
+tokens with `-x`, but it cannot remove or replace project tokens. `assurance_profile` reserves
+the project default for the active Owner Kernel bridge: `standard` is the ordinary profile and
+`conservative` requires legacy-equivalent independent challenge coverage once that bridge is live.
+P3.0 shadow translation only records the selected profile; it does not make either profile an
+action or acceptance authority.
 
 ```json
 {
   "schema_version": 1,
   "governance": {
     "default_mode": "owner-led",
+    "red_lines": ["no-production-push", "no-secret-disclosure"],
+    "assurance_profile": "standard",
     "owner_roster": [
       {
         "identity": "qualified-owner-a",
@@ -85,6 +97,30 @@ entries must be real, verified attestations; replacing the example values with a
 does not create owner authority. A local JSONL file is not an authoritative witness. Production autonomous
 activation requires a host-resident external witness adapter and owner capability outside every model and
 workspace process; P2a callback descriptors alone cannot prove that deployment property.
+
+## Compatibility Translation (P3.0)
+
+The public command is a pure mapping and has no ledger write path:
+
+```bash
+node <autopilot-source>/scripts/owner-kernel.js translate-level \
+  --config .claude/owner-kernel-governance.json \
+  --level l3 --expand -x no-delete --check
+```
+
+It returns source/target hashes, an inline/foreman/heterogeneous topology preference, the frozen
+policy hash, and the monotonic effective red-line set. `--all` renders the four level mappings
+without recording telemetry. `--solo` is valid only for `/l4` through `/l6`; it changes topology
+to inline but cannot remove red lines.
+
+Only an integrating host using `ShadowTranslationRuntime` can turn an `/l3` translation into a
+witnessed `translation_used` event; the public CLI has no ledger write path. The adapter API
+accepts an empty action catalog and a v1 ledger-only contract only; its result always says
+`owner_kernel_authority: "shadow"` and `acceptance: "not_available"`. It is deliberately not a
+generic CLI append operation, not a replacement for existing lifecycle rails, and not evidence
+that AutopilotEngine acceptance or action sinks are Kernel-controlled. A `MemoryWitness` result is
+machine-labelled `test_only_not_eligible_for_alias_retirement`; an external receipt is still not
+alias-retirement evidence until the full P3 gate is complete.
 
 ## Action Catalog
 

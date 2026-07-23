@@ -2,6 +2,12 @@
   "schema_version": 1,
   "governance": {
     "default_mode": "owner-led",
+    "red_lines": [
+      "no-external-publish",
+      "no-production-push",
+      "no-secret-disclosure"
+    ],
+    "assurance_profile": "conservative",
     "owner_roster": [
       {
         "identity": "p1-dogfood-owner-pending-p4",

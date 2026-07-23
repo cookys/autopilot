@@ -13,7 +13,8 @@
 >
 > **Success criteria**:
 > 1. `owner-led` and `milestone-led` both resolve from project config; a one-run override changes only the
->    current run. Verified by `node scripts/owner-kernel.js resolve --check` and translation tests.
+>    current run. Verified by `node scripts/owner-kernel.js resolve --config .claude/owner-kernel-governance.json --check`
+>    and translation tests.
 > 2. P0's three-task spike records zero false acceptance, zero missed red-line escalation, at least 30%
 >    fewer mandatory model-review dispatches, and transcript-free cross-session reconstruction followed
 >    by an exact external approval. Failing any
@@ -114,7 +115,7 @@
 | P0 | Semantic inventory, absolute surface baseline, host trust probes, frozen fixtures, and three-task no-core-code spike | Pass only if at least one target host is `full`/`partial` and KR9 passes; stop only on completed disproof; otherwise `INCOMPLETE` |
 | P1 | Governance resolution, authenticated/witnessed event ledger, owner principal, approvals, checkpoints, resume, and disclosure | Policy/contract hashes stay frozen; replay is byte-identical; negative controls fail closed |
 | P2 | Unified transitions, authority, action mediation, reconciliation, exact acceptance transaction, assessment purposes | All transition/acceptance/concurrency/adversarial harnesses pass |
-| P3 | Compatibility aliases, skill simplification, docs/config migration, generated mirrors, dogfood, release metadata | One executable translation table; legacy paths no longer own trust/lifecycle semantics |
+| P3 | Compatibility translation, supervised host activation, skill simplification, docs/config migration, generated mirrors, dogfood, release metadata | One executable translation table; legacy paths are removed only after Kernel-owned live authority is proven |
 | P4 | Owner/challenger/worker role qualification and optional native runner onboarding | Zero critical false-pass qualification; unqualified engines stay non-gating |
 | L-5 | Final goal review, quality pipeline, merge, doc-sync, archive, session end, branch cleanup | Seven finish-flow gates produce concrete evidence |
 
@@ -128,7 +129,7 @@
 | P0 | **PASS FOR P1 FUNDING** | Canonical five-target classifier: `supervised-partial` is `partial`; Claude Code, Codex, OpenCode, and agy are `none`. Three actual bounded tasks passed independent family review, reduced mandatory reviews 6→3, and reconstructed from durable evidence only after exact external approval. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json); [spike evidence](p0/spike/evidence-2026-07-23-hardened-r2/) |
 | P1 | **Implemented — P2 pending** | Durable policy/event/principal/approval/checkpoint/replay/disclosure core: [`p1/README.md`](p1/README.md). Test-only witnesses cannot activate production mode; P2 must add mediated action and acceptance transaction |
 | P2 | **P2a + P2b protocol core implemented; P3 integration pending** | Enforced catalog, two-stage preclaim permits/postclaim authorizations, independently bound verifier/executor/receipt/witness roles, broker/direct execution, typed v2 verification/challenge/audit evidence, coordinator-bound atomic acceptance, pending-claim `unknown` recovery without effect replay, and bounded delegation/recovery transitions are in [`p2/README.md`](p2/README.md). This validates trusted adapter messages, not OS/IPC isolation or a production supervised host |
-| P3 | Blocked | Depends on P2 |
+| P3 | **P3.0 implemented; full activation blocked** | Deterministic `/lN` translation table, frozen red-line/profile policy, read-only CLI, and integrating-host witnessed `/l3` shadow telemetry are implemented: [`p3/README.md`](p3/README.md). This intermediate step does not bump v2.32.57 or release metadata; the live engine/broker/coordinator bridge, KR8/KR10, and alias deletion gates remain open. |
 | P4 | Blocked | Depends on P3 |
 | L-5 | Not reached | Begins only after P1-P4 complete |
 
@@ -167,7 +168,7 @@ The authoritative per-phase commands are frozen in strict dispatch-unit contract
 The final mechanical gate includes at least:
 
 ```bash
-node scripts/owner-kernel.js resolve --check
+node scripts/owner-kernel.js resolve --config .claude/owner-kernel-governance.json --check
 bash hooks/tests/owner-kernel.test.sh
 bash hooks/tests/owner-kernel-cli.test.sh
 bash hooks/tests/owner-kernel-adversarial.test.sh

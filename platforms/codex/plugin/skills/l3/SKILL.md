@@ -23,6 +23,29 @@ Hard rules:
 - The front-door changes startup ONLY — every `ceo-agent` gate (size → project setup
   → phases → finish-flow) still applies.
 
+### P3.0 shadow translation
+
+When the consuming project explicitly has `.claude/owner-kernel-governance.json` **and an
+explicit Autopilot source path**, it may resolve the read-only mapping before work. In this example,
+`<autopilot-source>` is a literal absolute source checkout or project-provided installed copy, not
+an assumed environment variable:
+
+```bash
+node <autopilot-source>/scripts/owner-kernel.js translate-level \
+  --config .claude/owner-kernel-governance.json --level l3 [--expand] [-x <red-line-csv>] --check
+```
+
+Treat the result as a frozen topology preference and red-line disclosure, never as an approval,
+action permit, or acceptance result. Do not fall back to Autopilot's own dogfood config when the
+consuming project has no config or no explicit source path. A host that provides
+`ShadowTranslationRuntime` may record the same mapping as a witnessed `translation_used` event; a
+shell/skill invocation cannot mint that event and must not claim telemetry when no host bridge is
+configured.
+
+P3.0 does not replace the existing `/l3` lifecycle, DOA, independent QC, or finish-flow rails.
+`/l4` through `/l6` remain on their present strict worktree/dispatch paths until the supervised
+engine bridge is complete.
+
 **MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
 (front-door semantics) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) (DOA,
 Prime Directives, quality gates).

@@ -99,6 +99,20 @@ assert.equal(signed.nonce_echo, 'controlnonce');
 assert.equal(signed.execution_proof, 'host_process_witnessed');
 assert.equal(signed.execution_witness.kind, 'host_wrapper_payload_hash');
 
+const metadataSpoofAttempt = witnessPayload({
+  probe: 'identity-control',
+  nonce_echo: 'identitynonce',
+}, {
+  wrapper_pid: 1,
+  parent_pid: 1,
+  wrapper_script: 'forged-wrapper.js',
+  node: 'forged-node',
+});
+assert.equal(metadataSpoofAttempt.execution_witness.wrapper_pid, process.pid);
+assert.equal(metadataSpoofAttempt.execution_witness.parent_pid, process.ppid);
+assert.equal(metadataSpoofAttempt.execution_witness.wrapper_script, path.basename(process.argv[1]));
+assert.equal(metadataSpoofAttempt.execution_witness.node, path.basename(process.execPath));
+
 const verified = JSON.parse(run(process.execPath, [
   witness, '--verify', '--payload-file', signedPath, '--nonce', 'controlnonce', '--trace-file', tracePath,
 ], { cwd: repo }).stdout);
@@ -399,6 +413,7 @@ process.stdout.write(JSON.stringify({
   probe: 'owner-kernel-p0-execution-witness-controls',
   controls: {
     signed_payload_verified: true,
+    process_identity_metadata_is_not_caller_overridable: true,
     tampered_payload_rejected: true,
     namespace_pid_trace_verified: true,
     fdwrite_trace_verified: true,

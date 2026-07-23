@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "task_id": "medium-resume",
+  "status": "authored",
+  "runner": "anthropic-compatible",
+  "model": "GLM-5.2",
+  "family": "glm",
+  "endpoint": "glm",
+  "raw_output_sha256": "ca0258aa590757a8efbcc72f409ac3af755fc21dafe53791f0548e66530199ab",
+  "normalized_output_sha256": "f04377d2c0518b60b6979ee646d26c6b12e74aec77ed877874b6c762ab034322"
+}

@@ -65,9 +65,11 @@ function witnessPayload(payload) {
     probe: payload.probe,
     nonce_echo: payload.nonce_echo,
     payload_sha256: payloadSha,
+    // These values are process-derived. Callers may control the payload, but they must not mint
+    // a different process identity into the witness that the driver later binds to its trace.
     wrapper_pid: process.pid,
     parent_pid: process.ppid,
-    wrapper_script: path.basename(__filename),
+    wrapper_script: path.basename(process.argv[1] || __filename),
     node: path.basename(process.execPath),
   };
   return {

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "task_id": "low-status",
+  "runner": "cc-shim",
+  "model": "MiniMax-M3",
+  "family": "minimax",
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "none",
+  "reviewed_artifact_sha256": "a169cb7598d2bf94ecf81a1af7c19572a70d7f447e91ee83a84edb64ebe385f3",
+  "packet_sha256": "6bab0c6d552862abc932ee891fc467d44d40eb0478820e8614978a775d56a746"
+}

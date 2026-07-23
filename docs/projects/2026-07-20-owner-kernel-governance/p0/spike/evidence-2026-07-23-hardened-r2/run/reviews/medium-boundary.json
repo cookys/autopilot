@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "task_id": "medium-boundary",
+  "runner": "anthropic-compatible",
+  "model": "GLM-5.2",
+  "family": "glm",
+  "status": "reviewed",
+  "verdict": "SHIP-AS-IS",
+  "findings": "none",
+  "reviewed_artifact_sha256": "54b77b2f759fd45dcf0eb475c0f5b21b297f8ee7d39e021c332a9539f6a8c62d",
+  "packet_sha256": "1ad93beadaead603caa00db86786d98a0649324ba5c1aaa13ddcc05c08acd502"
+}

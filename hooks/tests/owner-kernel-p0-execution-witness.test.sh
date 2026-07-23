@@ -11,6 +11,7 @@ RC=$?
 
 assert_exit_code "$RC" 0 "execution witness controls pass"
 assert_contains "$(cat "$OUT")" '"signed_payload_verified": true' "signed payload is verified"
+assert_contains "$(cat "$OUT")" '"process_identity_metadata_is_not_caller_overridable": true' "caller cannot override witnessed process identity"
 assert_contains "$(cat "$OUT")" '"tampered_payload_rejected": true' "tampered payload is rejected"
 assert_contains "$(cat "$OUT")" '"namespace_pid_trace_verified": true' "namespace trace pid is verified"
 assert_contains "$(cat "$OUT")" '"fdwrite_trace_verified": true' "fdwrite trace is verified"

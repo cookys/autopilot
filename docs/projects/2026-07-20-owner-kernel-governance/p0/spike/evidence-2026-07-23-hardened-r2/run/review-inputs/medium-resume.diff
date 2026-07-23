@@ -1,0 +1,18 @@
+diff --git a/p0-spike/medium-resume.json b/p0-spike/medium-resume.json
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/p0-spike/medium-resume.json
++{"approval":"required","evidence":["Certified AWS Solutions Architect - Amazon (2023) with renewal until 2026","Published paper in IEEE on distributed systems - DOI:10.1109/XYZ.2023.001","GitHub repository with 500+ stars for open-source project","Verifiable employment at TechCorp from 2018-2022 as Senior Developer"],"task":"medium-resume"}
+diff --git a/p0-spike/medium-resume.ledger.jsonl b/p0-spike/medium-resume.ledger.jsonl
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/p0-spike/medium-resume.ledger.jsonl
++{"type":"intent_received","task_id":"medium-resume","principal":"p0-operator","artifact_sha256":null,"descriptor_hash":null,"descriptor_content_sha256":null,"content_hash":"70caf474635060c2e6543a6aeba9a4a93e5c032d5056a4280f13b9ba5999b656"}
++{"type":"worker_artifact_recorded","task_id":"medium-resume","principal":"bounded-worker","artifact_sha256":"f04377d2c0518b60b6979ee646d26c6b12e74aec77ed877874b6c762ab034322","descriptor_hash":null,"descriptor_content_sha256":null,"content_hash":"b6ab2e7690e023836b4ba45afe52e0e3c10b8a91a5f6a5458428a9c0705886ed"}
++{"type":"non_explicit_decision","task_id":"medium-resume","principal":"p0-supervisor","artifact_sha256":null,"descriptor_hash":"191ce2625a1f4c2a0e998ef0129b517c00b21082ea259f9752bd67c0a195d3e1","descriptor_content_sha256":"f04377d2c0518b60b6979ee646d26c6b12e74aec77ed877874b6c762ab034322","content_hash":"7b5a2359518ecf0a2ba527dd500697bec91f2e60f91438124e6a53ca4d1fadcf"}
++{"type":"approval_required","task_id":"medium-resume","principal":"p0-supervisor","artifact_sha256":null,"descriptor_hash":"191ce2625a1f4c2a0e998ef0129b517c00b21082ea259f9752bd67c0a195d3e1","descriptor_content_sha256":null,"content_hash":"8d36f75c45726a9b8aeb2cc3b2ac268e0b9a97ad8a90dd2ea5dce41ef1cfeb3b"}
++{"type":"approval_granted","task_id":"medium-resume","principal":"p0-operator","artifact_sha256":null,"descriptor_hash":"191ce2625a1f4c2a0e998ef0129b517c00b21082ea259f9752bd67c0a195d3e1","descriptor_content_sha256":null,"content_hash":"fbada96ba67224c959b889b7cd2024acdf8f3bd112a5aaf5b10a83a96a3a805d"}
++{"type":"mediated_effect_completed","task_id":"medium-resume","principal":"p0-supervisor","artifact_sha256":"f04377d2c0518b60b6979ee646d26c6b12e74aec77ed877874b6c762ab034322","descriptor_hash":"191ce2625a1f4c2a0e998ef0129b517c00b21082ea259f9752bd67c0a195d3e1","descriptor_content_sha256":null,"content_hash":"385c22cd090da38bbfb8d8072451405f3595fdcc4980f44453182b00add21fa6"}
++{"type":"deterministic_verification_passed","task_id":"medium-resume","principal":"p0-verifier","artifact_sha256":"f04377d2c0518b60b6979ee646d26c6b12e74aec77ed877874b6c762ab034322","descriptor_hash":null,"descriptor_content_sha256":null,"content_hash":"9572a074133e20aa0b10bd891320cfe0449dd44104580d189cce984db09fb000"}

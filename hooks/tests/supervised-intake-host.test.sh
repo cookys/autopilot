@@ -83,8 +83,11 @@ for invalid_keyring in (
 material = host.installation_material(
     '/run/autopilot-p35-test/install',
     '/var/lib/autopilot-p35-test',
+    '/var/lib/autopilot-p35-registry-test',
+    '/var/lib/autopilot-p35-witness-test',
     {'identity': host.WORKER_IDENTITY, 'uid': 991, 'gid': 991},
     {'identity': host.VERIFIER_IDENTITY, 'uid': 992, 'gid': 992},
+    {'identity': host.SHADOW_WITNESS_IDENTITY, 'uid': 993, 'gid': 993},
     {key: '/usr/bin/' + key for key in ('node_path', 'python_path', 'setpriv_path', 'systemd_run_path', 'systemctl_path')},
     {name: {'relative_path': relative, 'sha256': 'a' * 64} for name, relative in host.FILE_LAYOUT.items()},
     keyring,
@@ -94,14 +97,20 @@ assert material['limits']['session_ttl_milliseconds'] == host.SESSION_TTL_MILLIS
 assert material['systemd_properties'] == list(host.SYSTEMD_PROPERTIES)
 assert host.WORKER_IDENTITY == 'autopilot-intake-worker'
 assert host.WORKER_IDENTITY != host.LEGACY_P34_WORKER_IDENTITY
+assert host.SHADOW_WITNESS_IDENTITY == 'autopilot-shadow-witness'
+assert material['workspace_registry']['socket'] == '/var/lib/autopilot-p35-registry-test/registry.sock'
+assert material['witness_state_root'] == '/var/lib/autopilot-p35-witness-test'
 assert 'RuntimeMaxSec=45s' in host.SYSTEMD_PROPERTIES
 assert 'TimeoutStopSec=5s' in host.SYSTEMD_PROPERTIES
 assert host.sha256_value(material) == host.sha256_value(material)
 unicode_material = host.installation_material(
     '/run/autopilot-p35-\u8acb',
     '/var/lib/autopilot-p35-\u8acb',
+    '/var/lib/autopilot-p35-registry-\u8acb',
+    '/var/lib/autopilot-p35-witness-\u8acb',
     {'identity': host.WORKER_IDENTITY, 'uid': 991, 'gid': 991},
     {'identity': host.VERIFIER_IDENTITY, 'uid': 992, 'gid': 992},
+    {'identity': host.SHADOW_WITNESS_IDENTITY, 'uid': 993, 'gid': 993},
     {key: '/usr/bin/' + key for key in ('node_path', 'python_path', 'setpriv_path', 'systemd_run_path', 'systemctl_path')},
     {name: {'relative_path': relative, 'sha256': 'a' * 64} for name, relative in host.FILE_LAYOUT.items()},
     keyring,
@@ -500,11 +509,23 @@ with tempfile.TemporaryDirectory() as temporary:
     host.P34 = RollbackP34
     host.require_private_service_account = lambda identity, _create: {
         'identity': identity,
-        'uid': 991 if identity == host.WORKER_IDENTITY else 992,
-        'gid': 991 if identity == host.WORKER_IDENTITY else 992,
+        'uid': {
+            host.WORKER_IDENTITY: 991,
+            host.VERIFIER_IDENTITY: 992,
+            host.SHADOW_WITNESS_IDENTITY: 993,
+        }[identity],
+        'gid': {
+            host.WORKER_IDENTITY: 991,
+            host.VERIFIER_IDENTITY: 992,
+            host.SHADOW_WITNESS_IDENTITY: 993,
+        }[identity],
     }
     host.require_distinct_legacy_p34_worker_identity = lambda _worker: None
     host.ensure_state_root = lambda path, _verifier, create=False: path
+    original_registry_root = host.ensure_root_private_state_root
+    original_witness_root = host.ensure_witness_state_root
+    host.ensure_root_private_state_root = lambda path, _label, create=False: path
+    host.ensure_witness_state_root = lambda path, _witness, create=False: path
     host.read_keyring_source = lambda _path: (b'{}', {'sha256': 'a' * 64})
     host.resolve_node_install_source = lambda _path: '/fake/node'
     try:
@@ -512,10 +533,13 @@ with tempfile.TemporaryDirectory() as temporary:
             host.install(types.SimpleNamespace(
                 install_root=rollback_root,
                 state_root=os.path.join(temporary, 'state'),
+                workspace_registry_root=os.path.join(temporary, 'registry'),
+                witness_state_root=os.path.join(temporary, 'witness'),
                 keyring=os.path.join(temporary, 'keyring'),
                 node_path='/fake/node',
                 create_worker=False,
                 create_verifier=False,
+                create_shadow_witness=False,
             ))
             raise AssertionError('install accepted a forced child-directory failure')
         except RollbackP34.LauncherError as error:
@@ -530,6 +554,8 @@ with tempfile.TemporaryDirectory() as temporary:
         host.require_private_service_account = original_private_account
         host.require_distinct_legacy_p34_worker_identity = original_distinct_legacy
         host.ensure_state_root = original_state_root
+        host.ensure_root_private_state_root = original_registry_root
+        host.ensure_witness_state_root = original_witness_root
         host.read_keyring_source = original_keyring_source
         host.resolve_node_install_source = original_node_source
 
@@ -540,6 +566,10 @@ assert 'candidate.close()' in gateway_source
 assert 'fcntl.flock' in gateway_source
 assert host.FILE_LAYOUT['shadow_engine_consumer'] == 'lib/supervised-shadow-engine-consumer.js'
 assert host.installation_sources()['shadow_engine_consumer'].endswith('supervised-shadow-engine-consumer.js')
+assert host.FILE_LAYOUT['workspace_registry'] == 'lib/supervised-workspace-registry.py'
+assert host.FILE_LAYOUT['shadow_witness'] == 'lib/supervised-shadow-witness.py'
+assert host.FILE_LAYOUT['shadow_witness_client'] == 'lib/supervised-shadow-witness-client.py'
+assert host.installation_sources()['workspace_registry'].endswith('supervised-workspace-registry.py')
 shadow_summary = {
     'schema_version': 1,
     'status': 'shadow_intake_recorded',
@@ -575,6 +605,112 @@ try:
     raise AssertionError('gateway accepted an accepting shadow summary')
 except gateway.GatewayError:
     pass
+ticket_material = {
+    'schema_version': 1,
+    'kind': 'p35_workspace_descriptor_ticket',
+    'install_binding_hash': 'b' * 64,
+    'registry_instance_id': 'p35-registry-fixture',
+    'registration_id': 'project-main',
+    'workspace_root_hash': 'c' * 64,
+    'immutable_base': 'd' * 40,
+    'descriptor_fingerprint_hash': 'e' * 64,
+    'descriptor_binding_hash': 'f' * 64,
+    'session_id': 'p35-session',
+    'session_challenge_hash': 'c' * 64,
+    'expires_at_ms': 10,
+}
+workspace_ticket = {**ticket_material, 'ticket_hash': host.sha256_value(ticket_material)}
+normalized_ticket = host.normalize_workspace_ticket(
+    workspace_ticket,
+    config,
+    session_id='p35-session',
+    session_challenge_hash='c' * 64,
+)
+assert normalized_ticket['descriptor_binding_hash'] == 'f' * 64
+try:
+    host.normalize_workspace_ticket(
+        {**workspace_ticket, 'workspace_root_hash': '0' * 64},
+        config,
+        session_id='p35-session',
+        session_challenge_hash='c' * 64,
+    )
+    raise AssertionError('workspace ticket hash mismatch was accepted')
+except host.HostError:
+    pass
+shadow_witness_summary = {
+    'schema_version': 1,
+    'status': 'shadow_witness_recorded',
+    'shadow_admission_id': '1' * 64,
+    'ticket_hash': normalized_ticket['ticket_hash'],
+    'capsule_hash': '2' * 64,
+    'observation_hash': '3' * 64,
+    'close_hash': '4' * 64,
+    'previous_shadow_head': '5' * 64,
+    'shadow_chain_head': '6' * 64,
+    'idempotent': False,
+    'disclosure': {
+        'engine': {'status': 'not_started', 'dispatch_authority': 'not_available'},
+        'owner_kernel_authority': 'none',
+        'effect_authority': 'none',
+        'acceptance': 'not_available',
+        'witness_assurance': 'separate_uid_local_append_only_root_readback_not_p2',
+        'workspace_assurance': 'root_held_descriptor_matches_signed_v1_path_and_base_only',
+        'content_immutability': 'not_available',
+    },
+}
+assert host.validate_shadow_witness_summary(
+    shadow_witness_summary, normalized_ticket, 'test shadow witness summary'
+) == shadow_witness_summary
+try:
+    host.validate_shadow_witness_summary(
+        {**shadow_witness_summary, 'disclosure': {**shadow_witness_summary['disclosure'], 'acceptance': 'accepted'}},
+        normalized_ticket,
+        'invalid shadow witness summary',
+    )
+    raise AssertionError('host accepted an authoritative shadow witness summary')
+except host.HostError:
+    pass
+
+class MismatchedRootReadbackClient:
+    class ShadowWitnessClientError(Exception):
+        pass
+
+    @staticmethod
+    def invoke(**kwargs):
+        assert kwargs['method'] == 'read_shadow_record'
+        assert kwargs['request'] == {
+            'shadow_admission_id': shadow_witness_summary['shadow_admission_id'],
+            'ticket_hash': normalized_ticket['ticket_hash'],
+        }
+        return {
+            'status': 'shadow_closed',
+            'idempotent': True,
+            'shadow_admission_id': shadow_witness_summary['shadow_admission_id'],
+            'ticket_hash': shadow_witness_summary['ticket_hash'],
+            'capsule_hash': shadow_witness_summary['capsule_hash'],
+            'observation_hash': shadow_witness_summary['observation_hash'],
+            'close_hash': shadow_witness_summary['close_hash'],
+            'previous_shadow_head': shadow_witness_summary['previous_shadow_head'],
+            'shadow_chain_head': '0' * 64,
+        }
+
+original_witness_client_loader = host.load_shadow_witness_client
+host.load_shadow_witness_client = lambda _install_root: MismatchedRootReadbackClient
+try:
+    try:
+        host.verify_shadow_witness_root_readback(
+            '/test-install',
+            {'witness': '/test-witness-root', 'witness_socket_path': '/test-witness.sock'},
+            {'witness_pid': 100, 'witness_uid': 101, 'witness_gid': 102, 'socket_gid': 103},
+            normalized_ticket,
+            shadow_witness_summary,
+        )
+        raise AssertionError('host accepted a mismatched root witness readback')
+    except host.HostError as error:
+        assert 'does not match' in str(error)
+finally:
+    host.load_shadow_witness_client = original_witness_client_loader
+
 submit_source = inspect.getsource(host.submit_session)
 assert 'json.loads' not in submit_source
 assert 'read_bounded_stdin(' in submit_source
@@ -672,6 +808,9 @@ for filename in (
     'supervised-intake-verifier.js',
     'supervised-authenticated-intake.js',
     'supervised-shadow-engine-consumer.js',
+    'supervised-workspace-registry.py',
+    'supervised-shadow-witness.py',
+    'supervised-shadow-witness-client.py',
 ):
     source = open(os.path.join(root, 'src', 'engine', filename), encoding='utf-8').read()
     assert 'shell=True' not in source
@@ -708,6 +847,8 @@ print('systemd_runtime_cap_is_frozen=true')
 print('root_submit_lease_is_outside_verifier_state=true')
 print('shadow_host_has_no_authority_calls=true')
 print('shadow_admission_summary_is_strict_and_non_authoritative=true')
+print('workspace_ticket_and_separate_witness_are_hash_bound=true')
+print('root_witness_readback_mismatch_is_rejected=true')
 PY
 )"
 PY_STATUS=$?
@@ -742,5 +883,7 @@ assert_contains "$PY_OUT" "systemd_runtime_cap_is_frozen=true" "P3.5 transient u
 assert_contains "$PY_OUT" "root_submit_lease_is_outside_verifier_state=true" "root submit serialization is not stored in verifier-writable state"
 assert_contains "$PY_OUT" "shadow_host_has_no_authority_calls=true" "P3.5 host stays outside Kernel/action authority"
 assert_contains "$PY_OUT" "shadow_admission_summary_is_strict_and_non_authoritative=true" "P3.5 host validates a strict non-authoritative shadow summary"
+assert_contains "$PY_OUT" "workspace_ticket_and_separate_witness_are_hash_bound=true" "P3.5c binds a root descriptor ticket and strict separate-UID witness summary"
+assert_contains "$PY_OUT" "root_witness_readback_mismatch_is_rejected=true" "P3.5c rejects a root witness readback that diverges from the gateway summary"
 
 finalize_test

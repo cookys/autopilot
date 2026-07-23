@@ -31,6 +31,7 @@ import time
 SCHEMA_VERSION = 1
 WORKER_IDENTITY = "autopilot-intake-worker"
 VERIFIER_IDENTITY = "autopilot-verifier"
+SHADOW_WITNESS_IDENTITY = "autopilot-shadow-witness"
 LEGACY_P34_WORKER_IDENTITY = "autopilot-worker"
 RUNTIME_PARENT = "/run/autopilot-intake"
 CONFIG_RELATIVE_PATH = "etc/supervised-intake-host.json"
@@ -45,6 +46,9 @@ FILE_LAYOUT = {
     "authenticated_intake": "lib/supervised-authenticated-intake.js",
     "bridge_contract": "lib/supervised-engine-bridge-contract.js",
     "shadow_engine_consumer": "lib/supervised-shadow-engine-consumer.js",
+    "workspace_registry": "lib/supervised-workspace-registry.py",
+    "shadow_witness": "lib/supervised-shadow-witness.py",
+    "shadow_witness_client": "lib/supervised-shadow-witness-client.py",
     "canonical": "lib/owner-kernel/canonical.js",
     "actions": "lib/owner-kernel/actions.js",
     "errors": "lib/owner-kernel/errors.js",
@@ -76,6 +80,7 @@ SYSTEMD_PROPERTIES = (
 GATEWAY_SYSTEMD_PROPERTIES = tuple(
     value for value in SYSTEMD_PROPERTIES if value != "ProtectProc=invisible"
 )
+WITNESS_SYSTEMD_PROPERTIES = GATEWAY_SYSTEMD_PROPERTIES
 MAX_CONFIG_BYTES = 65536
 MAX_REQUEST_BYTES = 262144
 REQUEST_TIMEOUT_SECONDS = 5
@@ -93,6 +98,7 @@ TOKEN_CHARS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"
 )
 SHA256_CHARS = frozenset("0123456789abcdef")
+GIT_SHA_CHARS = frozenset("0123456789abcdef")
 BASE64URL_CHARS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 )
@@ -226,6 +232,33 @@ def load_p34_support():
 P34 = None
 
 
+def load_snapshot_python_module(install_root, file_key, module_name):
+    current = os.path.realpath(os.path.abspath(__file__))
+    installed_host = os.path.join(install_root, FILE_LAYOUT["host"])
+    if current == installed_host:
+        source = os.path.join(install_root, FILE_LAYOUT[file_key])
+        P34.require_root_owned_path(source, file_key + " snapshot", executable=file_key in {"workspace_registry", "shadow_witness"})
+    else:
+        source = os.path.join(os.path.dirname(current), os.path.basename(FILE_LAYOUT[file_key]))
+    spec = importlib.util.spec_from_file_location(module_name, source)
+    module = importlib.util.module_from_spec(spec)
+    previous_dont_write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous_dont_write_bytecode
+    return module
+
+
+def load_workspace_registry(install_root):
+    return load_snapshot_python_module(install_root, "workspace_registry", "p35_workspace_registry")
+
+
+def load_shadow_witness_client(install_root):
+    return load_snapshot_python_module(install_root, "shadow_witness_client", "p35_shadow_witness_client")
+
+
 def fail(message):
     raise HostError(message)
 
@@ -266,6 +299,16 @@ def require_sha256(value, label):
         or any(character not in SHA256_CHARS for character in value)
     ):
         fail(label + " must be a lowercase SHA-256 digest")
+    return value
+
+
+def require_git_sha(value, label):
+    if (
+        not isinstance(value, str)
+        or len(value) != 40
+        or any(character not in GIT_SHA_CHARS for character in value)
+    ):
+        fail(label + " must be a lowercase full 40-character Git SHA")
     return value
 
 
@@ -372,7 +415,7 @@ def write_all(descriptor, content):
         remaining = remaining[written:]
 
 
-def write_atomic_root_json(path, value, mode=0o600, replace=False):
+def write_atomic_root_json(path, value, mode=0o600, replace=False, uid=0, gid=0):
     directory = os.path.dirname(path)
     temporary = os.path.join(directory, "." + os.path.basename(path) + ".pending-" + secrets.token_hex(16))
     if os.path.lexists(path) and not replace:
@@ -386,7 +429,7 @@ def write_atomic_root_json(path, value, mode=0o600, replace=False):
             mode,
         )
         temporary_exists = True
-        os.fchown(descriptor, 0, 0)
+        os.fchown(descriptor, uid, gid)
         os.fchmod(descriptor, mode)
         write_all(descriptor, canonical(value).encode("utf-8"))
         os.fsync(descriptor)
@@ -552,6 +595,43 @@ def ensure_state_root(state_root, verifier, create=False):
     return state_root
 
 
+def ensure_root_private_state_root(state_root, label, create=False):
+    state_root = require_absolute_path(state_root, label)
+    parent = os.path.dirname(state_root)
+    P34.ensure_root_directory_chain(parent)
+    if not os.path.exists(state_root):
+        if not create:
+            fail(label + " is absent")
+        P34.create_directory(state_root, 0, 0, 0o700, label)
+    require_exact_directory(state_root, 0, 0, 0o700, label)
+    return state_root
+
+
+def ensure_witness_state_root(state_root, witness, create=False):
+    state_root = require_absolute_path(state_root, "shadow witness state root")
+    parent = os.path.dirname(state_root)
+    P34.ensure_root_directory_chain(parent)
+    require_unprivileged_runtime_ancestors(state_root, "shadow witness state root")
+    if not os.path.exists(state_root):
+        if not create:
+            fail("shadow witness state root is absent")
+        P34.create_directory(
+            state_root,
+            witness["uid"],
+            witness["gid"],
+            0o700,
+            "shadow witness state root",
+        )
+    require_exact_directory(
+        state_root,
+        witness["uid"],
+        witness["gid"],
+        0o700,
+        "shadow witness state root",
+    )
+    return state_root
+
+
 def validate_keyring_bytes(raw, label):
     value = require_canonical_json_bytes(raw, label, MAX_CONFIG_BYTES)
     value = require_exact_keys(value, {"schema_version", "issuer", "keyring_id", "keyring_epoch", "keys"}, label)
@@ -620,14 +700,31 @@ def read_keyring_source(source_path):
     return raw, validate_keyring_bytes(raw, "keyring source")
 
 
-def installation_material(install_root, state_root, worker, verifier, paths, files, keyring):
+def installation_material(
+    install_root,
+    state_root,
+    workspace_registry_root,
+    witness_state_root,
+    worker,
+    verifier,
+    shadow_witness,
+    paths,
+    files,
+    keyring,
+):
     return {
         "schema_version": SCHEMA_VERSION,
         "install_root": install_root,
         "runtime_parent": RUNTIME_PARENT,
         "state_root": state_root,
+        "workspace_registry": {
+            "root": workspace_registry_root,
+            "socket": os.path.join(workspace_registry_root, "registry.sock"),
+        },
+        "witness_state_root": witness_state_root,
         "worker": worker,
         "verifier": verifier,
+        "shadow_witness": shadow_witness,
         "paths": paths,
         "files": files,
         "keyring": keyring,
@@ -656,6 +753,9 @@ def installation_sources():
         "authenticated_intake": os.path.join(source_root, "supervised-authenticated-intake.js"),
         "bridge_contract": os.path.join(source_root, "supervised-engine-bridge-contract.js"),
         "shadow_engine_consumer": os.path.join(source_root, "supervised-shadow-engine-consumer.js"),
+        "workspace_registry": os.path.join(source_root, "supervised-workspace-registry.py"),
+        "shadow_witness": os.path.join(source_root, "supervised-shadow-witness.py"),
+        "shadow_witness_client": os.path.join(source_root, "supervised-shadow-witness-client.py"),
         "canonical": os.path.join(source_root, "owner-kernel", "canonical.js"),
         "actions": os.path.join(source_root, "owner-kernel", "actions.js"),
         "errors": os.path.join(source_root, "owner-kernel", "errors.js"),
@@ -712,14 +812,28 @@ def install(args):
     P34.require_root()
     install_root = require_absolute_path(args.install_root, "install_root")
     state_root = require_absolute_path(args.state_root, "state_root")
+    workspace_registry_root = require_absolute_path(
+        args.workspace_registry_root, "workspace_registry_root"
+    )
+    witness_state_root = require_absolute_path(args.witness_state_root, "witness_state_root")
     if os.path.lexists(install_root):
         fail("install_root already exists")
     worker = require_private_service_account(WORKER_IDENTITY, args.create_worker)
     verifier = require_private_service_account(VERIFIER_IDENTITY, args.create_verifier)
-    if worker["uid"] == verifier["uid"] or worker["gid"] == verifier["gid"]:
-        fail("dedicated worker and verifier identities must be distinct")
+    shadow_witness = require_private_service_account(
+        SHADOW_WITNESS_IDENTITY, args.create_shadow_witness
+    )
+    identities = (worker, verifier, shadow_witness)
+    if len({identity["uid"] for identity in identities}) != len(identities) or len(
+        {identity["gid"] for identity in identities}
+    ) != len(identities):
+        fail("dedicated worker, verifier, and shadow witness identities must be distinct")
     require_distinct_legacy_p34_worker_identity(worker)
     state_root = ensure_state_root(state_root, verifier, create=True)
+    workspace_registry_root = ensure_root_private_state_root(
+        workspace_registry_root, "workspace registry root", create=True
+    )
+    witness_state_root = ensure_witness_state_root(witness_state_root, shadow_witness, create=True)
     keyring_raw, keyring = read_keyring_source(args.keyring)
     node_source = resolve_node_install_source(args.node_path)
     install_parent = os.path.dirname(install_root)
@@ -749,7 +863,11 @@ def install(args):
         for name, relative in FILE_LAYOUT.items():
             destination = os.path.join(staging_root, relative)
             P34.copy_root_snapshot_file(sources[name], destination)
-            P34.require_root_owned_path(destination, name + " snapshot", executable=name in {"host", "gateway", "worker", "verifier"})
+            P34.require_root_owned_path(
+                destination,
+                name + " snapshot",
+                executable=name in {"host", "gateway", "worker", "verifier", "workspace_registry", "shadow_witness"},
+            )
             files[name] = {"relative_path": relative, "sha256": file_digest(destination)}
         node_snapshot = P34.require_root_owned_path(
             os.path.join(staging_root, FILE_LAYOUT["node_runtime"]),
@@ -773,7 +891,18 @@ def install(args):
             executable=True,
         )
         paths["node_path"] = os.path.join(install_root, FILE_LAYOUT["node_runtime"])
-        material = installation_material(install_root, state_root, worker, verifier, paths, files, keyring)
+        material = installation_material(
+            install_root,
+            state_root,
+            workspace_registry_root,
+            witness_state_root,
+            worker,
+            verifier,
+            shadow_witness,
+            paths,
+            files,
+            keyring,
+        )
         config = dict(material)
         config["binding_hash"] = sha256_value(material)
         config_path = os.path.join(staging_root, CONFIG_RELATIVE_PATH)
@@ -808,6 +937,7 @@ def install(args):
             "authority": keyring["authority"],
             "worker": worker,
             "verifier": verifier,
+            "shadow_witness": shadow_witness,
             "owner_kernel_authority": "none",
             "acceptance": "not_available",
         }
@@ -853,8 +983,11 @@ def load_installed_config(install_root):
         "install_root",
         "runtime_parent",
         "state_root",
+        "workspace_registry",
+        "witness_state_root",
         "worker",
         "verifier",
+        "shadow_witness",
         "paths",
         "files",
         "keyring",
@@ -901,13 +1034,21 @@ def require_unprivileged_runtime_path(path, label, directory=False, readable=Fal
 def validate_installed_config(install_root, config):
     worker = validate_identity(config["worker"], "installed worker", WORKER_IDENTITY)
     verifier = validate_identity(config["verifier"], "installed verifier", VERIFIER_IDENTITY)
-    if worker["uid"] == verifier["uid"] or worker["gid"] == verifier["gid"]:
-        fail("installed worker and verifier must be distinct")
+    shadow_witness = validate_identity(
+        config["shadow_witness"], "installed shadow witness", SHADOW_WITNESS_IDENTITY
+    )
+    identities = (worker, verifier, shadow_witness)
+    if len({identity["uid"] for identity in identities}) != len(identities) or len(
+        {identity["gid"] for identity in identities}
+    ) != len(identities):
+        fail("installed worker, verifier, and shadow witness identities must be distinct")
     require_distinct_legacy_p34_worker_identity(worker)
     if require_private_service_account(WORKER_IDENTITY, False) != worker:
         fail("dedicated worker account no longer matches installed config")
     if require_private_service_account(VERIFIER_IDENTITY, False) != verifier:
         fail("dedicated verifier account no longer matches installed config")
+    if require_private_service_account(SHADOW_WITNESS_IDENTITY, False) != shadow_witness:
+        fail("dedicated shadow witness account no longer matches installed config")
     require_unprivileged_runtime_path(
         os.path.join(install_root, CONFIG_RELATIVE_PATH), "installed config", readable=True
     )
@@ -931,13 +1072,17 @@ def validate_installed_config(install_root, config):
         if entry["relative_path"] != relative:
             fail(name + " snapshot relative path is unexpected")
         destination = os.path.join(install_root, relative)
-        P34.require_root_owned_path(destination, name + " snapshot", executable=name in {"host", "gateway", "worker", "verifier"})
+        P34.require_root_owned_path(
+            destination,
+            name + " snapshot",
+            executable=name in {"host", "gateway", "worker", "verifier", "workspace_registry", "shadow_witness"},
+        )
         if name not in {"host", "p34_support"}:
             require_unprivileged_runtime_path(
                 destination,
                 name + " snapshot",
                 readable=True,
-                executable=name in {"gateway", "worker", "verifier"},
+                executable=name in {"gateway", "worker", "verifier", "shadow_witness"},
             )
         if file_digest(destination) != require_sha256(entry["sha256"], name + " snapshot hash"):
             fail(name + " snapshot hash does not match installed content")
@@ -968,7 +1113,28 @@ def validate_installed_config(install_root, config):
         },
         "installed limits",
     )
-    if limits != installation_material(install_root, config["state_root"], worker, verifier, paths, files, actual_keyring)["limits"]:
+    workspace_registry = require_exact_keys(
+        config["workspace_registry"], {"root", "socket"}, "installed workspace registry"
+    )
+    registry_root = ensure_root_private_state_root(
+        workspace_registry["root"], "workspace registry root"
+    )
+    expected_registry_socket = os.path.join(registry_root, "registry.sock")
+    if workspace_registry["socket"] != expected_registry_socket:
+        fail("installed workspace registry socket is unexpected")
+    witness_state_root = ensure_witness_state_root(config["witness_state_root"], shadow_witness)
+    if limits != installation_material(
+        install_root,
+        config["state_root"],
+        registry_root,
+        witness_state_root,
+        worker,
+        verifier,
+        shadow_witness,
+        paths,
+        files,
+        actual_keyring,
+    )["limits"]:
         fail("installed limits differ from the frozen host protocol")
     if config["systemd_properties"] != list(SYSTEMD_PROPERTIES):
         fail("installed systemd properties differ from the frozen host protocol")
@@ -976,10 +1142,13 @@ def validate_installed_config(install_root, config):
     return {
         "worker": worker,
         "verifier": verifier,
+        "shadow_witness": shadow_witness,
         "paths": paths,
         "files": files,
         "keyring": actual_keyring,
         "state_root": state_root,
+        "workspace_registry": {"root": registry_root, "socket": expected_registry_socket},
+        "witness_state_root": witness_state_root,
         "limits": limits,
     }
 
@@ -1031,6 +1200,8 @@ def session_paths_from_root(root):
         "worker": os.path.join(root, "worker"),
         "socket": os.path.join(root, "socket"),
         "gateway": os.path.join(root, "gateway"),
+        "binding": os.path.join(root, "binding"),
+        "witness": os.path.join(root, "witness"),
         "session": os.path.join(root, "root-state", "session.json"),
         "claim": os.path.join(root, "root-state", "submit-claim.json"),
         "handoff_socket": os.path.join(root, "worker", "handoff.sock"),
@@ -1039,6 +1210,10 @@ def session_paths_from_root(root):
         "socket_path": os.path.join(root, "socket", "intake.sock"),
         "ready": os.path.join(root, "gateway", "ready.json"),
         "result": os.path.join(root, "gateway", "result.json"),
+        "workspace_ticket": os.path.join(root, "binding", "workspace-ticket.json"),
+        "witness_binding": os.path.join(root, "binding", "shadow-witness.json"),
+        "witness_socket_path": os.path.join(root, "witness", "shadow.sock"),
+        "witness_ready": os.path.join(root, "witness", "ready.json"),
     }
 
 
@@ -1138,6 +1313,98 @@ def normalize_session(value, config):
         "install_binding_hash": config["binding_hash"],
         "expires_at_ms": require_nonnegative_int(value["expires_at_ms"], "P3.5 session expiry", 1),
     }
+
+
+def normalize_workspace_ticket(value, config, session_id=None, session_challenge_hash=None):
+    value = require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "kind",
+            "install_binding_hash",
+            "registry_instance_id",
+            "registration_id",
+            "workspace_root_hash",
+            "immutable_base",
+            "descriptor_fingerprint_hash",
+            "descriptor_binding_hash",
+            "session_id",
+            "session_challenge_hash",
+            "expires_at_ms",
+            "ticket_hash",
+        },
+        "P3.5c workspace ticket",
+    )
+    material = dict(value)
+    ticket_hash = require_sha256(material.pop("ticket_hash"), "P3.5c workspace ticket hash")
+    if sha256_value(material) != ticket_hash:
+        fail("P3.5c workspace ticket hash does not match content")
+    if material["schema_version"] != SCHEMA_VERSION or material["kind"] != "p35_workspace_descriptor_ticket":
+        fail("P3.5c workspace ticket protocol is unsupported")
+    if material["install_binding_hash"] != config["binding_hash"]:
+        fail("P3.5c workspace ticket does not match the installed host")
+    normalized = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "p35_workspace_descriptor_ticket",
+        "install_binding_hash": config["binding_hash"],
+        "registry_instance_id": require_token(
+            material["registry_instance_id"], "P3.5c workspace ticket registry instance"
+        ),
+        "registration_id": require_token(
+            material["registration_id"], "P3.5c workspace ticket registration"
+        ),
+        "workspace_root_hash": require_sha256(
+            material["workspace_root_hash"], "P3.5c workspace ticket workspace hash"
+        ),
+        "immutable_base": require_git_sha(
+            material["immutable_base"], "P3.5c workspace ticket immutable base"
+        ),
+        "descriptor_fingerprint_hash": require_sha256(
+            material["descriptor_fingerprint_hash"], "P3.5c workspace ticket descriptor fingerprint"
+        ),
+        "descriptor_binding_hash": require_sha256(
+            material["descriptor_binding_hash"], "P3.5c workspace ticket descriptor binding"
+        ),
+        "session_id": require_token(material["session_id"], "P3.5c workspace ticket session"),
+        "session_challenge_hash": require_sha256(
+            material["session_challenge_hash"], "P3.5c workspace ticket challenge"
+        ),
+        "expires_at_ms": require_nonnegative_int(
+            material["expires_at_ms"], "P3.5c workspace ticket expiry", 1
+        ),
+        "ticket_hash": ticket_hash,
+    }
+    if session_id is not None and normalized["session_id"] != session_id:
+        fail("P3.5c workspace ticket does not match the session")
+    if (
+        session_challenge_hash is not None
+        and normalized["session_challenge_hash"] != session_challenge_hash
+    ):
+        fail("P3.5c workspace ticket does not match the session challenge")
+    return normalized
+
+
+def read_root_verifier_json(path, verifier, label):
+    try:
+        info = os.lstat(path)
+    except OSError as error:
+        fail(label + " cannot be inspected: " + str(error))
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_uid != 0
+        or info.st_gid != verifier["gid"]
+        or (info.st_mode & 0o7777) != 0o440
+    ):
+        fail(label + " does not have the expected root/verifier identity and mode")
+    return read_canonical_json_file(path, label)
+
+
+def require_workspace_binding_layout(paths, verifier):
+    require_exact_directory(
+        paths["binding"], 0, verifier["gid"], 0o710, "session workspace binding root"
+    )
+    return paths["binding"]
 
 
 def normalize_reapable_session(value, session_id):
@@ -1449,12 +1716,75 @@ def reap_expired_sessions(validated):
         fail("P3.5 runtime parent exceeds the fixed session limit")
 
 
-def create_session(config, validated):
+def workspace_registry_request(install_root, validated, operation, request):
+    registry = load_workspace_registry(install_root)
+    try:
+        return registry.registry_request(
+            validated["workspace_registry"]["socket"], operation, request
+        )
+    except registry.WorkspaceRegistryError as error:
+        fail("P3.5c workspace registry rejected the root request: " + str(error))
+
+
+def reserve_workspace_ticket(install_root, config, validated, registration_id, session):
+    response = workspace_registry_request(
+        install_root,
+        validated,
+        "reserve",
+        {
+            "registration_id": require_token(registration_id, "workspace registration id"),
+            "session_id": session["session_id"],
+            "session_challenge_hash": session["session_challenge_hash"],
+            "install_binding_hash": config["binding_hash"],
+            "expires_at_ms": session["expires_at_ms"],
+        },
+    )
+    response = require_exact_keys(
+        response, {"schema_version", "status", "ticket"}, "workspace registry reservation response"
+    )
+    if response["schema_version"] != SCHEMA_VERSION or response["status"] != "reserved":
+        fail("workspace registry did not reserve the descriptor")
+    return normalize_workspace_ticket(
+        response["ticket"],
+        config,
+        session_id=session["session_id"],
+        session_challenge_hash=session["session_challenge_hash"],
+    )
+
+
+def release_workspace_ticket(install_root, validated, ticket):
+    response = workspace_registry_request(
+        install_root,
+        validated,
+        "release",
+        {
+            "registration_id": ticket["registration_id"],
+            "session_id": ticket["session_id"],
+            "ticket_hash": ticket["ticket_hash"],
+        },
+    )
+    response = require_exact_keys(
+        response,
+        {"schema_version", "status", "registration_id", "session_id", "ticket_hash"},
+        "workspace registry release response",
+    )
+    if (
+        response["schema_version"] != SCHEMA_VERSION
+        or response["status"] != "released"
+        or response["registration_id"] != ticket["registration_id"]
+        or response["session_id"] != ticket["session_id"]
+        or response["ticket_hash"] != ticket["ticket_hash"]
+    ):
+        fail("workspace registry did not release the descriptor")
+
+
+def create_session(config, validated, install_root, workspace_registration_id=None):
     P34.require_root()
     P34.require_supported_host()
     reap_expired_sessions(validated)
     worker = validated["worker"]
     verifier = validated["verifier"]
+    shadow_witness = validated["shadow_witness"]
     session_id = "p35-" + secrets.token_hex(16)
     challenge = secrets.token_urlsafe(32).rstrip("=")
     paths = session_paths(session_id)
@@ -1463,6 +1793,7 @@ def create_session(config, validated):
     )
     pending_paths = session_paths_from_root(pending_root)
     published = False
+    workspace_ticket = None
     try:
         P34.create_directory(pending_paths["root"], 0, 0, 0o711, "pending session root")
         P34.create_directory(pending_paths["root_state"], 0, 0, 0o700, "session root state")
@@ -1478,12 +1809,39 @@ def create_session(config, validated):
             "expires_at_ms": int(time.time() * 1000) + validated["limits"]["session_ttl_milliseconds"],
         }
         write_atomic_root_json(pending_paths["session"], session)
+        if workspace_registration_id is not None:
+            P34.create_directory(
+                pending_paths["binding"],
+                0,
+                verifier["gid"],
+                0o710,
+                "session workspace binding root",
+            )
+            workspace_ticket = reserve_workspace_ticket(
+                install_root,
+                config,
+                validated,
+                workspace_registration_id,
+                session,
+            )
+            write_atomic_root_json(
+                pending_paths["workspace_ticket"],
+                workspace_ticket,
+                mode=0o440,
+                uid=0,
+                gid=verifier["gid"],
+            )
         if os.path.lexists(paths["root"]):
             fail("P3.5 generated session path already exists")
         os.rename(pending_paths["root"], paths["root"])
         published = True
         fsync_directory(RUNTIME_PARENT)
     except Exception:
+        if workspace_ticket is not None:
+            try:
+                release_workspace_ticket(install_root, validated, workspace_ticket)
+            except HostError:
+                pass
         cleanup_session_paths(
             paths if published else pending_paths,
             remove_session=True,
@@ -1491,7 +1849,7 @@ def create_session(config, validated):
             verifier=verifier,
         )
         raise
-    return {
+    result = {
         "status": "session_open",
         "schema_version": SCHEMA_VERSION,
         "session_id": session_id,
@@ -1503,6 +1861,15 @@ def create_session(config, validated):
         "owner_kernel_authority": "none",
         "acceptance": "not_available",
     }
+    if workspace_ticket is not None:
+        result["workspace_binding"] = {
+            "registration_id": workspace_ticket["registration_id"],
+            "descriptor_binding_hash": workspace_ticket["descriptor_binding_hash"],
+            "ticket_hash": workspace_ticket["ticket_hash"],
+            "assurance": "root_held_descriptor_matches_signed_v1_path_and_base_only",
+            "content_immutability": "not_available",
+        }
+    return result
 
 
 def read_exact_private_json(path, uid, gid, label):
@@ -1732,6 +2099,115 @@ def seal_gateway_socket_for_worker(socket_root, path, worker, verifier):
         fail("gateway socket did not retain the dedicated worker restriction")
 
 
+def validate_shadow_witness_ready(value, expected_pid, witness, verifier):
+    value = require_exact_keys(
+        value,
+        {"schema_version", "status", "witness_pid", "witness_uid", "witness_gid", "socket_gid"},
+        "shadow witness readiness",
+    )
+    if (
+        value["schema_version"] != SCHEMA_VERSION
+        or value["status"] != "ready"
+        or value["witness_pid"] != expected_pid
+        or value["witness_uid"] != witness["uid"]
+        or value["witness_gid"] != witness["gid"]
+        or value["socket_gid"] != verifier["gid"]
+    ):
+        fail("shadow witness readiness does not match the fixed host identities")
+
+
+def seal_shadow_witness_socket(socket_root, socket_path, witness, verifier):
+    require_exact_directory(
+        socket_root,
+        witness["uid"],
+        verifier["gid"],
+        0o2710,
+        "shadow witness socket root before sealing",
+    )
+    try:
+        descriptor = os.open(socket_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as error:
+        fail("shadow witness socket root cannot be opened before sealing: " + str(error))
+    try:
+        os.fchown(descriptor, 0, verifier["gid"])
+        os.fchmod(descriptor, 0o710)
+    except OSError as error:
+        fail("shadow witness socket root cannot be sealed: " + str(error))
+    finally:
+        os.close(descriptor)
+    require_exact_directory(
+        socket_root,
+        0,
+        verifier["gid"],
+        0o710,
+        "sealed shadow witness socket root",
+    )
+    try:
+        info = os.lstat(socket_path)
+    except OSError as error:
+        fail("shadow witness socket cannot be inspected after sealing: " + str(error))
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISSOCK(info.st_mode)
+        or info.st_uid != witness["uid"]
+        or info.st_gid != verifier["gid"]
+        or (info.st_mode & 0o7777) != 0o660
+    ):
+        fail("shadow witness socket is not the expected sealed listener")
+
+
+def write_shadow_witness_binding(path, session_id, ticket, ready, witness, verifier):
+    value = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "p35_shadow_witness_binding",
+        "session_id": session_id,
+        "ticket_hash": ticket["ticket_hash"],
+        "witness_pid": ready["witness_pid"],
+        "witness_uid": witness["uid"],
+        "witness_gid": witness["gid"],
+        "socket_gid": verifier["gid"],
+    }
+    write_atomic_root_json(path, value, mode=0o440, uid=0, gid=verifier["gid"])
+    return value
+
+
+def normalize_shadow_witness_binding(value, session_id, ticket, witness, verifier):
+    value = require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "kind",
+            "session_id",
+            "ticket_hash",
+            "witness_pid",
+            "witness_uid",
+            "witness_gid",
+            "socket_gid",
+        },
+        "shadow witness binding",
+    )
+    if (
+        value["schema_version"] != SCHEMA_VERSION
+        or value["kind"] != "p35_shadow_witness_binding"
+        or value["session_id"] != session_id
+        or value["ticket_hash"] != ticket["ticket_hash"]
+        or value["witness_uid"] != witness["uid"]
+        or value["witness_gid"] != witness["gid"]
+        or value["socket_gid"] != verifier["gid"]
+    ):
+        fail("shadow witness binding does not match the session identities")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "p35_shadow_witness_binding",
+        "session_id": session_id,
+        "ticket_hash": ticket["ticket_hash"],
+        "witness_pid": require_nonnegative_int(value["witness_pid"], "shadow witness pid", 1),
+        "witness_uid": witness["uid"],
+        "witness_gid": witness["gid"],
+        "socket_gid": verifier["gid"],
+    }
+
+
 def systemd_command(paths, unit, uid, gid, properties, command):
     return [
         paths["systemd_run_path"],
@@ -1813,7 +2289,104 @@ def validate_shadow_summary(value, label):
     return value
 
 
-def validate_gateway_result(value, expected_worker):
+def validate_shadow_witness_summary(value, ticket, label):
+    value = require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "status",
+            "shadow_admission_id",
+            "ticket_hash",
+            "capsule_hash",
+            "observation_hash",
+            "close_hash",
+            "previous_shadow_head",
+            "shadow_chain_head",
+            "idempotent",
+            "disclosure",
+        },
+        label,
+    )
+    disclosure = require_exact_keys(
+        value["disclosure"],
+        {
+            "engine",
+            "owner_kernel_authority",
+            "effect_authority",
+            "acceptance",
+            "witness_assurance",
+            "workspace_assurance",
+            "content_immutability",
+        },
+        label + " disclosure",
+    )
+    engine = require_exact_keys(
+        disclosure["engine"], {"status", "dispatch_authority"}, label + " disclosure engine"
+    )
+    if (
+        value["schema_version"] != SCHEMA_VERSION
+        or value["status"] != "shadow_witness_recorded"
+        or value["ticket_hash"] != ticket["ticket_hash"]
+        or value["idempotent"] is not False
+        or engine["status"] != "not_started"
+        or engine["dispatch_authority"] != "not_available"
+        or disclosure["owner_kernel_authority"] != "none"
+        or disclosure["effect_authority"] != "none"
+        or disclosure["acceptance"] != "not_available"
+        or disclosure["witness_assurance"]
+        != "separate_uid_local_append_only_root_readback_not_p2"
+        or disclosure["workspace_assurance"]
+        != "root_held_descriptor_matches_signed_v1_path_and_base_only"
+        or disclosure["content_immutability"] != "not_available"
+    ):
+        fail(label + " is not a non-authoritative shadow witness record")
+    for key in (
+        "shadow_admission_id",
+        "ticket_hash",
+        "capsule_hash",
+        "observation_hash",
+        "close_hash",
+        "shadow_chain_head",
+    ):
+        require_sha256(value[key], label + " " + key)
+    if value["previous_shadow_head"] is not None:
+        require_sha256(value["previous_shadow_head"], label + " previous shadow head")
+    return value
+
+
+def verify_shadow_witness_root_readback(install_root, paths, binding, ticket, summary):
+    client = load_shadow_witness_client(install_root)
+    try:
+        response = client.invoke(
+            socket_root=paths["witness"],
+            socket_path=paths["witness_socket_path"],
+            witness_pid=binding["witness_pid"],
+            witness_uid=binding["witness_uid"],
+            witness_gid=binding["witness_gid"],
+            socket_gid=binding["socket_gid"],
+            method="read_shadow_record",
+            request={
+                "shadow_admission_id": summary["shadow_admission_id"],
+                "ticket_hash": ticket["ticket_hash"],
+            },
+        )
+    except client.ShadowWitnessClientError as error:
+        fail("root shadow witness readback failed: " + str(error))
+    if (
+        response["status"] != "shadow_closed"
+        or response["idempotent"] is not True
+        or response["shadow_admission_id"] != summary["shadow_admission_id"]
+        or response["ticket_hash"] != summary["ticket_hash"]
+        or response["capsule_hash"] != summary["capsule_hash"]
+        or response["observation_hash"] != summary["observation_hash"]
+        or response["close_hash"] != summary["close_hash"]
+        or response["previous_shadow_head"] != summary["previous_shadow_head"]
+        or response["shadow_chain_head"] != summary["shadow_chain_head"]
+    ):
+        fail("root shadow witness readback does not match the verifier result")
+
+
+def validate_gateway_result(value, expected_worker, ticket=None):
     if isinstance(value, dict) and set(value) == {"schema_version", "status"}:
         if value["schema_version"] == SCHEMA_VERSION and value["status"] == "rejected":
             fail("gateway rejected the intake before a verified receipt")
@@ -1828,11 +2401,18 @@ def validate_gateway_result(value, expected_worker):
     if peer["pid"] != expected_worker["pid"] or peer["uid"] != expected_worker["uid"] or peer["gid"] != expected_worker["gid"]:
         fail("gateway accepted an unexpected peer")
     require_sha256(value["receipt_hash"], "gateway receipt_hash")
-    output = require_exact_keys(
-        value["output"],
-        {"schema_version", "status", "owner_kernel_authority", "acceptance", "receipt", "bridge_receipt", "shadow"},
-        "gateway verifier output",
-    )
+    expected_output = {
+        "schema_version",
+        "status",
+        "owner_kernel_authority",
+        "acceptance",
+        "receipt",
+        "bridge_receipt",
+        "shadow",
+    }
+    if ticket is not None:
+        expected_output.add("shadow_witness")
+    output = require_exact_keys(value["output"], expected_output, "gateway verifier output")
     if (
         output["schema_version"] != SCHEMA_VERSION
         or output["status"] != "verified_intake"
@@ -1843,6 +2423,10 @@ def validate_gateway_result(value, expected_worker):
     ):
         fail("gateway verifier output is not non-authoritative")
     validate_shadow_summary(output["shadow"], "gateway verifier shadow summary")
+    if ticket is not None:
+        validate_shadow_witness_summary(
+            output["shadow_witness"], ticket, "gateway verifier shadow witness summary"
+        )
     return {"peer": peer, "receipt_hash": value["receipt_hash"], "output": output}
 
 
@@ -1855,17 +2439,24 @@ def submit_session(session_id):
     paths = session_paths(session_id)
     worker = validated["worker"]
     verifier = validated["verifier"]
+    shadow_witness = validated["shadow_witness"]
     system_paths = validated["paths"]
     worker_unit = "autopilot-p35-worker-" + secrets.token_hex(16) + ".service"
     verifier_unit = "autopilot-p35-verifier-" + secrets.token_hex(16) + ".service"
+    witness_unit = "autopilot-p35-shadow-witness-" + secrets.token_hex(16) + ".service"
     worker_cgroup = "/system.slice/" + worker_unit
     verifier_cgroup = "/system.slice/" + verifier_unit
+    witness_cgroup = "/system.slice/" + witness_unit
     worker_started = False
     verifier_started = False
+    witness_started = False
     cleanup_errors = []
     created_resources = {"claim": False}
     global_submit_lease = None
     previous_handlers = {}
+    workspace_ticket = None
+    workspace_reservation_active = False
+    shadow_witness_binding = None
 
     def interrupt_handler(_signum, _frame):
         fail("P3.5 submit interrupted before completion")
@@ -1892,6 +2483,36 @@ def submit_session(session_id):
         now = int(time.time() * 1000)
         if now >= session["expires_at_ms"]:
             fail("P3.5 session has expired")
+        if os.path.lexists(paths["binding"]):
+            require_workspace_binding_layout(paths, verifier)
+            workspace_ticket = normalize_workspace_ticket(
+                read_root_verifier_json(
+                    paths["workspace_ticket"], verifier, "P3.5c session workspace ticket"
+                ),
+                config,
+                session_id=session_id,
+                session_challenge_hash=session["session_challenge_hash"],
+            )
+            if now >= workspace_ticket["expires_at_ms"]:
+                fail("P3.5c workspace descriptor ticket has expired")
+            workspace_registry_request(
+                install_root,
+                validated,
+                "assert_reserved",
+                {
+                    "registration_id": workspace_ticket["registration_id"],
+                    "session_id": session_id,
+                    "ticket_hash": workspace_ticket["ticket_hash"],
+                },
+            )
+            workspace_reservation_active = True
+            P34.create_directory(
+                paths["witness"],
+                shadow_witness["uid"],
+                verifier["gid"],
+                0o2710,
+                "session shadow witness root",
+            )
         session["status"] = "submitting"
         write_atomic_root_json(paths["session"], session, replace=True)
         request = read_bounded_stdin(
@@ -1954,14 +2575,83 @@ def submit_session(session_id):
             "--install-binding-hash", config["binding_hash"],
             "--timeout-seconds", str(REQUEST_TIMEOUT_SECONDS),
         ]
+        if workspace_ticket is not None:
+            gateway_command.extend(
+                [
+                    "--workspace-ticket", paths["workspace_ticket"],
+                    "--shadow-witness-binding", paths["witness_binding"],
+                    "--shadow-witness-socket", paths["witness_socket_path"],
+                    "--shadow-witness-socket-root", paths["witness"],
+                    "--shadow-witness-client", os.path.join(install_root, FILE_LAYOUT["shadow_witness_client"]),
+                ]
+            )
         gateway_properties = list(GATEWAY_SYSTEMD_PROPERTIES) + [
-            "ReadWritePaths=" + " ".join([validated["state_root"], paths["socket"], paths["gateway"]]),
+            "ReadWritePaths="
+            + " ".join(
+                [validated["state_root"], paths["socket"], paths["gateway"]]
+                + ([paths["binding"], paths["witness"]] if workspace_ticket is not None else [])
+            ),
         ]
         verifier_started = True
         launch_unit(system_paths, verifier_unit, verifier["uid"], verifier["gid"], gateway_properties, gateway_command, "verifier")
         verifier_pid = P34.wait_for_main_pid(
             system_paths["systemctl_path"], verifier_unit, verifier_cgroup, REQUEST_TIMEOUT_SECONDS
         )
+        if workspace_ticket is not None:
+            witness_command = [
+                system_paths["python_path"],
+                "-I",
+                os.path.join(install_root, FILE_LAYOUT["shadow_witness"]),
+                "serve",
+                "--socket-root", paths["witness"],
+                "--socket", paths["witness_socket_path"],
+                "--ready-path", paths["witness_ready"],
+                "--state-root", validated["witness_state_root"],
+                "--ticket-hash", workspace_ticket["ticket_hash"],
+                "--expected-verifier-pid", str(verifier_pid),
+                "--expected-verifier-uid", str(verifier["uid"]),
+                "--expected-verifier-gid", str(verifier["gid"]),
+                "--expected-verifier-cgroup", verifier_cgroup,
+                "--expected-root-pid", str(os.getpid()),
+                "--witness-uid", str(shadow_witness["uid"]),
+                "--witness-gid", str(shadow_witness["gid"]),
+                "--socket-gid", str(verifier["gid"]),
+            ]
+            witness_properties = list(WITNESS_SYSTEMD_PROPERTIES) + [
+                "ReadWritePaths=" + " ".join([validated["witness_state_root"], paths["witness"]]),
+            ]
+            witness_started = True
+            launch_unit(
+                system_paths,
+                witness_unit,
+                shadow_witness["uid"],
+                shadow_witness["gid"],
+                witness_properties,
+                witness_command,
+                "shadow witness",
+            )
+            witness_pid = P34.wait_for_main_pid(
+                system_paths["systemctl_path"], witness_unit, witness_cgroup, REQUEST_TIMEOUT_SECONDS
+            )
+            witness_ready = wait_for_private_json(
+                paths["witness_ready"],
+                shadow_witness["uid"],
+                shadow_witness["gid"],
+                REQUEST_TIMEOUT_SECONDS,
+                "shadow witness readiness",
+            )
+            validate_shadow_witness_ready(witness_ready, witness_pid, shadow_witness, verifier)
+            seal_shadow_witness_socket(
+                paths["witness"], paths["witness_socket_path"], shadow_witness, verifier
+            )
+            shadow_witness_binding = write_shadow_witness_binding(
+                paths["witness_binding"],
+                session_id,
+                workspace_ticket,
+                witness_ready,
+                shadow_witness,
+                verifier,
+            )
         ready = wait_for_private_json(
             paths["ready"], verifier["uid"], verifier["gid"], REQUEST_TIMEOUT_SECONDS, "gateway readiness"
         )
@@ -1971,10 +2661,48 @@ def submit_session(session_id):
         result = wait_for_private_json(
             paths["result"], verifier["uid"], verifier["gid"], REQUEST_TIMEOUT_SECONDS * 2, "gateway result"
         )
-        checked = validate_gateway_result(result, {"pid": worker_pid, "uid": worker["uid"], "gid": worker["gid"]})
+        checked = validate_gateway_result(
+            result,
+            {"pid": worker_pid, "uid": worker["uid"], "gid": worker["gid"]},
+            ticket=workspace_ticket,
+        )
+        if workspace_ticket is not None:
+            if shadow_witness_binding is None:
+                fail("shadow witness binding is absent for the bound workspace session")
+            verify_shadow_witness_root_readback(
+                install_root,
+                paths,
+                shadow_witness_binding,
+                workspace_ticket,
+                checked["output"]["shadow_witness"],
+            )
+            completed = workspace_registry_request(
+                install_root,
+                validated,
+                "complete",
+                {
+                    "registration_id": workspace_ticket["registration_id"],
+                    "session_id": session_id,
+                    "ticket_hash": workspace_ticket["ticket_hash"],
+                },
+            )
+            completed = require_exact_keys(
+                completed,
+                {"schema_version", "status", "registration_id", "session_id", "ticket_hash"},
+                "workspace registry completion response",
+            )
+            if (
+                completed["schema_version"] != SCHEMA_VERSION
+                or completed["status"] != "completed"
+                or completed["registration_id"] != workspace_ticket["registration_id"]
+                or completed["session_id"] != session_id
+                or completed["ticket_hash"] != workspace_ticket["ticket_hash"]
+            ):
+                fail("workspace registry did not close the descriptor reservation")
+            workspace_reservation_active = False
         P34.wait_for_load_state(system_paths["systemctl_path"], verifier_unit, "not-found", REQUEST_TIMEOUT_SECONDS)
         P34.wait_for_load_state(system_paths["systemctl_path"], worker_unit, "not-found", REQUEST_TIMEOUT_SECONDS)
-        return {
+        output = {
             "status": "p35_shadow_intake_complete",
             "schema_version": SCHEMA_VERSION,
             "session_id": session_id,
@@ -1987,7 +2715,22 @@ def submit_session(session_id):
             "owner_kernel_authority": "none",
             "acceptance": "not_available",
         }
+        if workspace_ticket is not None:
+            output["workspace_binding"] = {
+                "registration_id": workspace_ticket["registration_id"],
+                "descriptor_binding_hash": workspace_ticket["descriptor_binding_hash"],
+                "ticket_hash": workspace_ticket["ticket_hash"],
+                "assurance": "root_held_descriptor_matches_signed_v1_path_and_base_only",
+                "content_immutability": "not_available",
+            }
+            output["shadow_witness"] = checked["output"]["shadow_witness"]
+        return output
     finally:
+        if witness_started:
+            try:
+                P34.stop_and_collect_unit(system_paths["systemctl_path"], witness_unit)
+            except (P34.LauncherError, OSError) as error:
+                cleanup_errors.append("shadow witness unit: " + str(error))
         if verifier_started:
             try:
                 P34.stop_and_collect_unit(system_paths["systemctl_path"], verifier_unit)
@@ -1998,6 +2741,11 @@ def submit_session(session_id):
                 P34.stop_and_collect_unit(system_paths["systemctl_path"], worker_unit)
             except (P34.LauncherError, OSError) as error:
                 cleanup_errors.append("worker unit: " + str(error))
+        if workspace_ticket is not None and workspace_reservation_active:
+            try:
+                release_workspace_ticket(install_root, validated, workspace_ticket)
+            except HostError as error:
+                cleanup_errors.append("workspace descriptor release: " + str(error))
         if created_resources["claim"]:
             cleanup_errors.extend(
                 cleanup_session_paths(
@@ -2048,10 +2796,14 @@ def cleanup_session_paths(paths, remove_session, legacy_request_gid=None, worker
         errors.extend(cleanup_gateway_pending_artifacts(paths, verifier))
     for candidate, kind in (
         (paths.get("socket_path"), "socket"),
+        (paths.get("witness_socket_path"), "socket"),
         (paths.get("release"), "file"),
         (paths.get("handoff_socket"), "socket"),
         (paths.get("ready"), "file"),
         (paths.get("result"), "file"),
+        (paths.get("workspace_ticket"), "file"),
+        (paths.get("witness_binding"), "file"),
+        (paths.get("witness_ready"), "file"),
         (paths.get("claim"), "file"),
         (paths.get("session"), "file"),
     ):
@@ -2065,7 +2817,15 @@ def cleanup_session_paths(paths, remove_session, legacy_request_gid=None, worker
         if legacy_request_error is not None:
             errors.append(legacy_request_error)
     if remove_session:
-        for candidate in (paths.get("gateway"), paths.get("socket"), paths.get("worker"), paths.get("root_state"), paths.get("root")):
+        for candidate in (
+            paths.get("witness"),
+            paths.get("binding"),
+            paths.get("gateway"),
+            paths.get("socket"),
+            paths.get("worker"),
+            paths.get("root_state"),
+            paths.get("root"),
+        ):
             if candidate:
                 try:
                     P34.cleanup_path(candidate, "dir")
@@ -2081,9 +2841,114 @@ def begin(args):
     validated = validate_installed_config(install_root, config)
     lease = acquire_runtime_parent_lease()
     try:
-        return create_session(config, validated)
+        registration_id = (
+            require_token(args.workspace_registration_id, "workspace registration id")
+            if args.workspace_registration_id is not None
+            else None
+        )
+        return create_session(config, validated, install_root, registration_id)
     finally:
         release_root_lease(lease)
+
+
+def serve_workspace_registry(_args):
+    P34.require_root()
+    install_root = installed_root_from_self()
+    config = load_installed_config(install_root)
+    validated = validate_installed_config(install_root, config)
+    registry_module = load_workspace_registry(install_root)
+    server = registry_module.WorkspaceRegistryServer(
+        validated["workspace_registry"]["root"],
+        validated["workspace_registry"]["socket"],
+        config["binding_hash"],
+    )
+    previous_handlers = {}
+
+    def stop_registry(_signum, _frame):
+        # Defer descriptor and socket teardown to the normal finally path.
+        # Calling close operations from a signal handler would make the
+        # registry's lifecycle depend on an arbitrary instruction boundary.
+        server.stopping = True
+
+    try:
+        for signal_number in (signal.SIGINT, signal.SIGTERM):
+            previous_handlers[signal_number] = signal.signal(signal_number, stop_registry)
+        server.start()
+        return_value = {
+            "schema_version": SCHEMA_VERSION,
+            "status": "workspace_registry_ready",
+            "registry_instance_id": server.registry.instance_id,
+            "owner_kernel_authority": "none",
+            "acceptance": "not_available",
+        }
+        emit(return_value)
+        server.serve_forever()
+        return None
+    finally:
+        try:
+            server.stop()
+        finally:
+            for signal_number, previous in previous_handlers.items():
+                signal.signal(signal_number, previous)
+
+
+def register_workspace(args):
+    P34.require_root()
+    install_root = installed_root_from_self()
+    config = load_installed_config(install_root)
+    validated = validate_installed_config(install_root, config)
+    registry_module = load_workspace_registry(install_root)
+    try:
+        response = registry_module.register_workspace(
+            validated["workspace_registry"]["socket"],
+            require_token(args.registration_id, "workspace registration id"),
+            require_git_sha(args.immutable_base, "workspace immutable base"),
+            require_absolute_path(args.workspace_root, "workspace registration path"),
+            require_nonnegative_int(
+                args.ttl_milliseconds,
+                "workspace registration TTL",
+                registry_module.MIN_REGISTRATION_TTL_MILLISECONDS,
+            ),
+        )
+    except registry_module.WorkspaceRegistryError as error:
+        fail("P3.5c workspace registration failed: " + str(error))
+    response = require_exact_keys(
+        response,
+        {
+            "schema_version",
+            "status",
+            "registry_instance_id",
+            "registration_id",
+            "workspace_root_hash",
+            "immutable_base",
+            "descriptor_binding_hash",
+            "expires_at_ms",
+        },
+        "workspace registration response",
+    )
+    if response["schema_version"] != SCHEMA_VERSION or response["status"] != "registered":
+        fail("workspace registry did not retain the root-held descriptor")
+    require_token(response["registry_instance_id"], "workspace registry instance")
+    if response["registration_id"] != args.registration_id:
+        fail("workspace registry registration id does not match")
+    require_sha256(response["workspace_root_hash"], "workspace registry workspace hash")
+    if response["immutable_base"] != args.immutable_base:
+        fail("workspace registry immutable base does not match")
+    require_sha256(response["descriptor_binding_hash"], "workspace descriptor binding")
+    require_nonnegative_int(response["expires_at_ms"], "workspace registration expiry", 1)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "status": "workspace_registered",
+        "registry_instance_id": response["registry_instance_id"],
+        "registration_id": response["registration_id"],
+        "workspace_root_hash": response["workspace_root_hash"],
+        "immutable_base": response["immutable_base"],
+        "descriptor_binding_hash": response["descriptor_binding_hash"],
+        "expires_at_ms": response["expires_at_ms"],
+        "content_immutability": "not_available",
+        "owner_kernel_authority": "none",
+        "acceptance": "not_available",
+    }
 
 
 def parser():
@@ -2092,16 +2957,28 @@ def parser():
     install_parser = commands.add_parser("install")
     install_parser.add_argument("--install-root", required=True)
     install_parser.add_argument("--state-root", required=True)
+    install_parser.add_argument("--workspace-registry-root", required=True)
+    install_parser.add_argument("--witness-state-root", required=True)
     install_parser.add_argument("--keyring", required=True)
     install_parser.add_argument("--node-path", required=True)
     install_parser.add_argument("--create-worker", action="store_true")
     install_parser.add_argument("--create-verifier", action="store_true")
+    install_parser.add_argument("--create-shadow-witness", action="store_true")
     install_parser.set_defaults(handler=install)
     begin_parser = commands.add_parser("begin")
+    begin_parser.add_argument("--workspace-registration-id")
     begin_parser.set_defaults(handler=begin)
     submit_parser = commands.add_parser("submit")
     submit_parser.add_argument("--session-id", required=True)
     submit_parser.set_defaults(handler=lambda args: submit_session(require_token(args.session_id, "session_id")))
+    registry_serve_parser = commands.add_parser("workspace-registry-serve")
+    registry_serve_parser.set_defaults(handler=serve_workspace_registry)
+    workspace_register_parser = commands.add_parser("workspace-register")
+    workspace_register_parser.add_argument("--registration-id", required=True)
+    workspace_register_parser.add_argument("--workspace-root", required=True)
+    workspace_register_parser.add_argument("--immutable-base", required=True)
+    workspace_register_parser.add_argument("--ttl-milliseconds", type=int, default=10 * 60 * 1000)
+    workspace_register_parser.set_defaults(handler=register_workspace)
     return root
 
 

@@ -357,11 +357,52 @@ seam, mint a P2 permit, or call a P2/external witness API.
   only to `recovery_required`; it is never promoted to recorded, re-verified, replayed, closed, or used to
   start an Engine. The gateway's existing verifier/replay lock covers this sweep.
 
-P3.5b is restart diagnosis for a pure hash record, not end-to-end intake recovery. It is not an independent
-witness and it does not descriptor-pin a workspace. P3.5c must add a root-owned workspace registration and
-retained descriptor protocol plus a separate-UID, append-only shadow witness with readback/idempotency. The
-P0 production corpus remains mandatory before a mediated effect, P2 authority, acceptance, or alias
-retirement is considered.
+P3.5b remains restart diagnosis for a pure hash record, not end-to-end intake recovery. Its verifier-local
+record is retained alongside, rather than upgraded into, the P3.5c witness below. The P0 production corpus
+remains mandatory before a mediated effect, P2 authority, acceptance, or alias retirement is considered.
+
+## P3.5c Root-Held Workspace Binding and Separate-UID Shadow Witness
+
+P3.5c adds Linux-local, host-held workspace provenance and a separate-UID diagnostic journal. Its design is
+recorded in [the P3.5c plan](../../../plans/2026-07-23-p3-5c-workspace-shadow-witness.md). It preserves the
+P3.3 bridge and authenticated owner envelope at v1: the existing signed `workspace_root_hash` and
+`immutable_base` claims are exact-matched to a root-created host ticket. The descriptor fingerprint is
+runtime-local provenance, not a portable owner intent claim.
+
+- `src/engine/supervised-workspace-registry.py` accepts exactly one root-opened `O_PATH` directory descriptor
+  through `SOCK_SEQPACKET`/`SCM_RIGHTS`, validates peer credentials before packet parsing, requires Linux
+  `openat2` and `statx`, derives a hash-only identity from the held FD, and retains only the descriptor in memory. It
+  neither persists nor reopens a workspace path, invokes Git, or transfers the descriptor to the worker,
+  verifier, witness, or Engine. A registration is unique, expires, reserves once, and closes on completion;
+  daemon restart loses every descriptor and fails closed.
+- `begin --workspace-registration-id` emits a root-owned, verifier-readable ticket with hashes only. The
+  installed Node verifier recomputes the P3.3 plan and rejects any signed workspace hash or immutable-base
+  mismatch. The ticket never contains a path, FD number, inode, mount ID, or Git data.
+- P3.3 v1 still sends the user-supplied `workspaceRoot` through the existing worker/verifier request so the
+  pinned verifier can recompute the signed path hash. P3.5c does not copy the root registration path or a
+  descriptor into that route, ticket, witness, or output, but it does not make the verifier path-confidential.
+- `src/engine/supervised-shadow-witness.py` runs as the distinct
+  `autopilot-shadow-witness` account with a `0700` state root. It accepts only the exact verifier gateway
+  PID/UID/GID/cgroup, or the exact root host PID for readback, before it reads request bytes. Its four-method
+  protocol is limited to `open_shadow`, `append_shadow_observation`, `read_shadow_record`, and
+  `close_shadow_diagnostic`; it persists canonical hash-chain entries and fsyncs both the file and journal
+  directory. Interrupted records are diagnostic-only `shadow_recovery_required`, never auto-completed.
+- The root host starts and seals the witness after the gateway PID/cgroup is known, then returns a bound
+  result only after an independent root readback exactly matches the gateway summary. The public disclosure
+  remains `engine.status: "not_started"`, `owner_kernel_authority: "none"`,
+  `effect_authority: "none"`, and `acceptance: "not_available"`; its witness assurance explicitly says it
+  is separate-UID local evidence and not P2 authority.
+
+The expanded `AUTOPILOT_P35_LIVE=1` gate passed on this Linux host on 2026-07-23. It installs all three
+distinct service accounts, starts the root registry, registers a real directory, proves the descriptor-backed
+ticket exact-matches the signed P3.3 plan, validates the three-entry witness journal's ownership and hash
+chain, checks root readback, proves a competing registry cannot remove the active listener, rejects descriptor
+reuse, and leaves no registry socket, session, or transient unit.
+
+P3.5c does not prove repository content, grant an owner registration namespace, create P2 authority, start
+an Engine, broker an effect, or accept a result. P3.3/envelope v2 is mandatory before an effect-capable
+broker consumes this provenance, before a path-confidential verifier lane is claimed, or earlier if aliases,
+multiple policy mappings, project namespaces, or an owner-visible registration choice are introduced.
 
 ## Deferred Full P3 Gate
 
@@ -419,5 +460,10 @@ no-authority source controls. `hooks/tests/supervised-shadow-engine-consumer.tes
 plan/receipt/install binding, raw-data exclusion, durable idempotency, symlink rejection, cleanup of an
 unpublished interrupted temporary, `pending` to `recovery_required` restart behavior, and no live Engine or
 action dependency. The live P3.5 gate also verifies the compact shadow summary over the real root/systemd/
-SO_PEERCRED path.
-`hooks/tests/supervised-intake-live-host.sh` is the opt-in root/systemd/SO_PEERCRED evidence gate.
+SO_PEERCRED path. `hooks/tests/supervised-workspace-registry.test.sh` covers root-held descriptor identity,
+one-shot reserve/complete/expiry, symlink and replacement rejection, path exclusion, and no command surface.
+`hooks/tests/supervised-shadow-witness.test.sh` covers canonical chained journal transitions, restart recovery,
+idempotency, corruption rejection, peer-before-payload ordering, and no P2/Engine surface. The expanded
+`hooks/tests/supervised-intake-host.test.sh` covers P3.5c ticket and root-readback validation. The opt-in
+`hooks/tests/supervised-intake-live-host.sh` gate additionally proves the installed descriptor and separate-
+UID witness path under root/systemd/SO_PEERCRED.

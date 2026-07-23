@@ -10,6 +10,7 @@ It never constructs a Kernel, invokes an Engine sink, or accepts a result.
 import argparse
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 import select
@@ -69,6 +70,82 @@ def require_exact_keys(value, expected, label):
     if not isinstance(value, dict) or set(value) != set(expected):
         fail(label + " has an unexpected key set")
     return value
+
+
+def require_root_owned_file(path, label, executable=False):
+    path = require_absolute_path(path, label)
+    components = ["/"]
+    current = ""
+    for part in path.split("/"):
+        if part:
+            current += "/" + part
+            components.append(current)
+    for component in components:
+        try:
+            info = os.lstat(component)
+        except OSError as error:
+            fail(label + " cannot inspect an ancestor: " + str(error))
+        if stat.S_ISLNK(info.st_mode) or info.st_uid != 0 or (info.st_mode & 0o022) != 0:
+            fail(label + " has an untrusted ancestor " + component)
+    info = os.lstat(path)
+    if not stat.S_ISREG(info.st_mode) or (executable and (info.st_mode & 0o111) == 0):
+        fail(label + " must be a root-owned regular file")
+    return path
+
+
+def read_root_verifier_json(path, verifier_gid, label):
+    path = require_absolute_path(path, label)
+    try:
+        initial = os.lstat(path)
+    except OSError as error:
+        fail(label + " cannot be inspected: " + str(error))
+    if (
+        stat.S_ISLNK(initial.st_mode)
+        or not stat.S_ISREG(initial.st_mode)
+        or initial.st_uid != 0
+        or initial.st_gid != verifier_gid
+        or (initial.st_mode & 0o7777) != 0o440
+        or initial.st_size <= 0
+        or initial.st_size > MAX_RESULT_BYTES
+    ):
+        fail(label + " does not have the expected root/verifier identity and mode")
+    descriptor = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        opened = os.fstat(descriptor)
+        if (
+            opened.st_dev != initial.st_dev
+            or opened.st_ino != initial.st_ino
+            or opened.st_size != initial.st_size
+            or opened.st_uid != 0
+            or opened.st_gid != verifier_gid
+            or (opened.st_mode & 0o7777) != 0o440
+        ):
+            fail(label + " changed while being opened")
+        content = b""
+        while len(content) <= MAX_RESULT_BYTES:
+            block = os.read(descriptor, min(65536, MAX_RESULT_BYTES + 1 - len(content)))
+            if not block:
+                break
+            content += block
+        if len(content) > MAX_RESULT_BYTES:
+            fail(label + " exceeds the fixed byte limit")
+        final = os.fstat(descriptor)
+        if final.st_dev != opened.st_dev or final.st_ino != opened.st_ino or final.st_size != len(content):
+            fail(label + " changed while being read")
+        try:
+            text = content.decode("utf-8")
+            value = json.loads(text)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            fail(label + " is not UTF-8 JSON: " + str(error))
+        if canonical(value) != text:
+            fail(label + " is not canonical")
+        return value
+    except OSError as error:
+        fail(label + " cannot be read: " + str(error))
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def validate_shadow_summary(value, label):
@@ -265,7 +342,32 @@ def write_private_json(path, value):
                 pass
 
 
-def parse_verifier_output(output):
+def validate_shadow_witness_capsule(value, label):
+    value = require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "shadow_admission_id",
+            "ticket_hash",
+            "capsule_hash",
+            "observation_hash",
+            "close_hash",
+        },
+        label,
+    )
+    if value["schema_version"] != SCHEMA_VERSION:
+        fail(label + " schema_version is unsupported")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "shadow_admission_id": require_sha256(value["shadow_admission_id"], label + " admission id"),
+        "ticket_hash": require_sha256(value["ticket_hash"], label + " ticket hash"),
+        "capsule_hash": require_sha256(value["capsule_hash"], label + " capsule hash"),
+        "observation_hash": require_sha256(value["observation_hash"], label + " observation hash"),
+        "close_hash": require_sha256(value["close_hash"], label + " close hash"),
+    }
+
+
+def parse_verifier_output(output, expect_shadow_witness=False):
     if not output or len(output) > MAX_RESULT_BYTES:
         fail("installed verifier output is missing or too large")
     try:
@@ -275,7 +377,7 @@ def parse_verifier_output(output):
         fail("installed verifier output is not JSON: " + str(error))
     if canonical(value) + "\n" != text:
         fail("installed verifier output is not canonical")
-    if not isinstance(value, dict) or set(value) != {
+    expected = {
         "acceptance",
         "bridge_receipt",
         "owner_kernel_authority",
@@ -283,7 +385,10 @@ def parse_verifier_output(output):
         "schema_version",
         "shadow",
         "status",
-    }:
+    }
+    if expect_shadow_witness:
+        expected.add("shadow_witness_capsule")
+    if not isinstance(value, dict) or set(value) != expected:
         fail("installed verifier output has an unexpected shape")
     if (
         value["schema_version"] != SCHEMA_VERSION
@@ -295,6 +400,10 @@ def parse_verifier_output(output):
     ):
         fail("installed verifier output is not a non-authoritative intake receipt")
     validate_shadow_summary(value["shadow"], "installed verifier shadow summary")
+    if expect_shadow_witness:
+        value["shadow_witness_capsule"] = validate_shadow_witness_capsule(
+            value["shadow_witness_capsule"], "installed verifier shadow witness capsule"
+        )
     return value
 
 
@@ -314,6 +423,9 @@ def run_node_verifier(args, payload):
         "--install-binding-hash",
         args.install_binding_hash,
     ]
+    workspace_ticket = getattr(args, "workspace_ticket", None)
+    if workspace_ticket is not None:
+        command.extend(["--workspace-ticket", workspace_ticket])
     try:
         result = subprocess.run(
             command,
@@ -329,7 +441,94 @@ def run_node_verifier(args, payload):
         fail("installed verifier timed out")
     if result.returncode != 0:
         fail("installed verifier rejected the intake")
-    return result.stdout, parse_verifier_output(result.stdout)
+    return result.stdout, parse_verifier_output(
+        result.stdout, expect_shadow_witness=workspace_ticket is not None
+    )
+
+
+def normalize_shadow_witness_binding(value, args, capsule):
+    value = require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "kind",
+            "session_id",
+            "ticket_hash",
+            "witness_pid",
+            "witness_uid",
+            "witness_gid",
+            "socket_gid",
+        },
+        "shadow witness root binding",
+    )
+    if (
+        value["schema_version"] != SCHEMA_VERSION
+        or value["kind"] != "p35_shadow_witness_binding"
+        or value["session_id"] != args.session_id
+        or value["ticket_hash"] != capsule["ticket_hash"]
+        or value["socket_gid"] != args.verifier_gid
+    ):
+        fail("shadow witness root binding does not match the verifier session")
+    return {
+        "witness_pid": require_nonnegative_int(value["witness_pid"], "shadow witness pid", 1),
+        "witness_uid": require_nonnegative_int(value["witness_uid"], "shadow witness uid", 1),
+        "witness_gid": require_nonnegative_int(value["witness_gid"], "shadow witness gid", 1),
+        "socket_gid": args.verifier_gid,
+    }
+
+
+def load_shadow_witness_client(path):
+    path = require_root_owned_file(path, "shadow witness client snapshot")
+    spec = importlib.util.spec_from_file_location("p35_shadow_witness_client", path)
+    module = importlib.util.module_from_spec(spec)
+    previous_dont_write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous_dont_write_bytecode
+    return module
+
+
+def append_shadow_witness(args, parsed):
+    if getattr(args, "workspace_ticket", None) is None:
+        return parsed
+    capsule = parsed.pop("shadow_witness_capsule", None)
+    if capsule is None:
+        fail("installed verifier did not return a shadow witness capsule")
+    binding = normalize_shadow_witness_binding(
+        read_root_verifier_json(
+            args.shadow_witness_binding, args.verifier_gid, "shadow witness root binding"
+        ),
+        args,
+        capsule,
+    )
+    client = load_shadow_witness_client(args.shadow_witness_client)
+    try:
+        summary = client.record_shadow(
+            args.shadow_witness_socket_root,
+            args.shadow_witness_socket,
+            binding["witness_pid"],
+            binding["witness_uid"],
+            binding["witness_gid"],
+            binding["socket_gid"],
+            capsule,
+        )
+    except client.ShadowWitnessClientError as error:
+        fail("shadow witness append failed: " + str(error))
+    parsed["shadow_witness"] = {
+        **summary,
+        "disclosure": {
+            "engine": {"status": "not_started", "dispatch_authority": "not_available"},
+            "owner_kernel_authority": "none",
+            "effect_authority": "none",
+            "acceptance": "not_available",
+            "witness_assurance": "separate_uid_local_append_only_root_readback_not_p2",
+            "workspace_assurance": "root_held_descriptor_matches_signed_v1_path_and_base_only",
+            "content_immutability": "not_available",
+        },
+    }
+    return parsed
 
 
 def acquire_replay_lock(path):
@@ -413,6 +612,10 @@ def serve(args):
             lock_descriptor = acquire_replay_lock(args.replay_lock_path)
             try:
                 output, parsed = run_node_verifier(args, payload)
+                parsed = append_shadow_witness(args, parsed)
+                output = (canonical(parsed) + "\n").encode("utf-8")
+                if len(output) > MAX_RESULT_BYTES:
+                    fail("shadow witness verifier output exceeds the fixed byte limit")
             finally:
                 fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
                 os.close(lock_descriptor)
@@ -480,6 +683,11 @@ def parser():
     serve_parser.add_argument("--session-expires-at-ms", type=int, required=True)
     serve_parser.add_argument("--install-binding-hash", required=True)
     serve_parser.add_argument("--timeout-seconds", type=int, required=True)
+    serve_parser.add_argument("--workspace-ticket")
+    serve_parser.add_argument("--shadow-witness-binding")
+    serve_parser.add_argument("--shadow-witness-socket")
+    serve_parser.add_argument("--shadow-witness-socket-root")
+    serve_parser.add_argument("--shadow-witness-client")
     serve_parser.set_defaults(handler=serve)
     return root
 
@@ -508,6 +716,29 @@ def normalize_args(args):
     args.socket_gid = require_nonnegative_int(args.socket_gid, "socket_gid", 1)
     args.expected_cgroup_path = require_cgroup_path(args.expected_cgroup_path, "expected_cgroup_path")
     args.timeout_seconds = require_nonnegative_int(args.timeout_seconds, "timeout_seconds", 1)
+    witness_values = (
+        args.workspace_ticket,
+        args.shadow_witness_binding,
+        args.shadow_witness_socket,
+        args.shadow_witness_socket_root,
+        args.shadow_witness_client,
+    )
+    if any(value is not None for value in witness_values) and any(value is None for value in witness_values):
+        fail("shadow witness arguments must be present together")
+    if args.workspace_ticket is not None:
+        args.workspace_ticket = require_absolute_path(args.workspace_ticket, "workspace ticket")
+        args.shadow_witness_binding = require_absolute_path(
+            args.shadow_witness_binding, "shadow witness binding"
+        )
+        args.shadow_witness_socket = require_absolute_path(
+            args.shadow_witness_socket, "shadow witness socket"
+        )
+        args.shadow_witness_socket_root = require_absolute_path(
+            args.shadow_witness_socket_root, "shadow witness socket root"
+        )
+        args.shadow_witness_client = require_absolute_path(
+            args.shadow_witness_client, "shadow witness client"
+        )
     if args.expected_worker_uid == args.verifier_uid or args.expected_worker_gid == args.verifier_gid:
         fail("worker and verifier identities must be distinct")
     return args

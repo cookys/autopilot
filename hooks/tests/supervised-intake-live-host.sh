@@ -26,6 +26,9 @@ fi
 live_parent="/run/autopilot-p35-live-$$"
 install_root="$live_parent/install"
 state_root="$live_parent/state"
+workspace_registry_root="$live_parent/workspace-registry"
+witness_state_root="$live_parent/shadow-witness-state"
+bound_workspace_root="$live_parent/bound-workspace"
 stage_root="$TEST_TMP/p35-live-stage-$$-$RANDOM"
 keyring_path="$stage_root/keyring.json"
 private_key_path="$stage_root/private.pem"
@@ -54,14 +57,51 @@ private_install_out="$stage_root/private-install.out"
 private_install_err="$stage_root/private-install.err"
 private_state_install_out="$stage_root/private-state-install.out"
 private_state_install_err="$stage_root/private-state-install.err"
+registry_out="$stage_root/workspace-registry.out"
+registry_err="$stage_root/workspace-registry.err"
+registry_duplicate_out="$stage_root/workspace-registry-duplicate.out"
+registry_duplicate_err="$stage_root/workspace-registry-duplicate.err"
+bound_register_out="$stage_root/bound-register.out"
+bound_begin_out="$stage_root/bound-begin.out"
+bound_request_path="$stage_root/bound-request.json"
+bound_submit_out="$stage_root/bound-submit.out"
+bound_submit_err="$stage_root/bound-submit.err"
+bound_witness_meta="$stage_root/bound-witness-meta.json"
+bound_reuse_out="$stage_root/bound-reuse.out"
+bound_reuse_err="$stage_root/bound-reuse.err"
 created_runtime_parent=0
+workspace_registry_pid=""
 
 mkdir -p "$stage_root"
+
+stop_workspace_registry() {
+  local pid="${workspace_registry_pid:-}"
+  if [ -z "$pid" ]; then
+    return 0
+  fi
+  if ! sudo -n kill -TERM "$pid" 2>/dev/null; then
+    if kill -0 "$pid" 2>/dev/null; then
+      printf 'FAIL [supervised-intake-live-host] workspace registry could not be stopped\n' >&2
+      return 1
+    fi
+  fi
+  if ! wait "$pid"; then
+    printf 'FAIL [supervised-intake-live-host] workspace registry exited unsuccessfully\n' >&2
+    return 1
+  fi
+  workspace_registry_pid=""
+  return 0
+}
 
 cleanup_live() {
   local status="$?"
   local snapshot_cleanup_status=0
   set +e
+  if ! stop_workspace_registry; then
+    if [ "$status" -eq 0 ]; then
+      status=1
+    fi
+  fi
   sudo -n /usr/bin/python3 - "$live_parent" <<'PY' 2>/dev/null || snapshot_cleanup_status=$?
 import os
 import stat
@@ -161,10 +201,13 @@ NODE
 sudo -n /usr/bin/python3 -I "$REPO_ROOT/src/engine/supervised-intake-host.py" install \
   --install-root "$install_root" \
   --state-root "$state_root" \
+  --workspace-registry-root "$workspace_registry_root" \
+  --witness-state-root "$witness_state_root" \
   --keyring "$keyring_path" \
   --node-path "$(readlink -f "$(command -v node)")" \
   --create-worker \
-  --create-verifier >"$install_out" 2>"$install_err"
+  --create-verifier \
+  --create-shadow-witness >"$install_out" 2>"$install_err"
 if sudo -n find "$REPO_ROOT/src/engine" -maxdepth 2 -type f -path '*/__pycache__/*' | grep -q .; then
   printf 'FAIL [supervised-intake-live-host] root install left bytecode in the source checkout\n' >&2
   exit 1
@@ -175,6 +218,46 @@ const fs = require('fs');
 const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 if (value.worker?.identity !== 'autopilot-intake-worker') process.exit(1);
 NODE
+
+sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" workspace-registry-serve >"$registry_out" 2>"$registry_err" &
+workspace_registry_pid=$!
+registry_ready=0
+for _ in $(seq 1 50); do
+  if grep -q '"status":"workspace_registry_ready"' "$registry_out"; then
+    registry_ready=1
+    break
+  fi
+  if ! kill -0 "$workspace_registry_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 0.1
+done
+if [ "$registry_ready" -ne 1 ]; then
+  printf 'FAIL [supervised-intake-live-host] workspace registry did not become ready\n' >&2
+  sed -n '1,80p' "$registry_err" >&2 || true
+  exit 1
+fi
+node - "$registry_out" <<'NODE'
+const fs = require('fs');
+const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (value.status !== 'workspace_registry_ready' || !/^[A-Za-z0-9._:-]+$/.test(value.registry_instance_id || '')) process.exit(1);
+if (value.owner_kernel_authority !== 'none' || value.acceptance !== 'not_available') process.exit(1);
+NODE
+
+if sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" workspace-registry-serve \
+  >"$registry_duplicate_out" 2>"$registry_duplicate_err"; then
+  printf 'FAIL [supervised-intake-live-host] second workspace registry unexpectedly started\n' >&2
+  exit 1
+fi
+if ! grep -qi 'instance lock is already held' "$registry_duplicate_err"; then
+  printf 'FAIL [supervised-intake-live-host] second registry did not fail on the singleton lock\n' >&2
+  sed -n '1,80p' "$registry_duplicate_err" >&2 || true
+  exit 1
+fi
+if ! sudo -n test -S "$workspace_registry_root/registry.sock"; then
+  printf 'FAIL [supervised-intake-live-host] failed second registry removed the first listener socket\n' >&2
+  exit 1
+fi
 
 sudo -n /usr/bin/python3 -I - "$install_root/sbin/supervised-intake-host.py" "$live_parent/handoff-probe" >"$handoff_probe_out" <<'PY'
 import importlib.util
@@ -385,6 +468,8 @@ sudo -n install -d -o root -g root -m 0700 "$private_parent"
 if sudo -n /usr/bin/python3 -I "$REPO_ROOT/src/engine/supervised-intake-host.py" install \
   --install-root "$private_install_root" \
   --state-root "$state_root" \
+  --workspace-registry-root "$workspace_registry_root" \
+  --witness-state-root "$witness_state_root" \
   --keyring "$keyring_path" \
   --node-path "$(readlink -f "$(command -v node)")" >"$private_install_out" 2>"$private_install_err"; then
   printf 'FAIL [supervised-intake-live-host] install accepted an untraversable service snapshot parent\n' >&2
@@ -406,6 +491,8 @@ sudo -n install -d -o root -g root -m 0700 "$private_state_parent"
 if sudo -n /usr/bin/python3 -I "$REPO_ROOT/src/engine/supervised-intake-host.py" install \
   --install-root "$private_state_install_root" \
   --state-root "$private_state_root" \
+  --workspace-registry-root "$workspace_registry_root" \
+  --witness-state-root "$witness_state_root" \
   --keyring "$keyring_path" \
   --node-path "$(readlink -f "$(command -v node)")" >"$private_state_install_out" 2>"$private_state_install_err"; then
   printf 'FAIL [supervised-intake-live-host] install accepted an untraversable verifier state parent\n' >&2
@@ -430,12 +517,13 @@ generate_request() {
   local target_session="$2"
   local target_challenge_hash="$3"
   local jti="$4"
-  node - "$REPO_ROOT" "$private_key_path" "$output_path" "$target_session" "$target_challenge_hash" "$install_binding_hash" "$jti" <<'NODE'
+  local workspace_root="${5:-$REPO_ROOT/test-workspace}"
+  node - "$REPO_ROOT" "$private_key_path" "$output_path" "$target_session" "$target_challenge_hash" "$install_binding_hash" "$jti" "$workspace_root" <<'NODE'
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const [root, privatePath, outputPath, sessionId, challengeHash, installBindingHash, jti] = process.argv.slice(2);
+const [root, privatePath, outputPath, sessionId, challengeHash, installBindingHash, jti, workspaceRoot] = process.argv.slice(2);
 const {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   compileSupervisedEngineBridgeContract,
@@ -491,7 +579,7 @@ const input = {
     schema_version: 2, contract_id: 'p35-live-contract', artifacts: [{ id: 'source', target: 'src/engine/autopilot-engine.js' }],
     legs: [{ id: 'verification', kind: 'executable', command: 'bash hooks/tests/autopilot-engine.test.sh', artifact_ids: ['source'] }],
   },
-  immutableBase: 'a'.repeat(40), workspaceRoot: path.join(root, 'test-workspace'), prompt: '\u8acb\u9a57\u8b49 P3.5 \u4e2d\u6587 intake \u4e0d\u5f97\u6d29\u9732',
+  immutableBase: 'a'.repeat(40), workspaceRoot, prompt: '\u8acb\u9a57\u8b49 P3.5 \u4e2d\u6587 intake \u4e0d\u5f97\u6d29\u9732',
   branch: 'feat/p35-live', verifyCommand: 'bash hooks/tests/run.sh --parallel 16',
   actionCatalogBindings: Object.fromEntries(getRequiredActionCatalogBindingIds().map((id) => [id, id])),
 };
@@ -543,6 +631,140 @@ NODE
 
 if sudo -n test -e "/run/autopilot-intake/$session_id"; then
   printf 'FAIL [supervised-intake-live-host] completed session remained after cleanup\n' >&2
+  exit 1
+fi
+
+sudo -n install -d -o root -g root -m 0755 "$bound_workspace_root"
+sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" workspace-register \
+  --registration-id p35c-workspace-main \
+  --workspace-root "$bound_workspace_root" \
+  --immutable-base "$(printf 'a%.0s' {1..40})" \
+  --ttl-milliseconds 600000 >"$bound_register_out"
+node - "$bound_register_out" "$bound_workspace_root" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const [outputPath, workspaceRoot] = process.argv.slice(2);
+const raw = fs.readFileSync(outputPath, 'utf8');
+const value = JSON.parse(raw);
+const expectedHash = crypto.createHash('sha256').update(path.resolve(workspaceRoot)).digest('hex');
+if (value.status !== 'workspace_registered' || value.registration_id !== 'p35c-workspace-main') process.exit(1);
+if (value.workspace_root_hash !== expectedHash || value.immutable_base !== 'a'.repeat(40)) process.exit(1);
+if (!/^[0-9a-f]{64}$/.test(value.descriptor_binding_hash || '')) process.exit(1);
+if (value.content_immutability !== 'not_available' || value.owner_kernel_authority !== 'none' || value.acceptance !== 'not_available') process.exit(1);
+if (raw.includes(workspaceRoot)) process.exit(1);
+NODE
+
+sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" begin \
+  --workspace-registration-id p35c-workspace-main >"$bound_begin_out"
+bound_session="$(node -e "console.log(JSON.parse(process.argv[1]).session_id)" "$(cat "$bound_begin_out")")"
+bound_challenge="$(node -e "console.log(JSON.parse(process.argv[1]).session_challenge_hash)" "$(cat "$bound_begin_out")")"
+node - "$bound_begin_out" "$bound_workspace_root" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const value = JSON.parse(raw);
+const workspaceRoot = process.argv[3];
+const binding = value.workspace_binding;
+if (value.status !== 'session_open' || !binding || binding.registration_id !== 'p35c-workspace-main') process.exit(1);
+if (!/^[0-9a-f]{64}$/.test(binding.descriptor_binding_hash || '') || !/^[0-9a-f]{64}$/.test(binding.ticket_hash || '')) process.exit(1);
+if (binding.assurance !== 'root_held_descriptor_matches_signed_v1_path_and_base_only' || binding.content_immutability !== 'not_available') process.exit(1);
+if (raw.includes(workspaceRoot)) process.exit(1);
+NODE
+generate_request "$bound_request_path" "$bound_session" "$bound_challenge" "p35c-live-bound-jti" "$bound_workspace_root"
+if ! sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" submit --session-id "$bound_session" \
+  <"$bound_request_path" >"$bound_submit_out" 2>"$bound_submit_err"; then
+  printf 'FAIL [supervised-intake-live-host] bound workspace submission failed\n' >&2
+  sed -n '1,120p' "$bound_submit_err" >&2 || true
+  exit 1
+fi
+node - "$bound_submit_out" "$bound_workspace_root" "$bound_witness_meta" <<'NODE'
+const fs = require('fs');
+const [outputPath, workspaceRoot, metaPath] = process.argv.slice(2);
+const raw = fs.readFileSync(outputPath, 'utf8');
+const value = JSON.parse(raw);
+const hashes = ['shadow_admission_id', 'ticket_hash', 'capsule_hash', 'observation_hash', 'close_hash', 'shadow_chain_head'];
+const witness = value.shadow_witness;
+const binding = value.workspace_binding;
+if (value.status !== 'p35_shadow_intake_complete' || value.owner_kernel_authority !== 'none' || value.acceptance !== 'not_available') process.exit(1);
+if (!binding || binding.registration_id !== 'p35c-workspace-main' || binding.assurance !== 'root_held_descriptor_matches_signed_v1_path_and_base_only' || binding.content_immutability !== 'not_available') process.exit(1);
+if (!witness || witness.status !== 'shadow_witness_recorded' || witness.idempotent !== false) process.exit(1);
+if (!hashes.every((key) => /^[0-9a-f]{64}$/.test(witness[key] || ''))) process.exit(1);
+if (witness.previous_shadow_head !== null && !/^[0-9a-f]{64}$/.test(witness.previous_shadow_head || '')) process.exit(1);
+const disclosure = witness.disclosure;
+if (disclosure?.engine?.status !== 'not_started' || disclosure?.engine?.dispatch_authority !== 'not_available') process.exit(1);
+if (disclosure?.owner_kernel_authority !== 'none' || disclosure?.effect_authority !== 'none' || disclosure?.acceptance !== 'not_available') process.exit(1);
+if (disclosure?.witness_assurance !== 'separate_uid_local_append_only_root_readback_not_p2') process.exit(1);
+if (disclosure?.workspace_assurance !== 'root_held_descriptor_matches_signed_v1_path_and_base_only' || disclosure?.content_immutability !== 'not_available') process.exit(1);
+if (raw.includes(workspaceRoot)) process.exit(1);
+fs.writeFileSync(metaPath, JSON.stringify({
+  shadow_admission_id: witness.shadow_admission_id,
+  ticket_hash: witness.ticket_hash,
+  capsule_hash: witness.capsule_hash,
+  observation_hash: witness.observation_hash,
+  close_hash: witness.close_hash,
+  shadow_chain_head: witness.shadow_chain_head,
+}, null, 0) + '\n', { mode: 0o600 });
+NODE
+if sudo -n test -e "/run/autopilot-intake/$bound_session"; then
+  printf 'FAIL [supervised-intake-live-host] bound workspace session remained after cleanup\n' >&2
+  exit 1
+fi
+sudo -n /usr/bin/python3 - "$witness_state_root" "$bound_witness_meta" "$bound_workspace_root" <<'PY'
+import json
+import os
+import pwd
+import stat
+import sys
+
+state_root, meta_path, workspace_root = sys.argv[1:]
+with open(meta_path, 'r', encoding='utf-8') as source:
+    expected = json.load(source)
+journal_path = os.path.join(state_root, 'journal', expected['shadow_admission_id'] + '.jsonl')
+account = pwd.getpwnam('autopilot-shadow-witness')
+info = os.lstat(journal_path)
+if (
+    not stat.S_ISREG(info.st_mode)
+    or info.st_uid != account.pw_uid
+    or info.st_gid != account.pw_gid
+    or (info.st_mode & 0o7777) != 0o600
+    or info.st_nlink != 1
+):
+    raise SystemExit('witness journal identity or mode is incorrect')
+with open(journal_path, 'rb') as source:
+    raw = source.read()
+if workspace_root.encode('utf-8') in raw or '\u8acb\u9a57\u8b49 P3.5 \u4e2d\u6587 intake \u4e0d\u5f97\u6d29\u9732'.encode('utf-8') in raw:
+    raise SystemExit('witness journal retained raw workspace or prompt data')
+lines = raw.splitlines()
+if len(lines) != 3:
+    raise SystemExit('witness journal does not contain exactly three durable transitions')
+entries = [json.loads(line) for line in lines]
+if [(entry.get('sequence'), entry.get('phase')) for entry in entries] != [(0, 'open'), (1, 'observation'), (2, 'closed')]:
+    raise SystemExit('witness journal phases are invalid')
+if entries[-1].get('entry_hash') != expected['shadow_chain_head']:
+    raise SystemExit('witness journal final hash does not match root-readback output')
+if entries[0].get('shadow_admission_id') != expected['shadow_admission_id'] or entries[0].get('ticket_hash') != expected['ticket_hash']:
+    raise SystemExit('witness journal does not match the root-issued ticket')
+if entries[0].get('capsule_hash') != expected['capsule_hash']:
+    raise SystemExit('witness journal capsule hash does not match the gateway summary')
+if entries[1].get('observation_hash') != expected['observation_hash'] or entries[2].get('close_hash') != expected['close_hash']:
+    raise SystemExit('witness journal observation or close hash does not match the gateway summary')
+if any('workspace' in key or 'prompt' in key for entry in entries for key in entry):
+    raise SystemExit('witness journal schema gained raw workspace or prompt fields')
+PY
+if sudo -n /usr/bin/python3 -I "$install_root/sbin/supervised-intake-host.py" begin \
+  --workspace-registration-id p35c-workspace-main >"$bound_reuse_out" 2>"$bound_reuse_err"; then
+  printf 'FAIL [supervised-intake-live-host] completed workspace descriptor registration was reused\n' >&2
+  exit 1
+fi
+if ! grep -qi 'registration\|completed\|reserved' "$bound_reuse_err"; then
+  printf 'FAIL [supervised-intake-live-host] completed workspace descriptor rejection was not visible\n' >&2
+  exit 1
+fi
+if ! stop_workspace_registry; then
+  exit 1
+fi
+if sudo -n test -e "$workspace_registry_root/registry.sock"; then
+  printf 'FAIL [supervised-intake-live-host] workspace registry socket remained after graceful stop\n' >&2
   exit 1
 fi
 

@@ -41,6 +41,7 @@ const REQUIRED_FILE_KEYS = Object.freeze([
 ]);
 const TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 class VerifierEntrypointError extends Error {
   constructor(message) {
@@ -77,6 +78,13 @@ function requireToken(value, label) {
 
 function requireDigest(value, label) {
   if (typeof value !== 'string' || !SHA256_PATTERN.test(value)) fail(`${label} must be a lowercase SHA-256 digest`);
+  return value;
+}
+
+function requireGitSha(value, label) {
+  if (typeof value !== 'string' || !GIT_SHA_PATTERN.test(value)) {
+    fail(`${label} must be a lowercase full 40-character Git SHA`);
+  }
   return value;
 }
 
@@ -187,8 +195,8 @@ function readBoundedStdin() {
 }
 
 function parseArgs(argv) {
-  if (argv.length !== 11 || argv[0] !== 'verify') {
-    fail('usage is verify --config PATH --session-id ID --session-challenge-hash HASH --session-expires-at-ms TIME --install-binding-hash HASH');
+  if ((argv.length !== 11 && argv.length !== 13) || argv[0] !== 'verify') {
+    fail('usage is verify --config PATH --session-id ID --session-challenge-hash HASH --session-expires-at-ms TIME --install-binding-hash HASH [--workspace-ticket PATH]');
   }
   const expected = ['--config', '--session-id', '--session-challenge-hash', '--session-expires-at-ms', '--install-binding-hash'];
   const values = {};
@@ -196,12 +204,19 @@ function parseArgs(argv) {
     if (argv[index * 2 + 1] !== expected[index]) fail('verifier arguments must use the fixed ordered protocol');
     values[expected[index].slice(2).replaceAll('-', '_')] = argv[index * 2 + 2];
   }
+  const workspaceTicket = argv.length === 13
+    ? (() => {
+      if (argv[11] !== '--workspace-ticket') fail('verifier workspace ticket argument must use the fixed ordered protocol');
+      return requireAbsolutePath(argv[12], 'verifier workspace ticket');
+    })()
+    : null;
   return {
     config: requireAbsolutePath(values.config, 'verifier config'),
     session_id: requireToken(values.session_id, 'verifier session_id'),
     session_challenge_hash: requireDigest(values.session_challenge_hash, 'verifier session_challenge_hash'),
     session_expires_at_ms: requireDecimalCliInteger(values.session_expires_at_ms, 'verifier session_expires_at_ms', 1),
     install_binding_hash: requireDigest(values.install_binding_hash, 'verifier install_binding_hash'),
+    workspace_ticket: workspaceTicket,
   };
 }
 
@@ -224,10 +239,13 @@ function normalizeInstalledConfig(raw, configPath) {
     'paths',
     'runtime_parent',
     'schema_version',
+    'shadow_witness',
     'state_root',
     'systemd_properties',
     'verifier',
+    'witness_state_root',
     'worker',
+    'workspace_registry',
   ]), 'installed P3.5 config');
   if (value.schema_version !== HOST_SCHEMA_VERSION) fail('installed P3.5 config schema_version is unsupported');
   const installRoot = requireAbsolutePath(value.install_root, 'installed P3.5 install_root');
@@ -240,7 +258,17 @@ function normalizeInstalledConfig(raw, configPath) {
   }
   const worker = normalizeIdentity(value.worker, 'installed P3.5 worker', 'autopilot-intake-worker');
   const verifier = normalizeIdentity(value.verifier, 'installed P3.5 verifier', 'autopilot-verifier');
-  if (worker.uid === verifier.uid || worker.gid === verifier.gid) fail('installed worker and verifier must be distinct');
+  const shadowWitness = normalizeIdentity(value.shadow_witness, 'installed P3.5 shadow witness', 'autopilot-shadow-witness');
+  if (new Set([worker.uid, verifier.uid, shadowWitness.uid]).size !== 3
+    || new Set([worker.gid, verifier.gid, shadowWitness.gid]).size !== 3) {
+    fail('installed worker, verifier, and shadow witness must be distinct');
+  }
+  const workspaceRegistry = requireExactKeys(value.workspace_registry, new Set(['root', 'socket']), 'installed P3.5 workspace registry');
+  const registryRoot = requireAbsolutePath(workspaceRegistry.root, 'installed P3.5 workspace registry root');
+  if (workspaceRegistry.socket !== path.join(registryRoot, 'registry.sock')) {
+    fail('installed P3.5 workspace registry socket is unexpected');
+  }
+  const witnessStateRoot = requireAbsolutePath(value.witness_state_root, 'installed P3.5 witness_state_root');
   const paths = requireExactKeys(value.paths, new Set([
     'node_path',
     'python_path',
@@ -294,6 +322,9 @@ function normalizeInstalledConfig(raw, configPath) {
     state_root: requireVerifierStateDirectory(value.state_root, verifier),
     worker,
     verifier,
+    shadow_witness: shadowWitness,
+    workspace_registry: { root: registryRoot, socket: workspaceRegistry.socket },
+    witness_state_root: witnessStateRoot,
     paths,
     files,
     keyring: { ...keyring, authority: {
@@ -326,6 +357,131 @@ function loadInstalledKeyring(config) {
     fail('installed P3.5 keyring does not match its pinned authority');
   }
   return keyring;
+}
+
+function readRootVerifierWorkspaceTicket(ticketPath, config, args) {
+  if (ticketPath === null) return null;
+  const candidate = requireAbsolutePath(ticketPath, 'workspace ticket');
+  const parent = path.dirname(candidate);
+  requireRootOwnedPath(parent, 'workspace ticket parent', { directory: true });
+  let info;
+  try {
+    info = fs.lstatSync(candidate);
+  } catch (error) {
+    fail(`workspace ticket cannot be inspected: ${error.message}`);
+  }
+  if (info.isSymbolicLink() || !info.isFile() || info.uid !== 0 || info.gid !== config.verifier.gid
+    || (info.mode & 0o7777) !== 0o440 || info.size <= 0 || info.size > MAX_CONFIG_BYTES) {
+    fail('workspace ticket does not have the expected root/verifier identity and mode');
+  }
+  let raw;
+  try {
+    raw = fs.readFileSync(candidate);
+  } catch (error) {
+    fail(`workspace ticket cannot be read: ${error.message}`);
+  }
+  const final = fs.lstatSync(candidate);
+  if (final.dev !== info.dev || final.ino !== info.ino || final.size !== info.size) {
+    fail('workspace ticket changed while being read');
+  }
+  const value = requireExactKeys(
+    parseCanonicalJsonBytes(raw, 'workspace ticket', MAX_CONFIG_BYTES),
+    new Set([
+      'schema_version',
+      'kind',
+      'install_binding_hash',
+      'registry_instance_id',
+      'registration_id',
+      'workspace_root_hash',
+      'immutable_base',
+      'descriptor_fingerprint_hash',
+      'descriptor_binding_hash',
+      'session_id',
+      'session_challenge_hash',
+      'expires_at_ms',
+      'ticket_hash',
+    ]),
+    'workspace ticket',
+  );
+  const material = { ...value };
+  delete material.ticket_hash;
+  const ticketHash = requireDigest(value.ticket_hash, 'workspace ticket hash');
+  if (ticketHash !== sha256(canonicalJson(material))) fail('workspace ticket hash does not match content');
+  if (value.schema_version !== HOST_SCHEMA_VERSION || value.kind !== 'p35_workspace_descriptor_ticket'
+    || value.install_binding_hash !== config.binding_hash || value.session_id !== args.session_id
+    || value.session_challenge_hash !== args.session_challenge_hash
+    || value.expires_at_ms !== args.session_expires_at_ms) {
+    fail('workspace ticket does not match the installed verifier session');
+  }
+  if (Date.now() >= value.expires_at_ms) fail('workspace ticket has expired');
+  return {
+    schema_version: HOST_SCHEMA_VERSION,
+    kind: 'p35_workspace_descriptor_ticket',
+    install_binding_hash: config.binding_hash,
+    registry_instance_id: requireToken(value.registry_instance_id, 'workspace ticket registry instance'),
+    registration_id: requireToken(value.registration_id, 'workspace ticket registration'),
+    workspace_root_hash: requireDigest(value.workspace_root_hash, 'workspace ticket workspace hash'),
+    immutable_base: requireGitSha(value.immutable_base, 'workspace ticket immutable base'),
+    descriptor_fingerprint_hash: requireDigest(value.descriptor_fingerprint_hash, 'workspace ticket descriptor fingerprint'),
+    descriptor_binding_hash: requireDigest(value.descriptor_binding_hash, 'workspace ticket descriptor binding'),
+    session_id: args.session_id,
+    session_challenge_hash: args.session_challenge_hash,
+    expires_at_ms: args.session_expires_at_ms,
+    ticket_hash: ticketHash,
+  };
+}
+
+function assertWorkspaceTicketMatchesPlan(ticket, plan) {
+  if (ticket === null) return;
+  if (plan.inputs.workspace_root_hash !== ticket.workspace_root_hash || plan.immutable_base !== ticket.immutable_base) {
+    fail('workspace ticket does not exact-match the signed P3.3 workspace and immutable-base claims');
+  }
+}
+
+function buildShadowWitnessCapsule({ ticket, plan, authenticatedReceipt, bridgeReceipt, shadow }) {
+  if (ticket === null) return null;
+  const planHash = sha256(canonicalJson(plan));
+  const material = {
+    schema_version: HOST_SCHEMA_VERSION,
+    kind: 'p35_shadow_witness_capsule',
+    ticket_hash: ticket.ticket_hash,
+    descriptor_binding_hash: ticket.descriptor_binding_hash,
+    plan_hash: planHash,
+    intake_binding_hash: plan.intake_binding_hash,
+    bridge_receipt_hash: sha256(canonicalJson(bridgeReceipt)),
+    authenticated_receipt_hash: sha256(canonicalJson(authenticatedReceipt)),
+    shadow_intake_id: shadow.intake_id,
+    shadow_record_hash: shadow.record_hash,
+  };
+  const capsuleHash = sha256(canonicalJson(material));
+  const shadowAdmissionId = sha256(canonicalJson({
+    schema_version: HOST_SCHEMA_VERSION,
+    kind: 'p35_shadow_admission',
+    ticket_hash: ticket.ticket_hash,
+    capsule_hash: capsuleHash,
+  }));
+  const observationHash = sha256(canonicalJson({
+    schema_version: HOST_SCHEMA_VERSION,
+    kind: 'p35_shadow_observation',
+    shadow_admission_id: shadowAdmissionId,
+    shadow_record_hash: shadow.record_hash,
+    descriptor_binding_hash: ticket.descriptor_binding_hash,
+  }));
+  const closeHash = sha256(canonicalJson({
+    schema_version: HOST_SCHEMA_VERSION,
+    kind: 'p35_shadow_diagnostic_close',
+    shadow_admission_id: shadowAdmissionId,
+    ticket_hash: ticket.ticket_hash,
+    observation_hash: observationHash,
+  }));
+  return {
+    schema_version: HOST_SCHEMA_VERSION,
+    shadow_admission_id: shadowAdmissionId,
+    ticket_hash: ticket.ticket_hash,
+    capsule_hash: capsuleHash,
+    observation_hash: observationHash,
+    close_hash: closeHash,
+  };
 }
 
 function readRequest() {
@@ -370,6 +526,7 @@ function execute() {
   assertEntrypoint(config);
   if (args.install_binding_hash !== config.binding_hash) fail('verifier install binding does not match installed config');
   assertSessionActive(args);
+  const workspaceTicket = readRootVerifierWorkspaceTicket(args.workspace_ticket, config, args);
   const request = readRequest();
   if (request.session_id !== args.session_id) fail('verifier request does not match the host session');
   const keyring = loadInstalledKeyring(config);
@@ -405,6 +562,7 @@ function execute() {
       },
     };
     const plan = compileSupervisedEngineBridgeContract(request.bridge_input);
+    assertWorkspaceTicketMatchesPlan(workspaceTicket, plan);
     let authenticated = null;
     const bridgeReceipt = verifySupervisedEngineBridgeContract(plan, request.bridge_input, request.envelope, {
       trustedIntakeVerifier: (envelope, context) => {
@@ -429,6 +587,15 @@ function execute() {
       receipt: authenticated.receipt,
       bridge_receipt: bridgeReceipt,
       shadow,
+      ...(workspaceTicket === null ? {} : {
+        shadow_witness_capsule: buildShadowWitnessCapsule({
+          ticket: workspaceTicket,
+          plan,
+          authenticatedReceipt: authenticated.receipt,
+          bridgeReceipt,
+          shadow,
+        }),
+      }),
     };
     process.stdout.write(`${canonicalJson(output)}\n`);
   } finally {

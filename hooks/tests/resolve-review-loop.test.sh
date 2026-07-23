@@ -151,10 +151,13 @@ printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
 
 # 7. qc_panel (v2.25.9): default array + aggregation default
-OUT="$(bash "$SCRIPT")"
+# EMPTY_CFG override: isolate from autopilot's dogfood .claude/review-loop-config.md (slot 3),
+# whose qc_panel is a moving target (pinned to Gemini 3.6 Flash (High) on 2026-07-23) — this
+# case asserts the BUILT-IN default roster, so it must not read the live config.
+OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT")"
 assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash"]' "default qc_panel array emitted"
 assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "default aggregation"
-assert_eq "gpt-5.5 claude-opus gemini-flash" "$(bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
+assert_eq "gpt-5.5 claude-opus gemini-flash" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
 
 # 7b. qc_panel preset all-calibrated
 AC_CFG="$TEST_TMP/all-calibrated.md"

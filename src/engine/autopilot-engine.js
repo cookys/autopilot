@@ -10,6 +10,7 @@ const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
+const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const MISPLACEMENT_PATH_PATTERNS = [
@@ -732,23 +733,17 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch (error) {
-    let stderr = '';
-    try {
-      fs.rmSync(parent, { recursive: true, force: true });
-    } catch (cleanupError) {
-      stderr = `verify worktree parent cleanup failed: ${cleanupError.message}`;
-    }
     return {
       error,
       status: null,
       signal: null,
       stdout: '',
-      stderr,
+      stderr: '',
       worktree,
       parent,
     };
   }
-  const result = {
+  return {
     error: child.error || null,
     status: child.status,
     signal: child.signal || null,
@@ -757,17 +752,6 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
     worktree,
     parent,
   };
-  if (worktreeResultBlocked(result)) {
-    try {
-      fs.rmSync(parent, { recursive: true, force: true });
-    } catch (error) {
-      result.stderr = appendCleanupWarning(
-        result.stderr,
-        `verify worktree parent cleanup failed: ${error.message}`,
-      );
-    }
-  }
-  return result;
 }
 
 function defaultGitWorktreeRemove({ worktree, cwd }) {
@@ -786,24 +770,20 @@ function defaultGitWorktreeRemove({ worktree, cwd }) {
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const result = {
+  return {
     error: child.error || null,
     status: child.status,
     signal: child.signal || null,
     stdout: child.stdout || '',
     stderr: child.stderr || '',
   };
-  if (worktreeResultBlocked(result)) {
-    try {
-      fs.rmSync(worktree, { recursive: true, force: true });
-    } catch (error) {
-      result.stderr = appendCleanupWarning(
-        result.stderr,
-        `verify worktree cleanup fallback failed: ${error.message}`,
-      );
-    }
+}
+
+function defaultVerifyWorktreeCleanup({ targetPath }) {
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new TypeError('verify worktree cleanup requires a target path');
   }
-  return result;
+  fs.rmSync(targetPath, { recursive: true, force: true });
 }
 
 function defaultGitBranchForce({ branch, commit, cwd }) {
@@ -994,6 +974,7 @@ class AutopilotEngine {
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
+    this.verifyWorktreeCleanup = options.verifyWorktreeCleanup || defaultVerifyWorktreeCleanup;
     this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
     this.gitResumeInspect = options.gitResumeInspect || defaultResumeInspect;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
@@ -2329,7 +2310,14 @@ class AutopilotEngine {
               }
               if (verifyCleanupWarning) {
                 try {
-                  fs.rmSync(verifyWorktree, { recursive: true, force: true });
+                  this.verifyWorktreeCleanup({
+                    targetPath: verifyWorktree,
+                    cwd: loopCwd,
+                    round,
+                    commit,
+                    branch: currentBranch,
+                    reason: 'worktree_remove_fallback',
+                  });
                 } catch (error) {
                   verifyCleanupWarning = appendCleanupWarning(
                     verifyCleanupWarning,
@@ -2341,7 +2329,14 @@ class AutopilotEngine {
           } finally {
             if (verifyWorktreeParent) {
               try {
-                fs.rmSync(verifyWorktreeParent, { recursive: true, force: true });
+                this.verifyWorktreeCleanup({
+                  targetPath: verifyWorktreeParent,
+                  cwd: loopCwd,
+                  round,
+                  commit,
+                  branch: currentBranch,
+                  reason: 'worktree_parent_cleanup',
+                });
               } catch (error) {
                 verifyCleanupWarning = appendCleanupWarning(
                   verifyCleanupWarning,
@@ -2655,6 +2650,7 @@ class AutopilotEngine {
 }
 
 module.exports = {
+  AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
   buildImplementationArgs,
   buildReviewArgs,

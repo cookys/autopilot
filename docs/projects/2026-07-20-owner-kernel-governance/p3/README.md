@@ -119,6 +119,49 @@ but P3.1 has no protocol to resume a partially open observation session from `ge
 session can replay its idempotent `open`, but its first append against an advanced remote stream becomes
 partial rather than silently continuing it.
 
+## P3.3 Frozen Engine-to-Kernel Bridge Contract
+
+`src/engine/supervised-engine-bridge-contract.js` is a pure compiler and verifier for the future
+supervised host boundary. It maps every current dependency-injected `AutopilotEngine` control seam,
+including verification-worktree fallback deletion, to the only Owner Kernel destinations that a later
+host may use. The module-load inventory validator rejects duplicate sink IDs/seams, duplicate or
+unsupported Kernel destinations, missing P2 permit/execution routes, and invalid action requirements.
+The focused contract test also reads the full constructor option inventory and fails when it diverges
+from the declared control or runtime-context allowlist.
+
+- Compilation requires a frozen governance policy, a v2 acceptance contract, a lowercase immutable
+  Git base, an absolute workspace root, bounded run/invocation identifiers, and one distinct frozen
+  action-catalog entry for every dispatch or mutation sink. Each entry must match that sink's fixed
+  operation/tool signature, meet its minimum risk class, and require mediation; command execution also
+  requires a command-bound catalog entry. The bridge plan contains policy and contract hashes, catalog
+  IDs plus entry/requirement hashes, and only hashes for the workspace root, prompt, branch, and
+  verification command. It never serializes raw policy, acceptance-contract, workspace, or sensitive
+  input objects.
+- The plan explicitly records `bridge_status: "contract_only"`,
+  `owner_kernel_authority: "none"`, and `acceptance: "not_available"`. It maps every engine terminal
+  outcome, including `engine_converged`, to `not_accepted`; an ordinary review is never a challenge
+  unless a qualified independent hash-bound condition is supplied by a later host. Every catalog-bound
+  sink includes P2's `mintActionDecision` and `executeAuthorizedAction` route; review/implementation
+  dispatch retain their semantic delegation records only in addition to that permit/receipt path.
+- Compilation is deterministic but does not authenticate its caller. Verification requires an opaque
+  `trustedIntakeEnvelope`, a **host-owned** `trustedIntakeVerifier` adapter, and a host-pinned
+  issuer/key/attestation tuple. The adapter must return the authenticated binding plus the exact
+  canonical compiled-plan hash. The binding covers run IDs, policy/contract hashes, immutable base,
+  workspace-root and sensitive-input hashes, the full sink-inventory hash, and the static bridge ABI
+  hash. This makes a self-consistent worker-side change to destinations or mappings fail against the
+  host-issued envelope; the plan hash also binds the resolved catalog mappings. P3.3 validates this
+  adapter protocol and exact comparison only: it does not verify signatures, credentials, replay,
+  expiry, or peer identity itself. P3.4 must provide and pin that adapter in the cross-UID host rather
+  than letting the worker select it. The contract does not construct an Owner Kernel, mint a permit,
+  invoke a dispatcher, run a command, change a worktree, or alter the existing review loop.
+
+This is intentionally a coverage and integration contract, not a live bridge. A workspace-root hash is
+not a descriptor-pinned filesystem identity, and the legacy Engine still allows its ordinary `cwd`
+overrides. P3.4 must reject unbound workspace overrides and provide a Linux supervised substrate with a
+cross-UID authenticated channel, peer-credential checks, a sandboxed worker, broker-held effects,
+durable independent witnessing, and an externally run P0 corpus before it can consume this contract for
+real authority.
+
 ## Deferred Full P3 Gate
 
 Do not reduce `/l4` through `/l6` to aliases yet. Their worktree isolation, strict dispatch
@@ -151,3 +194,8 @@ exclusion from the journal, crash replay, paired lease contention, close/short-w
 unterminated journal tails, durable runtime-directory creation, descriptor-pinned path replacement,
 private socket directories, bounded trickling peers/shutdown, same-instance replay, and
 unavailable-client FD cleanup.
+`hooks/tests/supervised-engine-bridge-contract.test.sh` covers P3.3's complete constructor-option and
+injected-sink inventory, static inventory validation, exact distinct mediated action-catalog bindings
+and risk floors, v2-only acceptance contract, hash-only workspace/sensitive inputs, host-owned trusted
+intake verification, pinned issuer/key/attestation, ABI/inventory/compiled-plan binding, no-authority
+terminal mapping, deterministic verification, and mutation/tampering rejection.

@@ -43,6 +43,11 @@
 #       # active `/l6` contract: strict roster selection only.
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
 #       # test seam only: override the runner binary for seam/fake tests.
+#   [--context-window off|warn|block] on any mode: pre-dispatch context-window gate (default:
+#       block; also AUTOPILOT_CONTEXT_WINDOW_GATE). Authoring payloads are the largest
+#       single-file inputs on any rail, so this is the rail most likely to overflow a small
+#       window. Over budget ⇒ fail closed with no runner spawn.
+#       See references/hetero-dispatch.md § Context-window gate.
 #   In strict roster mode, do not pass `--runner`, `--model`, `--effort`, or `--endpoint`.
 #   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
 #   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
@@ -101,7 +106,12 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_AUTHOR_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_AUTHOR_SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-author-*' || true
+# Pre-dispatch context-window gate (lib/context-window.sh). Best-effort source: a missing
+# helper degrades to "no gate", never to a dispatch outage.
+# shellcheck source=/dev/null
+[ -r "$_AUTHOR_SELF_DIR/lib/context-window.sh" ] && . "$_AUTHOR_SELF_DIR/lib/context-window.sh" || true
 
+CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
@@ -118,6 +128,7 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
+    --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
@@ -126,7 +137,7 @@ while [[ $# -gt 0 ]]; do
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
-    -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -671,6 +682,22 @@ timeout_to_ms() {
 }
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
+
+# Context-window gate — runs BEFORE any runner spawns, so an over-budget authoring
+# payload costs nothing. Authoring prompts are the largest single-file payloads on
+# any rail (see the header note about the 4096 review default truncating them), which
+# makes this the rail most likely to overflow a small window.
+if declare -F context_window_gate > /dev/null 2>&1; then
+  _CB_MODE="$(context_window_mode "${CONTEXT_WINDOW_GATE:-}")"
+  if ! context_window_gate "$_CB_MODE" "$_AUTHOR_SELF_DIR" "$MODEL" "${PROMPT_FILE:-}"; then
+    printf '[dispatch-author: context-window blocked] %s\n' "${CONTEXT_WINDOW_JSON:-}" >> "$RAW_LOG"
+    die_precondition "context budget exceeded: ${CONTEXT_WINDOW_REASON:-over budget}"
+  fi
+  [ -n "${CONTEXT_WINDOW_JSON:-}" ] \
+    && printf '[dispatch-author: context-window %s] %s\n' \
+      "${CONTEXT_WINDOW_VERDICT:-}" "${CONTEXT_WINDOW_JSON:-}" >> "$RAW_LOG"
+fi
+
 RUNNER_EXIT=0
 CODEX_TRANSPORT=0
 CODEX_DEADLINE_HIT=0

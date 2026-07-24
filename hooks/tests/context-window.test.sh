@@ -148,6 +148,16 @@ assert_eq "$(context_window_mode '')" "block" "empty mode defaults to block"
 assert_eq "$(context_window_mode garbage)" "block" "garbage mode fails closed to block"
 assert_eq "$(AUTOPILOT_CONTEXT_WINDOW_GATE=warn context_window_mode '')" "warn" "env supplies the mode when arg is empty"
 
+# REGRESSION: the rails run under `set -u`. An unguarded $HOME expansion aborted the
+# ENTIRE rail when HOME was unset (systemd scope / container / cron), turning a
+# fail-open cost gate into a hard dispatch outage.
+NOHOME_RC=0
+env -u HOME bash -c "set -uo pipefail; . '$LIB'; context_window_gate block '$REPO_ROOT/scripts' 'gpt-5.5'" > /dev/null 2>&1 || NOHOME_RC=$?
+assert_eq "0" "$NOHOME_RC" "gate survives an unset HOME under set -u (fail-open, not abort)"
+NOHOME_BLOCK_RC=0
+env -u HOME bash -c "set -uo pipefail; . '$LIB'; context_window_gate block '$REPO_ROOT/scripts' 'gpt-5.3-codex-spark' '$TMP/big.txt'" > /dev/null 2>&1 || NOHOME_BLOCK_RC=$?
+assert_eq "1" "$NOHOME_BLOCK_RC" "gate still blocks over-budget with HOME unset"
+
 # --- dispatch rails: fail closed WITHOUT spawning the runner ------------------
 # The strongest assertion available here: a marker file the fake runner would
 # create if it ever ran. Status comes from artifacts, never from self-report.

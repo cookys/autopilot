@@ -84,7 +84,11 @@ context_window_gate() {
 
   # Consult a recorded context_window observation when the store exists; the JS
   # treats a store without the dimension as a clean miss.
-  local cap_store="${AUTOPILOT_CAPABILITY_STATE:-$HOME/.autopilot/engine-capability/capability.jsonl}"
+  # ${HOME:-} not $HOME: the rails run under `set -u`, and a dispatch launched from a
+  # systemd scope / container / cron context can have no HOME at all. An unguarded
+  # expansion aborts the ENTIRE rail — turning a fail-open cost gate into a hard outage,
+  # the exact opposite of this file's stated posture.
+  local cap_store="${AUTOPILOT_CAPABILITY_STATE:-${HOME:-}/.autopilot/engine-capability/capability.jsonl}"
   [ -r "$cap_store" ] && args+=(--capability-state "$cap_store")
 
   local out rc

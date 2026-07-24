@@ -51,12 +51,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S
 - **Source**: v2.32.58 finish-flow L-5.5 release-hygiene gate
 
-### doc-drift script-refs：`docs/upstream-bugs/agy-print-mode-model-flag.md` 引用不存在的 `scripts/with-agy-model.sh`
-- **Trigger**: 下次動 `docs/upstream-bugs/` 或要讓 `doc-drift-gate.js` 進 CI 硬閘之前。
-- **Context**: `doc-drift-gate.js` 的 script-refs 檢查唯一 FAIL。已驗證為 pre-existing（base SHA d90433b 上該引用即已壞，且 `scripts/with-agy-model.sh` 在 base 就不存在）。要嘛補回該腳本、要嘛把文件改成描述當時的 workaround 而不指向檔案。
-- **Effort**: S
-- **Source**: v2.32.58 finish-flow L-5.4 post-merge doc-sync
-
 ### `hooks/tests/dispatch-output-quiescence.test.sh` 時間敏感 flake 未根治
 - **Trigger**: 下次 CI 或 finish-flow 因它變紅時；或要把它納入 blocking gate 之前。
 - **Context**: v2.32.57 的 merge（`d90433b`，標題明寫 "kill dispatch-output-quiescence flake"）以 worker count 縮放 parallel timing factor，但未根治。v2.32.58 期間三次觀測：base SHA 上 FAIL（`immediate-content returns quickly: expected <= 5, got 6`）、一次全套件 PASS、pre-merge 全套件再度 FAIL 且**失敗的斷言換成 `genuine-empty-fast`** — 斷言隨機漂移是負載敏感 flake 的特徵而非邏輯錯誤。`verify-preexisting.sh` 正式判定 `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`。可能修法：把絕對 tick 上限改成相對於實測 baseline tick 的比值，或在高負載下自動放寬。

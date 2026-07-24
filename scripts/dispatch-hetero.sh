@@ -1957,6 +1957,43 @@ else
   MANIFEST_CONTAINMENT="plain"
 fi
 write_manifest "$$"
+# --- strict pre-flight: every acceptance argv must at least be EXECUTABLE ---
+# run_strict_acceptance_checks() spawns these AFTER the runner has been paid for, and
+# spawnSync does NOT throw on ENOENT/EACCES (it returns status=null with .error set), so a
+# typo'd or missing command surfaces there as a generic "exit-code mismatch" — an expensive
+# way to learn about a typo. Executability is decidable at base, for free.
+#
+# Deliberately NOT gated on exit codes: red-at-base is the expected shape for a TDD unit
+# and green-at-base is legitimate for a regression guard, so only "cannot execute at all"
+# is fatal here.
+if [ "$STRICT_CONTRACT" -eq 1 ]; then
+  preflight_err="$(node -e '
+const fs = require("fs");
+const cp = require("child_process");
+let contract;
+try {
+  contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+} catch (err) {
+  process.stdout.write("");
+  process.exit(0);   // schema problems are the checker s job, not this pre-flight s
+}
+const acceptance = Array.isArray(contract.acceptance) ? contract.acceptance : [];
+for (let i = 0; i < acceptance.length; i++) {
+  const argv = Array.isArray(acceptance[i] && acceptance[i].argv) ? acceptance[i].argv : [];
+  if (!argv.length) continue;
+  const r = cp.spawnSync(argv[0], argv.slice(1), { cwd: process.argv[2], stdio: "ignore" });
+  if (r.error && (r.error.code === "ENOENT" || r.error.code === "EACCES")) {
+    process.stdout.write("acceptance command #" + (i + 1) + " is not executable (" + r.error.code + "): " + argv[0]);
+    process.exit(0);
+  }
+}
+process.stdout.write("");
+  ' "$CONTRACT_FILE" "$WT" 2>/dev/null || true)"
+  if [ -n "$preflight_err" ]; then
+    die_precondition "$preflight_err"
+  fi
+fi
+
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: run_id=${DISPATCH_RUN_ID} manifest=${MANIFEST_FILE:-none} log=${LOG} (watch: scripts/dispatch-status.js --run ${DISPATCH_RUN_ID})" >&2
 if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
   RESULTS_DIR="${LEDGER}.results"

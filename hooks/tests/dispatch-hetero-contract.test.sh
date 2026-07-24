@@ -306,4 +306,25 @@ assert_not_contains "$json" "contract_sha256"
 assert_not_contains "$json" "spec_sha256"
 assert_file_exists "$RUN_MARKER_PATH"
 
+
+echo "--- R9: acceptance argv that cannot execute fails BEFORE the runner ---"
+# spawnSync does not throw on ENOENT — it returns status=null with .error set — so the
+# post-run acceptance check reports a generic "exit-code mismatch" only AFTER the engine
+# has been paid for. Executability is provable at base, for free.
+sed 's|"acceptance": \[{"argv": \["true"\], "exit": 0}\]|"acceptance": [{"argv": ["definitely-not-a-real-command-xyz"], "exit": 0}]|' \
+  "$VALID_CONTRACT" > "$TEST_TMP/unrunnable-acceptance.json"
+rm -f "$RUN_MARKER_PATH"
+out=$(run_dispatch "r9" --strict-contract --contract-file "$TEST_TMP/unrunnable-acceptance.json")
+json=$(get_last_json "$out")
+assert_contains "$json" "precondition_failed"
+assert_contains "$json" "acceptance"
+# The decisive property: the engine must NEVER have been started.
+assert_file_absent "$RUN_MARKER_PATH"
+
+echo "--- R9b: negative control — a runnable acceptance still dispatches ---"
+rm -f "$RUN_MARKER_PATH"
+out=$(run_dispatch "r9b" --strict-contract --contract-file "$VALID_CONTRACT")
+json=$(get_last_json "$out")
+assert_not_contains "$json" "precondition_failed"
+
 finalize_test

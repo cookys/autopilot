@@ -38,6 +38,10 @@ Hard rules:
   timeout pin from the contract; post-return boundary (allow/deny/budget/output) and
   depth-0-executed acceptance argv gate the result. While an l5/l6 session marker is active,
   prompt-only (non-strict) write or author dispatch on this repo fails before the runner.
+- **Context-window gate (v2.32.58)**: all three rails — including the authoring leaf, whose
+  payloads are the largest on any rail — size the input against the target engine's window
+  before spending; over budget ⇒ `precondition_failed`, no runner spawned. Contract:
+  [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md) § Context-window gate.
   No manual override of a NO-GO exists; a changed contract is a new hash and a new GO check.
 - `--solo` (or a foreman that cannot dispatch reliably) → fall back to `/l3` inline.
 - **Depth-0 context discipline**: depth-0 never authors implementation or verification content inline — even verification-prompt authoring is dispatched (dispatch-author.sh). Inline execution only via --solo or a recorded precondition_failed fallback.

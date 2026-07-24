@@ -2,7 +2,7 @@
 
 > **Plan**: [`docs/plans/2026-07-20-owner-kernel-evolution.md`](../../plans/2026-07-20-owner-kernel-evolution.md)
 > **Target branch**: `feat/owner-kernel-governance`
-> **Target version**: v2.32.57
+> **Target version**: v2.32.58
 > **Workflow**: CEO `/l6`, scope=Hold, involvement=just-results
 
 ## Project Goal
@@ -74,7 +74,7 @@
 | API/interface reference | Yes | P1-P2 schema and CLI documentation; migration notes in P3 |
 | Config templates/examples | Yes | P1 governance template plus self-hosted `.claude` config |
 | CHANGELOG | Yes | P3 release entry |
-| Version bump | Yes | P3 patch bump to v2.32.57 per project version policy |
+| Version bump | Yes | P3 patch bump to v2.32.58 after `origin/develop` consumed v2.32.57 |
 | Version sync grep/check | Yes | P3 all-tracked-file old-version scan plus `sync-version.js --check` |
 | Migration guide/notes | Yes | P3 `/lN` alias mapping and one-cycle retirement conditions |
 | Dependent repos/consumers | Yes | P3 documents impact; actual downstream adoption explicitly out of scope |
@@ -129,7 +129,7 @@
 | P0 | **PASS FOR P1 FUNDING** | Canonical five-target classifier: `supervised-partial` is `partial`; Claude Code, Codex, OpenCode, and agy are `none`. Three actual bounded tasks passed independent family review, reduced mandatory reviews 6→3, and reconstructed from durable evidence only after exact external approval. [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md); classifier [`p0/host-classification.json`](p0/host-classification.json); [spike evidence](p0/spike/evidence-2026-07-23-hardened-r2/) |
 | P1 | **Implemented — P2 pending** | Durable policy/event/principal/approval/checkpoint/replay/disclosure core: [`p1/README.md`](p1/README.md). Test-only witnesses cannot activate production mode; P2 must add mediated action and acceptance transaction |
 | P2 | **P2a + P2b protocol core implemented; P3 integration pending** | Enforced catalog, two-stage preclaim permits/postclaim authorizations, independently bound verifier/executor/receipt/witness roles, broker/direct execution, typed v2 verification/challenge/audit evidence, coordinator-bound atomic acceptance, pending-claim `unknown` recovery without effect replay, and bounded delegation/recovery transitions are in [`p2/README.md`](p2/README.md). This validates trusted adapter messages, not OS/IPC isolation or a production supervised host |
-| P3 | **P3.0-P3.5d installed shadow boundary implemented; full activation blocked** | Deterministic `/lN` translation, frozen red-line/profile policy, read-only CLI, integrating-host witnessed `/l3` shadow telemetry, a host-injected `/l5`/`/l6` lifecycle observation sidecar, a Linux-local bounded external-process receipt transport, a hash-bound Engine-to-Kernel bridge contract, and a Linux cross-UID authenticated intake host are implemented: [`p3/README.md`](p3/README.md). P3.5c adds a root-held, memory-only workspace descriptor registration whose hash/base ticket exact-matches the signed v1 plan, plus a separate-UID hash-only witness journal with exact gateway identity checks and root readback. P3.5d adds a separate, explicit v2 descriptor-bound path-free shadow lane: its signed ticket binds registration ID, root hash, immutable base, descriptor binding, and ticket hash, while its worker/verifier/witness/public artifacts receive no root-derived or structured raw workspace-path field. Caller-provided free-form task text is not path-classified. V1 remains available without implicit upgrade and remains non-confidential at the verifier. Both lanes remain `engine.status: not_started`, `owner_kernel_authority: none`, `effect_authority: none`, and `acceptance: not_available`; they do not prove content or add P2 authority. This intermediate work does not bump v2.32.57 or release metadata; P0 production corpus, live engine/broker/coordinator integration, KR8/KR10, and alias deletion gates remain open. |
+| P3 | **P3.0-P3.6c implemented; P3.7 activation specified** | P3.0-P3.5d established deterministic translation, descriptor-bound authenticated intake, and the installed shadow boundary. P3.6c completed the installed refusal-only five-role durable substrate plus receipt-verifier-owned evidence anchor and privileged P0-A0 gate, while retaining `owner_kernel_authority: none`, `effect_authority: none`, broker disabled, and acceptance unavailable. [`p3/README.md`](p3/README.md) records the exact ceiling. P3.7a/b/c now have a frozen activation plan: [`2026-07-24-owner-kernel-p37-activation.md`](../../plans/2026-07-24-owner-kernel-p37-activation.md). Full production P0, one Engine sink, dogfood, KR8/KR10, release metadata, and later alias-retirement telemetry remain open. |
 | P4 | Blocked | Depends on P3 |
 | L-5 | Not reached | Begins only after P1-P4 complete |
 
@@ -221,7 +221,7 @@ bash hooks/tests/supervised-host-live-launcher.sh
 | 2026-07-20 | Nonce-only harness payloads downgraded to self-report | The nonce is disclosed in the model instruction, so it proves freshness but not execution of `host-capability-probe.js`; no R2/R3 host disproof is scored from it |
 | 2026-07-20 | Fixture results excluded from host classification by construction | `classify-hosts.js` takes only execution-proven harness evidence. A sound contract qualifies no host |
 | 2026-07-20 | Every attack must be re-run against production at P1 exit | Depth-0 Owner decision, recorded in the fixtures and findings. Fixture pass is a design gate, never a host qualification |
-| 2026-07-20 | Target v2.32.57 | Externally visible change without a new skill/agent uses a patch bump in this repo |
+| 2026-07-24 | Target moved to v2.32.58 | `origin/develop` consumed v2.32.57 before Owner Kernel activation; release metadata must use the next free patch consistently |
 | 2026-07-20 | ~~P0 = STOP; kill condition met~~ **WITHDRAWN** | Not supported. Step 4 was never performed, so the universal-negative kill condition could not have been established. Superseded by the row below |
 | 2026-07-20 | ~~P0 INCOMPLETE; step 4 not performed (2/8, 1/4)~~ **SUPERSEDED** | Superseded by the Owner-decision stage: 8/8 fixture attacks executed and per-harness probing re-driven. P1 blocked because the pass bar is **unproven**, not failed. Current counts live in [`p0/P0-FINDINGS.md`](p0/P0-FINDINGS.md) |
 | 2026-07-20 | ~~Plan P0 step 4 is unexecutable as written~~ **WITHDRAWN** | Impossibility was never demonstrated. Steps 5–6 permit frozen fixtures and a minimum JSONL/manual spike, so a disposable no-core-code harness may exercise the Kernel-surface attacks. Superseded below |

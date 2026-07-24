@@ -1,9 +1,8 @@
 # P3 Compatibility Activation
 
-P3 is split deliberately. P3.0 is implemented as a safe migration prerequisite; full P3 remains
-blocked until a supervised host bridge controls live engine action sinks and v2 acceptance. P3.0 is
-not release activation: it deliberately leaves target v2.32.57, manifests, and CHANGELOG unchanged
-until the full P3 gate clears.
+P3 is split deliberately. P3.0-P3.6c are implemented prerequisites; full P3 remains blocked until the
+P3.7 supervised host bridge controls a live Engine action sink and v2 acceptance. The intermediate
+phases are not release activation: release metadata moves only after the full gate clears.
 
 ## P3.0 Implemented
 
@@ -483,6 +482,12 @@ prove recovery, checks the exact worker-inaccessible classes, and verifies the
 post-teardown mutation/head rewrite audit. That is a bounded A0 substrate result only; the
 original P0 Owner-Kernel semantics and all fifteen baseline categories remain
 unevaluable until a later authority-bearing phase exists.
+
+P3.6c completed this bounded substrate and its independent receipt-evidence
+hardening. The next authority-bearing work is frozen in
+[`2026-07-24-owner-kernel-p37-activation.md`](../../../plans/2026-07-24-owner-kernel-p37-activation.md):
+P3.7a adds semantic witnessing without effects, P3.7b adds one fixed reversible
+broker effect, and P3.7c adds the acceptance coordinator plus one Engine sink.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-p0-replay.test.sh

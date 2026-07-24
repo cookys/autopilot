@@ -25,6 +25,7 @@ REAL_LSTAT = os.lstat
 REAL_FSTAT = os.fstat
 REAL_GETGROUPS = os.getgroups
 REAL_FSYNC = os.fsync
+REAL_READLINK = os.readlink
 
 
 def digest(value):
@@ -107,11 +108,11 @@ def expect_codes(callback, codes):
     raise AssertionError("expected one of " + repr(codes))
 
 
-def root_like_stat(info):
+def root_like_stat(info, gid=None):
     return types.SimpleNamespace(
         st_mode=info.st_mode,
         st_uid=0,
-        st_gid=info.st_gid,
+        st_gid=info.st_gid if gid is None else gid,
         st_nlink=info.st_nlink,
         st_size=info.st_size,
         st_dev=info.st_dev,
@@ -138,6 +139,55 @@ def root_provisioned_metadata():
     finally:
         durable.os.lstat = old_lstat
         durable.os.fstat = old_fstat
+        durable.os.getgroups = old_getgroups
+
+
+@contextlib.contextmanager
+def root_provisioned_metadata_for_paths(path_gids):
+    prefixes = sorted(
+        ((os.path.normpath(path), gid) for path, gid in path_gids.items()),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+
+    def gid_for_path(path):
+        normalized = os.path.normpath(path)
+        for prefix, gid in prefixes:
+            if normalized == prefix or normalized.startswith(prefix + os.sep):
+                return gid
+        raise AssertionError("missing simulated root metadata for " + normalized)
+
+    def fake_lstat(path, *args, **kwargs):
+        return root_like_stat(REAL_LSTAT(path, *args, **kwargs), gid_for_path(path))
+
+    def fake_fstat(descriptor, *args, **kwargs):
+        path = REAL_READLINK("/proc/self/fd/" + str(descriptor))
+        return root_like_stat(REAL_FSTAT(descriptor, *args, **kwargs), gid_for_path(path))
+
+    old_lstat = durable.os.lstat
+    old_fstat = durable.os.fstat
+    durable.os.lstat = fake_lstat
+    durable.os.fstat = fake_fstat
+    try:
+        yield
+    finally:
+        durable.os.lstat = old_lstat
+        durable.os.fstat = old_fstat
+
+
+@contextlib.contextmanager
+def durable_runtime_identity(uid, gid):
+    old_geteuid = durable.os.geteuid
+    old_getegid = durable.os.getegid
+    old_getgroups = durable.os.getgroups
+    durable.os.geteuid = lambda: uid
+    durable.os.getegid = lambda: gid
+    durable.os.getgroups = lambda: [gid]
+    try:
+        yield
+    finally:
+        durable.os.geteuid = old_geteuid
+        durable.os.getegid = old_getegid
         durable.os.getgroups = old_getgroups
 
 
@@ -291,6 +341,150 @@ with tempfile.TemporaryDirectory() as temporary:
         )
         assert os.path.getsize(os.path.join(witness_leaf, "cohort.json")) > 0
         assert os.path.getsize(os.path.join(witness_leaf, "quarantine.json")) > 0
+
+with tempfile.TemporaryDirectory() as temporary:
+    bound_anchor_audit = binding("witness", "anchor-audit")
+    witness_leaf = provision_leaf(temporary, bound_anchor_audit, "witness")
+    anchor_leaf = provision_leaf(temporary, bound_anchor_audit, "receipt_verifier")
+    metadata_paths = {
+        os.path.dirname(witness_leaf): bound_anchor_audit["service_bindings"]["witness"]["gid"],
+        witness_leaf: bound_anchor_audit["service_bindings"]["witness"]["gid"],
+        os.path.dirname(anchor_leaf): bound_anchor_audit["service_bindings"]["receipt_verifier"]["gid"],
+        anchor_leaf: bound_anchor_audit["service_bindings"]["receipt_verifier"]["gid"],
+    }
+    witness_service = bound_anchor_audit["service_bindings"]["witness"]
+    anchor_service = bound_anchor_audit["service_bindings"]["receipt_verifier"]
+    with root_provisioned_metadata_for_paths(metadata_paths):
+        request = witness_request(
+            bound_anchor_audit,
+            "anchor-append",
+            "appendIfHead",
+            expected_head=None,
+            event_hash=digest("anchor-event"),
+            event_payload_hash=digest("anchor-payload"),
+        )
+        envelope_hash = digest("anchor-envelope")
+        with durable_runtime_identity(witness_service["uid"], witness_service["gid"]):
+            witness = durable.DurableWitness(witness_leaf, bound_anchor_audit)
+            response = witness.handle(request_bytes(request), envelope_hash)
+        with durable_runtime_identity(anchor_service["uid"], anchor_service["gid"]):
+            anchor = durable.DurableReceiptAnchor(anchor_leaf, bound_anchor_audit)
+            anchor_record = anchor.record_witness_response(request_bytes(request), envelope_hash, response)
+            assert anchor_record["endpoint_id"] == "receipt_verifier_witness"
+            assert anchor.availability()["role"] == "receipt_verifier"
+        with durable_runtime_identity(0, 0):
+            audit = durable.audit_receipt_anchor(witness_leaf, anchor_leaf, bound_anchor_audit)
+            assert audit["status"] == "verified"
+            assert audit["anchored_records"] == 1
+
+        # A valid witness-only tail advances the stream head without changing
+        # the anchor. The root audit must treat that uncommitted mutation as a
+        # receipt-chain breach, not merely compare the records it happens to
+        # find in the anchor leaf.
+        unanchored_request = witness_request(
+            bound_anchor_audit,
+            "anchor-unanchored-tail",
+            "appendIfHead",
+            expected_head=response["head"],
+            event_hash=digest("anchor-unanchored-event"),
+            event_payload_hash=digest("anchor-unanchored-payload"),
+        )
+        with durable_runtime_identity(witness_service["uid"], witness_service["gid"]):
+            witness.handle(request_bytes(unanchored_request), digest("anchor-unanchored-envelope"))
+        with durable_runtime_identity(0, 0):
+            expect_code(
+                lambda: durable.audit_receipt_anchor(witness_leaf, anchor_leaf, bound_anchor_audit),
+                "DURABLE_RECEIPT_AUDIT_FAILED",
+            )
+
+        with open(os.path.join(witness_leaf, "journal.jsonl"), encoding="utf-8") as source:
+            journal_lines = source.readlines()
+        header = json.loads(journal_lines[0])
+        rewritten_request = dict(
+            request,
+            event_hash=digest("rewritten-anchor-event"),
+            event_payload_hash=digest("rewritten-anchor-payload"),
+        )
+        rewritten_canonical = durable.canonical(rewritten_request)
+        rewritten_hash = durable.sha256_value(rewritten_canonical)
+        rewritten_event = {
+            "event_hash": rewritten_request["event_hash"],
+            "event_payload_hash": rewritten_request["event_payload_hash"],
+        }
+        rewritten_receipt = durable.witness_receipt(
+            rewritten_request["stream_id"], 1, None, rewritten_event, rewritten_hash
+        )
+        rewritten_record = {
+            "schema_version": 1,
+            "kind": "p36_durable_witness_record",
+            "record_type": "mutation",
+            "operation": rewritten_request["operation"],
+            "request_id": rewritten_request["request_id"],
+            "request_canonical": rewritten_canonical,
+            "request_hash": rewritten_hash,
+            "request_envelope_hash": envelope_hash,
+            "stream_id": rewritten_request["stream_id"],
+            "expected_head": None,
+            "events": [rewritten_event],
+            "receipts": [rewritten_receipt],
+            "previous_journal_hash": header["journal_hash"],
+        }
+        rewritten_record["journal_hash"] = witness._record_hash(rewritten_record)
+        with open(os.path.join(witness_leaf, "journal.jsonl"), "wb") as target:
+            target.write((durable.canonical(header) + "\n").encode("utf-8"))
+            target.write((durable.canonical(rewritten_record) + "\n").encode("utf-8"))
+            target.flush()
+            os.fsync(target.fileno())
+        with durable_runtime_identity(0, 0):
+            expect_code(
+                lambda: durable.audit_receipt_anchor(witness_leaf, anchor_leaf, bound_anchor_audit),
+                "DURABLE_RECEIPT_AUDIT_FAILED",
+            )
+
+with tempfile.TemporaryDirectory() as temporary:
+    bound_anchor_mutation = binding("witness", "anchor-mutation")
+    witness_leaf = provision_leaf(temporary, bound_anchor_mutation, "witness")
+    anchor_leaf = provision_leaf(temporary, bound_anchor_mutation, "receipt_verifier")
+    metadata_paths = {
+        os.path.dirname(witness_leaf): bound_anchor_mutation["service_bindings"]["witness"]["gid"],
+        witness_leaf: bound_anchor_mutation["service_bindings"]["witness"]["gid"],
+        os.path.dirname(anchor_leaf): bound_anchor_mutation["service_bindings"]["receipt_verifier"]["gid"],
+        anchor_leaf: bound_anchor_mutation["service_bindings"]["receipt_verifier"]["gid"],
+    }
+    witness_service = bound_anchor_mutation["service_bindings"]["witness"]
+    anchor_service = bound_anchor_mutation["service_bindings"]["receipt_verifier"]
+    with root_provisioned_metadata_for_paths(metadata_paths):
+        request = witness_request(
+            bound_anchor_mutation,
+            "anchor-mutation-append",
+            "appendIfHead",
+            expected_head=None,
+            event_hash=digest("anchor-mutation-event"),
+            event_payload_hash=digest("anchor-mutation-payload"),
+        )
+        envelope_hash = digest("anchor-mutation-envelope")
+        with durable_runtime_identity(witness_service["uid"], witness_service["gid"]):
+            witness = durable.DurableWitness(witness_leaf, bound_anchor_mutation)
+            response = witness.handle(request_bytes(request), envelope_hash)
+        with durable_runtime_identity(anchor_service["uid"], anchor_service["gid"]):
+            anchor = durable.DurableReceiptAnchor(anchor_leaf, bound_anchor_mutation)
+            anchor.record_witness_response(request_bytes(request), envelope_hash, response)
+        with open(os.path.join(anchor_leaf, "journal.jsonl"), encoding="utf-8") as source:
+            anchor_lines = source.readlines()
+        anchor_header = json.loads(anchor_lines[0])
+        malicious_anchor_record = json.loads(anchor_lines[1])
+        malicious_anchor_record["witness_code"] = "WITNESS_AVAILABLE"
+        malicious_anchor_record["journal_hash"] = anchor._record_hash(malicious_anchor_record)
+        with open(os.path.join(anchor_leaf, "journal.jsonl"), "wb") as target:
+            target.write((durable.canonical(anchor_header) + "\n").encode("utf-8"))
+            target.write((durable.canonical(malicious_anchor_record) + "\n").encode("utf-8"))
+            target.flush()
+            os.fsync(target.fileno())
+        with durable_runtime_identity(0, 0):
+            expect_code(
+                lambda: durable.audit_receipt_anchor(witness_leaf, anchor_leaf, bound_anchor_mutation),
+                "DURABLE_JOURNAL_CORRUPT",
+            )
 
 with tempfile.TemporaryDirectory() as temporary:
     deleted_leaf = provision_leaf(temporary, bound_witness, "witness")
@@ -538,6 +732,12 @@ for operation, malicious_status in (
                 os.fsync(source.fileno())
             expect_code(lambda: coordinator.availability(), "DURABLE_JOURNAL_CORRUPT")
 
+receipt_anchor_snapshot = durable.service_availability_snapshot(
+    bound_witness,
+    "receipt_verifier",
+    "available",
+    digest("availability-receipt-anchor"),
+)
 witness_snapshot = durable.service_availability_snapshot(
     bound_witness,
     "witness",
@@ -552,6 +752,7 @@ coordinator_snapshot = durable.service_availability_snapshot(
 )
 disclosure = durable.create_availability_disclosure(
     bound_witness,
+    receipt_anchor_snapshot,
     witness_snapshot,
     coordinator_snapshot,
 )
@@ -565,6 +766,7 @@ foreign_snapshot = durable.service_availability_snapshot(
 expect_code(
     lambda: durable.create_availability_disclosure(
         bound_witness,
+        receipt_anchor_snapshot,
         witness_snapshot,
         foreign_snapshot,
     ),
@@ -618,6 +820,7 @@ print("durable_exact_replay_and_race=true")
 print("durable_restart_quarantine=true")
 print("durable_broker_disabled=true")
 print("durable_no_effect_surface=true")
+print("durable_receipt_anchor_rewrite_detection=true")
 print("cross_language_fixture=" + base64.b64encode(
     durable.canonical(cross_language_fixture).encode("utf-8")
 ).decode("ascii"))
@@ -631,6 +834,7 @@ assert_contains "$PY_OUT" "durable_exact_replay_and_race=true" "durable witness 
 assert_contains "$PY_OUT" "durable_restart_quarantine=true" "new service instances cannot reuse a durable cohort"
 assert_contains "$PY_OUT" "durable_broker_disabled=true" "every durable broker operation stays explicitly disabled"
 assert_contains "$PY_OUT" "durable_no_effect_surface=true" "durable state source has no Engine or subprocess effect path"
+assert_contains "$PY_OUT" "durable_receipt_anchor_rewrite_detection=true" "independent receipt anchor rejects a self-consistent witness rewrite"
 
 CROSS_LANGUAGE_FIXTURE="$(printf '%s\n' "$PY_OUT" | sed -n 's/^cross_language_fixture=//p')"
 NODE_OUT="$(node - "$REPO_ROOT" "$CROSS_LANGUAGE_FIXTURE" <<'NODE'

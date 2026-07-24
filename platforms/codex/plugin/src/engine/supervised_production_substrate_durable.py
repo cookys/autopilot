@@ -28,7 +28,7 @@ DURABLE_LOCK_TIMEOUT_SECONDS = 5
 # This value is mechanically compared with the Node ABI in the recovery test.
 # The root-installed host must refuse a snapshot if this pin and the copied
 # durable contract disagree.
-DURABLE_ABI_HASH = "b75711040bf3925be48d7e147f186e9021097e2464d6d86987b30aeb9d3522ef"
+DURABLE_ABI_HASH = "f47c90057dc3cb0452b655f721d15f9dd36ba02c65f830cc9b84b04c257978a5"
 TOKEN_CHARS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"
 )
@@ -279,6 +279,8 @@ def write_all(descriptor, content, label):
 
 
 def journal_kind_for_role(role):
+    if role == "receipt_verifier":
+        return "p36_durable_receipt_anchor_journal"
     if role == "witness":
         return "p36_durable_witness_journal"
     if role == "coordinator":
@@ -321,11 +323,12 @@ class DurableLeaf:
         "quarantine.json",
     })
 
-    def __init__(self, state_root, binding, role):
+    def __init__(self, state_root, binding, role, root_audit=False):
         self.binding = normalize_binding(binding)
-        if role not in {"witness", "coordinator"}:
+        if role not in {"receipt_verifier", "witness", "coordinator"}:
             fail("durable leaf role is unsupported")
         self.role = role
+        self.root_audit = root_audit
         service = self.binding["service_bindings"][role]
         self.uid = service["uid"]
         self.gid = service["gid"]
@@ -348,6 +351,10 @@ class DurableLeaf:
         self._check_entries()
 
     def _require_runtime_identity(self):
+        if self.root_audit:
+            if os.geteuid() != 0 or os.getegid() != 0:
+                fail("durable root audit does not run as UID/GID 0", "DURABLE_AUDIT_NOT_ROOT")
+            return
         if os.geteuid() != self.uid or os.getegid() != self.gid:
             fail("durable service process does not match its pinned UID/GID", "DURABLE_IDENTITY_MISMATCH")
         try:
@@ -558,6 +565,8 @@ class DurableLeaf:
         self._block_cohort("DURABLE_STORAGE_UNCERTAIN", reason)
 
     def _write_quarantine(self, code, reason):
+        if self.root_audit:
+            return
         existing = self._read_control_file(
             self.quarantine_path,
             "durable quarantine",
@@ -588,6 +597,8 @@ class DurableLeaf:
             pass
 
     def _raise_quarantined(self, reason, code="DURABLE_QUARANTINED"):
+        if self.root_audit:
+            fail("durable " + self.role + " state is unavailable to root audit", code)
         self._write_quarantine(code, reason)
         fail("durable " + self.role + " state is quarantined", code)
 
@@ -728,7 +739,11 @@ class DurableLeaf:
             if self._read_quarantine() is not None:
                 fail("durable " + self.role + " state is quarantined", "DURABLE_QUARANTINED")
             marker = self._read_cohort_marker()
-            if marker is not None and marker["marker_hash"] != self._cohort_marker_hash:
+            if (
+                marker is not None
+                and not self.root_audit
+                and marker["marker_hash"] != self._cohort_marker_hash
+            ):
                 self._raise_quarantined(
                     "a new service instance attempted to reuse a durable cohort",
                     "DURABLE_COHORT_RECOVERY_REQUIRED",
@@ -960,8 +975,8 @@ def witness_receipt(stream_id, sequence, previous_head, event, request_hash):
 class DurableWitness(DurableLeaf):
     JOURNAL_KIND = "p36_durable_witness_journal"
 
-    def __init__(self, state_root, binding):
-        super().__init__(state_root, binding, "witness")
+    def __init__(self, state_root, binding, root_audit=False):
+        super().__init__(state_root, binding, "witness", root_audit=root_audit)
 
     def _record_hash(self, record):
         material = dict(record)
@@ -1282,6 +1297,305 @@ class DurableWitness(DurableLeaf):
             )
 
         return self._locked(operation)
+
+
+class DurableReceiptAnchor(DurableLeaf):
+    """Receipt-verifier-owned commitments for witness mutation responses.
+
+    The anchor has no transport endpoint or caller-controlled operation.  The
+    receipt verifier appends a record only after the existing authenticated
+    receipt-verifier-to-witness route has validated an exact mutation response.
+    Query records do not advance a witness stream head and remain protected by
+    the witness journal's local chain only. Root later compares this separate
+    journal with the witness mutation/head ledger; a witness cannot rewrite
+    both role-owned leaves.
+    """
+
+    JOURNAL_KIND = "p36_durable_receipt_anchor_journal"
+    ENDPOINT_ID = "receipt_verifier_witness"
+    ANCHORED_OPERATIONS = frozenset({"appendIfHead", "appendBatchIfHead"})
+
+    def __init__(self, state_root, binding, root_audit=False):
+        super().__init__(state_root, binding, "receipt_verifier", root_audit=root_audit)
+
+    def _record_hash(self, record):
+        material = dict(record)
+        material.pop("journal_hash", None)
+        return sha256_value(canonical(material))
+
+    def _load_locked(self):
+        values = self._read_journal_values(self.JOURNAL_KIND)
+        self._require_marker_for_journal(values)
+        try:
+            header = self._validate_header(values[0], self.JOURNAL_KIND)
+            state = {"journal_hash": header["journal_hash"], "records": {}, "ordered": []}
+            for raw in values[1:]:
+                record = self._normalize_record(raw, state["journal_hash"])
+                if record["request_id"] in state["records"]:
+                    fail("durable receipt anchor repeats a witness request id")
+                state["records"][record["request_id"]] = record
+                state["ordered"].append(record)
+                state["journal_hash"] = record["journal_hash"]
+            return state
+        except DurableStateError as error:
+            if error.code.startswith("DURABLE_"):
+                self._raise_quarantined(str(error), "DURABLE_JOURNAL_CORRUPT")
+            raise
+
+    def _normalize_record(self, value, expected_previous_hash):
+        value = require_exact_keys(
+            value,
+            {
+                "schema_version", "kind", "request_id", "operation", "request_hash",
+                "request_envelope_hash", "endpoint_id", "witness_status", "witness_code",
+                "witness_result_hash", "witness_response_hash",
+                "witness_stream_id", "witness_head", "witness_sequence", "witness_journal_hash",
+                "previous_journal_hash", "journal_hash",
+            },
+            "durable receipt anchor record",
+        )
+        if (
+            require_exact_int(
+                value["schema_version"], SCHEMA_VERSION, "durable receipt anchor schema", "DURABLE_JOURNAL_CORRUPT"
+            )
+            != SCHEMA_VERSION
+            or value["kind"] != "p36_durable_receipt_anchor_record"
+            or value["previous_journal_hash"] != expected_previous_hash
+            or value["journal_hash"] != self._record_hash(value)
+        ):
+            fail("durable receipt anchor journal chain is invalid")
+        operation = require_token(value["operation"], "durable receipt anchor operation")
+        expected_status, expected_code = self._expected_witness_outcome(operation)
+        if (
+            value["endpoint_id"] != self.ENDPOINT_ID
+            or value["witness_status"] != expected_status
+            or value["witness_code"] != expected_code
+        ):
+            fail("durable receipt anchor record is outside the fixed witness route", "DURABLE_JOURNAL_CORRUPT")
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "kind": "p36_durable_receipt_anchor_record",
+            "request_id": require_token(value["request_id"], "durable receipt anchor request id"),
+            "operation": operation,
+            "request_hash": require_sha256(value["request_hash"], "durable receipt anchor request hash"),
+            "request_envelope_hash": require_sha256(
+                value["request_envelope_hash"], "durable receipt anchor envelope hash"
+            ),
+            "endpoint_id": require_token(value["endpoint_id"], "durable receipt anchor endpoint"),
+            "witness_status": require_token(value["witness_status"], "durable receipt anchor witness status"),
+            "witness_code": require_token(value["witness_code"], "durable receipt anchor witness code"),
+            "witness_result_hash": require_sha256(
+                value["witness_result_hash"], "durable receipt anchor witness result hash"
+            ),
+            "witness_response_hash": require_sha256(
+                value["witness_response_hash"], "durable receipt anchor witness response hash"
+            ),
+            "witness_stream_id": require_token(
+                value["witness_stream_id"], "durable receipt anchor witness stream"
+            ),
+            "witness_head": require_nullable_sha256(
+                value["witness_head"], "durable receipt anchor witness head"
+            ),
+            "witness_sequence": require_nonnegative_int(
+                value["witness_sequence"], "durable receipt anchor witness sequence"
+            ),
+            "witness_journal_hash": require_sha256(
+                value["witness_journal_hash"], "durable receipt anchor witness journal"
+            ),
+            "previous_journal_hash": require_sha256(
+                value["previous_journal_hash"], "durable receipt anchor previous journal"
+            ),
+            "journal_hash": require_sha256(value["journal_hash"], "durable receipt anchor journal hash"),
+        }
+
+    @classmethod
+    def _expected_witness_outcome(cls, operation):
+        if operation not in cls.ANCHORED_OPERATIONS:
+            fail("durable receipt anchor operation is outside its fixed witness route", "DURABLE_RECEIPT_INVALID")
+        return "recorded", "WITNESS_RECORDED"
+
+    def _normalize_witness_response(self, request, request_canonical, envelope_hash, response):
+        if not isinstance(response, dict):
+            fail("durable receipt anchor witness response is not an object", "DURABLE_RECEIPT_INVALID")
+        fields = {
+            "schema_version", "kind", "status", "code", "request_id", "operation",
+            "install_binding_hash", "run_binding_hash", "substrate_abi_hash",
+            "substrate_plan_hash", "durable_abi_hash", "cohort_id", "generation",
+            "request_hash", "request_envelope_hash", "responder_role", "responder_identity",
+            "responder_attestation_hash", "responder_cgroup_binding_hash",
+            "owner_kernel_authority", "effect_authority", "broker_authority", "acceptance",
+            "stream_id", "head", "sequence", "records", "journal_hash", "result_hash",
+        }
+        response = require_exact_keys(response, fields, "durable receipt anchor witness response")
+        material = dict(response)
+        result_hash = material.pop("result_hash")
+        witness = self.binding["service_bindings"]["witness"]
+        expected_status, expected_code = self._expected_witness_outcome(request["operation"])
+        if (
+            require_exact_int(
+                response["schema_version"], SCHEMA_VERSION, "durable receipt anchor response schema", "DURABLE_RECEIPT_INVALID"
+            )
+            != SCHEMA_VERSION
+            or response["kind"] != "p36_durable_witness_result"
+            or response["status"] != expected_status
+            or response["code"] != expected_code
+            or response["request_id"] != request["request_id"]
+            or response["operation"] != request["operation"]
+            or response["request_hash"] != sha256_value(request_canonical)
+            or response["request_envelope_hash"] != envelope_hash
+            or response["responder_role"] != "witness"
+            or response["responder_identity"] != witness["identity"]
+            or response["responder_attestation_hash"] != witness["attestation_hash"]
+            or response["responder_cgroup_binding_hash"] != witness["cgroup_binding_hash"]
+            or response["owner_kernel_authority"] != "none"
+            or response["effect_authority"] != "none"
+            or response["broker_authority"] != "disabled"
+            or response["acceptance"] != "not_available"
+            or any(
+                response[key] != self.binding[key]
+                for key in (
+                    "install_binding_hash", "run_binding_hash", "substrate_abi_hash",
+                    "substrate_plan_hash", "durable_abi_hash", "cohort_id", "generation",
+                )
+            )
+            or sha256_value(canonical(material)) != require_sha256(
+                result_hash, "durable receipt anchor witness result hash"
+            )
+        ):
+            fail("durable receipt anchor witness response does not bind the fixed cohort", "DURABLE_RECEIPT_INVALID")
+        if not isinstance(response["records"], list):
+            fail("durable receipt anchor witness response records are invalid", "DURABLE_RECEIPT_INVALID")
+        return response
+
+    def record_witness_response(self, raw_request, request_envelope_hash, response):
+        value, request_canonical = decode_canonical_request(raw_request, "durable receipt anchor witness request")
+        request = normalize_witness_request(value, self.binding)
+        expected_status, expected_code = self._expected_witness_outcome(request["operation"])
+        envelope_hash = require_sha256(request_envelope_hash, "durable receipt anchor envelope hash")
+        response = self._normalize_witness_response(request, request_canonical, envelope_hash, response)
+
+        def operation():
+            state = self._load_locked()
+            existing = state["records"].get(request["request_id"])
+            record = {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "p36_durable_receipt_anchor_record",
+                "request_id": request["request_id"],
+                "operation": request["operation"],
+                "request_hash": sha256_value(request_canonical),
+                "request_envelope_hash": envelope_hash,
+                "endpoint_id": self.ENDPOINT_ID,
+                "witness_status": expected_status,
+                "witness_code": expected_code,
+                "witness_result_hash": response["result_hash"],
+                "witness_response_hash": sha256_value(canonical(response)),
+                "witness_stream_id": request["stream_id"],
+                "witness_head": response["head"],
+                "witness_sequence": response["sequence"],
+                "witness_journal_hash": response["journal_hash"],
+                "previous_journal_hash": state["journal_hash"],
+            }
+            record["journal_hash"] = self._record_hash(record)
+            if existing is not None:
+                compare_fields = {
+                    "schema_version", "kind", "request_id", "operation", "request_hash",
+                    "request_envelope_hash", "endpoint_id", "witness_status", "witness_code",
+                    "witness_result_hash", "witness_response_hash",
+                    "witness_stream_id", "witness_head", "witness_sequence", "witness_journal_hash",
+                }
+                if all(existing[field] == record[field] for field in compare_fields):
+                    return existing
+                fail("durable receipt anchor request id replay conflicts with committed bytes", "RECEIPT_ANCHOR_REPLAY_CONFLICT")
+            self._claim_mutating_cohort(record["request_hash"])
+            self._append_journal(record)
+            normalized = self._normalize_record(record, state["journal_hash"])
+            return normalized
+
+        return self._locked(operation)
+
+    def records_for_audit(self):
+        def operation():
+            state = self._load_locked()
+            return list(state["ordered"]), state["journal_hash"]
+
+        return self._locked(operation)
+
+    def availability(self):
+        def operation():
+            state = self._load_locked()
+            return service_availability_snapshot(
+                self.binding,
+                "receipt_verifier",
+                "available",
+                state["journal_hash"],
+            )
+
+        return self._locked(operation)
+
+
+def audit_receipt_anchor(witness_leaf, receipt_anchor_leaf, binding):
+    """Root-only compare of receipt commitments against witness mutation state."""
+
+    if os.geteuid() != 0 or os.getegid() != 0:
+        fail("durable receipt-anchor audit requires effective UID/GID 0", "DURABLE_AUDIT_NOT_ROOT")
+    binding = normalize_binding(binding)
+    witness = DurableWitness(witness_leaf, binding, root_audit=True)
+    anchor = DurableReceiptAnchor(receipt_anchor_leaf, binding, root_audit=True)
+    records, anchor_journal_hash = anchor.records_for_audit()
+    if not records:
+        fail("durable receipt anchor has no witness commitments", "DURABLE_RECEIPT_AUDIT_FAILED")
+
+    def operation():
+        state = witness._load_locked()
+        # The anchor intentionally covers only append mutations: those are the
+        # fixed operations that advance a stream head and define A0's durable
+        # event ledger. Query records are not independently receipt-anchored.
+        anchored_request_ids = {record["request_id"] for record in records}
+        witness_mutation_ids = {
+            request_id
+            for request_id, witness_record in state["requests"].items()
+            if witness_record["record_type"] == "mutation"
+        }
+        if witness_mutation_ids != anchored_request_ids:
+            fail(
+                "durable receipt anchor does not cover every witness mutation",
+                "DURABLE_RECEIPT_AUDIT_FAILED",
+            )
+        for record in records:
+            witness_record = state["requests"].get(record["request_id"])
+            if witness_record is None:
+                fail("durable receipt anchor references a missing witness request", "DURABLE_RECEIPT_AUDIT_FAILED")
+            response = witness._result_from_record(witness_record)
+            expected_status, expected_code = anchor._expected_witness_outcome(record["operation"])
+            if (
+                record["operation"] != response["operation"]
+                or record["request_hash"] != response["request_hash"]
+                or record["request_envelope_hash"] != response["request_envelope_hash"]
+                or record["endpoint_id"] != anchor.ENDPOINT_ID
+                or record["witness_status"] != expected_status
+                or record["witness_status"] != response["status"]
+                or record["witness_code"] != expected_code
+                or record["witness_code"] != response["code"]
+                or record["witness_result_hash"] != response["result_hash"]
+                or record["witness_response_hash"] != sha256_value(canonical(response))
+                or record["witness_stream_id"] != response["stream_id"]
+                or record["witness_head"] != response["head"]
+                or record["witness_sequence"] != response["sequence"]
+                or record["witness_journal_hash"] != response["journal_hash"]
+            ):
+                fail("durable receipt anchor does not match the witness journal", "DURABLE_RECEIPT_AUDIT_FAILED")
+        material = {
+            "schema_version": SCHEMA_VERSION,
+            "kind": "p36_durable_receipt_anchor_audit",
+            "status": "verified",
+            "binding_hash": normalized_binding_hash(binding),
+            "anchored_records": len(records),
+            "receipt_anchor_journal_hash": anchor_journal_hash,
+            "witness_journal_hash": state["journal_hash"],
+        }
+        return dict(material, audit_hash=sha256_value(canonical(material)))
+
+    return witness._locked(operation)
 
 
 def normalize_coordinator_request(value, binding):
@@ -1689,7 +2003,7 @@ def create_revocation_unavailable_result(binding, raw_request, request_envelope_
 
 def service_availability_snapshot(binding, role, state, journal_hash):
     binding = normalize_binding(binding)
-    if role not in {"witness", "coordinator"}:
+    if role not in {"receipt_verifier", "witness", "coordinator"}:
         fail("durable availability role is unsupported")
     if state not in {"available", "unavailable", "unknown", "quarantined"}:
         fail("durable availability state is unsupported")
@@ -1735,13 +2049,20 @@ def normalize_service_availability_snapshot(binding, role, raw):
     return value
 
 
-def create_availability_disclosure(binding, witness_snapshot, coordinator_snapshot):
+def create_availability_disclosure(binding, receipt_anchor_snapshot, witness_snapshot, coordinator_snapshot):
     binding = normalize_binding(binding)
+    receipt_anchor_state = normalize_service_availability_snapshot(
+        binding, "receipt_verifier", receipt_anchor_snapshot
+    )
     witness_state = normalize_service_availability_snapshot(binding, "witness", witness_snapshot)
     coordinator_state = normalize_service_availability_snapshot(binding, "coordinator", coordinator_snapshot)
     status = (
         "available"
-        if witness_state["status"] == "available" and coordinator_state["status"] == "available"
+        if (
+            receipt_anchor_state["status"] == "available"
+            and witness_state["status"] == "available"
+            and coordinator_state["status"] == "available"
+        )
         else "unknown"
     )
     material = {
@@ -1755,6 +2076,11 @@ def create_availability_disclosure(binding, witness_snapshot, coordinator_snapsh
         "durable_abi_hash": binding["durable_abi_hash"],
         "cohort_id": binding["cohort_id"],
         "generation": binding["generation"],
+        "receipt_anchor_role": "receipt_verifier",
+        "receipt_anchor_binding_hash": receipt_anchor_state["binding_hash"],
+        "receipt_anchor_state": receipt_anchor_state["status"],
+        "receipt_anchor_journal_hash": receipt_anchor_state["journal_hash"],
+        "receipt_anchor_snapshot_hash": receipt_anchor_state["snapshot_hash"],
         "witness_role": "witness",
         "witness_binding_hash": witness_state["binding_hash"],
         "witness_state": witness_state["status"],
@@ -1774,10 +2100,12 @@ def create_availability_disclosure(binding, witness_snapshot, coordinator_snapsh
 
 
 __all__ = [
+    "DurableReceiptAnchor",
     "DurableCoordinator",
     "DurableStateError",
     "DurableWitness",
     "SCHEMA_VERSION",
+    "audit_receipt_anchor",
     "canonical",
     "create_availability_disclosure",
     "create_effects_disabled_broker_result",

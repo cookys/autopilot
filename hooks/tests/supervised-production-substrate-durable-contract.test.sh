@@ -193,6 +193,10 @@ assert.equal(
   durable.getSupervisedProductionDurableAbi().availability.authority.effect_authority,
   'none',
 );
+assert.equal(
+  durable.getSupervisedProductionDurableAbi().receipt_verifier.receipt_anchor,
+  'internal_witness_response_commitment_only',
+);
 
 function commonResult(request, envelopeHash, role, kind, status, code) {
   const responder = bound.service_bindings[role];
@@ -518,6 +522,7 @@ function availabilitySnapshot(role, state, journalHash) {
   }, 'snapshot_hash');
 }
 
+const receiptAnchorSnapshot = availabilitySnapshot('receipt_verifier', 'available', hash('receipt-anchor-journal'));
 const witnessSnapshot = availabilitySnapshot('witness', 'available', witnessResult.journal_hash);
 const coordinatorSnapshot = availabilitySnapshot('coordinator', 'available', coordinatorResult.journal_hash);
 const disclosure = bindResultHash({
@@ -531,6 +536,11 @@ const disclosure = bindResultHash({
   durable_abi_hash: bound.durable_abi_hash,
   cohort_id: bound.cohort_id,
   generation: bound.generation,
+  receipt_anchor_role: 'receipt_verifier',
+  receipt_anchor_binding_hash: receiptAnchorSnapshot.binding_hash,
+  receipt_anchor_state: receiptAnchorSnapshot.status,
+  receipt_anchor_journal_hash: receiptAnchorSnapshot.journal_hash,
+  receipt_anchor_snapshot_hash: receiptAnchorSnapshot.snapshot_hash,
   witness_role: 'witness',
   witness_binding_hash: witnessSnapshot.binding_hash,
   witness_state: witnessSnapshot.status,
@@ -547,13 +557,16 @@ const disclosure = bindResultHash({
   acceptance: 'not_available',
 }, 'disclosure_hash');
 assert.deepEqual(
-  durable.normalizeDurableAvailabilityDisclosure(bound, witnessSnapshot, coordinatorSnapshot, disclosure),
+  durable.normalizeDurableAvailabilityDisclosure(
+    bound, receiptAnchorSnapshot, witnessSnapshot, coordinatorSnapshot, disclosure,
+  ),
   disclosure,
 );
 reject(
   () => durable.normalizeDurableAvailabilityDisclosure(
     bound,
-    { ...witnessSnapshot, binding_hash: hash('foreign-binding') },
+    { ...receiptAnchorSnapshot, binding_hash: hash('foreign-binding') },
+    witnessSnapshot,
     coordinatorSnapshot,
     disclosure,
   ),

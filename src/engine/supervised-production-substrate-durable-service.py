@@ -31,6 +31,7 @@ ROOT_CONFIG_MODE = 0o440
 ROLE_CONFIG_ROOT_MODE = 0o710
 SOCKET_STAGING_MODE = 0o2710
 SOCKET_MODE = 0o660
+ACK_SOCKET_MODE = 0o660
 ACK_MODE = 0o600
 MAX_CONFIG_BYTES = 131072
 MAX_LIFECYCLE_SECONDS = 300
@@ -222,7 +223,9 @@ def read_bootstrap(path):
                 "release_path",
                 "release_token",
                 "ready_path",
-                "ack_path",
+                "ack_socket_path",
+                "quiesce_path",
+                "quiesce_token",
                 "peer_config_path",
                 "state_leaf",
                 "release_timeout_seconds",
@@ -250,7 +253,7 @@ def read_bootstrap(path):
     gid = guard(lambda: transport.require_positive_int(value["gid"], "durable bootstrap gid"))
     require_exact_identity(uid, gid)
     state_leaf = value["state_leaf"]
-    if role in {"witness", "coordinator"}:
+    if role in {"receipt_verifier", "witness", "coordinator"}:
         state_leaf = guard(lambda: transport.require_absolute_path(state_leaf, "durable state leaf"))
     elif state_leaf is not None:
         fail("stateless durable service received a durable state leaf")
@@ -282,7 +285,9 @@ def read_bootstrap(path):
         "release_path": guard(lambda: transport.require_absolute_path(value["release_path"], "durable release path")),
         "release_token": guard(lambda: transport.require_token(value["release_token"], "durable release token")),
         "ready_path": guard(lambda: transport.require_absolute_path(value["ready_path"], "durable ready path")),
-        "ack_path": guard(lambda: transport.require_absolute_path(value["ack_path"], "durable ack path")),
+        "ack_socket_path": guard(lambda: transport.require_absolute_path(value["ack_socket_path"], "durable acknowledgement socket path")),
+        "quiesce_path": guard(lambda: transport.require_absolute_path(value["quiesce_path"], "durable quiesce path")),
+        "quiesce_token": guard(lambda: transport.require_token(value["quiesce_token"], "durable quiesce token")),
         "peer_config_path": guard(lambda: transport.require_absolute_path(value["peer_config_path"], "durable peer config path")),
         "state_leaf": state_leaf,
         "release_timeout_seconds": require_lifecycle_seconds(value["release_timeout_seconds"], "durable release timeout"),
@@ -341,6 +346,20 @@ def wait_for_release(bootstrap):
             return
         if time.monotonic() >= deadline:
             fail("durable service release timed out")
+        time.sleep(0.025)
+
+
+def wait_for_quiesce(bootstrap, listener_context):
+    """Wait for root's second phase while surfacing late listener failures."""
+
+    deadline = time.monotonic() + bootstrap["hold_seconds"]
+    while True:
+        if listener_context is not None and listener_context["errors"]:
+            fail("durable listener failed before root quiescence: " + str(listener_context["errors"][0]))
+        if read_release_token(bootstrap["quiesce_path"], bootstrap["quiesce_token"], bootstrap["gid"]):
+            return
+        if time.monotonic() >= deadline:
+            fail("durable service quiescence timed out")
         time.sleep(0.025)
 
 
@@ -508,24 +527,35 @@ def normalize_peer_config(bootstrap):
 
 
 def handler_for_role(role, binding, state_leaf):
+    if role == "receipt_verifier":
+        if state_leaf is None:
+            fail("durable receipt verifier has no root-created receipt anchor leaf")
+        anchor = durable.DurableReceiptAnchor(state_leaf, binding)
+        return (
+            lambda payload, envelope_hash: durable.create_revocation_unavailable_result(binding, payload, envelope_hash),
+            anchor.availability,
+            anchor,
+        )
     if role == "witness":
         if state_leaf is None:
             fail("durable witness has no root-created state leaf")
         instance = durable.DurableWitness(state_leaf, binding)
-        return instance.handle, instance.availability
+        return instance.handle, instance.availability, None
     if role == "coordinator":
         if state_leaf is None:
             fail("durable coordinator has no root-created state leaf")
         instance = durable.DurableCoordinator(state_leaf, binding)
-        return instance.handle, instance.availability
+        return instance.handle, instance.availability, None
     if state_leaf is not None:
         fail("stateless durable role received a state leaf")
     if role == "broker":
-        return lambda payload, envelope_hash: durable.create_effects_disabled_broker_result(binding, payload, envelope_hash), None
-    if role == "receipt_verifier":
-        return lambda payload, envelope_hash: durable.create_revocation_unavailable_result(binding, payload, envelope_hash), None
+        return (
+            lambda payload, envelope_hash: durable.create_effects_disabled_broker_result(binding, payload, envelope_hash),
+            None,
+            None,
+        )
     if role == "worker":
-        return None, None
+        return None, None, None
     fail("durable service role is unsupported")
 
 
@@ -679,16 +709,20 @@ def endpoint_socket_path(peer_config, endpoint_id):
     return matches[0]["socket_path"]
 
 
-def run_self_probes(role, peer_config):
+def run_self_probes(role, peer_config, receipt_anchor):
     """Exchange only fixed refusal/state probes after every listener is sealed."""
 
+    if role == "receipt_verifier" and receipt_anchor is None:
+        fail("receipt verifier cannot self-probe without its durable receipt anchor")
+    if role != "receipt_verifier" and receipt_anchor is not None:
+        fail("only the receipt verifier may own a durable receipt anchor")
     results = []
     for spec in self_probe_specs(role, peer_config["binding"]):
         deadline = time.monotonic() + SELF_PROBE_TIMEOUT_SECONDS
         last_error = None
         while time.monotonic() < deadline:
             try:
-                _request, response = transport.request_response(
+                request_value, response = transport.request_response(
                     endpoint_socket_path(peer_config, spec["endpoint_id"]),
                     peer_config["binding"],
                     peer_config["runtime_services"],
@@ -705,6 +739,15 @@ def run_self_probes(role, peer_config):
                 continue
             if response.get("code") != spec["expected_code"]:
                 fail("durable self-probe received an unexpected " + spec["endpoint_id"] + " result")
+            if (
+                receipt_anchor is not None
+                and spec["endpoint_id"] == durable.DurableReceiptAnchor.ENDPOINT_ID
+            ):
+                receipt_anchor.record_witness_response(
+                    durable.canonical(request_value["payload"]).encode("utf-8"),
+                    transport.sha256_value(request_value["envelope"]),
+                    response,
+                )
             results.append(
                 {
                     "endpoint_id": spec["endpoint_id"],
@@ -720,11 +763,12 @@ def run_self_probes(role, peer_config):
     return results
 
 
-def write_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence):
+def write_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence, phase="probe_complete"):
     material = {
         "schema_version": SCHEMA_VERSION,
         "kind": "p36_durable_release_ack",
         "status": "released_durable_no_effect",
+        "phase": phase,
         "role": bootstrap["role"],
         "identity": bootstrap["identity"],
         "pid": os.getpid(),
@@ -740,8 +784,35 @@ def write_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence):
         "broker_authority": "disabled",
         "acceptance": "not_available",
     }
-    value = dict(material, ack_hash=sha256_value(material))
-    publish_owned_json(bootstrap["ack_path"], bootstrap["uid"], bootstrap["gid"], value, "durable release acknowledgement")
+    return dict(material, ack_hash=sha256_value(material))
+
+
+def send_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence, phase):
+    """Send an ACK over root's socket, never via a service-owned file.
+
+    The host validates SO_PEERCRED plus the exact cgroup before it reads this
+    frame.  A same-UID process outside the transient unit therefore cannot
+    substitute a forged ACK for the launched service process.
+    """
+
+    value = write_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence, phase)
+    path = bootstrap["ack_socket_path"]
+    require_exact_directory(
+        os.path.dirname(path), 0, bootstrap["gid"], ROLE_CONFIG_ROOT_MODE, "durable acknowledgement socket parent"
+    )
+    require_exact_socket(path, 0, bootstrap["gid"], ACK_SOCKET_MODE, "durable acknowledgement socket")
+    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        connection.settimeout(SELF_PROBE_TIMEOUT_SECONDS)
+        connection.connect(path)
+        guard(lambda: transport.send_frame(connection, transport.encode_frame(value), SELF_PROBE_TIMEOUT_SECONDS))
+        confirmation = connection.recv(1)
+        if confirmation != b"\x01":
+            fail("durable acknowledgement socket did not return root confirmation")
+    except OSError as error:
+        fail("durable acknowledgement socket cannot be reached: " + str(error))
+    finally:
+        connection.close()
     return value
 
 
@@ -786,11 +857,11 @@ def start_listener_context(listener_pairs, peer_config, handler, hold_seconds):
                     remaining,
                 )
             except transport.DurableTransportError as error:
-                if context["stopped"].is_set():
-                    return
                 # An accept timeout only means no trusted peer arrived during
                 # this bounded poll.  Any accepted bad frame/peer is terminal.
                 if "did not accept a request" in str(error):
+                    if context["stopped"].is_set():
+                        return
                     continue
                 stop_for_error(error)
                 return
@@ -818,7 +889,10 @@ def stop_listener_context(context):
         except OSError:
             pass
     for thread in context["threads"]:
-        thread.join(1)
+        # A peer accepted just before close can remain in a bounded frame read.
+        # Wait through that bound so a late invalid peer cannot disappear after
+        # the service has emitted its final quiescence acknowledgement.
+        thread.join(transport.FRAME_TIMEOUT_SECONDS + 1)
     if any(thread.is_alive() for thread in context["threads"]):
         fail("durable listener did not stop after its socket was closed")
 
@@ -861,7 +935,9 @@ def run(args):
         write_ready(bootstrap, list(listeners))
         wait_for_release(bootstrap)
         peer_config = normalize_peer_config(bootstrap)
-        handler, availability = handler_for_role(bootstrap["role"], peer_config["binding"], bootstrap["state_leaf"])
+        handler, availability, receipt_anchor = handler_for_role(
+            bootstrap["role"], peer_config["binding"], bootstrap["state_leaf"]
+        )
         listener_pairs = [
             (endpoint, listeners[endpoint["endpoint_id"]])
             for endpoint in bootstrap["endpoints"]
@@ -875,15 +951,21 @@ def run(args):
         try:
             # All recipient loops are listening before a sender starts retrying
             # its sealed fixed probe.  These probes are the only traffic in A0.
-            self_probe_evidence = run_self_probes(bootstrap["role"], peer_config)
+            self_probe_evidence = run_self_probes(bootstrap["role"], peer_config, receipt_anchor)
             if listener_context is not None and listener_context["errors"]:
                 fail("durable listener failed during self-probe: " + str(listener_context["errors"][0]))
             state_snapshot = availability() if availability is not None else None
-            write_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence)
+            send_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence, "probe_complete")
+            wait_for_quiesce(bootstrap, listener_context)
             if listener_context is not None:
-                wait_for_listener_context(listener_context)
-            else:
-                time.sleep(bootstrap["hold_seconds"])
+                stop_listener_context(listener_context)
+                if listener_context["errors"]:
+                    fail("durable listener failed during root quiescence: " + str(listener_context["errors"][0]))
+            # A first-phase availability snapshot can precede a peer's final
+            # fixed mutation. Recompute only after every recipient loop has
+            # stopped so the terminal disclosure describes the quiesced state.
+            state_snapshot = availability() if availability is not None else None
+            send_ack(bootstrap, peer_config, state_snapshot, self_probe_evidence, "quiesced")
         finally:
             if listener_context is not None:
                 stop_listener_context(listener_context)

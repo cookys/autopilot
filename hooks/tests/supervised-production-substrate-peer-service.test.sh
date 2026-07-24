@@ -3,6 +3,7 @@
 
 PY_OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 - "$REPO_ROOT" <<'PY'
 import contextlib
+import errno
 import importlib.util
 import io
 import os
@@ -204,7 +205,14 @@ with tempfile.TemporaryDirectory(dir="/tmp", prefix="p36-") as temporary_directo
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             client.connect(socket_path)
-            client.sendall(b"\x00\x00\x00\x02{}")
+            try:
+                client.sendall(b"\x00\x00\x00\x02{}")
+            except OSError as error:
+                # The server is deliberately allowed to reject this wrong peer
+                # immediately after SO_PEERCRED, before the client can finish
+                # writing its decoy frame.
+                if error.errno not in {errno.EPIPE, errno.ECONNRESET}:
+                    raise
         finally:
             client.close()
         thread.join(2)

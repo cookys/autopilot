@@ -76,6 +76,56 @@ to the complete mediated red-line subset it actually observes.
 implementation before production can claim `full`/`partial`. The P0 supervised profile is a named
 measurement target that funds P1 only; it is not a production-host qualification.
 
+## P0-A0 Bounded Substrate Evidence (Separate, Non-Qualifying)
+
+The P3.6 A0 substrate has a separate evidence corpus at
+[`fixtures/p36-a0-corpus.json`](fixtures/p36-a0-corpus.json). It is **not** an
+addition to the fixture 8/8 result above, does not alter any host tier, and
+does not authorize `full`, `partial`, or a new P0 pass. Its only aggregate
+status is `bounded_a0_report`, with the fixed ceiling:
+`owner_kernel_authority: none`, `effect_authority: none`,
+`broker_authority: disabled`, `acceptance: not_available`, and
+`qualification_prohibited: true`.
+
+The corpus keeps all eight original IDs and all fifteen baseline categories so
+that A0 cannot silently shrink the original obligation. It marks the original
+Owner-Kernel semantics `not_applicable_a0`: A0 has no decision event, owner
+capability, policy/approval use, action descriptor, effect, or acceptance
+surface. It records only these substrate analogues as `held_a0`:
+
+- a real P3.5d v2 signed intake is published to, and exclusively claimed from,
+  the root-only P3.6 mailbox;
+- a root-created same-UID outsider with a different cgroup is closed by the
+  broker before its valid frame is parsed; this is not a worker-child
+  inheritance claim;
+- a canonical same-UID forged root-ACK frame is rejected by the root-owned
+  socket before frame parsing, and either hostile peer makes the cohort
+  terminal without retaining verified probe evidence;
+- worker access to the exact prohibited classes is denied: P3.5 ticket body,
+  root-held workspace path/descriptor FD directory, root cohort binding, and
+  broker bootstrap/peer service material;
+- installed snapshot tampering fails before handoff admission;
+- all broker probes remain `BROKER_EFFECTS_DISABLED`; and
+- a root-only, internally self-consistent witness mutation/head-ledger rewrite
+  is rejected by the separately owned receipt-verifier anchor during
+  post-teardown audit.
+
+This does not make a blanket `/proc` confidentiality claim. The exact registry
+descriptor FD directory is one tested prohibited class; P3.6 still reads the
+exact `/proc/<pid>/cgroup` record needed for peer binding. The root rewrite is
+also a distinct adversary from the worker: it proves the anchor catches an
+otherwise self-consistent witness mutation/head rewrite, not that a compromised
+root is in scope. Fixed witness query records are locally journal-chained but
+outside the independent receipt-anchor claim.
+
+Reproduce the deterministic report and its opt-in installed-snapshot evidence:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-p0-replay.test.sh
+AUTOPILOT_P0_A0_LIVE=1 PYTHONDONTWRITEBYTECODE=1 \
+  bash hooks/tests/supervised-production-substrate-p0-live.test.sh
+```
+
 ## 1. Step 4 — all eight attacks executed against frozen fixtures
 
 Each run builds a fresh fixture; within that run **the fixture instance is the authoritative

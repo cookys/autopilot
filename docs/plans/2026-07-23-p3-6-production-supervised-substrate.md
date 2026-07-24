@@ -128,11 +128,12 @@ authority, while deliberately exposing **no effect and no acceptance path**.
    states, never inferred into success or acceptance.
 10. **State leaf ownership preserves role independence.** Root owns the
     durable control tree, generation manifest, and root-created parents.
-    Witness and coordinator receive distinct private leaves only; workers,
-    brokers, and receipt verifiers receive no durable-state write path. A
-    journal is authoritative after its record and directory are fsynced;
-    derived HEAD files are cache only and are rebuilt or quarantined on
-    recovery.
+    Receipt verifier, witness, and coordinator receive distinct private leaves
+    only; worker and broker receive no durable-state write path. The receipt
+    verifier anchor commits fixed witness mutation responses but exposes no caller route
+    or effect operation. A journal is authoritative after its record and
+    directory are fsynced; derived HEAD files are cache only and are rebuilt or
+    quarantined on recovery.
 11. **Coordinator state is deliberately non-accepting.** The existing P2b
     `COORDINATOR_ACCEPTANCE_DISABLED` result remains a probe-compatible
     refusal. The durable coordinator instead records fenced `prepared`,
@@ -222,7 +223,7 @@ ambiguous launch/restart.
   release window plus hold. Tests lock these nested budgets so a later timeout
   reduction cannot reintroduce a healthy-startup expiry race.
 
-### Phase 3 - Durable witness, coordinator, and disabled broker
+### Phase 3 - Durable receipt anchor, witness, coordinator, and disabled broker
 
 **Phase 3 sequencing:** first freeze the standalone durable ABI and its
 filesystem recovery core, then bind it to a fresh root-created service cohort.
@@ -277,6 +278,17 @@ a recoverable success.
   of dropping work; a compaction/retention protocol is required before this
   transit mailbox is used for unbounded-volume unattended progression.
 
+- **P3.6c complete:** the receipt verifier now owns a third durable leaf that
+  commits only the fixed witness-mutation response hashes before it
+  acknowledges its probes. Root's read-only audit cross-checks this
+  independently owned anchor against the retained witness mutation/head ledger.
+  A rewritten mutation ledger recomputed from its header still fails that audit;
+  fixed `getHead`/`readback` query records remain outside the independent anchor
+  scope. The separately labelled P0-A0 corpus preserves
+  all eight original attack IDs and all fifteen baseline categories, but can
+  emit only `bounded_a0_report` with `qualification_prohibited: true`; it never
+  promotes A0 to an Owner-Kernel P0 pass.
+
 1. Implement the production witness as a separate service with authenticated
    hash-only `appendIfHead`, atomic `appendBatchIfHead`, `getHead`, and
    readback. Ensure all requests are bounded, idempotent only for exact bytes,
@@ -326,6 +338,8 @@ PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-peer.
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-peer-service.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-recovery.test.sh
 AUTOPILOT_P36_LIVE=1 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-live.test.sh
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-p0-replay.test.sh
+AUTOPILOT_P0_A0_LIVE=1 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-p0-live.test.sh
 ```
 
 Regression and repository gates:
@@ -353,6 +367,16 @@ installed-snapshot gate passed 38 assertions covering normal five-role
 teardown, replay rejection, direct SIGTERM tombstone/teardown, and SIGKILL
 recovery on the next admission.
 
+P3.6c evidence on 2026-07-23: the deterministic bounded P0-A0 corpus and its
+negative taxonomy mutations passed. The installed P0-A0 gate passed 59
+assertions using a real P3.5d v2 handoff, same-UID/wrong-cgroup outsider peer,
+a canonical forged root-ACK attempt, terminal tombstone plus fresh-handoff
+recovery, exact secret-class checks, snapshot tamper rejection, and independent
+receipt-anchor rewrite detection. Root retains probe evidence and availability
+only after every service returns a fresh quiesced snapshot; a terminal failed
+cohort retains no verified probe-evidence record. This is substrate evidence
+only, not a full or partial P0 qualification.
+
 ## 6. Risks and Inversion
 
 | Failure to prevent | Inversion / mitigation |
@@ -361,8 +385,8 @@ recovery on the next admission.
 | A worker impersonates a service through filesystem/socket access. | Exact PID/UID/GID plus cgroup verification before bytes; private roots, independently attested identities, and hostile substitution tests. |
 | A Unix socket path exceeds the kernel limit or a receiver rewrites/pre-seeds a published endpoint. | The frozen endpoint layout has a `107`-byte ASCII path guard; root validates the server-created listener, seals its parent to the fixed sender group, requires exactly that one socket entry, and root-cleans rejected staging contents before release. |
 | Process hiding makes a cgroup check silently unavailable. | P2b omits `ProtectProc=invisible` only for this substrate, pins release material in private role roots, and requires exact credentials plus `/proc/<pid>/cgroup` before parsing. |
-| A healthy early service expires while the root host completes five bounded launches or peer exchange. | The 210-second release window covers the explicit 190-second pre-release bound plus margin; one shared 30-second ack collector and 35-second hold fit inside the 300-second unit maximum. |
-| Root silently collapses witness/coordinator independence. | Installer rejects root for those roles and binding validator rejects identity or attestation reuse. |
+| A healthy early service expires while the root host completes five bounded launches or peer exchange. | The 210-second release window covers the explicit 190-second pre-release bound plus margin; one shared 30-second probe ACK plus 10-second quiescence ACK fit inside the 45-second hold and 300-second unit maximum. |
+| Root silently collapses receipt-anchor/witness/coordinator independence. | Installer rejects root for those roles, gives each role a distinct private leaf, and binding validation rejects identity or attestation reuse. |
 | A lost response leads to automatic effect replay. | No effects exist in A0; persistent ambiguous state is quarantine/unknown and blocks new work. |
 | CAS/batch shape exists but is not durable/atomic. | Readback, chain verification, conflicting concurrent requests, crash-tail, and restart tests are mandatory. |
 | A full P3.6 mailbox consumes a verified P3.5 intake without an ingress record. | P3.5 takes the root-only mailbox admission lock and proves bounded capacity before it creates its one-shot submit claim; it holds that reservation through post-cleanup publication. Full capacity leaves the session open. |
@@ -400,3 +424,5 @@ recovery on the next admission.
 | R9 | Architect | SHIP: P3.5 masks from root-private result read through cleanup/publication, the pre-claim mailbox reservation holds through publication, and P3.6 normal/TERM finalization plus installer mkdir rollback are closed. |
 | R9 | Ops/SRE | SHIP: P3.5/P3.6 privileged gates pass; P3.6 covers direct TERM teardown and SIGKILL recovery. The 128-record mailbox is accepted as A0 backpressure, with compaction/retention explicitly deferred. |
 | R9 | QA / Skeptic | SHIP: focused hostile-schema, redaction, transport, handoff, recovery, and installed-snapshot lifecycle gates pass with no remaining Critical/Major finding. |
+| R10 | Architect / Ops / QA | SHIP for the bounded A0 follow-on only: require an independently owned receipt anchor, a real P3.5-to-P3.6 live handoff, a same-UID/wrong-cgroup pre-frame probe, and explicit non-qualification taxonomy. The original P0 semantic replay remains pending. |
+| R11 | Architect / Ops / QA | SHIP for P3.6c's bounded A0 evidence hardening: the root ACK path now has credential-checked two-phase quiescence before evidence persistence, mutation receipts have an independent anchor, and the frozen P0-A0 corpus passed its 59-assertion privileged live gate without fixture residue. This does not upgrade the pending full P0 semantic replay. |

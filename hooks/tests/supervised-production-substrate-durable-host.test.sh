@@ -42,6 +42,7 @@ units = {role: {
     'unit': 'autopilot-p36d-' + role + '-fixture.service',
     'cgroup_path': '/system.slice/autopilot-p36d-' + role + '-fixture.service',
     'release_token': 'release-' + role,
+    'quiesce_token': 'quiesce-' + role,
     'paths': host.role_paths('/run/p36d-fixture', role),
     'pid': 71000 + index,
 } for index, role in enumerate(host.SERVICE_ROLES)}
@@ -68,6 +69,8 @@ endpoint = {'endpoint_id': 'worker_broker', 'socket_root': '/run/p36d-fixture/ip
 endpoint_2 = {'endpoint_id': 'broker_receipt_verifier', 'socket_root': '/run/p36d-fixture/ipc/e4', 'socket_path': '/run/p36d-fixture/ipc/e4/s', 'sender_role': 'broker', 'recipient_role': 'receipt_verifier', 'sender_gid': services['broker']['gid']}
 bootstrap = host.bootstrap_material('broker', units['broker'], services['broker'], None, [endpoint, endpoint_2])
 assert bootstrap['endpoints'] == [endpoint, endpoint_2] and bootstrap['state_leaf'] is None
+assert bootstrap['ack_socket_path'] == units['broker']['paths']['ack_socket']
+assert bootstrap['quiesce_token'] == units['broker']['quiesce_token']
 assert host.service_writable_paths('broker', units['broker'], [endpoint, endpoint_2], {}) == [units['broker']['paths']['ack_root'], endpoint['socket_root']]
 assert host.DURABLE_STATE_ROOT_MODE == 0o711
 with patch.object(service, 'read_root_group_json', return_value=bootstrap), patch.object(service, 'require_exact_identity'):
@@ -100,7 +103,11 @@ assert set(worker_peer_config['runtime_services']) == {'worker', 'broker'}
 assert worker_peer_config['durable_binding']['service_bindings']['receipt_verifier'] != binding['service_bindings']['receipt_verifier']
 assert worker_peer_config['durable_binding']['service_bindings']['witness'] != binding['service_bindings']['witness']
 assert worker_peer_config['durable_binding']['service_bindings']['coordinator'] != binding['service_bindings']['coordinator']
+receipt_peer_config = host.peer_config_material('receipt_verifier', binding, runtime, [endpoint, endpoint_2])
+assert receipt_peer_config['durable_binding'] == binding
+assert set(receipt_peer_config['runtime_services']) == {'broker', 'receipt_verifier'}
 assert host.service_writable_paths('witness', units['witness'], [], {'witness': '/var/lib/p36/witness/leaf'})[-1] == '/var/lib/p36/witness/leaf'
+assert host.service_writable_paths('receipt_verifier', units['receipt_verifier'], [], {'receipt_verifier': '/var/lib/p36/receipt/leaf'})[-1] == '/var/lib/p36/receipt/leaf'
 assert host.require_lifecycle_timing_budget() < host.ROLE_RELEASE_TIMEOUT_SECONDS
 evidence = {
     role: [dict(item, response_hash=digest({'role': role, 'index': index}))
@@ -142,10 +149,15 @@ except host.DurableHostError:
 
 with patch.object(service.os, 'getpid', return_value=units['broker']['pid']), \
      patch.object(service.os, 'geteuid', return_value=services['broker']['uid']), \
-     patch.object(service.os, 'getegid', return_value=services['broker']['gid']), \
-     patch.object(service, 'publish_owned_json'):
+     patch.object(service.os, 'getegid', return_value=services['broker']['gid']):
     acknowledgement = service.write_ack(bootstrap, normalized_peer, None, evidence['broker'])
+    quiesced_ack = service.write_ack(bootstrap, normalized_peer, None, evidence['broker'], phase='quiesced')
 host.validate_ack(acknowledgement, bootstrap, peer_config, services['broker'], units['broker'], core)
+assert acknowledgement['phase'] == 'probe_complete'
+host.validate_ack(
+    quiesced_ack, bootstrap, peer_config, services['broker'], units['broker'], core, expected_phase='quiesced'
+)
+assert quiesced_ack['phase'] == 'quiesced'
 boolean_ack = dict(acknowledgement, schema_version=True)
 boolean_ack_material = dict(boolean_ack)
 boolean_ack_material.pop('ack_hash')
@@ -153,6 +165,37 @@ boolean_ack['ack_hash'] = digest(boolean_ack_material)
 try:
     host.validate_ack(boolean_ack, bootstrap, peer_config, services['broker'], units['broker'], core)
     raise AssertionError('host accepted a rehashed acknowledgement schema boolean')
+except host.DurableHostError:
+    pass
+
+class FakeAckConnection:
+    def settimeout(self, _timeout):
+        return None
+
+    def sendall(self, _value):
+        return None
+
+    def close(self):
+        self.closed = True
+
+class FakeAckListener:
+    def accept(self):
+        return FakeAckConnection(), None
+
+def should_not_read(*_args):
+    raise AssertionError('root ACK parser read a frame before peer authentication')
+
+fake_ack_transport = SimpleNamespace(
+    DurableTransportError=Exception,
+    peer_credentials=lambda *_args: (0, 0, 0),
+    cgroup_v2_matches=lambda *_args: False,
+    read_single_frame=should_not_read,
+)
+try:
+    host.read_root_ack(
+        FakeAckListener(), units['broker'], services['broker'], fake_ack_transport, 'fixture root acknowledgement'
+    )
+    raise AssertionError('root ACK listener accepted an unauthenticated peer')
 except host.DurableHostError:
     pass
 
@@ -203,6 +246,14 @@ with patch.object(host, 'process_start_token', return_value='123456'):
     attempt_material = host.launch_attempt_material(binding, attempt_handoff, units, 'preclaim_intent')
 attempt = dict(attempt_material, attempt_hash=digest(attempt_material))
 assert host.normalize_launch_attempt(attempt)['runtime_root'] == host.RUNTIME_PARENT + '/p36d-9-fixture'
+active_attempt_material = dict(attempt_material, state='claimed_launching')
+active_attempt = dict(active_attempt_material, attempt_hash=digest(active_attempt_material))
+with patch.object(host, '_read_root_private_json', return_value=active_attempt):
+    try:
+        host.require_terminal_attempt_for_audit('/root-owned/state', binding, '/usr/bin/systemctl')
+        raise AssertionError('standalone audit accepted a non-terminal launch attempt')
+    except host.DurableHostError:
+        pass
 
 bad_lock = SimpleNamespace(
     st_mode=stat.S_IFREG | 0o600,
@@ -219,13 +270,15 @@ with patch.object(host.os, 'lstat', return_value=bad_lock):
         pass
 
 payload = {'schema_version': 1, 'request_id': 'disabled-broker', 'operation': 'execute', 'substrate_plan_hash': binding['substrate_plan_hash']}
-handler, availability = service.handler_for_role('broker', binding, None)
+handler, availability, receipt_anchor = service.handler_for_role('broker', binding, None)
 result = handler(core.canonical(payload).encode('utf-8'), digest('envelope'))
-assert availability is None and result['code'] == 'BROKER_EFFECTS_DISABLED'
+assert availability is None and receipt_anchor is None and result['code'] == 'BROKER_EFFECTS_DISABLED'
 revocation = {'schema_version': 1, 'request_id': 'revocation', 'operation': 'check_revocation', 'broker_result_hash': digest('broker-result'), 'substrate_plan_hash': binding['substrate_plan_hash']}
-handler, availability = service.handler_for_role('receipt_verifier', binding, None)
+with patch.object(service.durable, 'DurableReceiptAnchor') as receipt_anchor_class:
+    receipt_anchor_instance = receipt_anchor_class.return_value
+    handler, availability, receipt_anchor = service.handler_for_role('receipt_verifier', binding, '/root-owned/receipt-anchor')
 result = handler(core.canonical(revocation).encode('utf-8'), digest('envelope-2'))
-assert availability is None and result['code'] == 'REVOCATION_UNAVAILABLE'
+assert availability == receipt_anchor_instance.availability and receipt_anchor is receipt_anchor_instance and result['code'] == 'REVOCATION_UNAVAILABLE'
 
 with contextlib.redirect_stderr(io.StringIO()):
     try:
@@ -241,7 +294,7 @@ assert 'supervised_production_substrate_peer' not in service_source
 assert 'fcntl.flock' in host_source and 'write_abandoned_tombstone' in host_source and 'claim_verified_handoff' in host_source
 assert 'create_effects_disabled_broker_result' in service_source
 assert 'create_revocation_unavailable_result' in service_source
-assert 'DurableWitness' in service_source and 'DurableCoordinator' in service_source
+assert 'DurableReceiptAnchor' in service_source and 'DurableWitness' in service_source and 'DurableCoordinator' in service_source
 assert 'p36_durable_cohort_verified' in host_source and 'teardown_verified' in host_source
 assert '_require_root_private_regular_file' in host_source and 'os.O_NOFOLLOW' in host_source
 assert '0o600' in host_source and 'scoped_durable_binding' in host_source and 'direct_peer_roles' in host_source
@@ -249,6 +302,8 @@ assert 'recover_stale_launch_attempts' in host_source and 'preclaim_intent' in h
 assert 'P3.5d durable handoff is unavailable' in host_source and 'P3.5d durable handoff claim failed' in host_source
 assert 'runtime_may_exist = True' in host_source and 'create_runtime_layout(runtime_root' in host_source
 assert 'record_terminal_failure' in host_source and 'finish a verified durable cohort' in host_source
+assert 'receipt-audits' in host_source and 'audit_receipt_anchor' in host_source and 'read_cohort_binding_for_audit' in host_source
+assert 'bind_root_ack_listener' in host_source and 'read_root_ack' in host_source and 'ROLE_QUIESCE_TIMEOUT_SECONDS' in host_source
 assert 'block_termination_signals' in host_source and 'finish a verified durable cohort' in host_source
 assert 'decode_root_canonical_json' in host_source and 'parse_constant=_reject_json_constant' in host_source
 assert 'on_created=lambda: _mark_install_root_created()' in host_source
@@ -256,8 +311,12 @@ assert 'decode_root_group_json' in service_source and 'raw[:-1]' in service_sour
 assert 'for endpoint, listener in listener_pairs' in service_source
 assert 'run_self_probes' in service_source and 'start_listener_context' in service_source
 lifecycle_source = inspect.getsource(host.run_session)
+service_lifecycle_source = inspect.getsource(service.run)
 assert lifecycle_source.index('block_termination_signals("finish a verified durable cohort")') < lifecycle_source.index('except BaseException as error:')
 assert lifecycle_source.index('block_termination_signals("persist a durable cohort failure")') > lifecycle_source.index('except BaseException as error:')
+assert lifecycle_source.index('"quiesced"') < lifecycle_source.index('probe_evidence = write_probe_evidence')
+assert lifecycle_source.index('quiesced_snapshots, quiesced_evidence') < lifecycle_source.index('availability = core.create_availability_disclosure')
+assert service_lifecycle_source.index('wait_for_quiesce') < service_lifecycle_source.rindex('state_snapshot = availability()')
 print('fresh_generation_and_one_shot_handoff_binding=true')
 print('separate_state_leaf_and_socket_permissions=true')
 print('disabled_broker_and_revocation_services=true')
@@ -268,6 +327,8 @@ print('peer_configs_disclose_only_direct_runtime_peers=true')
 print('launch_intent_and_hash_only_probe_evidence_are_durable=true')
 print('host_json_schema_and_partial_runtime_regressions=true')
 print('installer_owns_mkdir_before_chown_failure=true')
+print('receipt_anchor_is_stateful_and_root_auditable=true')
+print('root_ack_is_peer_authenticated_and_audit_requires_terminal_teardown=true')
 PY
 )"
 PY_STATUS=$?
@@ -283,4 +344,6 @@ assert_contains "$PY_OUT" "peer_configs_disclose_only_direct_runtime_peers=true"
 assert_contains "$PY_OUT" "launch_intent_and_hash_only_probe_evidence_are_durable=true" "claim recovery and fixed refusal evidence remain root-verifiable"
 assert_contains "$PY_OUT" "host_json_schema_and_partial_runtime_regressions=true" "host rejects hostile schemas and cleans a partial runtime layout"
 assert_contains "$PY_OUT" "installer_owns_mkdir_before_chown_failure=true" "installer cleans a root created before ownership setup fails"
+assert_contains "$PY_OUT" "receipt_anchor_is_stateful_and_root_auditable=true" "receipt verifier owns a durable anchor while root retains a read-only audit path"
+assert_contains "$PY_OUT" "root_ack_is_peer_authenticated_and_audit_requires_terminal_teardown=true" "ACK provenance and standalone audit both require a fully verified terminal cohort"
 finalize_test

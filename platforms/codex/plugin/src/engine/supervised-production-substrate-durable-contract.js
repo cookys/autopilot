@@ -150,6 +150,13 @@ const BROKER_REQUEST_FIELDS = Object.freeze([
 const REVOCATION_REQUEST_FIELDS = Object.freeze([
   'schema_version', 'request_id', 'operation', 'broker_result_hash', 'substrate_plan_hash',
 ]);
+const RECEIPT_ANCHOR_RECORD_FIELDS = Object.freeze([
+  'schema_version', 'kind', 'request_id', 'operation', 'request_hash',
+  'request_envelope_hash', 'endpoint_id', 'witness_status', 'witness_code',
+  'witness_result_hash', 'witness_response_hash',
+  'witness_stream_id', 'witness_head', 'witness_sequence', 'witness_journal_hash',
+  'previous_journal_hash', 'journal_hash',
+]);
 const RESULT_COMMON_FIELDS = Object.freeze([
   'schema_version', 'kind', 'status', 'code', 'request_id', 'operation',
   'install_binding_hash', 'run_binding_hash', 'substrate_abi_hash',
@@ -174,7 +181,8 @@ const AVAILABILITY_SNAPSHOT_FIELDS = Object.freeze([
 const AVAILABILITY_FIELDS = Object.freeze([
   'schema_version', 'kind', 'status', 'install_binding_hash', 'run_binding_hash',
   'substrate_abi_hash', 'substrate_plan_hash', 'durable_abi_hash', 'cohort_id',
-  'generation', 'witness_role', 'witness_binding_hash', 'witness_state',
+  'generation', 'receipt_anchor_role', 'receipt_anchor_binding_hash', 'receipt_anchor_state',
+  'receipt_anchor_journal_hash', 'receipt_anchor_snapshot_hash', 'witness_role', 'witness_binding_hash', 'witness_state',
   'witness_journal_hash', 'witness_snapshot_hash', 'coordinator_role',
   'coordinator_binding_hash', 'coordinator_state', 'coordinator_journal_hash',
   'coordinator_snapshot_hash', 'owner_kernel_authority', 'effect_authority',
@@ -308,6 +316,8 @@ function getSupervisedProductionDurableAbi() {
       result_fields: REVOCATION_RESULT_FIELDS,
       status: 'unavailable',
       code: 'REVOCATION_UNAVAILABLE',
+      receipt_anchor_record_fields: RECEIPT_ANCHOR_RECORD_FIELDS,
+      receipt_anchor: 'internal_witness_response_commitment_only',
     },
     availability: {
       fields: AVAILABILITY_FIELDS,
@@ -823,7 +833,7 @@ function normalizeDurableRevocationResult(bindingRaw, requestRaw, requestEnvelop
 
 function normalizeDurableServiceAvailabilitySnapshot(bindingRaw, role, raw) {
   const binding = normalizeDurableBinding(bindingRaw);
-  if (!['witness', 'coordinator'].includes(role)) durableError('durable availability role is unsupported');
+  if (!['receipt_verifier', 'witness', 'coordinator'].includes(role)) durableError('durable availability role is unsupported');
   const value = assertExactKeys(raw, new Set(AVAILABILITY_SNAPSHOT_FIELDS), 'durable service availability');
   if (
     value.schema_version !== DURABLE_STATE_SCHEMA_VERSION
@@ -844,12 +854,14 @@ function normalizeDurableServiceAvailabilitySnapshot(bindingRaw, role, raw) {
   return cloneCanonical(value);
 }
 
-function normalizeDurableAvailabilityDisclosure(bindingRaw, witnessRaw, coordinatorRaw, raw) {
+function normalizeDurableAvailabilityDisclosure(bindingRaw, receiptAnchorRaw, witnessRaw, coordinatorRaw, raw) {
   const binding = normalizeDurableBinding(bindingRaw);
+  const receiptAnchor = normalizeDurableServiceAvailabilitySnapshot(binding, 'receipt_verifier', receiptAnchorRaw);
   const witness = normalizeDurableServiceAvailabilitySnapshot(binding, 'witness', witnessRaw);
   const coordinator = normalizeDurableServiceAvailabilitySnapshot(binding, 'coordinator', coordinatorRaw);
   const value = assertExactKeys(raw, new Set(AVAILABILITY_FIELDS), 'durable availability disclosure');
-  const expectedStatus = witness.status === 'available' && coordinator.status === 'available'
+  const expectedStatus = receiptAnchor.status === 'available'
+    && witness.status === 'available' && coordinator.status === 'available'
     ? 'available'
     : 'unknown';
   if (
@@ -863,6 +875,11 @@ function normalizeDurableAvailabilityDisclosure(bindingRaw, witnessRaw, coordina
     || value.durable_abi_hash !== binding.durable_abi_hash
     || value.cohort_id !== binding.cohort_id
     || value.generation !== binding.generation
+    || value.receipt_anchor_role !== 'receipt_verifier'
+    || value.receipt_anchor_binding_hash !== receiptAnchor.binding_hash
+    || value.receipt_anchor_state !== receiptAnchor.status
+    || value.receipt_anchor_journal_hash !== receiptAnchor.journal_hash
+    || value.receipt_anchor_snapshot_hash !== receiptAnchor.snapshot_hash
     || value.witness_role !== 'witness'
     || value.witness_binding_hash !== witness.binding_hash
     || value.witness_state !== witness.status
@@ -898,6 +915,7 @@ module.exports = {
   MAX_DURABLE_FRAME_BYTES,
   MAX_DURABLE_READBACK_LIMIT,
   RECEIPT_VERIFIER_OPERATIONS,
+  RECEIPT_ANCHOR_RECORD_FIELDS,
   SERVICE_ROLES,
   WITNESS_RECEIPT_FIELDS,
   WITNESS_APPEND_OPERATIONS,

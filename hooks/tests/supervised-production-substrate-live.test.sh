@@ -232,6 +232,8 @@ assert_contains "$(cat "$out")" '"lifecycle":"teardown_verified"' "live output r
 assert_contains "$(cat "$out")" '"effect_authority":"none"' "live cohort preserves no effect authority"
 assert_contains "$(cat "$out")" '"acceptance":"not_available"' "live cohort preserves no acceptance authority"
 assert_contains "$(cat "$out")" '"fixed_probe_evidence_hash":"' "live cohort emits a root-retained fixed probe evidence hash"
+assert_contains "$(cat "$out")" '"receipt_anchor_audit_hash":"' "live cohort emits a cross-leaf receipt anchor audit hash"
+assert_contains "$(cat "$out")" '"receipt_anchor_audit_evidence_hash":"' "live cohort retains a receipt anchor audit evidence hash"
 
 cohort_id="$(/usr/bin/python3 -I - "$out" <<'PY'
 import json
@@ -250,6 +252,8 @@ assert_eq "$cohort_id_is_opaque" "true" "live host allocates a fresh opaque coho
 assert_eq "$(sudo -n stat -c '%u:%g:%a' "$state_root/generation.json")" "0:0:600" "generation ledger remains root-private"
 assert_eq "$(sudo -n stat -c '%u:%g:%a' "$handoff_root/handoff-$handoff_id.claim")" "0:0:600" "handoff claim remains root-private and durable"
 assert_eq "$(sudo -n stat -c '%u:%g:%a' "$state_root/probe-evidence/$cohort_id.json")" "0:0:600" "fixed refusal evidence remains root-private after teardown"
+assert_eq "$(sudo -n stat -c '%u:%g:%a' "$state_root/receipt-audits/$cohort_id.json")" "0:0:600" "receipt anchor audit evidence remains root-private after teardown"
+assert_eq "$(sudo -n stat -c '%u:%g:%a' "$state_root/cohorts/$cohort_id/binding.json")" "0:0:600" "cohort binding remains root-private for later read-only audit"
 assert_eq "$(sudo -n /usr/bin/python3 -I - "$state_root/attempts/$cohort_id.json" <<'PY'
 import json
 import sys
@@ -258,24 +262,46 @@ with open(sys.argv[1], encoding='utf-8') as source:
 PY
 )" "teardown_verified" "normal cohort records verified teardown in its durable launch attempt"
 if sudo -n test -e "$state_root/cohorts/$cohort_id/witness/leaf/journal.jsonl"; then witness_journal_exists=true; else witness_journal_exists=false; fi
+if sudo -n test -e "$state_root/cohorts/$cohort_id/receipt_verifier/leaf/journal.jsonl"; then receipt_anchor_journal_exists=true; else receipt_anchor_journal_exists=false; fi
 if sudo -n test -e "$state_root/cohorts/$cohort_id/coordinator/leaf/journal.jsonl"; then coordinator_journal_exists=true; else coordinator_journal_exists=false; fi
 if sudo -n test -e "$RUNTIME_PARENT/$cohort_id"; then cohort_runtime_absent=false; else cohort_runtime_absent=true; fi
 assert_eq "$witness_journal_exists" "true" "root retains durable witness evidence after transient teardown"
+assert_eq "$receipt_anchor_journal_exists" "true" "root retains independently owned receipt anchor evidence after transient teardown"
 assert_eq "$coordinator_journal_exists" "true" "root retains durable coordinator evidence after transient teardown"
 assert_eq "$cohort_runtime_absent" "true" "cohort runtime tree is removed after verified teardown"
 witness_journal_lines="$(sudo -n /usr/bin/wc -l "$state_root/cohorts/$cohort_id/witness/leaf/journal.jsonl" | /usr/bin/awk '{print $1}')"
+receipt_anchor_journal_lines="$(sudo -n /usr/bin/wc -l "$state_root/cohorts/$cohort_id/receipt_verifier/leaf/journal.jsonl" | /usr/bin/awk '{print $1}')"
 coordinator_journal_lines="$(sudo -n /usr/bin/wc -l "$state_root/cohorts/$cohort_id/coordinator/leaf/journal.jsonl" | /usr/bin/awk '{print $1}')"
 assert_eq "$witness_journal_lines" "5" "sealed append, batch, get-head, and readback probes leave four witness records"
+assert_eq "$receipt_anchor_journal_lines" "3" "receipt verifier commits both fixed witness responses into its own journal"
 assert_eq "$coordinator_journal_lines" "3" "sealed prepare-cancel probes leave exactly two coordinator records"
 assert_not_contains "$(sudo -n cat "$state_root/cohorts/$cohort_id/coordinator/leaf/journal.jsonl")" '"status":"unknown"' "live coordinator self-probe cannot leave pending or unknown state"
 assert_not_contains "$(sudo -n cat "$state_root/cohorts/$cohort_id/witness/leaf/journal.jsonl")" '"ticket"' "durable witness evidence does not contain a P3.5 ticket body"
 assert_contains "$(sudo -n cat "$state_root/cohorts/$cohort_id/witness/leaf/journal.jsonl")" '"operation":"appendBatchIfHead"' "live witness exercises the atomic batch route"
 assert_contains "$(sudo -n cat "$state_root/cohorts/$cohort_id/witness/leaf/journal.jsonl")" '"operation":"readback"' "live witness exercises the bounded readback route"
+assert_contains "$(sudo -n cat "$state_root/cohorts/$cohort_id/receipt_verifier/leaf/journal.jsonl")" '"endpoint_id":"receipt_verifier_witness"' "receipt anchor is limited to the fixed witness route"
+assert_not_contains "$(sudo -n cat "$state_root/cohorts/$cohort_id/receipt_verifier/leaf/journal.jsonl")" '"ticket"' "receipt anchor retains no P3.5 ticket body"
 probe_evidence="$(sudo -n cat "$state_root/probe-evidence/$cohort_id.json")"
 assert_contains "$probe_evidence" '"code":"BROKER_EFFECTS_DISABLED"' "root retains hash-only evidence of the execute refusal"
 assert_contains "$probe_evidence" '"code":"REVOCATION_UNAVAILABLE"' "root retains hash-only evidence of the revocation refusal"
 assert_not_contains "$probe_evidence" '"permit"' "fixed refusal evidence exposes no capability material"
 assert_not_contains "$probe_evidence" '"ticket"' "fixed refusal evidence exposes no P3.5 ticket body"
+
+audit_out="$TEST_TMP/p36-live-audit.out"
+audit_err="$TEST_TMP/p36-live-audit.err"
+sudo -n env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -I \
+  "$install_root/sbin/supervised-production-substrate-durable-host.py" audit \
+  --cohort-id "$cohort_id" >"$audit_out" 2>"$audit_err"
+audit_status=$?
+if [ "$audit_status" != "0" ]; then
+  fail "root re-audits the retained receipt and witness journals: expected '0', got '$audit_status'"
+  cat "$audit_err" >&2
+  finalize_test
+  exit 1
+fi
+assert_eq "$audit_status" "0" "root re-audits the retained receipt and witness journals"
+assert_contains "$(cat "$audit_out")" '"kind":"p36_durable_receipt_anchor_audit_result"' "read-only post-teardown audit emits its dedicated result kind"
+assert_contains "$(cat "$audit_out")" '"status":"verified"' "read-only post-teardown audit verifies the independent receipt chain"
 
 sudo -n env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -I \
   "$install_root/sbin/supervised-production-substrate-durable-host.py" run \
@@ -438,4 +464,5 @@ echo "live_root_snapshot_and_five_role_lifecycle=true"
 echo "live_one_shot_handoff_and_teardown=true"
 echo "live_sigterm_terminal_teardown=true"
 echo "live_sigkill_claim_recovery=true"
+echo "live_receipt_anchor_audit=true"
 finalize_test

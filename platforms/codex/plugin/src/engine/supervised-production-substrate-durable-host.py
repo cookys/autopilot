@@ -2,7 +2,7 @@
 """Root-installed P3.6 durable cohort host.
 
 The old P2b host remains an independent 8 KiB peer credential probe.  This
-host creates a fresh durable generation, provisions two role-private state
+host creates a fresh durable generation, provisions three role-private state
 leaves, seals a new five-route 512 KiB socket topology, and consumes exactly
 one root-only P3.5d v2 handoff.  It deliberately has no Engine/effect or
 acceptance invocation path.
@@ -18,6 +18,7 @@ import pwd
 import grp
 import secrets
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -91,7 +92,8 @@ ROLE_START_TIMEOUT_SECONDS = 8
 # and post-seal identity checks before the first release.
 ROLE_RELEASE_TIMEOUT_SECONDS = 210
 ROLE_ACK_TIMEOUT_SECONDS = 30
-ROLE_HOLD_SECONDS = 35
+ROLE_QUIESCE_TIMEOUT_SECONDS = 10
+ROLE_HOLD_SECONDS = 45
 SYSTEMD_COMMAND_TIMEOUT_SECONDS = 10
 ROLE_RELEASE_SAFETY_MARGIN_SECONDS = 10
 ROLE_ACK_SAFETY_MARGIN_SECONDS = 3
@@ -195,8 +197,13 @@ def require_lifecycle_timing_budget():
         fail("durable release timeout cannot cover the worst-case pre-release setup")
     if ROLE_RELEASE_TIMEOUT_SECONDS + ROLE_HOLD_SECONDS > ROLE_RUNTIME_MAX_SECONDS:
         fail("durable service runtime cap cannot cover release and hold windows")
-    if ROLE_ACK_TIMEOUT_SECONDS + ROLE_ACK_SAFETY_MARGIN_SECONDS > ROLE_HOLD_SECONDS:
-        fail("durable acknowledgement deadline lacks a service hold safety margin")
+    if (
+        ROLE_ACK_TIMEOUT_SECONDS
+        + ROLE_QUIESCE_TIMEOUT_SECONDS
+        + ROLE_ACK_SAFETY_MARGIN_SECONDS
+        > ROLE_HOLD_SECONDS
+    ):
+        fail("durable acknowledgement/quiescence deadlines lack a service hold safety margin")
     return setup_bound
 
 
@@ -1254,8 +1261,13 @@ def provision_cohort_state(core, state_root, binding, services):
     require_exact_directory(cohorts, 0, 0, 0o711, "durable cohorts root")
     root = cohort_root_path(state_root, binding["cohort_id"])
     create_directory(root, 0, 0, 0o711, "durable cohort root")
+    write_root_file(
+        os.path.join(root, "binding.json"),
+        (core.canonical(binding) + "\n").encode("utf-8"),
+        0o600,
+    )
     leaves = {}
-    for role in ("witness", "coordinator"):
+    for role in ("receipt_verifier", "witness", "coordinator"):
         leaf = os.path.join(root, role, "leaf")
         provision_durable_leaf(core, leaf, binding, role, services[role])
         leaves[role] = leaf
@@ -1587,7 +1599,8 @@ def role_paths(runtime_root, role):
         "peer_config": os.path.join(root, "peer.json"),
         "ack_root": os.path.join(root, "ack"),
         "ready": os.path.join(root, "ack", "listeners.json"),
-        "ack": os.path.join(root, "ack", "release.json"),
+        "ack_socket": os.path.join(root, "ack.sock"),
+        "quiesce": os.path.join(root, "quiesce"),
     }
 
 
@@ -1600,6 +1613,7 @@ def plan_units(runtime_root):
             "unit": unit,
             "cgroup_path": "/system.slice/" + unit,
             "release_token": "p36d-" + secrets.token_hex(24),
+            "quiesce_token": "p36d-quiesce-" + secrets.token_hex(24),
             "paths": paths,
             "pid": None,
             # systemd-run may create a transient unit and still return a
@@ -1619,6 +1633,40 @@ def create_runtime_layout(runtime_root, services, units):
         paths = units[role]["paths"]
         create_directory(paths["root"], 0, service["gid"], 0o710, role + " runtime root")
         create_directory(paths["ack_root"], service["uid"], service["gid"], 0o700, role + " acknowledgement root")
+
+
+def bind_root_ack_listener(unit, service):
+    """Bind the root-owned acknowledgement channel before services launch.
+
+    A service-private ACK file proves only that some process with the service
+    UID wrote a file.  The stream socket below lets root authenticate the
+    connecting PID/UID/GID/cgroup with SO_PEERCRED before reading a frame.
+    """
+
+    path = unit["paths"]["ack_socket"]
+    require_exact_directory(unit["paths"]["root"], 0, service["gid"], 0o710, service["role"] + " runtime root")
+    if os.path.lexists(path):
+        fail(service["role"] + " root acknowledgement socket already exists")
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        listener.bind(path)
+        os.chown(path, 0, service["gid"])
+        os.chmod(path, 0o660)
+        require_exact_socket(path, 0, service["gid"], 0o660, service["role"] + " root acknowledgement socket")
+        listener.listen(4)
+        listener.setblocking(False)
+        return listener
+    except BaseException:
+        listener.close()
+        raise
+
+
+def close_root_ack_listeners(listeners):
+    for listener in listeners.values():
+        try:
+            listener.close()
+        except OSError:
+            pass
 
 
 def run_binding_material(config, handoff, generation, cohort_id, units, services):
@@ -1689,7 +1737,9 @@ def bootstrap_material(role, unit, service, state_leaf, endpoints):
         "release_path": unit["paths"]["release"],
         "release_token": unit["release_token"],
         "ready_path": unit["paths"]["ready"],
-        "ack_path": unit["paths"]["ack"],
+        "ack_socket_path": unit["paths"]["ack_socket"],
+        "quiesce_path": unit["paths"]["quiesce"],
+        "quiesce_token": unit["quiesce_token"],
         "peer_config_path": unit["paths"]["peer_config"],
         "state_leaf": state_leaf,
         "release_timeout_seconds": ROLE_RELEASE_TIMEOUT_SECONDS,
@@ -1791,23 +1841,108 @@ def wait_for_service_json(path, service, timeout_seconds, label):
     fail(label + " did not appear before its deadline")
 
 
-def collect_release_acks(units, services, bootstraps, peer_configs, core, systemctl_path):
-    """Collect all role acknowledgements against one cohort-wide deadline."""
+def read_root_ack(listener, unit, service, transport, label):
+    """Read one ACK only after kernel-authenticating the service peer."""
 
-    deadline = time.monotonic() + ROLE_ACK_TIMEOUT_SECONDS
+    try:
+        connection, _ = listener.accept()
+    except BlockingIOError:
+        return None
+    except OSError as error:
+        raise DurableHostError(label + " socket cannot accept a peer: " + str(error)) from error
+    try:
+        expected = {
+            "pid": unit["pid"],
+            "uid": service["uid"],
+            "gid": service["gid"],
+            "cgroup_path": unit["cgroup_path"],
+        }
+        # Do not decode even a frame header until the kernel proves this is
+        # the exact transient unit root launched for this cohort.
+        observed_pid, observed_uid, observed_gid = transport.peer_credentials(connection)
+        if (
+            observed_pid != expected["pid"]
+            or observed_uid != expected["uid"]
+            or observed_gid != expected["gid"]
+            or not transport.cgroup_v2_matches(observed_pid, expected["cgroup_path"])
+        ):
+            fail(
+                label
+                + " rejected an unexpected Linux peer before frame parsing"
+                + " (observed pid/uid/gid="
+                + str(observed_pid)
+                + "/"
+                + str(observed_uid)
+                + "/"
+                + str(observed_gid)
+                + ", expected pid/uid/gid="
+                + str(expected["pid"])
+                + "/"
+                + str(expected["uid"])
+                + "/"
+                + str(expected["gid"])
+                + ")"
+            )
+        frame = transport.read_single_frame(connection, transport.FRAME_TIMEOUT_SECONDS)
+        return connection, transport.decode_frame(frame, label)
+    except transport.DurableTransportError as error:
+        connection.close()
+        raise DurableHostError(label + " is not a valid authenticated frame: " + str(error)) from error
+    except BaseException:
+        connection.close()
+        raise
+
+
+def confirm_root_ack(connection, transport, label):
+    """Release a service only after all root-side ACK checks have finished."""
+
+    try:
+        connection.settimeout(transport.FRAME_TIMEOUT_SECONDS)
+        # Keep the service process alive until root has inspected its
+        # PID/cgroup, verified the pinned unit, and validated its one canonical
+        # ACK frame. Without this reply a final quiesced service can exit
+        # before `/proc/<pid>/cgroup` is read.
+        connection.sendall(b"\x01")
+    except OSError as error:
+        raise DurableHostError(label + " root confirmation cannot be sent: " + str(error)) from error
+
+
+def collect_release_acks(
+    ack_listeners,
+    units,
+    services,
+    bootstraps,
+    peer_configs,
+    core,
+    transport,
+    systemctl_path,
+    expected_phase,
+    timeout_seconds,
+):
+    """Collect one peer-authenticated ACK phase against a shared deadline."""
+
+    deadline = time.monotonic() + timeout_seconds
     pending = set(SERVICE_ROLES)
     snapshots = {}
     evidence_by_role = {}
-    errors = {}
     while pending and time.monotonic() < deadline:
         for role in tuple(pending):
             unit = units[role]
             service = services[role]
-            path = unit["paths"]["ack"]
-            if not os.path.lexists(path):
-                continue
             try:
-                ack = read_service_ack(path, service, role + " durable release acknowledgement")
+                received = read_root_ack(
+                    ack_listeners[role],
+                    unit,
+                    service,
+                    transport,
+                    role + " durable " + expected_phase + " acknowledgement",
+                )
+            except DurableHostError:
+                raise
+            if received is None:
+                continue
+            connection, ack = received
+            try:
                 verify_service_process_binding(systemctl_path, unit, service)
                 snapshot, evidence = validate_ack(
                     ack,
@@ -1816,10 +1951,19 @@ def collect_release_acks(units, services, bootstraps, peer_configs, core, system
                     service,
                     unit,
                     core,
+                    expected_phase,
+                )
+                confirm_root_ack(
+                    connection,
+                    transport,
+                    role + " durable " + expected_phase + " acknowledgement",
                 )
             except DurableHostError as error:
-                errors[role] = str(error)
-                continue
+                raise DurableHostError(
+                    role + " durable " + expected_phase + " acknowledgement is invalid: " + str(error)
+                ) from error
+            finally:
+                connection.close()
             if snapshot is not None:
                 snapshots[role] = snapshot
             evidence_by_role[role] = evidence
@@ -1827,8 +1971,10 @@ def collect_release_acks(units, services, bootstraps, peer_configs, core, system
         if pending:
             time.sleep(0.025)
     if pending:
-        detail = "; ".join(role + "=" + errors.get(role, "acknowledgement did not appear") for role in sorted(pending))
-        fail("durable release acknowledgements missed the shared deadline: " + detail)
+        fail(
+            "durable " + expected_phase + " acknowledgements missed the shared deadline: "
+            + ", ".join(sorted(pending))
+        )
     return snapshots, evidence_by_role
 
 
@@ -1936,12 +2082,12 @@ def scoped_durable_binding(role, binding, endpoints):
     Stateless roles only need the two claims on each endpoint they can use.
     The durable ABI requires five syntactically valid bindings, so undisclosed
     services are deterministic, non-routable placeholders rather than omitted
-    fields.  Witness/coordinator retain the full static binding because the
+    fields. Receipt verifier/witness/coordinator retain the full static binding because the
     P3a state core itself validates that frozen cohort contract; their runtime
     PID/cgroup disclosure remains route-scoped below.
     """
 
-    if role in {"witness", "coordinator"}:
+    if role in {"receipt_verifier", "witness", "coordinator"}:
         return binding
     disclosed = direct_peer_roles(role, endpoints)
     material = dict(binding)
@@ -2142,11 +2288,63 @@ def write_probe_evidence(state_root, binding, handoff_hash, evidence_by_role):
     return value
 
 
-def validate_ack(raw, bootstrap, peer_config, service, unit, core):
+def validate_receipt_anchor_audit(binding, audit):
+    value = require_exact_keys(
+        audit,
+        {
+            "schema_version", "kind", "status", "binding_hash", "anchored_records",
+            "receipt_anchor_journal_hash", "witness_journal_hash", "audit_hash",
+        },
+        "durable receipt anchor audit",
+    )
+    material = dict(value)
+    audit_hash = material.pop("audit_hash")
+    if (
+        require_exact_int(value["schema_version"], SCHEMA_VERSION, "durable receipt audit schema")
+        != SCHEMA_VERSION
+        or value["kind"] != "p36_durable_receipt_anchor_audit"
+        or value["status"] != "verified"
+        or value["binding_hash"] != sha256_value(binding)
+        or require_positive_int(value["anchored_records"], "durable receipt audit anchored record count") < 1
+        or sha256_value(material) != require_sha256(audit_hash, "durable receipt audit hash")
+    ):
+        fail("durable receipt anchor audit is invalid")
+    for key in ("binding_hash", "receipt_anchor_journal_hash", "witness_journal_hash", "audit_hash"):
+        require_sha256(value[key], "durable receipt audit " + key)
+    return value
+
+
+def write_receipt_anchor_audit_evidence(state_root, binding, handoff_hash, audit):
+    audit = validate_receipt_anchor_audit(binding, audit)
+    root = os.path.join(state_root, "receipt-audits")
+    if not os.path.lexists(root):
+        if ensure_directory(root, 0, 0, 0o700, "durable receipt audit root"):
+            fsync_directory(state_root)
+    require_exact_directory(root, 0, 0, 0o700, "durable receipt audit root")
+    material = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "p36_durable_receipt_anchor_audit_evidence",
+        "cohort_id": binding["cohort_id"],
+        "generation": binding["generation"],
+        "binding_hash": sha256_value(binding),
+        "handoff_hash": require_sha256(handoff_hash, "durable receipt audit handoff hash"),
+        "receipt_anchor_audit_hash": audit["audit_hash"],
+        "receipt_anchor_journal_hash": audit["receipt_anchor_journal_hash"],
+        "witness_journal_hash": audit["witness_journal_hash"],
+        "anchored_records": audit["anchored_records"],
+    }
+    value = dict(material, evidence_hash=sha256_value(material))
+    path = os.path.join(root, binding["cohort_id"] + ".json")
+    write_root_file(path, (canonical(value) + "\n").encode("utf-8"), 0o600)
+    fsync_directory(root)
+    return value
+
+
+def validate_ack(raw, bootstrap, peer_config, service, unit, core, expected_phase="probe_complete"):
     value = require_exact_keys(
         raw,
         {
-            "schema_version", "kind", "status", "role", "identity", "pid", "uid", "gid", "bootstrap_hash",
+            "schema_version", "kind", "status", "phase", "role", "identity", "pid", "uid", "gid", "bootstrap_hash",
             "peer_config_hash", "binding_hash", "state_snapshot", "self_probe_evidence", "owner_kernel_authority", "effect_authority",
             "broker_authority", "acceptance", "ack_hash",
         },
@@ -2160,6 +2358,7 @@ def validate_ack(raw, bootstrap, peer_config, service, unit, core):
         != SCHEMA_VERSION
         or value["kind"] != "p36_durable_release_ack"
         or value["status"] != "released_durable_no_effect"
+        or value["phase"] != expected_phase
         or value["role"] != service["role"]
         or value["identity"] != service["identity"]
         or require_positive_int(value["pid"], "durable acknowledgement PID") != unit["pid"]
@@ -2176,7 +2375,7 @@ def validate_ack(raw, bootstrap, peer_config, service, unit, core):
     ):
         fail("durable release acknowledgement does not match the root-pinned cohort")
     evidence = validate_probe_evidence(value["self_probe_evidence"], binding, service["role"])
-    if service["role"] in {"witness", "coordinator"}:
+    if service["role"] in {"receipt_verifier", "witness", "coordinator"}:
         try:
             snapshot = core.normalize_service_availability_snapshot(binding, service["role"], value["state_snapshot"])
         except core.DurableStateError as error:
@@ -2263,6 +2462,7 @@ def run_session(handoff_id):
     cleanup_errors = []
     result = None
     primary_error = None
+    ack_listeners = {}
     previous_signal_mask = current_termination_signal_mask("durable cohort")
     previous_handlers = install_interrupt_handlers(raise_interruption)
 
@@ -2309,6 +2509,7 @@ def run_session(handoff_id):
         """Clean up and fsync one terminal outcome with termination signals masked."""
 
         nonlocal attempt
+        close_root_ack_listeners(ack_listeners)
         for role in reversed(SERVICE_ROLES):
             if not units[role]["may_exist"]:
                 continue
@@ -2333,6 +2534,28 @@ def run_session(handoff_id):
                     raise DurableHostError(str(failure) + "; " + detail) from failure
                 raise failure
             raise DurableHostError("durable cohort cleanup failed: " + detail)
+        # No listener, service unit, or runtime socket remains at this point.
+        # Audit only the retained role-private leaves so a verified result cannot
+        # race an otherwise authenticated post-ACK witness mutation.
+        try:
+            receipt_audit = core.audit_receipt_anchor(
+                leaves["witness"], leaves["receipt_verifier"], binding
+            )
+            receipt_audit_evidence = write_receipt_anchor_audit_evidence(
+                validated["state_root"], binding, handoff["handoff_hash"], receipt_audit
+            )
+        except core.DurableStateError as error:
+            audit_error = DurableHostError(
+                "durable post-teardown receipt-anchor audit failed [" + error.code + "]: " + str(error)
+            )
+            record_terminal_failure(str(audit_error))
+            raise audit_error from error
+        except (DurableHostError, OSError) as error:
+            audit_error = DurableHostError("durable post-teardown receipt-anchor audit failed: " + str(error))
+            record_terminal_failure(str(audit_error))
+            raise audit_error from error
+        result["receipt_anchor_audit_hash"] = receipt_audit["audit_hash"]
+        result["receipt_anchor_audit_evidence_hash"] = receipt_audit_evidence["evidence_hash"]
         if attempt_recorded:
             try:
                 attempt = transition_launch_attempt(validated["state_root"], attempt, "teardown_verified")
@@ -2366,6 +2589,8 @@ def run_session(handoff_id):
         ensure_runtime_parent()
         runtime_may_exist = True
         create_runtime_layout(runtime_root, validated["services"], units)
+        for role in SERVICE_ROLES:
+            ack_listeners[role] = bind_root_ack_listener(units[role], validated["services"][role])
         _cohort_root, leaves = provision_cohort_state(core, validated["state_root"], binding, validated["services"])
         endpoints = endpoint_specs(runtime_root, validated["services"], transport)
         bootstraps = write_bootstraps(units, validated["services"], leaves, endpoints)
@@ -2417,20 +2642,55 @@ def run_session(handoff_id):
                 units[role]["paths"]["release"], units[role]["release_token"], validated["services"][role]["gid"]
             )
         snapshots, evidence_by_role = collect_release_acks(
+            ack_listeners,
             units,
             validated["services"],
             bootstraps,
             peer_configs,
             core,
+            transport,
             validated["paths"]["systemctl_path"],
+            "probe_complete",
+            ROLE_ACK_TIMEOUT_SECONDS,
         )
-        if set(snapshots) != {"witness", "coordinator"}:
-            fail("durable cohort did not publish both state availability snapshots")
+        if set(snapshots) != {"receipt_verifier", "witness", "coordinator"}:
+            fail("durable cohort did not publish every durable state availability snapshot")
+        for role in SERVICE_ROLES:
+            create_release_file(
+                units[role]["paths"]["quiesce"], units[role]["quiesce_token"], validated["services"][role]["gid"]
+            )
+        # A service only emits this second ACK after it has stopped its
+        # listener loops and observed no late bad peer/frame.  The root ACK
+        # socket remains open between phases so an unexpected peer cannot be
+        # hidden behind a writable service-owned artefact.
+        quiesced_snapshots, quiesced_evidence = collect_release_acks(
+            ack_listeners,
+            units,
+            validated["services"],
+            bootstraps,
+            peer_configs,
+            core,
+            transport,
+            validated["paths"]["systemctl_path"],
+            "quiesced",
+            ROLE_QUIESCE_TIMEOUT_SECONDS,
+        )
+        if set(quiesced_snapshots) != {"receipt_verifier", "witness", "coordinator"}:
+            fail("durable cohort did not publish every quiesced state availability snapshot")
+        if quiesced_evidence != evidence_by_role:
+            fail("durable cohort changed fixed probe evidence between acknowledgement phases")
+        # The first acknowledgement proves only that the fixed self-probes
+        # completed. Persist no root evidence until every listener has also
+        # quiesced cleanly: an unexpected peer in that final window makes the
+        # cohort terminally abandoned, not evidenced as a verified probe run.
         availability = core.create_availability_disclosure(
-            binding, snapshots["witness"], snapshots["coordinator"]
+            binding,
+            quiesced_snapshots["receipt_verifier"],
+            quiesced_snapshots["witness"],
+            quiesced_snapshots["coordinator"],
         )
         probe_evidence = write_probe_evidence(
-            validated["state_root"], binding, handoff["handoff_hash"], evidence_by_role
+            validated["state_root"], binding, handoff["handoff_hash"], quiesced_evidence
         )
         result = {
             # This host deliberately tears down the transient cohort before it
@@ -2477,6 +2737,98 @@ def run_session(handoff_id):
     return final_result
 
 
+def read_cohort_binding_for_audit(core, state_root, cohort_id):
+    cohort_id = require_token(cohort_id, "durable audit cohort id")
+    root = cohort_root_path(state_root, cohort_id)
+    require_exact_directory(root, 0, 0, 0o711, "durable audit cohort root")
+    try:
+        binding = core.normalize_binding(
+            _read_root_private_json(os.path.join(root, "binding.json"), "durable audit cohort binding")
+        )
+    except core.DurableStateError as error:
+        raise DurableHostError("durable audit cohort binding is invalid: " + str(error)) from error
+    if binding["cohort_id"] != cohort_id:
+        fail("durable audit cohort binding does not match its root")
+    return root, binding
+
+
+def require_terminal_attempt_for_audit(state_root, binding, systemctl_path):
+    """Bind a read-only audit to a fully torn-down, verified cohort only."""
+
+    try:
+        attempt = normalize_launch_attempt(
+            _read_root_private_json(
+                launch_attempt_path(state_root, binding["cohort_id"]), "durable audit launch attempt"
+            )
+        )
+    except DurableHostError as error:
+        raise DurableHostError("durable audit launch attempt is invalid") from error
+    if (
+        attempt["state"] != "teardown_verified"
+        or attempt["generation"] != binding["generation"]
+        or attempt["binding_hash"] != sha256_value(binding)
+        or attempt["run_binding_hash"] != binding["run_binding_hash"]
+    ):
+        fail("durable audit requires a matching teardown-verified launch attempt")
+    if os.path.lexists(attempt["runtime_root"]):
+        fail("durable audit refuses a cohort with a live runtime root")
+    for unit in attempt["units"]:
+        observed = run_command(
+            [systemctl_path, "show", "--property=LoadState", "--value", unit["unit"]], timeout_seconds=2
+        )
+        if observed.returncode != 0 or observed.stdout.strip() != "not-found":
+            fail("durable audit refuses a cohort with a live service unit")
+    return attempt
+
+
+def audit_cohort(cohort_id):
+    """Run a read-only root audit over a retained receipt/witness pair."""
+
+    require_root()
+    require_supported_host()
+    install_root = installed_root_from_self()
+    config = load_installed_config(install_root)
+    validated = validate_installed_config(install_root, config)
+    core = load_snapshot_module(install_root, "durable_core", "p36d_audit_core")
+    if core.DURABLE_ABI_HASH != validated["durable_abi_hash"]:
+        fail("installed durable core ABI pin does not match the host config")
+    root, binding = read_cohort_binding_for_audit(core, validated["state_root"], cohort_id)
+    if binding["install_binding_hash"] != config["binding_hash"]:
+        fail("durable audit cohort binding does not match this installed host")
+    require_terminal_attempt_for_audit(
+        validated["state_root"], binding, validated["paths"]["systemctl_path"]
+    )
+    try:
+        audit = core.audit_receipt_anchor(
+            os.path.join(root, "witness", "leaf"),
+            os.path.join(root, "receipt_verifier", "leaf"),
+            binding,
+        )
+    except core.DurableStateError as error:
+        raise DurableHostError(
+            "durable receipt-anchor audit failed [" + error.code + "]: " + str(error)
+        ) from error
+    audit = validate_receipt_anchor_audit(binding, audit)
+    emit(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "kind": "p36_durable_receipt_anchor_audit_result",
+            "status": "verified",
+            "cohort_id": binding["cohort_id"],
+            "generation": binding["generation"],
+            "durable_binding_hash": core.normalized_binding_hash(binding),
+            "receipt_anchor_audit_hash": audit["audit_hash"],
+            "receipt_anchor_journal_hash": audit["receipt_anchor_journal_hash"],
+            "witness_journal_hash": audit["witness_journal_hash"],
+            "anchored_records": audit["anchored_records"],
+            "owner_kernel_authority": "none",
+            "effect_authority": "none",
+            "broker_authority": "disabled",
+            "acceptance": "not_available",
+        }
+    )
+
+
 def parser():
     root = argparse.ArgumentParser()
     commands = root.add_subparsers(dest="command", required=True)
@@ -2490,6 +2842,9 @@ def parser():
     run_parser = commands.add_parser("run")
     run_parser.add_argument("--handoff-id", required=True)
     run_parser.set_defaults(handler=lambda args: emit(run_session(require_token(args.handoff_id, "handoff id"))))
+    audit_parser = commands.add_parser("audit")
+    audit_parser.add_argument("--cohort-id", required=True)
+    audit_parser.set_defaults(handler=lambda args: audit_cohort(require_token(args.cohort_id, "audit cohort id")))
     return root
 
 

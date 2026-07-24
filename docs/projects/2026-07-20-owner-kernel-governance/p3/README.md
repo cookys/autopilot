@@ -450,6 +450,46 @@ P3.5c local witness with a production witness, or make the P0 corpus production 
 broker and Engine integration remain separate later gates; any future effect-capable use must consume this
 v2 boundary and a production P2 witness rather than reuse the shadow witness.
 
+## P3.6 A0 Durable Substrate
+
+P3.6 consumes only the root-published, one-shot P3.5d v2 handoff. It starts a
+fresh five-role Linux cohort and remains refusal-only:
+`owner_kernel_authority: "none"`, `effect_authority: "none"`,
+`broker_authority: "disabled"`, and `acceptance: "not_available"`. It has no
+Engine construction, action descriptor, permit, action effect, or acceptance
+operation.
+
+The retained durable state has three independently owned role-private leaves:
+the receipt verifier owns a local receipt anchor, the witness owns the witness
+journal, and the coordinator owns fenced unavailable/unknown state. The receipt
+anchor is not an IPC route and accepts no caller-selected operation. It commits
+only hash-safe results from the fixed `receipt_verifier_witness` mutation
+probes. Root can read both leaves after teardown and rejects a witness
+mutation/head ledger rewritten from genesis even when the rewritten ledger
+recalculates its own internal hashes. Fixed `getHead`/`readback` query records
+remain locally journal-chained but are outside this independent anchor scope.
+Root provisions and audits these leaves; it is not a receipt writer.
+
+The opt-in `AUTOPILOT_P0_A0_LIVE=1` gate uses an installed P3.5 host and an
+installed P3.6 host, rather than a synthetic handoff. It proves a root-created
+same-UID outsider outside the worker unit cgroup is closed before its valid
+frame is parsed, and cannot forge the root ACK socket. The host requires a
+second clean-quiescence ACK before it retains any probe evidence or terminal
+availability disclosure. Stateful services recompute their availability only
+after their listeners stop, so the final disclosure reflects the quiesced
+durable state. A failed second phase records a terminal tombstone but no
+verified probe-evidence record. The gate then starts a new real P3.5 handoff to
+prove recovery, checks the exact worker-inaccessible classes, and verifies the
+post-teardown mutation/head rewrite audit. That is a bounded A0 substrate result only; the
+original P0 Owner-Kernel semantics and all fifteen baseline categories remain
+unevaluable until a later authority-bearing phase exists.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-p0-replay.test.sh
+AUTOPILOT_P0_A0_LIVE=1 PYTHONDONTWRITEBYTECODE=1 \
+  bash hooks/tests/supervised-production-substrate-p0-live.test.sh
+```
+
 ## Deferred Full P3 Gate
 
 Do not reduce `/l4` through `/l6` to aliases yet. Their worktree isolation, strict dispatch

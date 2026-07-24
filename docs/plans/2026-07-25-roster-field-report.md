@@ -17,7 +17,8 @@ schema-declared but read by nothing is dead contract surface, bound for the P3 d
 
 The recipe is correct. What it lacks is a body: it runs when a human remembers, over the fields that
 human examined. Running it mechanically over all 44 always-on fields surfaced five more the manual pass
-did not reach, one of which carries operator-facing alert strings with no detected consumer.
+did not reach, one of which carries operator-facing alert strings and lands in the no-detected-match
+bucket.
 
 **This plan ships the measurement as a report and wires the fields it found.** The report is advisory —
 it always exits 0 — but it is *triggered broadly and read by someone*, which is the part an earlier
@@ -159,8 +160,8 @@ No KR targets a field count. Phase 2 changes the distribution by design, and a c
 either trivially met or self-contradicting (an earlier draft asserted both a fixed baseline and that no
 count is an acceptance criterion).
 
-No KR claims the report prevents recurrence. It makes recurrence *visible*; that is weaker and honest.
-Blocking is §8 Q1.
+No KR claims the report prevents recurrence. It makes visible those recurrences that land in the
+modeled-zero bucket — which, by §1b, is not all of them. Blocking is §8 Q1.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -239,7 +240,10 @@ No registry file. The five dispositions live in §1c with their producer evidenc
       limit stated in §1b);
    9. `--json` parses and contains exactly one entry per field in the fixture schema's `required` array;
    10. exit stays 0 when the no-detected-match count is non-zero (proves advisory, not gate);
-   11. the report runs on the real repo and exits 0.
+   11. **report-health**: an unreadable or unparseable fixture schema ⇒ exit 2 and a
+       `REPORT-HEALTH: FAILED` line on stderr, with no table on stdout. Without this case a silent
+       failure would read as a clean run;
+   12. the report runs on the real repo and exits 0.
 3. **Register so it actually runs when it matters.** In `scripts/sync-manifest.json`:
    `id: roster-field-report`, `generator: null`,
    `check: node scripts/report-roster-field-consumers.js`, `tier: both`, and `trigger` covering the
@@ -310,6 +314,7 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
 | Comment + non-shape rules | dedicated cases | script |
 | Scan-root limit | a match outside the seven roots must not count | script |
 | Advisory-not-gate | exit 0 with non-zero findings | script |
+| Report-health signal | unreadable schema ⇒ exit 2 + `REPORT-HEALTH: FAILED`, no table | script |
 | Trigger/scan-root equality | assert the manifest row's triggers equal the seven scan roots | script |
 | Release-prep presentation | `preflight-release.sh` prints the bucket and its exit code is unchanged | script |
 | No behavioural drift | `bash scripts/sync-all.sh --check`; resolver JSON byte-compared before/after | script |
@@ -326,9 +331,11 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
   Phase 2 and reconcile §1c against its output; the six may not be the same six. Observed live: during
   this plan's drafting a concurrent commit removed a `spec_review` mention from `CLAUDE.md`, changing a
   citation this plan had made.
-- **R2 — an advisory report can still be ignored.** Nothing fails when the count is non-zero. Broad
-  triggering and unconditional CI printing make it *visible*, and a named owner makes it *someone's*;
-  neither makes it enforced. This is the accepted cost of not building §8 Q1's machinery.
+- **R2 — an advisory report can still be ignored.** Nothing fails when the count is non-zero. Triggering
+  on the scan roots and printing unconditionally in CI make it *available*, the release-prep invocation
+  puts it in front of someone, and the owner makes it someone's; none of that makes it enforced, and none
+  of it covers a recurrence the classifier does not model (§1b). This is the accepted cost of not building
+  §8 Q1's machinery.
 - **R3 — interpretation can drift back into the report's voice.** The report prints counts; the
   "unenforced" language is this plan's (§1b). If the script's output ever states a verdict it inherits a
   soundness burden its method cannot carry. The §4.1 wording requirement is the guard.
@@ -341,9 +348,11 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
 - **R6 — prose enforcement is only as strong as an agent reading it**, which is why KR3 is scoped to
   foreman-driven runs. Engine-CLI paths that resolve the roster with no agent reading `/l5` `/l6` are
   not covered (§8 Q2).
-- **R7 — the `skills/**` bucket rests on reading eight documents, not on a mechanism.** All eight were
-  read and each has an instructing site (§1c), but `qc_panel_aggregation`'s is a parenthetical, and a
-  future edit could reduce any of them to a bare mention without changing the count. The report cannot
+- **R7 — the `skills/**` bucket rests on a manual read, not on a mechanism.** All eight fields were read
+  at their sites — which fall in just two documents, `code-review.md` and `level-front-door.md`, so the
+  breadth is eight fields, not eight independent documents — and each has an instructing site (§1c). But
+  `qc_panel_aggregation`'s is a parenthetical, and a future edit could reduce any of them to a bare
+  mention without changing the count. The report cannot
   see that difference (§1b); only a re-read would.
 - **Inversion**: the surest way to fail is to let the report grow gate semantics — a varying exit code, a
   threshold, a registry. Each reintroduces the soundness burden the descope removed. §2.5 states exit 0

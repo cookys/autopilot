@@ -35,9 +35,18 @@ what blocking would require, so the option is deferred rather than lost.
 Deterministic, so the report is reproducible rather than impressionistic:
 
 - **executable file** — extension in exactly `{.js, .mjs, .cjs, .ts, .sh, .bash, .py}`.
-- **access-shaped** — the line matches any of: `.<field>`; `["<field>"]` / `['<field>']`;
-  `"<field>"` / `'<field>'`; `$<FIELD>` / `${<FIELD>}`; `<FIELD>=`; `<field>=`; `$<field>` /
-  `${<field>}`; `--field <field>`; `read_review_loop_field <field>`; `<field>)` (shell `case` arm).
+- **access-shaped** — the line matches any of these **ten** patterns, numbered so test coverage is
+  unambiguous (quote alternatives inside one pattern are one pattern, not two):
+  1. `.<field>` — property access
+  2. `["<field>"]` or `['<field>']` — bracketed key
+  3. `"<field>"` or `'<field>'` — quoted string or object key
+  4. `$<FIELD>` or `${<FIELD>}` — uppercase shell variable
+  5. `<FIELD>=` — uppercase shell assignment
+  6. `<field>=` — lowercase shell assignment
+  7. `$<field>` or `${<field>}` — lowercase shell variable
+  8. `--field <field>` — resolver flag
+  9. `read_review_loop_field <field>` — repo accessor
+  10. `<field>)` — shell `case` arm
 - **comment** — in an executable file, the trimmed line starts with `//`, `#`, `*`, or `/*`. A comment
   line is never access-shaped.
 - **incidental** — a literal match in an executable file that is not access-shaped, or is a comment.
@@ -156,8 +165,12 @@ Blocking is §8 Q1.
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
 - Node ≥ 20.10, built-ins only (no new dependencies).
-- The report emits JSON on stdout with `--json`, a table otherwise, diagnostics on stderr, and **exits 0
-  regardless of findings**. An exit code that varies with findings would make it a gate by accident.
+- The report emits JSON on stdout with `--json`, a table otherwise, and diagnostics on stderr.
+  **Exit 0 means the report ran, whatever it found** — an exit code varying with findings would make it a
+  gate by accident. **Exit 2 means the report could not run** (schema unreadable or unparseable, git
+  failure, unreadable scan root, bad usage) and is accompanied by a `REPORT-HEALTH: FAILED <reason>` line
+  on stderr. That is a broken tool, not a verdict about fields: without it a schema or git failure would
+  produce no table while CI stayed green, which defeats the report's only purpose.
 - The field set is read from `schemas/review-loop-contract.schema.json`, the documented SSOT. Do not
   shell the resolver and do not hand-maintain a second field list.
 - Conditional fields (`reviewer_qualified`, `fallback_ladder`, `verify_first`, `capability_tier`,
@@ -259,9 +272,15 @@ reference. Before the first implementation dispatch, the foreman surfaces to the
   is therefore not recoverable (§1c, §8 Q6). An earlier draft required rendering the role and status, which
   is not implementable from the roster and would have invited a fabricated attribution;
 - `capability_state_source` when it is `none`, stated as "capability-state consultation is off for this
-  project, so the quota and skill-mode values are configured defaults, not observations" — **only
-  `none`**, since the producer distinguishes it from `unknown` (consulted, no fresh data);
-- `skill_mode_requested` when it differs from `skill_mode_effective`, naming both;
+  project — these values were not read from the capability store" — **only `none`**, since the producer
+  distinguishes it from `unknown` (consulted, no fresh data). The message deliberately stops at "not read
+  from the store": the cited evidence establishes that consultation was off, not where each downstream
+  value did originate;
+- `skill_mode_requested` **only when it is `auto` and `skill_mode_effective` is `off`**, stated as "skill
+  transport requested automatically but resolved to none". The producer passes `off`/`prompt`/`native`
+  through unchanged, so `auto` is the only mode that can diverge, and `off` is its degraded terminus;
+  `auto → prompt` is ordinary resolution, not degradation. An earlier draft surfaced any inequality, which
+  is not established as actionable and would have contradicted R4's "a healthy run surfaces nothing";
 - `domain_source` whenever `work_domain` is reported, so a reader knows whether the domain was declared
   or inferred.
 

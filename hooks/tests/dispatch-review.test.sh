@@ -22,12 +22,20 @@ read_prompt_arg() {
     if [ "$arg" = "--prompt-file" ] || [ "$arg" = "-p" ]; then
       next_index=$((i + 1))
       next_arg="${!next_index}"
-      if [ -n "$next_arg" ] && [ -f "$next_arg" ]; then
-        prompt="$(cat "$next_arg")"
-      else
-        prompt="$next_arg"
-      fi
-      break
+      # `-p` may be a BOOLEAN flag (prompt arrives on stdin — qoder/cc-shim/claude-native)
+      # or carry the prompt as its value (agy). If the following token is itself a flag or
+      # absent, treat -p as boolean and fall through to the stdin read below.
+      case "$next_arg" in
+        ''|-*) : ;;
+        *)
+          if [ -f "$next_arg" ]; then
+            prompt="$(cat "$next_arg")"
+          else
+            prompt="$next_arg"
+          fi
+          break
+          ;;
+      esac
     fi
     i=$((i + 1))
   done
@@ -197,6 +205,14 @@ assert_eq "0" "$EXIT" "codex reviewed exit 0"
 assert_contains "$OUT" '"status": "reviewed"' "codex reviewed status"
 assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "codex verdict parsed"
 assert_contains "$OUT" 'does not reverse' "codex findings captured"
+
+# 3q. qoder path: STDOUT parsed (stderr split off), verdict → reviewed, runner reported. Real
+# qoder prints a benign 'fatal: not a git repository' to STDERR from the scratch cwd; the
+# split-stream capture keeps it out of the parse (see dispatch-review.sh qoderclicn branch).
+OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoder reviewed exit 0"
+assert_contains "$OUT" '"status": "reviewed"' "qoder reviewed status"
+assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. FAIL-CLOSED: empty capture → no_verdict, exit 1 (NEVER a pass)
 OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?

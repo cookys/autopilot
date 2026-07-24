@@ -40,6 +40,35 @@
 - verification_author_runner: agy
 - verification_author_effort: high
 - verification_author_endpoint:
+- qc_panel: gpt-5.5, claude-opus, Gemini 3.6 Flash (High)
+- qc_panel_aggregation: union-on-verified-critical
+
+> **Gemini slot pinned to `Gemini 3.6 Flash (High)` (2026-07-23).** Previously
+> this config omitted `qc_panel`, inheriting the template default whose Google
+> member `gemini-flash` dispatches an *implicit* Gemini 3.5 Flash. The slot is
+> now explicit at 3.6 on reviewer-qualification evidence:
+> - 2-pass `evals/known-bad/` reverification through the real agy path
+>   (`panel-cmd-dispatch.sh agy "Gemini 3.6 Flash (High)"` → `dispatch-review.sh`
+>   `--runner agy`): **both rounds 12/13 (sensitivity 0.923),
+>   false-pass-on-critical 0/9**. The single miss is `13-runstree-cycle-drop`
+>   (Major, not Critical), stable across both rounds.
+> - `evals/clean/` specificity: **0/11 over-flags** (no clean diff wrongly
+>   FIX-THEN-SHIP'd).
+> - For comparison the incumbent 3.5 Flash scored 11/13 on the same corpus
+>   (missed a Critical, `06-removed-test-assertion`), so 3.6 is a strict catch
+>   upgrade for this seat.
+>
+> **Selection mechanism:** `dispatch-review.sh --runner agy` passes
+> `agy -p --model "Gemini 3.6 Flash (High)"`, which is HONORED on the installed
+> agy 1.1.5 (2026-07-23 controlled matrix: `--model` overrides the persisted
+> settings.json model for display-names AND slugs — see
+> `docs/upstream-bugs/agy-print-mode-model-flag.md`). An earlier spike reported
+> `--model` ignored and proposed a persisted-settings wrapper; that premise did
+> NOT reproduce — it was a direct-pipe artifact (the flag IS honored on the
+> `script -qec` pseudo-TTY path `dispatch-review.sh` uses), so the wrapper was
+> **dropped as YAGNI** (hetero-review also found a fail-open Critical in it) and
+> the `--model` flag is the sole selection mechanism. Disjoint-family panel
+> intact: openai (`gpt-5.5`) / anthropic (`claude-opus`) / google (Gemini 3.6).
 
 > Seat note (2026-07-21): `~/.autopilot/endpoints.env` is present and both `glm` and
 > `minimax` resolve under the autopilot namespace. GLM-5.2 direct HTTP review smoke and

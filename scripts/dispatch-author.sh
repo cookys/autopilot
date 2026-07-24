@@ -37,7 +37,7 @@
 #   exceed the JS's 4096 review default; a truncated response fail-closes in the JS).
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible --model <name> --prompt-file <file>
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn --model <name> --prompt-file <file>
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
@@ -59,7 +59,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible",
+#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn",
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed",
 #     "raw_log": "<path>",
@@ -621,8 +621,8 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, or anthropic-compatible (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -691,10 +691,12 @@ IDENTITY_SNAPSHOT_TAKEN=0
 GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
+QODER_CWD=""
 cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
+  [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
 }
 trap cleanup EXIT
@@ -757,6 +759,21 @@ elif [[ "$RUNNER" = "grok" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$GROK_CWD"; GROK_CWD=""
+elif [[ "$RUNNER" = "qoderclicn" ]]; then
+  QODER_BIN="${BIN:-qoderclicn}"
+  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (Qoder CLI CN)"
+  # Read-only authoring, grok-shaped: scratch cwd (-w), --tools "" (no editor/tools — the
+  # authored content is produced as STDOUT text, not repo edits), prompt via STDIN. STDERR is
+  # discarded (2>/dev/null) so qoder's benign non-git-cwd 'fatal: not a git repository' never
+  # lands in the captured authored text. Enforced timeout is the hang backstop.
+  QODER_CWD="$(mktemp -d -t dispatch-author-qodercwd-XXXXXX)"
+  set +e
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
+    --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence < "$5"' \
+    _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  RUNNER_EXIT=$?
+  set -e
+  rm -rf "$QODER_CWD"; QODER_CWD=""
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"

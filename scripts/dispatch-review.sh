@@ -30,7 +30,7 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|qoderclicn|cc-shim|anthropic-compatible|claude-native --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
@@ -46,9 +46,6 @@
 #   with BASH_DEFAULT_TIMEOUT_MS (and BASH_MAX_TIMEOUT_MS) in ~/.claude/settings.json `env`.
 #   grok runner: read-only by construction (scratch cwd, no --always-approve,
 #   --disable-web-search, --output-format plain). models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
-#   qoderclicn runner: Qoder CLI CN (`qoderclicn`) read-intent with best-effort
-#   surface reduction (scratch cwd, `--tools ""`, prompt via STDIN, no session persistence;
-#   NOT an OS sandbox).
 #   claude-native runner: drives the LOCAL Claude Code CLI with its own ambient/native auth
 #   (OAuth session / subscription / ANTHROPIC_API_KEY — whatever is already configured), for
 #   first-party Anthropic models (e.g. claude-haiku). Unlike cc-shim (a third-party
@@ -73,7 +70,7 @@
 #   ANTHROPIC_API_KEY.
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|qoderclicn|cc-shim|anthropic-compatible|claude-native", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...", "raw_log": "<path>", "error": "..." }
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
@@ -127,8 +124,8 @@ done
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$RUNNER" "$MODEL" "$1"; exit 2; }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|qoderclicn|cc-shim|anthropic-compatible|claude-native)"
-case "$RUNNER" in codex|agy|grok|qoderclicn|cc-shim|anthropic-compatible|claude-native) ;; *) die_precondition "--runner must be codex, agy, grok, qoderclicn, cc-shim, anthropic-compatible, or claude-native (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
@@ -281,9 +278,11 @@ BLOCK_FILE="$(mktemp -t dispatch-review-block-XXXXXX)"
 CODEX_OUT=""
 CODEX_ERR=""
 GROK_CWD=""   # set only on the grok path; cleaned by the trap so it can't leak on interrupt
-QODERCN_CWD="" # set only on the qoderclicn path; same trap-reap rationale
 CCSHIM_CWD="" # set only on the cc-shim path; same trap-reap rationale
 CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
+QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
+QODER_OUT=""  # qoder reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
+QODER_ERR=""  # qoder reviewer stderr capture (chrome); reaped on EXIT
 cleanup() {
   # $? at trap entry = the script's exit code — its authoritative status contract
   # (0 reviewed / 1 no_verdict / 2 precondition_failed; anything else = killed/aborted).
@@ -292,10 +291,12 @@ cleanup() {
   rm -f "$PROMPT_FILE" "$BLOCK_FILE"
   [ -n "$CODEX_OUT" ] && rm -f "$CODEX_OUT"
   [ -n "$CODEX_ERR" ] && rm -f "$CODEX_ERR"
-  [ -n "${GROK_CWD:-}" ] && rm -rf "$GROK_CWD"
-  [ -n "${QODERCN_CWD:-}" ] && rm -rf "$QODERCN_CWD"
-  [ -n "${CCSHIM_CWD:-}" ] && rm -rf "$CCSHIM_CWD"
-  [ -n "${CNATIVE_CWD:-}" ] && rm -rf "$CNATIVE_CWD"
+  [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD"
+  [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD"
+  [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD"
+  [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD"
+  [ -n "$QODER_OUT" ] && rm -f "$QODER_OUT"
+  [ -n "$QODER_ERR" ] && rm -f "$QODER_ERR"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
   # every emit path already honors) so dispatch-status.js reports phase:"exited" with
   # the outcome on every exit path. declare -F guard: the trap is armed a few lines
@@ -438,7 +439,7 @@ EOF
   printf '%s\n' "$END"
   cat <<'EOF'
 
-Do NOT echo the diff or instructions. Output ONLY the wrapped block, nothing after.
+Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
 EOF
   if [[ -n "$PACK_FILE" ]]; then
     cat <<'EOF'
@@ -562,31 +563,47 @@ elif [[ "$RUNNER" = "grok" ]]; then
     exit 1
   fi
 
-
 elif [[ "$RUNNER" = "qoderclicn" ]]; then
   QODER_BIN="${BIN:-qoderclicn}"
-  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoderclicn binary not found: $QODER_BIN"
-  # QoderCN review is read-intent best-effort isolation: scratch cwd, no session
-  # persistence, and `--tools ""` so the model can only answer from prompt text.
-  # This is NOT an OS sandbox. The prompt is fed through STDIN (qoderclicn `-p`
-  # accepts it) to avoid ARG_MAX on large diffs.
-  QODERCN_CWD="$(mktemp -d -t dispatch-review-qodercncwd-XXXXXX)"
-  timeout "$TIMEOUT" "$QODER_BIN" -p --cwd "$QODERCN_CWD" --model "$MODEL" \
-      --permission-mode dont_ask --tools "" --no-session-persistence \
-      --output-format text < "$PROMPT_FILE" > "$RAW_LOG" 2>&1
-  QODERCN_RC=$?
-  wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true
-  rm -rf "$QODERCN_CWD"; QODERCN_CWD=""
-  if [ "$QODERCN_RC" -ne 0 ]; then
-    printf '\n[dispatch-review: qoderclicn exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
-      "$QODERCN_RC" "$([ "$QODERCN_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+  command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (Qoder CLI CN)"
+  # READ-ONLY review of an UNTRUSTED diff, same posture as grok/cc-shim: scratch cwd (-w,
+  # NEVER the repo); --tools "" DISABLES all built-in tools (empty allow-list — the diff is
+  # in the prompt, so the reviewer only reads + answers, never runs/edits on the untrusted
+  # diff); --no-session-persistence; enforced `timeout` (qoder has no --print-timeout) as the
+  # ultimate hang backstop; FAIL-CLOSED before the shared parser on any non-zero exit.
+  # Prompt via STDIN (qoder -p reads stdin — Spike-verified 2026-07-24), NOT a positional argv
+  # arg: a large diff as one arg can hit ARG_MAX → avoidable no_verdict. qoder delivers stdout
+  # under a pipe (unlike agy), so a direct redirect captures it — no script -qec pseudo-TTY.
+  # Default output is plain text so VERDICT/FINDINGS land line-start for the parser. Headless
+  # -p has no TTY → a denied tool auto-denies (never an interactive hang); --tools "" plus
+  # --dangerously-skip-permissions keep it tool-free and non-interactive.
+  # SPLIT STREAMS (same rail as codex): parse STDOUT only, keep STDERR as chrome. qoder
+  # prints a benign `fatal: not a git repository` to STDERR at startup from the non-git
+  # scratch cwd; merging it (2>&1) would put it AHEAD of the wrapped block and the parser
+  # (which requires the response to START with the block) would reject a real verdict as
+  # no_verdict. Spike-verified 2026-07-24: the git line is on stderr, stdout is clean.
+  QODER_OUT="$(mktemp -t dispatch-review-qoder-out-XXXXXX)"
+  QODER_ERR="$(mktemp -t dispatch-review-qoder-err-XXXXXX)"
+  QODER_CWD="$(mktemp -d -t dispatch-review-qodercwd-XXXXXX)"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
+      --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence < "$5"' \
+      _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$QODER_OUT" 2> "$QODER_ERR"
+  QODER_RC=$?   # no set -e in this script (top is `set -uo pipefail`, see grok branch) — capturing $? is safe
+  wait_output_quiescent "$QODER_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$QODER_CWD"; QODER_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  # raw_log carries the full picture for humans/passive_capture: parsed stdout, separator, stderr chrome.
+  cat "$QODER_OUT" > "$RAW_LOG"
+  printf '\n--- qoder stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$QODER_ERR" >> "$RAW_LOG"
+  if [ "$QODER_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: qoder exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$QODER_RC" "$([ "$QODER_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "qoderclicn exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
-      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$QODERCN_RC"
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "qoder exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+      "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$QODER_RC"
     exit 1
   fi
-
-
+  PARSE_INPUT="$QODER_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"

@@ -74,9 +74,15 @@ if [ "$PARALLEL" -eq 1 ]; then
       PARALLEL_N=4
     fi
   fi
-  # Widen load-sensitive timing windows under contention unless already set.
+  # Widen load-sensitive timing windows in PROPORTION to the worker count. N concurrent
+  # workers — each spawning several subprocesses (git, stubs, dispatch subshells) — oversubscribe
+  # the cores and inflate every test's wall-clock by up to ~N× under scheduler contention (measured:
+  # a ~1s genuine-empty dispatch took ~30s at N=32). test_timing_scale is applied ONLY to upper
+  # bounds (assert_le), never to minimums, so scaling it up cannot make a "waits >= Ns" check pass
+  # spuriously. Serial runs keep factor 1 — the strict gate that catches real timing regressions;
+  # only the parallel convenience path gets headroom. A user-set factor still wins.
   if [ -z "${AUTOPILOT_TEST_TIMING_FACTOR+x}" ]; then
-    export AUTOPILOT_TEST_TIMING_FACTOR=3
+    export AUTOPILOT_TEST_TIMING_FACTOR="$PARALLEL_N"
   fi
 fi
 

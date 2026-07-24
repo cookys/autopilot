@@ -108,6 +108,13 @@ authority, while deliberately exposing **no effect and no acceptance path**.
    head, expired lease, or service restart blocks new work and records an
    explicit pending/unknown state. It never replays a request or infers that a
    side effect did not occur.
+7. **P2b peer proof keeps `/proc` readable by the five service UIDs.** Exact
+   peer cgroup verification requires reading `/proc/<pid>/cgroup` after
+   `SO_PEERCRED`; `ProtectProc=invisible` would hide that evidence across the
+   independent UIDs. P2b therefore retains all other namespace/capability and
+   filesystem protections but omits that one property. Its bootstrap release
+   token never appears in a command line, each role root remains private, and
+   every peer message is still bound to the fixed UID/GID/PID/cgroup tuple.
 
 ## 4. Phases
 
@@ -164,11 +171,32 @@ ambiguous launch/restart.
   and interruption-safe teardown. Its only writable unit exception is that
   role's root-pinned acknowledgement directory. P2a has no service IPC,
   socket, witness, coordinator, broker, Engine, effect, or acceptance path.
-- **P2b pending:** add root-pinned local Unix socket endpoints, exact
-  `SO_PEERCRED`/cgroup authentication before request bytes are parsed,
-  canonical framed request/response binding, and no raw filesystem authority
-  across roles. P2a's non-authoritative lifecycle acknowledgement is not a
-  substitute for that peer proof.
+- **P2b complete:** four ABI-aligned,
+  root-pinned local Unix endpoints now use a socket-specific path layout below
+  Linux's `sun_path` limit. The recipient binds in its own `02710` staging
+  root; root validates the listener then seals that root to `root:sender_gid
+  0710`, verifies that the now-sealed directory contains exactly its pinned
+  listener socket, and removes any pre-seeded entries during root cleanup. This
+  leaves the sender only traversal/connect access and the recipient no
+  directory rewrite capability. Each endpoint validates exact
+  `SO_PEERCRED` PID/UID/GID and cgroup-v2 before it reads one bounded canonical
+  frame. The response binds the request, frozen install/run/ABI hashes, and a
+  fixed representative operation for the corresponding contract route. The
+  role acknowledgement carries only paired request/response hashes and public
+  peer claims, never socket or cgroup paths. P2a's lifecycle acknowledgement
+  is not treated as a substitute for this peer proof. Before it seals any
+  socket root or releases a sender, the host requires each role's atomic
+  `fixed_listeners_ready` record, bound to that role's exact PID, install/run/
+  ABI hashes, and complete recipient endpoint list; it then revalidates all
+  five service bindings again immediately before writing peer configs and
+  release files. The release window is 150 seconds, deliberately covering the
+  host's 130-second sum of bounded five-unit launch/PID/ready/socket/recheck
+  work plus setup margin. A shared 35-second collector validates each released
+  role as its acknowledgement appears, rather than serially giving each role a
+  separate deadline. The 240-second unit lifetime covers the maximum two-route
+  peer exchange, including bounded connect/send/read phases, and the
+  40-second acknowledgement hold. Tests lock these nested budgets so a later
+  timeout reduction cannot reintroduce a healthy-startup expiry race.
 
 ### Phase 3 - Durable witness, coordinator, and disabled broker
 
@@ -213,6 +241,8 @@ New focused commands (created by this phase):
 ```bash
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-contract.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-host.test.sh
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-peer.test.sh
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-peer-service.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-recovery.test.sh
 AUTOPILOT_P36_LIVE=1 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-live.test.sh
 ```
@@ -242,6 +272,9 @@ separation.
 | --- | --- |
 | Shadow boundary quietly becomes production authority. | Separate namespace and explicit source scans forbid P3.5 witness reuse, Engine, P2 calls, effects, and acceptance. |
 | A worker impersonates a service through filesystem/socket access. | Exact PID/UID/GID plus cgroup verification before bytes; private roots, independently attested identities, and hostile substitution tests. |
+| A Unix socket path exceeds the kernel limit or a receiver rewrites/pre-seeds a published endpoint. | The frozen endpoint layout has a `107`-byte ASCII path guard; root validates the server-created listener, seals its parent to the fixed sender group, requires exactly that one socket entry, and root-cleans rejected staging contents before release. |
+| Process hiding makes a cgroup check silently unavailable. | P2b omits `ProtectProc=invisible` only for this substrate, pins release material in private role roots, and requires exact credentials plus `/proc/<pid>/cgroup` before parsing. |
+| A healthy early service expires while the root host completes five bounded launches or peer exchange. | The 150-second release window covers the explicit 130-second pre-release bound; one shared 35-second ack collector validates receipts as they arrive, and 40-second hold plus 240-second unit maximum are compositionally tested against connect/send/read peer phases. |
 | Root silently collapses witness/coordinator independence. | Installer rejects root for those roles and binding validator rejects identity or attestation reuse. |
 | A lost response leads to automatic effect replay. | No effects exist in A0; persistent ambiguous state is quarantine/unknown and blocks new work. |
 | CAS/batch shape exists but is not durable/atomic. | Readback, chain verification, conflicting concurrent requests, crash-tail, and restart tests are mandatory. |
@@ -265,3 +298,6 @@ separation.
 | R5 | Architect | SHIP: P2a source/runtime scope now has a loadable immutable closure and a deterministic second-interrupt teardown proof. |
 | R5 | QA | SHIP: no remaining Critical/Major; second SIGINT between cleanup callbacks is deferred until all unit and runtime cleanup finishes. |
 | R5 | Ops/SRE | SHIP: the writable exception is limited to each role's pinned ack directory; no role or release/runtime-parent write capability was added. |
+| R6 | Architect | SHIP: fixed-topology no-effect IPC preserves credential-before-frame checks, listener-ready ordering, root socket sealing, and root-pinned runtime claims; pre-seeded socket entries now fail closed and clean up. |
+| R6 | QA / Skeptic | SHIP: exact schema, canonical/hash-bound frames, 107-byte socket boundary, rehashed cross-route rejection, shared ack deadline, and no-effect receipt pairing all have deterministic negative coverage. |
+| R6 | Ops/SRE | SHIP: a fresh installed `install -> run-probe` completed all five role peer proofs and teardown with no runtime, transient-unit, process, account, or snapshot residue; bounded lifecycle values are consistent. |

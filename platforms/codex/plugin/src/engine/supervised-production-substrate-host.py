@@ -5,8 +5,9 @@
 the role-local release runner, and the Phase 1 contract files into a new,
 root-owned directory. ``run-probe`` accepts no caller input and executes only
 that installed snapshot. It starts five independent, bounded transient units,
-verifies their exact UID/GID/groups and unified cgroup-v2 placement, then
-releases a no-effect acknowledgement probe.
+verifies their exact UID/GID/groups and unified cgroup-v2 placement, seals the
+four fixed Unix listener roots, then releases one no-effect peer probe per
+ABI-pinned route.
 
 This is deliberately below P2 authority. It has no action, permit, effect,
 acceptance, dispatcher, workspace, or production witness implementation.
@@ -14,6 +15,7 @@ acceptance, dispatcher, workspace, or production witness implementation.
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import pwd
@@ -26,7 +28,7 @@ import sys
 import time
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 RUNTIME_PARENT = "/run/autopilot-production-substrate"
 CONFIG_RELATIVE_PATH = "etc/supervised-production-substrate.json"
 SERVICE_ROLES = ("worker", "broker", "receipt_verifier", "witness", "coordinator")
@@ -40,6 +42,7 @@ SERVICE_IDENTITIES = {
 FILE_LAYOUT = {
     "host": "sbin/supervised-production-substrate-host.py",
     "service_runner": "lib/supervised-production-substrate-service.py",
+    "peer_protocol": "lib/supervised_production_substrate_peer.py",
     "contract": "lib/supervised-production-substrate-contract.js",
     "bridge_contract": "lib/supervised-engine-bridge-contract.js",
     "canonical": "lib/owner-kernel/canonical.js",
@@ -50,6 +53,7 @@ FILE_LAYOUT = {
 FILE_MODES = {
     "host": 0o755,
     "service_runner": 0o755,
+    "peer_protocol": 0o644,
     "contract": 0o644,
     "bridge_contract": 0o644,
     "canonical": 0o644,
@@ -60,6 +64,7 @@ FILE_MODES = {
 SNAPSHOT_SOURCE_LAYOUT = {
     "host": "supervised-production-substrate-host.py",
     "service_runner": "supervised-production-substrate-service.py",
+    "peer_protocol": "supervised_production_substrate_peer.py",
     "contract": "supervised-production-substrate-contract.js",
     "bridge_contract": "supervised-engine-bridge-contract.js",
     "canonical": "owner-kernel/canonical.js",
@@ -80,21 +85,39 @@ SYSTEMD_PROPERTIES = (
     "PrivateTmp=yes",
     "ProtectSystem=strict",
     "ProtectHome=tmpfs",
-    "ProtectProc=invisible",
     "RestrictNamespaces=yes",
     "RestrictSUIDSGID=yes",
     "CapabilityBoundingSet=",
     "CollectMode=inactive-or-failed",
-    "RuntimeMaxSec=30s",
+    "RuntimeMaxSec=240s",
     "TimeoutStopSec=5s",
 )
+# P2b authenticates a peer's exact unified cgroup-v2 location through
+# /proc/<pid>/cgroup before it reads that peer's frame. ProtectProc=invisible
+# hides other UID process metadata and would make that proof impossible. The
+# remaining namespace, capability, identity, cgroup, and sealed-socket guards
+# stay mandatory; a later root-owned verifier may restore process hiding.
 TOKEN_CHARS = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"
 )
 SHA256_CHARS = frozenset("0123456789abcdef")
-ROLE_RELEASE_TIMEOUT_SECONDS = 15
-ROLE_ACK_TIMEOUT_SECONDS = 5
-ROLE_HOLD_SECONDS = 15
+# The host may spend up to 130 seconds in successful pre-release work under
+# its explicit child-command bounds: five systemd-run calls (10s), five PID
+# waits (5s), five ready-record waits (5s), four socket waits (5s), and five
+# post-seal process checks (2s). Keep a bounded setup margin rather than
+# letting a healthy early service hit its release deadline during that work.
+ROLE_RELEASE_TIMEOUT_SECONDS = 150
+ROLE_STARTUP_TIMEOUT_SECONDS = 5
+# Every released service exchanges its fixed peers concurrently. One role can
+# still need two bounded outbound probes, so give the host one shared deadline
+# to collect all acknowledgements rather than serially spending this bound.
+ROLE_ACK_TIMEOUT_SECONDS = 35
+# The host revalidates an acknowledgement as soon as it observes it. Retain a
+# margin beyond the maximum peer exchange so that a near-deadline publication
+# cannot exit before that immediate process check completes.
+ROLE_HOLD_SECONDS = 40
+SYSTEMD_LAUNCH_TIMEOUT_SECONDS = 10
+SYSTEMD_INSPECTION_TIMEOUT_SECONDS = 2
 TERMINATION_SIGNALS = (signal.SIGINT, signal.SIGTERM)
 
 
@@ -227,7 +250,10 @@ def require_root_owned_path(path, label, directory=False, executable=False):
 
 def require_service_traversable_root_path(path, label, executable=False):
     path = require_root_owned_path(path, label, executable=executable)
-    for component in path_components(path):
+    # Traversal is a property of the containing directories.  Requiring the
+    # final regular file itself to carry the other-execute bit would reject
+    # legitimate root-owned read-only modules (for example the peer protocol).
+    for component in path_components(os.path.dirname(path)):
         info = os.lstat(component)
         if (info.st_mode & 0o001) == 0:
             raise SubstrateHostError(label + " is not traversable by a substrate service at " + component)
@@ -317,6 +343,29 @@ def write_root_file(path, content, mode):
         os.fchmod(descriptor, mode)
     finally:
         os.close(descriptor)
+
+
+def write_root_group_file(path, content, gid, mode, label):
+    gid = require_nonroot_id(gid, label + " gid")
+    write_root_file(path, content, mode)
+    try:
+        os.chown(path, 0, gid)
+        os.chmod(path, mode)
+        info = os.lstat(path)
+    except OSError as error:
+        raise SubstrateHostError(label + " cannot be finalized") from error
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_uid != 0
+        or info.st_gid != gid
+        or (info.st_mode & 0o777) != mode
+    ):
+        raise SubstrateHostError(label + " does not retain the expected root-owned mode")
+
+
+def write_root_group_json(path, value, gid, label):
+    write_root_group_file(path, (canonical(value) + "\n").encode("utf-8"), gid, 0o440, label)
 
 
 def cleanup_partial_install(install_root):
@@ -468,6 +517,35 @@ def installed_contract_abi(node_path, contract_path):
     if result.returncode != 0:
         raise SubstrateHostError("installed P3.6 contract ABI cannot be loaded: " + result.stderr.strip())
     return require_sha256(result.stdout.strip(), "installed substrate ABI hash")
+
+
+def load_peer_protocol(install_root):
+    path = os.path.join(install_root, FILE_LAYOUT["peer_protocol"])
+    require_root_owned_path(path, "installed P3.6 peer protocol")
+    previous_dont_write_bytecode = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        spec = importlib.util.spec_from_file_location("p36_installed_peer_protocol", path)
+        if spec is None or spec.loader is None:
+            raise ImportError("cannot create module loader")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except (ImportError, OSError, ValueError) as error:
+        raise SubstrateHostError("installed P3.6 peer protocol cannot be loaded") from error
+    finally:
+        sys.dont_write_bytecode = previous_dont_write_bytecode
+    required = (
+        "SERVICE_IPC_ENDPOINTS",
+        "create_runtime_service_claim",
+        "require_endpoint",
+        "runtime_service_claim",
+        "sha256_value",
+        "require_unix_socket_path",
+        "PeerProtocolError",
+    )
+    if any(not hasattr(module, name) for name in required):
+        raise SubstrateHostError("installed P3.6 peer protocol has an incomplete surface")
+    return module
 
 
 def installation_material(install_root, services, paths, files, substrate_abi_hash):
@@ -736,9 +814,169 @@ def require_exact_directory(path, uid, gid, mode, label):
         or not stat.S_ISDIR(info.st_mode)
         or info.st_uid != uid
         or info.st_gid != gid
+        or (info.st_mode & 0o7777) != mode
+    ):
+        raise SubstrateHostError(label + " does not have the expected ownership and mode")
+
+
+def require_exact_socket(path, uid, gid, mode, label):
+    try:
+        info = os.lstat(path)
+    except OSError as error:
+        raise SubstrateHostError(label + " cannot be inspected: " + str(error)) from error
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISSOCK(info.st_mode)
+        or info.st_uid != uid
+        or info.st_gid != gid
         or (info.st_mode & 0o777) != mode
     ):
         raise SubstrateHostError(label + " does not have the expected ownership and mode")
+
+
+def wait_for_listener_socket(endpoint_spec, timeout_seconds):
+    endpoint = endpoint_spec["endpoint"]
+    socket_root = endpoint_spec["socket_root"]
+    socket_path = endpoint_spec["socket_path"]
+    recipient = endpoint_spec["recipient"]
+    sender = endpoint_spec["sender"]
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if os.path.lexists(socket_path):
+            require_exact_directory(
+                socket_root,
+                recipient["uid"],
+                sender["gid"],
+                0o2710,
+                endpoint["endpoint_id"] + " socket root before sealing",
+            )
+            require_exact_socket(
+                socket_path,
+                recipient["uid"],
+                sender["gid"],
+                0o660,
+                endpoint["endpoint_id"] + " socket before sealing",
+            )
+            return
+        time.sleep(0.025)
+    raise SubstrateHostError(endpoint["endpoint_id"] + " listener did not appear before the deadline")
+
+
+def require_exact_listener_directory_contents(descriptor, socket_path, label):
+    try:
+        entries = os.listdir(descriptor)
+    except OSError as error:
+        raise SubstrateHostError(label + " cannot be enumerated after sealing") from error
+    if entries != [os.path.basename(socket_path)]:
+        raise SubstrateHostError(label + " contains an unexpected entry after sealing")
+
+
+def seal_listener_socket(endpoint_spec):
+    endpoint = endpoint_spec["endpoint"]
+    socket_root = endpoint_spec["socket_root"]
+    socket_path = endpoint_spec["socket_path"]
+    recipient = endpoint_spec["recipient"]
+    sender = endpoint_spec["sender"]
+    require_exact_directory(
+        socket_root,
+        recipient["uid"],
+        sender["gid"],
+        0o2710,
+        endpoint["endpoint_id"] + " socket root before sealing",
+    )
+    try:
+        descriptor = os.open(socket_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as error:
+        raise SubstrateHostError(endpoint["endpoint_id"] + " socket root cannot be sealed") from error
+    try:
+        os.fchown(descriptor, 0, sender["gid"])
+        os.fchmod(descriptor, 0o710)
+        require_exact_listener_directory_contents(
+            descriptor,
+            socket_path,
+            endpoint["endpoint_id"] + " sealed socket root",
+        )
+    except OSError as error:
+        raise SubstrateHostError(endpoint["endpoint_id"] + " socket root cannot be sealed") from error
+    finally:
+        os.close(descriptor)
+    require_exact_directory(
+        socket_root,
+        0,
+        sender["gid"],
+        0o710,
+        endpoint["endpoint_id"] + " sealed socket root",
+    )
+    require_exact_socket(
+        socket_path,
+        recipient["uid"],
+        sender["gid"],
+        0o660,
+        endpoint["endpoint_id"] + " sealed socket",
+    )
+
+
+def remove_directory_entries(descriptor, label):
+    try:
+        entries = os.listdir(descriptor)
+    except OSError as error:
+        raise SubstrateHostError(label + " cannot be enumerated during cleanup") from error
+    for entry in entries:
+        if not entry or entry in {".", ".."} or "/" in entry:
+            raise SubstrateHostError(label + " contains an invalid cleanup entry")
+        try:
+            info = os.stat(entry, dir_fd=descriptor, follow_symlinks=False)
+        except OSError as error:
+            raise SubstrateHostError(label + " cannot inspect a cleanup entry") from error
+        if stat.S_ISDIR(info.st_mode):
+            try:
+                child_descriptor = os.open(
+                    entry,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=descriptor,
+                )
+            except OSError as error:
+                raise SubstrateHostError(label + " cannot open a cleanup directory") from error
+            try:
+                remove_directory_entries(child_descriptor, label)
+            finally:
+                os.close(child_descriptor)
+            try:
+                os.rmdir(entry, dir_fd=descriptor)
+            except OSError as error:
+                raise SubstrateHostError(label + " cannot remove a cleanup directory") from error
+        else:
+            try:
+                os.unlink(entry, dir_fd=descriptor)
+            except OSError as error:
+                raise SubstrateHostError(label + " cannot remove a cleanup entry") from error
+
+
+def cleanup_endpoint_socket_root(endpoint_spec):
+    endpoint = endpoint_spec["endpoint"]
+    socket_root = endpoint_spec["socket_root"]
+    sender = endpoint_spec["sender"]
+    try:
+        descriptor = os.open(socket_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise SubstrateHostError(endpoint["endpoint_id"] + " socket root cannot be opened for cleanup") from error
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISDIR(info.st_mode):
+            raise SubstrateHostError(endpoint["endpoint_id"] + " socket root is not a directory during cleanup")
+        os.fchown(descriptor, 0, sender["gid"])
+        os.fchmod(descriptor, 0o700)
+        remove_directory_entries(descriptor, endpoint["endpoint_id"] + " socket root")
+    except OSError as error:
+        raise SubstrateHostError(endpoint["endpoint_id"] + " socket root cannot be cleaned") from error
+    finally:
+        os.close(descriptor)
+    try:
+        os.rmdir(socket_root)
+    except OSError as error:
+        raise SubstrateHostError(endpoint["endpoint_id"] + " socket root cannot be removed") from error
 
 
 def ensure_runtime_parent(on_created=None):
@@ -784,10 +1022,13 @@ def process_identity_matches(pid, service):
 def wait_for_service_pid(systemctl_path, unit, cgroup_path, service, timeout_seconds):
     deadline = time.monotonic() + timeout_seconds
     observed = ""
-    while time.monotonic() < deadline:
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         result = run_command(
             [systemctl_path, "show", "--property=MainPID", "--value", unit],
-            timeout_seconds=2,
+            timeout_seconds=min(SYSTEMD_INSPECTION_TIMEOUT_SECONDS, remaining),
         )
         if result.returncode == 0:
             observed = result.stdout.strip()
@@ -852,6 +1093,8 @@ def cleanup_path(path, expected_type):
         raise SubstrateHostError("cleanup refused unexpected file type at " + path)
     if expected_type == "dir" and (stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode)):
         raise SubstrateHostError("cleanup refused unexpected directory type at " + path)
+    if expected_type == "socket" and (stat.S_ISLNK(info.st_mode) or not stat.S_ISSOCK(info.st_mode)):
+        raise SubstrateHostError("cleanup refused unexpected socket type at " + path)
     if expected_type == "dir":
         os.rmdir(path)
     else:
@@ -912,16 +1155,82 @@ def role_paths(runtime_root, role):
     return {
         "root": role_root,
         "release": os.path.join(role_root, "release"),
+        "bootstrap": os.path.join(role_root, "bootstrap.json"),
+        "peer_config": os.path.join(role_root, "peer.json"),
         "ack_root": os.path.join(role_root, "ack"),
+        "ready": os.path.join(role_root, "ack", "listeners.json"),
+        "ready_pending": os.path.join(role_root, "ack", "listeners.json.pending"),
         "ack": os.path.join(role_root, "ack", "release.json"),
         "ack_pending": os.path.join(role_root, "ack", "release.json.pending"),
     }
 
 
-def run_binding_material(config, validated, run_id, units):
+def endpoint_socket_paths(runtime_root, endpoint_id, peer_protocol):
+    endpoint_id = require_token(endpoint_id, "endpoint_id")
+    root = os.path.join(runtime_root, "i", endpoint_id)
+    socket_path = os.path.join(root, "s")
+    try:
+        peer_protocol.require_unix_socket_path(socket_path, "P3.6 peer socket path")
+    except peer_protocol.PeerProtocolError as error:
+        raise SubstrateHostError(str(error)) from error
+    return {"root": root, "socket": socket_path}
+
+
+def endpoint_static_specs(runtime_root, peer_protocol, services):
+    specs = []
+    seen = set()
+    for raw in peer_protocol.SERVICE_IPC_ENDPOINTS:
+        endpoint = peer_protocol.require_endpoint(dict(raw), "P3.6 fixed IPC endpoint")
+        endpoint_id = endpoint["endpoint_id"]
+        if endpoint_id in seen:
+            raise SubstrateHostError("P3.6 fixed IPC endpoint IDs must be unique")
+        seen.add(endpoint_id)
+        sender = services[endpoint["sender_role"]]
+        recipient = services[endpoint["recipient_role"]]
+        socket_paths = endpoint_socket_paths(runtime_root, endpoint_id, peer_protocol)
+        specs.append(
+            {
+                "endpoint": endpoint,
+                "socket_root": socket_paths["root"],
+                "socket_path": socket_paths["socket"],
+                "sender": {
+                    "role": sender["role"],
+                    "identity": sender["identity"],
+                    "uid": sender["uid"],
+                    "gid": sender["gid"],
+                    "attestation_hash": sender["attestation_hash"],
+                },
+                "recipient": {
+                    "role": recipient["role"],
+                    "identity": recipient["identity"],
+                    "uid": recipient["uid"],
+                    "gid": recipient["gid"],
+                    "attestation_hash": recipient["attestation_hash"],
+                },
+            }
+        )
+    if len(specs) != len(peer_protocol.SERVICE_IPC_ENDPOINTS):
+        raise SubstrateHostError("P3.6 fixed IPC endpoint topology is incomplete")
+    return specs
+
+
+def service_writable_paths(role, unit, endpoint_specs):
+    if role not in SERVICE_ROLES:
+        raise SubstrateHostError("unknown P3.6 service role for writable path policy")
+    paths = [unit["paths"]["ack_root"]] + [
+        endpoint_spec["socket_root"]
+        for endpoint_spec in endpoint_specs
+        if endpoint_spec["endpoint"]["recipient_role"] == role
+    ]
+    if len(paths) != len(set(paths)):
+        raise SubstrateHostError("P3.6 service writable path policy contains an alias")
+    return tuple(paths)
+
+
+def run_binding_material(config, validated, run_id, units, endpoint_specs):
     return {
         "schema_version": SCHEMA_VERSION,
-        "kind": "p36_phase2_run_binding",
+        "kind": "p36_phase2b_run_binding",
         "install_binding_hash": config["binding_hash"],
         "substrate_abi_hash": validated["substrate_abi_hash"],
         "run_id": run_id,
@@ -935,18 +1244,240 @@ def run_binding_material(config, validated, run_id, units):
                 "unit": units[role]["unit"],
                 "cgroup_path": units[role]["cgroup_path"],
                 "ack_root": units[role]["paths"]["ack_root"],
+                "ready_path": units[role]["paths"]["ready"],
                 "ack_path": units[role]["paths"]["ack"],
+                "bootstrap_path": units[role]["paths"]["bootstrap"],
+                "peer_config_path": units[role]["paths"]["peer_config"],
+                "release_hash": sha256_value(units[role]["release_token"]),
             }
             for role in SERVICE_ROLES
+        ],
+        "endpoints": endpoint_specs,
+    }
+
+
+def service_bootstrap_material(config, validated, unit, role, run_binding_hash, endpoint_specs):
+    service = validated["services"][role]
+    endpoints = [
+        spec
+        for spec in endpoint_specs
+        if role in {spec["endpoint"]["sender_role"], spec["endpoint"]["recipient_role"]}
+    ]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "p36_phase2b_bootstrap",
+        "role": role,
+        "identity": service["identity"],
+        "uid": service["uid"],
+        "gid": service["gid"],
+        "attestation_hash": service["attestation_hash"],
+        "release_path": unit["paths"]["release"],
+        "ack_path": unit["paths"]["ack"],
+        "ready_path": unit["paths"]["ready"],
+        "peer_config_path": unit["paths"]["peer_config"],
+        "release_token": unit["release_token"],
+        "install_binding_hash": config["binding_hash"],
+        "run_binding_hash": run_binding_hash,
+        "substrate_abi_hash": validated["substrate_abi_hash"],
+        "release_timeout_seconds": ROLE_RELEASE_TIMEOUT_SECONDS,
+        "hold_seconds": ROLE_HOLD_SECONDS,
+        "endpoints": endpoints,
+    }
+
+
+def write_service_bootstrap(config, validated, unit, role, run_binding_hash, endpoint_specs):
+    material = service_bootstrap_material(
+        config, validated, unit, role, run_binding_hash, endpoint_specs
+    )
+    value = dict(material)
+    value["bootstrap_hash"] = sha256_value(material)
+    write_root_group_json(
+        unit["paths"]["bootstrap"],
+        value,
+        validated["services"][role]["gid"],
+        role + " peer bootstrap",
+    )
+    return value
+
+
+def runtime_endpoint_specs(peer_protocol, endpoint_specs, units):
+    values = []
+    for spec in endpoint_specs:
+        endpoint = spec["endpoint"]
+        sender_role = endpoint["sender_role"]
+        recipient_role = endpoint["recipient_role"]
+        sender_unit = units[sender_role]
+        recipient_unit = units[recipient_role]
+        if sender_unit["pid"] is None or recipient_unit["pid"] is None:
+            raise SubstrateHostError("P3.6 peer endpoint cannot be bound before both service PIDs exist")
+        values.append(
+            {
+                "endpoint": endpoint,
+                "socket_root": spec["socket_root"],
+                "socket_path": spec["socket_path"],
+                "sender": peer_protocol.create_runtime_service_claim(
+                    spec["sender"], sender_unit["pid"], sender_unit["cgroup_path"]
+                ),
+                "recipient": peer_protocol.create_runtime_service_claim(
+                    spec["recipient"], recipient_unit["pid"], recipient_unit["cgroup_path"]
+                ),
+            }
+        )
+    return values
+
+
+def peer_config_material(config, validated, role, run_binding_hash, endpoint_specs):
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "p36_phase2b_peer_config",
+        "role": role,
+        "install_binding_hash": config["binding_hash"],
+        "run_binding_hash": run_binding_hash,
+        "substrate_abi_hash": validated["substrate_abi_hash"],
+        "endpoints": [
+            spec
+            for spec in endpoint_specs
+            if role in {spec["endpoint"]["sender_role"], spec["endpoint"]["recipient_role"]}
         ],
     }
 
 
-def read_release_ack(path, service, install_binding_hash, run_binding_hash, substrate_abi_hash):
+def write_peer_configs(config, validated, units, run_binding_hash, endpoint_specs):
+    values = {}
+    for role in SERVICE_ROLES:
+        material = peer_config_material(
+            config, validated, role, run_binding_hash, endpoint_specs
+        )
+        value = dict(material)
+        value["peer_config_hash"] = sha256_value(material)
+        write_root_group_json(
+            units[role]["paths"]["peer_config"],
+            value,
+            validated["services"][role]["gid"],
+            role + " peer config",
+        )
+        values[role] = value
+    return values
+
+
+def expected_ipc_receipts(role, endpoint_specs):
+    expected = []
+    for spec in endpoint_specs:
+        endpoint = spec["endpoint"]
+        if endpoint["sender_role"] == role:
+            direction = "outbound"
+            peer = spec["recipient"]
+        elif endpoint["recipient_role"] == role:
+            direction = "inbound"
+            peer = spec["sender"]
+        else:
+            continue
+        expected.append(
+            {
+                "direction": direction,
+                "endpoint_id": endpoint["endpoint_id"],
+                "route_operation": endpoint["route_operation"],
+                "peer": peer,
+            }
+        )
+    return expected
+
+
+def public_runtime_claim(value):
+    return {
+        "role": value["role"],
+        "identity": value["identity"],
+        "uid": value["uid"],
+        "gid": value["gid"],
+        "attestation_hash": value["attestation_hash"],
+        "pid": value["pid"],
+        "cgroup_binding_hash": value["cgroup_binding_hash"],
+    }
+
+
+def validate_ipc_receipts(value, expected):
+    if not isinstance(value, list) or len(value) != len(expected):
+        raise SubstrateHostError("service peer receipt count does not match its fixed topology")
+    receipts = []
+    for index, item in enumerate(value):
+        expected_item = expected[index]
+        item = require_exact_keys(
+            item,
+            {
+                "direction",
+                "endpoint_id",
+                "route_operation",
+                "peer",
+                "request_hash",
+                "response_hash",
+                "receipt_hash",
+            },
+            "service peer receipt",
+        )
+        material = dict(item)
+        receipt_hash = material.pop("receipt_hash")
+        peer = require_exact_keys(
+            item["peer"],
+            {
+                "role",
+                "identity",
+                "uid",
+                "gid",
+                "attestation_hash",
+                "pid",
+                "cgroup_binding_hash",
+            },
+            "service peer receipt peer",
+        )
+        expected_peer = public_runtime_claim(expected_item["peer"])
+        if (
+            item["direction"] != expected_item["direction"]
+            or item["endpoint_id"] != expected_item["endpoint_id"]
+            or item["route_operation"] != expected_item["route_operation"]
+            or peer != expected_peer
+            or sha256_value(material)
+            != require_sha256(receipt_hash, "service peer receipt receipt_hash")
+            or not isinstance(item["request_hash"], str)
+            or not isinstance(item["response_hash"], str)
+        ):
+            raise SubstrateHostError("service peer receipt does not match the frozen endpoint")
+        require_sha256(item["request_hash"], "service peer receipt request_hash")
+        require_sha256(item["response_hash"], "service peer receipt response_hash")
+        receipts.append(item)
+    return receipts
+
+
+def verify_cross_peer_receipts(acknowledgements, endpoint_specs):
+    by_role = {role: acknowledgement["ipc_receipts"] for role, acknowledgement in acknowledgements.items()}
+    for spec in endpoint_specs:
+        endpoint = spec["endpoint"]
+        endpoint_id = endpoint["endpoint_id"]
+        sender_role = endpoint["sender_role"]
+        recipient_role = endpoint["recipient_role"]
+        outbound = [
+            item
+            for item in by_role[sender_role]
+            if item["direction"] == "outbound" and item["endpoint_id"] == endpoint_id
+        ]
+        inbound = [
+            item
+            for item in by_role[recipient_role]
+            if item["direction"] == "inbound" and item["endpoint_id"] == endpoint_id
+        ]
+        if (
+            len(outbound) != 1
+            or len(inbound) != 1
+            or outbound[0]["request_hash"] != inbound[0]["request_hash"]
+            or outbound[0]["response_hash"] != inbound[0]["response_hash"]
+        ):
+            raise SubstrateHostError("service peer receipts do not pair across the fixed endpoint")
+
+
+def read_service_owned_json(path, service, label):
     try:
         info = os.lstat(path)
     except OSError as error:
-        raise SubstrateHostError("service release acknowledgement is unavailable: " + str(error)) from error
+        raise SubstrateHostError(label + " is unavailable: " + str(error)) from error
     if (
         stat.S_ISLNK(info.st_mode)
         or not stat.S_ISREG(info.st_mode)
@@ -954,11 +1485,11 @@ def read_release_ack(path, service, install_binding_hash, run_binding_hash, subs
         or info.st_gid != service["gid"]
         or (info.st_mode & 0o777) != 0o600
     ):
-        raise SubstrateHostError("service release acknowledgement has an unexpected identity or mode")
+        raise SubstrateHostError(label + " has an unexpected identity or mode")
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except OSError as error:
-        raise SubstrateHostError("service release acknowledgement cannot be opened safely") from error
+        raise SubstrateHostError(label + " cannot be opened safely") from error
     try:
         opened = os.fstat(descriptor)
         if (
@@ -967,19 +1498,110 @@ def read_release_ack(path, service, install_binding_hash, run_binding_hash, subs
             or opened.st_gid != service["gid"]
             or (opened.st_mode & 0o777) != 0o600
         ):
-            raise SubstrateHostError("service release acknowledgement changed while opening")
+            raise SubstrateHostError(label + " changed while opening")
         raw = os.read(descriptor, 8193)
     finally:
         os.close(descriptor)
     if not raw or len(raw) > 8192:
-        raise SubstrateHostError("service release acknowledgement has an invalid size")
+        raise SubstrateHostError(label + " has an invalid size")
     try:
         text = raw.decode("utf-8")
         value = json.loads(text)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise SubstrateHostError("service release acknowledgement is invalid JSON") from error
+        raise SubstrateHostError(label + " is invalid JSON") from error
     if canonical(value) + "\n" != text:
-        raise SubstrateHostError("service release acknowledgement is not canonical")
+        raise SubstrateHostError(label + " is not canonical")
+    return value
+
+
+def read_listener_ready(
+    path,
+    service,
+    install_binding_hash,
+    run_binding_hash,
+    substrate_abi_hash,
+    expected_pid,
+    expected_listener_endpoint_ids,
+):
+    value = read_service_owned_json(path, service, "service listener readiness")
+    require_exact_keys(
+        value,
+        {
+            "schema_version",
+            "kind",
+            "status",
+            "role",
+            "pid",
+            "uid",
+            "gid",
+            "install_binding_hash",
+            "run_binding_hash",
+            "substrate_abi_hash",
+            "listener_endpoint_ids",
+            "ready_hash",
+        },
+        "service listener readiness",
+    )
+    material = dict(value)
+    ready_hash = material.pop("ready_hash")
+    if (
+        not isinstance(value["schema_version"], int)
+        or isinstance(value["schema_version"], bool)
+        or value["schema_version"] != SCHEMA_VERSION
+        or value["kind"] != "p36_phase2_listener_ready"
+        or value["status"] != "fixed_listeners_ready"
+        or value["role"] != service["role"]
+        or value["uid"] != service["uid"]
+        or value["gid"] != service["gid"]
+        or not isinstance(value["pid"], int)
+        or isinstance(value["pid"], bool)
+        or value["pid"] < 1
+        or value["pid"] != expected_pid
+        or value["install_binding_hash"] != install_binding_hash
+        or value["run_binding_hash"] != run_binding_hash
+        or value["substrate_abi_hash"] != substrate_abi_hash
+        or value["listener_endpoint_ids"] != expected_listener_endpoint_ids
+        or sha256_value(material)
+        != require_sha256(ready_hash, "service listener readiness ready_hash")
+    ):
+        raise SubstrateHostError("service listener readiness does not match the frozen run")
+    return value
+
+
+def wait_for_listener_ready(
+    path,
+    service,
+    install_binding_hash,
+    run_binding_hash,
+    substrate_abi_hash,
+    expected_pid,
+    expected_listener_endpoint_ids,
+):
+    deadline = time.monotonic() + ROLE_STARTUP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            return read_listener_ready(
+                path,
+                service,
+                install_binding_hash,
+                run_binding_hash,
+                substrate_abi_hash,
+                expected_pid,
+                expected_listener_endpoint_ids,
+            )
+        time.sleep(0.025)
+    raise SubstrateHostError("service did not publish listener readiness before the deadline")
+
+
+def read_release_ack(
+    path,
+    service,
+    install_binding_hash,
+    run_binding_hash,
+    substrate_abi_hash,
+    expected_receipts,
+):
+    value = read_service_owned_json(path, service, "service release acknowledgement")
     require_exact_keys(
         value,
         {
@@ -994,6 +1616,7 @@ def read_release_ack(path, service, install_binding_hash, run_binding_hash, subs
             "run_binding_hash",
             "substrate_abi_hash",
             "release_hash",
+            "ipc_receipts",
             "ack_hash",
         },
         "service release acknowledgement",
@@ -1001,13 +1624,16 @@ def read_release_ack(path, service, install_binding_hash, run_binding_hash, subs
     material = dict(value)
     ack_hash = material.pop("ack_hash")
     if (
-        value["schema_version"] != SCHEMA_VERSION
+        not isinstance(value["schema_version"], int)
+        or isinstance(value["schema_version"], bool)
+        or value["schema_version"] != SCHEMA_VERSION
         or value["kind"] != "p36_phase2_release_ack"
-        or value["status"] != "released_no_effect"
+        or value["status"] != "released_peer_authenticated_no_effect"
         or value["role"] != service["role"]
         or value["uid"] != service["uid"]
         or value["gid"] != service["gid"]
         or not isinstance(value["pid"], int)
+        or isinstance(value["pid"], bool)
         or value["pid"] < 1
         or value["install_binding_hash"] != install_binding_hash
         or value["run_binding_hash"] != run_binding_hash
@@ -1016,31 +1642,87 @@ def read_release_ack(path, service, install_binding_hash, run_binding_hash, subs
     ):
         raise SubstrateHostError("service release acknowledgement does not match the frozen run")
     require_sha256(value["release_hash"], "service acknowledgement release_hash")
+    value["ipc_receipts"] = validate_ipc_receipts(value["ipc_receipts"], expected_receipts)
     return value
 
 
-def wait_for_release_ack(path, service, install_binding_hash, run_binding_hash, substrate_abi_hash):
-    deadline = time.monotonic() + ROLE_ACK_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if os.path.exists(path):
-            return read_release_ack(
-                path, service, install_binding_hash, run_binding_hash, substrate_abi_hash
-            )
-        time.sleep(0.025)
-    raise SubstrateHostError("service did not acknowledge its no-effect release before the deadline")
+def verify_service_process_binding(systemctl_path, unit, cgroup_path, service, expected_pid):
+    result = run_command(
+        [systemctl_path, "show", "--property=MainPID", "--value", unit],
+        timeout_seconds=SYSTEMD_INSPECTION_TIMEOUT_SECONDS,
+    )
+    observed = result.stdout.strip() if result.returncode == 0 else ""
+    if not observed.isdigit() or int(observed) != expected_pid:
+        raise SubstrateHostError("service no longer matches systemd MainPID")
+    if not cgroup_v2_matches(expected_pid, cgroup_path):
+        raise SubstrateHostError("service PID no longer matches its cgroup-v2 binding")
+    if not process_identity_matches(expected_pid, service):
+        raise SubstrateHostError("service PID no longer matches its private identity")
 
 
 def verify_ack_service_process(systemctl_path, unit, cgroup_path, service, acknowledged_pid):
-    result = run_command(
-        [systemctl_path, "show", "--property=MainPID", "--value", unit], timeout_seconds=2
-    )
-    observed = result.stdout.strip() if result.returncode == 0 else ""
-    if not observed.isdigit() or int(observed) != acknowledged_pid:
-        raise SubstrateHostError("service acknowledgement no longer matches systemd MainPID")
-    if not cgroup_v2_matches(acknowledged_pid, cgroup_path):
-        raise SubstrateHostError("service acknowledgement PID no longer matches its cgroup-v2 binding")
-    if not process_identity_matches(acknowledged_pid, service):
-        raise SubstrateHostError("service acknowledgement PID no longer matches its private identity")
+    try:
+        verify_service_process_binding(
+            systemctl_path, unit, cgroup_path, service, acknowledged_pid
+        )
+    except SubstrateHostError as error:
+        raise SubstrateHostError("service acknowledgement " + str(error)) from error
+
+
+def collect_release_acks(
+    units,
+    services,
+    expected_receipts,
+    install_binding_hash,
+    run_binding_hash,
+    substrate_abi_hash,
+    systemctl_path,
+):
+    pending = set(SERVICE_ROLES)
+    acknowledgements = {}
+    deadline = time.monotonic() + ROLE_ACK_TIMEOUT_SECONDS
+    while pending:
+        for role in SERVICE_ROLES:
+            if role not in pending:
+                continue
+            if time.monotonic() >= deadline:
+                raise SubstrateHostError(
+                    "services did not acknowledge their no-effect release before the deadline"
+                )
+            service = services[role]
+            unit = units[role]
+            if not os.path.exists(unit["paths"]["ack"]):
+                continue
+            acknowledgement = read_release_ack(
+                unit["paths"]["ack"],
+                service,
+                install_binding_hash,
+                run_binding_hash,
+                substrate_abi_hash,
+                expected_receipts[role],
+            )
+            if acknowledgement["pid"] != unit["pid"]:
+                raise SubstrateHostError("service acknowledgement PID does not match systemd MainPID")
+            if acknowledgement["release_hash"] != sha256_value(unit["release_token"]):
+                raise SubstrateHostError("service acknowledgement does not bind its release token")
+            verify_ack_service_process(
+                systemctl_path,
+                unit["unit"],
+                unit["cgroup_path"],
+                service,
+                acknowledgement["pid"],
+            )
+            if time.monotonic() >= deadline:
+                raise SubstrateHostError(
+                    "services did not acknowledge their no-effect release before the deadline"
+                )
+            acknowledgements[role] = acknowledgement
+            pending.remove(role)
+        if pending:
+            if time.monotonic() >= deadline:
+                raise SubstrateHostError("services did not acknowledge their no-effect release before the deadline")
+            time.sleep(0.025)
+    return acknowledgements
 
 
 def run_probe():
@@ -1048,15 +1730,19 @@ def run_probe():
     install_root = installed_root_from_self()
     config = load_installed_config(install_root)
     validated = validate_installed_config(install_root, config)
+    peer_protocol = load_peer_protocol(install_root)
     require_supported_host()
 
     run_id = "p36-" + secrets.token_hex(12)
     runtime_root = os.path.join(RUNTIME_PARENT, run_id)
     runner_path = os.path.join(install_root, FILE_LAYOUT["service_runner"])
-    resources = {"parent": False, "runtime_root": False}
+    resources = {"parent": False, "runtime_root": False, "ipc_root": False}
     units = {}
+    endpoint_specs = []
     releases = {role: False for role in SERVICE_ROLES}
+    readiness_may_exist = {role: False for role in SERVICE_ROLES}
     acknowledgements = {role: False for role in SERVICE_ROLES}
+    acknowledgement_values = {}
     acknowledgements_may_exist = {role: False for role in SERVICE_ROLES}
     previous_handlers = {}
 
@@ -1080,6 +1766,8 @@ def run_probe():
             paths = role_paths(runtime_root, role)
             resources[role + "_root"] = False
             resources[role + "_ack_root"] = False
+            resources[role + "_bootstrap_may_exist"] = False
+            resources[role + "_peer_config_may_exist"] = False
             create_tracked_resource(
                 resources,
                 role + "_root",
@@ -1111,42 +1799,61 @@ def run_probe():
                 "paths": paths,
                 "may_exist": False,
                 "pid": None,
+                "release_token": secrets.token_urlsafe(24).rstrip("="),
             }
 
-        run_material = run_binding_material(config, validated, run_id, units)
+        endpoint_specs = endpoint_static_specs(
+            runtime_root, peer_protocol, validated["services"]
+        )
+        ipc_root = os.path.join(runtime_root, "i")
+        create_tracked_resource(
+            resources,
+            "ipc_root",
+            lambda on_created: create_directory(
+                ipc_root, 0, 0, 0o711, "P3.6 peer IPC root", on_created
+            ),
+        )
+        for endpoint_spec in endpoint_specs:
+            endpoint = endpoint_spec["endpoint"]
+            endpoint_id = endpoint["endpoint_id"]
+            recipient = endpoint_spec["recipient"]
+            sender = endpoint_spec["sender"]
+            resources["endpoint_" + endpoint_id + "_root"] = False
+            resources["endpoint_" + endpoint_id + "_socket_may_exist"] = True
+            create_tracked_resource(
+                resources,
+                "endpoint_" + endpoint_id + "_root",
+                lambda on_created, endpoint_spec=endpoint_spec, recipient=recipient, sender=sender, endpoint_id=endpoint_id: create_directory(
+                    endpoint_spec["socket_root"],
+                    recipient["uid"],
+                    sender["gid"],
+                    0o2710,
+                    endpoint_id + " peer socket root",
+                    on_created,
+                ),
+            )
+
+        run_material = run_binding_material(
+            config, validated, run_id, units, endpoint_specs
+        )
         run_binding_hash = sha256_value(run_material)
+        for role in SERVICE_ROLES:
+            unit = units[role]
+            resources[role + "_bootstrap_may_exist"] = True
+            write_service_bootstrap(
+                config, validated, unit, role, run_binding_hash, endpoint_specs
+            )
         for role in SERVICE_ROLES:
             service = validated["services"][role]
             unit = units[role]
-            release_token = secrets.token_urlsafe(24).rstrip("=")
-            unit["release_token"] = release_token
             command = [
                 validated["paths"]["python_path"],
                 "-I",
                 runner_path,
-                "--role",
-                role,
-                "--release-path",
-                unit["paths"]["release"],
-                "--ack-path",
-                unit["paths"]["ack"],
-                "--release-token",
-                release_token,
-                "--expected-uid",
-                str(service["uid"]),
-                "--expected-gid",
-                str(service["gid"]),
-                "--install-binding-hash",
-                config["binding_hash"],
-                "--run-binding-hash",
-                run_binding_hash,
-                "--substrate-abi-hash",
-                validated["substrate_abi_hash"],
-                "--release-timeout-seconds",
-                str(ROLE_RELEASE_TIMEOUT_SECONDS),
-                "--hold-seconds",
-                str(ROLE_HOLD_SECONDS),
+                "--bootstrap-config",
+                unit["paths"]["bootstrap"],
             ]
+            writable_paths = service_writable_paths(role, unit, endpoint_specs)
             systemd_command = [
                 validated["paths"]["systemd_run_path"],
                 "--no-block",
@@ -1157,12 +1864,13 @@ def run_probe():
                 "--uid=" + str(service["uid"]),
                 "--gid=" + str(service["gid"]),
             ] + ["--property=" + property for property in SYSTEMD_PROPERTIES] + [
-                "--property=ReadWritePaths=" + unit["paths"]["ack_root"],
+                "--property=ReadWritePaths=" + " ".join(writable_paths)
             ] + command
             # Treat a timeout or lost response as a possibly created unit before
             # invoking systemd-run, so cleanup never assumes launch ambiguity away.
             unit["may_exist"] = True
-            started = run_command(systemd_command, timeout_seconds=10)
+            readiness_may_exist[role] = True
+            started = run_command(systemd_command, timeout_seconds=SYSTEMD_LAUNCH_TIMEOUT_SECONDS)
             if started.returncode != 0:
                 raise SubstrateHostError(
                     "systemd " + role + " launch failed: " + started.stderr.strip()
@@ -1172,8 +1880,47 @@ def run_probe():
                 unit["unit"],
                 unit["cgroup_path"],
                 service,
-                ROLE_ACK_TIMEOUT_SECONDS,
+                ROLE_STARTUP_TIMEOUT_SECONDS,
             )
+
+        for role in SERVICE_ROLES:
+            unit = units[role]
+            listener_endpoint_ids = [
+                spec["endpoint"]["endpoint_id"]
+                for spec in endpoint_specs
+                if spec["endpoint"]["recipient_role"] == role
+            ]
+            wait_for_listener_ready(
+                unit["paths"]["ready"],
+                validated["services"][role],
+                config["binding_hash"],
+                run_binding_hash,
+                validated["substrate_abi_hash"],
+                unit["pid"],
+                listener_endpoint_ids,
+            )
+        for endpoint_spec in endpoint_specs:
+            wait_for_listener_socket(endpoint_spec, ROLE_STARTUP_TIMEOUT_SECONDS)
+        for endpoint_spec in endpoint_specs:
+            seal_listener_socket(endpoint_spec)
+        for role in SERVICE_ROLES:
+            unit = units[role]
+            verify_service_process_binding(
+                validated["paths"]["systemctl_path"],
+                unit["unit"],
+                unit["cgroup_path"],
+                validated["services"][role],
+                unit["pid"],
+            )
+        endpoint_runtime = runtime_endpoint_specs(peer_protocol, endpoint_specs, units)
+        for role in SERVICE_ROLES:
+            resources[role + "_peer_config_may_exist"] = True
+        write_peer_configs(
+            config, validated, units, run_binding_hash, endpoint_runtime
+        )
+        expected_receipts = {
+            role: expected_ipc_receipts(role, endpoint_runtime) for role in SERVICE_ROLES
+        }
 
         for role in SERVICE_ROLES:
             service = validated["services"][role]
@@ -1182,28 +1929,20 @@ def run_probe():
             releases[role] = True
             create_release_file(unit["paths"]["release"], unit["release_token"], service["gid"])
 
+        acknowledgement_values = collect_release_acks(
+            units,
+            validated["services"],
+            expected_receipts,
+            config["binding_hash"],
+            run_binding_hash,
+            validated["substrate_abi_hash"],
+            validated["paths"]["systemctl_path"],
+        )
         receipts = {}
         for role in SERVICE_ROLES:
             service = validated["services"][role]
             unit = units[role]
-            acknowledgement = wait_for_release_ack(
-                unit["paths"]["ack"],
-                service,
-                config["binding_hash"],
-                run_binding_hash,
-                validated["substrate_abi_hash"],
-            )
-            if acknowledgement["pid"] != unit["pid"]:
-                raise SubstrateHostError("service acknowledgement PID does not match systemd MainPID")
-            if acknowledgement["release_hash"] != sha256_value(unit["release_token"]):
-                raise SubstrateHostError("service acknowledgement does not bind its release token")
-            verify_ack_service_process(
-                validated["paths"]["systemctl_path"],
-                unit["unit"],
-                unit["cgroup_path"],
-                service,
-                acknowledgement["pid"],
-            )
+            acknowledgement = acknowledgement_values[role]
             acknowledgements[role] = True
             receipts[role] = {
                 "role": role,
@@ -1214,9 +1953,12 @@ def run_probe():
                 "attestation_hash": service["attestation_hash"],
                 "cgroup_binding_hash": sha256_value(unit["cgroup_path"]),
                 "status": acknowledgement["status"],
+                "ipc_peer_proof": "peer_authenticated_no_effect",
+                "ipc_receipt_count": len(acknowledgement["ipc_receipts"]),
             }
+        verify_cross_peer_receipts(acknowledgement_values, endpoint_runtime)
         return {
-            "status": "p36_phase2_probe_complete",
+            "status": "p36_phase2b_peer_probe_complete",
             "schema_version": SCHEMA_VERSION,
             "run_binding_hash": run_binding_hash,
             "install_binding_hash": config["binding_hash"],
@@ -1257,11 +1999,34 @@ def run_probe():
                             role + " pending acknowledgement",
                             lambda unit=unit: cleanup_path(unit["paths"]["ack_pending"], "file"),
                         )
+                    if readiness_may_exist[role]:
+                        append_cleanup_error(
+                            cleanup_errors,
+                            role + " listener readiness",
+                            lambda unit=unit: cleanup_path(unit["paths"]["ready"], "file"),
+                        )
+                        append_cleanup_error(
+                            cleanup_errors,
+                            role + " pending listener readiness",
+                            lambda unit=unit: cleanup_path(unit["paths"]["ready_pending"], "file"),
+                        )
                     if releases[role]:
                         append_cleanup_error(
                             cleanup_errors,
                             role + " release",
                             lambda unit=unit: cleanup_path(unit["paths"]["release"], "file"),
+                        )
+                    if resources.get(role + "_peer_config_may_exist"):
+                        append_cleanup_error(
+                            cleanup_errors,
+                            role + " peer config",
+                            lambda unit=unit: cleanup_path(unit["paths"]["peer_config"], "file"),
+                        )
+                    if resources.get(role + "_bootstrap_may_exist"):
+                        append_cleanup_error(
+                            cleanup_errors,
+                            role + " peer bootstrap",
+                            lambda unit=unit: cleanup_path(unit["paths"]["bootstrap"], "file"),
                         )
                     if resources.get(role + "_ack_root"):
                         append_cleanup_error(
@@ -1275,6 +2040,23 @@ def run_probe():
                             role + " runtime root",
                             lambda unit=unit: cleanup_path(unit["paths"]["root"], "dir"),
                         )
+                for endpoint_spec in reversed(endpoint_specs):
+                    endpoint = endpoint_spec["endpoint"]
+                    endpoint_id = endpoint["endpoint_id"]
+                    if resources.get("endpoint_" + endpoint_id + "_root"):
+                        append_cleanup_error(
+                            cleanup_errors,
+                            endpoint_id + " peer socket root",
+                            lambda endpoint_spec=endpoint_spec: cleanup_endpoint_socket_root(
+                                endpoint_spec
+                            ),
+                        )
+                if resources.get("ipc_root"):
+                    append_cleanup_error(
+                        cleanup_errors,
+                        "peer IPC root",
+                        lambda: cleanup_path(ipc_root, "dir"),
+                    )
                 if resources.get("runtime_root"):
                     append_cleanup_error(
                         cleanup_errors,

@@ -780,6 +780,30 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     }
   }
 
+  // Pre-spend catch: for output.kind=commit, dispatch-hetero's boundary check matches
+  // output.paths EXACTLY against `git diff --name-only` ("output.paths must be a subset
+  // of changed files"). A directory can never appear in that list, so such a contract is
+  // guaranteed to be boundary_rejected — but only AFTER the runner has been paid for.
+  // Proving it here costs nothing. Restricted to kind=commit because the other kinds do
+  // not go through that exact-match rail.
+  if (contract.output.kind === 'commit') {
+    for (const outPath of contract.output.paths) {
+      let isDir = outPath.endsWith('/');
+
+      if (!isDir) {
+        try {
+          isDir = runGit(repo, ['cat-file', '-t', `${baseSha}:${outPath}`]).trim() === 'tree';
+        } catch (err) {
+          isDir = false;  // absent at base is fine: the unit may be creating the file
+        }
+      }
+
+      if (isDir) {
+        reasons.push(`output: path '${outPath}' is a directory; kind=commit matches changed files exactly, so it can never be satisfied`);
+      }
+    }
+  }
+
   const baseSpec = getBaseSpecSection(baseSha, contract, repo);
   let specSha = '';
   if (!baseSpec.ok) {

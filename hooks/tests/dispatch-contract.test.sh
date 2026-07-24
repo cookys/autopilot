@@ -734,4 +734,37 @@ if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
   assert_red_green_clean "$MINI_REPO"
 fi
 
+# === CASE 9: output.paths that can never be satisfied (pre-spend catch) ===
+#
+# For output.kind=commit, dispatch-hetero's boundary check matches output.paths
+# EXACTLY against `git diff --name-only` (scripts/dispatch-hetero.sh, "output.paths
+# must be a subset of changed files"). A directory therefore can never appear, so the
+# unit is guaranteed boundary_rejected AFTER the runner has already been paid for.
+# The checker can prove that before any spend.
+echo "--- Case 9.1: directory in output.paths (kind=commit) is NO-GO ---"
+sed 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src"]}|' \
+  "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/outdir.json"
+out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/outdir.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "output"
+
+echo "--- Case 9.2: trailing-slash directory (kind=commit) is NO-GO ---"
+sed 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src/"]}|' \
+  "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/outslash.json"
+out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/outslash.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "output"
+
+echo "--- Case 9.3: negative control — file paths (kind=commit) still GO ---"
+sed 's|"output": {"kind": "diff", "paths": \["src/"\]}|"output": {"kind": "commit", "paths": ["src/main.go"]}|' \
+  "$CONTRACT_DIR/valid.json" > "$CONTRACT_DIR/outfile.json"
+out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/outfile.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "0"
+
+echo "--- Case 9.4: negative control — kind=diff keeps accepting directories ---"
+out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "0"
+
+assert_red_green_clean "$MINI_REPO"
+
 finalize_test

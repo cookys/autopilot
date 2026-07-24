@@ -75,7 +75,8 @@ so they are one rule, not five; a healthy run surfaces nothing.
 - `domain_source` whenever `work_domain` is reported, so a reader knows whether the domain was declared
   or inferred.
 
-Rationale and evidence: [`../../../docs/plans/2026-07-25-roster-field-report.md`](../../../docs/plans/2026-07-25-roster-field-report.md) §1c.
+Rationale and evidence: `docs/plans/2026-07-25-roster-field-report.md` §1c — a plain path, not a
+link: `docs/` is outside the Codex plugin payload, so a relative link here escapes it (`codex-plugin-package` test).
 
 ## Verify-first wiring rule
 

@@ -25,7 +25,7 @@ queue-and-deliver-at-boundary, **advisory injection, never seizure of authority*
 |---------|-------------|-----------|
 | pi RPC supervisor (`pi-rpc-run.js`) | **mid-run** | native RPC `steer` at the supervisor's poll cadence (queue+boundary-delivery, verified in the Stage-2 spike) |
 | CC foreman (dev-flow inline) | **stage-boundary** | poll own run-id at each stage boundary, honor/record |
-| batch one-shot runners (codex exec / agy -p / grok / cc-shim) | **UNREACHABLE mid-run** | a directive can only shape the NEXT round's dispatch — no pretend-channel |
+| batch one-shot runners (codex exec / agy -p / grok / qoderclicn / cc-shim) | **UNREACHABLE mid-run** | a directive can only shape the NEXT round's dispatch — no pretend-channel |
 
 ## Design
 

@@ -1,0 +1,16 @@
+diff --git a/p0-spike/medium-boundary.json b/p0-spike/medium-boundary.json
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/p0-spike/medium-boundary.json
++{"controls":["limit output size","enforce timeout"],"mediation":"required","task":"medium-boundary"}
+diff --git a/p0-spike/medium-boundary.ledger.jsonl b/p0-spike/medium-boundary.ledger.jsonl
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/p0-spike/medium-boundary.ledger.jsonl
++{"type":"intent_received","task_id":"medium-boundary","principal":"p0-operator","artifact_sha256":null,"descriptor_hash":null,"descriptor_content_sha256":null,"content_hash":"e26614fb5809bbe72f975da5135b50a0aa17d7c1058d93c126e80bf335427802"}
++{"type":"worker_artifact_recorded","task_id":"medium-boundary","principal":"bounded-worker","artifact_sha256":"54b77b2f759fd45dcf0eb475c0f5b21b297f8ee7d39e021c332a9539f6a8c62d","descriptor_hash":null,"descriptor_content_sha256":null,"content_hash":"1854d5bf81d1fbb0ede6f5e16151554c76f7bf9d3b1bdcc98edd7ebcd64391ed"}
++{"type":"non_explicit_decision","task_id":"medium-boundary","principal":"p0-supervisor","artifact_sha256":null,"descriptor_hash":"c1c34dc0a158b157563422cff76913e594295eca8d0db6aa79a472f03540a3f6","descriptor_content_sha256":"54b77b2f759fd45dcf0eb475c0f5b21b297f8ee7d39e021c332a9539f6a8c62d","content_hash":"bca9b410b2d0fb58c067827975a440e753bd067fe419c3c46b521ed3fb43c40e"}
++{"type":"mediated_effect_completed","task_id":"medium-boundary","principal":"p0-supervisor","artifact_sha256":"54b77b2f759fd45dcf0eb475c0f5b21b297f8ee7d39e021c332a9539f6a8c62d","descriptor_hash":"c1c34dc0a158b157563422cff76913e594295eca8d0db6aa79a472f03540a3f6","descriptor_content_sha256":null,"content_hash":"f4ea9f51e35c508c8de824f8cb23fe3089737eba210a1611d68321029a994731"}
++{"type":"deterministic_verification_passed","task_id":"medium-boundary","principal":"p0-verifier","artifact_sha256":"54b77b2f759fd45dcf0eb475c0f5b21b297f8ee7d39e021c332a9539f6a8c62d","descriptor_hash":null,"descriptor_content_sha256":null,"content_hash":"cfdfe4042e207a0b9009e9dcaae6fc0db57bab131e9b1dbb6529ee72dd7cd3ad"}

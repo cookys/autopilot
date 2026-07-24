@@ -1,0 +1,108 @@
+{
+  "probe": "owner-kernel-p0-per-harness-capability",
+  "permission_mode": "default",
+  "nonce_rail": "fresh driver nonce",
+  "execution_witness_rail": "strace execve/stdout payload hash",
+  "profile": "supervised-partial",
+  "fault_injection": "none",
+  "task_id": "medium-boundary",
+  "hosts": [
+    {
+      "harness": "supervised-partial",
+      "status": "probed",
+      "command": "strace node supervised-profile-probe.js --nonce <nonce>",
+      "exit_code": 0,
+      "error_excerpt": "driver strace execution witness verified",
+      "probe_payload": {
+        "probe": "owner-kernel-p0-host-capability",
+        "nonce_echo": "p0-medium-boundary-54b77b2f759fd45d",
+        "scope_note": "P0-only supervised-partial measurement fixture. Positive roots require live sandbox/broker attacks; this is not production Owner Kernel code.",
+        "profile": {
+          "id": "supervised-partial",
+          "sandbox": "bubblewrap-rootless",
+          "authority_location": "out-of-sandbox-supervisor",
+          "fault_injection": "none",
+          "task_id": "medium-boundary"
+        },
+        "findings": {
+          "R1_user_channel_substrate": {
+            "live_forge_rejected": true,
+            "live_forge_accepted": false,
+            "witness_channel_outside_model": true,
+            "worker_forge_error": "user_channel_only"
+          },
+          "R2_owner_capability_substrate": {
+            "mediator_only_redline_capabilities_positive_proof": true,
+            "owner_capability_never_exposed_to_model": true,
+            "parent_memory_theft_succeeded": false,
+            "owner_capability_exposed_to_model": false,
+            "direct_decision_accepted_from_worker": false,
+            "worker_environment_exposure": false,
+            "supervisor_proc_environ_read_succeeded": false,
+            "supervisor_proc_mem_read_succeeded": false,
+            "direct_decision_error": "capability_invalid"
+          },
+          "R3_pre_action_mediation_substrate": {
+            "protected_path_write": "blocked",
+            "gate_non_disableable_positive_proof": true,
+            "mediated_action_completed": true,
+            "descriptor_drift_rejected": true,
+            "ticket_replay_rejected": true,
+            "policy_mutation_rejected": true,
+            "nested_user_namespace_blocked": true
+          },
+          "R4_append_only_witness_substrate": {
+            "harness_authoritative_witness_attack_rejected": true,
+            "external_receipt_chain_verified": true,
+            "harness_authoritative_witness_root_compromised": false,
+            "worker_receipt_write_succeeded": false,
+            "worker_receipt_forge_error": "witness_root_unavailable",
+            "event_count": 3,
+            "receipt_count": 3
+          },
+          "mediated_artifact": {
+            "content_sha256": "54b77b2f759fd45dcf0eb475c0f5b21b297f8ee7d39e021c332a9539f6a8c62d",
+            "content_bytes": 101
+          },
+          "process_identity": {
+            "worker_uid": 1000,
+            "worker_pid_namespace_ppid": 1,
+            "supervisor_host_pid_visible_from_worker": false
+          }
+        },
+        "execution_proof": "host_process_witnessed",
+        "execution_witness": {
+          "kind": "host_wrapper_payload_hash",
+          "version": 1,
+          "probe": "owner-kernel-p0-host-capability",
+          "nonce_echo": "p0-medium-boundary-54b77b2f759fd45d",
+          "payload_sha256": "940c495224b283567bc528434b311e9c756e87adbf8682d1f9f7fa6119263c1c",
+          "wrapper_pid": 891310,
+          "parent_pid": 891308,
+          "wrapper_script": "supervised-profile-probe.js",
+          "node": "node"
+        }
+      },
+      "evidence_grade": "driver_verified_execution_witness",
+      "execution_witness_verified": true,
+      "execution_witness_driver": {
+        "kind": "strace_execve_stdout",
+        "version": 1,
+        "trace_tool": "strace",
+        "wrapper_pid": 891310,
+        "trace_pid": "891310",
+        "write_fd": "1",
+        "wrapper_script": "supervised-profile-probe.js",
+        "payload_sha256": "940c495224b283567bc528434b311e9c756e87adbf8682d1f9f7fa6119263c1c",
+        "execve_matched": true,
+        "stdout_payload_hash_matched": true,
+        "payload_hash_write_matched": true,
+        "trace_sha256": "83be593e99df9a3ee5104c48b3c304e902bd91b3f330029c34767152afe079db",
+        "evidence": [
+          "891310 execve(supervised-profile-probe.js) nonce=p0-medium-boundary-54b77b2f759fd45d trace=a653b6df2861395683dd1eddee6cb6b1616a922f2dc5e71f782e636f4b1d7c3a",
+          "891310 write(1, ...) nonce=p0-medium-boundary-54b77b2f759fd45d payload_sha256=940c495224b283567bc528434b311e9c756e87adbf8682d1f9f7fa6119263c1c trace=8ad75e96dd58a7b873ef8104ec12700b92864bb26865b63df6679fe0b39a530c"
+        ]
+      }
+    }
+  ]
+}

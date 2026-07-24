@@ -1,0 +1,18 @@
+{
+  "probe": "owner-kernel-p0-per-harness-capability",
+  "permission_mode": "bypass",
+  "nonce_rail": "not applicable",
+  "execution_witness_rail": "not applicable",
+  "profile": "supervised-partial",
+  "fault_injection": "none",
+  "hosts": [
+    {
+      "harness": "supervised-partial",
+      "status": "not_applicable",
+      "command": "no bypass mode; the OS boundary is the profile",
+      "exit_code": null,
+      "error_excerpt": "bypass is intentionally unavailable",
+      "probe_payload": null
+    }
+  ]
+}

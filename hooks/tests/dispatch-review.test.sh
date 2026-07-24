@@ -170,6 +170,19 @@ STUB_EMPTY="$TEST_TMP/eng-empty"
 printf '#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\nexit 0\n' > "$STUB_EMPTY"
 chmod +x "$STUB_EMPTY"
 STUB_SHIP="$STUB_MARKER"
+STUB_QODERCN_MARKER="$TEST_TMP/qoderclicn-marker"
+cat > "$STUB_QODERCN_MARKER" <<'EOF'
+#!/usr/bin/env bash
+PROMPT="$(cat)"
+begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+[ -n "$begin" ] && [ -n "$end" ] || exit 0
+echo "$begin"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "$end"
+EOF
+chmod +x "$STUB_QODERCN_MARKER"
 
 # 1. --help
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; assert_eq "0" "$?" "--help exit code"
@@ -259,6 +272,15 @@ if command -v script >/dev/null 2>&1; then
 else
   echo "  (skip agy pseudo-TTY case: 'script' not available)"
 fi
+
+# 5b. qoderclicn path: prompt via STDIN, scratch cwd, text output parsed.
+OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoderclicn reviewed exit 0"
+assert_contains "$OUT" '"runner": "qoderclicn"' "qoderclicn runner provenance"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn verdict parsed"
+OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "qoderclicn empty clean exit is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn empty clean output fails closed"
 
 # 6. anthropic-compatible: transport precondition failures collapse to no_verdict, exit 1 (no network)
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_COMPATIBLE_AUTH_TOKEN -u MINIMAX_API_KEY \

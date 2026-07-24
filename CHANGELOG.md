@@ -24,6 +24,47 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.59 — Owner Kernel P3.7 authority contracts
+
+**Headline**: Owner Kernel can now consume the authenticated P3.5d/P3.6 route, witness semantic
+events, mediate one fixed reversible probe, cross one real Engine implementation-dispatch seam, and
+atomically accept an exact verified artifact manifest. Project governance remains a one-time default
+with an exact one-run override; Engine completion is evidence, never self-acceptance.
+
+### Added
+- P3.7 semantic authority route and external witness adapter with compare-and-append, authoritative
+  readback, durable request binding, and an independent receipt anchor.
+- One fixed reversible probe profile and one fixed Engine implementation profile. Both retain P2's
+  preclaim permit, witnessed claim, post-claim authorization, broker receipt, independent
+  verification, and replay protection.
+- External schema-v2 acceptance coordinator adapter. `acceptance` and `complete` share one witness
+  batch, durable request, coordinator commitment, and readback proof.
+- Focused P3.7a/b/c gates plus an explicit external-host-contract corpus: 8 named attack semantics,
+  15 frozen baseline categories, zero `not_applicable`, 23 scenario-specific behavior oracles,
+  and 46 separate report-integrity mutations.
+
+### Changed
+- P3.7 profile compilation binds `owner-led`/`milestone-led` project defaults and per-run overrides
+  to the same policy hash used by the Kernel. Conflicting top-level/nested overrides or supplied
+  profiles are rejected before session start.
+- Missing or blocking required challenge evidence is terminally blocked instead of being routed to
+  automatic recovery; executable verification failure remains recoverable.
+- The self-hosted governance config selects the one mediated Engine implementation catalog row and
+  keeps external effects approval-bound and single-use.
+- The privileged P3.5 live gate distinguishes bytecode created by the current root install from
+  ignored pre-existing cache files, and teardown is idempotent when its test-owned runtime parent
+  is already absent.
+
+### Boundary
+- The P3.7 JavaScript modules are production code with injected external-host contracts. Focused
+  tests use deterministic host implementations. The existing P3.6 privileged gate remains the
+  separate installed cross-UID systemd/cgroup proof; this release does not claim that a P3.7 systemd
+  adapter is deployed, and it does not retire `/l3`-`/l6`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.58`
+
 ## v2.32.58 — Pre-dispatch context-window gate
 
 **Headline**: A read-only scan of 90 days of local engine transcripts (1231 headless

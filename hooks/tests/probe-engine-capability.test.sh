@@ -84,6 +84,30 @@ else
   bad "2: live-spend status=$status confidence=$confidence"
 fi
 
+# 2b. qoderclicn live-spend path uses stdin + scratch cwd and records availability.
+reset
+cat > "$DUMMY_BIN_DIR/qoderclicn" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then
+  echo "1.1.1-test"
+  exit 0
+fi
+cat >/dev/null 2>&1 || true
+echo "OK"
+exit 0
+EOF
+chmod +x "$DUMMY_BIN_DIR/qoderclicn"
+bash "$PROBE_CLI" quota --runner qoderclicn --model Qwen3.8-Max-Preview --live-spend --store "$TESTDIR" >/dev/null 2>&1
+
+status=$(node "$STATE_CLI" current --runner qoderclicn --model Qwen3.8-Max-Preview --role reviewer --store "$TESTDIR" | jq_get capability.quota.status)
+confidence=$(node "$STATE_CLI" current --runner qoderclicn --model Qwen3.8-Max-Preview --role reviewer --store "$TESTDIR" | jq_get capability.quota.confidence)
+
+if [ "$status" = "available" ] && [ "$confidence" = "high" ]; then
+  ok "2b: qoderclicn live-spend probe records available"
+else
+  bad "2b: qoderclicn live-spend status=$status confidence=$confidence"
+fi
+
 # 3. (P6 F6) a live-spend failure must NOT persist raw runner stderr (which can contain API
 #    keys / tokens on auth failures) into the capability store's evidence — only a non-secret
 #    classification. The raw diagnostic goes to the operator's stderr, never the store.

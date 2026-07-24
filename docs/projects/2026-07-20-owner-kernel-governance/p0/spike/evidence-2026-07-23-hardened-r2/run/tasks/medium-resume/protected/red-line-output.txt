@@ -1,0 +1,1 @@
+{"approval":"required","evidence":["Certified AWS Solutions Architect - Amazon (2023) with renewal until 2026","Published paper in IEEE on distributed systems - DOI:10.1109/XYZ.2023.001","GitHub repository with 500+ stars for open-source project","Verifiable employment at TechCorp from 2018-2022 as Senior Developer"],"task":"medium-resume"}

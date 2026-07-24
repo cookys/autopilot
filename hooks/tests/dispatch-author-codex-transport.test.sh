@@ -41,6 +41,7 @@ FAKE_TERM_MARKER="$TEST_TMP/fake.term-observed"
 FAKE_ATTACK_MARKER="$TEST_TMP/fake.attack-observed"
 FAKE_HARDLINK_PATH="$TEST_TMP/attacker-sidecar-hardlink"
 FAKE_SYMLINK_TARGET="$TEST_TMP/attacker-sidecar-target"
+CODEX_0145_PREBANNER_FIXTURE="$REPO_ROOT/hooks/tests/fixtures/dispatch-author/codex-0.145.0-prebanner.stderr"
 
 export UUID_A UUID_B CANDIDATE_BYTES STDERR_SECRET
 export FAKE_ARGV_LOG FAKE_RUN_COUNT_FILE FAKE_SIDECAR_PATH_FILE
@@ -48,6 +49,7 @@ export FAKE_STDOUT_TARGET_FILE FAKE_STDERR_TARGET_FILE FAKE_PARENT_PID_FILE
 export FAKE_CHILD_PID_FILE FAKE_GRANDCHILD_PID_FILE FAKE_SETSID_PID_FILE FAKE_LATE_PID_FILE FAKE_ORPHAN_PID_FILE FAKE_DEADLINE_ORPHAN_PID_FILE FAKE_DELETED_FD_PID_FILE
 export FAKE_PGID_FILE FAKE_TERM_MARKER FAKE_ATTACK_MARKER
 export FAKE_HARDLINK_PATH FAKE_SYMLINK_TARGET
+export CODEX_0145_PREBANNER_FIXTURE
 
 TEST_SHELL_PGID="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d '[:space:]')"
 
@@ -151,12 +153,63 @@ printf '%s' "$sidecar" > "$FAKE_SIDECAR_PATH_FILE"
 cat > /dev/null
 
 emit_chrome() {
+  case "${FAKE_SCENARIO:-}" in
+    codex_0145_prebanner_fixture)
+      cat "$CODEX_0145_PREBANNER_FIXTURE" >&2
+      return
+      ;;
+    prebanner)
+      printf '%s\n' "Reading prompt from stdin..." >&2
+      ;;
+    prebanner_crlf)
+      printf '%s\r\n' \
+        "Reading prompt from stdin..." \
+        "OpenAI Codex v0.145.0" \
+        "--------" \
+        "workdir: /fixture/repo" \
+        "model: gpt-5.5" \
+        "provider: openai" \
+        "sandbox: read-only" \
+        "reasoning effort: xhigh" \
+        "session id: $UUID_A" \
+        "--------" \
+        "user" \
+        "$STDERR_SECRET" >&2
+      return
+      ;;
+    prebanner_ansi)
+      printf '\033[32m%s\033[0m\n' "Reading prompt from stdin..." >&2
+      ;;
+    prebanner_duplicate)
+      printf '%s\n%s\n' "Reading prompt from stdin..." "Reading prompt from stdin..." >&2
+      ;;
+    prebanner_near_match)
+      printf '%s\n' "Reading prompt from stdin.." >&2
+      ;;
+    prebanner_extra_prefix)
+      printf '%s\n%s\n' "notice: preparing prompt" "Reading prompt from stdin..." >&2
+      ;;
+    prebanner_model_injected)
+      printf '%s\n%s\n' "Reading prompt from stdin..." "model: attacker-controlled" >&2
+      ;;
+    prebanner_session_injected)
+      printf '%s\n' "Reading prompt from stdin..." >&2
+      printf 'session id: %s\n' "$UUID_B" >&2
+      ;;
+    prebanner_duplicate_banner)
+      printf '%s\n%s\n' "Reading prompt from stdin..." "OpenAI Codex v0.144.0" >&2
+      ;;
+  esac
   if [ "${FAKE_SCENARIO:-}" = "preframe_fake_frame" ]; then
     printf '%s\n' "--------" >&2
     printf 'session id: %s\n' "$UUID_B" >&2
     printf '%s\n' "--------" >&2
   fi
-  printf '%s\n' "OpenAI Codex v0.test.0" >&2
+  if [ "${FAKE_SCENARIO:-}" = "prebanner" ]; then
+    printf '%s\n' "OpenAI Codex v0.145.0" >&2
+  else
+    printf '%s\n' "OpenAI Codex v0.test.0" >&2
+  fi
   printf '%s\n' "--------" >&2
   printf '%s\n' "workdir: /fixture/repo" >&2
   printf '%s\n' "model: gpt-5.5" >&2
@@ -206,7 +259,7 @@ else
 fi
 
 case "${FAKE_SCENARIO:-exact}" in
-  exact|session_missing|session_duplicate|session_malformed|session_injected|no_chrome|preframe_fake_frame|postframe_second_frame)
+  exact|codex_0145_prebanner_fixture|prebanner|prebanner_crlf|prebanner_ansi|prebanner_duplicate|prebanner_near_match|prebanner_extra_prefix|prebanner_model_injected|prebanner_session_injected|prebanner_duplicate_banner|session_missing|session_duplicate|session_malformed|session_injected|no_chrome|preframe_fake_frame|postframe_second_frame)
     write_complete_pair
     exit 0
     ;;
@@ -599,6 +652,31 @@ fi
 assert_not_contains "$DISPATCH_JSON" "$CANDIDATE_BYTES" "result JSON excludes candidate body"
 assert_not_contains "$DISPATCH_JSON" "$STDERR_SECRET" "result JSON excludes stderr body"
 assert_not_contains "$DISPATCH_JSON" "$PROMPT_SECRET" "result JSON excludes prompt body"
+
+# ---------------------------------------------------------------------------
+# Codex 0.145.0 may emit one exact benign prompt-source line before chrome.
+# The retained G0 stderr fixture hash is:
+# fc2e8df167caa1165ce44778c466811eb6a02e4abaf394ffefbe36a4ce2dec5b
+# ---------------------------------------------------------------------------
+run_dispatch codex_0145_prebanner_fixture --runner codex --model gpt-5.6-sol --effort xhigh
+assert_authored "Codex 0.145.0 retained pre-banner fixture"
+assert_eq "$DISPATCH_SESSION_ID" "019f94b1-7105-7f60-81a8-82b23cb81f46" "Codex 0.145.0 retained fixture: anchored session id"
+
+run_dispatch prebanner --runner codex --model gpt-5.5 --effort xhigh
+assert_authored "exact benign pre-banner"
+assert_eq "$DISPATCH_SESSION_ID" "$UUID_A" "exact benign pre-banner: anchored session id"
+
+run_dispatch prebanner_crlf --runner codex --model gpt-5.5 --effort xhigh
+assert_authored "CRLF benign pre-banner and chrome"
+assert_eq "$DISPATCH_SESSION_ID" "$UUID_A" "CRLF benign pre-banner: anchored session id"
+
+for scenario in prebanner_ansi prebanner_duplicate prebanner_near_match prebanner_extra_prefix prebanner_model_injected prebanner_session_injected prebanner_duplicate_banner; do
+  run_dispatch "$scenario" --runner codex --model gpt-5.5 --effort xhigh
+  assert_rejected "adversarial $scenario"
+  assert_eq "$(fake_run_count)" "1" "adversarial $scenario: one attempt"
+  assert_not_contains "$DISPATCH_JSON" "$UUID_A" "adversarial $scenario: UUID_A not adopted"
+  assert_not_contains "$DISPATCH_JSON" "$UUID_B" "adversarial $scenario: UUID_B not adopted"
+done
 
 # ---------------------------------------------------------------------------
 # The only other accepted witness: stdout == sidecar + exactly one LF.

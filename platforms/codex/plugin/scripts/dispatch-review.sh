@@ -224,6 +224,8 @@ fi
 
 # shellcheck source=lib/json-emit.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
+# shellcheck source=lib/grok-effort.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/grok-effort.sh"
 
 passive_capture() {
   local status="${1:-}"
@@ -572,7 +574,9 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # arg can hit ARG_MAX before grok runs → avoidable no_verdict. PROMPT_FILE is an
   # absolute mktemp path (grok resolves --prompt-file relative to --cwd, so it MUST be
   # absolute — Spike-verified 2026-06-29: a relative path errored, absolute worked).
+  grok_effort_note "$EFFORT" "dispatch-review"
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+      --reasoning-effort "$(grok_effort_clamp "$EFFORT")" \
       --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>&1
   GROK_RC=$?   # do NOT swallow with `|| true`: no `set -e` here, so capturing is safe
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true

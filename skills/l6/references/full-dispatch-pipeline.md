@@ -24,6 +24,14 @@ orchestration.
 runs the mechanical checks, judges convergence-by-verification, and holds merge
 authority. A dispatched green or reviewer pass is not authoritative by itself.
 
+## Capability-state surface rule
+
+Identical to `/l5` — canonical text in
+[`../../l5/references/hetero-impl-loop.md`](../../l5/references/hetero-impl-loop.md)
+§ "Capability-state surface rule". `/l6` delta: the rule applies before the **verification-authoring**
+dispatch too, not only the implementation dispatch, because that leaf runs on a different engine whose
+quota and skill-transport state is what the roster is reporting.
+
 ## Machinery (existing only — /l6 adds no new scripts)
 
 - [`../../../bin/autopilot.js`](../../../bin/autopilot.js) (`engine implement-review`, canonical)

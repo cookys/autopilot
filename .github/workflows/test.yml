@@ -70,6 +70,18 @@ jobs:
         # in scripts/sync-manifest.json; replaces the hand-copied per-ritual steps.
         run: bash scripts/sync-all.sh --check
 
+      - name: Roster-field report (advisory)
+        # NOT a gate. Prints the roster's three-bucket table into the job log so a
+        # field that loses its last consumer is visible on every run, not only when
+        # someone remembers to look. Deliberately NOT registered as a sync-all
+        # ritual: sync-all only surfaces a ritual's output when it FAILS, so a
+        # never-failing report registered there would print nothing while appearing
+        # in the checks list as passing. `continue-on-error` keeps a broken report
+        # (exit 2 + REPORT-HEALTH) from failing the build while still colouring the
+        # step red. Plan: docs/plans/2026-07-25-roster-field-report.md
+        continue-on-error: true
+        run: node scripts/report-roster-field-consumers.js
+
       - name: Release-hygiene gate
         # Check 7 (slash-entry probe) needs a `claude` binary + auth — neither
         # exists on a CI runner. The skip is loud by design; giving CI an API

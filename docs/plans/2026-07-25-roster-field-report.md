@@ -151,10 +151,10 @@ sees it, and the fields found today are resolved.
 
 | KR | Measure | Target |
 |---|---|---|
-| KR1 | The 44-field match table | reproducible by one command; printed by a registered ritual whose triggers are exactly the report's scan roots, and unconditionally in CI |
+| KR1 | The 44-field match table | reproducible by one command; printed unconditionally by a dedicated CI step |
 | KR2 | The report is presented, not merely owned | invoked non-blockingly from `scripts/preflight-release.sh`; owner named in `CLAUDE.md` |
 | KR3 | The five operator-relevant values in §1c | reach the operator on foreman-driven `/l5` `/l6` runs |
-| KR4 | `spec_review` | recorded as a deletion-manifest candidate in the semantic inventory |
+| KR4 | `spec_review` | recorded as a deletion-manifest candidate in the semantic inventory — **deferred**, that file is not on this base (§3, §6 R8) |
 
 No KR targets a field count. Phase 2 changes the distribution by design, and a count target would be
 either trivially met or self-contradicting (an earlier draft asserted both a fixed baseline and that no
@@ -188,12 +188,12 @@ modeled-zero bucket — which, by §1b, is not all of them. Blocking is §8 Q1.
 |---|---|---|
 | `scripts/report-roster-field-consumers.js` | **new** | The measurement, shipped. Named `report-`, not `check-`, so its advisory nature is legible at the call site |
 | `hooks/tests/report-roster-field-consumers.test.sh` | **new** | Oracle: classifier behaviour, the exclusion contract, exit 0 on findings |
-| `scripts/sync-manifest.json` | edit | Register the ritual, with triggers covering every scanned tree |
+| ~~`scripts/sync-manifest.json`~~ | **not edited — see below** | `sync-all.sh` surfaces a ritual's output only when it FAILS (`sync-all.sh:192`). A never-failing report registered there would print nothing on every run while appearing in the checks list as passing. Registration is therefore dropped: it would be invisible *and* misleading. Consequence: there is no trigger set, so the trigger-vs-scan-root question disappears with it |
 | `.github/workflows/test.yml` | edit | Run the report unconditionally and print its table into the job log |
 | `scripts/preflight-release.sh` | edit | Non-blocking invocation at release prep — prints the no-detected-match bucket, never changes that script's exit code |
 | `skills/l5/references/hetero-impl-loop.md` | edit | One capability-state surface rule covering the five fields |
 | `skills/l6/references/full-dispatch-pipeline.md` | edit | Delta pointing at the `/l5` rule |
-| `docs/projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md` | edit | Record that the recipe is mechanized; name `spec_review` a deletion-manifest candidate |
+| `docs/projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md` | **deferred** | That file does not exist on `origin/develop`; it lives on the unmerged owner-kernel branch. The `spec_review` handoff edit must be made there or after that branch merges (§6 R8) |
 | `CLAUDE.md` | edit | Inventory row naming the script **and its owner** |
 | `docs/BACKLOG.md` | edit | §8 carry-overs |
 
@@ -354,6 +354,10 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
   `qc_panel_aggregation`'s is a parenthetical, and a future edit could reduce any of them to a bare
   mention without changing the count. The report cannot
   see that difference (§1b); only a re-read would.
+- **R8 — two Phase-1 items could not be done on this base.** The semantic-inventory handoff (KR4) needs a
+  file that exists only on the unmerged owner-kernel branch. And the `sync-manifest` registration was
+  dropped on discovering the harness hides a passing ritual's output — a design fact that only surfaced by
+  reading `sync-all.sh`, not by reviewing this plan. Both are recorded rather than quietly skipped.
 - **Inversion**: the surest way to fail is to let the report grow gate semantics — a varying exit code, a
   threshold, a registry. Each reintroduces the soundness burden the descope removed. §2.5 states exit 0
   as a constraint for exactly this reason.

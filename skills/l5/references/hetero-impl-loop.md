@@ -56,6 +56,27 @@ path, the foreman heartbeats it, and depth-0 watches
 `node scripts/watch-foreman.js --ledger <path>` (Monitor on CC, `--once` poll
 elsewhere). Ritual + report-only discipline: front-door § "Live sensing".
 
+## Capability-state surface rule
+
+Before the **first implementation dispatch** of a unit, surface these roster values to the operator
+when present. They describe one situation — the capability picture the run is about to proceed under —
+so they are one rule, not five; a healthy run surfaces nothing.
+
+- every string in `capability_warnings` (an engine was demoted, or lacks native skill support);
+- `quota_reset_at` when non-null — say **a** configured engine's quota is constrained and when it
+  clears. **Do not name a role**: the roster emits no per-role quota value, so the role the producer
+  selected is not recoverable and any attribution would be invented;
+- `capability_state_source` when it is exactly `none` — "capability-state consultation is off for this
+  project; these values were not read from the capability store". Only `none`: the resolver
+  distinguishes it from `unknown`, which means consulted-but-no-fresh-data;
+- `skill_mode_requested` when it is `auto` **and** `skill_mode_effective` is `off` — skill transport was
+  requested automatically and resolved to none. Only that pair: `off`/`prompt`/`native` pass through
+  unchanged, so `auto` is the only mode that can diverge, and `auto → prompt` is ordinary resolution;
+- `domain_source` whenever `work_domain` is reported, so a reader knows whether the domain was declared
+  or inferred.
+
+Rationale and evidence: [`../../../docs/plans/2026-07-25-roster-field-report.md`](../../../docs/plans/2026-07-25-roster-field-report.md) §1c.
+
 ## Verify-first wiring rule
 
 When `resolve-review-loop.sh` emits `verify_first: true`, the foreman MUST pass

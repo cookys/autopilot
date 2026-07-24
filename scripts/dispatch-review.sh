@@ -96,8 +96,16 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_REVIEW_SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-review-*' || true
+# Pre-dispatch context-window gate (lib/context-window.sh). Sourced best-effort: a missing
+# helper degrades to "no gate", never to a dispatch outage.
+# shellcheck source=/dev/null
+[ -r "$_REVIEW_SELF_DIR/lib/context-window.sh" ] && . "$_REVIEW_SELF_DIR/lib/context-window.sh" || true
+# Canonical json_escape, so die_precondition can emit VALID JSON for any message.
+# shellcheck source=/dev/null
+[ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""
+CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
 # DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
 # heartbeats to the ledger and lands its JSON result atomically (lib/dispatch-detach.sh).
@@ -113,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
     --checklists) CHECKLISTS="${2:-}"; shift 2 ;;
+    --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --ledger)    LEDGER="${2:-}"; shift 2 ;;
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
@@ -122,7 +131,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$RUNNER" "$MODEL" "$1"; exit 2; }
+# Every interpolated value goes through json_escape: an unescaped quote in a message
+# (e.g. a model id quoted inside a reason string) silently produced INVALID JSON, which
+# a parsing caller reads as a transport failure rather than a precondition failure.
+# Falls back to raw interpolation only if json-emit.sh could not be sourced.
+_rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
+die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
@@ -404,11 +418,20 @@ review_manifest_finalize() {
 }
 write_review_manifest
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-review: run_id=${REVIEW_RUN_ID} manifest=${REVIEW_MANIFEST_FILE:-none} (watch: scripts/dispatch-status.js --run ${REVIEW_RUN_ID})" >&2
-DIFF_SIZE_BYTES="$(wc -c < "$DIFF_FILE")"
-if [ "$DIFF_SIZE_BYTES" -gt 98304 ]; then
-  SIZE_WARNING="large diff (${DIFF_SIZE_BYTES} bytes) exceeds 96 KB; large diffs can trigger prompt echo, consider splitting"
-  echo "WARNING: $SIZE_WARNING" >&2
-  printf '[dispatch-review: %s]\n' "$SIZE_WARNING" >> "$RAW_LOG"
+# Context-window gate. This REPLACES a former hardcoded 96 KB advisory: a fixed byte
+# threshold is meaningless once the target engine's real window is known (the same diff
+# that overflows gpt-5.3-codex-spark's 121600 window is comfortable inside grok-4.5's
+# 500000). Over budget fails closed BEFORE the runner spawns, so nothing is spent.
+if declare -F context_window_gate > /dev/null 2>&1; then
+  _CB_MODE="$(context_window_mode "${CONTEXT_WINDOW_GATE:-}")"
+  if ! context_window_gate "$_CB_MODE" "$_REVIEW_SELF_DIR" "$MODEL" \
+    "$DIFF_FILE" "${SPEC_FILE:-}" "${PACK_FILE:-}"; then
+    printf '[dispatch-review: context-window blocked: %s]\n' "${CONTEXT_WINDOW_REASON:-}" >> "$RAW_LOG"
+    die_precondition "context budget exceeded: ${CONTEXT_WINDOW_REASON:-over budget}"
+  fi
+  [ -n "${CONTEXT_WINDOW_JSON:-}" ] \
+    && printf '[dispatch-review: context-window %s] %s\n' \
+      "${CONTEXT_WINDOW_VERDICT:-}" "${CONTEXT_WINDOW_JSON:-}" >> "$RAW_LOG"
 fi
 
 NONCE=""

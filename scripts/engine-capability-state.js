@@ -123,7 +123,7 @@ function validateEvent(event) {
     failValidation('capability must be an object');
   }
 
-  const capAllowed = new Set(['quota', 'skill_transport']);
+  const capAllowed = new Set(['quota', 'skill_transport', 'context_window']);
   for (const key of Object.keys(event.capability)) {
     if (!capAllowed.has(key)) {
       failValidation(`unknown key in capability: ${key}`);
@@ -200,6 +200,34 @@ function validateEvent(event) {
       }
     }
   }
+
+  // context_window — optional dimension, same posture as skill_transport: absent is
+  // fine, `null` total_tokens means "observed nothing" and never clobbers a valid
+  // reading during the merge.
+  const ctxWindow = event.capability.context_window;
+  if (ctxWindow !== undefined) {
+    if (!ctxWindow || typeof ctxWindow !== 'object' || Array.isArray(ctxWindow)) {
+      failValidation('capability.context_window must be an object');
+    }
+    const ctxAllowed = new Set(['total_tokens', 'evidence', 'observed_at']);
+    for (const key of Object.keys(ctxWindow)) {
+      if (!ctxAllowed.has(key)) {
+        failValidation(`unknown key in capability.context_window: ${key}`);
+      }
+    }
+    if (ctxWindow.total_tokens !== undefined && ctxWindow.total_tokens !== null) {
+      if (!Number.isInteger(ctxWindow.total_tokens) || ctxWindow.total_tokens < 1) {
+        failValidation('context_window.total_tokens must be a positive integer or null');
+      }
+    }
+    if (ctxWindow.evidence !== undefined && ctxWindow.evidence !== null && typeof ctxWindow.evidence !== 'string') {
+      failValidation('context_window.evidence must be a string or null');
+    }
+    // Output-only on the merged `current` view; accepted on input for round-trip parity.
+    if (ctxWindow.observed_at !== undefined && ctxWindow.observed_at !== null && typeof ctxWindow.observed_at !== 'string') {
+      failValidation('context_window.observed_at must be a string or null');
+    }
+  }
 }
 
 function resolveStoreConfig(options) {
@@ -273,6 +301,9 @@ function readStoreRows(storeFile, silentWarn = false) {
 function mergeCurrentState(rows, runner, model, role, nowMs) {
   let mergedQuota = null;
   let mergedSkill = null;
+  // context_window is merged ROLE-AGNOSTICALLY (like quota, unlike skill_transport):
+  // a model's window is a property of the model, not of the seat it is dispatched into.
+  let mergedCtx = null;
 
   for (const row of rows) {
     if (row.runner !== runner || row.model !== model) {
@@ -389,6 +420,23 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
         mergedSkill.last_bench_id = (s.last_bench_id !== undefined ? s.last_bench_id : null);
       }
     }
+
+    // Process capability.context_window — latest event carrying a non-null total_tokens
+    // wins. A null reading means "observed nothing" and must never clobber a valid
+    // window, mirroring the 'unknown' discipline used for skill_transport.
+    if (row.capability && row.capability.context_window) {
+      const c = row.capability.context_window;
+      const eid = toEventId(row.event_id) || 0;
+      if (!mergedCtx) {
+        mergedCtx = { total_tokens: null, eventId: -1, observedAt: null, evidence: null };
+      }
+      if (c.total_tokens !== undefined && c.total_tokens !== null && eid > mergedCtx.eventId) {
+        mergedCtx.total_tokens = c.total_tokens;
+        mergedCtx.eventId = eid;
+        mergedCtx.observedAt = row.observed_at || null;
+        mergedCtx.evidence = (c.evidence !== undefined ? c.evidence : null);
+      }
+    }
   }
 
   // Construct final merged output
@@ -410,7 +458,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
 
   // Find observed_at from latest event, or use now ISO
   let finalObserved = new Date(nowMs).toISOString();
-  if (mergedQuota || mergedSkill) {
+  if (mergedQuota || mergedSkill || mergedCtx) {
     const latestEventId = finalEventId;
     const matchingRow = rows.find(r => toEventId(r.event_id) === latestEventId);
     if (matchingRow) finalObserved = matchingRow.observed_at;
@@ -443,6 +491,13 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
         // Consumers gating on freshness MUST use these, not the aggregate observed_at. (gpt-5.5 P6 F4)
         native_observed_at: (mergedSkill && mergedSkill.native !== null) ? mergedSkill.nativeObservedAt : null,
         prompt_pack_observed_at: (mergedSkill && mergedSkill.prompt_pack !== null) ? mergedSkill.promptObservedAt : null
+      },
+      context_window: {
+        total_tokens: mergedCtx ? mergedCtx.total_tokens : null,
+        evidence: mergedCtx ? mergedCtx.evidence : null,
+        // Per-field observation time (output-only). A consumer sizing a dispatch should
+        // treat a stale window as suspect, so it must not read the aggregate observed_at.
+        observed_at: (mergedCtx && mergedCtx.total_tokens !== null) ? mergedCtx.observedAt : null
       }
     }
   };

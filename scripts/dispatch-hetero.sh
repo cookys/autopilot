@@ -122,6 +122,11 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" \
        'hetero-*-log-*' 'dispatch-hetero-*' 'pi-rpc-session-*' 'hetero-detach-state-*' || true
+# Pre-dispatch context-window gate (lib/context-window.sh). Best-effort source: a missing
+# helper degrades to "no gate", never to a dispatch outage.
+# shellcheck source=/dev/null
+[ -r "$SELF_DIR/lib/context-window.sh" ] && . "$SELF_DIR/lib/context-window.sh" || true
+CONTEXT_WINDOW_GATE=""     # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
@@ -803,6 +808,7 @@ while [ $# -gt 0 ]; do
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
+    --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
@@ -1137,6 +1143,18 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   fi
 else
   EFFECTIVE_SKILL_MODE="off"
+fi
+
+# --- context-window gate ---
+# Placed AFTER skill-pack concatenation (the pack inflates PROMPT_FILE, and the engine
+# pays for the packed size, not the original) and BEFORE the worktree exists, so an
+# over-budget unit costs neither tokens nor a worktree to reap. This generalizes the
+# skill-pack's own SKILL_PACK_MAX_BYTES check above from one input to the whole payload.
+if declare -F context_window_gate > /dev/null 2>&1; then
+  _CB_MODE="$(context_window_mode "${CONTEXT_WINDOW_GATE:-}")"
+  if ! context_window_gate "$_CB_MODE" "$SELF_DIR" "$MODEL" "${PROMPT_FILE:-}"; then
+    die_precondition "context budget exceeded: ${CONTEXT_WINDOW_REASON:-over budget}"
+  fi
 fi
 
 # --- isolated worktree (the non-skippable safety rail) ---

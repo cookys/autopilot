@@ -17,7 +17,7 @@ schema-declared but read by nothing is dead contract surface, bound for the P3 d
 
 The recipe is correct. What it lacks is a body: it runs when a human remembers, over the fields that
 human examined. Running it mechanically over all 44 always-on fields surfaced five more the manual pass
-did not reach, one of which discards operator-facing alerts.
+did not reach, one of which carries operator-facing alert strings with no detected consumer.
 
 **This plan ships the measurement as a report and wires the fields it found.** The report is advisory —
 it always exits 0 — but it is *triggered broadly and read by someone*, which is the part an earlier
@@ -62,6 +62,12 @@ from:
 
 ### 1b. What the numbers are and are not
 
+**Scan roots.** The report scans exactly seven roots — `src/`, `scripts/`, `skills/`, `hooks/`,
+`references/`, `bin/`, `agents/` — and nothing else. This is deliberately the same set as the ritual's
+triggers (§4.1 step 3), so the scanned set and the triggered set are equal *by construction* rather than
+by a claim that must be maintained. A tracked executable outside those roots is invisible to the report;
+that is a stated limit, not an accident.
+
 **The report counts literal matches under the §1a definition. It does not determine consumption.** It
 cannot tell an executable read from a same-shaped token in a string or declaration, nor an instruction in
 a `skills/**` document from an incidental mention there, nor see a consumer reached by forwarding or by
@@ -101,20 +107,26 @@ substitutions of reviewer fields; neither reads the fields in §1c.
 Of 44 always-on fields: **30** have an access-shaped match in an executable file; **8** have no such
 match but do have a `skills/**` match; **6** have neither.
 
-The `skills/**` bucket is treated as enforced because this repo already relies on that class — but note
-only one of the eight was sampled (`skills/quality-pipeline/references/code-review.md`, where
-`independent_harness` appears in an instruction to reproduce a finding before it blocks). **The other
-seven are unexamined**; they are out of this plan's scope (§7) and their strength is §8 Q3. The contrast
-sample on the other side is the `CLAUDE.md` script-inventory row, which is description, not instruction —
-which is why file type alone cannot separate the buckets.
+**All eight `skills/**` matches were read**, not sampled. Each has at least one site that instructs
+rather than describes: `independent_harness` and `qc_panel_aggregation` in
+`skills/quality-pipeline/references/code-review.md` (reproduce-before-blocking; `majority` forbidden as an
+aggregation); `cross_family_required` / `cross_family_satisfied` in the same file's decorrelate-by-family
+rule; `required_review_families` and `min_panel_size` in `skills/ceo-agent/references/level-front-door.md`
+(panel composition with a resolver-unavailable fallback); `l1_required` there under high `review_risk`;
+and `review_diff_scope` there defining what each round's review reads. The weakest is
+`qc_panel_aggregation`, whose only substantive site names the field inside a parenthetical explaining what
+the resolver rejects — instructional in effect, but by the narrowest margin of the eight.
+
+The contrast case on the other side is the `CLAUDE.md` script-inventory row: description, not instruction.
+That contrast is why file type alone cannot separate the buckets.
 
 The six with no detected match, each read at its producer:
 
 | Field | Producer behaviour | Would an operator act differently seeing it? |
 |---|---|---|
 | `capability_warnings` | three strings: implementer demoted for exhausted quota; reviewer demoted likewise; runner lacks native skill support | **Yes** — the engine that will do the work has been substituted |
-| `quota_reset_at` | non-null only when an implementer or reviewer quota is `exhausted` or `limited`, carrying **that role's** reset time | **Yes** — determines wait-vs-switch. Which role and which status it came from are separate values, not derivable from the timestamp |
-| `capability_state_source` | `unknown` \| `none` \| `store` | **Yes for `none`** — capability state was not read, so a `quota_status` of `unknown` is "never checked". `unknown` is *not* shown by the producer to mean the same thing and is not claimed here |
+| `quota_reset_at` | non-null only when an implementer or reviewer quota is `exhausted` or `limited`. The producer selects by precedence: implementer-exhausted, then reviewer-exhausted, then implementer-limited, then reviewer-limited, else the later of the two known times | **Yes, but only partially** — it says *something* is quota-constrained and when it clears, which is enough for wait-vs-switch. **It cannot say whose.** The roster's only quota fields are `quota_status` and `quota_reset_at`; no per-role quota value is emitted, so the selected role is not recoverable downstream (§8 Q6) |
+| `capability_state_source` | `unknown` \| `none` \| `store`. The producer states the distinction in-line: `none` means capability-state consultation is **explicitly off** ("deliberately not consulted"); `unknown` means it **was** consulted but the store held no fresh data | **Yes for `none`** — the quota and skill-mode values are configured defaults rather than observations. An earlier draft rendered `none` as "capability state was not read" and additionally claimed a `quota_status` of `unknown` meant "never checked"; the producer's own comment separates those, and only the `none` reading is claimed here |
 | `skill_mode_requested` | the requested mode against `skill_mode_effective`; a warning is emitted **only** when `requested === "native"` and native is unsupported, so the `auto` → degraded path emits nothing | **Yes** — a run that requested `auto` and got `off` has no skill transport and is told nothing. This settles a question earlier drafts left open: the divergence is **not** covered by `capability_warnings` |
 | `domain_source` | `none` \| `explicit` \| `auto` — the provenance tag for `work_domain` | **Yes** — provenance is diagnostic even where the tagged value routes nothing: reading `work_domain` without knowing whether it was declared or inferred invites trusting a guess. An earlier draft adjudicated this inert on the grounds that a provenance tag cannot matter more than the value it tags; that conflates routing with diagnosis |
 | `spec_review` | documented in the config template as "run the reviewer loop on the spec BEFORE dispatching impl"; resolved `on` here | **Not decided here** — handed to the P3 deletion manifest (§4 Phase 2) |
@@ -129,8 +141,8 @@ sees it, and the fields found today are resolved.
 
 | KR | Measure | Target |
 |---|---|---|
-| KR1 | The 44-field match table | reproducible by one command; printed by a registered ritual that runs on changes to any scanned tree, and unconditionally in CI |
-| KR2 | The report's output has a named owner and a landing place | stated in the ritual's manifest row and in `CLAUDE.md` |
+| KR1 | The 44-field match table | reproducible by one command; printed by a registered ritual whose triggers are exactly the report's scan roots, and unconditionally in CI |
+| KR2 | The report is presented, not merely owned | invoked non-blockingly from `scripts/preflight-release.sh`; owner named in `CLAUDE.md` |
 | KR3 | The five operator-relevant values in §1c | reach the operator on foreman-driven `/l5` `/l6` runs |
 | KR4 | `spec_review` | recorded as a deletion-manifest candidate in the semantic inventory |
 
@@ -164,6 +176,7 @@ Blocking is §8 Q1.
 | `hooks/tests/report-roster-field-consumers.test.sh` | **new** | Oracle: classifier behaviour, the exclusion contract, exit 0 on findings |
 | `scripts/sync-manifest.json` | edit | Register the ritual, with triggers covering every scanned tree |
 | `.github/workflows/test.yml` | edit | Run the report unconditionally and print its table into the job log |
+| `scripts/preflight-release.sh` | edit | Non-blocking invocation at release prep — prints the no-detected-match bucket, never changes that script's exit code |
 | `skills/l5/references/hetero-impl-loop.md` | edit | One capability-state surface rule covering the five fields |
 | `skills/l6/references/full-dispatch-pipeline.md` | edit | Delta pointing at the `/l5` rule |
 | `docs/projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md` | edit | Record that the recipe is mechanized; name `spec_review` a deletion-manifest candidate |
@@ -185,19 +198,35 @@ No registry file. The five dispositions live in §1c with their producer evidenc
    - Print the three-bucket summary. Use the phrase **"no detected modeled match"** for the third
      bucket — not "unenforced", not "dead".
    - `--json` for machine output. **Exit 0 always.**
-2. `hooks/tests/report-roster-field-consumers.test.sh` — six cases:
-   1. runs on the repo and exits 0;
-   2. `--json` parses and contains one entry per field in the schema's `required` set (the always-on
-      contract — conditional fields are absent by design, §2.5);
-   3. **exclusion contract**: a fixture field whose only access-shaped match is in an excluded
-      *executable* path (`platforms/**` mirror `.js`, or `hooks/tests/**` `.sh`) lands in the
-      no-detected-match bucket. The exclusion must be tested with a path that would **otherwise count** —
-      testing it with the config template proves nothing, since a `.md` outside `skills/**` is not a
-      match under §1a in the first place;
-   4. a fixture field with a `skills/**` match lands in the prose bucket;
-   5. a fixture field whose only executable match is on a comment line lands in the no-detected-match
-      bucket (pins the comment rule);
-   6. exit stays 0 when the no-detected-match count is non-zero (proves advisory, not gate).
+2. `hooks/tests/report-roster-field-consumers.test.sh`, **table-driven over a synthetic fixture tree**.
+   Fixture injection: the test builds a temp directory containing a minimal
+   `schemas/review-loop-contract.schema.json` (whose `required` array names only the fixture fields) plus
+   the seven scan roots, initialises it as a git repo and commits, then runs the report with that
+   directory as its repo argument. Nothing depends on the live repo's contents.
+
+   **Positive oracle first** — without it, an implementation that classified *every* executable
+   occurrence as unmatched would pass a suite made only of negatives:
+   1. one case **per access shape** in §1a (eleven shapes), each a fixture field whose sole occurrence is
+      that shape in a `.js` or `.sh` under a scan root ⇒ each lands in the matched bucket;
+   2. one case per **executable extension** in §1a ⇒ matched bucket, proving the extension set is honoured;
+   3. a field with an ordinary access-shaped match ⇒ matched bucket, and its reported site path equals the
+      fixture path (proves sites are reported, not just counted).
+
+   **Negative and boundary cases:**
+   4. a field whose only executable occurrence is **not** any §1a shape (a bare word in a string) ⇒
+      no-detected-match bucket, counted as incidental;
+   5. a field whose only executable match is on a **comment** line ⇒ no-detected-match bucket;
+   6. **one case per exclusion family** — producers, `schemas/`, `platforms/`, `hooks/tests/`, `docs/`,
+      `evals/`, `CHANGELOG.md`, `CLAUDE.md`, the config template — each placing an otherwise-counting
+      access-shaped match in that excluded location ⇒ no-detected-match bucket. The exclusion must be
+      exercised with a path that would **otherwise count**: testing it with the config template alone
+      proves nothing, since a `.md` outside `skills/**` is not a match under §1a in the first place;
+   7. a field matched only under `skills/**` ⇒ prose bucket;
+   8. a field with a match **outside the seven scan roots** ⇒ no-detected-match bucket (pins the scan-root
+      limit stated in §1b);
+   9. `--json` parses and contains exactly one entry per field in the fixture schema's `required` array;
+   10. exit stays 0 when the no-detected-match count is non-zero (proves advisory, not gate);
+   11. the report runs on the real repo and exits 0.
 3. **Register so it actually runs when it matters.** In `scripts/sync-manifest.json`:
    `id: roster-field-report`, `generator: null`,
    `check: node scripts/report-roster-field-consumers.js`, `tier: both`, and `trigger` covering the
@@ -208,14 +237,16 @@ No registry file. The five dispositions live in §1c with their producer evidenc
    table lands in every job log regardless of what changed.
    Because the ritual cannot fail, broad triggering costs only output — which is why this does not need
    the scan-set/trigger-set equality a blocking design would.
-4. **Name an owner.** The CLAUDE.md inventory row states who reads the table and when: the plan owner
-   reviews it at each release-prep (`preflight-release.sh` time). A report with no reader is the failure
-   mode this step exists to prevent, and naming an owner is the honest limit of what an advisory ritual
-   can do about it.
+4. **Present it, do not merely assign it.** Add a non-blocking invocation to
+   `scripts/preflight-release.sh`: it runs the report and prints the no-detected-match bucket into the
+   release-prep output, never affecting that script's exit code. Naming an owner in a CLAUDE.md row was an
+   earlier draft's answer and was not enough — it left the outcome resting on the same human memory the
+   plan set out to replace. The inventory row still names the owner, but the mechanism is the invocation.
 
-**Acceptance**: all six cases pass; the report prints a 44-row table and `--json` parses; the manifest
-row's triggers include all seven scanned trees; the CI job log contains the table. No count is an
-acceptance criterion (§2).
+**Acceptance**: every case in the table-driven suite passes, including all eleven access-shape positives;
+the report prints a 44-row table on the real repo and `--json` parses; the manifest row's triggers are
+exactly the seven scan roots; the CI job log contains the table; `preflight-release.sh` prints the bucket
+without altering its own exit code. No count is an acceptance criterion (§2).
 
 ### Phase 2 — resolve the six (size: S, same commit)
 
@@ -223,10 +254,13 @@ acceptance criterion (§2).
 reference. Before the first implementation dispatch, the foreman surfaces to the operator, when present:
 
 - every string in `capability_warnings`;
-- `quota_reset_at` when non-null, rendered **with the role and status it came from** ("implementer quota
-  exhausted, resets <t>"), because the timestamp alone does not say whose or why;
-- `capability_state_source` when it is `none`, stated as "capability state was not read" — **only
-  `none`**, since `unknown` is not established to carry that meaning;
+- `quota_reset_at` when non-null, rendered **without attributing a role** — "a configured engine's quota
+  is constrained; clears at <t>" — because the roster emits no per-role quota value and the selected role
+  is therefore not recoverable (§1c, §8 Q6). An earlier draft required rendering the role and status, which
+  is not implementable from the roster and would have invited a fabricated attribution;
+- `capability_state_source` when it is `none`, stated as "capability-state consultation is off for this
+  project, so the quota and skill-mode values are configured defaults, not observations" — **only
+  `none`**, since the producer distinguishes it from `unknown` (consulted, no fresh data);
 - `skill_mode_requested` when it differs from `skill_mode_effective`, naming both;
 - `domain_source` whenever `work_domain` is reported, so a reader knows whether the domain was declared
   or inferred.
@@ -252,11 +286,13 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
 
 | What | How | Gated by |
 |---|---|---|
-| Classifier + report correctness | `hooks/tests/report-roster-field-consumers.test.sh`, 6 cases | script |
-| Exclusion contract | case 3 — an excluded *executable* path must not count | script |
-| Comment rule | case 5 | script |
-| Advisory-not-gate | case 6 — exit 0 with non-zero findings | script |
-| Trigger breadth | assert the manifest row lists all seven scanned trees | script |
+| Positive classifier oracle | one case per §1a access shape (11) + per executable extension — without these a report that matches nothing passes | script |
+| Exclusion contract | one case per exclusion family, each with an otherwise-counting match | script |
+| Comment + non-shape rules | dedicated cases | script |
+| Scan-root limit | a match outside the seven roots must not count | script |
+| Advisory-not-gate | exit 0 with non-zero findings | script |
+| Trigger/scan-root equality | assert the manifest row's triggers equal the seven scan roots | script |
+| Release-prep presentation | `preflight-release.sh` prints the bucket and its exit code is unchanged | script |
 | No behavioural drift | `bash scripts/sync-all.sh --check`; resolver JSON byte-compared before/after | script |
 | CLAUDE.md inventory | `node scripts/check-claude-md-inventory.js` | script |
 | Doc integrity | `bash scripts/preflight-portability.sh`; `node scripts/doc-drift-gate.js` | script |
@@ -286,9 +322,10 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
 - **R6 — prose enforcement is only as strong as an agent reading it**, which is why KR3 is scoped to
   foreman-driven runs. Engine-CLI paths that resolve the roster with no agent reading `/l5` `/l6` are
   not covered (§8 Q2).
-- **R7 — seven of the eight `skills/**`-matched fields were never examined.** This plan treats them as
-  enforced on the strength of one sample plus repo precedent. If that assumption is wrong, the real
-  unenforced count is higher than six (§8 Q3).
+- **R7 — the `skills/**` bucket rests on reading eight documents, not on a mechanism.** All eight were
+  read and each has an instructing site (§1c), but `qc_panel_aggregation`'s is a parenthetical, and a
+  future edit could reduce any of them to a bare mention without changing the count. The report cannot
+  see that difference (§1b); only a re-read would.
 - **Inversion**: the surest way to fail is to let the report grow gate semantics — a varying exit code, a
   threshold, a registry. Each reintroduces the soundness burden the descope removed. §2.5 states exit 0
   as a constraint for exactly this reason.
@@ -298,7 +335,8 @@ the `/l5` reference tells a foreman what to surface, when, and in what wording.
 - Blocking on unmatched fields (§8 Q1).
 - Deleting any field, including `spec_review` — the P3 deletion manifest's call.
 - Any change to resolver behaviour, field semantics, or emitted JSON.
-- The 8 `skills/**`-matched fields — seven unexamined; their strength is §8 Q3.
+- The 8 `skills/**`-matched fields — read and found instructional (§1c); whether prose enforcement is
+  strong enough in general is §8 Q3.
 - `source` — matched on count alone, no claim made either way (§1b).
 - Reachability checking of dispatch-contract allowlists (§8 Q4).
 - Auditing the other resolvers (§8 Q5).
@@ -317,10 +355,14 @@ scanned set and the trigger set. Revisit if the report shows the count climbing.
 means a code-level surface (e.g. resolver stderr), which changes resolver behaviour and is excluded by
 §2.5.
 
-**Q3 — how strong is prose enforcement, and are all eight real?** Eight fields are matched only under
-`skills/**`; one was sampled and is a genuine instruction, seven were not examined. Both questions —
-whether those seven are instructions, and whether prose enforcement is strong enough in general — are
-open.
+**Q3 — how strong is prose enforcement?** All eight `skills/**`-matched fields were read and each
+instructs (§1c), so the bucket is not inflated today. The open question is the general one: an
+instruction only binds an agent that reads it, and nothing detects an instruction decaying into a mention.
+
+**Q6 — should the roster emit per-role quota state?** `quota_reset_at` is selected from one of four
+role/status combinations but the chosen role is not emitted, so no consumer can attribute it. Fixing that
+means adding fields to the resolver, which §2.5 excludes here. Until then the surface rule deliberately
+does not name a role.
 
 **Q4 (withdrawn, retained) — should a dispatch contract's allowlist be checked against its oracle?** An
 earlier draft built a phase on the premise that an `/l6` round was lost to an unreachable scope: the

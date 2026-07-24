@@ -29,6 +29,17 @@ ERR="$TEST_TMP/supervised-profile-controls.err"
 node "$SCRIPT" --repo "$REPO_ROOT" --tmp "$TEST_TMP/supervised-profile" >"$OUT" 2>"$ERR"
 RC=$?
 
+# On failure, SHOW the probe's stderr. Without this the suite prints eight identical
+# "not found in output" lines and nothing about the cause: the driver writes its real error
+# (e.g. `spawn bwrap ENOENT`, or a sandbox/userns denial) to $ERR, which the EXIT trap then
+# deletes with TEST_TMP. That is why a plain missing-package failure read as a logic failure
+# for an entire CI cycle.
+if [ "$RC" -ne 0 ]; then
+  echo "  --- probe stderr (exit $RC) ---" >&2
+  tail -c 2000 "$ERR" >&2 2>/dev/null || echo "  (no stderr captured)" >&2
+  echo "  --- end probe stderr ---" >&2
+fi
+
 assert_exit_code "$RC" 0 "supervised profile controls pass"
 assert_contains "$(cat "$OUT")" '"baseline_qualifies_partial": true' "baseline qualifies partial"
 assert_contains "$(cat "$OUT")" '"r1_forged_user_intent_acceptance_scores_fail": true' "forged user intent fails"

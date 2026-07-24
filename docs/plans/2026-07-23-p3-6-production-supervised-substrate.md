@@ -213,14 +213,14 @@ ambiguous launch/restart.
   `fixed_listeners_ready` record, bound to that role's exact PID, install/run/
   ABI hashes, and complete recipient endpoint list; it then revalidates all
   five service bindings again immediately before writing peer configs and
-  release files. The release window is 150 seconds, deliberately covering the
-  host's 130-second sum of bounded five-unit launch/PID/ready/socket/recheck
-  work plus setup margin. A shared 35-second collector validates each released
-  role as its acknowledgement appears, rather than serially giving each role a
-  separate deadline. The 240-second unit lifetime covers the maximum two-route
-  peer exchange, including bounded connect/send/read phases, and the
-  40-second acknowledgement hold. Tests lock these nested budgets so a later
-  timeout reduction cannot reintroduce a healthy-startup expiry race.
+  release files. The release window is 210 seconds, deliberately covering the
+  host's explicit 190-second five-unit launch/PID/ready/socket/recheck bound
+  plus a 10-second setup margin. A shared 30-second collector validates each
+  released role as its acknowledgement appears, rather than serially giving
+  each role a separate deadline; its 3-second safety margin fits inside the
+  35-second service hold. The 300-second unit lifetime covers the 210-second
+  release window plus hold. Tests lock these nested budgets so a later timeout
+  reduction cannot reintroduce a healthy-startup expiry race.
 
 ### Phase 3 - Durable witness, coordinator, and disabled broker
 
@@ -249,6 +249,33 @@ a recoverable success.
   revocation results remain explicitly disabled/unavailable. This is recovery
   core only: it creates no root-installed long-lived service, v2 handoff,
   Engine/effect path, or acceptance claim.
+
+- **P3b complete:** P3.5d reserves a bounded root-only P3.6 mailbox slot
+  before it consumes a v2 submit session, then publishes only a hash-only,
+  one-shot verified-intake handoff after verifier, workspace, session, and
+  shadow-witness cleanup converge. The public submit result never carries the
+  handoff identifier. If the mailbox is full, the open P3.5 session is left
+  untouched; a verified result is never cleaned up and then dropped. P3.5
+  masks termination signals as soon as root reads the private gateway result,
+  through validation, cleanup, and final publication.
+  A separate durable host consumes the record with an exclusive claim bound to
+  a freshly allocated generation/cohort, provisions root-owned role leaves,
+  creates a distinct five-route 512 KiB transport, verifies PID/UID/GID and
+  cgroup-v2 placement before any frame parse, seals each listener for its
+  sender, and releases services whose broker/revocation paths remain refusal
+  only. Fixed-schema integers reject Python booleans, root/service JSON rejects
+  non-finite values and lone surrogates, and stateless peer configs disclose
+  real runtime identity only for direct peers. Any claimed-handoff launch or
+  teardown uncertainty leaves a root-only abandoned-cohort tombstone and never
+  reopens the record. Both normal completion and TERM interruption block
+  further termination signals until units, runtime, and durable attempt state
+  have reached a terminal outcome. This still creates no Engine/effect/
+  acceptance path.
+
+  The 128-record mailbox is an intentional A0 safety/backpressure bound, not
+  an archival policy. It preserves an open session before consumption instead
+  of dropping work; a compaction/retention protocol is required before this
+  transit mailbox is used for unbounded-volume unattended progression.
 
 1. Implement the production witness as a separate service with authenticated
    hash-only `appendIfHead`, atomic `appendBatchIfHead`, `getHead`, and
@@ -290,6 +317,9 @@ New focused commands (created by this phase):
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-durable-contract.test.sh
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-p35-durable-handoff.test.sh
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-durable-transport.test.sh
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-durable-host.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-contract.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-host.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-peer.test.sh
@@ -317,6 +347,12 @@ corresponding identity/CAS/disabled-effect guard is locally mutated, and pass
 on the committed guard. A service startup alone is not a proof of authority
 separation.
 
+P3b evidence on 2026-07-23: six focused deterministic gates passed; the P3.5
+privileged installed-snapshot gate passed; and the P3.6 privileged
+installed-snapshot gate passed 38 assertions covering normal five-role
+teardown, replay rejection, direct SIGTERM tombstone/teardown, and SIGKILL
+recovery on the next admission.
+
 ## 6. Risks and Inversion
 
 | Failure to prevent | Inversion / mitigation |
@@ -325,10 +361,13 @@ separation.
 | A worker impersonates a service through filesystem/socket access. | Exact PID/UID/GID plus cgroup verification before bytes; private roots, independently attested identities, and hostile substitution tests. |
 | A Unix socket path exceeds the kernel limit or a receiver rewrites/pre-seeds a published endpoint. | The frozen endpoint layout has a `107`-byte ASCII path guard; root validates the server-created listener, seals its parent to the fixed sender group, requires exactly that one socket entry, and root-cleans rejected staging contents before release. |
 | Process hiding makes a cgroup check silently unavailable. | P2b omits `ProtectProc=invisible` only for this substrate, pins release material in private role roots, and requires exact credentials plus `/proc/<pid>/cgroup` before parsing. |
-| A healthy early service expires while the root host completes five bounded launches or peer exchange. | The 150-second release window covers the explicit 130-second pre-release bound; one shared 35-second ack collector validates receipts as they arrive, and 40-second hold plus 240-second unit maximum are compositionally tested against connect/send/read peer phases. |
+| A healthy early service expires while the root host completes five bounded launches or peer exchange. | The 210-second release window covers the explicit 190-second pre-release bound plus margin; one shared 30-second ack collector and 35-second hold fit inside the 300-second unit maximum. |
 | Root silently collapses witness/coordinator independence. | Installer rejects root for those roles and binding validator rejects identity or attestation reuse. |
 | A lost response leads to automatic effect replay. | No effects exist in A0; persistent ambiguous state is quarantine/unknown and blocks new work. |
 | CAS/batch shape exists but is not durable/atomic. | Readback, chain verification, conflicting concurrent requests, crash-tail, and restart tests are mandatory. |
+| A full P3.6 mailbox consumes a verified P3.5 intake without an ingress record. | P3.5 takes the root-only mailbox admission lock and proves bounded capacity before it creates its one-shot submit claim; it holds that reservation through post-cleanup publication. Full capacity leaves the session open. |
+| TERM lands between a completed lifecycle and terminal cleanup. | P3.6 blocks INT/TERM inside both normal and error lifecycle paths before leaving the body, and restores the original mask only after units, runtime, tombstone/attempt, and locks are finalized; the live gate injects TERM after the durable claim. |
+| Installer creates a root before ownership setup fails. | The mkdir callback marks this invocation as owner immediately after mkdir, while signals are blocked; any later chown/chmod/snapshot failure rolls back that partial root. |
 | P0 is prematurely claimed as production evidence. | Project status remains P0 funding-only until the complete corpus explicitly targets this committed substrate. |
 
 ## 7. Review Log
@@ -358,3 +397,6 @@ separation.
 | R8 | Architect | SHIP: recovery now enforces the same coordinator operation/status semantics as the live handler; hash-self-consistent invalid terminal records quarantine, and the Python `unknown` reservation cross-validates in the Node ABI normalizer. |
 | R8 | QA / Skeptic | SHIP: hostile lone-surrogate journal records quarantine instead of crashing; receipt/readback/head invariants, exact replay, unknown reservations, and Python broker/revocation results have focused deterministic coverage. |
 | R8 | Ops/SRE | SHIP: root-owned leaf, lock, fsync, capacity, cohort-reuse, and quarantine behavior remains fail-closed after the final reservation and revocation changes. |
+| R9 | Architect | SHIP: P3.5 masks from root-private result read through cleanup/publication, the pre-claim mailbox reservation holds through publication, and P3.6 normal/TERM finalization plus installer mkdir rollback are closed. |
+| R9 | Ops/SRE | SHIP: P3.5/P3.6 privileged gates pass; P3.6 covers direct TERM teardown and SIGKILL recovery. The 128-record mailbox is accepted as A0 backpressure, with compaction/retention explicitly deferred. |
+| R9 | QA / Skeptic | SHIP: focused hostile-schema, redaction, transport, handoff, recovery, and installed-snapshot lifecycle gates pass with no remaining Critical/Major finding. |

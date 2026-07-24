@@ -53,6 +53,7 @@ FILE_LAYOUT = {
     "workspace_registry": "lib/supervised-workspace-registry.py",
     "shadow_witness": "lib/supervised-shadow-witness.py",
     "shadow_witness_client": "lib/supervised-shadow-witness-client.py",
+    "durable_handoff": "lib/supervised_p35_durable_handoff.py",
     "canonical": "lib/owner-kernel/canonical.js",
     "actions": "lib/owner-kernel/actions.js",
     "errors": "lib/owner-kernel/errors.js",
@@ -257,6 +258,10 @@ def load_snapshot_python_module(install_root, file_key, module_name):
 
 def load_workspace_registry(install_root):
     return load_snapshot_python_module(install_root, "workspace_registry", "p35_workspace_registry")
+
+
+def load_durable_handoff(install_root):
+    return load_snapshot_python_module(install_root, "durable_handoff", "p35_durable_handoff")
 
 
 def load_shadow_witness_client(install_root):
@@ -798,6 +803,10 @@ def installation_material(
             "root": workspace_registry_root,
             "socket": os.path.join(workspace_registry_root, "registry.sock"),
         },
+        # This is a root-only mailbox shared with the separately installed
+        # P3.6 durable host.  It holds only verified hash disclosures, never a
+        # workspace descriptor or a ticket body.
+        "durable_handoff_root": os.path.join(workspace_registry_root, "p36-handoff"),
         "witness_state_root": witness_state_root,
         "worker": worker,
         "verifier": verifier,
@@ -833,6 +842,7 @@ def installation_sources():
         "workspace_registry": os.path.join(source_root, "supervised-workspace-registry.py"),
         "shadow_witness": os.path.join(source_root, "supervised-shadow-witness.py"),
         "shadow_witness_client": os.path.join(source_root, "supervised-shadow-witness-client.py"),
+        "durable_handoff": os.path.join(source_root, "supervised_p35_durable_handoff.py"),
         "canonical": os.path.join(source_root, "owner-kernel", "canonical.js"),
         "actions": os.path.join(source_root, "owner-kernel", "actions.js"),
         "errors": os.path.join(source_root, "owner-kernel", "errors.js"),
@@ -909,6 +919,11 @@ def install(args):
     state_root = ensure_state_root(state_root, verifier, create=True)
     workspace_registry_root = ensure_root_private_state_root(
         workspace_registry_root, "workspace registry root", create=True
+    )
+    ensure_root_private_state_root(
+        os.path.join(workspace_registry_root, "p36-handoff"),
+        "durable verified-intake handoff root",
+        create=True,
     )
     witness_state_root = ensure_witness_state_root(witness_state_root, shadow_witness, create=True)
     keyring_raw, keyring = read_keyring_source(args.keyring)
@@ -1061,6 +1076,7 @@ def load_installed_config(install_root):
         "runtime_parent",
         "state_root",
         "workspace_registry",
+        "durable_handoff_root",
         "witness_state_root",
         "worker",
         "verifier",
@@ -1199,6 +1215,11 @@ def validate_installed_config(install_root, config):
     expected_registry_socket = os.path.join(registry_root, "registry.sock")
     if workspace_registry["socket"] != expected_registry_socket:
         fail("installed workspace registry socket is unexpected")
+    durable_handoff_root = ensure_root_private_state_root(
+        config["durable_handoff_root"], "durable verified-intake handoff root"
+    )
+    if durable_handoff_root != os.path.join(registry_root, "p36-handoff"):
+        fail("installed durable verified-intake handoff root is unexpected")
     witness_state_root = ensure_witness_state_root(config["witness_state_root"], shadow_witness)
     if limits != installation_material(
         install_root,
@@ -1225,6 +1246,7 @@ def validate_installed_config(install_root, config):
         "keyring": actual_keyring,
         "state_root": state_root,
         "workspace_registry": {"root": registry_root, "socket": expected_registry_socket},
+        "durable_handoff_root": durable_handoff_root,
         "witness_state_root": witness_state_root,
         "limits": limits,
     }
@@ -2516,6 +2538,58 @@ def verify_shadow_witness_root_readback(install_root, paths, binding, ticket, su
         fail("root shadow witness readback does not match the verifier result")
 
 
+def publish_p36_verified_intake_handoff(
+    install_root, validated, config, session, workspace_ticket, checked, reserved_admission_lock=None
+):
+    """Publish a one-shot P3.6 ingress only after the v2 result is complete.
+
+    This deliberately consumes no caller-provided JSON.  Every field comes
+    from the root-held P3.5 session/ticket or the already validated verifier
+    result.  The public ``submit`` response does not include the handoff id.
+    """
+
+    if session["intake_protocol_version"] != INTAKE_PROTOCOL_V2:
+        fail("only a P3.5d v2 session can create a durable handoff")
+    if workspace_ticket is None:
+        fail("P3.5d durable handoff requires a root-held workspace ticket")
+    output = checked["output"]
+    if (
+        output.get("intake_protocol_version") != INTAKE_PROTOCOL_V2
+        or output.get("effect_authority") != "none"
+    ):
+        fail("P3.5d verifier result is not an exact v2 non-authoritative intake")
+    receipt = output["receipt"]
+    bridge_receipt = output["bridge_receipt"]
+    if not isinstance(receipt, dict) or not isinstance(bridge_receipt, dict):
+        fail("P3.5d verifier result does not retain canonical receipts")
+    plan_hash = require_sha256(receipt.get("plan_hash"), "P3.5d durable handoff plan")
+    durable_handoff = load_durable_handoff(install_root)
+    handoff = durable_handoff.create_verified_handoff(
+        p35_install_binding_hash=config["binding_hash"],
+        session_id=session["session_id"],
+        session_challenge_hash=session["session_challenge_hash"],
+        ticket_hash=workspace_ticket["ticket_hash"],
+        descriptor_binding_hash=workspace_ticket["descriptor_binding_hash"],
+        workspace_root_hash=workspace_ticket["workspace_root_hash"],
+        immutable_base=workspace_ticket["immutable_base"],
+        authority=validated["keyring"]["authority"],
+        gateway_receipt_hash=checked["receipt_hash"],
+        bridge_plan_hash=plan_hash,
+        bridge_receipt_hash=durable_handoff.sha256_value(
+            durable_handoff.canonical(bridge_receipt)
+        ),
+        authenticated_receipt_hash=durable_handoff.sha256_value(
+            durable_handoff.canonical(receipt)
+        ),
+    )
+    try:
+        durable_handoff.publish_verified_handoff(
+            validated["durable_handoff_root"], handoff, reserved_admission_lock
+        )
+    except durable_handoff.DurableHandoffError as error:
+        fail("P3.5d durable handoff publication failed: " + str(error))
+
+
 def validate_gateway_result(
     value, expected_worker, ticket=None, intake_protocol_version=INTAKE_PROTOCOL_V1
 ):
@@ -2603,6 +2677,37 @@ def submit_session(session_id):
     workspace_ticket = None
     workspace_reservation_active = False
     shadow_witness_binding = None
+    completed_output = None
+    publish_after_cleanup = False
+    durable_handoff = None
+    durable_handoff_admission_lock = None
+    completion_signal_mask = None
+
+    def release_reserved_durable_handoff_admission():
+        nonlocal durable_handoff_admission_lock
+        if durable_handoff_admission_lock is None:
+            return
+        descriptor = durable_handoff_admission_lock
+        durable_handoff_admission_lock = None
+        try:
+            durable_handoff.release_handoff_admission_lock(descriptor)
+        except (OSError, durable_handoff.DurableHandoffError) as error:
+            fail("P3.5d durable handoff admission release failed: " + str(error))
+
+    def block_completion_signals():
+        nonlocal completion_signal_mask
+        if completion_signal_mask is None:
+            completion_signal_mask = signal.pthread_sigmask(
+                signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM}
+            )
+
+    def restore_completion_signals():
+        nonlocal completion_signal_mask
+        if completion_signal_mask is None:
+            return
+        previous_mask = completion_signal_mask
+        completion_signal_mask = None
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 
     def interrupt_handler(_signum, _frame):
         fail("P3.5 submit interrupted before completion")
@@ -2618,6 +2723,17 @@ def submit_session(session_id):
             fail("P3.5 session has already been consumed")
         if int(time.time() * 1000) >= session["expires_at_ms"]:
             fail("P3.5 session has expired")
+        if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2:
+            # Reserve P3.6 mailbox capacity before creating P3.5's one-shot
+            # submit claim.  The root-held lock survives the transient P3.5
+            # lifecycle and is consumed only by the final post-cleanup publish.
+            durable_handoff = load_durable_handoff(install_root)
+            try:
+                durable_handoff_admission_lock = durable_handoff.reserve_handoff_publication_slot(
+                    validated["durable_handoff_root"]
+                )
+            except durable_handoff.DurableHandoffError as error:
+                fail("P3.5d durable handoff admission failed: " + str(error))
         P34.create_tracked_resource(
             created_resources,
             "claim",
@@ -2810,6 +2926,12 @@ def submit_session(session_id):
         result = wait_for_private_json(
             paths["result"], verifier["uid"], verifier["gid"], REQUEST_TIMEOUT_SECONDS * 2, "gateway result"
         )
+        # The verifier has now produced the root-private terminal result.  Do
+        # not let a termination signal delete its one-shot session while root
+        # validates the result, closes the workspace reservation, and publishes
+        # the P3.6 handoff (or records a clean rejection).
+        if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2:
+            block_completion_signals()
         checked = validate_gateway_result(
             result,
             {"pid": worker_pid, "uid": worker["uid"], "gid": worker["gid"]},
@@ -2852,6 +2974,7 @@ def submit_session(session_id):
             workspace_reservation_active = False
         P34.wait_for_load_state(system_paths["systemctl_path"], verifier_unit, "not-found", REQUEST_TIMEOUT_SECONDS)
         P34.wait_for_load_state(system_paths["systemctl_path"], worker_unit, "not-found", REQUEST_TIMEOUT_SECONDS)
+        publish_after_cleanup = session["intake_protocol_version"] == INTAKE_PROTOCOL_V2
         output = {
             "status": "p35_shadow_intake_complete",
             "schema_version": SCHEMA_VERSION,
@@ -2884,7 +3007,12 @@ def submit_session(session_id):
         if session["intake_protocol_version"] == INTAKE_PROTOCOL_V2:
             output["intake_protocol_version"] = INTAKE_PROTOCOL_V2
             output["effect_authority"] = "none"
-        return output
+        completed_output = output
+    except BaseException:
+        # A rejected or interrupted submit never reports a completed P3.5
+        # result, so its pending P3.6 capacity reservation must be released.
+        publish_after_cleanup = False
+        raise
     finally:
         if witness_started:
             try:
@@ -2923,7 +3051,42 @@ def submit_session(session_id):
         for signal_number, previous in previous_handlers.items():
             signal.signal(signal_number, previous)
         if cleanup_errors:
+            publish_after_cleanup = False
+        if not publish_after_cleanup:
+            try:
+                release_reserved_durable_handoff_admission()
+            except HostError as error:
+                cleanup_errors.append("durable handoff admission: " + str(error))
+            try:
+                restore_completion_signals()
+            except (OSError, ValueError) as error:
+                cleanup_errors.append("completion signal mask: " + str(error))
+        if cleanup_errors:
             fail("P3.5 submit cleanup failed: " + "; ".join(cleanup_errors))
+    try:
+        if completed_output is None:
+            fail("P3.5 submit completed without a verified result")
+        if publish_after_cleanup:
+            # The P3.6 record becomes consumable only after the shadow witness,
+            # worker/verifier, workspace reservation, and session files all have
+            # converged.  The signal mask was installed before cleanup so a
+            # completed P3.5 result cannot be lost between teardown and this
+            # root-only publication.
+            publish_p36_verified_intake_handoff(
+                install_root,
+                validated,
+                config,
+                session,
+                workspace_ticket,
+                checked,
+                reserved_admission_lock=durable_handoff_admission_lock,
+            )
+        return completed_output
+    finally:
+        try:
+            release_reserved_durable_handoff_admission()
+        finally:
+            restore_completion_signals()
 
 
 def cleanup_legacy_request(path, gid):

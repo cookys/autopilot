@@ -130,6 +130,14 @@ def require_nonnegative_int(value, label):
     return value
 
 
+def require_exact_int(value, expected, label, code="DURABLE_STATE_INVALID"):
+    """Require a frozen JSON integer without Python's ``True == 1`` coercion."""
+
+    if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+        fail(label + " must be the exact frozen integer", code)
+    return value
+
+
 def require_absolute_path(value, label):
     if (
         not isinstance(value, str)
@@ -207,7 +215,11 @@ def normalize_binding(raw):
         },
         "durable binding",
     )
-    if value["schema_version"] != SCHEMA_VERSION or value["kind"] != "p36_durable_state_binding":
+    if (
+        require_exact_int(value["schema_version"], SCHEMA_VERSION, "durable binding schema")
+        != SCHEMA_VERSION
+        or value["kind"] != "p36_durable_state_binding"
+    ):
         fail("durable binding has an unsupported schema or kind")
     services = require_exact_keys(value["service_bindings"], set(SERVICE_ROLES), "durable service bindings")
     normalized_services = {}
@@ -604,7 +616,10 @@ class DurableLeaf:
             material = dict(value)
             quarantine_hash = material.pop("quarantine_hash")
             if (
-                value["schema_version"] != SCHEMA_VERSION
+                require_exact_int(
+                    value["schema_version"], SCHEMA_VERSION, "durable quarantine schema", "DURABLE_QUARANTINE_CORRUPT"
+                )
+                != SCHEMA_VERSION
                 or value["kind"] != "p36_durable_quarantine"
                 or value["role"] != self.role
                 or value["binding_hash"] != normalized_binding_hash(self.binding)
@@ -648,7 +663,10 @@ class DurableLeaf:
             material = dict(value)
             marker_hash = material.pop("marker_hash")
             if (
-                value["schema_version"] != SCHEMA_VERSION
+                require_exact_int(
+                    value["schema_version"], SCHEMA_VERSION, "durable cohort marker schema", "DURABLE_COHORT_MARKER_CORRUPT"
+                )
+                != SCHEMA_VERSION
                 or value["kind"] != "p36_durable_cohort_marker"
                 or value["role"] != self.role
                 or value["binding_hash"] != normalized_binding_hash(self.binding)
@@ -795,7 +813,10 @@ class DurableLeaf:
             material = dict(value)
             journal_hash = material.pop("journal_hash")
             if (
-                value["schema_version"] != SCHEMA_VERSION
+                require_exact_int(
+                    value["schema_version"], SCHEMA_VERSION, "durable journal header schema", "DURABLE_JOURNAL_CORRUPT"
+                )
+                != SCHEMA_VERSION
                 or value["kind"] != journal_kind + "_header"
                 or value["previous_journal_hash"] is not None
                 or normalize_binding(value["binding"]) != self.binding
@@ -856,7 +877,9 @@ def normalize_witness_request(value, binding):
     if operation not in fields:
         fail("durable witness operation is unsupported", "DURABLE_REQUEST_INVALID")
     value = require_exact_keys(value, fields[operation], "durable witness request")
-    if value["schema_version"] != SCHEMA_VERSION:
+    if require_exact_int(
+        value["schema_version"], SCHEMA_VERSION, "durable witness request schema", "DURABLE_REQUEST_INVALID"
+    ) != SCHEMA_VERSION:
         fail("durable witness request schema is unsupported", "DURABLE_REQUEST_INVALID")
     request = {
         "schema_version": SCHEMA_VERSION,
@@ -979,7 +1002,10 @@ class DurableWitness(DurableLeaf):
             fail("durable witness journal record type is invalid")
         value = require_exact_keys(value, expected_fields, "durable witness journal record")
         if (
-            value["schema_version"] != SCHEMA_VERSION
+            require_exact_int(
+                value["schema_version"], SCHEMA_VERSION, "durable witness journal schema", "DURABLE_JOURNAL_CORRUPT"
+            )
+            != SCHEMA_VERSION
             or value["kind"] != "p36_durable_witness_record"
             or value["record_type"] != record_type
             or value["previous_journal_hash"] != expected_previous_hash
@@ -1267,7 +1293,9 @@ def normalize_coordinator_request(value, binding):
         },
         "durable coordinator request",
     )
-    if value["schema_version"] != SCHEMA_VERSION:
+    if require_exact_int(
+        value["schema_version"], SCHEMA_VERSION, "durable coordinator request schema", "DURABLE_REQUEST_INVALID"
+    ) != SCHEMA_VERSION:
         fail("durable coordinator request schema is unsupported", "DURABLE_REQUEST_INVALID")
     operation = require_token(value["operation"], "durable coordinator operation")
     if operation not in {"prepare", "cancel", "resolve"}:
@@ -1329,8 +1357,12 @@ class DurableCoordinator(DurableLeaf):
             },
             "durable coordinator journal record",
         )
+        record_fence = require_positive_int(value["fence"], "durable coordinator record fence")
         if (
-            value["schema_version"] != SCHEMA_VERSION
+            require_exact_int(
+                value["schema_version"], SCHEMA_VERSION, "durable coordinator journal schema", "DURABLE_JOURNAL_CORRUPT"
+            )
+            != SCHEMA_VERSION
             or value["kind"] != "p36_durable_coordinator_record"
             or value["previous_journal_hash"] != expected_previous_hash
             or value["journal_hash"] != self._record_hash(value)
@@ -1348,7 +1380,7 @@ class DurableCoordinator(DurableLeaf):
             or request["request_id"] != value["request_id"]
             or request["operation"] != value["operation"]
             or request["transaction_id"] != value["transaction_id"]
-            or request["fence"] != value["fence"]
+            or request["fence"] != record_fence
             or request["expected_witness_head"] != value["expected_witness_head"]
             or sha256_value(request_canonical) != require_sha256(value["request_hash"], "durable coordinator request hash")
         ):
@@ -1541,7 +1573,9 @@ def normalize_broker_request(value, binding):
         {"schema_version", "request_id", "operation", "substrate_plan_hash"},
         "durable broker request",
     )
-    if value["schema_version"] != SCHEMA_VERSION:
+    if require_exact_int(
+        value["schema_version"], SCHEMA_VERSION, "durable broker request schema", "DURABLE_REQUEST_INVALID"
+    ) != SCHEMA_VERSION:
         fail("durable broker request schema is unsupported", "DURABLE_REQUEST_INVALID")
     operation = require_token(value["operation"], "durable broker operation")
     if operation not in {"mint_permit", "postclaim_authorize", "execute", "revoke"}:
@@ -1596,7 +1630,9 @@ def normalize_revocation_request(value, binding):
         {"schema_version", "request_id", "operation", "broker_result_hash", "substrate_plan_hash"},
         "durable revocation request",
     )
-    if value["schema_version"] != SCHEMA_VERSION:
+    if require_exact_int(
+        value["schema_version"], SCHEMA_VERSION, "durable revocation request schema", "DURABLE_REQUEST_INVALID"
+    ) != SCHEMA_VERSION:
         fail("durable revocation request schema is unsupported", "DURABLE_REQUEST_INVALID")
     request = {
         "schema_version": SCHEMA_VERSION,
@@ -1686,7 +1722,8 @@ def normalize_service_availability_snapshot(binding, role, raw):
     material = dict(value)
     snapshot_hash = material.pop("snapshot_hash")
     if (
-        value["schema_version"] != SCHEMA_VERSION
+        require_exact_int(value["schema_version"], SCHEMA_VERSION, "durable availability schema")
+        != SCHEMA_VERSION
         or value["kind"] != "p36_durable_service_availability"
         or value["role"] != role
         or value["binding_hash"] != normalized_binding_hash(binding)

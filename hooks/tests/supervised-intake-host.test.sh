@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import types
+from unittest.mock import patch
 
 root = sys.argv[1]
 
@@ -99,6 +100,7 @@ assert host.WORKER_IDENTITY == 'autopilot-intake-worker'
 assert host.WORKER_IDENTITY != host.LEGACY_P34_WORKER_IDENTITY
 assert host.SHADOW_WITNESS_IDENTITY == 'autopilot-shadow-witness'
 assert material['workspace_registry']['socket'] == '/var/lib/autopilot-p35-registry-test/registry.sock'
+assert material['durable_handoff_root'] == '/var/lib/autopilot-p35-registry-test/p36-handoff'
 assert material['witness_state_root'] == '/var/lib/autopilot-p35-witness-test'
 assert 'RuntimeMaxSec=45s' in host.SYSTEMD_PROPERTIES
 assert 'TimeoutStopSec=5s' in host.SYSTEMD_PROPERTIES
@@ -187,6 +189,53 @@ v2_session = host.normalize_session({
 }, config)
 assert v2_session['intake_protocol_version'] == 2
 assert host.session_storage_value(v2_session)['intake_protocol_version'] == 2
+
+handoff_calls = {}
+class HandoffStub:
+    class DurableHandoffError(Exception):
+        pass
+    @staticmethod
+    def canonical(value):
+        return host.canonical(value)
+    @staticmethod
+    def sha256_value(value):
+        return host.sha256_value(value)
+    @staticmethod
+    def create_verified_handoff(**kwargs):
+        handoff_calls['create'] = kwargs
+        return {'handoff_id': 'root-only-handoff'}
+    @staticmethod
+    def publish_verified_handoff(root, handoff, reserved_admission_lock=None):
+        handoff_calls['publish'] = (root, handoff, reserved_admission_lock)
+
+with patch.object(host, 'load_durable_handoff', return_value=HandoffStub):
+    host.publish_p36_verified_intake_handoff(
+        '/installed-p35',
+        {
+            'keyring': {'authority': {'issuer': 'owner', 'key_id': 'key', 'attestation_hash': 'a' * 64}},
+            'durable_handoff_root': '/root-only/p36-handoff',
+        },
+        {'binding_hash': 'b' * 64},
+        v2_session,
+        {
+            'ticket_hash': 'c' * 64,
+            'descriptor_binding_hash': 'd' * 64,
+            'workspace_root_hash': 'e' * 64,
+            'immutable_base': 'f' * 40,
+        },
+        {
+            'receipt_hash': '1' * 64,
+            'output': {
+                'intake_protocol_version': 2,
+                'effect_authority': 'none',
+                'receipt': {'plan_hash': '2' * 64},
+                'bridge_receipt': {'receipt': 'bridge'},
+            },
+        },
+    )
+assert handoff_calls['create']['ticket_hash'] == 'c' * 64
+assert handoff_calls['create']['bridge_plan_hash'] == '2' * 64
+assert handoff_calls['publish'] == ('/root-only/p36-handoff', {'handoff_id': 'root-only-handoff'}, None)
 try:
     host.normalize_session({
         'schema_version': 1,
@@ -303,8 +352,11 @@ with tempfile.TemporaryDirectory(prefix='p35-v2-preflight-', dir='/tmp') as temp
     original_cleanup_session_paths = host.cleanup_session_paths
     original_launch_unit = host.launch_unit
     original_deliver_request = host.deliver_request_to_exact_worker
+    original_load_durable_handoff = host.load_durable_handoff
     launches = []
     handoffs = []
+    admission_events = []
+    claim_events = []
     fake_paths = {
         'binding': os.path.join(temporary, 'no-binding'),
         'session': os.path.join(temporary, 'session.json'),
@@ -345,6 +397,7 @@ with tempfile.TemporaryDirectory(prefix='p35-v2-preflight-', dir='/tmp') as temp
         'verifier': {'uid': 992, 'gid': 992},
         'shadow_witness': {'uid': 993, 'gid': 993},
         'paths': {},
+        'durable_handoff_root': '/root-only/p36-handoff',
     }
     host.acquire_global_submit_lease = lambda: object()
     host.release_root_lease = lambda _lease: None
@@ -352,13 +405,46 @@ with tempfile.TemporaryDirectory(prefix='p35-v2-preflight-', dir='/tmp') as temp
     host.require_session_layout = lambda _paths, _worker, _verifier: None
     host.read_root_private_json = lambda _path, _label: dict(fake_session)
     host.normalize_session = lambda value, _config: dict(value)
-    host.create_submit_claim = lambda _paths, _session_id, on_created: on_created()
+    host.create_submit_claim = lambda _paths, _session_id, on_created: claim_events.append('claim') or on_created()
     host.write_atomic_root_json = lambda *_args, **_kwargs: None
     host.read_bounded_stdin = lambda _timeout: raw_v2_workspace_request
     host.cleanup_session_paths = lambda *_args, **_kwargs: []
     host.launch_unit = lambda *args: launches.append(args)
     host.deliver_request_to_exact_worker = lambda *args: handoffs.append(args)
+
+    class CapacityFullHandoff:
+        class DurableHandoffError(Exception):
+            pass
+
+        @staticmethod
+        def reserve_handoff_publication_slot(_root):
+            admission_events.append('capacity')
+            raise CapacityFullHandoff.DurableHandoffError('DURABLE_HANDOFF_CAPACITY_EXHAUSTED')
+
+    class ReservedHandoff:
+        class DurableHandoffError(Exception):
+            pass
+
+        @staticmethod
+        def reserve_handoff_publication_slot(_root):
+            admission_events.append('reserve')
+            return 'reserved-mailbox-lock'
+
+        @staticmethod
+        def release_handoff_admission_lock(lock):
+            assert lock == 'reserved-mailbox-lock'
+            admission_events.append('release')
+
     try:
+        host.load_durable_handoff = lambda _root: CapacityFullHandoff
+        try:
+            host.submit_session('p35-v2-preflight')
+            raise AssertionError('full durable mailbox allowed P3.5 submit claim')
+        except host.HostError as error:
+            assert 'DURABLE_HANDOFF_CAPACITY_EXHAUSTED' in str(error)
+        assert claim_events == [], 'mailbox admission consumed a P3.5 session before capacity was reserved'
+
+        host.load_durable_handoff = lambda _root: ReservedHandoff
         try:
             host.submit_session('p35-v2-preflight')
             raise AssertionError('v2 raw workspace request reached submit completion')
@@ -366,6 +452,8 @@ with tempfile.TemporaryDirectory(prefix='p35-v2-preflight-', dir='/tmp') as temp
             assert 'raw workspace path field' in str(error)
         assert launches == [], 'v2 root preflight launched a worker before rejecting the raw path'
         assert handoffs == [], 'v2 root preflight handed bytes to a worker before rejecting the raw path'
+        assert admission_events == ['capacity', 'reserve', 'release']
+        assert claim_events == ['claim'], 'reserved P3.6 capacity must precede the one-shot P3.5 submit claim'
     finally:
         host.P34 = original_p34
         host.installed_root_from_self = original_installed_root
@@ -383,6 +471,7 @@ with tempfile.TemporaryDirectory(prefix='p35-v2-preflight-', dir='/tmp') as temp
         host.cleanup_session_paths = original_cleanup_session_paths
         host.launch_unit = original_launch_unit
         host.deliver_request_to_exact_worker = original_deliver_request
+        host.load_durable_handoff = original_load_durable_handoff
 
 reapable_v2_session = host.normalize_reapable_session({
     'schema_version': 1,
@@ -1024,7 +1113,10 @@ assert submit_source.index('preflight_v2_request_before_worker_handoff(request)'
 assert submit_source.index('preflight_v2_request_before_worker_handoff(request)') < submit_source.index('deliver_request_to_exact_worker(')
 assert 'create_submit_claim' in submit_source
 assert submit_source.index('acquire_global_submit_lease') < submit_source.index('require_session_layout(paths, worker, verifier)')
+assert submit_source.index('reserve_handoff_publication_slot') < submit_source.index('create_submit_claim')
 assert submit_source.index('create_submit_claim') < submit_source.index('write_atomic_root_json(paths["session"]')
+assert submit_source.index('result = wait_for_private_json(') < submit_source.rindex('block_completion_signals()')
+assert submit_source.rindex('block_completion_signals()') < submit_source.index('checked = validate_gateway_result(')
 assert submit_source.index('worker_pid = P34.wait_for_main_pid') < submit_source.index('deliver_request_to_exact_worker(')
 assert submit_source.index('deliver_request_to_exact_worker(') < submit_source.index('create_release(paths["release"]')
 assert submit_source.index('validate_gateway_ready(ready, verifier_pid, verifier, worker)') < submit_source.index('seal_gateway_socket_for_worker(paths["socket"], paths["socket_path"], worker, verifier)')
@@ -1033,6 +1125,8 @@ assert '--session-expires-at-ms' in submit_source
 assert 'P3.5 session is no longer available' in inspect.getsource(host.create_submit_claim)
 assert 'os.link(temporary, path, follow_symlinks=False)' in inspect.getsource(host.write_atomic_root_json)
 assert 'os.O_NOFOLLOW | os.O_NONBLOCK' in inspect.getsource(host.read_exact_private_json)
+assert submit_source.index('if cleanup_errors:') < submit_source.index('publish_p36_verified_intake_handoff(')
+assert submit_source.index('publish_p36_verified_intake_handoff(') < submit_source.rindex('release_reserved_durable_handoff_admission()')
 worker_source = inspect.getsource(worker.connect_and_submit)
 assert 'SO_PEERCRED' in worker_source
 assert 'peer_pid != server_pid' in worker_source
@@ -1159,6 +1253,7 @@ print('shadow_host_has_no_authority_calls=true')
 print('shadow_admission_summary_is_strict_and_non_authoritative=true')
 print('workspace_ticket_and_separate_witness_are_hash_bound=true')
 print('root_witness_readback_mismatch_is_rejected=true')
+print('p36_mailbox_capacity_is_reserved_before_p35_consumption=true')
 PY
 )"
 PY_STATUS=$?
@@ -1197,5 +1292,6 @@ assert_contains "$PY_OUT" "shadow_host_has_no_authority_calls=true" "P3.5 host s
 assert_contains "$PY_OUT" "shadow_admission_summary_is_strict_and_non_authoritative=true" "P3.5 host validates a strict non-authoritative shadow summary"
 assert_contains "$PY_OUT" "workspace_ticket_and_separate_witness_are_hash_bound=true" "P3.5c binds a root descriptor ticket and strict separate-UID witness summary"
 assert_contains "$PY_OUT" "root_witness_readback_mismatch_is_rejected=true" "P3.5c rejects a root witness readback that diverges from the gateway summary"
+assert_contains "$PY_OUT" "p36_mailbox_capacity_is_reserved_before_p35_consumption=true" "P3.5 reserves durable handoff capacity before consuming its one-shot session"
 
 finalize_test

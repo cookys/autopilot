@@ -256,6 +256,7 @@ function normalizeIdentity(raw, label, expectedIdentity) {
 function normalizeInstalledConfig(raw, configPath) {
   const value = requireExactKeys(raw, new Set([
     'binding_hash',
+    'durable_handoff_root',
     'files',
     'install_root',
     'keyring',
@@ -291,6 +292,13 @@ function normalizeInstalledConfig(raw, configPath) {
   const registryRoot = requireAbsolutePath(workspaceRegistry.root, 'installed P3.5 workspace registry root');
   if (workspaceRegistry.socket !== path.join(registryRoot, 'registry.sock')) {
     fail('installed P3.5 workspace registry socket is unexpected');
+  }
+  const durableHandoffRoot = requireAbsolutePath(
+    value.durable_handoff_root,
+    'installed P3.5 durable handoff root',
+  );
+  if (durableHandoffRoot !== path.join(registryRoot, 'p36-handoff')) {
+    fail('installed P3.5 durable handoff root is unexpected');
   }
   const witnessStateRoot = requireAbsolutePath(value.witness_state_root, 'installed P3.5 witness_state_root');
   const paths = requireExactKeys(value.paths, new Set([
@@ -348,6 +356,7 @@ function normalizeInstalledConfig(raw, configPath) {
     verifier,
     shadow_witness: shadowWitness,
     workspace_registry: { root: registryRoot, socket: workspaceRegistry.socket },
+    durable_handoff_root: durableHandoffRoot,
     witness_state_root: witnessStateRoot,
     paths,
     files,

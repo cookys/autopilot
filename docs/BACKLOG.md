@@ -39,6 +39,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### CLAUDE.md 逼近 40k 硬上限（餘裕 54 bytes）— 每個新 script 都要加 row，下一個必撞
+- **Trigger**: 下次任何人要在 Scripts inventory 加 row 時（幾乎等於「下一個新 script」）；或 `check-claude-md-inventory.js` 再次在 CI 變紅時。
+- **Context**: v2.32.57 才剛把 CLAUDE.md 從 81KB 瘦到 38.5KB 並加上 40000 bytes 硬 cap。三週後（v2.32.58）就回到 **39946/40000，只剩 54 bytes 餘裕** —— 因為兩條並行管線各加一個 inventory row 就直接撞破（40223），CI 紅。這次靠把新 row 縮回索引形態（783→~420 bytes）救回，但那是一次性的：**inventory 是單調成長的（每個新 script 一列），而 cap 是固定的**，所以這個閘會週期性地在「兩人同時加 row」時炸掉，且炸的是無辜的第二個 push 者。可能修法：(a) 把 inventory 拆成 `references/scripts-inventory.md` 由 CLAUDE.md 單行引用（CLAUDE.md 回到真正的 session-entry 內容）；(b) cap 改成隨 script 數線性放寬並保留 per-line cap；(c) 維持現狀但把 Row shape rule 的字數上限機械化（目前只有 per-line 800 bytes，太寬）。**(a) 最貼近 40k 存在的理由**（harness 每 session 吞它），但要確認被引用的 reference 不會反而每 session 都被載入。
+- **Effort**: S（(b)/(c)）／M（(a)，需驗證載入行為）
+- **Source**: v2.32.58 push 後 CI 紅（`check-claude-md-inventory` 23/24）
+
 ### `preflight-release.sh` 的 prose-justification 檢查掃全檔，等同永久放行
 - **Trigger**: 下次 north-star 閘要真正約束 prose 成長時；或發現某版 prose 暴增卻通過閘時。
 - **Context**: 第 188 行是 `grep -qE "prose-justification:" "$CHANGELOG"` — 掃**整個 CHANGELOG**而非當前版本段落。CHANGELOG 裡已有 5+ 條歷史 justification 行（最早可追到 v2.28 以前），所以自 v2.32.x 起這個檢查對每一版都自動通過，north-star 的 +5% 煞車實質失效。v2.32.58 實測：gate 印 "CHANGELOG justification found, allowed"，但找到的是 v2.32.57 的行。**修法**：把搜尋範圍限縮到當前版本的 CHANGELOG 段落（從 `## v<current>` 到下一個 `## v`），與 `check-optin-changelog.js` 已經在做的段落切分方式一致。

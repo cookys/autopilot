@@ -115,6 +115,30 @@ authority, while deliberately exposing **no effect and no acceptance path**.
    filesystem protections but omits that one property. Its bootstrap release
    token never appears in a command line, each role root remains private, and
    every peer message is still bound to the fixed UID/GID/PID/cgroup tuple.
+8. **Durable state is a new ABI and transport, not a P2b extension.** P2b's
+   8 KiB, one-probe frames remain an identity/self-test only. Phase 3 adds a
+   separately versioned durable envelope with bounded larger frames, exact
+   route operation sets, and response/receipt schemas for witness and
+   coordinator state. It must not reinterpret a P2b probe socket or result.
+9. **Durable data survives; a service cohort never does.** A service crash,
+   lost peer, or host interruption invalidates the complete PID/cgroup-bound
+   cohort. The next attempt must be root-created with a new generation; no
+   `Restart=` policy may reuse old peer claims. Durable records can be
+   recovered only into named `unknown`, `unavailable`, or `quarantined`
+   states, never inferred into success or acceptance.
+10. **State leaf ownership preserves role independence.** Root owns the
+    durable control tree, generation manifest, and root-created parents.
+    Witness and coordinator receive distinct private leaves only; workers,
+    brokers, and receipt verifiers receive no durable-state write path. A
+    journal is authoritative after its record and directory are fsynced;
+    derived HEAD files are cache only and are rebuilt or quarantined on
+    recovery.
+11. **Coordinator state is deliberately non-accepting.** The existing P2b
+    `COORDINATOR_ACCEPTANCE_DISABLED` result remains a probe-compatible
+    refusal. The durable coordinator instead records fenced `prepared`,
+    `cancelled`, `unavailable`, `unknown`, or `quarantined` state under a new
+    schema. `commit` and `accept` do not exist; `resolve` can only produce
+    `unavailable` or `unknown`.
 
 ## 4. Phases
 
@@ -200,6 +224,32 @@ ambiguous launch/restart.
 
 ### Phase 3 - Durable witness, coordinator, and disabled broker
 
+**Phase 3 sequencing:** first freeze the standalone durable ABI and its
+filesystem recovery core, then bind it to a fresh root-created service cohort.
+The first subphase is intentionally not an A0 ingress claim: P3.5d's
+root-held v2 verified-intake handoff must be connected before a caller can
+create an A0 session. P2b stays an independent credential self-test throughout.
+P3a's recovery core has one deliberately conservative cohort rule: root
+precreates the complete role leaf (`generation.json`, immutable journal header,
+lock, journal, cohort marker, and quarantine file), then a service may only
+write those known files. The first persisted request claims the cohort marker
+before the journal append; any new process, missing marker with non-header
+records, journal capacity exhaustion, or uncertain write blocks the leaf for a
+fresh root-created generation. This avoids treating a partial durable write as
+a recoverable success.
+
+**Increment status:**
+
+- **P3a complete:** the separately pinned durable ABI now defines the five
+  service routes and a 512 KiB frame bound without extending P2b. Root-created
+  witness/coordinator leaves persist exact request/result snapshots under a
+  cohort marker, journal chain, bounded lock, and quarantine rule. Witness
+  supports hash-only CAS/batch/readback; coordinator supports fenced
+  prepare/cancel/resolve plus durable `unknown` reservations; broker and
+  revocation results remain explicitly disabled/unavailable. This is recovery
+  core only: it creates no root-installed long-lived service, v2 handoff,
+  Engine/effect path, or acceptance claim.
+
 1. Implement the production witness as a separate service with authenticated
    hash-only `appendIfHead`, atomic `appendBatchIfHead`, `getHead`, and
    readback. Ensure all requests are bounded, idempotent only for exact bytes,
@@ -239,6 +289,7 @@ activation.
 New focused commands (created by this phase):
 
 ```bash
+PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-durable-contract.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-contract.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-host.test.sh
 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-production-substrate-peer.test.sh
@@ -301,3 +352,9 @@ separation.
 | R6 | Architect | SHIP: fixed-topology no-effect IPC preserves credential-before-frame checks, listener-ready ordering, root socket sealing, and root-pinned runtime claims; pre-seeded socket entries now fail closed and clean up. |
 | R6 | QA / Skeptic | SHIP: exact schema, canonical/hash-bound frames, 107-byte socket boundary, rehashed cross-route rejection, shared ack deadline, and no-effect receipt pairing all have deterministic negative coverage. |
 | R6 | Ops/SRE | SHIP: a fresh installed `install -> run-probe` completed all five role peer proofs and teardown with no runtime, transient-unit, process, account, or snapshot residue; bounded lifecycle values are consistent. |
+| R7 | Architect | NO-SHIP before an ABI split: P2b's frame ceiling and probe-only result cannot carry actual batch/readback or state semantics; durable transport also needs an explicit broker-to-verifier handshake route. |
+| R7 | QA / Skeptic | NO-SHIP before response schemas: coordinator's old blanket disabled result conflicts with required fenced recovery state, and no exact witness/coordinator success, unknown, or quarantine receipt exists yet. |
+| R7 | Ops/SRE | NO-SHIP before cohort/lifecycle separation: a service restart cannot reuse PID/cgroup claims, and shared durable write roots would collapse the service ownership boundary. |
+| R8 | Architect | SHIP: recovery now enforces the same coordinator operation/status semantics as the live handler; hash-self-consistent invalid terminal records quarantine, and the Python `unknown` reservation cross-validates in the Node ABI normalizer. |
+| R8 | QA / Skeptic | SHIP: hostile lone-surrogate journal records quarantine instead of crashing; receipt/readback/head invariants, exact replay, unknown reservations, and Python broker/revocation results have focused deterministic coverage. |
+| R8 | Ops/SRE | SHIP: root-owned leaf, lock, fsync, capacity, cohort-reuse, and quarantine behavior remains fail-closed after the final reservation and revocation changes. |

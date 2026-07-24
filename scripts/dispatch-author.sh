@@ -90,6 +90,8 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-author-codex-transport.sh"
+# shellcheck source=lib/grok-effort.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/grok-effort.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -781,7 +783,9 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # Read-only by construction: scratch cwd, no --always-approve, no web, no editor.
   GROK_CWD="$(mktemp -d -t dispatch-author-grokcwd-XXXXXX)"
   set +e
+  grok_effort_note "$EFFORT" "dispatch-author"
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+    --reasoning-effort "$(grok_effort_clamp "$EFFORT")" \
     --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
   RUNNER_EXIT=$?
   set -e

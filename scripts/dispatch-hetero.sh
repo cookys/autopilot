@@ -337,6 +337,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$SELF_DIR/lib/json-emit.sh"
+# shellcheck source=lib/grok-effort.sh
+. "$SELF_DIR/lib/grok-effort.sh"
 # Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
 _flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
@@ -1357,6 +1359,9 @@ elif [ "$IS_GROK" -eq 1 ]; then
   # Flags are all Spike-verified present: --prompt-file, --cwd, --model, --always-approve
   # (headless tool auto-approve), --no-alt-screen (clean capture under a pipe),
   # --output-format json. (Do NOT add unverified flags like --no-auto-update.)
+  # --reasoning-effort: probe-verified 2026-07-25 (grok 0.2.111, grok-4.5). grok validates
+  # the value against a 3-item enum and HARD-FAILS otherwise, so EFFORT must be clamped —
+  # passing autopilot's default xhigh verbatim errors out. See lib/grok-effort.sh.
   GROK_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
@@ -1369,9 +1374,11 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # resolves --prompt-file relative to --cwd (Spike-verified 2026-06-29). mktemp is absolute.
   GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
+  grok_effort_note "$EFFORT" "dispatch-hetero"
   run_worker bash -c 'cd "$1" && exec "$2" --prompt-file "$3" --cwd "$1" --model "$4" \
+      --reasoning-effort "$5" \
       --always-approve --no-alt-screen --output-format json' \
-      _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
+      _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")"
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_QODER" -eq 1 ]; then
   # qoder (Qoder CLI CN; gateway to Qwen3.8-Max-Preview / GLM-5.2 / DeepSeek-V4 / …).

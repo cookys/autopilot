@@ -155,6 +155,21 @@ root-installed lifecycle work starts.
 or cgroup alias acceptance, no supplementary-group drift, and cleanup after
 ambiguous launch/restart.
 
+**Increment status:**
+
+- **P2a complete:** a root-only installer snapshots the exact transitive P3.6
+  contract closure, pins five independently attested private identities, and
+  runs a no-effect lifecycle probe with bounded transient units, exact
+  MainPID/UID/GID/group/cgroup revalidation, atomic release/ack publication,
+  and interruption-safe teardown. Its only writable unit exception is that
+  role's root-pinned acknowledgement directory. P2a has no service IPC,
+  socket, witness, coordinator, broker, Engine, effect, or acceptance path.
+- **P2b pending:** add root-pinned local Unix socket endpoints, exact
+  `SO_PEERCRED`/cgroup authentication before request bytes are parsed,
+  canonical framed request/response binding, and no raw filesystem authority
+  across roles. P2a's non-authoritative lifecycle acknowledgement is not a
+  substitute for that peer proof.
+
 ### Phase 3 - Durable witness, coordinator, and disabled broker
 
 1. Implement the production witness as a separate service with authenticated
@@ -244,3 +259,9 @@ separation.
 | R3 | Architect | SHIP: every operation now has one ABI-pinned route; generic parser rejects cross-route and unknown frames. |
 | R3 | QA | SHIP: ABI commits disabled-result correlation and normalizer verifies it against original request/envelope/clock. |
 | R3 | Skeptic | SHIP: no remaining Critical/Major in the claimed Phase 1 scope; temporal and no-effect boundaries hold. |
+| R4 | Architect | NO-SHIP: the installed P2a snapshot omitted the bridge contract's `actions.js`/`policy.js` transitive dependencies, so Node could not load the copied ABI. Fixed by freezing the exact closure and testing an isolated real ABI load. |
+| R4 | QA | NO-SHIP: install interruption could leave a partial snapshot; ack publication could expose a partial file; and ack receipt did not revalidate current MainPID/cgroup/identity. Fixed with interruption rollback, pending-plus-link publication, and receipt-time process revalidation. |
+| R4 | Ops/SRE | NO-SHIP: `ProtectSystem=strict` made the runner's acknowledgement path read-only. Fixed by binding one per-role `ReadWritePaths=<ack_root>` exception into the run material and launch command. |
+| R5 | Architect | SHIP: P2a source/runtime scope now has a loadable immutable closure and a deterministic second-interrupt teardown proof. |
+| R5 | QA | SHIP: no remaining Critical/Major; second SIGINT between cleanup callbacks is deferred until all unit and runtime cleanup finishes. |
+| R5 | Ops/SRE | SHIP: the writable exception is limited to each role's pinned ack directory; no role or release/runtime-parent write capability was added. |

@@ -122,7 +122,11 @@ assert.equal(verified.driver.payload_sha256, signed.execution_witness.payload_sh
 
 const namespaceTracePath = path.join(tmp, 'namespace-pid.trace');
 const namespaceTrace = fs.readFileSync(tracePath, 'utf8')
-  .replace(new RegExp(`^${signed.execution_witness.wrapper_pid} `, 'gm'), '2 ');
+  // strace pads the pid column to align syscalls (`181   write(1, ...)`), so the gap is
+  // 1..n spaces, not exactly one. Match `\s+` and preserve the original spacing via $1 —
+  // a single-space pattern silently fails to rewrite on padded output, which is how the
+  // fdwrite control below became a no-op (see the comment there).
+  .replace(new RegExp(`^${signed.execution_witness.wrapper_pid}(\\s+)`, 'gm'), '2$1');
 fs.writeFileSync(namespaceTracePath, namespaceTrace);
 const namespaceVerified = JSON.parse(run(process.execPath, [
   witness, '--verify', '--payload-file', signedPath, '--nonce', 'controlnonce', '--trace-file', namespaceTracePath,
@@ -132,8 +136,15 @@ assert.equal(namespaceVerified.driver.trace_pid, '2');
 
 const fdWriteTracePath = path.join(tmp, 'fdwrite.trace');
 const fdWriteTrace = fs.readFileSync(tracePath, 'utf8')
-  .replace(new RegExp(`^${signed.execution_witness.wrapper_pid} write\\(1,`, 'gm'),
-    `${signed.execution_witness.wrapper_pid} write(25,`);
+  // ⚠️ This mutation MUST actually apply — it is the only thing that constructs the
+  // non-stdout-fd scenario the assertions below verify. The previous pattern required
+  // EXACTLY ONE space between the pid and `write(`, but strace pads that column
+  // (`181   write(1, "ok", 2)` — three spaces on strace 6.1), so the replace was a silent
+  // no-op: fdwrite.trace came out byte-identical to signed.trace, the verifier correctly
+  // reported `strace_execve_stdout`, and `assert.equal(..., 'strace_execve_fdwrite')` failed.
+  // That is what kept develop red (with a message that said nothing about whitespace).
+  .replace(new RegExp(`^${signed.execution_witness.wrapper_pid}(\\s+)write\\(1,`, 'gm'),
+    `${signed.execution_witness.wrapper_pid}$1write(25,`);
 fs.writeFileSync(fdWriteTracePath, fdWriteTrace);
 const fdWriteVerified = JSON.parse(run(process.execPath, [
   witness, '--verify', '--payload-file', signedPath, '--nonce', 'controlnonce', '--trace-file', fdWriteTracePath,

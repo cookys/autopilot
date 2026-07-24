@@ -25,6 +25,25 @@ jobs:
           # (base-ref walk) need real history — shallow clone kept CI red for 100+ runs.
           fetch-depth: 0
 
+      # owner-kernel P0's supervised-profile probe needs a real Linux sandbox +
+      # syscall tracer. Without them the probe dies on `spawn bwrap ENOENT` /
+      # `spawnSync strace ENOENT` and ALL 8 assertions of
+      # hooks/tests/owner-kernel-p0-supervised-profile.test.sh fail — which is what
+      # turned develop red on 2026-07-25 (the failure predates the commit that
+      # surfaced it; the run that would have shown it was cancelled by a later push).
+      # Declared as a prerequisite in docs/projects/2026-07-20-owner-kernel-governance/README.md
+      # ("Linux sandbox/runtime prerequisite | Yes"). Installing them — rather than
+      # skipping the probe — is deliberate: those 8 assertions ARE the security
+      # controls (forged intent rejected, capability exposure rejected, protected
+      # write rejected, receipt-mount rejected, payload tamper rejected). A skip
+      # would turn a security gate into a silent pass.
+      - name: Install sandbox prerequisites (owner-kernel P0 supervised profile)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap strace
+          bwrap --version
+          strace -V | head -1
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

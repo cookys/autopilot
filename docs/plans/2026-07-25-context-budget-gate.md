@@ -1,4 +1,4 @@
-# Context-budget gate for hetero dispatch
+# Context-window gate for hetero dispatch
 
 **Date**: 2026-07-25
 **Target version**: v2.32.58
@@ -46,12 +46,12 @@ explicitly NOT the lever — a measured 76-round cluster cost 7.9M while a 41-ro
 
 ## Design
 
-### P0 — `scripts/check-context-budget.js` (new)
+### P0 — `scripts/check-context-window.js` (new)
 
 Deterministic, Node built-ins only (runs inside dep-minimal sandboxes per CLAUDE.md language rule).
 
 ```
-check-context-budget.js --model <id> [--prompt-file F] [--diff-file F] [--extra-bytes N]
+check-context-window.js --model <id> [--prompt-file F] [--diff-file F] [--extra-bytes N]
                         [--ratio R] [--window N] [--json]
 ```
 
@@ -78,8 +78,8 @@ precondition checks and before the runner is spawned.
 - Over budget ⇒ **fail-closed**, non-zero exit, structured reason, no spend.
 - `dispatch-review.sh`'s existing 96 KB advisory is *replaced* by the engine-aware gate (the
   hardcoded constant loses its meaning once the real window is known).
-- Escape hatch: `--context-budget off|warn|block` (default `block`) plus
-  `AUTOPILOT_CONTEXT_BUDGET` env. Depth-0 keeps authority to override deliberately; the point
+- Escape hatch: `--context-window off|warn|block` (default `block`) plus
+  `AUTOPILOT_CONTEXT_WINDOW_GATE` env. Depth-0 keeps authority to override deliberately; the point
   is to make oversized dispatch a *decision*, not an accident.
 
 ### P2 — `context_window` as a capability dimension
@@ -90,10 +90,19 @@ discipline (`unknown` never clobbers a valid observation).
 
 ### P3 — `resolve-review-loop.sh` consumes it
 
-Surface the resolved window in the resolver contract so routing can prefer a large-window
+> **REVISED DURING EXECUTION.** The original design below proposed new contract fields. Reading
+> the code showed `resolve-review-loop.sh` is a *resolver, not an executor* — even an exhausted
+> quota only yields `quota_status` + a warning, with the CONSUMER acting per
+> `on_engine_unavailable`. New window fields would also create a second source of window truth
+> alongside `check-context-window.js`. **Shipped instead**: `--input-bytes N` reports
+> over-budget seats into the existing `capability_warnings` array. Zero new contract fields
+> (still 44), zero schema risk. `UNKNOWN_WINDOW` deliberately emits no warning — 2 of the 3
+> default seats have no recorded window, so it would be constant noise.
+
+~~Surface the resolved window in the resolver contract so routing can prefer a large-window
 engine when the measured diff is large. Additive fields only; the always-on contract in
 `schemas/review-loop-contract.schema.json` is extended in lockstep (gated by
-`scripts/check-contract-schema.js`).
+`scripts/check-contract-schema.js`).~~
 
 ### P4 — Wire-in and release hygiene
 
@@ -105,16 +114,24 @@ CLAUDE.md inventory row, `references/hetero-dispatch.md` section, Codex plugin p
 **"What command objectively proves this is done?"**
 
 ```bash
-bash hooks/tests/context-budget.test.sh      # new, focused
+bash hooks/tests/context-window.test.sh      # new, focused
 bash hooks/tests/run.sh                      # full suite, no regressions
 ```
 
 Red-green: the new test file must be **RED on base** (the gate does not exist there) and
-**GREEN on head**, verified via `scripts/verify-red-green.sh` — artifact, not self-report.
+**GREEN on head** — artifact, not self-report.
+
+> **Executed manually, because `scripts/verify-red-green.sh` cannot validate this repo's own
+> test suite.** Its `run_verify_cmd` `cd`s into the base worktree but invokes `$VERIFY_CMD` by
+> the CALLER's absolute path (deliberate, per its header); autopilot's tests derive `REPO_ROOT`
+> from `$0` via `lib.sh`, so the base run actually exercises the head tree and is always green
+> (`NOT_RED_ON_BASE`). Manual procedure used instead: detached worktree at base → apply ONLY the
+> test-file patch → `cd` in → run by relative path. Result: **base exit 1 (RED), head 48
+> assertions PASS (GREEN)**. Tool defect recorded in `docs/BACKLOG.md`.
 
 Negative controls the test must include:
 - an over-budget prompt is **blocked** (not merely warned),
-- `--context-budget off` still dispatches (escape hatch is real),
+- `--context-window off` still dispatches (escape hatch is real),
 - an unknown model does **not** become undispatchable by default,
 - `--strict` does block an unknown model,
 - the estimator never under-estimates a known fixture's token count.

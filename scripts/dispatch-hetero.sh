@@ -34,6 +34,12 @@
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
 #                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
 #                                              #   still used when omitted (byte-identical)
+#       [--context-window off|warn|block]      # pre-dispatch context-window gate (default:
+#                                              #   block; also AUTOPILOT_CONTEXT_WINDOW_GATE).
+#                                              #   Over budget ⇒ fail closed BEFORE the runner
+#                                              #   spawns and before the worktree exists.
+#                                              #   See references/hetero-dispatch.md
+#                                              #   § Context-window gate.
 #       [--skill-mode off|prompt|native|auto]  # skill transport mode (default: off)
 #       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default

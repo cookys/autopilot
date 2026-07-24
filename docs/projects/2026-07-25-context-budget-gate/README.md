@@ -7,17 +7,18 @@
 
 > **Final goal**: Make oversized input to a small-context-window engine a *blocked, deliberate
 > decision* instead of a silent 41%-of-all-tokens cost sink, by adding an engine-aware
-> context-budget gate to all three hetero dispatch rails.
+> context-window gate to all three hetero dispatch rails.
 >
 > **Success criteria** (each with threshold + verification method):
-> 1. `bash hooks/tests/context-budget.test.sh` exits 0 — and is proven RED on base / GREEN on
->    head by `scripts/verify-red-green.sh` (verdict `VALIDATED`, artifact not self-report).
+> 1. `bash hooks/tests/context-window.test.sh` exits 0 — and is proven RED on base / GREEN on
+>    head (artifact, not self-report). See § Red-green evidence: done manually because
+>    `verify-red-green.sh` structurally cannot validate this repo's own test suite.
 > 2. `bash hooks/tests/run.sh` shows zero new failures vs. the pre-change baseline
 >    (classified by `scripts/verify-preexisting.sh` if any failure appears).
 > 3. All three rails (`dispatch-hetero.sh`, `dispatch-review.sh`, `dispatch-author.sh`) refuse
 >    an over-budget dispatch with a non-zero exit and no runner spawn — verified by a test that
 >    asserts the runner binary was never invoked.
-> 4. `--context-budget off` still dispatches (escape hatch verified by test).
+> 4. `--context-window off` still dispatches (escape hatch verified by test).
 > 5. An unknown model is NOT blocked by default; `--strict` does block it (both verified).
 > 6. `node scripts/check-claude-md-inventory.js --json` passes (new script is inventoried).
 > 7. `bash scripts/sync-codex-plugin-skills.sh --check` passes (Codex payload mirrored).
@@ -31,10 +32,10 @@
 
 | Dimension | Applies | Coverage |
 |-----------|---------|----------|
-| Source code + tests | YES | P0–P4; `hooks/tests/context-budget.test.sh` (auto-registered — `run.sh` globs `hooks/tests/*.test.sh`) |
-| User-facing docs | YES | P4 — `references/hetero-dispatch.md` gets a Context-budget gate section |
-| API / interface reference | YES | P4 — `check-context-budget.js --help`; new dispatch flag `--context-budget` documented in each rail's header |
-| Config templates / examples | YES | P4 — threshold override documented; env `AUTOPILOT_CONTEXT_BUDGET` |
+| Source code + tests | YES | P0–P4; `hooks/tests/context-window.test.sh` (auto-registered — `run.sh` globs `hooks/tests/*.test.sh`) |
+| User-facing docs | YES | P4 — `references/hetero-dispatch.md` gets a Context-window gate section |
+| API / interface reference | YES | P4 — `check-context-window.js --help`; new dispatch flag `--context-window` documented in each rail's header |
+| Config templates / examples | YES | P4 — threshold override documented; env `AUTOPILOT_CONTEXT_WINDOW_GATE` |
 | CHANGELOG entry | YES | P4 |
 | Version bump (semver) | YES | PATCH → v2.32.58 (new script + hardening of existing behavior; not a new user-invoked surface, per CLAUDE.md bump table) |
 | Version sync verification (grep) | YES | P4 — `sync-version.js --check`; grep old version across **all tracked files**, never enumerate from memory |
@@ -75,7 +76,7 @@
    fields** (still 44), zero schema risk, and the single-source-of-truth rule holds.
 2. **Renamed from `context-budget` to `context-window`.** A pre-existing opt-in hook is already
    named `context-budget` (it watches depth-0's OWN session context growth via PostToolUse) and
-   owns `AUTOPILOT_CONTEXT_BUDGET_T1/T2/MODE`. The first draft used `AUTOPILOT_CONTEXT_BUDGET`,
+   owns `AUTOPILOT_CONTEXT_WINDOW_GATE_T1/T2/MODE`. The first draft used `AUTOPILOT_CONTEXT_WINDOW_GATE`,
    which would have collided in the same namespace for a different concept. Renamed script, lib,
    test, flag (`--context-window`) and env (`AUTOPILOT_CONTEXT_WINDOW_GATE`).
 3. **`UNKNOWN_WINDOW` emits no resolver warning.** 2 of the 3 default roster seats (MiniMax-M3,
@@ -92,6 +93,31 @@
 - **Shell word-splitting on space-containing model ids** in the first P3 draft turned
   `"Gemini 3.5 Flash (High)"` into phantom seats named `3.5`, `Flash` and `(High)`. Fixed with
   parallel arrays; a regression assertion guards it.
+
+## Red-green evidence
+
+`scripts/verify-red-green.sh` returned `NOT_RED_ON_BASE` — **a tool defect, not a test defect**.
+`run_verify_cmd` `cd`s into the base worktree but executes `$VERIFY_CMD` by the CALLER's absolute
+path (deliberate, per its header comment). autopilot's `hooks/tests/*.test.sh` all derive
+`REPO_ROOT` from `$0` through `lib.sh`, so the "base" run actually exercised the head tree and
+was trivially green. Recorded in `docs/BACKLOG.md` with two candidate fixes.
+
+Manual procedure with the same artifact discipline:
+
+```bash
+git worktree add --detach $WT d90433b            # base SHA, product code untouched
+git diff d90433b..HEAD -- hooks/tests/context-window.test.sh > testonly.patch
+git -C $WT apply testonly.patch                  # ONLY the test file crosses over
+cd $WT && bash hooks/tests/context-window.test.sh # relative path ⇒ $0 resolves to base
+```
+
+| Tree | Product code present | Result |
+|------|---------------------|--------|
+| base + test-only patch | `check-context-window.js` **absent** (verified) | **exit 1 — RED** (runner spawned, worktree created, branch leaked, resolver silent) |
+| head | present | **48 assertions PASS — GREEN** |
+
+The base failures are exactly the behaviors the gate exists to prevent, which is what makes the
+test load-bearing rather than tautological.
 
 ## Progress
 

@@ -39,6 +39,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### `verify-red-green.sh` 對「從 `$0` 推導 REPO_ROOT」的測試套件失效（＝autopilot 自己全部）
+- **Trigger**: 下次要在 autopilot repo 內用 `verify-red-green.sh` 當紅綠閘時；或要把它接進 `/l5`／`/l6` 的自動驗收路徑時。
+- **Context**: `run_verify_cmd()` 雖然 `cd "$wt"` 進 base worktree，但用**主 repo 的絕對路徑**執行 `$VERIFY_CMD`（第 174 行刻意 canonicalize，header 有說明理由）。autopilot 的 `hooks/tests/*.test.sh` 一律 `. "$(dirname "$0")/lib.sh"`，`lib.sh` 再由 `$0` 推出 `REPO_ROOT` — 於是 base run 實際上是拿**主 repo（＝head）的產品碼**在跑，永遠綠，verdict 恆為 `NOT_RED_ON_BASE`。v2.32.58 實測：工具報 `NOT_RED_ON_BASE`（base green），但手動在 base worktree 內用相對路徑跑同一測試檔 ⇒ **exit 1、大量斷言失敗**（真 RED）。工具傳了 `"$wt"` 當 `$1` 給 verify-cmd，顯示設計意圖是測試自己要吃這個參數；autopilot 的 `lib.sh` 不看 `$1`。**兩條可能修法**：(a) `lib.sh` 優先採用 `$1`／`AUTOPILOT_TEST_REPO_ROOT` 當 REPO_ROOT（消費端修，影響 158 個測試檔的共用底座）；(b) `verify-red-green.sh` 改成在 worktree 內解析同名相對路徑（工具端修，但會改變既有使用者語意）。**未修之前，本 repo 的紅綠驗證必須手動做**（建 detached worktree at base → 只 apply 測試檔 patch → `cd` 進去用相對路徑跑）。
+- **Effort**: S（任一修法）＋需回歸既有消費者
+- **Source**: v2.32.58 context-window gate 的紅綠驗收（`docs/projects/2026-07-25-context-budget-gate/README.md`）
+
 ### Engine-transcript → scorecard importer（四家引擎真實遙測灌進決策層）
 - **Trigger**: 下次要調 `resolve-review-loop.sh` roster／`resolve-dispatch.sh`／DOA tier，而手上只有軼事沒有基率時；或 `engine-scorecard.js` 的 row 數再度落後真實派遣量一個數量級時。
 - **Context**: 2026-07-25 遙測盤點發現決策層與觀測層嚴重脫節——`engine-scorecard.jsonl` 138 rows、`engine-capability.jsonl` 141 rows、`calibration/samples.jsonl` **5 rows**，而本機磁碟上躺著 codex 1231 個 headless dispatch session（含完整 `event_msg.token_count`）、grok 369 個（`signals.json` 有 30+ 行為欄位含 `editAndRetryCount`／`agentLinesAdded`／`toolFailureCount`）、opencode 372 個（**唯一有真實金額** `cost` 欄位）從未被讀過。importer 應輸出去識別化聚合（絕不含 transcript 原文）：per-engine 的完成率／撞牆率／toolFailure 率／零產出率。**注意母體偏差**：opencode 那 372 個 99% 是 `swe-calibrate`，非日常派遣路徑，不可外推成本。

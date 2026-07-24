@@ -37,6 +37,11 @@
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
 #       [--bin <path>]          # override the runner binary (test seam)
 #       [--checklists <c1,c2>]  # optional adversarial checklist
+#       [--context-window off|warn|block]  # pre-dispatch context-window gate (default: block;
+#                               #   also AUTOPILOT_CONTEXT_WINDOW_GATE). Sizes diff+spec+pack
+#                               #   against the model's window; over budget ⇒ fail closed with
+#                               #   no runner spawn. Replaces the old fixed 96 KB diff advisory.
+#                               #   See references/hetero-dispatch.md § Context-window gate.
 #       [--endpoint <name>]     # anthropic-compatible/cc-shim: resolve creds via
 #                               #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*);
 #                               #   raw env still used when omitted (byte-identical)
@@ -126,7 +131,7 @@ while [[ $# -gt 0 ]]; do
     --run-id)    RUN_ID="${2:-}"; shift 2 ;;
     --stage)     STAGE="${2:-}"; shift 2 ;;
     --endpoint)  { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--endpoint requires a non-empty value" >&2; exit 2; }; ENDPOINT="$2"; shift 2 ;;
-    -h|--help)   sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,47p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done

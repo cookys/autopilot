@@ -38,6 +38,18 @@ context_window_mode() {
   esac
 }
 
+# The dispatch rails' stdout+stderr is a MACHINE-PARSABLE result channel: callers do
+# `OUT="$(dispatch-... 2>&1)"` and then JSON-parse it. Any chrome this gate prints there
+# corrupts that parse. So every advisory line here respects the rails' existing
+# DISPATCH_QUIET convention, exactly like the surrounding scripts do. The structured
+# verdict always reaches the caller through CONTEXT_WINDOW_JSON / _VERDICT / _REASON,
+# which the rails write into their raw log — diagnosis never depends on this printing.
+_context_window_warn() {
+  [ -n "${DISPATCH_QUIET:-}" ] && return 0
+  printf 'WARNING: %s\n' "$1" >&2
+  return 0
+}
+
 context_window_gate() {
   local mode="${1:-block}"
   local self_dir="${2:-}"
@@ -57,7 +69,7 @@ context_window_gate() {
   if [ ! -r "$gate" ] || ! command -v node > /dev/null 2>&1; then
     CONTEXT_WINDOW_VERDICT="gate_unavailable"
     CONTEXT_WINDOW_REASON="context-window gate unavailable (node or check-context-window.js missing); dispatch allowed"
-    printf 'WARNING: %s\n' "$CONTEXT_WINDOW_REASON" >&2
+    _context_window_warn "$CONTEXT_WINDOW_REASON"
     return 0
   fi
 
@@ -82,7 +94,7 @@ context_window_gate() {
   if [ -z "$out" ]; then
     CONTEXT_WINDOW_VERDICT="gate_unavailable"
     CONTEXT_WINDOW_REASON="context-window gate produced no output (rc=$rc); dispatch allowed"
-    printf 'WARNING: %s\n' "$CONTEXT_WINDOW_REASON" >&2
+    _context_window_warn "$CONTEXT_WINDOW_REASON"
     return 0
   fi
 
@@ -106,17 +118,22 @@ process.stdin.on("data", (d) => (s += d)).on("end", () => {
       ;;
     OVER_BUDGET)
       if [ "$mode" = "warn" ]; then
-        printf 'WARNING: context-window OVER_BUDGET (mode=warn, dispatching anyway): %s\n' \
-          "$CONTEXT_WINDOW_REASON" >&2
+        _context_window_warn "context-window OVER_BUDGET (mode=warn, dispatching anyway): $CONTEXT_WINDOW_REASON"
         return 0
       fi
       return 1
       ;;
+    UNKNOWN_WINDOW)
+      # Never block, and never print: most models have no recorded window, so this
+      # is the NORMAL state, not an anomaly. Printing it on every dispatch would be
+      # constant noise. Same call made on the resolver side (it omits UNKNOWN_WINDOW
+      # from capability_warnings). The verdict still reaches the rail's raw log via
+      # CONTEXT_WINDOW_JSON.
+      return 0
+      ;;
     *)
-      # UNKNOWN_WINDOW and any unexpected verdict: report, never block. A new
-      # engine must not become undispatchable just because no window has been
-      # observed for it yet.
-      printf 'WARNING: context-window %s: %s\n' "$CONTEXT_WINDOW_VERDICT" "$CONTEXT_WINDOW_REASON" >&2
+      # Any unexpected verdict: report (this one IS anomalous), never block.
+      _context_window_warn "context-window $CONTEXT_WINDOW_VERDICT: $CONTEXT_WINDOW_REASON"
       return 0
       ;;
   esac

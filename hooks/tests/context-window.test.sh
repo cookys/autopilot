@@ -18,7 +18,25 @@ assert_file_exists "$GATE" "check-context-window.js exists"
 assert_file_exists "$LIB" "lib/context-window.sh exists"
 
 TMP="$(mktemp -d -t context-window-test-XXXXXX)"
-trap 'rm -rf "$TMP"' EXIT
+# The hetero probe below asks dispatch-hetero.sh to create branch
+# test/context-window-selftest. On a GATED tree the gate blocks first and nothing is
+# created — that is exactly what the probe asserts. But this same file is also run
+# against an UNGATED tree during red-green validation, where the dispatch really does
+# create a worktree + branch. Reap both unconditionally so the test cannot leave the
+# repo dirtier than it found it in either direction.
+SELFTEST_BRANCH="test/context-window-selftest"
+cleanup_context_window_test() {
+  rm -rf "$TMP"
+  local wt
+  while IFS= read -r wt; do
+    [ -n "$wt" ] && git -C "$REPO_ROOT" worktree remove --force "$wt" > /dev/null 2>&1
+  done < <(git -C "$REPO_ROOT" worktree list --porcelain 2> /dev/null \
+    | awk '/^worktree /{p=$2} /^branch .*'"${SELFTEST_BRANCH##*/}"'$/{print p}')
+  git -C "$REPO_ROOT" worktree prune > /dev/null 2>&1
+  git -C "$REPO_ROOT" branch -D "$SELFTEST_BRANCH" > /dev/null 2>&1
+  return 0
+}
+trap cleanup_context_window_test EXIT
 
 # Fixtures. 400000 bytes / 3.5 = 114286 est. tokens, which overflows spark's
 # 0.7 x 121600 = 85120 threshold but fits grok-4.5's 0.7 x 500000 = 350000.
@@ -173,6 +191,19 @@ rm -f "$RUNNER_MARKER"
 timeout 90 bash "$REPO_ROOT/scripts/dispatch-author.sh" --runner codex \
   --model gpt-5.3-codex-spark --prompt-file "$TMP/small.txt" --bin "$FAKE" > /dev/null 2>&1
 assert_file_exists "$RUNNER_MARKER" "in-budget input dispatches normally"
+
+# --- REGRESSION: the gate must not corrupt the machine-parsable result channel -
+# The rails' callers do OUT="$(dispatch-... 2>&1)" and then JSON-parse OUT. The first
+# cut of this gate printed a WARNING to stderr on UNKNOWN_WINDOW — which is the NORMAL
+# state for most models — and broke JSON parsing for 5 dispatch-author test files.
+# An unknown model here is the exact trigger.
+rm -f "$RUNNER_MARKER"
+NOISE_OUT="$(DISPATCH_QUIET=1 timeout 90 bash "$REPO_ROOT/scripts/dispatch-author.sh" --runner codex \
+  --model definitely-unknown-engine --prompt-file "$TMP/small.txt" --bin "$FAKE" 2>&1 | tail -1)"
+assert_neq "$(json_field "$NOISE_OUT" status)" "PARSE_ERROR" \
+  "unknown-window dispatch still emits parseable JSON on the 2>&1 channel"
+assert_not_contains "$NOISE_OUT" "WARNING:" \
+  "gate prints no stderr chrome under DISPATCH_QUIET (would corrupt 2>&1 JSON parsing)"
 
 # --- hetero rail: blocked BEFORE the worktree is created ----------------------
 WT_BEFORE="$(git -C "$REPO_ROOT" worktree list | wc -l)"

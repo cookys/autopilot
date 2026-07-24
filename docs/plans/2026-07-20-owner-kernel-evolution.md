@@ -1,6 +1,7 @@
 # Plan — Owner Kernel evolution
 
-> **Status**: P0 funded; P1-P2 and P3.0-P3.6c implemented; P3.7 production activation specified and pending
+> **Status**: P0 funded; P1-P2 and P3.0-P3.6c implemented; P3.7 authority contracts implemented
+> against external host interfaces, with installed-host activation still pending
 > **Owner**: a qualified depth-0 principal, persisted as a logical role through durable events
 > **Proposed branch**: `feat/owner-kernel-governance`
 > **Frame**: replace flow-led autonomy with owner-led governance without weakening executable evidence

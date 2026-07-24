@@ -141,6 +141,13 @@ function makeInitialState(header) {
     state.terminal_controls = [];
     state.acceptance_failures = {};
   }
+  if (header.semantic_authority) {
+    state.semantic_authority_version = 1;
+    state.semantic_authority_hash = header.semantic_authority_hash;
+    state.semantic_route_hash = header.semantic_authority.route_hash;
+    state.semantic_kernel_binding = cloneCanonical(header.semantic_authority.route.kernel_binding);
+    if (!state.delegations) state.delegations = {};
+  }
   return state;
 }
 
@@ -202,6 +209,13 @@ function stateProjection(state) {
     projection.terminal_controls = state.terminal_controls;
     projection.acceptance_failures = state.acceptance_failures;
   }
+  if (state.semantic_authority_version !== undefined) {
+    projection.semantic_authority_version = state.semantic_authority_version;
+    projection.semantic_authority_hash = state.semantic_authority_hash;
+    projection.semantic_route_hash = state.semantic_route_hash;
+    projection.semantic_kernel_binding = state.semantic_kernel_binding;
+    projection.delegations = state.delegations;
+  }
   return cloneCanonical(projection);
 }
 
@@ -227,6 +241,14 @@ function hasActionAuthority(state) {
 
 function hasAcceptanceProtocol(state) {
   return state.acceptance_version === 2;
+}
+
+function hasSemanticAuthority(state) {
+  return state.semantic_authority_version === 1;
+}
+
+function hasDelegationProtocol(state) {
+  return hasAcceptanceProtocol(state) || hasSemanticAuthority(state);
 }
 
 function hasPendingActionClaim(state) {
@@ -487,7 +509,8 @@ function validateDecisionPayload(payload, state, policy, emitter, eventEmittedAt
     suspended: false,
     approved_uses: 0,
     ...(hasActionAuthority(state) ? { claimed_uses: 0 } : {}),
-    ...(hasAcceptanceProtocol(state) ? { delegation_count: 0, recovery_count: 0 } : {}),
+    ...(hasDelegationProtocol(state) ? { delegation_count: 0 } : {}),
+    ...(hasAcceptanceProtocol(state) ? { recovery_count: 0 } : {}),
   };
 }
 
@@ -1814,7 +1837,9 @@ function validateTranslationPayload(payload) {
 }
 
 function validateDelegationPayload(payload, state, policy, emitter) {
-  if (!hasAcceptanceProtocol(state)) stateError('delegation requires a schema_version 2 acceptance contract');
+  if (!hasDelegationProtocol(state)) {
+    stateError('delegation requires acceptance authority or semantic delegation authority');
+  }
   assertObject(payload, 'delegation payload');
   assertOnlyKeys(payload, new Set([
     'delegation_id',
@@ -2418,9 +2443,10 @@ function applyEvent(previousState, event, policy, { preflight = false } = {}) {
     case 'decision': {
       const decision = validateDecisionPayload(event.payload, state, policy, event.emitter, event.emitted_at);
       state.decisions[decision.decision_id] = decision;
-      if (hasAcceptanceProtocol(state)) {
+      if (hasDelegationProtocol(state)) {
         state.block_reasons = state.block_reasons.filter((reason) => (
-          !reason.startsWith('delegation_exhausted:') && !reason.startsWith('recovery_exhausted:')
+          !reason.startsWith('delegation_exhausted:')
+          && (!hasAcceptanceProtocol(state) || !reason.startsWith('recovery_exhausted:'))
         ));
         if (state.block_reasons.length === 0) {
           state.blocked_since = null;
@@ -2428,7 +2454,7 @@ function applyEvent(previousState, event, policy, { preflight = false } = {}) {
         }
       }
       if (decision.requires_approval) addBlockReason(state, approvalReason(decision.decision_id), event.emitted_at);
-      else if (hasAcceptanceProtocol(state) && state.block_reasons.length === 0) state.status = 'decide';
+      else if (hasDelegationProtocol(state) && state.block_reasons.length === 0) state.status = 'decide';
       break;
     }
     case 'approval': {

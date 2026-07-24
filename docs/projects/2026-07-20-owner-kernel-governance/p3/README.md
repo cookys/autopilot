@@ -495,12 +495,47 @@ AUTOPILOT_P0_A0_LIVE=1 PYTHONDONTWRITEBYTECODE=1 \
   bash hooks/tests/supervised-production-substrate-p0-live.test.sh
 ```
 
+## P3.7 Authority Contracts
+
+P3.7a-c are implemented as production-code external-host contracts:
+
+- P3.7a consumes an exact P3.5d v2 handoff, exclusive P3.6 claim, durable cohort, policy,
+  acceptance contract, immutable base, workspace descriptor, and six distinct Kernel/worker/broker/
+  receipt-verifier/witness/coordinator identities. Every event receipt is compare-and-appended,
+  read back, and independently anchored. This profile has no effects or acceptance.
+- P3.7b enables only `owner-kernel-probe-toggle-v1`. The caller cannot select a command, target,
+  path, tool, or receipt root. The focused gate performs and restores the effect, rejects action
+  substitution, receipt-root substitution, and authorization replay.
+- P3.7c enables only `engine-implementation-dispatch-v1`, crosses the real
+  `AutopilotEngine.implementTask()` seam exactly once, binds the delivered manifest to verification,
+  independent challenge, and action audit, then commits `acceptance` plus `complete` in one durable
+  witness batch. Engine `committed`/`converged` alone never terminates the Kernel.
+
+The project default and a one-run `owner-led`/`milestone-led` override are resolved into the same
+route policy hash used by the Kernel. A supplied profile or nested override that disagrees is
+rejected before session start.
+
+`hooks/tests/owner-kernel-production-corpus.test.sh` reports all eight named attacks and all fifteen
+frozen baseline categories separately. Each of the 23 rows requires a scenario-specific marker from
+the production test that executed it; 46 additional mutations prove the report cannot silently alter
+an outcome or evidence hash. There are no `not_applicable` rows. Its scope is
+`production_code_with_external_host_contracts`: deterministic tests inject the external calls. The
+P3.6 privileged live gate remains the installed cross-UID substrate evidence; P3.7 does not relabel
+that A0 evidence or claim that a systemd P3.7 adapter has been deployed.
+
+```bash
+bash hooks/tests/supervised-owner-kernel-semantic-witness.test.sh
+bash hooks/tests/supervised-owner-kernel-probe-effect.test.sh
+bash hooks/tests/supervised-owner-kernel-engine-acceptance.test.sh
+bash hooks/tests/owner-kernel-production-corpus.test.sh
+```
+
 ## Deferred Full P3 Gate
 
 Do not reduce `/l4` through `/l6` to aliases yet. Their worktree isolation, strict dispatch
 contracts, artifact boundary, depth-0 QC, merge, session marker, and recovery rails are currently
-the active enforcement path. The current `AutopilotEngine` has no Owner Kernel action-sink bridge,
-and P2 callback contracts are not a production supervised broker/witness/coordinator.
+the active enforcement path. P3.7 now has one bounded Owner Kernel action-sink bridge and the
+external coordinator contract, but no installed P3.7 systemd adapter has replaced those rails.
 
 Full activation requires all of the following:
 

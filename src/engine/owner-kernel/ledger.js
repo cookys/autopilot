@@ -17,6 +17,10 @@ const {
 const { OwnerKernelError } = require('./errors');
 const { verifyEvent } = require('./events');
 const { freezeAcceptanceContract, resolveGovernancePolicy } = require('./policy');
+const {
+  createSemanticAuthorityHeader,
+  normalizeSemanticAuthorityHeader,
+} = require('./semantic-authority');
 const { makeInitialState, applyEvent, stateProjection } = require('./state');
 const { normalizeWitnessBinding } = require('./witness');
 
@@ -263,6 +267,8 @@ function createLedgerHeader({
   createdAt,
   authority = null,
   acceptanceAuthority = null,
+  semanticAuthority = null,
+  witness = null,
 }) {
   validateRunId(runId);
   if (typeof witnessStreamId !== 'string' || witnessStreamId.length === 0) {
@@ -274,6 +280,15 @@ function createLedgerHeader({
   const normalizedContract = freezeAcceptanceContract(contract);
   const normalizedAuthority = normalizeAuthorityHeader(authority);
   const normalizedAcceptanceAuthority = normalizeAcceptanceAuthorityHeader(acceptanceAuthority);
+  const normalizedSemanticAuthority = semanticAuthority === null
+    ? null
+    : createSemanticAuthorityHeader(semanticAuthority, witness);
+  if (normalizedSemanticAuthority !== null
+    && (normalizedSemanticAuthority.route.run_id !== runId
+      || normalizedSemanticAuthority.route.policy_hash !== policyHash
+      || normalizedSemanticAuthority.route.contract_hash !== contractHash)) {
+    ledgerError('semantic authority route does not match the frozen run, policy, and contract');
+  }
   const actionCatalog = Array.isArray(normalizedPolicy.policy.action_catalog)
     ? normalizedPolicy.policy.action_catalog
     : [];
@@ -296,6 +311,21 @@ function createLedgerHeader({
   if (normalizedAuthority !== null && normalizedAcceptanceAuthority !== null
     && normalizedAuthority.witness_binding_hash !== normalizedAcceptanceAuthority.witness_binding_hash) {
     ledgerError('action and acceptance authorities must bind the same witness identity and attestation');
+  }
+  const authorityWitnessHashes = [
+    normalizedAuthority && normalizedAuthority.witness_binding_hash,
+    normalizedAcceptanceAuthority && normalizedAcceptanceAuthority.witness_binding_hash,
+    normalizedSemanticAuthority && normalizedSemanticAuthority.witness_binding_hash,
+  ].filter(Boolean);
+  if (new Set(authorityWitnessHashes).size > 1) {
+    ledgerError('semantic, action, and acceptance authorities must bind the same witness identity');
+  }
+  if (normalizedSemanticAuthority !== null
+    && (actionCatalog.length !== 0
+      || normalizedAuthority !== null
+      || normalizedAcceptanceAuthority !== null
+      || normalizedContract.contract.schema_version !== 1)) {
+    ledgerError('semantic-only authority requires an empty catalog, schema_version 1 contract, and no effect or acceptance authority');
   }
   assertAcceptanceHeaderIndependence(normalizedAuthority, normalizedAcceptanceAuthority);
   if (normalizedAuthority !== null) {
@@ -326,6 +356,10 @@ function createLedgerHeader({
       acceptance_authority: normalizedAcceptanceAuthority,
       acceptance_authority_hash: sha256(canonicalJson(normalizedAcceptanceAuthority)),
     }),
+    ...(normalizedSemanticAuthority === null ? {} : {
+      semantic_authority: normalizedSemanticAuthority,
+      semantic_authority_hash: sha256(canonicalJson(normalizedSemanticAuthority)),
+    }),
   });
 }
 
@@ -346,6 +380,8 @@ function validateLedgerHeader(header) {
     'authority_hash',
     'acceptance_authority',
     'acceptance_authority_hash',
+    'semantic_authority',
+    'semantic_authority_hash',
   ]);
   for (const key of Object.keys(header)) {
     if (!allowed.has(key)) ledgerError(`ledger header has unsupported key "${key}"`);
@@ -366,6 +402,7 @@ function validateLedgerHeader(header) {
   }
   const authority = normalizeAuthorityHeader(header.authority);
   const acceptanceAuthority = normalizeAcceptanceAuthorityHeader(header.acceptance_authority);
+  const semanticAuthority = normalizeSemanticAuthorityHeader(header.semantic_authority);
   const actionCatalog = Array.isArray(policy.policy.action_catalog) ? policy.policy.action_catalog : [];
   if (actionCatalog.length > 0 && authority === null) {
     ledgerError('a non-empty action catalog requires a ledger authority');
@@ -382,6 +419,27 @@ function validateLedgerHeader(header) {
   if (authority !== null && acceptanceAuthority !== null
     && authority.witness_binding_hash !== acceptanceAuthority.witness_binding_hash) {
     ledgerError('action and acceptance authorities must bind the same witness identity and attestation');
+  }
+  const authorityWitnessHashes = [
+    authority && authority.witness_binding_hash,
+    acceptanceAuthority && acceptanceAuthority.witness_binding_hash,
+    semanticAuthority && semanticAuthority.witness_binding_hash,
+  ].filter(Boolean);
+  if (new Set(authorityWitnessHashes).size > 1) {
+    ledgerError('semantic, action, and acceptance authorities must bind the same witness identity');
+  }
+  if (semanticAuthority !== null
+    && (semanticAuthority.route.run_id !== header.run_id
+      || semanticAuthority.route.policy_hash !== header.policy_hash
+      || semanticAuthority.route.contract_hash !== header.contract_hash)) {
+    ledgerError('semantic authority route does not match the frozen run, policy, and contract');
+  }
+  if (semanticAuthority !== null
+    && (actionCatalog.length !== 0
+      || authority !== null
+      || acceptanceAuthority !== null
+      || contract.contract.schema_version !== 1)) {
+    ledgerError('semantic-only authority requires an empty catalog, schema_version 1 contract, and no effect or acceptance authority');
   }
   assertAcceptanceHeaderIndependence(authority, acceptanceAuthority);
   if (authority === null) {
@@ -411,6 +469,17 @@ function validateLedgerHeader(header) {
       ledgerError('ledger header acceptance_authority_hash does not match acceptance_authority');
     }
   }
+  if (semanticAuthority === null) {
+    if (Object.prototype.hasOwnProperty.call(header, 'semantic_authority_hash')) {
+      ledgerError('ledger header semantic_authority_hash must be omitted when semantic authority is absent');
+    }
+  } else {
+    const semanticAuthorityHash = sha256(canonicalJson(semanticAuthority));
+    if (!Object.prototype.hasOwnProperty.call(header, 'semantic_authority_hash')
+      || header.semantic_authority_hash !== semanticAuthorityHash) {
+      ledgerError('ledger header semantic_authority_hash does not match semantic_authority');
+    }
+  }
   if (header.policy_hash !== policy.policy_hash || header.contract_hash !== contract.contract_hash) {
     ledgerError('ledger header policy or contract hash does not match frozen data');
   }
@@ -420,6 +489,7 @@ function validateLedgerHeader(header) {
     contract: contract.contract,
     authority,
     acceptanceAuthority,
+    semanticAuthority,
   };
 }
 
@@ -464,7 +534,7 @@ function verifyLedger(ledger, {
   if (requireWitness && !witness) {
     throw new OwnerKernelError('external witness adapter is required to verify this ledger', 'WITNESS_REQUIRED');
   }
-  if ((header.authority || header.acceptance_authority) && witness) {
+  if ((header.authority || header.acceptance_authority || header.semantic_authority) && witness) {
     let witnessBinding;
     try {
       witnessBinding = normalizeWitnessBinding(witness);
@@ -478,6 +548,10 @@ function verifyLedger(ledger, {
     if (header.acceptance_authority
       && witnessBindingHash !== header.acceptance_authority.witness_binding_hash) {
       ledgerError('verification witness does not exactly match the intake-frozen acceptance authority binding');
+    }
+    if (header.semantic_authority
+      && witnessBindingHash !== header.semantic_authority.witness_binding_hash) {
+      ledgerError('verification witness does not exactly match the intake-frozen semantic authority binding');
     }
   }
   let verifiedAcceptanceAuthority = null;
@@ -516,6 +590,24 @@ function verifyLedger(ledger, {
   }
   if (requiresCoordinatorVerification && !verifiedAcceptanceAuthority && !allowUnverifiedAcceptanceProof) {
     ledgerError('serializable acceptance proof verification requires the intake-frozen acceptance coordinator');
+  }
+  if ((header.authority || header.acceptance_authority || header.semantic_authority) && witness) {
+    if (typeof witness.getHead !== 'function') {
+      ledgerError('authority verification requires witness.getHead() readback');
+    }
+    const authoritativeHead = witness.getHead();
+    const mayBeAhead = allowWitnessAheadForPendingAttempt
+      && authoritativeHead !== state.witness_head
+      && (
+        (header.acceptance_authority
+          && state.acceptance_attempt
+          && state.acceptance_attempt.status === 'pending')
+        || (header.authority
+          && Object.values(state.action_claims || {}).some((claim) => claim.outcome === null))
+      );
+    if (authoritativeHead !== state.witness_head && !mayBeAhead) {
+      ledgerError('ledger is not the complete authoritative witness stream');
+    }
   }
   if (header.acceptance_authority && witness) {
     if (typeof witness.getHead !== 'function') {
@@ -587,13 +679,6 @@ function verifyLedger(ledger, {
       if (resolutionVerified !== true && (!resolutionVerified || resolutionVerified.ok !== true)) {
         ledgerError('serializable acceptance coordinator resolution commitment did not verify');
       }
-    }
-    const authoritativeHead = witness.getHead();
-    const mayBeAhead = allowWitnessAheadForPendingAttempt
-      && state.acceptance_attempt && state.acceptance_attempt.status === 'pending'
-      && authoritativeHead !== state.witness_head;
-    if (authoritativeHead !== state.witness_head && !mayBeAhead) {
-      ledgerError('ledger is not the complete authoritative witness stream');
     }
   }
   return {

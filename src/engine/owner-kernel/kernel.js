@@ -35,6 +35,7 @@ const {
   verifyLedger,
 } = require('./ledger');
 const { freezeAcceptanceContract, resolveGovernancePolicy } = require('./policy');
+const { createSemanticAuthorityHeader } = require('./semantic-authority');
 const {
   actionReconciliationHash,
   applyEvent,
@@ -1020,6 +1021,7 @@ function appendInternal(kernel, { type, emitter, payload, skipAutomaticCheckpoin
       contractHash: internal.header.contract_hash,
       authorityHash: internal.header.authority_hash,
       acceptanceAuthorityHash: internal.header.acceptance_authority_hash,
+      semanticAuthorityHash: internal.header.semantic_authority_hash,
       payload,
       prevEventHash: internal.state.event_head,
     });
@@ -1064,6 +1066,7 @@ function appendInternal(kernel, { type, emitter, payload, skipAutomaticCheckpoin
       contractHash: provisional.contract_hash,
       authorityHash: provisional.authority_hash,
       acceptanceAuthorityHash: provisional.acceptance_authority_hash,
+      semanticAuthorityHash: provisional.semantic_authority_hash,
       payload: provisional.payload,
       prevEventHash: provisional.prev_event_hash,
       witness: receipt,
@@ -1127,6 +1130,7 @@ async function appendBatchInternal(kernel, entries, { batchId, appendBatch = nul
         contractHash: internal.header.contract_hash,
         authorityHash: internal.header.authority_hash,
         acceptanceAuthorityHash: internal.header.acceptance_authority_hash,
+        semanticAuthorityHash: internal.header.semantic_authority_hash,
         payload,
         prevEventHash: previousEventHash,
       });
@@ -1219,6 +1223,7 @@ async function appendBatchInternal(kernel, entries, { batchId, appendBatch = nul
         contractHash: provisional.contract_hash,
         authorityHash: provisional.authority_hash,
         acceptanceAuthorityHash: provisional.acceptance_authority_hash,
+        semanticAuthorityHash: provisional.semantic_authority_hash,
         payload: provisional.payload,
         prevEventHash: provisional.prev_event_hash,
         witness: receipt,
@@ -1269,6 +1274,7 @@ async function importAcceptedAttemptBatch(kernel, response) {
       contractHash: record.contract_hash,
       authorityHash: record.authority_hash,
       acceptanceAuthorityHash: record.acceptance_authority_hash,
+      semanticAuthorityHash: record.semantic_authority_hash,
       payload: record.payload,
       prevEventHash: record.prev_event_hash,
     });
@@ -1347,6 +1353,7 @@ async function importAcceptedAttemptBatch(kernel, response) {
     contractHash: provisional.contract_hash,
     authorityHash: provisional.authority_hash,
     acceptanceAuthorityHash: provisional.acceptance_authority_hash,
+    semanticAuthorityHash: provisional.semantic_authority_hash,
     payload: provisional.payload,
     prevEventHash: provisional.prev_event_hash,
     witness: receipts[index],
@@ -1532,7 +1539,9 @@ class OwnerKernel {
       actionAuthority,
       acceptanceAuthority,
       recoveryOnly,
-      requireCompareAndAppend: Boolean(header.authority || header.acceptance_authority),
+      requireCompareAndAppend: Boolean(
+        header.authority || header.acceptance_authority || header.semantic_authority,
+      ),
       appending: false,
       acceptanceLock: false,
       acceptanceTransaction: null,
@@ -1557,6 +1566,7 @@ class OwnerKernel {
     allowTestActionExecutor = false,
     acceptanceAuthority = null,
     allowTestAcceptanceCoordinator = false,
+    semanticAuthority = null,
     nonceFactory,
   }) {
     assertWitnessAdapter(witness, { allowTestWitness });
@@ -1688,6 +1698,23 @@ class OwnerKernel {
       }
       assertIndependentAuthorityBindings(bindings, { label: 'acceptance coordinator binding' });
     }
+    if (semanticAuthority !== null && semanticAuthority !== undefined) {
+      assertWitnessAdapter(witness, {
+        allowTestWitness,
+        requireCompareAndAppend: true,
+        requireBinding: true,
+      });
+      const initialWitnessHead = witness.getHead();
+      if (initialWitnessHead !== null && !isSha256(initialWitnessHead)) {
+        throw new OwnerKernelBlockedError('witness getHead() returned an invalid head', 'WITNESS_HEAD_INVALID');
+      }
+      if (initialWitnessHead !== null) {
+        throw new OwnerKernelBlockedError(
+          'a new semantic-authority Kernel run requires an empty external witness stream',
+          'WITNESS_HEAD_STALE',
+        );
+      }
+    }
     const header = createLedgerHeader({
       runId,
       policy: resolvedPolicy.policy,
@@ -1718,6 +1745,8 @@ class OwnerKernel {
         witness_binding: normalizeWitnessBinding(witness),
         witness_binding_hash: sha256(canonicalJson(normalizeWitnessBinding(witness))),
       },
+      semanticAuthority,
+      witness,
     });
     const kernel = new OwnerKernel({
       header,
@@ -1751,6 +1780,7 @@ class OwnerKernel {
     allowTestActionExecutor = false,
     acceptanceAuthority = null,
     allowTestAcceptanceCoordinator = false,
+    semanticAuthority = null,
     nonceFactory,
   }) {
     assertWitnessAdapter(witness, { allowTestWitness });
@@ -1789,6 +1819,27 @@ class OwnerKernel {
         'ACCEPTANCE_COORDINATOR_MISMATCH',
       );
     }
+    let normalizedSemanticAuthority = null;
+    if (verified.header.semantic_authority) {
+      if (!semanticAuthority) {
+        throw new OwnerKernelBlockedError(
+          'resuming a semantic-authority ledger requires the intake-frozen semantic route',
+          'SEMANTIC_AUTHORITY_REQUIRED',
+        );
+      }
+      normalizedSemanticAuthority = createSemanticAuthorityHeader(semanticAuthority, witness);
+      if (canonicalJson(normalizedSemanticAuthority) !== canonicalJson(verified.header.semantic_authority)) {
+        throw new OwnerKernelBlockedError(
+          'resumed semantic route does not exactly match the intake-frozen authority',
+          'SEMANTIC_AUTHORITY_MISMATCH',
+        );
+      }
+    } else if (semanticAuthority !== null && semanticAuthority !== undefined) {
+      throw new OwnerKernelError(
+        'legacy ledger has no semantic authority header and cannot be resumed with one',
+        'SEMANTIC_AUTHORITY_MISMATCH',
+      );
+    }
     if (verified.header.authority && !verified.header.acceptance_authority
       && Object.values(resumedReplay.state.action_claims).some((claim) => claim.outcome === null)) {
       throw new OwnerKernelBlockedError(
@@ -1802,7 +1853,8 @@ class OwnerKernel {
     if (typeof nonce !== 'string' || nonce.length < 32) {
       throw new OwnerKernelError('nonceFactory must return a high-entropy string', 'INVALID_CAPABILITY_NONCE');
     }
-    if (verified.header.authority || verified.header.acceptance_authority) {
+    if (verified.header.authority || verified.header.acceptance_authority
+      || verified.header.semantic_authority) {
       assertWitnessAdapter(witness, {
         allowTestWitness,
         requireCompareAndAppend: true,
@@ -1824,6 +1876,14 @@ class OwnerKernel {
         !== verified.header.acceptance_authority.witness_binding_hash) {
       throw new OwnerKernelBlockedError(
         'resumed witness does not exactly match the intake-frozen acceptance authority binding',
+        'WITNESS_BINDING_MISMATCH',
+      );
+    }
+    if (verified.header.semantic_authority
+      && sha256(canonicalJson(normalizeWitnessBinding(witness)))
+        !== verified.header.semantic_authority.witness_binding_hash) {
+      throw new OwnerKernelBlockedError(
+        'resumed witness does not exactly match the intake-frozen semantic authority binding',
         'WITNESS_BINDING_MISMATCH',
       );
     }
@@ -1852,7 +1912,10 @@ class OwnerKernel {
         acceptance_recovery: timeoutKernel.recoverAcceptanceAttempt(),
       };
     }
-    if (verified.header.authority || verified.header.acceptance_authority) assertCurrentWitnessHead(timeoutKernel);
+    if (verified.header.authority || verified.header.acceptance_authority
+      || verified.header.semantic_authority) {
+      assertCurrentWitnessHead(timeoutKernel);
+    }
     if (resumedReplay.state.status === 'complete') {
       return { kernel: timeoutKernel, owner_capability: null };
     }
@@ -3023,7 +3086,7 @@ class OwnerKernel {
     assertActionControlPlaneUnlocked(this, 'delegation');
     beforeOperation(this);
     const internal = INTERNALS.get(this);
-    requireAcceptanceAuthority(internal);
+    if (!internal.header.semantic_authority) requireAcceptanceAuthority(internal);
     const { principal, trustedTurn } = verifyOwnerOperation(this, {
       capability,
       ownerTurnEnvelope,
@@ -3043,10 +3106,28 @@ class OwnerKernel {
         run_id: internal.header.run_id,
         decision_id: decisionId,
         decision_content_hash: decision.decision_content_hash,
+        ...(internal.header.semantic_authority ? {
+          semantic_route_hash: internal.header.semantic_authority.route_hash,
+          worker_binding: cloneCanonical(
+            internal.header.semantic_authority.route.worker_binding,
+          ),
+        } : {}),
       }),
       'delegation dispatch',
       { runId: internal.header.run_id },
     );
+    if (internal.header.semantic_authority) {
+      const boundWorker = internal.header.semantic_authority.route.worker_binding;
+      const boundWorkerHash = sha256(canonicalJson(boundWorker));
+      if (verified.identity !== boundWorker.identity
+        || verified.payload.worker_identity !== boundWorker.identity
+        || verified.payload.worker_binding_hash !== boundWorkerHash) {
+        throw new OwnerKernelBlockedError(
+          'semantic delegation verifier does not match the intake-frozen worker binding',
+          'DELEGATION_WORKER_MISMATCH',
+        );
+      }
+    }
     return appendInternal(this, {
       type: 'delegation',
       emitter: { kind: 'owner', identity: principal.identity, channel: trustedTurn.channel },

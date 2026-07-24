@@ -38,7 +38,7 @@ function roster(identity, role, family) {
   };
 }
 
-function config() {
+function config({ maxRecoverCycles = 1 } = {}) {
   return {
     schema_version: 1,
     governance: {
@@ -55,7 +55,7 @@ function config() {
       capability_ttl_seconds: 3600,
       checkpoint_interval_closed_events: 100,
       max_blocked_duration_seconds: 86400,
-      max_recover_cycles: 1,
+      max_recover_cycles: maxRecoverCycles,
       max_delegate_per_decision: 1,
       action_catalog: [],
     },
@@ -71,6 +71,24 @@ function contract() {
       { id: 'tests', kind: 'executable', command: 'node --test', artifact_ids: ['workspace'] },
       { id: 'ux', kind: 'non_executable', artifact_ids: ['workspace'] },
     ],
+  };
+}
+
+function executableOnlyContract(id) {
+  return {
+    schema_version: 2,
+    contract_id: id,
+    artifacts: [{ id: 'workspace', target: 'workspace.tar' }],
+    legs: [{ id: 'tests', kind: 'executable', command: 'node --test', artifact_ids: ['workspace'] }],
+  };
+}
+
+function nonExecutableOnlyContract(id) {
+  return {
+    schema_version: 2,
+    contract_id: id,
+    artifacts: [{ id: 'workspace', target: 'workspace.tar' }],
+    legs: [{ id: 'ux', kind: 'non_executable', artifact_ids: ['workspace'] }],
   };
 }
 
@@ -443,12 +461,12 @@ function start(runId, options = {}) {
   const coordinator = options.coordinator || authority({ witness });
   const started = OwnerKernel.start({
     runId,
-    governanceConfig: config(),
-    acceptanceContract: contract(),
+    governanceConfig: options.governanceConfig || config(),
+    acceptanceContract: options.acceptanceContract || contract(),
     initialIntentEnvelope: { signed: true, payload: { text: 'Ship the artifact.', explicit_action_hashes: [] } },
     initialOwnerId: 'owner-a',
     witness,
-    adapters: adapters(),
+    adapters: options.adapters || adapters(),
     clock: () => now,
     allowTestWitness: true,
     acceptanceAuthority: coordinator,
@@ -521,6 +539,56 @@ async function main() {
   assert.equal(failure.accepted, false);
   assert.equal(insufficient.kernel.getState().status, 'blocked');
   assert.equal(insufficient.kernel.getLedger().events.some((event) => event.payload.evidence_kind === 'acceptance_failure'), true);
+
+  const highRisk = start('baseline-high-risk', {
+    acceptanceContract: executableOnlyContract('baseline-high-risk-contract'),
+  });
+  highRisk.kernel.recordVerification({ purpose: 'tests' });
+  highRisk.kernel.recordAuditReconciliation({ purpose: 'audit' });
+  const highRiskFailure = await highRisk.kernel.accept({
+    capability: highRisk.owner_capability,
+    timeoutMilliseconds: 1000,
+  });
+  assert.equal(highRiskFailure.accepted, false);
+  assert.equal(highRisk.kernel.getState().status, 'blocked');
+
+  const mixed = start('baseline-mixed');
+  mixed.kernel.recordVerification({ purpose: 'tests' });
+  mixed.kernel.recordChallenge({ purpose: 'challenge', scope_id: 'tests' });
+  mixed.kernel.recordAuditReconciliation({ purpose: 'audit' });
+  const mixedFailure = await mixed.kernel.accept({
+    capability: mixed.owner_capability,
+    timeoutMilliseconds: 1000,
+  });
+  assert.equal(mixedFailure.accepted, false);
+  assert.equal(mixed.kernel.getState().status, 'blocked');
+
+  const nonExecutable = start('baseline-non-executable', {
+    acceptanceContract: nonExecutableOnlyContract('baseline-non-executable-contract'),
+  });
+  nonExecutable.kernel.recordAuditReconciliation({ purpose: 'audit' });
+  const nonExecutableFailure = await nonExecutable.kernel.accept({
+    capability: nonExecutable.owner_capability,
+    timeoutMilliseconds: 1000,
+  });
+  assert.equal(nonExecutableFailure.accepted, false);
+  assert.equal(nonExecutable.kernel.getState().status, 'blocked');
+
+  const unavailableAdapters = adapters();
+  unavailableAdapters.challengeVerifier = () => ({ ok: false });
+  const unavailable = start('baseline-unavailable-challenger', { adapters: unavailableAdapters });
+  unavailable.kernel.recordVerification({ purpose: 'tests' });
+  assert.throws(
+    () => unavailable.kernel.recordChallenge({ purpose: 'challenge', scope_id: 'tests' }),
+    /not verified/,
+  );
+  unavailable.kernel.recordAuditReconciliation({ purpose: 'audit' });
+  const unavailableFailure = await unavailable.kernel.accept({
+    capability: unavailable.owner_capability,
+    timeoutMilliseconds: 1000,
+  });
+  assert.equal(unavailableFailure.accepted, false);
+  assert.equal(unavailable.kernel.getState().status, 'blocked');
 
   const drift = start('acceptance-drift', {
     coordinator: authority({ snapshotOverrides: { delivered_artifacts: [{ id: 'workspace', sha256: hash('other') }] } }),
@@ -629,7 +697,39 @@ async function main() {
   });
   assert.equal(counters.kernel.getState().status, 'decide');
 
-  console.log(JSON.stringify({ assertions: 43 }));
+  const workerFailure = start('baseline-worker-failure', {
+    governanceConfig: config({ maxRecoverCycles: 2 }),
+  });
+  const workerDecision = workerFailure.kernel.mintDecision({
+    capability: workerFailure.owner_capability,
+    ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'worker-failure' },
+    actionClass: 'read_only',
+    actionDescriptor: { operation: 'inspect-worker-failure' },
+  });
+  const workerEvidence = workerFailure.kernel.recordEvidence({ purpose: 'worker-failed' });
+  workerFailure.kernel.recover({
+    capability: workerFailure.owner_capability,
+    ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'worker-recovery' },
+    decisionId: workerDecision.payload.decision_id,
+    reason: 'worker_exit_nonzero',
+    sourceEvidenceIds: [workerEvidence.payload.evidence_id],
+  });
+  assert.equal(workerFailure.kernel.getState().status, 'recover');
+
+  console.log(JSON.stringify({
+    assertions: 61,
+    corpus_evidence: {
+      baseline_categories: {
+        low_risk_executable: 'accept',
+        high_risk_executable: 'block',
+        mixed_executable_non_executable: 'block',
+        non_executable_design: 'block',
+        acceptance_substitution: 'block',
+        worker_failure: 'recover',
+        unavailable_challenger: 'block',
+      },
+    },
+  }));
 }
 
 main().catch((error) => {
@@ -640,5 +740,8 @@ NODE
 )"; EXIT=$?
 
 assert_eq "0" "$EXIT" "P2b acceptance protocol process exits cleanly"
-assert_contains "$OUT" '"assertions":43' "P2b acceptance protocol assertions pass"
+assert_contains "$OUT" '"assertions":61' "P2b acceptance protocol assertions pass"
+if [ "${AUTOPILOT_CORPUS_EVIDENCE:-0}" = "1" ]; then
+  printf '%s\n' "$OUT"
+fi
 finalize_test

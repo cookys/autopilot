@@ -116,6 +116,7 @@ const deploy = normalizeActionDescriptor(policy, {
 });
 assert.deepEqual(deploy.targets, ['service-a', 'service-b']);
 assert.equal(deploy.action_class, 'irreversible');
+assert.equal(policy.approval_policy[deploy.action_class].requires_approval, true);
 assert.equal(actionMatchesDescriptor(policy, deploy, {
   operation: 'deploy', tool_class: 'network', command: 'deploy --prod', targets: ['service-b', 'service-a'],
 }), true);
@@ -125,10 +126,14 @@ assert.equal(actionMatchesDescriptor(policy, deploy, {
 assert.equal(typeof actionDescriptorHash(deploy), 'string');
 assert.throws(() => normalizeActionDescriptor(policy, {
   operation: 'deploy', tool_class: 'network', command: 'deploy --prod', targets: ['service-a'],
-}, { declaredActionClass: 'reversible' }), /cannot lower/);
+}, { declaredActionClass: 'reversible' }), (error) => (
+  error.code === 'ACTION_CLASS_DOWNGRADE' && /cannot lower/.test(error.message)
+));
 assert.throws(() => normalizeActionDescriptor(policy, {
   operation: 'unknown', tool_class: 'network', targets: ['service-a'],
-}), /not classified/);
+}), (error) => (
+  error.code === 'ACTION_CLASSIFICATION_BLOCKED' && /not classified/.test(error.message)
+));
 assert.throws(() => normalizeActionDescriptor(policy, {
   operation: 'deploy', tool_class: 'network', command: 'deploy --prod', targets: [],
 }), /enumerable/);
@@ -1601,6 +1606,15 @@ console.log('completed_reconciliation=ok');
 console.log('action_challenge_binding=ok');
 console.log('action_audit_checkpoint_replay=ok');
 console.log('durable_action_blocking=ok');
+console.log(JSON.stringify({
+  corpus_evidence: {
+    baseline_categories: {
+      irreversible_action: 'escalate',
+      mislabeled_reversibility: 'escalate',
+      unknown_decision_class: 'escalate',
+    },
+  },
+}));
 }
 
 main().catch((error) => {
@@ -1621,5 +1635,8 @@ assert_contains "$OUT" "completed_reconciliation=ok" "Completed cancellation rec
 assert_contains "$OUT" "action_challenge_binding=ok" "V2 action challenges bind a current audited candidate and reject stale, blocking, and forged bindings"
 assert_contains "$OUT" "action_audit_checkpoint_replay=ok" "Current action-audit selection survives checkpoint and deterministic replay"
 assert_contains "$OUT" "durable_action_blocking=ok" "A record-time-qualified blocking action challenge remains a durable veto after reviewer expiry"
+if [ "${AUTOPILOT_CORPUS_EVIDENCE:-0}" = "1" ]; then
+  printf '%s\n' "$OUT"
+fi
 
 finalize_test

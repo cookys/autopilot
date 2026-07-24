@@ -42,6 +42,7 @@ replay_out="$stage_root/replay.out"
 replay_err="$stage_root/replay.err"
 install_out="$stage_root/install.out"
 install_err="$stage_root/install.err"
+bytecode_sentinel="$stage_root/bytecode-sentinel"
 tamper_out="$stage_root/tamper.out"
 tamper_err="$stage_root/tamper.err"
 p34_tamper_out="$stage_root/p34-tamper.out"
@@ -146,7 +147,7 @@ PY
     fi
   fi
   if [ "$created_runtime_parent" -eq 1 ]; then
-    if ! sudo -n rmdir /run/autopilot-intake 2>/dev/null; then
+    if [ -e /run/autopilot-intake ] && ! sudo -n rmdir /run/autopilot-intake 2>/dev/null; then
       printf 'FAIL [supervised-intake-live-host] test-created runtime parent was not empty\n' >&2
       if [ "$status" -eq 0 ]; then
         status=1
@@ -206,6 +207,7 @@ fs.writeFileSync(keyringPath, canonicalJson(keyring), { mode: 0o600 });
 fs.writeFileSync(privatePath, pair.privateKey.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 });
 NODE
 
+touch "$bytecode_sentinel"
 sudo -n /usr/bin/python3 -I "$REPO_ROOT/src/engine/supervised-intake-host.py" install \
   --install-root "$install_root" \
   --state-root "$state_root" \
@@ -216,7 +218,8 @@ sudo -n /usr/bin/python3 -I "$REPO_ROOT/src/engine/supervised-intake-host.py" in
   --create-worker \
   --create-verifier \
   --create-shadow-witness >"$install_out" 2>"$install_err"
-if sudo -n find "$REPO_ROOT/src/engine" -maxdepth 2 -type f -path '*/__pycache__/*' | grep -q .; then
+if sudo -n find "$REPO_ROOT/src/engine" -maxdepth 2 -type f -path '*/__pycache__/*' \
+  -newer "$bytecode_sentinel" | grep -q .; then
   printf 'FAIL [supervised-intake-live-host] root install left bytecode in the source checkout\n' >&2
   exit 1
 fi

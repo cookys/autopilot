@@ -52,6 +52,14 @@ const {
 const { deriveDisclosure, stateProjection } = require('./state');
 const { MemoryWitness, normalizeWitnessBinding } = require('./witness');
 const {
+  SEMANTIC_AUTHORITY_SCHEMA_VERSION,
+  SEMANTIC_WITNESS_ROUTE_VERSION,
+  createSemanticAuthorityHeader,
+  normalizeSemanticAuthorityHeader,
+  normalizeSemanticRoute,
+  semanticRouteHash,
+} = require('./semantic-authority');
+const {
   ASSURANCE_PROFILES,
   LEGACY_LEVELS,
   LEVEL_TOPOLOGIES,
@@ -87,6 +95,8 @@ module.exports = {
   OwnerKernelError,
   SHADOW_TRANSLATION_CONTRACT_ID,
   SHADOW_TRANSLATION_LEVEL,
+  SEMANTIC_AUTHORITY_SCHEMA_VERSION,
+  SEMANTIC_WITNESS_ROUTE_VERSION,
   ShadowTranslationRuntime,
   SUPPORTED_MODES,
   canonicalJson,
@@ -94,6 +104,7 @@ module.exports = {
   cloneCanonical,
   contractArtifactIds,
   createLedgerHeader,
+  createSemanticAuthorityHeader,
   createShadowTranslationEnvelope,
   deriveTranslationStatus,
   deriveDisclosure,
@@ -116,6 +127,8 @@ module.exports = {
   normalizeFrozenHostCapabilityVerifierBinding,
   normalizeHostCapability,
   normalizeRedLines,
+  normalizeSemanticAuthorityHeader,
+  normalizeSemanticRoute,
   normalizeWitnessBinding,
   normalizeVerifiedActionOutcome,
   manifestHash,
@@ -124,6 +137,7 @@ module.exports = {
   resolveGovernancePolicy,
   receiptIsWithinBrokerRoot,
   serializeLedger,
+  semanticRouteHash,
   sha256,
   stateProjection,
   translateLegacyLevel,

@@ -4,7 +4,7 @@ description: >
   Terse CEO front-door — Level 3: full autonomy, CEO executes inline on this thread, escalate only
   at the DOA boundary. Use when: "/l3 <goal>", "L3 <goal>", you want the "全權處理 / get it done"
   behavior as one command without the CEO startup Q&A. Presets involvement=just-results, scope=Hold,
-  red-lines=none (override -x / --expand). Not for: offloading to a background foreman (→ /l4), hetero
+  project red lines plus -x additions (override --mode / --expand). Not for: offloading to a background foreman (→ /l4), hetero
   impl engine (→ /l5), participatory planning (→ dev-flow), research-only (→ survey).
 ---
 
@@ -17,7 +17,8 @@ goal **itself on this thread** and escalates only at the DOA boundary.
 
 Hard rules:
 - Startup pre-filled, never re-asked on a clean goal: OKR from `<goal>`;
-  involvement=3 just-results; scope=Hold (`--expand` → Expand); red-lines=none (`-x <csv>`).
+  involvement=3 just-results; scope=Hold (`--expand` → Expand); governance mode from the project
+  default (`--mode` changes only this run); project red lines plus `-x <csv>` additions.
 - Posture: **inline** — no foreman dispatch. `/l3` is also the `--solo` degradation
   target for `/l4`/`/l5`/`/l6`.
 - The front-door changes startup ONLY — every `ceo-agent` gate (size → project setup

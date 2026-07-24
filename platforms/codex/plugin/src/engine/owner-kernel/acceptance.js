@@ -491,6 +491,11 @@ function evaluateAcceptancePredicate(state, snapshot) {
     || reason === 'user_abort_requested'
     || reason === 'unresolved_block'
     || reason === 'audit_reconciliation_missing'
+    || reason === 'candidate_contract_drift'
+    || reason === 'delivery_candidate_drift'
+    || reason.startsWith('contract_leg_classification:')
+    || reason.startsWith('challenge_missing:')
+    || reason.startsWith('challenge_blocking:')
     || reason.startsWith('non_successful_action_claim:')
   ));
   return {

@@ -65,8 +65,21 @@
       "external": { "requires_approval": true, "max_uses": 1 },
       "irreversible": { "requires_approval": true, "max_uses": 1 }
     },
+    "action_catalog": [
+      {
+        "id": "engine-implementation-dispatch-v1",
+        "operation": "engine_implementation_dispatch",
+        "tool_class": "model_runner",
+        "action_class": "external",
+        "command_required": false,
+        "requires_mediator": true,
+        "requires_challenge": false
+      }
+    ],
     "capability_ttl_seconds": 3600,
     "checkpoint_interval_closed_events": 100,
-    "max_blocked_duration_seconds": 86400
+    "max_blocked_duration_seconds": 86400,
+    "max_recover_cycles": 1,
+    "max_delegate_per_decision": 1
   }
 }

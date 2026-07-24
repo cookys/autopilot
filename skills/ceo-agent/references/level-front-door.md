@@ -34,11 +34,17 @@ so the run does not re-ask on a clean goal:
 | 1. OKR / success criteria | Derived from `<goal>`. If `<goal>` has no verifiable end-state, the CEO restates one and proceeds (does **not** block on Q&A — that is the point of the front-door). |
 | 2. Involvement | `/l3 /l4 /l5 /l6` all preset **3 = just-results** (full autonomy, notify on done). |
 | 3. Scope mode | **Hold** (bulletproof, no scope drift). Override with `--expand`. |
-| 4. Red lines (紅線) | **none** (default DOA). Override with `-x <csv>`. |
+| 4. Red lines (紅線) | Project governance red lines when configured; otherwise none (default DOA). `-x <csv>` adds run-specific rules and never removes project rules. |
+
+When `.claude/owner-kernel-governance.json` is present, its `default_mode` is the project default.
+An explicit `--mode owner-led|milestone-led` applies only to this run. `owner-led` keeps one
+qualified owner across the full run; `milestone-led` re-instantiates that owner at plan, milestone,
+and acceptance boundaries without turning milestones into user result-approval gates. The skill
+must not claim authoritative Kernel telemetry unless an external host bridge actually records it.
 
 ### Mid-run question discipline (presets active)
 
-With the front-door presets (involvement=just-results, red-lines=none), "想確認一下 /
+With the front-door presets (involvement=just-results, resolved red lines), "想確認一下 /
 should I continue?" is **NOT an escalation trigger**. The run stops ONLY at: a DOA
 boundary (outcome/escalation tables), an irreversible op outside DOA, or input that
 genuinely cannot be self-derived. Near-misses (差點走錯路) are **recorded** — into the
@@ -65,7 +71,8 @@ to plan / decompose / synthesize / verify — the things that actually need it:
 
 | Flag | Effect |
 |------|--------|
-| `-x <csv>` | Red lines, e.g. `-x payments,auth`. |
+| `-x <csv>` | Add run-specific red lines, e.g. `-x payments,auth`; project red lines cannot be removed. |
+| `--mode owner-led\|milestone-led` | Override the project governance mode for this run only. |
 | `--expand` | Scope mode = Expand instead of Hold. |
 | `--solo` | `/l4`/`/l5`/`/l6` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4/5/6 posture respectively. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). |
 

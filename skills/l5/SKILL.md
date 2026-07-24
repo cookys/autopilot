@@ -5,7 +5,7 @@ description: >
   loop + authoritative qc) but the IMPLEMENTER is orchestrated by the engine CLI and dispatched
   through the canonical `engine implement-review` path. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
   or a decorrelated second engine doing the mechanical impl. Presets involvement=just-results,
-  scope=Hold, red-lines=none (override -x / --expand / --solo). Not for: all-Claude run (→ /l4), inline
+  scope=Hold, project red lines plus -x additions (override --mode / --expand / --solo). Not for: all-Claude run (→ /l4), inline
   (→ /l3).
 ---
 

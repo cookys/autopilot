@@ -403,6 +403,21 @@ OUT="$(node "$REPO_ROOT/scripts/owner-kernel.js" translate-level --config "$CONF
 assert_eq "0" "$EXIT" "Read-only translate-level --all exits cleanly"
 assert_contains "$OUT" '"entry":"l6"' "CLI exposes the full executable translation table"
 
+CEO_SKILL="$(cat "$REPO_ROOT/skills/ceo-agent/SKILL.md")"
+LEVEL_REFERENCE="$(cat "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md")"
+assert_contains "$CEO_SKILL" 'cat .claude/owner-kernel-governance.json' "CEO mode injects project Owner Kernel governance"
+assert_contains "$CEO_SKILL" 'can never remove a project rule' "CEO mode keeps project red lines monotonic"
+assert_contains "$LEVEL_REFERENCE" 'never removes project rules' "Shared level semantics keep project red lines monotonic"
+assert_contains "$LEVEL_REFERENCE" '--mode owner-led|milestone-led' "Shared level semantics expose a per-run mode override"
+for LEVEL in l3 l4 l5 l6; do
+  if grep -q 'red-lines=none' "$REPO_ROOT/skills/$LEVEL/SKILL.md"; then
+    fail_test "$LEVEL must not erase configured project red lines"
+  fi
+done
+if grep -q 'scope=Hold; red-lines=none' "$REPO_ROOT/skills/ceo-agent/SKILL.md"; then
+  fail_test "CEO front-door summary must not erase configured project red lines"
+fi
+
 node "$REPO_ROOT/scripts/owner-kernel.js" translate-level --config "$CONFIG" --level l3 --solo >"$TEST_TMP/l3-solo.out" 2>"$TEST_TMP/l3-solo.err"; EXIT=$?
 assert_eq "2" "$EXIT" "l3 --solo is rejected instead of silently changing topology"
 assert_contains "$(cat "$TEST_TMP/l3-solo.err")" 'not valid for l3' "CLI reports invalid l3 solo flag"

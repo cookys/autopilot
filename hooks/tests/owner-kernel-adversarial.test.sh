@@ -256,6 +256,20 @@ console.log('forgery_controls=ok');
 console.log('cross_run_controls=ok');
 console.log('approval_supersession=ok');
 console.log('timeout_and_qualification=ok');
+console.log(JSON.stringify({
+  corpus_evidence: {
+    attacks: {
+      direct_decision_append: 'held',
+      worker_artifact_decision_injection: 'held',
+      child_process_capability_theft: 'held',
+    },
+    baseline_categories: {
+      approval_supersession: 'reject',
+      owner_principal_swap_expiry: 'block',
+      event_log_tampering: 'reject',
+    },
+  },
+}));
 NODE
 )"; EXIT=$?
 
@@ -264,5 +278,8 @@ assert_contains "$OUT" "forgery_controls=ok" "Forged capabilities, user input, a
 assert_contains "$OUT" "cross_run_controls=ok" "Cross-run and roster forgery are blocked"
 assert_contains "$OUT" "approval_supersession=ok" "Superseded approvals remain blocked"
 assert_contains "$OUT" "timeout_and_qualification=ok" "Timeout abort and qualification revocation are fail-closed"
+if [ "${AUTOPILOT_CORPUS_EVIDENCE:-0}" = "1" ]; then
+  printf '%s\n' "$OUT"
+fi
 
 finalize_test

@@ -318,6 +318,14 @@ console.log('exact_approval=ok');
 console.log('checkpoint_replay=ok');
 console.log('owner_capability=ok');
 console.log('supersession_disclosure=ok');
+console.log(JSON.stringify({
+  corpus_evidence: {
+    baseline_categories: {
+      session_resume: 'accept',
+      intent_amendment: 'block',
+    },
+  },
+}));
 NODE
 )"; EXIT=$?
 
@@ -327,5 +335,8 @@ assert_contains "$OUT" "exact_approval=ok" "Approval is bound to exact decision 
 assert_contains "$OUT" "checkpoint_replay=ok" "Checkpoint/replay stays deterministic"
 assert_contains "$OUT" "owner_capability=ok" "Old capabilities are rejected after resume/principal change"
 assert_contains "$OUT" "supersession_disclosure=ok" "New intent suspends prior decisions and disclosure is decision-only"
+if [ "${AUTOPILOT_CORPUS_EVIDENCE:-0}" = "1" ]; then
+  printf '%s\n' "$OUT"
+fi
 
 finalize_test

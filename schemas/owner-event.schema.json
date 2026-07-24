@@ -61,6 +61,7 @@
     "contract_hash": { "$ref": "#/$defs/sha256" },
     "authority_hash": { "$ref": "#/$defs/sha256" },
     "acceptance_authority_hash": { "$ref": "#/$defs/sha256" },
+    "semantic_authority_hash": { "$ref": "#/$defs/sha256" },
     "payload": { "type": "object" },
     "prev_event_hash": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
     "content_hash": { "$ref": "#/$defs/sha256" },
@@ -92,7 +93,17 @@
           "items": { "$ref": "#/$defs/sha256" }
         },
         "batch_commitment": { "$ref": "#/$defs/sha256" },
-        "coordinator_commitment": { "type": "object" }
+        "coordinator_commitment": { "type": "object" },
+        "semantic_route_hash": { "$ref": "#/$defs/sha256" },
+        "durable_request_hash": { "$ref": "#/$defs/sha256" },
+        "durable_event_payload_hash": { "$ref": "#/$defs/sha256" },
+        "receipt_anchor_hash": { "$ref": "#/$defs/sha256" }
+      },
+      "dependentRequired": {
+        "semantic_route_hash": ["durable_request_hash", "durable_event_payload_hash", "receipt_anchor_hash"],
+        "durable_request_hash": ["semantic_route_hash", "durable_event_payload_hash", "receipt_anchor_hash"],
+        "durable_event_payload_hash": ["semantic_route_hash", "durable_request_hash", "receipt_anchor_hash"],
+        "receipt_anchor_hash": ["semantic_route_hash", "durable_request_hash", "durable_event_payload_hash"]
       }
     }
   },

@@ -27,6 +27,23 @@ function verifyReceiptShape(receipt, expected = {}) {
     || (previousWitnessHead !== null && !isSha256(previousWitnessHead))) {
     throw new OwnerKernelError('witness receipt has invalid fields', 'INVALID_WITNESS_RECEIPT');
   }
+  const semanticFields = [
+    'semantic_route_hash',
+    'durable_request_hash',
+    'durable_event_payload_hash',
+    'receipt_anchor_hash',
+  ];
+  const semanticFieldCount = semanticFields.filter(
+    (name) => Object.prototype.hasOwnProperty.call(receipt, name),
+  ).length;
+  if (semanticFieldCount !== 0
+    && (semanticFieldCount !== semanticFields.length
+      || semanticFields.some((name) => !isSha256(receipt[name])))) {
+    throw new OwnerKernelError(
+      'semantic witness receipt must carry the complete durable route and anchor binding',
+      'INVALID_WITNESS_RECEIPT',
+    );
+  }
   for (const [key, value] of Object.entries(expected)) {
     if (receipt[key] !== value) {
       throw new OwnerKernelError(`witness receipt ${key} does not match event`, 'INVALID_WITNESS_RECEIPT');

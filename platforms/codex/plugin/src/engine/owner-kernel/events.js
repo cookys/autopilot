@@ -36,6 +36,7 @@ const EVENT_KEYS = new Set([
   'contract_hash',
   'authority_hash',
   'acceptance_authority_hash',
+  'semantic_authority_hash',
   'payload',
   'prev_event_hash',
   'content_hash',
@@ -117,6 +118,9 @@ function eventContent(event) {
     ...(Object.prototype.hasOwnProperty.call(event, 'acceptance_authority_hash')
       ? { acceptance_authority_hash: event.acceptance_authority_hash }
       : {}),
+    ...(Object.prototype.hasOwnProperty.call(event, 'semantic_authority_hash')
+      ? { semantic_authority_hash: event.semantic_authority_hash }
+      : {}),
     payload: event.payload,
   };
 }
@@ -131,6 +135,7 @@ function prepareEvent({
   contractHash,
   authorityHash,
   acceptanceAuthorityHash,
+  semanticAuthorityHash,
   payload,
   prevEventHash,
 }) {
@@ -145,6 +150,7 @@ function prepareEvent({
     contract_hash: contractHash,
     ...(authorityHash === undefined ? {} : { authority_hash: authorityHash }),
     ...(acceptanceAuthorityHash === undefined ? {} : { acceptance_authority_hash: acceptanceAuthorityHash }),
+    ...(semanticAuthorityHash === undefined ? {} : { semantic_authority_hash: semanticAuthorityHash }),
     payload: cloneCanonical(payload),
     prev_event_hash: prevEventHash,
   };
@@ -167,6 +173,7 @@ function buildEvent({
   contractHash,
   authorityHash,
   acceptanceAuthorityHash,
+  semanticAuthorityHash,
   payload,
   prevEventHash,
   witness,
@@ -181,6 +188,7 @@ function buildEvent({
     contractHash,
     authorityHash,
     acceptanceAuthorityHash,
+    semanticAuthorityHash,
     payload,
     prevEventHash,
   });
@@ -218,6 +226,10 @@ function validateEventShape(event, options = {}) {
   if (Object.prototype.hasOwnProperty.call(value, 'acceptance_authority_hash')
     && !isSha256(value.acceptance_authority_hash)) {
     eventError('event.acceptance_authority_hash must be a SHA-256 digest when present');
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'semantic_authority_hash')
+    && !isSha256(value.semantic_authority_hash)) {
+    eventError('event.semantic_authority_hash must be a SHA-256 digest when present');
   }
   assertPlainObject(value.payload, 'event.payload');
   canonicalJson(value.payload);
@@ -291,6 +303,14 @@ function verifyEvent(event, { header, previousEventHash, previousWitnessHead, wi
     } else if (!Object.prototype.hasOwnProperty.call(event, 'acceptance_authority_hash')
       || event.acceptance_authority_hash !== header.acceptance_authority_hash) {
       eventError('event acceptance_authority_hash does not match the ledger acceptance authority commitment');
+    }
+    if (header.semantic_authority_hash === undefined) {
+      if (Object.prototype.hasOwnProperty.call(event, 'semantic_authority_hash')) {
+        eventError('non-semantic ledger event must not contain semantic_authority_hash');
+      }
+    } else if (!Object.prototype.hasOwnProperty.call(event, 'semantic_authority_hash')
+      || event.semantic_authority_hash !== header.semantic_authority_hash) {
+      eventError('event semantic_authority_hash does not match the ledger semantic authority commitment');
     }
   }
   if (event.witness.previous_witness_head !== previousWitnessHead) {

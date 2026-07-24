@@ -1,6 +1,7 @@
 # Owner Kernel P3.7 production activation
 
-> **Status**: frozen for `/l6` execution
+> **Status**: P3.7a-c external-host contract milestone implemented; installed-host activation remains
+> pending under the original production/dogfood/KR gates; v2.32.58 verification in progress
 > **Parent plan**: [`2026-07-20-owner-kernel-evolution.md`](2026-07-20-owner-kernel-evolution.md)
 > **Project**: [`../projects/2026-07-20-owner-kernel-governance/README.md`](../projects/2026-07-20-owner-kernel-governance/README.md)
 > **Release target**: v2.32.58
@@ -13,14 +14,43 @@ restart behavior, and teardown auditing. It does not construct `OwnerKernel`, ex
 enable the broker, call `AutopilotEngine`, or make acceptance available.
 
 P3.7 activates those capabilities in three separately reviewable boundaries. Each boundary is a new,
-versioned profile. Existing P3.5d and P3.6 A0 evidence remains interpretable and is never upgraded by
-relabeling old records.
+versioned profile. v2.32.58 implements those boundaries as external-host contracts; it does not satisfy
+this plan's later installed-host, dogfood, or KR gates. Existing P3.5d and P3.6 A0 evidence remains
+interpretable and is never upgraded by relabeling old records.
+
+## v2.32.58 bounded milestone
+
+This release is accepted only as an external-host contract milestone:
+
+- New sessions reject stale handoffs and bind the exact P3.5d handoff, exclusive P3.6 claim,
+  five-service durable cohort, policy, contract, workspace, and immutable base. Resume revalidates
+  the frozen route without requiring the short-lived intake handoff to remain fresh. The route's
+  `substrate_plan_hash` preserves the P3.6c durable protocol's P3.5 bridge-plan binding; the separate
+  `p36_contract_plan_hash` binds the exact P3.6a compiled substrate contract.
+- The five installed P3.6 service bindings must exactly match the durable cohort. The external P3.7
+  host supplies and freezes the Kernel binding; this release does not claim an installed Kernel
+  peer/cgroup attestation.
+- Semantic receipts compare-and-append, read back, verify an independent anchor, reject a stale head
+  or non-next durable sequence before append, reject non-contiguous batches, and become locally
+  unusable even when remote teardown fails.
+- Semantic delegation requires the trusted host verifier to attest the full frozen worker binding,
+  not only its identity string.
+- The only effects are one fixed reversible probe and one fixed implementation-dispatch sink.
+  Acceptance and completion share one witness batch; a lost record response is accepted only when
+  exact-attempt resolution returns the identical committed response.
+- Focused gates, the 8/15 contract corpus, the full deterministic suite, version/mirror checks, and
+  the existing privileged P3.5/P3.6 gates pass. No result is described as installed P3.7 authority.
+
+The original production P0, installed-host dogfood, KR8/KR10, and 14-day alias-removal gates below
+remain open and keep the parent project active after this release.
 
 ## Global invariants
 
 - The installed P3.5d descriptor-bound v2 handoff is the only intake route.
-- Kernel, receipt verifier, witness, broker, coordinator, and worker identities are fixed by the installed
-  snapshot and verified through peer credentials plus the exact systemd cgroup.
+- The five P3.6 receipt-verifier/witness/broker/coordinator/worker identities are fixed by the installed
+  snapshot and verified through peer credentials plus the exact systemd cgroup. The Kernel identity is
+  frozen into the P3.7 route supplied by the external-host contract; installed Kernel peer/cgroup
+  attestation remains part of the deferred full-activation gate.
 - Worker output and model claims never append authoritative Owner Kernel events directly.
 - Every semantic append uses a compare-and-append receipt bound to the prior Kernel head, route version,
   run/invocation, descriptor ticket, policy, acceptance contract, emitter role, and event hash.

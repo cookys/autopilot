@@ -93,6 +93,17 @@
 - **Shell word-splitting on space-containing model ids** in the first P3 draft turned
   `"Gemini 3.5 Flash (High)"` into phantom seats named `3.5`, `Flash` and `(High)`. Fixed with
   parallel arrays; a regression assertion guards it.
+- **The gate corrupted the rails' machine-parsable result channel** (caught only by the full
+  suite — 5 `dispatch-author` test files went red, which the focused test could not see). The
+  rails' callers do `OUT="$(dispatch-... 2>&1)"` and then JSON-parse `OUT`; the gate printed a
+  `WARNING:` line to stderr on `UNKNOWN_WINDOW` — the normal state for any model without a
+  recorded window, i.e. every fake model the tests use — and broke `json.loads`, leaving
+  `raw_log` empty. Fixed by routing all advisory output through a helper that respects the
+  rails' pre-existing `DISPATCH_QUIET` convention, and by making `UNKNOWN_WINDOW` silent
+  outright (matching the same call already made on the resolver side). Regression assertion
+  added. **Lesson**: a focused test on the new component passed all 48 assertions while the
+  component was actively breaking five unrelated test files — the full-suite baseline
+  comparison is what caught it, not the new test.
 
 ## Red-green evidence
 
@@ -124,7 +135,9 @@ test load-bearing rather than tautological.
 | Date | Event |
 |------|-------|
 | 2026-07-25 | Project created; branch cut from `develop` @ `d90433b`; plan written |
-| 2026-07-25 | P0–P4 complete. `hooks/tests/context-window.test.sh`: **48 assertions PASS**. Baseline captured in a detached worktree at base SHA: **157/158 test files pass**; the single failure (`dispatch-output-quiescence`, a timing-sensitive flake the just-merged `d90433b` was itself trying to kill) is **PRE_EXISTING**, reproduced on untouched base under load. `sync-all.sh --check` all green. |
+| 2026-07-25 | P0–P4 complete (`9bc1059`). Baseline captured in a detached worktree at base SHA: **157/158 test files pass**; the single failure (`dispatch-output-quiescence`, a timing-sensitive flake the just-merged `d90433b` was itself trying to kill) is **PRE_EXISTING**, reproduced on untouched base under load. |
+| 2026-07-25 | Full suite caught a **real regression** the focused test could not see: 5 `dispatch-author` files red from stderr chrome corrupting the rails' `2>&1` JSON channel. Fixed + regression-tested (`03389f9`). |
+| 2026-07-25 | **Final: `bash hooks/tests/run.sh` → ALL 159 test files PASS, EXIT=0.** Better than baseline — the pre-existing `dispatch-output-quiescence` flake also passed under lower load, confirming it as timing-sensitive rather than a real failure. `sync-all.sh --check` all green. Red-green: base RED / head GREEN (manual, see § Red-green evidence). |
 
 ## Evidence base
 

@@ -39,6 +39,24 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### `preflight-release.sh` 的 prose-justification 檢查掃全檔，等同永久放行
+- **Trigger**: 下次 north-star 閘要真正約束 prose 成長時；或發現某版 prose 暴增卻通過閘時。
+- **Context**: 第 188 行是 `grep -qE "prose-justification:" "$CHANGELOG"` — 掃**整個 CHANGELOG**而非當前版本段落。CHANGELOG 裡已有 5+ 條歷史 justification 行（最早可追到 v2.28 以前），所以自 v2.32.x 起這個檢查對每一版都自動通過，north-star 的 +5% 煞車實質失效。v2.32.58 實測：gate 印 "CHANGELOG justification found, allowed"，但找到的是 v2.32.57 的行。**修法**：把搜尋範圍限縮到當前版本的 CHANGELOG 段落（從 `## v<current>` 到下一個 `## v`），與 `check-optin-changelog.js` 已經在做的段落切分方式一致。
+- **Effort**: S
+- **Source**: v2.32.58 finish-flow L-5.5 release-hygiene gate
+
+### doc-drift script-refs：`docs/upstream-bugs/agy-print-mode-model-flag.md` 引用不存在的 `scripts/with-agy-model.sh`
+- **Trigger**: 下次動 `docs/upstream-bugs/` 或要讓 `doc-drift-gate.js` 進 CI 硬閘之前。
+- **Context**: `doc-drift-gate.js` 的 script-refs 檢查唯一 FAIL。已驗證為 pre-existing（base SHA d90433b 上該引用即已壞，且 `scripts/with-agy-model.sh` 在 base 就不存在）。要嘛補回該腳本、要嘛把文件改成描述當時的 workaround 而不指向檔案。
+- **Effort**: S
+- **Source**: v2.32.58 finish-flow L-5.4 post-merge doc-sync
+
+### `hooks/tests/dispatch-output-quiescence.test.sh` 時間敏感 flake 未根治
+- **Trigger**: 下次 CI 或 finish-flow 因它變紅時；或要把它納入 blocking gate 之前。
+- **Context**: v2.32.57 的 merge（`d90433b`，標題明寫 "kill dispatch-output-quiescence flake"）以 worker count 縮放 parallel timing factor，但未根治。v2.32.58 期間三次觀測：base SHA 上 FAIL（`immediate-content returns quickly: expected <= 5, got 6`）、一次全套件 PASS、pre-merge 全套件再度 FAIL 且**失敗的斷言換成 `genuine-empty-fast`** — 斷言隨機漂移是負載敏感 flake 的特徵而非邏輯錯誤。`verify-preexisting.sh` 正式判定 `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`。可能修法：把絕對 tick 上限改成相對於實測 baseline tick 的比值，或在高負載下自動放寬。
+- **Effort**: S–M
+- **Source**: v2.32.58 finish-flow L-5.2 pre-merge 全套件
+
 ### `verify-red-green.sh` 對「從 `$0` 推導 REPO_ROOT」的測試套件失效（＝autopilot 自己全部）
 - **Trigger**: 下次要在 autopilot repo 內用 `verify-red-green.sh` 當紅綠閘時；或要把它接進 `/l5`／`/l6` 的自動驗收路徑時。
 - **Context**: `run_verify_cmd()` 雖然 `cd "$wt"` 進 base worktree，但用**主 repo 的絕對路徑**執行 `$VERIFY_CMD`（第 174 行刻意 canonicalize，header 有說明理由）。autopilot 的 `hooks/tests/*.test.sh` 一律 `. "$(dirname "$0")/lib.sh"`，`lib.sh` 再由 `$0` 推出 `REPO_ROOT` — 於是 base run 實際上是拿**主 repo（＝head）的產品碼**在跑，永遠綠，verdict 恆為 `NOT_RED_ON_BASE`。v2.32.58 實測：工具報 `NOT_RED_ON_BASE`（base green），但手動在 base worktree 內用相對路徑跑同一測試檔 ⇒ **exit 1、大量斷言失敗**（真 RED）。工具傳了 `"$wt"` 當 `$1` 給 verify-cmd，顯示設計意圖是測試自己要吃這個參數；autopilot 的 `lib.sh` 不看 `$1`。**兩條可能修法**：(a) `lib.sh` 優先採用 `$1`／`AUTOPILOT_TEST_REPO_ROOT` 當 REPO_ROOT（消費端修，影響 158 個測試檔的共用底座）；(b) `verify-red-green.sh` 改成在 worktree 內解析同名相對路徑（工具端修，但會改變既有使用者語意）。**未修之前，本 repo 的紅綠驗證必須手動做**（建 detached worktree at base → 只 apply 測試檔 patch → `cd` 進去用相對路徑跑）。

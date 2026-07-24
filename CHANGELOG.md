@@ -86,6 +86,12 @@ latter fed 5.4M/15.9M single-turn inputs).
   canonical `json_escape` from `lib/json-emit.sh`. Surfaced by the new gate, but the defect
   predates it.
 
+prose-justification: the prose added by this release is one `references/hetero-dispatch.md`
+section documenting the gate (its measured motivation, the resolution-order rules, and the
+capability-recording recipe), the `--context-window` flag description in each of the three
+rails' `--help` headers, and this CHANGELOG entry. No new skill body, no `description:` field,
+no routing surface — the engine side grew by two scripts plus a capability dimension.
+
 ## v2.32.57 — CLAUDE.md inventory slim + size gate
 
 **Headline**: CLAUDE.md had grown 11KB → 81KB in six weeks — release commits kept

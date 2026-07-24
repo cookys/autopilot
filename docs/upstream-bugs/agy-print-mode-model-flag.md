@@ -93,9 +93,10 @@ Expected (per 1.1.2 changelog): print mode exits non-zero with a concise
 - The reviewer gemini slot upgrade to 3.6 is achieved by the **working `--model`
   flag** alone (`dispatch-review.sh --runner agy --model "Gemini 3.6 Flash (High)"`).
   No wrapper is required on this build.
-- `scripts/with-agy-model.sh` (persisted-model swap under `flock`, restore on
-  EXIT+signals, fail-closed) is retained as an **opt-in** guard
-  (`AUTOPILOT_AGY_PERSIST_MODEL=1`) against a future recurrence of the historical
-  `-p`-ignores-`--model` regression. It is NOT the default because mutating the
-  shared `~/.gemini` settings on every review call adds a SIGKILL-leaves-wrong-model
-  failure mode the flag does not have.
+- A persisted-model wrapper (settings swap under `flock`, restore on EXIT+signals,
+  fail-closed, behind `AUTOPILOT_AGY_PERSIST_MODEL=1`) was considered as a guard against a
+  future recurrence of the historical `-p`-ignores-`--model` regression, and **was not
+  built**: mutating the shared `~/.gemini` settings on every review call adds a
+  SIGKILL-leaves-wrong-model failure mode the `--model` flag does not have. Neither the
+  script nor the env var exists — verified against the full branch history, not from memory.
+  If the regression ever returns, this is the design that was rejected and why.

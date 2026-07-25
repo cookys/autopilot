@@ -61,6 +61,28 @@ exec "$1" "$2" "$3" "$4" "$5" "$6" "$7"
 STUB
 chmod +x "$STUB_BIN/codex"
 
+# The Claude self-disable control needs ${REPO}/.claude/settings.local.json to exist, be a
+# regular readable+writable file (run-harness-probes.sh:434). That path is GITIGNORED
+# (.gitignore:7), so on any clean checkout — every CI run, and any dev box that never made one —
+# the guard short-circuits to {"attempted":false,"reason":"settings_unavailable"} and the seven
+# Claude self-disable assertions below fail with 'false'/'null'. The control was gated on
+# ambient local state instead of on an input the test controls.
+#
+# Stage it ourselves, ONLY when absent, and remove it again on exit. A developer who really has
+# one keeps it untouched (the driver does its own backup/restore around the mutation).
+CLAUDE_LOCAL_SETTINGS="$REPO_ROOT/.claude/settings.local.json"
+STAGED_CLAUDE_SETTINGS=0
+if [ ! -e "$CLAUDE_LOCAL_SETTINGS" ]; then
+  mkdir -p "$(dirname "$CLAUDE_LOCAL_SETTINGS")"
+  printf '{\n  "permissions": {\n    "allow": []\n  }\n}\n' > "$CLAUDE_LOCAL_SETTINGS"
+  STAGED_CLAUDE_SETTINGS=1
+fi
+cleanup_execution_witness() {
+  [ "$STAGED_CLAUDE_SETTINGS" = "1" ] && rm -f "$CLAUDE_LOCAL_SETTINGS"
+  cleanup_test_tmp
+}
+trap cleanup_execution_witness EXIT
+
 DRIVER_OUT="$TEST_TMP/driver-codex.json"
 DRIVER_ERR="$TEST_TMP/driver-codex.err"
 PATH="$STUB_BIN:$PATH" bash "$DRIVER" \

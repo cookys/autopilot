@@ -87,10 +87,30 @@ fs.mkdirSync(tmp, { recursive: true });
 
 const signedPath = path.join(tmp, 'signed.json');
 const tracePath = path.join(tmp, 'signed.trace');
+
+// R1 substrate must be DETERMINISTIC, not ambient.
+//
+// host-capability-probe.js derives `R1_user_channel_substrate.agent_can_write_user_channel_artifacts`
+// by probing five paths under os.homedir() (~/.claude/history.jsonl, ~/.claude/projects, ~/.codex,
+// ~/.config/opencode, ~/.gemini) and asking whether ANY is agent-writable. On a developer laptop
+// those exist, so the flag comes out true and the classifier grades R1 `suspect` — which is what
+// the assertion further down expects. On a clean CI runner none of them exist, the flag is false,
+// the classifier correctly returns `unverified`, and the assertion fails. The control was therefore
+// testing the MACHINE, not the code: green only where the tester happened to have agent config dirs.
+//
+// Fix: point HOME at a fixture-owned directory containing one genuinely agent-writable
+// user-channel artifact, so the probe OBSERVES it for real and signs a payload that honestly
+// contains it. This is not tampering — nothing is injected into the signed payload after the fact;
+// the witness simply runs against a staged, self-contained environment. Staging the very condition
+// the control flags is the point: it is the only way to exercise the `suspect` branch on purpose.
+const userChannelHome = path.join(tmp, 'user-channel-home');
+fs.mkdirSync(path.join(userChannelHome, '.codex'), { recursive: true });
+const witnessEnv = Object.assign({}, process.env, { HOME: userChannelHome });
+
 const signedRun = run('strace', [
   '-f', '-qq', '-s', '200000', '-e', 'trace=execve,write', '-o', tracePath,
   process.execPath, witness, '--nonce', 'controlnonce', '--repo', repo, '--json',
-], { cwd: repo });
+], { cwd: repo, env: witnessEnv });
 fs.writeFileSync(signedPath, signedRun.stdout);
 const signed = JSON.parse(signedRun.stdout);
 

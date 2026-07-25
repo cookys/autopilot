@@ -12,7 +12,7 @@
 > **Scope boundary**: implementation-review adjudication and repair-loop scope control
 > only. No reviewer-roster, severity, plan-review, or consuming-project product changes.
 
-Plan: [2026-07-26-review-scope-stop-loss.md](../../plans/2026-07-26-review-scope-stop-loss.md)
+Plan: [2026-07-26-review-scope-stop-loss.md](../../../plans/2026-07-26-review-scope-stop-loss.md)
 
 ## Scope Completeness Audit
 
@@ -33,7 +33,7 @@ Plan: [2026-07-26-review-scope-stop-loss.md](../../plans/2026-07-26-review-scope
 |---|---|---|
 | 1 | finding relevance gate | complete (`fd78820`, repaired by `208f2d0`) |
 | 2 | cumulative scope stop-loss | complete (`fd78820`, repaired by `208f2d0`) |
-| 3 | integration, dogfood, release sync | complete; merge pending |
+| 3 | integration, dogfood, release sync | complete; merged as `8d5140a` |
 
 ## Decision Log
 

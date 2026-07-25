@@ -44,42 +44,34 @@ jobs:
           bwrap --version
           strace -V | head -1
 
-      # TEMPORARY DIAGNOSTIC (remove once the bwrap posture question is settled).
-      # bwrap is installed and runs, but dies with
+      # Ubuntu 24.04 ships `kernel.apparmor_restrict_unprivileged_userns=1`, an AppArmor
+      # restriction that did not exist on 22.04 and does not exist on most other distros. It
+      # blocks unconfined binaries from creating unprivileged user namespaces, so bwrap (which
+      # is NOT setuid here: `-rwxr-xr-x root root`) cannot get a userns and dies with
+      #   bwrap: setting up uid map: Permission denied
       #   bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
-      # In a normal unprivileged user namespace the process DOES hold CAP_NET_ADMIN inside
-      # that namespace, so `--unshare-net` usually works without privileges. This step
-      # establishes WHY it doesn't here, so we can tell a config problem (fixable, no posture
-      # change) apart from a genuine privilege requirement. Never fails the build.
-      - name: Diagnose bwrap namespace capability (temporary)
-        continue-on-error: true
+      # taking all 8 owner-kernel P0 supervised-profile controls down with it.
+      #
+      # Measured on the runner (diagnostic run 2026-07-25, ubuntu-24.04.4, kernel 6.17-azure):
+      #   unprivileged `bwrap --unshare-net`        -> rc=1 (RTM_NEWADDR)
+      #   `sudo bwrap --unshare-net`                -> rc=0
+      #   the probe under `sudo -E`                 -> rc=1  (STILL fails: it re-spawns bwrap
+      #                                                without inheriting root, so "just run
+      #                                                the tests as root" is NOT a fix)
+      # Clearing the knob is therefore the option that keeps the probe running exactly as
+      # designed — UNPRIVILEGED, in a real user namespace — instead of either running security
+      # tests as root or declaring the controls unverifiable in CI. It only relaxes an
+      # Ubuntu-24.04-specific hardening on an ephemeral runner VM, not in the sandbox itself.
+      - name: Allow unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
         run: |
-          set +e
-          echo "== os =="; . /etc/os-release; echo "$PRETTY_NAME"; uname -r
-          echo "== bwrap =="; command -v bwrap; ls -l "$(command -v bwrap)"; bwrap --version
-          echo "== userns knobs =="
-          for k in kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone user.max_user_namespaces; do
-            printf '%s = ' "$k"; sysctl -n "$k" 2>/dev/null || echo "(absent)"
-          done
-          echo "== apparmor =="; aa-enabled 2>/dev/null || echo "(aa-enabled absent)"
-          echo "== whoami =="; id
-          echo "== T1 plain unshare-user =="
-          bwrap --unshare-user --dev-bind / / true; echo "rc=$?"
-          echo "== T2 unshare-net (the failing one) =="
-          bwrap --unshare-net --dev-bind / / true; echo "rc=$?"
-          echo "== T3 unshare-user + unshare-net =="
-          bwrap --unshare-user --unshare-net --dev-bind / / true; echo "rc=$?"
-          echo "== T4 same under sudo =="
-          sudo bwrap --unshare-net --dev-bind / / true; echo "rc=$?"
-          echo "== T5 the real probe, unprivileged =="
-          node docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/supervised-profile-controls.js \
-            --repo "$PWD" --tmp "$RUNNER_TEMP/spdiag" >/dev/null 2>"$RUNNER_TEMP/sp.err"; echo "rc=$?"
-          tail -c 600 "$RUNNER_TEMP/sp.err"
-          echo "== T6 the real probe, under sudo =="
-          sudo -E node docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/supervised-profile-controls.js \
-            --repo "$PWD" --tmp "$RUNNER_TEMP/spdiag2" >/dev/null 2>"$RUNNER_TEMP/sp2.err"; echo "rc=$?"
-          tail -c 600 "$RUNNER_TEMP/sp2.err"
-          exit 0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # Fail loudly if bwrap still cannot build a sandbox — a silent regression here would
+          # take the 8 security controls down again while the suite blames application logic.
+          if ! bwrap --unshare-user --unshare-net --dev-bind / / true; then
+            echo "::error::bwrap still cannot create an unprivileged user namespace; the owner-kernel P0 controls cannot be verified in this environment" >&2
+            exit 1
+          fi
+          echo "bwrap unprivileged sandbox: OK"
 
       - name: Set up Node
         uses: actions/setup-node@v4

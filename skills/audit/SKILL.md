@@ -1,11 +1,12 @@
 ---
 name: audit
 description: >
-  Compare two implementations and find every difference. Use when: "compare X with Y", "check X
-  against Y", "verify X matches Y", "flag anything missing", "比對 X 和 Y", "檢查有沒有漏掉",
-  "驗證是否一致", feature parity review between old and new systems, spec vs implementation
-  verification, cross-system completeness check. Not for debugging a single discrepancy or writing
-  comparison tests.
+  Compare two existing implementations and find every difference. Use when: "compare X with Y",
+  "check X against Y", "verify X matches Y", "flag anything missing", "比對 X 和 Y",
+  "檢查有沒有漏掉", "驗證是否一致", feature parity review between old and new systems,
+  an existing spec against an implemented target, or cross-system completeness checks. Not for
+  future/unimplemented plan readiness, architecture-plan critique, debugging a single discrepancy,
+  or writing comparison tests.
 ---
 
 # Systematic Comparison Audit
@@ -34,6 +35,23 @@ Establish before exploring code:
 3. What constitutes parity? (functional equivalence | field completeness | behavioral match)
 4. What differences are known By-Design?
 
+#### Target-exists precondition (hard routing gate)
+
+Resolve both Source and Target to concrete artifacts before comparing them. The Target must be an
+**already-existing implementation/system/code path**, not a feature described only in a future
+plan. The current repository as a whole is not a substitute for a missing future target.
+
+If the Target does not exist, stop before Phase 2 and return:
+
+```text
+status: routing_precondition_failed
+reason: parity audit requires an existing target implementation
+route: plan-readiness reviewer
+```
+
+Repository code may verify factual premises in a plan, but its absence of the planned future
+feature is not a parity finding.
+
 ### Phase 2: Parallel Exploration
 
 Split into segments (Entry/Init, Core Ops, Edge Cases, Post-Op, Field Completeness). For each, compare **presence**, **correctness**, **completeness**. Spawn one agent per segment for large audits.
@@ -55,12 +73,17 @@ This **generalizes the `skills/doc-sync` ethos** to the audit output contract: d
 | **Minor** | Cosmetic, no functional impact |
 | **By-Design** | Intentional difference, documented reason |
 
-### Phase 4: Prioritized Fix
+### Phase 4: Prioritized Handoff
 
-Fix order: Critical -> Major -> Minor (backlog).
+Report fix order: Critical -> Major -> Minor (backlog).
 
-Per fix: update target -> verify against source -> update comparison matrix -> re-run tests.
+One audit invocation performs one comparison pass and then terminates. Do not edit the target,
+dispatch fixes, request another pass, or schedule a re-audit. A caller may later start a separate
+blind verification invocation after fixes exist; that decision is outside this skill.
 
-**Re-audit dispatch is blind** — when re-running an audit segment after a fix (verification pass), the re-dispatch prompt MUST NOT carry the prior round's finding line numbers, "the fix at X to verify" cues, or specific aspect labels the prior pass surfaced. The Phase 2 segment agent must re-derive findings from a clean read of source-vs-target; the dispatcher pattern-matches the new findings against the prior ones in its own memory to determine whether the fix held.
+**Caller-initiated re-audit is blind** — if a later invocation verifies a fix, its prompt MUST NOT
+carry the prior round's finding line numbers, "the fix at X to verify" cues, or specific aspect
+labels the prior pass surfaced. The new pass re-derives findings from a clean source-vs-target read;
+the depth-0 caller adjudicates whether prior findings closed.
 
 Follow the dispatcher pre-flight checklist in [`../../references/blind-dispatch.md`](../../references/blind-dispatch.md). Fixers acting on the prior finding remain non-blind (they need the specifics to act on); only re-audit verification passes are blinded. First-pass Phase 2 exploration is full-context by design — only round 2+ on the same segment applies.

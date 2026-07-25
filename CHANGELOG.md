@@ -24,6 +24,51 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.58 — Bounded plan review + fail-loud reviewer transport
+
+**Headline**: Plan critique now has its own durable controller instead of borrowing code-parity
+audit or hand-running reviewers until a stochastic clean verdict appears. The controller keys its
+budget by canonical git identity + ticket, freezes the rubric, admits only next-slice POC blockers,
+allows at most two generations / 120 minutes, warns at 1.25× plan growth, stops above 1.50×, and
+lets chair + deep reviewer widen one generation without creating another round.
+
+### Added
+- `scripts/dispatch-plan-review.js`: read-only plan-readiness rail over
+  `dispatch-author.sh`, with atomic generation claims, terminal artifacts, strict reviewer JSON,
+  rubric/class admission, union aggregation across chair/deep seats, transport identity checks,
+  and test-only seams. Runner/model/session changes cannot reset the repo+ticket state.
+- Separate `plan_review` roster/budget fields in `review-loop-config.md` and the resolver contract.
+  `spec_review` remains only as a deprecated compatibility field.
+- Deterministic routing/controller/Claude-native-author regressions (63 assertions across the new
+  tests, plus resolver coverage).
+
+### Changed
+- `autopilot:audit` now requires two existing implementations and returns
+  `routing_precondition_failed` when a future Target does not exist. One invocation is one terminal
+  comparison pass; it cannot schedule its own re-audit.
+- Reviewer plan mode requires frozen `rubric_id`, a
+  `decision-now|implementation-spike|future` class, and the two POC-blocker predicates. Current repo
+  absence of a proposed future feature is explicitly not a finding.
+- `research-to-ship` Phase 3 now invokes the bounded plan controller. The former
+  “loop until it converges” instruction is removed.
+- `dispatch-author.sh` accepts the first-party `claude-native` read-only author transport so plan
+  review can use an explicitly configured Claude chair without a third-party endpoint.
+
+### Fixed
+- `resolve-review-loop.sh` no longer rewrites an explicit blank/unknown reviewer or implementer
+  runner to a different default transport. Unsupported configured transports exit 3; missing keys
+  alone may use defaults. `claude-native` is a first-class reviewer runner.
+- Corrected an upstream-bug note that claimed a persisted-model AGY fallback wrapper was retained;
+  no such wrapper ships, and the release doc-drift gate now passes again.
+
+prose-justification: The added skill/reference lines replace an unsafe unbounded workflow with the
+minimum routing and frozen-rubric contract needed for agents to discover the mechanical controller;
+generation, clock, growth, identity and admission behavior lives in Node rather than prose.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.57`
+
 ## v2.32.57 — CLAUDE.md inventory slim + size gate
 
 **Headline**: CLAUDE.md had grown 11KB → 81KB in six weeks — release commits kept

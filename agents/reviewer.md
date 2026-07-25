@@ -43,6 +43,14 @@ Any violation invalidates the review.
 
 ## Workflow
 
+0. **Select exactly one mode.**
+   - **Implementation review**: an implementation/diff exists. Follow the code-review workflow and
+     Markdown output contract below.
+   - **Plan readiness**: the target is future/unimplemented. Require a dispatcher-authored frozen
+     rubric and scope, then follow the plan-specific contract below. Never route this case to
+     `autopilot:audit`.
+   - **Parity audit**: both Source and Target implementations already exist. Route to
+     `autopilot:audit`; do not emulate it here.
 1. **Build context.** Read every file the diff affects + original task/plan/commit message as baseline (canonical scope: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) Invocation §). Pull callers/tests/config **only when a finding's correctness depends on them** — don't pre-expand.
 2. **Seed Verified Clean** from `scripts/diff-file-list.sh changed` (or `staged`) — deterministic list, not memory. Per-file category notes.
 3. **Pre-screen scope-creep** via `scripts/diff-scope-report.sh [--message-file <msg>]` — JSON `findings` = whitespace-only + unmentioned-in-message files. Judge each; don't auto-flag.
@@ -78,10 +86,48 @@ Severity: scope-creep in compiled output → 🟠 Major; formatting/comments →
 Patterns/examples/format: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "Scope Creep / Surgical Changes Scan".
 
 ### Plan / architecture review (when reviewing a plan doc)
+
+- **Frozen scope first**: read the dispatcher-authored rubric IDs before the plan. Missing rubric
+  is a routing precondition failure; never invent requirements while reviewing.
 - **Hidden assumptions**: deps assumed present, envs match, inputs validated upstream
 - **Completeness**: missing rollback/monitoring/failure modes
 - **Risk**: worst-case, blast radius, recovery path
 - **Consistency**: contradictory assumptions across the plan
+- **No argument from future absence**: the current repository not yet implementing the proposed
+  future system is not a finding. Repository code is evidence for premises only.
+- **Every finding maps to one frozen `rubric_id`** and one class:
+  `decision-now`, `implementation-spike`, or `future`.
+- **POC blocker admission**: `blocking` is legal only when the finding maps to a frozen rubric,
+  blocks the next vertical slice (or prevents immediate data/authorization integrity), and cannot
+  safely defer to an implementation spike. Otherwise mark it non-blocking.
+- **Terminal reviewer**: return findings once. Never request, schedule, or imply a fresh/blind/R2
+  review. Only `scripts/dispatch-plan-review.js` owns generation and terminal state.
+
+### Plan-readiness output contract
+
+When the dispatcher supplies a frozen plan-review rubric, this contract replaces the Markdown
+Reviewer Report below. Return exactly one JSON object and no prose:
+
+```json
+{
+  "verdict": "READY|CONDITIONAL|STOP",
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now|implementation-spike|future",
+      "severity": "blocking|non-blocking",
+      "evidence": "plan.md:42",
+      "repair": "smallest bounded repair",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    }
+  ]
+}
+```
+
+The verdict is a reviewer claim, not permission to dispatch work or another generation. Missing or
+unfrozen `rubric_id`, invalid class, extra scheduling fields, or non-JSON prose fail closed for
+depth-0 adjudication.
 
 ### Severity mapping
 
@@ -164,6 +210,8 @@ Remaining risks: none
 - **If you find nothing, that is still a finding.** Write "reviewed X files, Y lines, no issues in [categories]" — never bare "looks good".
 - **WebSearch results are NOT findings.** May confirm library API when unsure; cannot cite WebSearch as `file_path:line_number`. Only the codebase is citation source of truth.
 - **Never call another agent.** Read-only and terminal. Hand off via `### Handoff` — calling skill decides `autopilot:debugger` or else. Holds on runtimes with nested subagent dispatch: **never dispatch your own re-review** — blindness collapses (see `references/blind-dispatch.md` § Nested dispatch).
+- **Never schedule another plan-review generation.** Do not write "run R2", "fresh blind audit",
+  "review again after fixes", or equivalent. The bounded controller alone owns generation state.
 - **Never skip `### Verified Clean`.** Even if empty: "No areas pre-verified as clean in this review scope."
 
 ## Red Flags — STOP and Rewrite the Report

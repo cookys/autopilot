@@ -3225,6 +3225,19 @@ const validPayload = {
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
   spec_review: 'on',
+  plan_review: 'off',
+  plan_reviewer_engine: '',
+  plan_reviewer_effort: '',
+  plan_reviewer_runner: '',
+  plan_reviewer_endpoint: '',
+  plan_deep_reviewer_engine: '',
+  plan_deep_reviewer_effort: '',
+  plan_deep_reviewer_runner: '',
+  plan_deep_reviewer_endpoint: '',
+  plan_review_max_generations: 2,
+  plan_review_max_wall_seconds: 7200,
+  plan_review_growth_warn_ratio: 1.25,
+  plan_review_growth_stop_ratio: 1.5,
   independent_harness: 'off',
   qc_panel: ['test-reviewer'],
   qc_panel_aggregation: 'union-on-verified-critical',
@@ -3237,7 +3250,7 @@ const validPayload = {
   source: 'override',
   work_domain: 'mixed',
   domain_source: 'none',
-  // Eight new fields
+  // Capability/provenance fields
   capability_state_source: 'unknown',
   quota_status: 'ok',
   quota_reset_at: null,
@@ -3274,7 +3287,26 @@ if (validated) {
   console.log(`capability_warnings_0=${validated.capability_warnings[0]}`);
   console.log(`reviewer_endpoint=${validated.reviewer_endpoint}`);
   console.log(`implementer_endpoint=${validated.implementer_endpoint}`);
+  console.log(`plan_review=${validated.plan_review}`);
 }
+
+const planOn = logPayloadCase('plan_on', {
+  ...validPayload,
+  plan_review: 'on',
+  plan_reviewer_engine: 'claude-fable-5',
+  plan_reviewer_effort: 'high',
+  plan_reviewer_runner: 'claude-native',
+});
+if (planOn) {
+  console.log(`plan_on_runner=${planOn.plan_reviewer_runner}`);
+}
+logPayloadCase('plan_on_blank_runner', {
+  ...validPayload,
+  plan_review: 'on',
+  plan_reviewer_engine: 'claude-fable-5',
+  plan_reviewer_effort: 'high',
+  plan_reviewer_runner: '',
+});
 
 const payloadWithResetString = {
   ...validPayload,
@@ -3382,6 +3414,10 @@ assert_contains "$OUT" "skill_mode_effective=selective" "validateReviewLoopConfi
 assert_contains "$OUT" "capability_warnings_0=warning 1" "validateReviewLoopConfig carries capability_warnings"
 assert_contains "$OUT" "reviewer_endpoint=" "validateReviewLoopConfig carries empty reviewer_endpoint"
 assert_contains "$OUT" "implementer_endpoint=" "validateReviewLoopConfig carries empty implementer_endpoint"
+assert_contains "$OUT" "plan_review=off" "validateReviewLoopConfig carries disabled plan rail"
+assert_contains "$OUT" "plan_on=ok" "validateReviewLoopConfig accepts a complete plan-review chair tuple"
+assert_contains "$OUT" "plan_on_runner=claude-native" "validateReviewLoopConfig preserves exact plan-review runner"
+assert_contains "$OUT" "plan_on_blank_runner=review-loop output JSON field plan_reviewer_runner must be a non-empty string when plan_review=on" "validateReviewLoopConfig fails loud on an incomplete plan-review chair tuple"
 assert_contains "$OUT" "validated2=true" "validateReviewLoopConfig validates payload with string quota_reset_at"
 assert_contains "$OUT" "quota_reset_at2=2026-07-04T00:00:00Z" "validateReviewLoopConfig carries string quota_reset_at"
 assert_contains "$OUT" "reviewer_endpoint2=http://reviewer" "validateReviewLoopConfig carries string reviewer_endpoint"

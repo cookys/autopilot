@@ -90,6 +90,7 @@ function validateReviewLoopConfig(value) {
     'implementer_runner',
     'loop_convergence_verdict',
     'spec_review',
+    'plan_review',
     'independent_harness',
     'qc_panel_aggregation',
     'review_risk',
@@ -106,10 +107,10 @@ function validateReviewLoopConfig(value) {
   }
   assertOneOf(value, 'reviewer_effort', schemaEnum('reviewer_effort'));
   assertOneOf(value, 'implementer_effort', schemaEnum('implementer_effort'));
-  // claude-native (dispatch-review.sh) is deliberately NOT roster-eligible — it is a measurement/probe runner; an unknown reviewer_runner here silently falls back to the default.
   assertOneOf(value, 'reviewer_runner', schemaEnum('reviewer_runner'));
   assertOneOf(value, 'implementer_runner', schemaEnum('implementer_runner'));
   assertOneOf(value, 'spec_review', schemaEnum('spec_review'));
+  assertOneOf(value, 'plan_review', schemaEnum('plan_review'));
   assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));
   assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
   assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
@@ -144,6 +145,14 @@ function validateReviewLoopConfig(value) {
     'verification_author_family',
     'implementer_family',
     'config_path',
+    'plan_reviewer_engine',
+    'plan_reviewer_effort',
+    'plan_reviewer_runner',
+    'plan_reviewer_endpoint',
+    'plan_deep_reviewer_engine',
+    'plan_deep_reviewer_effort',
+    'plan_deep_reviewer_runner',
+    'plan_deep_reviewer_endpoint',
   ]) {
     assertField(value, field, (v) => typeof v === 'string', 'a string');
   }
@@ -174,6 +183,62 @@ function validateReviewLoopConfig(value) {
       assertField(value, field, emptyString, 'an empty string');
     }
   }
+  assertOneOf(value, 'plan_reviewer_effort', schemaEnum('plan_reviewer_effort'));
+  assertOneOf(value, 'plan_reviewer_runner', schemaEnum('plan_reviewer_runner'));
+  assertOneOf(value, 'plan_deep_reviewer_effort', schemaEnum('plan_deep_reviewer_effort'));
+  assertOneOf(value, 'plan_deep_reviewer_runner', schemaEnum('plan_deep_reviewer_runner'));
+  for (const field of ['plan_reviewer_endpoint', 'plan_deep_reviewer_endpoint']) {
+    assertField(value, field, (v) => /^[A-Za-z0-9_]*$/.test(v), 'a named endpoint or empty');
+  }
+  if (value.plan_review === 'on') {
+    for (const field of [
+      'plan_reviewer_engine',
+      'plan_reviewer_effort',
+      'plan_reviewer_runner',
+    ]) {
+      assertField(value, field, nonEmptyString, 'a non-empty string when plan_review=on');
+    }
+  }
+  const hasAnyDeepReviewerField = [
+    'plan_deep_reviewer_engine',
+    'plan_deep_reviewer_effort',
+    'plan_deep_reviewer_runner',
+    'plan_deep_reviewer_endpoint',
+  ].some((field) => value[field] !== '');
+  if (hasAnyDeepReviewerField) {
+    for (const field of [
+      'plan_deep_reviewer_engine',
+      'plan_deep_reviewer_effort',
+      'plan_deep_reviewer_runner',
+    ]) {
+      assertField(value, field, nonEmptyString, 'a non-empty string in a configured deep-reviewer tuple');
+    }
+  }
+  assertField(
+    value,
+    'plan_review_max_generations',
+    (v) => Number.isInteger(v) && v >= 1 && v <= 2,
+    'an integer in 1..2',
+  );
+  assertField(
+    value,
+    'plan_review_max_wall_seconds',
+    (v) => Number.isInteger(v) && v >= 1 && v <= 7200,
+    'an integer in 1..7200',
+  );
+  assertField(
+    value,
+    'plan_review_growth_warn_ratio',
+    (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1.25,
+    'a positive number <= 1.25',
+  );
+  assertField(
+    value,
+    'plan_review_growth_stop_ratio',
+    (v) => typeof v === 'number' && Number.isFinite(v)
+      && v > value.plan_review_growth_warn_ratio && v <= 1.5,
+    'a number greater than warn ratio and <= 1.5',
+  );
   assertField(value, 'min_panel_size', (v) => Number.isInteger(v) && v >= 1, 'an integer >= 1');
   assertOneOf(value, 'on_engine_unavailable', schemaEnum('on_engine_unavailable'));
   for (const field of ['reviewer_fallback_preference', 'reviewer_fallback_preference_low_risk']) {

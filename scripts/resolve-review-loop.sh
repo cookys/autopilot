@@ -36,7 +36,7 @@
 #  implementer family. qc_panel_aggregation: union-on-verified-critical; majority forbidden.
 #  review_diff_scope: how much the per-round reviewer reads — full | incremental-mitigated.)
 #
-# Exit codes: 0 success / 2 usage.
+# Exit codes: 0 success / 2 usage / 3 invalid or inconsistent config.
 
 set -uo pipefail
 
@@ -63,6 +63,11 @@ DEF_REV_EFFORT_LOW_RISK=""
 DEF_MAX_ROUNDS="5"
 DEF_CONVERGE="SHIP-AS-IS"
 DEF_SPEC_REVIEW="on"
+DEF_PLAN_REVIEW="off"
+DEF_PLAN_MAX_GENERATIONS="2"
+DEF_PLAN_MAX_WALL_SECONDS="7200"
+DEF_PLAN_GROWTH_WARN_RATIO="1.25"
+DEF_PLAN_GROWTH_STOP_RATIO="1.50"
 DEF_HARNESS="on"
 # Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
@@ -155,12 +160,38 @@ done
 # --- locate the config file (4-tier -r ladder) ---
 resolve_config_ladder "review-loop-config.md" "REVIEW_LOOP_CONFIG_OVERRIDE" "builtin-default"
 
+# A missing runner key may use the built-in default. An explicitly configured
+# runner (including an empty value) is an operator decision and must never be
+# rewritten to a different transport. Keep this stricter extraction local to
+# runner fields so legacy fallback semantics for other fields remain unchanged.
+config_has_field() {
+  local config_path="$1" key="$2"
+  [[ -n "$config_path" && -r "$config_path" ]] || return 1
+  grep -qiE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$config_path"
+}
+
+read_explicit_field() {
+  local config_path="$1" key="$2"
+  grep -iE "^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:" "$config_path" 2>/dev/null \
+    | head -1 \
+    | sed -E "s/^[[:space:]]*-?[[:space:]]*${key}[[:space:]]*:[[:space:]]*//I" \
+    | sed -E 's/[[:space:]]+$//'
+}
+
 REV_ENGINE="$(read_field "$CONFIG" reviewer_engine "$DEF_REV_ENGINE")"
 REV_EFFORT="$(read_field "$CONFIG" reviewer_effort "$DEF_REV_EFFORT")"
-REV_RUNNER="$(read_field "$CONFIG" reviewer_runner "$DEF_REV_RUNNER")"
+if config_has_field "$CONFIG" reviewer_runner; then
+  REV_RUNNER="$(read_explicit_field "$CONFIG" reviewer_runner)"
+else
+  REV_RUNNER="$DEF_REV_RUNNER"
+fi
 IMPL_ENGINE="$(read_field "$CONFIG" implementer_engine "$DEF_IMPL_ENGINE")"
 IMPL_EFFORT="$(read_field "$CONFIG" implementer_effort "$DEF_IMPL_EFFORT")"
-IMPL_RUNNER="$(read_field "$CONFIG" implementer_runner "$DEF_IMPL_RUNNER")"
+if config_has_field "$CONFIG" implementer_runner; then
+  IMPL_RUNNER="$(read_explicit_field "$CONFIG" implementer_runner)"
+else
+  IMPL_RUNNER="$DEF_IMPL_RUNNER"
+fi
 REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
 IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
 VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
@@ -254,6 +285,74 @@ REV_FB_PREF_LOW_JSON="$(csv_to_json_array "$REV_FB_PREF_LOW_RAW")"
 MAX_ROUNDS="$(read_field "$CONFIG" loop_max_rounds "$DEF_MAX_ROUNDS")"
 CONVERGE="$(read_field "$CONFIG" loop_convergence_verdict "$DEF_CONVERGE")"
 SPEC_REVIEW="$(read_field "$CONFIG" spec_review "$DEF_SPEC_REVIEW")"
+PLAN_REVIEW="$(read_field "$CONFIG" plan_review "$DEF_PLAN_REVIEW")"
+PLAN_REV_ENGINE="$(read_field "$CONFIG" plan_reviewer_engine "")"
+PLAN_REV_EFFORT="$(read_field "$CONFIG" plan_reviewer_effort "")"
+PLAN_REV_RUNNER="$(read_field "$CONFIG" plan_reviewer_runner "")"
+PLAN_REV_ENDPOINT="$(read_field "$CONFIG" plan_reviewer_endpoint "")"
+PLAN_DEEP_ENGINE="$(read_field "$CONFIG" plan_deep_reviewer_engine "")"
+PLAN_DEEP_EFFORT="$(read_field "$CONFIG" plan_deep_reviewer_effort "")"
+PLAN_DEEP_RUNNER="$(read_field "$CONFIG" plan_deep_reviewer_runner "")"
+PLAN_DEEP_ENDPOINT="$(read_field "$CONFIG" plan_deep_reviewer_endpoint "")"
+PLAN_MAX_GENERATIONS="$(read_field "$CONFIG" plan_review_max_generations "$DEF_PLAN_MAX_GENERATIONS")"
+PLAN_MAX_WALL_SECONDS="$(read_field "$CONFIG" plan_review_max_wall_seconds "$DEF_PLAN_MAX_WALL_SECONDS")"
+PLAN_GROWTH_WARN_RATIO="$(read_field "$CONFIG" plan_review_growth_warn_ratio "$DEF_PLAN_GROWTH_WARN_RATIO")"
+PLAN_GROWTH_STOP_RATIO="$(read_field "$CONFIG" plan_review_growth_stop_ratio "$DEF_PLAN_GROWTH_STOP_RATIO")"
+
+case "$PLAN_REVIEW" in on|off) ;; *)
+  echo "resolve-review-loop: invalid plan_review (must be on|off): $PLAN_REVIEW" >&2
+  exit 3
+esac
+case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *)
+  echo "resolve-review-loop: invalid plan_reviewer_runner: $PLAN_REV_RUNNER" >&2
+  exit 3
+esac
+case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *)
+  echo "resolve-review-loop: invalid plan_deep_reviewer_runner: $PLAN_DEEP_RUNNER" >&2
+  exit 3
+esac
+case "$PLAN_REV_EFFORT" in ''|low|medium|high|xhigh|max) ;; *)
+  echo "resolve-review-loop: invalid plan_reviewer_effort: $PLAN_REV_EFFORT" >&2
+  exit 3
+esac
+case "$PLAN_DEEP_EFFORT" in ''|low|medium|high|xhigh|max) ;; *)
+  echo "resolve-review-loop: invalid plan_deep_reviewer_effort: $PLAN_DEEP_EFFORT" >&2
+  exit 3
+esac
+[[ -z "$PLAN_REV_ENDPOINT" || "$PLAN_REV_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || {
+  echo "resolve-review-loop: invalid plan_reviewer_endpoint: $PLAN_REV_ENDPOINT" >&2
+  exit 3
+}
+[[ -z "$PLAN_DEEP_ENDPOINT" || "$PLAN_DEEP_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || {
+  echo "resolve-review-loop: invalid plan_deep_reviewer_endpoint: $PLAN_DEEP_ENDPOINT" >&2
+  exit 3
+}
+if [[ "$PLAN_REVIEW" == "on" && ( -z "$PLAN_REV_ENGINE" || -z "$PLAN_REV_RUNNER" || -z "$PLAN_REV_EFFORT" ) ]]; then
+  echo "resolve-review-loop: plan_review=on requires plan_reviewer_engine, plan_reviewer_runner, and plan_reviewer_effort" >&2
+  exit 3
+fi
+if [[ -n "$PLAN_DEEP_ENGINE" || -n "$PLAN_DEEP_RUNNER" || -n "$PLAN_DEEP_EFFORT" || -n "$PLAN_DEEP_ENDPOINT" ]]; then
+  if [[ -z "$PLAN_DEEP_ENGINE" || -z "$PLAN_DEEP_RUNNER" || -z "$PLAN_DEEP_EFFORT" ]]; then
+    echo "resolve-review-loop: plan_deep_reviewer tuple must be wholly empty or include engine, runner, and effort" >&2
+    exit 3
+  fi
+fi
+if ! { [[ "$PLAN_MAX_GENERATIONS" =~ ^[0-9]+$ ]] && [[ "$PLAN_MAX_GENERATIONS" -ge 1 ]] && [[ "$PLAN_MAX_GENERATIONS" -le 2 ]]; }; then
+  echo "resolve-review-loop: plan_review_max_generations must be 1 or 2" >&2
+  exit 3
+fi
+if ! { [[ "$PLAN_MAX_WALL_SECONDS" =~ ^[0-9]+$ ]] && [[ "$PLAN_MAX_WALL_SECONDS" -ge 1 ]] && [[ "$PLAN_MAX_WALL_SECONDS" -le 7200 ]]; }; then
+  echo "resolve-review-loop: plan_review_max_wall_seconds must be 1..7200" >&2
+  exit 3
+fi
+if ! node -e '
+const warn = Number(process.argv[1]);
+const stop = Number(process.argv[2]);
+process.exit(Number.isFinite(warn) && Number.isFinite(stop) && warn > 0 && warn <= 1.25 && stop > warn && stop <= 1.5 ? 0 : 1);
+' "$PLAN_GROWTH_WARN_RATIO" "$PLAN_GROWTH_STOP_RATIO"; then
+  echo "resolve-review-loop: plan growth ratios must satisfy 0 < warn <= 1.25 < stop <= 1.50" >&2
+  exit 3
+fi
 SKILL_MODE_REQ="$(read_field "$CONFIG" skill_mode "")"
 if [[ -n "${SKILL_MODE_OVERRIDE:-}" ]]; then
   SKILL_MODE_REQ="$SKILL_MODE_OVERRIDE"
@@ -332,12 +431,24 @@ done
 QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
 
-# Validate enums; fall back to defaults on garbage (fail toward the safe roster).
-# claude-native (dispatch-review.sh) is deliberately NOT roster-eligible — it is a measurement/probe runner; an unknown reviewer_runner here silently falls back to the default.
-case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim|anthropic-compatible|qoderclicn) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
+# Runner identity selects the actual transport. Unknown or blank explicit values
+# fail loudly: silently substituting a different runner misattributes the review.
+case "$REV_RUNNER" in
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;;
+  *)
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn): ${REV_RUNNER:-<empty>}" >&2
+    exit 3
+    ;;
+esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
-case "$IMPL_RUNNER" in auto|codex|agy|grok|cc-shim|pi|qoderclicn) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
+case "$IMPL_RUNNER" in
+  auto|codex|agy|grok|cc-shim|pi|qoderclicn) ;;
+  *)
+    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn): ${IMPL_RUNNER:-<empty>}" >&2
+    exit 3
+    ;;
+esac
 case "$SPEC_REVIEW" in on|off) ;; *) SPEC_REVIEW="$DEF_SPEC_REVIEW" ;; esac
 case "$HARNESS" in on|off) ;; *) HARNESS="$DEF_HARNESS" ;; esac
 case "$DIFF_SCOPE" in full|incremental-mitigated) ;; *) DIFF_SCOPE="$DEF_DIFF_SCOPE" ;; esac
@@ -884,6 +995,19 @@ if [[ -n "$FIELD" ]]; then
     loop_max_rounds) printf '%s\n' "$MAX_ROUNDS" ;;
     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;
+    plan_review) printf '%s\n' "$PLAN_REVIEW" ;;
+    plan_reviewer_engine) printf '%s\n' "$PLAN_REV_ENGINE" ;;
+    plan_reviewer_effort) printf '%s\n' "$PLAN_REV_EFFORT" ;;
+    plan_reviewer_runner) printf '%s\n' "$PLAN_REV_RUNNER" ;;
+    plan_reviewer_endpoint) printf '%s\n' "$PLAN_REV_ENDPOINT" ;;
+    plan_deep_reviewer_engine) printf '%s\n' "$PLAN_DEEP_ENGINE" ;;
+    plan_deep_reviewer_effort) printf '%s\n' "$PLAN_DEEP_EFFORT" ;;
+    plan_deep_reviewer_runner) printf '%s\n' "$PLAN_DEEP_RUNNER" ;;
+    plan_deep_reviewer_endpoint) printf '%s\n' "$PLAN_DEEP_ENDPOINT" ;;
+    plan_review_max_generations) printf '%s\n' "$PLAN_MAX_GENERATIONS" ;;
+    plan_review_max_wall_seconds) printf '%s\n' "$PLAN_MAX_WALL_SECONDS" ;;
+    plan_review_growth_warn_ratio) printf '%s\n' "$PLAN_GROWTH_WARN_RATIO" ;;
+    plan_review_growth_stop_ratio) printf '%s\n' "$PLAN_GROWTH_STOP_RATIO" ;;
     independent_harness) printf '%s\n' "$HARNESS" ;;
     qc_panel) printf '%s\n' "${QC_PANEL[*]}" ;;
     qc_panel_aggregation) printf '%s\n' "$QC_AGG" ;;
@@ -962,13 +1086,29 @@ fi
 
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
+PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
+PLAN_ARGS=(
+  "$PLAN_REVIEW"
+  "$(json_escape "$PLAN_REV_ENGINE")"
+  "$PLAN_REV_EFFORT"
+  "$PLAN_REV_RUNNER"
+  "$(json_escape "$PLAN_REV_ENDPOINT")"
+  "$(json_escape "$PLAN_DEEP_ENGINE")"
+  "$PLAN_DEEP_EFFORT"
+  "$PLAN_DEEP_RUNNER"
+  "$(json_escape "$PLAN_DEEP_ENDPOINT")"
+  "$PLAN_MAX_GENERATIONS"
+  "$PLAN_MAX_WALL_SECONDS"
+  "$PLAN_GROWTH_WARN_RATIO"
+  "$PLAN_GROWTH_STOP_RATIO"
+)
 if [[ "$DENSITY_SOURCE" != "off" ]]; then
   FMT_SUFFIX=", \"capability_tier\": \"%s\", \"density_scaled\": %s, \"density_source\": \"%s\", \"verify_first\": %s }\n"
   ARGS_SUFFIX=("$CAPABILITY_TIER" "$DENSITY_SCALED" "$DENSITY_SOURCE" "$VERIFY_FIRST")
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${PLAN_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -977,9 +1117,9 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" "$IMPL_FAMILY" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
     "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
-    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${ARGS_SUFFIX[@]}"
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${PLAN_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -987,6 +1127,6 @@ else
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
     "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
-    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${ARGS_SUFFIX[@]}"
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

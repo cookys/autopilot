@@ -27,6 +27,12 @@ node bin/autopilot.js harness report --stale-after 14d --required-level H3 --for
 
 If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or below the required harness level, do not implement H3+ dispatch, hooks, gating, or orchestration from memory. Run a survey or local spike first.
 
+## Available Scripts
+
+| Script | Use |
+|--------|-----|
+| [`scripts/measure-profile-context.js`](../../scripts/measure-profile-context.js) | Produce content-free source, rule-inventory, or persisted Codex context summaries. A byte estimate is conservative evidence only; it cannot prove an exact-token budget or another host's prompt visibility. |
+
 ## Update Rules
 
 - Capability records live in `src/harness/capabilities/*.json`.

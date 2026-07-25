@@ -9,6 +9,15 @@ ERR="$TEST_TMP/execution-witness-controls.err"
 node "$SCRIPT" --repo "$REPO_ROOT" --tmp "$TEST_TMP/controls" >"$OUT" 2>"$ERR"
 RC=$?
 
+# Same diagnosability fix as owner-kernel-p0-supervised-profile: without this the suite prints
+# a wall of identical "not found in output" lines while the driver's real error dies with
+# TEST_TMP. That opacity is what made a missing system package look like a logic failure.
+if [ "$RC" -ne 0 ]; then
+  echo "  --- controls stderr (exit $RC) ---" >&2
+  tail -c 2000 "$ERR" >&2 2>/dev/null || echo "  (no stderr captured)" >&2
+  echo "  --- end controls stderr ---" >&2
+fi
+
 assert_exit_code "$RC" 0 "execution witness controls pass"
 assert_contains "$(cat "$OUT")" '"signed_payload_verified": true' "signed payload is verified"
 assert_contains "$(cat "$OUT")" '"process_identity_metadata_is_not_caller_overridable": true' "caller cannot override witnessed process identity"

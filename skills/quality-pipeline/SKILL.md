@@ -35,8 +35,8 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
 | [`scripts/error-path-scan.sh`](../../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error paths) | Completeness Gate step (advisory to review) |
 | [`scripts/secret-scan-diff.js`](../../scripts/secret-scan-diff.js) | L0 attention-slip scan for leaked secrets | Completeness Gate step (blocking) |
-| [`scripts/adjudicate-findings.js`](../../scripts/adjudicate-findings.js) | "Is this finding real / repair-eligible?" — probe-backed statuses; `gate --ids` = claim-real (actionable); `dispose` + `repair-gate --ids` = relevance (`must-fix-now` only) | Review step: verify → classify → before fix dispatch |
-| [`scripts/check-repair-scope.js`](../../scripts/check-repair-scope.js) | Cumulative repair stop-loss — frozen contract, full `base_sha..HEAD` churn/path/new-file accounting; TRIP ends automatic repair | After relevance classify, every repair round before fixer |
+| [`scripts/adjudicate-findings.js`](../../scripts/adjudicate-findings.js) | "Is this finding real / repair-eligible?" — probe-backed statuses; `gate --ids` = claim-real; `dispose` + `repair-gate --ids` = relevance (`must-fix-now`); `completeness` = all-blocking Critical/Major dispositions over the full registry | Review step: verify → classify → completeness before fix dispatch and before acceptance |
+| [`scripts/check-repair-scope.js`](../../scripts/check-repair-scope.js) | Cumulative repair stop-loss — sealed contract (`seal --out` + check `--seal`), full `base_sha..HEAD` churn/path/new-file accounting; TRIP ends automatic repair | Before fixer, after every repair mutation, and before acceptance |
 | [`scripts/check-redispatch-prompt.sh`](../../scripts/check-redispatch-prompt.sh) | Round 2+ leaky-phrase detection (per `references/blind-dispatch.md`) | Before every re-review dispatch |
 | [`scripts/diff-file-list.sh`](../../scripts/diff-file-list.sh) | Reviewer's "list every file I read" enumeration in Verified Clean | Reviewer prompt assembly |
 | [`scripts/diff-scope-report.sh`](../../scripts/diff-scope-report.sh) | v2 scope-creep filter: whitespace-only files, files not in message, comment-only hunks, quote-style swaps | Code Review step (Scope Creep Scan) |
@@ -138,11 +138,14 @@ Follow references/code-review.md (dispatches per .claude/dispatch-config.md '## 
   → Critical/Major claims?
        → verify (adjudicate-findings gate / probe|trace)
        → classify relevance (dispose: must-fix-now | follow-up | reject-out-of-scope)
-       → scope check: `scripts/check-repair-scope.js check --contract <intake> --intake-contract <intake>`
-       → repair-gate --ids <must-fix-now> → fix only those → re-review
+       → completeness: `adjudicate-findings.js completeness --store <store>` (all-blocking; not --ids subset)
+       → scope check: `scripts/check-repair-scope.js check --contract <contract> --seal <seal.json>`
+       → repair-gate --ids <must-fix-now> → fix only those
+       → scope check after every repair mutation (full base_sha..HEAD) → re-review
+       → completeness + scope check before acceptance / commit
        (severity orthogonal; union-on-verified Critical/Major intact inside must-fix-now)
   → Suggestion/Minor? → dispatch via Decision Tree below
-  → LGTM? → pass
+  → LGTM? → completeness + scope check before acceptance → pass
 ```
 
 ### Pre-existing Error Cleanup (after main task)

@@ -16,13 +16,14 @@ const HELP_TEXT = `Usage:
   node scripts/adjudicate-findings.js status --store <path> [--id <finding-id>] [--json] [--now <ISO-date>]
   node scripts/adjudicate-findings.js gate --store <path> --ids <id1,id2,...> [--now <ISO-date>]
   node scripts/adjudicate-findings.js repair-gate --store <path> --ids <id1,id2,...> [--now <ISO-date>]
+  node scripts/adjudicate-findings.js completeness --store <path> [--json] [--now <ISO-date>]
 
 Options:
   --store <path>       Path to the JSONL store file or directory (required).
   --id <finding-id>    ID of the finding to probe, refute, trace, or dispose.
   --ids <id1,id2,...>  Comma-separated list of finding IDs to check for gate / repair-gate.
   --file <path>        Read input JSON from file instead of stdin.
-  --json               Output status in JSON format.
+  --json               Output status / completeness report in JSON format.
   --now <ISO-date>     Use this ISO-8601 UTC timestamp for deterministic tests.
 
 Disposition (dispose): exactly one of must-fix-now | follow-up | reject-out-of-scope.
@@ -33,12 +34,20 @@ Disposition (dispose): exactly one of must-fix-now | follow-up | reject-out-of-s
 gate: exit 0 iff every id is actionable (backward-compatible claim check).
 repair-gate: exit 0 iff every id is actionable AND disposed must-fix-now
   without conflict/missing/malformed disposition (severity is orthogonal).
+  Subset --ids alone is NOT completeness — run completeness before fix
+  dispatch and before final acceptance.
+completeness: fail-closed all-blocking gate over the full registry.
+  Enumerates every actionable Critical (🔴) / Major (🟠); fails on missing
+  or conflicting disposition; distinguishes must-fix-now from
+  follow-up/reject IDs; rejects --ids (caller subsets are never complete).
 
 Exit codes:
   0 = success
   1 = validation / schema / transition error, malformed JSON, gate fail
   2 = usage error / unknown subcommand
 `;
+
+const BLOCKING_SEVERITIES = new Set(['🔴', '🟠']);
 
 const VALID_DISPOSITIONS = new Set(['must-fix-now', 'follow-up', 'reject-out-of-scope']);
 
@@ -155,18 +164,18 @@ function validateStoreEvent(ev, lineNo) {
       'context', 'trigger', 'rationale'
     ])
   };
-  
+
   if (!ev.type || !typeFields[ev.type]) {
     failValidation(`store event at line ${lineNo} has invalid type: ${ev.type}`);
   }
-  
+
   const allowed = new Set([...rootAllowed, ...typeFields[ev.type]]);
   for (const key of Object.keys(ev)) {
     if (!allowed.has(key)) {
       failValidation(`unknown field '${key}' in store event at line ${lineNo}`);
     }
   }
-  
+
   if (!Number.isInteger(ev.event_id) || ev.event_id <= 0) {
     failValidation(`invalid event_id at line ${lineNo}`);
   }
@@ -176,7 +185,7 @@ function validateStoreEvent(ev, lineNo) {
   if (typeof ev.finding_id !== 'string' || ev.finding_id.trim().length === 0) {
     failValidation(`invalid finding_id at line ${lineNo}`);
   }
-  
+
   if (ev.type === 'add') {
     if (typeof ev.claim !== 'string' || ev.claim.trim().length === 0) {
       failValidation(`invalid claim at line ${lineNo}`);
@@ -317,7 +326,7 @@ function getFindingsState(events) {
         continue;
       }
       findings[fid].events.push(ev);
-      
+
       if (ev.type === 'probe') {
         if (ev.observed_matches_expected) {
           findings[fid].status = 'REPRODUCED';
@@ -353,10 +362,62 @@ function isRepairEligible(state) {
   return true;
 }
 
+/** Actionable Critical/Major — must have exactly one disposition for completeness. */
+function isBlockingActionable(state) {
+  return !!(state && state.actionable && BLOCKING_SEVERITIES.has(state.severity));
+}
+
+/**
+ * All-blocking completeness over the registry (not a caller-selected subset).
+ * Every actionable Critical/Major must have exactly one non-conflicting disposition.
+ */
+function evaluateCompleteness(findings) {
+  const mustFixNow = [];
+  const followUpOrReject = [];
+  const missingDisposition = [];
+  const conflictingDisposition = [];
+
+  const blocking = Object.values(findings)
+    .filter((f) => isBlockingActionable(f))
+    .sort((a, b) => a.finding_id.localeCompare(b.finding_id));
+
+  for (const state of blocking) {
+    if (state.disposition_conflict) {
+      conflictingDisposition.push(state.finding_id);
+      continue;
+    }
+    if (!state.disposition) {
+      missingDisposition.push(state.finding_id);
+      continue;
+    }
+    if (state.disposition === 'must-fix-now') {
+      mustFixNow.push(state.finding_id);
+    } else if (
+      state.disposition === 'follow-up'
+      || state.disposition === 'reject-out-of-scope'
+    ) {
+      followUpOrReject.push(state.finding_id);
+    } else {
+      missingDisposition.push(state.finding_id);
+    }
+  }
+
+  const ok = missingDisposition.length === 0 && conflictingDisposition.length === 0;
+  return {
+    complete: ok,
+    blocking_count: blocking.length,
+    must_fix_now_ids: mustFixNow,
+    follow_up_or_reject_ids: followUpOrReject,
+    missing_disposition_ids: missingDisposition,
+    conflicting_disposition_ids: conflictingDisposition
+  };
+}
+
 function statusPayload(state) {
   return {
     finding_id: state.finding_id,
     status: state.status,
+    severity: state.severity,
     actionable: state.actionable,
     disposition: state.disposition,
     disposition_conflict: state.disposition_conflict === true,
@@ -389,7 +450,7 @@ function readInputJson(options) {
       failValidation(`Failed to read from stdin: ${err.message}`);
     }
   }
-  
+
   try {
     return JSON.parse(raw);
   } catch (err) {
@@ -401,7 +462,7 @@ function validateInputJson(input, command) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     failValidation('Input must be a JSON object');
   }
-  
+
   if (command === 'add') {
     const allowed = new Set(['finding_id', 'claim', 'severity', 'source']);
     for (const key of Object.keys(input)) {
@@ -544,7 +605,9 @@ const COMMAND_ALLOWED_FLAGS = {
   dispose: new Set(['store', 'id', 'file', 'now']),
   status: new Set(['store', 'id', 'json', 'now']),
   gate: new Set(['store', 'ids', 'now']),
-  'repair-gate': new Set(['store', 'ids', 'now'])
+  'repair-gate': new Set(['store', 'ids', 'now']),
+  // completeness intentionally omits --ids: caller subsets are never "complete"
+  completeness: new Set(['store', 'json', 'now'])
 };
 
 function main() {
@@ -582,7 +645,7 @@ function main() {
       validateStoreEvent(rows[i], i + 1);
     }
     const findings = getFindingsState(rows);
-    
+
     if (options.id) {
       const fid = options.id;
       const state = findings[fid];
@@ -611,6 +674,49 @@ function main() {
     process.exit(0);
   }
 
+  if (command === 'completeness') {
+    // Fail closed if caller tries to pass a subset (flag not allowed above; belt).
+    if (options.ids !== undefined) {
+      failUsage('completeness rejects --ids; it enumerates the full registry');
+    }
+    const { storeFile } = resolveStoreConfig(options);
+    const rows = readStoreRows(storeFile);
+    for (let i = 0; i < rows.length; i++) {
+      validateStoreEvent(rows[i], i + 1);
+    }
+    const findings = getFindingsState(rows);
+    const report = evaluateCompleteness(findings);
+    if (options.json) {
+      process.stdout.write(JSON.stringify(report) + '\n');
+    } else {
+      process.stdout.write(
+        [
+          `complete=${report.complete}`,
+          `blocking=${report.blocking_count}`,
+          `must-fix-now=${report.must_fix_now_ids.join(',') || '-'}`,
+          `follow-up-or-reject=${report.follow_up_or_reject_ids.join(',') || '-'}`,
+          `missing=${report.missing_disposition_ids.join(',') || '-'}`,
+          `conflict=${report.conflicting_disposition_ids.join(',') || '-'}`
+        ].join(' ') + '\n'
+      );
+    }
+    if (!report.complete) {
+      const parts = [];
+      if (report.missing_disposition_ids.length) {
+        parts.push(`missing disposition: ${report.missing_disposition_ids.join(', ')}`);
+      }
+      if (report.conflicting_disposition_ids.length) {
+        parts.push(`conflicting disposition: ${report.conflicting_disposition_ids.join(', ')}`);
+      }
+      process.stderr.write(
+        `ERROR: blocking completeness failed (${parts.join('; ')}). ` +
+        'Every actionable Critical/Major needs exactly one disposition.\n'
+      );
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
   if (command === 'gate' || command === 'repair-gate') {
     if (!options.ids) {
       failUsage('Option --ids <id1,id2,...> is required');
@@ -621,12 +727,12 @@ function main() {
       validateStoreEvent(rows[i], i + 1);
     }
     const findings = getFindingsState(rows);
-    
+
     const ids = options.ids.split(',').map(s => s.trim()).filter(Boolean);
     if (ids.length === 0) {
       failUsage(`No ids specified for ${command}`);
     }
-    
+
     if (command === 'gate') {
       // Backward-compatible: claim-real check only (actionable).
       const nonActionable = [];
@@ -636,7 +742,7 @@ function main() {
           nonActionable.push(id);
         }
       }
-      
+
       if (nonActionable.length > 0) {
         process.stdout.write(nonActionable.join(',') + '\n');
         process.stderr.write(`ERROR: Non-actionable findings: ${nonActionable.join(', ')}\n`);
@@ -647,6 +753,8 @@ function main() {
     }
 
     // repair-gate: actionable + must-fix-now disposition without conflict.
+    // NOTE: --ids is a selected fix set, NOT registry completeness. Callers
+    // MUST run `completeness` before fix dispatch and before acceptance.
     const blocked = [];
     for (const id of ids) {
       const state = findings[id];
@@ -682,10 +790,10 @@ function main() {
     for (let i = 0; i < rows.length; i++) {
       validateStoreEvent(rows[i], i + 1);
     }
-    
+
     const findings = getFindingsState(rows);
     const fid = command === 'add' ? input.finding_id : options.id;
-    
+
     if (command === 'add') {
       if (findings[fid]) {
         failValidation(`Duplicate finding_id: ${fid} already exists in store`);
@@ -695,11 +803,11 @@ function main() {
         failValidation(`Finding with id ${fid} does not exist in store`);
       }
     }
-    
+
     const currentStatus = findings[fid] ? findings[fid].status : 'UNPROBED';
     let newStatus = 'UNPROBED';
     let eventSpecificData = {};
-    
+
     if (command === 'add') {
       newStatus = 'UNPROBED';
       eventSpecificData = {
@@ -710,10 +818,10 @@ function main() {
       };
     } else if (command === 'probe') {
       newStatus = input.observed_matches_expected ? 'REPRODUCED' : 'UNPROBED';
-      
+
       const digest = crypto.createHash('sha256').update(input.observed_output).digest('hex');
       const head = input.observed_output.slice(0, 400);
-      
+
       eventSpecificData = {
         probe_cmd: input.probe_cmd,
         expected_signature: input.expected_signature,
@@ -730,12 +838,12 @@ function main() {
       if (!hasFailedProbe) {
         failValidation(`refute requires a prior probe record for ${fid} whose observed_matches_expected was false`);
       }
-      
+
       newStatus = input.probe_fired_under_mutation ? 'REFUTED' : 'UNPROBED';
-      
+
       const digest = crypto.createHash('sha256').update(input.mutation_probe_output).digest('hex');
       const head = input.mutation_probe_output.slice(0, 400);
-      
+
       eventSpecificData = {
         mutation_desc: input.mutation_desc,
         mutation_probe_output_digest: digest,
@@ -749,7 +857,7 @@ function main() {
       if (input.confirmed_by === findingObj.source) {
         failValidation(`reject same-source confirmation: confirmed_by must differ from finding source (${findingObj.source})`);
       }
-      
+
       newStatus = 'PROOF_BY_TRACE';
       eventSpecificData = {
         trace_chain: input.trace_chain,
@@ -772,11 +880,11 @@ function main() {
         eventSpecificData.rationale = input.rationale;
       }
     }
-    
+
     if (command !== 'dispose') {
       checkTransition(currentStatus, newStatus);
     }
-    
+
     const assigned = maxEventId(rows) + 1;
     const eventType = command === 'dispose' ? 'disposition' : command;
     const newEvent = {
@@ -786,7 +894,7 @@ function main() {
       type: eventType,
       ...eventSpecificData
     };
-    
+
     ensureDir(storeDir);
     appendRow(storeFile, newEvent);
     return newEvent;

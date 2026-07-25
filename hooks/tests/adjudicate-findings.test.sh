@@ -310,4 +310,74 @@ assert_contains "$__RUN_STDOUT" "F6" "mixed lists F6"
 assert_contains "$__RUN_STDOUT" "F7" "mixed lists F7"
 assert_not_contains "$__RUN_STDOUT" "F1" "mixed does not list eligible F1"
 
+# --- 9. Completeness (all-blocking) — omitted Major cannot be hidden via --ids ---
+echo "Running Completeness / all-blocking tests..."
+
+# F1 is must-fix-now (Critical, actionable). F6 is follow-up (Major, actionable).
+# F7 is reject-out-of-scope (Major, actionable). F9 is conflict (Major, actionable).
+# Completeness must fail while F9 conflicts / any actionable Critical/Major lacks disposition.
+
+# First: dispose F9 conflict already set — completeness fails on conflict
+run_adj "completeness --store $STORE --json"
+assert_exit_code "$__RUN_EXIT" "1" "completeness fails on conflicting disposition F9"
+assert_contains "$__RUN_STDOUT" '"complete":false' "completeness complete=false on conflict"
+assert_contains "$__RUN_STDOUT" 'F9' "completeness names conflicting F9"
+assert_contains "$__RUN_STDOUT" '"must_fix_now_ids"' "completeness distinguishes must-fix-now"
+assert_contains "$__RUN_STDOUT" '"follow_up_or_reject_ids"' "completeness distinguishes follow-up/reject"
+
+# Resolve F9 by appending a single disposition path: use a fresh store for clean omitted-Major
+STORE2="$TEST_TMP/findings2.jsonl"
+run_adj "add --store $STORE2" \
+  '{"finding_id":"M1","claim":"in-scope major","severity":"🟠","source":"r1"}'
+assert_exit_code "$__RUN_EXIT" "0" "add M1"
+run_adj "probe --store $STORE2 --id M1" \
+  '{"probe_cmd":"true","expected_signature":"a","observed_output":"a","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe M1"
+run_adj "dispose --store $STORE2 --id M1" \
+  '{"disposition":"must-fix-now","task_surface":"scripts/x","deferral_harm":"blocks AC"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose M1 must-fix-now"
+
+run_adj "add --store $STORE2" \
+  '{"finding_id":"M2","claim":"omitted major","severity":"🟠","source":"r1"}'
+assert_exit_code "$__RUN_EXIT" "0" "add M2 omitted-Major shape"
+run_adj "probe --store $STORE2 --id M2" \
+  '{"probe_cmd":"true","expected_signature":"b","observed_output":"b","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe M2"
+
+# repair-gate with only M1 would PASS (subset), but completeness must FAIL (M2 omitted)
+run_adj "repair-gate --store $STORE2 --ids M1"
+assert_exit_code "$__RUN_EXIT" "0" "subset repair-gate on M1 alone still passes (not completeness)"
+
+run_adj "completeness --store $STORE2 --json"
+assert_exit_code "$__RUN_EXIT" "1" "omitted actionable Major fails completeness"
+assert_contains "$__RUN_STDOUT" '"complete":false' "omitted-Major complete=false"
+assert_contains "$__RUN_STDOUT" 'M2' "completeness lists omitted M2"
+assert_contains "$__RUN_STDOUT" '"must_fix_now_ids":["M1"]' "M1 in must-fix-now class"
+assert_contains "$__RUN_STDOUT" '"missing_disposition_ids":["M2"]' "M2 missing disposition"
+
+# Dispose M2 as follow-up → completeness passes; distinguishes classes
+run_adj "dispose --store $STORE2 --id M2" \
+  '{"disposition":"follow-up","context":"later","trigger":"next ticket"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose M2 follow-up"
+run_adj "completeness --store $STORE2 --json"
+assert_exit_code "$__RUN_EXIT" "0" "completeness passes when all blockers disposed"
+assert_contains "$__RUN_STDOUT" '"complete":true' "complete=true"
+assert_contains "$__RUN_STDOUT" '"must_fix_now_ids":["M1"]' "must-fix-now = M1"
+assert_contains "$__RUN_STDOUT" '"follow_up_or_reject_ids":["M2"]' "follow-up class = M2"
+
+# completeness rejects --ids (subsets never treated as complete)
+run_adj "completeness --store $STORE2 --ids M1"
+assert_exit_code "$__RUN_EXIT" "2" "completeness rejects --ids"
+assert_contains "$__RUN_STDERR" "--ids" "stderr names rejected --ids"
+
+# Minor (🟡) actionable without disposition does NOT block completeness
+run_adj "add --store $STORE2" \
+  '{"finding_id":"MIN1","claim":"style","severity":"🟡","source":"r1"}'
+assert_exit_code "$__RUN_EXIT" "0" "add MIN1"
+run_adj "probe --store $STORE2 --id MIN1" \
+  '{"probe_cmd":"true","expected_signature":"c","observed_output":"c","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe MIN1"
+run_adj "completeness --store $STORE2 --json"
+assert_exit_code "$__RUN_EXIT" "0" "actionable Minor without disposition does not block completeness"
+
 finalize_test

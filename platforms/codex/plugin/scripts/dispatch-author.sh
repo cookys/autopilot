@@ -37,12 +37,17 @@
 #   exceed the JS's 4096 review default; a truncated response fail-closes in the JS).
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn --model <name> --prompt-file <file>
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn --model <name> --prompt-file <file>
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
 #       # test seam only: override the runner binary for seam/fake tests.
+#   [--context-window off|warn|block] on any mode: pre-dispatch context-window gate (default:
+#       block; also AUTOPILOT_CONTEXT_WINDOW_GATE). Authoring payloads are the largest
+#       single-file inputs on any rail, so this is the rail most likely to overflow a small
+#       window. Over budget ⇒ fail closed with no runner spawn.
+#       See references/hetero-dispatch.md § Context-window gate.
 #   In strict roster mode, do not pass `--runner`, `--model`, `--effort`, or `--endpoint`.
 #   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
 #   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
@@ -59,7 +64,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn",
+#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn",
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed",
 #     "raw_log": "<path>",
@@ -85,6 +90,8 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/output-quiescence.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-detach.sh"
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-author-codex-transport.sh"
+# shellcheck source=lib/grok-effort.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/grok-effort.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -101,7 +108,12 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_AUTHOR_SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$_AUTHOR_SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" 'dispatch-author-*' || true
+# Pre-dispatch context-window gate (lib/context-window.sh). Best-effort source: a missing
+# helper degrades to "no gate", never to a dispatch outage.
+# shellcheck source=/dev/null
+[ -r "$_AUTHOR_SELF_DIR/lib/context-window.sh" ] && . "$_AUTHOR_SELF_DIR/lib/context-window.sh" || true
 
+CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
@@ -118,6 +130,7 @@ while [[ $# -gt 0 ]]; do
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
+    --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
     --run-id)      RUN_ID="${2:-}"; shift 2 ;;
     --stage)       STAGE="${2:-}"; shift 2 ;;
@@ -126,7 +139,7 @@ while [[ $# -gt 0 ]]; do
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
-    -h|--help)     sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -621,8 +634,8 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -671,6 +684,22 @@ timeout_to_ms() {
 }
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
+
+# Context-window gate — runs BEFORE any runner spawns, so an over-budget authoring
+# payload costs nothing. Authoring prompts are the largest single-file payloads on
+# any rail (see the header note about the 4096 review default truncating them), which
+# makes this the rail most likely to overflow a small window.
+if declare -F context_window_gate > /dev/null 2>&1; then
+  _CB_MODE="$(context_window_mode "${CONTEXT_WINDOW_GATE:-}")"
+  if ! context_window_gate "$_CB_MODE" "$_AUTHOR_SELF_DIR" "$MODEL" "${PROMPT_FILE:-}"; then
+    printf '[dispatch-author: context-window blocked] %s\n' "${CONTEXT_WINDOW_JSON:-}" >> "$RAW_LOG"
+    die_precondition "context budget exceeded: ${CONTEXT_WINDOW_REASON:-over budget}"
+  fi
+  [ -n "${CONTEXT_WINDOW_JSON:-}" ] \
+    && printf '[dispatch-author: context-window %s] %s\n' \
+      "${CONTEXT_WINDOW_VERDICT:-}" "${CONTEXT_WINDOW_JSON:-}" >> "$RAW_LOG"
+fi
+
 RUNNER_EXIT=0
 CODEX_TRANSPORT=0
 CODEX_DEADLINE_HIT=0
@@ -692,11 +721,13 @@ GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
 QODER_CWD=""
+CNATIVE_CWD=""
 cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
+  [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
 }
 trap cleanup EXIT
@@ -754,7 +785,9 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # Read-only by construction: scratch cwd, no --always-approve, no web, no editor.
   GROK_CWD="$(mktemp -d -t dispatch-author-grokcwd-XXXXXX)"
   set +e
+  grok_effort_note "$EFFORT" "dispatch-author"
   timeout "$TIMEOUT" "$GROK_BIN" --prompt-file "$PROMPT_FILE" --cwd "$GROK_CWD" --model "$MODEL" \
+    --reasoning-effort "$(grok_effort_clamp "$EFFORT")" \
     --no-alt-screen --output-format plain --disable-web-search > "$RAW_LOG" 2>/dev/null
   RUNNER_EXIT=$?
   set -e
@@ -795,6 +828,23 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
+elif [[ "$RUNNER" = "claude-native" ]]; then
+  CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
+  [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (claude-native drives the local Claude Code CLI with ambient/native auth)"
+  case "$CC_BIN" in
+    /*) ;;
+    *)  CC_BIN="$(cd "$(dirname "$CC_BIN")" 2>/dev/null && pwd)/$(basename "$CC_BIN")" || true
+        case "$CC_BIN" in /*) ;; *) die_precondition "could not resolve --bin to an absolute path: ${BIN}" ;; esac ;;
+  esac
+  # First-party Claude authoring transport. It keeps ambient native auth but
+  # otherwise uses the same scratch-cwd/no-tools posture as the reviewer rail.
+  CNATIVE_CWD="$(mktemp -d)"
+  set +e
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  RUNNER_EXIT=$?
+  set -e
+  rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_JS="${BIN:-$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js}"
   [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-author.sh"
@@ -884,7 +934,7 @@ fi
 # (Codex: settle never converts a prior exit-first/incomplete-tree rejection
 # into authored — those paths already exited above. Post-settle content still
 # faces unconditional chrome/witness/session gates below.)
-if [[ "$RUNNER" = "cc-shim" ]]; then
+if [[ "$RUNNER" = "cc-shim" || "$RUNNER" = "claude-native" ]]; then
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
 else
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true

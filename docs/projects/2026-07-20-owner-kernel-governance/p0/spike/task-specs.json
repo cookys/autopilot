@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "baseline_mandatory_review_dispatches": 6,
+  "tasks": [
+    {
+      "id": "low-status",
+      "risk": "low",
+      "intent": {
+        "goal": "Produce a bounded status artifact for the P0 spike."
+      },
+      "contract": {
+        "required_values": {
+          "task": "low-status",
+          "status": "complete"
+        },
+        "required_arrays": {
+          "checks": {
+            "min_items": 1
+          }
+        },
+        "allowed_keys": [
+          "task",
+          "status",
+          "checks"
+        ]
+      },
+      "requires_approval": false,
+      "author_prompt": "Return exactly one JSON object and no Markdown. It must be valid JSON with exactly these keys: task, status, checks. Set task to low-status, status to complete, and checks to a non-empty array of short ASCII strings describing deterministic checks."
+    },
+    {
+      "id": "medium-boundary",
+      "risk": "medium",
+      "intent": {
+        "goal": "Produce a mediated-boundary artifact for the P0 spike."
+      },
+      "contract": {
+        "required_values": {
+          "task": "medium-boundary",
+          "mediation": "required"
+        },
+        "required_arrays": {
+          "controls": {
+            "min_items": 2
+          }
+        },
+        "allowed_keys": [
+          "task",
+          "mediation",
+          "controls"
+        ]
+      },
+      "requires_approval": false,
+      "author_prompt": "Return exactly one JSON object and no Markdown. It must be valid JSON with exactly these keys: task, mediation, controls. Set task to medium-boundary, mediation to required, and controls to an array of at least two short ASCII strings about bounded execution controls."
+    },
+    {
+      "id": "medium-resume",
+      "risk": "medium",
+      "intent": {
+        "goal": "Produce an approval-bound artifact that is resumed from durable evidence."
+      },
+      "contract": {
+        "required_values": {
+          "task": "medium-resume",
+          "approval": "required"
+        },
+        "required_arrays": {
+          "evidence": {
+            "min_items": 2
+          }
+        },
+        "allowed_keys": [
+          "task",
+          "approval",
+          "evidence"
+        ]
+      },
+      "requires_approval": true,
+      "author_prompt": "Return exactly one JSON object and no Markdown. It must be valid JSON with exactly these keys: task, approval, evidence. Set task to medium-resume, approval to required, and evidence to an array of at least two short ASCII strings about durable resume evidence."
+    }
+  ]
+}

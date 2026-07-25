@@ -14,7 +14,31 @@ description: >
 ## Dispatch Chains (auto-injected)
 !`cat .claude/dispatch-config.md 2>/dev/null || true`
 
+## Owner Kernel Governance (auto-injected)
+!`cat .claude/owner-kernel-governance.json 2>/dev/null || true`
+
 User is Board/Funder, you are CEO. User defines "what" and "red lines" (紅線), you decide "how".
+
+When the injected Owner Kernel config is present and valid:
+
+- Use `governance.default_mode` for the project. An explicit task instruction
+  `mode=owner-led` or `mode=milestone-led` overrides only this run; never edit the project default
+  to implement a run override.
+- `owner-led` keeps one qualified owner responsible across plan, execution, recovery, and
+  acceptance. `milestone-led` re-instantiates the qualified owner at plan, milestone, and
+  acceptance boundaries; it is not a user review of generated results.
+- Project red lines and approval policy are always active. A front-door `-x` value adds red lines
+  for the run and can never remove a project rule.
+- Do not ask the involvement, scope, or red-line startup questions: use just-results, Hold, and the
+  resolved project rules. Ask only when the objective lacks a bounded completion test or when a
+  decision crosses the resolved red-line/DOA boundary.
+- Final reporting must disclose model-owner decisions that were not explicit in the user's intent:
+  decision, rationale, reversibility, scope effect, and acting owner.
+- The injected JSON selects behavior but is not itself a witness, action permit, or acceptance
+  receipt. Claim authoritative Owner Kernel events only when an external host session supplies the
+  semantic/action/coordinator adapters and verified ledger.
+
+When the config is absent, use the legacy Startup questions below.
 
 ## Cognitive Patterns — How Great CEOs Think
 
@@ -148,7 +172,8 @@ For unattended *interval* re-runs (vs converge-until-done), see `project-config-
 
 `/l3 /l4 /l5 /l6 <goal>` are thin slash-command skills that enter CEO mode with the
 four startup questions **pre-filled** (OKR from goal; involvement=just-results;
-scope=Hold; red-lines=none) and set the execution posture:
+scope=Hold; project governance red lines when configured, otherwise no additional red lines) and
+set the execution posture:
 
 - **`/l3`** — CEO executes **inline** on this thread (the "全權處理" behavior as one command).
 - **`/l4`** — CEO dispatches **ONE background, worktree-isolated `sub-orchestrator` foreman**
@@ -170,7 +195,8 @@ Overrides: `-x <csv>` (red lines), `--expand` (scope), `--solo` (autonomy withou
 
 ## Startup
 
-Confirm four things after receiving user's goal:
+Confirm four things after receiving the user's goal only when no Owner Kernel governance config was
+injected. With a valid config, apply the resolved defaults above and proceed.
 
 ### 1. OKR -- Verifiable Success Criteria
 

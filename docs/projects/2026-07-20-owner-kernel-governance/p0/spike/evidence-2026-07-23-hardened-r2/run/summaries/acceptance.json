@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "accepted",
+  "tasks": [
+    "low-status",
+    "medium-boundary",
+    "medium-resume"
+  ],
+  "baseline_mandatory_review_dispatches": 6,
+  "candidate_mandatory_review_dispatches": 3,
+  "review_dispatch_reduction": 0.5,
+  "observed_false_acceptances": 0,
+  "observed_missed_red_line_escalations": 0,
+  "transcript_free_resume": true,
+  "ledger_head_before_terminal_record": "5c5ecf97f71073e1756485f2030aa8b5db097eb1bd69435e008ad4369e6d2e58"
+}

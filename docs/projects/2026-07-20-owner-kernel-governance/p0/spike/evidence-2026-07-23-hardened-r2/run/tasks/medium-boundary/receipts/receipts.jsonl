@@ -1,0 +1,3 @@
+{"seq":0,"event_head":"93ef6f7c6e17fd2950fed0e59befbb8f17ae6db9a477ef23f797e8be59858f61","prev_witnessed_head":"genesis"}
+{"seq":1,"event_head":"ee5cf4327c9c117f3967915d49e6c20ff3b784aeb907bcdf00625f122c65dadc","prev_witnessed_head":"93ef6f7c6e17fd2950fed0e59befbb8f17ae6db9a477ef23f797e8be59858f61"}
+{"seq":2,"event_head":"d9f41e2bf91364c20cc63d5b5ceaf13744145b05d81034f5ed0f91f06ef5029c","prev_witnessed_head":"ee5cf4327c9c117f3967915d49e6c20ff3b784aeb907bcdf00625f122c65dadc"}

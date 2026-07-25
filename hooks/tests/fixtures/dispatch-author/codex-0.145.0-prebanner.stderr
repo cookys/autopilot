@@ -1,0 +1,19 @@
+Reading prompt from stdin...
+OpenAI Codex v0.145.0
+--------
+workdir: /home/cookys/projects/autopilot
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019f94b1-7105-7f60-81a8-82b23cb81f46
+--------
+user
+Respond with exactly one line: G0_OK model_identity=<the exact model you are serving>.
+
+codex
+G0_OK model_identity=GPT-5
+tokens used
+7,728

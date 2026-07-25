@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.32.57-E8A838?style=flat-square" alt="v2.32.57">
+  <img src="https://img.shields.io/badge/version-2.32.59-E8A838?style=flat-square" alt="v2.32.59">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
@@ -156,7 +156,7 @@ Autopilot delegates labor, not authority. Implementer self-report is never evide
 
 ### 🔌 Add another engine (optional)
 
-Claude alone is enough. But point autopilot at a **second engine family** and its review/implement pipeline gets stronger — a cross-family qc panel catches what one vendor and its same-family reviewer jointly miss, and you get a heterogeneous implementer for cost-arbitrage. **Recommended order: a subscription you already pay for ≻ a metered API key** — OAuth-login runners (`codex` / `agy` / `grok`) need no token at all; GLM / MiniMax go in one canonical mode-600 file (`~/.autopilot/endpoints.env`) and are wired declaratively in `.claude/review-loop-config.md`.
+Claude alone is enough. But point autopilot at a **second engine family** and its review/implement pipeline gets stronger — a cross-family qc panel catches what one vendor and its same-family reviewer jointly miss, and you get a heterogeneous implementer for cost-arbitrage. **Recommended order: a subscription you already pay for ≻ a metered API key** — OAuth-login runners (`codex` / `agy` / `grok` / explicit-only `qoderclicn`) need no token at all; GLM / MiniMax go in one canonical mode-600 file (`~/.autopilot/endpoints.env`) and are wired declaratively in `.claude/review-loop-config.md`.
 
 > **Try saying:** *"set up a GLM reviewer"* · *"use MiniMax as the /l5 implementer"*
 

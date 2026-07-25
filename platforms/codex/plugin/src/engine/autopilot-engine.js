@@ -9,6 +9,8 @@ const { isImmutableGitSha } = require('../lib/common');
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
+const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
+const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const MISPLACEMENT_PATH_PATTERNS = [
@@ -246,6 +248,7 @@ function modelFamilyOfEngine(engine) {
   if (/(qwen|qwq)/.test(normalized)) return 'alibaba';
   if (/(gemini|flash|bison)/.test(normalized)) return 'google';
   if (/(grok|composer)/.test(normalized)) return 'xai';
+  if (/(qwen|qoder)/.test(normalized)) return 'alibaba';
   if (/(minimax|abab)/.test(normalized)) return 'minimax';
   if (/(glm|zhipu)/.test(normalized)) return 'zhipu';
   return 'unknown';
@@ -266,7 +269,7 @@ const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 // Endpoint wiring (v2.32.45): the only reviewer runners that consume a named
 // endpoint credential (dispatch-review.sh --endpoint <name> → resolve-endpoint.sh
 // → AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN} from ~/.autopilot/endpoints.env). Every
-// other runner (codex/agy/grok/claude-native) authenticates natively and gets NO
+// other runner (codex/agy/grok/qoderclicn/claude-native) authenticates natively and gets NO
 // --endpoint. The name must be env-var-compatible ([A-Za-z0-9_]+, matching the
 // resolve-endpoint.sh contract); anything else (a URL, empty string) is ignored.
 const ENDPOINT_CAPABLE_REVIEW_RUNNERS = new Set(['cc-shim', 'anthropic-compatible']);
@@ -731,23 +734,17 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch (error) {
-    let stderr = '';
-    try {
-      fs.rmSync(parent, { recursive: true, force: true });
-    } catch (cleanupError) {
-      stderr = `verify worktree parent cleanup failed: ${cleanupError.message}`;
-    }
     return {
       error,
       status: null,
       signal: null,
       stdout: '',
-      stderr,
+      stderr: '',
       worktree,
       parent,
     };
   }
-  const result = {
+  return {
     error: child.error || null,
     status: child.status,
     signal: child.signal || null,
@@ -756,17 +753,6 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
     worktree,
     parent,
   };
-  if (worktreeResultBlocked(result)) {
-    try {
-      fs.rmSync(parent, { recursive: true, force: true });
-    } catch (error) {
-      result.stderr = appendCleanupWarning(
-        result.stderr,
-        `verify worktree parent cleanup failed: ${error.message}`,
-      );
-    }
-  }
-  return result;
 }
 
 function defaultGitWorktreeRemove({ worktree, cwd }) {
@@ -785,24 +771,20 @@ function defaultGitWorktreeRemove({ worktree, cwd }) {
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const result = {
+  return {
     error: child.error || null,
     status: child.status,
     signal: child.signal || null,
     stdout: child.stdout || '',
     stderr: child.stderr || '',
   };
-  if (worktreeResultBlocked(result)) {
-    try {
-      fs.rmSync(worktree, { recursive: true, force: true });
-    } catch (error) {
-      result.stderr = appendCleanupWarning(
-        result.stderr,
-        `verify worktree cleanup fallback failed: ${error.message}`,
-      );
-    }
+}
+
+function defaultVerifyWorktreeCleanup({ targetPath }) {
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new TypeError('verify worktree cleanup requires a target path');
   }
-  return result;
+  fs.rmSync(targetPath, { recursive: true, force: true });
 }
 
 function defaultGitBranchForce({ branch, commit, cwd }) {
@@ -993,11 +975,13 @@ class AutopilotEngine {
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
+    this.verifyWorktreeCleanup = options.verifyWorktreeCleanup || defaultVerifyWorktreeCleanup;
     this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
     this.gitResumeInspect = options.gitResumeInspect || defaultResumeInspect;
     this.cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
     this.now = createClock(options.clock);
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
+    this.lifecycleObserver = options.lifecycleObserver || null;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -1818,6 +1802,7 @@ class AutopilotEngine {
     // unless the caller explicitly passes dynamicReviewRisk: true.
     const dynamicReviewRisk = input.dynamicReviewRisk === true;
     const ledger = [];
+    let lifecycleObservation = null;
     let promptFile = input.promptFile;
     const branch = input.branch;
     const base = input.base;
@@ -1835,7 +1820,10 @@ class AutopilotEngine {
       advisoryFindings: [],
       bestCommit: null,
     };
-    const finish = (result) => resultWithVerificationFields(result, verifyState);
+    const finish = (result) => {
+      const output = resultWithVerificationFields(result, verifyState);
+      return lifecycleObservation ? lifecycleObservation.finalize(output) : output;
+    };
 
     if (!promptFile || typeof promptFile !== 'string') {
       const startedAt = this.now();
@@ -1925,6 +1913,19 @@ class AutopilotEngine {
       });
     }
     promptFile = path.resolve(loopCwd, promptFile);
+
+    // P3.1 is a host-injected observation sidecar only. It never controls the
+    // existing loop, action sinks, acceptance, or terminal result.
+    lifecycleObservation = createEngineLifecycleObservationSession({
+      observer: this.lifecycleObserver,
+      config: input.lifecycleObservation,
+      promptFile,
+      base,
+      branch,
+      verifyCmd: verifyCmdProvided ? verifyCmd : null,
+      expectedEngineRunId: input.runId,
+    });
+    if (lifecycleObservation) lifecycleObservation.attach(ledger);
 
     let roster = input.roster || null;
     let resolveResult = null;
@@ -2212,6 +2213,7 @@ class AutopilotEngine {
       }
       ledger.push(...implementation.ledger);
       implementationChain.push(implementation);
+      if (lifecycleObservation) lifecycleObservation.observeImplementationResult(implementation, round);
       if (implementation.status !== 'committed') {
         const implementationPhase = implementation.phase || 'dispatch_implementation';
         return finish({
@@ -2309,7 +2311,14 @@ class AutopilotEngine {
               }
               if (verifyCleanupWarning) {
                 try {
-                  fs.rmSync(verifyWorktree, { recursive: true, force: true });
+                  this.verifyWorktreeCleanup({
+                    targetPath: verifyWorktree,
+                    cwd: loopCwd,
+                    round,
+                    commit,
+                    branch: currentBranch,
+                    reason: 'worktree_remove_fallback',
+                  });
                 } catch (error) {
                   verifyCleanupWarning = appendCleanupWarning(
                     verifyCleanupWarning,
@@ -2321,7 +2330,14 @@ class AutopilotEngine {
           } finally {
             if (verifyWorktreeParent) {
               try {
-                fs.rmSync(verifyWorktreeParent, { recursive: true, force: true });
+                this.verifyWorktreeCleanup({
+                  targetPath: verifyWorktreeParent,
+                  cwd: loopCwd,
+                  round,
+                  commit,
+                  branch: currentBranch,
+                  reason: 'worktree_parent_cleanup',
+                });
               } catch (error) {
                 verifyCleanupWarning = appendCleanupWarning(
                   verifyCleanupWarning,
@@ -2492,6 +2508,7 @@ class AutopilotEngine {
       });
       ledger.push(...review.ledger);
       reviewChain.push(review);
+      if (lifecycleObservation) lifecycleObservation.observeReviewResult(review, round);
       if (review.status !== 'reviewed') {
         if (verifyCmdProvided && currentVerifyPass === true && !noVerifyFirst) {
           verifyState.convergenceReason = 'verification';
@@ -2634,6 +2651,7 @@ class AutopilotEngine {
 }
 
 module.exports = {
+  AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
   buildImplementationArgs,
   buildReviewArgs,

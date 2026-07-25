@@ -99,6 +99,27 @@
               "description": "Output-only (merged `current`): observed_at of the event that set `prompt_pack`."
             }
           }
+        },
+        "context_window": {
+          "type": "object",
+          "required": ["total_tokens"],
+          "additionalProperties": false,
+          "description": "Observed context window for this runner+model. Consumed by scripts/check-context-budget.js to size a dispatch before it spends anything. Windows DRIFT — the same model id has been observed with two different windows — so a recorded observation outranks the estimator's built-in default table.",
+          "properties": {
+            "total_tokens": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "Total context window in tokens, as reported by the engine at runtime (codex: event_msg.token_count.info.model_context_window; grok: signals.json .contextWindowTokens). null = unknown, which never clobbers a valid observation."
+            },
+            "evidence": {
+              "type": ["string", "null"]
+            },
+            "observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only (merged `current`): observed_at of the event that set `total_tokens`."
+            }
+          }
         }
       }
     }

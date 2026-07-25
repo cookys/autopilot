@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "task_id": "low-status",
+  "status": "authored",
+  "runner": "grok",
+  "model": "grok-4.5",
+  "family": "grok",
+  "endpoint": null,
+  "raw_output_sha256": "676f8590cb1c98364e14b0c9f4573a49f173d6f733b2134e311621b2973ff464",
+  "normalized_output_sha256": "a169cb7598d2bf94ecf81a1af7c19572a70d7f447e91ee83a84edb64ebe385f3"
+}

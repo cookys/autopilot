@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "base": {
+    "default": {
+      "path": "harness-capability-default-mode.json",
+      "sha256": "22cc8156a564f2188ceec1cde67de9d86c4e5609be01a66af768c109941e222f"
+    },
+    "bypass": {
+      "path": "harness-capability-bypass-mode.json",
+      "sha256": "5a2d06cfe49111a6a49b8b4b2d4dc1fd0c9e458e9f115d4b92260bf34232598e"
+    }
+  },
+  "target_hosts": [
+    "claude-code",
+    "codex",
+    "opencode",
+    "agy",
+    "supervised-partial"
+  ],
+  "overlays": [
+    {
+      "harness": "claude-code",
+      "default": {
+        "path": "variants/claude-opus-high/harness-capability-default-mode.json",
+        "sha256": "06200eabbe4acee26ba31a3187f3756d3b1a64453fc352e5ae71bf2b134036d6"
+      },
+      "bypass": {
+        "path": "variants/claude-opus-high/harness-capability-bypass-mode.json",
+        "sha256": "7380f39be2cc6b3f529343ee71a9b82be86723f4c0244f6f5b154e33f726925f"
+      }
+    },
+    {
+      "harness": "supervised-partial",
+      "default": {
+        "path": "variants/supervised-partial/harness-capability-default-mode.json",
+        "sha256": "9b166aba08471ad0ee5791c4c53bcd3fa242ea56f248e359ac53444628de0d34"
+      },
+      "bypass": {
+        "path": "variants/supervised-partial/harness-capability-bypass-mode.json",
+        "sha256": "fbf0ec88739e9ef7e06b2c0a9e089ebaa153f96047e9de7fc2e06ce290ea84a1"
+      }
+    }
+  ]
+}

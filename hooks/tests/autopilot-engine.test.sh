@@ -2824,8 +2824,13 @@ const roster = {
   loop_max_rounds: 1,
   loop_convergence_verdict: 'SHIP-AS-IS',
 };
+let cleanupCalls = 0;
 const engine = new AutopilotEngine({
   cwd: scenarioDir,
+  verifyWorktreeCleanup({ targetPath }) {
+    cleanupCalls += 1;
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  },
   implementationDispatcher() {
     return {
       error: null,
@@ -2875,6 +2880,7 @@ console.log(`worktree_add_fail_status=${result.status}`);
 console.log(`worktree_add_fail_setup_exit=${verifyEntry && verifyEntry.setup_exit_status}`);
 console.log(`worktree_add_fail_blocked_reason=${verifyEntry && verifyEntry.blocked_reason}`);
 console.log(`worktree_add_fail_stray_count=${strayDirs.length}`);
+console.log(`worktree_add_fail_cleanup_calls=${cleanupCalls}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine verify worktree add-failure cleanup test exits 0"
@@ -2882,6 +2888,7 @@ assert_contains "$OUT" "worktree_add_fail_status=blocked" "AutopilotEngine block
 assert_contains "$OUT" "worktree_add_fail_setup_exit=73" "AutopilotEngine records worktree add failure status"
 assert_contains "$OUT" "worktree_add_fail_blocked_reason=git worktree command exited with status 73" "AutopilotEngine surfaces worktree add failure reason"
 assert_contains "$OUT" "worktree_add_fail_stray_count=0" "AutopilotEngine removes failed verify worktree mkdtemp parent"
+assert_contains "$OUT" "worktree_add_fail_cleanup_calls=1" "AutopilotEngine routes default add-failure cleanup through the injected sink"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verify-worktree-remove-fail" <<'NODE'
 const fs = require('fs');
@@ -2910,9 +2917,14 @@ const roster = {
 let parent = null;
 let worktree = null;
 let removeCalls = 0;
+let cleanupCalls = 0;
+let addReceivedCleanup = null;
+let removeReceivedCleanup = null;
 const engine = new AutopilotEngine({
   cwd: scenarioDir,
-  gitWorktreeAdd({ round }) {
+  gitWorktreeAdd(args) {
+    const { round } = args;
+    addReceivedCleanup = Object.prototype.hasOwnProperty.call(args, 'cleanup');
     parent = fs.mkdtempSync(path.join(tmp, `remove-fail-${round}-wt-`));
     worktree = path.join(parent, 'wt');
     fs.mkdirSync(worktree, { recursive: true });
@@ -2926,8 +2938,9 @@ const engine = new AutopilotEngine({
       parent,
     };
   },
-  gitWorktreeRemove() {
+  gitWorktreeRemove(args) {
     removeCalls += 1;
+    removeReceivedCleanup = Object.prototype.hasOwnProperty.call(args, 'cleanup');
     return {
       error: null,
       status: 81,
@@ -2935,6 +2948,10 @@ const engine = new AutopilotEngine({
       stdout: '',
       stderr: 'simulated remove failure',
     };
+  },
+  verifyWorktreeCleanup({ targetPath }) {
+    cleanupCalls += 1;
+    fs.rmSync(targetPath, { recursive: true, force: true });
   },
   verifyCommandRunner() {
     return {
@@ -3010,6 +3027,9 @@ console.log(`worktree_remove_fail_cleanup_exit=${verifyEntry && verifyEntry.clea
 console.log(`worktree_remove_fail_warning=${verifyEntry && verifyEntry.verify_cleanup_warning}`);
 console.log(`worktree_remove_fail_warning_present=${Boolean(verifyEntry && verifyEntry.verify_cleanup_warning)}`);
 console.log(`worktree_remove_fail_remove_calls=${removeCalls}`);
+console.log(`worktree_remove_fail_cleanup_calls=${cleanupCalls}`);
+console.log(`worktree_remove_fail_add_received_cleanup=${addReceivedCleanup}`);
+console.log(`worktree_remove_fail_remove_received_cleanup=${removeReceivedCleanup}`);
 console.log(`worktree_remove_fail_worktree_exists=${fs.existsSync(worktree)}`);
 console.log(`worktree_remove_fail_parent_exists=${fs.existsSync(parent)}`);
 NODE
@@ -3020,6 +3040,9 @@ assert_contains "$OUT" "worktree_remove_fail_cleanup_exit=81" "AutopilotEngine r
 assert_contains "$OUT" "worktree_remove_fail_warning=git worktree command exited with status 81" "AutopilotEngine records verify cleanup warning in ledger"
 assert_contains "$OUT" "worktree_remove_fail_warning_present=true" "AutopilotEngine exposes verify cleanup warning"
 assert_contains "$OUT" "worktree_remove_fail_remove_calls=1" "AutopilotEngine attempts git worktree remove"
+assert_contains "$OUT" "worktree_remove_fail_cleanup_calls=2" "AutopilotEngine routes both fallback cleanup paths through the injected sink"
+assert_contains "$OUT" "worktree_remove_fail_add_received_cleanup=false" "AutopilotEngine does not grant cleanup authority to custom worktree add handlers"
+assert_contains "$OUT" "worktree_remove_fail_remove_received_cleanup=false" "AutopilotEngine does not grant cleanup authority to custom worktree remove handlers"
 assert_contains "$OUT" "worktree_remove_fail_worktree_exists=false" "AutopilotEngine force-removes worktree path after remove failure"
 assert_contains "$OUT" "worktree_remove_fail_parent_exists=false" "AutopilotEngine removes verify worktree parent after remove failure"
 
@@ -3225,6 +3248,19 @@ const validPayload = {
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
   spec_review: 'on',
+  plan_review: 'off',
+  plan_reviewer_engine: '',
+  plan_reviewer_effort: '',
+  plan_reviewer_runner: '',
+  plan_reviewer_endpoint: '',
+  plan_deep_reviewer_engine: '',
+  plan_deep_reviewer_effort: '',
+  plan_deep_reviewer_runner: '',
+  plan_deep_reviewer_endpoint: '',
+  plan_review_max_generations: 2,
+  plan_review_max_wall_seconds: 7200,
+  plan_review_growth_warn_ratio: 1.25,
+  plan_review_growth_stop_ratio: 1.5,
   independent_harness: 'off',
   qc_panel: ['test-reviewer'],
   qc_panel_aggregation: 'union-on-verified-critical',
@@ -3237,7 +3273,7 @@ const validPayload = {
   source: 'override',
   work_domain: 'mixed',
   domain_source: 'none',
-  // Eight new fields
+  // Capability/provenance fields
   capability_state_source: 'unknown',
   quota_status: 'ok',
   quota_reset_at: null,
@@ -3274,7 +3310,26 @@ if (validated) {
   console.log(`capability_warnings_0=${validated.capability_warnings[0]}`);
   console.log(`reviewer_endpoint=${validated.reviewer_endpoint}`);
   console.log(`implementer_endpoint=${validated.implementer_endpoint}`);
+  console.log(`plan_review=${validated.plan_review}`);
 }
+
+const planOn = logPayloadCase('plan_on', {
+  ...validPayload,
+  plan_review: 'on',
+  plan_reviewer_engine: 'claude-fable-5',
+  plan_reviewer_effort: 'high',
+  plan_reviewer_runner: 'claude-native',
+});
+if (planOn) {
+  console.log(`plan_on_runner=${planOn.plan_reviewer_runner}`);
+}
+logPayloadCase('plan_on_blank_runner', {
+  ...validPayload,
+  plan_review: 'on',
+  plan_reviewer_engine: 'claude-fable-5',
+  plan_reviewer_effort: 'high',
+  plan_reviewer_runner: '',
+});
 
 const payloadWithResetString = {
   ...validPayload,
@@ -3382,6 +3437,10 @@ assert_contains "$OUT" "skill_mode_effective=selective" "validateReviewLoopConfi
 assert_contains "$OUT" "capability_warnings_0=warning 1" "validateReviewLoopConfig carries capability_warnings"
 assert_contains "$OUT" "reviewer_endpoint=" "validateReviewLoopConfig carries empty reviewer_endpoint"
 assert_contains "$OUT" "implementer_endpoint=" "validateReviewLoopConfig carries empty implementer_endpoint"
+assert_contains "$OUT" "plan_review=off" "validateReviewLoopConfig carries disabled plan rail"
+assert_contains "$OUT" "plan_on=ok" "validateReviewLoopConfig accepts a complete plan-review chair tuple"
+assert_contains "$OUT" "plan_on_runner=claude-native" "validateReviewLoopConfig preserves exact plan-review runner"
+assert_contains "$OUT" "plan_on_blank_runner=review-loop output JSON field plan_reviewer_runner must be a non-empty string when plan_review=on" "validateReviewLoopConfig fails loud on an incomplete plan-review chair tuple"
 assert_contains "$OUT" "validated2=true" "validateReviewLoopConfig validates payload with string quota_reset_at"
 assert_contains "$OUT" "quota_reset_at2=2026-07-04T00:00:00Z" "validateReviewLoopConfig carries string quota_reset_at"
 assert_contains "$OUT" "reviewer_endpoint2=http://reviewer" "validateReviewLoopConfig carries string reviewer_endpoint"

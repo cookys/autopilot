@@ -24,6 +24,129 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.59 — Owner Kernel P3.7 authority contracts
+
+**Headline**: Owner Kernel can now consume the authenticated P3.5d/P3.6 route, witness semantic
+events, mediate one fixed reversible probe, cross one real Engine implementation-dispatch seam, and
+atomically accept an exact verified artifact manifest. Project governance remains a one-time default
+with an exact one-run override; Engine completion is evidence, never self-acceptance.
+
+### Added
+- P3.7 semantic authority route and external witness adapter with compare-and-append, authoritative
+  readback, durable request binding, and an independent receipt anchor.
+- One fixed reversible probe profile and one fixed Engine implementation profile. Both retain P2's
+  preclaim permit, witnessed claim, post-claim authorization, broker receipt, independent
+  verification, and replay protection.
+- External schema-v2 acceptance coordinator adapter. `acceptance` and `complete` share one witness
+  batch, durable request, coordinator commitment, and readback proof.
+- Focused P3.7a/b/c gates plus an explicit external-host-contract corpus: 8 named attack semantics,
+  15 frozen baseline categories, zero `not_applicable`, 23 scenario-specific behavior oracles,
+  and 46 separate report-integrity mutations.
+- `scripts/dispatch-plan-review.js`: a durable, read-only plan-readiness controller keyed by
+  canonical repository identity and ticket. It freezes the rubric, admits only next-slice POC
+  blockers, caps review at two generations / 120 minutes, and enforces plan-growth stop-loss.
+- First-class `plan_review` roster and budget fields plus strict routing/controller regressions.
+  `spec_review` remains only as a deprecated compatibility field.
+
+### Changed
+- P3.7 profile compilation binds `owner-led`/`milestone-led` project defaults and per-run overrides
+  to the same policy hash used by the Kernel. Conflicting top-level/nested overrides or supplied
+  profiles are rejected before session start.
+- Missing or blocking required challenge evidence is terminally blocked instead of being routed to
+  automatic recovery; executable verification failure remains recoverable.
+- The self-hosted governance config selects the one mediated Engine implementation catalog row and
+  keeps external effects approval-bound and single-use.
+- The privileged P3.5 live gate distinguishes bytecode created by the current root install from
+  ignored pre-existing cache files, and teardown is idempotent when its test-owned runtime parent
+  is already absent.
+- `autopilot:audit` now requires two existing implementations and performs one terminal comparison
+  pass; future-target plan critique routes through the bounded plan-review controller instead.
+- `research-to-ship` Phase 3 uses the bounded controller rather than an unbounded stochastic loop.
+- `dispatch-author.sh` supports the first-party `claude-native` read-only author transport.
+
+### Fixed
+- Explicit blank or unsupported reviewer/implementer transports now fail loudly instead of being
+  silently rewritten to another runner; missing keys alone may use defaults.
+- Corrected the AGY persisted-model fallback note: no settings-mutating fallback wrapper ships.
+
+### Boundary
+- The P3.7 JavaScript modules are production code with injected external-host contracts. Focused
+  tests use deterministic host implementations. The existing P3.6 privileged gate remains the
+  separate installed cross-UID systemd/cgroup proof; this release does not claim that a P3.7 systemd
+  adapter is deployed, and it does not retire `/l3`-`/l6`.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.58`
+
+## v2.32.58 — Pre-dispatch context-window gate
+
+**Headline**: A read-only scan of 90 days of local engine transcripts (1231 headless
+`codex_exec` dispatch sessions carrying real `event_msg.token_count` telemetry) found
+that 4.3% of dispatches — 53 sessions that hit a context wall and compacted — burned
+**41.0% of all dispatch tokens** (322.9M of 788.0M), and 52 of those 53 were
+`gpt-5.3-codex-spark` running into its observed 121600 window. Dispatch cost is 98.4%
+input, and the driver is oversized input meeting a small window. Every rail now sizes
+its payload against the target engine's context window BEFORE spawning a runner, and
+fails closed when it will not fit. Notably NOT a lever, per the same data: review-loop
+round count (a 76-round cluster cost 7.9M; a 41-round cluster cost 60.9M, because the
+latter fed 5.4M/15.9M single-turn inputs).
+
+### Added
+- **`scripts/check-context-window.js` + `scripts/lib/context-window.sh`** — the gate.
+  Estimates input tokens (bytes ÷ 3.5, **rounding UP**; under-estimating is the one
+  direction that silently defeats a budget gate) and compares against a window resolved
+  in precedence order `--window` > recorded `context_window` capability observation >
+  built-in observed-default table > unknown. Verdicts `OK` / `OVER_BUDGET` /
+  `UNKNOWN_WINDOW`; exit 0 may-dispatch, 1 blocked, 2 usage. The default table is seeded
+  from **real runtime telemetry, never vendor claims**, and records the MINIMUM where one
+  model id was observed with two different windows (spark: 121600 and 258400 → 121600).
+- **`context_window` capability dimension** (`engine-capability-state.js` +
+  `schemas/engine-capability-state.schema.json`) — merges **role-agnostically** (a window
+  belongs to the model, not the seat it is dispatched into), and a `null` reading never
+  clobbers a valid one, mirroring the existing `unknown`-never-clobbers discipline.
+- **`scripts/resolve-review-loop.sh --input-bytes N`** — reports, never rewrites, a roster
+  seat whose window cannot hold N bytes. Same posture as the quota path: the resolver
+  states the fact and the consumer decides per `on_engine_unavailable`. Reuses the existing
+  `capability_warnings` array, so the window gate adds **no new contract field** and
+  `check-context-window.js` stays the single source of window truth (the merged contract has 57
+  fields after bounded plan review). `UNKNOWN_WINDOW` deliberately emits no warning — 2 of the 3 default seats have
+  no recorded window, so warning on it would be constant noise.
+- **`hooks/tests/context-window.test.sh`** — 48 assertions incl. the negative controls:
+  over-budget is blocked not warned, the escape hatch really dispatches, an unknown model
+  is not made undispatchable, `--strict` does block it, a missing input file is a usage
+  error rather than a silent zero, and — asserted by marker file, artifact-not-self-report
+  — an over-budget dispatch **never spawns the runner** and `dispatch-hetero.sh` creates
+  neither worktree nor branch.
+
+### Changed
+- **All three dispatch rails gated** (`dispatch-hetero.sh` / `dispatch-review.sh` /
+  `dispatch-author.sh`), opt-out via `--context-window off|warn|block` or
+  `AUTOPILOT_CONTEXT_WINDOW_GATE`; default `block`, garbage fails closed to `block`. On
+  `dispatch-hetero.sh` the gate sits after skill-pack concatenation (the pack inflates the
+  payload the engine actually pays for) and before the worktree exists, so an over-budget
+  unit costs neither tokens nor a worktree to reap. The gate is a **cost control, not a
+  security boundary**: if the gate itself cannot run it warns and allows, rather than
+  turning a tooling fault into a dispatch outage.
+- **`dispatch-review.sh`'s hardcoded 96 KB diff advisory removed** — a fixed byte threshold
+  is meaningless once the real window is known: the same 400 KB diff overflows spark's
+  121600 window and sits comfortably inside grok-4.5's 500000.
+
+### Fixed
+- **`dispatch-review.sh` emitted INVALID JSON on any precondition failure whose message
+  contained a double quote** — `die_precondition` interpolated `$RUNNER` / `$MODEL` /
+  message straight into the JSON with no escaping (`dispatch-hetero.sh` and
+  `dispatch-author.sh` already escaped theirs). A parsing caller reads the malformed
+  result as a transport failure rather than a precondition failure. Now routed through the
+  canonical `json_escape` from `lib/json-emit.sh`. Surfaced by the new gate, but the defect
+  predates it.
+
+prose-justification: the prose added by this release is one `references/hetero-dispatch.md`
+section documenting the gate (its measured motivation, the resolution-order rules, and the
+capability-recording recipe), the `--context-window` flag description in each of the three
+rails' `--help` headers, and this CHANGELOG entry. No new skill body, no `description:` field,
+no routing surface — the engine side grew by two scripts plus a capability dimension.
+
 ## v2.32.57 — CLAUDE.md inventory slim + size gate
 
 **Headline**: CLAUDE.md had grown 11KB → 81KB in six weeks — release commits kept

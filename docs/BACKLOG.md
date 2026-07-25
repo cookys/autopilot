@@ -39,6 +39,48 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### CLAUDE.md 逼近 40k 硬上限（餘裕 54 bytes）— 每個新 script 都要加 row，下一個必撞
+- **Trigger**: 下次任何人要在 Scripts inventory 加 row 時（幾乎等於「下一個新 script」）；或 `check-claude-md-inventory.js` 再次在 CI 變紅時。
+- **Context**: v2.32.57 才剛把 CLAUDE.md 從 81KB 瘦到 38.5KB 並加上 40000 bytes 硬 cap。三週後（v2.32.58）就回到 **39946/40000，只剩 54 bytes 餘裕** —— 因為兩條並行管線各加一個 inventory row 就直接撞破（40223），CI 紅。這次靠把新 row 縮回索引形態（783→~420 bytes）救回，但那是一次性的：**inventory 是單調成長的（每個新 script 一列），而 cap 是固定的**，所以這個閘會週期性地在「兩人同時加 row」時炸掉，且炸的是無辜的第二個 push 者。可能修法：(a) 把 inventory 拆成 `references/scripts-inventory.md` 由 CLAUDE.md 單行引用（CLAUDE.md 回到真正的 session-entry 內容）；(b) cap 改成隨 script 數線性放寬並保留 per-line cap；(c) 維持現狀但把 Row shape rule 的字數上限機械化（目前只有 per-line 800 bytes，太寬）。**(a) 最貼近 40k 存在的理由**（harness 每 session 吞它），但要確認被引用的 reference 不會反而每 session 都被載入。
+- **Effort**: S（(b)/(c)）／M（(a)，需驗證載入行為）
+- **Source**: v2.32.58 push 後 CI 紅（`check-claude-md-inventory` 23/24）
+
+### `preflight-release.sh` 的 prose-justification 檢查掃全檔，等同永久放行
+- **Trigger**: 下次 north-star 閘要真正約束 prose 成長時；或發現某版 prose 暴增卻通過閘時。
+- **Context**: 第 188 行是 `grep -qE "prose-justification:" "$CHANGELOG"` — 掃**整個 CHANGELOG**而非當前版本段落。CHANGELOG 裡已有 5+ 條歷史 justification 行（最早可追到 v2.28 以前），所以自 v2.32.x 起這個檢查對每一版都自動通過，north-star 的 +5% 煞車實質失效。v2.32.58 實測：gate 印 "CHANGELOG justification found, allowed"，但找到的是 v2.32.57 的行。**修法**：把搜尋範圍限縮到當前版本的 CHANGELOG 段落（從 `## v<current>` 到下一個 `## v`），與 `check-optin-changelog.js` 已經在做的段落切分方式一致。
+- **Effort**: S
+- **Source**: v2.32.58 finish-flow L-5.5 release-hygiene gate
+
+### `hooks/tests/dispatch-output-quiescence.test.sh` 時間敏感 flake 未根治
+- **Trigger**: 下次 CI 或 finish-flow 因它變紅時；或要把它納入 blocking gate 之前。
+- **Context**: v2.32.57 的 merge（`d90433b`，標題明寫 "kill dispatch-output-quiescence flake"）以 worker count 縮放 parallel timing factor，但未根治。v2.32.58 期間三次觀測：base SHA 上 FAIL（`immediate-content returns quickly: expected <= 5, got 6`）、一次全套件 PASS、pre-merge 全套件再度 FAIL 且**失敗的斷言換成 `genuine-empty-fast`** — 斷言隨機漂移是負載敏感 flake 的特徵而非邏輯錯誤。`verify-preexisting.sh` 正式判定 `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`。可能修法：把絕對 tick 上限改成相對於實測 baseline tick 的比值，或在高負載下自動放寬。
+- **Effort**: S–M
+- **Source**: v2.32.58 finish-flow L-5.2 pre-merge 全套件
+
+### `verify-red-green.sh` 對「從 `$0` 推導 REPO_ROOT」的測試套件失效（＝autopilot 自己全部）
+- **Trigger**: 下次要在 autopilot repo 內用 `verify-red-green.sh` 當紅綠閘時；或要把它接進 `/l5`／`/l6` 的自動驗收路徑時。
+- **Context**: `run_verify_cmd()` 雖然 `cd "$wt"` 進 base worktree，但用**主 repo 的絕對路徑**執行 `$VERIFY_CMD`（第 174 行刻意 canonicalize，header 有說明理由）。autopilot 的 `hooks/tests/*.test.sh` 一律 `. "$(dirname "$0")/lib.sh"`，`lib.sh` 再由 `$0` 推出 `REPO_ROOT` — 於是 base run 實際上是拿**主 repo（＝head）的產品碼**在跑，永遠綠，verdict 恆為 `NOT_RED_ON_BASE`。v2.32.58 實測：工具報 `NOT_RED_ON_BASE`（base green），但手動在 base worktree 內用相對路徑跑同一測試檔 ⇒ **exit 1、大量斷言失敗**（真 RED）。工具傳了 `"$wt"` 當 `$1` 給 verify-cmd，顯示設計意圖是測試自己要吃這個參數；autopilot 的 `lib.sh` 不看 `$1`。**兩條可能修法**：(a) `lib.sh` 優先採用 `$1`／`AUTOPILOT_TEST_REPO_ROOT` 當 REPO_ROOT（消費端修，影響 158 個測試檔的共用底座）；(b) `verify-red-green.sh` 改成在 worktree 內解析同名相對路徑（工具端修，但會改變既有使用者語意）。**未修之前，本 repo 的紅綠驗證必須手動做**（建 detached worktree at base → 只 apply 測試檔 patch → `cd` 進去用相對路徑跑）。
+- **Effort**: S（任一修法）＋需回歸既有消費者
+- **Source**: v2.32.58 context-window gate 的紅綠驗收（`docs/projects/2026-07-25-context-budget-gate/README.md`）
+
+### Engine-transcript → scorecard importer（四家引擎真實遙測灌進決策層）
+- **Trigger**: 下次要調 `resolve-review-loop.sh` roster／`resolve-dispatch.sh`／DOA tier，而手上只有軼事沒有基率時；或 `engine-scorecard.js` 的 row 數再度落後真實派遣量一個數量級時。
+- **Context**: 2026-07-25 遙測盤點發現決策層與觀測層嚴重脫節——`engine-scorecard.jsonl` 138 rows、`engine-capability.jsonl` 141 rows、`calibration/samples.jsonl` **5 rows**，而本機磁碟上躺著 codex 1231 個 headless dispatch session（含完整 `event_msg.token_count`）、grok 369 個（`signals.json` 有 30+ 行為欄位含 `editAndRetryCount`／`agentLinesAdded`／`toolFailureCount`）、opencode 372 個（**唯一有真實金額** `cost` 欄位）從未被讀過。importer 應輸出去識別化聚合（絕不含 transcript 原文）：per-engine 的完成率／撞牆率／toolFailure 率／零產出率。**注意母體偏差**：opencode 那 372 個 99% 是 `swe-calibrate`，非日常派遣路徑，不可外推成本。
+- **Effort**: M（codex schema 已實測驗證；grok/agy/opencode 各自 parser）
+- **Source**: v2.32.58 context-window gate 的前置遙測調查（`docs/plans/2026-07-25-context-budget-gate.md` § Scope boundary）
+
+### agy 遙測盲區 — transcript 無 token 欄位且 91% 被平台截斷
+- **Trigger**: 要把 agy 納入任何成本／容量決策之前；或 antigravity 上游補上 usage 欄位時。
+- **Context**: `~/.gemini/antigravity-cli/brain/*/。system_generated/logs/transcript.jsonl` 的 schema 是 `{step_index, source, type, status, created_at, content, truncated_fields}` — **完全沒有 token/usage 欄位**，且 500 個 session 中 454 個（91%）帶 `truncated_fields`（平台自行截斷內容）。目前只能用 content bytes 當極粗代理指標，不可與 codex/grok/opencode 的 token 數同軸比較。**不可測 ⇒ 不可優化**：在補上遙測前，任何 agy 的成本結論都是猜測。
+- **Effort**: S（若上游有欄位）／M（若需自建量測 harness）
+- **Source**: 同上
+
+### grok implementer 摩擦調校（toolFailure 28%／零 commit 72%／effort 反效果假說）
+- **Trigger**: grok 真正被當成 `dispatch-hetero.sh` implementer 常態使用之後（累積 ≥30 個寫檔 session）。
+- **Context**: 2026-07-25 掃描顯示 grok 目前在 autopilot 派遣路徑上只有 71 個 session 且**全是唯讀**（review 59／author 12）；實際寫碼發生在 dispatch rail 之外的互動式 session。既有 32 個寫檔 session 的訊號：`toolFailure>0` 28.1%（平均 1.6 次）、零 commit 71.9%（對應已知的 untracked-new-files 問題）、但 `editAndRetry`／`regeneration`／`hasReverted` **全為 0**（寫出來的東西不用重寫，品質面乾淨）。另有一個**相關非因果**觀察：`reasoning_effort=high` 的 302 個 session 只有 6 個寫檔、耗時 3.4 倍、toolFail 更多，而 `(none)` 的 65 個有 24 個寫檔 — 極可能是任務難度自選偏差，**要驗證需同任務 A/B，不可逕自關掉 high**。
+- **Effort**: M（需先累積母體，再跑 A/B）
+- **Source**: 同上
+
 ### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
 - **Trigger**: 下次動 `scripts/dispatch-author.sh` codex branch 或 `scripts/lib/dispatch-author-codex-transport.sh`；或首次出現真實 incomplete-tree 事故（result 被 orphan 汙染）。
 - **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。
@@ -92,6 +134,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: v2.32.26 出貨 T1/T2 advisory；T3（PreToolUse 擋 Edit/Write + 拒絕 NEW dispatch 直到合規 handoff 落地）刻意延後。設計要點已定於 plan：handoff 檢查用 content-hash + 結構段落（非 mtime，touch 可偽造）、handoff allowlist 收窄到 docs/projects/** + ~/.autopilot/handoffs/、3 次 deny 未從 ⇒ 降級 warn + 大聲放棄（gate 跟模型吵架會燒掉它要省的 token，Gemini finding）、擋新 dispatch 用自家 script 名 leading-command 枚舉（非 write-regex — 三家 panel 一致否決 write-regex）。
 - **Effort**: M。
 - **Source**: `docs/plans/2026-07-14-context-budget-orchestrator-gate.md` § Out of scope；3-family panel review 2026-07-14。
+- **交叉參考（v2.32.58）**: 上述「T3 必須用視窗百分比而非絕對值」的結論，已在**另一層**（派遣側，不是本 hook 的 session 側）獨立實作並驗證——`scripts/check-context-window.js` 用 `ratio × window`（預設 0.7）取代 `dispatch-review.sh` 原本引擎無關的硬編碼 96KB advisory，因為同一份 400KB 輸入會撐爆 spark 的 121600 window 卻能舒服放進 grok-4.5 的 500000。兩者是同一原理在不同層；實作 T3 時可直接沿用該 window-解析優先序（explicit > capability-state 觀測 > 實測預設表 > unknown，且 unknown 不擋）。注意命名刻意區分：hook = `context-budget`（我方 session 成長），派遣閘 = `context-window`（送出去的 payload vs 目標引擎）。
 - **硬前置（pre-merge review 2026-07-14 🟡）**: orchestrator-edit-gate 升 block 模式前，必須先解決「finish-flow 期間 marker 仍 LIVE」：CHANGELOG/README*/plugin.json 不在 allowlist，block 模式會把 depth-0 的 release 編輯全擋掉。修法二選一：finish-flow 進場即 clear marker，或 allowlist 加 release-file 集合。
 - **回溯校準已完成（2026-07-14，歷史 transcript n=94 主 session — 見 `docs/projects/_archive/2026-07-14-context-budget-orchestrator-gate/calibration/`）**：(1) fleet 是雙峰（27% 用 200k 視窗、73% 用 1M，peak 到 948k）⇒ **T3 必須用視窗百分比（建議 80%，1M ≈ 800k），絕對值 200k 會攔掉 73% 正常 session** — panel 少數意見（GPT-OSS/MiniMax 的 %-of-window 主張）在 T3 上被資料證實，v3 裁決在 T3 上反轉；hook 可自我偵測視窗（本 session 任一 context 曾 >210k ⇒ 1M）。(2) T1/T2 維持絕對值 — 它們是成本斜率 advisory 不是護牆，「越過 150k 後中位還跑 469 則」正是要治的 N² 複利（噪音率僅 3-5%）；但 T2 每 10 call 重複對 400+ 則的長 session 會累積 40+ 次嘮叨 ⇒ **T2 加 fire-cap（如 5 次後靜默 + 一句大聲放棄）**，與 T3 一起實作。(3) 仍缺的兩塊維持原 Trigger：advisory 服從率（回溯測不到）+ 合成對抗 session。
 

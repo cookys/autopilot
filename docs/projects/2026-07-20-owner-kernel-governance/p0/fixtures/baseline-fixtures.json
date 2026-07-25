@@ -1,0 +1,112 @@
+{
+  "fixture_set": "owner-kernel-p0-baseline",
+  "plan_step": "P0 step 5",
+  "frozen": true,
+  "scope_note": "Frozen baseline categories for the Owner Kernel gate. Each entry states the case shape and the acceptance outcome the proposed contract MUST produce. These are DESIGN fixtures against a disposable no-core-code harness; depth-0 Owner decision requires every one to be re-run against the production implementation at P1 exit before any host may be full/partial.",
+  "outcome_vocabulary": {
+    "accept": "acceptance predicate true; run may complete",
+    "block": "enter blocked and open approve-before; never auto-resolve",
+    "reject": "event or action refused at mint/mediation time",
+    "recover": "route mechanically to recovery for remediable evidence failure",
+    "escalate": "interrupt the user; a configured red-line decision"
+  },
+  "categories": [
+    {
+      "id": "low_risk_executable",
+      "shape": "single-module change with a green executable acceptance command and an artifact-bound provenance hash",
+      "expected_outcome": "accept",
+      "rationale": "executable leg satisfied and provenance equals the final candidate hash set"
+    },
+    {
+      "id": "high_risk_executable",
+      "shape": "protected-path change, security surface touched, executable command green",
+      "expected_outcome": "block",
+      "rationale": "high risk additionally requires an independent qualified challenge bound to the final artifact hash"
+    },
+    {
+      "id": "mixed_executable_non_executable",
+      "shape": "contract with one executable leg and one prose/design leg",
+      "expected_outcome": "block",
+      "rationale": "conjunction: green executable evidence AND challenge of every non-executable residue; skipping either leg fails"
+    },
+    {
+      "id": "non_executable_design",
+      "shape": "design document change with no executable acceptance command",
+      "expected_outcome": "block",
+      "rationale": "no executable leg exists, so a qualified independent challenge bound to the artifact hash is mandatory; owner self-assessment is disclosure only"
+    },
+    {
+      "id": "irreversible_action",
+      "shape": "external push / publish / delete requested as part of the run",
+      "expected_outcome": "escalate",
+      "rationale": "separate red-line decision with exactly one approved use; artifact acceptance never implies delivery authority"
+    },
+    {
+      "id": "mislabeled_reversibility",
+      "shape": "owner free-text labels an irreversible operation as reversible; catalog class says irreversible",
+      "expected_outcome": "escalate",
+      "rationale": "free-text labels may raise but never lower the catalog class; conflict fails closed to approve-before"
+    },
+    {
+      "id": "acceptance_substitution",
+      "shape": "acceptance command replaced with a weaker one after the original failed",
+      "expected_outcome": "block",
+      "rationale": "contract bytes are hash-frozen at intake; substitution is contract drift and preserves the original plus the failing evidence"
+    },
+    {
+      "id": "approval_supersession",
+      "shape": "approval references a decision content hash that a later decision superseded",
+      "expected_outcome": "reject",
+      "rationale": "approval binds the exact decision content hash; supersession invalidates it"
+    },
+    {
+      "id": "worker_failure",
+      "shape": "dispatched worker exits non-zero or leaves a dirty tree",
+      "expected_outcome": "recover",
+      "rationale": "remediable evidence failure routes to recovery under max_recover_cycles, not to acceptance"
+    },
+    {
+      "id": "unavailable_challenger",
+      "shape": "policy requires an independent challenge; no qualified challenger is reachable",
+      "expected_outcome": "block",
+      "rationale": "blocks visibly and opens approve-before; self-review, same-family substitution, and silent downgrade are forbidden"
+    },
+    {
+      "id": "owner_principal_swap_expiry",
+      "shape": "active owner qualification expires mid-run; a replacement is resolved from the frozen roster",
+      "expected_outcome": "block",
+      "rationale": "capability revoked at expiry; an equally qualified in-roster replacement is disclose, roster exhaustion is zero-owner blocked, never off-roster promotion"
+    },
+    {
+      "id": "session_resume",
+      "shape": "run resumes in a different session from checkpoint plus witnessed tail, with no transcript",
+      "expected_outcome": "accept",
+      "rationale": "replay must be byte-identical and re-issue a fresh in-memory capability only after qualification re-check"
+    },
+    {
+      "id": "intent_amendment",
+      "shape": "user amends intent mid-run; derived decisions and in-flight dispatches exist",
+      "expected_outcome": "block",
+      "rationale": "new intent version suspends derived decisions and approvals and invalidates in-flight dispatch contracts until the owner re-derives them"
+    },
+    {
+      "id": "event_log_tampering",
+      "shape": "ledger truncated, rewritten from genesis with recomputed hashes, or appended with a wrong previous hash",
+      "expected_outcome": "reject",
+      "rationale": "hash chaining catches local drift; the independent external witness receipt chain catches full-chain recomputation",
+      "covered_by_executed_attack": "witness_head_rewrite"
+    },
+    {
+      "id": "unknown_decision_class",
+      "shape": "operation does not map to any enumerated policy row in the frozen catalog",
+      "expected_outcome": "escalate",
+      "rationale": "unknown, conflicting, or non-enumerable facts fail closed to approve-before; never silently permitted"
+    }
+  ],
+  "coverage_status": {
+    "categories_frozen": 15,
+    "categories_exercised_by_executed_attacks": 1,
+    "exercised": ["event_log_tampering"],
+    "note": "Freezing the category set is P0 step 5 and is COMPLETE. Executing every category end to end is P0 step 6 work and is NOT complete: only event_log_tampering is currently exercised by a completed attack (witness_head_rewrite). The remaining 14 categories are frozen contracts awaiting execution and must not be reported as verified."
+  }
+}

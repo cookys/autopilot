@@ -288,10 +288,121 @@ assert_eq "0" "$EXIT_RE0" "review DISPATCH_DETACH=0: inline exit 0"
 assert_eq "reviewed" "$(printf '%s' "$OUT_RE0" | jq -r '.status' 2>/dev/null)" "review DISPATCH_DETACH=0: inline reviewed"
 assert_file_absent "${LEDGER_E0}.results/re0.review.result.json" "review DISPATCH_DETACH=0: no durable result (detach bypassed)"
 
+# =========================================================================================
+# (h) Strict contract with default detachment
+# =========================================================================================
+STRICT_SBX="$TEST_TMP/strict-repo"
+STRICT_SCORES_DIR="$TEST_TMP/strict-engine-scores"
+STRICT_CAPS_DIR="$TEST_TMP/strict-engine-caps"
+STRICT_SESSION_DIR="$TEST_TMP/strict-session-mode"
+STRICT_LEDGER="$TEST_TMP/strict-ledger.jsonl"
+STRICT_STUB="$TEST_TMP/strict-codex-stub"
+STRICT_CONTRACT="$TEST_TMP/strict-contract.json"
+STRICT_PROMPT="$TEST_TMP/strict-prompt.txt"
+STRICT_ACCEPTANCE_MARKER="$TEST_TMP/strict-acceptance-ran.txt"
+
+mkdir -p "$STRICT_SBX" "$STRICT_SCORES_DIR" "$STRICT_CAPS_DIR" "$STRICT_SESSION_DIR"
+
+cat > "$STRICT_STUB" <<'EOF_STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *"exec --help"*) printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'; exit 0 ;;
+  *"--version"*)   echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
+esac
+echo done > done.txt
+git add done.txt
+git -c user.email=t@t -c user.name=t commit -q -m "stub work"
+exit 0
+EOF_STUB
+chmod +x "$STRICT_STUB"
+
+git -C "$STRICT_SBX" init -q -b main
+git -C "$STRICT_SBX" config user.email "t@t"
+git -C "$STRICT_SBX" config user.name "t"
+
+mkdir -p "$STRICT_SBX/docs/plans"
+mkdir -p "$STRICT_SBX/.claude"
+
+printf 'Prereq content\n' > "$STRICT_SBX/preq.txt"
+git -C "$STRICT_SBX" add -A
+git -C "$STRICT_SBX" commit -q -m "Prereq commit"
+STRICT_DEP_SHA=$(git -C "$STRICT_SBX" rev-parse HEAD)
+
+printf '## Unit spec\nStable spec content\n' > "$STRICT_SBX/docs/plans/spec.md"
+printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$STRICT_SBX/.claude/review-loop-config.md"
+git -C "$STRICT_SBX" add -A
+git -C "$STRICT_SBX" commit -q -m "Base commit"
+STRICT_BASE_SHA=$(git -C "$STRICT_SBX" rev-parse HEAD)
+
+cat > "$STRICT_CONTRACT" <<EOF
+{
+  "schema": 1,
+  "unit_id": "strict-detach-unit",
+  "role": "implementer",
+  "goal": "fixture",
+  "spec": {"path": "docs/plans/spec.md", "section": "Unit spec"},
+  "base_sha": "$STRICT_BASE_SHA",
+  "depends_on": ["$STRICT_DEP_SHA"],
+  "scope": {"allow_paths": ["done.txt"], "deny_paths": ["secret/**"], "max_files": 2, "max_diff_lines": 50},
+  "go": {"required_paths": ["docs/plans/spec.md"], "required_engine_role": "implementer", "required_red_command": ["bash", "-n", "docs/plans/spec.md"]},
+  "no_go": {"on_missing_spec": "stop", "on_dirty_base": "stop", "on_unknown_engine": "stop", "on_quota_unavailable": "stop", "on_scope_violation": "stop", "on_budget_exceeded": "stop", "on_clarification_needed": "stop", "forbidden_actions": ["push", "merge", "network", "dependency-change"]},
+  "output": {"kind": "commit", "paths": ["done.txt"]},
+  "acceptance": [{"argv": ["touch", "$STRICT_ACCEPTANCE_MARKER"], "exit": 0}],
+  "budget": {"wall_seconds": 120, "max_attempts": 1, "max_context_files": 4}
+}
+EOF
+
+ENGINE_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
+RUNTIME_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ENGINE_EVENT="{\"schema_version\":1,\"observed_at\":\"$RUNTIME_UTC\",\"runner\":\"codex\",\"model\":\"gpt-5.3-codex-spark\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"reset_at\":null,\"evidence\":\"test\"}}}"
+
+printf '%s\n' "$ENGINE_ROW" > "$TEST_TMP/strict-engine-row.json"
+printf '%s\n' "$ENGINE_EVENT" > "$TEST_TMP/strict-engine-event.json"
+
+ENGINE_SCORECARD_DIR="$STRICT_SCORES_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$TEST_TMP/strict-engine-row.json" >/dev/null
+ENGINE_CAPABILITY_DIR="$STRICT_CAPS_DIR" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/strict-engine-event.json" >/dev/null
+
+bash "$LEDGER_SH" init --ledger "$STRICT_LEDGER" >/dev/null
+echo "Do the needful." > "$STRICT_PROMPT"
+
+CHECKER_OUT=$(ENGINE_SCORECARD_DIR="$STRICT_SCORES_DIR" ENGINE_CAPABILITY_DIR="$STRICT_CAPS_DIR" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$STRICT_CONTRACT" --repo "$STRICT_SBX" --json 2>&1)
+CHECKER_JSON=$(echo "$CHECKER_OUT" | grep '^{' | tail -n 1)
+GATE_VERDICT=$(echo "$CHECKER_JSON" | jq -r '.verdict' 2>/dev/null)
+assert_eq "GO" "$GATE_VERDICT" "pre-dispatch contract checker reaches GO"
+
+EXPECTED_CONTRACT_SHA=$(echo "$CHECKER_JSON" | jq -r '.contract_sha256' 2>/dev/null)
+EXPECTED_SPEC_SHA=$(echo "$CHECKER_JSON" | jq -r '.spec_sha256' 2>/dev/null)
+
+OUT_STRICT="$(cd "$STRICT_SBX" && ENGINE_SCORECARD_DIR="$STRICT_SCORES_DIR" ENGINE_CAPABILITY_DIR="$STRICT_CAPS_DIR" AUTOPILOT_SESSION_MODE_DIR="$STRICT_SESSION_DIR" DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
+  --branch feat/strict-detach --prompt-file "$STRICT_PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin "$STRICT_STUB" \
+  --ledger "$STRICT_LEDGER" --run-id strict-detach-run --stage implement --strict-contract --contract-file "$STRICT_CONTRACT" 2>/dev/null)"; EXIT_STRICT=$?
+
+assert_eq "0" "$EXIT_STRICT" "strict detach: relayed exit code is 0 (committed)"
+reap_wt "$OUT_STRICT"
+
+assert_eq "committed" "$(printf '%s' "$OUT_STRICT" | jq -r '.status' 2>/dev/null)" "strict detach: outcome status is committed"
+assert_eq "strict-detach-unit" "$(printf '%s' "$OUT_STRICT" | jq -r '.unit_id' 2>/dev/null)" "strict detach: outcome preserves unit_id"
+assert_eq "$EXPECTED_CONTRACT_SHA" "$(printf '%s' "$OUT_STRICT" | jq -r '.contract_sha256' 2>/dev/null)" "strict detach: outcome preserves contract_sha256"
+assert_eq "$EXPECTED_SPEC_SHA" "$(printf '%s' "$OUT_STRICT" | jq -r '.spec_sha256' 2>/dev/null)" "strict detach: outcome preserves spec_sha256"
+assert_eq "GO" "$(printf '%s' "$OUT_STRICT" | jq -r '.go' 2>/dev/null)" "strict detach: outcome preserves go field"
+
+DURABLE_RESULT="${STRICT_LEDGER}.results/strict-detach-run.implement.result.json"
+assert_file_exists "$DURABLE_RESULT" "strict detach: durable result file also landed"
+DURABLE_JSON="$(cat "$DURABLE_RESULT" 2>/dev/null)"
+reap_wt "$DURABLE_JSON"
+
+assert_eq "committed" "$(printf '%s' "$DURABLE_JSON" | jq -r '.status' 2>/dev/null)" "strict detach: durable status is committed"
+assert_eq "strict-detach-unit" "$(printf '%s' "$DURABLE_JSON" | jq -r '.unit_id' 2>/dev/null)" "strict detach: durable preserves unit_id"
+assert_eq "$EXPECTED_CONTRACT_SHA" "$(printf '%s' "$DURABLE_JSON" | jq -r '.contract_sha256' 2>/dev/null)" "strict detach: durable preserves contract_sha256"
+assert_eq "$EXPECTED_SPEC_SHA" "$(printf '%s' "$DURABLE_JSON" | jq -r '.spec_sha256' 2>/dev/null)" "strict detach: durable preserves spec_sha256"
+assert_eq "GO" "$(printf '%s' "$DURABLE_JSON" | jq -r '.go' 2>/dev/null)" "strict detach: durable preserves go field"
+
+assert_file_exists "$STRICT_ACCEPTANCE_MARKER" "strict detach: strict acceptance check completed and touched the marker file"
+
 # --- cleanup any KEEP=1 detached worktrees so they don't leak into /tmp ---
 for wt in "${LEAKED_WTS[@]}"; do
   [ -n "$wt" ] || continue
-  git -C "$SBX" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt" 2>/dev/null || true
+  git -C "$SBX" worktree remove --force "$wt" >/dev/null 2>&1 || git -C "$STRICT_SBX" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt" 2>/dev/null || true
 done
 
 finalize_test

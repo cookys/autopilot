@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-07-16 -->
+<!-- last-verified: 2026-07-24 -->
 # Git Ref Lifecycle Race Lessons
 
 **Date**: 2026-07-16 | **Context**: Autopilot dispatch-branch lifecycle recovery, preserve-first reaping, and final QC race review.
@@ -72,3 +72,13 @@
 **Failed attempts**: Calling fail-closed behavior "portable" merely because it avoids deletion.
 
 **Related**: SHA-256 fixture in `hooks/tests/reap-dispatch-branches.test.sh`; recorded-tip and ack validation in `scripts/reap-dispatch-branches.sh`.
+
+## 8. Post-merge cleanup is part of completion
+
+**Date**: 2026-07-24 | **Context**: Owner Kernel CEO run left a completed foreman worktree and merged dispatch branches behind.
+
+**Problem**: A merged implementation was treated as finished while its worktree and branch refs remained. The stale refs made later branch audits noisy and obscured which work was still live.
+
+**Solution**: Make cleanup a terminal invariant. After merge, enumerate worktrees, verify the worktree is inactive and clean, prove the exact branch tip is contained by the authoritative integration target, remove the worktree, then use the preserve-first reaper or `git branch -d`. Re-enumerate worktrees and refs before reporting completion. Never use an unchecked `git branch -D`.
+
+**Related**: `scripts/reap-dispatch-branches.sh`, `skills/finish-flow/SKILL.md` L-5.6/L-5.7, and `skills/ceo-agent/references/level-front-door.md` worktree GC.

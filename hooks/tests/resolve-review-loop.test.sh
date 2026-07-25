@@ -55,8 +55,9 @@ assert_eq "2" "$EXIT" "unknown flag exit code"
 # 3. default JSON carries the repo's DOGFOOD roster + is parseable.
 # DOGFOOD PIN (reads the live .claude/review-loop-config.md): as of 2026-07-16
 # Board decision A the reviewer is MiniMax-M3 and the implementer is grok-4.5 (xai).
-# 2026-07-18 seat refresh: verification_author glm-5.2/anthropic-compatible →
-# Gemini/agy (endpoints.env absent on host; restore note in the config file).
+# 2026-07-21 seat refresh: Claude native quota is unavailable, and GLM review
+# smoke is not enough to re-promote it to authoring, so verification author stays
+# Gemini/agy until a full authoring re-drive passes.
 # xai ∉ {openai,anthropic,google} ⇒ source-trust low ⇒ review_risk=high,
 # required_review_families=2, l1_required=true — BY DESIGN (resolve-review-loop.sh
 # §"Derive source trust"). Restore the gpt seats (reviewer gpt-5.5 / implementer
@@ -107,11 +108,10 @@ assert_eq "[]" "$(ENGINE_SCORECARD_DIR="$EMPTY_SCDIR" bash "$SCRIPT" --check-sco
 OUT="$(bash "$SCRIPT" --field nope 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unknown field exit code"
 
-# 6. override precedence + enum fallback on garbage
+# 6. override precedence + non-transport enum fallback on garbage
 CFG="$TEST_TMP/rl.md"
-printf -- '- reviewer_effort: turbo\n- implementer_runner: rocket\n- loop_max_rounds: notanum\n- implementer_engine: my-local-model\n' > "$CFG"
+printf -- '- reviewer_effort: turbo\n- loop_max_rounds: notanum\n- implementer_engine: my-local-model\n' > "$CFG"
 assert_eq "xhigh" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field reviewer_effort)" "bad effort falls back to default"
-assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_runner)" "bad runner falls back to default"
 assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field loop_max_rounds)" "non-numeric rounds falls back to default"
 assert_eq "my-local-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_engine)" "valid override value is honored"
 assert_eq "override" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field source)" "override source reported"
@@ -122,33 +122,95 @@ assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --fie
 assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_effort)" "template override verification_author_effort is empty"
 assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_endpoint)" "template override verification_author_endpoint is empty"
 
+# 6a. Explicit runner values select a transport, so invalid/blank values fail
+#      instead of being silently attributed to a different default runner.
+BAD_IMPL_CFG="$TEST_TMP/rl-bad-impl-runner.md"
+printf -- '- implementer_runner: rocket\n' > "$BAD_IMPL_CFG"
+BAD_IMPL_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BAD_IMPL_CFG" bash "$SCRIPT" --field implementer_runner 2>&1)"
+BAD_IMPL_EXIT=$?
+assert_eq "3" "$BAD_IMPL_EXIT" "unknown implementer_runner fails config resolution"
+assert_contains "$BAD_IMPL_OUT" "invalid implementer_runner" "unknown implementer_runner reports the configured field"
+
+BAD_REV_CFG="$TEST_TMP/rl-bad-reviewer-runner.md"
+printf -- '- reviewer_runner: definitely-not-a-runner\n' > "$BAD_REV_CFG"
+BAD_REV_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BAD_REV_CFG" bash "$SCRIPT" --field reviewer_runner 2>&1)"
+BAD_REV_EXIT=$?
+assert_eq "3" "$BAD_REV_EXIT" "unknown reviewer_runner fails config resolution"
+assert_contains "$BAD_REV_OUT" "invalid reviewer_runner" "unknown reviewer_runner reports the configured field"
+
+BLANK_REV_CFG="$TEST_TMP/rl-blank-reviewer-runner.md"
+printf -- '- reviewer_runner:\n' > "$BLANK_REV_CFG"
+BLANK_REV_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BLANK_REV_CFG" bash "$SCRIPT" --field reviewer_runner 2>&1)"
+BLANK_REV_EXIT=$?
+assert_eq "3" "$BLANK_REV_EXIT" "blank explicit reviewer_runner fails config resolution"
+assert_contains "$BLANK_REV_OUT" "<empty>" "blank explicit reviewer_runner is diagnosed"
+assert_eq "codex" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field reviewer_runner)" "missing reviewer_runner alone uses the built-in default"
+
 # 6b. new hetero runners are accepted (v2.26.6–2.26.8): grok (impl+reviewer), cc-shim (impl).
 #     Regression guard — these were silently reset to default before the enums were widened.
 NCFG="$TEST_TMP/rl-new-runners.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- reviewer_runner: grok\n- reviewer_engine: grok-build\n' > "$NCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field implementer_runner)" "cc-shim implementer_runner honored"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field reviewer_runner)" "grok reviewer_runner honored"
+QCFG="$TEST_TMP/rl-qoderclicn.md"
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n' > "$QCFG"
+assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field implementer_runner)" "qoderclicn implementer_runner honored"
+assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field reviewer_runner)" "qoderclicn reviewer_runner honored"
 RCFG="$TEST_TMP/rl-ccshim-rev.md"
 printf -- '- reviewer_runner: cc-shim\n- reviewer_engine: MiniMax-M3\n' > "$RCFG"
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RCFG" bash "$SCRIPT" --field reviewer_runner)" "cc-shim reviewer_runner honored (dispatch-review supports it since v2.26.10)"
 ACRCFG="$TEST_TMP/rl-anthropic-compatible-rev.md"
 printf -- '- reviewer_runner: anthropic-compatible\n- reviewer_engine: MiniMax-M3\n' > "$ACRCFG"
 assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACRCFG" bash "$SCRIPT" --field reviewer_runner)" "anthropic-compatible reviewer_runner honored (dispatch-review direct HTTP reviewer)"
+CNRCFG="$TEST_TMP/rl-claude-native-rev.md"
+printf -- '- reviewer_runner: claude-native\n- reviewer_engine: claude-fable-5\n' > "$CNRCFG"
+assert_eq "claude-native" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CNRCFG" bash "$SCRIPT" --field reviewer_runner)" "claude-native reviewer_runner honored (dispatch-review local Claude transport)"
 ACI_CFG="$TEST_TMP/rl-anthropic-compatible-impl.md"
 printf -- '- implementer_runner: anthropic-compatible\n- implementer_engine: MiniMax-M3\n' > "$ACI_CFG"
-assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACI_CFG" bash "$SCRIPT" --field implementer_runner)" "anthropic-compatible implementer_runner rejected (dispatch-hetero does not support it)"
+ACI_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACI_CFG" bash "$SCRIPT" --field implementer_runner 2>&1)"
+ACI_EXIT=$?
+assert_eq "3" "$ACI_EXIT" "anthropic-compatible implementer_runner rejected (dispatch-hetero does not support it)"
+assert_contains "$ACI_OUT" "invalid implementer_runner" "unsupported implementer transport fails loudly"
 VAA_CFG="$TEST_TMP/rl-ver-auth-runner-anthropic.md"
 printf -- '- verification_author_present: true\n- verification_author_engine: MiniMax-M3\n- verification_author_runner: anthropic-compatible\n- verification_author_effort: high\n- verification_author_endpoint: glm\n' > "$VAA_CFG"
 assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$VAA_CFG" bash "$SCRIPT" --field verification_author_runner)" "anthropic-compatible verification_author_runner honored"
 GCFG="$TEST_TMP/rl-grok-impl.md"
 printf -- '- implementer_runner: grok\n- implementer_engine: grok-composer-2.5-fast\n' > "$GCFG"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field implementer_runner)" "grok implementer_runner honored"
+
+# 6c. Plan review has a separate, bounded roster and cannot loosen hard ceilings.
+PLAN_CFG="$TEST_TMP/rl-plan-review.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n- plan_reviewer_runner: claude-native\n- plan_reviewer_effort: high\n- plan_reviewer_endpoint:\n- plan_deep_reviewer_engine: gpt-5.6-sol\n- plan_deep_reviewer_runner: codex\n- plan_deep_reviewer_effort: max\n- plan_deep_reviewer_endpoint:\n- plan_review_max_generations: 2\n- plan_review_max_wall_seconds: 7200\n- plan_review_growth_warn_ratio: 1.25\n- plan_review_growth_stop_ratio: 1.50\n' > "$PLAN_CFG"
+assert_eq "on" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_CFG" bash "$SCRIPT" --field plan_review)" "plan review is independently enabled"
+assert_eq "claude-fable-5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_CFG" bash "$SCRIPT" --field plan_reviewer_engine)" "plan chair engine preserved"
+assert_eq "claude-native" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_CFG" bash "$SCRIPT" --field plan_reviewer_runner)" "plan chair runner preserved"
+assert_eq "gpt-5.6-sol" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_CFG" bash "$SCRIPT" --field plan_deep_reviewer_engine)" "plan deep engine preserved"
+assert_eq "2" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_CFG" bash "$SCRIPT" --field plan_review_max_generations)" "plan generation hard cap preserved"
+assert_eq "1.50" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_CFG" bash "$SCRIPT" --field plan_review_growth_stop_ratio)" "plan growth hard stop preserved"
+
+PLAN_LOOSE_CFG="$TEST_TMP/rl-plan-loose.md"
+printf -- '- plan_review_max_generations: 3\n' > "$PLAN_LOOSE_CFG"
+PLAN_LOOSE_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_LOOSE_CFG" bash "$SCRIPT" 2>&1)"
+PLAN_LOOSE_EXIT=$?
+assert_eq "3" "$PLAN_LOOSE_EXIT" "plan generation cap cannot exceed 2"
+assert_contains "$PLAN_LOOSE_OUT" "must be 1 or 2" "loosened plan generation cap is diagnosed"
+
+PLAN_INCOMPLETE_CFG="$TEST_TMP/rl-plan-incomplete.md"
+printf -- '- plan_review: on\n- plan_reviewer_engine: claude-fable-5\n' > "$PLAN_INCOMPLETE_CFG"
+PLAN_INCOMPLETE_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$PLAN_INCOMPLETE_CFG" bash "$SCRIPT" 2>&1)"
+PLAN_INCOMPLETE_EXIT=$?
+assert_eq "3" "$PLAN_INCOMPLETE_EXIT" "enabled plan review requires a complete chair tuple"
+assert_contains "$PLAN_INCOMPLETE_OUT" "requires plan_reviewer_engine" "incomplete plan chair tuple is diagnosed"
+
 # family_of recognises xai (grok) ≠ minimax (impl). Panel is grok-build ALONE so the result
 # can ONLY come from grok being a real (xai) family — an UNKNOWN family never satisfies
 # cross-family (fail-closed), so this would be false if family_of didn't know grok.
 XFCFG="$TEST_TMP/rl-xfamily.md"
 printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc_panel: grok-build\n' > "$XFCFG"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
+QXFCFG="$TEST_TMP/rl-qwen-xfamily.md"
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- qc_panel: grok-4.5\n' > "$QXFCFG"
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QXFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok panel member satisfies cross-family vs qwen/alibaba implementer"
 
 # 7. qc_panel (v2.25.9): default array + aggregation default
 # EMPTY_CFG override: isolate from autopilot's dogfood .claude/review-loop-config.md (slot 3),
@@ -276,7 +338,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 

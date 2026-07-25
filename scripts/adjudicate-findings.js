@@ -12,22 +12,35 @@ const HELP_TEXT = `Usage:
   node scripts/adjudicate-findings.js probe --store <path> --id <finding-id> [--file <path>] [--now <ISO-date>]
   node scripts/adjudicate-findings.js refute --store <path> --id <finding-id> [--file <path>] [--now <ISO-date>]
   node scripts/adjudicate-findings.js trace --store <path> --id <finding-id> [--file <path>] [--now <ISO-date>]
+  node scripts/adjudicate-findings.js dispose --store <path> --id <finding-id> [--file <path>] [--now <ISO-date>]
   node scripts/adjudicate-findings.js status --store <path> [--id <finding-id>] [--json] [--now <ISO-date>]
   node scripts/adjudicate-findings.js gate --store <path> --ids <id1,id2,...> [--now <ISO-date>]
+  node scripts/adjudicate-findings.js repair-gate --store <path> --ids <id1,id2,...> [--now <ISO-date>]
 
 Options:
   --store <path>       Path to the JSONL store file or directory (required).
-  --id <finding-id>    ID of the finding to probe, refute, or trace.
-  --ids <id1,id2,...>  Comma-separated list of finding IDs to check for gate.
+  --id <finding-id>    ID of the finding to probe, refute, trace, or dispose.
+  --ids <id1,id2,...>  Comma-separated list of finding IDs to check for gate / repair-gate.
   --file <path>        Read input JSON from file instead of stdin.
   --json               Output status in JSON format.
   --now <ISO-date>     Use this ISO-8601 UTC timestamp for deterministic tests.
 
+Disposition (dispose): exactly one of must-fix-now | follow-up | reject-out-of-scope.
+  must-fix-now: requires (acceptance_id|rubric_id|task_surface) + deferral_harm
+  follow-up: requires context + trigger
+  reject-out-of-scope: requires rationale
+
+gate: exit 0 iff every id is actionable (backward-compatible claim check).
+repair-gate: exit 0 iff every id is actionable AND disposed must-fix-now
+  without conflict/missing/malformed disposition (severity is orthogonal).
+
 Exit codes:
   0 = success
-  1 = validation / schema / transition error, malformed JSON
+  1 = validation / schema / transition error, malformed JSON, gate fail
   2 = usage error / unknown subcommand
 `;
+
+const VALID_DISPOSITIONS = new Set(['must-fix-now', 'follow-up', 'reject-out-of-scope']);
 
 function usage(code) {
   console.log(HELP_TEXT);
@@ -136,7 +149,11 @@ function validateStoreEvent(ev, lineNo) {
     add: new Set(['claim', 'severity', 'source', 'status']),
     probe: new Set(['probe_cmd', 'expected_signature', 'observed_output_digest', 'observed_output_head', 'observed_matches_expected', 'status']),
     refute: new Set(['mutation_desc', 'mutation_probe_output_digest', 'mutation_probe_output_head', 'probe_fired_under_mutation', 'vacuous_probe', 'status']),
-    trace: new Set(['trace_chain', 'confirmed_by', 'status'])
+    trace: new Set(['trace_chain', 'confirmed_by', 'status']),
+    disposition: new Set([
+      'disposition', 'acceptance_id', 'rubric_id', 'task_surface', 'deferral_harm',
+      'context', 'trigger', 'rationale'
+    ])
   };
   
   if (!ev.type || !typeFields[ev.type]) {
@@ -222,6 +239,59 @@ function validateStoreEvent(ev, lineNo) {
     if (ev.status !== 'PROOF_BY_TRACE') {
       failValidation(`invalid status for trace event at line ${lineNo}`);
     }
+  } else if (ev.type === 'disposition') {
+    validateDispositionFields(ev, `store event at line ${lineNo}`);
+  }
+}
+
+function nonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validateDispositionFields(obj, label) {
+  if (!VALID_DISPOSITIONS.has(obj.disposition)) {
+    failValidation(`invalid disposition at ${label}: must be one of must-fix-now|follow-up|reject-out-of-scope`);
+  }
+  const disposition = obj.disposition;
+  if (disposition === 'must-fix-now') {
+    const hasSurface = nonEmptyString(obj.acceptance_id)
+      || nonEmptyString(obj.rubric_id)
+      || nonEmptyString(obj.task_surface);
+    if (!hasSurface) {
+      failValidation(`must-fix-now requires acceptance_id, rubric_id, or task_surface at ${label}`);
+    }
+    if (!nonEmptyString(obj.deferral_harm)) {
+      failValidation(`must-fix-now requires deferral_harm at ${label}`);
+    }
+    // Foreign evidence keys for other dispositions are not allowed (fail closed).
+    if (obj.context !== undefined || obj.trigger !== undefined || obj.rationale !== undefined) {
+      failValidation(`must-fix-now must not carry follow-up/reject evidence fields at ${label}`);
+    }
+  } else if (disposition === 'follow-up') {
+    if (!nonEmptyString(obj.context)) {
+      failValidation(`follow-up requires context at ${label}`);
+    }
+    if (!nonEmptyString(obj.trigger)) {
+      failValidation(`follow-up requires trigger at ${label}`);
+    }
+    if (
+      obj.acceptance_id !== undefined || obj.rubric_id !== undefined
+      || obj.task_surface !== undefined || obj.deferral_harm !== undefined
+      || obj.rationale !== undefined
+    ) {
+      failValidation(`follow-up must not carry must-fix-now/reject evidence fields at ${label}`);
+    }
+  } else if (disposition === 'reject-out-of-scope') {
+    if (!nonEmptyString(obj.rationale)) {
+      failValidation(`reject-out-of-scope requires rationale at ${label}`);
+    }
+    if (
+      obj.acceptance_id !== undefined || obj.rubric_id !== undefined
+      || obj.task_surface !== undefined || obj.deferral_harm !== undefined
+      || obj.context !== undefined || obj.trigger !== undefined
+    ) {
+      failValidation(`reject-out-of-scope must not carry must-fix-now/follow-up evidence fields at ${label}`);
+    }
   }
 }
 
@@ -237,6 +307,9 @@ function getFindingsState(events) {
         source: ev.source,
         status: 'UNPROBED',
         actionable: false,
+        disposition: null,
+        disposition_conflict: false,
+        disposition_values: [],
         events: [ev]
       };
     } else {
@@ -258,10 +331,37 @@ function getFindingsState(events) {
       } else if (ev.type === 'trace') {
         findings[fid].status = 'PROOF_BY_TRACE';
         findings[fid].actionable = true;
+      } else if (ev.type === 'disposition') {
+        findings[fid].disposition_values.push(ev.disposition);
+        const unique = new Set(findings[fid].disposition_values);
+        findings[fid].disposition_conflict = unique.size > 1;
+        // Latest disposition is current when no conflict; conflict fails closed at repair-gate.
+        findings[fid].disposition = findings[fid].disposition_conflict
+          ? null
+          : ev.disposition;
       }
     }
   }
   return findings;
+}
+
+/** repair-eligible: actionable claim + single must-fix-now disposition. Severity orthogonal. */
+function isRepairEligible(state) {
+  if (!state || !state.actionable) return false;
+  if (state.disposition_conflict) return false;
+  if (state.disposition !== 'must-fix-now') return false;
+  return true;
+}
+
+function statusPayload(state) {
+  return {
+    finding_id: state.finding_id,
+    status: state.status,
+    actionable: state.actionable,
+    disposition: state.disposition,
+    disposition_conflict: state.disposition_conflict === true,
+    repair_eligible: isRepairEligible(state)
+  };
 }
 
 function checkTransition(currentStatus, newStatus) {
@@ -398,6 +498,20 @@ function validateInputJson(input, command) {
     if (typeof input.confirmed_by !== 'string' || input.confirmed_by.trim().length === 0) {
       failValidation('confirmed_by must be a non-empty string');
     }
+  } else if (command === 'dispose') {
+    const allowed = new Set([
+      'disposition', 'acceptance_id', 'rubric_id', 'task_surface', 'deferral_harm',
+      'context', 'trigger', 'rationale'
+    ]);
+    for (const key of Object.keys(input)) {
+      if (!allowed.has(key)) {
+        failValidation(`unknown field in input: ${key}`);
+      }
+    }
+    if (!('disposition' in input)) {
+      failValidation('missing required field in input: disposition');
+    }
+    validateDispositionFields(input, 'input');
   }
 }
 
@@ -427,8 +541,10 @@ const COMMAND_ALLOWED_FLAGS = {
   probe: new Set(['store', 'id', 'file', 'now']),
   refute: new Set(['store', 'id', 'file', 'now']),
   trace: new Set(['store', 'id', 'file', 'now']),
+  dispose: new Set(['store', 'id', 'file', 'now']),
   status: new Set(['store', 'id', 'json', 'now']),
-  gate: new Set(['store', 'ids', 'now'])
+  gate: new Set(['store', 'ids', 'now']),
+  'repair-gate': new Set(['store', 'ids', 'now'])
 };
 
 function main() {
@@ -474,32 +590,28 @@ function main() {
         failValidation(`Finding with id ${fid} does not exist in store`);
       }
       if (options.json) {
-        process.stdout.write(JSON.stringify({
-          finding_id: fid,
-          status: state.status,
-          actionable: state.actionable
-        }) + '\n');
+        process.stdout.write(JSON.stringify(statusPayload(state)) + '\n');
       } else {
-        process.stdout.write(`${fid} ${state.status} ${state.actionable}\n`);
+        process.stdout.write(
+          `${fid} ${state.status} ${state.actionable} ${state.disposition || '-'} ${isRepairEligible(state)}\n`
+        );
       }
     } else {
       if (options.json) {
-        const list = Object.values(findings).map(f => ({
-          finding_id: f.finding_id,
-          status: f.status,
-          actionable: f.actionable
-        }));
+        const list = Object.values(findings).map(f => statusPayload(f));
         process.stdout.write(JSON.stringify(list) + '\n');
       } else {
         for (const f of Object.values(findings)) {
-          process.stdout.write(`${f.finding_id} ${f.status} ${f.actionable}\n`);
+          process.stdout.write(
+            `${f.finding_id} ${f.status} ${f.actionable} ${f.disposition || '-'} ${isRepairEligible(f)}\n`
+          );
         }
       }
     }
     process.exit(0);
   }
 
-  if (command === 'gate') {
+  if (command === 'gate' || command === 'repair-gate') {
     if (!options.ids) {
       failUsage('Option --ids <id1,id2,...> is required');
     }
@@ -512,28 +624,48 @@ function main() {
     
     const ids = options.ids.split(',').map(s => s.trim()).filter(Boolean);
     if (ids.length === 0) {
-      failUsage('No ids specified for gate');
+      failUsage(`No ids specified for ${command}`);
     }
     
-    const nonActionable = [];
-    for (const id of ids) {
-      const state = findings[id];
-      if (!state || !state.actionable) {
-        nonActionable.push(id);
+    if (command === 'gate') {
+      // Backward-compatible: claim-real check only (actionable).
+      const nonActionable = [];
+      for (const id of ids) {
+        const state = findings[id];
+        if (!state || !state.actionable) {
+          nonActionable.push(id);
+        }
+      }
+      
+      if (nonActionable.length > 0) {
+        process.stdout.write(nonActionable.join(',') + '\n');
+        process.stderr.write(`ERROR: Non-actionable findings: ${nonActionable.join(', ')}\n`);
+        process.exit(1);
+      } else {
+        process.exit(0);
       }
     }
-    
-    if (nonActionable.length > 0) {
-      process.stdout.write(nonActionable.join(',') + '\n');
-      process.stderr.write(`ERROR: Non-actionable findings: ${nonActionable.join(', ')}\n`);
-      process.exit(1);
-    } else {
-      process.exit(0);
+
+    // repair-gate: actionable + must-fix-now disposition without conflict.
+    const blocked = [];
+    for (const id of ids) {
+      const state = findings[id];
+      if (!isRepairEligible(state)) {
+        blocked.push(id);
+      }
     }
+    if (blocked.length > 0) {
+      process.stdout.write(blocked.join(',') + '\n');
+      process.stderr.write(
+        `ERROR: Not repair-eligible (need actionable + must-fix-now disposition): ${blocked.join(', ')}\n`
+      );
+      process.exit(1);
+    }
+    process.exit(0);
   }
 
   // Commands that write to store
-  if (command === 'probe' || command === 'refute' || command === 'trace') {
+  if (command === 'probe' || command === 'refute' || command === 'trace' || command === 'dispose') {
     if (!options.id) {
       failUsage(`Option --id <finding-id> is required for command ${command}`);
     }
@@ -624,16 +756,34 @@ function main() {
         confirmed_by: input.confirmed_by,
         status: newStatus
       };
+    } else if (command === 'dispose') {
+      // Disposition does not change claim status; it is orthogonal to severity/actionable.
+      newStatus = currentStatus;
+      eventSpecificData = { disposition: input.disposition };
+      if (input.disposition === 'must-fix-now') {
+        if (input.acceptance_id !== undefined) eventSpecificData.acceptance_id = input.acceptance_id;
+        if (input.rubric_id !== undefined) eventSpecificData.rubric_id = input.rubric_id;
+        if (input.task_surface !== undefined) eventSpecificData.task_surface = input.task_surface;
+        eventSpecificData.deferral_harm = input.deferral_harm;
+      } else if (input.disposition === 'follow-up') {
+        eventSpecificData.context = input.context;
+        eventSpecificData.trigger = input.trigger;
+      } else if (input.disposition === 'reject-out-of-scope') {
+        eventSpecificData.rationale = input.rationale;
+      }
     }
     
-    checkTransition(currentStatus, newStatus);
+    if (command !== 'dispose') {
+      checkTransition(currentStatus, newStatus);
+    }
     
     const assigned = maxEventId(rows) + 1;
+    const eventType = command === 'dispose' ? 'disposition' : command;
     const newEvent = {
       event_id: assigned,
       observed_at: observedAt,
       finding_id: fid,
-      type: command,
+      type: eventType,
       ...eventSpecificData
     };
     

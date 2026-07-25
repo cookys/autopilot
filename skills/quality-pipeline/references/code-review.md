@@ -106,15 +106,23 @@ Methodology agents never call each other. Re-dispatch is quality-pipeline's job,
 
 ### Consuming a finding — verify before implementing (findings are suggestions to evaluate, not orders)
 
-A finding is a *claim to check*, not a command. Before acting:
+A finding is a *claim to check*, not a command. **Severity alone does not authorize scope expansion.** Before dispatching any repair:
 
-1. **Verify against the codebase.** Open cited `file:line`; confirm the claim. Reviewers confabulate — unreproducible = false positive, not a task. (Consumer half of the Fact-driven Red Line.)
-2. **Push back with technical reasoning when wrong** — breaks existing behavior, missing context, legacy/compat, or conflicts a prior decision. Cite refuting test/code. No defensive dismissal; no blind compliance.
-3. **YAGNI-check "do it properly"** — "implement X fully" → `grep` if X is used; unused → propose removal, not expansion.
-4. **No performative agreement.** Never "You're absolutely right!", "Great catch!", or thanks. State the fix (`Fixed — <what changed>`) or reasoned pushback. Actions over affect; the diff shows you heard it.
-5. **One fix at a time, re-verify** — no batch-apply-and-hope; each fix checked (re-review loop enforces at round level).
+1. **Verify the claim** against the codebase. Open cited `file:line`; confirm it. Reviewers confabulate — unreproducible = false positive, not a task. (Consumer half of the Fact-driven Red Line.) Mechanical form: adjudication table (`scripts/adjudicate-findings.js`) — statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`. `gate --ids` remains the backward-compatible “is this claim real?” check (`actionable`).
+2. **Classify relevance (disposition)** — required for every surviving Critical/Major before repair. Exactly one of:
+   - `must-fix-now` — names a frozen acceptance/rubric ID or allowed task surface **and** the concrete harm of deferral;
+   - `follow-up` — context + trigger (backlog / next ticket; does **not** enter this repair loop);
+   - `reject-out-of-scope` — rationale (does not enter repair).
+   Record via `adjudicate-findings.js dispose`. Missing, malformed, conflicting, or uncertain disposition **fails closed** — return to depth-0 scope adjudication; never default to “fix it”.
+3. **Scope check** — before the fixer runs, enforce the frozen repair-scope contract with `scripts/check-repair-scope.js check --contract <intake.json> --intake-contract <intake.json>`. Full `base_sha..HEAD` accounting (never per-round sums); path/new-file allowlists; ratio + absolute churn caps; symlink/traversal containment; contract immutable for the loop (no in-place reset).
+4. **Dispatch fix only for repair-eligible findings** — `adjudicate-findings.js repair-gate --ids …` passes **only** when each id is actionable **and** disposed `must-fix-now` without conflict. Severity remains orthogonal: `union-on-verified-critical` still unions verified Critical/Major, but only the `must-fix-now` class may mutate the ticket.
+5. **YAGNI-check "do it properly"** — "implement X fully" → `grep` if X is used; unused → propose removal / `follow-up`, not expansion of the current ticket.
+6. **No performative agreement.** Never "You're absolutely right!", "Great catch!", or thanks. State the fix (`Fixed — <what changed>`) or reasoned pushback / disposition.
+7. **One fix at a time, re-verify** — no batch-apply-and-hope; each fix checked (re-review loop enforces at round level). Re-run scope check every round.
 
-Mechanical form: adjudication table (`scripts/adjudicate-findings.js`, statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`); `union-on-verified-critical` "verified" = actionable status there.
+**Action order (binding):** verify claim → classify relevance → scope check → dispatch fix.
+
+Mechanical form: `scripts/adjudicate-findings.js` (`gate` = claim-real; `dispose` + `repair-gate` = relevance); `scripts/check-repair-scope.js` = cumulative stop-loss. `union-on-verified-critical` "verified" = actionable status; repair authority additionally requires `must-fix-now`.
 
 ## Scope Creep / Surgical Changes Scan
 
@@ -210,16 +218,21 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 
 ## Re-review Loop (Critical / Major)
 
-Fix Critical/Major → re-review until only Suggestion/Minor or LGTM.
+Critical/Major **claims** still surface via `union-on-verified-critical`. Only findings that pass **repair-gate** (`must-fix-now`) enter the fix loop; `follow-up` / `reject-out-of-scope` / unclassified do not mutate the ticket.
 
 ```
 review → findings?
-├── Has Critical/Major → fix → re-review (repeat until clean)
+├── Has Critical/Major
+│     → verify claim (adjudicate gate / probe|trace)
+│     → classify relevance (dispose: must-fix-now | follow-up | reject-out-of-scope)
+│     → scope check (check-repair-scope.js; TRIP ⇒ stop automatic repair)
+│     → repair-gate --ids <must-fix-now set>
+│     → fix only repair-eligible → re-review (repeat until clean or stop-loss)
 ├── Only Suggestion/Minor → process per below → commit
 └── Clean (LGTM) → commit
 ```
 
-**Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues.
+**Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues. Re-run the repair-scope checker on the full `base_sha..HEAD` each round.
 
 **Re-review checkpoint (dispatcher-only)**: Before round 1, `scripts/diff-since-last-round.sh mark` snapshots HEAD; between rounds `scripts/diff-since-last-round.sh stat` → JSON `{changed_files, insertions, deletions, doc_only}`. If `doc_only=true` and `changed_files` trivially small, dispatcher MAY short-circuit. Decision + data stay **in the dispatcher only** — never pass delta to the reviewer (leaks round-cycle meta-signal per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). Loop closed → `scripts/diff-since-last-round.sh clear`.
 

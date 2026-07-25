@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "2.32.59",
+  "version": "2.32.60",
   "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts. The manifest exposes skills only and does not load Claude Code hooks.",
   "author": {
     "name": "TWGS Team"

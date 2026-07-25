@@ -35,7 +35,8 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
 | [`scripts/error-path-scan.sh`](../../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error paths) | Completeness Gate step (advisory to review) |
 | [`scripts/secret-scan-diff.js`](../../scripts/secret-scan-diff.js) | L0 attention-slip scan for leaked secrets | Completeness Gate step (blocking) |
-| [`scripts/adjudicate-findings.js`](../../scripts/adjudicate-findings.js) | "Is this finding real?" — probe-backed statuses (REPRODUCED/REFUTED/UNPROBED/PROOF_BY_TRACE); `gate --ids` blocks fix dispatch on non-actionable findings | Review step, before acting on any finding |
+| [`scripts/adjudicate-findings.js`](../../scripts/adjudicate-findings.js) | "Is this finding real / repair-eligible?" — probe-backed statuses; `gate --ids` = claim-real (actionable); `dispose` + `repair-gate --ids` = relevance (`must-fix-now` only) | Review step: verify → classify → before fix dispatch |
+| [`scripts/check-repair-scope.js`](../../scripts/check-repair-scope.js) | Cumulative repair stop-loss — frozen contract, full `base_sha..HEAD` churn/path/new-file accounting; TRIP ends automatic repair | After relevance classify, every repair round before fixer |
 | [`scripts/check-redispatch-prompt.sh`](../../scripts/check-redispatch-prompt.sh) | Round 2+ leaky-phrase detection (per `references/blind-dispatch.md`) | Before every re-review dispatch |
 | [`scripts/diff-file-list.sh`](../../scripts/diff-file-list.sh) | Reviewer's "list every file I read" enumeration in Verified Clean | Reviewer prompt assembly |
 | [`scripts/diff-scope-report.sh`](../../scripts/diff-scope-report.sh) | v2 scope-creep filter: whitespace-only files, files not in message, comment-only hunks, quote-style swaps | Code Review step (Scope Creep Scan) |
@@ -134,7 +135,12 @@ Follow references/code-review.md (dispatches per .claude/dispatch-config.md '## 
   Agent dispatch: read JSON from `resolve-dispatch.sh --role reviewer`
   Before any round 2+ dispatch: `scripts/check-redispatch-prompt.sh <prompt>` (exit 1 ⇒ leaky, strip and retry)
   Optional short-circuit: `scripts/diff-since-last-round.sh stat` (dispatcher-only — doc_only=true ⇒ skip re-review)
-  → Critical/Major? → fix → re-review (repeat until clean)
+  → Critical/Major claims?
+       → verify (adjudicate-findings gate / probe|trace)
+       → classify relevance (dispose: must-fix-now | follow-up | reject-out-of-scope)
+       → scope check: `scripts/check-repair-scope.js check --contract <intake> --intake-contract <intake>`
+       → repair-gate --ids <must-fix-now> → fix only those → re-review
+       (severity orthogonal; union-on-verified Critical/Major intact inside must-fix-now)
   → Suggestion/Minor? → dispatch via Decision Tree below
   → LGTM? → pass
 ```

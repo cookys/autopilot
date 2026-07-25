@@ -44,6 +44,43 @@ jobs:
           bwrap --version
           strace -V | head -1
 
+      # TEMPORARY DIAGNOSTIC (remove once the bwrap posture question is settled).
+      # bwrap is installed and runs, but dies with
+      #   bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+      # In a normal unprivileged user namespace the process DOES hold CAP_NET_ADMIN inside
+      # that namespace, so `--unshare-net` usually works without privileges. This step
+      # establishes WHY it doesn't here, so we can tell a config problem (fixable, no posture
+      # change) apart from a genuine privilege requirement. Never fails the build.
+      - name: Diagnose bwrap namespace capability (temporary)
+        continue-on-error: true
+        run: |
+          set +e
+          echo "== os =="; . /etc/os-release; echo "$PRETTY_NAME"; uname -r
+          echo "== bwrap =="; command -v bwrap; ls -l "$(command -v bwrap)"; bwrap --version
+          echo "== userns knobs =="
+          for k in kernel.apparmor_restrict_unprivileged_userns kernel.unprivileged_userns_clone user.max_user_namespaces; do
+            printf '%s = ' "$k"; sysctl -n "$k" 2>/dev/null || echo "(absent)"
+          done
+          echo "== apparmor =="; aa-enabled 2>/dev/null || echo "(aa-enabled absent)"
+          echo "== whoami =="; id
+          echo "== T1 plain unshare-user =="
+          bwrap --unshare-user --dev-bind / / true; echo "rc=$?"
+          echo "== T2 unshare-net (the failing one) =="
+          bwrap --unshare-net --dev-bind / / true; echo "rc=$?"
+          echo "== T3 unshare-user + unshare-net =="
+          bwrap --unshare-user --unshare-net --dev-bind / / true; echo "rc=$?"
+          echo "== T4 same under sudo =="
+          sudo bwrap --unshare-net --dev-bind / / true; echo "rc=$?"
+          echo "== T5 the real probe, unprivileged =="
+          node docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/supervised-profile-controls.js \
+            --repo "$PWD" --tmp "$RUNNER_TEMP/spdiag" >/dev/null 2>"$RUNNER_TEMP/sp.err"; echo "rc=$?"
+          tail -c 600 "$RUNNER_TEMP/sp.err"
+          echo "== T6 the real probe, under sudo =="
+          sudo -E node docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/supervised-profile-controls.js \
+            --repo "$PWD" --tmp "$RUNNER_TEMP/spdiag2" >/dev/null 2>"$RUNNER_TEMP/sp2.err"; echo "rc=$?"
+          tail -c 600 "$RUNNER_TEMP/sp2.err"
+          exit 0
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

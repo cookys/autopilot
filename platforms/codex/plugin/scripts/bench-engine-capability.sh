@@ -26,7 +26,7 @@ Usage:
   scripts/bench-engine-capability.sh --runner <r> --model <m> --skill-mode <native|prompt> [--dry-run] [--live-spend] [--store <path>]
 
 Options:
-  --runner <r>              Runner name (e.g. codex, agy, grok, cc-shim)
+  --runner <r>              Runner name (e.g. codex, agy, grok, qoderclicn, cc-shim)
   --model <m>               Model name
   --skill-mode <mode>       Skill transport mode to bench (native or prompt)
   --dry-run                 Print the planned bench without running it

@@ -251,10 +251,11 @@ credentials below is what turns on:
 Reach for these **in order** — a flat-rate subscription you already pay for beats a metered API key
 whose cost is unbounded per run:
 
-1. **OAuth-login CLI runners — `codex` / `agy` / `grok`.** These sign in with your own
-   ChatGPT / Gemini / Grok **subscription** and need **no env token** at all — autopilot just shells
+1. **OAuth-login CLI runners — `codex` / `agy` / `grok` / `qoderclicn`.** These sign in with your own
+   ChatGPT / Gemini / Grok / QoderCN **subscription** and need **no env token** at all — autopilot just shells
    out to the CLI. If you have one of these subscriptions, this is the cheapest and simplest path;
    set `implementer_runner` / `reviewer_runner` in `.claude/review-loop-config.md` and you're done.
+   `qoderclicn` is explicit-only until its implementer/reviewer scorecard qualification promotes it.
 2. **A coding-plan subscription token — GLM / MiniMax (via `cc-shim` / `anthropic-compatible`).**
    For providers reached over an Anthropic-compatible endpoint, prefer their **flat-rate coding-plan
    subscription** token (e.g. the GLM Coding Plan) over a metered key. Put it in the credential file
@@ -295,8 +296,8 @@ files are refused, an already-set env var always wins, and a token value is **ne
 one-off `AUTOPILOT_ENDPOINT_GLM_TOKEN=… <cmd>` still overrides the file for that run.
 (`${AUTOPILOT_ENDPOINTS_ENV}` overrides the path if you keep it elsewhere.)
 
-> **OAuth runners need nothing here.** `codex` / `agy` / `grok` authenticate through their own CLI
-> login — leave them out of this file entirely.
+> **OAuth runners need nothing here.** `codex` / `agy` / `grok` / `qoderclicn` authenticate through their own CLI
+> login — leave them out of this file entirely. `qoderclicn` still has to be selected explicitly until calibrated.
 
 ### Wire it declaratively (no hand-typed flags)
 

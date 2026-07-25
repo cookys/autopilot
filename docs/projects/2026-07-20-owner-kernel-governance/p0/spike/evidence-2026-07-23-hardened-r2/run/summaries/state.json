@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "ledger_head": "93309ead1fdd83f93785cce770b581dbe482b8ff7b96341ec63e93f6ea9aa535",
+  "tasks": [
+    {
+      "task_id": "low-status",
+      "approval_open": false,
+      "effect_completed": true,
+      "independently_challenged": true,
+      "accepted": true
+    },
+    {
+      "task_id": "medium-boundary",
+      "approval_open": false,
+      "effect_completed": true,
+      "independently_challenged": true,
+      "accepted": true
+    },
+    {
+      "task_id": "medium-resume",
+      "approval_open": false,
+      "effect_completed": true,
+      "independently_challenged": true,
+      "accepted": true
+    }
+  ]
+}

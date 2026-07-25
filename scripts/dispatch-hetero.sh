@@ -34,6 +34,12 @@
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
 #                                              #   into ANTHROPIC_BASE_URL/AUTH_TOKEN; raw env
 #                                              #   still used when omitted (byte-identical)
+#       [--context-window off|warn|block]      # pre-dispatch context-window gate (default:
+#                                              #   block; also AUTOPILOT_CONTEXT_WINDOW_GATE).
+#                                              #   Over budget ⇒ fail closed BEFORE the runner
+#                                              #   spawns and before the worktree exists.
+#                                              #   See references/hetero-dispatch.md
+#                                              #   § Context-window gate.
 #       [--skill-mode off|prompt|native|auto]  # skill transport mode (default: off)
 #       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default
@@ -122,6 +128,11 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$SELF_DIR/lib/prune-tmp-residue.sh" ] && . "$SELF_DIR/lib/prune-tmp-residue.sh" \
   && prune_tmp_residue "${AUTOPILOT_TMP_LOG_RETENTION_DAYS:-3}" \
        'hetero-*-log-*' 'dispatch-hetero-*' 'pi-rpc-session-*' 'hetero-detach-state-*' || true
+# Pre-dispatch context-window gate (lib/context-window.sh). Best-effort source: a missing
+# helper degrades to "no gate", never to a dispatch outage.
+# shellcheck source=/dev/null
+[ -r "$SELF_DIR/lib/context-window.sh" ] && . "$SELF_DIR/lib/context-window.sh" || true
+CONTEXT_WINDOW_GATE=""     # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
@@ -326,6 +337,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$SELF_DIR/lib/json-emit.sh"
+# shellcheck source=lib/grok-effort.sh
+. "$SELF_DIR/lib/grok-effort.sh"
 # Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
 _flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
@@ -803,6 +816,7 @@ while [ $# -gt 0 ]; do
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
+    --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
@@ -1139,6 +1153,18 @@ else
   EFFECTIVE_SKILL_MODE="off"
 fi
 
+# --- context-window gate ---
+# Placed AFTER skill-pack concatenation (the pack inflates PROMPT_FILE, and the engine
+# pays for the packed size, not the original) and BEFORE the worktree exists, so an
+# over-budget unit costs neither tokens nor a worktree to reap. This generalizes the
+# skill-pack's own SKILL_PACK_MAX_BYTES check above from one input to the whole payload.
+if declare -F context_window_gate > /dev/null 2>&1; then
+  _CB_MODE="$(context_window_mode "${CONTEXT_WINDOW_GATE:-}")"
+  if ! context_window_gate "$_CB_MODE" "$SELF_DIR" "$MODEL" "${PROMPT_FILE:-}"; then
+    die_precondition "context budget exceeded: ${CONTEXT_WINDOW_REASON:-over budget}"
+  fi
+fi
+
 # --- isolated worktree (the non-skippable safety rail) ---
 WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
 if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
@@ -1333,6 +1359,9 @@ elif [ "$IS_GROK" -eq 1 ]; then
   # Flags are all Spike-verified present: --prompt-file, --cwd, --model, --always-approve
   # (headless tool auto-approve), --no-alt-screen (clean capture under a pipe),
   # --output-format json. (Do NOT add unverified flags like --no-auto-update.)
+  # --reasoning-effort: probe-verified 2026-07-25 (grok 0.2.111, grok-4.5). grok validates
+  # the value against a 3-item enum and HARD-FAILS otherwise, so EFFORT must be clamped —
+  # passing autopilot's default xhigh verbatim errors out. See lib/grok-effort.sh.
   GROK_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
 Make ONLY the file edits the task requires, in the current working directory. Do NOT
 git commit, git push, or open a PR — the harness commits your edits and a separate review
@@ -1345,9 +1374,11 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # resolves --prompt-file relative to --cwd (Spike-verified 2026-06-29). mktemp is absolute.
   GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
+  grok_effort_note "$EFFORT" "dispatch-hetero"
   run_worker bash -c 'cd "$1" && exec "$2" --prompt-file "$3" --cwd "$1" --model "$4" \
+      --reasoning-effort "$5" \
       --always-approve --no-alt-screen --output-format json' \
-      _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL"
+      _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")"
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_QODER" -eq 1 ]; then
   # qoder (Qoder CLI CN; gateway to Qwen3.8-Max-Preview / GLM-5.2 / DeepSeek-V4 / …).
@@ -1904,8 +1935,8 @@ dispatch_detached_run() {
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
-    declare -f json_escape _flat_json_escape emit reap_container run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_acceptance_checks \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit reap_container run_worker run_agent compute_artifacts passive_capture \
+      _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true

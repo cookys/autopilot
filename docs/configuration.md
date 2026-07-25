@@ -54,7 +54,30 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 | `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](../project-config-template/profiling-config.md) |
 | `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](../project-config-template/skill-routing.md) |
 | `.claude/model-routing-config.md` | Subagent model/mode per role (planner, reviewer, etc.) | [template](../project-config-template/model-routing-config.md) |
+| `.claude/owner-kernel-governance.json` | Owner Kernel project default, qualified rosters, red lines, approval policy, and mediated action catalog | [dogfood example](../.claude/owner-kernel-governance.json) |
 | `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](../project-config-template/loop.md) |
+
+### Owner Kernel governance
+
+Owner Kernel governance is selected once per project. `governance.default_mode` accepts:
+
+- `owner-led`: one qualified owner continuously decides, delegates, recovers, and accepts.
+- `milestone-led`: the qualified owner is re-instantiated at plan, milestone, and acceptance
+  boundaries. This is an owner checkpoint, not a user review of generated results.
+
+Use `--mode owner-led|milestone-led` only for a single run. Resolution records
+`mode_source: "run-override"` and does not modify the JSON project default:
+
+```bash
+node scripts/owner-kernel.js resolve \
+  --config .claude/owner-kernel-governance.json \
+  --mode milestone-led --check
+```
+
+The resolved policy and acceptance contract are hash-frozen at intake. P3.7 profiles reject a
+session when its run override, action catalog, policy, contract, authenticated handoff, or durable
+service cohort disagrees. Project red lines remain active for every `/l3`-`/l6` compatibility
+translation; `-x` can add a run-specific red line but cannot remove a project rule.
 
 ### Example: C++ Game Server Config
 

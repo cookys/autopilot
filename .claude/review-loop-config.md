@@ -13,15 +13,16 @@
 
 ## Settings
 
-<!-- 2026-07-16 Board decision A (codex pool exhausted: spark resets Jul 23,
-     gpt-5.5 limited — capability store event 5): implementer → grok-4.5 (xai),
-     reviewer seat → MiniMax-M3 via cc-shim @ endpoint minimax (engine-qualify
-     13/13 known-bad, false_pass_on_critical=0, scorecard event 9; cc-shim is
-     fine at review-sized payloads per the transport note below). claude-haiku/
-     opus are ALSO qualified (events 5-6) but claude-native is deliberately not
-     roster-eligible — they stay fallback-ladder + qc-panel seats. Low-risk tier
-     cleared: it shares reviewer_runner and there is no second calibrated
-     cc-shim engine. Restore the gpt seats + spark implementer after Jul 23. -->
+<!-- 2026-07-21 live roster: Claude Code native quota is exhausted until Jul 23,
+     but hetero seats are available. Grok-4.5 live-smoked OK and remains the
+     implementer. MiniMax-M3 remains the calibrated reviewer (engine-qualify
+     13/13 known-bad, false_pass_on_critical=0, scorecard event 9). GLM-5.2
+     endpoint and cc-shim small-review shape were re-verified after the 529
+     transport patch, but GLM is NOT restored as the default author seat until a
+     full authoring re-drive passes. QoderCN/Qwen is now an explicit runner
+     candidate (`qoderclicn`) after CLI/stdin smoke; do not make it default until
+     role eval promotes it. claude-haiku/opus remain qualified fallback/qc seats,
+     but Claude native is not a default roster seat while quota is exhausted. -->
 - reviewer_engine: MiniMax-M3
 - reviewer_effort: high
 - reviewer_runner: cc-shim
@@ -69,19 +70,16 @@
 > the `--model` flag is the sole selection mechanism. Disjoint-family panel
 > intact: openai (`gpt-5.5`) / anthropic (`claude-opus`) / google (Gemini 3.6).
 
-> Seat note (2026-07-18): verification_author moved glm-5.2/anthropic-compatible → Gemini/agy
-> for the v2.32.54 run — ~/.autopilot/endpoints.env is absent on this host session, so BOTH
-> glm and minimax endpoint-backed seats are not-ready (resolve-endpoint ready:false). Gemini
-> via agy needs no endpoint token, keeps three-way family disjointness (google author ×
-> xai implementer × openai loop-reviewer). Restore the glm seat when credentials return —
-> the transport-condemnation note below still holds for that seat.
+> Seat note (2026-07-21): `~/.autopilot/endpoints.env` is present and both `glm` and
+> `minimax` resolve under the autopilot namespace. GLM-5.2 direct HTTP review smoke and
+> GLM-5.2 cc-shim small-review smoke both returned `SHIP-AS-IS`; that is not enough to
+> restore GLM as the large authoring seat. Keep Gemini/agy for verification author until
+> a full GLM authoring re-drive passes.
 
-> Transport note (2026-07-16): verification_author_runner moved cc-shim → anthropic-compatible
-> PERMANENTLY. The Claude-CLI transport is condemned for large authoring payloads (z.ai answers
-> CLI-shaped requests with deterministic HTTP 529 and the CLI retries silently; MiniMax
-> full-author calls died the same way twice), while the direct-HTTP path is verified live
-> (400-line exact-shape output in 18s). Same engine, same endpoint, same effort — only the
-> transport changed. cc-shim remains valid for review-sized payloads.
+> Transport note (updated 2026-07-21): the earlier z.ai / Claude-CLI 529 failure has a
+> reported patch and the exact small review shape is live again. This does NOT by itself
+> re-qualify cc-shim or GLM for large authoring payloads; authoring promotion waits for
+> a full authoring re-drive.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

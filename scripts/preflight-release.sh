@@ -216,6 +216,16 @@ run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 
+# ─── advisory: roster-field report ───────────────────────────────────────────
+# NOT a check and NOT counted in $FAILS — it prints the roster's
+# no-detected-modeled-match bucket so the owner sees it at release prep. Its exit
+# code is deliberately ignored: this is the presentation step the plan requires
+# (docs/plans/2026-07-25-roster-field-report.md §4.1 step 4). If it cannot run it
+# says REPORT-HEALTH on stderr; that is a broken tool, not a release blocker.
+echo ""
+echo "── advisory: roster fields with no detected modeled match ──"
+node scripts/report-roster-field-consumers.js 2>&1 | sed -n '/no detected modeled match/,$p' || true
+
 echo ""
 if [ "$FAILS" -eq 0 ]; then
   echo "✅ RELEASE DOCS CONSISTENT for v$VERSION ($TOTAL/$TOTAL)"

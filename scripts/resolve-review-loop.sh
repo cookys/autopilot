@@ -109,6 +109,9 @@ DOMAIN_SOURCE="none"
 AUTO_DOMAIN=0
 AUTO_RANGE="changed"
 CAPABILITY_STATE=""
+# Optional: bytes of input the caller intends to feed the resolved seats. When set, the
+# resolver reports (never silently rewrites) a seat whose context window cannot hold it.
+INPUT_BYTES=0
 STORE_PATH=""
 NOW_VAL=""
 SKILL_MODE_OVERRIDE=""
@@ -121,6 +124,7 @@ while [[ $# -gt 0 ]]; do
     --oracle-available) ORACLE_AVAILABLE="${2:-}"; shift 2 ;;
     --security-surface) SECURITY_SURFACE="${2:-}"; shift 2 ;;
     --capability-state) CAPABILITY_STATE="${2:-}"; shift 2 ;;
+    --input-bytes) INPUT_BYTES="${2:-0}"; shift 2 ;;
     --store) STORE_PATH="${2:-}"; shift 2 ;;
     --now) NOW_VAL="${2:-}"; shift 2 ;;
     --skill-mode) SKILL_MODE_OVERRIDE="${2:-}"; shift 2 ;;
@@ -967,7 +971,63 @@ console.log(JSON.stringify(warnings));
   fi
 fi
 
-
+# --- context-window fitness (REPORT-ONLY) ---
+# This resolver reports state; it never rewrites the roster. Same posture as the quota
+# path above: an exhausted quota yields quota_status + a warning and the CONSUMER decides
+# per on_engine_unavailable. A seat whose window cannot hold the intended input is the
+# same class of fact, so it lands in the same capability_warnings array rather than in a
+# new field — check-context-window.js stays the single source of window truth.
+if [[ "${INPUT_BYTES:-0}" =~ ^[0-9]+$ ]] && [[ "${INPUT_BYTES:-0}" -gt 0 ]]; then
+  _CB_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/check-context-window.js"
+  if [[ -r "$_CB_SCRIPT" ]] && command -v node > /dev/null 2>&1; then
+    # PARALLEL ARRAYS, never a space-joined string: model ids legitimately contain
+    # spaces ("Gemini 3.5 Flash (High)"), and word-splitting a joined string invents
+    # phantom seats named after each word.
+    _seat_names=(reviewer implementer)
+    _seat_engines=("${REV_ENGINE:-}" "${IMPL_ENGINE:-}")
+    if [[ "${VER_AUTH_PRESENT:-false}" == "true" ]]; then
+      _seat_names+=(verification_author)
+      _seat_engines+=("${VER_AUTH_ENGINE:-}")
+    fi
+    _cb_new_warnings="[]"
+    for _i in "${!_seat_names[@]}"; do
+      _seat_name="${_seat_names[$_i]}"
+      _seat_engine="${_seat_engines[$_i]}"
+      [[ -n "$_seat_engine" ]] || continue
+      _cb_args=(--model "$_seat_engine" --bytes "$INPUT_BYTES" --quiet)
+      [[ -n "${CAPABILITY_STATE:-}" ]] && [[ -r "${CAPABILITY_STATE:-}" ]] \
+        && _cb_args+=(--capability-state "$CAPABILITY_STATE")
+      _cb_out="$(node "$_CB_SCRIPT" "${_cb_args[@]}" 2> /dev/null || true)"
+      [[ -n "$_cb_out" ]] || continue
+      _cb_new_warnings="$(printf '%s' "$_cb_out" | node -e '
+let s = "";
+process.stdin.on("data", (d) => (s += d)).on("end", () => {
+  const seat = process.argv[1];
+  let acc = [];
+  try { acc = JSON.parse(process.argv[2]); } catch { acc = []; }
+  try {
+    const v = JSON.parse(s);
+    // ONLY over-budget is actionable. UNKNOWN_WINDOW is the normal state for any
+    // engine without a recorded observation (2 of the 3 default seats today), so
+    // warning on it would emit constant noise that drowns the real signal.
+    if (v.verdict === "OVER_BUDGET") {
+      acc.push(`${seat} seat (${v.model}) context window ${v.window} cannot hold the intended input: ${v.reason}`);
+    }
+  } catch { /* unparseable verdict is not a warning */ }
+  process.stdout.write(JSON.stringify(acc));
+});' "$_seat_name" "$_cb_new_warnings" 2> /dev/null || printf '%s' "$_cb_new_warnings")"
+    done
+    if [[ "$_cb_new_warnings" != "[]" ]]; then
+      CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+let b = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+try { b = JSON.parse(process.argv[2]); } catch { b = []; }
+process.stdout.write(JSON.stringify([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
+' "$CAP_WARNINGS_JSON" "$_cb_new_warnings" 2> /dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+    fi
+  fi
+fi
 
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in

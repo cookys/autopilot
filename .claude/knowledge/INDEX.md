@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-07-24 | arch | Merge 完成後 cleanup 是 terminal invariant：驗證 worktree inactive/clean 與 branch containment，移除 worktree，再用 preserve-first reaper 或 `git branch -d`，最後重新列舉確認零殘留 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
 | 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-16 | debug | Git worktree 共享 .git/config — worker 裸 git config 寫穿主 clone 身分（Test Bot 事故）；teardown identity 校驗防線 BACKLOG | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-16 | arch | Git ref lifecycle races — enumeration status / stable snapshots / verified ack publication / prepared ref restore / lifetime flock / probe-first review / SHA-256 disclosure | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |

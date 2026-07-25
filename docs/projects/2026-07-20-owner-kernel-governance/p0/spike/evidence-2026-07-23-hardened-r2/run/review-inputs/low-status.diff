@@ -1,0 +1,16 @@
+diff --git a/p0-spike/low-status.json b/p0-spike/low-status.json
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/p0-spike/low-status.json
++{"checks":["json keys exact match","task equals low-status","status equals complete","checks is non-empty array","checks values are short ASCII strings"],"status":"complete","task":"low-status"}
+diff --git a/p0-spike/low-status.ledger.jsonl b/p0-spike/low-status.ledger.jsonl
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/p0-spike/low-status.ledger.jsonl
++{"type":"intent_received","task_id":"low-status","principal":"p0-operator","artifact_sha256":null,"descriptor_hash":null,"content_hash":"e94d63844253957e363ddb5df4d3873382ea6a4ee3c9f70b545b18e1a133c868"}
++{"type":"worker_artifact_recorded","task_id":"low-status","principal":"bounded-worker","artifact_sha256":"a169cb7598d2bf94ecf81a1af7c19572a70d7f447e91ee83a84edb64ebe385f3","descriptor_hash":null,"content_hash":"3f310d119b64e78320afddab8e6a4fa00f67081293a7d8c4b58bace7e74408d1"}
++{"type":"non_explicit_decision","task_id":"low-status","principal":"p0-supervisor","artifact_sha256":null,"descriptor_hash":"d3037a6eb0cbd31d6f12f962c72bebeb358c247421c0acdb4b17cd74bd69fb72","content_hash":"d7863b7bd4ba36941cd52640bb188648cb4a2560956aee06ca1165bff9156b63"}
++{"type":"mediated_effect_completed","task_id":"low-status","principal":"p0-supervisor","artifact_sha256":"a169cb7598d2bf94ecf81a1af7c19572a70d7f447e91ee83a84edb64ebe385f3","descriptor_hash":"d3037a6eb0cbd31d6f12f962c72bebeb358c247421c0acdb4b17cd74bd69fb72","content_hash":"4ae550242570294c2ca4ff4b638434b743a074ad6e81c88b936bb769d6598c5a"}
++{"type":"deterministic_verification_passed","task_id":"low-status","principal":"p0-verifier","artifact_sha256":"a169cb7598d2bf94ecf81a1af7c19572a70d7f447e91ee83a84edb64ebe385f3","descriptor_hash":null,"content_hash":"dda2ae8a6fd274a96ae847f8ca9487f1bee73bd35e353d86865e495029e7bed3"}

@@ -20,6 +20,54 @@ Not for: anything needing autopilot skills inside the executor (unverified — s
 4. **The contract is the prompt.** The executor has no autopilot plugin; methodology travels inside the six-element Task Prompt (goal / scope / input / output / acceptance / boundaries). Planner output is the native input format.
 5. **Every brief carries a scale budget (gate 5).** The Task Prompt's HOW MUCH element MUST state a LOC-delta / files-touched ceiling (see [`skills/ceo-agent/references/task-prompt-templates.md`](../skills/ceo-agent/references/task-prompt-templates.md) § HOW MUCH). A worker that would exceed it STOPS and returns an `[ESCALATION]` to re-scope — it never silently grinds past the budget. A brief with no budget is incomplete.
 6. **No bare multi-hour autonomous loop (gate 4).** A hetero implement/review loop that runs for hours MUST have a named depth-0 clock owner armed with the sensing watcher and the convergence brake ([`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) — gates 1 + 3; see [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § 裸跑禁令). Unwatched hours-long self-directed loops are the banned "bare run" shape.
+7. **Input must fit the engine's context window (gate 7).** Every rail runs the context-window gate before spawning a runner; an over-budget unit fails closed rather than letting the engine compact its way through. See § Context-window gate.
+
+## Context-window gate
+
+[`scripts/check-context-window.js`](../scripts/check-context-window.js) (+ the sourceable wrapper [`scripts/lib/context-window.sh`](../scripts/lib/context-window.sh)) answers one question before anything is spent: **does the input we are about to feed this engine fit its context window?**
+
+Why it exists — measured on this machine, not assumed. A read-only scan of 1231 headless `codex_exec` dispatch sessions (90 days, `~/.codex/sessions`, real `event_msg.token_count` telemetry):
+
+| Signal | Value |
+|--------|-------|
+| Total dispatch tokens | 788.0M — **98.4% of it input** |
+| Sessions that hit a context wall (compaction) | 53 (**4.3%**) |
+| Tokens burned by those 53 | **322.9M = 41.0% of the whole corpus** |
+| Of those 53, `gpt-5.3-codex-spark` | **52** (observed window 121600) |
+
+The cost driver is oversized input meeting a small window — not output volume, and **not** review-loop round count (a measured 76-round cluster cost 7.9M; a 41-round cluster cost 60.9M because it fed 5.4M/15.9M single-turn inputs). This gate replaces `dispatch-review.sh`'s former hardcoded 96 KB advisory, which was engine-agnostic and therefore meaningless: the same 400 KB diff overflows spark's 121600 window and sits comfortably inside grok-4.5's 500000.
+
+```bash
+# Standalone
+scripts/check-context-window.js --model gpt-5.3-codex-spark --file prompt.txt --file diff.txt
+# → {verdict: OK|OVER_BUDGET|UNKNOWN_WINDOW, window, window_source, estimated_tokens, threshold_tokens, ...}
+# exit 0 = may dispatch · 1 = blocked · 2 = usage error
+
+# On any rail (default mode = block)
+scripts/dispatch-hetero.sh --model X --prompt-file p.txt --context-window warn
+AUTOPILOT_CONTEXT_WINDOW_GATE=off scripts/dispatch-review.sh ...
+```
+
+Rules that make it safe to leave on:
+
+- **The estimator rounds UP** (bytes ÷ 3.5, the repo's blended divisor). Under-estimating is the one direction that silently defeats the gate.
+- **Window resolution order**: `--window` > a recorded `context_window` capability observation > the built-in observed-default table > unknown. The table is seeded from real runtime telemetry, never vendor claims, and records the **minimum** where a model was observed with more than one window (spark: 121600 and 258400 → 121600 wins).
+- **Unknown window never blocks** by default — a new engine must not become undispatchable because nobody has observed it yet. `--strict` flips this for callers that want it.
+- **The gate is a cost control, not a security boundary.** If the gate itself cannot run (no node, script missing), it warns and lets the dispatch through rather than turning a tooling fault into a dispatch outage. Only a real `OVER_BUDGET` blocks.
+- **Reason strings carry no double quotes** — they are interpolated into shell-assembled JSON by the rails.
+
+Recording an observed window (so the gate stops guessing from the table):
+
+```bash
+echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","role":"implementer",
+  "capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0},
+                "context_window":{"total_tokens":121600,"evidence":"token_count.model_context_window"}}}' \
+  | scripts/engine-capability-state.js record --file /dev/stdin
+```
+
+`context_window` merges **role-agnostically** (a window belongs to the model, not the seat) and a `null` reading never clobbers a valid one.
+
+[`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
 ## Script
 

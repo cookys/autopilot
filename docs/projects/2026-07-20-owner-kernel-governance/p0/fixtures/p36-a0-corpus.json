@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "kind": "p36_a0_substrate_safety_corpus",
+  "authority_ceiling": {
+    "owner_kernel_authority": "none",
+    "effect_authority": "none",
+    "broker_authority": "disabled",
+    "acceptance": "not_available"
+  },
+  "qualification_prohibited": true,
+  "baseline_fixture_canonical_hash": "f25d5c05576824ba4410e773d1aa49ce03ff5437378bf2aca0fb507255db063a",
+  "attacks": [
+    {
+      "id": "protected_event_envelope_forgery",
+      "expected_a0_outcome": "held_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "A real P3.5d v2 signed intake and root-only handoff must be consumed once by the installed P3.6 host; substituted or replayed handoffs are rejected.",
+      "deterministic_gate": "supervised-p35-durable-handoff.test.sh",
+      "live_gate": "supervised-production-substrate-p0-live.test.sh:p35_v2_to_p36"
+    },
+    {
+      "id": "direct_decision_append",
+      "expected_a0_outcome": "held_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "An outsider with the worker UID but outside the worker cgroup is rejected before a worker-to-broker frame is parsed or a durable state leaf advances.",
+      "deterministic_gate": "supervised-production-substrate-durable-transport.test.sh",
+      "live_gate": "supervised-production-substrate-p0-live.test.sh:outsider_peer"
+    },
+    {
+      "id": "worker_artifact_decision_injection",
+      "expected_a0_outcome": "not_applicable_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "A0 has no worker artifact to decision provenance boundary, decision event, or owner capability to test.",
+      "deterministic_gate": "none",
+      "live_gate": "none"
+    },
+    {
+      "id": "child_process_capability_theft",
+      "expected_a0_outcome": "held_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "A root-created same-UID outsider outside the worker cgroup is tested only for the exact prohibited classes: ticket body, root workspace descriptor/path, permit/action material, and service secret. This is not a worker-child inheritance or blanket /proc secrecy claim.",
+      "deterministic_gate": "supervised-production-substrate-durable-host.test.sh",
+      "live_gate": "supervised-production-substrate-p0-live.test.sh:worker_visible_classes"
+    },
+    {
+      "id": "policy_kernel_mutation",
+      "expected_a0_outcome": "held_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "Root-installed snapshot, ABI, binding, and generation material reject tampering before a no-effect cohort can be verified; A0 has no governance policy or Kernel mutation surface.",
+      "deterministic_gate": "supervised-production-substrate-durable-host.test.sh",
+      "live_gate": "supervised-production-substrate-p0-live.test.sh:snapshot_tamper"
+    },
+    {
+      "id": "mediated_action_bypass",
+      "expected_a0_outcome": "held_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "Every fixed broker operation remains BROKER_EFFECTS_DISABLED and no action descriptor, permit, effect, or acceptance state exists.",
+      "deterministic_gate": "supervised-production-substrate-recovery.test.sh",
+      "live_gate": "supervised-production-substrate-p0-live.test.sh:broker_disabled"
+    },
+    {
+      "id": "capability_set_drift",
+      "expected_a0_outcome": "not_applicable_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "A0 freezes service identities and routes, but it has no intake-frozen owner capability-set manifest or future authority-bound recheck.",
+      "deterministic_gate": "none",
+      "live_gate": "none"
+    },
+    {
+      "id": "witness_head_rewrite",
+      "expected_a0_outcome": "held_a0",
+      "original_semantic_status": "not_applicable_a0",
+      "a0_projection": "A receipt-verifier-owned anchor commits fixed witness mutation responses; a root-only audit rejects a witness mutation/head ledger rewritten from genesis with recomputed internal hashes.",
+      "deterministic_gate": "supervised-production-substrate-recovery.test.sh",
+      "live_gate": "supervised-production-substrate-p0-live.test.sh:post_teardown_rewrite"
+    }
+  ],
+  "baseline_categories": [
+    "low_risk_executable",
+    "high_risk_executable",
+    "mixed_executable_non_executable",
+    "non_executable_design",
+    "irreversible_action",
+    "mislabeled_reversibility",
+    "acceptance_substitution",
+    "approval_supersession",
+    "worker_failure",
+    "unavailable_challenger",
+    "owner_principal_swap_expiry",
+    "session_resume",
+    "intent_amendment",
+    "event_log_tampering",
+    "unknown_decision_class"
+  ],
+  "baseline_outcome": "not_evaluable_at_a0",
+  "forbidden_aggregate_labels": [
+    "P0_PASS",
+    "full",
+    "partial",
+    "production_verified"
+  ]
+}

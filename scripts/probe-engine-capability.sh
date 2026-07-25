@@ -20,7 +20,7 @@ Usage:
   scripts/probe-engine-capability.sh quota --runner <runner> --model <model> [--safe] [--live-spend] [--store <path>] [--now <ISO>]
 
 Options:
-  --runner <r>       Specify runner name (e.g. codex, agy, grok, cc-shim).
+  --runner <r>       Specify runner name (e.g. codex, agy, grok, qoderclicn, cc-shim).
   --model <m>        Specify model name.
   --safe             Safe mode (default), no paid model prompt.
   --live-spend       Live spend mode, send a tiny prompt to verify quota.
@@ -160,6 +160,12 @@ case "$RUNNER" in
       RUNNER_VERSION="$(grok --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
+  qoderclicn)
+    if command -v qoderclicn >/dev/null 2>&1; then
+      BINARY_FOUND=1
+      RUNNER_VERSION="$(qoderclicn --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+    ;;
   cc-shim)
     if command -v claude >/dev/null 2>&1; then
       BINARY_FOUND=1
@@ -212,6 +218,13 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     grok)
       # scratch --cwd (never the repo), NO --always-approve (cannot auto-run/edit), no web search.
       grok -p "Respond only with OK" --model "$MODEL" --cwd "$PROBE_CWD" --no-alt-screen --disable-web-search >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      ;;
+    qoderclicn)
+      # scratch --cwd (never the repo), no session persistence, and tools disabled:
+      # a quota probe needs only a text reply and must not mutate files.
+      printf 'Respond only with OK' | qoderclicn -p --cwd "$PROBE_CWD" --model "$MODEL" \
+        --permission-mode dont_ask --tools "" --no-session-persistence --output-format text \
+        >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       ;;
     cc-shim)
       # cc-shim doesn't run without env, but if it runs, send a minimal prompt

@@ -5,7 +5,7 @@ description: >
   loop + authoritative qc) but the IMPLEMENTER is orchestrated by the engine CLI and dispatched
   through the canonical `engine implement-review` path. Use when: "/l5 <goal>", "L5 <goal>", you want cost-arbitrage
   or a decorrelated second engine doing the mechanical impl. Presets involvement=just-results,
-  scope=Hold, red-lines=none (override -x / --expand / --solo). Not for: all-Claude run (→ /l4), inline
+  scope=Hold, project red lines plus -x additions (override --mode / --expand / --solo). Not for: all-Claude run (→ /l4), inline
   (→ /l3).
 ---
 
@@ -23,6 +23,10 @@ Hard rules:
   is the ONLY source of truth — never hardcode model/runner/effort inline.
 - Implementation dispatch uses an **immutable base SHA**; verification is by **git
   artifacts** (commit/diff/cleanliness), never agent self-report.
+- **Context-window gate (v2.32.58)**: every rail sizes the payload against the target
+  engine's window before spending; over budget ⇒ `precondition_failed` with no runner and
+  no worktree. Split the unit or pick a larger-window engine — `--context-window warn|off`
+  overrides deliberately. Contract: [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md) § Context-window gate.
 - **Strict dispatch-unit contracts (v2.32.36)**: while the l5/l6 session marker is active,
   write dispatch is `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json>`
   — depth-0 freezes the unit contract, `node scripts/dispatch-contract.js check` must return

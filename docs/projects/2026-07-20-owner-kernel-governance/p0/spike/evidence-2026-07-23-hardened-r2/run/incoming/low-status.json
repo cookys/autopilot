@@ -1,0 +1,1 @@
+{"checks":["json keys exact match","task equals low-status","status equals complete","checks is non-empty array","checks values are short ASCII strings"],"status":"complete","task":"low-status"}

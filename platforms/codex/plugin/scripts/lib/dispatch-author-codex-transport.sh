@@ -477,11 +477,12 @@ codex_transport_run() {
   return 0
 }
 
-# True when stderr has a complete INITIAL chrome frame anchored at start:
-# first non-empty line = version banner (not a delimiter), next line = opening
-# "--------", then body to the next "--------". Pre-banner content or a
-# delimiter before the banner invalidates the frame (fail closed). Delimiter
-# blocks after the initial frame are ignored.
+# True when stderr has a complete INITIAL chrome frame anchored at start.
+# Codex 0.145.0 may emit exactly one benign "Reading prompt from stdin..."
+# line before its version banner. No other pre-banner content is accepted, and
+# that compatibility path requires a canonical OpenAI Codex semver banner.
+# The next line must be opening "--------", then body to the next "--------".
+# Delimiter blocks after the initial frame are ignored.
 codex_transport_has_chrome_frame() {
   local stderr_path="$1"
   [ -r "$stderr_path" ] || return 1
@@ -493,7 +494,17 @@ const strip = (s) => s.replace(/\r$/, "");
 let i = 0;
 while (i < lines.length && strip(lines[i]) === "") i++;
 if (i >= lines.length) process.exit(1);
+let hasPromptSourceLine = false;
+if (strip(lines[i]) === "Reading prompt from stdin...") {
+  hasPromptSourceLine = true;
+  i += 1;
+  if (i >= lines.length) process.exit(1);
+}
 const banner = strip(lines[i]);
+if (hasPromptSourceLine &&
+    !/^OpenAI Codex v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(banner)) {
+  process.exit(1);
+}
 if (banner === "--------") process.exit(1);
 i += 1;
 if (i >= lines.length || strip(lines[i]) !== "--------") process.exit(1);
@@ -524,8 +535,8 @@ process.exit(1);
 }
 
 # Extract exactly one canonical session id from the INITIAL chrome frame only.
-# Frame anchoring matches codex_transport_has_chrome_frame: banner at first
-# non-empty line, opening -------- immediately after, body to next --------.
+# Frame anchoring matches codex_transport_has_chrome_frame, including its
+# single exact Codex 0.145.0 prompt-source compatibility line.
 # Delimiter blocks after the anchored frame never supply or override a session id.
 # Prints the UUID on success; exits nonzero on any ambiguity/malformed/missing.
 codex_transport_extract_session_id() {
@@ -539,7 +550,17 @@ const strip = (s) => s.replace(/\r$/, "");
 let i = 0;
 while (i < lines.length && strip(lines[i]) === "") i++;
 if (i >= lines.length) process.exit(1);
+let hasPromptSourceLine = false;
+if (strip(lines[i]) === "Reading prompt from stdin...") {
+  hasPromptSourceLine = true;
+  i += 1;
+  if (i >= lines.length) process.exit(1);
+}
 const banner = strip(lines[i]);
+if (hasPromptSourceLine &&
+    !/^OpenAI Codex v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(banner)) {
+  process.exit(1);
+}
 if (banner === "--------") process.exit(1);
 i += 1;
 if (i >= lines.length || strip(lines[i]) !== "--------") process.exit(1);

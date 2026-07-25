@@ -205,4 +205,179 @@ assert_not_contains "$__RUN_STDERR" "at " "stderr has no stack trace (no 'at ')"
 run_adj "status --store $STORE"
 assert_exit_code "$__RUN_EXIT" "0" "normal status invocation succeeds"
 
+# --- 8. Disposition + repair-gate (review-scope stop-loss) ---
+echo "Running Disposition / repair-gate tests..."
+
+# F1 is already REPRODUCED + actionable (Major/Critical claim path).
+# verified in-scope Major → must-fix-now → repair-gate PASS
+run_adj "dispose --store $STORE --id F1" \
+  '{"disposition":"must-fix-now","task_surface":"scripts/assetctl/","deferral_harm":"blocks POC acceptance AC-1"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose must-fix-now on F1"
+assert_contains "$__RUN_STDOUT" '"disposition":"must-fix-now"' "stdout disposition must-fix-now"
+
+run_adj "status --store $STORE --id F1 --json"
+assert_exit_code "$__RUN_EXIT" "0" "status F1 after dispose"
+assert_contains "$__RUN_STDOUT" '"repair_eligible":true' "F1 repair_eligible true"
+assert_contains "$__RUN_STDOUT" '"actionable":true' "F1 still actionable"
+
+run_adj "repair-gate --store $STORE --ids F1"
+assert_exit_code "$__RUN_EXIT" "0" "verified in-scope Major passes repair-gate"
+
+# old gate remains compatible (still only checks actionable)
+run_adj "gate --store $STORE --ids F1"
+assert_exit_code "$__RUN_EXIT" "0" "old gate remains compatible for actionable F1"
+
+# verified out-of-scope Major cannot enter repair
+run_adj "add --store $STORE" \
+  '{"finding_id":"F6","claim":"preview tool needs auth receipts","severity":"🟠","source":"reviewer-c"}'
+assert_exit_code "$__RUN_EXIT" "0" "add F6 Major out-of-scope shape"
+run_adj "probe --store $STORE --id F6" \
+  '{"probe_cmd":"true","expected_signature":"x","observed_output":"x","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe F6 reproduced"
+run_adj "dispose --store $STORE --id F6" \
+  '{"disposition":"follow-up","context":"optional phone preview hardening","trigger":"when shipping authenticated preview product"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose F6 follow-up"
+
+run_adj "gate --store $STORE --ids F6"
+assert_exit_code "$__RUN_EXIT" "0" "out-of-scope Major still passes old gate (claim real)"
+
+run_adj "repair-gate --store $STORE --ids F6"
+assert_exit_code "$__RUN_EXIT" "1" "verified out-of-scope Major cannot enter repair"
+assert_eq "$__RUN_STDOUT" "F6" "repair-gate lists F6"
+
+# unclassified actionable Major cannot enter repair
+run_adj "add --store $STORE" \
+  '{"finding_id":"F7","claim":"unclassified major","severity":"🟠","source":"reviewer-c"}'
+assert_exit_code "$__RUN_EXIT" "0" "add F7"
+run_adj "probe --store $STORE --id F7" \
+  '{"probe_cmd":"true","expected_signature":"y","observed_output":"y","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe F7"
+
+run_adj "gate --store $STORE --ids F7"
+assert_exit_code "$__RUN_EXIT" "0" "unclassified Major still passes old gate"
+
+run_adj "repair-gate --store $STORE --ids F7"
+assert_exit_code "$__RUN_EXIT" "1" "unclassified actionable Major cannot enter repair"
+assert_eq "$__RUN_STDOUT" "F7" "repair-gate lists F7"
+
+# reject-out-of-scope also blocks repair
+run_adj "dispose --store $STORE --id F7" \
+  '{"disposition":"reject-out-of-scope","rationale":"outside frozen task surface"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose F7 reject"
+run_adj "repair-gate --store $STORE --ids F7"
+assert_exit_code "$__RUN_EXIT" "1" "reject-out-of-scope blocks repair-gate"
+
+# missing evidence fields fail closed at dispose
+run_adj "add --store $STORE" \
+  '{"finding_id":"F8","claim":"needs surface","severity":"🟠","source":"reviewer-c"}'
+assert_exit_code "$__RUN_EXIT" "0" "add F8"
+run_adj "dispose --store $STORE --id F8" \
+  '{"disposition":"must-fix-now","deferral_harm":"bad"}'
+assert_exit_code "$__RUN_EXIT" "1" "must-fix-now without surface fails"
+assert_contains "$__RUN_STDERR" "task_surface" "stderr names required surface field"
+
+run_adj "dispose --store $STORE --id F8" \
+  '{"disposition":"follow-up","context":"only context"}'
+assert_exit_code "$__RUN_EXIT" "1" "follow-up without trigger fails"
+
+run_adj "dispose --store $STORE --id F8" \
+  '{"disposition":"reject-out-of-scope"}'
+assert_exit_code "$__RUN_EXIT" "1" "reject without rationale fails"
+
+# conflicting dispositions fail closed at repair-gate
+run_adj "add --store $STORE" \
+  '{"finding_id":"F9","claim":"conflict case","severity":"🟠","source":"reviewer-c"}'
+assert_exit_code "$__RUN_EXIT" "0" "add F9"
+run_adj "probe --store $STORE --id F9" \
+  '{"probe_cmd":"true","expected_signature":"z","observed_output":"z","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe F9"
+run_adj "dispose --store $STORE --id F9" \
+  '{"disposition":"must-fix-now","acceptance_id":"AC-9","deferral_harm":"blocks ship"}'
+assert_exit_code "$__RUN_EXIT" "0" "first dispose must-fix-now"
+run_adj "dispose --store $STORE --id F9" \
+  '{"disposition":"follow-up","context":"later","trigger":"next milestone"}'
+assert_exit_code "$__RUN_EXIT" "0" "second dispose follow-up (append-only)"
+run_adj "status --store $STORE --id F9 --json"
+assert_contains "$__RUN_STDOUT" '"disposition_conflict":true' "conflict flagged"
+assert_contains "$__RUN_STDOUT" '"repair_eligible":false' "conflict not repair-eligible"
+run_adj "repair-gate --store $STORE --ids F9"
+assert_exit_code "$__RUN_EXIT" "1" "conflicting disposition fails repair-gate"
+
+# multi-id repair-gate: only lists non-eligible
+run_adj "repair-gate --store $STORE --ids F1,F6,F7"
+assert_exit_code "$__RUN_EXIT" "1" "mixed repair-gate fails"
+assert_contains "$__RUN_STDOUT" "F6" "mixed lists F6"
+assert_contains "$__RUN_STDOUT" "F7" "mixed lists F7"
+assert_not_contains "$__RUN_STDOUT" "F1" "mixed does not list eligible F1"
+
+# --- 9. Completeness (all-blocking) — omitted Major cannot be hidden via --ids ---
+echo "Running Completeness / all-blocking tests..."
+
+# F1 is must-fix-now (Critical, actionable). F6 is follow-up (Major, actionable).
+# F7 is reject-out-of-scope (Major, actionable). F9 is conflict (Major, actionable).
+# Completeness must fail while F9 conflicts / any actionable Critical/Major lacks disposition.
+
+# First: dispose F9 conflict already set — completeness fails on conflict
+run_adj "completeness --store $STORE --json"
+assert_exit_code "$__RUN_EXIT" "1" "completeness fails on conflicting disposition F9"
+assert_contains "$__RUN_STDOUT" '"complete":false' "completeness complete=false on conflict"
+assert_contains "$__RUN_STDOUT" 'F9' "completeness names conflicting F9"
+assert_contains "$__RUN_STDOUT" '"must_fix_now_ids"' "completeness distinguishes must-fix-now"
+assert_contains "$__RUN_STDOUT" '"follow_up_or_reject_ids"' "completeness distinguishes follow-up/reject"
+
+# Resolve F9 by appending a single disposition path: use a fresh store for clean omitted-Major
+STORE2="$TEST_TMP/findings2.jsonl"
+run_adj "add --store $STORE2" \
+  '{"finding_id":"M1","claim":"in-scope major","severity":"🟠","source":"r1"}'
+assert_exit_code "$__RUN_EXIT" "0" "add M1"
+run_adj "probe --store $STORE2 --id M1" \
+  '{"probe_cmd":"true","expected_signature":"a","observed_output":"a","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe M1"
+run_adj "dispose --store $STORE2 --id M1" \
+  '{"disposition":"must-fix-now","task_surface":"scripts/x","deferral_harm":"blocks AC"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose M1 must-fix-now"
+
+run_adj "add --store $STORE2" \
+  '{"finding_id":"M2","claim":"omitted major","severity":"🟠","source":"r1"}'
+assert_exit_code "$__RUN_EXIT" "0" "add M2 omitted-Major shape"
+run_adj "probe --store $STORE2 --id M2" \
+  '{"probe_cmd":"true","expected_signature":"b","observed_output":"b","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe M2"
+
+# repair-gate with only M1 would PASS (subset), but completeness must FAIL (M2 omitted)
+run_adj "repair-gate --store $STORE2 --ids M1"
+assert_exit_code "$__RUN_EXIT" "0" "subset repair-gate on M1 alone still passes (not completeness)"
+
+run_adj "completeness --store $STORE2 --json"
+assert_exit_code "$__RUN_EXIT" "1" "omitted actionable Major fails completeness"
+assert_contains "$__RUN_STDOUT" '"complete":false' "omitted-Major complete=false"
+assert_contains "$__RUN_STDOUT" 'M2' "completeness lists omitted M2"
+assert_contains "$__RUN_STDOUT" '"must_fix_now_ids":["M1"]' "M1 in must-fix-now class"
+assert_contains "$__RUN_STDOUT" '"missing_disposition_ids":["M2"]' "M2 missing disposition"
+
+# Dispose M2 as follow-up → completeness passes; distinguishes classes
+run_adj "dispose --store $STORE2 --id M2" \
+  '{"disposition":"follow-up","context":"later","trigger":"next ticket"}'
+assert_exit_code "$__RUN_EXIT" "0" "dispose M2 follow-up"
+run_adj "completeness --store $STORE2 --json"
+assert_exit_code "$__RUN_EXIT" "0" "completeness passes when all blockers disposed"
+assert_contains "$__RUN_STDOUT" '"complete":true' "complete=true"
+assert_contains "$__RUN_STDOUT" '"must_fix_now_ids":["M1"]' "must-fix-now = M1"
+assert_contains "$__RUN_STDOUT" '"follow_up_or_reject_ids":["M2"]' "follow-up class = M2"
+
+# completeness rejects --ids (subsets never treated as complete)
+run_adj "completeness --store $STORE2 --ids M1"
+assert_exit_code "$__RUN_EXIT" "2" "completeness rejects --ids"
+assert_contains "$__RUN_STDERR" "--ids" "stderr names rejected --ids"
+
+# Minor (🟡) actionable without disposition does NOT block completeness
+run_adj "add --store $STORE2" \
+  '{"finding_id":"MIN1","claim":"style","severity":"🟡","source":"r1"}'
+assert_exit_code "$__RUN_EXIT" "0" "add MIN1"
+run_adj "probe --store $STORE2 --id MIN1" \
+  '{"probe_cmd":"true","expected_signature":"c","observed_output":"c","observed_matches_expected":true}'
+assert_exit_code "$__RUN_EXIT" "0" "probe MIN1"
+run_adj "completeness --store $STORE2 --json"
+assert_exit_code "$__RUN_EXIT" "0" "actionable Minor without disposition does not block completeness"
+
 finalize_test

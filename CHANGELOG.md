@@ -24,6 +24,35 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.32.60 — Review scope stop-loss (relevance + cumulative repair budget)
+
+**Headline**: Implementation-review repair no longer treats every verified Critical/Major as
+authority to widen the ticket. Findings must be disposed (`must-fix-now` / `follow-up` /
+`reject-out-of-scope`), and only `must-fix-now` enters repair; a frozen scope contract stops
+unplanned subsystem growth and cumulative churn gaming.
+
+### Added
+- `adjudicate-findings.js dispose` event + `repair-gate --ids` (actionable **and**
+  `must-fix-now`; missing/malformed/conflicting disposition fails closed). Existing `gate`
+  claim-real semantics preserved.
+- `scripts/check-repair-scope.js`: immutable intake contract, full `base_sha..HEAD` numstat
+  accounting, path prefix + new-file glob allowlists, ratio and absolute churn trips,
+  symlink/traversal containment, intake byte-equality guard against in-loop reset.
+- Quality-pipeline / code-review binding action order: verify claim → classify relevance →
+  scope check → dispatch fix. Severity remains orthogonal; union-on-verified Critical/Major
+  intact inside `must-fix-now`.
+- Focused regressions: `hooks/tests/adjudicate-findings.test.sh` (repair-gate controls) and
+  `hooks/tests/check-repair-scope.test.sh` (path/new-file/ratio/absolute/revert-safe/symlink/
+  contract-mutation).
+
+### Changed
+- Code-review re-review loop routes only repair-eligible findings into the fixer; out-of-scope
+  verified Majors stay claims, not current-ticket work.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.32.59`
+
 ## v2.32.59 — Owner Kernel P3.7 authority contracts
 
 **Headline**: Owner Kernel can now consume the authenticated P3.5d/P3.6 route, witness semantic

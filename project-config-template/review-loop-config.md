@@ -50,6 +50,19 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
+- plan_review: off
+- plan_reviewer_engine:
+- plan_reviewer_effort:
+- plan_reviewer_runner:
+- plan_reviewer_endpoint:
+- plan_deep_reviewer_engine:
+- plan_deep_reviewer_effort:
+- plan_deep_reviewer_runner:
+- plan_deep_reviewer_endpoint:
+- plan_review_max_generations: 2
+- plan_review_max_wall_seconds: 7200
+- plan_review_growth_warn_ratio: 1.25
+- plan_review_growth_stop_ratio: 1.50
 - independent_harness: on
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_aggregation: union-on-verified-critical
@@ -83,7 +96,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `reviewer_fallback_preference` | HUMAN-ordered engine ids the family-conflict fallback prefers over raw ladder order (every candidate still passes all guards: cross-family, runner allowlist, calibrated codex effort). Empty = ladder order (alphabetical within capability ties — set this if the strongest cross-family reviewer must win the high-risk seat) | comma list of scorecard engine ids (e.g. `claude-opus, MiniMax-M3`), or empty |
 | `reviewer_fallback_preference_low_risk` | preference list applied when computed `review_risk=low` (cheap calibrated leg for cheap rounds); empty = use `reviewer_fallback_preference` | comma list, or empty |
 | `skill_mode` | 是否把 skill pack（選定 SKILL.md 內容）傳輸進 hetero implementer prompt（`references/hetero-dispatch.md` § Skill transport）。2026-07 A/B：reviewer 席 H2 已被推翻——implementer 席才是它的戰場；resolver 輸出 `skill_mode_requested`/`skill_mode_effective` | `off`（預設）/ `prompt-pack` |
-| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| auto` |
+| `reviewer_runner` | how the implementation reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| claude-native` (first-party Claude Code ambient auth) `\| auto` |
 | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
 | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
@@ -92,7 +105,14 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `on_engine_unavailable` | what to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`) | `ask\|solo-fallback\|wait-reset` (default `ask`). **Behavior matrix**: `ask` — BOTH engine-quota death and `precondition_failed` stop the run and escalate to the user (no automatic `--solo` inline fallback, no automatic quota-reset wakeup). Fail-closed: the expensive depth-0 session model never silently takes over implementation labor. `solo-fallback` — legacy: `precondition_failed` falls back to `--solo` inline; quota death follows the §1.b auto-wakeup recovery (see `level-front-door.md`). `wait-reset` — quota death follows §1.b auto-wakeup; `precondition_failed` (non-quota) still escalates to the user. **Engine wiring**: when a dispatch dies `engine_unavailable`/`precondition_failed`, `engine implement-review` applies this matrix mechanically and emits an additive `engine_unavailable: {policy, action, error_class}` on its result (`action` ∈ `escalate\|solo-fallback\|wait-reset`; auth/unparseable deaths always `escalate` — waiting can't fix auth) so the orchestrator acts on `action` instead of re-deriving the policy from raw dispatch JSON |
 | `loop_max_rounds` | adversarial-loop convergence cap per phase | integer (default 5) |
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
-| `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
+| `spec_review` | deprecated compatibility switch for legacy callers; it is not the bounded plan-readiness rail | `on\|off` |
+| `plan_review` | enable first-class plan readiness through `scripts/dispatch-plan-review.js` | `on\|off` (default `off`) |
+| `plan_reviewer_*` | chair engine/runner/effort/named endpoint for plan review; `plan_review:on` requires engine+runner+effort | runner supports the reviewer transports, including `claude-native` |
+| `plan_deep_reviewer_*` | optional second, same-generation adversarial seat; tuple must be wholly empty or include engine+runner+effort | same runner/effort values as chair |
+| `plan_review_max_generations` | durable repo+ticket generation cap; runner/model/session changes do not reset it | integer `1..2` (hard maximum 2) |
+| `plan_review_max_wall_seconds` | depth-0 wall-clock budget from generation 1 | integer `1..7200` |
+| `plan_review_growth_warn_ratio` | warn relative to generation-1 plan bytes | positive number `<=1.25` |
+| `plan_review_growth_stop_ratio` | hard STOP relative to generation-1 plan bytes; must exceed warn ratio | positive number `<=1.50` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
 | `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |

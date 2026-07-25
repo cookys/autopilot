@@ -37,7 +37,7 @@
 #   exceed the JS's 4096 review default; a truncated response fail-closes in the JS).
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn --model <name> --prompt-file <file>
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn --model <name> --prompt-file <file>
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
@@ -59,7 +59,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn",
+#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn",
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed",
 #     "raw_log": "<path>",
@@ -621,8 +621,8 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -692,11 +692,13 @@ GROK_CWD=""
 CCSHIM_CWD=""
 AGY_CWD=""
 QODER_CWD=""
+CNATIVE_CWD=""
 cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
+  [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
 }
 trap cleanup EXIT
@@ -795,6 +797,23 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$CCSHIM_CWD"; CCSHIM_CWD=""
+elif [[ "$RUNNER" = "claude-native" ]]; then
+  CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
+  [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (claude-native drives the local Claude Code CLI with ambient/native auth)"
+  case "$CC_BIN" in
+    /*) ;;
+    *)  CC_BIN="$(cd "$(dirname "$CC_BIN")" 2>/dev/null && pwd)/$(basename "$CC_BIN")" || true
+        case "$CC_BIN" in /*) ;; *) die_precondition "could not resolve --bin to an absolute path: ${BIN}" ;; esac ;;
+  esac
+  # First-party Claude authoring transport. It keeps ambient native auth but
+  # otherwise uses the same scratch-cwd/no-tools posture as the reviewer rail.
+  CNATIVE_CWD="$(mktemp -d)"
+  set +e
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" --setting-sources project --strict-mcp-config --tools "" < "$4"' \
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2>/dev/null
+  RUNNER_EXIT=$?
+  set -e
+  rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_JS="${BIN:-$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js}"
   [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-author.sh"
@@ -884,7 +903,7 @@ fi
 # (Codex: settle never converts a prior exit-first/incomplete-tree rejection
 # into authored — those paths already exited above. Post-settle content still
 # faces unconditional chrome/witness/session gates below.)
-if [[ "$RUNNER" = "cc-shim" ]]; then
+if [[ "$RUNNER" = "cc-shim" || "$RUNNER" = "claude-native" ]]; then
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
 else
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" || true

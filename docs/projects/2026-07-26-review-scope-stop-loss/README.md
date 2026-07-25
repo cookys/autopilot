@@ -31,9 +31,9 @@ Plan: [2026-07-26-review-scope-stop-loss.md](../../plans/2026-07-26-review-scope
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| 1 | finding relevance gate | pending |
-| 2 | cumulative scope stop-loss | pending |
-| 3 | integration, dogfood, release sync | pending |
+| 1 | finding relevance gate | complete (`fd78820`, repaired by `208f2d0`) |
+| 2 | cumulative scope stop-loss | complete (`fd78820`, repaired by `208f2d0`) |
+| 3 | integration, dogfood, release sync | complete; merge pending |
 
 ## Decision Log
 
@@ -43,3 +43,15 @@ Plan: [2026-07-26-review-scope-stop-loss.md](../../plans/2026-07-26-review-scope
 - Scope-growth accounting uses the full task-base diff each round. The frozen contract
   has explicit allowed prefixes/new files plus ratio and absolute churn caps; crossing
   either cap stops automatic repair and cannot be reset inside the same loop.
+
+## Verification
+
+- Focused GREEN: `adjudicate-findings` 130 assertions; `check-repair-scope` 45.
+- Related regression: `check-loop-convergence` 18; `check-redispatch-prompt` 21.
+- RED/GREEN: `verify-red-green.sh` returned `VALIDATED` for
+  `28e3627..d2bad09`; the old implementation failed 16 new completeness assertions.
+- Integrity: completeness scan clean (zero new markers), secret scan clean,
+  test-integrity L0 clean, version mirrors synchronized, 28/28 skills valid.
+- Heto panel after repair: MiniMax-M3 and GLM-5.2 `SHIP-AS-IS`; Gemini's sole claim
+  (“add is bypassed”) was refuted by the control flow and 130-assertion suite. Fable and
+  Qwen transports returned `no_verdict` and were not counted as passes.

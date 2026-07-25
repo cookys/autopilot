@@ -139,3 +139,8 @@ mirrors, and perform independent implementation review.
   adjudication: the 2191-byte increase only specifies the admitted R3 repair above and
   adds no deliverable, surface, or phase. The stop evidence is retained; implementation
   is frozen to this revision and any further scope change requires user approval.
+- 2026-07-26 implementation review: peer Sol found one Critical and four Major, all
+  reproduced and mapped to R1/R3/R5; Grok repaired them in `208f2d0`.
+- 2026-07-26 post-repair Heto fallback panel: Fable unavailable triggered multi-family
+  fan-out. MiniMax-M3 and GLM-5.2 shipped; Gemini's only claim was refuted against the
+  actual unconditional write path and executable `add` tests; Qwen was unavailable.

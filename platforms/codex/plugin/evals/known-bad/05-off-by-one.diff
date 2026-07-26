@@ -1,0 +1,11 @@
+--- a/scripts/check-node-report.sh
++++ b/scripts/check-node-report.sh
+@@ -120,7 +120,7 @@ validate_line_range() {
+   local line_count
+   line_count="$(wc -l < "$file")"
+
+-  if [ "$end" -gt "$line_count" ]; then
++  if [ "$end" -ge "$line_count" ]; then
+     fail "line range $start-$end exceeds file length $line_count in $file"
+   fi
+ }

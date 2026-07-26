@@ -35,6 +35,13 @@ Hard rules:
 - `--solo` → the `/l3` inline engine (also the automatic degradation when the
   foreman returns `precondition_failed`).
 
+**Capability profile (shadow):** `/l4` fixes foreman topology only. When the host supplies a current
+verified envelope/grant/profile payload, forward it unchanged; never infer guidance density from
+the level or model name. A late mismatch requires a fresh-session handoff.
+The canonical `profile-session.js` lane proves only no-effect context isolation. An adaptive child
+also needs an independently witnessed effectful adapter for the exact grant; otherwise retain this
+level's existing guided dispatch path and report the adaptive row as unverified.
+
 **MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
 (§ The foreman, § Depth-0 control loop, § Run-summary ledger) — dispatch mechanics,
 outcome→action table, and worktree-base rules live there, not here.

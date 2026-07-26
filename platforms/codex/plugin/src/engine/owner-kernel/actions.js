@@ -147,6 +147,7 @@ function normalizeActionCatalog(raw) {
       'command_required',
       'requires_mediator',
       'requires_challenge',
+      'blocked_by_red_lines',
     ]), `governance.action_catalog[${index}]`);
     const entry = {
       id: requireToken(value.id, `governance.action_catalog[${index}].id`),
@@ -156,6 +157,13 @@ function normalizeActionCatalog(raw) {
       command_required: value.command_required === true,
       requires_mediator: value.requires_mediator === true,
       requires_challenge: value.requires_challenge === true,
+      ...(value.blocked_by_red_lines === undefined ? {} : {
+        blocked_by_red_lines: normalizeStringSet(
+          value.blocked_by_red_lines,
+          `governance.action_catalog[${index}].blocked_by_red_lines`,
+          { allowEmpty: true, token: true },
+        ),
+      }),
     };
     if (value.command_required !== undefined && typeof value.command_required !== 'boolean') {
       actionError(`governance.action_catalog[${index}].command_required must be boolean`);

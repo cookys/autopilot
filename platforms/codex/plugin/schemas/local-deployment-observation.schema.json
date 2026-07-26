@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/local-deployment-observation.schema.json",
+  "title": "LocalDeploymentObservation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "endpoint_id",
+    "roster_hash",
+    "runtime_adapter",
+    "roles",
+    "semantic_fingerprint",
+    "operational_fingerprint",
+    "identity",
+    "capacity_observation",
+    "capacity_observation_hash",
+    "network_containment",
+    "dispatch_eligible",
+    "slo_observation",
+    "resource_scope"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "status": { "const": "identity_verified" },
+    "endpoint_id": { "$ref": "#/$defs/token" },
+    "roster_hash": { "$ref": "#/$defs/sha256" },
+    "runtime_adapter": { "$ref": "#/$defs/token" },
+    "roles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["author", "reviewer"] }
+    },
+    "semantic_fingerprint": { "$ref": "#/$defs/sha256" },
+    "operational_fingerprint": { "$ref": "#/$defs/sha256" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "capacity_observation": { "$ref": "#/$defs/capacity" },
+    "capacity_observation_hash": { "$ref": "#/$defs/sha256" },
+    "network_containment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "independent", "evidence_hash"],
+      "properties": {
+        "state": {
+          "enum": ["local_endpoint", "authenticated_endpoint", "offline_verified"]
+        },
+        "independent": { "type": "boolean" },
+        "evidence_hash": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "dispatch_eligible": { "type": "boolean" },
+    "slo_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "observed_at",
+        "probe_wall_time_ms",
+        "identity_latency_ms",
+        "capacity_latency_ms",
+        "operational_fingerprint",
+        "capacity_observation_hash"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "probe_wall_time_ms": { "type": "integer", "minimum": 0 },
+        "identity_latency_ms": { "type": "integer", "minimum": 0 },
+        "capacity_latency_ms": { "type": "integer", "minimum": 0 },
+        "operational_fingerprint": { "$ref": "#/$defs/sha256" },
+        "capacity_observation_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resource_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lease_scope",
+        "external_load_controlled",
+        "configured_concurrency"
+      ],
+      "properties": {
+        "lease_scope": { "const": "autopilot_only" },
+        "external_load_controlled": { "const": false },
+        "configured_concurrency": { "const": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "runtime",
+        "runtime_version",
+        "model",
+        "weights_sha256",
+        "quantization",
+        "tokenizer_binding",
+        "chat_template_sha256",
+        "tool_parser_binding",
+        "context_window",
+        "hardware_fingerprint",
+        "configured_memory_bytes"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "runtime": { "$ref": "#/$defs/token" },
+        "runtime_version": { "$ref": "#/$defs/token" },
+        "model": { "$ref": "#/$defs/token" },
+        "weights_sha256": { "$ref": "#/$defs/sha256" },
+        "quantization": { "$ref": "#/$defs/token" },
+        "tokenizer_binding": { "$ref": "#/$defs/sha256" },
+        "chat_template_sha256": { "$ref": "#/$defs/sha256" },
+        "tool_parser_binding": { "$ref": "#/$defs/token" },
+        "context_window": { "type": "integer", "minimum": 1 },
+        "hardware_fingerprint": { "$ref": "#/$defs/sha256" },
+        "configured_memory_bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "capacity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "endpoint_id",
+        "observed_at",
+        "available_memory_bytes",
+        "queue_depth",
+        "active_requests",
+        "generation_slots"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "endpoint_id": { "$ref": "#/$defs/token" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "available_memory_bytes": { "type": "integer", "minimum": 0 },
+        "queue_depth": { "type": "integer", "minimum": 0 },
+        "active_requests": { "type": "integer", "minimum": 0 },
+        "generation_slots": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

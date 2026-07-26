@@ -103,7 +103,7 @@ EXIT_VALIDATE_DENSITY=$?
 assert_eq "$EXIT_VALIDATE_DENSITY" "0" "JS-side validator accepts density conditional fields and matches fields exactly"
 assert_contains "$VALIDATE_DENSITY" "parity-ok" "density validation returns parity-ok"
 
-# Case B3: high-tier density scaling emits verify_first=true and capped rounds, accepted by JS
+# Case B3: a disk row claiming high remains untrusted and scales conservatively.
 DENSITY_HIGH_STORE="$TEST_TMP/contract-density-high-scorecard"
 mkdir -p "$DENSITY_HIGH_STORE"
 RECIMPL_HIGH_JSON="$DENSITY_HIGH_STORE/rec.json"
@@ -113,17 +113,17 @@ JSON
 ENGINE_SCORECARD_DIR="$DENSITY_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
 DENSITY_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENSITY_HIGH_STORE" "$REPO_ROOT/scripts/resolve-review-loop.sh" --scale-by-capability --diff-lines 0 --protected-path 0 --oracle-available 1 --security-surface 0)"
 EXIT_DENSITY_HIGH=$?
-assert_eq "$EXIT_DENSITY_HIGH" "0" "resolve-review-loop exits 0 with --scale-by-capability and high-tier implementer"
+assert_eq "$EXIT_DENSITY_HIGH" "0" "resolve-review-loop exits 0 with an untrusted high claim"
 
-assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.capability_tier);' <<< "$DENSITY_HIGH_OUT")" "high" "high-tier scorecard row emits capability_tier=high"
-assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.review_risk);' <<< "$DENSITY_HIGH_OUT")" "low" "high-tier density case exercises low-risk path"
-assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(String(obj.verify_first));' <<< "$DENSITY_HIGH_OUT")" "true" "high-tier low-risk density scaling emits verify_first=true"
-assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(String(obj.loop_max_rounds));' <<< "$DENSITY_HIGH_OUT")" "2" "high-tier low-risk density scaling caps loop_max_rounds at 2"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.capability_tier);' <<< "$DENSITY_HIGH_OUT")" "unknown" "disk scorecard cannot create a high capability tier"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(obj.review_risk);' <<< "$DENSITY_HIGH_OUT")" "low" "untrusted density case still exercises the low-risk diff path"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(String(obj.verify_first));' <<< "$DENSITY_HIGH_OUT")" "false" "untrusted disk claim cannot enable verify-first optimization"
+assert_eq "$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(String(obj.loop_max_rounds));' <<< "$DENSITY_HIGH_OUT")" "7" "unknown capability increases the review-round ceiling"
 
 VALIDATE_DENSITY_HIGH="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" "true" <<< "$DENSITY_HIGH_OUT")"
 EXIT_VALIDATE_DENSITY_HIGH=$?
-assert_eq "$EXIT_VALIDATE_DENSITY_HIGH" "0" "JS-side validator accepts high-tier density fields and matches fields exactly"
-assert_contains "$VALIDATE_DENSITY_HIGH" "parity-ok" "high-tier density validation returns parity-ok"
+assert_eq "$EXIT_VALIDATE_DENSITY_HIGH" "0" "JS-side validator accepts conservative density fields and matches fields exactly"
+assert_contains "$VALIDATE_DENSITY_HIGH" "parity-ok" "conservative density validation returns parity-ok"
 
 # Case C: reviewer_runner enum parity for direct Anthropic-compatible reviewer.
 AC_CFG="$TEST_TMP/review-loop-anthropic-compatible.md"

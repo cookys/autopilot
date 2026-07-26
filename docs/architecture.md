@@ -92,6 +92,9 @@ Autopilot's engine layer is the host-neutral execution core underneath the prose
 | [`src/runners/`](../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) with schema validation and parse-fail visibility. |
 | [`src/harness/`](../src/harness/) | Harness capability state, stale/attention reporting, and read-only capability CLI surfaces. |
 | [`src/hooks/`](../src/hooks/) | Host-neutral hook normalizers and handlers used by Claude wrappers and Codex hook probes. |
+| [`src/engine/execution-profile.js`](../src/engine/execution-profile.js) + [`profile-payload.js`](../src/engine/profile-payload.js) | Admit an exact role/deployment first, then compile one content-addressed `guided` or `autonomous` payload without changing authority. |
+| [`src/engine/capability-evidence.js`](../src/engine/capability-evidence.js) | Typed role/scope/deployment evidence lifecycle. Disk rows remain provisional telemetry; a live host verifier is the session-admission boundary. |
+| [`src/engine/local-deployment.js`](../src/engine/local-deployment.js) | Optional local endpoint identity/capacity probe and one-slot Autopilot lease; it does not turn a raw chat API into an agentic runner. |
 
 The central DI contract is `new AutopilotEngine({ reviewLoopResolver, reviewDispatcher, implementationDispatcher, diffProvider, repairPromptWriter, clock, cwd })`. Production uses the shell-backed defaults; tests inject fakes at these seams so loop behavior can be verified without calling live engines.
 
@@ -134,6 +137,60 @@ deterministic host implementations; the existing P3.6 privileged Linux gate sepa
 root-installed cross-UID systemd/cgroup substrate. A consuming deployment must supply those host
 invocations outside model and workspace reach. The JavaScript API alone is not a claim that a P3.7
 systemd deployment is installed.
+
+### Capability-adaptive execution profiles
+
+Capability depth changes guidance, not authority:
+
+```text
+project default + optional task override
+                 |
+                 v
+immutable TaskAuthorityEnvelope
+                 |
+                 v
+exact role/scope/deployment admission -- denied --> block/escalate
+                 |
+                 v
+least-privilege RoleExecutionGrant
+                 |
+          +------+------+
+          |             |
+       guided       autonomous
+   bounded slice    thin objective
+          |             |
+          +------+------+
+                 |
+      same assurance/effects/egress/
+        red lines/acceptance floor
+```
+
+`adaptive` is a requested mode, never an effective payload. Unknown, stale, degraded, changed, or
+unqualified identities resolve to `guided` only when that role is otherwise admissible; protected
+roles such as owner/reviewer still require qualified evidence. A profile cannot grant a tool,
+effect, approval exemption, reviewer seat, or acceptance authority.
+
+The source stays in one repository. `profiles/core.md` and exactly one of `guided.md` /
+`autonomous.md` are generated into a profile-specific payload because supported harnesses do not
+prove that inactive skill metadata stays invisible for a whole session. `profile-runtime.js`
+records context/isolation evidence; `profile-cutover.js` emits an advisory default-change receipt.
+The repository keeps `guided` as its default until live exact-token measurements, an independently
+witnessed effectful guided run, lifecycle/assurance witnesses, and a complete five-task dogfood
+window all pass. The evaluator never edits configuration.
+
+Capability evidence has two different uses:
+
+- Artificial Analysis imports are optional, user-local, model-level `provisional` priors for
+  implementer/explorer discovery. They cannot qualify owner/reviewer or create routing authority.
+- `engine-qualify.sh reviewer|owner` uses separate fresh corpora and host oracles. Remote models see
+  one bounded case through a host-owned Unix-socket broker; credentials, network, exact returned
+  identity, and scoring stay outside the evaluator sandbox.
+
+Local OpenAI-compatible endpoints are also optional. The roster contains no tokens, non-loopback
+payloads require an existing authenticated TLS endpoint reference, identity is checked before and
+after generation, and ambiguous timeout requires cancellation acknowledgement plus resource
+recovery. The fake contract passed; this release observed no configured live local runtime, so it
+publishes no live local role or agentic runner.
 
 ---
 

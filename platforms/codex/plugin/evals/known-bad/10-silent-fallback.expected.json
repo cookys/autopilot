@@ -1,0 +1,1 @@
+{"class":"critical","defect":"unknown DOA preset now silently falls back to cloud-high-trust (most permissive) instead of escalating; a misconfiguration grants maximum autonomy with no error signal, violating the fail-closed contract"}

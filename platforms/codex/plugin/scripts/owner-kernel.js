@@ -9,6 +9,7 @@ const path = require('path');
 
 const {
   deriveTranslationStatus,
+  freezeTaskAuthorityEnvelope,
   parseLedgerJsonl,
   resolveGovernancePolicy,
   translateLegacyLevel,
@@ -18,6 +19,7 @@ const { deriveDisclosure } = require('../src/engine/owner-kernel/state');
 
 const USAGE = `Usage:
   node scripts/owner-kernel.js resolve --config <governance.json> [--mode owner-led|milestone-led] [--check]
+  node scripts/owner-kernel.js freeze-task --config <governance.json> --task <task-input.json> [--mode owner-led|milestone-led] [--check]
   node scripts/owner-kernel.js verify --ledger <owner-kernel.jsonl>
   node scripts/owner-kernel.js status --ledger <owner-kernel.jsonl>
   node scripts/owner-kernel.js disclose --ledger <owner-kernel.jsonl>
@@ -50,7 +52,7 @@ function parseArgs(argv) {
     const isShortRedLines = arg === '-x';
     if (!isShortRedLines && !arg.startsWith('--')) throw new Error(`unexpected argument "${arg}"`);
     const key = isShortRedLines ? 'redLines' : arg.slice(2).replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
-    if (!['config', 'mode', 'ledger', 'level', 'redLines'].includes(key)) throw new Error(`unknown option "${arg}"`);
+    if (!['config', 'mode', 'ledger', 'level', 'redLines', 'task'].includes(key)) throw new Error(`unknown option "${arg}"`);
     const value = argv[index + 1];
     if (!value || value.startsWith('--')) throw new Error(`missing value for "${arg}"`);
     if (Object.prototype.hasOwnProperty.call(options, key)) throw new Error(`duplicate option "${arg}"`);
@@ -126,6 +128,29 @@ function main() {
         check: options.check === true,
         policy: resolved.policy,
         policy_hash: resolved.policy_hash,
+      });
+      return;
+    }
+
+    if (command === 'freeze-task') {
+      if (!options.config || !options.task || options.ledger
+        || Object.keys(options).some((key) => !['config', 'task', 'mode', 'check'].includes(key))) {
+        throw new Error('freeze-task requires --config and --task and accepts only --mode and --check');
+      }
+      const resolved = resolveGovernancePolicy(readJson(options.config, 'governance config'), {
+        modeOverride: options.mode,
+      });
+      const frozen = freezeTaskAuthorityEnvelope({
+        ...readJson(options.task, 'task input'),
+        policy: resolved.policy,
+        policyHash: resolved.policy_hash,
+      });
+      emit({
+        status: 'candidate_unanchored',
+        authority_status: 'shadow',
+        trust: 'not_witnessed_by_owner_kernel',
+        check: options.check === true,
+        ...frozen,
       });
       return;
     }

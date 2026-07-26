@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/local-engine-roster.schema.json",
+  "title": "LocalEngineRoster",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "endpoints"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "endpoints": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/endpoint" }
+    }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+    },
+    "http_path": {
+      "type": ["string", "null"],
+      "pattern": "^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,511}$"
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "protocol",
+        "runtime",
+        "model",
+        "base_url",
+        "credential_endpoint",
+        "roles",
+        "identity_path",
+        "capacity_path",
+        "chat_path",
+        "cancel_path",
+        "request_timeout_ms",
+        "recovery_timeout_ms",
+        "max_tokens",
+        "min_headroom_bytes",
+        "configured_concurrency"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/token" },
+        "protocol": { "const": "openai-compatible" },
+        "runtime": {
+          "enum": ["autopilot-contract", "generic-openai", "ollama"]
+        },
+        "model": { "$ref": "#/$defs/token" },
+        "base_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "credential_endpoint": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["author", "reviewer"] }
+        },
+        "identity_path": { "$ref": "#/$defs/http_path" },
+        "capacity_path": { "$ref": "#/$defs/http_path" },
+        "chat_path": { "$ref": "#/$defs/http_path" },
+        "cancel_path": { "$ref": "#/$defs/http_path" },
+        "request_timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "recovery_timeout_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_headroom_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "configured_concurrency": { "const": 1 }
+      }
+    }
+  }
+}

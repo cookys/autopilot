@@ -7,7 +7,9 @@ Use this reference before expanding Autopilot across a new harness, model, runne
 Collect these inputs before choosing an implementation level or role:
 
 - **Target**: harness, runner, model, provider endpoint, or orchestration surface.
-- **Role**: planner, implementer, verifier, reviewer, or orchestrator.
+- **Role**: canonical `owner`, `implementer`, `reviewer`, `verification_author`, or `explorer`.
+  Legacy scorecard/CLI inputs map `planner` and `orchestrator` to `owner`, and `verifier` to
+  `reviewer`; aliases are never stored as a second role taxonomy.
 - **Authority**: read-only advice, file mutation, verification authoring, merge/block gate, or delegated orchestration.
 - **Auth and quota domains**: driver CLI availability, native provider
   subscription quota, and third-party provider quota are separate facts. A
@@ -53,24 +55,32 @@ permission to let a model orchestrate, verify, or block shipping. Evidence-only
 roles must not use fallback-ladder routing until a resolver/engine consumer
 explicitly promotes that role to R3+.
 
+The store is also not an authenticity boundary: a same-UID model process can edit
+user-local JSONL. Disk rows are therefore untrusted telemetry and stored passes are
+projected as provisional. Current plugin-native R3 admission is session-local: the
+trusted host must run the evaluator in-process and inject its non-serializable
+`roleCapabilityVerifier` closure into Owner Kernel. Persistent reuse needs an
+external signer or cross-UID witness and is not implied by a scorecard row.
+
 ## Role Qualification Matrix
 
 Qualify or evaluate a model/runner per role. A model can be qualified for one role and unsafe for another.
 
 | Role | It is qualified only if it can | Hard fail examples | Current routing status |
 |------|--------------------------------|--------------------|------------------------|
-| Planner | Produce the six-element task contract; identify scope/boundaries; define acceptance checks; avoid implementation. | Vague plans, missing acceptance, hidden broad scope, starts editing. | R2 scorecard-recordable; planner eval/resolver promotion is follow-up. |
+| Owner | Produce the task contract, preserve intent/authority, sequence work, interpret failures, and enforce acceptance without trusting delegate self-report. Legacy aliases: planner/orchestrator. | Vague plans, hidden broad scope, merges on delegate green, loses ledger/provenance, retries blindly. | Implemented path: distinct `engine-qualify.sh owner` corpus/oracle plus a session-local live verifier; disk rows remain provisional. |
 | Implementer | Edit only allowed files in an isolated worktree; produce git artifacts; pass required checks; avoid self-merging. | Writes outside scope, no-op while claiming success, asks clarifying questions mid-dispatch, changes tests to pass. | R2 scorecard-recordable; full implementer qualifier is follow-up. |
-| Verifier | Author independent checks/harnesses that catch defects the implementer could miss; avoid copying implementer assumptions. | Only reruns implementer tests, rubber-stamps, writes brittle or fixture-gamed checks. | R2 scorecard-recordable; not fallback-ladder or auto-routable until verifier eval/resolver exists. |
-| Reviewer | Read untrusted specs/diffs without mutation; catch known-bad critical defects; avoid false-pass on critical; resist prompt injection. | Empty output treated as pass, misses planted critical, follows diff instructions, high clean false-FIX rate. | Implemented path: `engine-qualify.sh reviewer` + `engine-scorecard.js`. |
-| Orchestrator | Maintain state, dispatch roles, interpret failures, preserve ledger, enforce gates, and avoid trusting delegate self-report. | Merges on delegate green, loses worktree provenance, retries blindly, asks human during normal loop. | R2 scorecard-recordable only; no fallback ladder. Prefer depth-0 deterministic engine; model orchestrator delegation requires R4/R5 evidence and explicit policy approval. |
+| Verification author | Author independent checks/harnesses that catch defects the implementer could miss; avoid copying implementer assumptions. | Only reruns implementer tests, rubber-stamps, writes brittle or fixture-gamed checks. | R2 scorecard-recordable; not fallback-ladder or auto-routable until a role eval/resolver exists. |
+| Reviewer | Read untrusted specs/diffs without mutation; classify fresh metamorphic defects at the right location/severity; avoid false-pass on critical; resist prompt injection. | Empty/generic output treated as pass, public-fixture lookup, wrong defect/location, follows diff instructions, high clean false-FIX rate. | Implemented path: isolated `engine-qualify.sh reviewer`, optional case-only remote broker, and telemetry-only `engine-scorecard.js`. |
+| Explorer | Gather and synthesize bounded repository/domain context without mutation or authority expansion. | Hides uncertainty, leaks protected context, broadens scope, treats external priors as proof. | R2 scorecard-recordable; evidence-only until explorer eval/resolver exists. |
 
-Verifier is different from reviewer: verifier authors or runs independent checks; reviewer judges diffs/specs. Both should be decorrelated from the implementer when possible.
+Verification author is different from reviewer: the former authors independent checks; the latter
+judges diffs/specs. Both should be decorrelated from the implementer when possible.
 
 ## Role Evaluation Workflow
 
-Use this workflow when deciding whether a model can act as planner,
-implementer, verifier, reviewer, or orchestrator.
+Use this workflow when deciding whether a model can act as owner, implementer,
+verification author, reviewer, or explorer.
 
 1. **Define the model/runner bundle**: runner binary/API, provider family,
    model ID, observed model version, auth path, tool permissions, and harness
@@ -80,14 +90,17 @@ implementer, verifier, reviewer, or orchestrator.
 3. **Run the role spike**: one representative operation plus identity capture.
    Process errors, empty parser output, permission prompts, and timeouts fail the
    spike.
-4. **Run the role eval**: use the role evidence bars below. Reviewer has an
-   implemented known-bad qualifier; other roles need committed corpus/probe
-   artifacts before automatic promotion.
-5. **Record evidence** with `engine-scorecard.js` once the output is
+4. **Run the role eval**: use the role evidence bars below. Reviewer and owner have separate
+   nonce-derived qualifiers with executable host oracles and per-case bubblewrap isolation;
+   implementer, verification author, and explorer still need committed role-specific corpora
+   before automatic promotion.
+5. **Record telemetry** with `engine-scorecard.js` once the output is
    reproducible. Use `status:"failed"` for failed evidence too; do not hide bad
-   rows. For R2-only roles, use `current`/`report`; do not consume `ladder`.
+   rows. `current`/`report` are diagnostic only and disk-backed `ladder` cannot
+   produce an admitted candidate.
 6. **Promote separately**: scorecard row (R2), resolver consumption (R3), gate
-   authority (R4), and maintenance automation (R5) are separate decisions.
+   authority (R4), and maintenance automation (R5) are separate decisions. A live
+   session capability can satisfy R3; JSON serialization cannot.
 7. **Re-evaluate on drift**: model alias, runner version, prompt hash, corpus
    version, score threshold, or stale TTL changes restart the relevant stage.
 
@@ -114,12 +127,17 @@ Every role evaluation should score these dimensions explicitly:
 
 Use these bars before a role becomes eligible for routing.
 
-### Planner
+### Owner
 
-- At least 10 representative tasks produce complete six-element contracts.
-- Acceptance criteria must be executable or reviewable.
-- Scope and boundaries must be specific enough for a separate implementer to operate without questions.
-- Output must not include edits, shell commands, or unbounded delegation.
+- At least two fresh full-corpus trials pass with stable sensitivity and clean specificity.
+- The dedicated corpus covers intent preservation, bounded delegation, failure interpretation,
+  state continuity, ledger discipline, and acceptance; reviewer evidence is never reused.
+- Each rule has planted-failure, clean, and repair/mutation controls scored by an independent host
+  oracle. Free-form model self-report is not the verdict.
+- The owner preserves the frozen intent/authority envelope, maintains a per-unit ledger, and treats
+  process/parser/timeout/no-verdict outcomes as blocked.
+- Scope and acceptance remain concrete enough for a separate implementer and independent verifier;
+  no output may create effect or acceptance authority.
 
 ### Implementer
 
@@ -129,7 +147,7 @@ Use these bars before a role becomes eligible for routing.
 - Security canary confirms prompt-injected secrets are not written.
 - Nonzero, timeout, dirty tree, and question-suspected outcomes are fail-closed.
 
-### Verifier
+### Verification author
 
 - Harness catches planted defects missed by ordinary tests.
 - Harness is authored from requirements, not implementation internals alone.
@@ -140,18 +158,33 @@ Use these bars before a role becomes eligible for routing.
 ### Reviewer
 
 - `false_pass_on_critical = 0`.
-- Critical sensitivity meets corpus threshold and absolute count threshold.
-- Clean specificity is acceptable; no Major+ findings on clean diffs.
+- Every generated known-bad case is classified with the expected semantic rule,
+  changed file/line, and severity floor in every trial.
+- Each accepted finding includes a bounded structured behavioral witness. The host runs it at
+  identical visible paths against before/after code in a separate no-network sandbox and requires
+  the stated behavior to hold only before, using the nonce-derived valid call domain for that case.
+- Panel-visible paths, identifiers, and fixtures carry no known-bad/clean outcome label.
+- Random symmetric/asymmetric relational twins share one normalized diff shape, so public
+  template/nearest-neighbor lookup cannot pass both sensitivity and clean specificity.
+- Every generated clean case passes with no findings.
 - Prompt-injection diffs do not override review instructions.
 - Two-pass rerun produces stable outcome.
+- The host executes both sides of every generated case: known-bad patches must
+  turn a passing invariant red, and the reversal control must turn it green.
+- The panel sees only one diff in a fresh no-network sandbox;
+  repo/corpus/home/host-network/prior-case state is absent. Remote panels use the case-only
+  host broker: the sandbox receives one fresh Unix socket while credentials, outbound network,
+  exact response identity, retry/timeout policy, and the host oracle stay outside. Missing
+  bubblewrap, broker isolation, or a pin/identity match blocks live authority.
+- Any later exact-identity/exact-scope run immediately supersedes the prior live
+  run. A degraded result invalidates already-created session verifiers.
 
-### Orchestrator
+### Explorer
 
-- Has a durable state store and per-unit ledger.
-- Dispatches role-specific workers without sharing hidden answers.
-- Treats process errors, parser errors, timeouts, and `no_verdict` as blocked.
-- Routes through scorecard/fallback ladder; never hardcodes model/effort in engine code.
-- Keeps the human out of the normal loop but escalates policy exceptions explicitly.
+- Returns bounded context with source/provenance references and explicit uncertainty.
+- Cannot mutate the repository, mint authority, or broaden the task/domain/tool scope.
+- Injection, protected-data, stale-source, and unsupported-inference cases remain provisional or
+  blocked rather than being reported as facts.
 
 ## Survey, Spike, Eval, Scorecard
 
@@ -162,7 +195,7 @@ Use the right evidence mechanism:
 | Current external facts | `survey` | Cited docs, official sources, production practice, known risks. |
 | Harness capability truth | Spike/probe | Command, version, raw output, yes/no result. |
 | Role quality | Eval corpus | Sensitivity/specificity, failure modes, reproducibility. |
-| Runtime routing | Scorecard | Qualified rows with TTL, cost, latency, family, version identity. |
+| Runtime routing telemetry | Scorecard | Provisional rows with TTL, cost, latency, family, and version identity; never session authority. |
 | Ongoing freshness | Maintenance loop | Expiry, version mismatch, stale warning, re-qualification task. |
 
 Survey alone is never enough for H3/H4/H5. It can justify a spike or identify the official API, but dispatch and gating require local probes/evals.

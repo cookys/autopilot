@@ -1,0 +1,1 @@
+{"class":"major","defect":"key test assertions removed: no longer verifies that emit appends to events.jsonl or that the emitted event type is correct, leaving the core tree invariant untested"}

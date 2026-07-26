@@ -62,46 +62,70 @@ st=$(node "$CLI" current --role reviewer --now 2026-06-30 | jq_get 0.status)
 stored=$(grep -o '"status":"[a-z]*"' "$TESTDIR/scorecard.jsonl" | head -1)
 [ "$st" = "expired" ] && [ "$stored" = '"status":"qualified"' ] && ok "5: past-expires => expired at read, store unmutated" || bad "5: derived=$st stored=$stored"
 
-# 6: report --key cost: unknown-cost sorts LAST even at price 0
+# 6: disk-only report cannot surface a qualified candidate, regardless of cost.
 reset
 echo "$(row CHEAP r f reviewer c@1 0.5 manual 1 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 echo "$(row UNK   r f reviewer c@1 0.5 unknown 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
-first=$(node "$CLI" report --role reviewer --key cost | jq_get 0.engine)
-last=$(node "$CLI" report --role reviewer --key cost | jq_get 1.engine)
-[ "$first" = "CHEAP" ] && [ "$last" = "UNK" ] && ok "6: unknown-cost sorts last despite price 0" || bad "6: first=$first last=$last"
+len=$(node "$CLI" report --role reviewer --key cost | arrlen)
+[ "$len" = "0" ] && ok "6: cost report cannot route disk telemetry" || bad "6: report len=$len want 0"
 
-# 6b: report --key cost: a non-unknown (manual) row with MISSING price is unmeasured => sorts last, not "free"
+# 6b: missing prices cannot make a disk row routable.
 reset
 echo "$(row PRICED r f reviewer c@1 0.5 manual 2 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 # manual row with price fields stripped out (source=manual but no usd_per_mtok_*):
 printf '{"engine":"NOPRICE","runner":"r","family":"f","role":"reviewer","model_version":"v","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"1/1","false_pass_critical":0,"specificity":"ok"},"capability_score":0.5,"cost":{"source":"manual"},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}\n' | node "$CLI" record >/dev/null 2>&1
-first=$(node "$CLI" report --role reviewer --key cost | jq_get 0.engine)
-last=$(node "$CLI" report --role reviewer --key cost | jq_get 1.engine)
-[ "$first" = "PRICED" ] && [ "$last" = "NOPRICE" ] && ok "6b: unpriced manual row sorts last, not free" || bad "6b: first=$first last=$last (want PRICED,NOPRICE)"
+len=$(node "$CLI" report --role reviewer --key cost | arrlen)
+[ "$len" = "0" ] && ok "6b: unpriced disk telemetry cannot rank as free" || bad "6b: report len=$len want 0"
 
-# 7: report --key capability DESC
+# 7: capability report cannot turn stored scores into admission.
 reset
 echo "$(row LO r f reviewer c@1 0.3 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 echo "$(row HI r f reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
-top=$(node "$CLI" report --role reviewer | jq_get 0.engine)
-[ "$top" = "HI" ] && ok "7: capability DESC" || bad "7: top=$top want HI"
+len=$(node "$CLI" report --role reviewer | arrlen)
+[ "$len" = "0" ] && ok "7: capability report cannot route disk telemetry" || bad "7: report len=$len want 0"
 
-# 8: ladder demotes same family to bottom but keeps it
+# 8: fallback ladder cannot be restored from same-UID disk rows.
 reset
 echo "$(row X r openai reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 echo "$(row Y r google reviewer c@1 0.8 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
-botfam=$(node "$CLI" ladder --role reviewer --implementer-family openai | jq_get 1.family)
 len=$(node "$CLI" ladder --role reviewer --implementer-family openai | arrlen)
-[ "$botfam" = "openai" ] && [ "$len" = "2" ] && ok "8: same-family demoted to bottom, still present" || bad "8: bottomfam=$botfam len=$len"
+[ "$len" = "0" ] && ok "8: disk-only fallback ladder is empty" || bad "8: ladder len=$len want 0"
 
-# 8b: governed evidence roles are recordable/queryable, but not fallback-ladder routable yet
+# 8b: legacy role aliases canonicalize at the CLI boundary; evidence-only roles stay off ladders.
 reset
 echo "$(row VER r f verifier verifier-corpus@1 0.7 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 echo "$(row ORCH r f orchestrator orchestrator-corpus@1 0.6 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
+echo "$(row VA r f verification_author verification-corpus@1 0.6 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
+echo "$(row EXP r f explorer explorer-corpus@1 0.6 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 verrole=$(node "$CLI" current --role verifier --now 2026-06-30 | jq_get 0.role)
-orchrole=$(node "$CLI" report --role orchestrator | jq_get 0.role)
-node "$CLI" ladder --role orchestrator >/dev/null 2>&1; ladder_ec=$?
-[ "$verrole" = "verifier" ] && [ "$orchrole" = "orchestrator" ] && [ "$ladder_ec" = "2" ] && ok "8b: verifier/orchestrator rows are evidence-queryable but ladder-blocked" || bad "8b: verifier=$verrole orchestrator=$orchrole ladder_exit=$ladder_ec"
+orchrole=$(node "$CLI" current --role orchestrator | jq_get 0.role)
+verstatus=$(node "$CLI" current --role verifier --now 2026-06-30 | jq_get 0.status)
+varole=$(node "$CLI" current --role verification_author | jq_get 0.role)
+exprole=$(node "$CLI" current --role explorer | jq_get 0.role)
+node "$CLI" ladder --role owner >/dev/null 2>&1; owner_ladder_ec=$?
+node "$CLI" ladder --role explorer >/dev/null 2>&1; explorer_ladder_ec=$?
+[ "$verrole" = "reviewer" ] && [ "$orchrole" = "owner" ] \
+  && [ "$verstatus" = "provisional" ] && [ "$varole" = "verification_author" ] \
+  && [ "$exprole" = "explorer" ] && [ "$owner_ladder_ec" = "0" ] \
+  && [ "$explorer_ladder_ec" = "2" ] \
+  && ok "8b: role aliases canonicalize and evidence-only roles remain ladder-blocked" \
+  || bad "8b: verifier=$verrole owner=$orchrole verification_author=$varole explorer=$exprole owner_ladder=$owner_ladder_ec explorer_ladder=$explorer_ladder_ec"
+
+# 8c: pre-canonicalization disk rows migrate at read time.
+reset
+echo "$(row LEGACY r f owner legacy-corpus@1 0.6 manual 0 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
+node - "$TESTDIR/scorecard.jsonl" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const row = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+row.role = 'planner';
+fs.writeFileSync(file, `${JSON.stringify(row)}\n`);
+NODE
+legacyrole=$(node "$CLI" current --role owner --now 2026-06-30 | jq_get 0.role)
+legacycount=$(node "$CLI" current --role planner --now 2026-06-30 | arrlen)
+[ "$legacyrole" = "owner" ] && [ "$legacycount" = "1" ] \
+  && ok "8c: legacy disk roles migrate at read time" \
+  || bad "8c: owner role=$legacyrole planner query count=$legacycount"
 
 # 9: invalid record (bad enum) => exit 1, store unchanged
 reset
@@ -137,23 +161,23 @@ if [ "$ec" = "0" ]; then ok "12: stale lock broken/recovered (record ok in $((t1
 
 # 13 (v2.32.25 R1): distinct efforts are distinct invocation-tuple identities —
 # two rows for the same engine+runner at different codex efforts must BOTH
-# survive into current/ladder, not collapse to the latest event.
+# survive into current telemetry, not collapse to the latest event.
 reset
 r1="$(row tupeng codex openai reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
 echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='high';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
 echo "$(node -e "const r=JSON.parse(process.argv[1]);r.effort='xhigh';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
-effs=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='tupeng').map(r=>r.effort).sort();process.stdout.write(l.join(','))})")
-[ "$effs" = "high,xhigh" ] && ok "13: distinct efforts coexist as distinct tuples (got: $effs)" || bad "13: efforts collapsed (got: $effs) — R1"
+effs=$(node "$CLI" current --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='tupeng').map(r=>r.effort).sort();process.stdout.write(l.join(','))})")
+[ "$effs" = "high,xhigh" ] && ok "13: distinct efforts coexist as telemetry tuples (got: $effs)" || bad "13: efforts collapsed (got: $effs) — R1"
 
 # 14 (v2.32.25 R4): model is an alias REFINEMENT — re-recording the same
 # engine+runner+effort with model added must SUPERSEDE the model-less row in
-# the ladder (else the stale non-dispatchable display id stays selectable).
+# the current telemetry view.
 reset
 r1="$(row aliaseng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
 echo "$r1" | node "$CLI" record >/dev/null 2>&1
 echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
-al=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='aliaseng');process.stdout.write(l.length+':'+l.map(r=>r.model).join(','))})")
-[ "$al" = "1:haiku" ] && ok "14: model refinement supersedes the model-less row (got: $al)" || bad "14: stale model-less row survives (got: $al) — R4"
+al=$(node "$CLI" current --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const l=JSON.parse(d).filter(r=>r.engine==='aliaseng');process.stdout.write(l.length+':'+l.map(r=>r.model).join(','))})")
+[ "$al" = "1:haiku" ] && ok "14: model refinement supersedes the model-less telemetry row (got: $al)" || bad "14: stale model-less row survives (got: $al) — R4"
 
 # 15 (v2.32.25 R5): a LATER failed re-qualification retires the rung — the
 # older qualified model-less row must NOT survive the supersede.
@@ -162,7 +186,8 @@ r1="$(row retireng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2
 echo "$r1" | node "$CLI" record >/dev/null 2>&1
 echo "$(node -e "const r=JSON.parse(process.argv[1]);r.model='haiku';r.status='failed';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
 rl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='retireng').length))})")
-[ "$rl" = "0" ] && ok "15: later failed re-qual retires the rung" || bad "15: stale qualified row survived a failed re-qual (rows=$rl) — R5"
+current_status=$(node "$CLI" current --role reviewer 2>/dev/null | jq_get 0.status)
+[ "$rl" = "0" ] && [ "$current_status" = "failed" ] && ok "15: later failed re-qual retires the telemetry tuple and no rung exists" || bad "15: ladder=$rl current=$current_status — R5"
 
 # 16 (v2.32.25 R7): supersede preserves configured identity — rows from a
 # DIFFERENT corpus (distinct qualification setup) must not retire each other.
@@ -170,8 +195,9 @@ reset
 r1="$(row corpeng claude-native anthropic reviewer c@1 0.9 manual 0 qualified 2099-01-01)"
 echo "$r1" | node "$CLI" record >/dev/null 2>&1
 echo "$(node -e "const r=JSON.parse(process.argv[1]);r.corpus_version='c@2';r.status='failed';console.log(JSON.stringify(r))" "$r1")" | node "$CLI" record >/dev/null 2>&1
-cl=$(node "$CLI" ladder --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='corpeng').length))})")
-[ "$cl" = "1" ] && ok "16: cross-corpus rows do not retire each other (c@1 survives c@2 failure)" || bad "16: cross-corpus retirement leak (rows=$cl) — R7"
+cl=$(node "$CLI" current --role reviewer 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{process.stdout.write(String(JSON.parse(d).filter(r=>r.engine==='corpeng').length))})")
+ladder_len=$(node "$CLI" ladder --role reviewer 2>/dev/null | arrlen)
+[ "$cl" = "2" ] && [ "$ladder_len" = "0" ] && ok "16: cross-corpus telemetry rows remain distinct without creating a rung" || bad "16: current=$cl ladder=$ladder_len — R7"
 
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"

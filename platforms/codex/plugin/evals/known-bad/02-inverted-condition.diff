@@ -1,0 +1,11 @@
+--- a/scripts/resolve-doa.sh
++++ b/scripts/resolve-doa.sh
+@@ -45,7 +45,7 @@ resolve_tier() {
+   local action_tier="$1"
+   local preset="$2"
+
+-  if [ "$action_tier" -le "$AUTONOMOUS_THRESHOLD" ]; then
++  if [ "$action_tier" -ge "$AUTONOMOUS_THRESHOLD" ]; then
+     echo "autonomous"
+   else
+     echo "escalate"

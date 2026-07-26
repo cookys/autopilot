@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 # Infrastructure helpers
 sha256_hex() {

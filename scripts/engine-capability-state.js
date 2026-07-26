@@ -5,11 +5,31 @@ const fs = require('fs');
 const path = require('path');
 const process = require('process');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const {
+  capabilityEvidenceProducerHash,
+  compileCapabilityEvidence,
+  evaluateCapabilityEvidence,
+} = require('../src/engine/capability-evidence');
+const {
+  canonicalJson,
+  isSha256,
+  sha256,
+} = require('../src/engine/owner-kernel/canonical');
+
+const EVIDENCE_PRODUCERS = new Set([
+  'engine-qualify-v2',
+  'operator-record-v1',
+  'trusted-observation-v1',
+  'aa-import-v1',
+]);
 
 const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js record [--file <path>] [--store <path>]
   node scripts/engine-capability-state.js current --runner <runner> --model <model> --role <role> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js report --capability <name> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js record-evidence [--file <path>] [--store <path>]
+  node scripts/engine-capability-state.js current-evidence --role <role> --scope-file <path> --identity-file <path> [--observation-file <path>] [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js report-evidence --role <role> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js prune [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js classify-error [--string <text>] [--file <path>] [--exit-code <code>]
 
@@ -21,6 +41,9 @@ Options:
   --model <model>      Specify model name.
   --role <role>        Specify role.
   --capability <name>  Specify capability name (default: quota).
+  --scope-file <path>  Read an exact capability scope JSON object.
+  --identity-file <path>  Read an exact deployment identity JSON object.
+  --observation-file <path>  Read an optional revocation observation into telemetry.
   --string <text>      String to classify for classify-error.
   --exit-code <code>   Exit code to classify for classify-error.
 
@@ -28,6 +51,10 @@ Exit codes:
   0 = success
   1 = validation / classification error
   2 = usage error / unknown command
+
+Evidence JSONL and CLI output are untrusted telemetry. A stored qualified evaluation is projected
+as provisional and cannot admit a role; only a session-local host capability from the live
+qualifier can produce an authoritative qualification.
 `;
 
 function usage(code) {
@@ -273,7 +300,8 @@ function resolveStoreConfig(options) {
     }
   }
   const lockFile = path.join(storeDir, '.lock');
-  return { storeDir, storeFile, lockFile };
+  const evidenceFile = path.join(storeDir, 'qualification-evidence.jsonl');
+  return { storeDir, storeFile, evidenceFile, lockFile };
 }
 
 function readStoreRows(storeFile, silentWarn = false) {
@@ -295,6 +323,389 @@ function readStoreRows(storeFile, silentWarn = false) {
   }
 
   return rows;
+}
+
+function readEvidenceRows(evidenceFile) {
+  const lines = readTextLines(evidenceFile);
+  const rows = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    try {
+      const wrapper = JSON.parse(lines[index]);
+      const eventId = wrapper && toEventId(wrapper.event_id);
+      if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)
+          || eventId === null || !wrapper.evidence
+          || !EVIDENCE_PRODUCERS.has(wrapper.producer)
+          || !isSha256(wrapper.transcript_hash)
+          || Object.keys(wrapper).some((key) => ![
+            'event_id',
+            'producer',
+            'transcript_hash',
+            'evidence',
+          ].includes(key))) {
+        throw new Error('expected an integrity-wrapped {event_id,producer,transcript_hash,evidence} object');
+      }
+      const evidence = compileCapabilityEvidence(wrapper.evidence);
+      if (wrapper.transcript_hash !== capabilityEvidenceProducerHash(
+        evidence,
+        wrapper.producer,
+      )) {
+        throw new Error('evidence producer transcript hash mismatch');
+      }
+      validateEvidenceProducer(evidence, wrapper.producer);
+      rows.push({
+        event_id: eventId,
+        producer: wrapper.producer,
+        transcript_hash: wrapper.transcript_hash,
+        evidence,
+      });
+    } catch (error) {
+      throw new Error(`malformed capability evidence line ${index + 1}: ${error.message}`);
+    }
+  }
+  return rows;
+}
+
+function evidenceStoreHead(rows) {
+  return sha256(canonicalJson(rows.map((row) => ({
+    event_id: row.event_id,
+    producer: row.producer,
+    transcript_hash: row.transcript_hash,
+    evidence_id: row.evidence.evidence_id,
+    evidence_hash: row.evidence.evidence_hash,
+  }))));
+}
+
+function evidenceResolution(rows, receipt, evaluationTime) {
+  const wrapper = rows.find((row) => row.evidence.evidence_id === receipt.evidence_id);
+  const telemetryReceipt = receipt.state === 'qualified'
+    ? { ...receipt, state: 'provisional' }
+    : receipt;
+  if (!wrapper) {
+    return {
+      authority_status: 'untrusted_telemetry',
+      admissible: false,
+      observed_state: receipt.state,
+      receipt: telemetryReceipt,
+      store_anchor: null,
+    };
+  }
+  return {
+    authority_status: 'untrusted_telemetry',
+    admissible: false,
+    observed_state: receipt.state,
+    receipt: telemetryReceipt,
+    store_anchor: {
+      schema_version: 1,
+      authority_status: 'untrusted_telemetry',
+      producer: wrapper.producer,
+      event_id: wrapper.event_id,
+      evidence_id: wrapper.evidence.evidence_id,
+      transcript_hash: wrapper.transcript_hash,
+      store_head_hash: evidenceStoreHead(rows),
+      query_hash: sha256(canonicalJson({
+        role: receipt.role,
+        requested_scope_hash: receipt.applicability.requested_scope_hash,
+        requested_identity_hash: receipt.applicability.requested_identity_hash,
+        evaluation_time: evaluationTime,
+      })),
+    },
+  };
+}
+
+function readJsonObject(filePath, label) {
+  let value;
+  try {
+    value = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    failValidation(`${label}: invalid JSON (${error.message})`);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    failValidation(`${label}: expected a JSON object`);
+  }
+  return value;
+}
+
+function appendEvidenceRows(config, rows) {
+  ensureDir(config.storeDir);
+  const content = `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`;
+  try {
+    fs.appendFileSync(config.evidenceFile, content, { mode: 0o600 });
+    fs.chmodSync(config.storeDir, 0o700);
+    fs.chmodSync(config.evidenceFile, 0o600);
+  } catch (error) {
+    throw new Error(`cannot append and secure capability evidence store: ${error.message}`);
+  }
+}
+
+function exactTokenList(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((entry, index) => entry === expected[index]);
+}
+
+function validateAaImportEvidence(evidence) {
+  const expectedTask = evidence.role === 'implementer'
+    ? 'code_implementation' : 'repository_exploration';
+  if (!['implementer', 'explorer'].includes(evidence.role)) {
+    throw new Error('aa-import-v1 may write only implementer/explorer evidence');
+  }
+  if (evidence.source !== 'external_prior'
+      || !['provisional', 'degraded'].includes(evidence.state)) {
+    throw new Error('aa-import-v1 may write only provisional/degraded external_prior evidence');
+  }
+  if (evidence.source_ref !== 'artificial-analysis-api-v2'
+      || evidence.methodology.kind !== 'external_prior'
+      || evidence.methodology.name !== 'artificial-analysis-model-prior'
+      || evidence.methodology.version !== '1.0.0') {
+    throw new Error('aa-import-v1 requires canonical Artificial Analysis provenance');
+  }
+  if (evidence.identity.runner !== 'aa-model-level'
+      || evidence.identity.runner_version !== 'api-v2'
+      || evidence.identity.harness_version !== 'unresolved'
+      || evidence.identity.effort !== 'unresolved'
+      || evidence.identity.identity_resolved !== false) {
+    throw new Error('aa-import-v1 requires an unresolved model-level Artificial Analysis identity');
+  }
+  if (!exactTokenList(evidence.scope.task_classes, [expectedTask])
+      || !exactTokenList(evidence.scope.domains, ['general'])
+      || !exactTokenList(evidence.scope.languages, ['und'])
+      || !exactTokenList(evidence.scope.tool_surface, ['model-level-benchmark'])) {
+    throw new Error('aa-import-v1 evidence has an unsupported role scope');
+  }
+  const expectedDimensions = evidence.role === 'implementer'
+    ? ['agentic_index', 'coding_index']
+    : ['agentic_index', 'intelligence_index'];
+  if (!exactTokenList(evidence.methodology.basis.dimensions, expectedDimensions)
+      || !evidence.methodology.basis.cohort.startsWith('aa-index-v')) {
+    throw new Error('aa-import-v1 evidence has an unsupported methodology basis');
+  }
+  const applicability = evidence.methodology.basis.applicability;
+  const requiredApplicability = [
+    'benchmark-language-unresolved',
+    'cloud-model-level',
+    'deployment-unresolved',
+    'harness-unresolved',
+    'precision-unresolved',
+    'proxy-only',
+    'runner-unresolved',
+  ];
+  if (requiredApplicability.some((entry) => !applicability.includes(entry))
+      || (evidence.state === 'degraded'
+        && (!applicability.includes('candidate-retired')
+          || ![
+            'below_candidate_floor',
+            'model_identity_changed',
+            'model_missing_current_cohort',
+          ].some((entry) => applicability.includes(entry))))
+      || (evidence.state === 'provisional' && applicability.includes('candidate-retired'))) {
+    throw new Error('aa-import-v1 evidence has unsupported applicability metadata');
+  }
+}
+
+function validateEvidenceProducer(evidence, producer) {
+  if (!EVIDENCE_PRODUCERS.has(producer)) {
+    throw new Error(`unsupported capability evidence producer '${producer}'`);
+  }
+  if (evidence.source === 'internal_eval' && producer !== 'engine-qualify-v2') {
+    throw new Error('internal evaluation evidence requires engine-qualify-v2');
+  }
+  if (producer === 'aa-import-v1') validateAaImportEvidence(evidence);
+}
+
+function restoreEvidenceAppend(config, existed, originalSize) {
+  try {
+    if (existed) {
+      fs.truncateSync(config.evidenceFile, originalSize);
+    } else if (fs.existsSync(config.evidenceFile)) {
+      fs.unlinkSync(config.evidenceFile);
+    }
+  } catch (rollbackError) {
+    throw new Error(`capability evidence rollback failed: ${rollbackError.message}`);
+  }
+}
+
+function appendEvidenceRecords(config, rawEvidenceRecords, producer, transaction = {}) {
+  if (!EVIDENCE_PRODUCERS.has(producer)) {
+    throw new Error(`unsupported capability evidence producer '${producer}'`);
+  }
+  if (!Array.isArray(rawEvidenceRecords) || rawEvidenceRecords.length === 0) {
+    throw new Error('capability evidence batch must be a non-empty array');
+  }
+  const evidenceRecords = rawEvidenceRecords.map((record) => compileCapabilityEvidence(record));
+  if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)
+      || Object.keys(transaction).some((key) => !['commit', 'rollback'].includes(key))
+      || (transaction.commit !== undefined && typeof transaction.commit !== 'function')
+      || (transaction.rollback !== undefined && typeof transaction.rollback !== 'function')
+      || Boolean(transaction.commit) !== Boolean(transaction.rollback)) {
+    throw new Error(
+      'capability evidence transaction must contain paired commit and rollback callbacks',
+    );
+  }
+  for (const evidence of evidenceRecords) validateEvidenceProducer(evidence, producer);
+
+  return withWriteLock({
+    storeDir: config.storeDir,
+    lockFile: config.lockFile,
+    name: 'capability evidence',
+  }, () => {
+    const rows = readEvidenceRows(config.evidenceFile);
+    const byEvidenceId = new Map(rows.map((row) => [row.evidence.evidence_id, row]));
+    const result = [];
+    const newRows = [];
+    let nextEventId = maxEventId(rows) + 1;
+
+    for (const evidence of evidenceRecords) {
+      let wrapper = byEvidenceId.get(evidence.evidence_id);
+      if (wrapper && wrapper.producer !== producer) {
+        throw new Error(
+          `capability evidence ${evidence.evidence_id} is owned by producer '${wrapper.producer}'`,
+        );
+      }
+      if (!wrapper) {
+        wrapper = {
+          event_id: nextEventId,
+          producer,
+          transcript_hash: capabilityEvidenceProducerHash(evidence, producer),
+          evidence,
+        };
+        nextEventId += 1;
+        rows.push(wrapper);
+        newRows.push(wrapper);
+        byEvidenceId.set(evidence.evidence_id, wrapper);
+      }
+      result.push(wrapper);
+    }
+
+    const allEvidence = rows.map((row) => row.evidence);
+    for (const evidence of evidenceRecords) {
+      evaluateCapabilityEvidence(
+        allEvidence,
+        {
+          role: evidence.role,
+          scope: evidence.scope,
+          identity: evidence.identity,
+          evaluation_time: evidence.issued_at,
+        },
+      );
+    }
+
+    if (rows.length !== byEvidenceId.size) {
+      throw new Error('capability evidence ledger contains duplicate evidence ids');
+    }
+    const existed = fs.existsSync(config.evidenceFile);
+    const originalSize = existed ? fs.statSync(config.evidenceFile).size : 0;
+    let published = false;
+    try {
+      if (transaction.commit) {
+        transaction.commit(result);
+        published = true;
+      }
+      if (newRows.length > 0) appendEvidenceRows(config, newRows);
+    } catch (error) {
+      const rollbackErrors = [];
+      if (newRows.length > 0) {
+        try {
+          restoreEvidenceAppend(config, existed, originalSize);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError.message);
+        }
+      }
+      if (published) {
+        try {
+          transaction.rollback();
+        } catch (rollbackError) {
+          rollbackErrors.push(`publication rollback failed: ${rollbackError.message}`);
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        throw new Error(`${error.message}; ${rollbackErrors.join('; ')}`);
+      }
+      throw error;
+    }
+    return result;
+  });
+}
+
+function appendEvidenceRecord(config, evidence, producer) {
+  return appendEvidenceRecords(config, [evidence], producer)[0];
+}
+
+function buildObservedRevocation(target, observation, observedAt) {
+  let reason = null;
+  if (observation.identity_hash !== target.identity_hash) {
+    reason = 'semantic_identity_drift';
+  } else if (observation.critical_miss === true) {
+    reason = 'critical_miss';
+  } else if (observation.probe_regression === true) {
+    reason = 'probe_regression';
+  }
+  if (reason === null) return null;
+  const observationHash = sha256(canonicalJson(observation));
+  return compileCapabilityEvidence({
+    schema_version: 1,
+    source: 'runtime_probe',
+    source_ref: `current-evidence:${reason}`,
+    state: 'revoked',
+    role: target.role,
+    scope: target.scope,
+    identity: target.identity,
+    issued_at: observedAt,
+    observed_at: observedAt,
+    expires_at: new Date(Date.parse(observedAt) + 86_400_000).toISOString(),
+    methodology: {
+      kind: 'runtime_probe',
+      name: 'owner-kernel-runtime-observation',
+      version: '1.0.0',
+      corpus_version: null,
+      corpus_manifest_hash: null,
+      thresholds: null,
+      basis: {
+        cohort: 'exact-session-observation',
+        cohort_hash: sha256(canonicalJson({
+          role: target.role,
+          scope_hash: target.scope_hash,
+          identity_hash: target.identity_hash,
+        })),
+        observation_hash: observationHash,
+        dimensions: [reason],
+        applicability: ['exact-identity', 'exact-scope'],
+      },
+    },
+    trials: [],
+    revocation: {
+      reason,
+      observation_hash: observationHash,
+      target_evidence_id: target.evidence_id,
+    },
+    supersedes: target.evidence_id,
+  });
+}
+
+function currentEvidenceRows(rows, role, nowIso) {
+  const groups = new Map();
+  for (const wrapper of rows) {
+    const evidence = wrapper.evidence;
+    if (evidence.role !== role) continue;
+    const key = `${evidence.role}\u0000${evidence.scope_hash}\u0000${evidence.identity_hash}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(wrapper);
+  }
+  return Array.from(groups.values()).map((group) => {
+    const newest = group.reduce(
+      (winner, row) => (row.event_id > winner.event_id ? row : winner),
+      group[0],
+    );
+    const receipt = evaluateCapabilityEvidence(group.map((row) => row.evidence), {
+      role: newest.evidence.role,
+      scope: newest.evidence.scope,
+      identity: newest.evidence.identity,
+      evaluation_time: nowIso,
+    });
+    return {
+      event_id: newest.event_id,
+      ...evidenceResolution(rows, receipt, nowIso),
+    };
+  }).sort((left, right) => left.event_id - right.event_id);
 }
 
 // Logic to merge events per runner, model, role
@@ -504,24 +915,44 @@ function mergeCurrentState(rows, runner, model, role, nowMs) {
 }
 
 function parseCommandLineArgs(argv) {
+  const command = argv[0];
+  const commandOptions = new Map([
+    ['record', new Set(['file', 'store'])],
+    ['current', new Set(['runner', 'model', 'role', 'now', 'store'])],
+    ['report', new Set(['capability', 'now', 'store'])],
+    ['record-evidence', new Set(['file', 'store'])],
+    ['current-evidence', new Set([
+      'role',
+      'scope-file',
+      'identity-file',
+      'observation-file',
+      'now',
+      'store',
+    ])],
+    ['report-evidence', new Set(['role', 'now', 'store'])],
+    ['prune', new Set(['now', 'store'])],
+    ['classify-error', new Set(['string', 'file', 'exit-code'])],
+  ]);
+  const allowed = commandOptions.get(command);
+  if (!allowed) return { command, options: {} };
   const options = {};
-  const args = [];
-
-  for (let i = 0; i < argv.length; i++) {
+  for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
-        options[key] = argv[++i];
-      } else {
-        options[key] = true;
-      }
-    } else {
-      args.push(arg);
+    if (!arg.startsWith('--')) {
+      failUsage(`unexpected positional argument: ${arg}`);
     }
+    const key = arg.slice(2);
+    if (!allowed.has(key)) failUsage(`unknown option for ${command}: ${arg}`);
+    if (Object.prototype.hasOwnProperty.call(options, key)) {
+      failUsage(`duplicate option: ${arg}`);
+    }
+    if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) {
+      failUsage(`${arg} requires a value`);
+    }
+    options[key] = argv[++i];
   }
 
-  return { command: args[0], options };
+  return { command, options };
 }
 
 function classifyErrorContent(content) {
@@ -663,6 +1094,110 @@ function main() {
     });
 
     process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'record-evidence') {
+    const rawInput = options.file
+      ? fs.readFileSync(options.file, 'utf8')
+      : fs.readFileSync(0, 'utf8');
+    let parsed;
+    try {
+      parsed = JSON.parse(rawInput);
+    } catch (error) {
+      failValidation(`record-evidence input: invalid JSON (${error.message})`);
+    }
+    let evidence;
+    try {
+      evidence = compileCapabilityEvidence(parsed);
+    } catch (error) {
+      failValidation(`record-evidence input: ${error.message}`);
+    }
+    if (evidence.source === 'internal_eval' || evidence.state === 'qualified') {
+      failValidation(
+        'record-evidence cannot mint internal/qualified evidence; run engine-qualify instead',
+      );
+    }
+    const config = resolveStoreConfig(options);
+    let written;
+    try {
+      written = appendEvidenceRecord(config, evidence, 'operator-record-v1');
+    } catch (error) {
+      failValidation(`qualification evidence store: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(written)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'current-evidence') {
+    if (!options.role || !options['scope-file'] || !options['identity-file']) {
+      failUsage('--role, --scope-file, and --identity-file are required for current-evidence');
+    }
+    const scope = readJsonObject(options['scope-file'], 'scope file');
+    const identity = readJsonObject(options['identity-file'], 'identity file');
+    const observation = options['observation-file']
+      ? readJsonObject(options['observation-file'], 'observation file') : undefined;
+    const config = resolveStoreConfig(options);
+    let rows;
+    try {
+      rows = readEvidenceRows(config.evidenceFile);
+    } catch (error) {
+      failValidation(`qualification evidence store: ${error.message}`);
+    }
+    const evaluationTime = new Date(nowMs).toISOString();
+    let result;
+    try {
+      const base = evaluateCapabilityEvidence(
+        rows.map((row) => row.evidence),
+        {
+          role: options.role,
+          scope,
+          identity,
+          evaluation_time: evaluationTime,
+        },
+      );
+      if (observation !== undefined && base.state === 'qualified') {
+        const target = rows.find((row) => row.evidence.evidence_id === base.evidence_id);
+        const revocation = target
+          ? buildObservedRevocation(target.evidence, observation, evaluationTime)
+          : null;
+        if (revocation) {
+          appendEvidenceRecord(config, revocation, 'trusted-observation-v1');
+          rows = readEvidenceRows(config.evidenceFile);
+        }
+      }
+      const receipt = evaluateCapabilityEvidence(
+        rows.map((row) => row.evidence),
+        {
+          role: options.role,
+          scope,
+          identity,
+          evaluation_time: evaluationTime,
+        },
+      );
+      result = evidenceResolution(rows, receipt, evaluationTime);
+    } catch (error) {
+      failValidation(`current-evidence query: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'report-evidence') {
+    if (!options.role) failUsage('--role is required for report-evidence');
+    const { evidenceFile } = resolveStoreConfig(options);
+    let rows;
+    try {
+      rows = readEvidenceRows(evidenceFile);
+    } catch (error) {
+      failValidation(`qualification evidence store: ${error.message}`);
+    }
+    const output = currentEvidenceRows(
+      rows,
+      options.role,
+      new Date(nowMs).toISOString(),
+    );
+    process.stdout.write(`${JSON.stringify(output)}\n`);
     process.exit(0);
   }
 
@@ -834,4 +1369,14 @@ function main() {
   failUsage(`unknown subcommand '${command}'`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  appendEvidenceRecord,
+  appendEvidenceRecords,
+  readEvidenceRows,
+  resolveStoreConfig,
+  validateEvidenceProducer,
+};

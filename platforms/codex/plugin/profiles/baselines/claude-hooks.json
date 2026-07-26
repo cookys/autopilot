@@ -1,0 +1,204 @@
+{
+  "description": "Autopilot hooks. Tool-event hooks recover data from the session transcript (transcript-reader-lib) since the upstream stdin pipe is broken (#6305); see hooks/README.md. Opt-in hooks (hooks/opt-in-manifest.json) are wired here too but self-gate via hooks/_shared/opt-in.js — default-off, enabled per ~/.autopilot/config.json {\"hooks\":{\"<stem>\":true}}. _transcript-timing-probe.js is an opt-in diagnostic (not wired).",
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/state-checkpoint.js"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js"
+          },
+          {
+            "//": "version-drift-check: dev-clone-only advisory (silent no-op for release/marketplace users). Wired here — NOT in settings.example.json — because ${CLAUDE_PLUGIN_ROOT} only expands inside the plugin's own hooks.json, never in a user's settings.json.",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/version-drift-check.js"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "//": "session-handoff (writer): OPT-IN behaviour gated at runtime — no-ops unless handoff is enabled (env AUTOPILOT_HANDOFF_INJECT=1 OR ~/.autopilot/config.json {\"handoff_inject\":true}); the SAME switch enables the session-start reader/inject half. Wired here — NOT in settings.example.json — because ${CLAUDE_PLUGIN_ROOT} only expands inside the plugin's own hooks.json, never in a user's settings.json (so the old copy-into-settings.json instruction produced a literal unresolved path).",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-handoff.js"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "//": "OPT-IN (default-off, self-gated via _shared/opt-in.js): branch-protection + commit-secret-scan. Wired here so ${CLAUDE_PLUGIN_ROOT} resolves; inert until enabled in ~/.autopilot/config.json.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/branch-protection.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/commit-secret-scan.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): large-file-warner",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/large-file-warner.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): config-protection",
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/config-protection.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): mcp-health pre-flight health check",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js pre"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): dispatch-model-guard — ask on guarded expensive engine or omitted model",
+        "matcher": "Task|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/dispatch-model-guard.js"
+          }
+        ]
+      },
+      {
+        "//": "OPT-IN (default-off): orchestrator-edit-gate — in /l4-/l6 sessions (session-mode marker) depth-0 inline product edits are warned/denied; subagents pass (payload agent_id). A1 of the depth-0 economics plan (v2.32.27).",
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-edit-gate.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/intent-capture.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/reload-watch.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/audit-log.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/failure-escalation.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/context-budget.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/suggest-compact.js"
+          },
+          {
+            "//": "OPT-IN (default-off, self-gated): accumulator collects edited paths for batch-format",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/accumulator.js"
+          },
+          {
+            "//": "OPT-IN (default-off, self-gated): test-runner runs sibling tests",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/test-runner.js",
+            "timeout": 60000
+          },
+          {
+            "//": "OPT-IN (default-off, self-gated): design-quality warns on generic UI patterns",
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/design-quality.js",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "//": "OPT-IN (default-off): mcp-health marks a server unhealthy on MCP tool failure",
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js failure"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "//": "OPT-IN (default-off, self-gated via _shared/opt-in.js): cost-tracker, session-summary, check-console, batch-format. Wired here so ${CLAUDE_PLUGIN_ROOT} resolves; inert until enabled in ~/.autopilot/config.json.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/cost-tracker.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/session-summary.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/check-console.js"
+          },
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/batch-format.js",
+            "timeout": 300000
+          }
+        ]
+      }
+    ]
+  }
+}

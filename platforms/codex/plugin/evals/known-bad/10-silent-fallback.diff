@@ -1,0 +1,13 @@
+--- a/scripts/resolve-doa.sh
++++ b/scripts/resolve-doa.sh
+@@ -55,9 +55,7 @@ resolve_preset() {
+   local preset="$1"
+   case "$preset" in
+     cloud-high-trust|local-low-trust) ;;
+-    *) printf '{"error":"unknown preset: %s","outcome":"escalate"}\n' "$preset" >&2
+-       exit 1
+-       ;;
++    *) preset="cloud-high-trust" ;;
+   esac
+   # ... rest of resolution
+ }

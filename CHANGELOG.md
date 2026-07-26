@@ -24,6 +24,64 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.33.0 — Capability-adaptive execution profiles
+
+**Headline**: Autopilot remains one product for strong, weak, remote, and local models. It now
+admits an exact deployment by role and task scope before compiling one bounded `guided` or
+`autonomous` payload. Guidance may remove redundant choreography, but it cannot change authority,
+effects, egress, assurance, red lines, review, or acceptance.
+
+### Added
+- Immutable task-authority envelopes and narrowing role grants in Owner Kernel shadow mode, with
+  content-addressed core/guided/autonomous payloads and full-session isolation/context evidence.
+- Scope-, identity-, and freshness-bound capability evidence plus separate reviewer and owner
+  qualification corpora. Remote evaluation uses a one-case Unix-socket broker so credentials,
+  network, returned identity, and the executable oracle stay host-side.
+- An optional Artificial Analysis importer that stores attributed user-local score data only as
+  provisional implementer/explorer discovery telemetry; external scores cannot qualify protected
+  roles or create routing authority.
+- A bounded local OpenAI-compatible author/reviewer adapter with protected non-secret roster,
+  pre/post deployment identity, one-slot lease, capacity, egress, cancellation, recovery, and
+  metadata-only telemetry checks.
+- An advisory cutover evaluator that requires live exact-token, compatibility, lifecycle,
+  assurance, complete-window dogfood, current qualification, independent receipt, and
+  decorrelated-review evidence before recommending an adaptive project default.
+
+### Changed
+- New and omitted project guidance defaults resolve to `guided`; a task can override the selected
+  guidance without modifying the one-time project setting. Static model tables are bootstrap
+  preferences, not qualification.
+- Fallback now conceptually re-runs exact admission and profile selection for the replacement
+  identity. Disk scorecard/evidence rows remain telemetry and cannot recreate session authority.
+- Public documentation now distinguishes the heterogeneous agentic dispatch rails from the raw
+  local author/reviewer transport.
+
+### Fixed
+- Guided active-slice acceptance now compares evidence as an order-independent exact set and
+  permits a role grant to add stricter evidence above the frozen task floor.
+- Raw task-authority and legacy-translation normalization now agree with the project resolver that
+  an omitted guidance profile means `guided`, never an implicit autonomous candidate.
+
+### Boundary
+- Owner Kernel integration remains shadow/projection work and does not claim production authority.
+  The AA adapter is optional and non-authoritative.
+- The local adapter passed fake-server contract tests, but no live local runtime was configured;
+  this release publishes no live local role row and no local agentic runner.
+- The recorded cutover decision is `hold_guided`. Autonomous control source is 113 bytes smaller,
+  but exact host-token measurement, an effectful guided witness, a current live owner verifier,
+  and five complete independent dogfood receipts are absent. The evaluator does not edit config.
+- This is not an `autopilot`/`hetopilot` repository split and adds no host daemon or general-purpose
+  local agent loop.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.59`; setting
+  `governance.guidance_profile` to `guided` is the one-setting profile rollback.
+
+prose-justification: this release adds the public contract and operator boundaries for a new
+cross-cutting execution-profile, qualification, provisional-prior, and local-transport surface;
+generated mirrors remain one-source synchronized rather than independently authored.
+
 ## v2.32.60 — Review scope stop-loss (relevance + cumulative repair budget)
 
 **Headline**: Implementation-review repair no longer treats every verified Critical/Major as

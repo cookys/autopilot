@@ -1,0 +1,1 @@
+{"class":"critical","defect":"Fail-closed behavior is removed for unparseable/no-verdict reviewer output; missing verdicts now default to SHIP-AS-IS instead of causing a no_verdict rejection."}

@@ -502,3 +502,26 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
 | Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |
 | Archive the project (L-5.5) before emitting final node verdicts | `tree.js` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |
+
+## Capability-adaptive projection (shadow)
+
+When a host supplies a verified `TaskAuthorityEnvelope`, current `RoleExecutionGrant`, and matching
+generated profile payload, consume that projection without re-deriving model strength, risk,
+topology, tools, effects, or authority. Missing or mismatched artifacts retain the existing guided
+lifecycle and cannot enable autonomous guidance.
+
+- `guided` receives only the current six-field active slice; task graph, history, and other slices
+  remain host/project state.
+- `autonomous` receives the bounded objective and latitude already present in the grant, without
+  adding lifecycle choreography.
+- A different profile or grant after context load requires a fresh-session handoff; never stack
+  both profiles in one session.
+
+The profile changes guidance only. Existing DOA, hooks, assurance, effect, acceptance, and
+finish-flow gates remain authoritative.
+
+The `profile-session.js prepare -> measure -> run -> check` lane is a no-effect isolation probe.
+`run` yields a same-process observation and `check` only validates rehashable disk structure;
+neither qualifies an effectful child. Until P5 records an independently witnessed transport,
+the already-loaded main plugin session remains the guided compatibility host. Never simulate an
+autonomous switch by appending profile prose to that session.

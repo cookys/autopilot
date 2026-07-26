@@ -8,6 +8,9 @@
       "no-secret-disclosure"
     ],
     "assurance_profile": "conservative",
+    "guidance_profile": "guided",
+    "topology_preference": "auto",
+    "data_egress": "local-only",
     "owner_roster": [
       {
         "identity": "p1-dogfood-owner-pending-p4",

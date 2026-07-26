@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 echo "--- Setting up contract dispatch test environment ---"
 
@@ -305,7 +306,6 @@ assert_not_contains "$json" '"go"'
 assert_not_contains "$json" "contract_sha256"
 assert_not_contains "$json" "spec_sha256"
 assert_file_exists "$RUN_MARKER_PATH"
-
 
 echo "--- R9: acceptance argv that cannot execute fails BEFORE the runner ---"
 # spawnSync does not throw on ENOENT — it returns status=null with .error set — so the

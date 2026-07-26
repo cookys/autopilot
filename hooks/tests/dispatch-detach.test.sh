@@ -11,6 +11,7 @@
 #   (c) TRANSPARENT NORMAL— default (detach on) un-killed run relays the SAME final JSON/exit
 #                           to the caller (so implementer.js's strict parse still works).
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 LEDGER_SH="$REPO_ROOT/scripts/run-ledger.sh"

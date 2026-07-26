@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "description": "Independent source universe for the owner/development lifecycle rule inventory.",
+  "sources": [
+    "skills/ceo-agent/SKILL.md",
+    "skills/dev-flow/SKILL.md"
+  ]
+}

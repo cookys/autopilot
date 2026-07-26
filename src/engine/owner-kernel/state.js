@@ -15,6 +15,11 @@ const {
 } = require('./acceptance');
 const { normalizeFrozenActionDescriptor, receiptIsWithinBrokerRoot } = require('./actions');
 const { OwnerKernelError } = require('./errors');
+const {
+  normalizeTaskAuthorityEnvelope,
+  verifyTaskAuthorityEnvelope,
+} = require('./task-authority');
+const { normalizeRoleExecutionGrant } = require('../execution-profile');
 
 function stateError(message) {
   throw new OwnerKernelError(message, 'INVALID_OWNER_EVENT_STATE');
@@ -215,6 +220,13 @@ function stateProjection(state) {
     projection.semantic_route_hash = state.semantic_route_hash;
     projection.semantic_kernel_binding = state.semantic_kernel_binding;
     projection.delegations = state.delegations;
+  }
+  if (state.task_authority_version !== undefined) {
+    projection.task_authority_version = state.task_authority_version;
+    projection.task_authorities = state.task_authorities;
+    projection.current_task_authority_id = state.current_task_authority_id;
+    projection.role_grants = state.role_grants;
+    projection.role_grant_revocations = state.role_grant_revocations;
   }
   return cloneCanonical(projection);
 }
@@ -1836,6 +1848,143 @@ function validateTranslationPayload(payload) {
   }
 }
 
+function assertAuthorityKernelEmitter(emitter, eventType) {
+  const validChannel = (
+    (eventType === 'task_authority_frozen' && emitter.channel === 'kernel-task-authority')
+    || (eventType === 'role_grant_issued' && /^kernel-role-grant:.+$/.test(emitter.channel))
+    || (eventType === 'role_grant_revoked'
+      && (emitter.channel === 'kernel-role-grant-revocation'
+        || /^kernel-role-grant-observer:.+$/.test(emitter.channel)))
+  );
+  if (emitter.kind !== 'kernel' || emitter.identity !== 'owner-kernel' || !validChannel) {
+    stateError(`${eventType} must be minted through its bound Owner Kernel channel`);
+  }
+}
+
+function validateTaskAuthorityPayload(payload, state, policy, emitter) {
+  assertAuthorityKernelEmitter(emitter, 'task_authority_frozen');
+  assertObject(payload, 'task_authority_frozen payload');
+  assertOnlyKeys(payload, new Set([
+    'intent_id',
+    'task_authority_id',
+    'task_authority_hash',
+    'envelope',
+  ]), 'task_authority_frozen payload');
+  if (payload.intent_id !== state.current_intent_id) {
+    stateError('task authority must bind the current authenticated intent');
+  }
+  if (state.current_task_authority_id !== undefined
+    && state.current_task_authority_id !== null) {
+    stateError('the current intent already has a frozen task authority');
+  }
+  const envelope = normalizeTaskAuthorityEnvelope(payload.envelope);
+  const taskAuthorityId = assertHash(
+    payload.task_authority_id,
+    'task_authority_frozen payload.task_authority_id',
+  ).toLowerCase();
+  const taskAuthorityHash = assertHash(
+    payload.task_authority_hash,
+    'task_authority_frozen payload.task_authority_hash',
+  ).toLowerCase();
+  if (envelope.task_authority_id !== taskAuthorityId
+    || sha256(canonicalJson(envelope)) !== taskAuthorityHash) {
+    stateError('task authority event hashes do not bind the embedded envelope');
+  }
+  const prior = state.task_authorities && state.task_authorities[taskAuthorityId];
+  if (prior && prior.intent_id !== payload.intent_id) {
+    stateError('task authority id cannot be reused across authenticated intents');
+  }
+  verifyTaskAuthorityEnvelope(envelope, {
+    expectedPolicy: policy,
+    expectedPolicyHash: state.policy_hash,
+    expectedTaskAuthorityId: taskAuthorityId,
+  });
+  return {
+    intent_id: payload.intent_id,
+    task_authority_id: taskAuthorityId,
+    task_authority_hash: taskAuthorityHash,
+    envelope,
+  };
+}
+
+function validateRoleGrantIssuedPayload(payload, state, emitter) {
+  assertAuthorityKernelEmitter(emitter, 'role_grant_issued');
+  if (state.task_authority_version !== 1 || state.current_task_authority_id === null) {
+    stateError('role grant issuance requires a current frozen task authority');
+  }
+  assertObject(payload, 'role_grant_issued payload');
+  assertOnlyKeys(payload, new Set([
+    'task_authority_id',
+    'grant_id',
+    'dispatch_id',
+    'request_hash',
+    'capability_verification_hash',
+    'grant',
+  ]), 'role_grant_issued payload');
+  const taskAuthorityId = assertHash(
+    payload.task_authority_id,
+    'role_grant_issued payload.task_authority_id',
+  ).toLowerCase();
+  if (taskAuthorityId !== state.current_task_authority_id) {
+    stateError('role grant parent is not the current task authority');
+  }
+  const parent = state.task_authorities[taskAuthorityId];
+  if (!parent) stateError('role grant parent task authority is unavailable');
+  const grant = normalizeRoleExecutionGrant(payload.grant, parent.envelope);
+  const grantId = assertHash(payload.grant_id, 'role_grant_issued payload.grant_id').toLowerCase();
+  const dispatchId = assertProtocolToken(
+    payload.dispatch_id,
+    'role_grant_issued payload.dispatch_id',
+  );
+  const requestHash = assertHash(
+    payload.request_hash,
+    'role_grant_issued payload.request_hash',
+  ).toLowerCase();
+  const capabilityVerificationHash = assertHash(
+    payload.capability_verification_hash,
+    'role_grant_issued payload.capability_verification_hash',
+  ).toLowerCase();
+  if (grant.grant_id !== grantId || grant.dispatch_id !== dispatchId
+    || grant.parent_task_authority_id !== taskAuthorityId) {
+    stateError('role grant event does not bind the embedded parent-bound grant');
+  }
+  if (state.role_grants[grantId]) stateError('role grant id already exists');
+  if (Object.values(state.role_grants).some((entry) => entry.dispatch_id === dispatchId)) {
+    stateError('role grant dispatch id already exists');
+  }
+  return {
+    task_authority_id: taskAuthorityId,
+    grant_id: grantId,
+    dispatch_id: dispatchId,
+    request_hash: requestHash,
+    capability_verification_hash: capabilityVerificationHash,
+    grant,
+  };
+}
+
+function validateRoleGrantRevokedPayload(payload, state, emitter) {
+  assertAuthorityKernelEmitter(emitter, 'role_grant_revoked');
+  assertObject(payload, 'role_grant_revoked payload');
+  assertOnlyKeys(payload, new Set([
+    'grant_id',
+    'reason',
+    'observation_hash',
+  ]), 'role_grant_revoked payload');
+  const grantId = assertHash(payload.grant_id, 'role_grant_revoked payload.grant_id').toLowerCase();
+  const grant = state.role_grants && state.role_grants[grantId];
+  if (!grant || grant.status !== 'active') {
+    stateError('role grant revocation requires a known active grant');
+  }
+  return {
+    grant_id: grantId,
+    reason: assertProtocolToken(payload.reason, 'role_grant_revoked payload.reason'),
+    observation_hash: assertHash(
+      payload.observation_hash,
+      'role_grant_revoked payload.observation_hash',
+    ).toLowerCase(),
+  };
+}
+
 function validateDelegationPayload(payload, state, policy, emitter) {
   if (!hasDelegationProtocol(state)) {
     stateError('delegation requires acceptance authority or semantic delegation authority');
@@ -2424,6 +2573,23 @@ function applyEvent(previousState, event, policy, { preflight = false } = {}) {
       );
       state.intents[intent.intent_id] = intent;
       state.current_intent_id = intent.intent_id;
+      if (state.task_authority_version === 1) {
+        for (const grant of Object.values(state.role_grants)) {
+          if (grant.status !== 'active') continue;
+          grant.status = 'revoked';
+          state.role_grant_revocations[grant.grant_id] = {
+            grant_id: grant.grant_id,
+            reason: 'intent_superseded',
+            observation_hash: sha256(canonicalJson({
+              prior_intent_id: grant.intent_id,
+              next_intent_id: intent.intent_id,
+            })),
+            revoked_at: event.emitted_at,
+            revocation_event_hash: event.event_hash,
+          };
+        }
+        state.current_task_authority_id = null;
+      }
       if (state.active_principal && state.block_reasons.length === 0) state.status = 'decide';
       break;
     }
@@ -2582,6 +2748,45 @@ function applyEvent(previousState, event, policy, { preflight = false } = {}) {
     case 'translation_used':
       validateTranslationPayload(event.payload);
       break;
+    case 'task_authority_frozen': {
+      const authority = validateTaskAuthorityPayload(event.payload, state, policy, event.emitter);
+      if (state.task_authority_version === undefined) {
+        state.task_authority_version = 1;
+        state.task_authorities = {};
+        state.current_task_authority_id = null;
+        state.role_grants = {};
+        state.role_grant_revocations = {};
+      }
+      state.task_authorities[authority.task_authority_id] = {
+        ...authority,
+        frozen_at: event.emitted_at,
+        authority_event_hash: event.event_hash,
+      };
+      state.current_task_authority_id = authority.task_authority_id;
+      break;
+    }
+    case 'role_grant_issued': {
+      const issued = validateRoleGrantIssuedPayload(event.payload, state, event.emitter);
+      const parent = state.task_authorities[issued.task_authority_id];
+      state.role_grants[issued.grant_id] = {
+        ...issued,
+        intent_id: parent.intent_id,
+        status: 'active',
+        issued_at: event.emitted_at,
+        issuance_event_hash: event.event_hash,
+      };
+      break;
+    }
+    case 'role_grant_revoked': {
+      const revocation = validateRoleGrantRevokedPayload(event.payload, state, event.emitter);
+      state.role_grants[revocation.grant_id].status = 'revoked';
+      state.role_grant_revocations[revocation.grant_id] = {
+        ...revocation,
+        revoked_at: event.emitted_at,
+        revocation_event_hash: event.event_hash,
+      };
+      break;
+    }
     case 'abort':
       validateAbortPayload(event.payload, state, event.emitter);
       if (hasAcceptanceProtocol(state) && hasPendingActionClaim(state)) {

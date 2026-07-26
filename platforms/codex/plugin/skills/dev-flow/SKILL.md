@@ -659,3 +659,12 @@ User may request skipping process steps. When overridden:
 - SQL injection / security validation
 - Completeness scan on new handlers/routes (invisible data loss)
 - Code review Critical-severity findings (security/correctness)
+
+## Capability-adaptive compatibility
+
+This skill remains the canonical guided compatibility path. When a verified profile session is
+active, the host retains the full task graph, checklist, completed history, and future slices, then
+sends the worker only the current six-field active slice plus its matching envelope and role grant.
+A late profile/grant change requires a fresh-session handoff and never edits the project default.
+The `profile-session.js` lane is a no-effect isolation probe, not an effectful handoff gate;
+rehashable artifacts, same-process observations, and caller-authored traces cannot qualify one.

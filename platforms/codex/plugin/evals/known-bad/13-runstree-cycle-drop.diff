@@ -1,0 +1,57 @@
+diff --git a/src/status/cli.js b/src/status/cli.js
+index edbf4c8..b10154b 100644
+--- a/src/status/cli.js
++++ b/src/status/cli.js
+@@ -1,3 +1,51 @@
+ const { renderRuns } = require("./render");
+ 
+-module.exports = { renderRuns };
++function runsTree(runs) {
++  // Shape: each node keeps existing run fields and gains `children: []`; synthetic
++  // roots for missing parents are explicit nodes: { synthetic_external: true, run_id,
++  // parent_run_id: null, children: [...] }.
++  const nodeById = new Map();
++  for (const run of runs) {
++    if (!run || !run.run_id) continue;
++    nodeById.set(`${run.run_id}`, { ...run, children: [] });
++  }
++  const roots = [];
++  const synthetic = new Map();
++  for (const node of nodeById.values()) {
++    const parent = node.parent_run_id;
++    if (!parent) {
++      roots.push(node);
++      continue;
++    }
++    const parentId = `${parent}`;
++    const parentNode = nodeById.get(parentId);
++    if (parentNode) {
++      parentNode.children.push(node);
++      continue;
++    }
++    let syn = synthetic.get(parentId);
++    if (!syn) {
++      syn = {
++        synthetic_external: true,
++        run_id: parentId,
++        role: 'external',
++        runner: null,
++        model: null,
++        phase: null,
++        started_at: null,
++        ended_at: null,
++        final_status: null,
++        parent_run_id: null,
++        root_run_id: null,
++        depth: null,
++        children: [],
++      };
++      synthetic.set(parentId, syn);
++      roots.push(syn);
++    }
++    syn.children.push(node);
++  }
++  return roots;
++}
++
++module.exports = { renderRuns, runsTree };

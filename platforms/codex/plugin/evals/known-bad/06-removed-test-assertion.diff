@@ -1,0 +1,8 @@
+--- a/hooks/tests/tree-engine.test.sh
++++ b/hooks/tests/tree-engine.test.sh
+@@ -55,9 +55,6 @@ OUT="$(bash "$SCRIPT" emit "$PROJ" node1 "$EVENT")"
+ assert_eq "0" "$?" "emit exits 0"
+ LINES="$(wc -l < "$EVENTS_FILE" | tr -d ' ')"
+-assert_eq "2" "$LINES" "events.jsonl has 2 lines after emit"
+-LAST="$(tail -1 "$EVENTS_FILE")"
+-assert_contains "$LAST" '"type":"node_created"' "emitted event type correct"

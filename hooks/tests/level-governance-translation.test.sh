@@ -16,13 +16,20 @@ const {
   OwnerKernel,
   ShadowTranslationRuntime,
   canonicalJson,
+  createShadowTranslationEnvelope,
+  freezeAcceptanceContract,
   parseLedgerJsonl,
   resolveGovernancePolicy,
   sha256,
   translateLegacyLevel,
   validateLedgerHeader,
+  verifyShadowTranslationEnvelope,
   verifyLedger,
 } = require(path.join(root, 'src', 'engine', 'owner-kernel'));
+const {
+  buildEvent,
+  prepareEvent,
+} = require(path.join(root, 'src', 'engine', 'owner-kernel', 'events'));
 
 const hash = (value) => sha256(typeof value === 'string' ? value : canonicalJson(value));
 const now = '2026-07-23T00:00:00.000Z';
@@ -227,12 +234,159 @@ assert.equal(verified.state.status, 'decide');
 const preP3Header = JSON.parse(JSON.stringify(ledger.header));
 delete preP3Header.policy.red_lines;
 delete preP3Header.policy.assurance_profile;
+delete preP3Header.policy.guidance_profile;
+delete preP3Header.policy.topology_preference;
+delete preP3Header.policy.data_egress;
 preP3Header.policy_hash = hash(preP3Header.policy);
 assert.doesNotThrow(() => validateLedgerHeader(preP3Header));
 const partialP3Header = JSON.parse(JSON.stringify(ledger.header));
 delete partialP3Header.policy.assurance_profile;
 partialP3Header.policy_hash = hash(partialP3Header.policy);
 assert.throws(() => validateLedgerHeader(partialP3Header), /partial P3 governance field set/);
+const p4WithoutP3Header = JSON.parse(JSON.stringify(ledger.header));
+delete p4WithoutP3Header.policy.red_lines;
+delete p4WithoutP3Header.policy.assurance_profile;
+p4WithoutP3Header.policy_hash = hash(p4WithoutP3Header.policy);
+assert.throws(
+  () => validateLedgerHeader(p4WithoutP3Header),
+  /cannot include P4 execution-profile fields without P3 governance fields/,
+);
+const historicalTranslation = JSON.parse(JSON.stringify(translateLegacyLevel({
+  level: 'l3',
+  flags: { expand: false, solo: false, red_line_additions: [] },
+  policy: resolved.policy,
+  policyHash: resolved.policy_hash,
+})));
+delete historicalTranslation.target.guidance_profile;
+delete historicalTranslation.target.topology_preference;
+delete historicalTranslation.target.data_egress;
+historicalTranslation.target_hash = hash(historicalTranslation.target);
+const historicalEnvelope = createShadowTranslationEnvelope({
+  runId: 'historical-translation-run',
+  invocationId: 'historical-pre-p4',
+  translation: historicalTranslation,
+});
+assert.throws(
+  () => verifyShadowTranslationEnvelope(historicalEnvelope, {
+    runId: 'historical-translation-run',
+    policy: resolved.policy,
+    policyHash: resolved.policy_hash,
+  }),
+  /does not match the frozen policy version/,
+);
+const partialHistoricalEnvelope = JSON.parse(JSON.stringify(historicalEnvelope));
+partialHistoricalEnvelope.target_detail.guidance_profile = 'adaptive';
+partialHistoricalEnvelope.target = hash(partialHistoricalEnvelope.target_detail);
+assert.throws(() => verifyShadowTranslationEnvelope(partialHistoricalEnvelope, {
+  runId: 'historical-translation-run',
+  policy: resolved.policy,
+  policyHash: resolved.policy_hash,
+}), /either all or none/);
+const historicalHeader = JSON.parse(JSON.stringify(ledger.header));
+delete historicalHeader.policy.guidance_profile;
+delete historicalHeader.policy.topology_preference;
+delete historicalHeader.policy.data_egress;
+historicalHeader.policy_hash = hash(historicalHeader.policy);
+historicalHeader.witness_stream_id = 'historical-pre-p4-shadow-witness';
+const historicalContract = freezeAcceptanceContract({
+  ...historicalHeader.acceptance_contract,
+  legs: historicalHeader.acceptance_contract.legs.map((leg) => ({
+    ...leg,
+    artifact_hashes: [historicalHeader.policy_hash],
+  })),
+});
+historicalHeader.acceptance_contract = historicalContract.contract;
+historicalHeader.contract_hash = historicalContract.contract_hash;
+validateLedgerHeader(historicalHeader);
+
+const originalTranslationEvent = ledger.events.find((event) => event.type === 'translation_used');
+const preP4Translation = translateLegacyLevel({
+  level: originalTranslationEvent.payload.source_detail.legacy_level,
+  flags: originalTranslationEvent.payload.source_detail.overrides,
+  policy: historicalHeader.policy,
+  policyHash: historicalHeader.policy_hash,
+});
+assert.equal(preP4Translation.source_hash, originalTranslationEvent.payload.source);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(preP4Translation.target, 'guidance_profile'),
+  false,
+);
+
+const historicalWitness = new MemoryWitness({
+  streamId: historicalHeader.witness_stream_id,
+});
+let historicalEventHead = null;
+const historicalEvents = ledger.events.map((originalEvent) => {
+  const payload = JSON.parse(JSON.stringify(originalEvent.payload));
+  if (originalEvent.type === 'translation_used') {
+    payload.source = preP4Translation.source_hash;
+    payload.target = preP4Translation.target_hash;
+    payload.source_detail = preP4Translation.source;
+    payload.target_detail = preP4Translation.target;
+  }
+  const eventInput = {
+    sequence: originalEvent.sequence,
+    runId: historicalHeader.run_id,
+    type: originalEvent.type,
+    emittedAt: originalEvent.emitted_at,
+    emitter: originalEvent.emitter,
+    policyHash: historicalHeader.policy_hash,
+    contractHash: historicalHeader.contract_hash,
+    payload,
+    prevEventHash: historicalEventHead,
+  };
+  const prepared = prepareEvent(eventInput);
+  const receipt = historicalWitness.append({
+    run_id: historicalHeader.run_id,
+    sequence: prepared.sequence,
+    event_hash: prepared.event_hash,
+  });
+  const rebuilt = buildEvent({ ...eventInput, witness: receipt });
+  historicalEventHead = rebuilt.event_hash;
+  return rebuilt;
+});
+const historicalLedger = { header: historicalHeader, events: historicalEvents };
+assert.equal(
+  verifyLedger(historicalLedger, {
+    witness: historicalWitness,
+    requireWitness: true,
+  }).state.status,
+  'decide',
+);
+const historicalResumed = ShadowTranslationRuntime.resume({
+  ledger: historicalLedger,
+  witness: historicalWitness,
+  adapters,
+  allowTestWitness: true,
+  clock: () => now,
+  nonceFactory: () => 'j'.repeat(64),
+});
+const historicalRetry = historicalResumed.runtime.recordLevelTranslation({
+  level: originalTranslationEvent.payload.source_detail.legacy_level,
+  invocationId: originalTranslationEvent.payload.invocation_id,
+  flags: originalTranslationEvent.payload.source_detail.overrides,
+});
+assert.equal(historicalRetry.idempotent, true);
+assert.equal(historicalRetry.event.event_hash, historicalEvents.at(-1).event_hash);
+assert.equal(historicalRetry.translation.target_hash, preP4Translation.target_hash);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(historicalRetry.translation.target, 'guidance_profile'),
+  false,
+);
+const historicalNewInvocation = historicalResumed.runtime.recordLevelTranslation({
+  level: 'l3',
+  invocationId: 'historical-pre-p4-new-invocation',
+  flags: { expand: false, solo: false, red_line_additions: [] },
+});
+assert.equal(historicalNewInvocation.idempotent, false);
+assert.equal(historicalNewInvocation.translation.target.policy_hash, historicalHeader.policy_hash);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    historicalNewInvocation.translation.target,
+    'guidance_profile',
+  ),
+  false,
+);
 const status = started.runtime.status();
 assert.equal(status.translations.count, 1);
 assert.equal(status.translations.latest.target.topology.execution, 'inline');

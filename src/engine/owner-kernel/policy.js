@@ -8,6 +8,9 @@ const GOVERNANCE_SCHEMA_VERSION = 1;
 const SUPPORTED_MODES = new Set(['owner-led', 'milestone-led']);
 const ACTION_CLASSES = new Set(['read_only', 'reversible', 'external', 'irreversible']);
 const ASSURANCE_PROFILES = new Set(['standard', 'conservative']);
+const GUIDANCE_PROFILES = new Set(['adaptive', 'guided', 'autonomous']);
+const TOPOLOGY_PREFERENCES = new Set(['auto', 'inline', 'foreman', 'heterogeneous']);
+const DATA_EGRESS_MODES = new Set(['local-only', 'allowlisted', 'online']);
 
 function fail(message) {
   throw new OwnerKernelError(message, 'INVALID_GOVERNANCE_POLICY');
@@ -172,11 +175,19 @@ function normalizeRedLines(raw) {
 }
 
 function normalizeAssuranceProfile(raw) {
-  const profile = raw === undefined ? 'standard' : requireProtocolToken(raw, 'governance.assurance_profile');
+  const profile = raw === undefined ? 'conservative' : requireProtocolToken(raw, 'governance.assurance_profile');
   if (!ASSURANCE_PROFILES.has(profile)) {
     fail(`governance.assurance_profile must be one of ${Array.from(ASSURANCE_PROFILES).join(', ')}`);
   }
   return profile;
+}
+
+function normalizeEnum(raw, fallback, allowed, label) {
+  const value = raw === undefined ? fallback : requireProtocolToken(raw, label);
+  if (!allowed.has(value)) {
+    fail(`${label} must be one of ${Array.from(allowed).join(', ')}`);
+  }
+  return value;
 }
 
 function resolveGovernancePolicy(config, options = {}) {
@@ -201,6 +212,9 @@ function resolveGovernancePolicy(config, options = {}) {
     'max_delegate_per_decision',
     'red_lines',
     'assurance_profile',
+    'guidance_profile',
+    'topology_preference',
+    'data_egress',
   ]), 'governance');
 
   const defaultMode = requireNonEmptyString(governance.default_mode, 'governance.default_mode');
@@ -261,6 +275,24 @@ function resolveGovernancePolicy(config, options = {}) {
     ),
     red_lines: normalizeRedLines(governance.red_lines === undefined ? [] : governance.red_lines),
     assurance_profile: normalizeAssuranceProfile(governance.assurance_profile),
+    guidance_profile: normalizeEnum(
+      governance.guidance_profile,
+      'guided',
+      GUIDANCE_PROFILES,
+      'governance.guidance_profile',
+    ),
+    topology_preference: normalizeEnum(
+      governance.topology_preference,
+      'auto',
+      TOPOLOGY_PREFERENCES,
+      'governance.topology_preference',
+    ),
+    data_egress: normalizeEnum(
+      governance.data_egress,
+      'allowlisted',
+      DATA_EGRESS_MODES,
+      'governance.data_egress',
+    ),
   };
 
   const normalized = cloneCanonical(resolved);
@@ -419,8 +451,11 @@ function freezeAcceptanceContractV2(contract) {
 module.exports = {
   ACTION_CLASSES,
   ASSURANCE_PROFILES,
+  DATA_EGRESS_MODES,
   GOVERNANCE_SCHEMA_VERSION,
+  GUIDANCE_PROFILES,
   SUPPORTED_MODES,
+  TOPOLOGY_PREFERENCES,
   freezeAcceptanceContract,
   resolveGovernancePolicy,
 };

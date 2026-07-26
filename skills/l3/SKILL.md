@@ -47,6 +47,12 @@ P3.0 does not replace the existing `/l3` lifecycle, DOA, independent QC, or fini
 `/l4` through `/l6` remain on their present strict worktree/dispatch paths until the supervised
 engine bridge is complete.
 
+**Capability profile (shadow):** `/l3` fixes inline topology only. When the host supplies a current
+verified envelope/grant/profile payload, pass it through unchanged; never infer guidance density
+from the level or model name. A late mismatch requires a fresh-session handoff.
+Because `/l3` executes in the already-loaded inline session, it remains on the guided compatibility
+host until an independently witnessed adapter launches it; appending autonomous prose is not a switch.
+
 **MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
 (front-door semantics) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) (DOA,
 Prime Directives, quality gates).

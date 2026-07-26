@@ -1,0 +1,77 @@
+diff --git a/schemas/review-loop-contract.schema.json b/schemas/review-loop-contract.schema.json
+index bb5126f..8976c5c 100644
+--- a/schemas/review-loop-contract.schema.json
++++ b/schemas/review-loop-contract.schema.json
+@@ -35,7 +35,9 @@
+     "reviewer_endpoint",
+     "implementer_endpoint",
+     "min_panel_size",
+-    "on_engine_unavailable"
++    "on_engine_unavailable",
++    "reviewer_engine_low_risk",
++    "reviewer_effort_low_risk"
+   ],
+   "properties": {
+     "reviewer_engine": { "type": "string", "minLength": 1 },
+@@ -68,7 +70,9 @@
+     "reviewer_endpoint": { "type": "string" },
+     "implementer_endpoint": { "type": "string" },
+     "min_panel_size": { "type": "integer", "minimum": 1 },
+-    "on_engine_unavailable": { "type": "string", "enum": ["ask", "solo-fallback", "wait-reset"], "x-shell-validated": true, "x-shell-var": "ON_ENGINE_UNAVAILABLE" }
++    "on_engine_unavailable": { "type": "string", "enum": ["ask", "solo-fallback", "wait-reset"], "x-shell-validated": true, "x-shell-var": "ON_ENGINE_UNAVAILABLE" },
++    "reviewer_engine_low_risk": { "type": "string", "description": "Risk-tiered overlay: non-empty (with reviewer_effort_low_risk) = the LOOP reviewer engine for computed review_risk=low; empty = tiering off (reviewer_engine used at every risk). High risk always uses reviewer_engine." },
++    "reviewer_effort_low_risk": { "type": "string", "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string." }
+   },
+   "required": [
+     "reviewer_engine",
+@@ -101,7 +105,9 @@
+     "reviewer_endpoint",
+     "implementer_endpoint",
+     "min_panel_size",
+-    "on_engine_unavailable"
++    "on_engine_unavailable",
++    "reviewer_engine_low_risk",
++    "reviewer_effort_low_risk"
+   ],
+   "additionalProperties": true
+ }
+diff --git a/scripts/resolve-review-loop.sh b/scripts/resolve-review-loop.sh
+index f80d893..cf4f5ab 100755
+--- a/scripts/resolve-review-loop.sh
++++ b/scripts/resolve-review-loop.sh
+@@ -52,6 +52,8 @@ DEF_IMPL_EFFORT="high"
+ DEF_IMPL_RUNNER="auto"
+ DEF_REV_ENDPOINT=""
+ DEF_IMPL_ENDPOINT=""
++DEF_REV_ENGINE_LOW_RISK=""   # risk-tiered overlay: empty = tiering OFF (loop reviewer = reviewer_engine at every risk)
++DEF_REV_EFFORT_LOW_RISK=""
+ DEF_MAX_ROUNDS="5"
+ DEF_CONVERGE="SHIP-AS-IS"
+ DEF_SPEC_REVIEW="on"
+@@ -172,6 +174,17 @@ IMPL_ENDPOINT="$(read_field implementer_endpoint "$DEF_IMPL_ENDPOINT")"
+ # arg or the emitted JSON (same fail-closed stance as resolve-endpoint.sh's NAME_RE).
+ [[ -z "$REV_ENDPOINT"  || "$REV_ENDPOINT"  =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid reviewer_endpoint (must be [A-Za-z0-9_]): $REV_ENDPOINT" >&2; REV_ENDPOINT=""; }
+ [[ -z "$IMPL_ENDPOINT" || "$IMPL_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid implementer_endpoint (must be [A-Za-z0-9_]): $IMPL_ENDPOINT" >&2; IMPL_ENDPOINT=""; }
++# Risk-tiered low-risk reviewer overlay (ADDITIVE): when BOTH keys are set the caller
++# (/l5 /l6 front-door) uses this pair as the LOOP reviewer for computed review_risk=low;
++# high risk always uses reviewer_engine/reviewer_effort. Empty = tiering off (unchanged
++# behavior). Garbage effort → "" (tiering off), never a bogus effort value — the
++# fail-safe direction is "review with the stronger incumbent", not "skip".
++REV_ENGINE_LOW_RISK="$(read_field reviewer_engine_low_risk "$DEF_REV_ENGINE_LOW_RISK")"
++REV_EFFORT_LOW_RISK="$(read_field reviewer_effort_low_risk "$DEF_REV_EFFORT_LOW_RISK")"
++case "$REV_EFFORT_LOW_RISK" in
++  ''|low|medium|high|xhigh|max) ;;
++  *) echo "resolve-review-loop: ignoring invalid reviewer_effort_low_risk (must be low|medium|high|xhigh|max): $REV_EFFORT_LOW_RISK" >&2; REV_EFFORT_LOW_RISK="" ;;
++esac
+ MAX_ROUNDS="$(read_field loop_max_rounds "$DEF_MAX_ROUNDS")"
+ CONVERGE="$(read_field loop_convergence_verdict "$DEF_CONVERGE")"
+ SPEC_REVIEW="$(read_field spec_review "$DEF_SPEC_REVIEW")"
+@@ -786,6 +799,8 @@ if [[ -n "$FIELD" ]]; then
+     implementer_runner) printf '%s\n' "$IMPL_RUNNER" ;;
+     reviewer_endpoint) printf '%s\n' "$REV_ENDPOINT" ;;
+     implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
++    reviewer_engine_low_risk) printf '%s\n' "$REV_ENGINE_LOW_RISK" ;;
++    reviewer_effort_low_risk) printf '%s\n' "$REV_EFFORT_LOW_RISK" ;;
+     loop_max_rounds) printf '%s\n' "$MAX_ROUNDS" ;;
+     loop_convergence_verdict) printf '%s\n' "$CONVERGE" ;;
+     spec_review) printf '%s\n' "$SPEC_REVIEW" ;;

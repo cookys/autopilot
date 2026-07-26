@@ -7,7 +7,8 @@
 # Usage:
 #   scripts/resolve-review-loop.sh                 # emit resolved config JSON
 #   scripts/resolve-review-loop.sh --field reviewer_engine   # one raw field (for shell)
-#   scripts/resolve-review-loop.sh --check-scorecard   # include reviewer_qualified + fallback_ladder
+#   scripts/resolve-review-loop.sh --check-scorecard --scorecard-scope-file <scope.json>
+#     --scorecard-identity-file <identity.json>   # exact evidence-required gate
 #   Risk inputs (optional): --source-trust high|low --diff-lines N --protected-path 0|1
 #     --oracle-available 0|1 --security-surface 0|1  (drive deterministic review_risk)
 #   --check-scorecard  # include scorecard gate signal in output (opt-in, no extra keys by default)
@@ -103,6 +104,8 @@ ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
 ENFORCE=0
 CHECK_SCORECARD=0
+SCORECARD_SCOPE_FILE=""
+SCORECARD_IDENTITY_FILE=""
 SCALE_BY_CAPABILITY=0
 DWORK_DOMAIN="mixed"
 DOMAIN_SOURCE="none"
@@ -149,6 +152,8 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     --check-scorecard) CHECK_SCORECARD=1; shift ;;
+    --scorecard-scope-file) SCORECARD_SCOPE_FILE="${2:-}"; shift 2 ;;
+    --scorecard-identity-file) SCORECARD_IDENTITY_FILE="${2:-}"; shift 2 ;;
     --enforce) ENFORCE=1; shift ;;
     --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
     -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -541,10 +546,14 @@ if (!Array.isArray(rows)) process.exit(0);
 let found = false;
 for (const row of rows) {
   if (row && String(row.engine) === String(engine) && (String(runner) === "auto" || String(row.runner) === String(runner)) && typeof row.status === "string") {
-    if (row.status === "qualified") {
+    if (row.status === "qualified"
+        && row.authority_status === "session_local"
+        && row.admissible === true) {
       process.stdout.write("high");
-    } else {
+    } else if (row.status === "failed" || row.status === "expired") {
       process.stdout.write("low");
+    } else {
+      process.stdout.write("unknown");
     }
     found = true;
     break;
@@ -693,8 +702,18 @@ process.stdout.write(JSON.stringify(parsed));'
 REVIEWER_QUALIFIED="false"
 FALLBACK_LADDER_JSON="[]"
 if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
-  SCORECARD_CURRENT="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role reviewer 2>/dev/null || true)"
-  SCORECARD_LADDER="$(node "$SCRIPT_DIR/engine-scorecard.js" ladder --role reviewer --implementer-family "$IMPL_FAMILY" 2>/dev/null || true)"
+  SCORECARD_CURRENT=""
+  SCORECARD_LADDER=""
+  if [[ -r "$SCORECARD_SCOPE_FILE" && -r "$SCORECARD_IDENTITY_FILE" ]]; then
+    SCORECARD_CURRENT="$(node "$SCRIPT_DIR/engine-scorecard.js" current \
+      --role reviewer --require-evidence \
+      --scope-file "$SCORECARD_SCOPE_FILE" \
+      --identity-file "$SCORECARD_IDENTITY_FILE" 2>/dev/null || true)"
+    SCORECARD_LADDER="$(node "$SCRIPT_DIR/engine-scorecard.js" ladder \
+      --role reviewer --require-evidence \
+      --scope-file "$SCORECARD_SCOPE_FILE" \
+      --implementer-family "$IMPL_FAMILY" 2>/dev/null || true)"
+  fi
   FALLBACK_LADDER_JSON="$(printf '%s' "$SCORECARD_LADDER" | json_parse_array_compact || printf '%s' "[]")"
 
   REVIEWER_STATUS=""
@@ -719,6 +738,8 @@ for (const row of rows) {
     row &&
     String(row.engine) === String(engine) &&
     (String(runner) === "auto" || String(row.runner) === String(runner)) &&
+    row.authority_status === "session_local" &&
+    row.admissible === true &&
     typeof row.status === "string"
   ) {
     process.stdout.write(row.status);

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "hooks": [
+    { "stem": "accumulator", "class": "invariant_effect" },
+    { "stem": "audit-log", "class": "invariant_effect" },
+    { "stem": "batch-format", "class": "invariant_effect" },
+    { "stem": "branch-protection", "class": "invariant_effect" },
+    { "stem": "check-console", "class": "invariant_effect" },
+    { "stem": "commit-secret-scan", "class": "invariant_effect" },
+    { "stem": "config-protection", "class": "invariant_effect" },
+    { "stem": "context-budget", "class": "invariant_effect" },
+    { "stem": "cost-tracker", "class": "invariant_effect" },
+    { "stem": "design-quality", "class": "guidance", "profiles": ["guided"] },
+    { "stem": "dispatch-model-guard", "class": "invariant_effect" },
+    { "stem": "failure-escalation", "class": "invariant_effect" },
+    { "stem": "intent-capture", "class": "invariant_effect" },
+    { "stem": "large-file-warner", "class": "invariant_effect" },
+    { "stem": "log-error", "class": "invariant_effect" },
+    { "stem": "mcp-health", "class": "invariant_effect" },
+    { "stem": "orchestrator-edit-gate", "class": "invariant_effect" },
+    { "stem": "reload-watch", "class": "invariant_effect" },
+    { "stem": "session-handoff", "class": "invariant_effect" },
+    { "stem": "session-start", "class": "host_only" },
+    { "stem": "session-summary", "class": "invariant_effect" },
+    { "stem": "state-checkpoint", "class": "invariant_effect" },
+    { "stem": "suggest-compact", "class": "guidance", "profiles": ["guided"] },
+    { "stem": "test-runner", "class": "invariant_effect" },
+    { "stem": "version-drift-check", "class": "host_only" }
+  ]
+}

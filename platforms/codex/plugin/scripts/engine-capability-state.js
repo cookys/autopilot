@@ -20,6 +20,7 @@ const EVIDENCE_PRODUCERS = new Set([
   'engine-qualify-v2',
   'operator-record-v1',
   'trusted-observation-v1',
+  'aa-import-v1',
 ]);
 
 const HELP_TEXT = `Usage:
@@ -350,9 +351,7 @@ function readEvidenceRows(evidenceFile) {
       )) {
         throw new Error('evidence producer transcript hash mismatch');
       }
-      if (evidence.source === 'internal_eval' && wrapper.producer !== 'engine-qualify-v2') {
-        throw new Error('internal evaluation evidence lacks the reported qualifier producer');
-      }
+      validateEvidenceProducer(evidence, wrapper.producer);
       rows.push({
         event_id: eventId,
         producer: wrapper.producer,
@@ -426,40 +425,209 @@ function readJsonObject(filePath, label) {
   return value;
 }
 
-function appendEvidenceRecord(config, evidence, producer) {
+function appendEvidenceRows(config, rows) {
+  ensureDir(config.storeDir);
+  const content = `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`;
+  try {
+    fs.appendFileSync(config.evidenceFile, content, { mode: 0o600 });
+    fs.chmodSync(config.storeDir, 0o700);
+    fs.chmodSync(config.evidenceFile, 0o600);
+  } catch (error) {
+    throw new Error(`cannot append and secure capability evidence store: ${error.message}`);
+  }
+}
+
+function exactTokenList(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((entry, index) => entry === expected[index]);
+}
+
+function validateAaImportEvidence(evidence) {
+  const expectedTask = evidence.role === 'implementer'
+    ? 'code_implementation' : 'repository_exploration';
+  if (!['implementer', 'explorer'].includes(evidence.role)) {
+    throw new Error('aa-import-v1 may write only implementer/explorer evidence');
+  }
+  if (evidence.source !== 'external_prior'
+      || !['provisional', 'degraded'].includes(evidence.state)) {
+    throw new Error('aa-import-v1 may write only provisional/degraded external_prior evidence');
+  }
+  if (evidence.source_ref !== 'artificial-analysis-api-v2'
+      || evidence.methodology.kind !== 'external_prior'
+      || evidence.methodology.name !== 'artificial-analysis-model-prior'
+      || evidence.methodology.version !== '1.0.0') {
+    throw new Error('aa-import-v1 requires canonical Artificial Analysis provenance');
+  }
+  if (evidence.identity.runner !== 'aa-model-level'
+      || evidence.identity.runner_version !== 'api-v2'
+      || evidence.identity.harness_version !== 'unresolved'
+      || evidence.identity.effort !== 'unresolved'
+      || evidence.identity.identity_resolved !== false) {
+    throw new Error('aa-import-v1 requires an unresolved model-level Artificial Analysis identity');
+  }
+  if (!exactTokenList(evidence.scope.task_classes, [expectedTask])
+      || !exactTokenList(evidence.scope.domains, ['general'])
+      || !exactTokenList(evidence.scope.languages, ['und'])
+      || !exactTokenList(evidence.scope.tool_surface, ['model-level-benchmark'])) {
+    throw new Error('aa-import-v1 evidence has an unsupported role scope');
+  }
+  const expectedDimensions = evidence.role === 'implementer'
+    ? ['agentic_index', 'coding_index']
+    : ['agentic_index', 'intelligence_index'];
+  if (!exactTokenList(evidence.methodology.basis.dimensions, expectedDimensions)
+      || !evidence.methodology.basis.cohort.startsWith('aa-index-v')) {
+    throw new Error('aa-import-v1 evidence has an unsupported methodology basis');
+  }
+  const applicability = evidence.methodology.basis.applicability;
+  const requiredApplicability = [
+    'benchmark-language-unresolved',
+    'cloud-model-level',
+    'deployment-unresolved',
+    'harness-unresolved',
+    'precision-unresolved',
+    'proxy-only',
+    'runner-unresolved',
+  ];
+  if (requiredApplicability.some((entry) => !applicability.includes(entry))
+      || (evidence.state === 'degraded'
+        && (!applicability.includes('candidate-retired')
+          || ![
+            'below_candidate_floor',
+            'model_identity_changed',
+            'model_missing_current_cohort',
+          ].some((entry) => applicability.includes(entry))))
+      || (evidence.state === 'provisional' && applicability.includes('candidate-retired'))) {
+    throw new Error('aa-import-v1 evidence has unsupported applicability metadata');
+  }
+}
+
+function validateEvidenceProducer(evidence, producer) {
+  if (!EVIDENCE_PRODUCERS.has(producer)) {
+    throw new Error(`unsupported capability evidence producer '${producer}'`);
+  }
+  if (evidence.source === 'internal_eval' && producer !== 'engine-qualify-v2') {
+    throw new Error('internal evaluation evidence requires engine-qualify-v2');
+  }
+  if (producer === 'aa-import-v1') validateAaImportEvidence(evidence);
+}
+
+function restoreEvidenceAppend(config, existed, originalSize) {
+  try {
+    if (existed) {
+      fs.truncateSync(config.evidenceFile, originalSize);
+    } else if (fs.existsSync(config.evidenceFile)) {
+      fs.unlinkSync(config.evidenceFile);
+    }
+  } catch (rollbackError) {
+    throw new Error(`capability evidence rollback failed: ${rollbackError.message}`);
+  }
+}
+
+function appendEvidenceRecords(config, rawEvidenceRecords, producer, transaction = {}) {
+  if (!EVIDENCE_PRODUCERS.has(producer)) {
+    throw new Error(`unsupported capability evidence producer '${producer}'`);
+  }
+  if (!Array.isArray(rawEvidenceRecords) || rawEvidenceRecords.length === 0) {
+    throw new Error('capability evidence batch must be a non-empty array');
+  }
+  const evidenceRecords = rawEvidenceRecords.map((record) => compileCapabilityEvidence(record));
+  if (!transaction || typeof transaction !== 'object' || Array.isArray(transaction)
+      || Object.keys(transaction).some((key) => !['commit', 'rollback'].includes(key))
+      || (transaction.commit !== undefined && typeof transaction.commit !== 'function')
+      || (transaction.rollback !== undefined && typeof transaction.rollback !== 'function')
+      || Boolean(transaction.commit) !== Boolean(transaction.rollback)) {
+    throw new Error(
+      'capability evidence transaction must contain paired commit and rollback callbacks',
+    );
+  }
+  for (const evidence of evidenceRecords) validateEvidenceProducer(evidence, producer);
+
   return withWriteLock({
     storeDir: config.storeDir,
     lockFile: config.lockFile,
     name: 'capability evidence',
   }, () => {
     const rows = readEvidenceRows(config.evidenceFile);
-    const existing = rows.find((row) => row.evidence.evidence_id === evidence.evidence_id);
-    if (existing) return existing;
-    evaluateCapabilityEvidence(
-      [...rows.map((row) => row.evidence), evidence],
-      {
-        role: evidence.role,
-        scope: evidence.scope,
-        identity: evidence.identity,
-        evaluation_time: evidence.issued_at,
-      },
-    );
-    const wrapper = {
-      event_id: maxEventId(rows) + 1,
-      producer,
-      transcript_hash: capabilityEvidenceProducerHash(evidence, producer),
-      evidence,
-    };
-    ensureDir(config.storeDir);
-    appendRow(config.evidenceFile, wrapper);
-    try {
-      fs.chmodSync(config.storeDir, 0o700);
-      fs.chmodSync(config.evidenceFile, 0o600);
-    } catch (error) {
-      throw new Error(`cannot secure capability evidence store: ${error.message}`);
+    const byEvidenceId = new Map(rows.map((row) => [row.evidence.evidence_id, row]));
+    const result = [];
+    const newRows = [];
+    let nextEventId = maxEventId(rows) + 1;
+
+    for (const evidence of evidenceRecords) {
+      let wrapper = byEvidenceId.get(evidence.evidence_id);
+      if (wrapper && wrapper.producer !== producer) {
+        throw new Error(
+          `capability evidence ${evidence.evidence_id} is owned by producer '${wrapper.producer}'`,
+        );
+      }
+      if (!wrapper) {
+        wrapper = {
+          event_id: nextEventId,
+          producer,
+          transcript_hash: capabilityEvidenceProducerHash(evidence, producer),
+          evidence,
+        };
+        nextEventId += 1;
+        rows.push(wrapper);
+        newRows.push(wrapper);
+        byEvidenceId.set(evidence.evidence_id, wrapper);
+      }
+      result.push(wrapper);
     }
-    return wrapper;
+
+    const allEvidence = rows.map((row) => row.evidence);
+    for (const evidence of evidenceRecords) {
+      evaluateCapabilityEvidence(
+        allEvidence,
+        {
+          role: evidence.role,
+          scope: evidence.scope,
+          identity: evidence.identity,
+          evaluation_time: evidence.issued_at,
+        },
+      );
+    }
+
+    if (rows.length !== byEvidenceId.size) {
+      throw new Error('capability evidence ledger contains duplicate evidence ids');
+    }
+    const existed = fs.existsSync(config.evidenceFile);
+    const originalSize = existed ? fs.statSync(config.evidenceFile).size : 0;
+    let published = false;
+    try {
+      if (transaction.commit) {
+        transaction.commit(result);
+        published = true;
+      }
+      if (newRows.length > 0) appendEvidenceRows(config, newRows);
+    } catch (error) {
+      const rollbackErrors = [];
+      if (newRows.length > 0) {
+        try {
+          restoreEvidenceAppend(config, existed, originalSize);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError.message);
+        }
+      }
+      if (published) {
+        try {
+          transaction.rollback();
+        } catch (rollbackError) {
+          rollbackErrors.push(`publication rollback failed: ${rollbackError.message}`);
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        throw new Error(`${error.message}; ${rollbackErrors.join('; ')}`);
+      }
+      throw error;
+    }
+    return result;
   });
+}
+
+function appendEvidenceRecord(config, evidence, producer) {
+  return appendEvidenceRecords(config, [evidence], producer)[0];
 }
 
 function buildObservedRevocation(target, observation, observedAt) {
@@ -1201,4 +1369,14 @@ function main() {
   failUsage(`unknown subcommand '${command}'`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  appendEvidenceRecord,
+  appendEvidenceRecords,
+  readEvidenceRows,
+  resolveStoreConfig,
+  validateEvidenceProducer,
+};

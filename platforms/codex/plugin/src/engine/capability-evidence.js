@@ -27,6 +27,14 @@ const STATES = new Set([
   'stale',
   'revoked',
 ]);
+const STATE_TIE_PRECEDENCE = Object.freeze({
+  unknown: 0,
+  provisional: 1,
+  qualified: 2,
+  stale: 3,
+  degraded: 4,
+  revoked: 5,
+});
 const REVOCATION_REASONS = new Set([
   'critical_miss',
   'semantic_identity_drift',
@@ -845,7 +853,8 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery) {
   }
   eligibleRecords.sort((left, right) => {
     const timeDelta = Date.parse(right.observed_at) - Date.parse(left.observed_at);
-    return timeDelta || right.evidence_id.localeCompare(left.evidence_id);
+    const stateDelta = STATE_TIE_PRECEDENCE[right.state] - STATE_TIE_PRECEDENCE[left.state];
+    return timeDelta || stateDelta || right.evidence_id.localeCompare(left.evidence_id);
   });
   const latestQualified = eligibleRecords.find((record) => record.state === 'qualified');
   const restrictiveRecords = eligibleRecords.filter(

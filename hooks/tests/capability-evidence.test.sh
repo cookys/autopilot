@@ -245,6 +245,35 @@ const externalPrior = compileCapabilityEvidence({
 check(externalPrior.state === 'provisional', 'external prior can produce provisional evidence');
 check(externalPrior.trials.length === 0, 'external prior carries no fabricated reviewer trials');
 check(externalPrior.methodology.thresholds === null, 'external prior carries no reviewer thresholds');
+const {
+  evidence_id: externalEvidenceId,
+  evidence_hash: externalEvidenceHash,
+  scope_hash: externalScopeHash,
+  identity_hash: externalIdentityHash,
+  grant_identity_hash: externalGrantIdentityHash,
+  trial_set_hash: externalTrialSetHash,
+  ...externalPriorBody
+} = externalPrior;
+const equalTimeDegraded = compileCapabilityEvidence({
+  ...externalPriorBody,
+  state: 'degraded',
+  methodology: {
+    ...externalPriorBody.methodology,
+    basis: {
+      ...externalPriorBody.methodology.basis,
+      observation_hash: digest('aa-equal-time-retirement'),
+    },
+  },
+});
+check(
+  evaluateCapabilityEvidence([externalPrior, equalTimeDegraded], {
+    role: externalPrior.role,
+    scope: externalPrior.scope,
+    identity: externalPrior.identity,
+    evaluation_time: externalPrior.issued_at,
+  }).state === 'degraded',
+  'restrictive evidence wins equal observed_at ties deterministically',
+);
 check(
   validateJsonSchema(evidenceSchema, externalPrior).valid === true,
   'external prior discriminated evidence matches its JSON schema',

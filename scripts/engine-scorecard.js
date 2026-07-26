@@ -15,6 +15,9 @@ const {
   ROLE_IDS,
   normalizeRole,
 } = require('../src/engine/roles');
+const {
+  validateEvidenceProducer,
+} = require('./engine-capability-state');
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
@@ -301,9 +304,7 @@ function readCapabilityEvidenceRows() {
     }
     if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)
         || toEventId(wrapper.event_id) === null
-        || !['engine-qualify-v2', 'operator-record-v1', 'trusted-observation-v1'].includes(
-          wrapper.producer,
-        )
+        || typeof wrapper.producer !== 'string'
         || typeof wrapper.transcript_hash !== 'string' || !wrapper.evidence) {
       failValidation(`malformed capability evidence line ${index + 1}: invalid wrapper`);
     }
@@ -316,9 +317,15 @@ function readCapabilityEvidenceRows() {
     if (wrapper.transcript_hash !== capabilityEvidenceProducerHash(
       evidence,
       wrapper.producer,
-    ) || (evidence.source === 'internal_eval'
-      && wrapper.producer !== 'engine-qualify-v2')) {
+    )) {
       failValidation(`malformed capability evidence line ${index + 1}: producer mismatch`);
+    }
+    try {
+      validateEvidenceProducer(evidence, wrapper.producer);
+    } catch (error) {
+      failValidation(
+        `malformed capability evidence line ${index + 1}: producer mismatch (${error.message})`,
+      );
     }
     return {
       event_id: toEventId(wrapper.event_id),

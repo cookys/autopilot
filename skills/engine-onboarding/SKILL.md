@@ -40,6 +40,7 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 | Script | Stage | Role in the runbook |
 |--------|-------|---------------------|
 | [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer) | Runs at least two fresh metamorphic known-bad + clean trials, executable host oracles, and a reversal control inside per-case bubblewrap isolation. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
+| [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
 | [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |
 | [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry. It cannot replace the live Owner Kernel verifier capability. |
@@ -143,6 +144,13 @@ Record a canonical row per run and keep historical comparability. The JSONL and 
 untrusted telemetry because a same-UID model process can edit them.
 
 - Use `scripts/engine-scorecard.js record --file <row.json>` after an evaluation run.
+- Optionally run `ARTIFICIAL_ANALYSIS_API_KEY=... node scripts/import-aa-capabilities.js refresh`.
+  The fixed official endpoint is fetched only on demand; raw scores remain under
+  `~/.autopilot/aa-capabilities/`, version cohorts are not mixed, old candidates are explicitly
+  degraded when they leave the current cohort, `--no-record` retirement debt is carried until a
+  recorded refresh, cached raw pages are re-derived and checked against the normalized snapshot,
+  cache loss is reconciled against surviving ledger evidence, and the key is never redirected or
+  cached.
 - Bind role + task/domain/language/tool scope and the full deployment identity, including runner/harness versions, effort, prompt configuration, semantic fingerprint, and containment fingerprint.
 - Use `node scripts/engine-scorecard.js current --role <role> --require-evidence --scope-file <scope.json> --identity-file <identity.json>` for an exact-identity telemetry view. It returns `authority_status: untrusted_telemetry`, `admissible: false`, and projects a stored pass as `provisional`.
 - External priors, self-report, runtime probes, and ordinary receipts cannot create `qualified`; ordinary receipts may sustain confidence or demote a later view.

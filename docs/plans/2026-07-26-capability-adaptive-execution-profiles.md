@@ -411,6 +411,16 @@ still cannot weaken assurance or authority.
 - maps Agentic/Coding/Coding-Agent evidence to eligible roles without producing reviewer or owner
   authority;
 - stores a content-hashed user-local cache;
+- re-derives normalized models, percentiles, and provisional evidence from the referenced raw
+  pages when reading the cache, so content-addressed objects cannot be recombined across snapshots;
+- refuses redirects and any cache/evidence-store path that resolves inside a Git worktree;
+- publishes the cache pointer before making appended evidence visible, rolls both sides back on
+  synchronous failure, reconciles surviving ledger state after cache loss or interruption, and
+  ignores an older refresh that finishes after a newer snapshot;
+- emits a same-identity `degraded` successor when a prior candidate falls below the current
+  within-version floor, changes identity, or disappears, so an old cohort cannot remain active;
+- carries any retirement skipped by `--no-record` through later snapshots until a recorded refresh
+  commits it, unless that exact identity and role becomes a current candidate again;
 - never runs on every task and never makes AA availability a runtime dependency;
 - does not commit or package imported score data;
 - treats index version changes as a new comparison cohort rather than comparing raw scores across
@@ -764,10 +774,12 @@ Acceptance:
    - index versions form separate cohorts;
    - no fetched data is staged or packaged.
 2. Map AA dimensions to provisional roles:
-   - Agentic + exact coding-agent evidence: owner candidate;
-   - DeepSWE/Terminal/Coding: implementer candidate;
-   - repository Q&A/long context: explorer candidate;
-   - reviewer remains unqualified without local false-pass/specificity evidence.
+   - the documented free model endpoint exposes model-level Intelligence, Coding, and Agentic
+     indices, so top-quartile Coding + Agentic can seed an implementer candidate and
+     Intelligence + Agentic can seed an explorer proxy;
+   - the endpoint exposes neither exact coding-agent variants nor repository-Q&A/context evidence,
+     so it emits no owner candidate;
+   - reviewer and verification author remain unqualified without their project-local role suites.
 3. Downgrade applicability when benchmark language/domain, harness, precision, or deployment shape
    does not match the requested role.
 
@@ -776,6 +788,12 @@ Acceptance:
 - AA network/API failure leaves routing functional using P3a evidence or guided.
 - External data alone cannot produce `qualified`.
 - Index-version changes never compare raw scores as one stable scale.
+- A failed publication leaves the prior `current.json`, evidence ledger, and referenced cache
+  objects unchanged; unreferenced objects created by that attempt are removed.
+- Abrupt interruption cannot expose new ledger evidence before its cache pointer; a later refresh
+  reconciles the safe cache-ahead state and any ledger state that survives cache loss.
+- Cached raw pages deterministically reproduce normalized model fields, percentiles, and
+  provisional evidence; a no-record refresh cannot permanently strand an earlier provisional row.
 - No AA response/cache enters git.
 - AA is not required for the core adaptive-profile release.
 

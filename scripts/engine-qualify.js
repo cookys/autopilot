@@ -8,7 +8,6 @@ const path = require('path');
 const process = require('process');
 const { spawnSync } = require('child_process');
 const {
-  capabilityEvidenceProducerHash,
   compileCapabilityEvidence,
   evaluateCapabilityEvidence,
   verifyEvaluationCorpus,
@@ -27,13 +26,12 @@ const {
   generateReviewerEvaluation,
 } = require('../evals/reviewer-eval-generator');
 const {
-  appendRow,
-  ensureDir,
   expandTilde,
-  maxEventId,
-  toEventId,
-  withWriteLock,
 } = require('./lib/jsonl-store');
+const {
+  appendEvidenceRecord,
+  readEvidenceRows,
+} = require('./engine-capability-state');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(REPO_ROOT, 'evals', 'capability-evidence-corpus.json');
@@ -1134,75 +1132,11 @@ function resolveEvidenceStore(storeOption) {
 }
 
 function readTelemetryEvidenceRows(evidenceFile) {
-  if (!fs.existsSync(evidenceFile)) return [];
-  const lines = fs.readFileSync(evidenceFile, 'utf8').split(/\r?\n/u).filter(Boolean);
-  return lines.map((line, index) => {
-    let wrapper;
-    try {
-      wrapper = JSON.parse(line);
-    } catch (error) {
-      throw new Error(`malformed capability evidence line ${index + 1}: ${error.message}`);
-    }
-    const eventId = wrapper && toEventId(wrapper.event_id);
-    if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)
-        || eventId === null || !wrapper.evidence
-        || !['engine-qualify-v2', 'operator-record-v1', 'trusted-observation-v1'].includes(
-          wrapper.producer,
-        )
-        || !SHA256.test(wrapper.transcript_hash || '')) {
-      throw new Error(`malformed capability evidence line ${index + 1}: invalid wrapper`);
-    }
-    const evidence = compileCapabilityEvidence(wrapper.evidence);
-    if (wrapper.transcript_hash !== capabilityEvidenceProducerHash(
-      evidence,
-      wrapper.producer,
-    )) {
-      throw new Error(`malformed capability evidence line ${index + 1}: transcript mismatch`);
-    }
-    if (evidence.source === 'internal_eval' && wrapper.producer !== QUALIFIER_PRODUCER) {
-      throw new Error(
-        `malformed capability evidence line ${index + 1}: untrusted internal evaluation`,
-      );
-    }
-    return {
-      event_id: eventId,
-      producer: wrapper.producer,
-      transcript_hash: wrapper.transcript_hash,
-      evidence,
-    };
-  });
+  return readEvidenceRows(evidenceFile);
 }
 
 function appendQualifierEvidence(config, evidence) {
-  return withWriteLock({
-    storeDir: config.storeDir,
-    lockFile: config.lockFile,
-    name: 'capability evidence qualifier',
-  }, () => {
-    const rows = readTelemetryEvidenceRows(config.evidenceFile);
-    const existing = rows.find((row) => row.evidence.evidence_id === evidence.evidence_id);
-    if (existing) return existing;
-    evaluateCapabilityEvidence(
-      [...rows.map((row) => row.evidence), evidence],
-      {
-        role: evidence.role,
-        scope: evidence.scope,
-        identity: evidence.identity,
-        evaluation_time: evidence.issued_at,
-      },
-    );
-    const wrapper = {
-      event_id: maxEventId(rows) + 1,
-      producer: QUALIFIER_PRODUCER,
-      transcript_hash: capabilityEvidenceProducerHash(evidence, QUALIFIER_PRODUCER),
-      evidence,
-    };
-    ensureDir(config.storeDir);
-    appendRow(config.evidenceFile, wrapper);
-    fs.chmodSync(config.storeDir, 0o700);
-    fs.chmodSync(config.evidenceFile, 0o600);
-    return wrapper;
-  });
+  return appendEvidenceRecord(config, evidence, QUALIFIER_PRODUCER);
 }
 
 function latestExactEvidence(rows, role, scopeHash, identityHash) {

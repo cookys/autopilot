@@ -3960,6 +3960,7 @@ class OwnerKernel {
       'capability_state',
       'model_identity',
       'evidence',
+      'evidence_store_anchor',
       'identity',
       'channel',
     ]), 'trusted role capability verification');
@@ -3975,13 +3976,54 @@ class OwnerKernel {
         'UNVERIFIED_ROLE_CAPABILITY',
       );
     }
+    const evidence = Array.isArray(verification.evidence) ? verification.evidence : [];
+    const anchor = requirePlainDataObject(
+      verification.evidence_store_anchor,
+      'trusted capability evidence store anchor',
+    );
+    requireOnlyDataKeys(anchor, new Set([
+      'schema_version',
+      'authority_kind',
+      'run_nonce_hash',
+      'store_head_hash',
+      'query_hash',
+      'receipts_hash',
+      'evidence_ids',
+    ]), 'trusted capability evidence store anchor');
+    const expectedQueryHash = sha256(canonicalJson({
+      task_authority_id: taskAuthorityId,
+      dispatch_id: dispatchId,
+      role,
+      capability_scope: canonicalRequest.capabilityScope,
+      model_identity: verification.model_identity,
+      capability_state: verification.capability_state,
+      evaluation_time: canonicalRequest.evaluationTime,
+    }));
+    const evidenceIds = evidence.map((receipt) => receipt && receipt.evidence_id).sort();
+    if (anchor.schema_version !== 1
+      || anchor.authority_kind !== 'session_local'
+      || !isSha256(anchor.run_nonce_hash)
+      || !isSha256(anchor.store_head_hash)
+      || anchor.query_hash !== expectedQueryHash
+      || anchor.receipts_hash !== sha256(canonicalJson(evidence))
+      || !Array.isArray(anchor.evidence_ids)
+      || canonicalJson(anchor.evidence_ids) !== canonicalJson(evidenceIds)
+      || evidenceIds.some((id) => !isSha256(id))) {
+      throw new OwnerKernelBlockedError(
+        'trusted role capability verifier did not bind evidence to its store and exact query',
+        'UNVERIFIED_ROLE_CAPABILITY',
+      );
+    }
+    const trustedReceiptIds = new Set(evidenceIds);
     const candidate = resolveRoleExecutionGrant({
       ...canonicalRequest,
       envelope: internal.state.task_authorities[taskAuthorityId].envelope,
       roleEligibility: verification.role_eligibility,
       capabilityState: verification.capability_state,
       modelIdentity: verification.model_identity,
-      evidence: verification.evidence,
+      evidence,
+    }, {
+      evidenceVerifier: (receipt) => trustedReceiptIds.has(receipt.evidence_id),
     });
     if (candidate.status !== 'candidate') return candidate;
     const capabilityVerificationHash = sha256(canonicalJson(verification));
@@ -4096,6 +4138,8 @@ class OwnerKernel {
       'identity_hash',
       'semantic_fingerprint',
       'containment_fingerprint',
+      'critical_miss',
+      'probe_regression',
       'identity',
       'channel',
     ]), 'trusted live role capability observation');
@@ -4122,6 +4166,8 @@ class OwnerKernel {
         semanticFingerprint: observation.semantic_fingerprint,
         containmentFingerprint: observation.containment_fingerprint,
         capabilityState: observation.capability_state,
+        criticalMiss: observation.critical_miss,
+        probeRegression: observation.probe_regression,
       });
     } catch (error) {
       if (!error || error.code !== 'ACTIVE_GRANT_REVOKED') throw error;
@@ -4130,6 +4176,8 @@ class OwnerKernel {
       else if (/exact identity/.test(error.message)) reason = 'identity_drift';
       else if (/semantic identity/.test(error.message)) reason = 'semantic_fingerprint_drift';
       else if (/containment/.test(error.message)) reason = 'containment_fingerprint_drift';
+      else if (/Critical miss/.test(error.message)) reason = 'critical_miss';
+      else if (/probe regression/.test(error.message)) reason = 'probe_regression';
       const event = appendInternal(this, {
         type: 'role_grant_revoked',
         emitter: {

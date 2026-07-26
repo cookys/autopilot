@@ -282,7 +282,11 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
     payloadError('hook class stems must be unique', 'PROFILE_HOOK_DRIFT');
   }
 
-  const hookManifest = readJsonInside(repoRoot, 'hooks/hooks.json', 'hook manifest');
+  const liveHookManifest = path.join(repoRoot, 'hooks', 'hooks.json');
+  const hookManifestPath = fs.existsSync(liveHookManifest)
+    ? 'hooks/hooks.json'
+    : 'profiles/baselines/claude-hooks.json';
+  const hookManifest = readJsonInside(repoRoot, hookManifestPath, 'hook manifest');
   const wired = [];
   for (const groups of Object.values(hookManifest.hooks || {})) {
     for (const group of groups) {

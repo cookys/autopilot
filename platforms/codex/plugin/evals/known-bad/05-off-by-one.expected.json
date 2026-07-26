@@ -1,0 +1,1 @@
+{"class":"major","defect":"off-by-one in line range validation: >= rejects valid pointers whose end line equals the last line of the file (1-based inclusive range)"}

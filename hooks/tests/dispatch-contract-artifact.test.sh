@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 json_get() { echo "$1" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);const p=process.argv[1].split('.');let v=o;for(const k of p){v=v?.[k];}console.log(v===undefined?'':typeof v==='object'?JSON.stringify(v):String(v))}catch(e){console.log('')}})" "$2"; }
 

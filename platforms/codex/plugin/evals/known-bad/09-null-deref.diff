@@ -1,0 +1,12 @@
+--- a/scripts/check-node-report.sh
++++ b/scripts/check-node-report.sh
+@@ -78,8 +78,7 @@ validate_artifact_paths() {
+   # Each element must be {path, sha256}
+   for entry in $(printf '%s' "$artifact_paths" | jq -c '.[]'); do
+     local path sha256
+-    path="$(printf '%s' "$entry" | jq -r '.path // empty')"
+-    sha256="$(printf '%s' "$entry" | jq -r '.sha256 // empty')"
++    path="$(printf '%s' "$entry" | jq -r '.path')"
++    sha256="$(printf '%s' "$entry" | jq -r '.sha256')"
+     [ -n "$path" ]   || { fail "artifact entry missing path: $entry"; continue; }
+     [ -n "$sha256" ] || { fail "artifact entry missing sha256: $entry"; continue; }

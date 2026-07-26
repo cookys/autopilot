@@ -176,6 +176,8 @@ const ownerKernel = require('./owner-kernel');
 const executionProfile = require('./execution-profile');
 const profilePayload = require('./profile-payload');
 const profileRuntime = require('./profile-runtime');
+const capabilityEvidence = require('./capability-evidence');
+const roles = require('./roles');
 
 module.exports = {
   AutopilotEngine,
@@ -314,6 +316,23 @@ module.exports = {
   looksLikeReviewLoopConfig,
   RESOLVE_REVIEW_LOOP,
   invokeSocketRequest,
+  CAPABILITY_EVIDENCE_SCHEMA_VERSION: capabilityEvidence.CAPABILITY_EVIDENCE_SCHEMA_VERSION,
+  CAPABILITY_EVIDENCE_ROLES: capabilityEvidence.ROLES,
+  CAPABILITY_EVIDENCE_SOURCES: capabilityEvidence.SOURCES,
+  CAPABILITY_EVIDENCE_STATES: capabilityEvidence.STATES,
+  CAPABILITY_EVIDENCE_REVOCATION_REASONS: capabilityEvidence.REVOCATION_REASONS,
+  CAPABILITY_ROLE_IDS: roles.ROLE_IDS,
+  CAPABILITY_ROLE_ALIASES: roles.LEGACY_ROLE_ALIASES,
+  CapabilityEvidenceError: capabilityEvidence.CapabilityEvidenceError,
+  MAX_QUALIFIED_TTL_DAYS: capabilityEvidence.MAX_QUALIFIED_TTL_DAYS,
+  buildCapabilityEvidenceReceipt: capabilityEvidence.buildCapabilityEvidenceReceipt,
+  compileCapabilityEvidence: capabilityEvidence.compileCapabilityEvidence,
+  evaluateCapabilityEvidence: capabilityEvidence.evaluateCapabilityEvidence,
+  normalizeCapabilityEvidenceIdentity: capabilityEvidence.normalizeIdentity,
+  normalizeCapabilityEvidenceReceipt: capabilityEvidence.normalizeCapabilityEvidenceReceipt,
+  normalizeCapabilityEvidenceScope: capabilityEvidence.normalizeScope,
+  normalizeCapabilityRole: roles.normalizeRole,
+  verifyEvaluationCorpus: capabilityEvidence.verifyEvaluationCorpus,
   ...profileRuntime,
   ...profilePayload,
   ...executionProfile,

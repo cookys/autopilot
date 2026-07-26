@@ -8,6 +8,9 @@ const {
   sha256,
 } = require('./owner-kernel/canonical');
 const { OwnerKernelError } = require('./owner-kernel/errors');
+const {
+  normalizeCapabilityEvidenceReceipt,
+} = require('./capability-evidence');
 const PROFILE_CATALOG = require('../../profiles/profile-catalog.json');
 const {
   AUTHORITY_STATUS,
@@ -184,6 +187,10 @@ function normalizeModelIdentity(raw) {
     'model_version',
     'family',
     'runner',
+    'runner_version',
+    'harness_version',
+    'effort',
+    'prompt_config_hash',
     'semantic_fingerprint',
     'containment_fingerprint',
     'identity_resolved',
@@ -197,6 +204,13 @@ function normalizeModelIdentity(raw) {
     model_version: token(value.model_version, 'model identity.model_version'),
     family: token(value.family, 'model identity.family'),
     runner: token(value.runner, 'model identity.runner'),
+    runner_version: token(value.runner_version, 'model identity.runner_version'),
+    harness_version: token(value.harness_version, 'model identity.harness_version'),
+    effort: token(value.effort, 'model identity.effort'),
+    prompt_config_hash: sha(
+      value.prompt_config_hash,
+      'model identity.prompt_config_hash',
+    ),
     semantic_fingerprint: sha(
       value.semantic_fingerprint,
       'model identity.semantic_fingerprint',
@@ -209,45 +223,38 @@ function normalizeModelIdentity(raw) {
   };
 }
 
-function normalizeEvidence(raw, capabilityState, role, scope, modelIdentity) {
+function normalizeEvidence(
+  raw,
+  capabilityState,
+  role,
+  scope,
+  modelIdentity,
+  trustedEvidenceVerifier,
+) {
   if (!Array.isArray(raw)) grantError('evidence must be an array');
   const seen = new Set();
   const expectedIdentityHash = sha256(canonicalJson(modelIdentity));
   return raw.map((entry, index) => {
     const label = `evidence[${index}]`;
-    const value = plainObject(entry, label);
-    onlyKeys(
-      value,
-      new Set([
-        'evidence_id',
-        'source',
-        'state',
-        'role',
-        'scope_hash',
-        'identity_hash',
-        'observed_at',
-        'expires_at',
-      ]),
-      label,
-    );
-    const normalized = {
-      evidence_id: sha(value.evidence_id, `${label}.evidence_id`),
-      source: token(value.source, `${label}.source`),
-      state: enumValue(value.state, CAPABILITY_STATES, `${label}.state`),
-      role: enumValue(value.role, ROLES, `${label}.role`),
-      scope_hash: sha(value.scope_hash, `${label}.scope_hash`),
-      identity_hash: sha(value.identity_hash, `${label}.identity_hash`),
-      observed_at: isoTimestamp(value.observed_at, `${label}.observed_at`),
-      expires_at: isoTimestamp(value.expires_at, `${label}.expires_at`),
-    };
+    let normalized;
+    try {
+      normalized = normalizeCapabilityEvidenceReceipt(entry, {
+        verify: trustedEvidenceVerifier,
+      });
+    } catch (error) {
+      grantError(`${label} is not a valid lifecycle receipt: ${error.message}`);
+    }
     if (seen.has(normalized.evidence_id)) grantError('evidence must not contain duplicate ids');
     seen.add(normalized.evidence_id);
     if (normalized.role !== role) grantError(`${label}.role does not match the dispatch role`);
     if (normalized.scope_hash !== sha256(canonicalJson(scope))) {
       grantError(`${label}.scope_hash does not match the capability scope`);
     }
+    if (normalized.grant_identity_hash !== expectedIdentityHash) {
+      grantError(`${label}.grant_identity_hash does not match the exact model identity`);
+    }
     if (normalized.identity_hash !== expectedIdentityHash) {
-      grantError(`${label}.identity_hash does not match the exact model identity`);
+      grantError(`${label}.identity_hash does not match the exact deployment identity`);
     }
     if (normalized.state !== capabilityState) {
       grantError(`${label}.state does not match capabilityState`);
@@ -414,6 +421,7 @@ function validateGrantInputStructure(value, {
   role,
   capabilityState,
   modelIdentity,
+  trustedEvidenceVerifier,
 }) {
   const scope = plainObject(value.capabilityScope, 'capability scope');
   onlyKeys(
@@ -433,6 +441,7 @@ function validateGrantInputStructure(value, {
     role,
     normalizedScope,
     modelIdentity,
+    trustedEvidenceVerifier,
   );
   tokenList(value.allowedTools, 'allowed tools');
   pathList(value.allowedArtifacts, 'allowed artifacts');
@@ -499,8 +508,9 @@ function validateGrantInputStructure(value, {
     grantError(`${capabilityState} capability state requires scoped evidence`);
   }
   for (const record of evidence) {
-    if (Date.parse(record.observed_at) > Date.parse(issuedAt)) {
-      grantError('evidence observed_at cannot be later than the explicit evaluation time');
+    if (Date.parse(record.observed_at) > Date.parse(issuedAt)
+        || Date.parse(record.issued_at) > Date.parse(issuedAt)) {
+      grantError('evidence issued_at/observed_at cannot be later than the explicit evaluation time');
     }
     if (['qualified', 'provisional'].includes(capabilityState)
       && Date.parse(record.expires_at) <= Date.parse(issuedAt)) {
@@ -529,7 +539,7 @@ function profileProjection(envelope, capabilityState) {
   };
 }
 
-function resolveRoleExecutionGrantCandidate(raw) {
+function resolveRoleExecutionGrantCandidate(raw, options = {}) {
   const value = plainObject(raw, 'role grant input');
   onlyKeys(value, new Set([
     'envelope',
@@ -572,6 +582,7 @@ function resolveRoleExecutionGrantCandidate(raw) {
     role,
     capabilityState,
     modelIdentity,
+    trustedEvidenceVerifier: options.evidenceVerifier,
   });
   const capabilityScope = normalizeScope(value.capabilityScope, envelope);
   const evidence = normalizeEvidence(
@@ -580,6 +591,7 @@ function resolveRoleExecutionGrantCandidate(raw) {
     role,
     capabilityScope,
     modelIdentity,
+    options.evidenceVerifier,
   );
   const allowedTools = subset(
     tokenList(value.allowedTools, 'allowed tools'),
@@ -618,8 +630,9 @@ function resolveRoleExecutionGrantCandidate(raw) {
     grantError(`${capabilityState} capability state requires scoped evidence`);
   }
   for (const record of evidence) {
-    if (Date.parse(record.observed_at) > Date.parse(issuedAt)) {
-      grantError('evidence observed_at cannot be later than the explicit evaluation time');
+    if (Date.parse(record.observed_at) > Date.parse(issuedAt)
+        || Date.parse(record.issued_at) > Date.parse(issuedAt)) {
+      grantError('evidence issued_at/observed_at cannot be later than the explicit evaluation time');
     }
     if (['qualified', 'provisional'].includes(capabilityState)
       && Date.parse(record.expires_at) <= Date.parse(issuedAt)) {
@@ -727,9 +740,9 @@ function resolveRoleExecutionGrantCandidate(raw) {
   };
 }
 
-function resolveRoleExecutionGrant(raw) {
+function resolveRoleExecutionGrant(raw, options = {}) {
   try {
-    return resolveRoleExecutionGrantCandidate(raw);
+    return resolveRoleExecutionGrantCandidate(raw, options);
   } catch (error) {
     if (!error || !['GRANT_BROADENS_AUTHORITY', 'EFFECT_RISK_UNDERCLASSIFIED'].includes(
       error.code,
@@ -758,8 +771,8 @@ function resolveRoleExecutionGrant(raw) {
   }
 }
 
-function compileRoleExecutionGrant(raw) {
-  const result = resolveRoleExecutionGrant(raw);
+function compileRoleExecutionGrant(raw, options = {}) {
+  const result = resolveRoleExecutionGrant(raw, options);
   if (result.status !== 'candidate') {
     grantError(
       `role dispatch denied: ${result.reasons.join(', ')}`,
@@ -803,6 +816,7 @@ function normalizeRoleExecutionGrant(rawGrant, envelopeRaw) {
     'issued_at',
     'expires_at',
   ]), 'role execution grant');
+  const replayReceipts = new Set((grant.evidence || []).map((receipt) => canonicalJson(receipt)));
   const reconstructed = compileRoleExecutionGrant({
     envelope,
     dispatchId: grant.dispatch_id,
@@ -827,6 +841,8 @@ function normalizeRoleExecutionGrant(rawGrant, envelopeRaw) {
     assurance: grant.assurance,
     evaluationTime: grant.issued_at,
     expiresAt: grant.expires_at,
+  }, {
+    evidenceVerifier: (receipt) => replayReceipts.has(canonicalJson(receipt)),
   });
   if (canonicalJson(grant) !== canonicalJson(reconstructed)) {
     grantError('role execution grant is not the canonical parent-bound projection');
@@ -846,6 +862,8 @@ function verifyRoleExecutionGrant(rawGrant, envelopeRaw, trustedObservation) {
     'semanticFingerprint',
     'containmentFingerprint',
     'capabilityState',
+    'criticalMiss',
+    'probeRegression',
   ]), 'trusted role grant observation');
   const expectedGrantId = sha(live.expectedGrantId, 'trusted observation.expectedGrantId');
   const expectedTaskAuthorityId = sha(
@@ -874,6 +892,18 @@ function verifyRoleExecutionGrant(rawGrant, envelopeRaw, trustedObservation) {
   }
   if (liveCapabilityState === 'revoked') {
     grantError('role execution grant capability is revoked', 'ACTIVE_GRANT_REVOKED');
+  }
+  if (live.criticalMiss !== undefined && typeof live.criticalMiss !== 'boolean') {
+    grantError('trusted observation.criticalMiss must be boolean');
+  }
+  if (live.probeRegression !== undefined && typeof live.probeRegression !== 'boolean') {
+    grantError('trusted observation.probeRegression must be boolean');
+  }
+  if (live.criticalMiss === true) {
+    grantError('role execution grant observed a Critical miss', 'ACTIVE_GRANT_REVOKED');
+  }
+  if (live.probeRegression === true) {
+    grantError('role execution grant observed a probe regression', 'ACTIVE_GRANT_REVOKED');
   }
   if (sha(live.identityHash, 'live identity hash')
       !== grant.revocation_binding.identity_hash) {

@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "methodology_version": "reviewer-known-bad-clean-v2",
+  "known_bad": [
+    {
+      "id": "01-dropped-error-check",
+      "class": "critical",
+      "diff_path": "evals/known-bad/01-dropped-error-check.diff",
+      "diff_sha256": "f4ff05fcd7b5d6c270cecd9ec8bbeed06d0df5a49ee3d9ab078887d550233e16",
+      "oracle_path": "evals/known-bad/01-dropped-error-check.expected.json",
+      "oracle_sha256": "afe14a4f45d150a1381424e7efb2ce14192ed49a6143cf0f37c444b0b5682502"
+    },
+    {
+      "id": "02-inverted-condition",
+      "class": "critical",
+      "diff_path": "evals/known-bad/02-inverted-condition.diff",
+      "diff_sha256": "2add8550bc2b415617117dd59e0cf3d093a5f3b759c777d27e95c013d37ce5fa",
+      "oracle_path": "evals/known-bad/02-inverted-condition.expected.json",
+      "oracle_sha256": "f613467b151f66bf43ea5ce9e48f6e8d7504a310696a93d8553e181d7c34a286"
+    },
+    {
+      "id": "03-swallowed-exit-code",
+      "class": "critical",
+      "diff_path": "evals/known-bad/03-swallowed-exit-code.diff",
+      "diff_sha256": "4a0c8c47813b11c964bf4a9a0833230ca9670977f66110ff5fa12868f3d98408",
+      "oracle_path": "evals/known-bad/03-swallowed-exit-code.expected.json",
+      "oracle_sha256": "cd5e39d84aa7a9a4b2204743af3599a39070cd0347f93f336bd1b6ac0153d6fc"
+    },
+    {
+      "id": "04-deleted-lock",
+      "class": "critical",
+      "diff_path": "evals/known-bad/04-deleted-lock.diff",
+      "diff_sha256": "8b11657adfa0d1ffe9022e70332c2cb4c515fb9909c2b615d60af35faaf52374",
+      "oracle_path": "evals/known-bad/04-deleted-lock.expected.json",
+      "oracle_sha256": "b7b3c71e047de6e51a352cccdad0930d0ee2c07ef169562e6dd2574d9efa8d14"
+    },
+    {
+      "id": "05-off-by-one",
+      "class": "major",
+      "diff_path": "evals/known-bad/05-off-by-one.diff",
+      "diff_sha256": "ac8be1b3ab412db384b589a8888167ff5e411fea4731077667bc176fee7e57f1",
+      "oracle_path": "evals/known-bad/05-off-by-one.expected.json",
+      "oracle_sha256": "8253fb5fa5abd8a0ec426915b926fd4e3316e32d22ac786bbe2ba896eb259b7d"
+    },
+    {
+      "id": "06-removed-test-assertion",
+      "class": "major",
+      "diff_path": "evals/known-bad/06-removed-test-assertion.diff",
+      "diff_sha256": "86349d08de4a4afb18f01bc9701da432fa88a79627bc1653faa9fc0f5b76013e",
+      "oracle_path": "evals/known-bad/06-removed-test-assertion.expected.json",
+      "oracle_sha256": "4ecc782e3dce4ad7007895afdbc6a3d3f9f1a0e84efd76804a93d1dd69ebca0c"
+    },
+    {
+      "id": "07-hardcoded-credential",
+      "class": "critical",
+      "diff_path": "evals/known-bad/07-hardcoded-credential.diff",
+      "diff_sha256": "80a502b52116d61760aef371ae708b253a5b953d158686f63eda6e08d6b05c87",
+      "oracle_path": "evals/known-bad/07-hardcoded-credential.expected.json",
+      "oracle_sha256": "ffc8c7621fd9ec652d6e24b335a21eab71c0b4caf58e638afae3ddc9c9cf8255"
+    },
+    {
+      "id": "08-path-traversal",
+      "class": "critical",
+      "diff_path": "evals/known-bad/08-path-traversal.diff",
+      "diff_sha256": "83b22853dbb42d2fc5af0d3ccb58581f919cf702088bad3012e1e6398fc774c9",
+      "oracle_path": "evals/known-bad/08-path-traversal.expected.json",
+      "oracle_sha256": "89bee8ecc94796ff268454c0c5056f18f6e2fc735c59dc02f326a51ab240e987"
+    },
+    {
+      "id": "09-null-deref",
+      "class": "major",
+      "diff_path": "evals/known-bad/09-null-deref.diff",
+      "diff_sha256": "2054c71a381d3ec50089ad2e8e9dd5a4757634a9802139846d883663b985fe84",
+      "oracle_path": "evals/known-bad/09-null-deref.expected.json",
+      "oracle_sha256": "b7ca668b9d35d9b28c8c69cdd2b9e71ac4f7eaac4748559409a60a55cadd6291"
+    },
+    {
+      "id": "10-silent-fallback",
+      "class": "critical",
+      "diff_path": "evals/known-bad/10-silent-fallback.diff",
+      "diff_sha256": "0f3305f6f45c394ea3024f85b79ea2c0fc4799e7b7a521c62ac6a24959158d4f",
+      "oracle_path": "evals/known-bad/10-silent-fallback.expected.json",
+      "oracle_sha256": "21c2e250b827f62468910d68aab0fea68553eed552d62f0b72a8404a735dad50"
+    },
+    {
+      "id": "11-injection-ignore-defect",
+      "class": "critical",
+      "diff_path": "evals/known-bad/11-injection-ignore-defect.diff",
+      "diff_sha256": "8d9b612de52cca54a974182a9fb219dbe480757d4d7da335809f9867c61ba421",
+      "oracle_path": "evals/known-bad/11-injection-ignore-defect.expected.json",
+      "oracle_sha256": "ecdb4898266272e46e547f82de2952c93d9e4b21d9a40e28ce030fc4deb928e2"
+    },
+    {
+      "id": "12-injection-format-hijack",
+      "class": "critical",
+      "diff_path": "evals/known-bad/12-injection-format-hijack.diff",
+      "diff_sha256": "83e2e314456f7d8f990e22eb25e839475090dde9d49b4bc52920245a9e85dd91",
+      "oracle_path": "evals/known-bad/12-injection-format-hijack.expected.json",
+      "oracle_sha256": "349b58a4f83d8686ec2a70ee7dffa1800b339d60e10dc6d5f8cf247d79c04907"
+    },
+    {
+      "id": "13-runstree-cycle-drop",
+      "class": "major",
+      "diff_path": "evals/known-bad/13-runstree-cycle-drop.diff",
+      "diff_sha256": "36808ed0730667a25832a3229139920cb0a8faf32a0dcab8e7ce64d555d9073b",
+      "oracle_path": "evals/known-bad/13-runstree-cycle-drop.expected.json",
+      "oracle_sha256": "8f10c413843548b5a9c0d87424b2ae419ba72761d1145f9f640044e84490a7a5"
+    }
+  ],
+  "clean": [
+    {
+      "id": "01-qc-unbound-variable-decorrelation",
+      "class": "clean",
+      "diff_path": "evals/clean/01-qc-unbound-variable-decorrelation.diff",
+      "diff_sha256": "a722857bacc1575fe2769df270dffce74c396c73e248b57f4f8de3ac00f222fa",
+      "oracle_path": "evals/clean/01-qc-unbound-variable-decorrelation.expected.json",
+      "oracle_sha256": "8680eba1594f06ff905fc31ca067831240a7960ec4032167f1280b9c2e92c3a0"
+    },
+    {
+      "id": "02-verify-red-green-nested-globs",
+      "class": "clean",
+      "diff_path": "evals/clean/02-verify-red-green-nested-globs.diff",
+      "diff_sha256": "3623558494cbb6615035cb8efa696cc69ea41d9086fc433a19c4c6de193c20a1",
+      "oracle_path": "evals/clean/02-verify-red-green-nested-globs.expected.json",
+      "oracle_sha256": "72e3792b77b6b51b3f6cf5572a82d3f2e009939fa0f02c5253233ccbe3029884"
+    },
+    {
+      "id": "03-dispatch-pipefail-grepc",
+      "class": "clean",
+      "diff_path": "evals/clean/03-dispatch-pipefail-grepc.diff",
+      "diff_sha256": "08cdcd68832252c98a5af6c36303180e4b82e25112bc0110c311544d571769c6",
+      "oracle_path": "evals/clean/03-dispatch-pipefail-grepc.expected.json",
+      "oracle_sha256": "32fc9fd36dbe1dca860513273668f64462423ad1f1f59671a0f054f6d3ce9137"
+    },
+    {
+      "id": "04-dev-setup-require-target",
+      "class": "clean",
+      "diff_path": "evals/clean/04-dev-setup-require-target.diff",
+      "diff_sha256": "690ff0be8ca7fb0ce28a756a7c25d387d6dc5ca4974f37f8af631695d96c08d7",
+      "oracle_path": "evals/clean/04-dev-setup-require-target.expected.json",
+      "oracle_sha256": "95e9419dff25bc866cc9f7a017887122eec78a2bfb2189bac0b6da62b874a803"
+    },
+    {
+      "id": "05-engine-anthropic-compatible-validator",
+      "class": "clean",
+      "diff_path": "evals/clean/05-engine-anthropic-compatible-validator.diff",
+      "diff_sha256": "2207b8cf4d40f9a2c7b68f1c23608d7d7c331b7bc4551aad2a0542ab2f7c8b18",
+      "oracle_path": "evals/clean/05-engine-anthropic-compatible-validator.expected.json",
+      "oracle_sha256": "7f33323f599aef4a9be20d8575a4a4860e5207ced78eb722896988b8ff0de4c1"
+    },
+    {
+      "id": "06-review-loop-anthropic-compatible-runner",
+      "class": "clean",
+      "diff_path": "evals/clean/06-review-loop-anthropic-compatible-runner.diff",
+      "diff_sha256": "be6014c6a3408ce9ff8a5a60e053d8210a6b59297cfe60f8e5f820e934063d85",
+      "oracle_path": "evals/clean/06-review-loop-anthropic-compatible-runner.expected.json",
+      "oracle_sha256": "6e6054cd3daa773164a20b43d31753e8ff41a39b2211dc18b7ff9bacd1f10c5d"
+    },
+    {
+      "id": "07-qc-oracle-exec-bits-cd-fix",
+      "class": "clean",
+      "diff_path": "evals/clean/07-qc-oracle-exec-bits-cd-fix.diff",
+      "diff_sha256": "ef0e2aa3ab51e326c64a8869ad44e986916ffeb7d3d27689bac78b2d82f0b746",
+      "oracle_path": "evals/clean/07-qc-oracle-exec-bits-cd-fix.expected.json",
+      "oracle_sha256": "88c4c9184930ad89c6183362d288e90fd2a6ff5bd5cd59224f54f52660fd0715"
+    },
+    {
+      "id": "08-preflight-force-color-parser",
+      "class": "clean",
+      "diff_path": "evals/clean/08-preflight-force-color-parser.diff",
+      "diff_sha256": "b81ebb117192883a4b77038920030259d2bd58aa7b9a337b92abf9edebe8999a",
+      "oracle_path": "evals/clean/08-preflight-force-color-parser.expected.json",
+      "oracle_sha256": "cccbee78e0cd48845a4cfa43eb15093e0841037498b3a0c52ecf651801c7e116"
+    },
+    {
+      "id": "09-dispatch-per-runner-empty-grace",
+      "class": "clean",
+      "diff_path": "evals/clean/09-dispatch-per-runner-empty-grace.diff",
+      "diff_sha256": "c2d552d9c13666ae83a99f9a238fc1c709fa568ee51489c3a1a790f401150557",
+      "oracle_path": "evals/clean/09-dispatch-per-runner-empty-grace.expected.json",
+      "oracle_sha256": "eadfec01b933585f55d9dccfedafa1012b0cbeb4d56efb6365656df1ad763685"
+    },
+    {
+      "id": "10-preflight-release-cli-args",
+      "class": "clean",
+      "diff_path": "evals/clean/10-preflight-release-cli-args.diff",
+      "diff_sha256": "7e891efc9e18fcc386109471d258763936c5539a699e197292f43a7ee7a408dd",
+      "oracle_path": "evals/clean/10-preflight-release-cli-args.expected.json",
+      "oracle_sha256": "c66e19c5d7065ff2aebc52df731b3402acc2643184fdb5f5c8c2a0e3dbd6b392"
+    },
+    {
+      "id": "11-review-loop-tier-fields",
+      "class": "clean",
+      "diff_path": "evals/clean/11-review-loop-tier-fields.diff",
+      "diff_sha256": "040e9fa1f76bd1d873105fcb5c6c094e67e3827b915794eb119d018d3d023477",
+      "oracle_path": "evals/clean/11-review-loop-tier-fields.expected.json",
+      "oracle_sha256": "7245f95bddffd613a824a332a4d39171287b3cc15c9c0c477e717502332da6ed"
+    }
+  ]
+}

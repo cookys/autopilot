@@ -67,6 +67,10 @@
         "model_version",
         "family",
         "runner",
+        "runner_version",
+        "harness_version",
+        "effort",
+        "prompt_config_hash",
         "semantic_fingerprint",
         "containment_fingerprint",
         "identity_resolved"
@@ -77,6 +81,10 @@
         "model_version": { "$ref": "#/$defs/token" },
         "family": { "$ref": "#/$defs/token" },
         "runner": { "$ref": "#/$defs/token" },
+        "runner_version": { "$ref": "#/$defs/token" },
+        "harness_version": { "$ref": "#/$defs/token" },
+        "effort": { "$ref": "#/$defs/token" },
+        "prompt_config_hash": { "$ref": "#/$defs/sha256" },
         "semantic_fingerprint": { "$ref": "#/$defs/sha256" },
         "containment_fingerprint": { "$ref": "#/$defs/sha256" },
         "identity_resolved": { "const": true }
@@ -84,32 +92,7 @@
     },
     "evidence": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "evidence_id",
-          "source",
-          "state",
-          "role",
-          "scope_hash",
-          "identity_hash",
-          "observed_at",
-          "expires_at"
-        ],
-        "properties": {
-          "evidence_id": { "$ref": "#/$defs/sha256" },
-          "source": { "$ref": "#/$defs/token" },
-          "state": {
-            "enum": ["unknown", "provisional", "qualified", "degraded", "stale", "revoked"]
-          },
-          "role": { "$ref": "#/$defs/role" },
-          "scope_hash": { "$ref": "#/$defs/sha256" },
-          "identity_hash": { "$ref": "#/$defs/sha256" },
-          "observed_at": { "type": "string", "format": "date-time" },
-          "expires_at": { "type": "string", "format": "date-time" }
-        }
-      }
+      "items": { "$ref": "#/$defs/evidence_receipt" }
     },
     "risk": { "enum": ["low", "medium", "high", "protected"] },
     "capability_state": {
@@ -285,6 +268,87 @@
     },
     "role": {
       "enum": ["owner", "implementer", "reviewer", "verification_author", "explorer"]
+    },
+    "evidence_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "evidence_id",
+        "evidence_hash",
+        "state",
+        "role",
+        "scope_hash",
+        "identity_hash",
+        "grant_identity_hash",
+        "provenance",
+        "applicability",
+        "issued_at",
+        "observed_at",
+        "expires_at",
+        "methodology_version",
+        "trial_set_hash",
+        "revocation_reason"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "evidence_hash": { "$ref": "#/$defs/sha256" },
+        "state": {
+          "enum": ["unknown", "provisional", "qualified", "degraded", "stale", "revoked"]
+        },
+        "role": { "$ref": "#/$defs/role" },
+        "scope_hash": { "$ref": "#/$defs/sha256" },
+        "identity_hash": { "$ref": "#/$defs/sha256" },
+        "grant_identity_hash": { "$ref": "#/$defs/sha256" },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "source_ref", "methodology_name", "methodology_version"],
+          "properties": {
+            "source": {
+              "enum": [
+                "external_prior",
+                "self_report",
+                "ordinary_receipt",
+                "internal_eval",
+                "runtime_probe"
+              ]
+            },
+            "source_ref": { "$ref": "#/$defs/token" },
+            "methodology_name": { "$ref": "#/$defs/token" },
+            "methodology_version": { "$ref": "#/$defs/token" }
+          }
+        },
+        "applicability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "applicable",
+            "reasons",
+            "requested_scope_hash",
+            "requested_identity_hash"
+          ],
+          "properties": {
+            "applicable": { "const": true },
+            "reasons": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/token" }
+            },
+            "requested_scope_hash": { "$ref": "#/$defs/sha256" },
+            "requested_identity_hash": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "methodology_version": { "$ref": "#/$defs/token" },
+        "trial_set_hash": { "$ref": "#/$defs/sha256" },
+        "revocation_reason": {
+          "enum": [null, "critical_miss", "semantic_identity_drift", "probe_regression"]
+        }
+      }
     }
   }
 }

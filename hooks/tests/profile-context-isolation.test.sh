@@ -288,6 +288,7 @@ const root = process.argv[2];
 const tmp = process.argv[3];
 const ownerKernel = require(path.join(root, 'src', 'engine', 'owner-kernel'));
 const executionProfile = require(path.join(root, 'src', 'engine', 'execution-profile'));
+const capabilityEvidence = require(path.join(root, 'src', 'engine', 'capability-evidence'));
 const profilePayload = require(path.join(root, 'src', 'engine', 'profile-payload'));
 const isolation = require(path.join(root, 'scripts', 'check-profile-isolation'));
 const profileBuilder = require(path.join(root, 'scripts', 'build-profile-payload'));
@@ -314,10 +315,87 @@ const identity = {
   model_version: '1',
   family: 'test',
   runner: 'test-runner',
+  runner_version: 'test-runner-v1',
+  harness_version: 'test-harness-v1',
+  effort: 'high',
+  prompt_config_hash: hash('prompt:p2-default'),
   semantic_fingerprint: hash('p2:semantic'),
   containment_fingerprint: hash('p2:containment'),
   identity_resolved: true,
 };
+function evidenceReceipt(role, selectedScope, selectedIdentity, seed) {
+  const exactIdentity = {
+    ...selectedIdentity,
+    runner_version: 'test-runner-v1',
+    harness_version: 'test-harness-v1',
+    effort: 'high',
+    prompt_config_hash: hash(`prompt:${seed}`),
+  };
+  const corpusManifestHash = hash(`corpus:${seed}`);
+  const trials = [1, 2].map((trial) => ({
+    trial_id: `trial-${trial}`,
+    observed_at: `2026-07-24T0${trial}:00:00.000Z`,
+    known_bad_total: 10,
+    known_bad_caught: 10,
+    critical_total: 5,
+    false_pass_critical: 0,
+    clean_total: 5,
+    clean_false_positives: 0,
+    corpus_manifest_hash: corpusManifestHash,
+    artifact_oracle: {
+      kind: 'fixture_manifest',
+      oracle_hash: hash(`oracle:${seed}:${trial}`),
+      result_set_hash: hash(`result-set:${seed}:${trial}`),
+      independent: true,
+      passed: true,
+    },
+    mutation_validation: {
+      target_id: 'mutation-control',
+      original_hash: hash(`original:${seed}:${trial}`),
+      mutated_hash: hash(`mutated:${seed}:${trial}`),
+      original_verdict: 'fail',
+      mutated_verdict: 'pass',
+      oracle_rejected: true,
+    },
+  }));
+  const record = capabilityEvidence.compileCapabilityEvidence({
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: `profile-isolation:${seed}`,
+    state: 'qualified',
+    role,
+    scope: selectedScope,
+    identity: exactIdentity,
+    issued_at: '2026-07-25T00:30:00.000Z',
+    observed_at: '2026-07-25T00:00:00.000Z',
+    expires_at: '2026-08-01T00:00:00.000Z',
+    methodology: {
+      kind: 'role_eval',
+      name: `${role}-qualification`,
+      version: '2.0.0',
+      corpus_version: `${role}-corpus-v2`,
+      corpus_manifest_hash: corpusManifestHash,
+      thresholds: {
+        min_trials: 2,
+        min_known_bad_cases: 10,
+        min_critical_cases: 5,
+        max_false_pass_critical: 0,
+        min_clean_cases: 5,
+        max_clean_false_positives: 0,
+      },
+      basis: null,
+    },
+    trials,
+    revocation: null,
+    supersedes: null,
+  });
+  return capabilityEvidence.buildCapabilityEvidenceReceipt(record, {
+    role,
+    scope: selectedScope,
+    identity: exactIdentity,
+    evaluation_time: '2026-07-26T00:00:00.000Z',
+  });
+}
 
 function compile(profile, taskId, runtimeOptions = {}) {
   const activePolicy = runtimeOptions.destination
@@ -329,10 +407,12 @@ function compile(profile, taskId, runtimeOptions = {}) {
       },
     })
     : resolved;
+  const evidenceSeed = `p2-${profile}-${taskId}`;
   const selectedIdentity = {
     ...identity,
     model_alias: runtimeOptions.modelAlias || identity.model_alias,
     runner: runtimeOptions.runner || identity.runner,
+    prompt_config_hash: hash(`prompt:${evidenceSeed}`),
   };
   const selectedTools = runtimeOptions.allowedTools || ['apply_patch'];
   const selectedScope = { ...scope, tool_surface: selectedTools };
@@ -406,16 +486,12 @@ function compile(profile, taskId, runtimeOptions = {}) {
     policy: activePolicy.policy,
     policyHash: activePolicy.policy_hash,
   }).envelope;
-  const evidence = [{
-    evidence_id: hash(`p2:evidence:${profile}`),
-    source: 'p2-suite',
-    state: 'qualified',
-    role: 'implementer',
-    scope_hash: hash(selectedScope),
-    identity_hash: hash(selectedIdentity),
-    observed_at: '2026-07-25T00:00:00.000Z',
-    expires_at: '2026-08-01T00:00:00.000Z',
-  }];
+  const evidence = [evidenceReceipt(
+    'implementer',
+    selectedScope,
+    selectedIdentity,
+    evidenceSeed,
+  )];
   const result = executionProfile.resolveRoleExecutionGrant({
     envelope,
     dispatchId: `p2-${profile}-dispatch`,
@@ -445,7 +521,7 @@ function compile(profile, taskId, runtimeOptions = {}) {
     assurance: 'conservative',
     evaluationTime: '2026-07-26T00:00:00.000Z',
     expiresAt: '2026-07-26T01:00:00.000Z',
-  });
+  }, { evidenceVerifier: () => true });
   assert.equal(result.status, 'candidate', JSON.stringify(result));
   assert.equal(result.grant.effective_profile, profile);
   return { envelope, grant: result.grant };

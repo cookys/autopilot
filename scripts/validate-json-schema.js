@@ -16,10 +16,12 @@ const SUPPORTED_KEYWORDS = new Set([
   'properties',
   'const',
   'enum',
+  'oneOf',
   'minLength',
   'maxLength',
   'pattern',
   'minItems',
+  'maxItems',
   'uniqueItems',
   'items',
   'minimum',
@@ -298,9 +300,20 @@ function assertSchemaNode(
       validatedNodes,
     );
   }
-  if (schema.type !== undefined
-    && !['object', 'array', 'string', 'integer', 'boolean', 'null'].includes(schema.type)) {
-    schemaError(`${path}.type is unsupported`);
+  if (schema.type !== undefined) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    if (types.length === 0
+      || new Set(types).size !== types.length
+      || types.some((type) => ![
+        'object',
+        'array',
+        'string',
+        'integer',
+        'boolean',
+        'null',
+      ].includes(type))) {
+      schemaError(`${path}.type is unsupported`);
+    }
   }
   if (schema.additionalProperties !== undefined
     && typeof schema.additionalProperties !== 'boolean') {
@@ -321,6 +334,20 @@ function assertSchemaNode(
     }
     if (new Set(schema.enum.map(canonical)).size !== schema.enum.length) {
       schemaError(`${path}.enum must not contain duplicate values`);
+    }
+  }
+  if (schema.oneOf !== undefined) {
+    if (!Array.isArray(schema.oneOf) || schema.oneOf.length === 0) {
+      schemaError(`${path}.oneOf must be a non-empty array`);
+    }
+    for (let index = 0; index < schema.oneOf.length; index += 1) {
+      assertSchemaNode(
+        schema.oneOf[index],
+        `${path}/oneOf/${index}`,
+        root,
+        activeNodes,
+        validatedNodes,
+      );
     }
   }
   if (schema.minLength !== undefined) {
@@ -345,6 +372,13 @@ function assertSchemaNode(
   }
   if (schema.minItems !== undefined) {
     assertNonNegativeInteger(schema.minItems, `${path}.minItems`);
+  }
+  if (schema.maxItems !== undefined) {
+    assertNonNegativeInteger(schema.maxItems, `${path}.maxItems`);
+  }
+  if (schema.minItems !== undefined && schema.maxItems !== undefined
+    && schema.minItems > schema.maxItems) {
+    schemaError(`${path}.minItems must not exceed maxItems`);
   }
   if (schema.uniqueItems !== undefined && typeof schema.uniqueItems !== 'boolean') {
     schemaError(`${path}.uniqueItems must be boolean`);
@@ -424,6 +458,7 @@ function resolvePointer(root, reference) {
 }
 
 function typeMatches(value, type) {
+  if (Array.isArray(type)) return type.some((candidate) => typeMatches(value, candidate));
   if (type === 'null') return value === null;
   if (type === 'array') return Array.isArray(value);
   if (type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -469,6 +504,17 @@ function evaluate(schema, value, root, path, errors) {
   if (schema.$ref !== undefined) {
     evaluate(resolvePointer(root, schema.$ref), value, root, path, errors);
   }
+  if (schema.oneOf !== undefined) {
+    let matches = 0;
+    for (const candidate of schema.oneOf) {
+      const candidateErrors = [];
+      evaluate(candidate, value, root, path, candidateErrors);
+      if (candidateErrors.length === 0) matches += 1;
+    }
+    if (matches !== 1) {
+      errors.push(`${path} must match exactly one oneOf branch; matched ${matches}`);
+    }
+  }
   if (schema.type !== undefined && !typeMatches(value, schema.type)) {
     errors.push(`${path} must have type ${schema.type}`);
     return;
@@ -502,6 +548,9 @@ function evaluate(schema, value, root, path, errors) {
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) {
       errors.push(`${path} must contain at least ${schema.minItems} items`);
+    }
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+      errors.push(`${path} must contain at most ${schema.maxItems} items`);
     }
     if (schema.uniqueItems === true
       && new Set(value.map((entry) => canonical(entry))).size !== value.length) {

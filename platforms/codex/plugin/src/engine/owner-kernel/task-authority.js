@@ -9,16 +9,10 @@ const {
   GUIDANCE_PROFILES,
   TOPOLOGY_PREFERENCES,
 } = require('./policy');
+const { ROLES } = require('../roles');
 
 const TASK_AUTHORITY_SCHEMA_VERSION = 1;
 const AUTHORITY_STATUS = 'shadow';
-const ROLES = new Set([
-  'owner',
-  'implementer',
-  'reviewer',
-  'verification_author',
-  'explorer',
-]);
 const ACTION_CLASS_ORDER = Object.freeze([
   'read_only',
   'reversible',

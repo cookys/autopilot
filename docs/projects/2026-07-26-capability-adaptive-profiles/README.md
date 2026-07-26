@@ -130,6 +130,7 @@ negative controls that fail when the claimed guard is removed.
 | P2 | Extract core/guided/autonomous packs and enforce full-session isolation/context budget. | Exactly one active profile; baseline source retention; profile prose cannot grant authority. Effectful golden traces remain a P5 cutover prerequisite. |
 | P3a | Add scope-aware evidence lifecycle and mutation-validated promotion/revocation. | No promotion from AA/self-report/ordinary receipts; scope and identity drift fail closed. |
 | P3b | Add optional Artificial Analysis provisional prior adapter. | Fake API/offline/cache/no-redistribution tests; core works without it. |
+| P3c | Add case-only remote transport and a dedicated owner evaluator. | Provider credentials stay host-side; exact request/response identity is bound; owner qualification is reachable without reusing reviewer evidence. |
 | P4 | Add optional local deployment fingerprint, raw transport, resource lease, and harness gate. | Fake server adversarial suite; live rows only after real probe. |
 | P5 | Run shadow comparison/dogfood and decide adaptive default from frozen gates. | Zero Critical profile-reduction escapes; measured context savings; config-only rollback. |
 | P6 | Sync docs/packages/version and close release evidence. | Portability, sync, release, full test, and doc-drift gates pass. |
@@ -143,8 +144,9 @@ negative controls that fail when the claimed guard is removed.
 | P0 | Complete | 745 conservative rule candidates / 728 canonical rules / 17 declared aliases; 42 focused assertions; three-lens re-review accepted; generated profile-specific payload strategy selected fail-closed. |
 | P1 | Complete | Immutable shadow task authority and narrowing role grants; 33 focused profile assertions plus Owner Kernel/translation gates; three-lens review accepted; base-vs-head red-green `VALIDATED`. |
 | P2 | Complete | Canonical core/guided/autonomous packs, exact-one-profile generated payloads, 122 isolation assertions, 33 execution-profile assertions, standalone Codex package proof, and unanimous three-lens review acceptance. Effectful golden traces remain a P5 cutover prerequisite. |
-| P3a | Pending | |
+| P3a | Complete | Scope/identity evidence lifecycle, immutable canonical roles, session-local qualification authority, label-free metamorphic reviewer corpus, domain-bound behavioral witnesses, 61 qualifier assertions, 204-file full regression, and unanimous three-lens re-review acceptance. |
 | P3b | Pending | |
+| P3c | Pending | |
 | P4 | Pending | |
 | P5 | Pending | |
 | P6 | Pending | |
@@ -173,6 +175,14 @@ negative controls that fail when the claimed guard is removed.
 | Architecture / isolation | A host-only profile selector could leave the inactive profile reachable, while Claude `--bare` cannot execute the hooks needed for an effectful adapter. | Generated bundles contain exactly one profile; the bare path is explicitly a no-effect context-isolation probe with a frozen workspace, exact model checks, one-shot receipts, and an external-witness requirement. Accepted after re-review. |
 | Correctness / authority | A guided slice or caller-authored trace could broaden intent, inputs, outputs, acceptance, or manufacture runtime proof. | Guided slices must exactly match the frozen objective and narrow all other grant fields; caller traces are conformance-only and cannot become terminal witnesses. Accepted after replaying the six blocking cases. |
 | Transport / standalone packaging | A copied Codex plugin could silently depend on the parent repository for the immutable P0 source baseline. | Hash-named P0 source snapshots and the hook classification manifest are packaged and validated in isolation with parent Git discovery blocked. Accepted after standalone package re-review. |
+
+## P3a Implementation Review
+
+| Lens | Verified blocker | Resolution / final verdict |
+|------|------------------|----------------------------|
+| Architecture / contract | Evidence source payloads initially shared reviewer-only fields, canonical roles diverged across components, the owner qualification dependency was unreachable, and public schema discriminants lagged runtime validation. | Added one generic evidence envelope with source-specific methodology branches, one immutable role taxonomy with legacy read migration, explicit P3c dependency, and negative schema/runtime parity tests. Accepted after re-review. |
+| QA / false promotion | Public/nonced lookup, label-bearing generated paths, and invalid-domain witnesses could pass without genuine review capability. | Added asymmetric/symmetric relational twins, opaque panel-visible artifacts, exact semantic metadata, host-pinned nonce-derived call domains, and separately sandboxed before/after witnesses. The original bypasses are regression tests. Accepted after re-review. |
+| Portability / authority | Same-UID disk rows could be mistaken for authority, stale files could leak into the standalone Codex package, and a public mutable role set could drift from schemas in a long-lived process. | Disk remains provisional telemetry; only a live nonserializable session verifier can admit a role. Exact payload allowlists remove stale files, canonical/Codex bytes match, and the exported role view has no mutation API. Accepted after standalone re-review. |
 
 ## Decision Log
 

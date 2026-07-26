@@ -5,9 +5,19 @@ const fs = require('fs');
 const path = require('path');
 const process = require('process');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
+const {
+  buildCapabilityEvidenceReceipt,
+  capabilityEvidenceProducerHash,
+  compileCapabilityEvidence,
+  evaluateCapabilityEvidence,
+} = require('../src/engine/capability-evidence');
+const {
+  ROLE_IDS,
+  normalizeRole,
+} = require('../src/engine/roles');
 
-const VALID_ROLES = new Set(['reviewer', 'implementer', 'planner', 'verifier', 'orchestrator', 'verification_author']);
-const LADDER_ROLES = new Set(['reviewer', 'implementer', 'planner']);
+const VALID_ROLES = new Set(ROLE_IDS);
+const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
@@ -45,15 +55,19 @@ const CONFIGURED_IDENTITY_FIELDS = [
 
 const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js record [--file <path>]\n\
-  node scripts/engine-scorecard.js current --role <reviewer|implementer|planner|verifier|orchestrator|verification_author> [--now <ISO-date>]\n\
-  node scripts/engine-scorecard.js report --role <reviewer|implementer|planner|verifier|orchestrator|verification_author> [--key capability|cost]\n\
-  node scripts/engine-scorecard.js ladder --role <reviewer|implementer|planner> [--implementer-family <family>]\n\
+  node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--identity-file <path>]\n\
+  node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
+  node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder.\n\
   --key accepts capability (default) or cost.\n\
-  --now accepts ISO date; used by current for deterministic TTL checks.\n\
+  --now accepts ISO date; used by current/report/ladder for deterministic TTL checks.\n\
+  All disk-backed views are untrusted telemetry: stored qualified rows are projected\n\
+    as provisional and report/ladder cannot produce a routing candidate.\n\
+  --require-evidence additionally excludes legacy rows and requires --scope-file.\n\
+  --scope-file and --identity-file constrain lifecycle evidence to an exact applicability query.\n\
   --implementer-family is optional; if provided, ladder demotes matching family entries.\n\
-  verifier/orchestrator rows are evidence-only in v1; use current/report, not ladder.\n\
+  verification_author/explorer rows are evidence-only in v1; use current/report, not ladder.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -83,6 +97,12 @@ const SCORECARD_DIR = path.resolve(
 );
 const SCORECARD_FILE = path.join(SCORECARD_DIR, 'scorecard.jsonl');
 const LOCK_FILE = path.join(SCORECARD_DIR, '.lock');
+const CAPABILITY_DIR = process.env.ENGINE_CAPABILITY_DIR
+  ? path.resolve(expandTilde(process.env.ENGINE_CAPABILITY_DIR))
+  : process.env.ENGINE_CAPABILITY_FILE
+    ? path.dirname(path.resolve(expandTilde(process.env.ENGINE_CAPABILITY_FILE)))
+    : path.resolve(expandTilde(path.join('~', '.autopilot', 'engine-capability')));
+const CAPABILITY_EVIDENCE_FILE = path.join(CAPABILITY_DIR, 'qualification-evidence.jsonl');
 
 function readTextLines(filePath) {
   if (!fs.existsSync(filePath)) return [];
@@ -107,7 +127,7 @@ function parseJsonObject(raw, context) {
   return parsed;
 }
 
-function readStoreRows(silentWarn = false) {
+function readStoreRows(silentWarn = false, strict = false) {
   const lines = readTextLines(SCORECARD_FILE);
   const rows = [];
 
@@ -116,11 +136,15 @@ function readStoreRows(silentWarn = false) {
     try {
       const row = JSON.parse(line);
       if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        if (strict) throw new Error('not an object');
         if (!silentWarn) warnMalformedLine(i + 1, 'not an object');
         continue;
       }
       rows.push(row);
     } catch (err) {
+      if (strict) {
+        failValidation(`malformed evidence-required scorecard line ${i + 1}: ${err.message}`);
+      }
       if (!silentWarn) warnMalformedLine(i + 1, err.message);
     }
   }
@@ -160,6 +184,10 @@ function identityKey(row) {
   return CONFIGURED_IDENTITY_FIELDS
     .map((name) => (row && row[name] !== undefined ? String(row[name]) : ''))
     .concat(tupleExt)
+    .concat([
+      row && row.evidence ? String(row.evidence.scope_hash || '') : '',
+      row && row.evidence ? String(row.evidence.identity_hash || '') : '',
+    ])
     .join('\u0000');
 }
 
@@ -180,9 +208,11 @@ function validateRecordRow(row) {
     failValidation('engine must be a non-empty string');
   }
 
-  if (!VALID_ROLES.has(row.role)) {
+  const canonicalRole = normalizeRole(row.role, { allowLegacy: true });
+  if (!canonicalRole) {
     failValidation(`invalid role '${row.role}'`);
   }
+  row.role = canonicalRole;
 
   if (!VALID_VERSION_SOURCES.has(row.version_source)) {
     failValidation(`invalid version_source '${row.version_source}'`);
@@ -216,11 +246,125 @@ function validateRecordRow(row) {
   if (!VALID_COST_SOURCES.has(row.cost.source)) {
     failValidation(`invalid cost.source '${row.cost.source}'`);
   }
+
+  if (row.evidence !== undefined) {
+    let evidence;
+    try {
+      evidence = compileCapabilityEvidence(row.evidence);
+    } catch (error) {
+      failValidation(`invalid capability evidence: ${error.message}`);
+    }
+    const identity = evidence.identity;
+    const expectedModel = row.model === undefined ? row.engine : row.model;
+    const bindings = [
+      ['engine', row.engine, identity.model_alias],
+      ['runner', row.runner, identity.runner],
+      ['family', row.family, identity.family],
+      ['model', expectedModel, identity.identity],
+      ['model_version', row.model_version, identity.model_version],
+      ['runner_version', row.runner_version, identity.runner_version],
+      ['harness_version', row.harness_version, identity.harness_version],
+      ['prompt_config_hash', row.prompt_config_hash, identity.prompt_config_hash],
+      ['effort', row.effort, identity.effort],
+      ['role', row.role, evidence.role],
+      ['corpus_version', row.corpus_version, evidence.methodology.corpus_version],
+    ];
+    for (const [field, actual, expected] of bindings) {
+      if (actual !== expected) {
+        failValidation(`scorecard ${field} does not match capability evidence`);
+      }
+    }
+    const evidenceStatus = evidence.state === 'qualified'
+      ? 'qualified' : evidence.state === 'stale' ? 'expired' : 'failed';
+    if (row.status !== evidenceStatus) {
+      failValidation(`scorecard status does not match capability evidence state '${evidence.state}'`);
+    }
+    if (row.qualified_at !== evidence.issued_at.slice(0, 10)
+        || row.expires !== evidence.expires_at.slice(0, 10)) {
+      failValidation('scorecard qualification dates do not match capability evidence');
+    }
+    row.evidence = evidence;
+    if (evidence.source === 'internal_eval') {
+      verifyEvidenceStoreAnchor(row, readCapabilityEvidenceRows());
+    }
+  }
+}
+
+function readCapabilityEvidenceRows() {
+  const lines = readTextLines(CAPABILITY_EVIDENCE_FILE);
+  return lines.map((line, index) => {
+    let wrapper;
+    try {
+      wrapper = JSON.parse(line);
+    } catch (error) {
+      failValidation(`malformed capability evidence line ${index + 1}: ${error.message}`);
+    }
+    if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)
+        || toEventId(wrapper.event_id) === null
+        || !['engine-qualify-v2', 'operator-record-v1', 'trusted-observation-v1'].includes(
+          wrapper.producer,
+        )
+        || typeof wrapper.transcript_hash !== 'string' || !wrapper.evidence) {
+      failValidation(`malformed capability evidence line ${index + 1}: invalid wrapper`);
+    }
+    let evidence;
+    try {
+      evidence = compileCapabilityEvidence(wrapper.evidence);
+    } catch (error) {
+      failValidation(`malformed capability evidence line ${index + 1}: ${error.message}`);
+    }
+    if (wrapper.transcript_hash !== capabilityEvidenceProducerHash(
+      evidence,
+      wrapper.producer,
+    ) || (evidence.source === 'internal_eval'
+      && wrapper.producer !== 'engine-qualify-v2')) {
+      failValidation(`malformed capability evidence line ${index + 1}: producer mismatch`);
+    }
+    return {
+      event_id: toEventId(wrapper.event_id),
+      producer: wrapper.producer,
+      transcript_hash: wrapper.transcript_hash,
+      evidence,
+    };
+  });
+}
+
+function verifyEvidenceStoreAnchor(row, capabilityRows) {
+  const anchor = row.evidence_store;
+  if (!anchor || typeof anchor !== 'object' || Array.isArray(anchor)
+      || Object.keys(anchor).sort().join(',') !== 'event_id,producer,transcript_hash'
+      || toEventId(anchor.event_id) === null
+      || anchor.producer !== 'engine-qualify-v2'
+      || typeof anchor.transcript_hash !== 'string') {
+    failValidation('internal evaluation scorecard row lacks a qualifier store anchor');
+  }
+  const match = capabilityRows.find(
+    (wrapper) => wrapper.event_id === toEventId(anchor.event_id),
+  );
+  if (!match || match.producer !== anchor.producer
+      || match.transcript_hash !== anchor.transcript_hash || !match.evidence) {
+    failValidation('scorecard qualifier store anchor is missing or mismatched');
+  }
+  const storedEvidence = match.evidence;
+  if (storedEvidence.evidence_id !== row.evidence.evidence_id
+      || match.transcript_hash !== capabilityEvidenceProducerHash(
+        storedEvidence,
+        match.producer,
+      )) {
+    failValidation('scorecard qualifier store anchor does not bind the evidence');
+  }
+}
+
+function readEvidenceQueryFile(filePath, label) {
+  return parseJsonObject(fs.readFileSync(filePath, 'utf8'), label);
 }
 
 function parseCurrentArgs(args) {
   let role = null;
   let now;
+  let requireEvidence = false;
+  let scope = null;
+  let identity = null;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -237,21 +381,44 @@ function parseCurrentArgs(args) {
       now = args[++i];
       continue;
     }
+    if (arg === '--require-evidence') {
+      requireEvidence = true;
+      continue;
+    }
+    if (arg === '--scope-file' || arg === '--identity-file') {
+      if (i + 1 >= args.length) failUsage(`${arg} requires a value`);
+      const parsed = readEvidenceQueryFile(args[++i], arg.slice(2));
+      if (arg === '--scope-file') scope = parsed;
+      else identity = parsed;
+      requireEvidence = true;
+      continue;
+    }
 
     failUsage(`unknown option: ${arg}`);
   }
 
   if (!role) failUsage('--role is required');
-  if (!VALID_ROLES.has(role)) failUsage(`invalid role '${role}'`);
+  const requestedRole = role;
+  role = normalizeRole(role, { allowLegacy: true });
+  if (!role) failUsage(`invalid role '${requestedRole}'`);
+  if (requireEvidence && !scope) {
+    failUsage('--require-evidence or --identity-file requires --scope-file');
+  }
 
-  const nowMs = nowArgToMs(now, false);
+  const nowMs = now === undefined
+    ? (requireEvidence ? Date.now() : todayMsUtc())
+    : nowArgToMs(now, false);
 
-  return { role, nowMs };
+  return { role, nowMs, requireEvidence, scope, identity };
 }
 
 function parseReportArgs(args) {
   let role = null;
   let key = 'capability';
+  let requireEvidence = false;
+  let scope = null;
+  let identity = null;
+  let now;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -268,20 +435,56 @@ function parseReportArgs(args) {
       key = args[++i];
       continue;
     }
+    if (arg === '--now') {
+      if (i + 1 >= args.length) failUsage('--now requires a value');
+      now = args[++i];
+      continue;
+    }
+    if (arg === '--require-evidence') {
+      requireEvidence = true;
+      continue;
+    }
+    if (arg === '--scope-file' || arg === '--identity-file') {
+      if (i + 1 >= args.length) failUsage(`${arg} requires a value`);
+      const parsed = readEvidenceQueryFile(args[++i], arg.slice(2));
+      if (arg === '--scope-file') scope = parsed;
+      else identity = parsed;
+      requireEvidence = true;
+      continue;
+    }
 
     failUsage(`unknown option: ${arg}`);
   }
 
   if (!role) failUsage('--role is required');
-  if (!VALID_ROLES.has(role)) failUsage(`invalid role '${role}'`);
+  const requestedRole = role;
+  role = normalizeRole(role, { allowLegacy: true });
+  if (!role) failUsage(`invalid role '${requestedRole}'`);
   if (key !== 'capability' && key !== 'cost') failUsage(`invalid --key '${key}'`);
+  if (requireEvidence && !scope) {
+    failUsage('--require-evidence or --identity-file requires --scope-file');
+  }
 
-  return { role, key };
+  const nowMs = now === undefined
+    ? (requireEvidence ? Date.now() : todayMsUtc())
+    : nowArgToMs(now, false);
+  return {
+    role,
+    key,
+    nowMs,
+    requireEvidence,
+    scope,
+    identity,
+  };
 }
 
 function parseLadderArgs(args) {
   let role = null;
   let implementerFamily = null;
+  let requireEvidence = false;
+  let scope = null;
+  let identity = null;
+  let now;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -298,17 +501,48 @@ function parseLadderArgs(args) {
       implementerFamily = args[++i];
       continue;
     }
+    if (arg === '--now') {
+      if (i + 1 >= args.length) failUsage('--now requires a value');
+      now = args[++i];
+      continue;
+    }
+    if (arg === '--require-evidence') {
+      requireEvidence = true;
+      continue;
+    }
+    if (arg === '--scope-file' || arg === '--identity-file') {
+      if (i + 1 >= args.length) failUsage(`${arg} requires a value`);
+      const parsed = readEvidenceQueryFile(args[++i], arg.slice(2));
+      if (arg === '--scope-file') scope = parsed;
+      else identity = parsed;
+      requireEvidence = true;
+      continue;
+    }
 
     failUsage(`unknown option: ${arg}`);
   }
 
   if (!role) failUsage('--role is required');
-  if (!VALID_ROLES.has(role)) failUsage(`invalid role '${role}'`);
+  const requestedRole = role;
+  role = normalizeRole(role, { allowLegacy: true });
+  if (!role) failUsage(`invalid role '${requestedRole}'`);
   if (!LADDER_ROLES.has(role)) {
     failUsage(`ladder is not enabled for evidence-only role '${role}'; use report`);
   }
+  if (requireEvidence && !scope) {
+    failUsage('--require-evidence or --identity-file requires --scope-file');
+  }
 
-  return { role, implementerFamily };
+  return {
+    role,
+    implementerFamily,
+    nowMs: now === undefined
+      ? (requireEvidence ? Date.now() : todayMsUtc())
+      : nowArgToMs(now, false),
+    requireEvidence,
+    scope,
+    identity,
+  };
 }
 
 function parseRecordArgs(args) {
@@ -330,21 +564,81 @@ function parseRecordArgs(args) {
   return { file };
 }
 
-function currentRowsForRole(role, nowMs) {
-  const rows = readStoreRows();
+function currentRowsForRole(role, nowMs, options = {}) {
+  const rows = readStoreRows(false, options.requireEvidence === true);
+  const capabilityRows = options.requireEvidence ? readCapabilityEvidenceRows() : null;
+  const evidenceReceipts = new WeakMap();
   const latest = new Map();
 
   for (const row of rows) {
-    if (!row || typeof row !== 'object' || row.role !== role) continue;
+    if (!row || typeof row !== 'object') continue;
+    const storedRole = normalizeRole(row.role, { allowLegacy: true });
+    if (storedRole !== role) continue;
+    row.role = storedRole;
+    if (row.evidence !== undefined) {
+      try {
+        row.evidence = compileCapabilityEvidence(row.evidence);
+        if (options.requireEvidence && row.evidence.source === 'internal_eval') {
+          verifyEvidenceStoreAnchor(row, capabilityRows);
+        }
+      } catch (error) {
+        if (options.requireEvidence) {
+          failValidation(`invalid evidence-required scorecard row: ${error.message}`);
+        }
+        warnMalformedLine(0, `invalid capability evidence (${error.message})`);
+        delete row.evidence;
+      }
+    }
+    if (options.requireEvidence && !row.evidence) continue;
+    if (row.evidence && options.requireEvidence) {
+      let receipt;
+      try {
+        receipt = evaluateCapabilityEvidence(
+          capabilityRows.map((wrapper) => wrapper.evidence),
+          {
+            role,
+            scope: options.scope,
+            identity: options.identity || row.evidence.identity,
+            evaluation_time: new Date(nowMs).toISOString(),
+          },
+        );
+      } catch (error) {
+        failValidation(`invalid capability evidence ledger: ${error.message}`);
+      }
+      if (!receipt.applicability.applicable) continue;
+      evidenceReceipts.set(row, receipt);
+    } else if (row.evidence && options.scope) {
+      const receipt = buildCapabilityEvidenceReceipt(row.evidence, {
+        role,
+        scope: options.scope,
+        identity: options.identity || row.evidence.identity,
+        evaluation_time: new Date(nowMs).toISOString(),
+      });
+      if (!receipt.applicability.applicable) continue;
+    } else if (row.evidence && options.identity) {
+      const receipt = buildCapabilityEvidenceReceipt(row.evidence, {
+        role,
+        scope: row.evidence.scope,
+        identity: options.identity,
+        evaluation_time: new Date(nowMs).toISOString(),
+      });
+      if (!receipt.applicability.applicable) continue;
+    }
 
     const missing = identityFieldMissing(row);
     if (missing) {
+      if (options.requireEvidence) {
+        failValidation(`invalid evidence-required scorecard row: missing ${missing}`);
+      }
       warnMalformedLine(0, `configured-identity field missing (${missing})`);
       continue;
     }
 
     const currentId = toEventId(row.event_id);
     if (currentId === null) {
+      if (options.requireEvidence) {
+        failValidation('invalid evidence-required scorecard row: invalid event_id');
+      }
       warnMalformedLine(0, 'invalid event_id for current view');
       continue;
     }
@@ -372,6 +666,10 @@ function currentRowsForRole(role, nowMs) {
     const key = CONFIGURED_IDENTITY_FIELDS
       .map((name) => (row[name] !== undefined ? String(row[name]) : ''))
       .concat([row.effort === undefined ? '' : String(row.effort)])
+      .concat([
+        row.evidence ? row.evidence.scope_hash : '',
+        row.evidence ? row.evidence.identity_hash : '',
+      ])
       .join('\u0000');
     const existing = byInvocation.get(key);
     if (!existing || (toEventId(row.event_id) || 0) > (toEventId(existing.event_id) || 0)) {
@@ -382,8 +680,23 @@ function currentRowsForRole(role, nowMs) {
   const output = [];
 
   for (const row of byInvocation.values()) {
-    const effectiveStatus = deriveStatus(row, nowMs);
-    const rowStatus = typeof effectiveStatus === 'string' ? effectiveStatus : row.status;
+    const resolvedEvidenceReceipt = evidenceReceipts.get(row) || null;
+    const effectiveStatus = deriveStatus(row, nowMs, resolvedEvidenceReceipt);
+    const evidenceBackedStatus = typeof effectiveStatus === 'string'
+      ? effectiveStatus : row.status;
+    const rowStatus = evidenceBackedStatus === 'qualified'
+      ? 'provisional' : evidenceBackedStatus;
+    const evidenceReceipt = resolvedEvidenceReceipt || (row.evidence
+      ? buildCapabilityEvidenceReceipt(row.evidence, {
+        role: row.evidence.role,
+        scope: row.evidence.scope,
+        identity: row.evidence.identity,
+        evaluation_time: new Date(nowMs).toISOString(),
+      })
+      : null);
+    const outputEvidenceReceipt = evidenceReceipt && evidenceReceipt.state === 'qualified'
+      ? { ...evidenceReceipt, state: 'provisional' }
+      : evidenceReceipt;
 
     output.push({
       engine: row.engine,
@@ -401,6 +714,13 @@ function currentRowsForRole(role, nowMs) {
       // optional invocation-tuple fields (v2.32.25) — carried so ladder can project them
       ...(row.effort !== undefined ? { effort: row.effort } : {}),
       ...(row.model !== undefined ? { model: row.model } : {}),
+      ...(outputEvidenceReceipt ? {
+        evidence_receipt: outputEvidenceReceipt,
+        evidence_observed_state: evidenceReceipt.state,
+      } : {}),
+      authority_status: 'untrusted_telemetry',
+      admissible: false,
+      observed_status: evidenceBackedStatus,
       event_id: toEventId(row.event_id) || 0,
     });
   }
@@ -412,7 +732,18 @@ function currentRowsForRole(role, nowMs) {
   });
 }
 
-function deriveStatus(row, nowMs) {
+function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null) {
+  if (row.evidence) {
+    const receipt = resolvedEvidenceReceipt || buildCapabilityEvidenceReceipt(row.evidence, {
+      role: row.evidence.role,
+      scope: row.evidence.scope,
+      identity: row.evidence.identity,
+      evaluation_time: new Date(nowMs).toISOString(),
+    });
+    if (receipt.state === 'qualified') return 'qualified';
+    if (receipt.state === 'stale') return 'expired';
+    return 'failed';
+  }
   if (row.status !== 'qualified') return row.status;
   const expiresMs = toDateMs(row.expires);
   if (expiresMs === null) return row.status;
@@ -473,14 +804,35 @@ function cmdRecord(args) {
 }
 
 function cmdCurrent(args) {
-  const { role, nowMs } = parseCurrentArgs(args);
-  const rows = currentRowsForRole(role, nowMs);
+  const {
+    role,
+    nowMs,
+    requireEvidence,
+    scope,
+    identity,
+  } = parseCurrentArgs(args);
+  const rows = currentRowsForRole(role, nowMs, {
+    requireEvidence,
+    scope,
+    identity,
+  });
   process.stdout.write(`${JSON.stringify(rows)}\n`);
 }
 
 function cmdReport(args) {
-  const { role, key } = parseReportArgs(args);
-  const rows = currentRowsForRole(role, todayMsUtc()).filter((row) => row.status === 'qualified');
+  const {
+    role,
+    key,
+    nowMs,
+    requireEvidence,
+    scope,
+    identity,
+  } = parseReportArgs(args);
+  const rows = currentRowsForRole(role, nowMs, {
+    requireEvidence,
+    scope,
+    identity,
+  }).filter((row) => row.status === 'qualified');
   const ranked = rows.slice();
 
   if (key === 'cost') {
@@ -493,11 +845,22 @@ function cmdReport(args) {
 }
 
 function cmdLadder(args) {
-  const { role, implementerFamily } = parseLadderArgs(args);
+  const {
+    role,
+    implementerFamily,
+    nowMs,
+    requireEvidence,
+    scope,
+    identity,
+  } = parseLadderArgs(args);
   // currentRowsForRole already applies the invocation-tuple supersede (R6) —
   // a later failed/expired re-qualification retires the rung before this
   // qualified filter runs (R5 semantics preserved).
-  const deduped = currentRowsForRole(role, todayMsUtc())
+  const deduped = currentRowsForRole(role, nowMs, {
+    requireEvidence,
+    scope,
+    identity,
+  })
     .filter((row) => row.status === 'qualified')
     .sort(sortByCapability);
 

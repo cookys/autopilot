@@ -1,0 +1,12 @@
+--- a/scripts/emit.sh
++++ b/scripts/emit.sh
+@@ -12,8 +12,7 @@ emit_event() {
+   local event_json="$2"
+-  result=$(flock -x -w 10 "$LOCK" bash -c "echo '$event_json' >> '$LOG'")
+-  if [ $? -ne 0 ]; then
+-    echo "emit_event: flock failed" >&2
+-    return 1
+-  fi
++  flock -x -w 10 "$LOCK" bash -c "echo '$event_json' >> '$LOG'"
+   return 0
+ }

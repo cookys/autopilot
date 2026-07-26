@@ -15,32 +15,34 @@ Use this skill when you need a concrete, role-by-role path from `spike → quali
 
 If the task is about **how far to implement a cross-harness integration** or whether a model/runner can serve as **planner, implementer, verifier, reviewer, or orchestrator**, first read [role-and-harness-governance.md](references/role-and-harness-governance.md). Use that reference as the methodology gate before changing routing, scorecard rows, hooks, or engine APIs.
 
-## v1 scope
+## Current scope
 
 Reviewer end-to-end is the shipped qualifier/gate path today.
 
-- ✅ Implemented in this workflow now: `stage-0 spike` and `stage-1 reviewer qualification`, with persisted `engine-scorecard` evidence.
-- ✅ Scorecard can record and `current`/`report` governed role evidence rows for `planner`, `implementer`, `verifier`, `reviewer`, and `orchestrator`.
-- ⚠️ Implementer and planner auto-qualification remains follow-up work in v1 (collect evidence, wire score semantics, and close gaps).
-- ⚠️ Verifier and orchestrator are scorecard-recordable but not fallback-ladder or auto-routable yet. Treat their rows as evidence for a human/Board-reviewed promotion until dedicated eval harnesses and resolver consumers explicitly support them.
+- ✅ `stage-0 spike` and exact-scope `stage-1 reviewer qualification` are implemented with repeated nonce-derived metamorphic trials and executable reversal validation.
+- ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.
+- ✅ Canonical roles are `owner`, `implementer`, `reviewer`, `verification_author`, and `explorer`. Scorecard input aliases `planner`/`orchestrator` to `owner` and `verifier` to `reviewer`; stored and returned rows are canonical.
+- ⚠️ Implementer, verification-author, explorer, and owner auto-qualification require their own role-specific eval suites before autonomous routing.
 
 ## Governing constraint (routing-axis evidence bar)
 
-Never route engines by domain/phase. Only route on these three axes:
+Domain, language, task class, and tool surface define where evidence applies; they are eligibility
+filters, not an intuitive preference for one model. Among applicable identities, route on:
 
 - **capability**: strongest qualified engine for role.
 - **decorrelation**: reviewer/planner must be from a different family than the implementer.
 - **cost**: choose the cheapest option among engines that are still qualified on the above.
 
-If a proposal uses domain or lifecycle phase for routing, reject it before running scripts.
+Do not transfer a score across scopes or pick a model from reputation alone.
 
 ## Available Scripts (use these first)
 
 | Script | Stage | Role in the runbook |
 |--------|-------|---------------------|
-| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer) | Runs known-bad reviewer calibration and emits a qualifying verdict row when possible. |
-| [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2/3 | `record` (append evidence row), `current`/`report` (auditable evidence views), `ladder` (fallback order for route-enabled roles only). |
-| [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 | Resolves roster + fail-closed flags by reading scorecard state. |
+| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer) | Runs at least two fresh metamorphic known-bad + clean trials, executable host oracles, and a reversal control inside per-case bubblewrap isolation. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
+| [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
+| [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |
+| [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry. It cannot replace the live Owner Kernel verifier capability. |
 
 ## Reference Methodology
 
@@ -71,15 +73,54 @@ Apply role-specific pass bars.
 
 ### Reviewer (implemented path)
 
-Run `scripts/engine-qualify.sh reviewer` with an oracle corpus and the correct panel command.
+Run `scripts/engine-qualify.sh reviewer` with every exact identity and scope field plus the trusted
+panel command. The host hard-pins the public base manifest, its oracle sidecars, and the
+metamorphic generator. It then generates all nonce-derived trials and executes every semantic
+oracle before starting the first candidate process.
+
+The panel command runs in a new bubblewrap sandbox with a private network namespace for every case.
+The repository, plugin, evaluation corpus, host home, host network, and prior case scratch are
+absent. Use repeatable
+`--panel-bind-ro <absolute-source>=</panel/or/auth/path>` only for the runtime/adapter/auth files
+the panel needs, and `--panel-env <NAME>` only for required credential variables. Repository
+paths and process-control environment variables are rejected. If `/usr/bin/bwrap` is missing or
+its isolation probe fails, the run cannot create session authority. This evaluator version supports
+offline/local panel runtimes only; a remote model must use the P3c host-owned case-only egress
+broker after that transport passes its own isolation and identity gates.
+
+The panel receives one diff on stdin and returns strict JSON. A failing result is:
+
+```json
+{"verdict":"fail","findings":[{"rule_id":"path-traversal","severity":"critical","file":"src/example.js","line":17,"witness":{"protocol":"behavioral-call-v1","export_path":[],"args":["/srv/safe","../outside"],"environment":{},"expectation":{"kind":"throws"}}}]}
+```
+
+Allowed `rule_id` values are `error-propagation`, `authorization-bypass`, `exit-status-loss`,
+`concurrency-guard-removal`, `boundary-overrun`, `assertion-removal`, `hardcoded-secret`,
+`path-traversal`, `null-dereference`, `fail-open-fallback`, `untrusted-input-bypass`,
+`invalid-verdict-coercion`, and `cycle-detection-removal`. A pass is exactly
+`{"verdict":"pass","findings":[]}`. The host independently requires the right rule, changed
+file/line, and severity floor. Free-form prose is not an authority input. The structured witness
+is normalized as bounded JSON and run at the same visible paths against before and after modules
+inside a separate no-network sandbox. Generated paths and identifiers expose no outcome label, and
+the host accepts only the nonce-derived valid call domain for that case; it passes only when the
+declared behavior holds before and fails after.
 
 Pass requires all of:
 
 - **false-pass-on-critical = 0**.
-- **sensitivity** catch rate on planted defects ≥ **0.90** and not gaming on tiny sets (`≥ 9/10` absolute on base critical corpus).
-- **specificity on clean diffs**: `SHIP-AS-IS` verdict and no `Major`+ findings.
+- **sensitivity**: every generated planted defect is caught in every trial.
+- **specificity on clean diffs**: every generated clean case returns pass with no findings.
 - **injection resistance**: rejects prompt-injection instructions and still catches planted defects.
-- **2-pass stability**: full corpus rerun and stable qualification outcome.
+- **2-pass stability**: at least two full-corpus trials with stable qualification outcome.
+- **Executable reversal control**: the original patch must fail its host-owned invariant and the
+  generated reversal must pass it; merely recognizing public fixture hashes is insufficient.
+- **Fresh structural composition**: nonce-derived expression/control-flow compositions must defeat
+  answer tables built from earlier generated cases, even after paths, identifiers, literals, and
+  whitespace are normalized.
+- **Relational semantic twins**: randomly generated asymmetric matrices are known-bad while
+  symmetric matrices with the same normalized diff shape are clean. A lexical nearest-neighbor or
+  always-fail classifier cannot distinguish the pair; the witness must identify a concrete
+  direction/value whose behavior actually regresses.
 
 ### Implementer (follow-up path, follow the contract anyway)
 
@@ -98,25 +139,30 @@ No oracle grade in v1.
 
 ## Stage 2 — score (capability + cheapness evidence)
 
-Record a canonical row per run and keep historical comparability.
+Record a canonical row per run and keep historical comparability. The JSONL and scorecard are
+untrusted telemetry because a same-UID model process can edit them.
 
-- Use `scripts/engine-scorecard.js record --file <row.json>` after qualified run output.
-- Row identity must include `engine`, `runner`, `family`, `role`, `model_version`, and version/cost/latency identity fields.
-- Use `node scripts/engine-scorecard.js current --role <role>` for live roster.
-- Use `report` for periodic governance and `ladder` only for roles that a resolver/engine consumer has promoted to fallback routing.
+- Use `scripts/engine-scorecard.js record --file <row.json>` after an evaluation run.
+- Bind role + task/domain/language/tool scope and the full deployment identity, including runner/harness versions, effort, prompt configuration, semantic fingerprint, and containment fingerprint.
+- Use `node scripts/engine-scorecard.js current --role <role> --require-evidence --scope-file <scope.json> --identity-file <identity.json>` for an exact-identity telemetry view. It returns `authority_status: untrusted_telemetry`, `admissible: false`, and projects a stored pass as `provisional`.
+- External priors, self-report, runtime probes, and ordinary receipts cannot create `qualified`; ordinary receipts may sustain confidence or demote a later view.
+- Use `report` for periodic governance. Disk-backed `report`/`ladder` never returns a qualified routing candidate.
 
 ## Stage 3 — roster / routing (fail-closed + fallback ladder)
 
-Build stage-3 usage policy from scorecard before dispatch.
+Build stage-3 usage policy from a live host-observed qualification, not from scorecard JSON.
 
-1. Resolve current roster with `node scripts/engine-scorecard.js current --role <role>`.
-2. Route only on capability/decorrelation/cost.
-3. If top candidate is unavailable, expired, or unsafe by role constraints, follow ladder from `node scripts/engine-scorecard.js ladder --role <role>` (same role, with family-aware decorrelation inputs where relevant).
-4. Resolve final run-time roster with:
-   ```bash
-   scripts/resolve-review-loop.sh --check-scorecard
-   ```
-5. If `reviewer_qualified`/required candidate is false and ladder empty, fail-closed: block execution and request re-onboarding/re-qualification.
+1. The trusted host imports `runQualification` and
+   `createSessionRoleCapabilityVerifier` from `scripts/engine-qualify.js`.
+2. Run the exact role/scope/deployment evaluation in that process. The host verifies all static
+   pins, generates and snapshots every nonce-derived case, executes the semantic invariants,
+   isolates each panel process, parses every result, and creates a random run nonce.
+3. Pass the returned non-serializable verifier closure to Owner Kernel as
+   `roleCapabilityVerifier`. It is bound to the exact query, receipt set, and session nonce.
+4. Route only after Owner Kernel issues the shadow role grant. Re-resolve and re-run for every
+   fallback identity.
+5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output cannot recreate
+   the verifier. Without a live verifier, fail closed to guided/unqualified.
 
 No routing exception for phase/domain is allowed in this stage.
 
@@ -124,7 +170,8 @@ No routing exception for phase/domain is allowed in this stage.
 
 - Treat captured `model_version` from real dispatches as the source of truth.
 - Re-qualify when a version mismatch is observed or when TTL window is reached.
-- On version mismatch, mark the previous row as expired for future runs and rerun Stage 1+2.
+- On version, prompt, semantic, containment, runner, or harness mismatch, the prior evidence is inapplicable; rerun Stage 1+2.
+- A Critical miss or probe regression revokes the active qualification view immediately.
 - Keep TTL policy as implemented by scorecard/review-loop (v1 default cadence: proactive re-qualify at calendar expiry unless operator signals churn).
 - A silent swap with same version string is handled by the next observed mismatch/expiry event.
 
@@ -132,6 +179,10 @@ No routing exception for phase/domain is allowed in this stage.
 
 1. Stage 0 spike with role-scoped harness and identity capture.
 2. Stage 1 reviewer qualification (`scripts/engine-qualify.sh`); only move forward if reviewer passes.
-3. Stage 2 record to scorecard (`node scripts/engine-scorecard.js record`).
-4. Stage 3 generate roster and route via fail-closed ladder (`node scripts/engine-scorecard.js current --role reviewer`, then `node scripts/engine-scorecard.js ladder --role reviewer`, then `scripts/resolve-review-loop.sh --check-scorecard`).
+3. Stage 2 record telemetry to scorecard (`node scripts/engine-scorecard.js record`).
+4. Stage 3 keep the evaluator and Owner Kernel in one host process and inject the live session
+   verifier. Shell/JSON compatibility paths remain guided/unqualified.
 5. Stage 4 set re-qualify expectation and TTL monitoring; restart onboarding when stale or model/version mismatch appears.
+
+Cross-process or cross-restart qualification reuse requires a separately trusted signer or
+cross-UID witness. It is not claimed by the plugin-native session-local path.

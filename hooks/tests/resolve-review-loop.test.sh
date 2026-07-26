@@ -372,7 +372,7 @@ BASE_OUT="$(bash "$SCRIPT")"
 assert_not_contains "$BASE_OUT" "\"reviewer_qualified\"" "no --check-scorecard output omits reviewer_qualified"
 assert_not_contains "$BASE_OUT" "\"fallback_ladder\"" "no --check-scorecard output omits fallback_ladder"
 
-# 17. --check-scorecard with a qualified reviewer row emits true + ladder from scorecard
+# 17. Legacy unscoped qualification cannot enter the adaptive scorecard gate.
 SCDIR="$TEST_TMP/check-ok"
 mkdir -p "$SCDIR"
 RECQUAL_JSON="$SCDIR/rec.json"
@@ -380,15 +380,13 @@ cat > "$RECQUAL_JSON" <<'JSON'
 {"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
 JSON
 ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECQUAL_JSON" > /dev/null
-EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
 # ISOLATED: EMPTY_CFG pins the default reviewer (gpt-5.5/codex) + openai implementer so
-# reviewer_qualified matches the gpt-5.5 fixture row and the ladder's implementer-family
-# matches EXPECTED_LADDER's --implementer-family openai — independent of the live roster.
+# this checks that even a matching legacy row cannot bypass exact scope/deployment evidence.
 QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard)"
-assert_eq "true" "$(json_get "$QUAL_OUT" reviewer_qualified)" "qualified reviewer row => reviewer_qualified true"
-assert_eq "$EXPECTED_LADDER" "$(json_get "$QUAL_OUT" fallback_ladder)" "fallback_ladder matches scorecard ladder output"
-assert_eq "true" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "field reviewer_qualified true for qualified row"
-assert_eq "$EXPECTED_LADDER" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "field fallback_ladder matches scorecard ladder output"
+assert_eq "false" "$(json_get "$QUAL_OUT" reviewer_qualified)" "legacy qualified row remains unqualified without exact evidence inputs"
+assert_eq "[]" "$(json_get "$QUAL_OUT" fallback_ladder)" "legacy row cannot enter the evidence-required ladder"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "legacy field gate remains false"
+assert_eq "[]" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "legacy field ladder remains empty"
 
 # 18. --check-scorecard with NO matching row fail-closes as unqualified
 EMPTY_SCDIR="$TEST_TMP/check-miss"
@@ -637,7 +635,7 @@ assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG
 assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first false for unknown tier"
 assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field cross_family_satisfied)" "density-scaled with 1 distinct non-impl family -> satisfied=false"
 
-# 23. --scale-by-capability with qualified implementer row -> high tier + low risk scales down
+# 23. A caller-written disk "qualified" row remains unknown and can only increase verification.
 DENS_HIGH_STORE="$TEST_TMP/dens-high"
 mkdir -p "$DENS_HIGH_STORE"
 RECIMPL_HIGH_JSON="$DENS_HIGH_STORE/rec.json"
@@ -646,27 +644,27 @@ cat > "$RECIMPL_HIGH_JSON" <<'JSON'
 JSON
 ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
 DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability)"
-assert_eq "high" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "qualified implementer -> high tier"
-assert_eq "true" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "high tier + low risk -> density_scaled true"
-assert_eq "2" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "high tier + low risk -> max rounds capped at 2"
-assert_eq "1" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "high tier + low risk -> required_review_families unchanged"
-assert_eq "false" "$(json_get "$DENS_HIGH_OUT" l1_required)" "high tier + low risk -> l1_required unchanged"
-assert_eq "true" "$(json_get "$DENS_HIGH_OUT" verify_first)" "high tier + low risk -> verify_first true"
-assert_eq "true" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first true for high tier + low risk"
+assert_eq "unknown" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "disk qualified telemetry cannot become high tier"
+assert_eq "true" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "untrusted disk row triggers conservative scaling"
+assert_eq "7" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "untrusted disk row cannot reduce review rounds"
+assert_eq "2" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "untrusted disk row increases family assurance"
+assert_eq "true" "$(json_get "$DENS_HIGH_OUT" l1_required)" "untrusted disk row requires L1"
+assert_eq "false" "$(json_get "$DENS_HIGH_OUT" verify_first)" "untrusted disk row cannot enable verify-first shortcut"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first stays false for disk telemetry"
 
 DENS_HIGH_BASE1_CFG="$TEST_TMP/dens-high-base1.md"
 printf -- '- loop_max_rounds: 1\n' > "$DENS_HIGH_BASE1_CFG"
 DENS_HIGH_BASE1_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_HIGH_BASE1_CFG" ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability)"
-assert_eq "1" "$(json_get "$DENS_HIGH_BASE1_OUT" loop_max_rounds)" "high tier + base rounds 1 -> stays 1"
-assert_eq "true" "$(json_get "$DENS_HIGH_BASE1_OUT" verify_first)" "high tier + base rounds 1 -> verify_first true"
+assert_eq "3" "$(json_get "$DENS_HIGH_BASE1_OUT" loop_max_rounds)" "disk telemetry + base rounds 1 -> conservatively adds 2"
+assert_eq "false" "$(json_get "$DENS_HIGH_BASE1_OUT" verify_first)" "disk telemetry never enables verify-first"
 
 DENS_HIGH_RISK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --security-surface 1)"
-assert_eq "high" "$(json_get "$DENS_HIGH_RISK_OUT" capability_tier)" "qualified implementer high risk -> high tier"
-assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" density_scaled)" "high tier + high risk -> no density reduction"
-assert_eq "5" "$(json_get "$DENS_HIGH_RISK_OUT" loop_max_rounds)" "high tier + high risk -> max rounds unchanged"
-assert_eq "2" "$(json_get "$DENS_HIGH_RISK_OUT" required_review_families)" "high tier + high risk -> high-risk family requirement"
-assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" l1_required)" "high tier + high risk -> high-risk l1 requirement"
-assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" verify_first)" "high tier + high risk -> verify_first false"
+assert_eq "unknown" "$(json_get "$DENS_HIGH_RISK_OUT" capability_tier)" "disk telemetry stays unknown on high risk"
+assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" density_scaled)" "disk telemetry conservatively scales high risk"
+assert_eq "7" "$(json_get "$DENS_HIGH_RISK_OUT" loop_max_rounds)" "disk telemetry cannot reduce high-risk rounds"
+assert_eq "2" "$(json_get "$DENS_HIGH_RISK_OUT" required_review_families)" "high-risk family requirement remains"
+assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" l1_required)" "high-risk l1 requirement remains"
+assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" verify_first)" "high-risk disk telemetry cannot enable verify-first"
 
 # 24. Config density_scaling: on -> scales via config (unknown tier)
 DENS_CFG="$TEST_TMP/dens-on.md"

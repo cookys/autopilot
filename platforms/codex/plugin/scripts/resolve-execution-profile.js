@@ -20,6 +20,8 @@ const HELP = `Usage:
 Commands accept an existing task authority envelope and inspect only its child projection.
 Every successful result is explicitly unanchored: this CLI cannot write an Owner Kernel ledger,
 admit a role, grant host authority, or perform an effect.
+Serialized evidence is never accepted here. Qualified grants require the live, in-process
+roleCapabilityVerifier supplied by the host to Owner Kernel.
 `;
 
 class CliError extends Error {
@@ -92,7 +94,16 @@ function run(argv = process.argv) {
     const envelopeFile = readJson(requireOption(options, 'envelope'), 'task envelope');
     const envelope = envelopeFile.envelope || envelopeFile;
     const input = readJson(requireOption(options, 'input'), 'grant input');
-    const result = resolveRoleExecutionGrant({ ...input, envelope });
+    const evidence = Array.isArray(input.evidence) ? input.evidence : [];
+    if (evidence.length > 0) {
+      throw new CliError(
+        'serialized capability evidence cannot mint a grant; use the Owner Kernel host verifier',
+        'UNTRUSTED_CAPABILITY_EVIDENCE',
+      );
+    }
+    const result = resolveRoleExecutionGrant({ ...input, envelope }, {
+      evidenceVerifier: () => false,
+    });
     output(result);
     return result.status === 'candidate' ? EXIT_SUCCESS : EXIT_POLICY_DENIED;
   }

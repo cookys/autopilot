@@ -12,6 +12,7 @@ const root = process.argv[2];
 const tmp = process.argv[3];
 const ownerKernel = require(path.join(root, 'src', 'engine', 'owner-kernel'));
 const executionProfile = require(path.join(root, 'src', 'engine', 'execution-profile'));
+const capabilityEvidence = require(path.join(root, 'src', 'engine', 'capability-evidence'));
 const { validateJsonSchema } = require(path.join(root, 'scripts', 'validate-json-schema'));
 
 const {
@@ -34,6 +35,105 @@ const {
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const hash = (value) => sha256(typeof value === 'string' ? value : canonicalJson(value));
 const throwsCode = (fn, code) => assert.throws(fn, (error) => error && error.code === code);
+const resolveTrustedRoleGrant = (raw) => resolveRoleExecutionGrant(raw, {
+  evidenceVerifier: () => true,
+});
+const makeEvidenceReceipt = ({
+  state,
+  role,
+  scope,
+  modelIdentity,
+  seed,
+  observedAt = '2026-07-25T00:00:00.000Z',
+  expiresAt = '2026-08-01T00:00:00.000Z',
+}) => {
+  const exactIdentity = {
+    ...modelIdentity,
+    runner_version: modelIdentity.runner_version || 'test-runner-v1',
+    harness_version: modelIdentity.harness_version || 'test-harness-v1',
+    effort: modelIdentity.effort || 'high',
+    prompt_config_hash: modelIdentity.prompt_config_hash || hash(`prompt:${seed}`),
+  };
+  const corpusManifestHash = hash(`corpus:${seed}`);
+  const methodology = state === 'qualified' ? {
+    kind: 'role_eval',
+    name: `${role}-qualification`,
+    version: '2.0.0',
+    corpus_version: `${role}-corpus-v2`,
+    corpus_manifest_hash: corpusManifestHash,
+    thresholds: {
+      min_trials: 2,
+      min_known_bad_cases: 10,
+      min_critical_cases: 5,
+      max_false_pass_critical: 0,
+      min_clean_cases: 5,
+      max_clean_false_positives: 0,
+    },
+    basis: null,
+  } : {
+    kind: 'external_prior',
+    name: `${role}-external-prior`,
+    version: '1.0.0',
+    corpus_version: null,
+    corpus_manifest_hash: null,
+    thresholds: null,
+    basis: {
+      cohort: 'test-prior-cohort',
+      cohort_hash: hash(`prior-cohort:${seed}`),
+      observation_hash: hash(`prior-observation:${seed}`),
+      dimensions: ['capability-prior'],
+      applicability: ['test-only'],
+    },
+  };
+  const trials = state === 'qualified' ? [1, 2].map((trial) => ({
+    trial_id: `trial-${trial}`,
+    observed_at: `2026-07-24T0${trial}:00:00.000Z`,
+    known_bad_total: 10,
+    known_bad_caught: 10,
+    critical_total: 5,
+    false_pass_critical: 0,
+    clean_total: 5,
+    clean_false_positives: 0,
+    corpus_manifest_hash: corpusManifestHash,
+    artifact_oracle: {
+      kind: 'fixture_manifest',
+      oracle_hash: hash(`oracle:${seed}:${trial}`),
+      result_set_hash: hash(`result-set:${seed}:${trial}`),
+      independent: true,
+      passed: true,
+    },
+    mutation_validation: {
+      target_id: 'mutation-control',
+      original_hash: hash(`original:${seed}:${trial}`),
+      mutated_hash: hash(`mutated:${seed}:${trial}`),
+      original_verdict: 'fail',
+      mutated_verdict: 'pass',
+      oracle_rejected: true,
+    },
+  })) : [];
+  const record = capabilityEvidence.compileCapabilityEvidence({
+    schema_version: 1,
+    source: state === 'qualified' ? 'internal_eval' : 'external_prior',
+    source_ref: `execution-profile:${seed}`,
+    state,
+    role,
+    scope,
+    identity: exactIdentity,
+    issued_at: '2026-07-25T00:30:00.000Z',
+    observed_at: observedAt,
+    expires_at: expiresAt,
+    methodology,
+    trials,
+    revocation: null,
+    supersedes: null,
+  });
+  return capabilityEvidence.buildCapabilityEvidenceReceipt(record, {
+    role,
+    scope,
+    identity: exactIdentity,
+    evaluation_time: '2026-07-26T00:00:00.000Z',
+  });
+};
 
 const config = JSON.parse(fs.readFileSync(
   path.join(root, '.claude', 'owner-kernel-governance.json'),
@@ -399,6 +499,10 @@ const primaryIdentity = {
   model_version: 'max',
   family: 'qwen',
   runner: 'qoderclicn',
+  runner_version: 'test-runner-v1',
+  harness_version: 'test-harness-v1',
+  effort: 'high',
+  prompt_config_hash: hash('prompt:qwen-implementation'),
   semantic_fingerprint: semanticFingerprint,
   containment_fingerprint: containmentFingerprint,
   identity_resolved: true,
@@ -411,16 +515,13 @@ const grantInput = {
   risk: 'low',
   capabilityScope,
   modelIdentity: primaryIdentity,
-  evidence: [{
-    evidence_id: hash('evidence:qwen:implementation'),
-    source: 'capability-registry',
+  evidence: [makeEvidenceReceipt({
     state: 'qualified',
     role: 'implementer',
-    scope_hash: hash(capabilityScope),
-    identity_hash: hash(primaryIdentity),
-    observed_at: '2026-07-25T00:00:00.000Z',
-    expires_at: '2026-08-01T00:00:00.000Z',
-  }],
+    scope: capabilityScope,
+    modelIdentity: primaryIdentity,
+    seed: 'qwen-implementation',
+  })],
   allowedTools: ['apply_patch'],
   allowedArtifacts: ['src/engine'],
   requestedEffects: [{
@@ -444,13 +545,25 @@ const grantInput = {
   evaluationTime: '2026-07-26T00:00:00.000Z',
   expiresAt: '2026-07-26T01:00:00.000Z',
 };
-const grantedA = resolveRoleExecutionGrant({ ...grantInput, envelope });
-const grantedB = resolveRoleExecutionGrant({ ...clone(grantInput), envelope: clone(envelope) });
+assert.throws(
+  () => resolveRoleExecutionGrant({ ...grantInput, envelope }),
+  /trusted evidence resolver/,
+  'caller-authored receipt cannot select a profile without the trusted resolver capability',
+);
+const grantedA = resolveTrustedRoleGrant({ ...grantInput, envelope });
+const grantedB = resolveTrustedRoleGrant({ ...clone(grantInput), envelope: clone(envelope) });
 assert.deepEqual(grantedA, grantedB);
 assert.equal(grantedA.status, 'candidate');
 assert.equal(grantedA.trust, 'unanchored_structural_projection');
 const grant = grantedA.grant;
 const identityHash = hash(primaryIdentity);
+const changedRunnerDeployment = clone(grantInput);
+changedRunnerDeployment.modelIdentity.runner_version = 'test-runner-v2';
+assert.throws(
+  () => resolveTrustedRoleGrant({ ...changedRunnerDeployment, envelope }),
+  /exact model identity|exact deployment identity/,
+  'runner version drift cannot reuse an old qualification receipt',
+);
 assert.equal(grant.parent_task_authority_id, envelope.task_authority_id);
 assert.equal(grant.authority_status, 'shadow');
 assert.equal(grant.requested_profile, 'autonomous');
@@ -487,12 +600,17 @@ fallbackInput.dispatchId = 'dispatch-fallback';
 fallbackInput.modelIdentity.identity = 'qwen-3.8-fallback-exact';
 fallbackInput.modelIdentity.semantic_fingerprint = hash('model:fallback:semantic');
 assert.throws(
-  () => resolveRoleExecutionGrant({ ...fallbackInput, envelope }),
+  () => resolveTrustedRoleGrant({ ...fallbackInput, envelope }),
   /identity_hash does not match the exact model identity/,
 );
-fallbackInput.evidence[0].evidence_id = hash('evidence:qwen:fallback:implementation');
-fallbackInput.evidence[0].identity_hash = hash(fallbackInput.modelIdentity);
-const fallback = resolveRoleExecutionGrant({ ...fallbackInput, envelope });
+fallbackInput.evidence = [makeEvidenceReceipt({
+  state: 'qualified',
+  role: 'implementer',
+  scope: capabilityScope,
+  modelIdentity: fallbackInput.modelIdentity,
+  seed: 'qwen-fallback-implementation',
+})];
+const fallback = resolveTrustedRoleGrant({ ...fallbackInput, envelope });
 assert.equal(fallback.status, 'candidate');
 assert.equal(fallback.grant.parent_task_authority_id, envelope.task_authority_id);
 assert.notEqual(fallback.grant.grant_id, grant.grant_id);
@@ -504,7 +622,7 @@ const injectedEnvelope = freezeTaskAuthorityEnvelope({
   policy: resolved.policy,
   policyHash: resolved.policy_hash,
 }).envelope;
-const injectedGrant = resolveRoleExecutionGrant({ ...grantInput, envelope: injectedEnvelope });
+const injectedGrant = resolveTrustedRoleGrant({ ...grantInput, envelope: injectedEnvelope });
 assert.equal(injectedGrant.status, 'candidate');
 assert.equal(injectedGrant.grant.effective_profile, grant.effective_profile);
 assert.deepEqual(injectedGrant.grant.effect_subset, grant.effect_subset);
@@ -512,7 +630,7 @@ assert.deepEqual(injectedGrant.grant.effect_subset, grant.effect_subset);
 const unknownInput = clone(grantInput);
 unknownInput.capabilityState = 'unknown';
 unknownInput.evidence = [];
-const unknownGrant = resolveRoleExecutionGrant({ ...unknownInput, envelope });
+const unknownGrant = resolveTrustedRoleGrant({ ...unknownInput, envelope });
 assert.equal(unknownGrant.status, 'candidate');
 assert.equal(unknownGrant.grant.effective_profile, 'guided');
 const limitedExternal = clone(unknownInput);
@@ -522,7 +640,7 @@ limitedExternal.requestedEffects = [{
   destinations: ['artifact-store'],
 }];
 assert.deepEqual(
-  resolveRoleExecutionGrant({ ...limitedExternal, envelope }).reasons,
+  resolveTrustedRoleGrant({ ...limitedExternal, envelope }).reasons,
   [
     'effect_requires_owner_kernel_authorization:publish-artifact',
     'limited_capability_not_admitted_for_risk',
@@ -534,7 +652,7 @@ qualifiedExternal.requestedEffects = [{
   id: 'publish-artifact',
   destinations: ['artifact-store'],
 }];
-const qualifiedExternalResult = resolveRoleExecutionGrant({ ...qualifiedExternal, envelope });
+const qualifiedExternalResult = resolveTrustedRoleGrant({ ...qualifiedExternal, envelope });
 assert.equal(qualifiedExternalResult.status, 'denied');
 assert.equal(qualifiedExternalResult.disposition, 'escalate');
 assert.deepEqual(
@@ -545,55 +663,75 @@ assert.deepEqual(
 const ineligibleOwner = clone(grantInput);
 ineligibleOwner.role = 'owner';
 ineligibleOwner.roleEligibility = 'ineligible';
-ineligibleOwner.evidence[0].role = 'owner';
-ineligibleOwner.evidence[0].evidence_id = hash('evidence:qwen:ineligible-owner');
+ineligibleOwner.evidence = [makeEvidenceReceipt({
+  state: 'qualified',
+  role: 'owner',
+  scope: capabilityScope,
+  modelIdentity: ineligibleOwner.modelIdentity,
+  seed: 'qwen-ineligible-owner',
+})];
 assert.deepEqual(
-  resolveRoleExecutionGrant({ ...ineligibleOwner, envelope }).reasons,
+  resolveTrustedRoleGrant({ ...ineligibleOwner, envelope }).reasons,
   ['role_ineligible'],
 );
 const provisionalReviewer = clone(grantInput);
 provisionalReviewer.role = 'reviewer';
 provisionalReviewer.roleEligibility = 'provisional';
 provisionalReviewer.capabilityState = 'provisional';
-provisionalReviewer.evidence[0].role = 'reviewer';
-provisionalReviewer.evidence[0].state = 'provisional';
-provisionalReviewer.evidence[0].evidence_id = hash('evidence:qwen:provisional-reviewer');
+provisionalReviewer.evidence = [makeEvidenceReceipt({
+  state: 'provisional',
+  role: 'reviewer',
+  scope: capabilityScope,
+  modelIdentity: provisionalReviewer.modelIdentity,
+  seed: 'qwen-provisional-reviewer',
+})];
 provisionalReviewer.requestedEffects = [];
 assert.deepEqual(
-  resolveRoleExecutionGrant({ ...provisionalReviewer, envelope }).reasons,
+  resolveTrustedRoleGrant({ ...provisionalReviewer, envelope }).reasons,
   ['provisional_role_not_admitted'],
 );
 const provisionalImplementer = clone(grantInput);
 provisionalImplementer.roleEligibility = 'provisional';
 provisionalImplementer.capabilityState = 'provisional';
-provisionalImplementer.evidence[0].evidence_id = hash('evidence:qwen:provisional');
-provisionalImplementer.evidence[0].state = 'provisional';
-const provisionalGrant = resolveRoleExecutionGrant({ ...provisionalImplementer, envelope });
+provisionalImplementer.evidence = [makeEvidenceReceipt({
+  state: 'provisional',
+  role: 'implementer',
+  scope: capabilityScope,
+  modelIdentity: provisionalImplementer.modelIdentity,
+  seed: 'qwen-provisional-implementer',
+})];
+const provisionalGrant = resolveTrustedRoleGrant({ ...provisionalImplementer, envelope });
 assert.equal(provisionalGrant.status, 'candidate');
 assert.equal(provisionalGrant.grant.role_admission, 'shadow_provisional');
 const highRiskProvisional = clone(provisionalImplementer);
 highRiskProvisional.risk = 'high';
 assert.deepEqual(
-  resolveRoleExecutionGrant({ ...highRiskProvisional, envelope }).reasons,
+  resolveTrustedRoleGrant({ ...highRiskProvisional, envelope }).reasons,
   ['provisional_scope_requires_low_risk'],
 );
 const unresolvedIdentity = clone(grantInput);
 unresolvedIdentity.modelIdentity.identity_resolved = false;
-unresolvedIdentity.evidence[0].identity_hash = hash(unresolvedIdentity.modelIdentity);
+unresolvedIdentity.capabilityState = 'unknown';
+unresolvedIdentity.evidence = [];
 assert.deepEqual(
-  resolveRoleExecutionGrant({ ...unresolvedIdentity, envelope }).reasons,
+  resolveTrustedRoleGrant({ ...unresolvedIdentity, envelope }).reasons,
   ['unresolved_identity'],
 );
 const reviewerOwnerEffect = clone(grantInput);
 reviewerOwnerEffect.role = 'reviewer';
-reviewerOwnerEffect.evidence[0].role = 'reviewer';
-reviewerOwnerEffect.evidence[0].evidence_id = hash('evidence:qwen:reviewer');
+reviewerOwnerEffect.evidence = [makeEvidenceReceipt({
+  state: 'qualified',
+  role: 'reviewer',
+  scope: capabilityScope,
+  modelIdentity: reviewerOwnerEffect.modelIdentity,
+  seed: 'qwen-reviewer',
+})];
 reviewerOwnerEffect.requestedEffects = [{
   id: 'deploy-production',
   destinations: ['production'],
 }];
 assert.deepEqual(
-  resolveRoleExecutionGrant({ ...reviewerOwnerEffect, envelope }).reasons,
+  resolveTrustedRoleGrant({ ...reviewerOwnerEffect, envelope }).reasons,
   ['scope_broadens_task_authority'],
 );
 
@@ -611,10 +749,13 @@ const policyDenialCases = [
   [{ allowedArtifacts: ['docs'] }, 'scope_broadens_task_authority'],
   [{
     capabilityScope: { ...capabilityScope, domains: ['unknown-domain'] },
-    evidence: grantInput.evidence.map((entry) => ({
-      ...entry,
-      scope_hash: hash({ ...capabilityScope, domains: ['unknown-domain'] }),
-    })),
+    evidence: [makeEvidenceReceipt({
+      state: 'qualified',
+      role: 'implementer',
+      scope: { ...capabilityScope, domains: ['unknown-domain'] },
+      modelIdentity: grantInput.modelIdentity,
+      seed: 'qwen-unknown-domain',
+    })],
   }, 'scope_broadens_task_authority'],
   [{
     resourceBudget: { ...grantInput.resourceBudget, max_wall_seconds: 7201 },
@@ -625,13 +766,13 @@ const policyDenialCases = [
   [{ requestedEgress: [credentialRequest] }, 'scope_broadens_task_authority'],
 ];
 for (const [patch, expectedReason] of policyDenialCases) {
-  const denied = resolveRoleExecutionGrant({ ...clone(grantInput), ...patch, envelope });
+  const denied = resolveTrustedRoleGrant({ ...clone(grantInput), ...patch, envelope });
   assert.equal(denied.status, 'denied');
   assert.equal(denied.disposition, 'block');
   assert.deepEqual(denied.reasons, [expectedReason]);
 }
 assert.throws(
-  () => resolveRoleExecutionGrant({
+  () => resolveTrustedRoleGrant({
     ...clone(grantInput),
     contextBudget: { max_input_tokens: 40000, max_control_tokens: 2001 },
     envelope,
@@ -648,7 +789,7 @@ for (const field of [
     ...grantInput.resourceBudget,
     [field]: envelope.resource_ceiling[field] + 1,
   };
-  const denied = resolveRoleExecutionGrant({
+  const denied = resolveTrustedRoleGrant({
     ...clone(grantInput),
     resourceBudget: widened,
     envelope,
@@ -656,27 +797,28 @@ for (const field of [
   assert.equal(denied.status, 'denied');
   assert.deepEqual(denied.reasons, ['scope_broadens_task_authority']);
 }
-assert.deepEqual(resolveRoleExecutionGrant({
+assert.deepEqual(resolveTrustedRoleGrant({
   ...clone(grantInput),
   resourceBudget: { ...grantInput.resourceBudget, max_tokens: 39999 },
   envelope,
 }).reasons, ['scope_broadens_task_authority']);
 const futureEvidence = clone(grantInput);
 futureEvidence.evidence[0].observed_at = '2026-07-26T00:00:01.000Z';
+futureEvidence.evidence[0].issued_at = '2026-07-26T00:00:02.000Z';
 assert.throws(
-  () => resolveRoleExecutionGrant({ ...futureEvidence, envelope }),
+  () => resolveTrustedRoleGrant({ ...futureEvidence, envelope }),
   /cannot be later than the explicit evaluation time/,
 );
 const staleEvidence = clone(grantInput);
 staleEvidence.evidence[0].expires_at = '2026-07-26T00:00:00.000Z';
 assert.throws(
-  () => resolveRoleExecutionGrant({ ...staleEvidence, envelope }),
+  () => resolveTrustedRoleGrant({ ...staleEvidence, envelope }),
   /must be fresh/,
 );
 const expiringEvidence = clone(grantInput);
 expiringEvidence.evidence[0].expires_at = '2026-07-26T00:59:59.000Z';
 assert.throws(
-  () => resolveRoleExecutionGrant({ ...expiringEvidence, envelope }),
+  () => resolveTrustedRoleGrant({ ...expiringEvidence, envelope }),
   /cannot outlive its capability evidence/,
 );
 
@@ -713,6 +855,14 @@ throwsCode(() => verifyRoleExecutionGrant(grant, envelope, {
   ...activeCheck,
   capabilityState: 'revoked',
 }), 'ACTIVE_GRANT_REVOKED');
+throwsCode(() => verifyRoleExecutionGrant(grant, envelope, {
+  ...activeCheck,
+  criticalMiss: true,
+}), 'ACTIVE_GRANT_REVOKED');
+throwsCode(() => verifyRoleExecutionGrant(grant, envelope, {
+  ...activeCheck,
+  probeRegression: true,
+}), 'ACTIVE_GRANT_REVOKED');
 
 const forgedGrant = clone(grant);
 forgedGrant.authority_projection.acceptance_hash = hash('forged acceptance projection');
@@ -732,7 +882,7 @@ assert.throws(
   () => verifyRoleExecutionGrant(profileForgedGrant, envelope),
   /not the canonical parent-bound projection/,
 );
-const selfRehashedChild = resolveRoleExecutionGrant({
+const selfRehashedChild = resolveTrustedRoleGrant({
   ...clone(grantInput),
   allowedTools: [],
   envelope,
@@ -754,7 +904,7 @@ assert.equal(grantSchema.properties.model_identity.properties.identity_resolved.
 assert.equal(grantSchema.required.includes('capability_state'), true);
 assert.equal(grantSchema.required.includes('resource_budget'), true);
 assert.equal(
-  grantSchema.properties.evidence.items.required.includes('identity_hash'),
+  grantSchema.$defs.evidence_receipt.required.includes('grant_identity_hash'),
   true,
 );
 assert.deepEqual(validateJsonSchema(taskSchema, envelope), { valid: true, errors: [] });
@@ -786,6 +936,9 @@ const invalidSchemaNodes = [
   { type: 'object', properties: { value: { maxLength: -1 } } },
   { type: 'object', properties: { value: { pattern: '[' } } },
   { type: 'object', properties: { value: { minItems: -1 } } },
+  { type: 'object', properties: { value: { maxItems: -1 } } },
+  { type: 'object', properties: { value: { minItems: 2, maxItems: 1 } } },
+  { oneOf: [] },
   { type: 'object', properties: { value: { uniqueItems: 'yes' } } },
   { type: 'object', properties: { value: { minimum: 'zero' } } },
   { type: 'object', properties: { value: { $ref: '#/$defs/missing' } }, $defs: {} },
@@ -810,6 +963,22 @@ const invalidSchemaNodes = [
 for (const invalidSchema of invalidSchemaNodes) {
   throwsCode(() => validateJsonSchema(invalidSchema, {}), 'UNSUPPORTED_JSON_SCHEMA');
 }
+assert.equal(
+  validateJsonSchema({
+    oneOf: [{ type: 'string' }, { const: 'specific' }],
+  }, 'generic').valid,
+  true,
+);
+assert.equal(
+  validateJsonSchema({
+    oneOf: [{ type: 'string' }, { const: 'specific' }],
+  }, 'specific').valid,
+  false,
+);
+assert.equal(
+  validateJsonSchema({ type: 'array', maxItems: 1 }, ['a', 'b']).valid,
+  false,
+);
 assert.equal(
   validateJsonSchema({ type: 'string', format: 'date-time' }, '2026-02-30T00:00:00Z').valid,
   false,
@@ -884,28 +1053,38 @@ for (const profile of matrixProfiles) {
                 languages: ['javascript'],
                 tool_surface: ['apply_patch'],
               };
+              const evidenceSeed = [
+                'matrix',
+                profile,
+                topology,
+                risk,
+                role,
+                taskClass,
+                state,
+                identityVariant,
+              ].join(':');
               const matrixIdentity = {
                 identity: `matrix-${identityVariant}-${role}`,
                 model_alias: `matrix-${identityVariant}`,
                 model_version: '1',
                 family: identityVariant,
                 runner: `matrix-${identityVariant}-runner`,
+                runner_version: 'test-runner-v1',
+                harness_version: 'test-harness-v1',
+                effort: 'high',
+                prompt_config_hash: hash(`prompt:${evidenceSeed}`),
                 semantic_fingerprint: hash(`matrix:${identityVariant}:${role}:semantic`),
                 containment_fingerprint: hash(`matrix:${identityVariant}:${role}:containment`),
                 identity_resolved: true,
               };
-              const evidence = ['qualified', 'provisional'].includes(state) ? [{
-                evidence_id: hash(
-                  `matrix:${profile}:${topology}:${risk}:${role}:${taskClass}:${state}:${identityVariant}`,
-                ),
-                source: 'matrix-suite',
-                state,
-                role,
-                scope_hash: hash(matrixScope),
-                identity_hash: hash(matrixIdentity),
-                observed_at: '2026-07-25T00:00:00.000Z',
-                expires_at: '2026-08-01T00:00:00.000Z',
-              }] : [];
+              const evidence = ['qualified', 'provisional'].includes(state)
+                ? [makeEvidenceReceipt({
+                  state,
+                  role,
+                  scope: matrixScope,
+                  modelIdentity: matrixIdentity,
+                  seed: evidenceSeed,
+                })] : [];
               const matrixInput = {
                 dispatchId: `m-${matrixCases}`,
                 role,
@@ -935,11 +1114,11 @@ for (const profile of matrixProfiles) {
                 evaluationTime: '2026-07-26T00:00:00.000Z',
                 expiresAt: '2026-07-26T00:30:00.000Z',
               };
-              const resultA = resolveRoleExecutionGrant({
+              const resultA = resolveTrustedRoleGrant({
                 ...matrixInput,
                 envelope: matrixEnvelope,
               });
-              const resultB = resolveRoleExecutionGrant({
+              const resultB = resolveTrustedRoleGrant({
                 ...clone(matrixInput),
                 envelope: clone(matrixEnvelope),
               });
@@ -1008,11 +1187,17 @@ const kernelModel = {
   model_version: '1',
   family: 'test',
   runner: 'kernel-test-runner',
+  runner_version: 'test-runner-v1',
+  harness_version: 'test-harness-v1',
+  effort: 'high',
+  prompt_config_hash: hash('prompt:kernel'),
   semantic_fingerprint: hash('kernel:model:semantic'),
   containment_fingerprint: hash('kernel:model:containment'),
   identity_resolved: true,
 };
 let observerSemanticFingerprint = kernelModel.semantic_fingerprint;
+let observerCriticalMiss = false;
+let observerProbeRegression = false;
 let kernelNow = '2026-07-26T00:10:00.000Z';
 const kernelAdapters = {
   userInputVerifier(input, kind, context) {
@@ -1059,6 +1244,15 @@ const kernelAdapters = {
     };
   },
   roleCapabilityVerifier(request) {
+    const evidence = [makeEvidenceReceipt({
+      state: 'qualified',
+      role: request.role,
+      scope: request.capability_scope,
+      modelIdentity: kernelModel,
+      seed: `kernel-${request.dispatch_id}`,
+      observedAt: '2026-07-25T00:00:00.000Z',
+      expiresAt: '2026-07-26T00:55:00.000Z',
+    })];
     return {
       ok: true,
       run_id: request.run_id,
@@ -1068,16 +1262,24 @@ const kernelAdapters = {
       role_eligibility: 'eligible',
       capability_state: 'qualified',
       model_identity: kernelModel,
-      evidence: [{
-        evidence_id: hash(`kernel:evidence:${request.dispatch_id}`),
-        source: 'trusted-kernel-test-registry',
-        state: 'qualified',
-        role: request.role,
-        scope_hash: hash(request.capability_scope),
-        identity_hash: hash(kernelModel),
-        observed_at: '2026-07-26T00:00:00.000Z',
-        expires_at: '2026-07-26T00:55:00.000Z',
-      }],
+      evidence,
+      evidence_store_anchor: {
+        schema_version: 1,
+        authority_kind: 'session_local',
+        run_nonce_hash: hash(`run-nonce:${request.dispatch_id}`),
+        store_head_hash: hash(`store-head:${request.dispatch_id}`),
+        query_hash: hash({
+          task_authority_id: request.task_authority_id,
+          dispatch_id: request.dispatch_id,
+          role: request.role,
+          capability_scope: request.capability_scope,
+          model_identity: kernelModel,
+          capability_state: 'qualified',
+          evaluation_time: request.evaluation_time,
+        }),
+        receipts_hash: hash(evidence),
+        evidence_ids: evidence.map((entry) => entry.evidence_id).sort(),
+      },
       identity: 'trusted-role-verifier',
       channel: 'host-role-capability',
     };
@@ -1094,6 +1296,8 @@ const kernelAdapters = {
       identity_hash: hash(kernelModel),
       semantic_fingerprint: observerSemanticFingerprint,
       containment_fingerprint: kernelModel.containment_fingerprint,
+      critical_miss: observerCriticalMiss,
+      probe_regression: observerProbeRegression,
       identity: 'trusted-role-observer',
       channel: 'host-role-observation',
     };
@@ -1242,6 +1446,39 @@ assert.equal(
   kernelState.role_grant_revocations[issued.grant.grant_id].reason,
   'semantic_fingerprint_drift',
 );
+observerSemanticFingerprint = kernelModel.semantic_fingerprint;
+const criticalIssued = kernelStarted.kernel.issueRoleGrant({
+  capability: kernelStarted.owner_capability,
+  grantRequest: { ...clone(kernelGrantRequest), dispatchId: 'kernel-dispatch-critical' },
+});
+observerCriticalMiss = true;
+throwsCode(() => kernelStarted.kernel.assertRoleGrantActive({
+  grantId: criticalIssued.grant.grant_id,
+  operationContext: { operation: 'accept_result', target: 'src' },
+}), 'ACTIVE_GRANT_REVOKED');
+assert.equal(
+  kernelStarted.kernel.getState().role_grant_revocations[
+    criticalIssued.grant.grant_id
+  ].reason,
+  'critical_miss',
+);
+observerCriticalMiss = false;
+const probeIssued = kernelStarted.kernel.issueRoleGrant({
+  capability: kernelStarted.owner_capability,
+  grantRequest: { ...clone(kernelGrantRequest), dispatchId: 'kernel-dispatch-probe' },
+});
+observerProbeRegression = true;
+throwsCode(() => kernelStarted.kernel.assertRoleGrantActive({
+  grantId: probeIssued.grant.grant_id,
+  operationContext: { operation: 'tool_call', target: 'src' },
+}), 'ACTIVE_GRANT_REVOKED');
+assert.equal(
+  kernelStarted.kernel.getState().role_grant_revocations[
+    probeIssued.grant.grant_id
+  ].reason,
+  'probe_regression',
+);
+observerProbeRegression = false;
 const kernelLedger = kernelStarted.kernel.getLedger();
 assert.equal(kernelLedger.events.some((event) => event.type === 'task_authority_frozen'), true);
 assert.equal(kernelLedger.events.some((event) => event.type === 'role_grant_issued'), true);
@@ -1282,12 +1519,28 @@ fs.writeFileSync(path.join(tmp, 'grant-input.json'), `${JSON.stringify(grantInpu
 fs.writeFileSync(path.join(tmp, 'grant.json'), `${JSON.stringify(grantedA, null, 2)}\n`);
 fs.writeFileSync(path.join(tmp, 'grant-document.json'), `${JSON.stringify(grant, null, 2)}\n`);
 fs.writeFileSync(path.join(tmp, 'denied-input.json'), `${JSON.stringify(
-  { ...grantInput, roleEligibility: 'ineligible' },
+  {
+    ...grantInput,
+    roleEligibility: 'ineligible',
+    capabilityState: 'unknown',
+    evidence: [],
+  },
   null,
   2,
 )}\n`);
 fs.writeFileSync(path.join(tmp, 'invalid-denied-input.json'), `${JSON.stringify(
-  { ...grantInput, roleEligibility: 'ineligible', resourceBudget: null },
+  {
+    ...grantInput,
+    roleEligibility: 'ineligible',
+    capabilityState: 'unknown',
+    evidence: [],
+    resourceBudget: null,
+  },
+  null,
+  2,
+)}\n`);
+fs.writeFileSync(path.join(tmp, 'unknown-input.json'), `${JSON.stringify(
+  unknownInput,
   null,
   2,
 )}\n`);
@@ -1311,9 +1564,18 @@ assert_exit_code "$FREEZE_EXIT" 0 "freeze CLI succeeds"
 assert_contains "$FREEZE_OUT" '"authority_status":"shadow"' "freeze CLI preserves shadow authority"
 
 GRANT_OUT="$(node "$REPO_ROOT/scripts/resolve-execution-profile.js" grant \
-  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/grant-input.json" 2>&1)"; GRANT_EXIT=$?
-assert_exit_code "$GRANT_EXIT" 0 "grant CLI succeeds for an admitted role"
-assert_contains "$GRANT_OUT" '"status": "candidate"' "grant CLI labels the result as an unanchored candidate"
+  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/grant-input.json" \
+  2>&1)"; GRANT_EXIT=$?
+assert_exit_code "$GRANT_EXIT" 1 "grant CLI rejects serialized qualified evidence"
+assert_contains "$GRANT_OUT" "serialized capability evidence cannot mint a grant" \
+  "grant CLI requires the live Owner Kernel verifier capability"
+
+GUIDED_OUT="$(node "$REPO_ROOT/scripts/resolve-execution-profile.js" grant \
+  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/unknown-input.json" \
+  2>&1)"; GUIDED_EXIT=$?
+assert_exit_code "$GUIDED_EXIT" 0 "grant CLI still compiles an unqualified guided candidate"
+assert_contains "$GUIDED_OUT" '"effective_profile": "guided"' \
+  "grant CLI fail-closed path remains usable without disk authority"
 
 VERIFY_OUT="$(node "$REPO_ROOT/scripts/resolve-execution-profile.js" verify \
   --envelope "$TEST_TMP/envelope.json" --grant "$TEST_TMP/grant.json" \
@@ -1326,12 +1588,14 @@ assert_exit_code "$VERIFY_EXIT" 0 "verify CLI accepts a live parent-bound grant"
 assert_contains "$VERIFY_OUT" '"status": "structurally_consistent_unanchored"' "verify CLI does not claim ledger authority"
 
 DENIED_OUT="$(node "$REPO_ROOT/scripts/resolve-execution-profile.js" grant \
-  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/denied-input.json" 2>&1)"; DENIED_EXIT=$?
+  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/denied-input.json" \
+  2>&1)"; DENIED_EXIT=$?
 assert_exit_code "$DENIED_EXIT" 3 "grant CLI distinguishes policy denial from invalid input"
 assert_contains "$DENIED_OUT" '"status": "denied"' "grant CLI returns the denial reason"
 
 INVALID_DENIED_OUT="$(node "$REPO_ROOT/scripts/resolve-execution-profile.js" grant \
-  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/invalid-denied-input.json" 2>&1)"; INVALID_DENIED_EXIT=$?
+  --envelope "$TEST_TMP/envelope.json" --input "$TEST_TMP/invalid-denied-input.json" \
+  2>&1)"; INVALID_DENIED_EXIT=$?
 assert_exit_code "$INVALID_DENIED_EXIT" 1 "denied roles still require complete structurally valid input"
 assert_contains "$INVALID_DENIED_OUT" "resource budget must be a plain object" "invalid denied input is not misclassified as policy denial"
 

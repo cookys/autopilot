@@ -371,6 +371,30 @@ Rules:
   shorter end unless a project policy explicitly selects a stricter interval.
 - Fallback resolution starts again from the replacement identity.
 
+Authentication boundary:
+
+- User-local JSONL, scorecard rows, and CLI JSON are untrusted telemetry because a same-UID model
+  process can edit them. A stored passing evaluation is projected as `provisional`,
+  `admissible:false`; disk `report`/`ladder` cannot create a routing candidate.
+- Plugin-native qualification authority is session-local. The trusted host runs and scores the
+  hard-pinned evaluator in-process, then injects an unforgeable-by-serialization
+  `roleCapabilityVerifier` closure into Owner Kernel. It binds the exact role/scope/deployment,
+  generated corpus, host-observed trial results, random run nonce, receipt set, and query.
+- The host pins the base manifest/oracles and generator bytes, generates every nonce-derived case,
+  snapshots the full run, and executes the original/patched semantic invariant before the first
+  panel child starts. Each child gets one diff in a fresh fail-closed bubblewrap sandbox with no
+  repo, corpus, host home, or prior-case scratch. Child stdout is parsed and scored by the host; it
+  never supplies receipt IDs or authority metadata.
+- Every evidence envelope declares `methodology.kind`. Only `role_eval` carries corpus, thresholds,
+  and trials; `external_prior`, `runtime_probe`, `ordinary_receipt`, and `self_report` carry a
+  source-specific observation basis and cannot fabricate reviewer metrics.
+- Canonical capability roles are `owner`, `implementer`, `reviewer`, `verification_author`, and
+  `explorer`. Legacy `planner`/`orchestrator`/`verifier` names are translated only at CLI/scorecard
+  input boundaries.
+- Serializing the run, restarting the process, or replaying a scorecard row destroys authority.
+  Cross-restart reusable qualification requires an external signer or cross-UID witness, which this
+  plugin-native release does not claim.
+
 An explicit user override to `guided` is always allowed. An `autonomous` override for an
 unqualified identity requires an explicit Board-level override, is recorded in the receipt, and
 still cannot weaken assurance or authority.
@@ -691,6 +715,8 @@ Acceptance:
 
 1. Extend capability state with source, role, task/domain/language/tool scope, exact identity,
    status, issued/observed/expiry time, methodology version, trial set, and evidence hash.
+   Use a generic envelope plus a `methodology.kind` discriminant so role evals, external priors,
+   runtime probes, ordinary receipts, and self-reports cannot impersonate each other's payload.
 2. Require mutation-validated known-bad, clean specificity, and an independent artifact oracle for
    every autonomous role promotion. Qualification thresholds use repeated trials and versioned
    pass/false-pass floors rather than one successful run.
@@ -699,14 +725,35 @@ Acceptance:
 4. Add immediate active-grant revocation on Critical miss, semantic identity drift, or probe
    regression.
 5. Expose provenance, applicability, and expiry in the final receipt.
+6. Keep disk evidence telemetry-only. Mint qualification authority only from the same-process,
+   host-observed evaluator result and bind it to a one-session nonce and exact Owner Kernel query.
+7. Prevent public-corpus answer lookup from becoming authority: hard-pin base/generator/oracle
+   bytes, generate fresh structurally composed cases plus symmetric/asymmetric relational twins per
+   trial, execute host-owned invariants, require exact semantic rule/file/line/severity, and execute
+   a bounded structured behavioral witness against before/after code at identical visible paths.
+   Panel-visible artifacts carry no known-bad/clean label, and the host accepts only the generated
+   valid call domain for that case, so unrelated exceptions cannot satisfy the witness. Free-form
+   summary text is not authority. Isolate both panel and witness processes from host files,
+   prior-case state, and networking. Missing bubblewrap is a fail-closed precondition, not an
+   unsandboxed fallback. Direct evaluator networking cannot mint authority.
 
 Acceptance:
 
 - No model becomes `qualified` from self-report, external prior, or ordinary receipts alone.
-- Mutating the known-bad defect makes the oracle fail; a vacuous green suite cannot promote.
+- Mutating the generator, manifest, base artifact, or oracle fails before panel dispatch. Every
+   generated known-bad patch makes its executable invariant fail and its generated reversal pass;
+   a vacuous green suite, public SHA table, or normalized public-answer lookup trained across prior
+   generated samples cannot promote.
 - Evidence for one role/domain/language/tool surface cannot silently qualify a different scope.
-- Expired/changed identity is demoted and active grants are revoked deterministically.
+- Expired/changed identity is demoted and active grants are revoked deterministically. A later
+  degraded exact-identity/exact-scope run also revokes any already-created session verifier.
 - Reviewer promotion includes false-pass-on-Critical and clean-specificity floors.
+- Direct same-UID JSONL writes, scorecard rows, CLI evidence files, and JSON-roundtripped evaluator
+  results cannot create an admitted role or a qualified fallback ladder.
+- Repo/corpus/sidecar absolute paths and host networking are absent in the panel and witness
+  sandboxes; each case has independent scratch. Wrong rule/file/line, under-severity, missing or
+  malformed witness, an invalid-domain witness, a witness that passes both sides, label/index
+  lookup, normalized lookup, or always-fail output fails the oracle.
 
 ### P3b - Optional Artificial Analysis prior adapter (size S; depends on P3a)
 
@@ -731,6 +778,37 @@ Acceptance:
 - Index-version changes never compare raw scores as one stable scale.
 - No AA response/cache enters git.
 - AA is not required for the core adaptive-profile release.
+
+### P3c - Case-only remote transport and owner evaluator (size L; depends on P3a)
+
+1. Add a host-owned case broker whose sandbox-facing side accepts exactly one bounded diff over a
+   per-case Unix socket. The evaluator sandbox remains networkless.
+2. Keep provider credentials, outbound HTTPS, retry policy, and exact returned model identity on
+   the host side. The remote adapter receives no repository path, corpus, oracle, prior case, or
+   authority metadata.
+3. Bind request/response hashes, provider/model identity, timeout, and broker policy into the live
+   qualification run. A broker restart, identity mismatch, malformed response, or ambiguous
+   timeout degrades the run.
+4. Add a separate owner corpus and host oracle for intent preservation, bounded delegation,
+   failure interpretation, state/ledger continuity, and acceptance discipline. Do not reuse the
+   reviewer corpus or thresholds.
+5. Extend `engine-qualify` with `owner` only after that corpus, remote/local transport adapters, and
+   mutation/clean controls pass. Owner evidence uses the same generic `role_eval` envelope but a
+   distinct methodology name/version.
+
+Acceptance:
+
+- The panel process has no network interface and can communicate only with its one per-case Unix
+  socket; the host broker cannot disclose a second case or local filesystem content.
+- A fake provider proves exact request bounds, no cross-case state, fail-closed timeout/retry
+  behavior, and exact response identity binding before any real provider is used.
+- Remote reviewer output must still pass the same host-owned behavioral witness oracle as local
+  output.
+- Reviewer qualification cannot qualify owner. Owner qualification includes clean specificity,
+  planted policy failures, mutation controls, and at least two fresh trials.
+- P5 cannot enable autonomous dogfood without a fresh live owner verifier. If no owner qualifies,
+  adaptive stays shadow/guided and the release reports that bounded result rather than inventing
+  authority.
 
 ### P4 - Optional local deployment onboarding (size L track; depends on P1/P3a)
 
@@ -795,7 +873,7 @@ Acceptance:
   metadata, path-escape, and descendant-process probes.
 - If no harness qualifies, the phase records that bounded result and ships no fake agentic path.
 
-### P5 - Core adaptive dogfood and cutover (size L; depends on P2/P3a)
+### P5 - Core adaptive dogfood and cutover (size L; depends on P2/P3a/P3c)
 
 1. Start with `guidance_profile: guided` authoritative and adaptive shadow decisions.
 2. Compare context cost, completion rate, false-green, reviewer catches, rework, wall time, and
@@ -941,6 +1019,7 @@ Do not test the full Cartesian product for ordinary cases.
 | HTTP cancellation leaves local generations consuming capacity | Require server acknowledgement plus queue/resource recovery; otherwise degrade/quarantine the endpoint. |
 | Guided profile consumes more context than the weak model can use | External task graph/state, current-slice-only prompt, hard budget, and role ineligibility when the invariant capsule cannot fit. |
 | Strong model optimization merely moves complexity into the resolver | Surface-line/context budgets and one envelope/grant policy seam; every added predicate requires a failing eval or invariant. |
+| Same-UID worker forges the evidence store | Disk is telemetry-only; qualified disk state is projected provisional. Only a live host-observed evaluator object can mint the session-local verifier closure consumed by Owner Kernel. |
 
 Inversion statement:
 
@@ -960,6 +1039,8 @@ Inversion statement:
 - Dynamically unloading system/skill instructions inside an already contaminated session.
 - Automatic production deployment or expanded DOA.
 - Supporting every local runtime in the first release; only live-probed protocol/role rows ship.
+- Persisting qualification authority across process restarts without an external signer or
+  cross-UID witness. The plugin-native path intentionally re-qualifies and fails closed.
 
 ## 8. Open questions
 
@@ -981,7 +1062,8 @@ P0 measure/inventory
   -> P1 Owner Kernel envelope/grant shadow
        -> P2 packs/context isolation
        -> P3a evidence lifecycle core
-P2 + P3a
+P3a -> P3c case-only remote transport + owner evaluator
+P2 + P3a + P3c
   -> P5 adaptive dogfood/cutover
        -> P6 docs/release
 
@@ -991,8 +1073,9 @@ P1 + P3a -> P4a local fingerprint/raw transport
               (optional additive releases)
 ```
 
-P2 and P3a may run in parallel after P1. P3b/P4 are capability adapters and cannot block P5/P6.
-P4b gates only the local owner/implementer rows it actually qualifies.
+P2 and P3a may run in parallel after P1. P3c is a core dependency of P5 because adaptive
+cutover needs a reachable owner qualification path. P3b/P4 are optional capability adapters and
+cannot block P5/P6. P4b gates only the local owner/implementer rows it actually qualifies.
 
 ## Requirement coverage
 
@@ -1059,7 +1142,7 @@ Sources:
 | Major / Local Ops | Transient RAM/VRAM was incorrectly part of identity and lacked concurrency admission. | Split stable operational fingerprint from transient capacity; added per-endpoint lease/default concurrency one and JIT headroom check. |
 | Major / Local Ops | Loopback did not prove runtime offline, and remote transport lacked TLS requirements. | Added independent `offline_verified` state and authenticated TLS/certificate verification for non-loopback payloads. |
 | Major / Local Ops | HTTP abort did not prove server generation/resource cancellation. | Cancellation acceptance now requires server acknowledgement plus queue/resource recovery or endpoint quarantine. |
-| Major / all lenses | AA/local adapter work unnecessarily blocked remote adaptive cutover. | Split P3a core evidence from optional P3b AA; made P4 optional; P5/P6 depend only on P2/P3a. |
+| Major / all lenses | AA/local adapter work unnecessarily blocked remote adaptive cutover. | Split optional P3b AA/P4 local adapters from the core; P5/P6 depend on P2/P3a plus the case-only remote transport and dedicated owner evaluator in P3c. |
 
 ### R3 - Final author boundary audit (2026-07-26)
 
@@ -1125,3 +1208,19 @@ passed with 122 profile-isolation assertions and 33 execution-profile assertions
 translation, action-hardening, standalone Codex packaging, canonical-invariant, and mirror-sync
 checks. Claude `--bare` remains explicitly a no-effect isolation probe; the independently witnessed
 effectful compatibility trace remains a P5 cutover prerequisite.
+
+### R7 - P3a implementation review (2026-07-26)
+
+Three independent read-only lenses rejected early revisions and accepted the repaired evidence and
+qualification boundary:
+
+- architecture verified one source-discriminated evidence schema/runtime contract, immutable
+  canonical roles with legacy scorecard migration, and the reachable P3c owner dependency;
+- QA reproduced public/normalized lookup, outcome-label, and invalid-domain witness false
+  promotions, then verified opaque artifacts and host-pinned nonce-derived witness call domains;
+- portability verified the live-only authority boundary, standalone Codex byte parity, stale
+  payload cleanup, generator/oracle pins, and immutable role behavior in a long-lived process.
+
+Final P3a review: Architecture accepted; QA/false-promotion accepted; Portability accepted.
+Focused gates passed with 102 evidence assertions, 61 reviewer-qualifier assertions, 35 execution
+profile assertions, 36 contract-parity assertions, and the 204-file full regression suite.

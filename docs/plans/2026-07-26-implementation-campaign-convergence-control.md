@@ -299,6 +299,11 @@ need to discover magic flags. Implement the shared `RunnerTransportEnvelope` as 
 exit/timeout/quota/unavailable + request-binding + private-raw-reference primitive; it never extracts
 semantic JSON. PRS/PRO consume this module instead of creating another transport truth.
 
+The canonical mutating entry also accepts one structured depth-0 disposition-authority artifact
+or an explicitly selected deterministic policy and binds it to the review digest before invoking
+the Phase 2 `campaignDispositionProvider` seam. A missing, stale, or reviewer-authored authority
+remains fail-closed; the CLI never silently self-authorizes a non-empty review.
+
 ICC separately owns product-review semantic normalization. Zero-byte/invalid/ambiguous product
 review output has no authority. PRS keeps its plan-review normalizer, and PRO keeps readiness
 observation validation. Endpoint normalization and provider truth belong to PRO/common config

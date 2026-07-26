@@ -7,3 +7,5 @@
 {"schema_version":1,"ts":"2026-07-26T08:56:36.425304617Z","node":"p3a","type":"phase_recorded","phase":"P3a","verdict":"PASS","commit":"a0239ca","qualifier_assertions":61,"full_test_files":204}
 {"schema_version":1,"ts":"2026-07-26T08:56:36.425304618Z","node":"p3b","type":"phase_recorded","phase":"P3b","verdict":"PASS","commit":"f321380","importer_cases":23,"evidence_assertions":103}
 {"schema_version":1,"ts":"2026-07-26T08:56:36.425304619Z","node":"p3c","type":"phase_completed","phase":"P3c","verdict":"PASS","broker_assertions":42,"owner_assertions":23,"reviewer_assertions":63,"codex_package_assertions":90}
+{"schema_version":1,"ts":"2026-07-26T09:22:24.344563792Z","node":"p4","type":"phase_completed","phase":"P4","verdict":"PASS_BOUNDED","probe_assertions":50,"dispatch_assertions":60,"live_runtime_status":"unverified_no_live_runtime","published_roles":0,"runner_registered":false}
+{"schema_version":1,"ts":"2026-07-26T09:26:08.406454181Z","node":"p4","type":"phase_evidence_corrected","phase":"P4","supersedes_dispatch_assertions":60,"dispatch_assertions":63,"reason":"raw-tool-response-bypass regression added before commit"}

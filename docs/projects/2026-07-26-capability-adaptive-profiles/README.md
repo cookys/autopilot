@@ -147,7 +147,7 @@ negative controls that fail when the claimed guard is removed.
 | P3a | Complete | Scope/identity evidence lifecycle, immutable canonical roles, session-local qualification authority, label-free metamorphic reviewer corpus, domain-bound behavioral witnesses, 61 qualifier assertions, 204-file full regression, and unanimous three-lens re-review acceptance. |
 | P3b | Complete | Fixed-endpoint AA prior importer, raw/normalized content-addressed cache, fail-atomic publication and ledger reconciliation, implementer/explorer-only provisional evidence, 23 importer cases, 103 evidence assertions, standalone parity, and unanimous bounded re-review; commit `f321380`. |
 | P3c | Complete | One-case Unix-socket broker with host-only credentials/network/exact identity, remote reviewer reuse of the behavioral witness oracle, distinct six-rule owner corpus/oracle with clean and repair controls, 42 broker + 23 owner + 63 reviewer assertions, and 90 standalone Codex package assertions. |
-| P4 | Pending | |
+| P4 | Complete | Protected user-local roster, exact semantic/operational fingerprints, one-slot lease, JIT capacity gate, deny-by-default raw author/reviewer transport, hot-swap/cancellation quarantine, and 50 probe + 63 dispatch assertions. No local runtime was configured, so the live result is honestly `unverified_no_live_runtime`; no live row or agentic runner was published. |
 | P5 | Pending | |
 | P6 | Pending | |
 | L-5 | Pending | |
@@ -199,3 +199,4 @@ negative controls that fail when the claimed guard is removed.
 | 2026-07-26 | Keep effectful guided compatibility as a P5 prerequisite. | P2 proves content-addressed source retention and isolation, but cannot honestly claim behavioral equivalence without an independently witnessed effectful transport. |
 | 2026-07-26 | Keep qualification transport case-only and host-owned. | The evaluator sandbox receives one diff over one fresh Unix socket; the host retains provider credentials, outbound access, timeout policy, response identity checks, and the independent role oracle. |
 | 2026-07-26 | Qualify owner with a separate intent/control methodology. | Reviewer evidence cannot establish ownership capability; owner trials independently test intent, delegation, failure, state, ledger, and acceptance behavior with clean and repair controls. |
+| 2026-07-26 | Close P4 without a fabricated local-runtime claim. | The fake contract verifies the generic adapter and failure boundaries, but this host has no configured local endpoint or supported runtime process. The observation is retained as `unverified_no_live_runtime`, with zero published roles and no agentic runner. |

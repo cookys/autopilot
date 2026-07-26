@@ -177,6 +177,7 @@ const executionProfile = require('./execution-profile');
 const profilePayload = require('./profile-payload');
 const profileRuntime = require('./profile-runtime');
 const capabilityEvidence = require('./capability-evidence');
+const localDeployment = require('./local-deployment');
 const roles = require('./roles');
 
 module.exports = {
@@ -333,6 +334,7 @@ module.exports = {
   normalizeCapabilityEvidenceScope: capabilityEvidence.normalizeScope,
   normalizeCapabilityRole: roles.normalizeRole,
   verifyEvaluationCorpus: capabilityEvidence.verifyEvaluationCorpus,
+  ...localDeployment,
   ...profileRuntime,
   ...profilePayload,
   ...executionProfile,

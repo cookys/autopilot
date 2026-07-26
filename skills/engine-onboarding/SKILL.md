@@ -17,12 +17,13 @@ If the task is about **how far to implement a cross-harness integration** or whe
 
 ## Current scope
 
-Reviewer end-to-end is the shipped qualifier/gate path today.
+Reviewer and owner end-to-end qualification are shipped gate paths today.
 
-- ✅ `stage-0 spike` and exact-scope `stage-1 reviewer qualification` are implemented with repeated nonce-derived metamorphic trials and executable reversal validation.
+- ✅ `stage-0 spike` and exact-scope `stage-1 reviewer/owner qualification` are implemented with separate repeated nonce-derived corpora, host oracles, and executable mutation controls.
 - ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.
 - ✅ Canonical roles are `owner`, `implementer`, `reviewer`, `verification_author`, and `explorer`. Scorecard input aliases `planner`/`orchestrator` to `owner` and `verifier` to `reviewer`; stored and returned rows are canonical.
-- ⚠️ Implementer, verification-author, explorer, and owner auto-qualification require their own role-specific eval suites before autonomous routing.
+- ⚠️ Implementer, verification-author, and explorer auto-qualification require their own role-specific eval suites before autonomous routing.
+- ⚠️ Local OpenAI-compatible transport is available only after a deployment's semantic and operational identity can be bound. A configured label or API response alone is not qualification.
 
 ## Governing constraint (routing-axis evidence bar)
 
@@ -41,6 +42,8 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 |--------|-------|---------------------|
 | [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer/owner) | Runs at least two fresh role-specific known-bad + clean trials, independent host oracles, and a reversal control. Reviewer and owner corpora/methodologies are not interchangeable. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
 | [`scripts/qualification-case-broker.js`](../../scripts/qualification-case-broker.js) | Remote qualification transport | Sends exactly one bounded case from a networkless sandbox over a per-case Unix socket while the host retains credentials, outbound access, timeout policy, and exact returned identity. |
+| [`scripts/probe-local-engine.js`](../../scripts/probe-local-engine.js) | Local deployment probe | Reads the protected user-local roster, probes runtime identity/capacity, and reports `identity_verified`, `identity_unverifiable`, `degraded`, or `not_configured` without promoting any role. |
+| [`scripts/dispatch-local-openai.js`](../../scripts/dispatch-local-openai.js) | Local raw transport | Runs an allowlisted author/reviewer call only after exact egress, identity, one-slot lease, capacity, and assurance gates; hot swap or ambiguous cancellation quarantines the deployment. |
 | [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
 | [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |

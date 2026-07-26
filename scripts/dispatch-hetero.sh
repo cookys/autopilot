@@ -51,6 +51,7 @@
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
 #       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
+#       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
 #       [--keep-worktree]                      # keep worktree even on success
@@ -114,6 +115,8 @@ KEEP=0
 BRANCH=""
 PROMPT_FILE=""
 CAMPAIGN_CONTRACT_FILE=""
+CAMPAIGN_CONTRACT_SHA256=""
+CAMPAIGN_CONTRACT_SNAPSHOT=""
 RUNNER="auto"
 EFFORT="xhigh"
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -333,6 +336,7 @@ CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome)
 cleanup() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
+  [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
 }
 trap cleanup EXIT
@@ -818,6 +822,7 @@ while [ $# -gt 0 ]; do
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
+    --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
@@ -947,6 +952,12 @@ esac
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
 [ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
   || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ] || [ -n "$CAMPAIGN_CONTRACT_SHA256" ]; then
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] && [ -n "$CAMPAIGN_CONTRACT_SHA256" ] \
+    || die_precondition "--campaign-contract and --campaign-contract-sha256 are required together"
+  [[ "$CAMPAIGN_CONTRACT_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+    || die_precondition "--campaign-contract-sha256 must be a lowercase SHA-256 digest"
+fi
 [ "$STRICT_CONTRACT" -eq 1 ] && [ "$CONTRACT_FILE_SUPPLIED" -eq 0 ] && die_precondition "--contract-file requires --strict-contract"
 [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] && [ "$STRICT_CONTRACT" -eq 0 ] && die_precondition "--strict-contract requires --contract-file"
 
@@ -1164,14 +1175,23 @@ fi
 # This layer does not reinterpret scope authority; it makes the frozen paths and
 # budgets visible to the implementer while ICC retains admission and enforcement.
 if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
+  CAMPAIGN_CONTRACT_SNAPSHOT="$(mktemp -t 'dispatch-hetero-campaign-contract-XX''XX''XX')"
+  cp -- "$CAMPAIGN_CONTRACT_FILE" "$CAMPAIGN_CONTRACT_SNAPSHOT" \
+    || die_precondition "campaign contract snapshot failed"
+  _campaign_snapshot_digest="$(sha256sum "$CAMPAIGN_CONTRACT_SNAPSHOT" | awk '{print $1}')"
+  [ "$_campaign_snapshot_digest" = "$CAMPAIGN_CONTRACT_SHA256" ] \
+    || die_precondition "campaign contract digest changed after intake"
   CAMPAIGN_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-campaign-prompt-XX''XX''XX')"
   {
     printf '%s\n' '=== MACHINE-OWNED CAMPAIGN BOUNDARY ==='
     printf '%s\n' 'The JSON contract below is immutable. Stay within its allowed paths and budgets.'
-    cat "$CAMPAIGN_CONTRACT_FILE"
+    cat "$CAMPAIGN_CONTRACT_SNAPSHOT"
     printf '%s\n\n' '=== END CAMPAIGN BOUNDARY ==='
     cat "$PROMPT_FILE"
   } > "$CAMPAIGN_PROMPT_FILE"
+  rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
+  CAMPAIGN_CONTRACT_SNAPSHOT=""
+  unset _campaign_snapshot_digest
   PROMPT_FILE="$CAMPAIGN_PROMPT_FILE"
 fi
 

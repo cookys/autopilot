@@ -679,6 +679,7 @@ function buildImplementationArgs({
   extraImplementationArgs = [],
   dispatchIdentity = null,
   campaignContractFile = null,
+  campaignContractDigest = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -698,11 +699,20 @@ function buildImplementationArgs({
     '--base',
     '--effort',
     '--campaign-contract',
+    '--campaign-contract-sha256',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
       && (typeof campaignContractFile !== 'string' || campaignContractFile.length === 0)) {
     throw new TypeError('campaignContractFile must be a non-empty string');
+  }
+  if (campaignContractDigest !== null
+      && (typeof campaignContractDigest !== 'string'
+        || !/^[0-9a-f]{64}$/.test(campaignContractDigest))) {
+    throw new TypeError('campaignContractDigest must be a lowercase SHA-256 digest');
+  }
+  if ((campaignContractFile === null) !== (campaignContractDigest === null)) {
+    throw new TypeError('campaignContractFile and campaignContractDigest must be supplied together');
   }
 
   const args = [
@@ -725,6 +735,7 @@ function buildImplementationArgs({
   );
   if (campaignContractFile) {
     args.push('--campaign-contract', path.resolve(cwd || process.cwd(), campaignContractFile));
+    args.push('--campaign-contract-sha256', campaignContractDigest);
   }
   args.push(...extraImplementationArgs);
   return args;
@@ -1714,6 +1725,7 @@ class AutopilotEngine {
           }
           : null,
         campaignContractFile: input.campaignContractFile || null,
+        campaignContractDigest: input.campaignContractDigest || null,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -1884,7 +1896,10 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
-    if (input.legacyUnmanaged === true || input.campaignContract) {
+    if (input.legacyUnmanaged === true) {
+      return this.runLegacyImplementationReviewLoop(input);
+    }
+    if (input.campaignContract) {
       return this._runImplementationReviewLoop(input);
     }
     return this._runImplementationReviewLoop({
@@ -1894,6 +1909,33 @@ class AutopilotEngine {
   }
 
   runLegacyImplementationReviewLoop(input = {}) {
+    const level = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
+    if (level === 'l5' || level === 'l6') {
+      const startedAt = this.now();
+      return {
+        status: 'blocked',
+        phase: 'campaign_contract',
+        reason: '--legacy-unmanaged is prohibited for L5/L6',
+        rounds: 0,
+        verdict: null,
+        roster: input.roster || null,
+        resolveResult: null,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger: [
+          this.ledgerEntry('campaign_contract', 'blocked', startedAt, {
+            rejection_code: 'legacy_unmanaged_rejected',
+          }),
+        ],
+        campaign_control: {
+          status: 'legacy_unmanaged_rejected',
+          deprecated: true,
+          removal_release: 'v2.35.0',
+        },
+      };
+    }
     return this._runImplementationReviewLoop({
       ...input,
       campaignManaged: false,
@@ -2415,6 +2457,9 @@ class AutopilotEngine {
             : input.implementationStage,
           campaignContractFile: campaignControl && campaignControl.status === 'admitted'
             ? campaignControl.contract_path
+            : null,
+          campaignContractDigest: campaignControl && campaignControl.status === 'admitted'
+            ? campaignControl.contract_digest
             : null,
           resultJson: input.resultJson,
           gitDir: input.gitDir,

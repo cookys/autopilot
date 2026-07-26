@@ -52,6 +52,41 @@ const USAGE_KEYS = new Set([
   'changed_files',
   'churn',
 ]);
+const EVENT_PAYLOAD_KEYS = Object.freeze({
+  [CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED]: ['sealed_contract'],
+  [CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED]: [
+    'scope_check_passed',
+    'scope_check_digest',
+  ],
+  [CAMPAIGN_EVENTS.VERTICAL_VERIFIED]: ['passed', 'evidence_digest'],
+  [CAMPAIGN_EVENTS.REVIEW_COMPLETED]: ['review_digest'],
+  [CAMPAIGN_EVENTS.REPAIR_AUTHORIZED]: [
+    'registry_complete',
+    'registry_digest',
+    'repair_gate_passed',
+    'repair_gate_digest',
+  ],
+  [CAMPAIGN_EVENTS.REPAIR_STARTED]: ['sealed_contract'],
+  [CAMPAIGN_EVENTS.REPAIR_COMPLETED]: [
+    'scope_check_passed',
+    'scope_check_digest',
+  ],
+  [CAMPAIGN_EVENTS.TERMINAL_READY]: [
+    'reason',
+    'registry_complete',
+    'registry_digest',
+    'convergence_digest',
+  ],
+  [CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP]: [
+    'reason',
+    'registry_complete',
+    'registry_digest',
+    'convergence_digest',
+    'follow_up_digest',
+  ],
+  [CAMPAIGN_EVENTS.TERMINAL_STOP]: ['reason', 'stop_receipt_digest'],
+  [CAMPAIGN_EVENTS.RESUMED]: [],
+});
 
 class CampaignStateError extends Error {
   constructor(code, message) {
@@ -283,7 +318,8 @@ function acquireLease(state, event) {
 }
 
 function requireScopeCheck(event) {
-  if (event.payload.scope_check_passed !== true) {
+  if (event.payload.scope_check_passed !== true
+      || !isSha256(event.payload.scope_check_digest)) {
     fail('SCOPE_CHECK_REQUIRED', 'post-mutation progress requires check-repair-scope PASS');
   }
 }
@@ -292,8 +328,16 @@ function reduceCampaignState(currentState, event) {
   if (!isPlainObject(currentState)) fail('INVALID_STATE', 'campaign state must be an object');
   const common = validateCommonEvent(currentState, event);
   if (common.duplicate) return currentState;
+  assertExactKeys(
+    event.payload,
+    new Set(EVENT_PAYLOAD_KEYS[event.event_type]),
+    `${event.event_type}.payload`,
+  );
   if (TERMINAL_STATES.has(currentState.phase)) {
     fail('TERMINAL_CAMPAIGN', 'terminal campaign cannot accept another event');
+  }
+  if (event.input_artifact_digest !== currentState.last_output_artifact_digest) {
+    fail('ARTIFACT_CHAIN_BROKEN', 'event input artifact must match the prior output artifact');
   }
 
   const next = JSON.parse(JSON.stringify(currentState));
@@ -307,8 +351,7 @@ function reduceCampaignState(currentState, event) {
   validateUsage(currentState, event, expectedGeneration);
 
   if (event.event_type === CAMPAIGN_EVENTS.RESUMED) {
-    if (currentState.live_lease
-        && currentState.live_lease.stage_identity !== event.stage_identity) {
+    if (currentState.live_lease) {
       fail('LIVE_LEASE_CONFLICT', 'resume cannot replace a live lease owner');
     }
   } else if (currentState.phase === CAMPAIGN_STATES.PREPARED
@@ -335,10 +378,12 @@ function reduceCampaignState(currentState, event) {
     next.phase = CAMPAIGN_STATES.ADJUDICATING;
   } else if (currentState.phase === CAMPAIGN_STATES.ADJUDICATING
       && event.event_type === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED) {
-    if (event.payload.registry_complete !== true) {
+    if (event.payload.registry_complete !== true
+        || !isSha256(event.payload.registry_digest)) {
       fail('REGISTRY_INCOMPLETE', 'repair requires registry-wide finding completeness');
     }
-    if (event.payload.repair_gate_passed !== true) {
+    if (event.payload.repair_gate_passed !== true
+        || !isSha256(event.payload.repair_gate_digest)) {
       fail('REPAIR_GATE_REQUIRED', 'repair requires a passing repair-gate receipt');
     }
     if (expectedGeneration > currentState.limits.max_repair_generations) {
@@ -357,12 +402,33 @@ function reduceCampaignState(currentState, event) {
     next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
   } else if (currentState.phase === CAMPAIGN_STATES.ADJUDICATING
       && event.event_type === CAMPAIGN_EVENTS.TERMINAL_READY) {
+    if (event.payload.registry_complete !== true
+        || !isSha256(event.payload.registry_digest)) {
+      fail('REGISTRY_INCOMPLETE', 'ready terminal requires registry-wide completeness');
+    }
+    if (!isSha256(event.payload.convergence_digest)) {
+      fail('CONVERGENCE_EVIDENCE_REQUIRED', 'ready terminal requires convergence evidence');
+    }
     next.phase = CAMPAIGN_STATES.TERMINAL_READY;
   } else if (currentState.phase === CAMPAIGN_STATES.ADJUDICATING
       && event.event_type === CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP) {
+    if (event.payload.registry_complete !== true
+        || !isSha256(event.payload.registry_digest)) {
+      fail('REGISTRY_INCOMPLETE', 'follow-up terminal requires registry-wide completeness');
+    }
+    if (!isSha256(event.payload.convergence_digest)
+        || !isSha256(event.payload.follow_up_digest)) {
+      fail(
+        'CONVERGENCE_EVIDENCE_REQUIRED',
+        'follow-up terminal requires convergence and follow-up evidence',
+      );
+    }
     next.phase = CAMPAIGN_STATES.TERMINAL_FOLLOW_UP;
   } else if (event.event_type === CAMPAIGN_EVENTS.TERMINAL_STOP
       && currentState.live_lease === null) {
+    if (!isSha256(event.payload.stop_receipt_digest)) {
+      fail('STOP_EVIDENCE_REQUIRED', 'stop terminal requires a stop receipt digest');
+    }
     next.phase = CAMPAIGN_STATES.TERMINAL_STOP;
   } else {
     fail(

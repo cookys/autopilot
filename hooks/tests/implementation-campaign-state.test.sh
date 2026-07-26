@@ -77,7 +77,10 @@ function adjudicating(limits = contract) {
     startedAt: '2026-07-26T00:00:00.000Z',
   });
   state = apply(state, E.IMPLEMENTATION_STARTED, 0, { sealed_contract: true });
-  state = apply(state, E.IMPLEMENTATION_COMPLETED, 0, { scope_check_passed: true }, {
+  state = apply(state, E.IMPLEMENTATION_COMPLETED, 0, {
+    scope_check_passed: true,
+    scope_check_digest: D,
+  }, {
     changed: 1,
     churn: 2,
   });
@@ -94,7 +97,10 @@ function adjudicating(limits = contract) {
 sequence = 0;
 let state = initial();
 state = apply(state, E.IMPLEMENTATION_STARTED, 0, { sealed_contract: true });
-state = apply(state, E.IMPLEMENTATION_COMPLETED, 0, { scope_check_passed: true }, {
+state = apply(state, E.IMPLEMENTATION_COMPLETED, 0, {
+  scope_check_passed: true,
+  scope_check_digest: D,
+}, {
   changed: 1,
   churn: 2,
 });
@@ -108,13 +114,18 @@ state = apply(state, E.REVIEW_COMPLETED, 0, { review_digest: D }, {
 });
 state = apply(state, E.REPAIR_AUTHORIZED, 1, {
   registry_complete: true,
+  registry_digest: D,
   repair_gate_passed: true,
+  repair_gate_digest: D,
 }, { changed: 1, churn: 2 });
 state = apply(state, E.REPAIR_STARTED, 1, { sealed_contract: true }, {
   changed: 1,
   churn: 2,
 });
-state = apply(state, E.REPAIR_COMPLETED, 1, { scope_check_passed: true }, {
+state = apply(state, E.REPAIR_COMPLETED, 1, {
+  scope_check_passed: true,
+  scope_check_digest: D,
+}, {
   changed: 2,
   churn: 4,
 });
@@ -126,7 +137,12 @@ state = apply(state, E.REVIEW_COMPLETED, 1, { review_digest: D }, {
   changed: 2,
   churn: 4,
 });
-const terminalEvent = event(E.TERMINAL_READY, 1, { reason: 'acceptance verified' }, {
+const terminalEvent = event(E.TERMINAL_READY, 1, {
+  reason: 'acceptance verified',
+  registry_complete: true,
+  registry_digest: D,
+  convergence_digest: D,
+}, {
   changed: 2,
   churn: 4,
 });
@@ -149,7 +165,13 @@ followUp = apply(
   followUp,
   E.TERMINAL_FOLLOW_UP,
   0,
-  { reason: 'bounded follow-up required' },
+  {
+    reason: 'bounded follow-up required',
+    registry_complete: true,
+    registry_digest: D,
+    convergence_digest: D,
+    follow_up_digest: D,
+  },
   { changed: 1, churn: 2 },
 );
 assert.strictEqual(followUp.phase, S.TERMINAL_FOLLOW_UP);
@@ -159,7 +181,7 @@ const stopped = apply(
   initial(),
   E.TERMINAL_STOP,
   0,
-  { reason: 'operator stop' },
+  { reason: 'operator stop', stop_receipt_digest: D },
 );
 assert.strictEqual(stopped.phase, S.TERMINAL_STOP);
 
@@ -188,16 +210,26 @@ expectCode('LIVE_LEASE_CONFLICT', () => apply(
   {},
   { stage: 'other-stage' },
 ));
+expectCode('LIVE_LEASE_CONFLICT', () => apply(
+  leased,
+  E.RESUMED,
+  0,
+  {},
+  { stage: 'stage-0' },
+));
 expectCode('SCOPE_CHECK_REQUIRED', () => apply(
   leased,
   E.IMPLEMENTATION_COMPLETED,
   0,
-  { scope_check_passed: false },
+  { scope_check_passed: false, scope_check_digest: D },
 ));
 
 sequence = 0;
 let vertical = apply(initial(), E.IMPLEMENTATION_STARTED, 0, { sealed_contract: true });
-vertical = apply(vertical, E.IMPLEMENTATION_COMPLETED, 0, { scope_check_passed: true });
+vertical = apply(vertical, E.IMPLEMENTATION_COMPLETED, 0, {
+  scope_check_passed: true,
+  scope_check_digest: D,
+});
 expectCode('VERTICAL_EVIDENCE_REQUIRED', () => apply(
   vertical,
   E.VERTICAL_VERIFIED,
@@ -210,14 +242,24 @@ expectCode('REGISTRY_INCOMPLETE', () => apply(
   adjudicated,
   E.REPAIR_AUTHORIZED,
   1,
-  { registry_complete: false, repair_gate_passed: true },
+  {
+    registry_complete: false,
+    registry_digest: D,
+    repair_gate_passed: true,
+    repair_gate_digest: D,
+  },
   { changed: 1, churn: 2 },
 ));
 expectCode('REPAIR_GATE_REQUIRED', () => apply(
   adjudicated,
   E.REPAIR_AUTHORIZED,
   1,
-  { registry_complete: true, repair_gate_passed: false },
+  {
+    registry_complete: true,
+    registry_digest: D,
+    repair_gate_passed: false,
+    repair_gate_digest: D,
+  },
   { changed: 1, churn: 2 },
 ));
 
@@ -227,13 +269,21 @@ expectCode('REPAIR_BUDGET_EXCEEDED', () => apply(
   adjudicated,
   E.REPAIR_AUTHORIZED,
   1,
-  { registry_complete: true, repair_gate_passed: true },
+  {
+    registry_complete: true,
+    registry_digest: D,
+    repair_gate_passed: true,
+    repair_gate_digest: D,
+  },
   { changed: 1, churn: 2 },
 ));
 
 sequence = 0;
 let progressed = apply(initial(), E.IMPLEMENTATION_STARTED, 0, { sealed_contract: true });
-progressed = apply(progressed, E.IMPLEMENTATION_COMPLETED, 0, { scope_check_passed: true }, {
+progressed = apply(progressed, E.IMPLEMENTATION_COMPLETED, 0, {
+  scope_check_passed: true,
+  scope_check_digest: D,
+}, {
   changed: 1,
   churn: 2,
 });
@@ -260,6 +310,32 @@ const conflicting = {
   output_artifact_digest: 'b'.repeat(64),
 };
 expectCode('IDEMPOTENCY_CONFLICT', () => reduceCampaignState(leased, conflicting));
+expectCode('UNKNOWN_FIELD', () => apply(
+  initial(),
+  E.IMPLEMENTATION_STARTED,
+  0,
+  { sealed_contract: true, unexpected: true },
+));
+expectCode('ARTIFACT_CHAIN_BROKEN', () => apply(
+  initial(),
+  E.IMPLEMENTATION_STARTED,
+  0,
+  { sealed_contract: true },
+  { input: 'b'.repeat(64) },
+));
+adjudicated = adjudicating();
+expectCode('REGISTRY_INCOMPLETE', () => apply(
+  adjudicated,
+  E.TERMINAL_READY,
+  0,
+  {
+    reason: 'invalid incomplete registry',
+    registry_complete: false,
+    registry_digest: D,
+    convergence_digest: D,
+  },
+  { changed: 1, churn: 2 },
+));
 
 console.log('valid_terminal=true');
 console.log('contract_digest_namespaces_campaign=true');
@@ -278,6 +354,9 @@ console.log('repair_ceiling_enforced=true');
 console.log('resume_budget_reset_rejected=true');
 console.log('resume_clock_reset_rejected=true');
 console.log('idempotency_conflict_rejected=true');
+console.log('payload_unknown_field_rejected=true');
+console.log('artifact_chain_break_rejected=true');
+console.log('terminal_registry_required=true');
 NODE
 )"
 PURE_EXIT=$?
@@ -287,7 +366,8 @@ for key in valid_terminal contract_digest_namespaces_campaign valid_resume valid
   unsealed_mutation_rejected second_live_lease_rejected scope_gate_required \
   vertical_evidence_required registry_completeness_required repair_gate_required \
   repair_ceiling_enforced resume_budget_reset_rejected resume_clock_reset_rejected \
-  idempotency_conflict_rejected; do
+  idempotency_conflict_rejected payload_unknown_field_rejected \
+  artifact_chain_break_rejected terminal_registry_required; do
   assert_contains "$PURE_OUT" "$key=true" "pure reducer proves $key"
 done
 
@@ -505,12 +585,30 @@ const drifted = engine.runImplementationReviewLoop({
   campaignContract: driftContract,
   campaignSeal: driftSeal,
 });
+const priorLevel = process.env.AUTOPILOT_LEVEL;
+process.env.AUTOPILOT_LEVEL = 'l6';
+const prohibitedLegacy = new AutopilotEngine({
+  cwd: repo,
+  implementationDispatcher() {
+    markers.runner += 1;
+    throw new Error('L6 legacy runner must not start');
+  },
+}).runLegacyImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+});
+if (priorLevel === undefined) delete process.env.AUTOPILOT_LEVEL;
+else process.env.AUTOPILOT_LEVEL = priorLevel;
 console.log(`missing_phase=${missing.phase}`);
 console.log(`missing_rounds=${missing.rounds}`);
 console.log(`omitted_phase=${omitted.phase}`);
 console.log(`omitted_rounds=${omitted.rounds}`);
 console.log(`drift_phase=${drifted.phase}`);
 console.log(`drift_code=${drifted.campaign_control.rejection.code}`);
+console.log(`legacy_api_status=${prohibitedLegacy.status}`);
+console.log(`legacy_api_code=${prohibitedLegacy.campaign_control.status}`);
 console.log(`runner_calls=${markers.runner}`);
 console.log(`worktree_calls=${markers.worktree}`);
 
@@ -637,6 +735,7 @@ console.log(`implementation_ledger=${argValue(implementationArgs, '--ledger')}`)
 console.log(`implementation_run_id=${argValue(implementationArgs, '--run-id')}`);
 console.log(`implementation_stage=${argValue(implementationArgs, '--stage')}`);
 console.log(`implementation_contract=${argValue(implementationArgs, '--campaign-contract')}`);
+console.log(`implementation_contract_sha=${argValue(implementationArgs, '--campaign-contract-sha256')}`);
 console.log(`review_ledger=${argValue(reviewArgs, '--ledger')}`);
 console.log(`review_run_id=${argValue(reviewArgs, '--run-id')}`);
 console.log(`review_stage=${argValue(reviewArgs, '--stage')}`);
@@ -670,6 +769,10 @@ assert_contains "$INTAKE_OUT" "drift_phase=campaign_intake" \
   "invalid sealed contract blocks at campaign intake"
 assert_contains "$INTAKE_OUT" "drift_code=campaign_contract_drift" \
   "invalid seal marker preserves the owning rejection code"
+assert_contains "$INTAKE_OUT" "legacy_api_status=blocked" \
+  "direct engine API blocks the L6 legacy compatibility rail"
+assert_contains "$INTAKE_OUT" "legacy_api_code=legacy_unmanaged_rejected" \
+  "direct engine API emits the machine-readable legacy rejection"
 assert_contains "$INTAKE_OUT" "runner_calls=0" "missing contract spawns no runner"
 assert_contains "$INTAKE_OUT" "worktree_calls=0" "invalid or missing contract creates no worktree"
 assert_contains "$INTAKE_OUT" "identity_status=converged" \
@@ -686,6 +789,9 @@ assert_contains "$INTAKE_OUT" \
 assert_contains "$INTAKE_OUT" \
   "implementation_contract=$CONTRACT" \
   "managed implementation receives the sealed campaign boundary"
+assert_contains "$INTAKE_OUT" \
+  "implementation_contract_sha=$(printf 'c%.0s' {1..64})" \
+  "managed implementation receives the intake-bound contract digest"
 assert_contains "$INTAKE_OUT" \
   "review_ledger=$SBX/.autopilot/identity-ledger.jsonl" \
   "managed review receives the campaign ledger"

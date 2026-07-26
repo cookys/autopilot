@@ -359,9 +359,11 @@ assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evalu
 CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
 printf '%s\n' '{"allowed_path_prefixes":["src/"],"max_changed_files":2,"max_extra_churn":40}' \
   > "$CAMPAIGN_CONTRACT"
+CAMPAIGN_CONTRACT_SHA="$(sha256sum "$CAMPAIGN_CONTRACT" | awk '{print $1}')"
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
-  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "campaign boundary dispatch exit code"
 assert_file_exists "$TEST_TMP/captured_prompt.txt" "campaign boundary prompt capture exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
@@ -370,6 +372,24 @@ assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
   '"max_changed_files":2' "campaign file budget reaches implementer"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
   "create ok.txt" "campaign boundary retains the original task prompt"
+
+# 12b. A contract changed after intake is rejected before the runner or worktree exists.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-drift --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$(printf '0%.0s' {1..64})" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "campaign contract digest drift exit code"
+assert_contains "$OUT" "campaign contract digest changed after intake" \
+  "campaign contract drift names the intake boundary"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "campaign contract drift spawns no runner"
+
+# 12c. The snapshot path and digest are one inseparable managed boundary.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-unbound --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unbound campaign contract exit code"
+assert_contains "$OUT" "are required together" \
+  "campaign contract without its intake digest fails closed"
 
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?

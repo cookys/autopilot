@@ -68,10 +68,10 @@ Qualify or evaluate a model/runner per role. A model can be qualified for one ro
 
 | Role | It is qualified only if it can | Hard fail examples | Current routing status |
 |------|--------------------------------|--------------------|------------------------|
-| Owner | Produce the task contract, preserve intent/authority, sequence work, interpret failures, and enforce acceptance without trusting delegate self-report. Legacy aliases: planner/orchestrator. | Vague plans, hidden broad scope, merges on delegate green, loses ledger/provenance, retries blindly. | R2 scorecard-recordable; owner evaluator/resolver promotion is a required adaptive-cutover gate. |
+| Owner | Produce the task contract, preserve intent/authority, sequence work, interpret failures, and enforce acceptance without trusting delegate self-report. Legacy aliases: planner/orchestrator. | Vague plans, hidden broad scope, merges on delegate green, loses ledger/provenance, retries blindly. | Implemented path: distinct `engine-qualify.sh owner` corpus/oracle plus a session-local live verifier; disk rows remain provisional. |
 | Implementer | Edit only allowed files in an isolated worktree; produce git artifacts; pass required checks; avoid self-merging. | Writes outside scope, no-op while claiming success, asks clarifying questions mid-dispatch, changes tests to pass. | R2 scorecard-recordable; full implementer qualifier is follow-up. |
 | Verification author | Author independent checks/harnesses that catch defects the implementer could miss; avoid copying implementer assumptions. | Only reruns implementer tests, rubber-stamps, writes brittle or fixture-gamed checks. | R2 scorecard-recordable; not fallback-ladder or auto-routable until a role eval/resolver exists. |
-| Reviewer | Read untrusted specs/diffs without mutation; classify fresh metamorphic defects at the right location/severity; avoid false-pass on critical; resist prompt injection. | Empty/generic output treated as pass, public-fixture lookup, wrong defect/location, follows diff instructions, high clean false-FIX rate. | Implemented path: isolated `engine-qualify.sh reviewer` + telemetry-only `engine-scorecard.js`. |
+| Reviewer | Read untrusted specs/diffs without mutation; classify fresh metamorphic defects at the right location/severity; avoid false-pass on critical; resist prompt injection. | Empty/generic output treated as pass, public-fixture lookup, wrong defect/location, follows diff instructions, high clean false-FIX rate. | Implemented path: isolated `engine-qualify.sh reviewer`, optional case-only remote broker, and telemetry-only `engine-scorecard.js`. |
 | Explorer | Gather and synthesize bounded repository/domain context without mutation or authority expansion. | Hides uncertainty, leaks protected context, broadens scope, treats external priors as proof. | R2 scorecard-recordable; evidence-only until explorer eval/resolver exists. |
 
 Verification author is different from reviewer: the former authors independent checks; the latter
@@ -90,10 +90,10 @@ verification author, reviewer, or explorer.
 3. **Run the role spike**: one representative operation plus identity capture.
    Process errors, empty parser output, permission prompts, and timeouts fail the
    spike.
-4. **Run the role eval**: use the role evidence bars below. Reviewer has an
-   implemented nonce-derived metamorphic qualifier with executable host oracles
-   and per-case bubblewrap isolation; other roles need committed corpus/probe
-   artifacts before automatic promotion.
+4. **Run the role eval**: use the role evidence bars below. Reviewer and owner have separate
+   nonce-derived qualifiers with executable host oracles and per-case bubblewrap isolation;
+   implementer, verification author, and explorer still need committed role-specific corpora
+   before automatic promotion.
 5. **Record telemetry** with `engine-scorecard.js` once the output is
    reproducible. Use `status:"failed"` for failed evidence too; do not hide bad
    rows. `current`/`report` are diagnostic only and disk-backed `ladder` cannot
@@ -129,14 +129,15 @@ Use these bars before a role becomes eligible for routing.
 
 ### Owner
 
-- At least 10 representative tasks produce complete six-element contracts.
-- Acceptance criteria must be executable or reviewable.
-- Scope and boundaries must be specific enough for a separate implementer to operate without questions.
-- Output must not include edits, shell commands, or unbounded delegation.
+- At least two fresh full-corpus trials pass with stable sensitivity and clean specificity.
+- The dedicated corpus covers intent preservation, bounded delegation, failure interpretation,
+  state continuity, ledger discipline, and acceptance; reviewer evidence is never reused.
+- Each rule has planted-failure, clean, and repair/mutation controls scored by an independent host
+  oracle. Free-form model self-report is not the verdict.
 - The owner preserves the frozen intent/authority envelope, maintains a per-unit ledger, and treats
   process/parser/timeout/no-verdict outcomes as blocked.
-- Planted cases cover false delegate success, invalid fallback inheritance, lost state, unauthorized
-  scope expansion, and premature acceptance.
+- Scope and acceptance remain concrete enough for a separate implementer and independent verifier;
+  no output may create effect or acceptance authority.
 
 ### Implementer
 
@@ -171,9 +172,10 @@ Use these bars before a role becomes eligible for routing.
 - The host executes both sides of every generated case: known-bad patches must
   turn a passing invariant red, and the reversal control must turn it green.
 - The panel sees only one diff in a fresh no-network sandbox;
-  repo/corpus/home/host-network/prior-case state is absent. Direct remote panels
-  remain ineligible until a case-only host egress broker exists. Missing
-  bubblewrap or a pin mismatch blocks live authority.
+  repo/corpus/home/host-network/prior-case state is absent. Remote panels use the case-only
+  host broker: the sandbox receives one fresh Unix socket while credentials, outbound network,
+  exact response identity, retry/timeout policy, and the host oracle stay outside. Missing
+  bubblewrap, broker isolation, or a pin/identity match blocks live authority.
 - Any later exact-identity/exact-scope run immediately supersedes the prior live
   run. A degraded result invalidates already-created session verifiers.
 
@@ -193,7 +195,7 @@ Use the right evidence mechanism:
 | Current external facts | `survey` | Cited docs, official sources, production practice, known risks. |
 | Harness capability truth | Spike/probe | Command, version, raw output, yes/no result. |
 | Role quality | Eval corpus | Sensitivity/specificity, failure modes, reproducibility. |
-| Runtime routing | Scorecard | Qualified rows with TTL, cost, latency, family, version identity. |
+| Runtime routing telemetry | Scorecard | Provisional rows with TTL, cost, latency, family, and version identity; never session authority. |
 | Ongoing freshness | Maintenance loop | Expiry, version mismatch, stale warning, re-qualification task. |
 
 Survey alone is never enough for H3/H4/H5. It can justify a spike or identify the official API, but dispatch and gating require local probes/evals.

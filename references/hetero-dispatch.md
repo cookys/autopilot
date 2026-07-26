@@ -22,6 +22,22 @@ Not for: anything needing autopilot skills inside the executor (unverified — s
 6. **No bare multi-hour autonomous loop (gate 4).** A hetero implement/review loop that runs for hours MUST have a named depth-0 clock owner armed with the sensing watcher and the convergence brake ([`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) — gates 1 + 3; see [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § 裸跑禁令). Unwatched hours-long self-directed loops are the banned "bare run" shape.
 7. **Input must fit the engine's context window (gate 7).** Every rail runs the context-window gate before spawning a runner; an over-budget unit fails closed rather than letting the engine compact its way through. See § Context-window gate.
 
+## Runner choice and guidance profile are separate
+
+Heterogeneous dispatch chooses a runner; capability admission decides whether that exact
+model/runner/configuration/deployment may hold the requested role; the execution-profile compiler
+then chooses `guided` or `autonomous`. A strong model is not admitted merely because its name
+appears in a static routing table, and a guided profile cannot turn an unqualified model into an
+owner or reviewer. Fallback repeats admission and profile resolution for the replacement identity
+instead of inheriting the failed engine's grant.
+
+[`scripts/dispatch-local-openai.js`](../scripts/dispatch-local-openai.js) is a deliberately narrower
+adapter. It sends one bounded author/reviewer prompt with no repository tools, under a protected
+roster, deny-by-default egress, pre/post identity binding, a one-slot lease, capacity checks, and
+cancellation/recovery checks. It is not a `dispatch-hetero.sh --runner`, implementer, owner, or
+agentic harness. The generic transport contract has fake-server coverage; no live local runtime
+row or local agentic runner is claimed in this release.
+
 ## Context-window gate
 
 [`scripts/check-context-window.js`](../scripts/check-context-window.js) (+ the sourceable wrapper [`scripts/lib/context-window.sh`](../scripts/lib/context-window.sh)) answers one question before anything is spent: **does the input we are about to feed this engine fit its context window?**

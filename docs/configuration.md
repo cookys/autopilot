@@ -54,7 +54,7 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 | `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](../project-config-template/profiling-config.md) |
 | `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](../project-config-template/skill-routing.md) |
 | `.claude/model-routing-config.md` | Subagent model/mode per role (planner, reviewer, etc.) | [template](../project-config-template/model-routing-config.md) |
-| `.claude/owner-kernel-governance.json` | Owner Kernel project default, qualified rosters, red lines, approval policy, and mediated action catalog | [dogfood example](../.claude/owner-kernel-governance.json) |
+| `.claude/owner-kernel-governance.json` | Owner Kernel project mode and guidance defaults, qualified rosters, red lines, approval policy, and mediated action catalog | [dogfood example](../.claude/owner-kernel-governance.json) |
 | `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](../project-config-template/loop.md) |
 
 ### Owner Kernel governance
@@ -73,6 +73,13 @@ node scripts/owner-kernel.js resolve \
   --config .claude/owner-kernel-governance.json \
   --mode milestone-led --check
 ```
+
+`governance.guidance_profile` independently accepts `guided`, `adaptive`, or `autonomous`;
+omitting it is the compatibility-safe `guided` default. A task intake may override guidance for
+that run without modifying the project JSON. Exact role/scope/deployment admission happens first,
+and every effective profile preserves the same red lines, effects, egress, assurance, and
+acceptance floor. `adaptive` is a selection request, not a third payload: it resolves to one
+`guided` or `autonomous` payload from current live evidence.
 
 The resolved policy and acceptance contract are hash-frozen at intake. P3.7 profiles reject a
 session when its run override, action catalog, policy, contract, authenticated handoff, or durable

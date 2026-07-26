@@ -57,6 +57,33 @@ Projects can create `.claude/model-routing-config.md` with a custom dispatch tab
 The file format should include a markdown table with columns: Role, Model, Mode.
 Skills will prefer the project config over these defaults.
 
+## Static Defaults vs Capability Evidence
+
+The table above is a bootstrap preference, not a claim that every named model is currently
+qualified. Runtime admission is keyed by exact canonical role, task/domain/language/tool scope,
+model + runner + effort/prompt configuration, and deployment identity:
+
+```text
+static/project routing preference
+             |
+             v
+exact role capability evidence -- missing/stale/drifted --> guided or block
+             |
+             v
+RoleExecutionGrant + one effective guidance profile
+```
+
+Guidance and model selection are separate axes. `guided` can give an admitted weak worker a smaller
+slice, but it cannot make that model an owner/reviewer. `autonomous` removes redundant choreography
+for a qualified role, but it cannot lower review, assurance, effect, egress, or acceptance gates.
+Fallback starts admission and profile resolution again for the replacement identity.
+
+Artificial Analysis is an optional model-level prior for implementer/explorer discovery only.
+Imported rows are user-local and `provisional`; no bundled score or external reputation can qualify
+owner/reviewer. Likewise, scorecard and capability-state JSON are editable same-UID telemetry.
+Plugin-native admission requires the evaluator and Owner Kernel to share a live non-serializable
+verifier; a restart or JSON roundtrip cannot recreate it.
+
 ## Codex-host caveat (spawn_agent model lock)
 
 On a Codex host the native `spawn_agent` tool exposes NO `model` field by default

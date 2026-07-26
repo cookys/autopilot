@@ -235,6 +235,43 @@ So a hook like `branch-protection` is **enabled** in `~/.autopilot/config.json` 
 
 ---
 
+## Capability profiles and optional local endpoints
+
+Capability-adaptive guidance is one project setting with a task-scoped override. Set
+`governance.guidance_profile` to `guided`, `adaptive`, or `autonomous` in
+`.claude/owner-kernel-governance.json`; omitting it resolves to `guided`. A task intake can request
+a different profile without editing the project file. Admission still happens by exact role,
+scope, model/runner configuration, and deployment identity before any profile is selected.
+
+The supporting operator surfaces are:
+
+```bash
+# Fresh, role-specific qualification. Telemetry alone does not admit a session.
+scripts/engine-qualify.sh reviewer <identity-and-scope-options> --panel-cmd '<trusted command>'
+scripts/engine-qualify.sh owner <identity-and-scope-options> --panel-cmd '<trusted command>'
+
+# Optional user-local Artificial Analysis prior for implementer/explorer discovery.
+ARTIFICIAL_ANALYSIS_API_KEY=... node scripts/import-aa-capabilities.js refresh
+
+# Optional local OpenAI-compatible endpoint inventory and exact-identity probe.
+node scripts/probe-local-engine.js list
+node scripts/probe-local-engine.js probe --endpoint <id>
+
+# Raw author/reviewer transport; this is not an agentic repository runner.
+node scripts/dispatch-local-openai.js run --endpoint <id> --role author \
+  --prompt-file <path> --envelope <task-authority-envelope.json> --risk low
+
+# Advisory only: the file CLI cannot recreate live verifier capabilities.
+node scripts/evaluate-profile-cutover.js evaluate --input <snapshot.json>
+```
+
+The local roster defaults to `~/.autopilot/local-engines.json`. It is a non-secret, regular
+mode-600 JSON file; credentials remain in the protected endpoint environment described below.
+Non-loopback endpoints require an authenticated HTTPS `credential_endpoint`. Supported adapter
+labels are `autopilot-contract`, `generic-openai`, and `ollama`, but a label is not qualification:
+the current release passed the fake `autopilot-contract` suite and observed no configured live
+runtime, so it publishes neither a live local role row nor an agentic local runner.
+
 ## Heterogeneous engine credentials (optional — unlocks the strong review/impl roster)
 
 Autopilot works fully standalone on Claude alone. But its **decorrelated** review-and-implement

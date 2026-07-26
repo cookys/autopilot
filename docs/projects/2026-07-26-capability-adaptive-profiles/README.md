@@ -41,7 +41,11 @@ Primary objective command:
 bash hooks/tests/execution-profile.test.sh &&
 bash hooks/tests/profile-context-isolation.test.sh &&
 bash hooks/tests/profile-cutover.test.sh &&
-bash hooks/tests/aa-capability-import.test.sh &&
+node scripts/import-aa-capabilities.test.js &&
+bash hooks/tests/capability-evidence.test.sh &&
+bash hooks/tests/engine-qualify.test.sh &&
+bash hooks/tests/engine-qualify-owner.test.sh &&
+bash hooks/tests/qualification-case-broker.test.sh &&
 bash hooks/tests/local-engine-probe.test.sh &&
 bash hooks/tests/dispatch-local-openai.test.sh &&
 bash hooks/tests/owner-kernel.test.sh &&
@@ -150,7 +154,7 @@ negative controls that fail when the claimed guard is removed.
 | P3c | Complete | One-case Unix-socket broker with host-only credentials/network/exact identity, remote reviewer reuse of the behavioral witness oracle, distinct six-rule owner corpus/oracle with clean and repair controls, 42 broker + 23 owner + 63 reviewer assertions, and 90 standalone Codex package assertions. |
 | P4 | Complete | Protected user-local roster, exact semantic/operational fingerprints, one-slot lease, JIT capacity gate, deny-by-default raw author/reviewer transport, hot-swap/cancellation quarantine, and 50 probe + 63 dispatch assertions. No local runtime was configured, so the live result is honestly `unverified_no_live_runtime`; no live row or agentic runner was published. |
 | P5 | Complete (bounded hold) | Advisory cutover evaluator and public snapshot schema; 62 focused assertions cover live-verifier loss, incomplete-window/cherry-picked/duplicate/expired dogfood, acceptance failure, Critical escape, decorrelation, exact-token, and source-drift gates. The recorded decision is `hold_guided`: canonical autonomous control prose is 113 bytes smaller, but no exact host-token measurement, effectful guided witness, current live owner verifier, or five independent dogfood receipts exists. |
-| P6 | Pending | |
+| P6 | Complete | v2.33.0 docs/version/mirrors synchronized; portability and doc-drift hard gates pass; focused suites pass; full repository regression passes 215/215 test files. |
 | L-5 | Pending | |
 
 ## P0 Implementation Review

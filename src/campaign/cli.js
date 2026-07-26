@@ -323,6 +323,62 @@ function processLiveness(lease) {
   return currentStart === lease.start_time ? 'alive' : 'dead';
 }
 
+function campaignResumeEligibility(projection, observedAt) {
+  const liveness = processLiveness(projection.latest_lease);
+  if (TERMINAL.has(projection.state.phase)) {
+    return { status: 'terminal', reason: 'campaign is already terminal', reason_code: 'terminal' };
+  }
+  if (liveness === 'alive') {
+    return { status: 'blocked', reason: 'campaign already has a live lease', reason_code: 'live_lease' };
+  }
+  if (liveness === 'unknown') {
+    return {
+      status: 'blocked',
+      reason: 'campaign lease liveness cannot be verified',
+      reason_code: 'lease_unknown',
+    };
+  }
+  if (projection.state.live_lease !== null) {
+    return {
+      status: 'blocked',
+      reason: 'durable campaign state still owns a mutation lease',
+      reason_code: 'campaign_state_lease_open',
+    };
+  }
+  if (projection.state.phase !== CAMPAIGN_STATES.PREPARED) {
+    return {
+      status: 'blocked',
+      reason: `campaign resume from ${projection.state.phase} is not yet supported`,
+      reason_code: 'campaign_resume_phase_unsupported',
+    };
+  }
+  if (projection.state.usage.changed_files >= projection.state.limits.max_changed_files) {
+    return {
+      status: 'blocked',
+      reason: 'campaign changed-file budget is exhausted',
+      reason_code: 'campaign_file_budget_exhausted',
+    };
+  }
+  if (projection.state.usage.churn >= projection.state.limits.max_churn) {
+    return {
+      status: 'blocked',
+      reason: 'campaign churn budget is exhausted',
+      reason_code: 'campaign_churn_budget_exhausted',
+    };
+  }
+  const startedAt = Date.parse(projection.state.started_at);
+  const now = Date.parse(observedAt);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(now) || now < startedAt
+      || Math.floor((now - startedAt) / 1000) >= projection.state.limits.max_wall_seconds) {
+    return {
+      status: 'blocked',
+      reason: 'campaign wall-clock budget is exhausted or unverifiable',
+      reason_code: 'campaign_wall_budget_exhausted',
+    };
+  }
+  return { status: 'resumable', reason: null, reason_code: null };
+}
+
 function runCampaignCli(argv, options = {}) {
   const cwd = path.resolve(options.cwd || process.cwd());
   const parsed = parseArgs(argv, cwd);
@@ -351,32 +407,25 @@ function runCampaignCli(argv, options = {}) {
     })}\n`);
     return EXIT_SUCCESS;
   }
-  let status = 'resumable';
-  let reason = null;
-  const liveness = processLiveness(projection.latest_lease);
-  if (TERMINAL.has(projection.state.phase)) {
-    status = 'terminal';
-    reason = 'campaign is already terminal';
-  } else if (liveness === 'alive') {
-    status = 'blocked';
-    reason = 'campaign already has a live lease';
-  } else if (liveness === 'unknown') {
-    status = 'blocked';
-    reason = 'campaign lease liveness cannot be verified';
-  }
+  const now = typeof options.now === 'function'
+    ? options.now()
+    : new Date().toISOString();
+  const eligibility = campaignResumeEligibility(projection, now);
   process.stdout.write(`${JSON.stringify({
-    status,
-    reason,
+    status: eligibility.status,
+    reason: eligibility.reason,
+    reason_code: eligibility.reason_code,
     campaign_id: parsed.campaignId,
     contract_digest: projection.state.contract_digest,
     phase: projection.state.phase,
     generation: projection.state.generation,
-    resume_required: status === 'resumable',
+    resume_required: eligibility.status === 'resumable',
   })}\n`);
-  return status === 'resumable' ? EXIT_SUCCESS : 1;
+  return eligibility.status === 'resumable' ? EXIT_SUCCESS : 1;
 }
 
 module.exports = {
+  campaignResumeEligibility,
   defaultCampaignLedgerPath,
   loadRows,
   parseArgs,

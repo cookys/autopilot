@@ -1459,9 +1459,23 @@ const result = runCampaignIntake({
   ...commonInput,
   ledgerPath,
 }, adapters);
+let durableMissionReleaseCalls = 0;
+const claimedControl = {
+  ...result,
+  steps: result.steps.map((entry) => entry.owner === 'mission'
+    ? { owner: 'mission', status: 'claimed', claim_id: 'claim-durable-release' }
+    : entry),
+};
+const releaseAdapters = {
+  ...adapters,
+  releaseMission() {
+    durableMissionReleaseCalls += 1;
+    return { owner: 'mission_release', status: 'released' };
+  },
+};
 const admissionRelease = releaseCampaignAdmission({
   repo,
-  campaignControl: result,
+  campaignControl: claimedControl,
   rejection: {
     owner: 'implementation_dispatch',
     status: 'rejected',
@@ -1469,7 +1483,24 @@ const admissionRelease = releaseCampaignAdmission({
     reason: 'fixture leaf precondition failed',
   },
   observedAt: '2026-07-26T00:00:00.500Z',
-}, adapters);
+}, releaseAdapters);
+const replayedAdmissionRelease = releaseCampaignAdmission({
+  repo,
+  campaignControl: claimedControl,
+  rejection: {
+    owner: 'implementation_dispatch',
+    status: 'rejected',
+    code: 'fixture_pre_spend_rejection',
+    reason: 'fixture leaf precondition failed',
+  },
+  observedAt: '2026-07-26T00:00:01.500Z',
+}, releaseAdapters);
+console.log(`durable_mission_release_calls=${durableMissionReleaseCalls}`);
+console.log(`replayed_release_status=${replayedAdmissionRelease.status}`);
+console.log(`replayed_release_receipt_match=${
+  replayedAdmissionRelease.pre_spend_no_effect_receipt.receipt_digest
+    === admissionRelease.pre_spend_no_effect_receipt.receipt_digest
+}`);
 
 const crashContractPath = path.join(path.dirname(contractPath), 'crash-campaign.json');
 const crashSealPath = path.join(path.dirname(sealPath), 'crash-campaign.seal.json');
@@ -1534,6 +1565,12 @@ assert_contains "$DEFAULT_INTAKE_OUT" "recovered_generation=2" \
   "a dead pre-journal claim reopens without stranding campaign identity"
 assert_contains "$DEFAULT_INTAKE_OUT" "admission_release_status=released" \
   "post-admission zero-spend cleanup durably releases the campaign lease"
+assert_contains "$DEFAULT_INTAKE_OUT" "durable_mission_release_calls=1" \
+  "replaying a completed release does not call the Mission adapter twice"
+assert_contains "$DEFAULT_INTAKE_OUT" "replayed_release_status=released" \
+  "a completed admission release replays idempotently"
+assert_contains "$DEFAULT_INTAKE_OUT" "replayed_release_receipt_match=true" \
+  "release replay returns the originally journaled no-effect receipt"
 assert_contains "$DEFAULT_INTAKE_OUT" "crash_recovered_generation=2" \
   "a leased intake claim owned by a dead process recovers after the crash window"
 CAMPAIGN_ID="$(node -e \
@@ -1553,8 +1590,20 @@ assert_exit_code "$?" "0" "campaign inspect derives the canonical ledger by defa
 assert_contains "$DEFAULT_PATH_INSPECT_OUT" '"status":"found"' \
   "default campaign CLI path matches intake's Git-common-dir ledger"
 
-RESUME_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign resume \
-  --campaign-id "$CAMPAIGN_ID" --ledger "$CAMPAIGN_LEDGER" 2>&1)"
+RESUME_OUT="$(node - "$REPO_ROOT" "$SBX" "$CAMPAIGN_ID" "$CAMPAIGN_LEDGER" <<'NODE'
+const path = require('path');
+const [root, repo, campaignId, ledger] = process.argv.slice(2);
+const { runCampaignCli } = require(path.join(root, 'src', 'campaign', 'cli'));
+process.exitCode = runCampaignCli([
+  'resume',
+  '--campaign-id', campaignId,
+  '--ledger', ledger,
+], {
+  cwd: repo,
+  now: () => '2026-07-26T00:00:01.000Z',
+});
+NODE
+)"
 assert_exit_code "$?" "0" "campaign resume accepts a dead prior process lease"
 assert_contains "$RESUME_OUT" '"status":"resumable"' "campaign resume is machine-readable"
 assert_contains "$RESUME_OUT" '"resume_required":true' "campaign resume preserves generation state"
@@ -1933,6 +1982,53 @@ assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '2p')" "unknown" \
   "missing leased process identity fails closed as unknown"
 assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '3p')" "unknown" \
   "unknown ledger state fails closed as unknown"
+
+ELIGIBILITY_OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const {
+  campaignResumeEligibility,
+} = require(path.join(root, 'src', 'campaign', 'cli'));
+const state = {
+  phase: 'PREPARED',
+  live_lease: null,
+  started_at: '2026-07-26T00:00:00.000Z',
+  usage: { changed_files: 0, churn: 0 },
+  limits: { max_changed_files: 4, max_churn: 8, max_wall_seconds: 120 },
+};
+const projection = {
+  state,
+  latest_lease: { state: 'dead' },
+};
+const code = (candidate, now = '2026-07-26T00:00:01.000Z') =>
+  campaignResumeEligibility(candidate, now).reason_code || 'resumable';
+console.log(code(projection));
+console.log(code({ ...projection, state: { ...state, live_lease: { generation: 0 } } }));
+console.log(code({ ...projection, state: { ...state, phase: 'REVIEWING' } }));
+console.log(code({
+  ...projection,
+  state: { ...state, usage: { ...state.usage, changed_files: 4 } },
+}));
+console.log(code({
+  ...projection,
+  state: { ...state, usage: { ...state.usage, churn: 8 } },
+}));
+console.log(code(projection, '2026-07-26T00:02:00.000Z'));
+NODE
+)"
+assert_exit_code "$?" "0" "campaign resume eligibility table process exits zero"
+assert_eq "$(printf '%s\n' "$ELIGIBILITY_OUT" | sed -n '1p')" "resumable" \
+  "eligible PREPARED campaign remains resumable"
+assert_eq "$(printf '%s\n' "$ELIGIBILITY_OUT" | sed -n '2p')" \
+  "campaign_state_lease_open" "open reducer mutation lease blocks resume projection"
+assert_eq "$(printf '%s\n' "$ELIGIBILITY_OUT" | sed -n '3p')" \
+  "campaign_resume_phase_unsupported" "unsupported reducer phase blocks resume projection"
+assert_eq "$(printf '%s\n' "$ELIGIBILITY_OUT" | sed -n '4p')" \
+  "campaign_file_budget_exhausted" "file cap blocks resume projection"
+assert_eq "$(printf '%s\n' "$ELIGIBILITY_OUT" | sed -n '5p')" \
+  "campaign_churn_budget_exhausted" "churn cap blocks resume projection"
+assert_eq "$(printf '%s\n' "$ELIGIBILITY_OUT" | sed -n '6p')" \
+  "campaign_wall_budget_exhausted" "wall cap blocks resume projection"
 
 SPACE_LEDGER="$TEST_TMP/space-name-ledger.jsonl"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$SPACE_LEDGER" >/dev/null

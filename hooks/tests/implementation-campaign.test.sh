@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+
+CHECKER="$REPO_ROOT/scripts/implementation-campaign-check.js"
+BASELINE="$REPO_ROOT/hooks/tests/fixtures/implementation-campaign/red-baseline.json"
+SBX="$TEST_TMP/repo"
+mkdir -p "$SBX"
+git -C "$SBX" init -q
+git -C "$SBX" config user.email "campaign-test@example.invalid"
+git -C "$SBX" config user.name "Campaign Test"
+printf 'first\n' > "$SBX/README.md"
+git -C "$SBX" add README.md
+git -C "$SBX" commit -qm "first"
+printf 'second\n' >> "$SBX/README.md"
+git -C "$SBX" commit -qam "second"
+
+BASE_SHA="$(git -C "$SBX" rev-parse HEAD)"
+ALT_SHA="$(git -C "$SBX" rev-parse HEAD^)"
+COMMON_RAW="$(git -C "$SBX" rev-parse --git-common-dir)"
+if [[ "$COMMON_RAW" = /* ]]; then
+  COMMON_DIR="$(realpath "$COMMON_RAW")"
+else
+  COMMON_DIR="$(realpath "$SBX/$COMMON_RAW")"
+fi
+REPO_ID="git-common-dir:$COMMON_DIR"
+CONTRACT="$TEST_TMP/campaign.json"
+SEAL="$TEST_TMP/campaign.seal.json"
+
+write_contract() {
+  local target="$1"
+  node - "$target" "$REPO_ID" "$BASE_SHA" <<'NODE'
+const fs = require('fs');
+const [target, repoIdentity, baseSha] = process.argv.slice(2);
+const value = {
+  schema_version: 1,
+  ticket: 'icc-p0',
+  profile: 'poc',
+  mission_grant_ref: null,
+  repo_identity: repoIdentity,
+  base_sha: baseSha,
+  branch: 'impl/icc-p0',
+  vertical_acceptance: ['one bounded vertical slice is verified'],
+  allowed_path_prefixes: ['src/', 'hooks/tests/'],
+  max_changed_files: 18,
+  baseline_churn: 900,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 450,
+  max_repair_generations: 2,
+  max_wall_seconds: 7200,
+  verify_cmd: 'bash hooks/tests/implementation-campaign.test.sh',
+  rubric_ids: ['R1', 'R2', 'R3'],
+};
+fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+}
+
+run_checker() {
+  local stdout_file="$TEST_TMP/stdout"
+  local stderr_file="$TEST_TMP/stderr"
+  HOME="$HOOK_HOME" node "$CHECKER" "$@" >"$stdout_file" 2>"$stderr_file"
+  __RUN_EXIT=$?
+  __RUN_STDOUT="$(cat "$stdout_file")"
+  __RUN_STDERR="$(cat "$stderr_file")"
+}
+
+mutate_contract() {
+  local target="$1"
+  local expression="$2"
+  node - "$target" "$expression" <<'NODE'
+const fs = require('fs');
+const [target, expression] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(target, 'utf8'));
+Function('value', expression)(value);
+fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+}
+
+write_contract "$CONTRACT"
+run_checker seal --contract "$CONTRACT" --repo "$SBX" --out "$SEAL"
+assert_exit_code "$__RUN_EXIT" "0" "valid campaign contract seals"
+assert_contains "$__RUN_STDOUT" '"verdict": "SEALED"' "seal emits SEALED"
+assert_file_exists "$SEAL" "independent seal is written"
+assert_eq "$(stat -c '%a' "$SEAL")" "600" "seal is private by default"
+
+run_checker check --contract "$CONTRACT" --repo "$SBX" --seal "$SEAL"
+assert_exit_code "$__RUN_EXIT" "0" "sealed campaign contract validates"
+assert_contains "$__RUN_STDOUT" '"verdict": "VALID"' "check emits VALID"
+
+SAME="$TEST_TMP/same.json"
+write_contract "$SAME"
+run_checker seal --contract "$SAME" --repo "$SBX" --out "$SAME"
+assert_exit_code "$__RUN_EXIT" "3" "same-path seal is rejected"
+assert_contains "$__RUN_STDERR" "independent" "same-path rejection names independence"
+
+ALIAS="$TEST_TMP/alias.json"
+ORIGINAL="$TEST_TMP/original.json"
+write_contract "$ORIGINAL"
+ln "$ORIGINAL" "$ALIAS"
+run_checker seal --contract "$ORIGINAL" --repo "$SBX" --out "$ALIAS"
+assert_exit_code "$__RUN_EXIT" "3" "same-inode seal alias is rejected"
+assert_contains "$__RUN_STDERR" "alias" "inode alias rejection is named"
+
+UNKNOWN="$TEST_TMP/unknown.json"
+write_contract "$UNKNOWN"
+mutate_contract "$UNKNOWN" "value.unreviewed = true;"
+run_checker seal --contract "$UNKNOWN" --repo "$SBX" --out "$TEST_TMP/unknown.seal"
+assert_exit_code "$__RUN_EXIT" "3" "unknown contract field is rejected"
+assert_contains "$__RUN_STDOUT" "unknown field 'unreviewed'" "unknown field is named"
+
+MISSING="$TEST_TMP/missing.json"
+write_contract "$MISSING"
+mutate_contract "$MISSING" "delete value.max_wall_seconds;"
+run_checker seal --contract "$MISSING" --repo "$SBX" --out "$TEST_TMP/missing.seal"
+assert_exit_code "$__RUN_EXIT" "3" "missing budget is rejected"
+assert_contains "$__RUN_STDOUT" "missing required field 'max_wall_seconds'" "missing budget is named"
+
+ESCAPE="$TEST_TMP/escape.json"
+write_contract "$ESCAPE"
+mutate_contract "$ESCAPE" "value.allowed_path_prefixes = ['../secret'];"
+run_checker seal --contract "$ESCAPE" --repo "$SBX" --out "$TEST_TMP/escape.seal"
+assert_exit_code "$__RUN_EXIT" "3" "path escape is rejected"
+assert_contains "$__RUN_STDOUT" "path escapes" "path escape reason is named"
+
+ABSOLUTE="$TEST_TMP/absolute.json"
+write_contract "$ABSOLUTE"
+mutate_contract "$ABSOLUTE" "value.allowed_path_prefixes = ['/tmp'];"
+run_checker seal --contract "$ABSOLUTE" --repo "$SBX" --out "$TEST_TMP/absolute.seal"
+assert_exit_code "$__RUN_EXIT" "3" "absolute path prefix is rejected"
+
+PROFILE="$TEST_TMP/profile.json"
+write_contract "$PROFILE"
+mutate_contract "$PROFILE" "value.max_repair_generations = 3;"
+run_checker seal --contract "$PROFILE" --repo "$SBX" --out "$TEST_TMP/profile.seal"
+assert_exit_code "$__RUN_EXIT" "3" "POC repair ceiling increase is rejected"
+assert_contains "$__RUN_STDOUT" "exceeds poc ceiling 2" "profile ceiling rejection is specific"
+
+CHURN="$TEST_TMP/churn.json"
+write_contract "$CHURN"
+mutate_contract "$CHURN" "value.max_extra_churn = 451;"
+run_checker seal --contract "$CHURN" --repo "$SBX" --out "$TEST_TMP/churn.seal"
+assert_exit_code "$__RUN_EXIT" "3" "ratio-inconsistent churn ceiling is rejected"
+assert_contains "$__RUN_STDOUT" "ratio-derived ceiling 450" "churn ceiling is deterministic"
+
+DRIFT="$TEST_TMP/drift.json"
+DRIFT_SEAL="$TEST_TMP/drift.seal"
+write_contract "$DRIFT"
+run_checker seal --contract "$DRIFT" --repo "$SBX" --out "$DRIFT_SEAL"
+mutate_contract "$DRIFT" "value.branch = 'impl/drifted';"
+run_checker check --contract "$DRIFT" --repo "$SBX" --seal "$DRIFT_SEAL"
+assert_exit_code "$__RUN_EXIT" "3" "post-seal contract mutation is rejected"
+assert_contains "$__RUN_STDOUT" '"verdict": "DRIFT"' "mutation produces DRIFT"
+assert_contains "$__RUN_STDOUT" '"contract_sha256"' "mutation names digest drift"
+
+SHA_DRIFT="$TEST_TMP/sha-drift.json"
+SHA_SEAL="$TEST_TMP/sha-drift.seal"
+write_contract "$SHA_DRIFT"
+run_checker seal --contract "$SHA_DRIFT" --repo "$SBX" --out "$SHA_SEAL"
+mutate_contract "$SHA_DRIFT" "value.base_sha = '$ALT_SHA';"
+run_checker check --contract "$SHA_DRIFT" --repo "$SBX" --seal "$SHA_SEAL"
+assert_exit_code "$__RUN_EXIT" "3" "post-seal base SHA change is rejected"
+assert_contains "$__RUN_STDOUT" '"contract_sha256"' "base SHA drift changes sealed digest"
+
+BAD_ID="$TEST_TMP/bad-id.json"
+write_contract "$BAD_ID"
+mutate_contract "$BAD_ID" "value.repo_identity = 'git-common-dir:/wrong';"
+run_checker seal --contract "$BAD_ID" --repo "$SBX" --out "$TEST_TMP/bad-id.seal"
+assert_exit_code "$__RUN_EXIT" "3" "repository identity mismatch is rejected"
+assert_contains "$__RUN_STDOUT" "canonical repository identity" "identity rejection is specific"
+
+BASELINE_SHA="$(node -e 'const f=require(process.argv[1]); process.stdout.write(f.baseline_sha)' "$BASELINE")"
+EXPLOIT_COUNT="$(node -e 'const f=require(process.argv[1]); process.stdout.write(String(f.exploits.length))' "$BASELINE")"
+assert_eq "$EXPLOIT_COUNT" "5" "RED baseline records all five exploit shapes"
+git -C "$REPO_ROOT" cat-file -e "${BASELINE_SHA}^{commit}" 2>/dev/null
+assert_exit_code "$?" "0" "RED baseline commit exists"
+BASE_CLI="$(git -C "$REPO_ROOT" show "${BASELINE_SHA}:bin/autopilot.js")"
+BASE_ENGINE="$(git -C "$REPO_ROOT" show "${BASELINE_SHA}:src/engine/autopilot-engine.js")"
+assert_not_contains "$BASE_CLI" "--campaign-contract" "base accepts implementation without campaign contract"
+assert_not_contains "$BASE_ENGINE" "max_repair_generations" "base has no durable POC repair ceiling"
+assert_not_contains "$BASE_ENGINE" "adjudicate-findings" "base omits finding disposition composition"
+assert_not_contains "$BASE_ENGINE" "campaign_id" "base session resume has no campaign identity"
+assert_not_contains "$BASE_ENGINE" "env_fingerprint" "base has no tree/argv/environment verification receipt"
+
+run_checker --help
+assert_exit_code "$__RUN_EXIT" "0" "help exits zero"
+
+finalize_test

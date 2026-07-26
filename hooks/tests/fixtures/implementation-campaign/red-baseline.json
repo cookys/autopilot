@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "baseline_sha": "db65c54255d502bdbbe903fe90412335e935c147",
+  "exploits": [
+    {
+      "id": "missing_contract",
+      "expected_gap": "engine implement-review accepts no campaign contract"
+    },
+    {
+      "id": "repair_cap_reset",
+      "expected_gap": "no durable campaign generation budget exists"
+    },
+    {
+      "id": "missing_finding_disposition",
+      "expected_gap": "engine loop does not compose the finding disposition gate"
+    },
+    {
+      "id": "session_resume_reset",
+      "expected_gap": "campaign identity and state are absent from the engine loop"
+    },
+    {
+      "id": "verification_receipt_reuse",
+      "expected_gap": "no tree/argv/environment-bound verification receipt exists"
+    }
+  ]
+}

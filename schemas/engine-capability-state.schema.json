@@ -37,6 +37,18 @@
       "minLength": 1,
       "description": "Lifecycle role."
     },
+    "endpoint": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_]+$",
+      "description": "Exact endpoint wallet identity. Absence means legacy endpoint-ambiguous evidence."
+    },
+    "endpoint_binding": {
+      "type": "string",
+      "enum": ["exact", "ambiguous-legacy"],
+      "description": "Output-only identity provenance for merged current/report views."
+    },
     "runner_version": {
       "type": ["string", "null"],
       "description": "Version of the runner if known."

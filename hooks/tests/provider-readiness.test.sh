@@ -18,9 +18,9 @@ const tuple = {
   runner: 'cc-shim',
   model: 'GLM-5.2',
   effort: 'high',
-  endpoint: 'wallet-a',
+  endpoint: 'wallet_a',
 };
-const otherWallet = { ...tuple, endpoint: 'wallet-b' };
+const otherWallet = { ...tuple, endpoint: 'wallet_b' };
 const observation = (boundTuple, axis, status, overrides = {}) => ({
   schema_version: 1,
   artifact_type: 'provider_axis_observation',
@@ -41,6 +41,11 @@ const ready = (boundTuple = tuple) => ({
 
 assert.deepStrictEqual(normalizeProviderTuple(tuple), tuple);
 assert.notStrictEqual(providerTupleDigest(tuple), providerTupleDigest(otherWallet));
+assert.throws(() => normalizeProviderTuple({
+  ...tuple,
+  endpoint: 'https://credential-bearing.example',
+}), /endpoint/i);
+assert.throws(() => normalizeProviderTuple({ ...tuple, role: ' reviewer' }), /role/i);
 
 const fresh = evaluateProviderReadiness({
   tuple,
@@ -84,6 +89,25 @@ assert.strictEqual(missing.axes.live.status, 'unknown');
 assert.strictEqual(missing.axes.live.freshness, 'missing');
 assert.strictEqual(missing.probe_required, true);
 
+const noObservations = evaluateProviderReadiness({ tuple, now: NOW });
+assert.strictEqual(noObservations.usable_now, false);
+assert.strictEqual(noObservations.probe_required, true);
+assert.deepStrictEqual(
+  Object.values(noObservations.axes).map((axis) => axis.status),
+  ['unknown', 'unknown', 'unknown'],
+);
+
+assert.throws(() => evaluateProviderReadiness({
+  tuple,
+  observations: {
+    ...ready(),
+    live: observation(tuple, 'live', 'ready', {
+      observed_at: '2026-07-27T12:00:01.000Z',
+    }),
+  },
+  now: NOW,
+}), /time window/i);
+
 const matrix = [
   ['transport', 'missing_binary'],
   ['live', 'auth_failed'],
@@ -122,11 +146,11 @@ const withFallbacks = evaluateProviderReadiness({
   fallbacks: [
     { tuple: otherWallet, observations: ready(otherWallet) },
     {
-      tuple: { ...tuple, endpoint: 'wallet-c' },
+      tuple: { ...tuple, endpoint: 'wallet_c' },
       observations: {
-        ...ready({ ...tuple, endpoint: 'wallet-c' }),
+        ...ready({ ...tuple, endpoint: 'wallet_c' }),
         qualification: observation(
-          { ...tuple, endpoint: 'wallet-c' },
+          { ...tuple, endpoint: 'wallet_c' },
           'qualification',
           'blocked',
           { evidence_class: 'scorecard', reason: 'unqualified' },
@@ -186,27 +210,38 @@ NODE
 }
 
 record_event absent exhausted
-record_event '"wallet-a"' available
-record_event '"wallet-b"' exhausted
+record_event '"wallet_a"' available
+record_event '"wallet_b"' exhausted
 record_event null limited
+record_event '"none"' available
+
+printf '%s\n' \
+  '{"schema_version":1,"event_id":99,"observed_at":"2026-07-27T11:55:00.000Z","runner":"cc-shim","model":"GLM-5.2","role":"reviewer","endpoint":"bad-name","runner_version":"fixture","capability":{"quota":{"status":"available","reset_at":null,"confidence":"high","evidence":"fixture","ttl_seconds":600}}}' \
+  >> "$STORE/capability.jsonl"
 
 LEGACY="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
   --now 2026-07-27T12:00:00.000Z --store "$STORE")"
 WALLET_A="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
-  --endpoint wallet-a --now 2026-07-27T12:00:00.000Z --store "$STORE")"
+  --endpoint wallet_a --now 2026-07-27T12:00:00.000Z --store "$STORE")"
 WALLET_B="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
-  --endpoint wallet-b --now 2026-07-27T12:00:00.000Z --store "$STORE")"
-NO_ENDPOINT="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
+  --endpoint wallet_b --now 2026-07-27T12:00:00.000Z --store "$STORE")"
+NAMED_NONE="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
   --endpoint none --now 2026-07-27T12:00:00.000Z --store "$STORE")"
+NO_ENDPOINT="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
+  --endpoint @none --now 2026-07-27T12:00:00.000Z --store "$STORE")"
 
 assert_contains "$LEGACY" '"endpoint_binding":"ambiguous-legacy"' \
   "legacy capability rows remain explicitly endpoint-ambiguous"
 assert_contains "$LEGACY" '"status":"exhausted"' \
   "legacy query preserves the legacy row without assigning it to a wallet"
-assert_contains "$WALLET_A" '"endpoint":"wallet-a"' "wallet A identity is emitted"
+assert_contains "$WALLET_A" '"endpoint":"wallet_a"' "wallet A identity is emitted"
 assert_contains "$WALLET_A" '"status":"available"' "wallet A state remains independent"
-assert_contains "$WALLET_B" '"endpoint":"wallet-b"' "wallet B identity is emitted"
+assert_contains "$WALLET_B" '"endpoint":"wallet_b"' "wallet B identity is emitted"
 assert_contains "$WALLET_B" '"status":"exhausted"' "wallet B state remains independent"
+assert_contains "$NAMED_NONE" '"endpoint":"none"' \
+  "a valid endpoint named none does not collide with the null selector"
+assert_contains "$NAMED_NONE" '"status":"available"' \
+  "the endpoint named none retains its own state"
 assert_contains "$NO_ENDPOINT" '"endpoint":null' "explicit endpoint-null identity is emitted"
 assert_contains "$NO_ENDPOINT" '"status":"limited"' \
   "explicit endpoint-null state does not consume legacy evidence"
@@ -214,6 +249,7 @@ assert_contains "$NO_ENDPOINT" '"status":"limited"' \
 REPORT="$(node "$CLI" report --capability quota --now 2026-07-27T12:00:00.000Z \
   --store "$STORE")"
 REPORT_COUNT="$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).length))" "$REPORT")"
-assert_eq "$REPORT_COUNT" "4" "report retains legacy, null, and both endpoint wallets"
+assert_eq "$REPORT_COUNT" "5" \
+  "report retains every valid endpoint identity and ignores a malformed stored row"
 
 finalize_test

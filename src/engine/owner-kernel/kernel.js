@@ -35,7 +35,12 @@ const {
   verifyLedger,
 } = require('./ledger');
 const { freezeAcceptanceContract, resolveGovernancePolicy } = require('./policy');
+const { freezeTaskAuthorityEnvelope } = require('./task-authority');
 const { createSemanticAuthorityHeader } = require('./semantic-authority');
+const {
+  resolveRoleExecutionGrant,
+  verifyRoleExecutionGrant,
+} = require('../execution-profile');
 const {
   actionReconciliationHash,
   applyEvent,
@@ -71,6 +76,34 @@ function isPlainDataObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function requirePlainDataObject(value, label) {
+  if (!isPlainDataObject(value)) {
+    throw new OwnerKernelError(`${label} must be a plain data object`, 'INVALID_ROLE_AUTHORITY_INPUT');
+  }
+  return value;
+}
+
+function requireOnlyDataKeys(value, allowed, label) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new OwnerKernelError(
+        `${label} has unsupported key "${key}"`,
+        'INVALID_ROLE_AUTHORITY_INPUT',
+      );
+    }
+  }
+}
+
+function requireProtocolToken(value, label) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
+    throw new OwnerKernelError(
+      `${label} must be a bounded protocol token`,
+      'INVALID_ROLE_AUTHORITY_INPUT',
+    );
+  }
+  return value;
 }
 
 function requireVerifiedEnvelope(result, label, { expectedKind, runId, principalId } = {}) {
@@ -3772,6 +3805,356 @@ class OwnerKernel {
     if (thrown !== null) throw thrown;
     if (result !== null) return result;
     return { accepted: false, disposition: failure.disposition, reasons: failure.reasons };
+  }
+
+  freezeTaskAuthority({ capability, taskAuthorityInput }) {
+    assertActionControlPlaneUnlocked(this, 'task authority freeze');
+    beforeOperation(this);
+    const internal = INTERNALS.get(this);
+    const now = nowIso(internal.clock);
+    assertCapability(this, capability, now);
+    assertCurrentQualification(this, 'task_authority_freeze', now);
+    assertCurrentWitnessHead(this);
+    const input = requirePlainDataObject(taskAuthorityInput, 'task authority input');
+    const frozen = freezeTaskAuthorityEnvelope({
+      ...cloneCanonical(input),
+      policy: internal.policy,
+      policyHash: internal.header.policy_hash,
+    });
+    const currentId = internal.state.current_task_authority_id;
+    if (currentId !== undefined && currentId !== null) {
+      const existing = internal.state.task_authorities[currentId];
+      if (existing.task_authority_id !== frozen.envelope.task_authority_id
+        || existing.task_authority_hash !== frozen.envelope_hash) {
+        throw new OwnerKernelBlockedError(
+          'the current intent already has a different witnessed task authority',
+          'TASK_AUTHORITY_CONFLICT',
+        );
+      }
+      const event = internal.events.find((candidate) => (
+        candidate.type === 'task_authority_frozen'
+        && candidate.payload.task_authority_id === currentId
+      ));
+      return cloneCanonical({
+        status: 'shadow_anchored',
+        authority_status: 'shadow',
+        envelope: existing.envelope,
+        envelope_hash: existing.task_authority_hash,
+        event,
+      });
+    }
+    const event = appendInternal(this, {
+      type: 'task_authority_frozen',
+      emitter: {
+        kind: 'kernel',
+        identity: 'owner-kernel',
+        channel: 'kernel-task-authority',
+      },
+      payload: {
+        intent_id: internal.state.current_intent_id,
+        task_authority_id: frozen.envelope.task_authority_id,
+        task_authority_hash: frozen.envelope_hash,
+        envelope: frozen.envelope,
+      },
+    });
+    return cloneCanonical({
+      status: 'shadow_anchored',
+      authority_status: 'shadow',
+      ...frozen,
+      event,
+    });
+  }
+
+  issueRoleGrant({ capability, grantRequest }) {
+    assertActionControlPlaneUnlocked(this, 'role grant issuance');
+    beforeOperation(this);
+    const internal = INTERNALS.get(this);
+    const now = nowIso(internal.clock);
+    assertCapability(this, capability, now);
+    assertCurrentQualification(this, 'role_grant_issue', now);
+    assertCurrentWitnessHead(this);
+    if (internal.state.task_authority_version !== 1
+      || internal.state.current_task_authority_id === null) {
+      throw new OwnerKernelBlockedError(
+        'role grant issuance requires a witnessed current task authority',
+        'TASK_AUTHORITY_REQUIRED',
+      );
+    }
+    const request = requirePlainDataObject(grantRequest, 'role grant request');
+    requireOnlyDataKeys(request, new Set([
+      'dispatchId',
+      'role',
+      'risk',
+      'capabilityScope',
+      'allowedTools',
+      'allowedArtifacts',
+      'requestedEffects',
+      'requestedEgress',
+      'requiredEvidence',
+      'resourceBudget',
+      'contextBudget',
+      'topology',
+      'assurance',
+      'evaluationTime',
+      'expiresAt',
+    ]), 'role grant request');
+    const canonicalRequest = cloneCanonical(request);
+    const dispatchId = requireProtocolToken(canonicalRequest.dispatchId, 'role grant dispatch id');
+    const role = requireProtocolToken(canonicalRequest.role, 'role grant role');
+    if (typeof canonicalRequest.evaluationTime !== 'string'
+      || Number.isNaN(Date.parse(canonicalRequest.evaluationTime))
+      || new Date(canonicalRequest.evaluationTime).toISOString() !== now) {
+      throw new OwnerKernelError(
+        'role grant evaluation time must equal the trusted Kernel clock',
+        'INVALID_ROLE_AUTHORITY_INPUT',
+      );
+    }
+    const taskAuthorityId = internal.state.current_task_authority_id;
+    const requestHash = sha256(canonicalJson({
+      task_authority_id: taskAuthorityId,
+      request: canonicalRequest,
+    }));
+    const existing = Object.values(internal.state.role_grants)
+      .find((entry) => entry.dispatch_id === dispatchId);
+    if (existing) {
+      if (existing.request_hash !== requestHash) {
+        throw new OwnerKernelBlockedError(
+          'dispatch id was already witnessed for a different role grant request',
+          'ROLE_GRANT_REPLAY_CONFLICT',
+        );
+      }
+      const event = internal.events.find((candidate) => (
+        candidate.type === 'role_grant_issued'
+        && candidate.payload.grant_id === existing.grant_id
+      ));
+      return cloneCanonical({
+        status: 'shadow_issued',
+        authority_status: 'shadow',
+        grant: existing.grant,
+        event,
+      });
+    }
+
+    const verifier = requireAdapter(internal.adapters, 'roleCapabilityVerifier');
+    const rawVerification = verifier({
+      run_id: internal.header.run_id,
+      policy_hash: internal.header.policy_hash,
+      task_authority_id: taskAuthorityId,
+      dispatch_id: dispatchId,
+      role,
+      capability_scope: cloneCanonical(canonicalRequest.capabilityScope),
+      risk: canonicalRequest.risk,
+      evaluation_time: canonicalRequest.evaluationTime,
+    });
+    const verification = requirePlainDataObject(
+      rawVerification,
+      'trusted role capability verification',
+    );
+    requireOnlyDataKeys(verification, new Set([
+      'ok',
+      'run_id',
+      'task_authority_id',
+      'dispatch_id',
+      'role',
+      'role_eligibility',
+      'capability_state',
+      'model_identity',
+      'evidence',
+      'identity',
+      'channel',
+    ]), 'trusted role capability verification');
+    if (verification.ok !== true
+      || verification.run_id !== internal.header.run_id
+      || verification.task_authority_id !== taskAuthorityId
+      || verification.dispatch_id !== dispatchId
+      || verification.role !== role
+      || typeof verification.identity !== 'string' || verification.identity.length === 0
+      || typeof verification.channel !== 'string' || verification.channel.length === 0) {
+      throw new OwnerKernelBlockedError(
+        'trusted role capability verifier did not bind the current run, task, dispatch, and role',
+        'UNVERIFIED_ROLE_CAPABILITY',
+      );
+    }
+    const candidate = resolveRoleExecutionGrant({
+      ...canonicalRequest,
+      envelope: internal.state.task_authorities[taskAuthorityId].envelope,
+      roleEligibility: verification.role_eligibility,
+      capabilityState: verification.capability_state,
+      modelIdentity: verification.model_identity,
+      evidence: verification.evidence,
+    });
+    if (candidate.status !== 'candidate') return candidate;
+    const capabilityVerificationHash = sha256(canonicalJson(verification));
+    const event = appendInternal(this, {
+      type: 'role_grant_issued',
+      emitter: {
+        kind: 'kernel',
+        identity: 'owner-kernel',
+        channel: `kernel-role-grant:${verification.channel}`,
+      },
+      payload: {
+        task_authority_id: taskAuthorityId,
+        grant_id: candidate.grant.grant_id,
+        dispatch_id: candidate.grant.dispatch_id,
+        request_hash: requestHash,
+        capability_verification_hash: capabilityVerificationHash,
+        grant: candidate.grant,
+      },
+    });
+    return cloneCanonical({
+      status: 'shadow_issued',
+      authority_status: 'shadow',
+      grant: candidate.grant,
+      event,
+    });
+  }
+
+  revokeRoleGrant({ capability, grantId, reason = 'owner_revoked' }) {
+    assertActionControlPlaneUnlocked(this, 'role grant revocation');
+    beforeOperation(this);
+    const internal = INTERNALS.get(this);
+    const now = nowIso(internal.clock);
+    const principal = assertCapability(this, capability, now);
+    assertCurrentQualification(this, 'role_grant_revoke', now);
+    assertCurrentWitnessHead(this);
+    if (!isSha256(grantId)) {
+      throw new OwnerKernelError('role grant id must be a SHA-256 digest', 'INVALID_ROLE_GRANT');
+    }
+    const grant = internal.state.role_grants && internal.state.role_grants[grantId.toLowerCase()];
+    if (!grant || grant.status !== 'active') {
+      throw new OwnerKernelBlockedError('role grant is unknown or already revoked', 'ACTIVE_GRANT_REVOKED');
+    }
+    const normalizedReason = requireProtocolToken(reason, 'role grant revocation reason');
+    return appendInternal(this, {
+      type: 'role_grant_revoked',
+      emitter: {
+        kind: 'kernel',
+        identity: 'owner-kernel',
+        channel: 'kernel-role-grant-revocation',
+      },
+      payload: {
+        grant_id: grant.grant_id,
+        reason: normalizedReason,
+        observation_hash: sha256(canonicalJson({
+          principal_id: principal.principalId,
+          reason: normalizedReason,
+          revoked_at: now,
+        })),
+      },
+    });
+  }
+
+  assertRoleGrantActive({ grantId, operationContext = {} }) {
+    assertActionControlPlaneUnlocked(this, 'role grant operation gate');
+    beforeOperation(this);
+    const internal = INTERNALS.get(this);
+    assertCurrentWitnessHead(this);
+    if (!isSha256(grantId)) {
+      throw new OwnerKernelError('role grant id must be a SHA-256 digest', 'INVALID_ROLE_GRANT');
+    }
+    const normalizedGrantId = grantId.toLowerCase();
+    const record = internal.state.role_grants && internal.state.role_grants[normalizedGrantId];
+    if (!record || record.status !== 'active') {
+      throw new OwnerKernelBlockedError(
+        'the exact witnessed role grant is unknown or revoked',
+        'ACTIVE_GRANT_REVOKED',
+      );
+    }
+    if (record.task_authority_id !== internal.state.current_task_authority_id) {
+      throw new OwnerKernelBlockedError(
+        'the role grant parent is no longer current',
+        'ACTIVE_GRANT_REVOKED',
+      );
+    }
+    const context = requirePlainDataObject(operationContext, 'role grant operation context');
+    const operationContextHash = sha256(canonicalJson(context));
+    const evaluationTime = nowIso(internal.clock);
+    const observer = requireAdapter(internal.adapters, 'roleCapabilityObserver');
+    const rawObservation = observer({
+      run_id: internal.header.run_id,
+      policy_hash: internal.header.policy_hash,
+      task_authority_id: record.task_authority_id,
+      grant_id: record.grant_id,
+      dispatch_id: record.dispatch_id,
+      role: record.grant.role,
+      model_identity: cloneCanonical(record.grant.model_identity),
+      operation_context_hash: operationContextHash,
+      evaluation_time: evaluationTime,
+    });
+    const observation = requirePlainDataObject(
+      rawObservation,
+      'trusted live role capability observation',
+    );
+    requireOnlyDataKeys(observation, new Set([
+      'ok',
+      'run_id',
+      'task_authority_id',
+      'grant_id',
+      'operation_context_hash',
+      'evaluation_time',
+      'capability_state',
+      'identity_hash',
+      'semantic_fingerprint',
+      'containment_fingerprint',
+      'identity',
+      'channel',
+    ]), 'trusted live role capability observation');
+    if (observation.ok !== true
+      || observation.run_id !== internal.header.run_id
+      || observation.task_authority_id !== record.task_authority_id
+      || observation.grant_id !== record.grant_id
+      || observation.operation_context_hash !== operationContextHash
+      || observation.evaluation_time !== evaluationTime
+      || typeof observation.identity !== 'string' || observation.identity.length === 0
+      || typeof observation.channel !== 'string' || observation.channel.length === 0) {
+      throw new OwnerKernelBlockedError(
+        'trusted role capability observer did not bind the exact operation and ledger grant',
+        'UNVERIFIED_ROLE_CAPABILITY',
+      );
+    }
+    const parent = internal.state.task_authorities[record.task_authority_id];
+    try {
+      verifyRoleExecutionGrant(record.grant, parent.envelope, {
+        expectedGrantId: record.grant_id,
+        expectedTaskAuthorityId: record.task_authority_id,
+        evaluationTime,
+        identityHash: observation.identity_hash,
+        semanticFingerprint: observation.semantic_fingerprint,
+        containmentFingerprint: observation.containment_fingerprint,
+        capabilityState: observation.capability_state,
+      });
+    } catch (error) {
+      if (!error || error.code !== 'ACTIVE_GRANT_REVOKED') throw error;
+      let reason = 'capability_drift';
+      if (/expired/.test(error.message)) reason = 'expired';
+      else if (/exact identity/.test(error.message)) reason = 'identity_drift';
+      else if (/semantic identity/.test(error.message)) reason = 'semantic_fingerprint_drift';
+      else if (/containment/.test(error.message)) reason = 'containment_fingerprint_drift';
+      const event = appendInternal(this, {
+        type: 'role_grant_revoked',
+        emitter: {
+          kind: 'kernel',
+          identity: 'owner-kernel',
+          channel: `kernel-role-grant-observer:${observation.channel}`,
+        },
+        payload: {
+          grant_id: record.grant_id,
+          reason,
+          observation_hash: sha256(canonicalJson(observation)),
+        },
+      });
+      throw new OwnerKernelBlockedError(
+        `${error.message}; revocation witnessed at ${event.event_hash}`,
+        'ACTIVE_GRANT_REVOKED',
+      );
+    }
+    return cloneCanonical({
+      status: 'active',
+      authority_status: 'shadow',
+      grant: record.grant,
+      issuance_event_hash: record.issuance_event_hash,
+      observation_hash: sha256(canonicalJson(observation)),
+    });
   }
 
   recordTranslation(translationEnvelope) {

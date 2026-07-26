@@ -141,7 +141,7 @@ negative controls that fail when the claimed guard is removed.
 | L-1.5 | Complete | Scope audit and requirements ledger recorded in this README. |
 | L-1.6 | Complete | Dev-flow, test-strategy, engine-onboarding, harness-maintenance, team, quality-pipeline, doc-sync, and finish-flow applied above. |
 | P0 | Complete | 745 conservative rule candidates / 728 canonical rules / 17 declared aliases; 42 focused assertions; three-lens re-review accepted; generated profile-specific payload strategy selected fail-closed. |
-| P1 | Pending | |
+| P1 | Complete | Immutable shadow task authority and narrowing role grants; 33 focused profile assertions plus Owner Kernel/translation gates; three-lens review accepted; base-vs-head red-green `VALIDATED`. |
 | P2 | Pending | |
 | P3a | Pending | |
 | P3b | Pending | |
@@ -157,6 +157,14 @@ negative controls that fail when the claimed guard is removed.
 | Architecture | Broad line ranges treated TaskCreate/checklist mechanics as core and duplicated S/L scope rules lacked one canonical owner. | Split into 72 semantic segments; mechanics/detection are guided, intent/DOA/escalation stay core, and 17 exact duplicates require declared owner/aliases. Accepted after re-review. |
 | Security / evidence | Trace corruption, non-prompt string matches, symlink escape, and heuristic token estimates could overstate evidence. | Malformed traces fail by default; developer prompt and other trace occurrences are separate; realpath containment is enforced; heuristic estimates cannot satisfy budgets. Accepted after re-review. |
 | Transport / false-green | Frontmatter routing, fragmented content, unknown options, trace hashes, and baseline summaries were not gated. | Frontmatter prose is inventoried; developer parts are reconstructed; unknown options fail; baseline checks live source hashes plus non-empty unique trace/catalog/Grok evidence. Accepted after mutation re-review. |
+
+## P1 Implementation Review
+
+| Lens | Verified blocker | Resolution / final verdict |
+|------|------------------|----------------------------|
+| Architecture / compatibility | New P4 profile fields could rewrite historical pre-P4 translations, or accept caller-selected downgraded targets. | Translation retries preserve the witnessed target; new invocations derive shape from the frozen policy; current and pre-P4 policies reject the opposite shape. Accepted after re-review. |
+| Correctness / authority | Caller-shaped emitter identity or a profile decision could masquerade as admission/authority, and drift needed to revoke before another operation. | Owner Kernel fixes event identity/channel namespaces, admits the exact role before selecting guidance, anchors each grant to one envelope, and revokes on identity/capability/containment drift. Accepted after re-review. |
+| Transport / false-green | The small schema oracle initially accepted unsupported keyword shapes, lossy JSON, duplicate keys, invalid UTF-8, and non-JSON API objects. | The validator now fails closed on unsupported schema/ref forms, unsafe numbers, decoded duplicate keys, invalid UTF-8, cyclic/accessor/exotic values, and array side properties; canonical/Codex hashes match. Accepted after adversarial re-review. |
 
 ## Decision Log
 

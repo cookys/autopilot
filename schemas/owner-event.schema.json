@@ -43,7 +43,10 @@
         "recovery",
         "suspension",
         "principal_change",
-        "translation_used"
+        "translation_used",
+        "task_authority_frozen",
+        "role_grant_issued",
+        "role_grant_revoked"
       ]
     },
     "emitted_at": { "type": "string", "format": "date-time" },
@@ -139,6 +142,30 @@
     {
       "if": { "properties": { "type": { "enum": ["suspension", "principal_change"] } }, "required": ["type"] },
       "then": { "properties": { "emitter": { "properties": { "kind": { "const": "kernel" } } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "task_authority_frozen" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": {
+        "kind": { "const": "kernel" },
+        "identity": { "const": "owner-kernel" },
+        "channel": { "const": "kernel-task-authority" }
+      } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "role_grant_issued" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": {
+        "kind": { "const": "kernel" },
+        "identity": { "const": "owner-kernel" },
+        "channel": { "pattern": "^kernel-role-grant:.+$" }
+      } } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "role_grant_revoked" } }, "required": ["type"] },
+      "then": { "properties": { "emitter": { "properties": {
+        "kind": { "const": "kernel" },
+        "identity": { "const": "owner-kernel" },
+        "channel": { "pattern": "^kernel-role-grant-(?:revocation|observer:.+)$" }
+      } } } }
     },
     {
       "if": { "properties": { "type": { "const": "translation_used" } }, "required": ["type"] },

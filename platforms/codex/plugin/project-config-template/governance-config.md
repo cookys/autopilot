@@ -18,13 +18,45 @@ the project default for the active Owner Kernel bridge: `standard` is the ordina
 P3.0 shadow translation only records the selected profile; it does not make either profile an
 action or acceptance authority.
 
+`guidance_profile`, `topology_preference`, and `data_egress` are project defaults. A task authority
+envelope may override them only for that task; assurance and egress overrides may narrow but never
+weaken the project ceiling. Omitted fields resolve to `adaptive`, `conservative`, `auto`, and
+`allowlisted`. Through P1 the effective payload still remains `guided`; profile choice cannot grant
+a tool, effect, reviewer, or approval.
+
+Freeze the project default plus an optional task override at intake, then pass only that frozen
+envelope to the child role resolver:
+
+```bash
+node <autopilot-source>/scripts/owner-kernel.js freeze-task \
+  --config .claude/owner-kernel-governance.json \
+  --task task-authority-input.json --check
+
+node <autopilot-source>/scripts/resolve-execution-profile.js grant \
+  --envelope frozen-task-authority.json \
+  --input role-grant-input.json
+```
+
+The first command owns project-policy resolution. The second command cannot read project config or
+create a parent envelope; it can only narrow the supplied envelope. Both remain shadow/read-only
+projections and do not write a ledger or perform an effect.
+
+Host integrations that need a trusted chain use `OwnerKernel.freezeTaskAuthority()` and
+`OwnerKernel.issueRoleGrant()`. The latter obtains eligibility, exact model identity, and scoped evidence
+from the host-supplied `roleCapabilityVerifier`; callers cannot self-declare those fields.
+`OwnerKernel.assertRoleGrantActive()` retrieves the exact witnessed grant and requires a complete live
+observation from `roleCapabilityObserver`. Drift or expiry appends `role_grant_revoked` before it fails.
+
 ```json
 {
   "schema_version": 1,
   "governance": {
     "default_mode": "owner-led",
     "red_lines": ["no-production-push", "no-secret-disclosure"],
-    "assurance_profile": "standard",
+    "assurance_profile": "conservative",
+    "guidance_profile": "adaptive",
+    "topology_preference": "auto",
+    "data_egress": "allowlisted",
     "owner_roster": [
       {
         "identity": "qualified-owner-a",
@@ -137,7 +169,8 @@ Kernel. Configuration alone never grants that authority.
     "action_class": "irreversible",
     "command_required": true,
     "requires_mediator": true,
-    "requires_challenge": true
+    "requires_challenge": true,
+    "blocked_by_red_lines": ["no-production-push"]
   }
 ]
 ```
@@ -148,6 +181,8 @@ lower it. `requires_mediator` requires a broker-only host route. `requires_chall
 an acceptance-contract schema version 2: startup rejects a v1 contract because it cannot serialize the
 candidate-manifest-bound challenge proof. Historical v1 ledgers can still replay, but cannot authorize
 such an action. It requires a typed, qualified independent `action` challenge before the action executes.
+`blocked_by_red_lines` is an optional exact token list; a matching frozen project or task red line removes
+that catalog action from the task authority before any role grant can be considered.
 The challenge is bound to the frozen action descriptor hash and to the candidate manifest from the latest
 complete coordinator audit that covers the current action footprint. A clear finding for an older or
 different manifest cannot mint or execute the action; a blocking finding vetoes execution.

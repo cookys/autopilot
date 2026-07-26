@@ -6,10 +6,20 @@
 
 const { canonicalJson, cloneCanonical, sha256 } = require('./canonical');
 const { OwnerKernelError } = require('./errors');
-const { ASSURANCE_PROFILES } = require('./policy');
+const {
+  ASSURANCE_PROFILES,
+  DATA_EGRESS_MODES,
+  GUIDANCE_PROFILES,
+  TOPOLOGY_PREFERENCES,
+} = require('./policy');
 
 const LEVEL_TRANSLATION_SCHEMA_VERSION = 1;
 const LEGACY_LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
+const ADAPTIVE_POLICY_FIELDS = Object.freeze([
+  'guidance_profile',
+  'topology_preference',
+  'data_egress',
+]);
 
 const LEVEL_TOPOLOGIES = Object.freeze({
   l3: Object.freeze({
@@ -107,7 +117,7 @@ function normalizeFlags(value = {}, level) {
   };
 }
 
-function normalizePolicy(policy, policyHash) {
+function normalizePolicy(policy, policyHash, { assuranceFallback = 'conservative' } = {}) {
   const value = assertPlainObject(policy, 'resolved governance policy');
   if (typeof value.mode !== 'string' || !['owner-led', 'milestone-led'].includes(value.mode)) {
     compatibilityError('resolved governance policy.mode is invalid');
@@ -122,17 +132,45 @@ function normalizePolicy(policy, policyHash) {
   if (sha256(canonicalJson(value)) !== policyHash.toLowerCase()) {
     compatibilityError('resolved governance policy hash does not match the canonical policy');
   }
-  const assuranceProfile = value.assurance_profile === undefined ? 'standard' : value.assurance_profile;
+  const assuranceProfile = value.assurance_profile === undefined
+    ? assuranceFallback : value.assurance_profile;
   if (!ASSURANCE_PROFILES.has(assuranceProfile)) {
     compatibilityError('resolved governance policy.assurance_profile is invalid');
+  }
+  const guidanceProfile = value.guidance_profile === undefined ? 'adaptive' : value.guidance_profile;
+  if (!GUIDANCE_PROFILES.has(guidanceProfile)) {
+    compatibilityError('resolved governance policy.guidance_profile is invalid');
+  }
+  const topologyPreference = value.topology_preference === undefined
+    ? 'auto' : value.topology_preference;
+  if (!TOPOLOGY_PREFERENCES.has(topologyPreference)) {
+    compatibilityError('resolved governance policy.topology_preference is invalid');
+  }
+  const dataEgress = value.data_egress === undefined ? 'allowlisted' : value.data_egress;
+  if (!DATA_EGRESS_MODES.has(dataEgress)) {
+    compatibilityError('resolved governance policy.data_egress is invalid');
   }
   return {
     mode: value.mode,
     project_default_mode: value.project_default_mode,
     red_lines: normalizeRedLines(value.red_lines === undefined ? [] : value.red_lines, 'resolved governance policy.red_lines'),
     assurance_profile: assuranceProfile,
+    guidance_profile: guidanceProfile,
+    topology_preference: topologyPreference,
+    data_egress: dataEgress,
     policy_hash: policyHash.toLowerCase(),
   };
+}
+
+function adaptivePolicyShape(policy, label = 'resolved governance policy') {
+  const value = assertPlainObject(policy, label);
+  const fieldCount = ADAPTIVE_POLICY_FIELDS.filter((field) => (
+    Object.prototype.hasOwnProperty.call(value, field)
+  )).length;
+  if (fieldCount !== 0 && fieldCount !== ADAPTIVE_POLICY_FIELDS.length) {
+    compatibilityError(`${label} must contain either all or none of the P4 execution-profile fields`);
+  }
+  return fieldCount === ADAPTIVE_POLICY_FIELDS.length;
 }
 
 function topologyFor(level, solo) {
@@ -144,12 +182,16 @@ function topologyFor(level, solo) {
   };
 }
 
-function translateLegacyLevel({ level, flags = {}, policy, policyHash }) {
+function translateLegacyLevelShape(
+  { level, flags = {}, policy, policyHash },
+  { assuranceFallback = 'conservative' } = {},
+) {
   if (!LEGACY_LEVELS.has(level)) {
     compatibilityError(`legacy level must be one of ${Array.from(LEGACY_LEVELS).join(', ')}`, 'LEVEL_UNKNOWN');
   }
   const normalizedFlags = normalizeFlags(flags, level);
-  const normalizedPolicy = normalizePolicy(policy, policyHash);
+  const includeAdaptiveFields = adaptivePolicyShape(policy);
+  const normalizedPolicy = normalizePolicy(policy, policyHash, { assuranceFallback });
   const effectiveRedLines = [...new Set([
     ...normalizedPolicy.red_lines,
     ...normalizedFlags.red_line_additions,
@@ -170,6 +212,11 @@ function translateLegacyLevel({ level, flags = {}, policy, policyHash }) {
     red_lines: effectiveRedLines,
     red_lines_hash: sha256(canonicalJson(effectiveRedLines)),
     assurance_profile: normalizedPolicy.assurance_profile,
+    ...(includeAdaptiveFields ? {
+      guidance_profile: normalizedPolicy.guidance_profile,
+      topology_preference: normalizedPolicy.topology_preference,
+      data_egress: normalizedPolicy.data_egress,
+    } : {}),
     owner_kernel_authority: 'none',
     shadow_telemetry: level === 'l3' ? 'eligible' : 'not_available',
     acceptance: 'not_available',
@@ -181,6 +228,10 @@ function translateLegacyLevel({ level, flags = {}, policy, policyHash }) {
     source_hash: sha256(canonicalJson(source)),
     target_hash: sha256(canonicalJson(target)),
   });
+}
+
+function translateLegacyLevel(input) {
+  return translateLegacyLevelShape(input);
 }
 
 function assertTranslation(translation) {
@@ -257,11 +308,33 @@ function verifyShadowTranslationEnvelope(envelope, { runId, policy, policyHash }
   }
   if (value.run_id !== runId) compatibilityError('shadow translation envelope is not bound to the current run');
   const invocationId = assertToken(value.invocation_id, 'shadow translation envelope.invocation_id');
-  const expected = translateLegacyLevel({
+  const adaptiveFieldCount = ADAPTIVE_POLICY_FIELDS.filter((field) => (
+    Object.prototype.hasOwnProperty.call(value.target_detail, field)
+  )).length;
+  if (adaptiveFieldCount !== 0 && adaptiveFieldCount !== ADAPTIVE_POLICY_FIELDS.length) {
+    compatibilityError(
+      'historical shadow translation target must contain either all or none of the adaptive fields',
+    );
+  }
+  const policyHasAdaptiveFields = adaptivePolicyShape(
+    policy,
+    'frozen shadow translation policy',
+  );
+  if ((adaptiveFieldCount === ADAPTIVE_POLICY_FIELDS.length) !== policyHasAdaptiveFields) {
+    compatibilityError(
+      'shadow translation target P4 shape does not match the frozen policy version',
+    );
+  }
+  const expected = translateLegacyLevelShape({
     level: value.level,
     flags: value.flags,
     policy,
     policyHash,
+  }, {
+    assuranceFallback: policy.assurance_profile === undefined
+      && ASSURANCE_PROFILES.has(value.target_detail.assurance_profile)
+      ? value.target_detail.assurance_profile
+      : 'conservative',
   });
   const expectedId = translationId(runId, invocationId, expected.source_hash);
   if (value.translation_id !== expectedId

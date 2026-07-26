@@ -173,6 +173,7 @@ const {
 } = require('./resolve-review-loop');
 
 const ownerKernel = require('./owner-kernel');
+const executionProfile = require('./execution-profile');
 
 module.exports = {
   AutopilotEngine,
@@ -311,5 +312,6 @@ module.exports = {
   looksLikeReviewLoopConfig,
   RESOLVE_REVIEW_LOOP,
   invokeSocketRequest,
+  ...executionProfile,
   ...ownerKernel,
 };

@@ -1089,3 +1089,20 @@ Three independent read-only lenses reproduced and then closed the P0 false-green
 
 Final P0 re-review: Architecture accepted; Security/Evidence accepted; Transport/False-green
 accepted. Focused gate: 42 assertions, zero failures.
+
+### R5 - P1 implementation review (2026-07-26)
+
+Three independent read-only lenses reproduced the P1 authority, compatibility, and executable-oracle
+boundaries, then accepted the repaired implementation:
+
+- architecture verified that current P4 policy cannot accept downgraded pre-P4 targets, pre-P4 policy
+  cannot accept P4 targets, and historical retries preserve the witnessed translation;
+- correctness verified fixed Owner Kernel emitter identity/channel namespaces, admission before
+  guidance, one-parent narrowing grants, and fail-stop revocation on live drift;
+- transport/false-green replayed 55 schema/ref/keyword cases plus duplicate-key, unsafe-number,
+  invalid-UTF-8, non-JSON API value, exotic-array, and canonical/Codex mirror probes.
+
+Final P1 re-review: Architecture accepted; Correctness accepted; Transport/False-green accepted.
+Focused profile gate: 33 assertions, zero failures. Translation, Owner Kernel, and action-hardening
+focused gates also passed. The worktree-aware red-green run was `VALIDATED`: HEAD passed all 25
+translation assertions while P0 base plus the changed test failed on the missing P4-shape rejection.

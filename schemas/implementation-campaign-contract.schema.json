@@ -114,6 +114,24 @@
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "profile": { "const": "spike" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 1 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "poc" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 2 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "internal-pilot" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 5 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "production" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 5 } } }
+    }
+  ],
   "$defs": {
     "sha256": {
       "type": "string",

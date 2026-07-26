@@ -54,9 +54,11 @@ const PROFILE_REPAIR_CEILINGS = Object.freeze({
 function usage() {
   return `Usage:
   node scripts/implementation-campaign-check.js seal \\
-    --contract <file> --repo <git-repo> --out <seal-file>
+    --contract <file> --repo <git-repo> --mission-mode <off|shadow|enforce> \\
+    --out <seal-file>
   node scripts/implementation-campaign-check.js check \\
-    --contract <file> --repo <git-repo> --seal <seal-file>
+    --contract <file> --repo <git-repo> --mission-mode <off|shadow|enforce> \\
+    --seal <seal-file>
 
 Exit codes:
   0 = SEALED or VALID
@@ -79,6 +81,7 @@ function parseArgs(argv) {
     ['--repo', 'repo'],
     ['--out', 'out'],
     ['--seal', 'seal'],
+    ['--mission-mode', 'missionMode'],
   ]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -94,8 +97,11 @@ function parseArgs(argv) {
     options[key] = value;
     index += 1;
   }
-  for (const key of ['contract', 'repo']) {
+  for (const key of ['contract', 'repo', 'missionMode']) {
     if (!options[key]) throw new CliError(`--${key} is required`);
+  }
+  if (!new Set(['off', 'shadow', 'enforce']).has(options.missionMode)) {
+    throw new CliError('--mission-mode must be off, shadow, or enforce');
   }
   if (command === 'seal' && !options.out) throw new CliError('--out is required for seal');
   if (command === 'check' && !options.seal) throw new CliError('--seal is required for check');
@@ -156,6 +162,18 @@ function canonicalRepoIdentity(repo) {
   return `git-common-dir:${canonical}`;
 }
 
+function repoObjectFormat(repo) {
+  const explicit = runGit(repo, ['rev-parse', '--show-object-format']);
+  if (explicit.status === 0) {
+    const format = explicit.stdout.trim();
+    if (format === 'sha1' || format === 'sha256') return format;
+  }
+  const head = runGit(repo, ['rev-parse', 'HEAD']);
+  if (head.status === 0 && /^[0-9a-f]{40}$/.test(head.stdout.trim())) return 'sha1';
+  if (head.status === 0 && /^[0-9a-f]{64}$/.test(head.stdout.trim())) return 'sha256';
+  throw new CliError('cannot determine repository object format');
+}
+
 function loadContract(contractPath) {
   const file = canonicalFile(contractPath, '--contract');
   let bytes;
@@ -211,7 +229,9 @@ function validateUniqueStrings(value, label, options, errors) {
 
 function normalizeAllowedPrefix(value) {
   if (!nonEmptyString(value) || value.includes('\\') || value.includes('\0')) return null;
-  if (path.posix.isAbsolute(value) || value.startsWith('./')) return null;
+  if (path.posix.isAbsolute(value) || value.startsWith('./') || /^[A-Za-z]:/.test(value)) {
+    return null;
+  }
   const withoutTrailing = value.endsWith('/') ? value.slice(0, -1) : value;
   if (!withoutTrailing || withoutTrailing.includes('//')) return null;
   const parts = withoutTrailing.split('/');
@@ -224,6 +244,12 @@ function normalizeAllowedPrefix(value) {
   ))) return null;
   if (parts[0] === '.git') return null;
   return parts.join('/');
+}
+
+function validBoundedVerifyCommand(value) {
+  return nonEmptyString(value)
+    && value.length <= 4096
+    && /^[A-Za-z0-9_./:@%+=,-]+(?: [A-Za-z0-9_./:@%+=,-]+)*$/.test(value);
 }
 
 function validateContract(contract, context) {
@@ -251,18 +277,26 @@ function validateContract(contract, context) {
         || !/^[0-9a-f]{64}$/.test(contract.mission_grant_ref))) {
     errors.push('mission_grant_ref: expected null or lowercase SHA-256');
   }
+  if (context.missionMode === 'enforce' && contract.mission_grant_ref === null) {
+    errors.push('mission_grant_ref: required when Mission enforcement is enabled');
+  }
   if (contract.repo_identity !== context.repoIdentity) {
     errors.push('repo_identity: does not match canonical repository identity');
   }
+  const expectedObjectLength = context.objectFormat === 'sha256' ? 64 : 40;
   if (typeof contract.base_sha !== 'string'
-      || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(contract.base_sha)) {
-    errors.push('base_sha: expected full lowercase Git object ID');
+      || !new RegExp(`^[0-9a-f]{${expectedObjectLength}}$`).test(contract.base_sha)) {
+    errors.push(
+      `base_sha: expected ${expectedObjectLength}-hex ${context.objectFormat} object ID`,
+    );
   } else {
     const commit = runGit(context.repo, ['cat-file', '-e', `${contract.base_sha}^{commit}`]);
     if (commit.status !== 0) errors.push('base_sha: commit does not exist in repository');
   }
-  if (!nonEmptyString(contract.branch) || contract.branch.length > 255) {
-    errors.push('branch: expected non-empty branch name');
+  if (!nonEmptyString(contract.branch)
+      || contract.branch.length > 255
+      || contract.branch.startsWith('-')) {
+    errors.push('branch: invalid Git branch name');
   } else {
     const refCheck = runGit(context.repo, ['check-ref-format', '--branch', contract.branch]);
     if (refCheck.status !== 0) errors.push('branch: invalid Git branch name');
@@ -354,8 +388,10 @@ function validateContract(contract, context) {
     CONTRACT_SCHEMA.properties.max_wall_seconds.maximum,
     errors,
   );
-  if (!nonEmptyString(contract.verify_cmd) || contract.verify_cmd.length > 4096) {
-    errors.push('verify_cmd: expected trimmed non-empty string up to 4096 characters');
+  if (!validBoundedVerifyCommand(contract.verify_cmd)) {
+    errors.push(
+      'verify_cmd: expected bounded space-delimited argv without shell control operators',
+    );
   }
   validateUniqueStrings(contract.rubric_ids, 'rubric_ids', {
     minimum: 1,
@@ -390,10 +426,23 @@ function resolveOutputPath(rawPath, contractFile) {
 function atomicWriteJson(target, value) {
   const temp = `${target}.tmp-${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
   const bytes = `${JSON.stringify(value, null, 2)}\n`;
+  let fd = null;
   try {
-    fs.writeFileSync(temp, bytes, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    fd = fs.openSync(temp, 'wx', 0o600);
+    fs.fchmodSync(fd, 0o600);
+    fs.writeFileSync(fd, bytes, 'utf8');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
     fs.renameSync(temp, target);
+    const parentFd = fs.openSync(path.dirname(target), 'r');
+    try {
+      fs.fsyncSync(parentFd);
+    } finally {
+      fs.closeSync(parentFd);
+    }
   } finally {
+    if (fd !== null) fs.closeSync(fd);
     try {
       fs.unlinkSync(temp);
     } catch (error) {
@@ -419,6 +468,7 @@ function loadSeal(sealPath, contractFile) {
     'contract_sha256',
     'contract_path',
     'repo_identity',
+    'mission_mode',
     'sealed_at',
   ]);
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -435,6 +485,7 @@ function loadSeal(sealPath, contractFile) {
       || !/^[0-9a-f]{64}$/.test(value.contract_sha256)
       || typeof value.contract_path !== 'string'
       || typeof value.repo_identity !== 'string'
+      || !new Set(['off', 'shadow', 'enforce']).has(value.mission_mode)
       || typeof value.sealed_at !== 'string'
       || !Number.isFinite(Date.parse(value.sealed_at))) {
     throw new CliError('seal file has invalid field values', 3);
@@ -453,8 +504,14 @@ function main() {
     options = parseArgs(process.argv.slice(2));
     const repo = canonicalDirectory(options.repo, '--repo');
     const repoIdentity = canonicalRepoIdentity(repo);
+    const objectFormat = repoObjectFormat(repo);
     const contractFile = loadContract(options.contract);
-    const errors = validateContract(contractFile.value, { repo, repoIdentity });
+    const errors = validateContract(contractFile.value, {
+      repo,
+      repoIdentity,
+      objectFormat,
+      missionMode: options.missionMode,
+    });
     if (errors.length > 0) {
       emit({
         verdict: 'REJECTED',
@@ -470,6 +527,7 @@ function main() {
         contract_sha256: contractFile.digest,
         contract_path: contractFile.path,
         repo_identity: repoIdentity,
+        mission_mode: options.missionMode,
         sealed_at: new Date().toISOString(),
       };
       atomicWriteJson(output, seal);
@@ -485,6 +543,7 @@ function main() {
     if (seal.contract_sha256 !== contractFile.digest) drift.push('contract_sha256');
     if (seal.contract_path !== contractFile.path) drift.push('contract_path');
     if (seal.repo_identity !== repoIdentity) drift.push('repo_identity');
+    if (seal.mission_mode !== options.missionMode) drift.push('mission_mode');
     if (drift.length > 0) {
       emit({
         verdict: 'DRIFT',
@@ -513,5 +572,7 @@ module.exports = {
   PROFILE_REPAIR_CEILINGS,
   canonicalRepoIdentity,
   normalizeAllowedPrefix,
+  repoObjectFormat,
   validateContract,
+  validBoundedVerifyCommand,
 };

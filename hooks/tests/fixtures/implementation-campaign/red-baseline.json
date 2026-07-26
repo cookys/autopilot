@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "baseline_sha": "db65c54255d502bdbbe903fe90412335e935c147",
+  "baseline_tree": "7593c2b3f18fb89f3057c6cb7ae339824be0a6cf",
+  "baseline_branch": "develop",
+  "probe": "runtime",
   "exploits": [
     {
       "id": "missing_contract",

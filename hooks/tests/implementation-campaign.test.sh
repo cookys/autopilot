@@ -57,7 +57,12 @@ NODE
 run_checker() {
   local stdout_file="$TEST_TMP/stdout"
   local stderr_file="$TEST_TMP/stderr"
-  HOME="$HOOK_HOME" node "$CHECKER" "$@" >"$stdout_file" 2>"$stderr_file"
+  if [ "${1:-}" = "--help" ]; then
+    HOME="$HOOK_HOME" node "$CHECKER" "$@" >"$stdout_file" 2>"$stderr_file"
+  else
+    HOME="$HOOK_HOME" node "$CHECKER" "$@" \
+      --mission-mode "${MISSION_MODE:-shadow}" >"$stdout_file" 2>"$stderr_file"
+  fi
   __RUN_EXIT=$?
   __RUN_STDOUT="$(cat "$stdout_file")"
   __RUN_STDERR="$(cat "$stderr_file")"
@@ -135,6 +140,19 @@ run_checker seal --contract "$WINDOWS" --repo "$SBX" --out "$TEST_TMP/windows.se
 assert_exit_code "$__RUN_EXIT" "3" "Windows drive path is rejected on every host"
 assert_contains "$__RUN_STDOUT" "path escapes" "Windows path rejection is specific"
 
+WINDOWS_SLASH="$TEST_TMP/windows-slash.json"
+write_contract "$WINDOWS_SLASH"
+mutate_contract "$WINDOWS_SLASH" "value.allowed_path_prefixes = ['C:/outside'];"
+run_checker seal --contract "$WINDOWS_SLASH" --repo "$SBX" --out "$TEST_TMP/windows-slash.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Windows forward-slash drive path is rejected on every host"
+
+WINDOWS_DRIVE_RELATIVE="$TEST_TMP/windows-drive-relative.json"
+write_contract "$WINDOWS_DRIVE_RELATIVE"
+mutate_contract "$WINDOWS_DRIVE_RELATIVE" "value.allowed_path_prefixes = ['C:outside'];"
+run_checker seal --contract "$WINDOWS_DRIVE_RELATIVE" --repo "$SBX" \
+  --out "$TEST_TMP/windows-drive-relative.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Windows drive-relative path is rejected on every host"
+
 WHITESPACE="$TEST_TMP/whitespace.json"
 write_contract "$WHITESPACE"
 mutate_contract "$WHITESPACE" "value.allowed_path_prefixes = ['src/.. /outside'];"
@@ -147,6 +165,20 @@ mutate_contract "$BAD_BRANCH" "value.branch = '../impl/icc-p0';"
 run_checker seal --contract "$BAD_BRANCH" --repo "$SBX" --out "$TEST_TMP/bad-branch.seal"
 assert_exit_code "$__RUN_EXIT" "3" "ref traversal branch is rejected"
 assert_contains "$__RUN_STDOUT" "invalid Git branch name" "branch rejection is specific"
+
+OPTION_BRANCH="$TEST_TMP/option-branch.json"
+write_contract "$OPTION_BRANCH"
+mutate_contract "$OPTION_BRANCH" "value.branch = '--help';"
+run_checker seal --contract "$OPTION_BRANCH" --repo "$SBX" --out "$TEST_TMP/option-branch.seal"
+assert_exit_code "$__RUN_EXIT" "3" "option-shaped branch is rejected before Git parsing"
+assert_contains "$__RUN_STDOUT" "invalid Git branch name" "option-shaped branch rejection is specific"
+
+VERIFY_INJECTION="$TEST_TMP/verify-injection.json"
+write_contract "$VERIFY_INJECTION"
+mutate_contract "$VERIFY_INJECTION" "value.verify_cmd = 'true; touch /tmp/campaign-pwn';"
+run_checker seal --contract "$VERIFY_INJECTION" --repo "$SBX" --out "$TEST_TMP/verify-injection.seal"
+assert_exit_code "$__RUN_EXIT" "3" "verify command shell chaining is rejected"
+assert_contains "$__RUN_STDOUT" "without shell control operators" "verify command rejection is specific"
 
 PROFILE="$TEST_TMP/profile.json"
 write_contract "$PROFILE"
@@ -205,18 +237,55 @@ run_checker seal --contract "$BAD_ID" --repo "$SBX" --out "$TEST_TMP/bad-id.seal
 assert_exit_code "$__RUN_EXIT" "3" "repository identity mismatch is rejected"
 assert_contains "$__RUN_STDOUT" "canonical repository identity" "identity rejection is specific"
 
+ENFORCED_GRANT="$TEST_TMP/enforced-grant.json"
+write_contract "$ENFORCED_GRANT"
+MISSION_MODE=enforce run_checker seal --contract "$ENFORCED_GRANT" --repo "$SBX" \
+  --out "$TEST_TMP/enforced-grant.seal"
+assert_exit_code "$__RUN_EXIT" "3" "enforced Mission rejects a null parent grant"
+assert_contains "$__RUN_STDOUT" "required when Mission enforcement is enabled" \
+  "enforced parent rejection is specific"
+
+GRANT_HASH="$(printf 'a%.0s' {1..64})"
+mutate_contract "$ENFORCED_GRANT" "value.mission_grant_ref = '$GRANT_HASH';"
+MISSION_MODE=enforce run_checker seal --contract "$ENFORCED_GRANT" --repo "$SBX" \
+  --out "$TEST_TMP/enforced-grant.seal"
+assert_exit_code "$__RUN_EXIT" "0" "enforced Mission accepts a content-addressed parent grant"
+MISSION_MODE=shadow run_checker check --contract "$ENFORCED_GRANT" --repo "$SBX" \
+  --seal "$TEST_TMP/enforced-grant.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Mission mode drift invalidates the seal"
+assert_contains "$__RUN_STDOUT" "mission_mode" "Mission mode drift is named"
+
+OBJECT_FORMAT="$TEST_TMP/object-format.json"
+write_contract "$OBJECT_FORMAT"
+mutate_contract "$OBJECT_FORMAT" "value.base_sha = '$(printf 'b%.0s' {1..64})';"
+run_checker seal --contract "$OBJECT_FORMAT" --repo "$SBX" --out "$TEST_TMP/object-format.seal"
+assert_exit_code "$__RUN_EXIT" "3" "SHA-256 length is rejected in a SHA-1 repository"
+assert_contains "$__RUN_STDOUT" "40-hex sha1" "repository object format determines SHA length"
+
 BASELINE_SHA="$(node -e 'const f=require(process.argv[1]); process.stdout.write(f.baseline_sha)' "$BASELINE")"
+BASELINE_TREE="$(node -e 'const f=require(process.argv[1]); process.stdout.write(f.baseline_tree)' "$BASELINE")"
 EXPLOIT_COUNT="$(node -e 'const f=require(process.argv[1]); process.stdout.write(String(f.exploits.length))' "$BASELINE")"
 assert_eq "$EXPLOIT_COUNT" "5" "RED baseline records all five exploit shapes"
 git -C "$REPO_ROOT" cat-file -e "${BASELINE_SHA}^{commit}" 2>/dev/null
 assert_exit_code "$?" "0" "RED baseline commit exists"
-BASE_CLI="$(git -C "$REPO_ROOT" show "${BASELINE_SHA}:bin/autopilot.js")"
-BASE_ENGINE="$(git -C "$REPO_ROOT" show "${BASELINE_SHA}:src/engine/autopilot-engine.js")"
-assert_not_contains "$BASE_CLI" "--campaign-contract" "base accepts implementation without campaign contract"
-assert_not_contains "$BASE_ENGINE" "max_repair_generations" "base has no durable POC repair ceiling"
-assert_not_contains "$BASE_ENGINE" "adjudicate-findings" "base omits finding disposition composition"
-assert_not_contains "$BASE_ENGINE" "campaign_id" "base session resume has no campaign identity"
-assert_not_contains "$BASE_ENGINE" "env_fingerprint" "base has no tree/argv/environment verification receipt"
+assert_eq "$(git -C "$REPO_ROOT" rev-parse "${BASELINE_SHA}^{tree}")" "$BASELINE_TREE" \
+  "RED baseline tree is content-bound"
+git -C "$REPO_ROOT" merge-base --is-ancestor "$BASELINE_SHA" HEAD
+assert_exit_code "$?" "0" "RED baseline is an ancestor of the implementation branch"
+
+BASE_ARCHIVE="$TEST_TMP/red-baseline"
+mkdir -p "$BASE_ARCHIVE"
+git -C "$REPO_ROOT" archive "$BASELINE_SHA" | tar -x -C "$BASE_ARCHIVE"
+RED_OUT="$(node \
+  "$REPO_ROOT/hooks/tests/fixtures/implementation-campaign/probe-red-baseline.js" \
+  "$BASE_ARCHIVE" "$TEST_TMP/red-baseline-prompt.txt")"
+assert_exit_code "$?" "0" "all five RED exploits reproduce against pinned develop runtime"
+for exploit in missing_contract repair_cap_reset missing_finding_disposition \
+  session_resume_reset verification_receipt_reuse; do
+  assert_eq "$(node -e \
+    'const v=JSON.parse(process.argv[1]); process.stdout.write(String(v.exploits[process.argv[2]]))' \
+    "$RED_OUT" "$exploit")" "true" "RED runtime reproduces $exploit"
+done
 
 run_checker --help
 assert_exit_code "$__RUN_EXIT" "0" "help exits zero"

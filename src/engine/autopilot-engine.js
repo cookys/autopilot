@@ -981,6 +981,7 @@ function defaultVerifyCommandRunner({ verifyCmd, cwd, env = process.env }) {
     signal: child.signal || null,
     stdout: child.stdout || '',
     stderr: child.stderr || '',
+    executed_argv: [file, ...args],
   };
 }
 
@@ -2262,7 +2263,7 @@ class AutopilotEngine {
       }
       const reviewed = this.reviewDiff({
         diffFile,
-        specFile: input.noReviewSpec !== true ? promptFile : undefined,
+        specFile: promptFile,
         roster,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
@@ -2596,17 +2597,41 @@ class AutopilotEngine {
             }),
           };
         }
-        const receipt = createVerificationReceipt({
-          campaignId: campaignControl.campaign_id,
-          request,
-          exitStatus: verifyResult.status,
-          startedAt,
-          endedAt: this.now(),
-          writerFence: candidate.writer_fence,
-          checkoutAttestation,
-          stdout: verifyResult.stdout,
-          stderr: verifyResult.stderr,
-        });
+        let receipt;
+        try {
+          receipt = createVerificationReceipt({
+            campaignId: campaignControl.campaign_id,
+            request,
+            exitStatus: verifyResult.status,
+            startedAt,
+            endedAt: this.now(),
+            writerFence: candidate.writer_fence,
+            checkoutAttestation,
+            executedArgv: verifyResult.executed_argv,
+            stdout: verifyResult.stdout,
+            stderr: verifyResult.stderr,
+          });
+        } catch (error) {
+          ledger.push(this.ledgerEntry(
+            'campaign_verification',
+            'blocked',
+            startedAt,
+            {
+              tree_sha: candidate.tree_sha,
+              attestation_error: error.message || String(error),
+            },
+          ));
+          return {
+            passed: false,
+            retriable: false,
+            phase: 'verification_attestation',
+            reason: error.message || String(error),
+            receipt_digest: campaignCanonicalDigest({
+              tree_sha: candidate.tree_sha,
+              attestation_error: error.message || String(error),
+            }),
+          };
+        }
         if (receipt.verdict === 'GREEN') verificationCache.set(request.request_digest, receipt);
         ledger.push(this.ledgerEntry(
           'campaign_verification',
@@ -2801,6 +2826,20 @@ class AutopilotEngine {
         status: 'blocked',
         phase: 'prepare_implementation_loop',
         reason: 'base must be a full immutable git SHA',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      });
+    }
+    if (campaignRequested && input.noReviewSpec === true) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('campaign_review_spec', 'blocked', startedAt));
+      return finish({
+        status: 'blocked',
+        phase: 'campaign_review_spec',
+        reason: 'managed campaign review requires the frozen task specification',
         rounds: 0,
         verdict: null,
         roster: null,

@@ -735,6 +735,7 @@ command_stage_transition() {
   [ -n "$latest" ] || error "no stage exists for run=$run_id stage=$stage"
 
   local current_state current_gen current_nonce resources git_ref_cur git_sha_cur worktree_cur
+  local pid start_time heartbeat_ts
   current_state="$(jq -r '.state' <<<"$latest")"
   current_gen="$(jq -r '.generation // 0' <<<"$latest")"
   current_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
@@ -798,6 +799,9 @@ command_stage_transition() {
   current_gen="$(jq -r '.generation // 0' <<<"$current_row")"
   current_nonce="$(jq -r '.nonce // empty' <<<"$current_row")"
   resources="$(jq -r '.resources // ""' <<<"$current_row")"
+  pid="$(jq -r '.pid // "0"' <<<"$current_row")"
+  start_time="$(jq -r '.start_time // "0"' <<<"$current_row")"
+  heartbeat_ts="$(jq -r '.heartbeat_ts // "0"' <<<"$current_row")"
 
   if [ "$nonce" != "$current_nonce" ]; then
     stale_from="$(jq -r '.state // ""' <<<"$current_row")"
@@ -860,12 +864,15 @@ command_stage_transition() {
     --arg from "$current_state" \
     --argjson gen "$generation" \
     --arg nonce_v "$nonce" \
+    --arg pid_v "$pid" \
+    --arg start_v "$start_time" \
+    --arg heartbeat_v "$heartbeat_ts" \
     --argjson req "$(jq -Rc 'split(",")' <<<"$required_side_effect_keys")" \
     --arg git_ref_v "$git_ref" \
     --arg git_sha_v "$git_sha" \
     --arg wt "$worktree" \
     --arg resources_v "$resources" \
-    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,idempotency_key:$id_key,transition_from:$from,generation:$gen,nonce:$nonce_v,required_side_effect_keys:$req,git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v}')"
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,idempotency_key:$id_key,transition_from:$from,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($heartbeat_v|tonumber),required_side_effect_keys:$req,git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v}')"
   append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
   for fd in $r_fds; do release_lock "$fd"; done
   echo "$line"
@@ -1283,7 +1290,7 @@ command_stage_reconcile() {
     --argjson blocked "$blocked_state" \
     --argjson is_alive "$alive" \
     --arg resources "$resources" \
-    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result|if . then true else false end),git_truth:($git_truth|if . then true else false end),pending_side_effects:($pending|tonumber),terminal:($terminal|if . then true else false end),blocked_state:($blocked|if . then true else false end),holder_alive:($is_alive|if . then true else false end),resources:$resources}'
+    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result == 1),git_truth:($git_truth == 1),pending_side_effects:($pending|tonumber),terminal:($terminal == 1),blocked_state:($blocked == 1),holder_alive:($is_alive == 1),resources:$resources}'
 }
 
 command_resume() {

@@ -1358,6 +1358,7 @@ const result = engine.runLegacyImplementationReviewLoop({
 
 console.log(`status=${result.status}`);
 console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
 console.log(`rounds=${result.rounds}`);
 console.log(`implementation_calls=${result.implementationChain.length}`);
 console.log(`review_calls=${result.reviewChain.length}`);

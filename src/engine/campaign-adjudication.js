@@ -127,6 +127,7 @@ function normalizeEvidence(value, label) {
         },
       }],
       classification: 'actionable',
+      evidence_digest: canonicalDigest(value),
     };
   }
   if (kind === 'reproduced') {
@@ -155,6 +156,7 @@ function normalizeEvidence(value, label) {
         },
       }],
       classification: 'actionable',
+      evidence_digest: canonicalDigest(value),
     };
   }
   if (kind === 'refuted') {
@@ -197,6 +199,7 @@ function normalizeEvidence(value, label) {
         },
       ],
       classification: 'refuted',
+      evidence_digest: canonicalDigest(value),
     };
   }
   throw new CampaignAdjudicationError(
@@ -507,15 +510,17 @@ function adjudicateCampaignReview({
         claim: finding.claim,
         severity: finding.severity,
         source: finding.source,
-      };
-      if (finding.disposition) {
-        output.disposition = finding.disposition.receipt;
-        output.disposition_authority = {
+        evidence: {
+          classification: finding.evidence.classification,
+          digest: finding.evidence.evidence_digest,
+        },
+        adjudication_authority: {
           authority: authority.authority,
           actor_id: authority.actor_id,
           review_digest: authority.review_digest,
-        };
-      }
+        },
+      };
+      if (finding.disposition) output.disposition = finding.disposition.receipt;
       return output;
     };
     return {

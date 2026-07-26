@@ -1085,13 +1085,14 @@ const expiredBeforeReview = new AutopilotEngine({
       stderr: '',
     };
   },
-  verifyCommandRunner() {
+  verifyCommandRunner({ verifyCmd }) {
     return {
       error: null,
       status: 0,
       signal: null,
       stdout: '',
       stderr: '',
+      executed_argv: ['/bin/sh', '-c', verifyCmd],
     };
   },
 }).runImplementationReviewLoop({
@@ -1192,7 +1193,7 @@ const identityEngine = new AutopilotEngine({
       stderr: '',
     };
   },
-  verifyCommandRunner({ env }) {
+  verifyCommandRunner({ env, verifyCmd }) {
     verificationEnvs.push(env);
     return {
       error: null,
@@ -1200,6 +1201,7 @@ const identityEngine = new AutopilotEngine({
       signal: null,
       stdout: '',
       stderr: '',
+      executed_argv: ['/bin/sh', '-c', verifyCmd],
     };
   },
   gitResumeInspect() {
@@ -1241,7 +1243,19 @@ const managedResumeResult = identityEngine.runImplementationReviewLoop({
   campaignContract: contractPath,
   resume: true,
 });
+const implementationsBeforeNoSpec = implementationCalls.length;
+const managedNoSpecResult = identityEngine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  noReviewSpec: true,
+});
 console.log(`identity_status=${identityResult.status}`);
+console.log(`identity_phase=${identityResult.phase}`);
+console.log(`identity_reason=${identityResult.reason}`);
 const argValue = (args, flag) => args ? args[args.indexOf(flag) + 1] : '<missing>';
 const implementationArgs = implementationCalls[0];
 const roundTwoArgs = implementationCalls[1];
@@ -1258,12 +1272,17 @@ console.log(`final_review_stage=${argValue(reviewCalls[1], '--stage')}`);
 console.log(`round_two_status=${roundTwoResult.status}`);
 console.log(`round_two_stage=${argValue(roundTwoArgs, '--stage')}`);
 console.log(`managed_resume_status=${managedResumeResult.status}`);
+console.log(`managed_resume_phase=${managedResumeResult.phase}`);
+console.log(`managed_resume_reason=${managedResumeResult.reason}`);
 console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
 console.log(`managed_resume_inspect_calls=${resumeInspectCalls}`);
 console.log(`identity_verify_env=${verificationEnvs[0].CI}`);
 console.log(
   `identity_tree_is_commit=${identityResult.campaign_receipt.candidate_tree_sha === base}`,
 );
+console.log(`managed_no_spec_phase=${managedNoSpecResult.phase}`);
+console.log(`managed_no_spec_rounds=${managedNoSpecResult.rounds}`);
+console.log(`managed_no_spec_impl_delta=${implementationCalls.length - implementationsBeforeNoSpec}`);
 NODE
 )"
 INTAKE_EXIT=$?
@@ -1409,6 +1428,12 @@ assert_contains "$INTAKE_OUT" "identity_verify_env=identity-test" \
   "verification executes with the environment used by its fingerprint"
 assert_contains "$INTAKE_OUT" "identity_tree_is_commit=false" \
   "verification identity binds the Git tree object rather than the commit"
+assert_contains "$INTAKE_OUT" "managed_no_spec_phase=campaign_review_spec" \
+  "managed campaign cannot omit the frozen review specification"
+assert_contains "$INTAKE_OUT" "managed_no_spec_rounds=0" \
+  "missing managed review specification blocks before round one"
+assert_contains "$INTAKE_OUT" "managed_no_spec_impl_delta=0" \
+  "missing managed review specification blocks before model spend"
 
 CAMPAIGN_LEDGER="$COMMON_DIR/autopilot/implementation-campaign.jsonl"
 DEFAULT_INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \

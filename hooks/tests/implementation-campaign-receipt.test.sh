@@ -23,6 +23,7 @@ const TREE_A = 'a'.repeat(40);
 const TREE_B = 'b'.repeat(40);
 const COMMIT_A = 'c'.repeat(40);
 const env = {
+  PATH: '/fixture/bin',
   CI: '1',
   NODE_ENV: 'test',
   API_TOKEN: 'never-fingerprint',
@@ -41,6 +42,34 @@ const sameSecretChange = createVerificationRequest({
   envAllowlist: ['NODE_ENV', 'API_TOKEN', 'CI'],
 });
 assert.strictEqual(request.env_fingerprint, sameSecretChange.env_fingerprint);
+const sameDatabaseSecretChange = createVerificationRequest({
+  treeSha: TREE_A,
+  verifyCmd: 'node test.js',
+  env: {
+    ...env,
+    DATABASE_URL: 'postgres://fixture-user:credential-a@example.invalid/db',
+  },
+  envAllowlist: ['NODE_ENV', 'DATABASE_URL', 'CI'],
+});
+const changedDatabaseSecret = createVerificationRequest({
+  treeSha: TREE_A,
+  verifyCmd: 'node test.js',
+  env: {
+    ...env,
+    DATABASE_URL: 'postgres://fixture-user:credential-b@example.invalid/db',
+  },
+  envAllowlist: ['NODE_ENV', 'DATABASE_URL', 'CI'],
+});
+assert.strictEqual(
+  sameDatabaseSecretChange.env_fingerprint,
+  changedDatabaseSecret.env_fingerprint,
+);
+assert.notStrictEqual(request.env_fingerprint, createVerificationRequest({
+  treeSha: TREE_A,
+  verifyCmd: 'node test.js',
+  env: { ...env, PATH: '/other/bin' },
+  envAllowlist: ['CI'],
+}).env_fingerprint);
 
 const implementationResult = {
   status: 'committed',
@@ -112,6 +141,33 @@ assert.throws(() => createLedgerReconciliationReceipt({
     git_sha: COMMIT_A,
   },
 }), /does not prove a closed implementation writer/);
+assert.throws(() => createLedgerReconciliationReceipt({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  reconcileResult: {
+    status: 'resolved',
+    reason: 'terminal_state',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'committed',
+    nonce: 'fixture-nonce',
+    pending_side_effects: 0,
+    terminal: true,
+    git_truth: false,
+    holder_alive: true,
+  },
+  latestRecord: {
+    kind: 'stage',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'committed',
+    nonce: 'fixture-nonce',
+    git_sha: COMMIT_A,
+  },
+}), /does not prove a closed implementation writer/);
 const ledgerWriterFence = createWriterFence({
   campaignId: 'campaign-fixture',
   stageIdentity: 'campaign-implementation',
@@ -158,6 +214,7 @@ const green = createVerificationReceipt({
   endedAt: '2026-07-27T00:00:01.000Z',
   writerFence,
   checkoutAttestation,
+  executedArgv: verificationArgv('node test.js'),
   stdout: 'ok\n',
 });
 assert.strictEqual(reusableGreenReceipt(green, request), true);
@@ -187,6 +244,7 @@ const red = createVerificationReceipt({
   endedAt: '2026-07-27T00:00:01.000Z',
   writerFence,
   checkoutAttestation,
+  executedArgv: verificationArgv('node test.js'),
   stderr: 'failed\n',
 });
 assert.strictEqual(reusableGreenReceipt(red, request), false);
@@ -204,7 +262,18 @@ assert.throws(() => createVerificationReceipt({
   endedAt: '2026-07-27T00:00:01.000Z',
   writerFence,
   checkoutAttestation,
+  executedArgv: verificationArgv('node test.js'),
 }), /fence or checkout binding/);
+assert.throws(() => createVerificationReceipt({
+  campaignId: 'campaign-fixture',
+  request,
+  exitStatus: 0,
+  startedAt: '2026-07-27T00:00:00.000Z',
+  endedAt: '2026-07-27T00:00:01.000Z',
+  writerFence,
+  checkoutAttestation,
+  executedArgv: ['/bin/sh', '-c', 'node other.js'],
+}), /argv attestation does not match/);
 assert.throws(() => createWriterFence({
   campaignId: 'campaign-fixture',
   stageIdentity: 'campaign-implementation',
@@ -327,7 +396,10 @@ assert.strictEqual(adjudicated.repair_gate_passed, true);
 assert.deepStrictEqual(adjudicated.must_fix_now.map((finding) => finding.id), ['F-IN-SCOPE']);
 assert.deepStrictEqual(adjudicated.follow_up.map((finding) => finding.id), ['F-HARDENING']);
 assert.deepStrictEqual(adjudicated.rejected.map((finding) => finding.id), ['F-REFUTED']);
-assert.strictEqual(adjudicated.must_fix_now[0].disposition_authority.actor_id, 'core-owner');
+assert.strictEqual(adjudicated.must_fix_now[0].adjudication_authority.actor_id, 'core-owner');
+assert.match(adjudicated.must_fix_now[0].evidence.digest, /^[0-9a-f]{64}$/);
+assert.strictEqual(adjudicated.rejected[0].adjudication_authority.actor_id, 'core-owner');
+assert.strictEqual(adjudicated.rejected[0].evidence.classification, 'refuted');
 
 const reviewerDisposition = adjudicateCampaignReview({
   review: {
@@ -392,7 +464,11 @@ let authorizedRepairInput = null;
 const scopeCheckpoints = [];
 const retainedFollowUp = {
   id: 'F-HARDENING',
-  disposition_authority: {
+  evidence: {
+    classification: 'actionable',
+    digest: '7'.repeat(64),
+  },
+  adjudication_authority: {
     authority: 'depth-0',
     actor_id: 'core-owner',
     review_digest: '1'.repeat(64),
@@ -436,8 +512,8 @@ const composition = runCampaignComposition({
         must_fix_now: [],
         follow_up: [{
           ...retainedFollowUp,
-          disposition_authority: {
-            ...retainedFollowUp.disposition_authority,
+          adjudication_authority: {
+            ...retainedFollowUp.adjudication_authority,
             review_digest: '2'.repeat(64),
           },
         }],
@@ -467,7 +543,7 @@ const composition = runCampaignComposition({
     return { reviewed: true, review_id: 'final' };
   },
 });
-assert.strictEqual(composition.status, 'ready');
+assert.strictEqual(composition.status, 'follow_up');
 assert.strictEqual(composition.repair_generations, 1);
 assert.strictEqual(mutations, 2);
 assert.strictEqual(focusedReviews, 2);
@@ -507,6 +583,36 @@ const dispositionConflict = runCampaignComposition({
 assert.strictEqual(dispositionConflict.status, 'blocked');
 assert.strictEqual(dispositionConflict.phase, 'final_adjudication');
 assert.match(dispositionConflict.reason, /conflicting cross-round dispositions/);
+
+const evidenceConflict = runCampaignComposition({
+  maxRepairGenerations: 1,
+}, {
+  preflight: () => ({ passed: true }),
+  implement: () => ({ committed: true, tree_sha: TREE_A }),
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: '8'.repeat(64) }),
+  review: () => ({ reviewed: true }),
+  adjudicate({ final }) {
+    return {
+      registry_complete: true,
+      repair_gate_passed: true,
+      must_fix_now: [],
+      follow_up: [{
+        id: 'F-EVIDENCE-DRIFT',
+        evidence: {
+          classification: 'actionable',
+          digest: (final ? '9' : '8').repeat(64),
+        },
+      }],
+      rejected: [],
+    };
+  },
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({ reviewed: true }),
+});
+assert.strictEqual(evidenceConflict.status, 'blocked');
+assert.strictEqual(evidenceConflict.phase, 'final_adjudication');
+assert.match(evidenceConflict.reason, /conflicting cross-round dispositions/);
 
 let incompleteMutations = 0;
 const incomplete = runCampaignComposition({

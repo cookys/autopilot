@@ -3,8 +3,18 @@
 const crypto = require('crypto');
 
 const VERIFICATION_RECEIPT_SCHEMA_VERSION = 1;
-const DEFAULT_ENV_ALLOWLIST = Object.freeze(['CI', 'LANG', 'LC_ALL', 'NODE_ENV', 'TZ']);
-const SECRET_NAME = /(AUTH|COOKIE|CREDENTIAL|KEY|PASSWORD|SECRET|TOKEN)/i;
+const MANDATORY_ENV_ALLOWLIST = Object.freeze(['PATH']);
+const DEFAULT_ENV_ALLOWLIST = Object.freeze([
+  ...MANDATORY_ENV_ALLOWLIST,
+  'CI',
+  'LANG',
+  'LC_ALL',
+  'NODE_ENV',
+  'TZ',
+]);
+const SECRET_NAME = /(AUTH|COOKIE|CREDENTIAL|DATABASE_URL|DB_URL|CONNECTION_STRING|KEY|PASSWORD|SECRET|TOKEN)/i;
+const CREDENTIAL_URL = /^[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s]+@/i;
+const PRIVATE_KEY_VALUE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
 const LEDGER_TERMINAL_STATES = new Set(['committed', 'reviewed', 'verified', 'merged']);
 
 function sha256(value) {
@@ -51,11 +61,15 @@ function environmentFingerprint(env = process.env, allowlist = DEFAULT_ENV_ALLOW
     throw new TypeError('environment allowlist must contain non-empty names');
   }
   const projection = {};
-  for (const name of [...new Set(allowlist)].sort()) {
-    if (SECRET_NAME.test(name)) continue;
-    projection[name] = Object.prototype.hasOwnProperty.call(env, name)
-      ? String(env[name])
-      : null;
+  const names = new Set([...MANDATORY_ENV_ALLOWLIST, ...allowlist]);
+  for (const name of [...names].sort()) {
+    const present = Object.prototype.hasOwnProperty.call(env, name);
+    const value = present ? String(env[name]) : null;
+    if (SECRET_NAME.test(name)
+        || (value !== null && (CREDENTIAL_URL.test(value) || PRIVATE_KEY_VALUE.test(value)))) {
+      continue;
+    }
+    projection[name] = value;
   }
   return canonicalDigest(projection);
 }
@@ -174,6 +188,7 @@ function createLedgerReconciliationReceipt({
       || reconcileResult.run_id !== campaignId
       || reconcileResult.stage !== stageIdentity
       || reconcileResult.pending_side_effects !== 0
+      || reconcileResult.holder_alive !== false
       || (!terminalClosure && !gitTruthClosure)
       || !Number.isSafeInteger(reconcileResult.generation)
       || reconcileResult.generation !== latestRecord.generation
@@ -250,6 +265,7 @@ function createVerificationReceipt({
   endedAt,
   writerFence,
   checkoutAttestation,
+  executedArgv,
   stdout = '',
   stderr = '',
 }) {
@@ -264,6 +280,12 @@ function createVerificationReceipt({
     throw new TypeError('verification request binding is invalid');
   }
   if (!Number.isInteger(exitStatus)) throw new TypeError('exitStatus must be an integer');
+  if (!Array.isArray(executedArgv)
+      || executedArgv.length === 0
+      || !executedArgv.every((part) => typeof part === 'string')
+      || canonicalDigest(executedArgv) !== request.argv_hash) {
+    throw new TypeError('verification runner argv attestation does not match the request');
+  }
   const writerFenceBody = receiptBody(writerFence, 'writer fence');
   const checkoutBody = receiptBody(checkoutAttestation, 'checkout attestation');
   if (writerFenceBody.schema_version !== 1
@@ -295,6 +317,7 @@ function createVerificationReceipt({
     exit_status: exitStatus,
     writer_lease_closed: true,
     detached_checkout: true,
+    runner_argv_attested: true,
     writer_fence_digest: writerFence.receipt_digest,
     checkout_attestation_digest: checkoutAttestation.receipt_digest,
     stdout_digest: sha256(String(stdout)),
@@ -310,7 +333,11 @@ function createVerificationReceipt({
 
 function reusableGreenReceipt(receipt, request) {
   if (!receipt || receipt.verdict !== 'GREEN' || receipt.exit_status !== 0) return false;
-  if (receipt.writer_lease_closed !== true || receipt.detached_checkout !== true) return false;
+  if (receipt.writer_lease_closed !== true
+      || receipt.detached_checkout !== true
+      || receipt.runner_argv_attested !== true) {
+    return false;
+  }
   if (!/^[0-9a-f]{64}$/.test(receipt.writer_fence_digest || '')
       || !/^[0-9a-f]{64}$/.test(receipt.checkout_attestation_digest || '')) {
     return false;

@@ -63,9 +63,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
 
   const stableFindingDigest = (finding) => {
     const stable = { ...finding };
-    if (stable.disposition_authority) {
-      const { review_digest: _reviewDigest, ...authority } = stable.disposition_authority;
-      stable.disposition_authority = authority;
+    if (stable.adjudication_authority) {
+      const { review_digest: _reviewDigest, ...authority } = stable.adjudication_authority;
+      stable.adjudication_authority = authority;
     }
     return canonicalDigest(stable);
   };
@@ -298,7 +298,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
   const finalMustFix = Array.isArray(finalAdjudication.must_fix_now)
     ? finalAdjudication.must_fix_now
     : [];
-  const status = finalMustFix.length === 0 ? 'ready' : 'follow_up';
+  const status = finalMustFix.length === 0 && followUps.length === 0
+    ? 'ready'
+    : 'follow_up';
   const receiptBody = {
     schema_version: 1,
     artifact_type: 'implementation_campaign_terminal',

@@ -1,10 +1,10 @@
 # Capability-adaptive execution profiles
 
-> Status: In progress
+> Status: Complete — merged to `develop` as `676aa03154f1988dac8a8b83300ebcef484b06b5`
 > Target: v2.33.0
-> Branch: `feat/v2.33.0-capability-adaptive-profiles`
+> Branch: merged and deleted after archive
 > Base: `develop@dd34d57`
-> Plan: [capability-adaptive-execution-profiles.md](../../plans/2026-07-26-capability-adaptive-execution-profiles.md)
+> Plan: [capability-adaptive-execution-profiles.md](../../../plans/2026-07-26-capability-adaptive-execution-profiles.md)
 
 ## Project Goal
 
@@ -155,7 +155,7 @@ negative controls that fail when the claimed guard is removed.
 | P4 | Complete | Protected user-local roster, exact semantic/operational fingerprints, one-slot lease, JIT capacity gate, deny-by-default raw author/reviewer transport, hot-swap/cancellation quarantine, and 50 probe + 63 dispatch assertions. No local runtime was configured, so the live result is honestly `unverified_no_live_runtime`; no live row or agentic runner was published. |
 | P5 | Complete (bounded hold) | Advisory cutover evaluator and public snapshot schema; 62 focused assertions cover live-verifier loss, incomplete-window/cherry-picked/duplicate/expired dogfood, acceptance failure, Critical escape, decorrelation, exact-token, and source-drift gates. The recorded decision is `hold_guided`: canonical autonomous control prose is 113 bytes smaller, but no exact host-token measurement, effectful guided witness, current live owner verifier, or five independent dogfood receipts exists. |
 | P6 | Complete | v2.33.0 docs/version/mirrors synchronized; portability and doc-drift hard gates pass; focused suites pass; full repository regression passes 215/215 test files. |
-| L-5 | Pending | |
+| L-5 | Complete | Goal review, bounded Grok/Qwen review, merge, post-merge smoke/doc-sync, archive, release hygiene, and branch cleanup completed. |
 
 ## P0 Implementation Review
 

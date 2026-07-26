@@ -1,8 +1,8 @@
 # Plan - Capability-adaptive execution profiles
 
-> Status: PROPOSED 2026-07-26
+> Status: SHIPPED in v2.33.0 — merged as `676aa03154f1988dac8a8b83300ebcef484b06b5` on 2026-07-26
 > Owner: depth-0 owner session
-> Branch: `feat/capability-adaptive-profiles`
+> Branch: `feat/v2.33.0-capability-adaptive-profiles` (merged and deleted)
 > Size: L
 > Frame: keep one Autopilot repository and product, but separate invariant enforcement from
 > model guidance density. Strong, weak, unknown, remote, and local deployments receive one

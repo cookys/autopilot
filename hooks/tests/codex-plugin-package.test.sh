@@ -152,7 +152,7 @@ for (const rel of [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
+  'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
@@ -259,7 +259,7 @@ const docFiles = [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
+  'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ];
 const misses = docFiles.filter((rel) => !covers(rel));
@@ -300,7 +300,7 @@ for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
   docs/plans/2026-06-26-trust-tiered-review-policy.md \
-  docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
+  docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
   docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
 do
   mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"

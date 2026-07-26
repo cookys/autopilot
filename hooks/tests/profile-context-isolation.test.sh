@@ -5,7 +5,7 @@ TEST_NAME="profile-context-isolation"
 . "$(dirname "$0")/lib.sh"
 
 CLI="$REPO_ROOT/scripts/measure-profile-context.js"
-BASELINE="$REPO_ROOT/docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
+BASELINE="$REPO_ROOT/docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
 
 json_get() {
   node -e '

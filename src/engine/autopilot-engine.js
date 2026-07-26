@@ -780,6 +780,28 @@ function isCampaignPreSpendRejection(result) {
     && leaf.deletions === 0;
 }
 
+function campaignWallBudgetStatus(control, observedAt) {
+  if (!control || control.status !== 'admitted') {
+    return { exhausted: false, elapsed_seconds: null };
+  }
+  const state = control.initial_state;
+  const startedAt = state && Date.parse(state.started_at);
+  const observed = Date.parse(observedAt);
+  const limit = state && state.limits && state.limits.max_wall_seconds;
+  if (!Number.isFinite(startedAt)
+      || !Number.isFinite(observed)
+      || observed < startedAt
+      || !Number.isSafeInteger(limit)
+      || limit < 0) {
+    return { exhausted: true, elapsed_seconds: null };
+  }
+  const elapsed = Math.floor((observed - startedAt) / 1000);
+  return {
+    exhausted: elapsed >= limit,
+    elapsed_seconds: elapsed,
+  };
+}
+
 function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
@@ -2257,9 +2279,9 @@ class AutopilotEngine {
       });
     }
 
-    const resume = input.resume === true;
+    const resumeImplementation = input.resume === true && !campaignRequested;
     let resumeTipSha = null;
-    if (resume) {
+    if (resumeImplementation) {
       const startedAt = this.now();
       let inspect;
       try {
@@ -2391,6 +2413,35 @@ class AutopilotEngine {
       ledger.push(this.ledgerEntry('verify_first_signal', 'unused', startedAt));
     }
 
+    const releaseCampaignNoEffect = (rejection) => {
+      if (!campaignControl || campaignControl.status !== 'admitted') return null;
+      const releaseStartedAt = this.now();
+      let release;
+      try {
+        release = this.campaignAdmissionReleaser({
+          repo: loopCwd,
+          campaignControl,
+          rejection,
+          observedAt: releaseStartedAt,
+        });
+      } catch (error) {
+        release = {
+          status: 'blocked',
+          error: error.code || error.message || String(error),
+        };
+      }
+      campaignControl = {
+        ...campaignControl,
+        admission_release: release,
+      };
+      ledger.push(this.ledgerEntry(
+        'campaign_admission_release',
+        release.status === 'released' ? 'released' : 'blocked',
+        releaseStartedAt,
+      ));
+      return release;
+    };
+
     const implementationChain = [];
     const reviewChain = [];
     const immutableBase = base;
@@ -2402,6 +2453,40 @@ class AutopilotEngine {
     let bestRound = 0;
 
     for (let round = 1; round <= maxRounds; round += 1) {
+      const implementationBudgetAt = this.now();
+      const implementationBudget = campaignWallBudgetStatus(
+        campaignControl,
+        implementationBudgetAt,
+      );
+      if (implementationBudget.exhausted) {
+        const rejection = {
+          owner: 'campaign_generation',
+          status: 'rejected',
+          code: 'campaign_wall_budget_exhausted',
+          reason: 'campaign has no wall-clock budget remaining before implementation dispatch',
+        };
+        ledger.push(this.ledgerEntry(
+          'campaign_wall_budget',
+          'blocked',
+          implementationBudgetAt,
+          { elapsed_seconds: implementationBudget.elapsed_seconds },
+        ));
+        if (implementationChain.length === 0) releaseCampaignNoEffect(rejection);
+        return finish({
+          status: 'blocked',
+          phase: 'campaign_wall_budget',
+          reason: rejection.reason,
+          rounds: round - 1,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
+      }
       const currentBranch = round === 1
         ? branch
         : buildRepairBranchName({
@@ -2410,7 +2495,7 @@ class AutopilotEngine {
           previousCommit: nextBase,
         });
 
-      if (round === 1 && resume) {
+      if (round === 1 && resumeImplementation) {
         // Synthesize the round-1 outcome from the already-committed branch tip
         // (validated by the resume precheck above) instead of dispatching the
         // implementer. The shared verify+diff+review code below runs unchanged
@@ -2488,36 +2573,13 @@ class AutopilotEngine {
         if (campaignControl
             && campaignControl.status === 'admitted'
             && isCampaignPreSpendRejection(implementation)) {
-          const releaseStartedAt = this.now();
           const rejection = {
             owner: 'implementation_dispatch',
             status: 'rejected',
             code: 'campaign_leaf_pre_spend_rejected',
             reason: implementation.reason || `implementation status ${implementation.status}`,
           };
-          let release;
-          try {
-            release = this.campaignAdmissionReleaser({
-              repo: loopCwd,
-              campaignControl,
-              rejection,
-              observedAt: releaseStartedAt,
-            });
-          } catch (error) {
-            release = {
-              status: 'blocked',
-              error: error.code || error.message || String(error),
-            };
-          }
-          campaignControl = {
-            ...campaignControl,
-            admission_release: release,
-          };
-          ledger.push(this.ledgerEntry(
-            'campaign_admission_release',
-            release.status === 'released' ? 'released' : 'blocked',
-            releaseStartedAt,
-          ));
+          releaseCampaignNoEffect(rejection);
         }
         return finish({
           status: 'blocked',
@@ -2771,6 +2833,31 @@ class AutopilotEngine {
           status: 'blocked',
           phase: 'prepare_review',
           reason: error.message || String(error),
+          rounds: round,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review: null,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
+      }
+
+      const reviewBudgetAt = this.now();
+      const reviewBudget = campaignWallBudgetStatus(campaignControl, reviewBudgetAt);
+      if (reviewBudget.exhausted) {
+        ledger.push(this.ledgerEntry(
+          'campaign_wall_budget',
+          'blocked',
+          reviewBudgetAt,
+          { elapsed_seconds: reviewBudget.elapsed_seconds },
+        ));
+        return finish({
+          status: 'blocked',
+          phase: 'campaign_wall_budget',
+          reason: 'campaign has no wall-clock budget remaining before review dispatch',
           rounds: round,
           verdict: null,
           roster,

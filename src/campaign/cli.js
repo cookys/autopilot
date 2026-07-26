@@ -15,6 +15,25 @@ const TERMINAL = new Set([
   CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
   CAMPAIGN_STATES.TERMINAL_STOP,
 ]);
+const RUN_LEDGER_STAGE_STATES = new Set([
+  'leased',
+  'committed',
+  'reviewed',
+  'verified',
+  'merged',
+  'stale_ignored',
+  'quarantined',
+  'dead',
+]);
+const NONLIVE_STAGE_STATES = new Set([
+  'committed',
+  'reviewed',
+  'verified',
+  'merged',
+  'stale_ignored',
+  'quarantined',
+  'dead',
+]);
 const EXIT_SUCCESS = 0;
 const INTAKE_ARTIFACT_KEYS = new Set([
   'schema_version',
@@ -132,7 +151,7 @@ function validateCampaignStageHistory(stageRows, intake, campaignId) {
       || latest.generation < 1
       || typeof latest.nonce !== 'string'
       || latest.nonce.length === 0
-      || typeof latest.state !== 'string'
+      || !RUN_LEDGER_STAGE_STATES.has(latest.state)
       || latest.resources !== `campaign:${campaignId}`) {
     throw new Error('campaign ledger latest stage evidence is malformed');
   }
@@ -226,7 +245,9 @@ function processStartTime(pid) {
 }
 
 function processLiveness(lease) {
-  if (!lease || lease.state !== 'leased') return 'dead';
+  if (!lease) return 'dead';
+  if (NONLIVE_STAGE_STATES.has(lease.state)) return 'dead';
+  if (lease.state !== 'leased') return 'unknown';
   if (!Number.isInteger(lease.pid) || lease.pid <= 0) return 'unknown';
   try {
     process.kill(lease.pid, 0);

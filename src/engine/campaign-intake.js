@@ -712,21 +712,65 @@ function runCampaignIntake(input = {}, adapters = {}) {
     };
   }
   const missionClaimAdapter = adapters.missionClaim || defaultMissionClaim;
-  const missionClaim = requireDecision(missionClaimAdapter({
-    missionMode,
-    contractDigest: rawContractDigest,
-    contractPath,
-    base: input.base,
-    branch: input.branch,
-  }), 'mission', new Set(['claimed', 'unknown', 'rejected']));
+  let missionClaim;
+  try {
+    missionClaim = requireDecision(missionClaimAdapter({
+      missionMode,
+      contractDigest: rawContractDigest,
+      contractPath,
+      base: input.base,
+      branch: input.branch,
+    }), 'mission', new Set(['claimed', 'unknown', 'rejected']));
+  } catch (error) {
+    const rejection = rejected(
+      'mission',
+      error.code || 'mission_claim_adapter_failed',
+      error.message || String(error),
+    );
+    return {
+      status: 'blocked',
+      reason: rejection.reason,
+      rejection,
+      steps: [rejection],
+      pre_spend_no_effect_receipt: null,
+    };
+  }
   if (missionClaim.status === 'claimed'
       && (typeof missionClaim.claim_id !== 'string'
         || missionClaim.claim_id.length === 0
         || rawContractDigest === null)) {
-    throw new CampaignIntakeError(
+    const rejection = rejected(
+      'mission',
       'invalid_mission_claim',
       'claimed Mission grant must bind a readable campaign contract digest',
     );
+    const receipt = buildNoEffectReceipt({
+      missionClaim,
+      rejection,
+      campaignDigest: rawContractDigest,
+      now,
+    });
+    let release;
+    try {
+      release = requireDecision(
+        adapters.releaseMission({ missionClaim, receipt }),
+        'mission_release',
+        new Set(['released', 'rejected']),
+      );
+    } catch (error) {
+      release = rejected(
+        'mission_release',
+        error.code || 'mission_release_failed',
+        error.message || String(error),
+      );
+    }
+    return {
+      status: 'blocked',
+      reason: rejection.reason,
+      rejection,
+      steps: [missionClaim, rejection, release],
+      pre_spend_no_effect_receipt: receipt,
+    };
   }
   steps.push(missionClaim);
   if (missionClaim.status === 'rejected') {

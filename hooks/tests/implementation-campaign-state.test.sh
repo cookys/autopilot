@@ -561,6 +561,50 @@ const unpaired = runCampaignIntake({
 console.log(`unpaired_code=${unpaired.rejection.code}`);
 console.log(`unpaired_mission_calls=${unpairedMissionCalls}`);
 
+let thrownMissionReleaseCalls = 0;
+const thrownMission = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  base,
+  branch: 'impl/icc-p1-intake',
+  roster,
+}, {
+  ...adapters,
+  missionClaim() {
+    throw new Error('claim adapter failed before returning authority');
+  },
+  releaseMission() {
+    thrownMissionReleaseCalls += 1;
+    return { owner: 'mission_release', status: 'released' };
+  },
+});
+console.log(`thrown_mission_code=${thrownMission.rejection.code}`);
+console.log(`thrown_mission_release_calls=${thrownMissionReleaseCalls}`);
+
+let malformedMissionReleaseCalls = 0;
+const malformedMission = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  base,
+  branch: 'impl/icc-p1-intake',
+  roster,
+}, {
+  ...adapters,
+  missionClaim() {
+    return { owner: 'mission', status: 'claimed', claim_id: '' };
+  },
+  releaseMission() {
+    malformedMissionReleaseCalls += 1;
+    return { owner: 'mission_release', status: 'released' };
+  },
+});
+console.log(`malformed_mission_code=${malformedMission.rejection.code}`);
+console.log(`malformed_mission_release_calls=${malformedMissionReleaseCalls}`);
+
 const shadowed = runCampaignIntake({
   repo,
   contractPath,
@@ -779,30 +823,35 @@ console.log(`invalid_max_intake_calls=${preflightIntakeCalls}`);
 
 const campaignId = `campaign-v1-${'c'.repeat(64)}`;
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
+function campaignControlFixture(nonce) {
+  return {
+    status: 'admitted',
+    campaign_id: campaignId,
+    contract_digest: 'c'.repeat(64),
+    contract: {
+      verify_cmd: 'fixture verify',
+      max_repair_generations: 2,
+    },
+    contract_path: contractPath,
+    initial_state: admitted.initial_state,
+    generation_claim: {
+      ledger: campaignLedger,
+      generation: 1,
+      nonce,
+      stage_identity: `run-ledger:1:${nonce}`,
+    },
+    full_enforcement: false,
+    shadow_axes: ['mission'],
+    steps: [],
+  };
+}
+let resumeInspectCalls = 0;
 let admissionReleaseCalls = 0;
 const preconditionEngine = new AutopilotEngine({
   cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
   campaignIntake() {
-    return {
-      status: 'admitted',
-      campaign_id: campaignId,
-      contract_digest: 'c'.repeat(64),
-      contract: {
-        verify_cmd: 'fixture verify',
-        max_repair_generations: 2,
-      },
-      contract_path: contractPath,
-      initial_state: admitted.initial_state,
-      generation_claim: {
-        ledger: campaignLedger,
-        generation: 1,
-        nonce: 'precondition',
-        stage_identity: 'run-ledger:1:precondition',
-      },
-      full_enforcement: false,
-      shadow_axes: ['mission'],
-      steps: [],
-    };
+    return campaignControlFixture('precondition');
   },
   campaignAdmissionReleaser() {
     admissionReleaseCalls += 1;
@@ -844,32 +893,119 @@ console.log(`precondition_status=${preconditionResult.status}`);
 console.log(`precondition_release_calls=${admissionReleaseCalls}`);
 console.log(`precondition_release_status=${preconditionResult.campaign_control.admission_release.status}`);
 
+let expiredImplementationCalls = 0;
+let expiredReleaseCalls = 0;
+const expiredBeforeImplementation = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:02:00.000Z',
+  campaignIntake() {
+    return campaignControlFixture('wall-expired');
+  },
+  campaignAdmissionReleaser() {
+    expiredReleaseCalls += 1;
+    return { status: 'released' };
+  },
+  implementationDispatcher() {
+    expiredImplementationCalls += 1;
+    throw new Error('wall-exhausted campaign must not dispatch implementation');
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+});
+console.log(`expired_impl_phase=${expiredBeforeImplementation.phase}`);
+console.log(`expired_impl_calls=${expiredImplementationCalls}`);
+console.log(`expired_release_calls=${expiredReleaseCalls}`);
+
+let reviewClock = '2026-07-26T00:00:01.000Z';
+let expiredReviewCalls = 0;
+const expiredBeforeReview = new AutopilotEngine({
+  cwd: repo,
+  clock: () => reviewClock,
+  campaignIntake() {
+    return campaignControlFixture('review-expired');
+  },
+  implementationDispatcher(args) {
+    reviewClock = '2026-07-26T00:02:00.000Z';
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'fixture',
+        model: 'fixture-implementer',
+        branch: args[args.indexOf('--branch') + 1],
+        base,
+        commit: base,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: repo,
+        agent_log: null,
+        error: null,
+      },
+    };
+  },
+  reviewDispatcher() {
+    expiredReviewCalls += 1;
+    throw new Error('wall-exhausted campaign must not dispatch review');
+  },
+  diffProvider() {
+    return promptFile;
+  },
+  gitWorktreeAdd() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      worktree: repo,
+      parent: null,
+    };
+  },
+  gitWorktreeRemove() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  },
+  verifyCommandRunner() {
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+});
+console.log(`expired_review_phase=${expiredBeforeReview.phase}`);
+console.log(`expired_review_calls=${expiredReviewCalls}`);
+
 const implementationCalls = [];
 let reviewArgs = null;
 const identityEngine = new AutopilotEngine({
   cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
   campaignIntake() {
-    return {
-      status: 'admitted',
-      reason: null,
-      campaign_id: campaignId,
-      contract_digest: 'c'.repeat(64),
-      contract: {
-        verify_cmd: 'fixture verify',
-        max_repair_generations: 2,
-      },
-      contract_path: contractPath,
-      initial_state: admitted.initial_state,
-      generation_claim: {
-        ledger: campaignLedger,
-        generation: 1,
-        nonce: 'identity',
-        stage_identity: 'run-ledger:1:identity',
-      },
-      full_enforcement: false,
-      shadow_axes: ['mission'],
-      steps: [],
-    };
+    return campaignControlFixture('identity');
   },
   implementationDispatcher(args) {
     implementationCalls.push(args);
@@ -951,6 +1087,10 @@ const identityEngine = new AutopilotEngine({
       stderr: '',
     };
   },
+  gitResumeInspect() {
+    resumeInspectCalls += 1;
+    throw new Error('managed PREPARED resume must not use legacy branch precheck');
+  },
 });
 const identityResult = identityEngine.runImplementationReviewLoop({
   promptFile,
@@ -972,10 +1112,20 @@ const roundTwoResult = identityEngine.implementTask({
   campaignContractFile: contractPath,
   campaignContractDigest: 'c'.repeat(64),
 });
+const managedResumeResult = identityEngine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  resume: true,
+});
 console.log(`identity_status=${identityResult.status}`);
 const argValue = (args, flag) => args[args.indexOf(flag) + 1];
 const implementationArgs = implementationCalls[0];
 const roundTwoArgs = implementationCalls[1];
+const managedResumeArgs = implementationCalls[2];
 console.log(`implementation_ledger=${argValue(implementationArgs, '--ledger')}`);
 console.log(`implementation_run_id=${argValue(implementationArgs, '--run-id')}`);
 console.log(`implementation_stage=${argValue(implementationArgs, '--stage')}`);
@@ -986,6 +1136,9 @@ console.log(`review_run_id=${argValue(reviewArgs, '--run-id')}`);
 console.log(`review_stage=${argValue(reviewArgs, '--stage')}`);
 console.log(`round_two_status=${roundTwoResult.status}`);
 console.log(`round_two_stage=${argValue(roundTwoArgs, '--stage')}`);
+console.log(`managed_resume_status=${managedResumeResult.status}`);
+console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
+console.log(`managed_resume_inspect_calls=${resumeInspectCalls}`);
 NODE
 )"
 INTAKE_EXIT=$?
@@ -1002,6 +1155,14 @@ assert_contains "$INTAKE_OUT" "unpaired_code=mission_adapter_pair_required" \
   "Mission claim cannot run without an installed release adapter"
 assert_contains "$INTAKE_OUT" "unpaired_mission_calls=0" \
   "Mission adapter pairing fails before a claim side effect"
+assert_contains "$INTAKE_OUT" "thrown_mission_code=mission_claim_adapter_failed" \
+  "Mission adapter exceptions become an owned pre-spend rejection"
+assert_contains "$INTAKE_OUT" "thrown_mission_release_calls=0" \
+  "an adapter exception cannot fabricate a confirmed Mission claim to release"
+assert_contains "$INTAKE_OUT" "malformed_mission_code=invalid_mission_claim" \
+  "malformed claimed Mission metadata fails closed"
+assert_contains "$INTAKE_OUT" "malformed_mission_release_calls=1" \
+  "a returned malformed claim is compensated exactly once"
 assert_contains "$INTAKE_OUT" "shadow_full_enforcement=false" \
   "an explicitly shadowed ready axis cannot advertise full enforcement"
 assert_contains "$INTAKE_OUT" "shadow_axes=provider_readiness" \
@@ -1050,6 +1211,16 @@ assert_contains "$INTAKE_OUT" "precondition_release_calls=1" \
   "zero-spend leaf precondition failure releases campaign admission once"
 assert_contains "$INTAKE_OUT" "precondition_release_status=released" \
   "campaign control records the terminal admission release result"
+assert_contains "$INTAKE_OUT" "expired_impl_phase=campaign_wall_budget" \
+  "zero remaining wall budget blocks before implementation dispatch"
+assert_contains "$INTAKE_OUT" "expired_impl_calls=0" \
+  "wall-budget exhaustion spawns no implementation model"
+assert_contains "$INTAKE_OUT" "expired_release_calls=1" \
+  "pre-implementation wall exhaustion releases the unused admission"
+assert_contains "$INTAKE_OUT" "expired_review_phase=campaign_wall_budget" \
+  "wall budget is rechecked after implementation and before review"
+assert_contains "$INTAKE_OUT" "expired_review_calls=0" \
+  "wall-budget exhaustion spawns no additional review model"
 assert_contains "$INTAKE_OUT" "identity_status=converged" \
   "managed campaign completes through identity-capturing dispatchers"
 assert_contains "$INTAKE_OUT" \
@@ -1080,6 +1251,12 @@ assert_contains "$INTAKE_OUT" "round_two_status=committed" \
   "managed round-two implementation dispatches successfully"
 assert_contains "$INTAKE_OUT" "round_two_stage=campaign-implementation#r2" \
   "managed repair rounds receive distinct implementation stage identities"
+assert_contains "$INTAKE_OUT" "managed_resume_status=converged" \
+  "managed PREPARED resume continues through campaign implementation"
+assert_contains "$INTAKE_OUT" "managed_resume_stage=campaign-implementation" \
+  "managed PREPARED resume dispatches the first campaign implementation round"
+assert_contains "$INTAKE_OUT" "managed_resume_inspect_calls=0" \
+  "managed campaign replay does not require the legacy ahead-branch precheck"
 
 CAMPAIGN_LEDGER="$COMMON_DIR/autopilot/implementation-campaign.jsonl"
 DEFAULT_INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
@@ -1346,6 +1523,25 @@ assert_exit_code "$?" "1" "campaign inspect rejects a leased stage without proce
 assert_contains "$MALFORMED_LEASE_OUT" "live lease identity is malformed" \
   "malformed liveness evidence cannot become a dead lease"
 
+UNKNOWN_STAGE_LEDGER="$TEST_TMP/unknown-stage-campaign-ledger.jsonl"
+node - "$CAMPAIGN_LEDGER" "$UNKNOWN_STAGE_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const [source, target, campaignId] = process.argv.slice(2);
+const rows = fs.readFileSync(source, 'utf8').trim().split('\n').map(JSON.parse);
+const indexes = rows
+  .map((row, index) => ({ row, index }))
+  .filter(({ row }) => row.run_id === campaignId
+    && row.kind === 'stage'
+    && row.stage === 'campaign');
+rows[indexes.at(-1).index].state = 'mystery';
+fs.writeFileSync(target, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+UNKNOWN_STAGE_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign resume \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$UNKNOWN_STAGE_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign resume rejects an unknown latest stage state"
+assert_contains "$UNKNOWN_STAGE_OUT" "latest stage evidence is malformed" \
+  "unknown stage state cannot project as a dead resumable lease"
+
 LEASE_ROWS_BEFORE="$(jq -s --arg id "$CAMPAIGN_ID" \
   '[.[] | select(.kind == "stage" and .run_id == $id and .stage == "campaign")] | length' \
   "$CAMPAIGN_LEDGER")"
@@ -1567,6 +1763,9 @@ console.log(processLiveness({
 console.log(processLiveness({
   state: 'leased',
 }));
+console.log(processLiveness({
+  state: 'mystery',
+}));
 NODE
 )"
 assert_exit_code "$?" "0" "portable liveness projection process exits zero"
@@ -1574,6 +1773,8 @@ assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '1p')" "unknown" \
   "unverifiable live process identity fails closed as unknown"
 assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '2p')" "unknown" \
   "missing leased process identity fails closed as unknown"
+assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '3p')" "unknown" \
+  "unknown ledger state fails closed as unknown"
 
 LEDGER="$TEST_TMP/exclusive-ledger.jsonl"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null

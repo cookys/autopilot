@@ -58,8 +58,8 @@ function parsePayload(row) {
   if (typeof row.payload !== 'string') return row.payload;
   try {
     return JSON.parse(row.payload);
-  } catch (_error) {
-    return null;
+  } catch (error) {
+    throw new Error(`campaign ledger contains invalid JSON payload: ${error.message}`);
   }
 }
 
@@ -96,11 +96,9 @@ function projectCampaign(rows, campaignId) {
   };
 }
 
-function processAlive(lease) {
-  if (!lease || lease.state !== 'leased' || !Number.isInteger(lease.pid)) return false;
+function processStartTime(pid) {
   try {
-    process.kill(lease.pid, 0);
-    const stat = fs.readFileSync(`/proc/${lease.pid}/stat`, 'utf8');
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
     const close = stat.lastIndexOf(')');
     const fields = stat.slice(close + 2).trim().split(/\s+/);
     const startTicks = Number(fields[19]);
@@ -110,15 +108,36 @@ function processAlive(lease) {
     const ticksResult = spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' });
     const bootTime = Number(btimeLine && btimeLine.split(/\s+/)[1]);
     const ticks = Number(String(ticksResult.stdout || '').trim());
-    if (!Number.isFinite(startTicks) || !Number.isFinite(bootTime)
-        || !Number.isFinite(ticks) || ticks <= 0) {
-      return false;
+    if (Number.isFinite(startTicks) && Number.isFinite(bootTime)
+        && Number.isFinite(ticks) && ticks > 0) {
+      return Math.floor(bootTime + (startTicks / ticks));
     }
-    const currentStart = Math.floor(bootTime + (startTicks / ticks));
-    return currentStart === lease.start_time;
   } catch (_error) {
-    return false;
+    // Fall through to the portable ps projection.
   }
+  const result = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.error || result.status !== 0) return null;
+  const parsed = Date.parse(String(result.stdout || '').trim());
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+}
+
+function processLiveness(lease) {
+  if (!lease || lease.state !== 'leased' || !Number.isInteger(lease.pid) || lease.pid <= 0) {
+    return 'dead';
+  }
+  try {
+    process.kill(lease.pid, 0);
+  } catch (error) {
+    if (error && error.code === 'ESRCH') return 'dead';
+    return 'unknown';
+  }
+  if (!Number.isSafeInteger(lease.start_time) || lease.start_time <= 0) return 'unknown';
+  const currentStart = processStartTime(lease.pid);
+  if (currentStart === null) return 'unknown';
+  return currentStart === lease.start_time ? 'alive' : 'dead';
 }
 
 function runCampaignCli(argv, options = {}) {
@@ -151,12 +170,16 @@ function runCampaignCli(argv, options = {}) {
   }
   let status = 'resumable';
   let reason = null;
+  const liveness = processLiveness(projection.latest_lease);
   if (TERMINAL.has(projection.state.phase)) {
     status = 'terminal';
     reason = 'campaign is already terminal';
-  } else if (processAlive(projection.latest_lease)) {
+  } else if (liveness === 'alive') {
     status = 'blocked';
     reason = 'campaign already has a live lease';
+  } else if (liveness === 'unknown') {
+    status = 'blocked';
+    reason = 'campaign lease liveness cannot be verified';
   }
   process.stdout.write(`${JSON.stringify({
     status,
@@ -173,6 +196,7 @@ function runCampaignCli(argv, options = {}) {
 module.exports = {
   loadRows,
   parseArgs,
+  processLiveness,
   projectCampaign,
   runCampaignCli,
 };

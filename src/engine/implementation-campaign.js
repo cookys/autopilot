@@ -115,14 +115,17 @@ function parseTimestamp(value, label) {
   return parsed.getTime();
 }
 
-function campaignIdFor(repoIdentity, ticket) {
+function campaignIdFor(repoIdentity, ticket, contractDigest) {
   if (typeof repoIdentity !== 'string' || repoIdentity.length === 0) {
     fail('INVALID_CAMPAIGN_IDENTITY', 'repo identity is required');
   }
   if (typeof ticket !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(ticket)) {
     fail('INVALID_CAMPAIGN_IDENTITY', 'ticket must match [A-Za-z0-9._-]{1,128}');
   }
-  return `campaign-v1-${sha256(`${repoIdentity}\0${ticket}`)}`;
+  if (!isSha256(contractDigest)) {
+    fail('INVALID_CAMPAIGN_IDENTITY', 'contract digest must be a lowercase SHA-256 digest');
+  }
+  return `campaign-v1-${sha256(`${repoIdentity}\0${ticket}\0${contractDigest}`)}`;
 }
 
 function normalizeLimits(contract) {
@@ -157,7 +160,7 @@ function createCampaignState({
     fail('INVALID_CONTRACT_DIGEST', 'contractDigest must be a lowercase SHA-256 digest');
   }
   const startedAtMs = parseTimestamp(startedAt, 'startedAt');
-  const campaignId = campaignIdFor(repoIdentity, contract.ticket);
+  const campaignId = campaignIdFor(repoIdentity, contract.ticket, contractDigest);
   return {
     schema_version: CAMPAIGN_SCHEMA_VERSION,
     campaign_id: campaignId,

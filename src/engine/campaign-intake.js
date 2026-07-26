@@ -10,10 +10,18 @@ const {
   projectMissionMode,
 } = require('../../scripts/implementation-campaign-check');
 const {
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
   campaignIdFor,
   canonicalDigest,
   createCampaignState,
+  reduceCampaignState,
 } = require('./implementation-campaign');
+const {
+  loadRows,
+  processLiveness,
+  projectCampaign,
+} = require('../campaign/cli');
 
 const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const CONTEXT_GATE = path.resolve(__dirname, '..', '..', 'scripts', 'check-context-window.js');
@@ -168,6 +176,55 @@ function runLedger(args, repo) {
   };
 }
 
+function buildResumeEvent({
+  campaignId,
+  contractDigest,
+  existingState,
+  idempotencyKey,
+  observedAt,
+  stageIdentity,
+}) {
+  const observedMs = Date.parse(observedAt);
+  const startedMs = Date.parse(existingState.started_at);
+  return {
+    schema_version: 1,
+    event_type: CAMPAIGN_EVENTS.RESUMED,
+    campaign_id: campaignId,
+    contract_digest: contractDigest,
+    generation: existingState.generation,
+    idempotency_key: idempotencyKey,
+    input_artifact_digest: existingState.last_output_artifact_digest,
+    output_artifact_digest: existingState.last_output_artifact_digest,
+    timestamp: observedAt,
+    stage_identity: stageIdentity,
+    usage: {
+      ...existingState.usage,
+      elapsed_wall_seconds: Math.floor((observedMs - startedMs) / 1000),
+    },
+    payload: {},
+  };
+}
+
+function abandonCampaignLease({ campaignId, lease, ledgerPath, repo }) {
+  runLedger([
+    'stage-transition',
+    '--ledger',
+    ledgerPath,
+    '--run-id',
+    campaignId,
+    '--stage',
+    'campaign',
+    '--generation',
+    String(lease.generation),
+    '--nonce',
+    lease.nonce,
+    '--to-state',
+    'dead',
+    '--idempotency-key',
+    `campaign-abandon:${lease.generation}:${lease.nonce}`,
+  ], repo);
+}
+
 function defaultGenerationClaim({
   campaignId,
   contractDigest,
@@ -175,7 +232,94 @@ function defaultGenerationClaim({
   ledgerPath,
   repo,
   resume,
+  observedAt,
 }) {
+  let existing = null;
+  let resumePreflight = null;
+  if (fs.existsSync(ledgerPath)) {
+    try {
+      existing = projectCampaign(loadRows(ledgerPath), campaignId);
+    } catch (error) {
+      return rejected(
+        'campaign_generation',
+        'campaign_ledger_invalid',
+        error.message || String(error),
+      );
+    }
+  }
+  if (existing && resume !== true) {
+    return rejected(
+      'campaign_generation',
+      'campaign_resume_required',
+      'durable campaign already exists; explicit resume is required',
+    );
+  }
+  if (!existing && resume === true) {
+    return rejected(
+      'campaign_generation',
+      'campaign_resume_not_found',
+      'no durable campaign exists for the sealed contract',
+    );
+  }
+  if (existing) {
+    if (existing.state.contract_digest !== contractDigest) {
+      return rejected(
+        'campaign_generation',
+        'campaign_contract_mismatch',
+        'durable campaign does not match the sealed contract digest',
+      );
+    }
+    if (new Set([
+      CAMPAIGN_STATES.TERMINAL_READY,
+      CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
+      CAMPAIGN_STATES.TERMINAL_STOP,
+    ]).has(existing.state.phase)) {
+      return rejected(
+        'campaign_generation',
+        'campaign_already_terminal',
+        'terminal campaign cannot be resumed',
+      );
+    }
+    const liveness = processLiveness(existing.latest_lease);
+    if (liveness !== 'dead') {
+      return rejected(
+        'campaign_generation',
+        liveness === 'alive' ? 'campaign_lease_live' : 'campaign_lease_unknown',
+        liveness === 'alive'
+          ? 'campaign already has a live lease'
+          : 'campaign lease liveness cannot be verified',
+      );
+    }
+    if (existing.state.live_lease !== null) {
+      return rejected(
+        'campaign_generation',
+        'campaign_state_lease_open',
+        'durable campaign state still owns a mutation lease',
+      );
+    }
+    const preflightEvent = buildResumeEvent({
+      campaignId,
+      contractDigest,
+      existingState: existing.state,
+      idempotencyKey: `campaign-resume-preflight:${canonicalDigest({
+        campaignId,
+        eventCount: existing.state.event_count,
+        observedAt,
+      })}`,
+      observedAt,
+      stageIdentity: 'campaign-resume-preflight',
+    });
+    try {
+      resumePreflight = reduceCampaignState(existing.state, preflightEvent);
+    } catch (error) {
+      return rejected(
+        'campaign_generation',
+        error.code || 'campaign_resume_invalid',
+        error.message || String(error),
+      );
+    }
+  }
+
   const init = runLedger(['init', '--ledger', ledgerPath], repo);
   if (init.error || init.status !== 0) {
     return rejected(
@@ -210,13 +354,64 @@ function defaultGenerationClaim({
     );
   }
   const lease = acquired.payload;
-  const journalPayload = JSON.stringify({
+  let journalOp = 'campaign_intake';
+  let journalIdempotencyKey = `campaign-intake:${contractDigest}`;
+  let journalArtifact = {
     schema_version: 1,
     artifact_type: 'implementation_campaign_intake',
     campaign_id: campaignId,
     contract_digest: contractDigest,
     initial_state: initialState,
-  });
+  };
+  let resumedState = null;
+  if (existing) {
+    const resumeEvent = buildResumeEvent({
+      campaignId,
+      contractDigest,
+      existingState: existing.state,
+      idempotencyKey: `campaign-resume:${lease.generation}:${lease.nonce}`,
+      observedAt,
+      stageIdentity: `run-ledger:${lease.generation}:${lease.nonce}`,
+    });
+    try {
+      resumedState = reduceCampaignState(existing.state, resumeEvent);
+    } catch (error) {
+      abandonCampaignLease({
+        campaignId,
+        lease,
+        ledgerPath,
+        repo,
+      });
+      return rejected(
+        'campaign_generation',
+        error.code || 'campaign_resume_invalid',
+        error.message || String(error),
+      );
+    }
+    journalOp = 'campaign_event';
+    journalIdempotencyKey = resumeEvent.idempotency_key;
+    journalArtifact = {
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_event',
+      campaign_id: campaignId,
+      contract_digest: contractDigest,
+      event: resumeEvent,
+    };
+  }
+  if (existing && resumePreflight === null) {
+    abandonCampaignLease({
+      campaignId,
+      lease,
+      ledgerPath,
+      repo,
+    });
+    return rejected(
+      'campaign_generation',
+      'campaign_resume_invalid',
+      'campaign resume preflight did not produce a durable state',
+    );
+  }
+  const journalPayload = JSON.stringify(journalArtifact);
   const journal = runLedger([
     'journal-add',
     '--ledger',
@@ -230,13 +425,19 @@ function defaultGenerationClaim({
     '--nonce',
     lease.nonce,
     '--idempotency-key',
-    `campaign-intake:${contractDigest}`,
+    journalIdempotencyKey,
     '--op',
-    'campaign_intake',
+    journalOp,
     '--payload',
     journalPayload,
   ], repo);
   if (journal.error || journal.status !== 0) {
+    abandonCampaignLease({
+      campaignId,
+      lease,
+      ledgerPath,
+      repo,
+    });
     return rejected(
       'campaign_generation',
       'campaign_journal_rejected',
@@ -249,6 +450,7 @@ function defaultGenerationClaim({
     nonce: lease.nonce,
     ledger: ledgerPath,
     stage_identity: `run-ledger:${lease.generation}:${lease.nonce}`,
+    resumed_state: resumedState,
   });
 }
 
@@ -476,6 +678,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       occupancyAdapter({ contract, inspection, campaignId: campaignIdFor(
         inspection.repo_identity,
         contract.ticket,
+        inspection.contract_sha256,
       ) }),
       'worktree_lifecycle',
       new Set(['ready', 'unknown', 'rejected']),
@@ -490,7 +693,11 @@ function runCampaignIntake(input = {}, adapters = {}) {
   if (occupancy.status === 'rejected') return releaseAfterRejection(occupancy);
   steps.push(occupancy);
 
-  const campaignId = campaignIdFor(inspection.repo_identity, contract.ticket);
+  const campaignId = campaignIdFor(
+    inspection.repo_identity,
+    contract.ticket,
+    inspection.contract_sha256,
+  );
   const initialState = createCampaignState({
     contract,
     contractDigest: inspection.contract_sha256,
@@ -507,6 +714,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       ledgerPath,
       repo,
       resume: input.resume === true,
+      observedAt: now,
     }), 'campaign_generation', new Set(['claimed', 'rejected']));
   } catch (error) {
     return releaseAfterRejection(rejected(
@@ -536,14 +744,16 @@ function runCampaignIntake(input = {}, adapters = {}) {
   const shadowAxes = steps
     .filter((entry) => entry.status === 'unknown')
     .map((entry) => entry.owner);
+  const durableState = generation.resumed_state || initialState;
   return {
     status: 'admitted',
     reason: null,
     campaign_id: campaignId,
     contract_digest: inspection.contract_sha256,
     contract,
+    contract_path: contractPath,
     seal_path: inspection.seal_path,
-    initial_state: initialState,
+    initial_state: durableState,
     generation_claim: generation,
     full_enforcement: shadowAxes.length === 0,
     shadow_axes: shadowAxes,

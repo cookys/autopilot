@@ -678,6 +678,7 @@ function buildImplementationArgs({
   cwd,
   extraImplementationArgs = [],
   dispatchIdentity = null,
+  campaignContractFile = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -696,8 +697,13 @@ function buildImplementationArgs({
     '--branch',
     '--base',
     '--effort',
+    '--campaign-contract',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
+  if (campaignContractFile !== null
+      && (typeof campaignContractFile !== 'string' || campaignContractFile.length === 0)) {
+    throw new TypeError('campaignContractFile must be a non-empty string');
+  }
 
   const args = [
     '--runner',
@@ -717,6 +723,9 @@ function buildImplementationArgs({
     args,
     normalizeDispatchIdentity(dispatchIdentity, 'dispatchIdentity'),
   );
+  if (campaignContractFile) {
+    args.push('--campaign-contract', path.resolve(cwd || process.cwd(), campaignContractFile));
+  }
   args.push(...extraImplementationArgs);
   return args;
 }
@@ -1704,6 +1713,7 @@ class AutopilotEngine {
             stage: resolvedImplementationStage,
           }
           : null,
+        campaignContractFile: input.campaignContractFile || null,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -1874,6 +1884,25 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
+    if (input.legacyUnmanaged === true || input.campaignContract) {
+      return this._runImplementationReviewLoop(input);
+    }
+    return this._runImplementationReviewLoop({
+      ...input,
+      campaignManaged: true,
+    });
+  }
+
+  runLegacyImplementationReviewLoop(input = {}) {
+    return this._runImplementationReviewLoop({
+      ...input,
+      campaignManaged: false,
+      campaignContract: null,
+      legacyUnmanaged: true,
+    });
+  }
+
+  _runImplementationReviewLoop(input = {}) {
     // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
     // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
     // unless the caller explicitly passes dynamicReviewRisk: true.
@@ -2112,7 +2141,11 @@ class AutopilotEngine {
         verifyCmdProvided = true;
         verifyState.verifyCmdProvided = true;
       }
-      campaignMaxRounds = intake.contract.max_repair_generations + 1;
+      campaignMaxRounds = (
+        intake.contract.max_repair_generations
+        - intake.initial_state.generation
+        + 1
+      );
       campaignDispatchIdentity = {
         runId: intake.campaign_id,
         ledger: intake.generation_claim.ledger,
@@ -2380,6 +2413,9 @@ class AutopilotEngine {
           implementationStage: campaignDispatchIdentity
             ? 'campaign-implementation'
             : input.implementationStage,
+          campaignContractFile: campaignControl && campaignControl.status === 'admitted'
+            ? campaignControl.contract_path
+            : null,
           resultJson: input.resultJson,
           gitDir: input.gitDir,
           extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')

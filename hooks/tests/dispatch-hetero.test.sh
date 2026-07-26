@@ -354,6 +354,23 @@ assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
 
+# 12a. A managed campaign contract is an explicit leaf input and is prepended before
+# the original task so paths and budgets reach the mutating model process.
+CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
+printf '%s\n' '{"allowed_path_prefixes":["src/"],"max_changed_files":2,"max_extra_churn":40}' \
+  > "$CAMPAIGN_CONTRACT"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "campaign boundary dispatch exit code"
+assert_file_exists "$TEST_TMP/captured_prompt.txt" "campaign boundary prompt capture exists"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
+  "=== MACHINE-OWNED CAMPAIGN BOUNDARY ===" "campaign boundary delimiter reaches implementer"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
+  '"max_changed_files":2' "campaign file budget reaches implementer"
+assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
+  "create ok.txt" "campaign boundary retains the original task prompt"
+
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "nonexistent skill exit code"

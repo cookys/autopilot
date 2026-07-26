@@ -50,6 +50,7 @@
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
+#       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
 #       [--keep-worktree]                      # keep worktree even on success
@@ -112,6 +113,7 @@ QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test s
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
+CAMPAIGN_CONTRACT_FILE=""
 RUNNER="auto"
 EFFORT="xhigh"
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -152,6 +154,7 @@ SKILLS=()
 EFFECTIVE_SKILL_MODE="off"
 SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
+CAMPAIGN_PROMPT_FILE=""
 SKILL_PACK_CONTENT_TEMP=""
 STRICT_CONTRACT=0
 CONTRACT_FILE=""
@@ -329,6 +332,7 @@ CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome)
 . "$SELF_DIR/lib/worktree-reap.sh"
 cleanup() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+  [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
 }
 trap cleanup EXIT
@@ -813,6 +817,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
+    --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
@@ -940,6 +945,8 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+[ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
+  || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
 [ "$STRICT_CONTRACT" -eq 1 ] && [ "$CONTRACT_FILE_SUPPLIED" -eq 0 ] && die_precondition "--contract-file requires --strict-contract"
 [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] && [ "$STRICT_CONTRACT" -eq 0 ] && die_precondition "--strict-contract requires --contract-file"
 
@@ -1151,6 +1158,21 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   fi
 else
   EFFECTIVE_SKILL_MODE="off"
+fi
+
+# A managed campaign passes the already-sealed contract as an explicit leaf input.
+# This layer does not reinterpret scope authority; it makes the frozen paths and
+# budgets visible to the implementer while ICC retains admission and enforcement.
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
+  CAMPAIGN_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-campaign-prompt-XX''XX''XX')"
+  {
+    printf '%s\n' '=== MACHINE-OWNED CAMPAIGN BOUNDARY ==='
+    printf '%s\n' 'The JSON contract below is immutable. Stay within its allowed paths and budgets.'
+    cat "$CAMPAIGN_CONTRACT_FILE"
+    printf '%s\n\n' '=== END CAMPAIGN BOUNDARY ==='
+    cat "$PROMPT_FILE"
+  } > "$CAMPAIGN_PROMPT_FILE"
+  PROMPT_FILE="$CAMPAIGN_PROMPT_FILE"
 fi
 
 # --- context-window gate ---
@@ -1872,6 +1894,7 @@ detached_main() {
   # and the orchestrator (not this leaf) owns its later cleanup.
   KEEP=1
   local packed_prompt_for_child="${PACKED_PROMPT_TEMP:-}"
+  local campaign_prompt_for_child="${CAMPAIGN_PROMPT_FILE:-}"
   # Decouple from the caller's prompt temp lifecycle: copy it into a child-owned file so the
   # parent's EXIT cleanup cannot yank it mid-run.
   local child_prompt="$RESULTS_DIR/${RUN_ID}.${STAGE}.prompt"
@@ -1912,6 +1935,7 @@ detached_main() {
   fi
   rm -f "$child_prompt" 2>/dev/null || true
   [ -n "$packed_prompt_for_child" ] && rm -f "$packed_prompt_for_child" 2>/dev/null || true
+  [ -n "$campaign_prompt_for_child" ] && rm -f "$campaign_prompt_for_child" 2>/dev/null || true
   exit "$OUTCOME_EXIT"
 }
 
@@ -1934,6 +1958,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
+    declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit reap_container run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
@@ -1947,6 +1972,7 @@ dispatch_detached_run() {
   # Prevent the top-level EXIT cleanup from deleting the prompt temp under a detached child.
   # The detached child now owns and removes this prompt copy.
   unset PACKED_PROMPT_TEMP
+  unset CAMPAIGN_PROMPT_FILE
   # The child removes the state file right after sourcing (before the long run) so a caller-kill
   # of the parent — which skips the parent's own cleanup below — cannot leak it.
   setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
@@ -2036,6 +2062,7 @@ fi
 # ---- inline path (DISPATCH_DETACH=0 OR no ledger coords): byte-identical to pre-R1 behavior ----
 run_agent
 [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+[ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
 trap - INT TERM
 compute_artifacts
 classify_outcome

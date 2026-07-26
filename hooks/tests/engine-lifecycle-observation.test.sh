@@ -177,7 +177,7 @@ const roster = {
 };
 
 function run(engine, lifecycleObservation, extra = {}) {
-  return engine.runImplementationReviewLoop({
+  return engine.runLegacyImplementationReviewLoop({
     promptFile,
     branch: BRANCH_SECRET,
     base: BASE,

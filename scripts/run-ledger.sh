@@ -256,29 +256,41 @@ sort_csv_ids() {
 
 get_process_start_time() {
   local pid="$1"
-  if [ ! -r "/proc/$pid/stat" ]; then
-    echo "0"
-    return
+  if [ -r "/proc/$pid/stat" ]; then
+    local start_ticks btime clock_ticks
+    start_ticks="$(awk '{print $22}' "/proc/$pid/stat")"
+    btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
+    clock_ticks="$(getconf CLK_TCK 2>/dev/null || echo 0)"
+    if [ -n "$start_ticks" ] && [ "$clock_ticks" -gt 0 ] && [ "$btime" -gt 0 ]; then
+      echo $((btime + start_ticks / clock_ticks))
+      return
+    fi
   fi
-  local start_ticks
-  start_ticks="$(awk '{print $22}' "/proc/$pid/stat")"
-  if [ -z "$start_ticks" ]; then
-    echo "0"
-    return
+  local ps_start parsed
+  if ! ps_start="$(ps -o lstart= -p "$pid" 2>/dev/null \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"; then
+    ps_start=""
   fi
-  local btime clock_ticks
-  btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
-  clock_ticks="$(getconf CLK_TCK)"
-  if [ -z "$clock_ticks" ] || [ "$clock_ticks" -le 0 ] || [ -z "$btime" ]; then
-    echo "0"
-    return
+  if [ -n "$ps_start" ]; then
+    if ! parsed="$(date -d "$ps_start" +%s 2>/dev/null)"; then
+      parsed=""
+    fi
+    if [ -z "$parsed" ]; then
+      if ! parsed="$(date -j -f '%a %b %e %T %Y' "$ps_start" +%s 2>/dev/null)"; then
+        parsed=""
+      fi
+    fi
+    if [ -n "$parsed" ]; then
+      echo "$parsed"
+      return
+    fi
   fi
-  echo $((btime + start_ticks / clock_ticks))
+  echo "0"
 }
 
 is_process_alive() {
   local pid="$1" expected_start="$2"
-  if [ -z "$pid" ] || [ "$pid" -le 0 ] || [ ! -d "/proc/$pid" ]; then
+  if [ -z "$pid" ] || [ "$pid" -le 0 ]; then
     return 1
   fi
   if ! kill -0 "$pid" 2>/dev/null; then
@@ -287,7 +299,7 @@ is_process_alive() {
   if [ -n "$expected_start" ] && [ "$expected_start" -gt 0 ]; then
     local current_start
     current_start="$(get_process_start_time "$pid")"
-    if [ "$current_start" -ne "$expected_start" ]; then
+    if [ "$current_start" -gt 0 ] && [ "$current_start" -ne "$expected_start" ]; then
       return 1
     fi
   fi

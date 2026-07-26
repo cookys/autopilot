@@ -637,9 +637,11 @@ function releaseCampaignAdmission(input = {}, adapters = {}) {
       now,
     })
     : null;
-  const releaseKey = `campaign-abandon:${claim.generation}:${claim.nonce}`;
+  const releaseKey = `campaign-admission-release:${claim.generation}:${claim.nonce}`;
+  const transitionKey = `campaign-abandon:${claim.generation}:${claim.nonce}`;
   const rejectionDigest = canonicalDigest(rejection);
   let releaseRecorded = false;
+  let leaseAlreadyDead = false;
   try {
     const rows = fs.existsSync(claim.ledger) ? loadRows(claim.ledger) : [];
     const releaseRow = rows.find((row) => row
@@ -670,6 +672,16 @@ function releaseCampaignAdmission(input = {}, adapters = {}) {
       releaseRecorded = true;
       receipt = artifact.pre_spend_no_effect_receipt;
     }
+    const latestStage = rows
+      .filter((row) => row
+        && row.run_id === control.campaign_id
+        && row.kind === 'stage'
+        && row.stage === 'campaign')
+      .at(-1);
+    leaseAlreadyDead = Boolean(latestStage
+      && latestStage.generation === claim.generation
+      && latestStage.nonce === claim.nonce
+      && latestStage.state === 'dead');
   } catch (error) {
     return {
       status: 'blocked',
@@ -767,13 +779,15 @@ function releaseCampaignAdmission(input = {}, adapters = {}) {
       };
     }
   }
-  const abandoned = abandonCampaignLease({
-    campaignId: control.campaign_id,
-    lease: claim,
-    ledgerPath: claim.ledger,
-    repo,
-    idempotencyKey: releaseKey,
-  });
+  const abandoned = leaseAlreadyDead
+    ? { error: null, status: 0, replayed: true }
+    : abandonCampaignLease({
+      campaignId: control.campaign_id,
+      lease: claim,
+      ledgerPath: claim.ledger,
+      repo,
+      idempotencyKey: transitionKey,
+    });
   const leaseRelease = abandoned.error || abandoned.status !== 0
     ? rejected(
       'campaign_generation_release',

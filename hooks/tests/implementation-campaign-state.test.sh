@@ -1501,6 +1501,15 @@ console.log(`replayed_release_receipt_match=${
   replayedAdmissionRelease.pre_spend_no_effect_receipt.receipt_digest
     === admissionRelease.pre_spend_no_effect_receipt.receipt_digest
 }`);
+const releasedLease = fs.readFileSync(ledgerPath, 'utf8')
+  .trim()
+  .split('\n')
+  .map(JSON.parse)
+  .filter((row) => row.run_id === campaignId
+    && row.kind === 'stage'
+    && row.stage === 'campaign')
+  .at(-1);
+console.log(`replayed_release_lease_state=${releasedLease.state}`);
 
 const crashContractPath = path.join(path.dirname(contractPath), 'crash-campaign.json');
 const crashSealPath = path.join(path.dirname(sealPath), 'crash-campaign.seal.json');
@@ -1571,6 +1580,8 @@ assert_contains "$DEFAULT_INTAKE_OUT" "replayed_release_status=released" \
   "a completed admission release replays idempotently"
 assert_contains "$DEFAULT_INTAKE_OUT" "replayed_release_receipt_match=true" \
   "release replay returns the originally journaled no-effect receipt"
+assert_contains "$DEFAULT_INTAKE_OUT" "replayed_release_lease_state=dead" \
+  "release completion and lease transition remain distinct durable operations"
 assert_contains "$DEFAULT_INTAKE_OUT" "crash_recovered_generation=2" \
   "a leased intake claim owned by a dead process recovers after the crash window"
 CAMPAIGN_ID="$(node -e \

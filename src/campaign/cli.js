@@ -114,6 +114,37 @@ function parsePayload(row) {
   }
 }
 
+function validateCampaignStageHistory(stageRows, intake, campaignId) {
+  if (stageRows.length === 0) {
+    throw new Error('campaign ledger intake root has no stage history');
+  }
+  if (!Number.isSafeInteger(intake.generation)
+      || intake.generation < 1
+      || typeof intake.nonce !== 'string'
+      || intake.nonce.length === 0
+      || !stageRows.some((row) => row.state === 'leased'
+        && row.generation === intake.generation
+        && row.nonce === intake.nonce)) {
+    throw new Error('campaign ledger intake root is not bound to its generation lease');
+  }
+  const latest = stageRows[stageRows.length - 1];
+  if (!Number.isSafeInteger(latest.generation)
+      || latest.generation < 1
+      || typeof latest.nonce !== 'string'
+      || latest.nonce.length === 0
+      || typeof latest.state !== 'string'
+      || latest.resources !== `campaign:${campaignId}`) {
+    throw new Error('campaign ledger latest stage evidence is malformed');
+  }
+  if (latest.state === 'leased'
+      && (!Number.isSafeInteger(latest.pid)
+        || latest.pid <= 0
+        || !Number.isSafeInteger(latest.start_time)
+        || latest.start_time <= 0)) {
+    throw new Error('campaign ledger live lease identity is malformed');
+  }
+}
+
 function projectCampaign(rows, campaignId) {
   const owned = rows.filter((row) => row && row.run_id === campaignId);
   const intakes = owned.filter(
@@ -154,6 +185,7 @@ function projectCampaign(rows, campaignId) {
     state = reduceCampaignState(state, payload.event);
   }
   const stageRows = owned.filter((row) => row.kind === 'stage' && row.stage === 'campaign');
+  validateCampaignStageHistory(stageRows, intake, campaignId);
   return {
     schema_version: 1,
     campaign_id: campaignId,
@@ -194,9 +226,8 @@ function processStartTime(pid) {
 }
 
 function processLiveness(lease) {
-  if (!lease || lease.state !== 'leased' || !Number.isInteger(lease.pid) || lease.pid <= 0) {
-    return 'dead';
-  }
+  if (!lease || lease.state !== 'leased') return 'dead';
+  if (!Number.isInteger(lease.pid) || lease.pid <= 0) return 'unknown';
   try {
     process.kill(lease.pid, 0);
   } catch (error) {

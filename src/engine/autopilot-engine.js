@@ -11,7 +11,10 @@ const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
-const { runCampaignIntake } = require('./campaign-intake');
+const {
+  releaseCampaignAdmission,
+  runCampaignIntake,
+} = require('./campaign-intake');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const MISPLACEMENT_PATH_PATTERNS = [
@@ -760,6 +763,23 @@ function reviewerQualificationViable(roster) {
     }) !== null;
 }
 
+function isCampaignPreSpendRejection(result) {
+  if (!result || result.status !== 'blocked') return false;
+  if (result.phase === 'prepare_implementation'
+      && result.implementationResult === null
+      && result.implementation === null) {
+    return true;
+  }
+  const leaf = result.implementation;
+  return leaf
+    && leaf.status === 'precondition_failed'
+    && leaf.commit === null
+    && leaf.worktree === null
+    && leaf.files_changed === 0
+    && leaf.insertions === 0
+    && leaf.deletions === 0;
+}
+
 function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
@@ -1078,6 +1098,8 @@ class AutopilotEngine {
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
     this.lifecycleObserver = options.lifecycleObserver || null;
     this.campaignIntake = options.campaignIntake || runCampaignIntake;
+    this.campaignAdmissionReleaser = options.campaignAdmissionReleaser
+      || releaseCampaignAdmission;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -2463,6 +2485,40 @@ class AutopilotEngine {
       if (lifecycleObservation) lifecycleObservation.observeImplementationResult(implementation, round);
       if (implementation.status !== 'committed') {
         const implementationPhase = implementation.phase || 'dispatch_implementation';
+        if (campaignControl
+            && campaignControl.status === 'admitted'
+            && isCampaignPreSpendRejection(implementation)) {
+          const releaseStartedAt = this.now();
+          const rejection = {
+            owner: 'implementation_dispatch',
+            status: 'rejected',
+            code: 'campaign_leaf_pre_spend_rejected',
+            reason: implementation.reason || `implementation status ${implementation.status}`,
+          };
+          let release;
+          try {
+            release = this.campaignAdmissionReleaser({
+              repo: loopCwd,
+              campaignControl,
+              rejection,
+              observedAt: releaseStartedAt,
+            });
+          } catch (error) {
+            release = {
+              status: 'blocked',
+              error: error.code || error.message || String(error),
+            };
+          }
+          campaignControl = {
+            ...campaignControl,
+            admission_release: release,
+          };
+          ledger.push(this.ledgerEntry(
+            'campaign_admission_release',
+            release.status === 'released' ? 'released' : 'blocked',
+            releaseStartedAt,
+          ));
+        }
         return finish({
           status: 'blocked',
           phase: implementationPhase,

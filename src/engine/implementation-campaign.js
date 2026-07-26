@@ -32,6 +32,10 @@ const TERMINAL_STATES = new Set([
   CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
   CAMPAIGN_STATES.TERMINAL_STOP,
 ]);
+const MUTATION_START_EVENTS = new Set([
+  CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
+  CAMPAIGN_EVENTS.REPAIR_STARTED,
+]);
 const EVENT_KEYS = new Set([
   'schema_version',
   'event_type',
@@ -433,6 +437,10 @@ function reduceCampaignState(currentState, event) {
     fail('GENERATION_MISMATCH', `event generation must equal ${expectedGeneration}`);
   }
   validateUsage(currentState, event, expectedGeneration);
+  if (MUTATION_START_EVENTS.has(event.event_type)
+      && event.usage.elapsed_wall_seconds >= currentState.limits.max_wall_seconds) {
+    fail('WALL_BUDGET_EXHAUSTED', 'mutation cannot start without remaining wall-clock budget');
+  }
 
   if (event.event_type === CAMPAIGN_EVENTS.RESUMED) {
     if (currentState.live_lease) {

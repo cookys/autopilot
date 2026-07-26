@@ -37,6 +37,12 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
     minimum_action_class: 'external',
     requires_mediator: true,
   },
+  'campaign-admission-release': {
+    operation: 'engine_campaign_admission_release',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
   'review-dispatch': {
     operation: 'engine_review_dispatch',
     tool_class: 'model_runner',
@@ -96,6 +102,7 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
 
 const EXPECTED_CONTROL_SINKS = [
   ['campaign-intake', 'campaignIntake', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-admission-release', 'campaignAdmissionReleaser', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['review-loop-resolution', 'reviewLoopResolver', 'policy_read', [], false],
   ['review-dispatch', 'reviewDispatcher', 'challenge_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate', 'recordChallenge'], true],
   ['implementation-dispatch', 'implementationDispatcher', 'worker_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate'], true],
@@ -716,8 +723,8 @@ NODE
 NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
-assert_contains "$OUT" "sink_inventory=14" "all injected engine control sinks are covered"
-assert_contains "$OUT" "action_catalog_bindings=10" "every mutable sink requires a frozen catalog binding"
+assert_contains "$OUT" "sink_inventory=15" "all injected engine control sinks are covered"
+assert_contains "$OUT" "action_catalog_bindings=11" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"
 assert_contains "$OUT" "mutation_rejected=true" "frozen inputs and compiled contract tampering fail closed"

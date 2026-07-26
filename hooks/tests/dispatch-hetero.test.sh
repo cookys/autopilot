@@ -359,7 +359,11 @@ assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evalu
 CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
 printf '%s\n' '{"allowed_path_prefixes":["src/"],"max_changed_files":2,"max_extra_churn":40}' \
   > "$CAMPAIGN_CONTRACT"
-CAMPAIGN_CONTRACT_SHA="$(sha256sum "$CAMPAIGN_CONTRACT" | awk '{print $1}')"
+CAMPAIGN_CONTRACT_SHA="$(node -e '
+  const crypto = require("crypto");
+  const fs = require("fs");
+  process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+' "$CAMPAIGN_CONTRACT")"
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \

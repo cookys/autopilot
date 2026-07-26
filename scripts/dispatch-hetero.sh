@@ -1178,7 +1178,14 @@ if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
   CAMPAIGN_CONTRACT_SNAPSHOT="$(mktemp -t 'dispatch-hetero-campaign-contract-XX''XX''XX')"
   cp -- "$CAMPAIGN_CONTRACT_FILE" "$CAMPAIGN_CONTRACT_SNAPSHOT" \
     || die_precondition "campaign contract snapshot failed"
-  _campaign_snapshot_digest="$(sha256sum "$CAMPAIGN_CONTRACT_SNAPSHOT" | awk '{print $1}')"
+  command -v node >/dev/null 2>&1 \
+    || die_precondition "node is required to verify the campaign contract digest"
+  _campaign_snapshot_digest="$(node -e '
+    const crypto = require("crypto");
+    const fs = require("fs");
+    process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+  ' "$CAMPAIGN_CONTRACT_SNAPSHOT")" \
+    || die_precondition "campaign contract digest verification failed"
   [ "$_campaign_snapshot_digest" = "$CAMPAIGN_CONTRACT_SHA256" ] \
     || die_precondition "campaign contract digest changed after intake"
   CAMPAIGN_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-campaign-prompt-XX''XX''XX')"

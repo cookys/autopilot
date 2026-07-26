@@ -232,7 +232,7 @@ function buildResumeEvent({
 }
 
 function abandonCampaignLease({ campaignId, lease, ledgerPath, repo }) {
-  runLedger([
+  return runLedger([
     'stage-transition',
     '--ledger',
     ledgerPath,
@@ -291,16 +291,39 @@ function defaultGenerationClaim({
     }
     if (stageRows.length > 0) {
       const latest = stageRows[stageRows.length - 1];
-      if (latest.state !== 'dead'
-          || latest.transition_from !== 'leased'
-          || latest.resources !== `campaign:${campaignId}`) {
+      if (latest.resources !== `campaign:${campaignId}`) {
+        return rejected(
+          'campaign_generation',
+          'campaign_orphaned_claim_invalid',
+          'campaign intake claim does not own the canonical campaign resource',
+        );
+      }
+      const liveness = processLiveness(latest);
+      if (latest.state === 'leased' && liveness === 'alive') {
+        return rejected(
+          'campaign_generation',
+          'campaign_lease_live',
+          'campaign intake claim is still owned by a live process',
+        );
+      }
+      if (latest.state === 'leased' && liveness === 'unknown') {
+        return rejected(
+          'campaign_generation',
+          'campaign_lease_unknown',
+          'campaign intake claim liveness cannot be verified',
+        );
+      }
+      if (latest.state === 'dead'
+          && latest.transition_from === 'leased'
+          && latest.resources === `campaign:${campaignId}`) {
+        reopenAbandonedClaim = true;
+      } else if (latest.state !== 'leased' || liveness !== 'dead') {
         return rejected(
           'campaign_generation',
           'campaign_orphaned_claim_invalid',
           'campaign ledger contains a non-recoverable claim without an intake root',
         );
       }
-      reopenAbandonedClaim = true;
     }
   }
   if (existing && resume !== true) {
@@ -549,6 +572,94 @@ function buildNoEffectReceipt({ missionClaim, rejection, campaignDigest, now }) 
   };
 }
 
+function releaseCampaignAdmission(input = {}, adapters = {}) {
+  const control = input.campaignControl;
+  const repo = path.resolve(input.repo || process.cwd());
+  const rejection = input.rejection;
+  const now = typeof input.observedAt === 'string'
+    ? input.observedAt
+    : (typeof adapters.now === 'function' ? adapters.now() : new Date().toISOString());
+  if (!control || control.status !== 'admitted'
+      || !control.generation_claim
+      || typeof control.campaign_id !== 'string'
+      || typeof control.contract_digest !== 'string') {
+    throw new CampaignIntakeError(
+      'campaign_release_invalid',
+      'campaign admission release requires one admitted campaign control',
+    );
+  }
+  if (!rejection || rejection.status !== 'rejected'
+      || typeof rejection.owner !== 'string'
+      || typeof rejection.code !== 'string'
+      || typeof rejection.reason !== 'string') {
+    throw new CampaignIntakeError(
+      'campaign_release_invalid',
+      'campaign admission release requires one named rejection',
+    );
+  }
+  const claim = control.generation_claim;
+  const abandoned = abandonCampaignLease({
+    campaignId: control.campaign_id,
+    lease: claim,
+    ledgerPath: claim.ledger,
+    repo,
+  });
+  const leaseRelease = abandoned.error || abandoned.status !== 0
+    ? rejected(
+      'campaign_generation_release',
+      'campaign_lease_release_failed',
+      abandoned.error
+        ? abandoned.error.message
+        : String(abandoned.stderr || 'campaign lease release failed').trim(),
+    )
+    : step('campaign_generation_release', 'released', {
+      generation: claim.generation,
+      nonce: claim.nonce,
+    });
+
+  const missionClaim = Array.isArray(control.steps)
+    ? control.steps.find((entry) => entry.owner === 'mission')
+    : null;
+  let missionRelease = null;
+  let receipt = null;
+  if (missionClaim && missionClaim.status === 'claimed') {
+    receipt = buildNoEffectReceipt({
+      missionClaim,
+      rejection,
+      campaignDigest: control.contract_digest,
+      now,
+    });
+    try {
+      if (typeof adapters.releaseMission !== 'function') {
+        throw new CampaignIntakeError(
+          'mission_release_adapter_missing',
+          'claimed Mission admission requires a release adapter',
+        );
+      }
+      missionRelease = requireDecision(
+        adapters.releaseMission({ missionClaim, receipt }),
+        'mission_release',
+        new Set(['released', 'rejected']),
+      );
+    } catch (error) {
+      missionRelease = rejected(
+        'mission_release',
+        error.code || 'mission_release_failed',
+        error.message || String(error),
+      );
+    }
+  }
+  const released = leaseRelease.status === 'released'
+    && (!missionRelease || missionRelease.status === 'released');
+  return {
+    status: released ? 'released' : 'blocked',
+    rejection,
+    campaign_generation_release: leaseRelease,
+    mission_release: missionRelease,
+    pre_spend_no_effect_receipt: receipt,
+  };
+}
+
 function runCampaignIntake(input = {}, adapters = {}) {
   const repo = path.resolve(input.repo || process.cwd());
   const contractPath = input.contractPath && path.resolve(repo, input.contractPath);
@@ -585,6 +696,21 @@ function runCampaignIntake(input = {}, adapters = {}) {
     };
   }
 
+  if (typeof adapters.missionClaim === 'function'
+      && typeof adapters.releaseMission !== 'function') {
+    const rejection = rejected(
+      'mission',
+      'mission_adapter_pair_required',
+      'Mission claim adapter requires a matching release adapter before claim',
+    );
+    return {
+      status: 'blocked',
+      reason: rejection.reason,
+      rejection,
+      steps: [rejection],
+      pre_spend_no_effect_receipt: null,
+    };
+  }
   const missionClaimAdapter = adapters.missionClaim || defaultMissionClaim;
   const missionClaim = requireDecision(missionClaimAdapter({
     missionMode,
@@ -625,16 +751,11 @@ function runCampaignIntake(input = {}, adapters = {}) {
       });
       let release;
       try {
-        release = adapters.releaseMission
-          ? adapters.releaseMission({ missionClaim, receipt })
-          : step('mission_release', 'unknown', {
-            enforcement: 'shadow',
-            reason: 'Mission release adapter is not shipped yet',
-          });
+        release = adapters.releaseMission({ missionClaim, receipt });
         release = requireDecision(
           release,
           'mission_release',
-          new Set(['released', 'unknown', 'rejected']),
+          new Set(['released', 'rejected']),
         );
       } catch (error) {
         release = rejected(
@@ -682,6 +803,13 @@ function runCampaignIntake(input = {}, adapters = {}) {
       inspection.verdict === 'DRIFT' ? 'campaign_contract_drift' : 'campaign_contract_invalid',
       `${inspection.verdict}: ${JSON.stringify(inspection.errors || inspection.drift || [])}`,
       { receipt: inspection },
+    ));
+  }
+  if (rawContractDigest !== inspection.contract_sha256) {
+    return releaseAfterRejection(rejected(
+      'campaign_contract',
+      'campaign_contract_changed',
+      'campaign contract bytes changed after Mission claim',
     ));
   }
   const contract = inspection.contract;
@@ -857,5 +985,6 @@ module.exports = {
   CampaignIntakeError,
   buildNoEffectReceipt,
   defaultCampaignSealPath,
+  releaseCampaignAdmission,
   runCampaignIntake,
 };

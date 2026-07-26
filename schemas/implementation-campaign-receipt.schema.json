@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/implementation-campaign-receipt.schema.json",
+  "title": "implementation-campaign-receipt",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "campaign_id",
+        "tree_sha",
+        "argv_hash",
+        "env_fingerprint",
+        "request_digest",
+        "verdict",
+        "exit_status",
+        "writer_lease_closed",
+        "detached_checkout",
+        "stdout_digest",
+        "stderr_digest",
+        "started_at",
+        "ended_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "implementation_campaign_verification" },
+        "campaign_id": { "type": "string", "minLength": 1 },
+        "tree_sha": { "$ref": "#/$defs/gitObject" },
+        "argv_hash": { "$ref": "#/$defs/sha256" },
+        "env_fingerprint": { "$ref": "#/$defs/sha256" },
+        "request_digest": { "$ref": "#/$defs/sha256" },
+        "verdict": { "type": "string", "enum": ["GREEN", "RED"] },
+        "exit_status": { "type": "integer" },
+        "writer_lease_closed": { "type": "boolean", "const": true },
+        "detached_checkout": { "type": "boolean", "const": true },
+        "stdout_digest": { "$ref": "#/$defs/sha256" },
+        "stderr_digest": { "$ref": "#/$defs/sha256" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "status",
+        "candidate_tree_sha",
+        "verification_receipt_digest",
+        "repair_generations",
+        "final_panel_count",
+        "follow_up",
+        "unresolved_final_findings",
+        "trace",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "implementation_campaign_terminal" },
+        "status": { "type": "string", "enum": ["ready", "follow_up"] },
+        "candidate_tree_sha": { "$ref": "#/$defs/gitObject" },
+        "verification_receipt_digest": { "$ref": "#/$defs/sha256" },
+        "repair_generations": { "type": "integer", "minimum": 0 },
+        "final_panel_count": { "type": "integer", "const": 1 },
+        "follow_up": { "type": "array" },
+        "unresolved_final_findings": { "type": "array" },
+        "trace": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    }
+  }
+}

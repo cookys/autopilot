@@ -839,6 +839,7 @@ function campaignControlFixture(nonce, initialState = admitted.initial_state) {
     campaign_id: campaignId,
     contract_digest: 'c'.repeat(64),
     contract: {
+      ...admitted.contract,
       verify_cmd: 'fixture verify',
       max_repair_generations: 2,
     },
@@ -1096,7 +1097,7 @@ console.log(`expired_review_phase=${expiredBeforeReview.phase}`);
 console.log(`expired_review_calls=${expiredReviewCalls}`);
 
 const implementationCalls = [];
-let reviewArgs = null;
+const reviewCalls = [];
 const identityEngine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-26T00:00:01.000Z',
@@ -1132,7 +1133,7 @@ const identityEngine = new AutopilotEngine({
     };
   },
   reviewDispatcher(args) {
-    reviewArgs = args;
+    reviewCalls.push(args);
     return {
       error: null,
       status: 0,
@@ -1218,7 +1219,7 @@ const managedResumeResult = identityEngine.runImplementationReviewLoop({
   resume: true,
 });
 console.log(`identity_status=${identityResult.status}`);
-const argValue = (args, flag) => args[args.indexOf(flag) + 1];
+const argValue = (args, flag) => args ? args[args.indexOf(flag) + 1] : '<missing>';
 const implementationArgs = implementationCalls[0];
 const roundTwoArgs = implementationCalls[1];
 const managedResumeArgs = implementationCalls[2];
@@ -1227,9 +1228,10 @@ console.log(`implementation_run_id=${argValue(implementationArgs, '--run-id')}`)
 console.log(`implementation_stage=${argValue(implementationArgs, '--stage')}`);
 console.log(`implementation_contract=${argValue(implementationArgs, '--campaign-contract')}`);
 console.log(`implementation_contract_sha=${argValue(implementationArgs, '--campaign-contract-sha256')}`);
-console.log(`review_ledger=${argValue(reviewArgs, '--ledger')}`);
-console.log(`review_run_id=${argValue(reviewArgs, '--run-id')}`);
-console.log(`review_stage=${argValue(reviewArgs, '--stage')}`);
+console.log(`review_ledger=${argValue(reviewCalls[0], '--ledger')}`);
+console.log(`review_run_id=${argValue(reviewCalls[0], '--run-id')}`);
+console.log(`review_stage=${argValue(reviewCalls[0], '--stage')}`);
+console.log(`final_review_stage=${argValue(reviewCalls[1], '--stage')}`);
 console.log(`round_two_status=${roundTwoResult.status}`);
 console.log(`round_two_stage=${argValue(roundTwoArgs, '--stage')}`);
 console.log(`managed_resume_status=${managedResumeResult.status}`);
@@ -1363,6 +1365,9 @@ assert_contains "$INTAKE_OUT" \
 assert_contains "$INTAKE_OUT" \
   "review_stage=campaign-review#r1" \
   "managed review receives a round-specific campaign stage identity"
+assert_contains "$INTAKE_OUT" \
+  "final_review_stage=campaign-final-review" \
+  "managed campaign performs one separately identified final panel"
 assert_contains "$INTAKE_OUT" "round_two_status=committed" \
   "managed round-two implementation dispatches successfully"
 assert_contains "$INTAKE_OUT" "round_two_stage=campaign-implementation#r2" \

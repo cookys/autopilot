@@ -169,6 +169,33 @@ function buildReasons(verdict, gate1, gate3) {
   return reasons;
 }
 
+function evaluateLoopConvergence(artifacts, options = {}) {
+  if (!Array.isArray(artifacts) || artifacts.length === 0) {
+    throw new TypeError('artifacts must be a non-empty array');
+  }
+  const generationCap = options.generationCap === undefined
+    ? 3
+    : parseGenerationCap(options.generationCap);
+  if (generationCap === null) {
+    throw new TypeError('generationCap must be a non-negative integer');
+  }
+  const ordered = sortArtifactsByGeneration(artifacts.map((artifact, index) => ({
+    artifact,
+    generation: parseGeneration(artifact && artifact.artifact_generation),
+    _inputIndex: index,
+  })));
+  const gate1 = runGate1(ordered);
+  const gate3 = runGate3(ordered, generationCap);
+  const verdict = (gate1.tripped || gate3.tripped) ? 'TRIP' : 'PASS';
+  return {
+    verdict,
+    artifact_count: ordered.length,
+    gate1_zero_execution: gate1,
+    gate3_generation_cap: gate3,
+    reasons: buildReasons(verdict, gate1, gate3),
+  };
+}
+
 function parseArgs(argv) {
   const opts = {
     artifactsDir: null,
@@ -244,27 +271,22 @@ function main() {
     return loadedArtifact;
   });
 
-  const ordered = sortArtifactsByGeneration(loaded);
-
-  const gate1 = runGate1(ordered);
-  const gate3 = runGate3(ordered, args.generationCap);
-
-  const verdict = (gate1.tripped || gate3.tripped) ? 'TRIP' : 'PASS';
-  const result = {
-    verdict,
-    artifact_count: ordered.length,
-    gate1_zero_execution: gate1,
-    gate3_generation_cap: gate3,
-    reasons: buildReasons(verdict, gate1, gate3),
-  };
+  const result = evaluateLoopConvergence(
+    loaded.map((item) => item.artifact),
+    { generationCap: args.generationCap },
+  );
 
   const out = JSON.stringify(result, null, 2);
   process.stdout.write(out + '\n');
 
-  if (args.enforce && verdict === 'TRIP') {
+  if (args.enforce && result.verdict === 'TRIP') {
     process.exit(3);
   }
   process.exit(0);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = {
+  evaluateLoopConvergence,
+};

@@ -5,6 +5,10 @@ const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const { isImmutableGitSha } = require('../lib/common');
+const {
+  contractDigest: repairScopeContractDigest,
+  evaluate: evaluateRepairScope,
+} = require('../../scripts/check-repair-scope');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
@@ -15,6 +19,15 @@ const {
   releaseCampaignAdmission,
   runCampaignIntake,
 } = require('./campaign-intake');
+const { runCampaignComposition } = require('./campaign-composition');
+const {
+  canonicalDigest: campaignCanonicalDigest,
+  createVerificationReceipt,
+  createVerificationRequest,
+  reusableGreenReceipt,
+} = require('./campaign-verification');
+const { adjudicateCampaignReview } = require('./campaign-adjudication');
+const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergence');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const MISPLACEMENT_PATH_PATTERNS = [
@@ -820,6 +833,68 @@ function campaignMutationBudgetStatus(control, observedAt) {
   return { ...wall, axis: null };
 }
 
+function createCampaignScopeSession({ contract, base, implementationSha }) {
+  const allowedNewPaths = contract.allowed_path_prefixes.map((prefix) => (
+    prefix.endsWith('/') ? `${prefix}**` : `${prefix}/**`
+  ));
+  const scopeContract = Object.freeze({
+    schema: 1,
+    task_id: contract.ticket,
+    base_sha: base,
+    implementation_sha: implementationSha,
+    allowed_path_prefixes: [...contract.allowed_path_prefixes],
+    allowed_new_paths: allowedNewPaths,
+    baseline_churn: contract.baseline_churn,
+    max_growth_ratio: contract.max_growth_ratio,
+    max_extra_churn: contract.max_extra_churn,
+  });
+  return Object.freeze({
+    contract: scopeContract,
+    seal_digest: repairScopeContractDigest(scopeContract),
+    max_changed_files: contract.max_changed_files,
+  });
+}
+
+function checkCampaignScope({ session, repo, head }) {
+  if (!session
+      || repairScopeContractDigest(session.contract) !== session.seal_digest) {
+    return {
+      passed: false,
+      verdict: 'TRIP',
+      reason: 'campaign scope seal drifted',
+    };
+  }
+  let result;
+  try {
+    result = evaluateRepairScope(session.contract, repo, head);
+  } catch (error) {
+    return {
+      passed: false,
+      verdict: 'TRIP',
+      reason: error.message || String(error),
+    };
+  }
+  const fileCapPassed = result.changed_files.length <= session.max_changed_files;
+  const body = {
+    ...result,
+    file_cap: session.max_changed_files,
+    file_cap_passed: fileCapPassed,
+    seal_digest: session.seal_digest,
+  };
+  return {
+    ...body,
+    passed: result.verdict === 'PASS' && fileCapPassed,
+    receipt_digest: campaignCanonicalDigest(body),
+    reason: result.verdict === 'PASS' && fileCapPassed
+      ? null
+      : (fileCapPassed ? 'repair scope gate tripped' : 'changed-file cap exceeded'),
+  };
+}
+
+function defaultCampaignAdjudicator({ review, convergenceVerdict, now }) {
+  return adjudicateCampaignReview({ review, convergenceVerdict, now });
+}
+
 function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
@@ -1140,6 +1215,9 @@ class AutopilotEngine {
     this.campaignIntake = options.campaignIntake || runCampaignIntake;
     this.campaignAdmissionReleaser = options.campaignAdmissionReleaser
       || releaseCampaignAdmission;
+    this.campaignComposer = options.campaignComposer || runCampaignComposition;
+    this.campaignAdjudicator = options.campaignAdjudicator || defaultCampaignAdjudicator;
+    this.campaignScopeChecker = options.campaignScopeChecker || checkCampaignScope;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -2047,6 +2125,420 @@ class AutopilotEngine {
     });
   }
 
+  _runManagedCampaignComposition({
+    input,
+    campaignControl,
+    roster,
+    resolveResult,
+    loopCwd,
+    promptFile,
+    branch,
+    base,
+    verifyCmd,
+    convergenceVerdict,
+    requireQualifiedReviewer,
+    ledger,
+    releaseCampaignNoEffect,
+  }) {
+    const implementationChain = [];
+    const reviewChain = [];
+    const verificationCache = new Map();
+    const convergenceArtifacts = [];
+    let scopeSession = null;
+    let currentBase = base;
+    let repairPromptFile = promptFile;
+    let latestReview = null;
+    let implementationRound = 0;
+
+    const performReview = ({ candidate, scope, repair_generation: repairGeneration }) => {
+      let diffFile;
+      try {
+        diffFile = this.diffProvider({
+          base,
+          commit: candidate.commit,
+          branch: candidate.branch,
+          round: repairGeneration + 1,
+          currentBase,
+          cwd: loopCwd,
+        });
+      } catch (error) {
+        return { reviewed: false, reason: error.message || String(error) };
+      }
+      const budgetAt = this.now();
+      const budget = campaignWallBudgetStatus(campaignControl, budgetAt);
+      if (budget.exhausted) {
+        return {
+          reviewed: false,
+          phase: 'campaign_wall_budget',
+          reason: 'campaign wall budget exhausted before review',
+        };
+      }
+      const reviewed = this.reviewDiff({
+        diffFile,
+        specFile: input.noReviewSpec !== true ? promptFile : undefined,
+        roster,
+        rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+          ? input.rosterArgs
+          : ['--check-scorecard'],
+        resolverOptions: {
+          ...(input.resolverOptions || {}),
+          cwd: loopCwd,
+        },
+        dynamicReviewRisk: false,
+        extraReviewArgs: input.extraReviewArgs || [],
+        sourceTrust: input.sourceTrust,
+        oracleAvailable: input.oracleAvailable,
+        securitySurface: input.securitySurface,
+        samplingRatio: input.samplingRatio,
+        samplingSeed: input.samplingSeed,
+        classifyRulesFile: input.classifyRulesFile,
+        implementerEngine: roster.implementer_engine,
+        runId: campaignControl.campaign_id,
+        ledger: campaignControl.generation_claim.ledger,
+        reviewStage: scope === 'final'
+          ? 'campaign-final-review'
+          : `campaign-review#r${repairGeneration + 1}`,
+        reviewOptions: {
+          ...(input.reviewOptions || {}),
+          cwd: loopCwd,
+        },
+        requireQualifiedReviewer,
+      });
+      ledger.push(...reviewed.ledger);
+      reviewChain.push(reviewed);
+      latestReview = reviewed;
+      if (reviewed.status !== 'reviewed') {
+        return {
+          reviewed: false,
+          reason: reviewed.reason || `review status ${reviewed.status}`,
+          raw: reviewed,
+        };
+      }
+      const findings = reviewed.review && typeof reviewed.review.findings === 'string'
+        ? reviewed.review.findings
+        : '';
+      return {
+        reviewed: true,
+        verdict: reviewed.verdict,
+        findings,
+        review_digest: campaignCanonicalDigest({
+          verdict: reviewed.verdict,
+          findings,
+          scope,
+          tree_sha: candidate.tree_sha,
+        }),
+        raw: reviewed,
+      };
+    };
+
+    const maxRepairGenerations = Math.min(
+      campaignControl.contract.max_repair_generations,
+      Math.max(0, roster.loop_max_rounds - 1),
+    );
+    const composition = this.campaignComposer({
+      maxRepairGenerations,
+    }, {
+      preflight: () => ({ passed: true, intake: campaignControl }),
+      implement: ({ kind, repair_generation: repairGeneration, repair_finding_ids: findingIds }) => {
+        const budgetAt = this.now();
+        const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
+        if (budget.exhausted) {
+          if (implementationChain.length === 0) {
+            releaseCampaignNoEffect({
+              owner: 'campaign_generation',
+              status: 'rejected',
+              code: 'campaign_budget_exhausted',
+              reason: 'campaign has no mutation budget remaining',
+            });
+          }
+          return {
+            committed: false,
+            phase: 'campaign_wall_budget',
+            reason: 'campaign mutation budget exhausted',
+          };
+        }
+        implementationRound += 1;
+        const currentBranch = implementationRound === 1
+          ? branch
+          : buildRepairBranchName({
+            branch,
+            round: implementationRound,
+            previousCommit: currentBase,
+          });
+        if (kind !== 'initial') {
+          const repairReview = latestReview || {
+            verdict: 'VERTICAL-ACCEPTANCE-FAILED',
+            review: {
+              findings: findingIds.join('\n'),
+            },
+          };
+          try {
+            repairPromptFile = this.repairPromptWriter({
+              promptFile,
+              round: implementationRound,
+              base,
+              previousCommit: currentBase,
+              commit: currentBase,
+              review: repairReview,
+            });
+          } catch (error) {
+            return { committed: false, reason: error.message || String(error) };
+          }
+        }
+        const implementation = this.implementTask({
+          promptFile: repairPromptFile,
+          branch: currentBranch,
+          base: currentBase,
+          roster,
+          runId: campaignControl.campaign_id,
+          ledger: campaignControl.generation_claim.ledger,
+          implementationRound,
+          implementationStage: 'campaign-implementation',
+          campaignContractFile: campaignControl.contract_path,
+          campaignContractDigest: campaignControl.contract_digest,
+          resultJson: input.resultJson,
+          gitDir: input.gitDir,
+          extraImplementationArgs: Object.prototype.hasOwnProperty.call(
+            input,
+            'extraImplementationArgs',
+          ) ? input.extraImplementationArgs : [],
+          implementationOptions: {
+            ...(input.implementationOptions || {}),
+            cwd: loopCwd,
+          },
+        });
+        ledger.push(...implementation.ledger);
+        implementationChain.push(implementation);
+        if (implementation.status !== 'committed') {
+          if (implementationChain.length === 1 && isCampaignPreSpendRejection(implementation)) {
+            releaseCampaignNoEffect({
+              owner: 'implementation_dispatch',
+              status: 'rejected',
+              code: 'campaign_leaf_pre_spend_rejected',
+              reason: implementation.reason || 'implementation pre-spend rejection',
+            });
+          }
+          return {
+            committed: false,
+            reason: implementation.reason || `implementation status ${implementation.status}`,
+            raw: implementation,
+          };
+        }
+        const commit = implementation.implementation.commit;
+        if (implementationRound === 1) {
+          try {
+            scopeSession = createCampaignScopeSession({
+              contract: campaignControl.contract,
+              base,
+              implementationSha: commit,
+            });
+          } catch (error) {
+            return { committed: false, reason: error.message || String(error) };
+          }
+        }
+        currentBase = commit;
+        return {
+          committed: true,
+          tree_sha: commit,
+          commit,
+          branch: currentBranch,
+          raw: implementation,
+        };
+      },
+      scopeCheck: ({ checkpoint, candidate }) => {
+        const receipt = this.campaignScopeChecker({
+          session: scopeSession,
+          repo: loopCwd,
+          head: candidate.commit,
+          checkpoint,
+        });
+        ledger.push(this.ledgerEntry(
+          'campaign_scope',
+          receipt.passed === true ? 'passed' : 'blocked',
+          this.now(),
+          {
+            checkpoint,
+            receipt_digest: receipt.receipt_digest || null,
+          },
+        ));
+        return receipt;
+      },
+      verify: ({ candidate, repair_generation: repairGeneration }) => {
+        const request = createVerificationRequest({
+          treeSha: candidate.tree_sha,
+          verifyCmd,
+          env: input.verificationEnv || process.env,
+          envAllowlist: input.verificationEnvAllowlist,
+        });
+        const cached = verificationCache.get(request.request_digest);
+        if (reusableGreenReceipt(cached, request)) {
+          return {
+            passed: true,
+            cached: true,
+            receipt_digest: cached.receipt_digest,
+            receipt: cached,
+          };
+        }
+        const startedAt = this.now();
+        let addResult;
+        let worktree = null;
+        let parent = null;
+        let verifyResult = null;
+        let setupReason = null;
+        let cleanupReason = null;
+        try {
+          addResult = this.gitWorktreeAdd({
+            commit: candidate.commit,
+            cwd: loopCwd,
+            round: repairGeneration + 1,
+            branch: candidate.branch,
+          });
+          worktree = addResult && addResult.worktree;
+          parent = addResult && addResult.parent;
+          setupReason = worktreeResultBlocked(addResult);
+          if (!setupReason) {
+            verifyResult = this.verifyCommandRunner({
+              verifyCmd,
+              cwd: worktree,
+              round: repairGeneration + 1,
+              commit: candidate.commit,
+              branch: candidate.branch,
+            });
+          }
+        } catch (error) {
+          setupReason = error.message || String(error);
+        } finally {
+          if (worktree && !setupReason) {
+            try {
+              cleanupReason = worktreeResultBlocked(this.gitWorktreeRemove({
+                worktree,
+                cwd: loopCwd,
+                round: repairGeneration + 1,
+                commit: candidate.commit,
+                branch: candidate.branch,
+              }));
+            } catch (error) {
+              cleanupReason = error.message || String(error);
+            }
+          }
+          if (parent) {
+            try {
+              this.verifyWorktreeCleanup({
+                targetPath: parent,
+                cwd: loopCwd,
+                round: repairGeneration + 1,
+                commit: candidate.commit,
+                branch: candidate.branch,
+                reason: 'campaign_verify_parent_cleanup',
+              });
+            } catch (error) {
+              cleanupReason = cleanupReason || error.message || String(error);
+            }
+          }
+        }
+        if (setupReason || !verifyResult || verifyResultBlocked(verifyResult)) {
+          return {
+            passed: false,
+            reason: setupReason || verifyResultBlocked(verifyResult) || 'verification unavailable',
+            receipt_digest: campaignCanonicalDigest({
+              tree_sha: candidate.tree_sha,
+              setup_reason: setupReason,
+            }),
+          };
+        }
+        const receipt = createVerificationReceipt({
+          campaignId: campaignControl.campaign_id,
+          request,
+          exitStatus: verifyResult.status,
+          startedAt,
+          endedAt: this.now(),
+          writerLeaseClosed: true,
+          detachedCheckout: true,
+          stdout: verifyResult.stdout,
+          stderr: verifyResult.stderr,
+        });
+        if (receipt.verdict === 'GREEN') verificationCache.set(request.request_digest, receipt);
+        ledger.push(this.ledgerEntry(
+          'campaign_verification',
+          receipt.verdict === 'GREEN' ? 'passed' : 'failed',
+          startedAt,
+          {
+            tree_sha: candidate.tree_sha,
+            receipt_digest: receipt.receipt_digest,
+            cached: false,
+            cleanup_warning: cleanupReason,
+          },
+        ));
+        return {
+          passed: receipt.verdict === 'GREEN',
+          cached: false,
+          receipt_digest: receipt.receipt_digest,
+          receipt,
+        };
+      },
+      review: (reviewInput) => performReview(reviewInput),
+      adjudicate: ({ review, repair_generation: repairGeneration, final }) => (
+        this.campaignAdjudicator({
+          review,
+          repairGeneration,
+          final,
+          convergenceVerdict,
+          contract: campaignControl.contract,
+          cwd: loopCwd,
+          now: this.now(),
+        })
+      ),
+      convergence: ({
+        repair_generation: repairGeneration,
+        next_repair_generation: nextGeneration,
+        reason,
+      }) => {
+        const budget = campaignWallBudgetStatus(campaignControl, this.now());
+        convergenceArtifacts.push({
+          artifact_generation: repairGeneration + 1,
+          tests_executed: true,
+          ship_ready: reason === 'acceptance',
+          convergence_verdict: reason === 'acceptance' ? 'PASS' : 'REWORK',
+        });
+        const gate = evaluateLoopConvergence(convergenceArtifacts, {
+          // Artifact generation one is the initial candidate; the contract cap
+          // counts repairs after that candidate.
+          generationCap: maxRepairGenerations + 1,
+        });
+        const passed = !budget.exhausted && gate.verdict === 'PASS';
+        return {
+          passed,
+          reason: passed ? null : 'campaign convergence or wall budget gate tripped',
+          generation_cap: maxRepairGenerations + 1,
+          next_repair_generation: nextGeneration,
+          gate,
+        };
+      },
+      finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
+    });
+
+    const lastImplementation = implementationChain.at(-1) || null;
+    const converged = composition.status === 'ready';
+    return {
+      status: converged ? 'converged' : (
+        composition.status === 'follow_up' ? 'follow_up' : 'blocked'
+      ),
+      phase: converged ? 'campaign_terminal_ready' : composition.phase || 'campaign_terminal',
+      reason: converged ? null : composition.reason || 'campaign requires follow-up',
+      rounds: implementationChain.length,
+      verdict: latestReview ? latestReview.verdict : null,
+      roster,
+      resolveResult,
+      base,
+      implementation: lastImplementation,
+      review: latestReview,
+      implementationChain,
+      reviewChain,
+      campaign_receipt: composition,
+      ledger,
+    };
+  }
+
   _runImplementationReviewLoop(input = {}) {
     // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
     // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
@@ -2511,6 +3003,24 @@ class AutopilotEngine {
         reviewChain: [],
         ledger,
       });
+    }
+
+    if (campaignControl && campaignControl.status === 'admitted') {
+      return finish(this._runManagedCampaignComposition({
+        input,
+        campaignControl,
+        roster,
+        resolveResult,
+        loopCwd,
+        promptFile,
+        branch,
+        base,
+        verifyCmd,
+        convergenceVerdict,
+        requireQualifiedReviewer,
+        ledger,
+        releaseCampaignNoEffect,
+      }));
     }
 
     const implementationChain = [];

@@ -178,7 +178,10 @@ const profilePayload = require('./profile-payload');
 const profileRuntime = require('./profile-runtime');
 const profileCutover = require('./profile-cutover');
 const capabilityEvidence = require('./capability-evidence');
+const campaignAdjudication = require('./campaign-adjudication');
 const campaignIntake = require('./campaign-intake');
+const campaignComposition = require('./campaign-composition');
+const campaignVerification = require('./campaign-verification');
 const implementationCampaign = require('./implementation-campaign');
 const localDeployment = require('./local-deployment');
 const roles = require('./roles');
@@ -342,6 +345,9 @@ module.exports = {
   ...profileRuntime,
   ...profilePayload,
   ...executionProfile,
+  ...campaignAdjudication,
+  ...campaignVerification,
+  ...campaignComposition,
   ...implementationCampaign,
   ...campaignIntake,
   ...ownerKernel,

@@ -50,7 +50,7 @@ blocking finding. A transport failure never counts as a verdict.
 |---:|---|---|---|---|---|
 | 0 | Reviewed portfolio baseline | none | READY | this baseline commit | `task-convergence-contract.review.md` |
 | 1 | ICC P0 contract + RED replay | baseline | READY | `0e2e4e2..b6fc192` | [icc-p0.md](reviews/icc-p0.md) |
-| 2 | ICC P1 state + pre-spend gate | ICC P0 | Pending | pending | pending |
+| 2 | ICC P1 state + pre-spend gate | ICC P0 | READY | `ef68372..3444daf` | [icc-p1.md](reviews/icc-p1.md) |
 | 3 | ICC P2 review/repair composition | ICC P1 | Pending | pending | pending |
 | 4 | ICC P3 routing + transport envelope + status | ICC P2 | Pending | pending | pending |
 | 5 | PRO P1 pure readiness identity | ICC transport boundary | Pending | pending | pending |

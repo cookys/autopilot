@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { scan: scanSecretPatterns } = require('../../hooks/_shared/secret-patterns');
 
 const VERIFICATION_RECEIPT_SCHEMA_VERSION = 1;
 const MANDATORY_ENV_ALLOWLIST = Object.freeze(['PATH']);
@@ -56,7 +57,11 @@ function verificationArgv(verifyCmd) {
 }
 
 function containsSecretValue(value) {
-  if (PRIVATE_KEY_VALUE.test(value)) return true;
+  if (PRIVATE_KEY_VALUE.test(value)
+      || /^(?:basic|bearer)\s+\S+/i.test(value)
+      || scanSecretPatterns(value).length > 0) {
+    return true;
+  }
   try {
     const parsed = JSON.parse(value);
     if (parsed
@@ -69,24 +74,33 @@ function containsSecretValue(value) {
   } catch (_error) {
     // Non-JSON environment values continue to URL inspection.
   }
-  try {
-    const parsed = new URL(value);
-    if (parsed.username.length > 0 || parsed.password.length > 0) return true;
-    const sensitiveField = (name) => SENSITIVE_URL_FIELD.test(
-      String(name).toLowerCase().replace(/[^a-z0-9]/g, ''),
-    );
-    for (const name of parsed.searchParams.keys()) {
-      if (sensitiveField(name)) return true;
-    }
-    const fragment = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
-    if (fragment.length > 0) {
-      const fragmentParams = new URLSearchParams(fragment);
-      for (const name of fragmentParams.keys()) {
+  const sensitiveField = (name) => SENSITIVE_URL_FIELD.test(
+    String(name).toLowerCase().replace(/[^a-z0-9]/g, ''),
+  );
+  const assignments = String(value).matchAll(
+    /(?:^|[;,\s&])([^=;,\s&]+)\s*=\s*([^;,\s&]+)/g,
+  );
+  for (const assignment of assignments) {
+    if (sensitiveField(assignment[1])) return true;
+  }
+  const candidates = /^jdbc:/i.test(value) ? [value, value.slice(5)] : [value];
+  for (const candidate of candidates) {
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.username.length > 0 || parsed.password.length > 0) return true;
+      for (const name of parsed.searchParams.keys()) {
         if (sensitiveField(name)) return true;
       }
+      const fragment = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
+      if (fragment.length > 0) {
+        const fragmentParams = new URLSearchParams(fragment);
+        for (const name of fragmentParams.keys()) {
+          if (sensitiveField(name)) return true;
+        }
+      }
+    } catch (_error) {
+      // Ordinary non-URL values are handled by the assignment scanner.
     }
-  } catch (_error) {
-    // Ordinary non-URL values are not credentials by shape.
   }
   return false;
 }

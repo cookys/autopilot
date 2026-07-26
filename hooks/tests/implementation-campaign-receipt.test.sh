@@ -128,6 +128,20 @@ for (const [left, right] of [
     'https://example.invalid/path#access_token=token-b',
   ],
   [
+    'jdbc:postgresql://fixture-user:credential-a@example.invalid/db',
+    'jdbc:postgresql://fixture-user:credential-b@example.invalid/db',
+  ],
+  [
+    'host=example.invalid user=fixture password=credential-a',
+    'host=example.invalid user=fixture password=credential-b',
+  ],
+  [
+    'Driver=SQL;Server=example.invalid;Uid=fixture;Pwd=credential-a',
+    'Driver=SQL;Server=example.invalid;Uid=fixture;Pwd=credential-b',
+  ],
+  ['Bearer credential-a', 'Bearer credential-b'],
+  [`sk-${'a'.repeat(24)}`, `sk-${'b'.repeat(24)}`],
+  [
     '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-a',
     '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-b',
   ],

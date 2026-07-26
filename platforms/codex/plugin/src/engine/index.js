@@ -176,6 +176,7 @@ const ownerKernel = require('./owner-kernel');
 const executionProfile = require('./execution-profile');
 const profilePayload = require('./profile-payload');
 const profileRuntime = require('./profile-runtime');
+const profileCutover = require('./profile-cutover');
 const capabilityEvidence = require('./capability-evidence');
 const localDeployment = require('./local-deployment');
 const roles = require('./roles');
@@ -335,6 +336,7 @@ module.exports = {
   normalizeCapabilityRole: roles.normalizeRole,
   verifyEvaluationCorpus: capabilityEvidence.verifyEvaluationCorpus,
   ...localDeployment,
+  ...profileCutover,
   ...profileRuntime,
   ...profilePayload,
   ...executionProfile,

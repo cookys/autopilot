@@ -139,6 +139,12 @@ const config = JSON.parse(fs.readFileSync(
   path.join(root, '.claude', 'owner-kernel-governance.json'),
   'utf8',
 ));
+const omittedGuidanceConfig = clone(config);
+delete omittedGuidanceConfig.governance.guidance_profile;
+assert.equal(
+  resolveGovernancePolicy(omittedGuidanceConfig).policy.guidance_profile,
+  'guided',
+);
 config.governance.guidance_profile = 'adaptive';
 config.governance.assurance_profile = 'standard';
 config.governance.topology_preference = 'auto';

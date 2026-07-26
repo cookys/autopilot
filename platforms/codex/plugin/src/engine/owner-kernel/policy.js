@@ -277,7 +277,7 @@ function resolveGovernancePolicy(config, options = {}) {
     assurance_profile: normalizeAssuranceProfile(governance.assurance_profile),
     guidance_profile: normalizeEnum(
       governance.guidance_profile,
-      'adaptive',
+      'guided',
       GUIDANCE_PROFILES,
       'governance.guidance_profile',
     ),

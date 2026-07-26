@@ -40,6 +40,7 @@ Primary objective command:
 ```bash
 bash hooks/tests/execution-profile.test.sh &&
 bash hooks/tests/profile-context-isolation.test.sh &&
+bash hooks/tests/profile-cutover.test.sh &&
 bash hooks/tests/aa-capability-import.test.sh &&
 bash hooks/tests/local-engine-probe.test.sh &&
 bash hooks/tests/dispatch-local-openai.test.sh &&
@@ -85,7 +86,7 @@ negative controls that fail when the claimed guard is removed.
 | `src/engine/owner-kernel/` | Canonical task envelope and narrowing shadow role-grant projection; no second authority resolver. |
 | `src/engine/execution-profile.js`, `schemas/` | Role admission, profile selection, deterministic rendering, typed contracts. |
 | `scripts/engine-capability-state.js`, `engine-scorecard.js`, `engine-qualify.sh` | Scope/deployment evidence lifecycle and promotion/revocation integration. |
-| `scripts/measure-profile-context.js`, `check-profile-isolation.js` | Host-observed context accounting and inactive-profile gate. |
+| `scripts/measure-profile-context.js`, `check-profile-isolation.js`, `evaluate-profile-cutover.js` | Host-observed context accounting, inactive-profile checks, and advisory adaptive-default gate. |
 | `scripts/import-aa-capabilities.js` | Optional user-local provisional benchmark prior. |
 | `scripts/probe-local-engine.js`, `dispatch-local-openai.js`, `scripts/lib/` | Exact local deployment probe, bounded raw transport, endpoint lease. |
 | `skills/ceo-agent`, `dev-flow`, `l3`-`l6`, hooks | Consume the canonical envelope/grant and selected profile without re-deriving policy. |
@@ -148,7 +149,7 @@ negative controls that fail when the claimed guard is removed.
 | P3b | Complete | Fixed-endpoint AA prior importer, raw/normalized content-addressed cache, fail-atomic publication and ledger reconciliation, implementer/explorer-only provisional evidence, 23 importer cases, 103 evidence assertions, standalone parity, and unanimous bounded re-review; commit `f321380`. |
 | P3c | Complete | One-case Unix-socket broker with host-only credentials/network/exact identity, remote reviewer reuse of the behavioral witness oracle, distinct six-rule owner corpus/oracle with clean and repair controls, 42 broker + 23 owner + 63 reviewer assertions, and 90 standalone Codex package assertions. |
 | P4 | Complete | Protected user-local roster, exact semantic/operational fingerprints, one-slot lease, JIT capacity gate, deny-by-default raw author/reviewer transport, hot-swap/cancellation quarantine, and 50 probe + 63 dispatch assertions. No local runtime was configured, so the live result is honestly `unverified_no_live_runtime`; no live row or agentic runner was published. |
-| P5 | Pending | |
+| P5 | Complete (bounded hold) | Advisory cutover evaluator and public snapshot schema; 62 focused assertions cover live-verifier loss, incomplete-window/cherry-picked/duplicate/expired dogfood, acceptance failure, Critical escape, decorrelation, exact-token, and source-drift gates. The recorded decision is `hold_guided`: canonical autonomous control prose is 113 bytes smaller, but no exact host-token measurement, effectful guided witness, current live owner verifier, or five independent dogfood receipts exists. |
 | P6 | Pending | |
 | L-5 | Pending | |
 
@@ -200,3 +201,4 @@ negative controls that fail when the claimed guard is removed.
 | 2026-07-26 | Keep qualification transport case-only and host-owned. | The evaluator sandbox receives one diff over one fresh Unix socket; the host retains provider credentials, outbound access, timeout policy, response identity checks, and the independent role oracle. |
 | 2026-07-26 | Qualify owner with a separate intent/control methodology. | Reviewer evidence cannot establish ownership capability; owner trials independently test intent, delegation, failure, state, ledger, and acceptance behavior with clean and repair controls. |
 | 2026-07-26 | Close P4 without a fabricated local-runtime claim. | The fake contract verifies the generic adapter and failure boundaries, but this host has no configured local endpoint or supported runtime process. The observation is retained as `unverified_no_live_runtime`, with zero published roles and no agentic runner. |
+| 2026-07-26 | Close P5 as `hold_guided`, not a synthetic dogfood pass. | The cutover gate is implemented and its positive path is mutation-tested, but file-only evidence cannot recreate live qualification/acceptance verifiers. The project default and omitted-field default remain guided; one task may still explicitly override the profile for bounded dogfood. |

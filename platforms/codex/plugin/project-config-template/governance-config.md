@@ -20,7 +20,7 @@ action or acceptance authority.
 
 `guidance_profile`, `topology_preference`, and `data_egress` are project defaults. A task authority
 envelope may override them only for that task; assurance and egress overrides may narrow but never
-weaken the project ceiling. Omitted fields resolve to `adaptive`, `conservative`, `auto`, and
+weaken the project ceiling. Omitted fields resolve to `guided`, `conservative`, `auto`, and
 `allowlisted`. Through P1 the effective payload still remains `guided`; profile choice cannot grant
 a tool, effect, reviewer, or approval.
 
@@ -54,7 +54,7 @@ observation from `roleCapabilityObserver`. Drift or expiry appends `role_grant_r
     "default_mode": "owner-led",
     "red_lines": ["no-production-push", "no-secret-disclosure"],
     "assurance_profile": "conservative",
-    "guidance_profile": "adaptive",
+    "guidance_profile": "guided",
     "topology_preference": "auto",
     "data_egress": "allowlisted",
     "owner_roster": [

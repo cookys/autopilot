@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-26T09:30:00.000Z",
+  "project_default": "guided",
+  "candidate_default": "adaptive",
+  "rollback": {
+    "setting": "governance.guidance_profile",
+    "value": "guided"
+  },
+  "supported_hosts": [
+    "claude-bare-probe",
+    "codex-plugin"
+  ],
+  "profile_sources": {
+    "guided": {
+      "profile_hash": "ad6e8ad38eb920d96c9ea4d96c53a1387d9f856158f7b0a1d085fc7b5f9c8d31",
+      "control_bytes": 905
+    },
+    "autonomous": {
+      "profile_hash": "c82b632ed836639d0cd7f2e554c854b7ce04ded32f31970481817f6593b26cdb",
+      "control_bytes": 792
+    }
+  },
+  "context_measurements": [],
+  "effectful_guided_compatibility": {
+    "status": "missing",
+    "receipt_hash": null
+  },
+  "fallback_tests": {
+    "identity_drift": "pass",
+    "capability_expiry": "pass",
+    "capability_demotion": "pass",
+    "replacement_reresolution": "pass",
+    "profile_change_fresh_session": "pass"
+  },
+  "critical_false_passes_attributed_to_reduction": 0,
+  "assurance_invariance": {
+    "high_risk_assurance_unchanged": "pass",
+    "cross_family_review": "unverified"
+  },
+  "dogfood_window": {
+    "status": "missing",
+    "window_id": null,
+    "started_at": null,
+    "ended_at": null,
+    "dispatched_task_ids": [],
+    "receipt_set_hash": null
+  },
+  "dogfood_receipts": []
+}

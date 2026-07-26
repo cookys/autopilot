@@ -27,7 +27,6 @@ function validateCampaignDispositionAuthority(value) {
   if (!exactKeys(value, AUTHORITY_KEYS)
       || value.schema_version !== 1
       || value.artifact_type !== 'campaign_disposition_authority'
-      || !new Set(['depth-0', 'deterministic-policy']).has(value.authority)
       || typeof value.actor_id !== 'string'
       || value.actor_id.length === 0
       || typeof value.campaign_id !== 'string'
@@ -37,6 +36,11 @@ function validateCampaignDispositionAuthority(value) {
       || !Array.isArray(value.reviews)
       || value.reviews.length === 0) {
     throw new Error('campaign disposition authority has an invalid identity or shape');
+  }
+  if (value.authority !== 'depth-0') {
+    throw new Error(
+      'campaign disposition authority files must be authored by depth-0; deterministic policy must use the explicit policy rail',
+    );
   }
   const seenReviews = new Set();
   for (const review of value.reviews) {

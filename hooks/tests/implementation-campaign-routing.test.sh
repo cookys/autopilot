@@ -97,6 +97,10 @@ const authority = {
     }],
   }],
 };
+assert.throws(() => compileCampaignDispositionProvider({
+  ...authority,
+  authority: 'deterministic-policy',
+}), /explicit policy rail/i);
 const provider = compileCampaignDispositionProvider(authority);
 const bound = provider({
   review: {
@@ -197,30 +201,31 @@ assert.strictEqual(implementationCalls, 0);
 assert(composition.trace.includes('resume_adopt_candidate'));
 
 const observedAt = '2026-07-27T00:00:20.000Z';
-const status = projectCampaignStatus({
-  state: {
-    campaign_id: authority.campaign_id,
-    ticket: '057',
-    profile: 'poc',
-    phase: 'VERTICAL_VERIFICATION',
-    generation: 0,
-    limits: {
-      max_repair_generations: 2,
-      max_wall_seconds: 120,
-      max_changed_files: 10,
-      baseline_churn: 10,
-      max_churn: 30,
-    },
-    usage: {
-      repair_generations: 0,
-      elapsed_wall_seconds: 10,
-      changed_files: 2,
-      churn: 12,
-    },
-    started_at: '2026-07-27T00:00:00.000Z',
-    last_output_artifact_digest: D,
-    terminal_reason: null,
+const campaignState = {
+  campaign_id: authority.campaign_id,
+  ticket: '057',
+  profile: 'poc',
+  phase: 'VERTICAL_VERIFICATION',
+  generation: 0,
+  limits: {
+    max_repair_generations: 2,
+    max_wall_seconds: 120,
+    max_changed_files: 10,
+    baseline_churn: 10,
+    max_churn: 30,
   },
+  usage: {
+    repair_generations: 0,
+    elapsed_wall_seconds: 10,
+    changed_files: 2,
+    churn: 12,
+  },
+  started_at: '2026-07-27T00:00:00.000Z',
+  last_output_artifact_digest: D,
+  terminal_reason: null,
+};
+const status = projectCampaignStatus({
+  state: campaignState,
   latest_lease: {
     state: 'dead',
   },
@@ -233,33 +238,33 @@ assert.strictEqual(status.last_artifact, D);
 assert(!Object.prototype.hasOwnProperty.call(status, 'can_merge'));
 assert(!Object.prototype.hasOwnProperty.call(status, 'can_close'));
 const reopenedLeafStatus = projectCampaignStatus({
-  ...{
-    state: {
-      ...status,
-      limits: {
-        max_repair_generations: 2,
-        max_wall_seconds: 120,
-        max_changed_files: 10,
-        baseline_churn: 10,
-        max_churn: 30,
-      },
-      usage: {
-        repair_generations: 0,
-        elapsed_wall_seconds: 10,
-        changed_files: 2,
-        churn: 12,
-      },
-      started_at: '2026-07-27T00:00:00.000Z',
-      last_output_artifact_digest: D,
-    },
-    latest_lease: { state: 'dead' },
-  },
+  state: campaignState,
+  latest_lease: { state: 'dead' },
 }, [
   { kind: 'stage', run_id: authority.campaign_id, stage: 'leaf-a', state: 'dead' },
   { kind: 'stage', run_id: authority.campaign_id, stage: 'leaf-b', state: 'dead' },
   { kind: 'stage', run_id: authority.campaign_id, stage: 'leaf-a', state: 'verified' },
 ], observedAt);
 assert.strictEqual(reopenedLeafStatus.leaf_runs.latest_stage, 'leaf-a');
+const failedLeafStatus = projectCampaignStatus({
+  state: { ...campaignState, phase: 'TERMINAL_READY' },
+  latest_lease: { state: 'quarantined' },
+}, [
+  { kind: 'stage', run_id: authority.campaign_id, stage: 'leaf-dead', state: 'leased' },
+  {
+    kind: 'stage',
+    run_id: authority.campaign_id,
+    stage: 'leaf-quarantined',
+    state: 'quarantined',
+  },
+  { kind: 'stage', run_id: authority.campaign_id, stage: 'leaf-green', state: 'verified' },
+], observedAt, {
+  processLiveness: () => 'dead',
+});
+assert.strictEqual(failedLeafStatus.activity, 'dead');
+assert.strictEqual(failedLeafStatus.leaf_runs.completed, 1);
+assert.strictEqual(failedLeafStatus.leaf_runs.dead, 2);
+assert.strictEqual(failedLeafStatus.leaf_runs.unknown, 0);
 
 console.log('transport_envelope_mechanical=true');
 console.log('product_review_normalizer_bounded=true');

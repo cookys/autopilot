@@ -5,15 +5,18 @@ const TERMINAL = new Set([
   'TERMINAL_FOLLOW_UP',
   'TERMINAL_STOP',
 ]);
-const NONLIVE = new Set([
+const COMPLETED = new Set([
   'committed',
   'reviewed',
   'verified',
   'merged',
+]);
+const FAILED = new Set([
   'stale_ignored',
   'quarantined',
   'dead',
 ]);
+const NONLIVE = new Set([...COMPLETED, ...FAILED]);
 
 function latestLeafStages(rows, campaignId) {
   const latest = new Map();
@@ -43,13 +46,17 @@ function projectCampaignStatus(projection, rows = [], observedAt, options = {}) 
     : defaultLeaseLiveness;
   const leafStages = latestLeafStages(rows, state.campaign_id);
   const campaignLiveness = liveness(projection.latest_lease);
-  const liveLeaves = leafStages.filter((row) => liveness(row) === 'alive');
-  const deadLeaves = leafStages.filter((row) => liveness(row) === 'dead');
+  const leafSnapshots = leafStages.map((row) => ({ row, liveness: liveness(row) }));
+  const liveLeaves = leafSnapshots.filter((item) => item.liveness === 'alive');
+  const unknownLeaves = leafSnapshots.filter((item) => item.liveness === 'unknown');
+  const deadLeaves = leafSnapshots.filter((item) => (
+    FAILED.has(item.row.state)
+    || (item.row.state === 'leased' && item.liveness === 'dead')
+  ));
   const terminal = TERMINAL.has(state.phase);
   let activity;
   const campaignLeaseCompleted = projection.latest_lease
-    && NONLIVE.has(projection.latest_lease.state)
-    && projection.latest_lease.state !== 'dead';
+    && COMPLETED.has(projection.latest_lease.state);
   if (campaignLiveness === 'alive' || liveLeaves.length > 0) activity = 'active';
   else if (terminal && campaignLeaseCompleted) activity = 'completed';
   else if (terminal) activity = 'dead';
@@ -92,8 +99,9 @@ function projectCampaignStatus(projection, rows = [], observedAt, options = {}) 
     leaf_runs: {
       total: leafStages.length,
       live: liveLeaves.length,
-      completed: leafStages.filter((row) => NONLIVE.has(row.state) && row.state !== 'dead').length,
-      dead: deadLeaves.filter((row) => row.state === 'dead').length,
+      completed: leafSnapshots.filter((item) => COMPLETED.has(item.row.state)).length,
+      dead: deadLeaves.length,
+      unknown: unknownLeaves.length,
       latest_stage: leafStages.length > 0 ? leafStages.at(-1).stage : null,
     },
   };

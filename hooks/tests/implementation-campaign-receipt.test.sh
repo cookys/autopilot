@@ -111,6 +111,14 @@ assert.throws(() => createVerificationRequest({
   env: { PATH: '', CI: '1' },
   envAllowlist: ['CI'],
 }), /requires a concrete non-secret PATH/);
+for (const invalidPath of [null, undefined]) {
+  assert.throws(() => createVerificationRequest({
+    treeSha: TREE_A,
+    verifyCmd: 'node test.js',
+    env: { PATH: invalidPath, CI: '1' },
+    envAllowlist: ['CI'],
+  }), /requires a concrete non-secret PATH/);
+}
 const secretValueFingerprint = (value) => createVerificationRequest({
   treeSha: TREE_A,
   verifyCmd: 'node test.js',

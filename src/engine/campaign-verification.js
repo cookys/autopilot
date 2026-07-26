@@ -114,12 +114,15 @@ function environmentFingerprint(env = process.env, allowlist = DEFAULT_ENV_ALLOW
   const names = new Set([...MANDATORY_ENV_ALLOWLIST, ...allowlist]);
   for (const name of [...names].sort()) {
     const present = Object.prototype.hasOwnProperty.call(env, name);
-    const value = present ? String(env[name]) : null;
+    const rawValue = present ? env[name] : null;
+    const value = present ? String(rawValue) : null;
     if (name === 'PATH') {
-      if (value === null || value.length === 0 || containsSecretValue(value)) {
+      if (typeof rawValue !== 'string'
+          || rawValue.length === 0
+          || containsSecretValue(rawValue)) {
         throw new TypeError('verification environment requires a concrete non-secret PATH');
       }
-      projection[name] = value;
+      projection[name] = rawValue;
       continue;
     }
     if (SECRET_NAME.test(name)

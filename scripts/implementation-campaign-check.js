@@ -248,6 +248,12 @@ function validateUniqueStrings(value, label, options, errors) {
   });
 }
 
+function isWindowsReservedSegment(segment) {
+  const basename = segment.split('.')[0].toUpperCase();
+  return /^(?:CON|PRN|AUX|NUL|CLOCK\$|CONIN\$|CONOUT\$)$/.test(basename)
+    || /^(?:COM|LPT)(?:[1-9]|\u00b9|\u00b2|\u00b3)$/.test(basename);
+}
+
 function normalizeAllowedPrefix(value) {
   if (!nonEmptyString(value) || value.includes('\\') || value.includes('\0')) return null;
   if (path.posix.isAbsolute(value) || value.startsWith('./') || /^[A-Za-z]:/.test(value)) {
@@ -263,6 +269,7 @@ function normalizeAllowedPrefix(value) {
     || part.trim() !== part
     || part.endsWith('.')
     || part.includes(':')
+    || isWindowsReservedSegment(part)
     || /[\u0000-\u001f\u007f]/.test(part)
   ))) return null;
   if (parts.some((part) => part.toLowerCase() === '.git')) return null;
@@ -615,6 +622,7 @@ if (require.main === module) main();
 module.exports = {
   PROFILE_REPAIR_CEILINGS,
   canonicalRepoIdentity,
+  isWindowsReservedSegment,
   normalizeAllowedPrefix,
   projectMissionMode,
   repoObjectFormat,

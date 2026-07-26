@@ -187,6 +187,20 @@ mutate_contract "$WINDOWS_ADS" \
 run_checker seal --contract "$WINDOWS_ADS" --repo "$SBX" --out "$TEST_TMP/windows-ads.seal"
 assert_exit_code "$__RUN_EXIT" "3" "Win32 alternate-data-stream alias is rejected"
 
+WINDOWS_DEVICE="$TEST_TMP/windows-device.json"
+write_contract "$WINDOWS_DEVICE"
+mutate_contract "$WINDOWS_DEVICE" "value.allowed_path_prefixes = ['worker/CON.txt'];"
+run_checker seal --contract "$WINDOWS_DEVICE" --repo "$SBX" \
+  --out "$TEST_TMP/windows-device.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Win32 reserved device name with extension is rejected"
+
+WINDOWS_DEVICE_NUMBERED="$TEST_TMP/windows-device-numbered.json"
+write_contract "$WINDOWS_DEVICE_NUMBERED"
+mutate_contract "$WINDOWS_DEVICE_NUMBERED" "value.allowed_path_prefixes = ['worker/lPt9/log'];"
+run_checker seal --contract "$WINDOWS_DEVICE_NUMBERED" --repo "$SBX" \
+  --out "$TEST_TMP/windows-device-numbered.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Win32 numbered device name is rejected case-insensitively"
+
 WHITESPACE="$TEST_TMP/whitespace.json"
 write_contract "$WHITESPACE"
 mutate_contract "$WHITESPACE" "value.allowed_path_prefixes = ['src/.. /outside'];"

@@ -438,6 +438,13 @@ function reduceCampaignState(currentState, event) {
     if (currentState.live_lease) {
       fail('LIVE_LEASE_CONFLICT', 'resume cannot replace a live lease owner');
     }
+    if (event.output_artifact_digest !== currentState.last_output_artifact_digest) {
+      fail('RESUME_ARTIFACT_DRIFT', 'resume cannot replace the durable output artifact');
+    }
+    if (event.usage.changed_files !== currentState.usage.changed_files
+        || event.usage.churn !== currentState.usage.churn) {
+      fail('RESUME_GROWTH_DRIFT', 'resume cannot change durable file or churn usage');
+    }
   } else if (currentState.phase === CAMPAIGN_STATES.PREPARED
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED) {
     acquireLease(next, event);

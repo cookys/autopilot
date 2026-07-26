@@ -261,16 +261,46 @@ function defaultGenerationClaim({
   observedAt,
 }) {
   let existing = null;
+  let ledgerRows = [];
+  let reopenAbandonedClaim = false;
   let resumePreflight = null;
   if (fs.existsSync(ledgerPath)) {
     try {
-      existing = projectCampaign(loadRows(ledgerPath), campaignId);
+      ledgerRows = loadRows(ledgerPath);
+      existing = projectCampaign(ledgerRows, campaignId);
     } catch (error) {
       return rejected(
         'campaign_generation',
         'campaign_ledger_invalid',
         error.message || String(error),
       );
+    }
+  }
+  if (!existing) {
+    const owned = ledgerRows.filter((row) => row && row.run_id === campaignId);
+    const orphanedJournals = owned.filter((row) => row.kind === 'journal');
+    const stageRows = owned.filter(
+      (row) => row.kind === 'stage' && row.stage === 'campaign',
+    );
+    if (orphanedJournals.length > 0) {
+      return rejected(
+        'campaign_generation',
+        'campaign_orphaned_journal',
+        'campaign ledger contains journal evidence without an intake root',
+      );
+    }
+    if (stageRows.length > 0) {
+      const latest = stageRows[stageRows.length - 1];
+      if (latest.state !== 'dead'
+          || latest.transition_from !== 'leased'
+          || latest.resources !== `campaign:${campaignId}`) {
+        return rejected(
+          'campaign_generation',
+          'campaign_orphaned_claim_invalid',
+          'campaign ledger contains a non-recoverable claim without an intake root',
+        );
+      }
+      reopenAbandonedClaim = true;
     }
   }
   if (existing && resume !== true) {
@@ -383,7 +413,7 @@ function defaultGenerationClaim({
     `campaign:${campaignId}`,
     '--exclusive-live',
   ];
-  if (resume === true) acquireArgs.push('--allow-reopen');
+  if (resume === true || reopenAbandonedClaim) acquireArgs.push('--allow-reopen');
   const acquired = runLedger(acquireArgs, repo);
   if (acquired.error || acquired.status !== 0 || !acquired.payload) {
     return rejected(
@@ -735,18 +765,29 @@ function runCampaignIntake(input = {}, adapters = {}) {
   if (occupancy.status === 'rejected') return releaseAfterRejection(occupancy);
   steps.push(occupancy);
 
-  const campaignId = campaignIdFor(
-    inspection.repo_identity,
-    contract.ticket,
-    inspection.contract_sha256,
-  );
-  const initialState = createCampaignState({
-    contract,
-    contractDigest: inspection.contract_sha256,
-    repoIdentity: inspection.repo_identity,
-    startedAt: now,
-  });
-  const ledgerPath = campaignLedgerPathFor(inspection.repo_identity);
+  let campaignId;
+  let initialState;
+  let ledgerPath;
+  try {
+    campaignId = campaignIdFor(
+      inspection.repo_identity,
+      contract.ticket,
+      inspection.contract_sha256,
+    );
+    initialState = createCampaignState({
+      contract,
+      contractDigest: inspection.contract_sha256,
+      repoIdentity: inspection.repo_identity,
+      startedAt: now,
+    });
+    ledgerPath = campaignLedgerPathFor(inspection.repo_identity);
+  } catch (error) {
+    return releaseAfterRejection(rejected(
+      'campaign_generation',
+      error.code || 'campaign_state_invalid',
+      error.message || String(error),
+    ));
+  }
   if (requestedLedgerPath !== null && requestedLedgerPath !== ledgerPath) {
     return releaseAfterRejection(rejected(
       'campaign_generation',
@@ -792,7 +833,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
   steps.push(generation);
 
   const shadowAxes = steps
-    .filter((entry) => entry.status === 'unknown')
+    .filter((entry) => entry.status === 'unknown' || entry.enforcement === 'shadow')
     .map((entry) => entry.owner);
   const durableState = generation.resumed_state || initialState;
   return {

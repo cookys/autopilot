@@ -165,6 +165,20 @@ sequence = 0;
 const resumed = apply(initial(), E.RESUMED, 0, {});
 assert.strictEqual(resumed.phase, S.PREPARED);
 assert.strictEqual(resumed.event_count, 1);
+expectCode('RESUME_ARTIFACT_DRIFT', () => apply(
+  initial(),
+  E.RESUMED,
+  0,
+  {},
+  { output: 'b'.repeat(64) },
+));
+expectCode('RESUME_GROWTH_DRIFT', () => apply(
+  initial(),
+  E.RESUMED,
+  0,
+  {},
+  { changed: 1 },
+));
 
 let followUp = adjudicating();
 followUp = apply(
@@ -364,6 +378,7 @@ console.log('payload_unknown_field_rejected=true');
 console.log('artifact_chain_break_rejected=true');
 console.log('terminal_registry_required=true');
 console.log('initial_identity_recomputed=true');
+console.log('resume_authority_preserved=true');
 NODE
 )"
 PURE_EXIT=$?
@@ -374,7 +389,8 @@ for key in valid_terminal contract_digest_namespaces_campaign valid_resume valid
   vertical_evidence_required registry_completeness_required repair_gate_required \
   repair_ceiling_enforced resume_budget_reset_rejected resume_clock_reset_rejected \
   idempotency_conflict_rejected payload_unknown_field_rejected \
-  artifact_chain_break_rejected terminal_registry_required initial_identity_recomputed; do
+  artifact_chain_break_rejected terminal_registry_required initial_identity_recomputed \
+  resume_authority_preserved; do
   assert_contains "$PURE_OUT" "$key=true" "pure reducer proves $key"
 done
 
@@ -508,6 +524,27 @@ console.log(`admitted=${admitted.status}`);
 console.log(`step_order=${admitted.steps.map((entry) => entry.owner).join(',')}`);
 console.log(`full_enforcement=${admitted.full_enforcement}`);
 
+const shadowed = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  base,
+  branch: 'impl/icc-p1-intake',
+  roster,
+}, {
+  ...adapters,
+  readiness() {
+    return {
+      owner: 'provider_readiness',
+      status: 'ready',
+      enforcement: 'shadow',
+    };
+  },
+});
+console.log(`shadow_full_enforcement=${shadowed.full_enforcement}`);
+console.log(`shadow_axes=${shadowed.shadow_axes.join(',')}`);
+
 let releaseCalls = 0;
 const rejected = runCampaignIntake({
   repo,
@@ -557,6 +594,27 @@ const thrown = runCampaignIntake({
 });
 console.log(`adapter_fault=${thrown.rejection.code}`);
 console.log(`adapter_fault_release_calls=${thrownReleaseCalls}`);
+
+let invalidTimeReleaseCalls = 0;
+const invalidTime = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  base,
+  branch: 'impl/icc-p1-intake',
+  observedAt: 'not-a-timestamp',
+  roster,
+}, {
+  ...adapters,
+  releaseMission() {
+    invalidTimeReleaseCalls += 1;
+    return { owner: 'mission_release', status: 'released' };
+  },
+});
+console.log(`invalid_time_status=${invalidTime.status}`);
+console.log(`invalid_time_code=${invalidTime.rejection.code}`);
+console.log(`invalid_time_release_calls=${invalidTimeReleaseCalls}`);
 
 const markers = { runner: 0, worktree: 0 };
 const engine = new AutopilotEngine({
@@ -638,7 +696,7 @@ console.log(`invalid_max_intake_calls=${preflightIntakeCalls}`);
 
 const campaignId = `campaign-v1-${'c'.repeat(64)}`;
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
-let implementationArgs = null;
+const implementationCalls = [];
 let reviewArgs = null;
 const identityEngine = new AutopilotEngine({
   cwd: repo,
@@ -666,7 +724,8 @@ const identityEngine = new AutopilotEngine({
     };
   },
   implementationDispatcher(args) {
-    implementationArgs = args;
+    implementationCalls.push(args);
+    const dispatchedBranch = args[args.indexOf('--branch') + 1];
     return {
       error: null,
       status: 0,
@@ -678,7 +737,7 @@ const identityEngine = new AutopilotEngine({
         status: 'committed',
         runner: 'fixture',
         model: 'fixture-implementer',
-        branch: 'impl/icc-p1-intake',
+        branch: dispatchedBranch,
         base,
         commit: base,
         files_changed: 0,
@@ -753,8 +812,22 @@ const identityResult = identityEngine.runImplementationReviewLoop({
   campaignManaged: true,
   campaignContract: contractPath,
 });
+const roundTwoResult = identityEngine.implementTask({
+  promptFile,
+  branch: 'impl/icc-p1-intake-repair-r2',
+  base,
+  roster,
+  runId: campaignId,
+  ledger: campaignLedger,
+  implementationRound: 2,
+  implementationStage: 'campaign-implementation',
+  campaignContractFile: contractPath,
+  campaignContractDigest: 'c'.repeat(64),
+});
 console.log(`identity_status=${identityResult.status}`);
 const argValue = (args, flag) => args[args.indexOf(flag) + 1];
+const implementationArgs = implementationCalls[0];
+const roundTwoArgs = implementationCalls[1];
 console.log(`implementation_ledger=${argValue(implementationArgs, '--ledger')}`);
 console.log(`implementation_run_id=${argValue(implementationArgs, '--run-id')}`);
 console.log(`implementation_stage=${argValue(implementationArgs, '--stage')}`);
@@ -763,6 +836,8 @@ console.log(`implementation_contract_sha=${argValue(implementationArgs, '--campa
 console.log(`review_ledger=${argValue(reviewArgs, '--ledger')}`);
 console.log(`review_run_id=${argValue(reviewArgs, '--run-id')}`);
 console.log(`review_stage=${argValue(reviewArgs, '--stage')}`);
+console.log(`round_two_status=${roundTwoResult.status}`);
+console.log(`round_two_stage=${argValue(roundTwoArgs, '--stage')}`);
 NODE
 )"
 INTAKE_EXIT=$?
@@ -775,6 +850,10 @@ assert_contains "$INTAKE_OUT" \
   "contract validation occupies the second intake slot"
 assert_contains "$INTAKE_OUT" "admitted=admitted" "valid ordered intake admits"
 assert_contains "$INTAKE_OUT" "full_enforcement=true" "all-known injected axes advertise full enforcement"
+assert_contains "$INTAKE_OUT" "shadow_full_enforcement=false" \
+  "an explicitly shadowed ready axis cannot advertise full enforcement"
+assert_contains "$INTAKE_OUT" "shadow_axes=provider_readiness" \
+  "full-enforcement projection names the explicitly shadowed owner"
 assert_contains "$INTAKE_OUT" "rejected=blocked" "readiness rejection blocks intake"
 assert_contains "$INTAKE_OUT" "release_calls=1" "post-claim rejection releases Mission exactly once"
 assert_contains "$INTAKE_OUT" "no_effect_zero=0" "pre-spend receipt records zero model attempts"
@@ -782,6 +861,12 @@ assert_contains "$INTAKE_OUT" "adapter_fault=readiness_adapter_invalid" \
   "sibling adapter faults fail closed under their owning code"
 assert_contains "$INTAKE_OUT" "adapter_fault_release_calls=1" \
   "adapter faults still release a claimed Mission exactly once"
+assert_contains "$INTAKE_OUT" "invalid_time_status=blocked" \
+  "invalid campaign clocks become an owned pre-spend rejection"
+assert_contains "$INTAKE_OUT" "invalid_time_code=INVALID_TIMESTAMP" \
+  "invalid campaign clocks preserve their reducer-owned error code"
+assert_contains "$INTAKE_OUT" "invalid_time_release_calls=1" \
+  "state-construction rejection releases a claimed Mission exactly once"
 assert_contains "$INTAKE_OUT" "missing_phase=campaign_intake" \
   "missing managed contract blocks at campaign intake"
 assert_contains "$INTAKE_OUT" "missing_rounds=0" "missing contract blocks before round one"
@@ -829,14 +914,23 @@ assert_contains "$INTAKE_OUT" \
 assert_contains "$INTAKE_OUT" \
   "review_stage=campaign-review#r1" \
   "managed review receives a round-specific campaign stage identity"
+assert_contains "$INTAKE_OUT" "round_two_status=committed" \
+  "managed round-two implementation dispatches successfully"
+assert_contains "$INTAKE_OUT" "round_two_stage=campaign-implementation#r2" \
+  "managed repair rounds receive distinct implementation stage identities"
 
 CAMPAIGN_LEDGER="$COMMON_DIR/autopilot/implementation-campaign.jsonl"
 DEFAULT_INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
   "$BASE_SHA" "$CAMPAIGN_LEDGER" <<'NODE'
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 const [root, repo, contractPath, sealPath, promptFile, base, ledgerPath] = process.argv.slice(2);
-const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const {
+  campaignIdFor,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
 const commonInput = {
   repo,
   contractPath,
@@ -852,6 +946,54 @@ const adapters = {
   contextGate: () => ({ owner: 'context_window', status: 'ready' }),
   occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
 };
+const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+const contractDigest = crypto.createHash('sha256')
+  .update(fs.readFileSync(contractPath))
+  .digest('hex');
+const commonRaw = spawnSync(
+  'git',
+  ['-C', repo, 'rev-parse', '--git-common-dir'],
+  { encoding: 'utf8' },
+).stdout.trim();
+const commonDir = fs.realpathSync(
+  path.isAbsolute(commonRaw) ? commonRaw : path.resolve(repo, commonRaw),
+);
+const campaignId = campaignIdFor(
+  `git-common-dir:${commonDir}`,
+  contract.ticket,
+  contractDigest,
+);
+const ledgerScript = path.join(root, 'scripts', 'run-ledger.sh');
+function runLedger(args) {
+  const result = spawnSync('bash', [ledgerScript, ...args], {
+    cwd: repo,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `run-ledger exited ${result.status}`);
+  }
+  return JSON.parse(result.stdout);
+}
+runLedger(['init', '--ledger', ledgerPath]);
+const abandoned = runLedger([
+  'stage-acquire',
+  '--ledger', ledgerPath,
+  '--run-id', campaignId,
+  '--stage', 'campaign',
+  '--pid', String(process.pid),
+  '--resources', `campaign:${campaignId}`,
+  '--exclusive-live',
+]);
+runLedger([
+  'stage-transition',
+  '--ledger', ledgerPath,
+  '--run-id', campaignId,
+  '--stage', 'campaign',
+  '--generation', String(abandoned.generation),
+  '--nonce', abandoned.nonce,
+  '--to-state', 'dead',
+  '--idempotency-key', 'fixture-journal-abandon',
+]);
 const alternatePath = path.join(repo, 'alternate-campaign.jsonl');
 const alternate = runCampaignIntake({
   ...commonInput,
@@ -863,6 +1005,7 @@ const result = runCampaignIntake({
 }, adapters);
 console.log(`alternate_code=${alternate.rejection.code}`);
 console.log(`alternate_exists=${fs.existsSync(alternatePath)}`);
+console.log(`recovered_generation=${result.generation_claim.generation}`);
 console.log(JSON.stringify(result));
 NODE
 )"
@@ -872,6 +1015,8 @@ assert_contains "$DEFAULT_INTAKE_OUT" "alternate_code=campaign_ledger_path_misma
   "alternate ledger paths cannot create an independent campaign authority"
 assert_contains "$DEFAULT_INTAKE_OUT" "alternate_exists=false" \
   "alternate ledger rejection occurs before any ledger mutation"
+assert_contains "$DEFAULT_INTAKE_OUT" "recovered_generation=2" \
+  "a dead pre-journal claim reopens without stranding campaign identity"
 CAMPAIGN_ID="$(node -e \
   'const lines=process.argv[1].trim().split("\n"); const v=JSON.parse(lines.at(-1)); process.stdout.write(v.campaign_id || "")' \
   "$DEFAULT_INTAKE_OUT")"
@@ -882,6 +1027,12 @@ INSPECT_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
 assert_exit_code "$?" "0" "campaign inspect reads the durable intake"
 assert_contains "$INSPECT_OUT" '"status":"found"' "campaign inspect returns found"
 assert_contains "$INSPECT_OUT" '"phase":"PREPARED"' "campaign inspect projects the initial state"
+
+DEFAULT_PATH_INSPECT_OUT="$(cd "$SBX" && node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
+  --campaign-id "$CAMPAIGN_ID" 2>&1)"
+assert_exit_code "$?" "0" "campaign inspect derives the canonical ledger by default"
+assert_contains "$DEFAULT_PATH_INSPECT_OUT" '"status":"found"' \
+  "default campaign CLI path matches intake's Git-common-dir ledger"
 
 RESUME_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign resume \
   --campaign-id "$CAMPAIGN_ID" --ledger "$CAMPAIGN_LEDGER" 2>&1)"
@@ -1024,6 +1175,57 @@ SEMANTIC_CORRUPT_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
 assert_exit_code "$?" "1" "campaign inspect rejects a digest-valid forged initial state"
 assert_contains "$SEMANTIC_CORRUPT_OUT" "initial campaign usage must start at zero" \
   "campaign projection validates initial-state semantics after digest binding"
+
+WRAPPER_DRIFT_LEDGER="$TEST_TMP/wrapper-drift-campaign-ledger.jsonl"
+cp "$CAMPAIGN_LEDGER" "$WRAPPER_DRIFT_LEDGER"
+node - "$WRAPPER_DRIFT_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const [ledger, campaignId] = process.argv.slice(2);
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const intake = rows.find((row) => row.run_id === campaignId && row.op === 'campaign_intake');
+const payload = JSON.parse(intake.payload);
+payload.campaign_id = `campaign-v1-${'b'.repeat(64)}`;
+intake.payload = JSON.stringify(payload);
+fs.writeFileSync(ledger, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+WRAPPER_DRIFT_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$WRAPPER_DRIFT_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign inspect rejects an intake wrapper identity mismatch"
+assert_contains "$WRAPPER_DRIFT_OUT" "invalid intake state binding" \
+  "intake wrapper identity is bound to the requested campaign"
+
+DUPLICATE_ROOT_LEDGER="$TEST_TMP/duplicate-root-campaign-ledger.jsonl"
+cp "$CAMPAIGN_LEDGER" "$DUPLICATE_ROOT_LEDGER"
+node - "$DUPLICATE_ROOT_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const [ledger, campaignId] = process.argv.slice(2);
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const intake = rows.find((row) => row.run_id === campaignId && row.op === 'campaign_intake');
+fs.appendFileSync(ledger, `${JSON.stringify(intake)}\n`);
+NODE
+DUPLICATE_ROOT_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$DUPLICATE_ROOT_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign inspect rejects duplicate intake roots"
+assert_contains "$DUPLICATE_ROOT_OUT" "exactly one intake root" \
+  "campaign projection has one unambiguous durable root"
+
+EVENT_WRAPPER_LEDGER="$TEST_TMP/event-wrapper-campaign-ledger.jsonl"
+cp "$CAMPAIGN_LEDGER" "$EVENT_WRAPPER_LEDGER"
+node - "$EVENT_WRAPPER_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const [ledger, campaignId] = process.argv.slice(2);
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const event = rows.find((row) => row.run_id === campaignId && row.op === 'campaign_event');
+const payload = JSON.parse(event.payload);
+payload.contract_digest = 'b'.repeat(64);
+event.payload = JSON.stringify(payload);
+fs.writeFileSync(ledger, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+EVENT_WRAPPER_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$EVENT_WRAPPER_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign inspect rejects event wrapper identity drift"
+assert_contains "$EVENT_WRAPPER_OUT" "invalid event wrapper binding" \
+  "event wrappers stay bound to the durable campaign root"
 
 ROOT_DRIFT_BACKUP="$TEST_TMP/campaign-root-backup.jsonl"
 cp "$CAMPAIGN_LEDGER" "$ROOT_DRIFT_BACKUP"

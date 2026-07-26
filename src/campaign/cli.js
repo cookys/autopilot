@@ -16,6 +16,48 @@ const TERMINAL = new Set([
   CAMPAIGN_STATES.TERMINAL_STOP,
 ]);
 const EXIT_SUCCESS = 0;
+const INTAKE_ARTIFACT_KEYS = new Set([
+  'schema_version',
+  'artifact_type',
+  'campaign_id',
+  'contract_digest',
+  'initial_state',
+  'initial_state_digest',
+]);
+const EVENT_ARTIFACT_KEYS = new Set([
+  'schema_version',
+  'artifact_type',
+  'campaign_id',
+  'contract_digest',
+  'event',
+]);
+
+function hasExactKeys(value, expected) {
+  return value !== null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.keys(value).length === expected.size
+    && Object.keys(value).every((key) => expected.has(key));
+}
+
+function defaultCampaignLedgerPath(cwd) {
+  const common = spawnSync('git', ['-C', cwd, 'rev-parse', '--git-common-dir'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (common.error || common.status !== 0) {
+    throw new Error('default campaign ledger requires a Git repository');
+  }
+  const raw = String(common.stdout || '').trim();
+  const candidate = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
+  let canonical;
+  try {
+    canonical = fs.realpathSync(candidate);
+  } catch (_error) {
+    throw new Error('default campaign ledger Git common directory is unreadable');
+  }
+  return path.join(canonical, 'autopilot', 'implementation-campaign.jsonl');
+}
 
 function parseArgs(argv, cwd) {
   const command = argv[0];
@@ -25,7 +67,7 @@ function parseArgs(argv, cwd) {
   const output = {
     command,
     campaignId: null,
-    ledger: path.join(cwd, '.autopilot', 'run-ledger.jsonl'),
+    ledger: null,
   };
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -40,6 +82,13 @@ function parseArgs(argv, cwd) {
     return { error: `unknown campaign option: ${flag}` };
   }
   if (!output.campaignId) return { error: '--campaign-id is required' };
+  if (!output.ledger) {
+    try {
+      output.ledger = defaultCampaignLedgerPath(cwd);
+    } catch (error) {
+      return { error: error.message || String(error) };
+    }
+  }
   return output;
 }
 
@@ -67,18 +116,22 @@ function parsePayload(row) {
 
 function projectCampaign(rows, campaignId) {
   const owned = rows.filter((row) => row && row.run_id === campaignId);
-  const intake = owned.find((row) => {
-    const payload = parsePayload(row);
-    return row.kind === 'journal'
-      && row.op === 'campaign_intake'
-      && payload
-      && payload.artifact_type === 'implementation_campaign_intake';
-  });
-  if (!intake) return null;
+  const intakes = owned.filter(
+    (row) => row.kind === 'journal' && row.op === 'campaign_intake',
+  );
+  if (intakes.length === 0) return null;
+  if (intakes.length !== 1) {
+    throw new Error('campaign ledger must contain exactly one intake root');
+  }
+  const [intake] = intakes;
   const intakePayload = parsePayload(intake);
-  if (!intakePayload
+  if (!hasExactKeys(intakePayload, INTAKE_ARTIFACT_KEYS)
       || intakePayload.schema_version !== 1
       || intakePayload.artifact_type !== 'implementation_campaign_intake'
+      || intakePayload.campaign_id !== campaignId
+      || !intakePayload.initial_state
+      || intakePayload.initial_state.campaign_id !== campaignId
+      || intakePayload.contract_digest !== intakePayload.initial_state.contract_digest
       || typeof intakePayload.initial_state_digest !== 'string'
       || !/^[0-9a-f]{64}$/.test(intakePayload.initial_state_digest)
       || canonicalDigest(intakePayload.initial_state) !== intakePayload.initial_state_digest) {
@@ -87,12 +140,16 @@ function projectCampaign(rows, campaignId) {
   validateInitialCampaignState(intakePayload.initial_state);
   let state = intakePayload.initial_state;
   for (const row of owned) {
-    const payload = parsePayload(row);
-    if (row.kind !== 'journal'
-        || row.op !== 'campaign_event'
-        || !payload
-        || payload.artifact_type !== 'implementation_campaign_event') {
+    if (row.kind !== 'journal' || row.op !== 'campaign_event') {
       continue;
+    }
+    const payload = parsePayload(row);
+    if (!hasExactKeys(payload, EVENT_ARTIFACT_KEYS)
+        || payload.schema_version !== 1
+        || payload.artifact_type !== 'implementation_campaign_event'
+        || payload.campaign_id !== campaignId
+        || payload.contract_digest !== state.contract_digest) {
+      throw new Error('campaign ledger contains an invalid event wrapper binding');
     }
     state = reduceCampaignState(state, payload.event);
   }
@@ -206,6 +263,7 @@ function runCampaignCli(argv, options = {}) {
 }
 
 module.exports = {
+  defaultCampaignLedgerPath,
   loadRows,
   parseArgs,
   processLiveness,

@@ -3,6 +3,12 @@
   "$id": "https://autopilot.local/schemas/implementation-campaign-contract.schema.json",
   "title": "implementation-campaign-contract",
   "description": "Closed v1 contract for one bounded implementation campaign.",
+  "x-profile-repair-ceilings": {
+    "spike": 1,
+    "poc": 2,
+    "internal-pilot": 5,
+    "production": 5
+  },
   "type": "object",
   "required": [
     "schema_version",
@@ -63,11 +69,13 @@
     },
     "max_changed_files": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 4096
     },
     "baseline_churn": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 10000000
     },
     "max_growth_ratio": {
       "type": "number",
@@ -76,7 +84,8 @@
     },
     "max_extra_churn": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "maximum": 5000000
     },
     "max_repair_generations": {
       "type": "integer",

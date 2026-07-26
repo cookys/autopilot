@@ -7,31 +7,12 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const MAX_CONTRACT_BYTES = 1024 * 1024;
-const CONTRACT_FIELDS = new Set([
-  'schema_version',
-  'ticket',
-  'profile',
-  'mission_grant_ref',
-  'repo_identity',
-  'base_sha',
-  'branch',
-  'vertical_acceptance',
-  'allowed_path_prefixes',
-  'max_changed_files',
-  'baseline_churn',
-  'max_growth_ratio',
-  'max_extra_churn',
-  'max_repair_generations',
-  'max_wall_seconds',
-  'verify_cmd',
-  'rubric_ids',
-]);
-const PROFILE_REPAIR_CEILINGS = Object.freeze({
-  spike: 1,
-  poc: 2,
-  'internal-pilot': 5,
-  production: 5,
-});
+const SCHEMA_PATH = path.resolve(
+  __dirname,
+  '..',
+  'schemas',
+  'implementation-campaign-contract.schema.json',
+);
 
 class CliError extends Error {
   constructor(message, exitCode = 2) {
@@ -39,6 +20,36 @@ class CliError extends Error {
     this.exitCode = exitCode;
   }
 }
+
+function loadCanonicalSchema() {
+  let value;
+  try {
+    value = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
+  } catch (error) {
+    throw new CliError(`canonical campaign schema is unreadable: ${error.message}`);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || !value.properties || typeof value.properties !== 'object'
+      || !Array.isArray(value.required)
+      || !value['x-profile-repair-ceilings']) {
+    throw new CliError('canonical campaign schema is missing contract metadata');
+  }
+  const properties = Object.keys(value.properties);
+  const required = new Set(value.required);
+  if (properties.length !== required.size
+      || properties.some((field) => !required.has(field))
+      || value.additionalProperties !== false) {
+    throw new CliError('canonical campaign schema must be closed with every property required');
+  }
+  return value;
+}
+
+const CONTRACT_SCHEMA = loadCanonicalSchema();
+const CONTRACT_FIELDS = new Set(Object.keys(CONTRACT_SCHEMA.properties));
+const REQUIRED_FIELDS = new Set(CONTRACT_SCHEMA.required);
+const PROFILE_REPAIR_CEILINGS = Object.freeze({
+  ...CONTRACT_SCHEMA['x-profile-repair-ceilings'],
+});
 
 function usage() {
   return `Usage:
@@ -204,7 +215,13 @@ function normalizeAllowedPrefix(value) {
   const withoutTrailing = value.endsWith('/') ? value.slice(0, -1) : value;
   if (!withoutTrailing || withoutTrailing.includes('//')) return null;
   const parts = withoutTrailing.split('/');
-  if (parts.some((part) => part === '' || part === '.' || part === '..')) return null;
+  if (parts.some((part) => (
+    part === ''
+    || part === '.'
+    || part === '..'
+    || part.trim() !== part
+    || /[\u0000-\u001f\u007f]/.test(part)
+  ))) return null;
   if (parts[0] === '.git') return null;
   return parts.join('/');
 }
@@ -217,7 +234,7 @@ function validateContract(contract, context) {
   for (const key of Object.keys(contract)) {
     if (!CONTRACT_FIELDS.has(key)) errors.push(`contract: unknown field '${key}'`);
   }
-  for (const key of CONTRACT_FIELDS) {
+  for (const key of REQUIRED_FIELDS) {
     if (!hasOwn(contract, key)) errors.push(`contract: missing required field '${key}'`);
   }
   if (contract.schema_version !== 1) errors.push('schema_version: must be 1');
@@ -273,15 +290,37 @@ function validateContract(contract, context) {
       }
     });
   }
-  requireInteger(contract.max_changed_files, 'max_changed_files', 1, Number.MAX_SAFE_INTEGER, errors);
-  requireInteger(contract.baseline_churn, 'baseline_churn', 1, Number.MAX_SAFE_INTEGER, errors);
+  requireInteger(
+    contract.max_changed_files,
+    'max_changed_files',
+    CONTRACT_SCHEMA.properties.max_changed_files.minimum,
+    CONTRACT_SCHEMA.properties.max_changed_files.maximum,
+    errors,
+  );
+  requireInteger(
+    contract.baseline_churn,
+    'baseline_churn',
+    CONTRACT_SCHEMA.properties.baseline_churn.minimum,
+    CONTRACT_SCHEMA.properties.baseline_churn.maximum,
+    errors,
+  );
   if (typeof contract.max_growth_ratio !== 'number'
       || !Number.isFinite(contract.max_growth_ratio)
-      || contract.max_growth_ratio < 1
-      || contract.max_growth_ratio > 1.5) {
-    errors.push('max_growth_ratio: expected finite number in 1..1.5');
+      || contract.max_growth_ratio < CONTRACT_SCHEMA.properties.max_growth_ratio.minimum
+      || contract.max_growth_ratio > CONTRACT_SCHEMA.properties.max_growth_ratio.maximum) {
+    errors.push(
+      `max_growth_ratio: expected finite number in `
+      + `${CONTRACT_SCHEMA.properties.max_growth_ratio.minimum}`
+      + `..${CONTRACT_SCHEMA.properties.max_growth_ratio.maximum}`,
+    );
   }
-  requireInteger(contract.max_extra_churn, 'max_extra_churn', 0, Number.MAX_SAFE_INTEGER, errors);
+  requireInteger(
+    contract.max_extra_churn,
+    'max_extra_churn',
+    CONTRACT_SCHEMA.properties.max_extra_churn.minimum,
+    CONTRACT_SCHEMA.properties.max_extra_churn.maximum,
+    errors,
+  );
   if (Number.isSafeInteger(contract.baseline_churn)
       && typeof contract.max_growth_ratio === 'number'
       && Number.isFinite(contract.max_growth_ratio)
@@ -293,7 +332,13 @@ function validateContract(contract, context) {
       errors.push(`max_extra_churn: exceeds ratio-derived ceiling ${ratioCeiling}`);
     }
   }
-  requireInteger(contract.max_repair_generations, 'max_repair_generations', 0, 5, errors);
+  requireInteger(
+    contract.max_repair_generations,
+    'max_repair_generations',
+    CONTRACT_SCHEMA.properties.max_repair_generations.minimum,
+    CONTRACT_SCHEMA.properties.max_repair_generations.maximum,
+    errors,
+  );
   if (hasOwn(PROFILE_REPAIR_CEILINGS, contract.profile)
       && Number.isSafeInteger(contract.max_repair_generations)
       && contract.max_repair_generations > PROFILE_REPAIR_CEILINGS[contract.profile]) {
@@ -302,7 +347,13 @@ function validateContract(contract, context) {
       + `${PROFILE_REPAIR_CEILINGS[contract.profile]}`,
     );
   }
-  requireInteger(contract.max_wall_seconds, 'max_wall_seconds', 1, 7200, errors);
+  requireInteger(
+    contract.max_wall_seconds,
+    'max_wall_seconds',
+    CONTRACT_SCHEMA.properties.max_wall_seconds.minimum,
+    CONTRACT_SCHEMA.properties.max_wall_seconds.maximum,
+    errors,
+  );
   if (!nonEmptyString(contract.verify_cmd) || contract.verify_cmd.length > 4096) {
     errors.push('verify_cmd: expected trimmed non-empty string up to 4096 characters');
   }

@@ -27,7 +27,7 @@ const ENDPOINT_NULL_SELECTOR = '@none';
 
 const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js record [--file <path>] [--store <path>]
-  node scripts/engine-capability-state.js current --runner <runner> --model <model> --role <role> [--endpoint <name|@none>] [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js current --runner <runner> --model <model> --role <role> [--effort <effort>] [--endpoint <name|@none>] [--role-scope pool|exact] [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js report --capability <name> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js record-evidence [--file <path>] [--store <path>]
   node scripts/engine-capability-state.js current-evidence --role <role> --scope-file <path> --identity-file <path> [--observation-file <path>] [--now <ISO-date>] [--store <path>]
@@ -42,8 +42,10 @@ Options:
   --runner <runner>    Specify runner name.
   --model <model>      Specify model name.
   --role <role>        Specify role.
+  --effort <effort>    Select one exact effort partition. Omit only for legacy rows.
   --endpoint <value>   Select one exact endpoint wallet; "@none" means explicit endpoint:null.
                        Omit only for backward-compatible legacy ambiguous rows.
+  --role-scope <scope> Quota merge scope for current: account pool (default) or exact role.
   --capability <name>  Specify capability name (default: quota).
   --scope-file <path>  Read an exact capability scope JSON object.
   --identity-file <path>  Read an exact deployment identity JSON object.
@@ -117,6 +119,7 @@ function validateEvent(event) {
     'runner',
     'model',
     'role',
+    'effort',
     'endpoint',
     'runner_version',
     'capability'
@@ -145,6 +148,12 @@ function validateEvent(event) {
 
   if (typeof event.role !== 'string' || event.role.trim().length === 0) {
     failValidation('role must be a non-empty string');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(event, 'effort')
+      && (typeof event.effort !== 'string'
+        || !/^[A-Za-z0-9._:-]{1,128}$/.test(event.effort))) {
+    failValidation('effort must be a bounded classification code');
   }
 
   if (Object.prototype.hasOwnProperty.call(event, 'endpoint')
@@ -742,8 +751,35 @@ function endpointSelection(raw, supplied) {
   return { key: `exact:${raw}`, endpoint: raw, binding: 'exact' };
 }
 
-// Logic to merge events per runner, model, role and exact endpoint identity.
-function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpointSelection(null, false)) {
+function effortRowKey(row) {
+  if (!Object.prototype.hasOwnProperty.call(row, 'effort')) return 'legacy';
+  if (typeof row.effort !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(row.effort)) {
+    return `invalid:${toEventId(row.event_id) || 0}`;
+  }
+  return `exact:${row.effort}`;
+}
+
+function effortSelection(raw, supplied) {
+  if (!supplied) {
+    return { key: 'legacy', effort: null, binding: 'ambiguous-legacy' };
+  }
+  if (typeof raw !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(raw)) {
+    failUsage('--effort must be a bounded classification code');
+  }
+  return { key: `exact:${raw}`, effort: raw, binding: 'exact' };
+}
+
+// Logic to merge events per runner, model, role, effort and endpoint identity.
+function mergeCurrentState(
+  rows,
+  runner,
+  model,
+  role,
+  nowMs,
+  endpoint = endpointSelection(null, false),
+  effort = effortSelection(null, false),
+  quotaRoleScope = 'pool',
+) {
   let mergedQuota = null;
   let mergedSkill = null;
   // context_window is merged ROLE-AGNOSTICALLY (like quota, unlike skill_transport):
@@ -752,7 +788,8 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
 
   for (const row of rows) {
     if (row.runner !== runner || row.model !== model
-        || endpointRowKey(row) !== endpoint.key) {
+        || endpointRowKey(row) !== endpoint.key
+        || effortRowKey(row) !== effort.key) {
       continue;
     }
 
@@ -761,7 +798,8 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
     // role fragmented the pool: a live 'available' probe recorded under role=reviewer
     // could never clear a stale-but-unexpired 'exhausted' recorded under role=implementer
     // (2026-07-17 grok incident, events 13 vs 15). skill_transport below stays role-keyed.
-    if (row.capability && row.capability.quota) {
+    if (row.capability && row.capability.quota
+        && (quotaRoleScope === 'pool' || row.role === role)) {
       const q = row.capability.quota;
       const observedMs = toDateMs(row.observed_at) || nowMs;
       const ttlMs = q.ttl_seconds * 1000;
@@ -928,6 +966,8 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
     runner,
     model,
     role,
+    effort: effort.effort,
+    effort_binding: effort.binding,
     endpoint: endpoint.endpoint,
     endpoint_binding: endpoint.binding,
     runner_version: null,
@@ -968,7 +1008,16 @@ function parseCommandLineArgs(argv) {
   const command = argv[0];
   const commandOptions = new Map([
     ['record', new Set(['file', 'store'])],
-    ['current', new Set(['runner', 'model', 'role', 'endpoint', 'now', 'store'])],
+    ['current', new Set([
+      'runner',
+      'model',
+      'role',
+      'effort',
+      'endpoint',
+      'role-scope',
+      'now',
+      'store',
+    ])],
     ['report', new Set(['capability', 'now', 'store'])],
     ['record-evidence', new Set(['file', 'store'])],
     ['current-evidence', new Set([
@@ -1263,6 +1312,14 @@ function main() {
       options.endpoint,
       Object.prototype.hasOwnProperty.call(options, 'endpoint'),
     );
+    const selectedEffort = effortSelection(
+      options.effort,
+      Object.prototype.hasOwnProperty.call(options, 'effort'),
+    );
+    const roleScope = options['role-scope'] || 'pool';
+    if (roleScope !== 'pool' && roleScope !== 'exact') {
+      failUsage('--role-scope must be "pool" or "exact"');
+    }
     const merged = mergeCurrentState(
       rows,
       options.runner,
@@ -1270,6 +1327,8 @@ function main() {
       options.role,
       nowMs,
       selectedEndpoint,
+      selectedEffort,
+      roleScope,
     );
     process.stdout.write(`${JSON.stringify(merged)}\n`);
     process.exit(0);
@@ -1284,31 +1343,62 @@ function main() {
     const { storeFile } = resolveStoreConfig(options);
     const rows = readStoreRows(storeFile, true);
 
-    // Group rows by (runner, model, endpoint identity). Quota remains role-agnostic only
-    // inside one exact wallet. Legacy rows retain their own ambiguous group.
+    // Group rows by (runner, model, effort, endpoint identity). Quota remains role-agnostic
+    // only inside one exact wallet+effort pool. Legacy rows retain an ambiguous group.
     const groups = new Map();
     for (const row of rows) {
       const endpointKey = endpointRowKey(row);
       if (endpointKey.startsWith('invalid:')) continue;
-      const key = `${row.runner}\u0000${row.model}\u0000${endpointKey}`;
+      const effortKey = effortRowKey(row);
+      if (effortKey.startsWith('invalid:')) continue;
+      const key = `${row.runner}\u0000${row.model}\u0000${effortKey}\u0000${endpointKey}`;
       const selection = endpointKey === 'legacy'
         ? endpointSelection(null, false)
         : endpointSelection(
           row.endpoint === null ? ENDPOINT_NULL_SELECTOR : row.endpoint,
           true,
         );
-      groups.set(key, { runner: row.runner, model: row.model, endpoint: selection });
+      const effort = effortKey === 'legacy'
+        ? effortSelection(null, false)
+        : effortSelection(row.effort, true);
+      groups.set(key, {
+        runner: row.runner,
+        model: row.model,
+        endpoint: selection,
+        effort,
+      });
     }
 
     const mergedList = [];
-    for (const { runner, model, endpoint } of groups.values()) {
+    for (const {
+      runner,
+      model,
+      endpoint,
+      effort,
+    } of groups.values()) {
       // First pass (role null) resolves the winning quota observation; the emitted row's
       // role echoes that observation's source role, and skill_transport follows it.
-      const probe = mergeCurrentState(rows, runner, model, null, nowMs, endpoint);
+      const probe = mergeCurrentState(
+        rows,
+        runner,
+        model,
+        null,
+        nowMs,
+        endpoint,
+        effort,
+      );
       const q = probe.capability && probe.capability.quota;
       if (q && q.status !== 'unknown') {
         const merged = (q.source_role != null)
-          ? mergeCurrentState(rows, runner, model, q.source_role, nowMs, endpoint)
+          ? mergeCurrentState(
+            rows,
+            runner,
+            model,
+            q.source_role,
+            nowMs,
+            endpoint,
+            effort,
+          )
           : probe;
         mergedList.push(merged);
       }
@@ -1318,6 +1408,11 @@ function main() {
     mergedList.sort((a, b) => {
       if (a.runner !== b.runner) return a.runner < b.runner ? -1 : 1;
       if (a.model !== b.model) return a.model < b.model ? -1 : 1;
+      const aEffort = a.effort_binding === 'ambiguous-legacy'
+        ? '' : String(a.effort);
+      const bEffort = b.effort_binding === 'ambiguous-legacy'
+        ? '' : String(b.effort);
+      if (aEffort !== bEffort) return aEffort < bEffort ? -1 : 1;
       const aEndpoint = a.endpoint_binding === 'ambiguous-legacy'
         ? '' : String(a.endpoint);
       const bEndpoint = b.endpoint_binding === 'ambiguous-legacy'
@@ -1353,7 +1448,7 @@ function main() {
       const latestNative = new Map();
       const latestPrompt = new Map();
       for (const row of rows) {
-        const key = `${row.runner}\u0000${row.model}\u0000${row.role}\u0000${endpointRowKey(row)}`;
+        const key = `${row.runner}\u0000${row.model}\u0000${row.role}\u0000${effortRowKey(row)}\u0000${endpointRowKey(row)}`;
         const currentId = toEventId(row.event_id) || 0;
         const existingId = latestEvents.get(key) || 0;
         if (currentId > existingId) {
@@ -1371,7 +1466,7 @@ function main() {
       }
 
       for (const row of rows) {
-        const key = `${row.runner}\u0000${row.model}\u0000${row.role}\u0000${endpointRowKey(row)}`;
+        const key = `${row.runner}\u0000${row.model}\u0000${row.role}\u0000${effortRowKey(row)}\u0000${endpointRowKey(row)}`;
         const currentId = toEventId(row.event_id) || 0;
         const isLatest = latestEvents.get(key) === currentId;
         const isSkillCarrier =

@@ -37,6 +37,18 @@
       "minLength": 1,
       "description": "Lifecycle role."
     },
+    "effort": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "description": "Exact effort identity. Absence means legacy effort-ambiguous evidence."
+    },
+    "effort_binding": {
+      "type": "string",
+      "enum": ["exact", "ambiguous-legacy"],
+      "description": "Output-only identity provenance for merged current/report views."
+    },
     "endpoint": {
       "type": ["string", "null"],
       "minLength": 1,

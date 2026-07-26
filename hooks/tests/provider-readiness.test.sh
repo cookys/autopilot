@@ -249,6 +249,8 @@ NO_ENDPOINT="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role revie
 
 assert_contains "$LEGACY" '"endpoint_binding":"ambiguous-legacy"' \
   "legacy capability rows remain explicitly endpoint-ambiguous"
+assert_contains "$LEGACY" '"effort":null,"effort_binding":"ambiguous-legacy"' \
+  "legacy capability rows remain explicitly effort-ambiguous"
 assert_contains "$LEGACY" '"status":"exhausted"' \
   "legacy query preserves the legacy row without assigning it to a wallet"
 assert_contains "$WALLET_A" '"endpoint":"wallet_a"' "wallet A identity is emitted"
@@ -305,6 +307,13 @@ REPORT="$(node "$CLI" report --capability quota --now 2026-07-27T12:00:00.000Z \
 REPORT_COUNT="$(node -e "process.stdout.write(String(JSON.parse(process.argv[1]).length))" "$REPORT")"
 assert_eq "$REPORT_COUNT" "5" \
   "report retains every valid endpoint identity and ignores a malformed stored row"
+EFFORT_SCHEMA_TYPE="$(node -e '
+const fs = require("fs");
+const schema = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+process.stdout.write(JSON.stringify(schema.properties.effort.type));
+' "$REPO_ROOT/schemas/engine-capability-state.schema.json")"
+assert_eq "$EFFORT_SCHEMA_TYPE" '["string","null"]' \
+  "capability schema accepts explicit null on legacy effort-ambiguous output"
 
 PROBE_OUT="$(node - "$REPO_ROOT" "$TEST_TMP/probe-capability" <<'NODE'
 'use strict';
@@ -332,12 +341,16 @@ const tuple = {
 };
 const NOW = '2026-07-27T12:00:00.000Z';
 const later = (minutes) => `2026-07-27T12:${String(minutes).padStart(2, '0')}:00.000Z`;
-const transport = (boundTuple, kind = 'success') => {
+const transport = (
+  boundTuple,
+  kind = 'success',
+  responseText = kind === 'success' ? 'OK\n' : '',
+) => {
   const child = {
     status: kind === 'success' ? 0 : 1,
     signal: null,
     error: null,
-    stdout: kind === 'success' ? 'OK\n' : '',
+    stdout: responseText,
     stderr: '',
   };
   const outcomeHints = {};
@@ -430,6 +443,70 @@ runProviderProbe({
 });
 assert.strictEqual(liveCalls, 2);
 
+const lowEffort = { ...tuple, effort: 'low' };
+runProviderProbe({
+  tuple: lowEffort,
+  now: later(9),
+  ttl_seconds: 600,
+  store,
+}, {
+  safeProbe: () => ({
+    status: 'ready',
+    evidence_class: 'safe-surface',
+    reason: null,
+  }),
+  liveProbe,
+});
+assert.strictEqual(liveCalls, 3);
+const highAfterLow = runProviderProbe({
+  tuple,
+  now: later(9),
+  ttl_seconds: 600,
+  store,
+}, {
+  safeProbe: () => ({
+    status: 'ready',
+    evidence_class: 'safe-surface',
+    reason: null,
+  }),
+  liveProbe,
+});
+assert.strictEqual(highAfterLow.live_probe.reused, true);
+assert.strictEqual(highAfterLow.persistence.event_id, first.persistence.event_id);
+assert.strictEqual(liveCalls, 3);
+
+const implementer = { ...tuple, role: 'implementer' };
+runProviderProbe({
+  tuple: implementer,
+  now: later(9),
+  ttl_seconds: 600,
+  store,
+}, {
+  safeProbe: () => ({
+    status: 'ready',
+    evidence_class: 'safe-surface',
+    reason: null,
+  }),
+  liveProbe,
+});
+assert.strictEqual(liveCalls, 4);
+const reviewerAfterImplementer = runProviderProbe({
+  tuple,
+  now: later(9),
+  ttl_seconds: 600,
+  store,
+}, {
+  safeProbe: () => ({
+    status: 'ready',
+    evidence_class: 'safe-surface',
+    reason: null,
+  }),
+  liveProbe,
+});
+assert.strictEqual(reviewerAfterImplementer.live_probe.reused, true);
+assert.strictEqual(reviewerAfterImplementer.persistence.event_id, first.persistence.event_id);
+assert.strictEqual(liveCalls, 4);
+
 const afterTtl = runProviderProbe({
   tuple,
   now: later(11),
@@ -438,7 +515,7 @@ const afterTtl = runProviderProbe({
 }, { safeProbe, liveProbe });
 assert.strictEqual(afterTtl.live_probe.attempted, true);
 assert.strictEqual(afterTtl.live_probe.reused, false);
-assert.strictEqual(liveCalls, 3);
+assert.strictEqual(liveCalls, 5);
 assert.strictEqual(safeCalls, 3);
 
 const blocked = runProviderProbe({
@@ -490,11 +567,15 @@ assert.strictEqual(
 );
 assert.strictEqual(
   classifyLiveProbeResult(tuple, {
-    transport_envelope: transport(tuple),
+    transport_envelope: transport(tuple, 'success', 'unexpected'),
     response_text: 'unexpected',
   }),
   'malformed_response',
 );
+assert.throws(() => classifyLiveProbeResult(tuple, {
+  transport_envelope: transport(tuple),
+  response_text: 'different-output',
+}), /stdout digest/i);
 const forged = transport(tuple);
 forged.receipt_digest = '0'.repeat(64);
 assert.throws(() => classifyLiveProbeResult(tuple, {
@@ -515,7 +596,7 @@ const secretResult = runProviderProbe({
     reason: null,
   }),
   liveProbe: ({ tuple: selected }) => ({
-    transport_envelope: transport(selected),
+    transport_envelope: transport(selected, 'success', `not-ok ${secret}`),
     response_text: `not-ok ${secret}`,
   }),
 });

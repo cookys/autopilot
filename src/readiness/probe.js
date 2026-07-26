@@ -108,6 +108,10 @@ function digest(value) {
     .digest('hex');
 }
 
+function bufferDigest(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
 function deepFreeze(value) {
   if (!isRecord(value) && !Array.isArray(value)) return value;
   for (const item of Object.values(value)) deepFreeze(item);
@@ -267,19 +271,20 @@ function classifyLiveProbeResult(tupleValue, value) {
       || envelope.request_binding.operation !== LIVE_PROBE_REQUEST.operation) {
     throw new TypeError('live probe transport envelope does not match the selected tuple');
   }
+  if (typeof value.response_text !== 'string' && !Buffer.isBuffer(value.response_text)) {
+    throw new TypeError('live probe response_text must be a string or buffer');
+  }
+  const responseBuffer = Buffer.isBuffer(value.response_text)
+    ? value.response_text
+    : Buffer.from(value.response_text, 'utf8');
+  if (bufferDigest(responseBuffer) !== envelope.output_digests.stdout_sha256) {
+    throw new TypeError('live probe response does not match the transport stdout digest');
+  }
 
   switch (envelope.outcome.classification) {
     case 'success': {
-      if (typeof value.response_text !== 'string' && !Buffer.isBuffer(value.response_text)) {
-        throw new TypeError('live probe response_text must be a string or buffer');
-      }
-      const responseBytes = Buffer.isBuffer(value.response_text)
-        ? value.response_text.length
-        : Buffer.byteLength(value.response_text, 'utf8');
-      if (responseBytes > 256) return 'malformed_response';
-      const response = Buffer.isBuffer(value.response_text)
-        ? value.response_text.toString('utf8')
-        : value.response_text;
+      if (responseBuffer.length > 256) return 'malformed_response';
+      const response = responseBuffer.toString('utf8');
       return response.trim() === 'OK'
         ? 'success'
         : 'malformed_response';
@@ -342,7 +347,9 @@ function readCurrentLiveObservation(input) {
     '--runner', input.tuple.runner,
     '--model', input.tuple.model,
     '--role', input.tuple.role,
+    '--effort', input.tuple.effort,
     '--endpoint', endpoint,
+    '--role-scope', 'exact',
     '--now', input.now,
   );
   const child = runStateCli(args, { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -359,6 +366,8 @@ function readCurrentLiveObservation(input) {
   if (current.runner !== input.tuple.runner
       || current.model !== input.tuple.model
       || current.role !== input.tuple.role
+      || current.effort !== input.tuple.effort
+      || current.effort_binding !== 'exact'
       || current.endpoint !== input.tuple.endpoint
       || current.endpoint_binding !== 'exact') {
     throw new Error('provider probe capability read returned a mismatched tuple');
@@ -409,6 +418,7 @@ function persistLiveObservation(input, outcome, observation) {
     runner: input.tuple.runner,
     model: input.tuple.model,
     role: input.tuple.role,
+    effort: input.tuple.effort,
     endpoint: input.tuple.endpoint,
     runner_version: null,
     capability: {
@@ -438,6 +448,7 @@ function persistLiveObservation(input, outcome, observation) {
       || stored.runner !== input.tuple.runner
       || stored.model !== input.tuple.model
       || stored.role !== input.tuple.role
+      || stored.effort !== input.tuple.effort
       || stored.endpoint !== input.tuple.endpoint) {
     throw new Error('provider probe capability persistence returned a mismatched event');
   }

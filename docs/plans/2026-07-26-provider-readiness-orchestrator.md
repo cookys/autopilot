@@ -1,5 +1,5 @@
 # Plan — Provider Readiness Orchestrator
-> Status: Heterogeneous review READY (generation 1) / Owner: CEO / Branch: to be created at execution / Frame: independent L-size follow-up
+> Status: Ownership-consolidated revision; prior generation-1 READY is historical / Owner: CEO / Branch: to be created at execution / Frame: independent readiness core with optional Kimi transport follow-up
 
 ## 0. Context / thesis
 
@@ -38,11 +38,13 @@ memory and causes false rejection, late blocking, and manual provider recovery.
 - **R4 / KR4 — bounded live probe:** Safe surface checks run first. When they cannot establish live
   auth/quota, one minimal no-effect provider request is allowed per exact tuple and TTL window; its
   spend and result are recorded without exposing credentials.
-- **R5 / KR5 — native Kimi:** `kimi` is a first-class read-only author/reviewer runner, including an
-  explicit `kimi-code/k3` alias mapping and feature-detected headless invocation.
+- **R5 / KR5 — optional native Kimi:** after the readiness core is usable, `kimi` may become a
+  first-class read-only author/reviewer runner with explicit `kimi-code/k3` alias mapping and
+  feature-detected headless invocation. This transport phase cannot block the readiness core.
 - **R6 / KR6 — early L5/L6 gate:** All selected implementer, reviewer, verification-author, and QC
-  seats are checked at intake. A blocked required seat is reported before implementation dispatch;
-  eligible configured fallbacks are named deterministically.
+  seats receive one content-bound readiness receipt. ICC consumes it at its sole effectful intake;
+  a blocked required seat is therefore reported before implementation dispatch and eligible
+  configured fallbacks are named deterministically.
 - **R7 / KR7 — honest CLI:** `autopilot status readiness --json [--probe]` and human output explain
   whether a seat is usable now and why. No remaining-quota percentage is invented.
 
@@ -55,15 +57,19 @@ memory and causes false rejection, late blocking, and manual provider recovery.
 - Credentials and bearer tokens must never appear in argv, JSON output, logs, fixtures, or error messages.
 - Native Kimi support is read-only author/reviewer transport only; this plan does not qualify Kimi for a role by assertion.
 - Existing `autopilot status quota|runs|roster` output remains backward compatible.
+- PRO exports pure readiness decisions/receipts and does not wire `autopilot-engine.js`, claim
+  campaign generations, or choose Mission scope.
+- PRO consumes the shared `RunnerTransportEnvelope` for mechanical runner outcomes and owns only
+  probe/readiness observation validation; it does not create a second raw-output envelope.
 
 ## 3. File-structure map
 
 | File | Responsibility |
 |---|---|
 | `src/readiness/provider-readiness.js` (new) | Pure tuple normalization, three-axis aggregation, TTL decisions, fallback eligibility, and verdict construction. |
-| `src/readiness/probe.js` (new) | Safe-first then bounded-live probe coordinator; deduplicates exact tuples within TTL. |
+| `src/readiness/probe.js` (new) | Safe-first then bounded-live probe coordinator; consumes the shared runner envelope and deduplicates exact tuples within TTL. |
+| `schemas/provider-readiness-receipt.schema.json` (new) | Exact seat tuple, axis evidence/TTL, ordered eligible fallbacks, policy digest, observation digest, and receipt binding. |
 | `src/runners/kimi.js` (new) | Feature-detected native Kimi read-only invocation and normalized result. |
-| `src/engine/autopilot-engine.js` | Run required-seat readiness before the canonical `engine implement-review` dispatcher is allowed to create its implementation branch/worktree. |
 | `src/status/cli.js` | Add `readiness` collection and human/JSON rendering without changing existing subcommands. |
 | `bin/autopilot.js` | Expose `status readiness [--json] [--probe]`. |
 | `scripts/dispatch-author.sh` | Admit the `kimi` runner and delegate to the native transport without shell interpolation. |
@@ -74,7 +80,7 @@ memory and causes false rejection, late blocking, and manual provider recovery.
 | `hooks/tests/status-cli.test.sh` | Readiness CLI contract, backward compatibility, redaction, stale/unknown cases. |
 | `hooks/tests/dispatch-author-kimi.test.sh` (new) | Native Kimi argv/stdin, alias, timeout, malformed response, and missing-binary fixtures. |
 | `hooks/tests/provider-readiness.test.sh` (new) | Three-axis matrix, TTL dedupe, fallback ordering, exact endpoint identity, intake fail-closed behavior. |
-| `hooks/tests/engine-provider-readiness.test.sh` (new) | End-to-end engine intake: a blocked required seat creates no branch/worktree or implementer dispatch; an eligible fallback is reported and admitted deterministically. |
+| `hooks/tests/provider-readiness-consumer.test.sh` (new) | Pure consumer contract: valid/expired/drifted/blocked receipts and eligible fallback binding; no engine wiring. |
 | `schemas/review-loop-contract.schema.json` | Schema additions for exact seat tuples and readiness policy. |
 | `platforms/codex/plugin/**` | Regenerated mirror through the canonical sync script; never hand-edited. |
 
@@ -116,42 +122,41 @@ for the same runner/model remaining distinct.
 **Acceptance:** the fixture live probe runs once on the first stale lookup, zero times on the second
 lookup inside TTL, and reruns after an injected clock crosses TTL.
 
-### Phase 3 — Native Kimi author/reviewer runner (L)
+### Phase 3 — Optional native Kimi author/reviewer runner (L, independent follow-up)
 
-**Depends on:** Phase 1.
+**Depends on:** Phase 1. Does not block Phase 4 or readiness-core shipment.
 
 1. Feature-detect the installed `kimi` CLI and its non-interactive/headless surface; fail closed when
    the required flags are absent.
 2. Add an explicit model mapping for `kimi-code/k3`; do not guess a default model.
 3. Pass the prompt on stdin or a private file according to the detected CLI contract. Never build a
    shell command from prompt/model text.
-4. Normalize exit, timeout, empty output, and malformed output to the same transport result shape as
-   other author runners.
+4. Return exit, timeout, and private raw reference through the shared runner envelope; validate the
+   Kimi-specific semantic body only inside PRO. Empty/malformed semantic output never changes the
+   mechanical transport SSOT.
 5. Admit `kimi` in `dispatch-author.sh` and the resolver schema.
 
 **Acceptance:** `bash hooks/tests/dispatch-author-kimi.test.sh` passes against a fake CLI capturing
 argv/stdin, and a local opt-in smoke returns a non-empty read-only response from `kimi-code/k3`.
 
-### Phase 4 — CLI and L5/L6 intake integration (L)
+### Phase 4 — Receipt and CLI integration (L)
 
-**Depends on:** Phases 1–3.
+**Depends on:** Phases 1–2 only.
 
 1. Add `autopilot status readiness [--json] [--probe]`; without `--probe`, it is observation-only.
 2. Render a one-line decision for each selected seat:
    `usable`, `probe-needed`, or `blocked`, followed by the exact failing axis.
-3. Invoke readiness preflight in `src/engine/autopilot-engine.js` at the canonical
-   `engine implement-review` intake, before its dispatcher creates an implementation branch or
-   worktree. A blocked required seat returns a fail-closed precondition result with eligible
-   fallbacks and causes zero dispatch. The L5/L6 front-door skills call this engine path and do not
-   implement a second preflight.
+3. Emit a content-bound `ProviderReadinessReceipt` for the selected roster and policy. Expired,
+   tuple-drifted, policy-drifted, or incomplete receipts fail validation; unknown stays unknown.
 4. Resolve fallbacks through configured order and family constraints; never promote an unqualified
-   fallback.
+   fallback. The receipt names the decision but performs no dispatch.
 5. Keep existing `status`, `status quota`, `status runs`, and `status roster` byte-compatible where
    fixture-pinned.
 
-**Acceptance:** `hooks/tests/engine-provider-readiness.test.sh` proves that a fixture with stale Grok,
-ready MiniMax endpoint, ready Kimi transport but missing qualification, and exhausted Fable produces
-the expected four distinct decisions and prevents a blocked required seat from dispatching.
+**Acceptance:** `hooks/tests/provider-readiness-consumer.test.sh` proves that a fixture with stale
+Grok, ready MiniMax endpoint, ready Kimi transport but missing qualification, and exhausted Fable
+produces four distinct decisions; its blocked receipt is rejected by a generic pure consumer.
+ICC separately proves that rejection happens before branch/worktree/runner spend.
 
 ### Phase 5 — Package sync and documentation (S)
 
@@ -169,7 +174,7 @@ the expected four distinct decisions and prevents a blocked required seat from d
 ```bash
 bash hooks/tests/provider-readiness.test.sh
 bash hooks/tests/dispatch-author-kimi.test.sh
-bash hooks/tests/engine-provider-readiness.test.sh
+bash hooks/tests/provider-readiness-consumer.test.sh
 bash hooks/tests/status-cli.test.sh
 bash hooks/tests/resolve-review-loop.test.sh
 bash hooks/tests/engine-scorecard.test.sh
@@ -199,6 +204,9 @@ The optional real Kimi smoke is human-gated because it spends provider quota.
 - Replacing the review controller or adding N-seat panel semantics; that belongs to the separate
   review-controller plan.
 - Worktree/branch lifecycle budgets; covered by the existing lifecycle plan.
+- Effectful `engine implement-review` intake ordering, campaign generations, and pre-spend spawn
+  blocking; ICC consumes this plan's pure receipt at its canonical composition point.
+- Mission budget/scope and task-level `can_close`.
 
 ## 8. Open questions
 
@@ -212,3 +220,6 @@ None. The Board already directed automatic provider probing and named native Kim
   end-to-end dispatch-blocking test, and live-probe persistence wording.
 - R1 MiniMax-M3 + GLM-5.2: both READY, zero findings. Durable ticket
   `transcript-followup-provider-readiness-orchestrator`, terminal generation 1.
+- R2 ownership consolidation: removed direct `autopilot-engine.js` ownership, made the readiness
+  receipt the integration boundary, and made native Kimi an independent optional phase. The R1
+  plan/rubric hash is historical; this revision requires a new bounded review.

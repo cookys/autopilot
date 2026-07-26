@@ -12,6 +12,9 @@ Only the following criteria may admit a blocking plan finding.
 - R8: Artifacts distinguish transport status, semantic verdict, attempt, generation, and terminal state.
 - R9: Legacy chair/deep callers remain compatible.
 - R10: Plan includes executable red cases for retries, drift, duplicate findings, supplements, and cap evasion.
+- R11: PRS consumes the shared mechanical runner envelope and alone validates purpose-bound
+  plan-review semantics; transport truth is not duplicated and raw artifacts cannot cross
+  controller authority.
 
 Next-slice readiness means no implementer must invent manifest, retry, adjudication, aggregation, or
 terminal semantics.

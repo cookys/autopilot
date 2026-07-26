@@ -1,5 +1,5 @@
 # Plan — Durable Heterogeneous Plan-Review Session Controller
-> Status: Semantic reviewers READY; controller recorded transport STOP on fenced JSON / Owner: CEO / Branch: to be created at execution / Frame: independent L-size follow-up
+> Status: Ownership boundary clarified; semantic reviewers READY but controller recorded transport STOP on fenced JSON / Owner: CEO / Branch: to be created at execution / Frame: independent L-size follow-up
 
 ## 0. Context / thesis
 
@@ -57,17 +57,19 @@ decision.
 - Generation 2 is the hard terminal cap; no reviewer text or new process may create generation 3 for the same ticket.
 - Raw reviewer output may be retained only in private state artifacts and must not leak credentials.
 - Existing two-seat CLI flags remain supported as a compatibility translation into a manifest.
+- PRS consumes the shared `RunnerTransportEnvelope` for mechanical outcomes. Only
+  `plan-review-normalize.js` may canonicalize the purpose-bound plan-review payload; it cannot emit
+  another transport truth or accept a raw artifact bound to another controller.
 
 ## 3. File-structure map
 
 | File | Responsibility |
 |---|---|
 | `scripts/dispatch-plan-review.js` | Durable ticket state machine, manifest loading, per-seat attempts, substitution, generation aggregation, and terminal policy. |
-| `scripts/lib/plan-review-normalize.js` (new) | Strict JSON parse plus bounded envelope extraction; produces transport/parser status separately from semantic output. |
+| `scripts/lib/plan-review-normalize.js` (new) | Purpose-bound strict JSON parse plus bounded extraction; consumes shared transport status and produces only plan-review semantic/parser status. |
 | `scripts/lib/plan-review-findings.js` (new) | Stable finding fingerprint, dedupe, rubric mapping, and disposition validation. |
 | `schemas/plan-review-manifest.schema.json` (new) | Caller-stable `logical_plan_id`, frozen 1–4 seat manifest, and declared fallback contract. |
 | `schemas/plan-review-artifact.schema.json` (new) | Generation, attempts, substitutions, findings ledger, and terminal result contract. |
-| `scripts/dispatch-author.sh` | Consume exact manifest seat tuple; transport remains read-only. |
 | `scripts/rubric-freeze.js` | Seal manifest hash beside rubric hash and reject later drift. |
 | `hooks/tests/dispatch-plan-review.test.sh` | State-machine red/green cases, compatibility flags, attempts vs generations, terminal cap. |
 | `hooks/tests/plan-review-routing.test.sh` | N-seat routing, endpoints, readiness/family substitution, and no hidden extra seats. |
@@ -75,6 +77,11 @@ decision.
 | `references/plan-template.md` | Describe manifest freeze and finding disposition review log. |
 | `skills/research-to-ship/SKILL.md` | Invoke the manifest-based controller and require adjudication before generation 2. |
 | `platforms/codex/plugin/**` | Canonically generated mirror only. |
+
+The existing author-dispatch CLI is a read-only transport dependency, not a PRS-owned modification
+surface. PRS passes the frozen exact tuple into its public interface. New runner
+adapters such as optional native Kimi belong to the provider/transport plan and remain independently
+testable.
 
 ## 4. Phases
 
@@ -207,6 +214,10 @@ None. The Board explicitly requested bounded heterogeneous loop review and corre
 verified findings.
 
 ## Review log
+
+- Ownership consolidation (2026-07-26): removed `dispatch-author.sh` from the implementation file
+  map. PRS owns plan-session semantics and its normalizer only; it consumes common transport and PRO
+  readiness without adding runner adapters.
 
 - R0 (2026-07-26): Authored from the transcript investigation. Rubric frozen in
   `2026-07-26-plan-review-session-controller.rubric.md`.

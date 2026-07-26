@@ -2,7 +2,7 @@
 
 > Status: In progress
 >
-> Progress: 4/34 phases READY
+> Progress: 5/34 phases READY
 >
 > Target: v2.34.0
 >
@@ -28,6 +28,7 @@ runner, reviewer, branch, or successor to reset authority or resource ceilings.
 | Existing project policy: project default once, task override only when needed | Mission configuration and authenticated override contract in Mission P1/P2. |
 | Existing project policy: strong and weak models coexist through profiles | ICC and PRO consume the shipped capability/guidance profile contracts without splitting the repository. |
 | Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen phase rubric go to `docs/BACKLOG.md`; they do not grow the active phase. |
+| Valuable reviewer follow-ups must not be lost | ICC/PRS emit evidence-bound follow-up candidates; LSM P4 makes depth-0 dedupe and admit them to backlog before closeout, while `/next` may reopen them only as a new ticket/contract/budget after their trigger is true. |
 
 ## Scope Completeness Audit
 
@@ -54,7 +55,7 @@ blocking finding. A transport failure never counts as a verdict.
 | 1 | ICC P0 contract + RED replay | baseline | READY | `0e2e4e2..b6fc192` | [icc-p0.md](reviews/icc-p0.md) |
 | 2 | ICC P1 state + pre-spend gate | ICC P0 | READY | `ef68372..3444daf` | [icc-p1.md](reviews/icc-p1.md) |
 | 3 | ICC P2 review/repair composition | ICC P1 | READY | `a83cae4..77213a8` | [icc-p2.md](reviews/icc-p2.md) |
-| 4 | ICC P3 routing + transport envelope + status | ICC P2 | Pending | pending | pending |
+| 4 | ICC P3 routing + transport envelope + status | ICC P2 | READY | `dba2668..d2020dc` | [icc-p3.md](reviews/icc-p3.md) |
 | 5 | PRO P1 pure readiness identity | ICC transport boundary | Pending | pending | pending |
 | 6 | PRO P2 bounded probe coordinator | PRO P1 | Pending | pending | pending |
 | 7 | PRO P4 readiness receipt + CLI | PRO P2 | Pending | pending | pending |

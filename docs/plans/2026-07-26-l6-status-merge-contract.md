@@ -146,9 +146,17 @@ preserved dirty changes, and no reverse-edge merge.
    completion when it is false. The S/Fix/H exemption changes only marker/terminal gating; their
    existing finish-flow behavior is otherwise unchanged.
 5. Replace ambiguous “merged and clean” templates with the four independent state labels.
+6. Before closeout, let depth-0 consume ICC/PRS follow-up candidate artifacts. Dedupe by stable
+   finding fingerprint; admit only evidence-backed valuable work to `docs/BACKLOG.md` with
+   `Source`, `Context`, and `Trigger`. Rejected/nitpick candidates remain in the immutable campaign
+   receipt but do not enter backlog. A backlog admission never reopens the current ticket:
+   `/next` may select it later only after its trigger is true, under a new ticket, contract, and
+   budget.
 
 **Acceptance:** finish-flow fixture cannot clear the marker with branch/worktree residue, and the
-final human report distinguishes merged/not-pushed/consumer-dirty states.
+final human report distinguishes merged/not-pushed/consumer-dirty states. A valuable out-of-scope
+review suggestion is admitted exactly once to backlog without changing current-ticket terminal
+state; a duplicate, unsupported, or preference-only suggestion is not admitted.
 
 ### Phase 5 — Docs/package sync (S)
 

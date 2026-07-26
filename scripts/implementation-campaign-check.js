@@ -162,6 +162,27 @@ function canonicalRepoIdentity(repo) {
   return `git-common-dir:${canonical}`;
 }
 
+function projectMissionMode(repo) {
+  const configPath = path.join(repo, '.claude', 'owner-kernel-governance.json');
+  if (!fs.existsSync(configPath)) return 'off';
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (error) {
+    throw new CliError(`authoritative project governance is invalid: ${error.message}`, 3);
+  }
+  if (!hasOwn(config, 'mission_convergence')) return 'off';
+  const section = config.mission_convergence;
+  if (!section || typeof section !== 'object' || Array.isArray(section)
+      || !new Set(['off', 'shadow', 'enforce']).has(section.enforcement_mode)) {
+    throw new CliError(
+      'authoritative project governance has invalid mission_convergence.enforcement_mode',
+      3,
+    );
+  }
+  return section.enforcement_mode;
+}
+
 function repoObjectFormat(repo) {
   const explicit = runGit(repo, ['rev-parse', '--show-object-format']);
   if (explicit.status === 0) {
@@ -240,6 +261,8 @@ function normalizeAllowedPrefix(value) {
     || part === '.'
     || part === '..'
     || part.trim() !== part
+    || part.endsWith('.')
+    || part.includes(':')
     || /[\u0000-\u001f\u007f]/.test(part)
   ))) return null;
   if (parts.some((part) => part.toLowerCase() === '.git')) return null;
@@ -518,6 +541,14 @@ function main() {
     const repo = canonicalDirectory(options.repo, '--repo');
     const repoIdentity = canonicalRepoIdentity(repo);
     const objectFormat = repoObjectFormat(repo);
+    const configuredMissionMode = projectMissionMode(repo);
+    if (options.missionMode !== configuredMissionMode) {
+      throw new CliError(
+        `--mission-mode ${options.missionMode} does not match authoritative project mode `
+          + configuredMissionMode,
+        3,
+      );
+    }
     const contractFile = loadContract(options.contract);
     const errors = validateContract(contractFile.value, {
       repo,
@@ -585,6 +616,7 @@ module.exports = {
   PROFILE_REPAIR_CEILINGS,
   canonicalRepoIdentity,
   normalizeAllowedPrefix,
+  projectMissionMode,
   repoObjectFormat,
   validateContract,
   validBoundedVerifyCommand,

@@ -8,8 +8,11 @@ mkdir -p "$SBX"
 git -C "$SBX" init -q
 git -C "$SBX" config user.email "campaign-test@example.invalid"
 git -C "$SBX" config user.name "Campaign Test"
+mkdir -p "$SBX/.claude"
+printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
+  > "$SBX/.claude/owner-kernel-governance.json"
 printf 'first\n' > "$SBX/README.md"
-git -C "$SBX" add README.md
+git -C "$SBX" add README.md .claude/owner-kernel-governance.json
 git -C "$SBX" commit -qm "first"
 printf 'second\n' >> "$SBX/README.md"
 git -C "$SBX" commit -qam "second"
@@ -170,6 +173,20 @@ run_checker seal --contract "$NESTED_GIT" --repo "$SBX" --out "$TEST_TMP/nested-
 assert_exit_code "$__RUN_EXIT" "3" "nested Git metadata path is rejected"
 assert_contains "$__RUN_STDOUT" "path escapes" "nested Git metadata rejection is specific"
 
+WINDOWS_GIT_ALIAS="$TEST_TMP/windows-git-alias.json"
+write_contract "$WINDOWS_GIT_ALIAS"
+mutate_contract "$WINDOWS_GIT_ALIAS" "value.allowed_path_prefixes = ['worker/.GiT./objects'];"
+run_checker seal --contract "$WINDOWS_GIT_ALIAS" --repo "$SBX" \
+  --out "$TEST_TMP/windows-git-alias.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Win32 trailing-dot Git alias is rejected"
+
+WINDOWS_ADS="$TEST_TMP/windows-ads.json"
+write_contract "$WINDOWS_ADS"
+mutate_contract "$WINDOWS_ADS" \
+  "value.allowed_path_prefixes = ['worker/.git::\$INDEX_ALLOCATION'];"
+run_checker seal --contract "$WINDOWS_ADS" --repo "$SBX" --out "$TEST_TMP/windows-ads.seal"
+assert_exit_code "$__RUN_EXIT" "3" "Win32 alternate-data-stream alias is rejected"
+
 WHITESPACE="$TEST_TMP/whitespace.json"
 write_contract "$WHITESPACE"
 mutate_contract "$WHITESPACE" "value.allowed_path_prefixes = ['src/.. /outside'];"
@@ -256,6 +273,8 @@ assert_contains "$__RUN_STDOUT" "canonical repository identity" "identity reject
 
 ENFORCED_GRANT="$TEST_TMP/enforced-grant.json"
 write_contract "$ENFORCED_GRANT"
+printf '%s\n' '{"mission_convergence":{"enforcement_mode":"enforce"}}' \
+  > "$SBX/.claude/owner-kernel-governance.json"
 MISSION_MODE=enforce run_checker seal --contract "$ENFORCED_GRANT" --repo "$SBX" \
   --out "$TEST_TMP/enforced-grant.seal"
 assert_exit_code "$__RUN_EXIT" "3" "enforced Mission rejects a null parent grant"
@@ -269,6 +288,15 @@ MISSION_MODE=enforce run_checker seal --contract "$ENFORCED_GRANT" --repo "$SBX"
 assert_exit_code "$__RUN_EXIT" "3" "unverified grant hash cannot enable Mission enforcement"
 assert_contains "$__RUN_STDOUT" "unavailable until Mission integration" \
   "pre-integration Mission enforcement fails closed"
+
+MISSION_MODE=shadow run_checker seal --contract "$CONTRACT" --repo "$SBX" \
+  --out "$TEST_TMP/downgraded-mode.seal"
+assert_exit_code "$__RUN_EXIT" "3" "caller cannot downgrade authoritative Mission enforcement"
+assert_contains "$__RUN_STDERR" "does not match authoritative project mode" \
+  "mode downgrade rejection names the authority mismatch"
+
+printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
+  > "$SBX/.claude/owner-kernel-governance.json"
 
 OBJECT_FORMAT="$TEST_TMP/object-format.json"
 write_contract "$OBJECT_FORMAT"

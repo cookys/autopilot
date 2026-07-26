@@ -383,6 +383,27 @@ function defaultGenerationClaim({
         'durable campaign state still owns a mutation lease',
       );
     }
+    if (existing.state.phase !== CAMPAIGN_STATES.PREPARED) {
+      return rejected(
+        'campaign_generation',
+        'campaign_resume_phase_unsupported',
+        `campaign resume from ${existing.state.phase} is unavailable until phase-aware dispatch ships`,
+      );
+    }
+    if (existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
+      return rejected(
+        'campaign_generation',
+        'campaign_file_budget_exhausted',
+        'durable campaign has no changed-file budget remaining',
+      );
+    }
+    if (existing.state.usage.churn >= existing.state.limits.max_churn) {
+      return rejected(
+        'campaign_generation',
+        'campaign_churn_budget_exhausted',
+        'durable campaign has no churn budget remaining',
+      );
+    }
     const preflightEvent = buildResumeEvent({
       campaignId,
       contractDigest,

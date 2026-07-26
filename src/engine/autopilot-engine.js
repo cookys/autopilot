@@ -802,6 +802,24 @@ function campaignWallBudgetStatus(control, observedAt) {
   };
 }
 
+function campaignMutationBudgetStatus(control, observedAt) {
+  const wall = campaignWallBudgetStatus(control, observedAt);
+  if (wall.exhausted || !control || control.status !== 'admitted') return wall;
+  const state = control.initial_state;
+  const usage = state && state.usage;
+  const limits = state && state.limits;
+  if (!usage || !limits) {
+    return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'state' };
+  }
+  if (usage.changed_files >= limits.max_changed_files) {
+    return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'changed_files' };
+  }
+  if (usage.churn >= limits.max_churn) {
+    return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'churn' };
+  }
+  return { ...wall, axis: null };
+}
+
 function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
@@ -1954,6 +1972,33 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
+    if (input.legacyUnmanaged === true
+        && (input.campaignManaged === true || Boolean(input.campaignContract))) {
+      const startedAt = this.now();
+      return {
+        status: 'blocked',
+        phase: 'campaign_contract',
+        reason: '--legacy-unmanaged conflicts with managed campaign input',
+        rounds: 0,
+        verdict: null,
+        roster: input.roster || null,
+        resolveResult: null,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger: [
+          this.ledgerEntry('campaign_contract', 'blocked', startedAt, {
+            rejection_code: 'campaign_mode_conflict',
+          }),
+        ],
+        campaign_control: {
+          status: 'campaign_mode_conflict',
+          deprecated: true,
+          removal_release: 'v2.35.0',
+        },
+      };
+    }
     if (input.legacyUnmanaged === true) {
       return this.runLegacyImplementationReviewLoop(input);
     }
@@ -2442,6 +2487,32 @@ class AutopilotEngine {
       return release;
     };
 
+    if (campaignControl
+        && campaignControl.status === 'admitted'
+        && campaignControl.initial_state.phase !== 'PREPARED') {
+      const rejection = {
+        owner: 'campaign_generation',
+        status: 'rejected',
+        code: 'campaign_resume_phase_unsupported',
+        reason: `campaign resume from ${campaignControl.initial_state.phase} cannot dispatch implementation`,
+      };
+      releaseCampaignNoEffect(rejection);
+      return finish({
+        status: 'blocked',
+        phase: 'campaign_resume',
+        reason: rejection.reason,
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
+
     const implementationChain = [];
     const reviewChain = [];
     const immutableBase = base;
@@ -2454,7 +2525,7 @@ class AutopilotEngine {
 
     for (let round = 1; round <= maxRounds; round += 1) {
       const implementationBudgetAt = this.now();
-      const implementationBudget = campaignWallBudgetStatus(
+      const implementationBudget = campaignMutationBudgetStatus(
         campaignControl,
         implementationBudgetAt,
       );
@@ -2463,13 +2534,18 @@ class AutopilotEngine {
           owner: 'campaign_generation',
           status: 'rejected',
           code: 'campaign_wall_budget_exhausted',
-          reason: 'campaign has no wall-clock budget remaining before implementation dispatch',
+          reason: implementationBudget.axis
+            ? `campaign has no ${implementationBudget.axis} budget remaining before implementation dispatch`
+            : 'campaign has no wall-clock budget remaining before implementation dispatch',
         };
         ledger.push(this.ledgerEntry(
           'campaign_wall_budget',
           'blocked',
           implementationBudgetAt,
-          { elapsed_seconds: implementationBudget.elapsed_seconds },
+          {
+            elapsed_seconds: implementationBudget.elapsed_seconds,
+            exhausted_axis: implementationBudget.axis || 'wall',
+          },
         ));
         if (implementationChain.length === 0) releaseCampaignNoEffect(rejection);
         return finish({

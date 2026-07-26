@@ -257,11 +257,18 @@ sort_csv_ids() {
 get_process_start_time() {
   local pid="$1"
   if [ -r "/proc/$pid/stat" ]; then
-    local start_ticks btime clock_ticks
-    start_ticks="$(awk '{print $22}' "/proc/$pid/stat")"
+    local stat_line stat_tail start_ticks btime clock_ticks
+    local -a stat_fields=()
+    IFS= read -r stat_line < "/proc/$pid/stat" || stat_line=""
+    # Field 2 is parenthesized and may contain spaces or ')'. Strip through
+    # its final delimiter, then field 22 is the 20th field in the remainder.
+    stat_tail="${stat_line##*) }"
+    read -r -a stat_fields <<< "$stat_tail"
+    start_ticks="${stat_fields[19]:-}"
     btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
     clock_ticks="$(getconf CLK_TCK 2>/dev/null || echo 0)"
-    if [ -n "$start_ticks" ] && [ "$clock_ticks" -gt 0 ] && [ "$btime" -gt 0 ]; then
+    if [[ "$start_ticks" =~ ^[0-9]+$ ]] \
+      && [ "$clock_ticks" -gt 0 ] && [ "$btime" -gt 0 ]; then
       echo $((btime + start_ticks / clock_ticks))
       return
     fi

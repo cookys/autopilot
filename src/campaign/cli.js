@@ -34,6 +34,15 @@ const NONLIVE_STAGE_STATES = new Set([
   'quarantined',
   'dead',
 ]);
+const ALLOWED_STAGE_TRANSITIONS = Object.freeze({
+  leased: new Set(['committed', 'reviewed', 'verified', 'merged', 'stale_ignored', 'dead']),
+  committed: new Set(['reviewed', 'stale_ignored', 'dead']),
+  reviewed: new Set(['verified', 'stale_ignored', 'dead']),
+  verified: new Set(['merged', 'stale_ignored', 'dead']),
+  stale_ignored: new Set(['stale_ignored', 'quarantined', 'dead']),
+  quarantined: new Set(['stale_ignored', 'quarantined', 'dead']),
+  dead: new Set(['stale_ignored', 'quarantined', 'dead']),
+});
 const EXIT_SUCCESS = 0;
 const INTAKE_ARTIFACT_KEYS = new Set([
   'schema_version',
@@ -146,21 +155,58 @@ function validateCampaignStageHistory(stageRows, intake, campaignId) {
         && row.nonce === intake.nonce)) {
     throw new Error('campaign ledger intake root is not bound to its generation lease');
   }
-  const latest = stageRows[stageRows.length - 1];
-  if (!Number.isSafeInteger(latest.generation)
-      || latest.generation < 1
-      || typeof latest.nonce !== 'string'
-      || latest.nonce.length === 0
-      || !RUN_LEDGER_STAGE_STATES.has(latest.state)
-      || latest.resources !== `campaign:${campaignId}`) {
-    throw new Error('campaign ledger latest stage evidence is malformed');
+  let latest = null;
+  const generations = new Map();
+  for (const row of stageRows) {
+    if (!Number.isSafeInteger(row.generation)
+        || row.generation < 1
+        || typeof row.nonce !== 'string'
+        || row.nonce.length === 0
+        || !RUN_LEDGER_STAGE_STATES.has(row.state)
+        || row.resources !== `campaign:${campaignId}`) {
+      throw new Error('campaign ledger latest stage evidence is malformed');
+    }
+    if (row.state === 'leased') {
+      if ((!latest && row.generation !== 1)
+          || generations.has(row.generation)
+          || (latest && row.generation !== latest.generation + 1)
+          || (latest
+            && latest.state === 'leased'
+            && processLiveness(latest) !== 'dead')) {
+        throw new Error('campaign ledger lease generation chain is invalid');
+      }
+      if (!Number.isSafeInteger(row.pid)
+          || row.pid <= 0
+          || !Number.isSafeInteger(row.start_time)
+          || row.start_time <= 0) {
+        throw new Error('campaign ledger live lease identity is malformed');
+      }
+      generations.set(row.generation, row);
+      latest = row;
+      continue;
+    }
+    const prior = generations.get(row.generation);
+    if (!prior
+        || prior !== latest
+        || prior.nonce !== row.nonce
+        || row.transition_from !== prior.state
+        || !ALLOWED_STAGE_TRANSITIONS[prior.state]
+        || !ALLOWED_STAGE_TRANSITIONS[prior.state].has(row.state)) {
+      throw new Error('campaign ledger stage transition chain is invalid');
+    }
+    generations.set(row.generation, row);
+    latest = row;
   }
-  if (latest.state === 'leased'
-      && (!Number.isSafeInteger(latest.pid)
-        || latest.pid <= 0
-        || !Number.isSafeInteger(latest.start_time)
-        || latest.start_time <= 0)) {
-    throw new Error('campaign ledger live lease identity is malformed');
+  return latest;
+}
+
+function validateCampaignJournalLease(row, currentLease) {
+  if (!currentLease
+      || currentLease.state !== 'leased'
+      || row.stage !== 'campaign'
+      || row.generation !== currentLease.generation
+      || row.nonce !== currentLease.nonce) {
+    throw new Error('campaign ledger journal is not bound to the active generation lease');
   }
 }
 
@@ -188,8 +234,25 @@ function projectCampaign(rows, campaignId) {
     throw new Error('campaign ledger contains an invalid intake state binding');
   }
   validateInitialCampaignState(intakePayload.initial_state);
+  const stageRows = owned.filter((row) => row.kind === 'stage' && row.stage === 'campaign');
+  const latestLease = validateCampaignStageHistory(stageRows, intake, campaignId);
   let state = intakePayload.initial_state;
+  let currentLease = null;
   for (const row of owned) {
+    if (row.kind === 'stage' && row.stage === 'campaign') {
+      if (row.state === 'leased') {
+        currentLease = row;
+      } else if (currentLease
+          && row.generation === currentLease.generation
+          && row.nonce === currentLease.nonce) {
+        currentLease = row;
+      }
+      continue;
+    }
+    if (row === intake) {
+      validateCampaignJournalLease(row, currentLease);
+      continue;
+    }
     if (row.kind !== 'journal' || row.op !== 'campaign_event') {
       continue;
     }
@@ -201,16 +264,15 @@ function projectCampaign(rows, campaignId) {
         || payload.contract_digest !== state.contract_digest) {
       throw new Error('campaign ledger contains an invalid event wrapper binding');
     }
+    validateCampaignJournalLease(row, currentLease);
     state = reduceCampaignState(state, payload.event);
   }
-  const stageRows = owned.filter((row) => row.kind === 'stage' && row.stage === 'campaign');
-  validateCampaignStageHistory(stageRows, intake, campaignId);
   return {
     schema_version: 1,
     campaign_id: campaignId,
     initial_state: intakePayload.initial_state,
     state,
-    latest_lease: stageRows.length > 0 ? stageRows[stageRows.length - 1] : null,
+    latest_lease: latestLease,
     durable_event_count: state.event_count,
     ledger_row_count: owned.length,
   };

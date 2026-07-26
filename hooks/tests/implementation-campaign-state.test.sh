@@ -791,6 +791,14 @@ const prohibitedLegacy = new AutopilotEngine({
   base,
   roster,
 });
+const conflictingMode = engine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+  legacyUnmanaged: true,
+});
 if (priorLevel === undefined) delete process.env.AUTOPILOT_LEVEL;
 else process.env.AUTOPILOT_LEVEL = priorLevel;
 let preflightIntakeCalls = 0;
@@ -816,6 +824,8 @@ console.log(`drift_phase=${drifted.phase}`);
 console.log(`drift_code=${drifted.campaign_control.rejection.code}`);
 console.log(`legacy_api_status=${prohibitedLegacy.status}`);
 console.log(`legacy_api_code=${prohibitedLegacy.campaign_control.status}`);
+console.log(`conflicting_mode_status=${conflictingMode.status}`);
+console.log(`conflicting_mode_code=${conflictingMode.campaign_control.status}`);
 console.log(`runner_calls=${markers.runner}`);
 console.log(`worktree_calls=${markers.worktree}`);
 console.log(`invalid_max_phase=${invalidMax.phase}`);
@@ -823,7 +833,7 @@ console.log(`invalid_max_intake_calls=${preflightIntakeCalls}`);
 
 const campaignId = `campaign-v1-${'c'.repeat(64)}`;
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
-function campaignControlFixture(nonce) {
+function campaignControlFixture(nonce, initialState = admitted.initial_state) {
   return {
     status: 'admitted',
     campaign_id: campaignId,
@@ -833,7 +843,7 @@ function campaignControlFixture(nonce) {
       max_repair_generations: 2,
     },
     contract_path: contractPath,
-    initial_state: admitted.initial_state,
+    initial_state: initialState,
     generation_claim: {
       ledger: campaignLedger,
       generation: 1,
@@ -845,6 +855,92 @@ function campaignControlFixture(nonce) {
     steps: [],
   };
 }
+let phaseResumeImplementationCalls = 0;
+let phaseResumeReleaseCalls = 0;
+const resumedPastMutation = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('phase-resume', {
+      ...admitted.initial_state,
+      phase: 'VERTICAL_VERIFICATION',
+    });
+  },
+  campaignAdmissionReleaser() {
+    phaseResumeReleaseCalls += 1;
+    return { status: 'released' };
+  },
+  implementationDispatcher() {
+    phaseResumeImplementationCalls += 1;
+    throw new Error('non-PREPARED resume must not replay implementation');
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+  resume: true,
+});
+console.log(`phase_resume_status=${resumedPastMutation.status}`);
+console.log(`phase_resume_calls=${phaseResumeImplementationCalls}`);
+console.log(`phase_resume_release_calls=${phaseResumeReleaseCalls}`);
+
+let fileBudgetImplementationCalls = 0;
+let fileBudgetReleaseCalls = 0;
+const exhaustedFileState = JSON.parse(JSON.stringify(admitted.initial_state));
+exhaustedFileState.usage.changed_files = exhaustedFileState.limits.max_changed_files;
+const exhaustedFileBudget = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('file-budget', exhaustedFileState);
+  },
+  campaignAdmissionReleaser() {
+    fileBudgetReleaseCalls += 1;
+    return { status: 'released' };
+  },
+  implementationDispatcher() {
+    fileBudgetImplementationCalls += 1;
+    throw new Error('file-exhausted campaign must not dispatch implementation');
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+});
+console.log(`file_budget_phase=${exhaustedFileBudget.phase}`);
+console.log(`file_budget_calls=${fileBudgetImplementationCalls}`);
+console.log(`file_budget_release_calls=${fileBudgetReleaseCalls}`);
+
+let churnBudgetImplementationCalls = 0;
+const exhaustedChurnState = JSON.parse(JSON.stringify(admitted.initial_state));
+exhaustedChurnState.usage.churn = exhaustedChurnState.limits.max_churn;
+const exhaustedChurnBudget = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('churn-budget', exhaustedChurnState);
+  },
+  campaignAdmissionReleaser() {
+    return { status: 'released' };
+  },
+  implementationDispatcher() {
+    churnBudgetImplementationCalls += 1;
+    throw new Error('churn-exhausted campaign must not dispatch implementation');
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+});
+console.log(`churn_budget_phase=${exhaustedChurnBudget.phase}`);
+console.log(`churn_budget_calls=${churnBudgetImplementationCalls}`);
+
 let resumeInspectCalls = 0;
 let admissionReleaseCalls = 0;
 const preconditionEngine = new AutopilotEngine({
@@ -1199,12 +1295,32 @@ assert_contains "$INTAKE_OUT" "legacy_api_status=blocked" \
   "direct engine API blocks the L6 legacy compatibility rail"
 assert_contains "$INTAKE_OUT" "legacy_api_code=legacy_unmanaged_rejected" \
   "direct engine API emits the machine-readable legacy rejection"
+assert_contains "$INTAKE_OUT" "conflicting_mode_status=blocked" \
+  "direct engine API rejects conflicting managed and legacy inputs"
+assert_contains "$INTAKE_OUT" "conflicting_mode_code=campaign_mode_conflict" \
+  "managed and legacy input conflict has a stable machine-readable code"
 assert_contains "$INTAKE_OUT" "runner_calls=0" "missing contract spawns no runner"
 assert_contains "$INTAKE_OUT" "worktree_calls=0" "invalid or missing contract creates no worktree"
 assert_contains "$INTAKE_OUT" "invalid_max_phase=prepare_implementation_loop" \
   "invalid loop limits fail during effect-free local preflight"
 assert_contains "$INTAKE_OUT" "invalid_max_intake_calls=0" \
   "invalid loop limits cannot acquire a campaign claim or lease"
+assert_contains "$INTAKE_OUT" "phase_resume_status=blocked" \
+  "a non-PREPARED managed resume blocks until phase-aware dispatch exists"
+assert_contains "$INTAKE_OUT" "phase_resume_calls=0" \
+  "a completed mutation cannot be replayed by managed resume"
+assert_contains "$INTAKE_OUT" "phase_resume_release_calls=1" \
+  "unsupported phase resume releases its unused admission"
+assert_contains "$INTAKE_OUT" "file_budget_phase=campaign_wall_budget" \
+  "changed-file exhaustion blocks at the mutation budget gate"
+assert_contains "$INTAKE_OUT" "file_budget_calls=0" \
+  "changed-file exhaustion spawns no implementation model"
+assert_contains "$INTAKE_OUT" "file_budget_release_calls=1" \
+  "changed-file exhaustion releases its unused admission"
+assert_contains "$INTAKE_OUT" "churn_budget_phase=campaign_wall_budget" \
+  "churn exhaustion blocks at the mutation budget gate"
+assert_contains "$INTAKE_OUT" "churn_budget_calls=0" \
+  "churn exhaustion spawns no implementation model"
 assert_contains "$INTAKE_OUT" "precondition_status=blocked" \
   "leaf precondition failure remains a blocked campaign result"
 assert_contains "$INTAKE_OUT" "precondition_release_calls=1" \
@@ -1684,6 +1800,48 @@ assert_exit_code "$?" "1" "campaign inspect rejects event wrapper identity drift
 assert_contains "$EVENT_WRAPPER_OUT" "invalid event wrapper binding" \
   "event wrappers stay bound to the durable campaign root"
 
+EVENT_LEASE_LEDGER="$TEST_TMP/event-lease-campaign-ledger.jsonl"
+cp "$CAMPAIGN_LEDGER" "$EVENT_LEASE_LEDGER"
+node - "$EVENT_LEASE_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const [ledger, campaignId] = process.argv.slice(2);
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const event = rows.find((row) => row.run_id === campaignId && row.op === 'campaign_event');
+event.generation += 1;
+fs.writeFileSync(ledger, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+EVENT_LEASE_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$EVENT_LEASE_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign inspect rejects an event from an unowned generation"
+assert_contains "$EVENT_LEASE_OUT" "journal is not bound to the active generation lease" \
+  "campaign events bind to their exact ledger generation and nonce"
+
+FORGED_TRANSITION_LEDGER="$TEST_TMP/forged-transition-campaign-ledger.jsonl"
+cp "$CAMPAIGN_LEDGER" "$FORGED_TRANSITION_LEDGER"
+node - "$FORGED_TRANSITION_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const [ledger, campaignId] = process.argv.slice(2);
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const latest = rows
+  .filter((row) => row.run_id === campaignId
+    && row.kind === 'stage'
+    && row.stage === 'campaign')
+  .at(-1);
+rows.push({
+  ...latest,
+  state: 'dead',
+  generation: latest.generation + 7,
+  reason: 'transition',
+  transition_from: 'leased',
+});
+fs.writeFileSync(ledger, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+FORGED_TRANSITION_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign resume \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$FORGED_TRANSITION_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign resume rejects a transition without its generation lease"
+assert_contains "$FORGED_TRANSITION_OUT" "stage transition chain is invalid" \
+  "a forged terminal row cannot supersede the authoritative lease chain"
+
 ROOT_DRIFT_BACKUP="$TEST_TMP/campaign-root-backup.jsonl"
 cp "$CAMPAIGN_LEDGER" "$ROOT_DRIFT_BACKUP"
 node - "$REPO_ROOT" "$CAMPAIGN_LEDGER" "$CAMPAIGN_ID" <<'NODE'
@@ -1775,6 +1933,28 @@ assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '2p')" "unknown" \
   "missing leased process identity fails closed as unknown"
 assert_eq "$(printf '%s\n' "$LIVENESS_OUT" | sed -n '3p')" "unknown" \
   "unknown ledger state fails closed as unknown"
+
+SPACE_LEDGER="$TEST_TMP/space-name-ledger.jsonl"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$SPACE_LEDGER" >/dev/null
+node -e "process.title = 'campaign worker'; setTimeout(() => {}, 30000)" &
+SPACE_PID=$!
+sleep 0.1
+SPACE_LEASE="$(bash "$REPO_ROOT/scripts/run-ledger.sh" stage-acquire \
+  --ledger "$SPACE_LEDGER" --run-id campaign-space --stage campaign \
+  --pid "$SPACE_PID" --resources campaign:space --exclusive-live)"
+assert_exit_code "$?" "0" "lease records a process whose kernel name contains spaces"
+SPACE_LIVENESS="$(node - "$REPO_ROOT" "$SPACE_LEASE" <<'NODE'
+const path = require('path');
+const [root, raw] = process.argv.slice(2);
+const { processLiveness } = require(path.join(root, 'src', 'campaign', 'cli'));
+console.log(processLiveness(JSON.parse(raw)));
+NODE
+)"
+assert_exit_code "$?" "0" "space-name liveness comparison process exits zero"
+assert_eq "$SPACE_LIVENESS" "alive" \
+  "shell and Node derive the same start time for a process name containing spaces"
+kill "$SPACE_PID" 2>/dev/null || true
+wait "$SPACE_PID" 2>/dev/null || true
 
 LEDGER="$TEST_TMP/exclusive-ledger.jsonl"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER" >/dev/null

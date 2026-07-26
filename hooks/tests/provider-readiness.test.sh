@@ -316,6 +316,7 @@ const store = process.argv[3];
 const {
   LIVE_PROBE_REQUEST,
   classifyLiveProbeResult,
+  probeSafeSurface,
   runProviderProbe,
 } = require(path.join(root, 'src', 'readiness', 'probe'));
 const {
@@ -357,6 +358,10 @@ const transport = (boundTuple, kind = 'success') => {
     cwd: '/private/provider-probe',
     child,
     outcomeHints,
+    privateRawReference: {
+      kind: 'private-file',
+      locator: '/private/provider-probe.raw',
+    },
   });
 };
 
@@ -394,6 +399,7 @@ assert.strictEqual(first.live_probe.attempted, true);
 assert.strictEqual(first.live_probe.reused, false);
 assert.strictEqual(first.live_probe.outcome, 'success');
 assert.strictEqual(first.persistence.recorded, true);
+assert(Number.isSafeInteger(first.persistence.event_id));
 assert.strictEqual(liveCalls, 1);
 
 const insideTtl = runProviderProbe({
@@ -405,6 +411,7 @@ const insideTtl = runProviderProbe({
 assert.strictEqual(insideTtl.live_probe.attempted, false);
 assert.strictEqual(insideTtl.live_probe.reused, true);
 assert.strictEqual(insideTtl.live_observation.status, 'ready');
+assert.strictEqual(insideTtl.persistence.event_id, first.persistence.event_id);
 assert.strictEqual(liveCalls, 1);
 
 const otherWallet = { ...tuple, endpoint: 'wallet_b' };
@@ -517,6 +524,82 @@ assert(!JSON.stringify(secretResult).includes(secret));
 const stored = fs.readFileSync(path.join(store, 'capability.jsonl'), 'utf8');
 assert(!stored.includes(secret));
 assert(stored.includes('provider_live_probe.minimal_no_effect.malformed_response'));
+const missingBinary = probeSafeSurface({
+  tuple: {
+    ...tuple,
+    runner: 'definitely_missing_provider_binary',
+    endpoint: null,
+  },
+});
+assert.deepStrictEqual(missingBinary, {
+  status: 'blocked',
+  evidence_class: 'safe-surface',
+  reason: 'missing_binary',
+});
+const safeBin = path.join(store, 'safe-bin');
+const endpointFile = path.join(store, 'endpoints.env');
+fs.mkdirSync(safeBin, { recursive: true });
+fs.writeFileSync(
+  path.join(safeBin, 'claude'),
+  '#!/usr/bin/env bash\nprintf "claude fixture\\n"\n',
+  { mode: 0o700 },
+);
+fs.writeFileSync(
+  endpointFile,
+  [
+    'AUTOPILOT_ENDPOINT_WALLET_FIXTURE_URL=https://example.invalid/anthropic',
+    'AUTOPILOT_ENDPOINT_WALLET_FIXTURE_TOKEN=endpoint-loader-sentinel',
+    '',
+  ].join('\n'),
+  { mode: 0o600 },
+);
+const priorPath = process.env.PATH;
+const priorEndpointFile = process.env.AUTOPILOT_ENDPOINTS_ENV;
+process.env.PATH = `${safeBin}:${priorPath}`;
+process.env.AUTOPILOT_ENDPOINTS_ENV = endpointFile;
+try {
+  const loadedEndpoint = probeSafeSurface({
+    tuple: {
+      ...tuple,
+      endpoint: 'wallet_fixture',
+    },
+  });
+  assert.deepStrictEqual(loadedEndpoint, {
+    status: 'ready',
+    evidence_class: 'safe-surface',
+    reason: null,
+  });
+  assert(!JSON.stringify(loadedEndpoint).includes('endpoint-loader-sentinel'));
+  assert.strictEqual(process.env.AUTOPILOT_ENDPOINT_WALLET_FIXTURE_TOKEN, undefined);
+} finally {
+  process.env.PATH = priorPath;
+  if (priorEndpointFile === undefined) {
+    delete process.env.AUTOPILOT_ENDPOINTS_ENV;
+  } else {
+    process.env.AUTOPILOT_ENDPOINTS_ENV = priorEndpointFile;
+  }
+}
+for (const [index, failingAdapter] of [
+  {
+    safeProbe: () => { throw new Error(secret); },
+    liveProbe,
+  },
+  {
+    safeProbe: () => ({
+      status: 'ready',
+      evidence_class: 'safe-surface',
+      reason: null,
+    }),
+    liveProbe: () => { throw new Error(secret); },
+  },
+].entries()) {
+  assert.throws(() => runProviderProbe({
+    tuple: { ...tuple, endpoint: `adapter_${index}` },
+    now: NOW,
+    ttl_seconds: 600,
+    store,
+  }, failingAdapter), (error) => !error.message.includes(secret));
+}
 assert.throws(() => runProviderProbe({
   tuple,
   now: NOW,
@@ -537,5 +620,87 @@ for key in safe_first ttl_deduped wallets_distinct outcomes_distinct \
   probe_secret_absent; do
   assert_contains "$PROBE_OUT" "$key=true" "PRO P2 proves $key"
 done
+
+CONCURRENT_WORKER="$TEST_TMP/provider-probe-worker.js"
+CONCURRENT_STORE="$TEST_TMP/concurrent-probe-capability"
+CONCURRENT_COUNT="$TEST_TMP/concurrent-live-count"
+cat > "$CONCURRENT_WORKER" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const [root, store, counter] = process.argv.slice(2);
+const {
+  LIVE_PROBE_REQUEST,
+  runProviderProbe,
+} = require(path.join(root, 'src', 'readiness', 'probe'));
+const {
+  createRunnerTransportEnvelope,
+} = require(path.join(root, 'src', 'transport', 'runner-envelope'));
+const tuple = {
+  role: 'reviewer',
+  runner: 'cc-shim',
+  model: 'Concurrent-Model',
+  effort: 'high',
+  endpoint: 'wallet_concurrent',
+};
+const result = runProviderProbe({
+  tuple,
+  now: '2026-07-27T13:00:00.000Z',
+  ttl_seconds: 600,
+  store,
+}, {
+  safeProbe: () => ({
+    status: 'ready',
+    evidence_class: 'safe-surface',
+    reason: null,
+  }),
+  liveProbe: ({ request }) => {
+    if (request !== LIVE_PROBE_REQUEST) throw new Error('request identity drift');
+    fs.appendFileSync(counter, 'probe\n');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+    return {
+      transport_envelope: createRunnerTransportEnvelope({
+        runner: tuple.runner,
+        model: tuple.model,
+        operation: LIVE_PROBE_REQUEST.operation,
+        argv: ['fixture-live-probe', '--model', tuple.model],
+        cwd: '/private/provider-probe',
+        child: {
+          status: 0,
+          signal: null,
+          error: null,
+          stdout: 'OK\n',
+          stderr: '',
+        },
+      }),
+      response_text: 'OK\n',
+    };
+  },
+});
+process.stdout.write(`${result.live_probe.attempted ? 'attempted' : 'reused'}\n`);
+NODE
+
+node "$CONCURRENT_WORKER" "$REPO_ROOT" "$CONCURRENT_STORE" "$CONCURRENT_COUNT" \
+  > "$TEST_TMP/concurrent-1.out" 2> "$TEST_TMP/concurrent-1.err" &
+CONCURRENT_PID_1=$!
+node "$CONCURRENT_WORKER" "$REPO_ROOT" "$CONCURRENT_STORE" "$CONCURRENT_COUNT" \
+  > "$TEST_TMP/concurrent-2.out" 2> "$TEST_TMP/concurrent-2.err" &
+CONCURRENT_PID_2=$!
+wait "$CONCURRENT_PID_1"
+CONCURRENT_EXIT_1=$?
+wait "$CONCURRENT_PID_2"
+CONCURRENT_EXIT_2=$?
+
+assert_exit_code "$CONCURRENT_EXIT_1" "0" "first concurrent probe process completes"
+assert_exit_code "$CONCURRENT_EXIT_2" "0" "second concurrent probe process completes"
+CONCURRENT_PROBES="$(wc -l < "$CONCURRENT_COUNT" | tr -d ' ')"
+CONCURRENT_ATTEMPTS="$(grep -h '^attempted$' \
+  "$TEST_TMP/concurrent-1.out" "$TEST_TMP/concurrent-2.out" | wc -l | tr -d ' ')"
+CONCURRENT_REUSES="$(grep -h '^reused$' \
+  "$TEST_TMP/concurrent-1.out" "$TEST_TMP/concurrent-2.out" | wc -l | tr -d ' ')"
+assert_eq "$CONCURRENT_PROBES" "1" \
+  "exact-tuple lock permits one live request across concurrent processes"
+assert_eq "$CONCURRENT_ATTEMPTS" "1" "one concurrent process owns the live request"
+assert_eq "$CONCURRENT_REUSES" "1" "the other concurrent process reuses persisted evidence"
 
 finalize_test

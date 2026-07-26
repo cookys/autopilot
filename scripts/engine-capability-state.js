@@ -938,6 +938,8 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
         confidence: quotaConfidence,
         evidence: quotaEvidence,
         ttl_seconds: quotaTtlSeconds,
+        observed_at: mergedQuota ? mergedQuota.observedAt : null,
+        event_id: mergedQuota ? mergedQuota.eventId : null,
         // Output-only (not part of the recorded event schema): which role's observation
         // won the role-agnostic per-model merge. Provenance for cross-role clears.
         source_role: mergedQuota ? mergedQuota.sourceRole : null

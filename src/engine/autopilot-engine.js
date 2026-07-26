@@ -22,8 +22,10 @@ const {
 const { runCampaignComposition } = require('./campaign-composition');
 const {
   canonicalDigest: campaignCanonicalDigest,
+  createDetachedCheckoutAttestation,
   createVerificationReceipt,
   createVerificationRequest,
+  createWriterFence,
   reusableGreenReceipt,
 } = require('./campaign-verification');
 const { adjudicateCampaignReview } = require('./campaign-adjudication');
@@ -891,8 +893,32 @@ function checkCampaignScope({ session, repo, head }) {
   };
 }
 
-function defaultCampaignAdjudicator({ review, convergenceVerdict, now }) {
-  return adjudicateCampaignReview({ review, convergenceVerdict, now });
+function defaultCampaignAdjudicator({
+  review,
+  convergenceVerdict,
+  dispositionAuthority,
+  now,
+}) {
+  return adjudicateCampaignReview({
+    review,
+    convergenceVerdict,
+    dispositionAuthority,
+    now,
+  });
+}
+
+function defaultCampaignTreeResolver({ repo, commit }) {
+  const child = spawnSync('git', ['rev-parse', '--verify', `${commit}^{tree}`], {
+    cwd: repo,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const treeSha = String(child.stdout || '').trim();
+  if (child.error || child.signal || child.status !== 0 || !isImmutableGitSha(treeSha)) {
+    throw new Error('candidate Git tree could not be resolved from the implementation commit');
+  }
+  return treeSha;
 }
 
 function tempNameSegment(value) {
@@ -925,9 +951,10 @@ function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   return file;
 }
 
-function defaultVerifyCommandRunner({ verifyCmd, cwd }) {
+function defaultVerifyCommandRunner({ verifyCmd, cwd, env = process.env }) {
   const child = spawnSync(verifyCmd, {
     cwd: cwd || process.cwd(),
+    env,
     encoding: 'utf8',
     shell: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -951,6 +978,10 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       stderr: '',
       worktree: null,
       parent: null,
+      commit,
+      observed_commit: null,
+      observed_tree_sha: null,
+      detached: false,
     };
   }
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-wt-'));
@@ -972,7 +1003,41 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       stderr: '',
       worktree,
       parent,
+      commit,
+      observed_commit: null,
+      observed_tree_sha: null,
+      detached: false,
     };
+  }
+  let observedCommit = null;
+  let observedTreeSha = null;
+  let detached = false;
+  if (child.status === 0 && !child.error && !child.signal) {
+    const head = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const tree = spawnSync('git', ['rev-parse', '--verify', 'HEAD^{tree}'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const symbolic = spawnSync('git', ['symbolic-ref', '--quiet', 'HEAD'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (!head.error && !head.signal && head.status === 0) {
+      observedCommit = String(head.stdout || '').trim();
+    }
+    if (!tree.error && !tree.signal && tree.status === 0) {
+      observedTreeSha = String(tree.stdout || '').trim();
+    }
+    detached = !symbolic.error && !symbolic.signal && symbolic.status === 1;
   }
   return {
     error: child.error || null,
@@ -982,6 +1047,10 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
     stderr: child.stderr || '',
     worktree,
     parent,
+    commit,
+    observed_commit: observedCommit,
+    observed_tree_sha: observedTreeSha,
+    detached,
   };
 }
 
@@ -1217,7 +1286,9 @@ class AutopilotEngine {
       || releaseCampaignAdmission;
     this.campaignComposer = options.campaignComposer || runCampaignComposition;
     this.campaignAdjudicator = options.campaignAdjudicator || defaultCampaignAdjudicator;
+    this.campaignDispositionProvider = options.campaignDispositionProvider || null;
     this.campaignScopeChecker = options.campaignScopeChecker || checkCampaignScope;
+    this.campaignTreeResolver = options.campaignTreeResolver || defaultCampaignTreeResolver;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -2239,7 +2310,12 @@ class AutopilotEngine {
       maxRepairGenerations,
     }, {
       preflight: () => ({ passed: true, intake: campaignControl }),
-      implement: ({ kind, repair_generation: repairGeneration, repair_finding_ids: findingIds }) => {
+      implement: ({
+        kind,
+        repair_generation: repairGeneration,
+        repair_finding_ids: findingIds,
+        repair_findings: repairFindings,
+      }) => {
         const budgetAt = this.now();
         const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
         if (budget.exhausted) {
@@ -2266,10 +2342,12 @@ class AutopilotEngine {
             previousCommit: currentBase,
           });
         if (kind !== 'initial') {
-          const repairReview = latestReview || {
-            verdict: 'VERTICAL-ACCEPTANCE-FAILED',
+          const repairReview = {
+            verdict: kind === 'vertical_repair'
+              ? 'VERTICAL-ACCEPTANCE-FAILED'
+              : 'AUTHORIZED-REPAIR',
             review: {
-              findings: findingIds.join('\n'),
+              findings: JSON.stringify(repairFindings),
             },
           };
           try {
@@ -2325,6 +2403,29 @@ class AutopilotEngine {
           };
         }
         const commit = implementation.implementation.commit;
+        let treeSha;
+        let writerFence;
+        try {
+          treeSha = this.campaignTreeResolver({
+            repo: loopCwd,
+            commit,
+          });
+          writerFence = createWriterFence({
+            campaignId: campaignControl.campaign_id,
+            stageIdentity: implementationRound === 1
+              ? 'campaign-implementation'
+              : `campaign-implementation#r${implementationRound}`,
+            candidateCommit: commit,
+            candidateTreeSha: treeSha,
+            implementationResult: implementation,
+          });
+        } catch (error) {
+          return {
+            committed: false,
+            phase: 'campaign_writer_fence',
+            reason: error.message || String(error),
+          };
+        }
         if (implementationRound === 1) {
           try {
             scopeSession = createCampaignScopeSession({
@@ -2339,9 +2440,11 @@ class AutopilotEngine {
         currentBase = commit;
         return {
           committed: true,
-          tree_sha: commit,
+          tree_sha: treeSha,
           commit,
           branch: currentBranch,
+          writer_fence: writerFence,
+          authorized_repair_finding_ids: findingIds,
           raw: implementation,
         };
       },
@@ -2364,10 +2467,24 @@ class AutopilotEngine {
         return receipt;
       },
       verify: ({ candidate, repair_generation: repairGeneration }) => {
+        const budget = campaignWallBudgetStatus(campaignControl, this.now());
+        if (budget.exhausted) {
+          return {
+            passed: false,
+            retriable: false,
+            phase: 'campaign_wall_budget',
+            reason: 'campaign wall budget exhausted before verification',
+            receipt_digest: campaignCanonicalDigest({
+              tree_sha: candidate.tree_sha,
+              elapsed_seconds: budget.elapsed_seconds,
+            }),
+          };
+        }
+        const verificationEnv = input.verificationEnv || process.env;
         const request = createVerificationRequest({
           treeSha: candidate.tree_sha,
           verifyCmd,
-          env: input.verificationEnv || process.env,
+          env: verificationEnv,
           envAllowlist: input.verificationEnvAllowlist,
         });
         const cached = verificationCache.get(request.request_digest);
@@ -2383,6 +2500,8 @@ class AutopilotEngine {
         let addResult;
         let worktree = null;
         let parent = null;
+        let worktreeAdded = false;
+        let checkoutAttestation = null;
         let verifyResult = null;
         let setupReason = null;
         let cleanupReason = null;
@@ -2397,9 +2516,22 @@ class AutopilotEngine {
           parent = addResult && addResult.parent;
           setupReason = worktreeResultBlocked(addResult);
           if (!setupReason) {
+            worktreeAdded = true;
+            try {
+              checkoutAttestation = createDetachedCheckoutAttestation({
+                candidateCommit: candidate.commit,
+                candidateTreeSha: candidate.tree_sha,
+                worktreeResult: addResult,
+              });
+            } catch (error) {
+              setupReason = error.message || String(error);
+            }
+          }
+          if (!setupReason) {
             verifyResult = this.verifyCommandRunner({
               verifyCmd,
               cwd: worktree,
+              env: verificationEnv,
               round: repairGeneration + 1,
               commit: candidate.commit,
               branch: candidate.branch,
@@ -2408,7 +2540,7 @@ class AutopilotEngine {
         } catch (error) {
           setupReason = error.message || String(error);
         } finally {
-          if (worktree && !setupReason) {
+          if (worktree && worktreeAdded) {
             try {
               cleanupReason = worktreeResultBlocked(this.gitWorktreeRemove({
                 worktree,
@@ -2439,6 +2571,8 @@ class AutopilotEngine {
         if (setupReason || !verifyResult || verifyResultBlocked(verifyResult)) {
           return {
             passed: false,
+            retriable: false,
+            phase: 'vertical_verification_setup',
             reason: setupReason || verifyResultBlocked(verifyResult) || 'verification unavailable',
             receipt_digest: campaignCanonicalDigest({
               tree_sha: candidate.tree_sha,
@@ -2452,8 +2586,8 @@ class AutopilotEngine {
           exitStatus: verifyResult.status,
           startedAt,
           endedAt: this.now(),
-          writerLeaseClosed: true,
-          detachedCheckout: true,
+          writerFence: candidate.writer_fence,
+          checkoutAttestation,
           stdout: verifyResult.stdout,
           stderr: verifyResult.stderr,
         });
@@ -2477,17 +2611,39 @@ class AutopilotEngine {
         };
       },
       review: (reviewInput) => performReview(reviewInput),
-      adjudicate: ({ review, repair_generation: repairGeneration, final }) => (
-        this.campaignAdjudicator({
+      adjudicate: ({ review, repair_generation: repairGeneration, final }) => {
+        let dispositionAuthority = null;
+        if (typeof this.campaignDispositionProvider === 'function') {
+          try {
+            dispositionAuthority = this.campaignDispositionProvider({
+              review,
+              repairGeneration,
+              final,
+              contract: campaignControl.contract,
+              cwd: loopCwd,
+            });
+          } catch (error) {
+            return {
+              registry_complete: false,
+              repair_gate_passed: false,
+              reason: error.message || String(error),
+              must_fix_now: [],
+              follow_up: [],
+              rejected: [],
+            };
+          }
+        }
+        return this.campaignAdjudicator({
           review,
           repairGeneration,
           final,
           convergenceVerdict,
+          dispositionAuthority,
           contract: campaignControl.contract,
           cwd: loopCwd,
           now: this.now(),
-        })
-      ),
+        });
+      },
       convergence: ({
         repair_generation: repairGeneration,
         next_repair_generation: nextGeneration,

@@ -9,14 +9,17 @@ const path = require('path');
 const [root, temp] = process.argv.slice(2);
 const {
   adjudicateCampaignReview,
+  createDetachedCheckoutAttestation,
   createVerificationReceipt,
   createVerificationRequest,
+  createWriterFence,
   reusableGreenReceipt,
   runCampaignComposition,
 } = require(path.join(root, 'src', 'engine'));
 
 const TREE_A = 'a'.repeat(40);
 const TREE_B = 'b'.repeat(40);
+const COMMIT_A = 'c'.repeat(40);
 const env = {
   CI: '1',
   NODE_ENV: 'test',
@@ -36,14 +39,44 @@ const sameSecretChange = createVerificationRequest({
 });
 assert.strictEqual(request.env_fingerprint, sameSecretChange.env_fingerprint);
 
+const implementationResult = {
+  status: 'committed',
+  implementation: { commit: COMMIT_A },
+  implementationResult: {
+    error: null,
+    status: 0,
+    signal: null,
+  },
+};
+const writerFence = createWriterFence({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  candidateTreeSha: TREE_A,
+  implementationResult,
+});
+const checkoutAttestation = createDetachedCheckoutAttestation({
+  candidateCommit: COMMIT_A,
+  candidateTreeSha: TREE_A,
+  worktreeResult: {
+    error: null,
+    status: 0,
+    signal: null,
+    detached: true,
+    commit: COMMIT_A,
+    observed_commit: COMMIT_A,
+    observed_tree_sha: TREE_A,
+    worktree: '/tmp/campaign-fixture-wt',
+  },
+});
 const green = createVerificationReceipt({
   campaignId: 'campaign-fixture',
   request,
   exitStatus: 0,
   startedAt: '2026-07-27T00:00:00.000Z',
   endedAt: '2026-07-27T00:00:01.000Z',
-  writerLeaseClosed: true,
-  detachedCheckout: true,
+  writerFence,
+  checkoutAttestation,
   stdout: 'ok\n',
 });
 assert.strictEqual(reusableGreenReceipt(green, request), true);
@@ -71,76 +104,123 @@ const red = createVerificationReceipt({
   exitStatus: 1,
   startedAt: '2026-07-27T00:00:00.000Z',
   endedAt: '2026-07-27T00:00:01.000Z',
-  writerLeaseClosed: true,
-  detachedCheckout: true,
+  writerFence,
+  checkoutAttestation,
   stderr: 'failed\n',
 });
 assert.strictEqual(reusableGreenReceipt(red, request), false);
 assert.strictEqual(reusableGreenReceipt({ ...green, stdout_digest: '0'.repeat(64) }, request), false);
+assert.strictEqual(reusableGreenReceipt({
+  ...green,
+  writer_fence_digest: undefined,
+  receipt_digest: undefined,
+}, request), false);
 assert.throws(() => createVerificationReceipt({
-  campaignId: 'campaign-fixture',
+  campaignId: 'other-campaign',
   request,
   exitStatus: 0,
   startedAt: '2026-07-27T00:00:00.000Z',
   endedAt: '2026-07-27T00:00:01.000Z',
-  writerLeaseClosed: false,
-  detachedCheckout: true,
-}), /closed writer/);
+  writerFence,
+  checkoutAttestation,
+}), /fence or checkout binding/);
+assert.throws(() => createWriterFence({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  candidateTreeSha: TREE_A,
+  implementationResult: { ...implementationResult, status: 'blocked' },
+}), /completed committed/);
+assert.throws(() => createDetachedCheckoutAttestation({
+  candidateCommit: COMMIT_A,
+  candidateTreeSha: TREE_A,
+  worktreeResult: {
+    error: null,
+    status: 0,
+    signal: null,
+    detached: false,
+    commit: COMMIT_A,
+    observed_commit: COMMIT_A,
+    observed_tree_sha: TREE_A,
+    worktree: '/tmp/campaign-fixture-wt',
+  },
+}), /not attested detached/);
 
+const REVIEW_DIGEST = 'd'.repeat(64);
 const structuredReview = JSON.stringify([
   {
     finding_id: 'F-IN-SCOPE',
     claim: 'in-scope acceptance defect',
     severity: '🟠',
     source: 'reviewer-a',
-    evidence: {
-      kind: 'trace',
-      trace_chain: ['src/engine/example.js:12'],
-      confirmed_by: 'depth-0',
-    },
-    disposition: {
-      disposition: 'must-fix-now',
-      acceptance_id: 'ICC-P2-AC1',
-      deferral_harm: 'blocks the frozen acceptance criterion',
-    },
   },
   {
     finding_id: 'F-HARDENING',
     claim: 'optional hardening outside the vertical slice',
     severity: '🟠',
     source: 'reviewer-b',
-    evidence: {
-      kind: 'reproduced',
-      probe_cmd: 'node fixture.js',
-      expected_signature: 'hardening absent',
-      observed_output: 'hardening absent',
-    },
-    disposition: {
-      disposition: 'follow-up',
-      context: 'real but outside this campaign',
-      trigger: 'when the hardening ticket is funded',
-      proposed_backlog_title: 'Harden the optional path',
-    },
   },
   {
     finding_id: 'F-REFUTED',
     claim: 'a refuted major claim',
     severity: '🟠',
     source: 'reviewer-c',
-    evidence: {
-      kind: 'refuted',
-      probe_cmd: 'node refute.js',
-      expected_signature: 'claim reproduced',
-      observed_output: 'claim absent',
-      mutation_desc: 'inject the claimed defect',
-      mutation_probe_output: 'claim reproduced',
-    },
-    disposition: null,
   },
 ]);
 const adjudicated = adjudicateCampaignReview({
-  review: { verdict: 'FIX-THEN-SHIP', findings: structuredReview },
+  review: {
+    verdict: 'FIX-THEN-SHIP',
+    findings: structuredReview,
+    review_digest: REVIEW_DIGEST,
+  },
   convergenceVerdict: 'SHIP-AS-IS',
+  dispositionAuthority: {
+    authority: 'depth-0',
+    actor_id: 'core-owner',
+    review_digest: REVIEW_DIGEST,
+    decisions: [
+      {
+        finding_id: 'F-IN-SCOPE',
+        evidence: {
+          kind: 'trace',
+          trace_chain: ['src/engine/example.js:12'],
+          confirmed_by: 'core-owner',
+        },
+        disposition: {
+          disposition: 'must-fix-now',
+          acceptance_id: 'ICC-P2-AC1',
+          deferral_harm: 'blocks the frozen acceptance criterion',
+        },
+      },
+      {
+        finding_id: 'F-HARDENING',
+        evidence: {
+          kind: 'reproduced',
+          probe_cmd: 'node fixture.js',
+          expected_signature: 'hardening absent',
+          observed_output: 'hardening absent',
+        },
+        disposition: {
+          disposition: 'follow-up',
+          context: 'real but outside this campaign',
+          trigger: 'when the hardening ticket is funded',
+          proposed_backlog_title: 'Harden the optional path',
+        },
+      },
+      {
+        finding_id: 'F-REFUTED',
+        evidence: {
+          kind: 'refuted',
+          probe_cmd: 'node refute.js',
+          expected_signature: 'claim reproduced',
+          observed_output: 'claim absent',
+          mutation_desc: 'inject the claimed defect',
+          mutation_probe_output: 'claim reproduced',
+        },
+        disposition: null,
+      },
+    ],
+  },
   now: '2026-07-27T00:00:00.000Z',
 });
 assert.strictEqual(adjudicated.registry_complete, true);
@@ -148,23 +228,60 @@ assert.strictEqual(adjudicated.repair_gate_passed, true);
 assert.deepStrictEqual(adjudicated.must_fix_now.map((finding) => finding.id), ['F-IN-SCOPE']);
 assert.deepStrictEqual(adjudicated.follow_up.map((finding) => finding.id), ['F-HARDENING']);
 assert.deepStrictEqual(adjudicated.rejected.map((finding) => finding.id), ['F-REFUTED']);
+assert.strictEqual(adjudicated.must_fix_now[0].disposition_authority.actor_id, 'core-owner');
+
+const reviewerDisposition = adjudicateCampaignReview({
+  review: {
+    verdict: 'FIX-THEN-SHIP',
+    review_digest: REVIEW_DIGEST,
+    findings: JSON.stringify([{
+      finding_id: 'F-UNTRUSTED',
+      claim: 'reviewer attempts to authorize its own repair',
+      severity: '🟠',
+      source: 'reviewer-a',
+      evidence: {
+        kind: 'trace',
+        trace_chain: ['src/engine/example.js:55'],
+        confirmed_by: 'depth-0',
+      },
+      disposition: {
+        disposition: 'must-fix-now',
+        acceptance_id: 'ICC-P2-AC1',
+        deferral_harm: 'self-authorized',
+      },
+    }]),
+  },
+  convergenceVerdict: 'SHIP-AS-IS',
+});
+assert.strictEqual(reviewerDisposition.registry_complete, false);
+assert.strictEqual(reviewerDisposition.error_code, 'INVALID_FINDING');
 
 const missingDisposition = adjudicateCampaignReview({
   review: {
     verdict: 'FIX-THEN-SHIP',
+    review_digest: REVIEW_DIGEST,
     findings: JSON.stringify([{
       finding_id: 'F-MISSING',
       claim: 'blocking claim lacks a disposition',
       severity: '🔴',
       source: 'reviewer-a',
-      evidence: {
-        kind: 'trace',
-        trace_chain: ['src/engine/example.js:99'],
-        confirmed_by: 'depth-0',
-      },
     }]),
   },
   convergenceVerdict: 'SHIP-AS-IS',
+  dispositionAuthority: {
+    authority: 'depth-0',
+    actor_id: 'core-owner',
+    review_digest: REVIEW_DIGEST,
+    decisions: [{
+      finding_id: 'F-MISSING',
+      evidence: {
+        kind: 'trace',
+        trace_chain: ['src/engine/example.js:99'],
+        confirmed_by: 'core-owner',
+      },
+      disposition: null,
+    }],
+  },
   now: '2026-07-27T00:00:00.000Z',
 });
 assert.strictEqual(missingDisposition.registry_complete, false);
@@ -172,13 +289,16 @@ assert.strictEqual(missingDisposition.registry_complete, false);
 let mutations = 0;
 let focusedReviews = 0;
 let finalPanels = 0;
+let authorizedRepairInput = null;
 const scopeCheckpoints = [];
 const composition = runCampaignComposition({
   maxRepairGenerations: 2,
 }, {
   preflight: () => ({ passed: true }),
-  implement({ kind }) {
+  implement(input) {
+    const { kind } = input;
     mutations += 1;
+    if (kind === 'review_repair') authorizedRepairInput = input;
     return {
       committed: true,
       tree_sha: mutations === 1 ? TREE_A : TREE_B,
@@ -239,6 +359,8 @@ assert.strictEqual(composition.repair_generations, 1);
 assert.strictEqual(mutations, 2);
 assert.strictEqual(focusedReviews, 2);
 assert.strictEqual(finalPanels, 1);
+assert.deepStrictEqual(authorizedRepairInput.repair_finding_ids, ['F-IN-SCOPE']);
+assert.deepStrictEqual(authorizedRepairInput.repair_findings, [{ id: 'F-IN-SCOPE' }]);
 assert.deepStrictEqual(scopeCheckpoints, [
   'after_initial_mutation',
   'before_repair',
@@ -246,6 +368,7 @@ assert.deepStrictEqual(scopeCheckpoints, [
   'before_acceptance',
 ]);
 assert.deepStrictEqual(composition.follow_up, [{ id: 'F-HARDENING' }]);
+assert.deepStrictEqual(composition.rejected_findings, [{ id: 'F-REFUTED' }]);
 assert.strictEqual(composition.final_panel_count, 1);
 
 let incompleteMutations = 0;

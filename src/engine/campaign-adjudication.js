@@ -236,8 +236,6 @@ function normalizeFindings(raw) {
       'claim',
       'severity',
       'source',
-      'evidence',
-      'disposition',
     ]), label);
     if (!nonEmpty(finding.finding_id)
         || !nonEmpty(finding.claim)
@@ -255,17 +253,86 @@ function normalizeFindings(raw) {
       );
     }
     seen.add(finding.finding_id);
-    const evidence = normalizeEvidence(finding.evidence, `${label}.evidence`);
-    const disposition = finding.disposition === null || finding.disposition === undefined
-      ? null
-      : normalizeDisposition(finding.disposition, `${label}.disposition`);
     return {
       ...finding,
       id: finding.finding_id,
-      evidence,
-      disposition,
+      evidence: null,
+      disposition: null,
     };
   });
+}
+
+function normalizeDispositionAuthority(value, reviewDigest, findings) {
+  if (value === null || value === undefined) return null;
+  if (!isRecord(value)) {
+    throw new CampaignAdjudicationError(
+      'INVALID_AUTHORITY',
+      'disposition authority must be an object',
+    );
+  }
+  exactKeys(
+    value,
+    new Set(['authority', 'actor_id', 'review_digest', 'decisions']),
+    'dispositionAuthority',
+  );
+  if (!new Set(['depth-0', 'deterministic-policy']).has(value.authority)
+      || !nonEmpty(value.actor_id)
+      || !/^[0-9a-f]{64}$/.test(value.review_digest)
+      || value.review_digest !== reviewDigest
+      || !Array.isArray(value.decisions)) {
+    throw new CampaignAdjudicationError(
+      'INVALID_AUTHORITY',
+      'disposition authority identity, review binding, or decisions are invalid',
+    );
+  }
+  const findingsById = new Map(findings.map((finding) => [finding.finding_id, finding]));
+  const decisions = new Map();
+  value.decisions.forEach((decision, index) => {
+    const label = `dispositionAuthority.decisions[${index}]`;
+    if (!isRecord(decision) || !nonEmpty(decision.finding_id)) {
+      throw new CampaignAdjudicationError(
+        'INVALID_AUTHORITY',
+        `${label}.finding_id is required`,
+      );
+    }
+    exactKeys(decision, new Set(['finding_id', 'evidence', 'disposition']), label);
+    if (!findingsById.has(decision.finding_id)) {
+      throw new CampaignAdjudicationError(
+        'AUTHORITY_SCOPE',
+        `${label} names a finding outside the bound review`,
+      );
+    }
+    if (decisions.has(decision.finding_id)) {
+      throw new CampaignAdjudicationError(
+        'AUTHORITY_CONFLICT',
+        `${label} duplicates a disposition decision`,
+      );
+    }
+    const finding = findingsById.get(decision.finding_id);
+    const evidence = normalizeEvidence(decision.evidence, `${label}.evidence`);
+    const disposition = decision.disposition === null || decision.disposition === undefined
+      ? null
+      : normalizeDisposition(decision.disposition, `${label}.disposition`);
+    if (evidence.classification === 'refuted' && disposition) {
+      throw new CampaignAdjudicationError(
+        'AUTHORITY_SCOPE',
+        `${label} cannot dispose an evidence-refuted finding`,
+      );
+    }
+    decisions.set(decision.finding_id, { evidence, disposition });
+  });
+  if (decisions.size !== findings.length) {
+    throw new CampaignAdjudicationError(
+      'AUTHORITY_INCOMPLETE',
+      'disposition authority must classify every finding in the bound review',
+    );
+  }
+  return {
+    authority: value.authority,
+    actor_id: value.actor_id,
+    review_digest: value.review_digest,
+    decisions,
+  };
 }
 
 function parseLastJson(stdout, label) {
@@ -322,6 +389,7 @@ function emptyRegistryReceipt() {
 function adjudicateCampaignReview({
   review,
   convergenceVerdict = 'SHIP-AS-IS',
+  dispositionAuthority = null,
   now,
 }) {
   const raw = review && Object.prototype.hasOwnProperty.call(review, 'findings')
@@ -333,8 +401,25 @@ function adjudicateCampaignReview({
   }
 
   let findings;
+  let authority;
   try {
     findings = normalizeFindings(raw);
+    authority = normalizeDispositionAuthority(
+      dispositionAuthority,
+      review && review.review_digest,
+      findings,
+    );
+    if (!authority && findings.length > 0) {
+      throw new CampaignAdjudicationError(
+        'AUTHORITY_REQUIRED',
+        'non-empty review findings require bound depth-0 adjudication authority',
+      );
+    }
+    for (const finding of findings) {
+      const decision = authority.decisions.get(finding.finding_id);
+      finding.evidence = decision.evidence;
+      finding.disposition = decision.disposition;
+    }
   } catch (error) {
     return {
       registry_complete: false,
@@ -423,7 +508,14 @@ function adjudicateCampaignReview({
         severity: finding.severity,
         source: finding.source,
       };
-      if (finding.disposition) output.disposition = finding.disposition.receipt;
+      if (finding.disposition) {
+        output.disposition = finding.disposition.receipt;
+        output.disposition_authority = {
+          authority: authority.authority,
+          actor_id: authority.actor_id,
+          review_digest: authority.review_digest,
+        };
+      }
       return output;
     };
     return {
@@ -459,5 +551,6 @@ function adjudicateCampaignReview({
 module.exports = {
   CampaignAdjudicationError,
   adjudicateCampaignReview,
+  normalizeDispositionAuthority,
   normalizeFindings,
 };

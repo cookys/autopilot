@@ -1066,6 +1066,14 @@ const expiredBeforeReview = new AutopilotEngine({
       stderr: '',
       worktree: repo,
       parent: null,
+      commit: base,
+      observed_commit: base,
+      observed_tree_sha: spawnSync(
+        'git',
+        ['rev-parse', `${base}^{tree}`],
+        { cwd: repo, encoding: 'utf8' },
+      ).stdout.trim(),
+      detached: true,
     };
   },
   gitWorktreeRemove() {
@@ -1098,6 +1106,7 @@ console.log(`expired_review_calls=${expiredReviewCalls}`);
 
 const implementationCalls = [];
 const reviewCalls = [];
+const verificationEnvs = [];
 const identityEngine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-26T00:00:01.000Z',
@@ -1164,6 +1173,14 @@ const identityEngine = new AutopilotEngine({
       stderr: '',
       worktree: repo,
       parent: null,
+      commit: base,
+      observed_commit: base,
+      observed_tree_sha: spawnSync(
+        'git',
+        ['rev-parse', `${base}^{tree}`],
+        { cwd: repo, encoding: 'utf8' },
+      ).stdout.trim(),
+      detached: true,
     };
   },
   gitWorktreeRemove() {
@@ -1175,7 +1192,8 @@ const identityEngine = new AutopilotEngine({
       stderr: '',
     };
   },
-  verifyCommandRunner() {
+  verifyCommandRunner({ env }) {
+    verificationEnvs.push(env);
     return {
       error: null,
       status: 0,
@@ -1196,6 +1214,11 @@ const identityResult = identityEngine.runImplementationReviewLoop({
   roster,
   campaignManaged: true,
   campaignContract: contractPath,
+  verificationEnv: {
+    PATH: process.env.PATH || '',
+    CI: 'identity-test',
+  },
+  verificationEnvAllowlist: ['CI'],
 });
 const roundTwoResult = identityEngine.implementTask({
   promptFile,
@@ -1237,6 +1260,10 @@ console.log(`round_two_stage=${argValue(roundTwoArgs, '--stage')}`);
 console.log(`managed_resume_status=${managedResumeResult.status}`);
 console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
 console.log(`managed_resume_inspect_calls=${resumeInspectCalls}`);
+console.log(`identity_verify_env=${verificationEnvs[0].CI}`);
+console.log(
+  `identity_tree_is_commit=${identityResult.campaign_receipt.candidate_tree_sha === base}`,
+);
 NODE
 )"
 INTAKE_EXIT=$?
@@ -1378,6 +1405,10 @@ assert_contains "$INTAKE_OUT" "managed_resume_stage=campaign-implementation" \
   "managed PREPARED resume dispatches the first campaign implementation round"
 assert_contains "$INTAKE_OUT" "managed_resume_inspect_calls=0" \
   "managed campaign replay does not require the legacy ahead-branch precheck"
+assert_contains "$INTAKE_OUT" "identity_verify_env=identity-test" \
+  "verification executes with the environment used by its fingerprint"
+assert_contains "$INTAKE_OUT" "identity_tree_is_commit=false" \
+  "verification identity binds the Git tree object rather than the commit"
 
 CAMPAIGN_LEDGER="$COMMON_DIR/autopilot/implementation-campaign.jsonl"
 DEFAULT_INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \

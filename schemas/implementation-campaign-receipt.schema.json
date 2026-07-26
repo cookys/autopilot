@@ -17,6 +17,8 @@
         "exit_status",
         "writer_lease_closed",
         "detached_checkout",
+        "writer_fence_digest",
+        "checkout_attestation_digest",
         "stdout_digest",
         "stderr_digest",
         "started_at",
@@ -35,6 +37,8 @@
         "exit_status": { "type": "integer" },
         "writer_lease_closed": { "type": "boolean", "const": true },
         "detached_checkout": { "type": "boolean", "const": true },
+        "writer_fence_digest": { "$ref": "#/$defs/sha256" },
+        "checkout_attestation_digest": { "$ref": "#/$defs/sha256" },
         "stdout_digest": { "$ref": "#/$defs/sha256" },
         "stderr_digest": { "$ref": "#/$defs/sha256" },
         "started_at": { "type": "string", "format": "date-time" },
@@ -54,6 +58,7 @@
         "repair_generations",
         "final_panel_count",
         "follow_up",
+        "rejected_findings",
         "unresolved_final_findings",
         "trace",
         "receipt_digest"
@@ -67,6 +72,7 @@
         "repair_generations": { "type": "integer", "minimum": 0 },
         "final_panel_count": { "type": "integer", "const": 1 },
         "follow_up": { "type": "array" },
+        "rejected_findings": { "type": "array" },
         "unresolved_final_findings": { "type": "array" },
         "trace": {
           "type": "array",

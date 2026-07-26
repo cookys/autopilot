@@ -55,29 +55,37 @@ function runCampaignComposition(input = {}, adapters = {}) {
   const trace = [];
   const followUps = [];
   const followUpDigests = new Set();
+  const rejectedFindings = [];
+  const rejectedDigests = new Set();
   let repairGeneration = 0;
   let candidate = null;
   let verification = null;
   let lastReview = null;
 
-  const retainFollowUps = (items) => {
+  const retainUnique = (items, target, digests) => {
     for (const item of Array.isArray(items) ? items : []) {
       const digest = canonicalDigest(item);
-      if (followUpDigests.has(digest)) continue;
-      followUpDigests.add(digest);
-      followUps.push(item);
+      if (digests.has(digest)) continue;
+      digests.add(digest);
+      target.push(item);
     }
+  };
+  const retainAdjudication = (adjudication) => {
+    retainUnique(adjudication.follow_up, followUps, followUpDigests);
+    retainUnique(adjudication.rejected, rejectedFindings, rejectedDigests);
   };
 
   const gate = requireReceipt(preflight(), 'preflight');
   trace.push('preflight');
   if (gate.passed !== true) return blocked('preflight', gate.reason || 'preflight rejected', trace);
 
-  const mutate = (kind, repairFindingIds = []) => {
+  const mutate = (kind, repairFindings = []) => {
+    const repairFindingIds = repairFindings.map((finding) => finding.id);
     const mutation = requireReceipt(implement({
       kind,
       repair_generation: repairGeneration,
       repair_finding_ids: repairFindingIds,
+      repair_findings: repairFindings,
       previous_candidate: candidate,
     }), 'implement');
     trace.push(kind === 'initial' ? 'implement' : 'repair');
@@ -113,6 +121,14 @@ function runCampaignComposition(input = {}, adapters = {}) {
     }), 'verify');
     trace.push('verify');
     if (verification.passed !== true) {
+      if (verification.retriable === false) {
+        return blocked(
+          verification.phase || 'vertical_verification',
+          verification.reason || 'verification infrastructure blocked',
+          trace,
+          { candidate, verification, repair_generations: repairGeneration },
+        );
+      }
       if (repairGeneration >= maxRepairs) {
         return blocked(
           'vertical_verification',
@@ -140,7 +156,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
         return blocked('convergence', receipt.reason || 'convergence gate tripped', trace);
       }
       repairGeneration += 1;
-      mutationResult = mutate('vertical_repair', ['vertical-acceptance']);
+      mutationResult = mutate('vertical_repair', [{
+        id: 'vertical-acceptance',
+        claim: verification.reason || 'contract verification did not pass',
+      }]);
       if (mutationResult.stop) return mutationResult.stop;
       continue;
     }
@@ -168,7 +187,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
     if (adjudication.registry_complete !== true) {
       return blocked('adjudication', adjudication.reason || 'finding registry is incomplete', trace);
     }
-    retainFollowUps(adjudication.follow_up);
+    retainAdjudication(adjudication);
     const mustFix = Array.isArray(adjudication.must_fix_now)
       ? adjudication.must_fix_now
       : [];
@@ -204,7 +223,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       return blocked('convergence', receipt.reason || 'convergence gate tripped', trace);
     }
     repairGeneration += 1;
-    mutationResult = mutate('review_repair', mustFix.map((finding) => finding.id));
+    mutationResult = mutate('review_repair', mustFix);
     if (mutationResult.stop) return mutationResult.stop;
   }
 
@@ -246,7 +265,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
   if (finalAdjudication.registry_complete !== true) {
     return blocked('final_adjudication', 'final finding registry is incomplete', trace);
   }
-  retainFollowUps(finalAdjudication.follow_up);
+  retainAdjudication(finalAdjudication);
   const finalMustFix = Array.isArray(finalAdjudication.must_fix_now)
     ? finalAdjudication.must_fix_now
     : [];
@@ -260,6 +279,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
     repair_generations: repairGeneration,
     final_panel_count: 1,
     follow_up: followUps,
+    rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,
     trace,
   };

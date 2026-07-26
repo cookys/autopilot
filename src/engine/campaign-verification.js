@@ -22,6 +22,21 @@ function canonicalDigest(value) {
   return sha256(JSON.stringify(canonicalize(value)));
 }
 
+function isGitObject(value) {
+  return typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
+}
+
+function receiptBody(receipt, label) {
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
+    throw new TypeError(`${label} must be a receipt object`);
+  }
+  const { receipt_digest: digest, ...body } = receipt;
+  if (digest !== canonicalDigest(body)) {
+    throw new TypeError(`${label} digest is invalid`);
+  }
+  return body;
+}
+
 function verificationArgv(verifyCmd) {
   if (typeof verifyCmd !== 'string' || verifyCmd.length === 0) {
     throw new TypeError('verifyCmd must be a non-empty string');
@@ -50,7 +65,7 @@ function createVerificationRequest({
   env = process.env,
   envAllowlist = DEFAULT_ENV_ALLOWLIST,
 }) {
-  if (typeof treeSha !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(treeSha)) {
+  if (!isGitObject(treeSha)) {
     throw new TypeError('treeSha must be a full immutable Git object id');
   }
   const request = {
@@ -64,14 +79,95 @@ function createVerificationRequest({
   };
 }
 
+function createWriterFence({
+  campaignId,
+  stageIdentity,
+  candidateCommit,
+  candidateTreeSha,
+  implementationResult,
+}) {
+  if (typeof campaignId !== 'string' || campaignId.length === 0
+      || typeof stageIdentity !== 'string' || stageIdentity.length === 0
+      || !isGitObject(candidateCommit)
+      || !isGitObject(candidateTreeSha)) {
+    throw new TypeError('writer fence identity is invalid');
+  }
+  const implementation = implementationResult && implementationResult.implementation;
+  const transport = implementationResult && implementationResult.implementationResult;
+  const directDispatchClosed = Boolean(
+    transport
+      && !transport.error
+      && !transport.signal
+      && transport.status === 0,
+  );
+  const reconciledFromTerminalLedger = Boolean(
+    implementation && implementation.reconcile_by_ledger === true,
+  );
+  if (!implementationResult
+      || implementationResult.status !== 'committed'
+      || !implementation
+      || implementation.commit !== candidateCommit
+      || (!directDispatchClosed && !reconciledFromTerminalLedger)) {
+    throw new TypeError('writer fence requires a completed committed implementation stage');
+  }
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_writer_fence',
+    campaign_id: campaignId,
+    stage_identity: stageIdentity,
+    candidate_commit: candidateCommit,
+    candidate_tree_sha: candidateTreeSha,
+    status: 'closed',
+    evidence_mode: reconciledFromTerminalLedger ? 'terminal_ledger' : 'dispatch_exit',
+  };
+  return {
+    ...body,
+    receipt_digest: canonicalDigest(body),
+  };
+}
+
+function createDetachedCheckoutAttestation({
+  candidateCommit,
+  candidateTreeSha,
+  worktreeResult,
+}) {
+  if (!isGitObject(candidateCommit) || !isGitObject(candidateTreeSha)) {
+    throw new TypeError('detached checkout identity is invalid');
+  }
+  if (!worktreeResult
+      || worktreeResult.error
+      || worktreeResult.signal
+      || worktreeResult.status !== 0
+      || worktreeResult.detached !== true
+      || worktreeResult.commit !== candidateCommit
+      || worktreeResult.observed_commit !== candidateCommit
+      || worktreeResult.observed_tree_sha !== candidateTreeSha
+      || typeof worktreeResult.worktree !== 'string'
+      || worktreeResult.worktree.length === 0) {
+    throw new TypeError('verification checkout is not attested detached and immutable');
+  }
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_checkout_attestation',
+    candidate_commit: candidateCommit,
+    candidate_tree_sha: candidateTreeSha,
+    mode: 'detached',
+    worktree_path_digest: sha256(worktreeResult.worktree),
+  };
+  return {
+    ...body,
+    receipt_digest: canonicalDigest(body),
+  };
+}
+
 function createVerificationReceipt({
   campaignId,
   request,
   exitStatus,
   startedAt,
   endedAt,
-  writerLeaseClosed,
-  detachedCheckout,
+  writerFence,
+  checkoutAttestation,
   stdout = '',
   stderr = '',
 }) {
@@ -86,8 +182,19 @@ function createVerificationReceipt({
     throw new TypeError('verification request binding is invalid');
   }
   if (!Number.isInteger(exitStatus)) throw new TypeError('exitStatus must be an integer');
-  if (writerLeaseClosed !== true || detachedCheckout !== true) {
-    throw new TypeError('authoritative verification requires a closed writer and detached checkout');
+  const writerFenceBody = receiptBody(writerFence, 'writer fence');
+  const checkoutBody = receiptBody(checkoutAttestation, 'checkout attestation');
+  if (writerFenceBody.schema_version !== 1
+      || writerFenceBody.artifact_type !== 'implementation_campaign_writer_fence'
+      || writerFenceBody.campaign_id !== campaignId
+      || writerFenceBody.status !== 'closed'
+      || writerFenceBody.candidate_tree_sha !== request.tree_sha
+      || checkoutBody.schema_version !== 1
+      || checkoutBody.artifact_type !== 'implementation_campaign_checkout_attestation'
+      || checkoutBody.mode !== 'detached'
+      || checkoutBody.candidate_tree_sha !== request.tree_sha
+      || checkoutBody.candidate_commit !== writerFenceBody.candidate_commit) {
+    throw new TypeError('authoritative verification fence or checkout binding is invalid');
   }
   if (!Number.isFinite(Date.parse(startedAt))
       || !Number.isFinite(Date.parse(endedAt))
@@ -106,6 +213,8 @@ function createVerificationReceipt({
     exit_status: exitStatus,
     writer_lease_closed: true,
     detached_checkout: true,
+    writer_fence_digest: writerFence.receipt_digest,
+    checkout_attestation_digest: checkoutAttestation.receipt_digest,
     stdout_digest: sha256(String(stdout)),
     stderr_digest: sha256(String(stderr)),
     started_at: startedAt,
@@ -120,6 +229,10 @@ function createVerificationReceipt({
 function reusableGreenReceipt(receipt, request) {
   if (!receipt || receipt.verdict !== 'GREEN' || receipt.exit_status !== 0) return false;
   if (receipt.writer_lease_closed !== true || receipt.detached_checkout !== true) return false;
+  if (!/^[0-9a-f]{64}$/.test(receipt.writer_fence_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.checkout_attestation_digest || '')) {
+    return false;
+  }
   if (receipt.tree_sha !== request.tree_sha
       || receipt.argv_hash !== request.argv_hash
       || receipt.env_fingerprint !== request.env_fingerprint
@@ -134,8 +247,10 @@ module.exports = {
   DEFAULT_ENV_ALLOWLIST,
   VERIFICATION_RECEIPT_SCHEMA_VERSION,
   canonicalDigest,
+  createDetachedCheckoutAttestation,
   createVerificationReceipt,
   createVerificationRequest,
+  createWriterFence,
   environmentFingerprint,
   reusableGreenReceipt,
   verificationArgv,

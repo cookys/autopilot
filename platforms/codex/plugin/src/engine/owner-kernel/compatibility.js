@@ -137,7 +137,7 @@ function normalizePolicy(policy, policyHash, { assuranceFallback = 'conservative
   if (!ASSURANCE_PROFILES.has(assuranceProfile)) {
     compatibilityError('resolved governance policy.assurance_profile is invalid');
   }
-  const guidanceProfile = value.guidance_profile === undefined ? 'adaptive' : value.guidance_profile;
+  const guidanceProfile = value.guidance_profile === undefined ? 'guided' : value.guidance_profile;
   if (!GUIDANCE_PROFILES.has(guidanceProfile)) {
     compatibilityError('resolved governance policy.guidance_profile is invalid');
   }

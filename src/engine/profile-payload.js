@@ -481,7 +481,7 @@ function normalizeActiveSlice(raw) {
       `active slice.outputs[${index}]`,
       false,
     )),
-    acceptance: tokenList(value.acceptance, 'active slice.acceptance'),
+    acceptance: tokenList(value.acceptance, 'active slice.acceptance').sort(),
   };
   for (const field of ['inputs', 'outputs']) {
     const ids = normalized[field].map((entry) => entry.id);
@@ -518,12 +518,9 @@ function narrowActiveSlice(rawSlice, grant, envelope) {
     }
   }
   if (grant.required_evidence.length === 0
-    || canonicalJson(activeSlice.acceptance) !== canonicalJson(grant.required_evidence)
-    || activeSlice.acceptance.some(
-      (evidence) => !envelope.acceptance.required_evidence.includes(evidence),
-    )) {
+    || canonicalJson(activeSlice.acceptance) !== canonicalJson(grant.required_evidence)) {
     payloadError(
-      'active slice acceptance must exactly match the grant evidence subset',
+      'active slice acceptance must exactly match the grant evidence requirements',
       'PROFILE_SLICE_BROADENS_GRANT',
     );
   }

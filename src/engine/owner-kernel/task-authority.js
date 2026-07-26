@@ -443,7 +443,7 @@ function normalizePolicy(policy, policyHash) {
     policy: value,
     policy_hash: expectedHash,
     guidance_profile: enumValue(
-      value.guidance_profile === undefined ? 'adaptive' : value.guidance_profile,
+      value.guidance_profile === undefined ? 'guided' : value.guidance_profile,
       GUIDANCE_PROFILES,
       'resolved governance policy.guidance_profile',
     ),

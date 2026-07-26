@@ -56,6 +56,12 @@ effects, egress, assurance, red lines, review, or acceptance.
 - Public documentation now distinguishes the heterogeneous agentic dispatch rails from the raw
   local author/reviewer transport.
 
+### Fixed
+- Guided active-slice acceptance now compares evidence as an order-independent exact set and
+  permits a role grant to add stricter evidence above the frozen task floor.
+- Raw task-authority and legacy-translation normalization now agree with the project resolver that
+  an omitted guidance profile means `guided`, never an implicit autonomous candidate.
+
 ### Boundary
 - Owner Kernel integration remains shadow/projection work and does not claim production authority.
   The AA adapter is optional and non-authoritative.

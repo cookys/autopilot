@@ -189,6 +189,13 @@ negative controls that fail when the claimed guard is removed.
 | QA / false promotion | Public/nonced lookup, label-bearing generated paths, and invalid-domain witnesses could pass without genuine review capability. | Added asymmetric/symmetric relational twins, opaque panel-visible artifacts, exact semantic metadata, host-pinned nonce-derived call domains, and separately sandboxed before/after witnesses. The original bypasses are regression tests. Accepted after re-review. |
 | Portability / authority | Same-UID disk rows could be mistaken for authority, stale files could leak into the standalone Codex package, and a public mutable role set could drift from schemas in a long-lived process. | Disk remains provisional telemetry; only a live nonserializable session verifier can admit a role. Exact payload allowlists remove stale files, canonical/Codex bytes match, and the exported role view has no mutation API. Accepted after standalone re-review. |
 
+## Final Heterogeneous Review
+
+| Reviewer | Scope | Result |
+|----------|-------|--------|
+| Qwen3.8-Max-Preview (`qoderclicn`, max) | Capability evidence, qualification broker, AA prior, and local transport | `SHIP-AS-IS`; post-fix profile delta also `SHIP-AS-IS`. |
+| Grok 4.5 (`grok`, high) | Profile/Owner authority and isolation | Parser verdict stayed `no_verdict` because the response did not start with the required block. Its three raw findings were independently reproduced: evidence order, stricter grant evidence, and omitted guidance default. All were fixed; the post-fix retry again produced no parseable verdict, so Grok is not counted as a passing seat. |
+
 ## Decision Log
 
 | Date | Decision | Rationale |

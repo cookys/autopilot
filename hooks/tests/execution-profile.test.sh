@@ -335,6 +335,15 @@ assert.deepEqual(defaultEnvelope.execution_preferences, {
   topology_preference: 'auto',
   topology_source: 'project-default',
 });
+const omittedGuidancePolicy = clone(resolved.policy);
+delete omittedGuidancePolicy.guidance_profile;
+const omittedGuidanceEnvelope = freezeTaskAuthorityEnvelope({
+  ...defaultTaskInput,
+  taskId: 'profile-task-omitted-guidance',
+  policy: omittedGuidancePolicy,
+  policyHash: hash(omittedGuidancePolicy),
+}).envelope;
+assert.equal(omittedGuidanceEnvelope.execution_preferences.guidance_profile, 'guided');
 const guidedTaskInput = clone(taskInput);
 guidedTaskInput.taskId = 'profile-task-guided';
 guidedTaskInput.taskOverrides.guidance_profile = 'guided';

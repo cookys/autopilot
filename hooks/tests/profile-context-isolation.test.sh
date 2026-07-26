@@ -506,7 +506,7 @@ function compile(profile, taskId, runtimeOptions = {}) {
     allowedArtifacts: ['src'],
     requestedEffects: [],
     requestedEgress,
-    requiredEvidence: ['tests'],
+    requiredEvidence: runtimeOptions.requiredEvidence || ['tests'],
     resourceBudget: {
       max_tokens: 40000,
       max_wall_seconds: 3600,
@@ -588,10 +588,35 @@ const autonomousRender = profilePayload.renderExecutionCapsule({
   usableContextTokens: 40000,
   repoRoot: root,
 });
+const stricterGuided = compile('guided', 'p2-guided-stricter-task', {
+  requiredEvidence: ['artifact_attestation'],
+});
+const reorderedStricterSlice = {
+  ...clone(slice),
+  acceptance: ['tests', 'artifact_attestation'],
+};
+const stricterGuidedRender = profilePayload.renderExecutionCapsule({
+  bundle: guidedBundle,
+  envelope: stricterGuided.envelope,
+  grant: stricterGuided.grant,
+  activeSlice: reorderedStricterSlice,
+  tokenCounter: exactCounter,
+  usableContextTokens: 40000,
+  repoRoot: root,
+});
 assert.equal(guided.grant.profile_hash, loaded.components.profiles.guided.sha256);
 assert.equal(autonomous.grant.profile_hash, loaded.components.profiles.autonomous.sha256);
 assert.equal(guidedRender.status, 'ready');
 assert.equal(autonomousRender.status, 'ready');
+assert.equal(stricterGuidedRender.status, 'ready');
+assert.deepEqual(
+  stricterGuided.grant.required_evidence,
+  ['artifact_attestation', 'tests'],
+);
+assert.deepEqual(
+  profilePayload.normalizeActiveSlice(reorderedStricterSlice).acceptance,
+  ['artifact_attestation', 'tests'],
+);
 assert.equal(guidedRender.core_control_hash, autonomousRender.core_control_hash);
 assert.equal(guidedRender.context_budget.measured_tokens, 180);
 assert.equal(guidedRender.context_budget.ceiling_tokens, 2000);

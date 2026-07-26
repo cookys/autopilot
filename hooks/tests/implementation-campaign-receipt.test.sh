@@ -10,11 +10,13 @@ const [root, temp] = process.argv.slice(2);
 const {
   adjudicateCampaignReview,
   createDetachedCheckoutAttestation,
+  createLedgerReconciliationReceipt,
   createVerificationReceipt,
   createVerificationRequest,
   createWriterFence,
   reusableGreenReceipt,
   runCampaignComposition,
+  verificationArgv,
 } = require(path.join(root, 'src', 'engine'));
 
 const TREE_A = 'a'.repeat(40);
@@ -31,6 +33,7 @@ const request = createVerificationRequest({
   env,
   envAllowlist: ['NODE_ENV', 'API_TOKEN', 'CI'],
 });
+assert.deepStrictEqual(verificationArgv('node test.js'), ['/bin/sh', '-c', 'node test.js']);
 const sameSecretChange = createVerificationRequest({
   treeSha: TREE_A,
   verifyCmd: 'node test.js',
@@ -55,6 +58,84 @@ const writerFence = createWriterFence({
   candidateTreeSha: TREE_A,
   implementationResult,
 });
+const ledgerReconciliation = createLedgerReconciliationReceipt({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  reconcileResult: {
+    status: 'resolved',
+    reason: 'terminal_state',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'committed',
+    nonce: 'fixture-nonce',
+    pending_side_effects: 0,
+    terminal: true,
+    git_truth: false,
+    holder_alive: false,
+  },
+  latestRecord: {
+    kind: 'stage',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'committed',
+    nonce: 'fixture-nonce',
+    git_sha: COMMIT_A,
+  },
+});
+assert.throws(() => createLedgerReconciliationReceipt({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  reconcileResult: {
+    status: 'resolved',
+    reason: 'git_truth',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'leased',
+    nonce: 'fixture-nonce',
+    pending_side_effects: 0,
+    terminal: false,
+    git_truth: true,
+    holder_alive: true,
+  },
+  latestRecord: {
+    kind: 'stage',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'leased',
+    nonce: 'fixture-nonce',
+    git_sha: COMMIT_A,
+  },
+}), /does not prove a closed implementation writer/);
+const ledgerWriterFence = createWriterFence({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  candidateTreeSha: TREE_A,
+  implementationResult: {
+    status: 'committed',
+    implementation: {
+      commit: COMMIT_A,
+      reconcile_by_ledger: true,
+      reconciliation_receipt: ledgerReconciliation,
+    },
+    implementationResult: {
+      error: new Error('transport exited before its terminal response'),
+      status: null,
+      signal: null,
+    },
+  },
+});
+assert.strictEqual(ledgerWriterFence.evidence_mode, 'terminal_ledger');
+assert.strictEqual(
+  ledgerWriterFence.closure_evidence_digest,
+  ledgerReconciliation.receipt_digest,
+);
 const checkoutAttestation = createDetachedCheckoutAttestation({
   candidateCommit: COMMIT_A,
   candidateTreeSha: TREE_A,
@@ -131,6 +212,24 @@ assert.throws(() => createWriterFence({
   candidateTreeSha: TREE_A,
   implementationResult: { ...implementationResult, status: 'blocked' },
 }), /completed committed/);
+assert.throws(() => createWriterFence({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  candidateTreeSha: TREE_A,
+  implementationResult: {
+    status: 'committed',
+    implementation: {
+      commit: COMMIT_A,
+      reconcile_by_ledger: true,
+    },
+    implementationResult: {
+      error: new Error('transport failed'),
+      status: null,
+      signal: null,
+    },
+  },
+}), /ledger reconciliation must be a receipt object/);
 assert.throws(() => createDetachedCheckoutAttestation({
   candidateCommit: COMMIT_A,
   candidateTreeSha: TREE_A,
@@ -291,6 +390,14 @@ let focusedReviews = 0;
 let finalPanels = 0;
 let authorizedRepairInput = null;
 const scopeCheckpoints = [];
+const retainedFollowUp = {
+  id: 'F-HARDENING',
+  disposition_authority: {
+    authority: 'depth-0',
+    actor_id: 'core-owner',
+    review_digest: '1'.repeat(64),
+  },
+};
 const composition = runCampaignComposition({
   maxRepairGenerations: 2,
 }, {
@@ -327,7 +434,13 @@ const composition = runCampaignComposition({
         registry_complete: true,
         repair_gate_passed: true,
         must_fix_now: [],
-        follow_up: [{ id: 'F-HARDENING' }],
+        follow_up: [{
+          ...retainedFollowUp,
+          disposition_authority: {
+            ...retainedFollowUp.disposition_authority,
+            review_digest: '2'.repeat(64),
+          },
+        }],
         rejected: [],
       };
     }
@@ -344,7 +457,7 @@ const composition = runCampaignComposition({
       registry_complete: true,
       repair_gate_passed: true,
       must_fix_now: [{ id: 'F-IN-SCOPE' }],
-      follow_up: [{ id: 'F-HARDENING' }],
+      follow_up: [retainedFollowUp],
       rejected: [{ id: 'F-REFUTED' }],
     };
   },
@@ -367,9 +480,33 @@ assert.deepStrictEqual(scopeCheckpoints, [
   'after_repair_mutation',
   'before_acceptance',
 ]);
-assert.deepStrictEqual(composition.follow_up, [{ id: 'F-HARDENING' }]);
+assert.deepStrictEqual(composition.follow_up, [retainedFollowUp]);
 assert.deepStrictEqual(composition.rejected_findings, [{ id: 'F-REFUTED' }]);
 assert.strictEqual(composition.final_panel_count, 1);
+
+const dispositionConflict = runCampaignComposition({
+  maxRepairGenerations: 1,
+}, {
+  preflight: () => ({ passed: true }),
+  implement: () => ({ committed: true, tree_sha: TREE_A }),
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: '6'.repeat(64) }),
+  review: () => ({ reviewed: true }),
+  adjudicate({ final }) {
+    return {
+      registry_complete: true,
+      repair_gate_passed: true,
+      must_fix_now: final ? [{ id: 'F-CONFLICT' }] : [],
+      follow_up: final ? [] : [{ id: 'F-CONFLICT' }],
+      rejected: [],
+    };
+  },
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({ reviewed: true }),
+});
+assert.strictEqual(dispositionConflict.status, 'blocked');
+assert.strictEqual(dispositionConflict.phase, 'final_adjudication');
+assert.match(dispositionConflict.reason, /conflicting cross-round dispositions/);
 
 let incompleteMutations = 0;
 const incomplete = runCampaignComposition({

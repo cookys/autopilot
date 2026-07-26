@@ -23,10 +23,12 @@ const { runCampaignComposition } = require('./campaign-composition');
 const {
   canonicalDigest: campaignCanonicalDigest,
   createDetachedCheckoutAttestation,
+  createLedgerReconciliationReceipt,
   createVerificationReceipt,
   createVerificationRequest,
   createWriterFence,
   reusableGreenReceipt,
+  verificationArgv,
 } = require('./campaign-verification');
 const { adjudicateCampaignReview } = require('./campaign-adjudication');
 const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergence');
@@ -196,6 +198,18 @@ function resolveImplementationFromLedger({
   if (typeof commit !== 'string' || !isImmutableGitSha(commit)) {
     return null;
   }
+  let reconciliationReceipt;
+  try {
+    reconciliationReceipt = createLedgerReconciliationReceipt({
+      campaignId: resolvedRunId,
+      stageIdentity: resolvedStage,
+      candidateCommit: commit,
+      reconcileResult: reconcilePayload,
+      latestRecord,
+    });
+  } catch (_error) {
+    return null;
+  }
 
   return {
     status: 'committed',
@@ -217,6 +231,7 @@ function resolveImplementationFromLedger({
     reconcile_reason: reconcilePayload.reason,
     reconcile_stage: resolvedStage,
     reconcile_run_id: resolvedRunId,
+    reconciliation_receipt: reconciliationReceipt,
     _reconciled_by_ledger: true,
     _reconciled_run_id: resolvedRunId,
     _reconciled_stage: resolvedStage,
@@ -952,11 +967,12 @@ function defaultDiffProvider({ base, commit, branch, round, cwd }) {
 }
 
 function defaultVerifyCommandRunner({ verifyCmd, cwd, env = process.env }) {
-  const child = spawnSync(verifyCmd, {
+  const [file, ...args] = verificationArgv(verifyCmd);
+  const child = spawnSync(file, args, {
     cwd: cwd || process.cwd(),
     env,
     encoding: 'utf8',
-    shell: true,
+    shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return {

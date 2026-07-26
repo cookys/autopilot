@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const VERIFICATION_RECEIPT_SCHEMA_VERSION = 1;
 const DEFAULT_ENV_ALLOWLIST = Object.freeze(['CI', 'LANG', 'LC_ALL', 'NODE_ENV', 'TZ']);
 const SECRET_NAME = /(AUTH|COOKIE|CREDENTIAL|KEY|PASSWORD|SECRET|TOKEN)/i;
+const LEDGER_TERMINAL_STATES = new Set(['committed', 'reviewed', 'verified', 'merged']);
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -41,7 +42,7 @@ function verificationArgv(verifyCmd) {
   if (typeof verifyCmd !== 'string' || verifyCmd.length === 0) {
     throw new TypeError('verifyCmd must be a non-empty string');
   }
-  return ['/bin/sh', '-lc', verifyCmd];
+  return ['/bin/sh', '-c', verifyCmd];
 }
 
 function environmentFingerprint(env = process.env, allowlist = DEFAULT_ENV_ALLOWLIST) {
@@ -100,9 +101,23 @@ function createWriterFence({
       && !transport.signal
       && transport.status === 0,
   );
-  const reconciledFromTerminalLedger = Boolean(
-    implementation && implementation.reconcile_by_ledger === true,
-  );
+  let ledgerReconciliation = null;
+  if (!directDispatchClosed && implementation && implementation.reconcile_by_ledger === true) {
+    ledgerReconciliation = receiptBody(
+      implementation.reconciliation_receipt,
+      'ledger reconciliation',
+    );
+    if (ledgerReconciliation.schema_version !== 1
+        || ledgerReconciliation.artifact_type
+          !== 'implementation_campaign_ledger_reconciliation'
+        || ledgerReconciliation.campaign_id !== campaignId
+        || ledgerReconciliation.stage_identity !== stageIdentity
+        || ledgerReconciliation.candidate_commit !== candidateCommit
+        || ledgerReconciliation.status !== 'closed') {
+      throw new TypeError('ledger reconciliation receipt binding is invalid');
+    }
+  }
+  const reconciledFromTerminalLedger = ledgerReconciliation !== null;
   if (!implementationResult
       || implementationResult.status !== 'committed'
       || !implementation
@@ -119,6 +134,73 @@ function createWriterFence({
     candidate_tree_sha: candidateTreeSha,
     status: 'closed',
     evidence_mode: reconciledFromTerminalLedger ? 'terminal_ledger' : 'dispatch_exit',
+    closure_evidence_digest: reconciledFromTerminalLedger
+      ? implementation.reconciliation_receipt.receipt_digest
+      : canonicalDigest({
+        exit_status: transport.status,
+        signal: transport.signal || null,
+        candidate_commit: candidateCommit,
+      }),
+  };
+  return {
+    ...body,
+    receipt_digest: canonicalDigest(body),
+  };
+}
+
+function createLedgerReconciliationReceipt({
+  campaignId,
+  stageIdentity,
+  candidateCommit,
+  reconcileResult,
+  latestRecord,
+}) {
+  if (typeof campaignId !== 'string' || campaignId.length === 0
+      || typeof stageIdentity !== 'string' || stageIdentity.length === 0
+      || !isGitObject(candidateCommit)
+      || !reconcileResult
+      || typeof reconcileResult !== 'object'
+      || !latestRecord
+      || typeof latestRecord !== 'object') {
+    throw new TypeError('ledger reconciliation identity is invalid');
+  }
+  const terminalClosure = reconcileResult.reason === 'terminal_state'
+    && reconcileResult.terminal === true
+    && LEDGER_TERMINAL_STATES.has(latestRecord.state);
+  const gitTruthClosure = reconcileResult.reason === 'git_truth'
+    && reconcileResult.git_truth === true
+    && reconcileResult.holder_alive === false;
+  if (reconcileResult.status !== 'resolved'
+      || reconcileResult.run_id !== campaignId
+      || reconcileResult.stage !== stageIdentity
+      || reconcileResult.pending_side_effects !== 0
+      || (!terminalClosure && !gitTruthClosure)
+      || !Number.isSafeInteger(reconcileResult.generation)
+      || reconcileResult.generation !== latestRecord.generation
+      || reconcileResult.state !== latestRecord.state
+      || typeof reconcileResult.nonce !== 'string'
+      || reconcileResult.nonce.length === 0
+      || reconcileResult.nonce !== latestRecord.nonce
+      || latestRecord.kind !== 'stage'
+      || latestRecord.run_id !== campaignId
+      || latestRecord.stage !== stageIdentity
+      || latestRecord.git_sha !== candidateCommit
+      || !Number.isSafeInteger(latestRecord.generation)
+      || latestRecord.generation < 0) {
+    throw new TypeError('ledger reconciliation does not prove a closed implementation writer');
+  }
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_ledger_reconciliation',
+    campaign_id: campaignId,
+    stage_identity: stageIdentity,
+    candidate_commit: candidateCommit,
+    ledger_generation: latestRecord.generation,
+    lease_nonce_digest: sha256(latestRecord.nonce),
+    status: 'closed',
+    reason: reconcileResult.reason,
+    reconcile_result_digest: canonicalDigest(reconcileResult),
+    ledger_record_digest: canonicalDigest(latestRecord),
   };
   return {
     ...body,
@@ -248,6 +330,7 @@ module.exports = {
   VERIFICATION_RECEIPT_SCHEMA_VERSION,
   canonicalDigest,
   createDetachedCheckoutAttestation,
+  createLedgerReconciliationReceipt,
   createVerificationReceipt,
   createVerificationRequest,
   createWriterFence,

@@ -54,25 +54,48 @@ function runCampaignComposition(input = {}, adapters = {}) {
 
   const trace = [];
   const followUps = [];
-  const followUpDigests = new Set();
   const rejectedFindings = [];
-  const rejectedDigests = new Set();
+  const findingRegistry = new Map();
   let repairGeneration = 0;
   let candidate = null;
   let verification = null;
   let lastReview = null;
 
-  const retainUnique = (items, target, digests) => {
-    for (const item of Array.isArray(items) ? items : []) {
-      const digest = canonicalDigest(item);
-      if (digests.has(digest)) continue;
-      digests.add(digest);
-      target.push(item);
+  const stableFindingDigest = (finding) => {
+    const stable = { ...finding };
+    if (stable.disposition_authority) {
+      const { review_digest: _reviewDigest, ...authority } = stable.disposition_authority;
+      stable.disposition_authority = authority;
     }
+    return canonicalDigest(stable);
   };
   const retainAdjudication = (adjudication) => {
-    retainUnique(adjudication.follow_up, followUps, followUpDigests);
-    retainUnique(adjudication.rejected, rejectedFindings, rejectedDigests);
+    const groups = [
+      ['must_fix_now', adjudication.must_fix_now, null],
+      ['follow_up', adjudication.follow_up, followUps],
+      ['rejected', adjudication.rejected, rejectedFindings],
+    ];
+    for (const [classification, items, target] of groups) {
+      for (const item of Array.isArray(items) ? items : []) {
+        if (!item || typeof item.id !== 'string' || item.id.length === 0) {
+          return { passed: false, reason: `${classification} finding is missing an id` };
+        }
+        const digest = stableFindingDigest(item);
+        const prior = findingRegistry.get(item.id);
+        if (prior) {
+          if (prior.classification !== classification || prior.digest !== digest) {
+            return {
+              passed: false,
+              reason: `finding ${item.id} has conflicting cross-round dispositions`,
+            };
+          }
+          continue;
+        }
+        findingRegistry.set(item.id, { classification, digest });
+        if (target) target.push(item);
+      }
+    }
+    return { passed: true };
   };
 
   const gate = requireReceipt(preflight(), 'preflight');
@@ -187,7 +210,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
     if (adjudication.registry_complete !== true) {
       return blocked('adjudication', adjudication.reason || 'finding registry is incomplete', trace);
     }
-    retainAdjudication(adjudication);
+    const retention = retainAdjudication(adjudication);
+    if (retention.passed !== true) {
+      return blocked('adjudication_conflict', retention.reason, trace);
+    }
     const mustFix = Array.isArray(adjudication.must_fix_now)
       ? adjudication.must_fix_now
       : [];
@@ -265,7 +291,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
   if (finalAdjudication.registry_complete !== true) {
     return blocked('final_adjudication', 'final finding registry is incomplete', trace);
   }
-  retainAdjudication(finalAdjudication);
+  const finalRetention = retainAdjudication(finalAdjudication);
+  if (finalRetention.passed !== true) {
+    return blocked('final_adjudication', finalRetention.reason, trace);
+  }
   const finalMustFix = Array.isArray(finalAdjudication.must_fix_now)
     ? finalAdjudication.must_fix_now
     : [];

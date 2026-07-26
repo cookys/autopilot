@@ -1362,6 +1362,7 @@ console.log(`rounds=${result.rounds}`);
 console.log(`implementation_calls=${result.implementationChain.length}`);
 console.log(`review_calls=${result.reviewChain.length}`);
 console.log(`reconciled=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconcile_by_ledger}`);
+console.log(`reconcile_receipt=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconciliation_receipt && result.implementationChain[0].implementation.reconciliation_receipt.receipt_digest}`);
 console.log(`dispatch_row=${result.ledger.find((entry) => entry.unit === 'dispatch_implementation').status}`);
 NODE
 )"; EXIT=$?
@@ -1372,6 +1373,8 @@ assert_contains "$OUT" "rounds=1" "AutopilotEngine split-brain path runs one rou
 assert_contains "$OUT" "implementation_calls=1" "AutopilotEngine split-brain path does not re-dispatch implementation"
 assert_contains "$OUT" "review_calls=1" "AutopilotEngine split-brain path dispatches a single review"
 assert_contains "$OUT" "reconciled=true" "AutopilotEngine split-brain path reconciles from ledger"
+assert_contains "$OUT" "reconcile_receipt=" "AutopilotEngine binds ledger reconciliation to a receipt"
+assert_not_contains "$OUT" "reconcile_receipt=undefined" "AutopilotEngine reconciliation receipt is concrete"
 assert_contains "$OUT" "dispatch_row=committed" "AutopilotEngine split-brain path reaches committed dispatch state from ledger"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'

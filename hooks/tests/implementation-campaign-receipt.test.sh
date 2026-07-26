@@ -99,6 +99,18 @@ assert.notStrictEqual(request.env_fingerprint, createVerificationRequest({
   env: { ...env, PATH: '/other/bin' },
   envAllowlist: ['CI'],
 }).env_fingerprint);
+assert.throws(() => createVerificationRequest({
+  treeSha: TREE_A,
+  verifyCmd: 'node test.js',
+  env: { CI: '1' },
+  envAllowlist: ['CI'],
+}), /requires a concrete non-secret PATH/);
+assert.throws(() => createVerificationRequest({
+  treeSha: TREE_A,
+  verifyCmd: 'node test.js',
+  env: { PATH: '', CI: '1' },
+  envAllowlist: ['CI'],
+}), /requires a concrete non-secret PATH/);
 const secretValueFingerprint = (value) => createVerificationRequest({
   treeSha: TREE_A,
   verifyCmd: 'node test.js',

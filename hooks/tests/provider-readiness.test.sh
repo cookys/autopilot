@@ -215,9 +215,26 @@ record_event '"wallet_b"' exhausted
 record_event null limited
 record_event '"none"' available
 
-printf '%s\n' \
-  '{"schema_version":1,"event_id":99,"observed_at":"2026-07-27T11:55:00.000Z","runner":"cc-shim","model":"GLM-5.2","role":"reviewer","endpoint":"bad-name","runner_version":"fixture","capability":{"quota":{"status":"available","reset_at":null,"confidence":"high","evidence":"fixture","ttl_seconds":600}}}' \
-  >> "$STORE/capability.jsonl"
+node - "$STORE/capability.jsonl" <<'NODE'
+const fs = require('fs');
+const file = process.argv[2];
+const rows = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
+const walletA = rows.find((row) => row.endpoint === 'wallet_a');
+const otherWalletDuplicate = {
+  ...walletA,
+  endpoint: 'wallet_b',
+  observed_at: '2026-07-27T11:00:00.000Z',
+};
+const malformed = {
+  ...walletA,
+  event_id: 99,
+  endpoint: 'bad-name',
+};
+fs.writeFileSync(
+  file,
+  `${[otherWalletDuplicate, ...rows, malformed].map(JSON.stringify).join('\n')}\n`,
+);
+NODE
 
 LEGACY="$(node "$CLI" current --runner cc-shim --model GLM-5.2 --role reviewer \
   --now 2026-07-27T12:00:00.000Z --store "$STORE")"
@@ -236,6 +253,8 @@ assert_contains "$LEGACY" '"status":"exhausted"' \
   "legacy query preserves the legacy row without assigning it to a wallet"
 assert_contains "$WALLET_A" '"endpoint":"wallet_a"' "wallet A identity is emitted"
 assert_contains "$WALLET_A" '"status":"available"' "wallet A state remains independent"
+assert_contains "$WALLET_A" '"observed_at":"2026-07-27T11:55:00.000Z"' \
+  "wallet A time provenance cannot come from a duplicate ID in another wallet"
 assert_contains "$WALLET_B" '"endpoint":"wallet_b"' "wallet B identity is emitted"
 assert_contains "$WALLET_B" '"status":"exhausted"' "wallet B state remains independent"
 assert_contains "$NAMED_NONE" '"endpoint":"none"' \
@@ -245,6 +264,35 @@ assert_contains "$NAMED_NONE" '"status":"available"' \
 assert_contains "$NO_ENDPOINT" '"endpoint":null' "explicit endpoint-null identity is emitted"
 assert_contains "$NO_ENDPOINT" '"status":"limited"' \
   "explicit endpoint-null state does not consume legacy evidence"
+
+node - <<'NODE' | node "$CLI" record --store "$STORE" >/dev/null
+process.stdout.write(`${JSON.stringify({
+  schema_version: 1,
+  observed_at: '2026-07-27T11:55:00.000Z',
+  runner: 'cc-shim',
+  model: 'Empty-Context',
+  role: 'reviewer',
+  endpoint: 'wallet_a',
+  runner_version: 'fixture',
+  capability: {
+    quota: {
+      status: 'unknown',
+      reset_at: null,
+      confidence: 'medium',
+      evidence: 'fixture',
+      ttl_seconds: 0,
+    },
+    context_window: {
+      total_tokens: null,
+      evidence: null,
+    },
+  },
+})}\n`);
+NODE
+EMPTY_CONTEXT="$(node "$CLI" current --runner cc-shim --model Empty-Context --role reviewer \
+  --endpoint wallet_a --now 2026-07-27T12:00:00.000Z --store "$STORE")"
+assert_contains "$EMPTY_CONTEXT" '"event_id":1' \
+  "a null-only context candidate preserves the legacy fallback event ID"
 
 REPORT="$(node "$CLI" report --capability quota --now 2026-07-27T12:00:00.000Z \
   --store "$STORE")"

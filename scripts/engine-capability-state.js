@@ -789,6 +789,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
         ttl_seconds,
         isExpired,
         observedMs,
+        observedAt: row.observed_at,
         sourceRole: row.role,
         eventId: toEventId(row.event_id) || 0
       };
@@ -846,7 +847,17 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
       const s = row.capability.skill_transport;
       const eid = toEventId(row.event_id) || 0;
       if (!mergedSkill) {
-        mergedSkill = { native: null, nativeEventId: -1, nativeObservedAt: null, prompt_pack: null, promptEventId: -1, promptObservedAt: null, last_bench_id: null, eventId: -1 };
+        mergedSkill = {
+          native: null,
+          nativeEventId: -1,
+          nativeObservedAt: null,
+          prompt_pack: null,
+          promptEventId: -1,
+          promptObservedAt: null,
+          last_bench_id: null,
+          eventId: -1,
+          observedAt: null,
+        };
       }
       if (s.native !== undefined && s.native !== 'unknown' && eid > mergedSkill.nativeEventId) {
         mergedSkill.native = s.native;
@@ -863,6 +874,7 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
       }
       if (eid >= mergedSkill.eventId) {
         mergedSkill.eventId = eid;
+        mergedSkill.observedAt = row.observed_at || null;
         mergedSkill.last_bench_id = (s.last_bench_id !== undefined ? s.last_bench_id : null);
       }
     }
@@ -896,19 +908,18 @@ function mergeCurrentState(rows, runner, model, role, nowMs, endpoint = endpoint
   const skillPromptPack = (mergedSkill && mergedSkill.prompt_pack !== null) ? mergedSkill.prompt_pack : 'unknown';
   const skillLastBenchId = mergedSkill ? mergedSkill.last_bench_id : null;
 
-  // We find the max event_id for this group to put as the final event_id, or just latest
-  const finalEventId = Math.max(
-    mergedQuota ? mergedQuota.eventId : 0,
-    mergedSkill ? mergedSkill.eventId : 0
-  ) || 1;
-
-  // Find observed_at from latest event, or use now ISO
-  let finalObserved = new Date(nowMs).toISOString();
-  if (mergedQuota || mergedSkill || mergedCtx) {
-    const latestEventId = finalEventId;
-    const matchingRow = rows.find(r => toEventId(r.event_id) === latestEventId);
-    if (matchingRow) finalObserved = matchingRow.observed_at;
-  }
+  // Keep time provenance on the winning exact-wallet candidates. A global event-id
+  // lookup could borrow observed_at from another endpoint when a hand-edited store
+  // contains duplicate IDs.
+  const finalCandidate = [mergedQuota, mergedSkill, mergedCtx]
+    .filter((candidate) => candidate && candidate.eventId > 0)
+    .reduce((latest, candidate) => (
+      !latest || candidate.eventId > latest.eventId ? candidate : latest
+    ), null);
+  const finalEventId = finalCandidate ? finalCandidate.eventId : 1;
+  const finalObserved = finalCandidate && finalCandidate.observedAt
+    ? finalCandidate.observedAt
+    : new Date(nowMs).toISOString();
 
   return {
     schema_version: 1,

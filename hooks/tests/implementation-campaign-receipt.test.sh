@@ -112,6 +112,22 @@ for (const [left, right] of [
     'https://example.invalid/path?access_token=token-b',
   ],
   [
+    'https://example.invalid/path?sig=signature-a',
+    'https://example.invalid/path?sig=signature-b',
+  ],
+  [
+    'https://example.invalid/path?signature=signature-a',
+    'https://example.invalid/path?signature=signature-b',
+  ],
+  [
+    'https://example.invalid/path?accessToken=token-a',
+    'https://example.invalid/path?accessToken=token-b',
+  ],
+  [
+    'https://example.invalid/path#access_token=token-a',
+    'https://example.invalid/path#access_token=token-b',
+  ],
+  [
     '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-a',
     '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-b',
   ],
@@ -123,8 +139,8 @@ for (const [left, right] of [
   assert.strictEqual(secretValueFingerprint(left), secretValueFingerprint(right));
 }
 assert.notStrictEqual(
-  secretValueFingerprint('https://example.invalid/public-a'),
-  secretValueFingerprint('https://example.invalid/public-b'),
+  secretValueFingerprint('https://example.invalid/public?page=1'),
+  secretValueFingerprint('https://example.invalid/public?page=2'),
 );
 
 const implementationResult = {

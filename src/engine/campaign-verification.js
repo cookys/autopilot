@@ -13,7 +13,7 @@ const DEFAULT_ENV_ALLOWLIST = Object.freeze([
   'TZ',
 ]);
 const SECRET_NAME = /(AUTH|COOKIE|CREDENTIAL|DATABASE_URL|DB_URL|CONNECTION_STRING|KEY|PASSWORD|SECRET|TOKEN)/i;
-const SENSITIVE_QUERY_NAME = /(?:^|[_-])(?:auth|credential|key|password|secret|token)(?:$|[_-])|^(?:api[_-]?key|access[_-]?token|client[_-]?secret)$/i;
+const SENSITIVE_URL_FIELD = /auth|bearer|code|cookie|credential|jwt|key|pass|pwd|saml|sas|secret|session|sig|token/i;
 const PRIVATE_KEY_VALUE = /\bPRIVATE KEY\b|PuTTY-User-Key-File-\d+:|AGE-SECRET-KEY-/i;
 const LEDGER_TERMINAL_STATES = new Set(['committed', 'reviewed', 'verified', 'merged']);
 
@@ -72,8 +72,18 @@ function containsSecretValue(value) {
   try {
     const parsed = new URL(value);
     if (parsed.username.length > 0 || parsed.password.length > 0) return true;
+    const sensitiveField = (name) => SENSITIVE_URL_FIELD.test(
+      String(name).toLowerCase().replace(/[^a-z0-9]/g, ''),
+    );
     for (const name of parsed.searchParams.keys()) {
-      if (SENSITIVE_QUERY_NAME.test(name)) return true;
+      if (sensitiveField(name)) return true;
+    }
+    const fragment = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
+    if (fragment.length > 0) {
+      const fragmentParams = new URLSearchParams(fragment);
+      for (const name of fragmentParams.keys()) {
+        if (sensitiveField(name)) return true;
+      }
     }
   } catch (_error) {
     // Ordinary non-URL values are not credentials by shape.

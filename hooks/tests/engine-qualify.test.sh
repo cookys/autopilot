@@ -354,6 +354,7 @@ QUALIFY_ARGS=(
   --language en
   --tool diff_read
 )
+QUALIFY_REMOTE_ARGS=("${QUALIFY_ARGS[@]}")
 QUALIFY_ARGS+=("${PANEL_BINDS[@]}")
 export AUTOPILOT_QUALIFY_NOW="2026-07-26T00:00:00.000Z"
 export AUTOPILOT_QUALIFY_SEED="engine-qualify-test-seed"
@@ -369,7 +370,52 @@ assert_contains "$PASS_OUT" '"admitted":false' "serialized qualifier result cann
 assert_contains "$PASS_OUT" '"authority_status":"untrusted_telemetry"' \
   "serialized qualifier result declares its non-authoritative boundary"
 
-# 3) The public fixture SHA lookup that previously false-greened cannot qualify.
+# 3) Remote reviewer output crosses the case-only broker, then passes the same host witness oracle.
+REMOTE_ADAPTER="$TEST_TMP/engine-qualify-remote-adapter.js"
+cat >"$REMOTE_ADAPTER" <<'NODE'
+'use strict';
+const fs = require('fs');
+const { spawnSync } = require('child_process');
+const request = JSON.parse(fs.readFileSync(0, 'utf8'));
+const panel = spawnSync(
+  process.env.QUAL_FAKE_NODE,
+  [process.env.QUAL_FAKE_PANEL, 'honest'],
+  {
+    input: request.payload.content,
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  },
+);
+if (panel.error || panel.signal || panel.status !== 0) process.exit(1);
+process.stdout.write(JSON.stringify({
+  schema_version: 1,
+  provider: process.env.QUAL_FAKE_PROVIDER,
+  model: process.env.QUAL_FAKE_MODEL,
+  output: panel.stdout,
+}));
+NODE
+export QUAL_FAKE_NODE="$NODE_BIN"
+export QUAL_FAKE_PANEL="$PANEL"
+export QUAL_FAKE_PROVIDER="fake-review-provider"
+export QUAL_FAKE_MODEL="eng-review-exact"
+REMOTE_PROVIDER_CMD="$(printf '%q ' "$NODE_BIN" "$REMOTE_ADAPTER")"
+REMOTE_OUT="$(
+  "$SCRIPT" "${QUALIFY_REMOTE_ARGS[@]}" \
+    --remote-provider-cmd "$REMOTE_PROVIDER_CMD" \
+    --remote-provider "$QUAL_FAKE_PROVIDER" \
+    --provider-env QUAL_FAKE_NODE \
+    --provider-env QUAL_FAKE_PANEL \
+    --provider-env QUAL_FAKE_PROVIDER \
+    --provider-env QUAL_FAKE_MODEL \
+    2>&1
+)"
+REMOTE_RC=$?
+assert_exit_code "$REMOTE_RC" "0" \
+  "case-only remote reviewer passes the host behavioral witness oracle"
+assert_contains "$REMOTE_OUT" '"evaluation_passed":true' \
+  "remote transport does not replace the reviewer host oracle"
+
+# 4) The public fixture SHA lookup that previously false-greened cannot qualify.
 PUBLIC_HASH_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PUBLIC_HASH_PANEL" 2>&1)"
 PUBLIC_HASH_RC=$?
 assert_exit_code "$PUBLIC_HASH_RC" "1" "public SHA lookup cannot qualify on fresh cases"
@@ -383,7 +429,7 @@ assert_exit_code "$NORMALIZED_RC" "1" \
 assert_contains "$NORMALIZED_OUT" '"evaluation_passed":false' \
   "metamorphic corpus rejects normalized benchmark lookup"
 
-# 4) Every case gets a fresh sandbox with host paths, network, and prior scratch hidden.
+# 5) Every case gets a fresh sandbox with host paths, network, and prior scratch hidden.
 SANDBOX_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$SANDBOX_PANEL" 2>&1)"
 SANDBOX_RC=$?
 assert_exit_code "$SANDBOX_RC" "0" \
@@ -419,26 +465,26 @@ wait "$NETWORK_SERVER_PID" 2>/dev/null || true
 assert_exit_code "$NETWORK_RC" "0" \
   "sandbox network namespace cannot reach a host-loopback evaluation side channel"
 
-# 5) The harness does not leak expected-outcome labels to the panel.
+# 6) The harness does not leak expected-outcome labels to the panel.
 LABEL_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$LABEL_CHEAT_PANEL" 2>&1)"
 LABEL_RC=$?
 assert_exit_code "$LABEL_RC" "1" "fixture label-dependent panel cannot qualify"
 assert_not_contains "$LABEL_OUT" '"evaluation_passed":true' "blind qualification exposes no outcome label"
 
-# 6) Critical false-pass -> qualified false, emits failed row with --emit-row
+# 7) Critical false-pass -> qualified false, emits failed row with --emit-row
 FAIL_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$ALL_PASS_PANEL" --emit-row 2>&1)"
 FAIL_RC=$?
 assert_exit_code "$FAIL_RC" "1" "all-true panel-cmd exits 1 (qualification failed)"
 assert_contains "$FAIL_OUT" '"status":"failed"' "emit-row status failed on false positive critical"
 assert_not_contains "$FAIL_OUT" '"false_pass_critical":0' "critical false-pass present"
 
-# 7) Fixed-order or cross-case-state guessing cannot pass.
+# 8) Fixed-order or cross-case-state guessing cannot pass.
 SENS_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PARTIAL_PASS_PANEL" 2>&1)"
 SENS_RC=$?
 assert_exit_code "$SENS_RC" "1" "fixed-order panel-cmd exits 1"
 assert_contains "$SENS_OUT" '"evaluation_passed":false' "shuffling rejects order-based answer guessing"
 
-# 8) Findings must match metadata and carry a behavioral consequence witness.
+# 9) Findings must match metadata and carry a behavioral consequence witness.
 for BAD_MODE in wrong-rule wrong-file wrong-line low-severity missing-witness malformed-witness nonconsequential-witness invalid-domain-witness summary-only; do
   BAD_ORACLE_RC=0
   "$SCRIPT" "${QUALIFY_ARGS[@]}" \
@@ -447,7 +493,7 @@ for BAD_MODE in wrong-rule wrong-file wrong-line low-severity missing-witness ma
     "behavioral oracle rejects $BAD_MODE reviewer output"
 done
 
-# 9) --emit-row emits engine-scorecard row accepted by record
+# 10) --emit-row emits engine-scorecard row accepted by record
 ROW_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --emit-row)"
 RECORD_RC=0
 ROW_OUT_FILE="$(mktemp "$TEST_TMP/engine-qualify-row.out.XXXXXX")"
@@ -459,7 +505,7 @@ assert_contains "$ROW_OUT" '"status":"qualified"' "emit-row on pass uses qualifi
 assert_contains "$ROW_OUT" '"repeated_trials":2' "emit-row records the repeated-trial floor"
 assert_contains "$ROW_OUT" '"mutation_validation"' "emit-row binds the mutation control"
 
-# 10) Only the exact live in-process run object can mint a session authority closure.
+# 11) Only the exact live in-process run object can mint a session authority closure.
 SESSION_OUT="$(node - "$REPO_ROOT" "$PANEL" "$TEST_TMP/session-capability" <<'NODE'
 'use strict';
 const path = require('path');
@@ -568,7 +614,7 @@ assert_contains "$SESSION_OUT" '"superseded_verifier_rejected":true' \
 assert_contains "$SESSION_OUT" '"superseded_run_rejected":true' \
   "superseded qualification cannot mint another verifier"
 
-# 11) Pinned assets, fresh seeds, and missing sandbox fail closed before panel execution.
+# 12) Pinned assets, fresh seeds, and missing sandbox fail closed before panel execution.
 PIN_OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';
 const fs = require('fs');
@@ -705,7 +751,7 @@ assert_contains "$PIN_OUT" '"location_vector_changed":true' \
   "fresh seeds change generated finding locations"
 assert_contains "$PIN_OUT" '"generator_hash_shape":true' "generator bytes have a stable SHA-256 pin"
 
-# 12) bad args exit 2
+# 13) bad args exit 2
 $SCRIPT "${QUALIFY_ARGS[@]}" 2>/dev/null
 BAD_RC=$?
 assert_exit_code "$BAD_RC" "2" "missing --panel-cmd is exit 2"

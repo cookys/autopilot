@@ -146,6 +146,8 @@ for (const rel of [
 }
 for (const rel of [
   'evals/capability-evidence-corpus.json',
+  'evals/owner-capability-evidence-corpus.json',
+  'evals/owner-eval-generator.js',
   'evals/reviewer-eval-generator.js',
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
@@ -284,6 +286,12 @@ cp "$SYNC_SANDBOX/evals/capability-evidence-corpus.json" \
 printf "'use strict';\n" > "$SYNC_SANDBOX/evals/reviewer-eval-generator.js"
 cp "$SYNC_SANDBOX/evals/reviewer-eval-generator.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/evals/reviewer-eval-generator.js"
+printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json"
+cp "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-capability-evidence-corpus.json"
+printf "'use strict';\n" > "$SYNC_SANDBOX/evals/owner-eval-generator.js"
+cp "$SYNC_SANDBOX/evals/owner-eval-generator.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-eval-generator.js"
 mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"
 cp "$SYNC_SANDBOX/skills/example/SKILL.md" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example/SKILL.md"

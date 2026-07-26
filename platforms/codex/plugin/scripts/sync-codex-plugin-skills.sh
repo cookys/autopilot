@@ -63,6 +63,8 @@ DOC_FILES=(
 
 SUPPORT_FILES=(
   "evals/capability-evidence-corpus.json"
+  "evals/owner-capability-evidence-corpus.json"
+  "evals/owner-eval-generator.js"
   "evals/reviewer-eval-generator.js"
 )
 

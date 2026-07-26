@@ -39,7 +39,8 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 
 | Script | Stage | Role in the runbook |
 |--------|-------|---------------------|
-| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer) | Runs at least two fresh metamorphic known-bad + clean trials, executable host oracles, and a reversal control inside per-case bubblewrap isolation. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
+| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer/owner) | Runs at least two fresh role-specific known-bad + clean trials, independent host oracles, and a reversal control. Reviewer and owner corpora/methodologies are not interchangeable. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
+| [`scripts/qualification-case-broker.js`](../../scripts/qualification-case-broker.js) | Remote qualification transport | Sends exactly one bounded case from a networkless sandbox over a per-case Unix socket while the host retains credentials, outbound access, timeout policy, and exact returned identity. |
 | [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
 | [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |

@@ -145,8 +145,8 @@ negative controls that fail when the claimed guard is removed.
 | P1 | Complete | Immutable shadow task authority and narrowing role grants; 33 focused profile assertions plus Owner Kernel/translation gates; three-lens review accepted; base-vs-head red-green `VALIDATED`. |
 | P2 | Complete | Canonical core/guided/autonomous packs, exact-one-profile generated payloads, 122 isolation assertions, 33 execution-profile assertions, standalone Codex package proof, and unanimous three-lens review acceptance. Effectful golden traces remain a P5 cutover prerequisite. |
 | P3a | Complete | Scope/identity evidence lifecycle, immutable canonical roles, session-local qualification authority, label-free metamorphic reviewer corpus, domain-bound behavioral witnesses, 61 qualifier assertions, 204-file full regression, and unanimous three-lens re-review acceptance. |
-| P3b | Pending | |
-| P3c | Pending | |
+| P3b | Complete | Fixed-endpoint AA prior importer, raw/normalized content-addressed cache, fail-atomic publication and ledger reconciliation, implementer/explorer-only provisional evidence, 23 importer cases, 103 evidence assertions, standalone parity, and unanimous bounded re-review; commit `f321380`. |
+| P3c | Complete | One-case Unix-socket broker with host-only credentials/network/exact identity, remote reviewer reuse of the behavioral witness oracle, distinct six-rule owner corpus/oracle with clean and repair controls, 42 broker + 23 owner + 63 reviewer assertions, and 90 standalone Codex package assertions. |
 | P4 | Pending | |
 | P5 | Pending | |
 | P6 | Pending | |
@@ -197,3 +197,5 @@ negative controls that fail when the claimed guard is removed.
 | 2026-07-26 | Treat Claude `--bare` as a no-effect isolation probe, not a production profile adapter. | The documented mode skips hooks and skills; a same-process observation proves context isolation only. An independently witnessed effectful trace remains required before adaptive cutover. |
 | 2026-07-26 | Package immutable P0 sources as hash-named non-skill snapshots in the Codex payload. | Standalone validation must not reach through to the parent clone, and the snapshots must not become discoverable profile instructions. |
 | 2026-07-26 | Keep effectful guided compatibility as a P5 prerequisite. | P2 proves content-addressed source retention and isolation, but cannot honestly claim behavioral equivalence without an independently witnessed effectful transport. |
+| 2026-07-26 | Keep qualification transport case-only and host-owned. | The evaluator sandbox receives one diff over one fresh Unix socket; the host retains provider credentials, outbound access, timeout policy, response identity checks, and the independent role oracle. |
+| 2026-07-26 | Qualify owner with a separate intent/control methodology. | Reviewer evidence cannot establish ownership capability; owner trials independently test intent, delegation, failure, state, ledger, and acceptance behavior with clean and repair controls. |

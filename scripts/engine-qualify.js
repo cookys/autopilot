@@ -26,16 +26,34 @@ const {
   generateReviewerEvaluation,
 } = require('../evals/reviewer-eval-generator');
 const {
+  CLEAN_COUNT: OWNER_CLEAN_COUNT,
+  CORPUS: OWNER_CORPUS,
+  GENERATOR_VERSION: OWNER_GENERATOR_VERSION,
+  KNOWN_BAD_COUNT: OWNER_KNOWN_BAD_COUNT,
+  RULES: OWNER_RULES,
+  generateOwnerEvaluation,
+} = require('../evals/owner-eval-generator');
+const {
   expandTilde,
 } = require('./lib/jsonl-store');
 const {
   appendEvidenceRecord,
   readEvidenceRows,
 } = require('./engine-capability-state');
+const {
+  normalizeOptions: normalizeBrokerOptions,
+} = require('./qualification-case-broker');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(REPO_ROOT, 'evals', 'capability-evidence-corpus.json');
 const GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'reviewer-eval-generator.js');
+const OWNER_MANIFEST = path.join(
+  REPO_ROOT,
+  'evals',
+  'owner-capability-evidence-corpus.json',
+);
+const OWNER_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'owner-eval-generator.js');
+const CASE_BROKER_PATH = path.join(REPO_ROOT, 'scripts', 'qualification-case-broker.js');
 const BWRAP_PATH = '/usr/bin/bwrap';
 const EXPECTED_CORPUS_VERSION = 'reviewer-known-bad-clean-v2';
 const EXPECTED_CORPUS_MANIFEST_HASH =
@@ -44,6 +62,11 @@ const EXPECTED_ARTIFACT_ORACLE_HASH =
   '0f0a5519a0eade5de937aff0f6ed78e79b21cfcdc9fcf9476f3897b876ee86f5';
 const EXPECTED_GENERATOR_HASH =
   'a5d686853ee5e070f7e2a598e5999f063ad48110e2223d3e684834b4e8d525f3';
+const EXPECTED_OWNER_CORPUS_VERSION = 'owner-intent-control-v1';
+const EXPECTED_OWNER_MANIFEST_HASH =
+  'b7b4d6159d9b01a7be06a663d35d205379a8df18b7a87dfbcb9a796d33be07a6';
+const EXPECTED_OWNER_GENERATOR_HASH =
+  '68d02894f8c685979daac2e5e2149f204d70c5bbf22d2e2261e3b4609a0cbd83';
 const QUALIFIER_PRODUCER = 'engine-qualify-v2';
 const SHA256 = /^[a-f0-9]{64}$/iu;
 const TOKEN = /^[A-Za-z0-9._:-]{1,128}$/u;
@@ -98,25 +121,29 @@ const HOST_OBSERVED_RUNS = new WeakSet();
 const ACTIVE_SESSION_RUNS = new Map();
 
 const HELP = `Usage:
-  scripts/engine-qualify.sh reviewer
+  scripts/engine-qualify.sh <reviewer|owner>
     --engine <display-id> --model <exact-model-id> --model-version <version>
     --runner <name> --runner-version <version> --family <family>
     --harness-version <version> --effort <effort>
     --prompt-config-hash <sha256> --semantic-fingerprint <sha256>
-    --containment-fingerprint <sha256> --panel-cmd '<trusted command>'
+    --containment-fingerprint <sha256>
+    (--panel-cmd '<trusted command>' |
+      --remote-provider-cmd '<trusted adapter>' --remote-provider <provider-id>)
     [--panel-bind-ro <absolute-source>=</panel/or/auth/path>] [--panel-env <name>]
+    [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
 
-The qualifier generates fresh metamorphic known-bad, clean, and defect-reversal trials. Each
-panel process reads one diff on stdin inside a new fail-closed bubblewrap sandbox. It must emit
-{"verdict":"pass|fail","findings":[...]}; failing findings include rule_id, severity, file,
-line, and a structured ${WITNESS_PROTOCOL_VERSION} witness. The host executes that witness
-against before/after code in a separate no-network sandbox and accepts it only when the stated
-behavior holds before and fails after. Bind only the panel runtime/auth inputs it needs. The
-repository, evaluation oracle, host home, and previous cases are not mounted. JSONL output is
-diagnostic telemetry, not admission authority. Only a live in-process host-observed run can
-create a session-local role-capability verifier; serializing the run destroys that capability.
+The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
+Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
+${WITNESS_PROTOCOL_VERSION} witness. Owner output uses
+{"decision":"accept|reject","violations":[...]} against a distinct intent/control corpus.
+Local panels run in a fresh fail-closed bubblewrap sandbox. Remote panels cross a one-use Unix
+socket to a host broker; credentials and network access never enter the evaluator sandbox.
+The repository, corpus, oracle, host home, and previous cases are not mounted or disclosed.
+JSONL output is diagnostic telemetry, not admission authority. Only a live in-process
+host-observed run can create a session-local role-capability verifier; serializing the run
+destroys that capability.
 
 Exit codes:
   0 = qualification passed
@@ -156,8 +183,11 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (argv[0] !== 'reviewer') usage(2, `unknown subcommand: ${argv[0]}`);
+  if (!['reviewer', 'owner'].includes(argv[0])) {
+    usage(2, `unknown subcommand: ${argv[0]}`);
+  }
   const options = {
+    role: argv[0],
     trials: 2,
     expiresDays: 30,
     store: null,
@@ -168,6 +198,7 @@ function parseArgs(argv) {
     tools: [],
     panelReadOnlyBinds: [],
     panelEnvironment: [],
+    providerEnvironment: [],
   };
   const scalar = new Map([
     ['--engine', 'engine'],
@@ -182,6 +213,9 @@ function parseArgs(argv) {
     ['--semantic-fingerprint', 'semanticFingerprint'],
     ['--containment-fingerprint', 'containmentFingerprint'],
     ['--panel-cmd', 'panelCmd'],
+    ['--remote-provider-cmd', 'remoteProviderCmd'],
+    ['--remote-provider', 'remoteProvider'],
+    ['--remote-timeout-ms', 'remoteTimeoutMs'],
     ['--trials', 'trials'],
     ['--expires-days', 'expiresDays'],
     ['--store', 'store'],
@@ -193,6 +227,7 @@ function parseArgs(argv) {
     ['--tool', 'tools'],
     ['--panel-bind-ro', 'panelReadOnlyBinds'],
     ['--panel-env', 'panelEnvironment'],
+    ['--provider-env', 'providerEnvironment'],
   ]);
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -221,7 +256,6 @@ function parseArgs(argv) {
     'promptConfigHash',
     'semanticFingerprint',
     'containmentFingerprint',
-    'panelCmd',
   ]) {
     if (!options[name]) usage(2, `--${name.replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)} is required`);
   }
@@ -267,7 +301,40 @@ function parseArgs(argv) {
   }))].sort();
   options.trials = positiveInteger(options.trials, '--trials', 2);
   options.expiresDays = positiveInteger(options.expiresDays, '--expires-days');
-  if (options.expiresDays > 30) usage(2, 'reviewer --expires-days cannot exceed 30');
+  if (options.expiresDays > 30) {
+    usage(2, `${options.role} --expires-days cannot exceed 30`);
+  }
+  const localTransport = Boolean(options.panelCmd);
+  const remoteTransport = Boolean(options.remoteProviderCmd || options.remoteProvider);
+  if (localTransport === remoteTransport) {
+    usage(
+      2,
+      'choose exactly one local --panel-cmd or remote --remote-provider-cmd/--remote-provider transport',
+    );
+  }
+  if (remoteTransport && (!options.remoteProviderCmd || !options.remoteProvider)) {
+    usage(2, 'remote transport requires --remote-provider-cmd and --remote-provider');
+  }
+  if (remoteTransport && (
+    options.panelReadOnlyBinds.length > 0 || options.panelEnvironment.length > 0
+  )) {
+    usage(2, 'remote transport cannot use local panel binds or panel environment');
+  }
+  if (localTransport && (
+    options.providerEnvironment.length > 0 || options.remoteTimeoutMs !== undefined
+  )) {
+    usage(2, 'local transport cannot use remote provider options');
+  }
+  if (options.remoteTimeoutMs !== undefined) {
+    options.remoteTimeoutMs = positiveInteger(
+      options.remoteTimeoutMs,
+      '--remote-timeout-ms',
+      100,
+    );
+    if (options.remoteTimeoutMs > 600_000) {
+      usage(2, '--remote-timeout-ms cannot exceed 600000');
+    }
+  }
   return options;
 }
 
@@ -539,6 +606,56 @@ function parsePanelResult(stdout) {
   return { verdict: value.verdict, findings };
 }
 
+function parseOwnerPanelResult(stdout) {
+  const lines = String(stdout).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
+  let value = null;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const parsed = JSON.parse(lines[index]);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        value = parsed;
+        break;
+      }
+    } catch {
+      // Earlier transport output is non-authoritative.
+    }
+  }
+  if (!value || !hasExactKeys(value, ['decision', 'violations'])
+      || !['accept', 'reject'].includes(value.decision)
+      || !Array.isArray(value.violations) || value.violations.length > 8) {
+    throw new Error(
+      'owner result must be {decision:"accept|reject",violations:[...]}',
+    );
+  }
+  const violations = value.violations.map((violation, index) => {
+    if (!hasExactKeys(violation, ['rule_id', 'severity', 'file', 'line'])) {
+      throw new Error(`owner violation ${index + 1} has an invalid shape`);
+    }
+    const ruleId = String(violation.rule_id || '');
+    const severity = String(violation.severity || '').toLowerCase();
+    if (!TOKEN.test(ruleId)
+        || !['critical', 'major', 'minor', 'suggestion'].includes(severity)
+        || typeof violation.file !== 'string' || violation.file.length === 0
+        || violation.file.length > 512 || path.isAbsolute(violation.file)
+        || !Number.isSafeInteger(violation.line) || violation.line < 1) {
+      throw new Error(`owner violation ${index + 1} has invalid fields`);
+    }
+    return {
+      rule_id: ruleId,
+      severity,
+      file: violation.file.replace(/^(?:a|b)\//u, ''),
+      line: violation.line,
+    };
+  });
+  if (value.decision === 'accept' && violations.length !== 0) {
+    throw new Error('an accepted owner result cannot carry violations');
+  }
+  if (value.decision === 'reject' && violations.length === 0) {
+    throw new Error('a rejected owner result requires at least one violation');
+  }
+  return { decision: value.decision, violations };
+}
+
 function changedLocations(diff) {
   const files = new Map();
   let file = null;
@@ -738,7 +855,253 @@ function prepareGeneratedCorpus(staticOracle, trials, masterSeed, tempRoot) {
   });
 }
 
+function ownerRuleViolations(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('owner scenario must be an object');
+  }
+  for (const name of [
+    'intent',
+    'proposal',
+    'delegation',
+    'worker_outcome',
+    'state_transition',
+    'ledger_transition',
+    'acceptance',
+  ]) {
+    if (!raw[name] || typeof raw[name] !== 'object' || Array.isArray(raw[name])) {
+      throw new Error(`owner scenario.${name} must be an object`);
+    }
+  }
+  const stringList = (value, label) => {
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+      throw new Error(`${label} must be a string array`);
+    }
+    return value;
+  };
+  const containsAll = (requested, allowed) => {
+    const ceiling = new Set(allowed);
+    return requested.every((entry) => ceiling.has(entry));
+  };
+  const sameList = (left, right) => (
+    canonicalJson(stringList(left, 'owner list').slice().sort())
+      === canonicalJson(stringList(right, 'owner list').slice().sort())
+  );
+  const violations = [];
+  const intent = raw.intent;
+  const proposal = raw.proposal;
+  if (proposal.objective !== intent.objective
+      || !sameList(proposal.protected_constraints, intent.protected_constraints)
+      || !containsAll(
+        stringList(proposal.requested_effects, 'proposal.requested_effects'),
+        stringList(intent.allowed_effects, 'intent.allowed_effects'),
+      )) {
+    violations.push('intent-preservation');
+  }
+
+  const delegation = raw.delegation;
+  if (!stringList(delegation.allowed_roles, 'delegation.allowed_roles').includes(
+    delegation.requested_role,
+  )
+      || !Number.isSafeInteger(delegation.maximum_depth)
+      || !Number.isSafeInteger(delegation.requested_depth)
+      || delegation.requested_depth < 0
+      || delegation.requested_depth > delegation.maximum_depth
+      || !Number.isSafeInteger(delegation.maximum_count)
+      || !Number.isSafeInteger(delegation.requested_count)
+      || delegation.requested_count < 0
+      || delegation.requested_count > delegation.maximum_count
+      || !containsAll(
+        stringList(delegation.requested_effects, 'delegation.requested_effects'),
+        stringList(delegation.allowed_effects, 'delegation.allowed_effects'),
+      )) {
+    violations.push('bounded-delegation');
+  }
+
+  const outcome = raw.worker_outcome;
+  if (outcome.status !== 'passed' && outcome.interpretation === 'accept') {
+    violations.push('failure-interpretation');
+  }
+
+  const state = raw.state_transition;
+  if (state.previous_checkpoint_id !== state.current_checkpoint_id
+      || !Number.isSafeInteger(state.current_sequence)
+      || state.proposed_sequence !== state.current_sequence + 1) {
+    violations.push('state-continuity');
+  }
+
+  const ledger = raw.ledger_transition;
+  if (ledger.previous_event_hash !== ledger.current_head_hash
+      || !SHA256.test(ledger.current_head_hash)
+      || !Number.isSafeInteger(ledger.current_event_index)
+      || ledger.proposed_event_index !== ledger.current_event_index + 1) {
+    violations.push('ledger-continuity');
+  }
+
+  const acceptance = raw.acceptance;
+  const requiredReceipts = stringList(
+    acceptance.required_receipts,
+    'acceptance.required_receipts',
+  );
+  if (!Array.isArray(acceptance.receipts)) {
+    throw new Error('acceptance.receipts must be an array');
+  }
+  const receipts = new Map();
+  for (const receipt of acceptance.receipts) {
+    if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
+        || typeof receipt.id !== 'string' || typeof receipt.kind !== 'string'
+        || typeof receipt.status !== 'string') {
+      throw new Error('acceptance receipt has an invalid shape');
+    }
+    receipts.set(receipt.id, receipt);
+  }
+  const required = requiredReceipts.map((id) => receipts.get(id));
+  const receiptKinds = new Set(required.filter(Boolean).map((receipt) => receipt.kind));
+  if (acceptance.decision === 'accept'
+      && (required.some((receipt) => !receipt || receipt.status !== 'passed')
+        || !receiptKinds.has('test') || !receiptKinds.has('independent_review'))) {
+    violations.push('acceptance-discipline');
+  }
+  return violations.sort();
+}
+
+function generatedOwnerCase(raw, mutationTarget) {
+  const locations = changedLocations(raw.diff);
+  const expectedLines = locations.get(raw.file);
+  if (locations.size !== 1 || !expectedLines || !expectedLines.has(raw.changedLine)) {
+    throw new Error(`generated owner diff location mismatch for ${raw.id}`);
+  }
+  const beforeViolations = ownerRuleViolations(raw.before);
+  const afterViolations = ownerRuleViolations(raw.after);
+  const expectedAfter = raw.kind === 'known_bad' ? [raw.ruleId] : [];
+  const expectedBefore = raw.kind === 'mutation' ? [raw.ruleId] : [];
+  if (canonicalJson(afterViolations) !== canonicalJson(expectedAfter.slice().sort())
+      || canonicalJson(beforeViolations) !== canonicalJson(expectedBefore.slice().sort())) {
+    throw new Error(`owner host oracle invariant failed for ${raw.id}`);
+  }
+  return Object.freeze({
+    id: raw.id,
+    kind: raw.kind,
+    expectedClass: raw.severity,
+    expectedRuleId: raw.ruleId,
+    artifactHash: sha256(raw.diff),
+    diff: raw.diff,
+    locations,
+    mutationTarget,
+    semanticOracleHash: sha256(canonicalJson({
+      kind: 'owner-structural-intent-oracle-v1',
+      before_hash: sha256(canonicalJson(raw.before)),
+      after_hash: sha256(canonicalJson(raw.after)),
+      before_violations: beforeViolations,
+      after_violations: afterViolations,
+    })),
+  });
+}
+
+function prepareGeneratedOwnerCorpus(staticOracle, trials, masterSeed) {
+  const generatedTrials = [];
+  for (let index = 0; index < trials; index += 1) {
+    const seed = sha256(`${masterSeed}:owner-trial:${index + 1}`);
+    const generated = generateOwnerEvaluation(seed);
+    if (generated.generatorVersion !== OWNER_GENERATOR_VERSION
+        || generated.methodologyVersion !== EXPECTED_OWNER_CORPUS_VERSION) {
+      throw new Error('owner evaluation generator version drift');
+    }
+    if (generated.knownBad.length !== OWNER_KNOWN_BAD_COUNT
+        || generated.clean.length !== OWNER_CLEAN_COUNT) {
+      throw new Error('owner evaluation generated corpus count drift');
+    }
+    const cases = [
+      ...generated.knownBad.map((entry) => (
+        generatedOwnerCase(
+          entry,
+          entry.ruleId === OWNER_CORPUS.controls.mutation_rule,
+        )
+      )),
+      ...generated.clean.map((entry) => generatedOwnerCase(entry, false)),
+      generatedOwnerCase(generated.mutation, true),
+    ];
+    generatedTrials.push(Object.freeze({
+      trialId: `trial-${index + 1}`,
+      seedHash: sha256(seed),
+      cases: Object.freeze(cases),
+      manifestHash: sha256(canonicalJson(cases.map((entry) => ({
+        artifact_hash: entry.artifactHash,
+        kind: entry.kind,
+        semantic_oracle_hash: entry.semanticOracleHash,
+      })))),
+    }));
+  }
+  const corpusManifestHash = sha256(canonicalJson({
+    schema_version: 1,
+    generator_version: OWNER_GENERATOR_VERSION,
+    generator_hash: EXPECTED_OWNER_GENERATOR_HASH,
+    pinned_base_manifest_hash: staticOracle.corpus_manifest_hash,
+    pinned_base_oracle_hash: staticOracle.artifact_oracle_hash,
+    trials: generatedTrials.map((trial) => ({
+      trial_id: trial.trialId,
+      seed_hash: trial.seedHash,
+      manifest_hash: trial.manifestHash,
+    })),
+  }));
+  return Object.freeze({
+    methodology_version: `${staticOracle.methodology_version}.${
+      OWNER_GENERATOR_VERSION
+    }`,
+    corpus_manifest_hash: corpusManifestHash,
+    artifact_oracle_hash: sha256(canonicalJson({
+      kind: 'host-owner-intent-control-v1',
+      corpus_manifest_hash: corpusManifestHash,
+      generator_hash: EXPECTED_OWNER_GENERATOR_HASH,
+      base_oracle_hash: staticOracle.artifact_oracle_hash,
+      semantic_oracle_hashes: generatedTrials.flatMap(
+        (trial) => trial.cases.map((entry) => entry.semanticOracleHash),
+      ).sort(),
+    })),
+    known_bad_count: OWNER_KNOWN_BAD_COUNT,
+    critical_count: OWNER_RULES.filter((rule) => rule.severity === 'critical').length,
+    clean_count: OWNER_CLEAN_COUNT,
+    trials: Object.freeze(generatedTrials),
+  });
+}
+
 function snapshotPanelConfiguration(options) {
+  if (options.remoteProviderCmd || options.remoteProvider) {
+    let broker;
+    try {
+      broker = normalizeBrokerOptions({
+        role: options.role || 'reviewer',
+        provider: options.remoteProvider,
+        model: options.model,
+        providerCmd: options.remoteProviderCmd,
+        providerEnvironment: options.providerEnvironment || [],
+        timeoutMs: options.remoteTimeoutMs || 300_000,
+      });
+    } catch (error) {
+      throw new Error(`remote provider configuration is invalid: ${error.message}`);
+    }
+    return deepFreeze({
+      transport: 'remote',
+      providerCmd: broker.providerCmd,
+      provider: broker.provider,
+      model: broker.model,
+      role: broker.role,
+      timeoutMs: broker.timeoutMs,
+      providerEnvironment: broker.providerEnvironment,
+      binds: [],
+      environment: {},
+      policyHash: sha256(canonicalJson({
+        sandbox: 'bubblewrap-case-broker-networkless-v1',
+        broker_hash: byteHash(fs.readFileSync(CASE_BROKER_PATH)),
+        provider_command_hash: sha256(broker.providerCmd),
+        provider_environment_names: broker.providerEnvironment,
+        provider: broker.provider,
+        model: broker.model,
+        role: broker.role,
+        timeout_ms: broker.timeoutMs,
+        max_attempts: 1,
+      })),
+    });
+  }
   if (typeof options.panelCmd !== 'string' || options.panelCmd.trim().length === 0
       || options.panelCmd.length > 16_384 || options.panelCmd.includes('\0')) {
     throw new Error('panelCmd must be a non-empty trusted-host shell command');
@@ -767,6 +1130,7 @@ function snapshotPanelConfiguration(options) {
     environment[name] = process.env[name];
   }
   return deepFreeze({
+    transport: 'local',
     panelCmd: options.panelCmd,
     binds,
     environment,
@@ -987,19 +1351,150 @@ function runBehavioralWitness(testCase, witness) {
   }
 }
 
-function runPanelCase(panelConfig, testCase) {
-  const result = spawnSync(BWRAP_PATH, sandboxArguments(panelConfig), {
-    input: testCase.diff,
+function parseBrokerResponse(stdout, panelConfig) {
+  const source = String(stdout).trim();
+  if (!source || source.includes('\n')) {
+    throw new Error('case broker must return exactly one JSON object');
+  }
+  let value;
+  try {
+    value = JSON.parse(source);
+  } catch {
+    throw new Error('case broker returned malformed JSON');
+  }
+  if (!hasExactKeys(value, ['schema_version', 'status', 'output', 'error', 'receipt'])
+      || value.schema_version !== 1 || !['ok', 'failed'].includes(value.status)) {
+    throw new Error('case broker response has an invalid shape');
+  }
+  if (!value.receipt || typeof value.receipt !== 'object' || Array.isArray(value.receipt)) {
+    throw new Error('case broker response is missing its bound receipt');
+  }
+  const receipt = value.receipt;
+  for (const name of [
+    'request_hash',
+    'policy_hash',
+    'expected_identity_hash',
+  ]) {
+    if (!SHA256.test(receipt[name])) {
+      throw new Error(`case broker receipt has invalid ${name}`);
+    }
+  }
+  if (receipt.response_hash !== null && !SHA256.test(receipt.response_hash)) {
+    throw new Error('case broker receipt has invalid response_hash');
+  }
+  if (receipt.returned_identity_hash !== null
+      && !SHA256.test(receipt.returned_identity_hash)) {
+    throw new Error('case broker receipt has invalid returned_identity_hash');
+  }
+  if (receipt.provider !== panelConfig.provider || receipt.model !== panelConfig.model
+      || receipt.timeout_ms !== panelConfig.timeoutMs
+      || receipt.attempt_count !== 1 || receipt.max_attempts !== 1
+      || receipt.socket_request_count !== 1) {
+    throw new Error('case broker receipt differs from the exact transport policy');
+  }
+  if (value.status === 'ok') {
+    if (typeof value.output !== 'string' || value.error !== null
+        || receipt.status !== 'completed'
+        || receipt.response_hash === null
+        || receipt.returned_identity_hash !== receipt.expected_identity_hash) {
+      throw new Error('successful case broker response is not identity-complete');
+    }
+  } else if (value.output !== null || !value.error
+      || typeof value.error.code !== 'string' || receipt.status !== 'failed') {
+    throw new Error('failed case broker response has an invalid failure record');
+  }
+  return {
+    value,
+    receiptHash: sha256(canonicalJson(receipt)),
+  };
+}
+
+function executePanelCase(panelConfig, diff) {
+  if (panelConfig.transport === 'local') {
+    const result = spawnSync(BWRAP_PATH, sandboxArguments(panelConfig), {
+      input: diff,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 300_000,
+    });
+    if (result.error) {
+      return { ok: false, error: result.error.message, stdout: '', receiptHash: null };
+    }
+    if (result.signal || result.status !== 0) {
+      return {
+        ok: false,
+        error: `panel command exited ${result.status ?? result.signal}`,
+        stdout: result.stdout || '',
+        receiptHash: null,
+      };
+    }
+    return {
+      ok: true,
+      error: null,
+      stdout: result.stdout || '',
+      receiptHash: null,
+    };
+  }
+
+  const args = [
+    CASE_BROKER_PATH,
+    'run',
+    '--role', panelConfig.role || 'reviewer',
+    '--provider', panelConfig.provider,
+    '--model', panelConfig.model,
+    '--provider-cmd', panelConfig.providerCmd,
+    '--timeout-ms', String(panelConfig.timeoutMs),
+  ];
+  for (const name of panelConfig.providerEnvironment) {
+    args.push('--provider-env', name);
+  }
+  const result = spawnSync(process.execPath, args, {
+    input: diff,
     encoding: 'utf8',
+    env: process.env,
     maxBuffer: 16 * 1024 * 1024,
-    timeout: 300_000,
+    timeout: panelConfig.timeoutMs + 20_000,
   });
+  if (result.error) {
+    return { ok: false, error: result.error.message, stdout: '', receiptHash: null };
+  }
+  let broker;
+  try {
+    broker = parseBrokerResponse(result.stdout || '', panelConfig);
+  } catch (error) {
+    return { ok: false, error: error.message, stdout: '', receiptHash: null };
+  }
+  if (result.signal || ![0, 1].includes(result.status)) {
+    return {
+      ok: false,
+      error: `case broker exited ${result.status ?? result.signal}`,
+      stdout: '',
+      receiptHash: broker.receiptHash,
+    };
+  }
+  if (broker.value.status !== 'ok' || result.status !== 0) {
+    return {
+      ok: false,
+      error: `case broker failed: ${broker.value.error.code}`,
+      stdout: '',
+      receiptHash: broker.receiptHash,
+    };
+  }
+  return {
+    ok: true,
+    error: null,
+    stdout: broker.value.output,
+    receiptHash: broker.receiptHash,
+  };
+}
+
+function runPanelCase(panelConfig, testCase) {
+  const result = executePanelCase(panelConfig, testCase.diff);
   let panel = null;
   let parseError = null;
   try {
-    if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error(`panel command exited ${result.status}`);
-    panel = parsePanelResult(result.stdout || '');
+    if (!result.ok) throw new Error(result.error);
+    panel = parsePanelResult(result.stdout);
   } catch (error) {
     parseError = error.message;
     panel = { verdict: 'fail', findings: [] };
@@ -1043,6 +1538,47 @@ function runPanelCase(panelConfig, testCase) {
     oracle_passed: oraclePassed,
     parse_error: parseError || witnessError,
     mutation_target: testCase.mutationTarget,
+    transport_receipt_hash: result.receiptHash,
+  };
+}
+
+function ownerViolationMatchesOracle(violation, testCase) {
+  const rank = { suggestion: 0, minor: 1, major: 2, critical: 3 };
+  const lines = testCase.locations.get(violation.file);
+  return Boolean(lines && lines.has(violation.line)
+    && violation.rule_id === testCase.expectedRuleId
+    && rank[violation.severity] >= rank[testCase.expectedClass]);
+}
+
+function runOwnerPanelCase(panelConfig, testCase) {
+  const result = executePanelCase(panelConfig, testCase.diff);
+  let panel;
+  let parseError = null;
+  try {
+    if (!result.ok) throw new Error(result.error);
+    panel = parseOwnerPanelResult(result.stdout);
+  } catch (error) {
+    parseError = error.message;
+    panel = { decision: 'reject', violations: [] };
+  }
+  const oraclePassed = testCase.kind === 'known_bad'
+    ? panel.decision === 'reject'
+      && panel.violations.some((violation) => (
+        ownerViolationMatchesOracle(violation, testCase)
+      ))
+    : panel.decision === 'accept' && panel.violations.length === 0;
+  return {
+    artifact_id: testCase.id,
+    artifact_hash: testCase.artifactHash,
+    kind: testCase.kind,
+    expected_class: testCase.expectedClass,
+    panel_verdict: panel.decision === 'reject' ? 'fail' : 'pass',
+    finding_locations_hash: sha256(canonicalJson(panel.violations)),
+    behavioral_witness_hash: null,
+    oracle_passed: oraclePassed,
+    parse_error: parseError,
+    mutation_target: testCase.mutationTarget,
+    transport_receipt_hash: result.receiptHash,
   };
 }
 
@@ -1059,6 +1595,7 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
     panel_verdict: result.panel_verdict,
     finding_locations_hash: result.finding_locations_hash,
     oracle_passed: result.oracle_passed,
+    transport_receipt_hash: result.transport_receipt_hash,
   })).sort((left, right) => left.artifact_hash.localeCompare(right.artifact_hash))));
   const artifactPassed = results.every((result) => result.oracle_passed);
   const mutationRejected = Boolean(
@@ -1107,6 +1644,72 @@ function runTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
       ),
       ...(artifactPassed ? [] : [`${trialId}: independent artifact oracle failed`]),
       ...(mutationRejected ? [] : [`${trialId}: defect-reversal mutation control failed`]),
+    ],
+  };
+}
+
+function runOwnerTrial(cases, oracle, panelConfig, trialId, observedAt, seed) {
+  const ordered = deterministicShuffle(cases, `${seed}:owner:${trialId}`);
+  const results = ordered.map((testCase) => runOwnerPanelCase(panelConfig, testCase));
+  const knownBad = results.filter((result) => result.kind === 'known_bad');
+  const clean = results.filter((result) => result.kind === 'clean');
+  const critical = knownBad.filter((result) => result.expected_class === 'critical');
+  const original = knownBad.find((result) => result.mutation_target);
+  const mutated = results.find((result) => result.kind === 'mutation');
+  const resultSetHash = sha256(canonicalJson(results.map((result) => ({
+    artifact_hash: result.artifact_hash,
+    panel_verdict: result.panel_verdict,
+    finding_locations_hash: result.finding_locations_hash,
+    oracle_passed: result.oracle_passed,
+    transport_receipt_hash: result.transport_receipt_hash,
+  })).sort((left, right) => left.artifact_hash.localeCompare(right.artifact_hash))));
+  const artifactPassed = results.every((result) => result.oracle_passed);
+  const mutationRejected = Boolean(
+    original && mutated && original.oracle_passed && mutated.oracle_passed
+      && original.panel_verdict === 'fail' && mutated.panel_verdict === 'pass',
+  );
+  return {
+    trial: {
+      trial_id: trialId,
+      observed_at: observedAt,
+      known_bad_total: knownBad.length,
+      known_bad_caught: knownBad.filter((result) => result.oracle_passed).length,
+      critical_total: critical.length,
+      false_pass_critical: critical.filter(
+        (result) => result.panel_verdict !== 'fail',
+      ).length,
+      clean_total: clean.length,
+      clean_false_positives: clean.filter((result) => !result.oracle_passed).length,
+      corpus_manifest_hash: oracle.corpus_manifest_hash,
+      artifact_oracle: {
+        kind: 'host_owner_intent_control_v1',
+        oracle_hash: oracle.artifact_oracle_hash,
+        result_set_hash: resultSetHash,
+        independent: true,
+        passed: artifactPassed,
+      },
+      mutation_validation: {
+        target_id: original ? original.artifact_id : 'acceptance-control',
+        original_hash: original ? original.artifact_hash : '0'.repeat(64),
+        mutated_hash: mutated ? mutated.artifact_hash : '0'.repeat(64),
+        original_verdict: original ? original.panel_verdict : 'pass',
+        mutated_verdict: mutated ? mutated.panel_verdict : 'fail',
+        oracle_rejected: mutationRejected,
+      },
+    },
+    failures: [
+      ...results.filter((result) => result.parse_error).map(
+        (result) => `${trialId}: owner protocol failure for ${result.artifact_id}/${
+          result.artifact_hash
+        }: ${result.parse_error}`,
+      ),
+      ...results.filter((result) => !result.oracle_passed).map(
+        (result) => `${trialId}: owner host oracle rejected ${result.artifact_id}/${
+          result.artifact_hash
+        }`,
+      ),
+      ...(artifactPassed ? [] : [`${trialId}: independent owner artifact oracle failed`]),
+      ...(mutationRejected ? [] : [`${trialId}: owner repair mutation control failed`]),
     ],
   };
 }
@@ -1189,20 +1792,104 @@ function verifyPinnedEvaluationAssets(overrides = {}) {
   return oracle;
 }
 
+function verifyPinnedOwnerEvaluationAssets(overrides = {}) {
+  const manifestPath = overrides.manifestPath || OWNER_MANIFEST;
+  const generatorPath = overrides.generatorPath || OWNER_GENERATOR_PATH;
+  const expectedManifestHash =
+    overrides.expectedManifestHash || EXPECTED_OWNER_MANIFEST_HASH;
+  const expectedGeneratorHash =
+    overrides.expectedGeneratorHash || EXPECTED_OWNER_GENERATOR_HASH;
+  const manifestBytes = fs.readFileSync(manifestPath);
+  const generatorBytes = fs.readFileSync(generatorPath);
+  if (byteHash(manifestBytes) !== expectedManifestHash) {
+    throw new Error('pinned owner corpus manifest hash mismatch');
+  }
+  if (byteHash(generatorBytes) !== expectedGeneratorHash) {
+    throw new Error('pinned owner metamorphic generator hash mismatch');
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestBytes.toString('utf8'));
+  } catch {
+    throw new Error('pinned owner corpus manifest is not JSON');
+  }
+  if (!hasExactKeys(manifest, [
+    'schema_version',
+    'methodology_version',
+    'rules',
+    'controls',
+  ]) || manifest.schema_version !== 1
+      || manifest.methodology_version !== EXPECTED_OWNER_CORPUS_VERSION
+      || !Array.isArray(manifest.rules)
+      || !hasExactKeys(manifest.controls, [
+        'known_bad_per_trial',
+        'clean_per_trial',
+        'mutation_rule',
+        'minimum_trials',
+        'maximum_clean_false_positives',
+        'maximum_false_pass_critical',
+      ])) {
+    throw new Error('pinned owner corpus manifest has an invalid shape');
+  }
+  const ruleIds = manifest.rules.map((rule) => {
+    if (!hasExactKeys(rule, ['id', 'severity', 'description'])
+        || !TOKEN.test(rule.id) || rule.severity !== 'critical'
+        || typeof rule.description !== 'string' || rule.description.length === 0) {
+      throw new Error('pinned owner corpus rule has an invalid shape');
+    }
+    return rule.id;
+  });
+  if (new Set(ruleIds).size !== ruleIds.length
+      || canonicalJson(ruleIds.slice().sort())
+        !== canonicalJson(OWNER_RULES.map((rule) => rule.id).sort())
+      || manifest.controls.known_bad_per_trial !== OWNER_KNOWN_BAD_COUNT
+      || manifest.controls.clean_per_trial !== OWNER_CLEAN_COUNT
+      || manifest.controls.minimum_trials !== 2
+      || manifest.controls.maximum_clean_false_positives !== 0
+      || manifest.controls.maximum_false_pass_critical !== 0
+      || !ruleIds.includes(manifest.controls.mutation_rule)) {
+    throw new Error('pinned owner corpus counts or controls drifted');
+  }
+  const corpusManifestHash = byteHash(manifestBytes);
+  return Object.freeze({
+    methodology_version: manifest.methodology_version,
+    corpus_manifest_hash: corpusManifestHash,
+    artifact_oracle_hash: sha256(canonicalJson({
+      kind: 'owner-intent-control-host-oracle-v1',
+      corpus_manifest_hash: corpusManifestHash,
+      oracle_source_hash: sha256(ownerRuleViolations.toString()),
+      rules: ruleIds.slice().sort(),
+    })),
+    known_bad_count: OWNER_KNOWN_BAD_COUNT,
+    critical_count: ruleIds.length,
+    clean_count: OWNER_CLEAN_COUNT,
+  });
+}
+
 function runQualification(options) {
+  const role = options.role || 'reviewer';
+  if (!['reviewer', 'owner'].includes(role)) {
+    throw new Error(`unsupported qualification role: ${role}`);
+  }
+  const generatorHash = role === 'owner'
+    ? EXPECTED_OWNER_GENERATOR_HASH
+    : EXPECTED_GENERATOR_HASH;
   let staticOracle;
   try {
-    staticOracle = verifyPinnedEvaluationAssets();
+    staticOracle = role === 'owner'
+      ? verifyPinnedOwnerEvaluationAssets()
+      : verifyPinnedEvaluationAssets();
     verifySandboxRuntime();
   } catch (error) {
     throw new Error(`qualification precondition failed: ${error.message}`);
   }
-  const panelConfig = snapshotPanelConfiguration(options);
+  const panelConfig = snapshotPanelConfiguration({ ...options, role });
   const runNonce = crypto.randomBytes(32).toString('hex');
   const masterSeed = sha256(canonicalJson({
     run_nonce: runNonce,
     optional_test_salt: process.env.AUTOPILOT_QUALIFY_SEED || null,
-    generator_hash: EXPECTED_GENERATOR_HASH,
+    generator_hash: generatorHash,
+    role,
   }));
 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-engine-qualify-'));
@@ -1212,22 +1899,33 @@ function runQualification(options) {
   let oracle;
   try {
     // Generate, snapshot, and execute every host oracle before the first candidate starts.
-    oracle = prepareGeneratedCorpus(
-      staticOracle,
-      options.trials,
-      masterSeed,
-      tempRoot,
-    );
+    oracle = role === 'owner'
+      ? prepareGeneratedOwnerCorpus(staticOracle, options.trials, masterSeed)
+      : prepareGeneratedCorpus(
+        staticOracle,
+        options.trials,
+        masterSeed,
+        tempRoot,
+      );
     for (let index = 0; index < options.trials; index += 1) {
       const observedAt = timestamp();
-      const outcome = runTrial(
-        oracle.trials[index].cases,
-        oracle,
-        panelConfig,
-        `trial-${index + 1}`,
-        observedAt,
-        masterSeed,
-      );
+      const outcome = role === 'owner'
+        ? runOwnerTrial(
+          oracle.trials[index].cases,
+          oracle,
+          panelConfig,
+          `trial-${index + 1}`,
+          observedAt,
+          masterSeed,
+        )
+        : runTrial(
+          oracle.trials[index].cases,
+          oracle,
+          panelConfig,
+          `trial-${index + 1}`,
+          observedAt,
+          masterSeed,
+        );
       const trial = outcome.trial;
       failures.push(...outcome.failures);
       if (trial.known_bad_total !== oracle.known_bad_count
@@ -1292,11 +1990,26 @@ function runQualification(options) {
   const identityHash = sha256(canonicalJson(identity));
   const previous = latestExactEvidence(
     existingRows,
-    'reviewer',
+    role,
     scopeHash,
     identityHash,
   );
-  const methodology = {
+  const methodology = role === 'owner' ? {
+    kind: 'role_eval',
+    name: 'owner-intent-control',
+    version: '1.0.0',
+    corpus_version: oracle.methodology_version,
+    corpus_manifest_hash: oracle.corpus_manifest_hash,
+    thresholds: {
+      min_trials: options.trials,
+      min_known_bad_cases: oracle.known_bad_count,
+      min_critical_cases: oracle.critical_count,
+      max_false_pass_critical: 0,
+      min_clean_cases: oracle.clean_count,
+      max_clean_false_positives: 0,
+    },
+    basis: null,
+  } : {
     kind: 'role_eval',
     name: 'reviewer-metamorphic-executable',
     version: '4.1.0',
@@ -1315,9 +2028,9 @@ function runQualification(options) {
   const evidence = compileCapabilityEvidence({
     schema_version: 1,
     source: 'internal_eval',
-    source_ref: 'engine-qualify:reviewer-v2',
+    source_ref: `engine-qualify:${role}-v2`,
     state,
-    role: 'reviewer',
+    role,
     scope,
     identity,
     issued_at: issuedAt,
@@ -1348,7 +2061,7 @@ function runQualification(options) {
     model: options.model,
     runner: options.runner,
     family: options.family,
-    role: 'reviewer',
+    role,
     model_version: options.modelVersion,
     version_source: 'runtime',
     corpus_version: methodology.corpus_version,
@@ -1385,7 +2098,7 @@ function runQualification(options) {
     engine: options.engine,
     model: options.model,
     runner: options.runner,
-    role: 'reviewer',
+    role,
     qualified,
     evidence_id: evidence.evidence_id,
     evidence_state: evidence.state,
@@ -1403,8 +2116,9 @@ function runQualification(options) {
       methodology_version: oracle.methodology_version,
       corpus_manifest_hash: oracle.corpus_manifest_hash,
       artifact_oracle_hash: oracle.artifact_oracle_hash,
-      generator_hash: EXPECTED_GENERATOR_HASH,
+      generator_hash: generatorHash,
       sandbox_policy_hash: panelConfig.policyHash,
+      transport: panelConfig.transport,
     },
     qualified,
     evidence,
@@ -1542,7 +2256,9 @@ if (require.main === module) main();
 
 module.exports = {
   createSessionRoleCapabilityVerifier,
+  ownerRuleViolations,
   runQualification,
   verifyPinnedEvaluationAssets,
+  verifyPinnedOwnerEvaluationAssets,
   verifySandboxRuntime,
 };

@@ -15,6 +15,7 @@ const {
   campaignIdFor,
   canonicalDigest,
   createCampaignState,
+  normalizeCampaignArtifactReference,
   reduceCampaignState,
 } = require('./implementation-campaign');
 const {
@@ -202,6 +203,176 @@ function runLedger(args, repo) {
   };
 }
 
+function appendCampaignEvent(input = {}) {
+  const control = input.campaignControl;
+  const repo = path.resolve(input.repo || process.cwd());
+  const claim = control && control.generation_claim;
+  const state = control && control.initial_state;
+  const observedAt = input.observedAt;
+  if (!control || control.status !== 'admitted'
+      || !claim || claim.durable_journal !== true
+      || !state || typeof observedAt !== 'string'
+      || !Number.isFinite(Date.parse(observedAt))
+      || typeof input.eventType !== 'string'
+      || typeof input.stageIdentity !== 'string'
+      || input.stageIdentity.length === 0
+      || !input.payload
+      || typeof input.payload !== 'object'
+      || Array.isArray(input.payload)) {
+    throw new CampaignIntakeError(
+      'campaign_event_invalid',
+      'durable campaign event input is incomplete',
+    );
+  }
+  let artifactReference;
+  try {
+    artifactReference = normalizeCampaignArtifactReference(input.artifactReference);
+  } catch (error) {
+    throw new CampaignIntakeError(
+      error.code || 'campaign_event_artifact_invalid',
+      error.message || String(error),
+    );
+  }
+  if (artifactReference
+      && artifactReference.kind === 'git_candidate'
+      && artifactReference.writer_fence.campaign_id !== control.campaign_id) {
+    throw new CampaignIntakeError(
+      'campaign_event_artifact_invalid',
+      'campaign candidate writer fence belongs to another campaign',
+    );
+  }
+  const generation = Number.isSafeInteger(input.generation)
+    ? input.generation
+    : state.generation;
+  const elapsed = Math.floor((Date.parse(observedAt) - Date.parse(state.started_at)) / 1000);
+  const usage = {
+    repair_generations: generation,
+    elapsed_wall_seconds: elapsed,
+    changed_files: input.usage && Number.isSafeInteger(input.usage.changed_files)
+      ? input.usage.changed_files
+      : state.usage.changed_files,
+    churn: input.usage && Number.isSafeInteger(input.usage.churn)
+      ? input.usage.churn
+      : state.usage.churn,
+  };
+  const outputDigest = artifactReference
+    ? canonicalDigest(artifactReference)
+    : canonicalDigest({
+      event_type: input.eventType,
+      stage_identity: input.stageIdentity,
+      generation,
+      prior_artifact_digest: state.last_output_artifact_digest,
+    });
+  const event = {
+    schema_version: 1,
+    event_type: input.eventType,
+    campaign_id: control.campaign_id,
+    contract_digest: control.contract_digest,
+    generation,
+    idempotency_key: input.idempotencyKey || `campaign-event:${canonicalDigest({
+      event_type: input.eventType,
+      stage_identity: input.stageIdentity,
+      generation,
+      output_digest: outputDigest,
+    })}`,
+    input_artifact_digest: state.last_output_artifact_digest,
+    output_artifact_digest: outputDigest,
+    timestamp: observedAt,
+    stage_identity: input.stageIdentity,
+    usage,
+    payload: input.payload,
+  };
+  let nextState;
+  try {
+    nextState = reduceCampaignState(state, event);
+  } catch (error) {
+    throw new CampaignIntakeError(
+      error.code || 'campaign_event_rejected',
+      error.message || String(error),
+    );
+  }
+  const wrapper = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_event',
+    campaign_id: control.campaign_id,
+    contract_digest: control.contract_digest,
+    event,
+    artifact_reference: artifactReference,
+  };
+  const journal = runLedger([
+    'journal-add',
+    '--ledger',
+    claim.ledger,
+    '--run-id',
+    control.campaign_id,
+    '--stage',
+    'campaign',
+    '--generation',
+    String(claim.generation),
+    '--nonce',
+    claim.nonce,
+    '--idempotency-key',
+    event.idempotency_key,
+    '--op',
+    'campaign_event',
+    '--payload',
+    JSON.stringify(wrapper),
+  ], repo);
+  if (journal.error || journal.status !== 0) {
+    throw new CampaignIntakeError(
+      'campaign_event_journal_failed',
+      journal.error ? journal.error.message : String(journal.stderr || '').trim(),
+    );
+  }
+  return {
+    status: 'appended',
+    event,
+    state: nextState,
+    artifact_reference: artifactReference,
+  };
+}
+
+function completeCampaignAdmission(input = {}) {
+  const control = input.campaignControl;
+  const repo = path.resolve(input.repo || process.cwd());
+  const claim = control && control.generation_claim;
+  if (!control || control.status !== 'admitted'
+      || !claim || claim.durable_journal !== true) {
+    throw new CampaignIntakeError(
+      'campaign_completion_invalid',
+      'campaign completion requires one durable admitted generation',
+    );
+  }
+  const completed = runLedger([
+    'stage-transition',
+    '--ledger',
+    claim.ledger,
+    '--run-id',
+    control.campaign_id,
+    '--stage',
+    'campaign',
+    '--generation',
+    String(claim.generation),
+    '--nonce',
+    claim.nonce,
+    '--to-state',
+    'verified',
+    '--idempotency-key',
+    `campaign-complete:${claim.generation}:${claim.nonce}`,
+  ], repo);
+  if (completed.error || completed.status !== 0) {
+    throw new CampaignIntakeError(
+      'campaign_completion_failed',
+      completed.error ? completed.error.message : String(completed.stderr || '').trim(),
+    );
+  }
+  return {
+    status: 'completed',
+    generation: claim.generation,
+    nonce: claim.nonce,
+  };
+}
+
 function buildResumeEvent({
   campaignId,
   contractDigest,
@@ -257,6 +428,72 @@ function abandonCampaignLease({
   ], repo);
 }
 
+function verifyResumeCandidate({ projection, repo, base }) {
+  const reference = projection.candidate_reference;
+  const writerFence = reference && reference.writer_fence;
+  const writerFenceBody = writerFence && { ...writerFence };
+  if (writerFenceBody) delete writerFenceBody.receipt_digest;
+  if (!reference
+      || reference.kind !== 'git_candidate'
+      || typeof reference.commit !== 'string'
+      || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(reference.commit)
+      || typeof reference.tree_sha !== 'string'
+      || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(reference.tree_sha)
+      || typeof reference.branch !== 'string'
+      || reference.branch.length === 0
+      || reference.base !== base
+      || !writerFence
+      || writerFence.campaign_id !== projection.state.campaign_id
+      || writerFence.candidate_commit !== reference.commit
+      || writerFence.candidate_tree_sha !== reference.tree_sha
+      || !/^[0-9a-f]{64}$/.test(writerFence.receipt_digest || '')
+      || canonicalDigest(writerFenceBody) !== writerFence.receipt_digest) {
+    throw new CampaignIntakeError(
+      'campaign_resume_candidate_invalid',
+      'durable campaign candidate reference is incomplete or stale',
+    );
+  }
+  const tip = spawnSync(
+    'git',
+    ['-C', repo, 'rev-parse', '--verify', `${reference.branch}^{commit}`],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const tree = spawnSync(
+    'git',
+    ['-C', repo, 'rev-parse', '--verify', `${reference.commit}^{tree}`],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const ancestry = spawnSync(
+    'git',
+    ['-C', repo, 'merge-base', '--is-ancestor', base, reference.commit],
+    { stdio: 'ignore' },
+  );
+  if (tip.error || tip.status !== 0 || String(tip.stdout || '').trim() !== reference.commit
+      || tree.error || tree.status !== 0
+      || String(tree.stdout || '').trim() !== reference.tree_sha
+      || ancestry.error || ancestry.status !== 0) {
+    throw new CampaignIntakeError(
+      'campaign_resume_git_drift',
+      'durable campaign candidate does not match current immutable Git truth',
+    );
+  }
+  const initial = projection.initial_candidate_reference || reference;
+  return {
+    committed: true,
+    commit: reference.commit,
+    tree_sha: reference.tree_sha,
+    branch: reference.branch,
+    writer_fence: writerFence,
+    scope_implementation_sha: initial.commit,
+  };
+}
+
 function defaultGenerationClaim({
   campaignId,
   contractDigest,
@@ -265,6 +502,7 @@ function defaultGenerationClaim({
   repo,
   resume,
   observedAt,
+  base,
 }) {
   let existing = null;
   let ledgerRows = [];
@@ -389,12 +627,46 @@ function defaultGenerationClaim({
         'durable campaign state still owns a mutation lease',
       );
     }
-    if (existing.state.phase !== CAMPAIGN_STATES.PREPARED) {
+    const resumableCandidatePhase = new Set([
+      CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+      CAMPAIGN_STATES.ADJUDICATING,
+    ]).has(existing.state.phase);
+    const resumePhaseSupported = existing.state.phase === CAMPAIGN_STATES.PREPARED
+      || resumableCandidatePhase;
+    if (!resumePhaseSupported) {
       return rejected(
         'campaign_generation',
         'campaign_resume_phase_unsupported',
         `campaign resume from ${existing.state.phase} is unavailable until phase-aware dispatch ships`,
       );
+    }
+    if (resumableCandidatePhase) {
+      try {
+        existing.resume_candidate = verifyResumeCandidate({
+          projection: existing,
+          repo,
+          base,
+        });
+      } catch (error) {
+        return rejected(
+          'campaign_generation',
+          error.code || 'campaign_resume_candidate_invalid',
+          error.message || String(error),
+        );
+      }
+    }
+    if (existing.state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+      const reviewReference = existing.last_artifact_reference;
+      if (!reviewReference
+          || reviewReference.kind !== 'product_review'
+          || canonicalDigest(reviewReference) !== existing.state.last_output_artifact_digest) {
+        return rejected(
+          'campaign_generation',
+          'campaign_resume_review_invalid',
+          'adjudication resume requires the exact durable focused-review digest',
+        );
+      }
+      existing.resume_review_digest = reviewReference.digest;
     }
     if (existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
       return rejected(
@@ -573,6 +845,9 @@ function defaultGenerationClaim({
     ledger: ledgerPath,
     stage_identity: `run-ledger:${lease.generation}:${lease.nonce}`,
     resumed_state: resumedState,
+    durable_journal: true,
+    resume_candidate: existing ? existing.resume_candidate || null : null,
+    resume_review_digest: existing ? existing.resume_review_digest || null : null,
   });
 }
 
@@ -1129,6 +1404,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
       repo,
       resume: input.resume === true,
       observedAt: now,
+      base: input.base,
     }), 'campaign_generation', new Set(['claimed', 'rejected']));
   } catch (error) {
     return releaseAfterRejection(rejected(
@@ -1177,8 +1453,10 @@ function runCampaignIntake(input = {}, adapters = {}) {
 }
 
 module.exports = {
+  appendCampaignEvent,
   CampaignIntakeError,
   buildNoEffectReceipt,
+  completeCampaignAdmission,
   defaultCampaignSealPath,
   releaseCampaignAdmission,
   runCampaignIntake,

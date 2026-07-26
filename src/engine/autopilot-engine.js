@@ -16,10 +16,17 @@ const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
 const {
+  appendCampaignEvent,
+  completeCampaignAdmission,
   releaseCampaignAdmission,
   runCampaignIntake,
 } = require('./campaign-intake');
 const { runCampaignComposition } = require('./campaign-composition');
+const {
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
+} = require('./implementation-campaign');
+const { normalizeProductReviewFindings } = require('./product-review-normalizer');
 const {
   canonicalDigest: campaignCanonicalDigest,
   createDetachedCheckoutAttestation,
@@ -1301,6 +1308,9 @@ class AutopilotEngine {
     this.campaignIntake = options.campaignIntake || runCampaignIntake;
     this.campaignAdmissionReleaser = options.campaignAdmissionReleaser
       || releaseCampaignAdmission;
+    this.campaignEventAppender = options.campaignEventAppender || appendCampaignEvent;
+    this.campaignAdmissionCompleter = options.campaignAdmissionCompleter
+      || completeCampaignAdmission;
     this.campaignComposer = options.campaignComposer || runCampaignComposition;
     this.campaignAdjudicator = options.campaignAdjudicator || defaultCampaignAdjudicator;
     this.campaignDispositionProvider = options.campaignDispositionProvider || null;
@@ -2232,11 +2242,65 @@ class AutopilotEngine {
     const reviewChain = [];
     const verificationCache = new Map();
     const convergenceArtifacts = [];
+    const durableJournal = campaignControl.generation_claim.durable_journal === true;
+    const resumeCandidate = campaignControl.generation_claim.resume_candidate || null;
+    const resumeReviewDigest = campaignControl.generation_claim.resume_review_digest || null;
     let scopeSession = null;
     let currentBase = base;
     let repairPromptFile = promptFile;
     let latestReview = null;
+    let latestAdjudication = null;
+    let latestVerification = null;
     let implementationRound = 0;
+    let resumeSetupError = null;
+
+    const recordCampaignEvent = (eventInput) => {
+      if (!durableJournal) return null;
+      const appended = this.campaignEventAppender({
+        repo: loopCwd,
+        campaignControl,
+        observedAt: this.now(),
+        ...eventInput,
+      });
+      if (!appended || appended.status !== 'appended' || !appended.state) {
+        throw new Error('campaign event appender did not return durable state');
+      }
+      campaignControl.initial_state = appended.state;
+      return appended;
+    };
+    const recordGreenVerification = (receipt, repairGeneration) => {
+      if (resumeReviewDigest
+          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+        return;
+      }
+      recordCampaignEvent({
+        eventType: CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
+        generation: repairGeneration,
+        stageIdentity: `campaign-verification:${repairGeneration}`,
+        payload: {
+          passed: true,
+          evidence_digest: receipt.receipt_digest,
+        },
+        artifactReference: {
+          kind: 'verification_receipt',
+          digest: receipt.receipt_digest,
+        },
+      });
+    };
+
+    if (resumeCandidate) {
+      try {
+        scopeSession = createCampaignScopeSession({
+          contract: campaignControl.contract,
+          base,
+          implementationSha: resumeCandidate.scope_implementation_sha,
+        });
+        currentBase = resumeCandidate.commit;
+        implementationRound = campaignControl.initial_state.generation + 1;
+      } catch (error) {
+        resumeSetupError = error.message || String(error);
+      }
+    }
 
     const performReview = ({ candidate, scope, repair_generation: repairGeneration }) => {
       let diffFile;
@@ -2302,19 +2366,64 @@ class AutopilotEngine {
           raw: reviewed,
         };
       }
-      const findings = reviewed.review && typeof reviewed.review.findings === 'string'
+      let findings = reviewed.review && typeof reviewed.review.findings === 'string'
         ? reviewed.review.findings
         : '';
+      if (findings.trim().length > 0) {
+        const normalized = normalizeProductReviewFindings(findings);
+        if (normalized.status !== 'normalized') {
+          return {
+            reviewed: false,
+            phase: 'product_review_normalization',
+            reason: normalized.reason,
+            raw: reviewed,
+          };
+        }
+        findings = normalized.canonical;
+      }
+      const reviewDigest = campaignCanonicalDigest({
+        verdict: reviewed.verdict,
+        findings,
+        scope,
+        tree_sha: candidate.tree_sha,
+      });
+      if (scope !== 'final'
+          && resumeReviewDigest
+          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+        if (reviewDigest !== resumeReviewDigest) {
+          return {
+            reviewed: false,
+            phase: 'campaign_resume_review',
+            reason: 'replayed focused review does not match the durable review digest',
+            raw: reviewed,
+          };
+        }
+      } else if (scope !== 'final') {
+        try {
+          recordCampaignEvent({
+            eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+            generation: repairGeneration,
+            stageIdentity: `campaign-review:${repairGeneration}`,
+            payload: { review_digest: reviewDigest },
+            artifactReference: {
+              kind: 'product_review',
+              digest: reviewDigest,
+            },
+          });
+        } catch (error) {
+          return {
+            reviewed: false,
+            phase: 'campaign_event_journal',
+            reason: error.message || String(error),
+            raw: reviewed,
+          };
+        }
+      }
       return {
         reviewed: true,
         verdict: reviewed.verdict,
         findings,
-        review_digest: campaignCanonicalDigest({
-          verdict: reviewed.verdict,
-          findings,
-          scope,
-          tree_sha: candidate.tree_sha,
-        }),
+        review_digest: reviewDigest,
         raw: reviewed,
       };
     };
@@ -2325,8 +2434,19 @@ class AutopilotEngine {
     );
     const composition = this.campaignComposer({
       maxRepairGenerations,
+      resume: resumeCandidate && !resumeSetupError
+        ? {
+          phase: campaignControl.initial_state.phase,
+          repair_generation: campaignControl.initial_state.generation,
+          candidate: resumeCandidate,
+        }
+        : null,
     }, {
-      preflight: () => ({ passed: true, intake: campaignControl }),
+      preflight: () => ({
+        passed: resumeSetupError === null,
+        reason: resumeSetupError,
+        intake: campaignControl,
+      }),
       implement: ({
         kind,
         repair_generation: repairGeneration,
@@ -2379,6 +2499,23 @@ class AutopilotEngine {
           } catch (error) {
             return { committed: false, reason: error.message || String(error) };
           }
+        }
+        try {
+          recordCampaignEvent({
+            eventType: kind === 'initial'
+              ? CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED
+              : CAMPAIGN_EVENTS.REPAIR_STARTED,
+            generation: repairGeneration,
+            stageIdentity: `campaign-mutation:${repairGeneration}`,
+            payload: { sealed_contract: true },
+            artifactReference: null,
+          });
+        } catch (error) {
+          return {
+            committed: false,
+            phase: 'campaign_event_journal',
+            reason: error.message || String(error),
+          };
         }
         const implementation = this.implementTask({
           promptFile: repairPromptFile,
@@ -2466,7 +2603,7 @@ class AutopilotEngine {
         };
       },
       scopeCheck: ({ checkpoint, candidate }) => {
-        const receipt = this.campaignScopeChecker({
+        let receipt = this.campaignScopeChecker({
           session: scopeSession,
           repo: loopCwd,
           head: candidate.commit,
@@ -2481,6 +2618,48 @@ class AutopilotEngine {
             receipt_digest: receipt.receipt_digest || null,
           },
         ));
+        if (durableJournal
+            && receipt.passed === true
+            && new Set(['after_initial_mutation', 'after_repair_mutation']).has(checkpoint)) {
+          try {
+            const state = campaignControl.initial_state;
+            const eventType = state.phase === CAMPAIGN_STATES.IMPLEMENTING
+              ? CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED
+              : CAMPAIGN_EVENTS.REPAIR_COMPLETED;
+            recordCampaignEvent({
+              eventType,
+              generation: state.generation,
+              stageIdentity: state.live_lease.stage_identity,
+              usage: {
+                changed_files: Array.isArray(receipt.changed_files)
+                  ? receipt.changed_files.length
+                  : state.usage.changed_files,
+                churn: Number.isSafeInteger(receipt.total_churn)
+                  ? receipt.total_churn
+                  : state.usage.churn,
+              },
+              payload: {
+                scope_check_passed: true,
+                scope_check_digest: receipt.receipt_digest,
+              },
+              artifactReference: {
+                kind: 'git_candidate',
+                commit: candidate.commit,
+                tree_sha: candidate.tree_sha,
+                branch: candidate.branch,
+                base,
+                writer_fence: candidate.writer_fence,
+              },
+            });
+          } catch (error) {
+            receipt = {
+              ...receipt,
+              passed: false,
+              reason: error.message || String(error),
+              phase: 'campaign_event_journal',
+            };
+          }
+        }
         return receipt;
       },
       verify: ({ candidate, repair_generation: repairGeneration }) => {
@@ -2506,6 +2685,18 @@ class AutopilotEngine {
         });
         const cached = verificationCache.get(request.request_digest);
         if (reusableGreenReceipt(cached, request)) {
+          try {
+            recordGreenVerification(cached, repairGeneration);
+          } catch (error) {
+            return {
+              passed: false,
+              retriable: false,
+              phase: 'campaign_event_journal',
+              reason: error.message || String(error),
+              receipt_digest: cached.receipt_digest,
+            };
+          }
+          latestVerification = cached;
           return {
             passed: true,
             cached: true,
@@ -2633,6 +2824,7 @@ class AutopilotEngine {
           };
         }
         if (receipt.verdict === 'GREEN') verificationCache.set(request.request_digest, receipt);
+        latestVerification = receipt;
         ledger.push(this.ledgerEntry(
           'campaign_verification',
           receipt.verdict === 'GREEN' ? 'passed' : 'failed',
@@ -2644,6 +2836,20 @@ class AutopilotEngine {
             cleanup_warning: cleanupReason,
           },
         ));
+        if (receipt.verdict === 'GREEN') {
+          try {
+            recordGreenVerification(receipt, repairGeneration);
+          } catch (error) {
+            return {
+              passed: false,
+              retriable: false,
+              phase: 'campaign_event_journal',
+              reason: error.message || String(error),
+              receipt_digest: receipt.receipt_digest,
+              receipt,
+            };
+          }
+        }
         return {
           passed: receipt.verdict === 'GREEN',
           cached: false,
@@ -2661,6 +2867,8 @@ class AutopilotEngine {
               repairGeneration,
               final,
               contract: campaignControl.contract,
+              campaignId: campaignControl.campaign_id,
+              contractDigest: campaignControl.contract_digest,
               cwd: loopCwd,
             });
           } catch (error) {
@@ -2674,7 +2882,7 @@ class AutopilotEngine {
             };
           }
         }
-        return this.campaignAdjudicator({
+        const adjudication = this.campaignAdjudicator({
           review,
           repairGeneration,
           final,
@@ -2684,6 +2892,8 @@ class AutopilotEngine {
           cwd: loopCwd,
           now: this.now(),
         });
+        latestAdjudication = adjudication;
+        return adjudication;
       },
       convergence: ({
         repair_generation: repairGeneration,
@@ -2702,10 +2912,50 @@ class AutopilotEngine {
           // counts repairs after that candidate.
           generationCap: maxRepairGenerations + 1,
         });
-        const passed = !budget.exhausted && gate.verdict === 'PASS';
+        let passed = !budget.exhausted && gate.verdict === 'PASS';
+        let journalReason = null;
+        if (passed && reason !== 'acceptance' && Number.isSafeInteger(nextGeneration)) {
+          const registryDigest = reason === 'review_findings'
+            && latestAdjudication
+            && /^[0-9a-f]{64}$/.test(latestAdjudication.registry_digest || '')
+            ? latestAdjudication.registry_digest
+            : campaignCanonicalDigest({
+              reason,
+              verification_receipt_digest: latestVerification
+                ? latestVerification.receipt_digest
+                : null,
+            });
+          const repairGateDigest = campaignCanonicalDigest({
+            reason,
+            registry_digest: registryDigest,
+            next_generation: nextGeneration,
+          });
+          try {
+            recordCampaignEvent({
+              eventType: CAMPAIGN_EVENTS.REPAIR_AUTHORIZED,
+              generation: nextGeneration,
+              stageIdentity: `campaign-repair-authorization:${nextGeneration}`,
+              payload: {
+                registry_complete: true,
+                registry_digest: registryDigest,
+                repair_gate_passed: true,
+                repair_gate_digest: repairGateDigest,
+              },
+              artifactReference: {
+                kind: 'finding_registry',
+                digest: registryDigest,
+              },
+            });
+          } catch (error) {
+            passed = false;
+            journalReason = error.message || String(error);
+          }
+        }
         return {
           passed,
-          reason: passed ? null : 'campaign convergence or wall budget gate tripped',
+          reason: passed
+            ? null
+            : journalReason || 'campaign convergence or wall budget gate tripped',
           generation_cap: maxRepairGenerations + 1,
           next_repair_generation: nextGeneration,
           gate,
@@ -2713,6 +2963,64 @@ class AutopilotEngine {
       },
       finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
     });
+
+    if (durableJournal && new Set(['ready', 'follow_up']).has(composition.status)) {
+      const terminalEvent = composition.status === 'ready'
+        ? CAMPAIGN_EVENTS.TERMINAL_READY
+        : CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP;
+      const reason = composition.status === 'ready'
+        ? 'campaign acceptance verified'
+        : 'campaign completed with bounded follow-up';
+      const registryDigest = latestAdjudication
+        && /^[0-9a-f]{64}$/.test(latestAdjudication.registry_digest || '')
+        ? latestAdjudication.registry_digest
+        : campaignCanonicalDigest([]);
+      const payload = {
+        reason,
+        registry_complete: true,
+        registry_digest: registryDigest,
+        convergence_digest: composition.receipt_digest,
+      };
+      if (terminalEvent === CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP) {
+        payload.follow_up_digest = campaignCanonicalDigest({
+          follow_up: composition.follow_up || [],
+          unresolved_final_findings: composition.unresolved_final_findings || [],
+        });
+      }
+      try {
+        recordCampaignEvent({
+          eventType: terminalEvent,
+          generation: campaignControl.initial_state.generation,
+          stageIdentity: `campaign-terminal:${campaignControl.initial_state.generation}`,
+          payload,
+          artifactReference: {
+            kind: 'campaign_terminal',
+            digest: composition.receipt_digest,
+          },
+        });
+        campaignControl.completion = this.campaignAdmissionCompleter({
+          repo: loopCwd,
+          campaignControl,
+        });
+      } catch (error) {
+        return {
+          status: 'blocked',
+          phase: 'campaign_terminal_journal',
+          reason: error.message || String(error),
+          rounds: implementationChain.length,
+          verdict: latestReview ? latestReview.verdict : null,
+          roster,
+          resolveResult,
+          base,
+          implementation: implementationChain.at(-1) || null,
+          review: latestReview,
+          implementationChain,
+          reviewChain,
+          campaign_receipt: composition,
+          ledger,
+        };
+      }
+    }
 
     const lastImplementation = implementationChain.at(-1) || null;
     const converged = composition.status === 'ready';
@@ -3190,9 +3498,17 @@ class AutopilotEngine {
       return release;
     };
 
+    const durableResumeCandidate = campaignControl
+      && campaignControl.generation_claim
+      && campaignControl.generation_claim.resume_candidate;
     if (campaignControl
         && campaignControl.status === 'admitted'
-        && campaignControl.initial_state.phase !== 'PREPARED') {
+        && campaignControl.initial_state.phase !== CAMPAIGN_STATES.PREPARED
+        && (!new Set([
+          CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+          CAMPAIGN_STATES.ADJUDICATING,
+        ]).has(campaignControl.initial_state.phase)
+          || !durableResumeCandidate)) {
       const rejection = {
         owner: 'campaign_generation',
         status: 'rejected',

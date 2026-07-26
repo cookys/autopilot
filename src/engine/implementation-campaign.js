@@ -80,6 +80,7 @@ const LIMIT_KEYS = new Set([
   'max_repair_generations',
   'max_wall_seconds',
   'max_changed_files',
+  'baseline_churn',
   'max_churn',
 ]);
 const CAMPAIGN_PROFILES = new Set([
@@ -163,6 +164,71 @@ function canonicalDigest(value) {
   return sha256(JSON.stringify(canonicalize(value)));
 }
 
+function normalizeCampaignArtifactReference(value) {
+  if (value === null || value === undefined) return null;
+  if (!isPlainObject(value) || typeof value.kind !== 'string') {
+    fail('INVALID_ARTIFACT_REFERENCE', 'campaign artifact reference must be a named object');
+  }
+  const digestKinds = new Set([
+    'verification_receipt',
+    'product_review',
+    'finding_registry',
+    'campaign_terminal',
+  ]);
+  if (digestKinds.has(value.kind)) {
+    assertExactKeys(value, new Set(['kind', 'digest']), 'campaign artifact reference');
+    if (!isSha256(value.digest)) {
+      fail('INVALID_ARTIFACT_REFERENCE', 'campaign artifact digest is invalid');
+    }
+    return { ...value };
+  }
+  if (value.kind !== 'git_candidate') {
+    fail('INVALID_ARTIFACT_REFERENCE', `unsupported campaign artifact kind "${value.kind}"`);
+  }
+  assertExactKeys(
+    value,
+    new Set(['kind', 'commit', 'tree_sha', 'branch', 'base', 'writer_fence']),
+    'campaign git candidate reference',
+  );
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.commit)
+      || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.tree_sha)
+      || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.base)
+      || typeof value.branch !== 'string'
+      || value.branch.length === 0
+      || !isPlainObject(value.writer_fence)) {
+    fail('INVALID_ARTIFACT_REFERENCE', 'campaign Git candidate identity is invalid');
+  }
+  const fence = value.writer_fence;
+  assertExactKeys(fence, new Set([
+    'schema_version',
+    'artifact_type',
+    'campaign_id',
+    'stage_identity',
+    'candidate_commit',
+    'candidate_tree_sha',
+    'status',
+    'evidence_mode',
+    'closure_evidence_digest',
+    'receipt_digest',
+  ]), 'campaign writer fence reference');
+  const { receipt_digest: receiptDigest, ...fenceBody } = fence;
+  if (fence.schema_version !== 1
+      || fence.artifact_type !== 'implementation_campaign_writer_fence'
+      || !/^campaign-v1-[0-9a-f]{64}$/.test(fence.campaign_id)
+      || typeof fence.stage_identity !== 'string'
+      || fence.stage_identity.length === 0
+      || fence.candidate_commit !== value.commit
+      || fence.candidate_tree_sha !== value.tree_sha
+      || fence.status !== 'closed'
+      || !new Set(['dispatch_exit', 'terminal_ledger']).has(fence.evidence_mode)
+      || !isSha256(fence.closure_evidence_digest)
+      || !isSha256(receiptDigest)
+      || canonicalDigest(fenceBody) !== receiptDigest) {
+    fail('INVALID_ARTIFACT_REFERENCE', 'campaign writer fence reference is invalid');
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
 function assertExactKeys(value, allowed, label) {
   if (!isPlainObject(value)) fail('INVALID_SHAPE', `${label} must be a plain object`);
   for (const key of Object.keys(value)) {
@@ -216,6 +282,7 @@ function normalizeLimits(contract) {
     max_repair_generations: contract.max_repair_generations,
     max_wall_seconds: contract.max_wall_seconds,
     max_changed_files: contract.max_changed_files,
+    baseline_churn: contract.baseline_churn,
     max_churn: contract.baseline_churn + contract.max_extra_churn,
   };
 }
@@ -475,7 +542,10 @@ function reduceCampaignState(currentState, event) {
       fail('REVIEW_EVIDENCE_REQUIRED', 'review completion requires a review artifact digest');
     }
     next.phase = CAMPAIGN_STATES.ADJUDICATING;
-  } else if (currentState.phase === CAMPAIGN_STATES.ADJUDICATING
+  } else if (new Set([
+    CAMPAIGN_STATES.ADJUDICATING,
+    CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+  ]).has(currentState.phase)
       && event.event_type === CAMPAIGN_EVENTS.REPAIR_AUTHORIZED) {
     if (event.payload.registry_complete !== true
         || !isSha256(event.payload.registry_digest)) {
@@ -568,6 +638,7 @@ module.exports = {
   campaignIdFor,
   canonicalDigest,
   createCampaignState,
+  normalizeCampaignArtifactReference,
   reduceCampaignState,
   replayCampaignEvents,
   validateInitialCampaignState,

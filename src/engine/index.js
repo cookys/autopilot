@@ -58,6 +58,9 @@ const {
   parseCanonicalJsonBytes,
   verifyHostPinnedAuthenticatedIntake,
 } = require('./supervised-authenticated-intake');
+const campaignDispositionAuthority = require('./campaign-disposition-authority');
+const productReviewNormalizer = require('./product-review-normalizer');
+const campaignStatus = require('../campaign/status');
 
 const {
   MAX_FRAME_BYTES: SUPERVISED_HOST_MAX_FRAME_BYTES,
@@ -350,5 +353,8 @@ module.exports = {
   ...campaignComposition,
   ...implementationCampaign,
   ...campaignIntake,
+  ...campaignDispositionAuthority,
+  ...productReviewNormalizer,
+  ...campaignStatus,
   ...ownerKernel,
 };

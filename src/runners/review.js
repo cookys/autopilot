@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { bufferToString } = require('../lib/common');
+const { createRunnerTransportEnvelope } = require('../transport/runner-envelope');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_REVIEW = path.join(REPO_ROOT, 'scripts', 'dispatch-review.sh');
@@ -111,6 +112,20 @@ function dispatchReviewJson(args, options = {}) {
   });
   const stdout = bufferToString(child.stdout);
   const stderr = bufferToString(child.stderr);
+  const argValue = (flag) => {
+    const index = args.indexOf(flag);
+    return index >= 0 && typeof args[index + 1] === 'string' ? args[index + 1] : null;
+  };
+  const transportEnvelope = createRunnerTransportEnvelope({
+    runner: argValue('--runner') || 'unknown',
+    model: argValue('--model') || 'unknown',
+    operation: 'review',
+    argv: args,
+    cwd: options.cwd || REPO_ROOT,
+    child: { ...child, stdout, stderr },
+    outcomeHints: options.transportOutcomeHints,
+    privateRawReference: options.privateRawReference,
+  });
 
   if (child.error) {
     return {
@@ -121,6 +136,7 @@ function dispatchReviewJson(args, options = {}) {
       stderr,
       result: null,
       parseError: null,
+      transportEnvelope,
     };
   }
 
@@ -133,6 +149,7 @@ function dispatchReviewJson(args, options = {}) {
       stderr,
       result: parseReviewOutput(stdout),
       parseError: null,
+      transportEnvelope,
     };
   } catch (error) {
     return {
@@ -143,6 +160,7 @@ function dispatchReviewJson(args, options = {}) {
       stderr,
       result: null,
       parseError: error,
+      transportEnvelope,
     };
   }
 }

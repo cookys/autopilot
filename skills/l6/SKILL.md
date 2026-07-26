@@ -33,11 +33,12 @@ Hard rules:
   runner/model derive from the checker's resolved verification-author tuple; caller-supplied
   `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. Consuming-checkout
   mutation is `containment_breach` (exit 4) and the artifact is quarantined, never promoted.
-  Write dispatches likewise run
-  `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json> ...` — base and
-  timeout pin from the contract; post-return boundary (allow/deny/budget/output) and
-  depth-0-executed acceptance argv gate the result. While an l5/l6 session marker is active,
-  prompt-only (non-strict) write or author dispatch on this repo fails before the runner.
+  Repository mutation has one entry:
+  `node bin/autopilot.js engine implement-review --campaign-contract <campaign.json> ...`.
+  The controller pins base, scope, budget, ledger identity, post-return boundary, and the
+  depth-0-executed acceptance command. Direct `scripts/dispatch-hetero.sh` invocation is for
+  controller internals or diagnostics, not an equivalent L6 workflow. While an l5/l6 session
+  marker is active, prompt-only write or author dispatch on this repo fails before the runner.
 - **Context-window gate (v2.32.58)**: all three rails — including the authoring leaf, whose
   payloads are the largest on any rail — size the input against the target engine's window
   before spending; over budget ⇒ `precondition_failed`, no runner spawned. Contract:

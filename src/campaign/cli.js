@@ -6,9 +6,11 @@ const { spawnSync } = require('child_process');
 const {
   CAMPAIGN_STATES,
   canonicalDigest,
+  normalizeCampaignArtifactReference,
   reduceCampaignState,
   validateInitialCampaignState,
 } = require('../engine/implementation-campaign');
+const { projectCampaignStatus } = require('./status');
 
 const TERMINAL = new Set([
   CAMPAIGN_STATES.TERMINAL_READY,
@@ -59,6 +61,10 @@ const EVENT_ARTIFACT_KEYS = new Set([
   'contract_digest',
   'event',
 ]);
+const DURABLE_EVENT_ARTIFACT_KEYS = new Set([
+  ...EVENT_ARTIFACT_KEYS,
+  'artifact_reference',
+]);
 
 function hasExactKeys(value, expected) {
   return value !== null
@@ -89,7 +95,7 @@ function defaultCampaignLedgerPath(cwd) {
 
 function parseArgs(argv, cwd) {
   const command = argv[0];
-  if (!new Set(['inspect', 'resume']).has(command)) {
+  if (!new Set(['inspect', 'resume', 'status']).has(command)) {
     return { error: `unknown campaign subcommand: ${command || '<missing>'}` };
   }
   const output = {
@@ -238,6 +244,9 @@ function projectCampaign(rows, campaignId) {
   const latestLease = validateCampaignStageHistory(stageRows, intake, campaignId);
   let state = intakePayload.initial_state;
   let currentLease = null;
+  let lastArtifactReference = null;
+  let candidateReference = null;
+  let initialCandidateReference = null;
   for (const row of owned) {
     if (row.kind === 'stage' && row.stage === 'campaign') {
       if (row.state === 'leased') {
@@ -257,7 +266,8 @@ function projectCampaign(rows, campaignId) {
       continue;
     }
     const payload = parsePayload(row);
-    if (!hasExactKeys(payload, EVENT_ARTIFACT_KEYS)
+    if (!(hasExactKeys(payload, EVENT_ARTIFACT_KEYS)
+        || hasExactKeys(payload, DURABLE_EVENT_ARTIFACT_KEYS))
         || payload.schema_version !== 1
         || payload.artifact_type !== 'implementation_campaign_event'
         || payload.campaign_id !== campaignId
@@ -266,6 +276,30 @@ function projectCampaign(rows, campaignId) {
     }
     validateCampaignJournalLease(row, currentLease);
     state = reduceCampaignState(state, payload.event);
+    if (Object.prototype.hasOwnProperty.call(payload, 'artifact_reference')) {
+      const reference = payload.artifact_reference;
+      if (reference !== null) {
+        try {
+          normalizeCampaignArtifactReference(reference);
+        } catch (error) {
+          throw new Error(`campaign ledger event artifact reference is invalid: ${error.message}`);
+        }
+      }
+      if (reference
+          && reference.kind === 'git_candidate'
+          && reference.writer_fence.campaign_id !== campaignId) {
+        throw new Error('campaign ledger candidate writer fence belongs to another campaign');
+      }
+      if (reference !== null
+          && canonicalDigest(reference) !== payload.event.output_artifact_digest) {
+        throw new Error('campaign ledger event artifact reference digest is invalid');
+      }
+      if (reference !== null) lastArtifactReference = reference;
+      if (reference && reference.kind === 'git_candidate') {
+        candidateReference = reference;
+        if (!initialCandidateReference) initialCandidateReference = reference;
+      }
+    }
   }
   return {
     schema_version: 1,
@@ -275,6 +309,10 @@ function projectCampaign(rows, campaignId) {
     latest_lease: latestLease,
     durable_event_count: state.event_count,
     ledger_row_count: owned.length,
+    last_artifact_reference: lastArtifactReference,
+    candidate_reference: candidateReference,
+    initial_candidate_reference: initialCandidateReference,
+    lifecycle_receipt_ref: null,
   };
 }
 
@@ -345,7 +383,18 @@ function campaignResumeEligibility(projection, observedAt) {
       reason_code: 'campaign_state_lease_open',
     };
   }
-  if (projection.state.phase !== CAMPAIGN_STATES.PREPARED) {
+  const hasCandidate = projection.candidate_reference
+    && projection.candidate_reference.kind === 'git_candidate';
+  const hasBoundReview = projection.last_artifact_reference
+    && projection.last_artifact_reference.kind === 'product_review'
+    && canonicalDigest(projection.last_artifact_reference)
+      === projection.state.last_output_artifact_digest;
+  const resumePhaseSupported = projection.state.phase === CAMPAIGN_STATES.PREPARED
+    || (projection.state.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION && hasCandidate)
+    || (projection.state.phase === CAMPAIGN_STATES.ADJUDICATING
+      && hasCandidate
+      && hasBoundReview);
+  if (!resumePhaseSupported) {
     return {
       status: 'blocked',
       reason: `campaign resume from ${projection.state.phase} is not yet supported`,
@@ -387,8 +436,10 @@ function runCampaignCli(argv, options = {}) {
     return 2;
   }
   let projection;
+  let rows;
   try {
-    projection = projectCampaign(loadRows(parsed.ledger), parsed.campaignId);
+    rows = loadRows(parsed.ledger);
+    projection = projectCampaign(rows, parsed.campaignId);
   } catch (error) {
     process.stderr.write(`campaign: ${error.message}\n`);
     return 1;
@@ -410,6 +461,13 @@ function runCampaignCli(argv, options = {}) {
   const now = typeof options.now === 'function'
     ? options.now()
     : new Date().toISOString();
+  if (parsed.command === 'status') {
+    process.stdout.write(`${JSON.stringify({
+      status: 'found',
+      ...projectCampaignStatus(projection, rows, now, { processLiveness }),
+    })}\n`);
+    return EXIT_SUCCESS;
+  }
   const eligibility = campaignResumeEligibility(projection, now);
   process.stdout.write(`${JSON.stringify({
     status: eligibility.status,

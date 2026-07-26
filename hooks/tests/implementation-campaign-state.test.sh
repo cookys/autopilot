@@ -268,6 +268,23 @@ expectCode('VERTICAL_EVIDENCE_REQUIRED', () => apply(
   { passed: true, evidence_digest: 'bad' },
 ));
 
+sequence = 0;
+let verticalRepair = apply(initial(), E.IMPLEMENTATION_STARTED, 0, {
+  sealed_contract: true,
+});
+verticalRepair = apply(verticalRepair, E.IMPLEMENTATION_COMPLETED, 0, {
+  scope_check_passed: true,
+  scope_check_digest: D,
+});
+verticalRepair = apply(verticalRepair, E.REPAIR_AUTHORIZED, 1, {
+  registry_complete: true,
+  registry_digest: D,
+  repair_gate_passed: true,
+  repair_gate_digest: D,
+});
+assert.strictEqual(verticalRepair.phase, S.REPAIRING);
+assert.strictEqual(verticalRepair.generation, 1);
+
 let adjudicated = adjudicating();
 expectCode('REGISTRY_INCOMPLETE', () => apply(
   adjudicated,
@@ -379,6 +396,7 @@ console.log('unsealed_mutation_rejected=true');
 console.log('second_live_lease_rejected=true');
 console.log('scope_gate_required=true');
 console.log('vertical_evidence_required=true');
+console.log('vertical_repair_authorized=true');
 console.log('registry_completeness_required=true');
 console.log('repair_gate_required=true');
 console.log('repair_ceiling_enforced=true');
@@ -398,7 +416,7 @@ assert_exit_code "$PURE_EXIT" "0" "pure campaign state-table process exits zero"
 for key in valid_terminal contract_digest_namespaces_campaign valid_resume valid_follow_up valid_stop \
   idempotent_terminal skipped_phase_rejected \
   unsealed_mutation_rejected second_live_lease_rejected scope_gate_required \
-  vertical_evidence_required registry_completeness_required repair_gate_required \
+  vertical_evidence_required vertical_repair_authorized registry_completeness_required repair_gate_required \
   repair_ceiling_enforced resume_budget_reset_rejected resume_clock_reset_rejected \
   idempotency_conflict_rejected payload_unknown_field_rejected \
   artifact_chain_break_rejected terminal_registry_required initial_identity_recomputed \

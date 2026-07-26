@@ -1,23 +1,29 @@
 #!/usr/bin/env node
 'use strict';
 
+const path = require('path');
 const { dispatchReview } = require('../src/runners/review');
 const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
 const { runHarnessCli } = require('../src/harness/cli');
 const { runEndpointsCli } = require('../src/endpoints/cli');
 const { runStatusCli } = require('../src/status/cli');
 const { runCampaignCli } = require('../src/campaign/cli');
-const { AutopilotEngine } = require('../src/engine');
+const {
+  AutopilotEngine,
+  compileCampaignDispositionPolicy,
+  compileCampaignDispositionProvider,
+  loadCampaignDispositionAuthority,
+} = require('../src/engine');
 
 function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster] [--json] [--probe]
-  node bin/autopilot.js campaign <inspect|resume> --campaign-id <id> [--ledger <file>]
+  node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -34,10 +40,13 @@ Commands:
                     --campaign-contract is mandatory. --legacy-unmanaged is a
                     v2.34.0-only compatibility rail, rejected for L5/L6, and
                     emits a machine-readable deprecation disclosure.
+                    Non-empty review findings require a separately supplied
+                    depth-0 disposition authority; reviewer output cannot
+                    self-authorize.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
   status            Read-only state overview: per-pool quota (recorded, per-MODEL pools), live dispatch runs, resolved roster seats (quota|runs|roster; --json; --probe = safe surface refresh, no model spend).
-  campaign          Inspect durable campaign state or determine whether it is resumable.
+  campaign          Inspect/status durable campaign state or determine whether it is resumable.
                     tokens never printed, never read from argv).
 
 Exit codes:
@@ -60,6 +69,8 @@ function parseImplementReviewArgs(rawArgs) {
     campaignContract: null,
     campaignSeal: null,
     campaignLedger: null,
+    campaignDispositionAuthority: null,
+    campaignDispositionPolicy: null,
     campaignManaged: true,
     legacyUnmanaged: false,
   };
@@ -102,6 +113,24 @@ function parseImplementReviewArgs(rawArgs) {
         return { error: '--campaign-ledger requires a value' };
       }
       output.campaignLedger = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--campaign-disposition-authority') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-disposition-authority requires a value' };
+      }
+      output.campaignDispositionAuthority = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--campaign-disposition-policy') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-disposition-policy requires a value' };
+      }
+      output.campaignDispositionPolicy = value;
       i += 2;
       continue;
     }
@@ -203,6 +232,15 @@ function parseImplementReviewArgs(rawArgs) {
   if (!output.legacyUnmanaged && !output.campaignContract) {
     return { error: '--campaign-contract is required; use --legacy-unmanaged only for compatibility' };
   }
+  if (output.campaignDispositionAuthority && output.campaignDispositionPolicy) {
+    return {
+      error: '--campaign-disposition-authority and --campaign-disposition-policy cannot be combined',
+    };
+  }
+  if (output.legacyUnmanaged
+      && (output.campaignDispositionAuthority || output.campaignDispositionPolicy)) {
+    return { error: 'campaign disposition controls require --campaign-contract' };
+  }
 
   return output;
 }
@@ -269,8 +307,31 @@ if (args[0] === 'engine') {
         })}\n`);
         process.exit(1);
       }
+      let campaignDispositionProvider = null;
+      try {
+        if (parsed.campaignDispositionAuthority) {
+          campaignDispositionProvider = compileCampaignDispositionProvider(
+            loadCampaignDispositionAuthority(path.resolve(
+              parsed.cwd || process.cwd(),
+              parsed.campaignDispositionAuthority,
+            )),
+          );
+        } else if (parsed.campaignDispositionPolicy) {
+          campaignDispositionProvider = compileCampaignDispositionPolicy(
+            parsed.campaignDispositionPolicy,
+          );
+        }
+      } catch (error) {
+        process.stdout.write(`${JSON.stringify({
+          status: 'blocked',
+          phase: 'campaign_disposition_authority',
+          reason: error.message || String(error),
+        })}\n`);
+        process.exit(1);
+      }
       const result = new AutopilotEngine({
         cwd: parsed.cwd || process.cwd(),
+        campaignDispositionProvider,
       }).runImplementationReviewLoop(parsed);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);

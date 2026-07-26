@@ -104,8 +104,23 @@ function runCampaignComposition(input = {}, adapters = {}) {
   const followUps = [];
   const rejectedFindings = [];
   const findingRegistry = new Map();
-  let repairGeneration = 0;
-  let candidate = null;
+  const resume = input.resume || null;
+  const resumablePhases = new Set(['VERTICAL_VERIFICATION', 'ADJUDICATING']);
+  if (resume !== null
+      && (!resume
+        || !resumablePhases.has(resume.phase)
+        || !Number.isSafeInteger(resume.repair_generation)
+        || resume.repair_generation < 0
+        || !resume.candidate
+        || typeof resume.candidate !== 'object'
+        || resume.candidate.committed !== true)) {
+    throw new CampaignCompositionError(
+      'INVALID_RESUME_CHECKPOINT',
+      'campaign resume requires one committed VERTICAL_VERIFICATION candidate',
+    );
+  }
+  let repairGeneration = resume ? resume.repair_generation : 0;
+  let candidate = resume ? resume.candidate : null;
   let verification = null;
   let lastReview = null;
 
@@ -184,8 +199,14 @@ function runCampaignComposition(input = {}, adapters = {}) {
     return { stop: null };
   };
 
-  let mutationResult = mutate('initial');
-  if (mutationResult.stop) return mutationResult.stop;
+  if (resume) {
+    trace.push(resume.phase === 'ADJUDICATING'
+      ? 'resume_replay_bound_review'
+      : 'resume_adopt_candidate');
+  } else {
+    const mutationResult = mutate('initial');
+    if (mutationResult.stop) return mutationResult.stop;
+  }
 
   for (;;) {
     verification = requireReceipt(verify({
@@ -229,7 +250,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
         return blocked('convergence', receipt.reason || 'convergence gate tripped', trace);
       }
       repairGeneration += 1;
-      mutationResult = mutate('vertical_repair', [{
+      const mutationResult = mutate('vertical_repair', [{
         id: 'vertical-acceptance',
         claim: verification.reason || 'contract verification did not pass',
       }]);
@@ -299,7 +320,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       return blocked('convergence', receipt.reason || 'convergence gate tripped', trace);
     }
     repairGeneration += 1;
-    mutationResult = mutate('review_repair', mustFix);
+    const mutationResult = mutate('review_repair', mustFix);
     if (mutationResult.stop) return mutationResult.stop;
   }
 

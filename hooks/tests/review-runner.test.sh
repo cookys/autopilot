@@ -77,6 +77,12 @@ console.log(`parse=${run.parseError ? 'error' : 'ok'}`);
 console.log(`result_status=${run.result && run.result.status}`);
 console.log(`verdict=${run.result && run.result.verdict}`);
 console.log(`findings=${run.result && run.result.findings}`);
+console.log(`transport_artifact=${run.transportEnvelope.artifact_type}`);
+console.log(`transport_outcome=${run.transportEnvelope.outcome.classification}`);
+console.log(`transport_has_verdict=${Object.prototype.hasOwnProperty.call(
+  run.transportEnvelope,
+  'verdict',
+)}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "review runner JS capture process exits 0"
@@ -85,6 +91,12 @@ assert_contains "$OUT" "parse=ok" "review runner parses JSON"
 assert_contains "$OUT" "result_status=reviewed" "review runner captures reviewed status"
 assert_contains "$OUT" "verdict=FIX-THEN-SHIP" "review runner captures verdict"
 assert_contains "$OUT" "findings=parsed by JS runner" "review runner captures findings"
+assert_contains "$OUT" "transport_artifact=runner_transport_envelope" \
+  "review runner returns the shared mechanical transport envelope"
+assert_contains "$OUT" "transport_outcome=success" \
+  "review runner transport records the mechanical child outcome"
+assert_contains "$OUT" "transport_has_verdict=false" \
+  "review runner transport does not extract semantic verdict authority"
 
 OUT="$(node - "$REPO_ROOT" "$DIFF" "$STUB_EMPTY" <<'NODE'
 const path = require('path');

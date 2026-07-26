@@ -13,7 +13,8 @@ description: >
 
 Terse front-door into `autopilot:ceo-agent` at **Level 5**: identical to `/l4`
 except the IMPLEMENTER is a heterogeneous engine driven through the canonical
-`engine implement-review` path (`bin/autopilot.js` → `dispatch-hetero.sh`).
+`engine implement-review --campaign-contract <campaign.json>` path
+(`bin/autopilot.js` → campaign controller → `dispatch-hetero.sh`).
 
 Hard rules:
 - At entry run `node <plugin>/scripts/session-mode.js set --level l5` (`--solo` ⇒
@@ -27,13 +28,12 @@ Hard rules:
   engine's window before spending; over budget ⇒ `precondition_failed` with no runner and
   no worktree. Split the unit or pick a larger-window engine — `--context-window warn|off`
   overrides deliberately. Contract: [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md) § Context-window gate.
-- **Strict dispatch-unit contracts (v2.32.36)**: while the l5/l6 session marker is active,
-  write dispatch is `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json>`
-  — depth-0 freezes the unit contract, `node scripts/dispatch-contract.js check` must return
-  GO pre-spend, base/timeout pin from the contract, caller disagreements are
-  precondition-rejected, and the post-return boundary + depth-0-executed acceptance argv gate
-  the artifact. Prompt-only write dispatch on the repo fails before the runner; a NO-GO has no
-  manual override (new contract = new hash = new GO check).
+- **One mutating entry**: depth-0 freezes the campaign contract, then invokes
+  `node bin/autopilot.js engine implement-review --campaign-contract <campaign.json> ...`.
+  Campaign identity automatically enables the durable ledger and detached lifecycle. Direct
+  `scripts/dispatch-hetero.sh` invocation is controller-internal or diagnostic only, never an
+  equivalent L5 workflow. Contract or caller disagreement is rejected pre-spend; a new scope
+  requires a new contract hash.
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 

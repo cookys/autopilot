@@ -30,6 +30,7 @@ const roster = {
 function makeEngine(verdicts, options = {}) {
   const counters = { implementation: 0, review: 0, repair: 0, verify: 0 };
   const observations = {
+    outOfScopeRepairDiffs: 0,
     verificationTreeMutations: 0,
   };
   const engine = new AutopilotEngine({
@@ -86,7 +87,16 @@ function makeEngine(verdicts, options = {}) {
     diffProvider({ round }) {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'campaign-red-diff-'));
       const target = path.join(directory, `round-${round}.diff`);
-      fs.writeFileSync(target, `round ${round}\n`);
+      if (options.outOfScopeRepair === true && round > 1) {
+        fs.writeFileSync(
+          target,
+          'diff --git a/outside-scope/secret.txt b/outside-scope/secret.txt\n'
+            + 'new file mode 100644\n',
+        );
+        observations.outOfScopeRepairDiffs += 1;
+      } else {
+        fs.writeFileSync(target, `round ${round}\n`);
+      }
       return target;
     },
     repairPromptWriter() {
@@ -169,7 +179,11 @@ const cap = run(
   ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'SHIP-AS-IS'],
   { maxRounds: 4 },
 );
-const disposition = run(['FIX-THEN-SHIP', 'SHIP-AS-IS'], { maxRounds: 2 });
+const disposition = run(
+  ['FIX-THEN-SHIP', 'SHIP-AS-IS'],
+  { maxRounds: 2 },
+  { outOfScopeRepair: true },
+);
 const resetA = run(
   ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
   { branch: 'impl/session-reset', maxRounds: 3 },
@@ -195,7 +209,9 @@ const exploits = {
     && cap.counters.repair === 3,
   missing_finding_disposition: disposition.result.status === 'converged'
     && disposition.counters.repair === 1
-    && !disposition.result.ledger.some((entry) => String(entry.unit).includes('adjudicat')),
+    && disposition.observations.outOfScopeRepairDiffs === 1
+    && !disposition.result.ledger.some((entry) => String(entry.unit).includes('adjudicat'))
+    && !disposition.result.ledger.some((entry) => String(entry.unit).includes('repair_scope')),
   session_resume_reset: resetA.result.status === 'non_converged'
     && resetB.result.status === 'converged'
     && resetA.counters.repair === 2

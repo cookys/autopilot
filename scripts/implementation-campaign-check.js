@@ -242,7 +242,7 @@ function normalizeAllowedPrefix(value) {
     || part.trim() !== part
     || /[\u0000-\u001f\u007f]/.test(part)
   ))) return null;
-  if (parts[0] === '.git') return null;
+  if (parts.some((part) => part.toLowerCase() === '.git')) return null;
   return parts.join('/');
 }
 
@@ -279,6 +279,11 @@ function validateContract(contract, context) {
   }
   if (context.missionMode === 'enforce' && contract.mission_grant_ref === null) {
     errors.push('mission_grant_ref: required when Mission enforcement is enabled');
+  }
+  if (context.missionMode === 'enforce') {
+    errors.push(
+      'mission_grant_ref: enforced grant verification is unavailable until Mission integration',
+    );
   }
   if (contract.repo_identity !== context.repoIdentity) {
     errors.push('repo_identity: does not match canonical repository identity');
@@ -434,7 +439,15 @@ function atomicWriteJson(target, value) {
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = null;
-    fs.renameSync(temp, target);
+    try {
+      fs.linkSync(temp, target);
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        throw new CliError('seal target already exists; choose a new independent path', 3);
+      }
+      throw error;
+    }
+    fs.unlinkSync(temp);
     const parentFd = fs.openSync(path.dirname(target), 'r');
     try {
       fs.fsyncSync(parentFd);

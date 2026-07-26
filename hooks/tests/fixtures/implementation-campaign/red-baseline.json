@@ -15,7 +15,7 @@
     },
     {
       "id": "missing_finding_disposition",
-      "expected_gap": "engine loop does not compose the finding disposition gate"
+      "expected_gap": "engine loop does not compose finding disposition or repair-scope gates"
     },
     {
       "id": "session_resume_reset",

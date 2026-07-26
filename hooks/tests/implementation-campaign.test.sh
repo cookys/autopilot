@@ -91,6 +91,16 @@ run_checker check --contract "$CONTRACT" --repo "$SBX" --seal "$SEAL"
 assert_exit_code "$__RUN_EXIT" "0" "sealed campaign contract validates"
 assert_contains "$__RUN_STDOUT" '"verdict": "VALID"' "check emits VALID"
 
+run_checker seal --contract "$CONTRACT" --repo "$SBX" --out "$SEAL"
+assert_exit_code "$__RUN_EXIT" "3" "existing seal cannot be silently replaced"
+assert_contains "$__RUN_STDERR" "already exists" "reseal rejection names no-clobber policy"
+
+UNRELATED="$TEST_TMP/unrelated.json"
+printf 'owner data\n' > "$UNRELATED"
+run_checker seal --contract "$CONTRACT" --repo "$SBX" --out "$UNRELATED"
+assert_exit_code "$__RUN_EXIT" "3" "seal cannot overwrite an unrelated regular file"
+assert_eq "$(cat "$UNRELATED")" "owner data" "unrelated file contents are preserved"
+
 SAME="$TEST_TMP/same.json"
 write_contract "$SAME"
 run_checker seal --contract "$SAME" --repo "$SBX" --out "$SAME"
@@ -152,6 +162,13 @@ mutate_contract "$WINDOWS_DRIVE_RELATIVE" "value.allowed_path_prefixes = ['C:out
 run_checker seal --contract "$WINDOWS_DRIVE_RELATIVE" --repo "$SBX" \
   --out "$TEST_TMP/windows-drive-relative.seal"
 assert_exit_code "$__RUN_EXIT" "3" "Windows drive-relative path is rejected on every host"
+
+NESTED_GIT="$TEST_TMP/nested-git.json"
+write_contract "$NESTED_GIT"
+mutate_contract "$NESTED_GIT" "value.allowed_path_prefixes = ['worker/.git/objects'];"
+run_checker seal --contract "$NESTED_GIT" --repo "$SBX" --out "$TEST_TMP/nested-git.seal"
+assert_exit_code "$__RUN_EXIT" "3" "nested Git metadata path is rejected"
+assert_contains "$__RUN_STDOUT" "path escapes" "nested Git metadata rejection is specific"
 
 WHITESPACE="$TEST_TMP/whitespace.json"
 write_contract "$WHITESPACE"
@@ -249,11 +266,9 @@ GRANT_HASH="$(printf 'a%.0s' {1..64})"
 mutate_contract "$ENFORCED_GRANT" "value.mission_grant_ref = '$GRANT_HASH';"
 MISSION_MODE=enforce run_checker seal --contract "$ENFORCED_GRANT" --repo "$SBX" \
   --out "$TEST_TMP/enforced-grant.seal"
-assert_exit_code "$__RUN_EXIT" "0" "enforced Mission accepts a content-addressed parent grant"
-MISSION_MODE=shadow run_checker check --contract "$ENFORCED_GRANT" --repo "$SBX" \
-  --seal "$TEST_TMP/enforced-grant.seal"
-assert_exit_code "$__RUN_EXIT" "3" "Mission mode drift invalidates the seal"
-assert_contains "$__RUN_STDOUT" "mission_mode" "Mission mode drift is named"
+assert_exit_code "$__RUN_EXIT" "3" "unverified grant hash cannot enable Mission enforcement"
+assert_contains "$__RUN_STDOUT" "unavailable until Mission integration" \
+  "pre-integration Mission enforcement fails closed"
 
 OBJECT_FORMAT="$TEST_TMP/object-format.json"
 write_contract "$OBJECT_FORMAT"

@@ -73,9 +73,18 @@
         "verification_receipt_digest": { "$ref": "#/$defs/sha256" },
         "repair_generations": { "type": "integer", "minimum": 0 },
         "final_panel_count": { "type": "integer", "const": 1 },
-        "follow_up": { "type": "array" },
-        "rejected_findings": { "type": "array" },
-        "unresolved_final_findings": { "type": "array" },
+        "follow_up": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
+        "rejected_findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
+        "unresolved_final_findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
         "trace": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
@@ -90,6 +99,90 @@
     "gitObject": {
       "type": "string",
       "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["classification", "digest"],
+      "properties": {
+        "classification": { "type": "string", "enum": ["actionable", "refuted"] },
+        "digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "adjudicationAuthority": {
+      "type": "object",
+      "required": ["authority", "actor_id", "review_digest"],
+      "properties": {
+        "authority": {
+          "type": "string",
+          "enum": ["depth-0", "deterministic-policy"]
+        },
+        "actor_id": { "type": "string", "minLength": 1 },
+        "review_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "disposition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["disposition", "deferral_harm"],
+          "properties": {
+            "disposition": { "type": "string", "const": "must-fix-now" },
+            "acceptance_id": { "type": "string", "minLength": 1 },
+            "rubric_id": { "type": "string", "minLength": 1 },
+            "task_surface": { "type": "string", "minLength": 1 },
+            "deferral_harm": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "disposition",
+            "context",
+            "trigger",
+            "proposed_backlog_title"
+          ],
+          "properties": {
+            "disposition": { "type": "string", "const": "follow-up" },
+            "context": { "type": "string", "minLength": 1 },
+            "trigger": { "type": "string", "minLength": 1 },
+            "proposed_backlog_title": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["disposition", "rationale"],
+          "properties": {
+            "disposition": { "type": "string", "const": "reject-out-of-scope" },
+            "rationale": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "adjudicatedFinding": {
+      "type": "object",
+      "required": [
+        "id",
+        "claim",
+        "severity",
+        "source",
+        "evidence",
+        "adjudication_authority"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "claim": { "type": "string", "minLength": 1 },
+        "severity": { "type": "string", "enum": ["🔴", "🟠", "🟡", "🔵"] },
+        "source": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "adjudication_authority": { "$ref": "#/$defs/adjudicationAuthority" },
+        "disposition": { "$ref": "#/$defs/disposition" }
+      },
+      "additionalProperties": false
     }
   }
 }

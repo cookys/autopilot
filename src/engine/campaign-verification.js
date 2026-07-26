@@ -13,8 +13,8 @@ const DEFAULT_ENV_ALLOWLIST = Object.freeze([
   'TZ',
 ]);
 const SECRET_NAME = /(AUTH|COOKIE|CREDENTIAL|DATABASE_URL|DB_URL|CONNECTION_STRING|KEY|PASSWORD|SECRET|TOKEN)/i;
-const CREDENTIAL_URL = /^[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s]+@/i;
-const PRIVATE_KEY_VALUE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+const SENSITIVE_QUERY_NAME = /(?:^|[_-])(?:auth|credential|key|password|secret|token)(?:$|[_-])|^(?:api[_-]?key|access[_-]?token|client[_-]?secret)$/i;
+const PRIVATE_KEY_VALUE = /\bPRIVATE KEY\b|PuTTY-User-Key-File-\d+:|AGE-SECRET-KEY-/i;
 const LEDGER_TERMINAL_STATES = new Set(['committed', 'reviewed', 'verified', 'merged']);
 
 function sha256(value) {
@@ -55,6 +55,32 @@ function verificationArgv(verifyCmd) {
   return ['/bin/sh', '-c', verifyCmd];
 }
 
+function containsSecretValue(value) {
+  if (PRIVATE_KEY_VALUE.test(value)) return true;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed
+        && typeof parsed === 'object'
+        && !Array.isArray(parsed)
+        && typeof parsed.kty === 'string'
+        && typeof parsed.d === 'string') {
+      return true;
+    }
+  } catch (_error) {
+    // Non-JSON environment values continue to URL inspection.
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.username.length > 0 || parsed.password.length > 0) return true;
+    for (const name of parsed.searchParams.keys()) {
+      if (SENSITIVE_QUERY_NAME.test(name)) return true;
+    }
+  } catch (_error) {
+    // Ordinary non-URL values are not credentials by shape.
+  }
+  return false;
+}
+
 function environmentFingerprint(env = process.env, allowlist = DEFAULT_ENV_ALLOWLIST) {
   if (!Array.isArray(allowlist)
       || allowlist.some((name) => typeof name !== 'string' || name.length === 0)) {
@@ -66,7 +92,7 @@ function environmentFingerprint(env = process.env, allowlist = DEFAULT_ENV_ALLOW
     const present = Object.prototype.hasOwnProperty.call(env, name);
     const value = present ? String(env[name]) : null;
     if (SECRET_NAME.test(name)
-        || (value !== null && (CREDENTIAL_URL.test(value) || PRIVATE_KEY_VALUE.test(value)))) {
+        || (value !== null && containsSecretValue(value))) {
       continue;
     }
     projection[name] = value;
@@ -189,6 +215,12 @@ function createLedgerReconciliationReceipt({
       || reconcileResult.stage !== stageIdentity
       || reconcileResult.pending_side_effects !== 0
       || reconcileResult.holder_alive !== false
+      || !Number.isSafeInteger(latestRecord.pid)
+      || latestRecord.pid <= 0
+      || !Number.isSafeInteger(latestRecord.start_time)
+      || latestRecord.start_time <= 0
+      || !Number.isSafeInteger(latestRecord.heartbeat_ts)
+      || latestRecord.heartbeat_ts <= 0
       || (!terminalClosure && !gitTruthClosure)
       || !Number.isSafeInteger(reconcileResult.generation)
       || reconcileResult.generation !== latestRecord.generation

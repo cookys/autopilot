@@ -35,6 +35,54 @@ function blocked(phase, reason, trace, detail = {}) {
   };
 }
 
+function validateRetainedFinding(item, classification) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)
+      || typeof item.id !== 'string' || item.id.length === 0
+      || typeof item.claim !== 'string' || item.claim.length === 0
+      || !new Set(['🔴', '🟠', '🟡', '🔵']).has(item.severity)
+      || typeof item.source !== 'string' || item.source.length === 0) {
+    return `${classification} finding identity is incomplete`;
+  }
+  const expectedEvidence = classification === 'rejected' ? null : 'actionable';
+  if (!item.evidence
+      || typeof item.evidence !== 'object'
+      || !/^[0-9a-f]{64}$/.test(item.evidence.digest || '')
+      || !new Set(['actionable', 'refuted']).has(item.evidence.classification)
+      || (expectedEvidence && item.evidence.classification !== expectedEvidence)) {
+    return `${classification} finding ${item.id} lacks bound evidence`;
+  }
+  const authority = item.adjudication_authority;
+  if (!authority
+      || typeof authority !== 'object'
+      || !new Set(['depth-0', 'deterministic-policy']).has(authority.authority)
+      || typeof authority.actor_id !== 'string'
+      || authority.actor_id.length === 0
+      || !/^[0-9a-f]{64}$/.test(authority.review_digest || '')) {
+    return `${classification} finding ${item.id} lacks adjudication authority`;
+  }
+  const disposition = item.disposition;
+  if (classification === 'must_fix_now') {
+    if (!disposition || disposition.disposition !== 'must-fix-now') {
+      return `must_fix_now finding ${item.id} lacks a must-fix disposition`;
+    }
+  } else if (classification === 'follow_up') {
+    if (!disposition
+        || disposition.disposition !== 'follow-up'
+        || typeof disposition.context !== 'string'
+        || disposition.context.length === 0
+        || typeof disposition.trigger !== 'string'
+        || disposition.trigger.length === 0
+        || typeof disposition.proposed_backlog_title !== 'string'
+        || disposition.proposed_backlog_title.length === 0) {
+      return `follow_up finding ${item.id} lacks a complete follow-up disposition`;
+    }
+  } else if (item.evidence.classification === 'actionable'
+      && (!disposition || disposition.disposition !== 'reject-out-of-scope')) {
+    return `rejected finding ${item.id} lacks a rejection disposition`;
+  }
+  return null;
+}
+
 function runCampaignComposition(input = {}, adapters = {}) {
   const maxRepairs = input.maxRepairGenerations;
   if (!Number.isSafeInteger(maxRepairs) || maxRepairs < 0) {
@@ -76,10 +124,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
       ['rejected', adjudication.rejected, rejectedFindings],
     ];
     for (const [classification, items, target] of groups) {
-      for (const item of Array.isArray(items) ? items : []) {
-        if (!item || typeof item.id !== 'string' || item.id.length === 0) {
-          return { passed: false, reason: `${classification} finding is missing an id` };
-        }
+      if (!Array.isArray(items)) {
+        return { passed: false, reason: `${classification} findings must be an array` };
+      }
+      for (const item of items) {
+        const invalid = validateRetainedFinding(item, classification);
+        if (invalid) return { passed: false, reason: invalid };
         const digest = stableFindingDigest(item);
         const prior = findingRegistry.get(item.id);
         if (prior) {

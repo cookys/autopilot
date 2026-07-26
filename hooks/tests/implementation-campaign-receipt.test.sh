@@ -22,6 +22,35 @@ const {
 const TREE_A = 'a'.repeat(40);
 const TREE_B = 'b'.repeat(40);
 const COMMIT_A = 'c'.repeat(40);
+const LEASE_IDENTITY = {
+  pid: 424242,
+  start_time: 1785099000,
+  heartbeat_ts: 1785099001,
+};
+function retainedFinding({
+  id,
+  evidenceClassification = 'actionable',
+  evidenceDigest = '7'.repeat(64),
+  reviewDigest = '1'.repeat(64),
+  disposition,
+}) {
+  return {
+    id,
+    claim: `claim for ${id}`,
+    severity: '🟠',
+    source: 'fixture-reviewer',
+    evidence: {
+      classification: evidenceClassification,
+      digest: evidenceDigest,
+    },
+    adjudication_authority: {
+      authority: 'depth-0',
+      actor_id: 'core-owner',
+      review_digest: reviewDigest,
+    },
+    ...(disposition ? { disposition } : {}),
+  };
+}
 const env = {
   PATH: '/fixture/bin',
   CI: '1',
@@ -70,6 +99,33 @@ assert.notStrictEqual(request.env_fingerprint, createVerificationRequest({
   env: { ...env, PATH: '/other/bin' },
   envAllowlist: ['CI'],
 }).env_fingerprint);
+const secretValueFingerprint = (value) => createVerificationRequest({
+  treeSha: TREE_A,
+  verifyCmd: 'node test.js',
+  env: { ...env, EXECUTION_HINT: value },
+  envAllowlist: ['CI', 'EXECUTION_HINT'],
+}).env_fingerprint;
+for (const [left, right] of [
+  ['https://token-a@example.invalid/path', 'https://token-b@example.invalid/path'],
+  [
+    'https://example.invalid/path?access_token=token-a',
+    'https://example.invalid/path?access_token=token-b',
+  ],
+  [
+    '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-a',
+    '-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-b',
+  ],
+  [
+    '{"kty":"RSA","d":"private-a"}',
+    '{"kty":"RSA","d":"private-b"}',
+  ],
+]) {
+  assert.strictEqual(secretValueFingerprint(left), secretValueFingerprint(right));
+}
+assert.notStrictEqual(
+  secretValueFingerprint('https://example.invalid/public-a'),
+  secretValueFingerprint('https://example.invalid/public-b'),
+);
 
 const implementationResult = {
   status: 'committed',
@@ -105,6 +161,7 @@ const ledgerReconciliation = createLedgerReconciliationReceipt({
     holder_alive: false,
   },
   latestRecord: {
+    ...LEASE_IDENTITY,
     kind: 'stage',
     run_id: 'campaign-fixture',
     stage: 'campaign-implementation',
@@ -132,6 +189,7 @@ assert.throws(() => createLedgerReconciliationReceipt({
     holder_alive: true,
   },
   latestRecord: {
+    ...LEASE_IDENTITY,
     kind: 'stage',
     run_id: 'campaign-fixture',
     stage: 'campaign-implementation',
@@ -157,6 +215,34 @@ assert.throws(() => createLedgerReconciliationReceipt({
     terminal: true,
     git_truth: false,
     holder_alive: true,
+  },
+  latestRecord: {
+    ...LEASE_IDENTITY,
+    kind: 'stage',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'committed',
+    nonce: 'fixture-nonce',
+    git_sha: COMMIT_A,
+  },
+}), /does not prove a closed implementation writer/);
+assert.throws(() => createLedgerReconciliationReceipt({
+  campaignId: 'campaign-fixture',
+  stageIdentity: 'campaign-implementation',
+  candidateCommit: COMMIT_A,
+  reconcileResult: {
+    status: 'resolved',
+    reason: 'terminal_state',
+    run_id: 'campaign-fixture',
+    stage: 'campaign-implementation',
+    generation: 1,
+    state: 'committed',
+    nonce: 'fixture-nonce',
+    pending_side_effects: 0,
+    terminal: true,
+    git_truth: false,
+    holder_alive: false,
   },
   latestRecord: {
     kind: 'stage',
@@ -400,6 +486,10 @@ assert.strictEqual(adjudicated.must_fix_now[0].adjudication_authority.actor_id, 
 assert.match(adjudicated.must_fix_now[0].evidence.digest, /^[0-9a-f]{64}$/);
 assert.strictEqual(adjudicated.rejected[0].adjudication_authority.actor_id, 'core-owner');
 assert.strictEqual(adjudicated.rejected[0].evidence.classification, 'refuted');
+assert.strictEqual(
+  adjudicated.follow_up[0].disposition.proposed_backlog_title,
+  'Harden the optional path',
+);
 
 const reviewerDisposition = adjudicateCampaignReview({
   review: {
@@ -462,18 +552,29 @@ let focusedReviews = 0;
 let finalPanels = 0;
 let authorizedRepairInput = null;
 const scopeCheckpoints = [];
-const retainedFollowUp = {
+const retainedFollowUp = retainedFinding({
   id: 'F-HARDENING',
-  evidence: {
-    classification: 'actionable',
-    digest: '7'.repeat(64),
+  disposition: {
+    disposition: 'follow-up',
+    context: 'real but outside this campaign',
+    trigger: 'when the hardening ticket is funded',
+    proposed_backlog_title: 'Harden the optional path',
   },
-  adjudication_authority: {
-    authority: 'depth-0',
-    actor_id: 'core-owner',
-    review_digest: '1'.repeat(64),
+});
+const retainedMustFix = retainedFinding({
+  id: 'F-IN-SCOPE',
+  evidenceDigest: '8'.repeat(64),
+  disposition: {
+    disposition: 'must-fix-now',
+    acceptance_id: 'ICC-P2-AC1',
+    deferral_harm: 'blocks the frozen acceptance criterion',
   },
-};
+});
+const retainedRejected = retainedFinding({
+  id: 'F-REFUTED',
+  evidenceClassification: 'refuted',
+  evidenceDigest: '9'.repeat(64),
+});
 const composition = runCampaignComposition({
   maxRepairGenerations: 2,
 }, {
@@ -532,9 +633,9 @@ const composition = runCampaignComposition({
     return {
       registry_complete: true,
       repair_gate_passed: true,
-      must_fix_now: [{ id: 'F-IN-SCOPE' }],
+      must_fix_now: [retainedMustFix],
       follow_up: [retainedFollowUp],
-      rejected: [{ id: 'F-REFUTED' }],
+      rejected: [retainedRejected],
     };
   },
   convergence: () => ({ passed: true }),
@@ -549,7 +650,7 @@ assert.strictEqual(mutations, 2);
 assert.strictEqual(focusedReviews, 2);
 assert.strictEqual(finalPanels, 1);
 assert.deepStrictEqual(authorizedRepairInput.repair_finding_ids, ['F-IN-SCOPE']);
-assert.deepStrictEqual(authorizedRepairInput.repair_findings, [{ id: 'F-IN-SCOPE' }]);
+assert.deepStrictEqual(authorizedRepairInput.repair_findings, [retainedMustFix]);
 assert.deepStrictEqual(scopeCheckpoints, [
   'after_initial_mutation',
   'before_repair',
@@ -557,7 +658,7 @@ assert.deepStrictEqual(scopeCheckpoints, [
   'before_acceptance',
 ]);
 assert.deepStrictEqual(composition.follow_up, [retainedFollowUp]);
-assert.deepStrictEqual(composition.rejected_findings, [{ id: 'F-REFUTED' }]);
+assert.deepStrictEqual(composition.rejected_findings, [retainedRejected]);
 assert.strictEqual(composition.final_panel_count, 1);
 
 const dispositionConflict = runCampaignComposition({
@@ -569,11 +670,27 @@ const dispositionConflict = runCampaignComposition({
   verify: () => ({ passed: true, receipt_digest: '6'.repeat(64) }),
   review: () => ({ reviewed: true }),
   adjudicate({ final }) {
+    const classification = final ? 'must_fix_now' : 'follow_up';
+    const finding = retainedFinding({
+      id: 'F-CONFLICT',
+      disposition: final
+        ? {
+          disposition: 'must-fix-now',
+          acceptance_id: 'ICC-P2-AC1',
+          deferral_harm: 'blocks acceptance',
+        }
+        : {
+          disposition: 'follow-up',
+          context: 'deferrable fixture',
+          trigger: 'when funded',
+          proposed_backlog_title: 'Resolve conflict fixture',
+        },
+    });
     return {
       registry_complete: true,
       repair_gate_passed: true,
-      must_fix_now: final ? [{ id: 'F-CONFLICT' }] : [],
-      follow_up: final ? [] : [{ id: 'F-CONFLICT' }],
+      must_fix_now: classification === 'must_fix_now' ? [finding] : [],
+      follow_up: classification === 'follow_up' ? [finding] : [],
       rejected: [],
     };
   },
@@ -597,13 +714,16 @@ const evidenceConflict = runCampaignComposition({
       registry_complete: true,
       repair_gate_passed: true,
       must_fix_now: [],
-      follow_up: [{
+      follow_up: [retainedFinding({
         id: 'F-EVIDENCE-DRIFT',
-        evidence: {
-          classification: 'actionable',
-          digest: (final ? '9' : '8').repeat(64),
+        evidenceDigest: (final ? '9' : '8').repeat(64),
+        disposition: {
+          disposition: 'follow-up',
+          context: 'evidence drift fixture',
+          trigger: 'when evidence changes',
+          proposed_backlog_title: 'Resolve evidence drift',
         },
-      }],
+      })],
       rejected: [],
     };
   },
@@ -613,6 +733,39 @@ const evidenceConflict = runCampaignComposition({
 assert.strictEqual(evidenceConflict.status, 'blocked');
 assert.strictEqual(evidenceConflict.phase, 'final_adjudication');
 assert.match(evidenceConflict.reason, /conflicting cross-round dispositions/);
+
+const missingRetentionEvidence = runCampaignComposition({
+  maxRepairGenerations: 0,
+}, {
+  preflight: () => ({ passed: true }),
+  implement: () => ({ committed: true, tree_sha: TREE_A }),
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: 'a'.repeat(64) }),
+  review: () => ({ reviewed: true }),
+  adjudicate: () => ({
+    registry_complete: true,
+    repair_gate_passed: true,
+    must_fix_now: [],
+    follow_up: [{
+      id: 'F-MISSING-EVIDENCE',
+      claim: 'finding omits terminal evidence',
+      severity: '🟠',
+      source: 'fixture-reviewer',
+      disposition: {
+        disposition: 'follow-up',
+        context: 'invalid fixture',
+        trigger: 'never',
+        proposed_backlog_title: 'Invalid fixture',
+      },
+    }],
+    rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({ reviewed: true }),
+});
+assert.strictEqual(missingRetentionEvidence.status, 'blocked');
+assert.strictEqual(missingRetentionEvidence.phase, 'adjudication_conflict');
+assert.match(missingRetentionEvidence.reason, /bound evidence/);
 
 let incompleteMutations = 0;
 const incomplete = runCampaignComposition({
@@ -669,6 +822,7 @@ const vertical = runCampaignComposition({
     repair_gate_passed: true,
     must_fix_now: [],
     follow_up: [],
+    rejected: [],
   }),
   convergence: () => ({ passed: true }),
   finalPanel: () => ({ reviewed: true }),
@@ -685,6 +839,15 @@ assert.deepStrictEqual(verticalScopeCheckpoints, [
 
 fs.writeFileSync(path.join(temp, 'green.json'), `${JSON.stringify(green, null, 2)}\n`);
 fs.writeFileSync(path.join(temp, 'terminal.json'), `${JSON.stringify(composition, null, 2)}\n`);
+fs.writeFileSync(path.join(temp, 'invalid-terminal.json'), `${JSON.stringify({
+  ...composition,
+  follow_up: [{
+    id: 'F-SCHEMA-MISSING-EVIDENCE',
+    claim: 'schema fixture',
+    severity: '🟠',
+    source: 'fixture-reviewer',
+  }],
+}, null, 2)}\n`);
 console.log('exact_green_reuse=true');
 console.log('drift_miss=true');
 console.log('red_never_reused=true');
@@ -714,5 +877,9 @@ node "$REPO_ROOT/scripts/validate-json-schema.js" \
   --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
   --document "$TEST_TMP/terminal.json" >/dev/null
 assert_exit_code "$?" "0" "terminal receipt matches the closed schema"
+node "$REPO_ROOT/scripts/validate-json-schema.js" \
+  --schema "$REPO_ROOT/schemas/implementation-campaign-receipt.schema.json" \
+  --document "$TEST_TMP/invalid-terminal.json" >/dev/null 2>&1
+assert_exit_code "$?" "1" "terminal schema rejects a finding without evidence and authority"
 
 finalize_test

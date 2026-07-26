@@ -35,6 +35,8 @@
 #     first, then run lock.
 #   - stage mutations are append-only and never overwrite existing rows.
 #   - stale live checks use PID + process start_time dual verification.
+#   - stage-acquire --exclusive-live rejects a second verified-live lease instead of
+#     preserving the legacy additive reacquire behavior.
 #
 
 set -euo pipefail
@@ -426,7 +428,7 @@ write_side_effect_row() {
 }
 
 command_stage_acquire() {
-  local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
+  local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" exclusive_live="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -441,6 +443,7 @@ command_stage_acquire() {
       --worktree) worktree="$2"; shift 2 ;;
       --resources) resources="$2"; shift 2 ;;
       --allow-reopen) allow_reopen=1; shift ;;
+      --exclusive-live) exclusive_live=1; shift ;;
       --timeout) timeout="$2"; shift 2 ;;
       --stale-seconds) stale_secs="$2"; shift 2 ;;
       *) usage ;;
@@ -489,7 +492,12 @@ command_stage_acquire() {
     fi
 
     if [ "$latest_state" = "leased" ] && [ "$latest_alive" -eq 0 ]; then
-      :
+      if [ "$exclusive_live" -eq 1 ]; then
+        flock -u "$run_fd"
+        eval "exec ${run_fd}>&-"
+        [ -n "$resource_fds" ] && for fd in $resource_fds; do release_lock "$fd"; done
+        error "run=$run_id stage=$stage already has a live lease"
+      fi
     elif is_terminal_gc_state "$latest_state" && [ "$allow_reopen" -eq 0 ]; then
       flock -u "$run_fd"
       eval "exec ${run_fd}>&-"

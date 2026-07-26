@@ -31,6 +31,12 @@ const {
 const hash = (value) => sha256(value);
 
 const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
+  'campaign-intake': {
+    operation: 'engine_campaign_intake',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
   'review-dispatch': {
     operation: 'engine_review_dispatch',
     tool_class: 'model_runner',
@@ -89,6 +95,7 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
 };
 
 const EXPECTED_CONTROL_SINKS = [
+  ['campaign-intake', 'campaignIntake', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['review-loop-resolution', 'reviewLoopResolver', 'policy_read', [], false],
   ['review-dispatch', 'reviewDispatcher', 'challenge_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate', 'recordChallenge'], true],
   ['implementation-dispatch', 'implementationDispatcher', 'worker_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate'], true],
@@ -351,7 +358,10 @@ assert.throws(() => validateAutopilotEngineControlSinkInventory(duplicateDestina
 const truncatedInventory = getAutopilotEngineControlSinkInventory().slice(1);
 assert.throws(() => validateAutopilotEngineControlSinkInventory(truncatedInventory), /missing or has an unexpected required sink/i);
 const nonActionAuthorityInventory = getAutopilotEngineControlSinkInventory();
-nonActionAuthorityInventory[0].kernel_destinations = ['mintActionDecision'];
+const nonActionIndex = nonActionAuthorityInventory.findIndex(
+  (sink) => sink.requires_action_catalog_binding === false,
+);
+nonActionAuthorityInventory[nonActionIndex].kernel_destinations = ['mintActionDecision'];
 assert.throws(() => validateAutopilotEngineControlSinkInventory(nonActionAuthorityInventory), /cannot route through/i);
 
 const requiredSeams = new Set(AUTOPILOT_ENGINE_CONTROL_SINKS.map((sink) => sink.seam));
@@ -706,8 +716,8 @@ NODE
 NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
-assert_contains "$OUT" "sink_inventory=13" "all injected engine control sinks are covered"
-assert_contains "$OUT" "action_catalog_bindings=9" "every mutable sink requires a frozen catalog binding"
+assert_contains "$OUT" "sink_inventory=14" "all injected engine control sinks are covered"
+assert_contains "$OUT" "action_catalog_bindings=10" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"
 assert_contains "$OUT" "mutation_rejected=true" "frozen inputs and compiled contract tampering fail closed"

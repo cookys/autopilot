@@ -97,6 +97,10 @@ For each row:
 
 The phase cannot advance on an empty response, parser failure, timeout, or reviewer prose alone.
 
+The temporary ICC `--legacy-unmanaged` rail is scheduled for removal in v2.35.0 no later than
+2026-08-31. ICC P4 must retain the dated removal item in its ship artifact; L5/L6 reject the rail
+immediately in v2.34.0.
+
 ## Plans
 
 - [Implementation Campaign Convergence Control](../../plans/2026-07-26-implementation-campaign-convergence-control.md)

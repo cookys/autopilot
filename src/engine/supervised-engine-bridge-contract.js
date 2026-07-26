@@ -52,6 +52,7 @@ const ACTION_CATALOG_REQUIREMENT_KEYS = new Set([
   'command_required',
 ]);
 const REQUIRED_CONTROL_SINK_REGISTRY = Object.freeze({
+  'campaign-intake': Object.freeze({ seam: 'campaignIntake', requires_action_catalog_binding: true }),
   'review-loop-resolution': Object.freeze({ seam: 'reviewLoopResolver', requires_action_catalog_binding: false }),
   'review-dispatch': Object.freeze({ seam: 'reviewDispatcher', requires_action_catalog_binding: true }),
   'implementation-dispatch': Object.freeze({ seam: 'implementationDispatcher', requires_action_catalog_binding: true }),
@@ -84,6 +85,22 @@ function freezeEntries(entries) {
 // AutopilotEngine. The focused test reads that constructor and fails when a new
 // callable seam is added without a corresponding supervised mapping.
 const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
+  {
+    id: 'campaign-intake',
+    seam: 'campaignIntake',
+    kind: 'campaign_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_campaign_intake',
+      tool_class: 'campaign_control',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
+  },
   {
     id: 'review-loop-resolution',
     seam: 'reviewLoopResolver',

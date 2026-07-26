@@ -1,0 +1,178 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const {
+  CAMPAIGN_STATES,
+  reduceCampaignState,
+} = require('../engine/implementation-campaign');
+
+const TERMINAL = new Set([
+  CAMPAIGN_STATES.TERMINAL_READY,
+  CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
+  CAMPAIGN_STATES.TERMINAL_STOP,
+]);
+const EXIT_SUCCESS = 0;
+
+function parseArgs(argv, cwd) {
+  const command = argv[0];
+  if (!new Set(['inspect', 'resume']).has(command)) {
+    return { error: `unknown campaign subcommand: ${command || '<missing>'}` };
+  }
+  const output = {
+    command,
+    campaignId: null,
+    ledger: path.join(cwd, '.autopilot', 'run-ledger.jsonl'),
+  };
+  for (let index = 1; index < argv.length; index += 1) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (flag === '--campaign-id' || flag === '--ledger') {
+      if (!value) return { error: `${flag} requires a value` };
+      if (flag === '--campaign-id') output.campaignId = value;
+      if (flag === '--ledger') output.ledger = path.resolve(cwd, value);
+      index += 1;
+      continue;
+    }
+    return { error: `unknown campaign option: ${flag}` };
+  }
+  if (!output.campaignId) return { error: '--campaign-id is required' };
+  return output;
+}
+
+function loadRows(ledger) {
+  const bytes = fs.readFileSync(ledger);
+  if (bytes.length > 64 * 1024 * 1024) throw new Error('campaign ledger exceeds 64 MiB');
+  const lines = bytes.toString('utf8').split('\n').filter((line) => line.trim() !== '');
+  return lines.map((line, index) => {
+    try {
+      return JSON.parse(line);
+    } catch (error) {
+      throw new Error(`campaign ledger line ${index + 1} is invalid JSON: ${error.message}`);
+    }
+  });
+}
+
+function parsePayload(row) {
+  if (typeof row.payload !== 'string') return row.payload;
+  try {
+    return JSON.parse(row.payload);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function projectCampaign(rows, campaignId) {
+  const owned = rows.filter((row) => row && row.run_id === campaignId);
+  const intake = owned.find((row) => {
+    const payload = parsePayload(row);
+    return row.kind === 'journal'
+      && row.op === 'campaign_intake'
+      && payload
+      && payload.artifact_type === 'implementation_campaign_intake';
+  });
+  if (!intake) return null;
+  const intakePayload = parsePayload(intake);
+  let state = intakePayload.initial_state;
+  for (const row of owned) {
+    const payload = parsePayload(row);
+    if (row.kind !== 'journal'
+        || row.op !== 'campaign_event'
+        || !payload
+        || payload.artifact_type !== 'implementation_campaign_event') {
+      continue;
+    }
+    state = reduceCampaignState(state, payload.event);
+  }
+  const stageRows = owned.filter((row) => row.kind === 'stage' && row.stage === 'campaign');
+  return {
+    schema_version: 1,
+    campaign_id: campaignId,
+    state,
+    latest_lease: stageRows.length > 0 ? stageRows[stageRows.length - 1] : null,
+    durable_event_count: state.event_count,
+    ledger_row_count: owned.length,
+  };
+}
+
+function processAlive(lease) {
+  if (!lease || lease.state !== 'leased' || !Number.isInteger(lease.pid)) return false;
+  try {
+    process.kill(lease.pid, 0);
+    const stat = fs.readFileSync(`/proc/${lease.pid}/stat`, 'utf8');
+    const close = stat.lastIndexOf(')');
+    const fields = stat.slice(close + 2).trim().split(/\s+/);
+    const startTicks = Number(fields[19]);
+    const btimeLine = fs.readFileSync('/proc/stat', 'utf8')
+      .split('\n')
+      .find((line) => line.startsWith('btime '));
+    const ticksResult = spawnSync('getconf', ['CLK_TCK'], { encoding: 'utf8' });
+    const bootTime = Number(btimeLine && btimeLine.split(/\s+/)[1]);
+    const ticks = Number(String(ticksResult.stdout || '').trim());
+    if (!Number.isFinite(startTicks) || !Number.isFinite(bootTime)
+        || !Number.isFinite(ticks) || ticks <= 0) {
+      return false;
+    }
+    const currentStart = Math.floor(bootTime + (startTicks / ticks));
+    return currentStart === lease.start_time;
+  } catch (_error) {
+    return false;
+  }
+}
+
+function runCampaignCli(argv, options = {}) {
+  const cwd = path.resolve(options.cwd || process.cwd());
+  const parsed = parseArgs(argv, cwd);
+  if (parsed.error) {
+    process.stderr.write(`campaign: ${parsed.error}\n`);
+    return 2;
+  }
+  let projection;
+  try {
+    projection = projectCampaign(loadRows(parsed.ledger), parsed.campaignId);
+  } catch (error) {
+    process.stderr.write(`campaign: ${error.message}\n`);
+    return 1;
+  }
+  if (!projection) {
+    process.stdout.write(`${JSON.stringify({
+      status: 'not_found',
+      campaign_id: parsed.campaignId,
+    })}\n`);
+    return 1;
+  }
+  if (parsed.command === 'inspect') {
+    process.stdout.write(`${JSON.stringify({
+      status: 'found',
+      ...projection,
+    })}\n`);
+    return EXIT_SUCCESS;
+  }
+  let status = 'resumable';
+  let reason = null;
+  if (TERMINAL.has(projection.state.phase)) {
+    status = 'terminal';
+    reason = 'campaign is already terminal';
+  } else if (processAlive(projection.latest_lease)) {
+    status = 'blocked';
+    reason = 'campaign already has a live lease';
+  }
+  process.stdout.write(`${JSON.stringify({
+    status,
+    reason,
+    campaign_id: parsed.campaignId,
+    contract_digest: projection.state.contract_digest,
+    phase: projection.state.phase,
+    generation: projection.state.generation,
+    resume_required: status === 'resumable',
+  })}\n`);
+  return status === 'resumable' ? EXIT_SUCCESS : 1;
+}
+
+module.exports = {
+  loadRows,
+  parseArgs,
+  projectCampaign,
+  runCampaignCli,
+};

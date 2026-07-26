@@ -536,6 +536,68 @@ function loadSeal(sealPath, contractFile) {
   return value;
 }
 
+function inspectSealedCampaignContract({
+  contractPath,
+  repoPath,
+  sealPath,
+  missionModeAssertion,
+}) {
+  const repo = canonicalDirectory(repoPath, '--repo');
+  const repoIdentity = canonicalRepoIdentity(repo);
+  const objectFormat = repoObjectFormat(repo);
+  const missionMode = projectMissionMode(repo);
+  if (missionModeAssertion !== undefined && missionModeAssertion !== missionMode) {
+    throw new CliError(
+      `--mission-mode ${missionModeAssertion} does not match authoritative project mode `
+        + missionMode,
+      3,
+    );
+  }
+  const contractFile = loadContract(contractPath);
+  const errors = validateContract(contractFile.value, {
+    repo,
+    repoIdentity,
+    objectFormat,
+    missionMode,
+  });
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      verdict: 'REJECTED',
+      contract_sha256: contractFile.digest,
+      errors,
+    };
+  }
+
+  const seal = loadSeal(sealPath, contractFile);
+  const drift = [];
+  if (seal.contract_sha256 !== contractFile.digest) drift.push('contract_sha256');
+  if (seal.contract_path !== contractFile.path) drift.push('contract_path');
+  if (seal.repo_identity !== repoIdentity) drift.push('repo_identity');
+  if (seal.mission_mode !== missionMode) drift.push('mission_mode');
+  if (drift.length > 0) {
+    return {
+      ok: false,
+      verdict: 'DRIFT',
+      contract_sha256: contractFile.digest,
+      sealed_sha256: seal.contract_sha256,
+      drift,
+    };
+  }
+  return {
+    ok: true,
+    verdict: 'VALID',
+    contract_sha256: contractFile.digest,
+    sealed_sha256: seal.contract_sha256,
+    contract_path: contractFile.path,
+    seal_path: fs.realpathSync(sealPath),
+    repo,
+    repo_identity: repoIdentity,
+    mission_mode: missionMode,
+    contract: contractFile.value,
+  };
+}
+
 function emit(payload, code) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   process.exit(code);
@@ -589,25 +651,18 @@ function main() {
       }, 0);
     }
 
-    const seal = loadSeal(options.seal, contractFile);
-    const drift = [];
-    if (seal.contract_sha256 !== contractFile.digest) drift.push('contract_sha256');
-    if (seal.contract_path !== contractFile.path) drift.push('contract_path');
-    if (seal.repo_identity !== repoIdentity) drift.push('repo_identity');
-    if (seal.mission_mode !== options.missionMode) drift.push('mission_mode');
-    if (drift.length > 0) {
-      emit({
-        verdict: 'DRIFT',
-        contract_sha256: contractFile.digest,
-        sealed_sha256: seal.contract_sha256,
-        drift,
-      }, 3);
-    }
+    const inspection = inspectSealedCampaignContract({
+      contractPath: options.contract,
+      repoPath: repo,
+      sealPath: options.seal,
+      missionModeAssertion: options.missionMode,
+    });
+    if (!inspection.ok) emit(inspection, 3);
     emit({
-      verdict: 'VALID',
-      contract_sha256: contractFile.digest,
-      sealed_sha256: seal.contract_sha256,
-      repo_identity: repoIdentity,
+      verdict: inspection.verdict,
+      contract_sha256: inspection.contract_sha256,
+      sealed_sha256: inspection.sealed_sha256,
+      repo_identity: inspection.repo_identity,
     }, 0);
   } catch (error) {
     const code = error instanceof CliError ? error.exitCode : 2;
@@ -622,6 +677,7 @@ if (require.main === module) main();
 module.exports = {
   PROFILE_REPAIR_CEILINGS,
   canonicalRepoIdentity,
+  inspectSealedCampaignContract,
   isWindowsReservedSegment,
   normalizeAllowedPrefix,
   projectMissionMode,

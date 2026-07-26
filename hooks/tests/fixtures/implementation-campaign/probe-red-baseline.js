@@ -27,8 +27,11 @@ const roster = {
   loop_convergence_verdict: 'SHIP-AS-IS',
 };
 
-function makeEngine(verdicts) {
+function makeEngine(verdicts, options = {}) {
   const counters = { implementation: 0, review: 0, repair: 0, verify: 0 };
+  const observations = {
+    verificationTreeMutations: 0,
+  };
   const engine = new AutopilotEngine({
     clock: () => '2026-07-26T00:00:00.000Z',
     implementationDispatcher(args) {
@@ -107,8 +110,15 @@ function makeEngine(verdicts) {
         parent,
       };
     },
-    verifyCommandRunner() {
+    verifyCommandRunner({ cwd }) {
       counters.verify += 1;
+      if (options.mutateVerificationTree === true) {
+        fs.writeFileSync(
+          path.join(cwd, `verification-drift-${counters.verify}.txt`),
+          'candidate changed after verification started\n',
+        );
+        observations.verificationTreeMutations += 1;
+      }
       return {
         error: null,
         status: 0,
@@ -124,12 +134,20 @@ function makeEngine(verdicts) {
     verifyWorktreeCleanup({ targetPath }) {
       fs.rmSync(targetPath, { recursive: true, force: true });
     },
+    gitResumeInspect() {
+      return {
+        error: null,
+        exists: typeof options.resumeTip === 'string',
+        tipSha: options.resumeTip || null,
+        baseAncestor: typeof options.resumeTip === 'string',
+      };
+    },
   });
-  return { engine, counters };
+  return { engine, counters, observations };
 }
 
-function run(verdicts, input = {}) {
-  const fixture = makeEngine(verdicts);
+function run(verdicts, input = {}, fixtureOptions = {}) {
+  const fixture = makeEngine(verdicts, fixtureOptions);
   const result = fixture.engine.runImplementationReviewLoop({
     promptFile,
     branch: input.branch || 'impl/red-baseline',
@@ -137,31 +155,56 @@ function run(verdicts, input = {}) {
     roster,
     maxRounds: input.maxRounds || verdicts.length,
     verifyCmd: input.verifyCmd,
+    resume: input.resume === true,
   });
-  return { result, counters: fixture.counters };
+  return {
+    result,
+    counters: fixture.counters,
+    observations: fixture.observations,
+  };
 }
 
 const missing = run(['SHIP-AS-IS']);
-const cap = run(['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'SHIP-AS-IS'], { maxRounds: 3 });
+const cap = run(
+  ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'SHIP-AS-IS'],
+  { maxRounds: 4 },
+);
 const disposition = run(['FIX-THEN-SHIP', 'SHIP-AS-IS'], { maxRounds: 2 });
-const resetA = run(['SHIP-AS-IS'], { branch: 'impl/reset-a' });
-const resetB = run(['SHIP-AS-IS'], { branch: 'impl/reset-b' });
-const receipt = run(['SHIP-AS-IS'], { verifyCmd: 'node fixture-verify.js' });
+const resetA = run(
+  ['FIX-THEN-SHIP', 'FIX-THEN-SHIP', 'FIX-THEN-SHIP'],
+  { branch: 'impl/session-reset', maxRounds: 3 },
+);
+const resetTip = resetA.result.implementation.implementation.commit;
+const resetB = run(
+  ['FIX-THEN-SHIP', 'SHIP-AS-IS'],
+  { branch: 'impl/session-reset', maxRounds: 2, resume: true },
+  { resumeTip: resetTip },
+);
+const receipt = run(
+  ['SHIP-AS-IS'],
+  { verifyCmd: 'node fixture-verify.js' },
+  { mutateVerificationTree: true },
+);
 const receiptJson = JSON.stringify(receipt.result);
 
 const exploits = {
   missing_contract: missing.result.status === 'converged'
     && missing.counters.implementation === 1,
   repair_cap_reset: cap.result.status === 'converged'
-    && cap.counters.implementation === 3,
+    && cap.counters.implementation === 4
+    && cap.counters.repair === 3,
   missing_finding_disposition: disposition.result.status === 'converged'
     && disposition.counters.repair === 1
     && !disposition.result.ledger.some((entry) => String(entry.unit).includes('adjudicat')),
-  session_resume_reset: resetA.result.status === 'converged'
+  session_resume_reset: resetA.result.status === 'non_converged'
     && resetB.result.status === 'converged'
-    && resetA.counters.implementation + resetB.counters.implementation === 2,
+    && resetA.counters.repair === 2
+    && resetB.counters.repair === 1
+    && resetB.result.ledger.some((entry) => entry.unit === 'resume_precheck'
+      && entry.status === 'resumed'),
   verification_receipt_reuse: receipt.result.status === 'converged'
     && receipt.counters.verify === 1
+    && receipt.observations.verificationTreeMutations === 1
     && !receiptJson.includes('tree_sha')
     && !receiptJson.includes('argv_hash')
     && !receiptJson.includes('env_fingerprint'),

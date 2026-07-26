@@ -174,6 +174,8 @@ const {
 
 const ownerKernel = require('./owner-kernel');
 const executionProfile = require('./execution-profile');
+const profilePayload = require('./profile-payload');
+const profileRuntime = require('./profile-runtime');
 
 module.exports = {
   AutopilotEngine,
@@ -312,6 +314,8 @@ module.exports = {
   looksLikeReviewLoopConfig,
   RESOLVE_REVIEW_LOOP,
   invokeSocketRequest,
+  ...profileRuntime,
+  ...profilePayload,
   ...executionProfile,
   ...ownerKernel,
 };

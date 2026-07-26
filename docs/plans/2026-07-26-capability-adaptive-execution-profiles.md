@@ -678,7 +678,9 @@ Acceptance:
   full session including compaction/reload.
 - Added control context is within KR3.
 - Envelope/core invariants are byte-equivalent across guided/autonomous grants.
-- Guided golden traces match current behavior.
+- Guided baseline source retention is content-addressed. Effectful guided golden traces remain
+  unverified until an independently witnessed transport exists and therefore remain a P5 cutover
+  prerequisite rather than a P2 implementation claim.
 - A guided worker sees only its current slice; removing completed/future slice text does not remove
   dependency IDs, inputs, outputs, or acceptance.
 - Guidance bodies contain no permission, tool-grant, approval, or reviewer-gate semantics.
@@ -1106,3 +1108,20 @@ Final P1 re-review: Architecture accepted; Correctness accepted; Transport/False
 Focused profile gate: 33 assertions, zero failures. Translation, Owner Kernel, and action-hardening
 focused gates also passed. The worktree-aware red-green run was `VALIDATED`: HEAD passed all 25
 translation assertions while P0 base plus the changed test failed on the missing P4-shape rejection.
+
+### R6 - P2 implementation review (2026-07-26)
+
+Three independent read-only lenses accepted the final profile packaging and isolation boundary:
+
+- architecture verified exact-one-profile bundles, frozen-workspace and exact-model binding, guided
+  objective equality, proxy fail-close behavior, and the P5 hold on effectful golden traces;
+- correctness replayed the six prior blockers and verified that caller-authored traces remain
+  conformance-only rather than terminal runtime witnesses;
+- transport copied the Codex package outside the repository with parent Git discovery blocked and
+  verified its hash-named immutable P0 source snapshots.
+
+Final P2 review: Architecture accepted; Correctness accepted; Transport accepted. Focused gates
+passed with 122 profile-isolation assertions and 33 execution-profile assertions, plus Owner Kernel,
+translation, action-hardening, standalone Codex packaging, canonical-invariant, and mirror-sync
+checks. Claude `--bare` remains explicitly a no-effect isolation probe; the independently witnessed
+effectful compatibility trace remains a P5 cutover prerequisite.

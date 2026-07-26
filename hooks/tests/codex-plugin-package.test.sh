@@ -126,13 +126,15 @@ function compareFile(rel) {
   if (!source.equals(copy)) failures.push(`content ${rel}`);
 }
 
-for (const rel of ['bin', 'src', 'hooks/_shared', 'references', 'scripts', 'project-config-template']) {
+for (const rel of ['bin', 'src', 'profiles', 'hooks/_shared', 'references', 'scripts', 'project-config-template']) {
   compareTree(rel);
 }
 for (const rel of [
+  'hooks/hooks.json',
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
@@ -152,6 +154,28 @@ assert_eq "$SUPPORT_DIFF_OUT" "support_payload_in_sync" "Codex plugin support pa
 OUT="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 on clean payload"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check reports clean payload"
+
+PROFILE_CATALOG_OUT="$(node "$PLUGIN_DIR/scripts/build-profile-payload.js" catalog \
+  --check --repo "$PLUGIN_DIR" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "Codex package validates its profile catalog from its own root"
+assert_contains "$PROFILE_CATALOG_OUT" '"canonical_rules": 751' \
+  "Codex package includes the immutable baseline needed by profile validation"
+
+STANDALONE_PLUGIN="$TEST_TMP/standalone-codex-plugin"
+cp -R "$PLUGIN_DIR" "$STANDALONE_PLUGIN"
+STANDALONE_CATALOG_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
+  node "$STANDALONE_PLUGIN/scripts/build-profile-payload.js" catalog \
+  --check --repo "$STANDALONE_PLUGIN" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "standalone Codex package validates without parent Git discovery"
+assert_contains "$STANDALONE_CATALOG_OUT" '"canonical_rules": 751' \
+  "standalone catalog uses packaged immutable baseline snapshots"
+STANDALONE_BUILD_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
+  node "$STANDALONE_PLUGIN/scripts/build-profile-payload.js" build \
+  --profile guided --out "$TEST_TMP/standalone-guided-bundle" \
+  --repo "$STANDALONE_PLUGIN" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "standalone Codex package builds a guided payload"
+assert_contains "$STANDALONE_BUILD_OUT" '"effective_profile": "guided"' \
+  "standalone payload build resolves the packaged hook manifest"
 
 # The codex-payload change-scope triggers moved from a bespoke CODEX_PAYLOAD_TRIGGER_RE
 # in .githooks/pre-commit into the sync-codex-plugin-skills row of scripts/sync-manifest.json
@@ -173,6 +197,7 @@ const docFiles = [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ];
 const misses = docFiles.filter((rel) => !covers(rel));
@@ -187,7 +212,7 @@ assert_eq "$MANIFEST_TRIGGER_OUT" "manifest_codex_doc_triggers_in_sync" "Codex p
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
-for rel in skills bin src hooks/_shared references scripts project-config-template schemas; do
+for rel in skills bin src profiles hooks/_shared references scripts project-config-template schemas; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
   printf 'payload %s\n' "$rel" > "$SYNC_SANDBOX/$rel/payload.txt"
   cp "$SYNC_SANDBOX/$rel/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/$rel/payload.txt"
@@ -200,12 +225,16 @@ for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
   docs/plans/2026-06-26-trust-tiered-review-policy.md \
+  docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
   docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
 do
   mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"
   printf 'doc %s\n' "$rel" > "$SYNC_SANDBOX/$rel"
   cp "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
 done
+printf '{"hooks":{}}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
+cp "$SYNC_SANDBOX/hooks/hooks.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"

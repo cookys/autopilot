@@ -48,6 +48,14 @@ Hard rules:
 - **Expensive-model thrift**: depth-0 assumes the session model is the most expensive engine in the fleet; inline fallback (`--solo` or authoring content itself) is an escalation event governed by `on_engine_unavailable` (from `resolve-review-loop.sh`), never a silent default.
 - **Every depth-0 `Agent` dispatch MUST pass `model` explicitly** (foreman = `opus`; mechanical inventory / file work = `sonnet`/`haiku`) — a subagent with no `model` inherits the parent session's model, silently burning the expensive session engine (the exact spend the thrift rule guards) on a Fable-class CEO's foreman. See the model-inheritance warning in [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md) § "Dispatching the foreman".
 
+**Capability profile (shadow):** `/l6` fixes heterogeneous implementation and verification-author
+topology only. When the host supplies a current verified envelope/grant/profile payload, forward it
+unchanged; never infer guidance density from the level, runner, or model name. A late mismatch
+requires a fresh-session handoff.
+The canonical `profile-session.js` lane proves only no-effect context isolation. Existing
+implementation and verification-author rails remain guided until their exact adapters independently
+witness grant, tool/effect, identity, and terminal enforcement.
+
 **MUST-READ**: [`references/full-dispatch-pipeline.md`](references/full-dispatch-pipeline.md)
 (per-unit pipeline, machinery, authoring-rail rationale) and
 [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)

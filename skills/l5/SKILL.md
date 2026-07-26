@@ -37,6 +37,14 @@ Hard rules:
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 
+**Capability profile (shadow):** `/l5` fixes heterogeneous-implementer topology only. When the host
+supplies a current verified envelope/grant/profile payload, forward it unchanged; never infer
+guidance density from the level, runner, or model name. A late mismatch requires a fresh-session
+handoff.
+The canonical `profile-session.js` lane proves only no-effect context isolation. Existing
+heterogeneous rails remain guided until their exact adapter is independently witnessed enforcing
+the grant, tools, effects, identity, and terminal outcome.
+
 **MUST-READ**: [`references/hetero-impl-loop.md`](references/hetero-impl-loop.md)
 (this level's loop: roster fields, harness/telemetry, wired runners) and
 [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)

@@ -38,6 +38,7 @@ DIRS=(
   "skills"
   "bin"
   "src"
+  "profiles"
   "schemas"
   "hooks/_shared"
   "references"
@@ -54,7 +55,12 @@ DOC_FILES=(
   "docs/plans/2026-06-04-distill-consolidate.md"
   "docs/plans/2026-06-22-ceo-fleet-autonomy.md"
   "docs/plans/2026-06-26-trust-tiered-review-policy.md"
+  "docs/projects/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
   "docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md"
+)
+
+SUPPORT_FILES=(
+  "hooks/hooks.json"
 )
 
 if [ ! -d "$SRC" ]; then
@@ -201,6 +207,9 @@ if [ "$MODE" = "check" ]; then
   for rel in "${DOC_FILES[@]}"; do
     check_file "$rel" || STATUS=1
   done
+  for rel in "${SUPPORT_FILES[@]}"; do
+    check_file "$rel" || STATUS=1
+  done
   check_doc_extras || STATUS=1
 
   if [ "$STATUS" -eq 0 ]; then
@@ -217,6 +226,9 @@ done
 
 rm -rf "$PLUGIN/docs"
 for rel in "${DOC_FILES[@]}"; do
+  copy_file "$rel"
+done
+for rel in "${SUPPORT_FILES[@]}"; do
   copy_file "$rel"
 done
 

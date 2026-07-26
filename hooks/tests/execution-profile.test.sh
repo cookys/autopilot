@@ -454,8 +454,8 @@ const identityHash = hash(primaryIdentity);
 assert.equal(grant.parent_task_authority_id, envelope.task_authority_id);
 assert.equal(grant.authority_status, 'shadow');
 assert.equal(grant.requested_profile, 'autonomous');
-assert.equal(grant.effective_profile, 'guided');
-assert.match(grant.profile_reason, /P1 shadow projection/);
+assert.equal(grant.effective_profile, 'autonomous');
+assert.match(grant.profile_reason, /qualified capability admitted/);
 assert.equal(grant.role_admission, 'shadow_candidate');
 assert.equal(grant.capability_state, 'qualified');
 assert.deepEqual(grant.effect_subset.effects, [{
@@ -723,13 +723,13 @@ assert.throws(
   () => verifyRoleExecutionGrant(forgedGrant, envelope),
   /not the canonical parent-bound projection/,
 );
-const autonomousGrant = clone(grant);
-autonomousGrant.effective_profile = 'autonomous';
-const autonomousBody = clone(autonomousGrant);
-delete autonomousBody.grant_id;
-autonomousGrant.grant_id = hash(autonomousBody);
+const profileForgedGrant = clone(grant);
+profileForgedGrant.effective_profile = 'guided';
+const profileForgedBody = clone(profileForgedGrant);
+delete profileForgedBody.grant_id;
+profileForgedGrant.grant_id = hash(profileForgedBody);
 assert.throws(
-  () => verifyRoleExecutionGrant(autonomousGrant, envelope),
+  () => verifyRoleExecutionGrant(profileForgedGrant, envelope),
   /not the canonical parent-bound projection/,
 );
 const selfRehashedChild = resolveRoleExecutionGrant({
@@ -760,7 +760,7 @@ assert.equal(
 assert.deepEqual(validateJsonSchema(taskSchema, envelope), { valid: true, errors: [] });
 assert.deepEqual(validateJsonSchema(grantSchema, grant), { valid: true, errors: [] });
 const mutatedGrantSchema = clone(grantSchema);
-mutatedGrantSchema.properties.effective_profile.enum = ['autonomous'];
+mutatedGrantSchema.properties.effective_profile.enum = ['guided'];
 assert.equal(validateJsonSchema(mutatedGrantSchema, grant).valid, false);
 assert.equal(validateJsonSchema({
   type: 'object',
@@ -957,7 +957,10 @@ for (const profile of matrixProfiles) {
               } else {
                 matrixAdmitted += 1;
                 assert.equal(resultA.grant.requested_profile, profile);
-                assert.equal(resultA.grant.effective_profile, 'guided');
+                assert.equal(
+                  resultA.grant.effective_profile,
+                  state === 'qualified' && profile !== 'guided' ? 'autonomous' : 'guided',
+                );
                 assert.equal(resultA.grant.topology, topology);
                 assert.equal(resultA.grant.model_identity.identity, matrixIdentity.identity);
                 assert.equal(

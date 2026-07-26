@@ -8,6 +8,7 @@ const {
   sha256,
 } = require('./owner-kernel/canonical');
 const { OwnerKernelError } = require('./owner-kernel/errors');
+const PROFILE_CATALOG = require('../../profiles/profile-catalog.json');
 const {
   AUTHORITY_STATUS,
   DATA_CLASSES,
@@ -513,21 +514,18 @@ function validateGrantInputStructure(value, {
 
 function profileProjection(envelope, capabilityState) {
   const requested = envelope.execution_preferences.guidance_profile;
+  const autonomous = requested !== 'guided' && capabilityState === 'qualified';
+  const effectiveProfile = autonomous ? 'autonomous' : 'guided';
   const reason = requested === 'guided'
     ? 'project/task requested guided compatibility'
-    : capabilityState === 'qualified'
-      ? 'P1 shadow projection keeps guided authoritative until P2 isolation passes'
+    : autonomous
+      ? `qualified capability admitted for ${requested} guidance`
       : `capability state ${capabilityState} requires guided`;
   return {
     requested_profile: requested,
-    effective_profile: 'guided',
+    effective_profile: effectiveProfile,
     profile_reason: reason,
-    profile_hash: sha256(canonicalJson({
-      schema_version: 1,
-      effective_profile: 'guided',
-      authority_status: AUTHORITY_STATUS,
-      phase: 'p1-shadow',
-    })),
+    profile_hash: PROFILE_CATALOG.profiles[effectiveProfile].sha256,
   };
 }
 

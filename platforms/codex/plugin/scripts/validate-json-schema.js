@@ -600,6 +600,9 @@ if (require.main === module) {
 
 module.exports = {
   SUPPORTED_KEYWORDS,
+  assertJsonValue,
   assertSchemaNode,
+  preflightJsonSource,
+  readJson,
   validateJsonSchema,
 };

@@ -5,7 +5,9 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   CAMPAIGN_STATES,
+  canonicalDigest,
   reduceCampaignState,
+  validateInitialCampaignState,
 } = require('../engine/implementation-campaign');
 
 const TERMINAL = new Set([
@@ -74,6 +76,15 @@ function projectCampaign(rows, campaignId) {
   });
   if (!intake) return null;
   const intakePayload = parsePayload(intake);
+  if (!intakePayload
+      || intakePayload.schema_version !== 1
+      || intakePayload.artifact_type !== 'implementation_campaign_intake'
+      || typeof intakePayload.initial_state_digest !== 'string'
+      || !/^[0-9a-f]{64}$/.test(intakePayload.initial_state_digest)
+      || canonicalDigest(intakePayload.initial_state) !== intakePayload.initial_state_digest) {
+    throw new Error('campaign ledger contains an invalid intake state binding');
+  }
+  validateInitialCampaignState(intakePayload.initial_state);
   let state = intakePayload.initial_state;
   for (const row of owned) {
     const payload = parsePayload(row);
@@ -89,6 +100,7 @@ function projectCampaign(rows, campaignId) {
   return {
     schema_version: 1,
     campaign_id: campaignId,
+    initial_state: intakePayload.initial_state,
     state,
     latest_lease: stageRows.length > 0 ? stageRows[stageRows.length - 1] : null,
     durable_event_count: state.event_count,

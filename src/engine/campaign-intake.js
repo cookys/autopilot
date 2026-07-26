@@ -45,6 +45,32 @@ function defaultCampaignSealPath(contractPath) {
     : `${absolute}.seal.json`;
 }
 
+function campaignLedgerPathFor(repoIdentity) {
+  const prefix = 'git-common-dir:';
+  if (typeof repoIdentity !== 'string' || !repoIdentity.startsWith(prefix)) {
+    throw new CampaignIntakeError(
+      'campaign_repo_identity_invalid',
+      'campaign repository identity must name the canonical Git common directory',
+    );
+  }
+  return path.join(
+    repoIdentity.slice(prefix.length),
+    'autopilot',
+    'implementation-campaign.jsonl',
+  );
+}
+
+function campaignRootDigest(state) {
+  return canonicalDigest({
+    campaign_id: state.campaign_id,
+    contract_digest: state.contract_digest,
+    repo_identity: state.repo_identity,
+    ticket: state.ticket,
+    profile: state.profile,
+    limits: state.limits,
+  });
+}
+
 function parseJson(raw) {
   try {
     return JSON.parse(String(raw || '').trim());
@@ -269,6 +295,13 @@ function defaultGenerationClaim({
         'durable campaign does not match the sealed contract digest',
       );
     }
+    if (campaignRootDigest(existing.initial_state) !== campaignRootDigest(initialState)) {
+      return rejected(
+        'campaign_generation',
+        'campaign_state_contract_mismatch',
+        'durable campaign root does not match the sealed contract limits and identity',
+      );
+    }
     if (new Set([
       CAMPAIGN_STATES.TERMINAL_READY,
       CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
@@ -318,6 +351,14 @@ function defaultGenerationClaim({
         error.message || String(error),
       );
     }
+    if (resumePreflight.usage.elapsed_wall_seconds
+        >= resumePreflight.limits.max_wall_seconds) {
+      return rejected(
+        'campaign_generation',
+        'campaign_wall_budget_exhausted',
+        'durable campaign has no wall-clock budget remaining',
+      );
+    }
   }
 
   const init = runLedger(['init', '--ledger', ledgerPath], repo);
@@ -362,6 +403,7 @@ function defaultGenerationClaim({
     campaign_id: campaignId,
     contract_digest: contractDigest,
     initial_state: initialState,
+    initial_state_digest: canonicalDigest(initialState),
   };
   let resumedState = null;
   if (existing) {
@@ -483,9 +525,9 @@ function runCampaignIntake(input = {}, adapters = {}) {
   const sealPath = input.sealPath
     ? path.resolve(repo, input.sealPath)
     : (contractPath ? defaultCampaignSealPath(contractPath) : null);
-  const ledgerPath = path.resolve(
-    input.ledgerPath || path.join(repo, '.autopilot', 'run-ledger.jsonl'),
-  );
+  const requestedLedgerPath = input.ledgerPath
+    ? path.resolve(repo, input.ledgerPath)
+    : null;
   const now = typeof input.observedAt === 'string'
     ? input.observedAt
     : (typeof adapters.now === 'function' ? adapters.now() : new Date().toISOString());
@@ -704,6 +746,14 @@ function runCampaignIntake(input = {}, adapters = {}) {
     repoIdentity: inspection.repo_identity,
     startedAt: now,
   });
+  const ledgerPath = campaignLedgerPathFor(inspection.repo_identity);
+  if (requestedLedgerPath !== null && requestedLedgerPath !== ledgerPath) {
+    return releaseAfterRejection(rejected(
+      'campaign_generation',
+      'campaign_ledger_path_mismatch',
+      'campaign ledger path must be the repository-wide canonical Git common-dir ledger',
+    ));
+  }
   const claimAdapter = adapters.claimGeneration || defaultGenerationClaim;
   let generation;
   try {

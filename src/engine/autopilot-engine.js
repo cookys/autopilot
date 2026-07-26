@@ -746,6 +746,20 @@ function buildRepairBranchName({ branch, round, previousCommit }) {
   return `${branch}-repair-r${round}-${short}`;
 }
 
+function reviewerQualificationViable(roster) {
+  if (roster.reviewer_qualified === true) return true;
+  const familyConflict = !ensureDistinctReviewFamily({
+    implementerEngine: roster.implementer_engine,
+    reviewerEngine: roster.reviewer_engine,
+  });
+  return familyConflict
+    && selectFamilyConflictFallback({
+      implementerEngine: roster.implementer_engine,
+      roster,
+      reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
+    }) !== null;
+}
+
 function tempNameSegment(value) {
   return String(value || 'branch').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
 }
@@ -2123,6 +2137,143 @@ class AutopilotEngine {
       }
     }
 
+    try {
+      validateReviewRoster(roster);
+      validateImplementerRoster(roster);
+    } catch (error) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return finish({
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: error.message || String(error),
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
+
+    const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
+    let maxRounds = roster.loop_max_rounds;
+    if (Object.prototype.hasOwnProperty.call(input, 'maxRounds')
+        && input.maxRounds !== undefined
+        && input.maxRounds !== null) {
+      maxRounds = typeof input.maxRounds === 'string'
+        ? Number(input.maxRounds)
+        : input.maxRounds;
+    }
+    try {
+      validateInteger(maxRounds, 'maxRounds', 1);
+    } catch (error) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return finish({
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: error.message || String(error),
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
+
+    let convergenceVerdict = roster.loop_convergence_verdict;
+    if (Object.prototype.hasOwnProperty.call(input, 'convergenceVerdict')) {
+      convergenceVerdict = input.convergenceVerdict;
+    }
+    if (typeof convergenceVerdict !== 'string' || convergenceVerdict.length === 0) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
+      return finish({
+        status: 'blocked',
+        phase: 'prepare_implementation_loop',
+        reason: 'convergenceVerdict is required',
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
+
+    if (requireQualifiedReviewer && !reviewerQualificationViable(roster)) {
+      const startedAt = this.now();
+      ledger.push(
+        this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
+          reviewer_qualified: roster.reviewer_qualified === true,
+        }),
+      );
+      return finish({
+        status: 'blocked',
+        phase: 'reviewer_qualification',
+        reason: 'reviewer is not qualified or qualification is unknown',
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
+
+    const resume = input.resume === true;
+    let resumeTipSha = null;
+    if (resume) {
+      const startedAt = this.now();
+      let inspect;
+      try {
+        inspect = this.gitResumeInspect({ base, branch, cwd: loopCwd });
+      } catch (error) {
+        inspect = { error, exists: false, tipSha: null, baseAncestor: false };
+      }
+      const invalidReason = resumeInspectBlocked(inspect, { base, branch });
+      if (invalidReason) {
+        ledger.push(this.ledgerEntry('resume_precheck', 'resume_invalid', startedAt, {
+          branch,
+          base,
+        }));
+        return finish({
+          status: 'blocked',
+          phase: 'resume_invalid',
+          reason: invalidReason,
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
+      resumeTipSha = inspect.tipSha;
+      ledger.push(this.ledgerEntry('resume_precheck', 'resumed', startedAt, {
+        branch,
+        base,
+        commit: resumeTipSha,
+      }));
+    }
+
     if (campaignRequested) {
       const intakeStartedAt = this.now();
       let intake;
@@ -2192,6 +2343,7 @@ class AutopilotEngine {
         runId: intake.campaign_id,
         ledger: intake.generation_claim.ledger,
       };
+      maxRounds = Math.min(maxRounds, campaignMaxRounds);
     }
 
     // Host-injected observation remains additive and starts only after the
@@ -2215,172 +2367,6 @@ class AutopilotEngine {
       const startedAt = this.now();
       verifyState.verifyFirstSignalUnused = true;
       ledger.push(this.ledgerEntry('verify_first_signal', 'unused', startedAt));
-    }
-
-    try {
-      validateReviewRoster(roster);
-      validateImplementerRoster(roster);
-    } catch (error) {
-      const startedAt = this.now();
-      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return finish({
-        status: 'blocked',
-        phase: 'prepare_implementation_loop',
-        reason: error.message || String(error),
-        rounds: 0,
-        verdict: null,
-        roster,
-        resolveResult,
-        implementation: null,
-        review: null,
-        implementationChain: [],
-        reviewChain: [],
-        ledger,
-      });
-    }
-
-    const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
-    let maxRounds = roster.loop_max_rounds;
-    if (Object.prototype.hasOwnProperty.call(input, 'maxRounds') && input.maxRounds !== undefined && input.maxRounds !== null) {
-      if (typeof input.maxRounds === 'string') {
-        maxRounds = Number(input.maxRounds);
-      } else {
-        maxRounds = input.maxRounds;
-      }
-    }
-    if (campaignMaxRounds !== null) maxRounds = Math.min(maxRounds, campaignMaxRounds);
-
-    try {
-      validateInteger(maxRounds, 'maxRounds', 1);
-    } catch (error) {
-      const startedAt = this.now();
-      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return finish({
-        status: 'blocked',
-        phase: 'prepare_implementation_loop',
-        reason: error.message || String(error),
-        rounds: 0,
-        verdict: null,
-        roster,
-        resolveResult,
-        ledger,
-      });
-    }
-
-    let convergenceVerdict = roster.loop_convergence_verdict;
-    if (Object.prototype.hasOwnProperty.call(input, 'convergenceVerdict')) {
-      convergenceVerdict = input.convergenceVerdict;
-    }
-    if (typeof convergenceVerdict !== 'string' || convergenceVerdict.length === 0) {
-      const startedAt = this.now();
-      ledger.push(this.ledgerEntry('prepare_implementation_loop', 'blocked', startedAt));
-      return finish({
-        status: 'blocked',
-        phase: 'prepare_implementation_loop',
-        reason: 'convergenceVerdict is required',
-        rounds: 0,
-        verdict: null,
-        roster,
-        resolveResult,
-        ledger,
-      });
-    }
-
-    if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
-      // Fallback-aware pre-flight (v2.32.40): the per-round reviewDiff substitutes
-      // a qualified cross-family fallback reviewer when — and only when — a family
-      // conflict exists between the implementer and the incumbent reviewer AND a
-      // valid ladder row is available (setting reviewer_qualified:true for that
-      // round). Hard-blocking here on the UNqualified incumbent made that
-      // substitution unreachable, leaving the v2.32.25 on_family_conflict:fallback
-      // design dead for implement-review (the default openai×openai roster stayed
-      // permanently reviewer_qualification-blocked at rounds:0). So block ONLY when
-      // the loop is genuinely unviable — NOT ( family conflict AND a valid fallback
-      // row exists ). Use the SAME implementer engine reviewDiff will use
-      // (roster.implementer_engine, matching the loop's reviewDiff call). For
-      // viability, the existence of ANY valid row is decisive; review_risk only
-      // reorders the preference walk (the plain ladder walk finds a valid row
-      // regardless), so pass the roster's computed review_risk honestly rather than
-      // probing both tiers.
-      const preflightImplementerEngine = roster.implementer_engine;
-      const familyConflict = !ensureDistinctReviewFamily({
-        implementerEngine: preflightImplementerEngine,
-        reviewerEngine: roster.reviewer_engine,
-      });
-      const fallbackViable = familyConflict
-        && selectFamilyConflictFallback({
-          implementerEngine: preflightImplementerEngine,
-          roster,
-          reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
-        }) !== null;
-      if (!fallbackViable) {
-        const startedAt = this.now();
-        ledger.push(
-          this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
-            reviewer_qualified: roster.reviewer_qualified === true,
-          }),
-        );
-        return finish({
-          status: 'blocked',
-          phase: 'reviewer_qualification',
-          reason: 'reviewer is not qualified or qualification is unknown',
-          rounds: 0,
-          verdict: null,
-          roster,
-          resolveResult,
-          implementation: null,
-          review: null,
-          implementationChain: [],
-          reviewChain: [],
-          ledger,
-        });
-      }
-    }
-
-    // Resume-from-review (v2.32.45): opt-in re-entry when the impl leg already
-    // committed but the review leg failed (e.g. a mis-wired endpoint). Instead of
-    // re-dispatching implementation (which fail-closes on "branch already exists"
-    // and forces destroying the verified commit), skip round-1's implementTask and
-    // enter the verify+review phase against the EXISTING base..branch diff. All
-    // guards fail closed to a `resume_invalid` block with ZERO mutation; absent
-    // --resume this whole block is skipped and behavior is byte-identical.
-    const resume = input.resume === true;
-    let resumeTipSha = null;
-    if (resume) {
-      const startedAt = this.now();
-      let inspect;
-      try {
-        inspect = this.gitResumeInspect({ base, branch, cwd: loopCwd });
-      } catch (error) {
-        inspect = { error, exists: false, tipSha: null, baseAncestor: false };
-      }
-      const invalidReason = resumeInspectBlocked(inspect, { base, branch });
-      if (invalidReason) {
-        ledger.push(this.ledgerEntry('resume_precheck', 'resume_invalid', startedAt, {
-          branch,
-          base,
-        }));
-        return finish({
-          status: 'blocked',
-          phase: 'resume_invalid',
-          reason: invalidReason,
-          rounds: 0,
-          verdict: null,
-          roster,
-          resolveResult,
-          implementation: null,
-          review: null,
-          implementationChain: [],
-          reviewChain: [],
-          ledger,
-        });
-      }
-      resumeTipSha = inspect.tipSha;
-      ledger.push(this.ledgerEntry('resume_precheck', 'resumed', startedAt, {
-        branch,
-        base,
-        commit: resumeTipSha,
-      }));
     }
 
     const implementationChain = [];

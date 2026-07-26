@@ -52,6 +52,38 @@ const USAGE_KEYS = new Set([
   'changed_files',
   'churn',
 ]);
+const CAMPAIGN_STATE_KEYS = new Set([
+  'schema_version',
+  'campaign_id',
+  'contract_digest',
+  'repo_identity',
+  'ticket',
+  'profile',
+  'phase',
+  'generation',
+  'limits',
+  'usage',
+  'started_at',
+  'last_event_at',
+  'live_lease',
+  'idempotency_records',
+  'event_count',
+  'last_input_artifact_digest',
+  'last_output_artifact_digest',
+  'terminal_reason',
+]);
+const LIMIT_KEYS = new Set([
+  'max_repair_generations',
+  'max_wall_seconds',
+  'max_changed_files',
+  'max_churn',
+]);
+const CAMPAIGN_PROFILES = new Set([
+  'spike',
+  'poc',
+  'internal-pilot',
+  'production',
+]);
 const EVENT_PAYLOAD_KEYS = Object.freeze({
   [CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED]: ['sealed_contract'],
   [CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED]: [
@@ -221,6 +253,58 @@ function createCampaignState({
     last_output_artifact_digest: contractDigest,
     terminal_reason: null,
   };
+}
+
+function validateInitialCampaignState(state) {
+  assertExactKeys(state, CAMPAIGN_STATE_KEYS, 'initial campaign state');
+  if (state.schema_version !== CAMPAIGN_SCHEMA_VERSION) {
+    fail('SCHEMA_VERSION', 'initial campaign state schema_version must equal 1');
+  }
+  if (typeof state.campaign_id !== 'string'
+      || !/^campaign-v1-[0-9a-f]{64}$/.test(state.campaign_id)
+      || !isSha256(state.contract_digest)) {
+    fail('INVALID_STATE_IDENTITY', 'initial campaign identity is invalid');
+  }
+  if (typeof state.repo_identity !== 'string' || state.repo_identity.length === 0
+      || typeof state.ticket !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(state.ticket)
+      || !CAMPAIGN_PROFILES.has(state.profile)) {
+    fail('INVALID_STATE_IDENTITY', 'initial campaign contract identity is invalid');
+  }
+  if (state.campaign_id !== campaignIdFor(
+    state.repo_identity,
+    state.ticket,
+    state.contract_digest,
+  )) {
+    fail('INVALID_STATE_IDENTITY', 'initial campaign id does not match its contract identity');
+  }
+  if (state.phase !== CAMPAIGN_STATES.PREPARED || state.generation !== 0) {
+    fail('INVALID_INITIAL_PHASE', 'initial campaign must be PREPARED at generation zero');
+  }
+  assertExactKeys(state.limits, LIMIT_KEYS, 'initial campaign limits');
+  for (const key of LIMIT_KEYS) {
+    if (!Number.isSafeInteger(state.limits[key]) || state.limits[key] < 0) {
+      fail('INVALID_LIMITS', `initial campaign limits.${key} must be a non-negative safe integer`);
+    }
+  }
+  assertExactKeys(state.usage, USAGE_KEYS, 'initial campaign usage');
+  if (Object.values(state.usage).some((value) => value !== 0)) {
+    fail('INVALID_INITIAL_USAGE', 'initial campaign usage must start at zero');
+  }
+  parseTimestamp(state.started_at, 'initial campaign started_at');
+  parseTimestamp(state.last_event_at, 'initial campaign last_event_at');
+  if (state.started_at !== state.last_event_at) {
+    fail('INVALID_INITIAL_TIME', 'initial campaign clock must start at one durable timestamp');
+  }
+  if (state.live_lease !== null
+      || !Array.isArray(state.idempotency_records)
+      || state.idempotency_records.length !== 0
+      || state.event_count !== 0
+      || state.last_input_artifact_digest !== state.contract_digest
+      || state.last_output_artifact_digest !== state.contract_digest
+      || state.terminal_reason !== null) {
+    fail('INVALID_INITIAL_STATE', 'initial campaign state contains projected or unbound data');
+  }
+  return true;
 }
 
 function validateUsage(state, event, expectedGeneration) {
@@ -471,4 +555,5 @@ module.exports = {
   createCampaignState,
   reduceCampaignState,
   replayCampaignEvents,
+  validateInitialCampaignState,
 };

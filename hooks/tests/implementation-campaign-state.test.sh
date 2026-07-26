@@ -13,6 +13,7 @@ const {
   campaignIdFor,
   createCampaignState,
   reduceCampaignState,
+  validateInitialCampaignState,
 } = require(path.join(root, 'src', 'engine'));
 
 const D = 'a'.repeat(64);
@@ -154,6 +155,11 @@ assert.notStrictEqual(
   campaignIdFor('git-common-dir:/fixture', 'icc-p1', D),
   campaignIdFor('git-common-dir:/fixture', 'icc-p1', 'b'.repeat(64)),
 );
+assert.strictEqual(validateInitialCampaignState(initial()), true);
+expectCode('INVALID_STATE_IDENTITY', () => validateInitialCampaignState({
+  ...initial(),
+  campaign_id: `campaign-v1-${'b'.repeat(64)}`,
+}));
 
 sequence = 0;
 const resumed = apply(initial(), E.RESUMED, 0, {});
@@ -357,6 +363,7 @@ console.log('idempotency_conflict_rejected=true');
 console.log('payload_unknown_field_rejected=true');
 console.log('artifact_chain_break_rejected=true');
 console.log('terminal_registry_required=true');
+console.log('initial_identity_recomputed=true');
 NODE
 )"
 PURE_EXIT=$?
@@ -367,7 +374,7 @@ for key in valid_terminal contract_digest_namespaces_campaign valid_resume valid
   vertical_evidence_required registry_completeness_required repair_gate_required \
   repair_ceiling_enforced resume_budget_reset_rejected resume_clock_reset_rejected \
   idempotency_conflict_rejected payload_unknown_field_rejected \
-  artifact_chain_break_rejected terminal_registry_required; do
+  artifact_chain_break_rejected terminal_registry_required initial_identity_recomputed; do
   assert_contains "$PURE_OUT" "$key=true" "pure reducer proves $key"
 done
 
@@ -601,6 +608,21 @@ const prohibitedLegacy = new AutopilotEngine({
 });
 if (priorLevel === undefined) delete process.env.AUTOPILOT_LEVEL;
 else process.env.AUTOPILOT_LEVEL = priorLevel;
+let preflightIntakeCalls = 0;
+const invalidMax = new AutopilotEngine({
+  cwd: repo,
+  campaignIntake() {
+    preflightIntakeCalls += 1;
+    throw new Error('campaign intake must not run after local preflight rejection');
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster,
+  campaignContract: contractPath,
+  maxRounds: 0,
+});
 console.log(`missing_phase=${missing.phase}`);
 console.log(`missing_rounds=${missing.rounds}`);
 console.log(`omitted_phase=${omitted.phase}`);
@@ -611,6 +633,8 @@ console.log(`legacy_api_status=${prohibitedLegacy.status}`);
 console.log(`legacy_api_code=${prohibitedLegacy.campaign_control.status}`);
 console.log(`runner_calls=${markers.runner}`);
 console.log(`worktree_calls=${markers.worktree}`);
+console.log(`invalid_max_phase=${invalidMax.phase}`);
+console.log(`invalid_max_intake_calls=${preflightIntakeCalls}`);
 
 const campaignId = `campaign-v1-${'c'.repeat(64)}`;
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
@@ -775,6 +799,10 @@ assert_contains "$INTAKE_OUT" "legacy_api_code=legacy_unmanaged_rejected" \
   "direct engine API emits the machine-readable legacy rejection"
 assert_contains "$INTAKE_OUT" "runner_calls=0" "missing contract spawns no runner"
 assert_contains "$INTAKE_OUT" "worktree_calls=0" "invalid or missing contract creates no worktree"
+assert_contains "$INTAKE_OUT" "invalid_max_phase=prepare_implementation_loop" \
+  "invalid loop limits fail during effect-free local preflight"
+assert_contains "$INTAKE_OUT" "invalid_max_intake_calls=0" \
+  "invalid loop limits cannot acquire a campaign claim or lease"
 assert_contains "$INTAKE_OUT" "identity_status=converged" \
   "managed campaign completes through identity-capturing dispatchers"
 assert_contains "$INTAKE_OUT" \
@@ -802,34 +830,50 @@ assert_contains "$INTAKE_OUT" \
   "review_stage=campaign-review#r1" \
   "managed review receives a round-specific campaign stage identity"
 
-CAMPAIGN_LEDGER="$TEST_TMP/campaign-ledger.jsonl"
+CAMPAIGN_LEDGER="$COMMON_DIR/autopilot/implementation-campaign.jsonl"
 DEFAULT_INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
   "$BASE_SHA" "$CAMPAIGN_LEDGER" <<'NODE'
 const path = require('path');
+const fs = require('fs');
 const [root, repo, contractPath, sealPath, promptFile, base, ledgerPath] = process.argv.slice(2);
 const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
-const result = runCampaignIntake({
+const commonInput = {
   repo,
   contractPath,
   sealPath,
   promptFile,
   base,
   branch: 'impl/icc-p1-intake',
-  ledgerPath,
   roster: { implementer_engine: 'fixture-implementer' },
-}, {
+};
+const adapters = {
   now: () => '2026-07-26T00:00:00.000Z',
   readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
   contextGate: () => ({ owner: 'context_window', status: 'ready' }),
   occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
-});
+};
+const alternatePath = path.join(repo, 'alternate-campaign.jsonl');
+const alternate = runCampaignIntake({
+  ...commonInput,
+  ledgerPath: alternatePath,
+}, adapters);
+const result = runCampaignIntake({
+  ...commonInput,
+  ledgerPath,
+}, adapters);
+console.log(`alternate_code=${alternate.rejection.code}`);
+console.log(`alternate_exists=${fs.existsSync(alternatePath)}`);
 console.log(JSON.stringify(result));
 NODE
 )"
 DEFAULT_INTAKE_EXIT=$?
 assert_exit_code "$DEFAULT_INTAKE_EXIT" "0" "default generation claim writes a durable ledger"
+assert_contains "$DEFAULT_INTAKE_OUT" "alternate_code=campaign_ledger_path_mismatch" \
+  "alternate ledger paths cannot create an independent campaign authority"
+assert_contains "$DEFAULT_INTAKE_OUT" "alternate_exists=false" \
+  "alternate ledger rejection occurs before any ledger mutation"
 CAMPAIGN_ID="$(node -e \
-  'const v=JSON.parse(process.argv[1]); process.stdout.write(v.campaign_id || "")' \
+  'const lines=process.argv[1].trim().split("\n"); const v=JSON.parse(lines.at(-1)); process.stdout.write(v.campaign_id || "")' \
   "$DEFAULT_INTAKE_OUT")"
 assert_neq "$CAMPAIGN_ID" "" "default intake returns a campaign id"
 
@@ -893,6 +937,37 @@ assert_contains "$RESUME_INTAKE_OUT" "resumed_elapsed=2" \
 LEASE_ROWS_BEFORE="$(jq -s --arg id "$CAMPAIGN_ID" \
   '[.[] | select(.kind == "stage" and .run_id == $id and .stage == "campaign")] | length' \
   "$CAMPAIGN_LEDGER")"
+EXACT_BUDGET_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
+  "$BASE_SHA" "$CAMPAIGN_LEDGER" <<'NODE'
+const path = require('path');
+const [root, repo, contractPath, sealPath, promptFile, base, ledgerPath] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const result = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  base,
+  branch: 'impl/icc-p1-intake',
+  ledgerPath,
+  resume: true,
+  observedAt: '2026-07-26T00:02:00.000Z',
+  roster: { implementer_engine: 'fixture-implementer' },
+}, {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+});
+console.log(`status=${result.status}`);
+console.log(`code=${result.rejection.code}`);
+NODE
+)"
+assert_exit_code "$?" "0" "exact-budget resume intake process exits zero"
+assert_contains "$EXACT_BUDGET_OUT" "status=blocked" \
+  "resume at the exact wall-clock ceiling is rejected"
+assert_contains "$EXACT_BUDGET_OUT" "code=campaign_wall_budget_exhausted" \
+  "exact wall-clock exhaustion has a stable campaign-owned rejection code"
+
 OVER_BUDGET_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
   "$BASE_SHA" "$CAMPAIGN_LEDGER" <<'NODE'
 const path = require('path');
@@ -928,6 +1003,75 @@ assert_contains "$OVER_BUDGET_OUT" "code=WALL_BUDGET_EXCEEDED" \
   "resume preflight preserves the reducer budget verdict"
 assert_eq "$LEASE_ROWS_AFTER" "$LEASE_ROWS_BEFORE" \
   "rejected resume preflight does not acquire a durable lease"
+
+SEMANTIC_CORRUPT_LEDGER="$TEST_TMP/semantic-corrupt-campaign-ledger.jsonl"
+cp "$CAMPAIGN_LEDGER" "$SEMANTIC_CORRUPT_LEDGER"
+node - "$REPO_ROOT" "$SEMANTIC_CORRUPT_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [root, ledger, campaignId] = process.argv.slice(2);
+const { canonicalDigest } = require(path.join(root, 'src', 'engine'));
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const intake = rows.find((row) => row.run_id === campaignId && row.op === 'campaign_intake');
+const payload = JSON.parse(intake.payload);
+payload.initial_state.usage.changed_files = 1;
+payload.initial_state_digest = canonicalDigest(payload.initial_state);
+intake.payload = JSON.stringify(payload);
+fs.writeFileSync(ledger, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+SEMANTIC_CORRUPT_OUT="$(node "$REPO_ROOT/bin/autopilot.js" campaign inspect \
+  --campaign-id "$CAMPAIGN_ID" --ledger "$SEMANTIC_CORRUPT_LEDGER" 2>&1)"
+assert_exit_code "$?" "1" "campaign inspect rejects a digest-valid forged initial state"
+assert_contains "$SEMANTIC_CORRUPT_OUT" "initial campaign usage must start at zero" \
+  "campaign projection validates initial-state semantics after digest binding"
+
+ROOT_DRIFT_BACKUP="$TEST_TMP/campaign-root-backup.jsonl"
+cp "$CAMPAIGN_LEDGER" "$ROOT_DRIFT_BACKUP"
+node - "$REPO_ROOT" "$CAMPAIGN_LEDGER" "$CAMPAIGN_ID" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [root, ledger, campaignId] = process.argv.slice(2);
+const { canonicalDigest } = require(path.join(root, 'src', 'engine'));
+const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+const intake = rows.find((row) => row.run_id === campaignId && row.op === 'campaign_intake');
+const payload = JSON.parse(intake.payload);
+payload.initial_state.limits.max_wall_seconds += 1;
+payload.initial_state_digest = canonicalDigest(payload.initial_state);
+intake.payload = JSON.stringify(payload);
+fs.writeFileSync(ledger, `${rows.map(JSON.stringify).join('\n')}\n`);
+NODE
+ROOT_DRIFT_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
+  "$BASE_SHA" "$CAMPAIGN_LEDGER" <<'NODE'
+const path = require('path');
+const [root, repo, contractPath, sealPath, promptFile, base, ledgerPath] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const result = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  base,
+  branch: 'impl/icc-p1-intake',
+  ledgerPath,
+  resume: true,
+  observedAt: '2026-07-26T00:00:03.000Z',
+  roster: { implementer_engine: 'fixture-implementer' },
+}, {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+});
+console.log(`status=${result.status}`);
+console.log(`code=${result.rejection.code}`);
+NODE
+)"
+ROOT_DRIFT_EXIT=$?
+cp "$ROOT_DRIFT_BACKUP" "$CAMPAIGN_LEDGER"
+assert_exit_code "$ROOT_DRIFT_EXIT" "0" "campaign root-drift resume process exits zero"
+assert_contains "$ROOT_DRIFT_OUT" "status=blocked" \
+  "resume rejects a ledger root that differs from the sealed contract"
+assert_contains "$ROOT_DRIFT_OUT" "code=campaign_state_contract_mismatch" \
+  "campaign root drift preserves a machine-readable rejection code"
 
 CORRUPT_LEDGER="$TEST_TMP/corrupt-campaign-ledger.jsonl"
 cp "$CAMPAIGN_LEDGER" "$CORRUPT_LEDGER"

@@ -182,11 +182,14 @@ function validateCloseReceipt(file, rootRunId, marker = readMarker()) {
 
 function cmdClear(args) {
   const marker = readMarker();
-  if (marker && (marker.level === 'l5' || marker.level === 'l6')) {
+  const explicitCloseReceipt = args['task-status-receipt'] !== undefined
+    || args['root-run-id'] !== undefined;
+  if (explicitCloseReceipt || (marker && (marker.level === 'l5' || marker.level === 'l6'))) {
+    const bindingMarker = marker || { repo_root: gitToplevel() };
     const reason = validateCloseReceipt(
       args['task-status-receipt'],
       args['root-run-id'],
-      marker,
+      bindingMarker,
     );
     if (reason) {
       process.stderr.write(`session-mode: close blocked: ${reason}\n`);

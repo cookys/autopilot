@@ -164,6 +164,84 @@ A richer signal — a *live* "the model is asking a question" event from `--outp
 
 After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then merge or discard the branch.
 
+## Task status and explicit merge closeout
+
+For managed L5/L6 root runs, merge permission and task completion are different facts. Persist the
+exact task evidence bundle at
+`${AUTOPILOT_TASK_STATUS_DIR:-${TMPDIR:-/tmp}/autopilot-task-status}/<root_run_id>.json`, then
+query it without mutating refs or worktrees:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" status task --root-run-id "$root_run_id"
+task_status_receipt="$(mktemp)"
+node "$autopilot_root/bin/autopilot.js" status task \
+  --root-run-id "$root_run_id" --json >"$task_status_receipt"
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(v.can_merge!==true)process.exit(1)' \
+  "$task_status_receipt"
+```
+
+Human output starts with `DONE` only when the receipt's full `can_close` predicate is true.
+Otherwise it starts with `NOT DONE`, the first blocker, and the next action. Always read the four
+states independently:
+
+```text
+NOT DONE product_merged=true consumer_updated=true pushed=false zero_residue=false
+Blocker: pushed_false
+Next action: push the required integration ref after explicit approval
+```
+
+### Direction is data, not prose
+
+A merge intent names every direction explicitly. For example, this sequence integrates safety
+work into the product branch, then advances the consumer branch; it does not imply or permit the
+reverse edge:
+
+```json
+{
+  "edges": [
+    {
+      "sequence": 1,
+      "source_ref": "refs/heads/safety",
+      "target_ref": "refs/heads/develop",
+      "mode": "no-ff"
+    },
+    {
+      "sequence": 2,
+      "source_ref": "refs/heads/develop",
+      "source_from_edge": 1,
+      "target_ref": "refs/heads/peo",
+      "mode": "ff-only"
+    }
+  ],
+  "forbidden_reverse_edges": [
+    {
+      "source_ref": "refs/heads/peo",
+      "target_ref": "refs/heads/develop"
+    }
+  ]
+}
+```
+
+`buildMergeIntent()` resolves refs/worktrees and seals this contract.
+`preflightMergeIntent()` is strictly read-only: it inventories staged, unstaged, untracked, and
+ambiguous target paths; compares incoming paths; and returns `safe`, `overlapping`, `ambiguous`, or
+`blocked`. It never checks out, merges, stashes, resets, pushes, or deletes anything.
+
+Mutation has a separate front door. The request file must carry the exact `{manifest, seal}`,
+the caller's matching `manifest_seal`, the digest-valid preflight receipt, and exact
+`approved_preservation` paths:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" merge execute \
+  --request /path/to/sealed-merge-request.json --json
+```
+
+Execution revalidates every endpoint, target symbolic ref, worktree/repository binding, dirty
+inventory, and protected bytes before each edge. It runs only the declared `no-ff` or `ff-only`
+mode and emits a content-digested execution receipt. It does not push, delete branches/worktrees,
+or drop stashes. Run task status freshly before merge, after merge, and immediately before L5/L6
+marker clear; a previously green receipt cannot authorize a later mutation boundary.
+
 ### Cleanup (caller's responsibility — both are deliberate persistence)
 
 - `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.

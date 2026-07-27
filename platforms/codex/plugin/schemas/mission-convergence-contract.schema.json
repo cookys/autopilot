@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/mission-convergence-contract.schema.json",
+  "title": "MissionConvergenceContract",
+  "description": "Frozen v1 Mission Convergence Supervisor contract: lineage binding, per-axis ceilings, grant shape, authenticated controls, projection, and state machine.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "contract_id",
+    "repo_identity",
+    "mission_lineage_id",
+    "task_authority_id",
+    "policy_hash",
+    "enforcement_mode",
+    "state",
+    "closure_ratio",
+    "axes",
+    "grant_contract",
+    "control_contract",
+    "lineage_binding"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "mission_convergence_contract" },
+    "contract_id": { "type": "string", "pattern": "^mission-v1-[0-9a-f]{64}$" },
+    "repo_identity": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
+    "task_authority_id": { "$ref": "#/$defs/sha256" },
+    "policy_hash": { "$ref": "#/$defs/sha256" },
+    "enforcement_mode": { "type": "string", "enum": ["shadow", "enforce"] },
+    "state": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "ACTIVE",
+        "CLOSING",
+        "COMPLETE",
+        "BLOCKED",
+        "ABORTING",
+        "ABORTED",
+        "off"
+      ]
+    },
+    "closure_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "max_stagnant_campaigns": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaigns",
+        "wall_seconds",
+        "tool_calls",
+        "engine_attempts",
+        "external_wait_seconds",
+        "canonical_changed_files",
+        "output_bytes"
+      ],
+      "properties": {
+        "campaigns": { "$ref": "#/$defs/axis" },
+        "wall_seconds": { "$ref": "#/$defs/axis" },
+        "tool_calls": { "$ref": "#/$defs/axis" },
+        "engine_attempts": { "$ref": "#/$defs/axis" },
+        "external_wait_seconds": { "$ref": "#/$defs/axis" },
+        "canonical_changed_files": { "$ref": "#/$defs/axis" },
+        "output_bytes": { "$ref": "#/$defs/axis" }
+      }
+    },
+    "grant_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "idempotency_key_required",
+        "single_use",
+        "expiry_seconds",
+        "bindings"
+      ],
+      "properties": {
+        "idempotency_key_required": { "type": "boolean", "const": true },
+        "single_use": { "type": "boolean", "const": true },
+        "expiry_seconds": { "type": "integer", "minimum": 1 },
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "mission_lineage_id",
+              "task_authority_id",
+              "campaign_id",
+              "campaign_contract_digest",
+              "base_sha",
+              "acceptance_ids"
+            ]
+          }
+        }
+      }
+    },
+    "control_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actions",
+        "allowed_authorities",
+        "ceiling_loosen_authority"
+      ],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "ceiling_adjust",
+              "scope_frozen",
+              "finish_requested",
+              "abort_requested"
+            ]
+          }
+        },
+        "allowed_authorities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "authenticated_user",
+              "authenticated_doa",
+              "agent",
+              "owner_kernel"
+            ]
+          }
+        },
+        "ceiling_loosen_authority": {
+          "type": "string",
+          "enum": ["authenticated_user", "authenticated_doa"]
+        },
+        "pre_effect_sequence_check": { "type": "boolean" }
+      }
+    },
+    "lineage_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_authority_id", "root_run_id", "policy_hash"],
+      "properties": {
+        "task_authority_id": { "$ref": "#/$defs/sha256" },
+        "root_run_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "policy_hash": { "$ref": "#/$defs/sha256" },
+        "successor_inherits_durable_consumed": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "axis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorized_ceiling", "reserved_active", "durable_consumed", "known"],
+      "properties": {
+        "authorized_ceiling": { "type": "integer", "minimum": 0 },
+        "reserved_active": { "type": "integer", "minimum": 0 },
+        "durable_consumed": { "type": "integer", "minimum": 0 },
+        "active_actual": { "type": "integer", "minimum": 0 },
+        "known": { "type": "boolean" },
+        "enforced": { "type": "boolean" }
+      }
+    }
+  }
+}

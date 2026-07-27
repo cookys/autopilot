@@ -184,6 +184,7 @@ set the execution posture:
 - **`/l5`** — `/l4` with the implementer loop run through `bin/autopilot.js engine
   implement-review` (internally `dispatch-hetero.sh`; engine/runner resolved from
   `scripts/resolve-review-loop.sh`, never hardcoded).
+  The mutating entry requires `--campaign-contract <campaign.json>`.
 - **`/l6`** — `/l5` with verification AUTHORING also leaf-dispatched to a heterogeneous
   engine (different family than the implementer, via the `dispatch-author.sh` raw-prompt
   rail); depth-0 keeps merge authority and the authoritative qc.

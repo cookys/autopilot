@@ -179,7 +179,10 @@ Mandatory question: **「這個任務做完,跑什麼命令能客觀證明?」**
 - 紅必須可重現(flaky base-fail 重跑一次確認;不可重現 → 降級)。
 
 Engine wiring: answer flows to `engine implement-review --verify-cmd`;non-gating only per conjunction(紅綠 ∧ scorecard-qualified ∧ risk=low),else keep `--no-verify-first`.
+Campaign identity requires `--campaign-contract <campaign.json>` and automatically owns durable
+ledger/resume.
 Side-effect warning: verify-cmd is dispatcher-authored, isolated-worktree, read-only expectation.
+The campaign contract is the mandatory durable-ledger authority boundary.
 
 ### Scope Creep Detection
 

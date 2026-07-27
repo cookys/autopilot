@@ -1,0 +1,503 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/task-status.schema.json",
+  "title": "task-status-receipt",
+  "description": "LSM P1 content-digested task status receipt. Sole owner of task-level can_merge/can_close; never trusts mission_terminal alone as closeout.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "issued_at",
+    "repo_identity",
+    "root_run_id",
+    "goal",
+    "phase",
+    "candidate_commit",
+    "candidate_tree_sha",
+    "acceptance_verdict",
+    "accepted_blockers",
+    "deferred_count",
+    "active_owned_worktrees",
+    "active_owned_branches",
+    "integration_target",
+    "product_merged",
+    "consumer_updated",
+    "pushed",
+    "zero_residue",
+    "mission_terminal",
+    "campaigns_terminal",
+    "evidence",
+    "can_merge",
+    "can_close",
+    "failed_predicates",
+    "receipt_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "task_status_receipt" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "repo_identity": { "type": "string", "minLength": 1 },
+    "root_run_id": { "type": "string", "minLength": 1 },
+    "goal": { "type": "string" },
+    "phase": { "type": "string" },
+    "candidate_commit": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/gitOid" }
+      ]
+    },
+    "candidate_tree_sha": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/gitOid" }
+      ]
+    },
+    "acceptance_verdict": {
+      "type": "string",
+      "enum": ["accepted", "rejected", "unknown"]
+    },
+    "accepted_blockers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blocker" }
+    },
+    "deferred_count": { "type": "integer", "minimum": 0 },
+    "active_owned_worktrees": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 0 }
+      ]
+    },
+    "active_owned_branches": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 0 }
+      ]
+    },
+    "integration_target": { "$ref": "#/$defs/integrationTarget" },
+    "product_merged": { "$ref": "#/$defs/triState" },
+    "consumer_updated": { "$ref": "#/$defs/triState" },
+    "pushed": { "$ref": "#/$defs/triState" },
+    "zero_residue": { "$ref": "#/$defs/triState" },
+    "mission_terminal": { "$ref": "#/$defs/triState" },
+    "campaigns_terminal": { "$ref": "#/$defs/triState" },
+    "evidence": { "$ref": "#/$defs/evidence" },
+    "can_merge": { "type": "boolean" },
+    "can_close": { "type": "boolean" },
+    "failed_predicates": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "receipt_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "triState": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "null" }
+      ]
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "subject", "reason"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "integrationTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "observed_sha"],
+      "properties": {
+        "ref": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "observed_sha": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        }
+      }
+    },
+    "evidenceStatus": {
+      "type": "string",
+      "enum": ["valid", "invalid", "unknown", "missing", "stale"]
+    },
+    "missionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "state",
+        "state_digest",
+        "receipt_digest",
+        "terminal_digest"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "state": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "state_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "receipt_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "terminal_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        }
+      }
+    },
+    "campaignItemEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "campaign_id",
+        "phase",
+        "terminal_status",
+        "verification_receipt_digest",
+        "terminal_receipt_digest",
+        "unresolved_count",
+        "follow_up_count",
+        "candidate_commit",
+        "candidate_tree_sha"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "campaign_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "phase": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "terminal_status": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "verification_receipt_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "terminal_receipt_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "unresolved_count": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "follow_up_count": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "candidate_commit": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        },
+        "candidate_tree_sha": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        }
+      }
+    },
+    "campaignsEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "coverage_exact",
+        "provided_campaign_ids",
+        "required_campaign_ids",
+        "campaigns"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "coverage_exact": { "type": "boolean" },
+        "provided_campaign_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "required_campaign_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "campaigns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/campaignItemEvidence" }
+        }
+      }
+    },
+    "lifecycleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "receipt_digest",
+        "inspect_status",
+        "zero_residue",
+        "owned_worktrees",
+        "owned_branches",
+        "active_owned_branches"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "receipt_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "inspect_status": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "zero_residue": { "$ref": "#/$defs/triState" },
+        "owned_worktrees": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "owned_branches": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        },
+        "active_owned_branches": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        }
+      }
+    },
+    "integrationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "target_ref",
+        "target_sha",
+        "consumer_ref",
+        "consumer_sha",
+        "remote_ref",
+        "remote_sha",
+        "push_required",
+        "required_consumer_update",
+        "candidate_commit"
+      ],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "target_ref": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "target_sha": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        },
+        "consumer_ref": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "consumer_sha": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        },
+        "remote_ref": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "remote_sha": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        },
+        "push_required": { "type": "boolean" },
+        "required_consumer_update": { "type": "boolean" },
+        "candidate_commit": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/gitOid" }
+          ]
+        }
+      }
+    },
+    "mergePreflightEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "manifest_seal", "preflight_status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "manifest_seal": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "preflight_status": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "enum": ["safe", "overlapping", "ambiguous", "blocked"] }
+          ]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mission",
+        "campaigns",
+        "lifecycle",
+        "integration",
+        "merge_preflight",
+        "merge_execution"
+      ],
+      "properties": {
+        "mission": { "$ref": "#/$defs/missionEvidence" },
+        "campaigns": { "$ref": "#/$defs/campaignsEvidence" },
+        "lifecycle": { "$ref": "#/$defs/lifecycleEvidence" },
+        "integration": { "$ref": "#/$defs/integrationEvidence" },
+        "merge_preflight": { "$ref": "#/$defs/mergePreflightEvidence" },
+        "merge_execution": { "$ref": "#/$defs/mergeExecutionEvidence" }
+      }
+    },
+    "mergeExecutionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "receipt_digest", "execution_status", "edge_count"],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "receipt_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "execution_status": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "enum": ["complete", "halted"] }
+          ]
+        },
+        "edge_count": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        }
+      }
+    }
+  }
+}

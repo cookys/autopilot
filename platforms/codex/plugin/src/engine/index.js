@@ -58,6 +58,9 @@ const {
   parseCanonicalJsonBytes,
   verifyHostPinnedAuthenticatedIntake,
 } = require('./supervised-authenticated-intake');
+const campaignDispositionAuthority = require('./campaign-disposition-authority');
+const productReviewNormalizer = require('./product-review-normalizer');
+const campaignStatus = require('../campaign/status');
 
 const {
   MAX_FRAME_BYTES: SUPERVISED_HOST_MAX_FRAME_BYTES,
@@ -178,8 +181,17 @@ const profilePayload = require('./profile-payload');
 const profileRuntime = require('./profile-runtime');
 const profileCutover = require('./profile-cutover');
 const capabilityEvidence = require('./capability-evidence');
+const campaignAdjudication = require('./campaign-adjudication');
+const campaignIntake = require('./campaign-intake');
+const campaignComposition = require('./campaign-composition');
+const campaignVerification = require('./campaign-verification');
+const implementationCampaign = require('./implementation-campaign');
 const localDeployment = require('./local-deployment');
 const roles = require('./roles');
+const authenticatedControl = require('./authenticated-control');
+const missionConvergence = require('./mission-convergence');
+const missionCampaignIdentity = require('./mission-campaign-identity');
+const missionInterface = require('../mission/interface');
 
 module.exports = {
   AutopilotEngine,
@@ -340,5 +352,63 @@ module.exports = {
   ...profileRuntime,
   ...profilePayload,
   ...executionProfile,
+  ...campaignAdjudication,
+  ...campaignVerification,
+  ...campaignComposition,
+  ...implementationCampaign,
+  ...campaignIntake,
+  ...campaignDispositionAuthority,
+  ...productReviewNormalizer,
+  ...campaignStatus,
   ...ownerKernel,
+  AUTHENTICATED_CONTROL_ACTIONS: authenticatedControl.CONTROL_ACTIONS,
+  AUTHENTICATED_CONTROL_AUTHORITIES: authenticatedControl.CONTROL_AUTHORITIES,
+  AUTHENTICATED_CONTROL_REJECTION_REASONS: authenticatedControl.REJECTION_REASONS,
+  AUTHENTICATED_CONTROL_SCHEMA_VERSION: authenticatedControl.CONTROL_SCHEMA_VERSION,
+  AuthenticatedControlAdapter: authenticatedControl.AuthenticatedControlAdapter,
+  AuthenticatedControlError: authenticatedControl.AuthenticatedControlError,
+  CEILING_LOOSEN_AUTHORITIES: authenticatedControl.CEILING_LOOSEN_AUTHORITIES,
+  MISSION_CONVERGENCE_AXES: missionConvergence.SUPPORTED_AXES,
+  MISSION_CONVERGENCE_CLOSURE_ALLOWLIST: missionConvergence.CLOSURE_ALLOWLIST,
+  MISSION_CONVERGENCE_ENFORCEMENT_MODES: missionConvergence.ENFORCEMENT_MODES,
+  MISSION_CONVERGENCE_EVENT_TYPES: missionConvergence.EVENT_TYPES,
+  MISSION_CONVERGENCE_GRANT_BINDING_FIELDS: missionConvergence.GRANT_BINDING_FIELDS,
+  MISSION_CONVERGENCE_SCHEMA_VERSION: missionConvergence.MISSION_SCHEMA_VERSION,
+  MISSION_CONVERGENCE_STATES: missionConvergence.MISSION_STATES,
+  MISSION_INTERFACE_VERSION: missionInterface.MISSION_INTERFACE_VERSION,
+  MISSION_RECEIPT_SCHEMA_VERSION: missionConvergence.MISSION_RECEIPT_SCHEMA_VERSION,
+  MissionReducerError: missionConvergence.MissionReducerError,
+  missionInterface,
+  TERMINAL_TRIGGER_ACTIONS: authenticatedControl.TERMINAL_TRIGGER_ACTIONS,
+  authorizeCeilingAdjust: authenticatedControl.authorizeCeilingAdjust,
+  buildProjection: missionConvergence.buildProjection,
+  applyMissionCampaignReceipt: missionConvergence.applyMissionCampaignReceipt,
+  createFileBackedMissionStateStore: missionConvergence.createFileBackedMissionStateStore,
+  createMissionCampaignAdapters: missionConvergence.createMissionCampaignAdapters,
+  evaluateCodexEnforcementDisposition: missionConvergence.evaluateCodexEnforcementDisposition,
+  createCodexMissionEnforcementAdapter: missionConvergence.createCodexMissionEnforcementAdapter,
+  fenceMissionEffect: missionConvergence.fenceMissionEffect,
+  recordMissionClosureEffect: missionConvergence.recordMissionClosureEffect,
+  buildMissionTerminalReceipt: missionConvergence.buildMissionTerminalReceipt,
+  claimIdFor: missionConvergence.claimIdFor,
+  classifyControlEffect: authenticatedControl.classifyControlEffect,
+  computeAxisBudget: missionConvergence.computeAxisBudget,
+  createMissionState: missionConvergence.createMissionState,
+  evaluateConfig: missionConvergence.evaluateConfig,
+  evaluateIdentityReset: missionConvergence.evaluateIdentityReset,
+  evaluateMissionIntegrationFixture: missionConvergence.evaluateMissionIntegrationFixture,
+  evaluateMissionReducerFixture: missionConvergence.evaluateMissionReducerFixture,
+  isNonSerializableVerifier: authenticatedControl.isNonSerializableVerifier,
+  missionCampaignIdFor: missionCampaignIdentity.missionCampaignIdFor,
+  missionSubjectDigest: missionCampaignIdentity.missionSubjectDigest,
+  normalizeControlEvent: authenticatedControl.normalizeControlEvent,
+  reduceMissionState: missionConvergence.reduceMissionState,
+  remainingForAxis: missionConvergence.remainingForAxis,
+  replayEvents: missionConvergence.replayEvents,
+  restoreProjection: missionConvergence.restoreProjection,
+  sha256: missionConvergence.sha256,
+  stateHash: missionConvergence.stateHash,
+  validateMissionContract: missionConvergence.validateMissionContract,
+  validateVerifier: authenticatedControl.validateVerifier,
+  verifySequence: authenticatedControl.verifySequence,
 };

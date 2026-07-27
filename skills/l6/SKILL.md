@@ -34,7 +34,7 @@ Hard rules:
   `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. Consuming-checkout
   mutation is `containment_breach` (exit 4) and the artifact is quarantined, never promoted.
   Repository mutation has one entry:
-  `node bin/autopilot.js engine implement-review --campaign-contract <campaign.json> ...`.
+  `node "$autopilot_root/bin/autopilot.js" engine implement-review --campaign-contract <campaign.json> ...`.
   The controller pins base, scope, budget, ledger identity, post-return boundary, and the
   depth-0-executed acceptance command. Direct `scripts/dispatch-hetero.sh` invocation is for
   controller internals or diagnostics, not an equivalent L6 workflow. While an l5/l6 session
@@ -58,8 +58,11 @@ Hard rules:
   `zero_residue` field to be exactly `true`; `false` is a resource blocker.
   This rail proves resource disposition only and never computes task
   `can_close`, generation advance, or finish authority.
-- **Terminal status gate**: run `autopilot status task --root-run-id <campaign-root> --json`
-  before merge, after merge, and before marker clear. Finish-flow may clear an L6 marker only with
+- **Terminal status gate**: run
+  `node "$autopilot_root/bin/autopilot.js" status task --root-run-id <campaign-root> --json`
+  before merge, after merge, and before marker clear. Exit 0 alone is insufficient: capture the
+  pre-merge JSON receipt and mechanically assert `can_merge === true` before merging.
+  Finish-flow may clear an L6 marker only with
   that final fresh, digest-valid receipt and `can_close=true`; lifecycle `zero_residue=true` alone
   is not task completion.
 - **Context-window gate (v2.32.58)**: all three rails — including the authoring leaf, whose

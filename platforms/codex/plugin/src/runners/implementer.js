@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { isImmutableGitSha, bufferToString, findJsonObjectCandidates } = require('../lib/common');
+const { createRunnerTransportEnvelope } = require('../transport/runner-envelope');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_HETERO = path.join(REPO_ROOT, 'scripts', 'dispatch-hetero.sh');
@@ -174,6 +175,20 @@ function dispatchImplementJson(args, options = {}) {
 
   const stdout = bufferToString(child.stdout);
   const stderr = bufferToString(child.stderr);
+  const argValue = (flag) => {
+    const index = args.indexOf(flag);
+    return index >= 0 && typeof args[index + 1] === 'string' ? args[index + 1] : null;
+  };
+  const transportEnvelope = createRunnerTransportEnvelope({
+    runner: argValue('--runner') || 'unknown',
+    model: argValue('--model') || 'unknown',
+    operation: 'implement',
+    argv: args,
+    cwd: options.cwd || process.cwd(),
+    child: { ...child, stdout, stderr },
+    outcomeHints: options.transportOutcomeHints,
+    privateRawReference: options.privateRawReference,
+  });
 
   if (child.error) {
     return {
@@ -184,6 +199,7 @@ function dispatchImplementJson(args, options = {}) {
       stderr,
       result: null,
       parseError: null,
+      transportEnvelope,
     };
   }
 
@@ -196,6 +212,7 @@ function dispatchImplementJson(args, options = {}) {
       stderr,
       result: parseImplementationOutput(stdout),
       parseError: null,
+      transportEnvelope,
     };
   } catch (error) {
     return {
@@ -206,6 +223,7 @@ function dispatchImplementJson(args, options = {}) {
       stderr,
       result: null,
       parseError: error,
+      transportEnvelope,
     };
   }
 }

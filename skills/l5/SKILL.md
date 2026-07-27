@@ -29,7 +29,7 @@ Hard rules:
   no worktree. Split the unit or pick a larger-window engine — `--context-window warn|off`
   overrides deliberately. Contract: [`references/hetero-dispatch.md`](../../references/hetero-dispatch.md) § Context-window gate.
 - **One mutating entry**: depth-0 freezes the campaign contract, then invokes
-  `node bin/autopilot.js engine implement-review --campaign-contract <campaign.json> ...`.
+  `node "$autopilot_root/bin/autopilot.js" engine implement-review --campaign-contract <campaign.json> ...`.
   Campaign identity automatically enables the durable ledger and detached lifecycle. Direct
   `scripts/dispatch-hetero.sh` invocation is controller-internal or diagnostic only, never an
   equivalent L5 workflow. Contract or caller disagreement is rejected pre-spend; a new scope
@@ -50,8 +50,11 @@ Hard rules:
   `zero_residue` field to be exactly `true`; `false` is a resource blocker.
   This rail proves resource disposition only and never computes task
   `can_close`, generation advance, or finish authority.
-- **Terminal status gate**: run `autopilot status task --root-run-id <campaign-root> --json`
-  before merge, after merge, and before marker clear. Finish-flow may clear an L5 marker only with
+- **Terminal status gate**: run
+  `node "$autopilot_root/bin/autopilot.js" status task --root-run-id <campaign-root> --json`
+  before merge, after merge, and before marker clear. Exit 0 alone is insufficient: capture the
+  pre-merge JSON receipt and mechanically assert `can_merge === true` before merging.
+  Finish-flow may clear an L5 marker only with
   that final fresh, digest-valid receipt and `can_close=true`; lifecycle `zero_residue=true` alone
   is not task completion.
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.

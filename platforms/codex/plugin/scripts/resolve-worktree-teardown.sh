@@ -15,7 +15,8 @@
 #   5. Safe built-in defaults: teardown_hook="", stale_reaper_age_days=0,
 #      reaper_scope=marker-only
 #
-# Output: JSON {teardown_hook, stale_reaper_age_days, reaper_scope, source}
+# Output: JSON {teardown_hook, stale_reaper_age_days, reaper_scope,
+#               max_leaf_worktrees_per_root, source}
 #   teardown_hook        — path to project hook (empty = none); validated at exec time
 #   stale_reaper_age_days — integer; 0 = --gc disabled (default)
 #   reaper_scope         — marker-only (default); only marker-bearing worktrees are
@@ -36,6 +37,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEF_HOOK=""
 DEF_AGE="0"
 DEF_SCOPE="marker-only"
+DEF_MAX_LEAVES="4"
 
 FIELD=""
 while [[ $# -gt 0 ]]; do
@@ -57,6 +59,7 @@ resolve_config_ladder "worktree-teardown-config.md" "WORKTREE_TEARDOWN_CONFIG_OV
 HOOK="$(read_field "$CONFIG" teardown_hook "$DEF_HOOK" --whitespace-empty)"
 AGE="$(read_field "$CONFIG" stale_reaper_age_days "$DEF_AGE" --whitespace-empty)"
 SCOPE="$(read_field "$CONFIG" reaper_scope "$DEF_SCOPE" --whitespace-empty)"
+MAX_LEAVES="$(read_field "$CONFIG" max_leaf_worktrees_per_root "$DEF_MAX_LEAVES" --whitespace-empty)"
 
 # --- validate; fall back safe-default on garbage ---
 # age: non-negative integer only
@@ -68,6 +71,10 @@ case "$SCOPE" in
   marker-only) ;;
   *) SCOPE="$DEF_SCOPE" ;;
 esac
+if ! [[ "$MAX_LEAVES" =~ ^[0-9]+$ ]] \
+   || [ "$MAX_LEAVES" -lt 1 ] || [ "$MAX_LEAVES" -gt 32 ]; then
+  MAX_LEAVES="$DEF_MAX_LEAVES"
+fi
 # hook: strip accidental surrounding quotes; reject control chars → empty
 HOOK="${HOOK#\"}"; HOOK="${HOOK%\"}"
 HOOK="${HOOK#\'}"; HOOK="${HOOK%\'}"
@@ -80,11 +87,12 @@ if [[ -n "$FIELD" ]]; then
     teardown_hook) printf '%s\n' "$HOOK" ;;
     stale_reaper_age_days) printf '%s\n' "$AGE" ;;
     reaper_scope) printf '%s\n' "$SCOPE" ;;
+    max_leaf_worktrees_per_root) printf '%s\n' "$MAX_LEAVES" ;;
     source) printf '%s\n' "$SOURCE" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
-printf '{ "teardown_hook": "%s", "stale_reaper_age_days": %s, "reaper_scope": "%s", "source": "%s" }\n' \
-  "$(json_escape "$HOOK")" "$AGE" "$SCOPE" "$SOURCE"
+printf '{ "teardown_hook": "%s", "stale_reaper_age_days": %s, "reaper_scope": "%s", "max_leaf_worktrees_per_root": %s, "source": "%s" }\n' \
+  "$(json_escape "$HOOK")" "$AGE" "$SCOPE" "$MAX_LEAVES" "$SOURCE"

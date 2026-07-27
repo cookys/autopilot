@@ -33,11 +33,38 @@ Hard rules:
   runner/model derive from the checker's resolved verification-author tuple; caller-supplied
   `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. Consuming-checkout
   mutation is `containment_breach` (exit 4) and the artifact is quarantined, never promoted.
-  Write dispatches likewise run
-  `scripts/dispatch-hetero.sh --strict-contract --contract-file <unit.json> ...` — base and
-  timeout pin from the contract; post-return boundary (allow/deny/budget/output) and
-  depth-0-executed acceptance argv gate the result. While an l5/l6 session marker is active,
-  prompt-only (non-strict) write or author dispatch on this repo fails before the runner.
+  Repository mutation has one entry:
+  `node "$autopilot_root/bin/autopilot.js" engine implement-review --campaign-contract <campaign.json> ...`.
+  The controller pins base, scope, budget, ledger identity, post-return boundary, and the
+  depth-0-executed acceptance command. Direct `scripts/dispatch-hetero.sh` invocation is for
+  controller internals or diagnostics, not an equivalent L6 workflow. While an l5/l6 session
+  marker is active, prompt-only write or author dispatch on this repo fails before the runner.
+- **Bounded leaf lifecycle**: every schema-2 implementation leaf inherits the
+  campaign's stable `root_run_id`, which the canonical campaign controller
+  derives from the sealed `campaign_id` and injects on every initial, repair,
+  and resumed implementation dispatch as
+  `AUTOPILOT_WORKTREE_ROOT_RUN_ID`. It is separate from
+  `AUTOPILOT_ROOT_RUN_ID`, which remains the foreman/watcher trace root. Never
+  substitute a foreman/stage/leaf run id or an ambient checkout path. Managed
+  dispatch depth is normalized to at least `1`, so an inherited zero/malformed
+  depth cannot bypass occupancy admission.
+  Verification-author dispatch is a no-worktree authoring rail and does not
+  consume this occupancy budget.
+  `max_leaf_worktrees_per_root` is a hard occupancy cap (default `4`), so
+  inspect and disposition every retained implementation outcome immediately.
+  Run `reap-dispatch-worktrees.sh`, feed its exact inventory to
+  `reap-dispatch-branches.sh`, then issue and freshness-check one
+  `LifecycleResidueReceipt`. Freshness is not absence: require its
+  `zero_residue` field to be exactly `true`; `false` is a resource blocker.
+  This rail proves resource disposition only and never computes task
+  `can_close`, generation advance, or finish authority.
+- **Terminal status gate**: run
+  `node "$autopilot_root/bin/autopilot.js" status task --root-run-id <campaign-root> --json`
+  before merge, after merge, and before marker clear. Exit 0 alone is insufficient: capture the
+  pre-merge JSON receipt and mechanically assert `can_merge === true` before merging.
+  Finish-flow may clear an L6 marker only with
+  that final fresh, digest-valid receipt and `can_close=true`; lifecycle `zero_residue=true` alone
+  is not task completion.
 - **Context-window gate (v2.32.58)**: all three rails — including the authoring leaf, whose
   payloads are the largest on any rail — size the input against the target engine's window
   before spending; over budget ⇒ `precondition_failed`, no runner spawned. Contract:

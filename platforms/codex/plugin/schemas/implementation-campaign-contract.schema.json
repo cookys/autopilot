@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autopilot.local/schemas/implementation-campaign-contract.schema.json",
+  "title": "implementation-campaign-contract",
+  "description": "Closed v1 contract for one bounded implementation campaign.",
+  "x-profile-repair-ceilings": {
+    "spike": 1,
+    "poc": 2,
+    "internal-pilot": 5,
+    "production": 5
+  },
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ticket",
+    "profile",
+    "mission_grant_ref",
+    "repo_identity",
+    "base_sha",
+    "branch",
+    "vertical_acceptance",
+    "allowed_path_prefixes",
+    "max_changed_files",
+    "baseline_churn",
+    "max_growth_ratio",
+    "max_extra_churn",
+    "max_repair_generations",
+    "max_wall_seconds",
+    "verify_cmd",
+    "rubric_ids"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "ticket": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["spike", "poc", "internal-pilot", "production"]
+    },
+    "mission_grant_ref": {
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "repo_identity": { "type": "string", "minLength": 1 },
+    "base_sha": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "branch": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "vertical_acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "allowed_path_prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "max_changed_files": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "baseline_churn": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000000
+    },
+    "max_growth_ratio": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 1.5
+    },
+    "max_extra_churn": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5000000
+    },
+    "max_repair_generations": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "max_wall_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7200
+    },
+    "verify_cmd": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "rubric_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*[0-9]+$"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "profile": { "const": "spike" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 1 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "poc" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 2 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "internal-pilot" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 5 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "production" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 5 } } }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

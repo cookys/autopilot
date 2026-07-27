@@ -5,14 +5,58 @@ const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const { isImmutableGitSha } = require('../lib/common');
+const {
+  contractDigest: repairScopeContractDigest,
+  evaluate: evaluateRepairScope,
+} = require('../../scripts/check-repair-scope');
 
 const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
 const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
+const {
+  appendCampaignEvent,
+  completeCampaignAdmission,
+  releaseCampaignAdmission,
+  runCampaignIntake,
+} = require('./campaign-intake');
+const {
+  projectMissionMode,
+} = require('../../scripts/implementation-campaign-check');
+const {
+  createFileBackedMissionStateStore,
+  createMissionCampaignAdapters,
+} = require('./mission-convergence');
+const { runCampaignComposition } = require('./campaign-composition');
+const {
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
+  campaignIdFor,
+} = require('./implementation-campaign');
+const { normalizeProductReviewFindings } = require('./product-review-normalizer');
+const {
+  canonicalDigest: campaignCanonicalDigest,
+  createDetachedCheckoutAttestation,
+  createLedgerReconciliationReceipt,
+  createVerificationReceipt,
+  createVerificationRequest,
+  createWriterFence,
+  reusableGreenReceipt,
+  verificationArgv,
+} = require('./campaign-verification');
+const { adjudicateCampaignReview } = require('./campaign-adjudication');
+const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergence');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
+
+function isPlainObject(value) {
+  return value !== null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 const MISPLACEMENT_PATH_PATTERNS = [
   /(^|[\/])\.gemini([\/]|$)/,
   /(^|[\/])\.gemini-[^/\\]+([\/]|$)/,
@@ -177,6 +221,18 @@ function resolveImplementationFromLedger({
   if (typeof commit !== 'string' || !isImmutableGitSha(commit)) {
     return null;
   }
+  let reconciliationReceipt;
+  try {
+    reconciliationReceipt = createLedgerReconciliationReceipt({
+      campaignId: resolvedRunId,
+      stageIdentity: resolvedStage,
+      candidateCommit: commit,
+      reconcileResult: reconcilePayload,
+      latestRecord,
+    });
+  } catch (_error) {
+    return null;
+  }
 
   return {
     status: 'committed',
@@ -198,6 +254,7 @@ function resolveImplementationFromLedger({
     reconcile_reason: reconcilePayload.reason,
     reconcile_stage: resolvedStage,
     reconcile_run_id: resolvedRunId,
+    reconciliation_receipt: reconciliationReceipt,
     _reconciled_by_ledger: true,
     _reconciled_run_id: resolvedRunId,
     _reconciled_stage: resolvedStage,
@@ -560,15 +617,58 @@ function validateInteger(value, field, minimum) {
   }
 }
 
-function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], checklists = [] }) {
+const DISPATCH_IDENTITY_FLAGS = ['--ledger', '--run-id', '--stage'];
+
+function normalizeDispatchIdentity(identity, label) {
+  if (identity === null || identity === undefined) return null;
+  if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+  const normalized = {};
+  for (const field of ['ledger', 'runId', 'stage']) {
+    if (typeof identity[field] !== 'string' || identity[field].length === 0) {
+      throw new TypeError(`${label}.${field} must be a non-empty string`);
+    }
+    normalized[field] = identity[field];
+  }
+  return normalized;
+}
+
+function appendDispatchIdentity(args, identity) {
+  if (!identity) return;
+  args.push(
+    '--ledger', identity.ledger,
+    '--run-id', identity.runId,
+    '--stage', identity.stage,
+  );
+}
+
+function buildReviewArgs({
+  roster,
+  diffFile,
+  specFile,
+  extraReviewArgs = [],
+  checklists = [],
+  dispatchIdentity = null,
+}) {
   validateReviewRoster(roster);
   if (!diffFile || typeof diffFile !== 'string') {
     throw new TypeError('diffFile is required');
   }
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists', '--endpoint']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set([
+    '--runner',
+    '--model',
+    '--diff-file',
+    '--effort',
+    '--spec-file',
+    '--checklists',
+    '--endpoint',
+    ...DISPATCH_IDENTITY_FLAGS,
+  ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
+  const identity = normalizeDispatchIdentity(dispatchIdentity, 'dispatchIdentity');
 
   // `--checklists` is a BUILDER-MANAGED arg (like `--spec-file`): callers may not pass it in
   // extraReviewArgs (it is reserved), the builder injects the classifier-derived list. It is
@@ -605,12 +705,22 @@ function buildReviewArgs({ roster, diffFile, specFile, extraReviewArgs = [], che
   if (specFile && typeof specFile === 'string') {
     args.push('--spec-file', specFile);
   }
+  appendDispatchIdentity(args, identity);
   args.push(...extraReviewArgs);
   return args;
 }
 
 function validateExtraReviewArgs(extraReviewArgs) {
-  validateExtraArgs(extraReviewArgs, new Set(['--runner', '--model', '--diff-file', '--effort', '--spec-file', '--checklists', '--endpoint']), 'extraReviewArgs');
+  validateExtraArgs(extraReviewArgs, new Set([
+    '--runner',
+    '--model',
+    '--diff-file',
+    '--effort',
+    '--spec-file',
+    '--checklists',
+    '--endpoint',
+    ...DISPATCH_IDENTITY_FLAGS,
+  ]), 'extraReviewArgs');
   if (extraReviewArgs.some(arg => arg === '--spec-file' || arg.startsWith('--spec-file='))) {
     throw new TypeError('extra args cannot override --spec-file');
   }
@@ -623,6 +733,9 @@ function buildImplementationArgs({
   base,
   cwd,
   extraImplementationArgs = [],
+  dispatchIdentity = null,
+  campaignContractFile = null,
+  campaignContractDigest = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -641,9 +754,24 @@ function buildImplementationArgs({
     '--branch',
     '--base',
     '--effort',
+    '--campaign-contract',
+    '--campaign-contract-sha256',
+    ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
+  if (campaignContractFile !== null
+      && (typeof campaignContractFile !== 'string' || campaignContractFile.length === 0)) {
+    throw new TypeError('campaignContractFile must be a non-empty string');
+  }
+  if (campaignContractDigest !== null
+      && (typeof campaignContractDigest !== 'string'
+        || !/^[0-9a-f]{64}$/.test(campaignContractDigest))) {
+    throw new TypeError('campaignContractDigest must be a lowercase SHA-256 digest');
+  }
+  if ((campaignContractFile === null) !== (campaignContractDigest === null)) {
+    throw new TypeError('campaignContractFile and campaignContractDigest must be supplied together');
+  }
 
-  return [
+  const args = [
     '--runner',
     roster.implementer_runner,
     '--model',
@@ -656,13 +784,223 @@ function buildImplementationArgs({
     base,
     '--effort',
     roster.implementer_effort,
-    ...extraImplementationArgs,
   ];
+  appendDispatchIdentity(
+    args,
+    normalizeDispatchIdentity(dispatchIdentity, 'dispatchIdentity'),
+  );
+  if (campaignContractFile) {
+    args.push('--campaign-contract', path.resolve(cwd || process.cwd(), campaignContractFile));
+    args.push('--campaign-contract-sha256', campaignContractDigest);
+  }
+  args.push(...extraImplementationArgs);
+  return args;
+}
+
+function deriveCampaignLifecycleRoot({
+  campaignContractFile,
+  campaignContractDigest,
+  runId,
+  cwd,
+}) {
+  const contractPath = path.resolve(cwd || process.cwd(), campaignContractFile);
+  let contract;
+  try {
+    contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  } catch (error) {
+    throw new TypeError(`managed campaign contract is unreadable: ${error.message}`);
+  }
+  const common = spawnSync(
+    'git',
+    ['-C', cwd || process.cwd(), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  if (common.error || common.status !== 0) {
+    throw new TypeError('managed campaign repository identity is unavailable');
+  }
+  let commonDir;
+  try {
+    commonDir = fs.realpathSync(String(common.stdout || '').trim());
+  } catch (_error) {
+    throw new TypeError('managed campaign Git common directory is unreadable');
+  }
+  const repoIdentity = `git-common-dir:${commonDir}`;
+  if (!contract || contract.repo_identity !== repoIdentity) {
+    throw new TypeError('managed campaign contract repository identity does not match cwd');
+  }
+  const expected = campaignIdFor(
+    repoIdentity,
+    contract.ticket,
+    campaignContractDigest,
+  );
+  if (runId !== expected) {
+    throw new TypeError(
+      'managed campaign run id does not match the sealed contract identity',
+    );
+  }
+  return expected;
 }
 
 function buildRepairBranchName({ branch, round, previousCommit }) {
   const short = previousCommit ? previousCommit.slice(0, 7) : 'base';
   return `${branch}-repair-r${round}-${short}`;
+}
+
+function reviewerQualificationViable(roster) {
+  if (roster.reviewer_qualified === true) return true;
+  const familyConflict = !ensureDistinctReviewFamily({
+    implementerEngine: roster.implementer_engine,
+    reviewerEngine: roster.reviewer_engine,
+  });
+  return familyConflict
+    && selectFamilyConflictFallback({
+      implementerEngine: roster.implementer_engine,
+      roster,
+      reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
+    }) !== null;
+}
+
+function isCampaignPreSpendRejection(result) {
+  if (!result || result.status !== 'blocked') return false;
+  if (result.phase === 'prepare_implementation'
+      && result.implementationResult === null
+      && result.implementation === null) {
+    return true;
+  }
+  const leaf = result.implementation;
+  return leaf
+    && leaf.status === 'precondition_failed'
+    && leaf.commit === null
+    && leaf.worktree === null
+    && leaf.files_changed === 0
+    && leaf.insertions === 0
+    && leaf.deletions === 0;
+}
+
+function campaignWallBudgetStatus(control, observedAt) {
+  if (!control || control.status !== 'admitted') {
+    return { exhausted: false, elapsed_seconds: null };
+  }
+  const state = control.initial_state;
+  const startedAt = state && Date.parse(state.started_at);
+  const observed = Date.parse(observedAt);
+  const limit = state && state.limits && state.limits.max_wall_seconds;
+  if (!Number.isFinite(startedAt)
+      || !Number.isFinite(observed)
+      || observed < startedAt
+      || !Number.isSafeInteger(limit)
+      || limit < 0) {
+    return { exhausted: true, elapsed_seconds: null };
+  }
+  const elapsed = Math.floor((observed - startedAt) / 1000);
+  return {
+    exhausted: elapsed >= limit,
+    elapsed_seconds: elapsed,
+  };
+}
+
+function campaignMutationBudgetStatus(control, observedAt) {
+  const wall = campaignWallBudgetStatus(control, observedAt);
+  if (wall.exhausted || !control || control.status !== 'admitted') return wall;
+  const state = control.initial_state;
+  const usage = state && state.usage;
+  const limits = state && state.limits;
+  if (!usage || !limits) {
+    return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'state' };
+  }
+  if (usage.changed_files >= limits.max_changed_files) {
+    return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'changed_files' };
+  }
+  if (usage.churn >= limits.max_churn) {
+    return { exhausted: true, elapsed_seconds: wall.elapsed_seconds, axis: 'churn' };
+  }
+  return { ...wall, axis: null };
+}
+
+function createCampaignScopeSession({ contract, base, implementationSha }) {
+  const allowedNewPaths = contract.allowed_path_prefixes.map((prefix) => (
+    prefix.endsWith('/') ? `${prefix}**` : `${prefix}/**`
+  ));
+  const scopeContract = Object.freeze({
+    schema: 1,
+    task_id: contract.ticket,
+    base_sha: base,
+    implementation_sha: implementationSha,
+    allowed_path_prefixes: [...contract.allowed_path_prefixes],
+    allowed_new_paths: allowedNewPaths,
+    baseline_churn: contract.baseline_churn,
+    max_growth_ratio: contract.max_growth_ratio,
+    max_extra_churn: contract.max_extra_churn,
+  });
+  return Object.freeze({
+    contract: scopeContract,
+    seal_digest: repairScopeContractDigest(scopeContract),
+    max_changed_files: contract.max_changed_files,
+  });
+}
+
+function checkCampaignScope({ session, repo, head }) {
+  if (!session
+      || repairScopeContractDigest(session.contract) !== session.seal_digest) {
+    return {
+      passed: false,
+      verdict: 'TRIP',
+      reason: 'campaign scope seal drifted',
+    };
+  }
+  let result;
+  try {
+    result = evaluateRepairScope(session.contract, repo, head);
+  } catch (error) {
+    return {
+      passed: false,
+      verdict: 'TRIP',
+      reason: error.message || String(error),
+    };
+  }
+  const fileCapPassed = result.changed_files.length <= session.max_changed_files;
+  const body = {
+    ...result,
+    file_cap: session.max_changed_files,
+    file_cap_passed: fileCapPassed,
+    seal_digest: session.seal_digest,
+  };
+  return {
+    ...body,
+    passed: result.verdict === 'PASS' && fileCapPassed,
+    receipt_digest: campaignCanonicalDigest(body),
+    reason: result.verdict === 'PASS' && fileCapPassed
+      ? null
+      : (fileCapPassed ? 'repair scope gate tripped' : 'changed-file cap exceeded'),
+  };
+}
+
+function defaultCampaignAdjudicator({
+  review,
+  convergenceVerdict,
+  dispositionAuthority,
+  now,
+}) {
+  return adjudicateCampaignReview({
+    review,
+    convergenceVerdict,
+    dispositionAuthority,
+    now,
+  });
+}
+
+function defaultCampaignTreeResolver({ repo, commit }) {
+  const child = spawnSync('git', ['rev-parse', '--verify', `${commit}^{tree}`], {
+    cwd: repo,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const treeSha = String(child.stdout || '').trim();
+  if (child.error || child.signal || child.status !== 0 || !isImmutableGitSha(treeSha)) {
+    throw new Error('candidate Git tree could not be resolved from the implementation commit');
+  }
+  return treeSha;
 }
 
 function tempNameSegment(value) {
@@ -695,11 +1033,13 @@ function defaultDiffProvider({ base, commit, branch, round, cwd }) {
   return file;
 }
 
-function defaultVerifyCommandRunner({ verifyCmd, cwd }) {
-  const child = spawnSync(verifyCmd, {
+function defaultVerifyCommandRunner({ verifyCmd, cwd, env = process.env }) {
+  const [file, ...args] = verificationArgv(verifyCmd);
+  const child = spawnSync(file, args, {
     cwd: cwd || process.cwd(),
+    env,
     encoding: 'utf8',
-    shell: true,
+    shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return {
@@ -708,6 +1048,7 @@ function defaultVerifyCommandRunner({ verifyCmd, cwd }) {
     signal: child.signal || null,
     stdout: child.stdout || '',
     stderr: child.stderr || '',
+    executed_argv: [file, ...args],
   };
 }
 
@@ -721,6 +1062,10 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       stderr: '',
       worktree: null,
       parent: null,
+      commit,
+      observed_commit: null,
+      observed_tree_sha: null,
+      detached: false,
     };
   }
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-verify-wt-'));
@@ -742,7 +1087,41 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
       stderr: '',
       worktree,
       parent,
+      commit,
+      observed_commit: null,
+      observed_tree_sha: null,
+      detached: false,
     };
+  }
+  let observedCommit = null;
+  let observedTreeSha = null;
+  let detached = false;
+  if (child.status === 0 && !child.error && !child.signal) {
+    const head = spawnSync('git', ['rev-parse', '--verify', 'HEAD'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const tree = spawnSync('git', ['rev-parse', '--verify', 'HEAD^{tree}'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const symbolic = spawnSync('git', ['symbolic-ref', '--quiet', 'HEAD'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (!head.error && !head.signal && head.status === 0) {
+      observedCommit = String(head.stdout || '').trim();
+    }
+    if (!tree.error && !tree.signal && tree.status === 0) {
+      observedTreeSha = String(tree.stdout || '').trim();
+    }
+    detached = !symbolic.error && !symbolic.signal && symbolic.status === 1;
   }
   return {
     error: child.error || null,
@@ -752,6 +1131,10 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
     stderr: child.stderr || '',
     worktree,
     parent,
+    commit,
+    observed_commit: observedCommit,
+    observed_tree_sha: observedTreeSha,
+    detached,
   };
 }
 
@@ -982,6 +1365,83 @@ class AutopilotEngine {
     this.now = createClock(options.clock);
     this.classifyDiffRisk = options.classifyDiffRisk || defaultClassifyDiffRisk;
     this.lifecycleObserver = options.lifecycleObserver || null;
+    this.campaignIntake = options.campaignIntake || runCampaignIntake;
+    this.campaignAdmissionReleaser = options.campaignAdmissionReleaser
+      || releaseCampaignAdmission;
+    this.campaignEventAppender = options.campaignEventAppender || appendCampaignEvent;
+    this.campaignAdmissionCompleter = options.campaignAdmissionCompleter
+      || completeCampaignAdmission;
+    this.campaignComposer = options.campaignComposer || runCampaignComposition;
+    this.campaignAdjudicator = options.campaignAdjudicator || defaultCampaignAdjudicator;
+    this.campaignDispositionProvider = options.campaignDispositionProvider || null;
+    this.campaignScopeChecker = options.campaignScopeChecker || checkCampaignScope;
+    this.campaignTreeResolver = options.campaignTreeResolver || defaultCampaignTreeResolver;
+    // Trusted Mission campaign adapter configuration. The engine builds
+    // adapters internally and passes them as the second argument to
+    // campaignIntake — callers never inject a free-form claim predicate.
+    // Runtime input to runImplementationReviewLoop cannot override the
+    // constructor's store/factory (host-trusted only).
+    this.missionStatePath = typeof options.missionStatePath === 'string'
+      && options.missionStatePath.length > 0
+      ? path.resolve(options.missionStatePath)
+      : null;
+    if (options.missionCampaignStore
+        && typeof options.missionCampaignStore === 'object'
+        && typeof options.missionCampaignStore.load === 'function'
+        && typeof options.missionCampaignStore.save === 'function') {
+      this.missionCampaignStore = options.missionCampaignStore;
+    } else if (this.missionStatePath) {
+      this.missionCampaignStore = createFileBackedMissionStateStore(this.missionStatePath);
+    } else {
+      this.missionCampaignStore = null;
+    }
+    this.missionCampaignGrant = options.missionCampaignGrant || null;
+    this.missionCampaignAdapterOptions = isPlainObject(options.missionCampaignAdapterOptions)
+      ? options.missionCampaignAdapterOptions
+      : {};
+    this.missionAdapterFactory = typeof options.missionAdapterFactory === 'function'
+      ? options.missionAdapterFactory
+      : createMissionCampaignAdapters;
+  }
+
+  // Constructor-owned adapters only. Free-form runtime input cannot replace
+  // the store or factory; grant_ref is taken from the sealed campaign contract.
+  buildMissionCampaignAdapters({ grant_ref: grantRef = null } = {}) {
+    const store = this.missionCampaignStore;
+    const grant = this.missionCampaignGrant;
+    const extra = this.missionCampaignAdapterOptions;
+    const hasAtomicStore = store !== null
+      && typeof store === 'object'
+      && typeof store.load === 'function'
+      && typeof store.save === 'function';
+    const hasGrantRef = typeof grantRef === 'string' && /^[0-9a-f]{64}$/.test(grantRef);
+    if (!hasAtomicStore && grant === null && !hasGrantRef && Object.keys(extra).length === 0) {
+      return null;
+    }
+    return this.missionAdapterFactory({
+      ...extra,
+      store: hasAtomicStore ? store : undefined,
+      grant: isPlainObject(grant) ? grant : (isPlainObject(extra.grant) ? extra.grant : grant),
+      grant_ref: hasGrantRef
+        ? grantRef
+        : (typeof extra.grant_ref === 'string' ? extra.grant_ref : undefined),
+    });
+  }
+
+  readCampaignMissionGrantRef(contractPath, cwd) {
+    if (typeof contractPath !== 'string' || contractPath.length === 0) return null;
+    const absolute = path.isAbsolute(contractPath)
+      ? contractPath
+      : path.resolve(cwd || this.cwd, contractPath);
+    let value;
+    try {
+      value = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+    } catch (_error) {
+      return null;
+    }
+    if (!isPlainObject(value)) return null;
+    const ref = value.mission_grant_ref;
+    return typeof ref === 'string' && /^[0-9a-f]{64}$/.test(ref) ? ref : null;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -1399,6 +1859,13 @@ class AutopilotEngine {
     const injectedChecklists = (dynamicReviewRisk && classification && Array.isArray(classification.checklists))
       ? classification.checklists
       : [];
+    const dispatchIdentity = input.ledger && input.runId
+      ? {
+        ledger: input.ledger,
+        runId: input.runId,
+        stage: input.reviewStage || 'review',
+      }
+      : null;
 
     try {
       reviewArgs = buildReviewArgs({
@@ -1411,6 +1878,7 @@ class AutopilotEngine {
           ? input.extraReviewArgs
           : [],
         checklists: injectedChecklists,
+        dispatchIdentity,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -1611,7 +2079,22 @@ class AutopilotEngine {
       };
     }
 
+    let resolvedImplementationStage;
+    let campaignLifecycleRoot = null;
     try {
+      resolvedImplementationStage = resolveImplementationLedgerStage({
+        implementationStage: input.implementationStage,
+        implementationRound: input.implementationRound,
+        runId: input.runId,
+      });
+      if (input.campaignContractFile) {
+        campaignLifecycleRoot = deriveCampaignLifecycleRoot({
+          campaignContractFile: input.campaignContractFile,
+          campaignContractDigest: input.campaignContractDigest,
+          runId: input.runId,
+          cwd: resolvedTaskCwd,
+        });
+      }
       implementationArgs = buildImplementationArgs({
         roster,
         promptFile: input.promptFile,
@@ -1621,6 +2104,15 @@ class AutopilotEngine {
         extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
           ? input.extraImplementationArgs
           : [],
+        dispatchIdentity: input.ledger && input.runId
+          ? {
+            ledger: input.ledger,
+            runId: input.runId,
+            stage: resolvedImplementationStage,
+          }
+          : null,
+        campaignContractFile: input.campaignContractFile || null,
+        campaignContractDigest: input.campaignContractDigest || null,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -1640,9 +2132,67 @@ class AutopilotEngine {
 
     const startedAt = this.now();
     let implementationResult;
+    const implementationBaseEnv = Object.prototype.hasOwnProperty.call(
+      implementationOptionsInput,
+      'env',
+    )
+      ? implementationOptionsInput.env
+      : process.env;
+    if (campaignLifecycleRoot
+        && (!implementationBaseEnv || typeof implementationBaseEnv !== 'object'
+          || Array.isArray(implementationBaseEnv))) {
+      const blockedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', blockedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'managed implementation env must be an object',
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+    const inheritedDispatchDepth = campaignLifecycleRoot
+      ? (
+        implementationBaseEnv.AUTOPILOT_DISPATCH_DEPTH
+        || '1'
+      )
+      : null;
+    const inheritedDispatchDepthText = String(inheritedDispatchDepth);
+    const inheritedDispatchDepthNumber = Number(inheritedDispatchDepthText);
+    const managedDispatchDepth = campaignLifecycleRoot
+      && /^[1-9][0-9]*$/.test(inheritedDispatchDepthText)
+      && Number.isSafeInteger(inheritedDispatchDepthNumber)
+      && inheritedDispatchDepthNumber <= 1_000_000
+      ? inheritedDispatchDepthText
+      : '1';
+    const managedTraceParent = campaignLifecycleRoot
+      ? (
+        implementationBaseEnv.AUTOPILOT_PARENT_RUN_ID
+        || campaignLifecycleRoot
+      )
+      : null;
+    const managedTraceRoot = campaignLifecycleRoot
+      ? (
+        implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID
+        || managedTraceParent
+      )
+      : null;
     const implementationOptions = {
       ...implementationOptionsInput,
       cwd: resolvedTaskCwd,
+      ...(campaignLifecycleRoot ? {
+        env: {
+          ...implementationBaseEnv,
+          AUTOPILOT_PARENT_RUN_ID: managedTraceParent,
+          AUTOPILOT_ROOT_RUN_ID: managedTraceRoot,
+          AUTOPILOT_WORKTREE_ROOT_RUN_ID: campaignLifecycleRoot,
+          AUTOPILOT_DISPATCH_DEPTH: managedDispatchDepth,
+        },
+      } : {}),
     };
     try {
       implementationResult = this.implementationDispatcher(
@@ -1662,12 +2212,6 @@ class AutopilotEngine {
     }
     let blockedReason = implementationResultBlocked(implementationResult);
     let parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
-    const resolvedImplementationStage = resolveImplementationLedgerStage({
-      implementationStage: input.implementationStage,
-      implementationRound: input.implementationRound,
-      runId: input.runId,
-    });
-
     let reconciledByLedger = false;
     let reconcileDetails = null;
     if (blockedReason && (!parsed || implementationResult.result === null)) {
@@ -1797,6 +2341,903 @@ class AutopilotEngine {
   }
 
   runImplementationReviewLoop(input = {}) {
+    if (input.legacyUnmanaged === true
+        && (input.campaignManaged === true || Boolean(input.campaignContract))) {
+      const startedAt = this.now();
+      return {
+        status: 'blocked',
+        phase: 'campaign_contract',
+        reason: '--legacy-unmanaged conflicts with managed campaign input',
+        rounds: 0,
+        verdict: null,
+        roster: input.roster || null,
+        resolveResult: null,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger: [
+          this.ledgerEntry('campaign_contract', 'blocked', startedAt, {
+            rejection_code: 'campaign_mode_conflict',
+          }),
+        ],
+        campaign_control: {
+          status: 'campaign_mode_conflict',
+          deprecated: true,
+          removal_release: 'v2.35.0',
+        },
+      };
+    }
+    if (input.legacyUnmanaged === true) {
+      return this.runLegacyImplementationReviewLoop(input);
+    }
+    if (input.campaignContract) {
+      return this._runImplementationReviewLoop(input);
+    }
+    return this._runImplementationReviewLoop({
+      ...input,
+      campaignManaged: true,
+    });
+  }
+
+  runLegacyImplementationReviewLoop(input = {}) {
+    const level = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
+    if (level === 'l5' || level === 'l6') {
+      const startedAt = this.now();
+      return {
+        status: 'blocked',
+        phase: 'campaign_contract',
+        reason: '--legacy-unmanaged is prohibited for L5/L6',
+        rounds: 0,
+        verdict: null,
+        roster: input.roster || null,
+        resolveResult: null,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger: [
+          this.ledgerEntry('campaign_contract', 'blocked', startedAt, {
+            rejection_code: 'legacy_unmanaged_rejected',
+          }),
+        ],
+        campaign_control: {
+          status: 'legacy_unmanaged_rejected',
+          deprecated: true,
+          removal_release: 'v2.35.0',
+        },
+      };
+    }
+    return this._runImplementationReviewLoop({
+      ...input,
+      campaignManaged: false,
+      campaignContract: null,
+      legacyUnmanaged: true,
+    });
+  }
+
+  _runManagedCampaignComposition({
+    input,
+    campaignControl,
+    roster,
+    resolveResult,
+    loopCwd,
+    promptFile,
+    branch,
+    base,
+    verifyCmd,
+    convergenceVerdict,
+    requireQualifiedReviewer,
+    ledger,
+    releaseCampaignNoEffect,
+  }) {
+    const implementationChain = [];
+    const reviewChain = [];
+    const verificationCache = new Map();
+    const convergenceArtifacts = [];
+    const durableJournal = campaignControl.generation_claim.durable_journal === true;
+    const resumeCandidate = campaignControl.generation_claim.resume_candidate || null;
+    const resumeReviewDigest = campaignControl.generation_claim.resume_review_digest || null;
+    let scopeSession = null;
+    let currentBase = base;
+    let repairPromptFile = promptFile;
+    let latestReview = null;
+    let latestAdjudication = null;
+    let latestVerification = null;
+    let implementationRound = 0;
+    let resumeSetupError = null;
+
+    const recordCampaignEvent = (eventInput) => {
+      if (!durableJournal) return null;
+      const appended = this.campaignEventAppender({
+        repo: loopCwd,
+        campaignControl,
+        observedAt: this.now(),
+        ...eventInput,
+      });
+      if (!appended || appended.status !== 'appended' || !appended.state) {
+        throw new Error('campaign event appender did not return durable state');
+      }
+      campaignControl.initial_state = appended.state;
+      return appended;
+    };
+    const recordGreenVerification = (receipt, repairGeneration) => {
+      if (resumeReviewDigest
+          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+        return;
+      }
+      recordCampaignEvent({
+        eventType: CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
+        generation: repairGeneration,
+        stageIdentity: `campaign-verification:${repairGeneration}`,
+        payload: {
+          passed: true,
+          evidence_digest: receipt.receipt_digest,
+        },
+        artifactReference: {
+          kind: 'verification_receipt',
+          digest: receipt.receipt_digest,
+        },
+      });
+    };
+
+    if (resumeCandidate) {
+      try {
+        scopeSession = createCampaignScopeSession({
+          contract: campaignControl.contract,
+          base,
+          implementationSha: resumeCandidate.scope_implementation_sha,
+        });
+        currentBase = resumeCandidate.commit;
+        implementationRound = campaignControl.initial_state.generation + 1;
+      } catch (error) {
+        resumeSetupError = error.message || String(error);
+      }
+    }
+
+    const performReview = ({ candidate, scope, repair_generation: repairGeneration }) => {
+      let diffFile;
+      try {
+        diffFile = this.diffProvider({
+          base,
+          commit: candidate.commit,
+          branch: candidate.branch,
+          round: repairGeneration + 1,
+          currentBase,
+          cwd: loopCwd,
+        });
+      } catch (error) {
+        return { reviewed: false, reason: error.message || String(error) };
+      }
+      const budgetAt = this.now();
+      const budget = campaignWallBudgetStatus(campaignControl, budgetAt);
+      if (budget.exhausted) {
+        return {
+          reviewed: false,
+          phase: 'campaign_wall_budget',
+          reason: 'campaign wall budget exhausted before review',
+        };
+      }
+      const reviewed = this.reviewDiff({
+        diffFile,
+        specFile: promptFile,
+        roster,
+        rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+          ? input.rosterArgs
+          : ['--check-scorecard'],
+        resolverOptions: {
+          ...(input.resolverOptions || {}),
+          cwd: loopCwd,
+        },
+        dynamicReviewRisk: false,
+        extraReviewArgs: input.extraReviewArgs || [],
+        sourceTrust: input.sourceTrust,
+        oracleAvailable: input.oracleAvailable,
+        securitySurface: input.securitySurface,
+        samplingRatio: input.samplingRatio,
+        samplingSeed: input.samplingSeed,
+        classifyRulesFile: input.classifyRulesFile,
+        implementerEngine: roster.implementer_engine,
+        runId: campaignControl.campaign_id,
+        ledger: campaignControl.generation_claim.ledger,
+        reviewStage: scope === 'final'
+          ? 'campaign-final-review'
+          : `campaign-review#r${repairGeneration + 1}`,
+        reviewOptions: {
+          ...(input.reviewOptions || {}),
+          cwd: loopCwd,
+        },
+        requireQualifiedReviewer,
+      });
+      ledger.push(...reviewed.ledger);
+      reviewChain.push(reviewed);
+      latestReview = reviewed;
+      if (reviewed.status !== 'reviewed') {
+        return {
+          reviewed: false,
+          reason: reviewed.reason || `review status ${reviewed.status}`,
+          raw: reviewed,
+        };
+      }
+      let findings = reviewed.review && typeof reviewed.review.findings === 'string'
+        ? reviewed.review.findings
+        : '';
+      if (findings.trim().length > 0) {
+        const normalized = normalizeProductReviewFindings(findings);
+        if (normalized.status !== 'normalized') {
+          return {
+            reviewed: false,
+            phase: 'product_review_normalization',
+            reason: normalized.reason,
+            raw: reviewed,
+          };
+        }
+        findings = normalized.canonical;
+      }
+      const reviewDigest = campaignCanonicalDigest({
+        verdict: reviewed.verdict,
+        findings,
+        scope,
+        tree_sha: candidate.tree_sha,
+      });
+      if (scope !== 'final'
+          && resumeReviewDigest
+          && campaignControl.initial_state.phase === CAMPAIGN_STATES.ADJUDICATING) {
+        if (reviewDigest !== resumeReviewDigest) {
+          return {
+            reviewed: false,
+            phase: 'campaign_resume_review',
+            reason: 'replayed focused review does not match the durable review digest',
+            raw: reviewed,
+          };
+        }
+      } else if (scope !== 'final') {
+        try {
+          recordCampaignEvent({
+            eventType: CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+            generation: repairGeneration,
+            stageIdentity: `campaign-review:${repairGeneration}`,
+            payload: { review_digest: reviewDigest },
+            artifactReference: {
+              kind: 'product_review',
+              digest: reviewDigest,
+            },
+          });
+        } catch (error) {
+          return {
+            reviewed: false,
+            phase: 'campaign_event_journal',
+            reason: error.message || String(error),
+            raw: reviewed,
+          };
+        }
+      }
+      return {
+        reviewed: true,
+        verdict: reviewed.verdict,
+        findings,
+        review_digest: reviewDigest,
+        raw: reviewed,
+      };
+    };
+
+    const maxRepairGenerations = Math.min(
+      campaignControl.contract.max_repair_generations,
+      Math.max(0, roster.loop_max_rounds - 1),
+    );
+    const composition = this.campaignComposer({
+      maxRepairGenerations,
+      resume: resumeCandidate && !resumeSetupError
+        ? {
+          phase: campaignControl.initial_state.phase,
+          repair_generation: campaignControl.initial_state.generation,
+          candidate: resumeCandidate,
+        }
+        : null,
+    }, {
+      preflight: () => ({
+        passed: resumeSetupError === null,
+        reason: resumeSetupError,
+        intake: campaignControl,
+      }),
+      implement: ({
+        kind,
+        repair_generation: repairGeneration,
+        repair_finding_ids: findingIds,
+        repair_findings: repairFindings,
+      }) => {
+        const budgetAt = this.now();
+        const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
+        if (budget.exhausted) {
+          if (implementationChain.length === 0) {
+            releaseCampaignNoEffect({
+              owner: 'campaign_generation',
+              status: 'rejected',
+              code: 'campaign_budget_exhausted',
+              reason: 'campaign has no mutation budget remaining',
+            });
+          }
+          return {
+            committed: false,
+            phase: 'campaign_wall_budget',
+            reason: 'campaign mutation budget exhausted',
+          };
+        }
+        implementationRound += 1;
+        const currentBranch = implementationRound === 1
+          ? branch
+          : buildRepairBranchName({
+            branch,
+            round: implementationRound,
+            previousCommit: currentBase,
+          });
+        if (kind !== 'initial') {
+          const repairReview = {
+            verdict: kind === 'vertical_repair'
+              ? 'VERTICAL-ACCEPTANCE-FAILED'
+              : 'AUTHORIZED-REPAIR',
+            review: {
+              findings: JSON.stringify(repairFindings),
+            },
+          };
+          try {
+            repairPromptFile = this.repairPromptWriter({
+              promptFile,
+              round: implementationRound,
+              base,
+              previousCommit: currentBase,
+              commit: currentBase,
+              review: repairReview,
+            });
+          } catch (error) {
+            return { committed: false, reason: error.message || String(error) };
+          }
+        }
+        try {
+          recordCampaignEvent({
+            eventType: kind === 'initial'
+              ? CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED
+              : CAMPAIGN_EVENTS.REPAIR_STARTED,
+            generation: repairGeneration,
+            stageIdentity: `campaign-mutation:${repairGeneration}`,
+            payload: { sealed_contract: true },
+            artifactReference: null,
+          });
+        } catch (error) {
+          return {
+            committed: false,
+            phase: 'campaign_event_journal',
+            reason: error.message || String(error),
+          };
+        }
+        const implementation = this.implementTask({
+          promptFile: repairPromptFile,
+          branch: currentBranch,
+          base: currentBase,
+          roster,
+          runId: campaignControl.campaign_id,
+          ledger: campaignControl.generation_claim.ledger,
+          implementationRound,
+          implementationStage: 'campaign-implementation',
+          campaignContractFile: campaignControl.contract_path,
+          campaignContractDigest: campaignControl.contract_digest,
+          resultJson: input.resultJson,
+          gitDir: input.gitDir,
+          extraImplementationArgs: Object.prototype.hasOwnProperty.call(
+            input,
+            'extraImplementationArgs',
+          ) ? input.extraImplementationArgs : [],
+          implementationOptions: {
+            ...(input.implementationOptions || {}),
+            cwd: loopCwd,
+          },
+        });
+        ledger.push(...implementation.ledger);
+        implementationChain.push(implementation);
+        if (implementation.status !== 'committed') {
+          if (implementationChain.length === 1 && isCampaignPreSpendRejection(implementation)) {
+            releaseCampaignNoEffect({
+              owner: 'implementation_dispatch',
+              status: 'rejected',
+              code: 'campaign_leaf_pre_spend_rejected',
+              reason: implementation.reason || 'implementation pre-spend rejection',
+            });
+          }
+          return {
+            committed: false,
+            reason: implementation.reason || `implementation status ${implementation.status}`,
+            raw: implementation,
+          };
+        }
+        const commit = implementation.implementation.commit;
+        let treeSha;
+        let writerFence;
+        try {
+          treeSha = this.campaignTreeResolver({
+            repo: loopCwd,
+            commit,
+          });
+          writerFence = createWriterFence({
+            campaignId: campaignControl.campaign_id,
+            stageIdentity: implementationRound === 1
+              ? 'campaign-implementation'
+              : `campaign-implementation#r${implementationRound}`,
+            candidateCommit: commit,
+            candidateTreeSha: treeSha,
+            implementationResult: implementation,
+          });
+        } catch (error) {
+          return {
+            committed: false,
+            phase: 'campaign_writer_fence',
+            reason: error.message || String(error),
+          };
+        }
+        if (implementationRound === 1) {
+          try {
+            scopeSession = createCampaignScopeSession({
+              contract: campaignControl.contract,
+              base,
+              implementationSha: commit,
+            });
+          } catch (error) {
+            return { committed: false, reason: error.message || String(error) };
+          }
+        }
+        currentBase = commit;
+        return {
+          committed: true,
+          tree_sha: treeSha,
+          commit,
+          branch: currentBranch,
+          writer_fence: writerFence,
+          authorized_repair_finding_ids: findingIds,
+          raw: implementation,
+        };
+      },
+      scopeCheck: ({ checkpoint, candidate }) => {
+        let receipt = this.campaignScopeChecker({
+          session: scopeSession,
+          repo: loopCwd,
+          head: candidate.commit,
+          checkpoint,
+        });
+        ledger.push(this.ledgerEntry(
+          'campaign_scope',
+          receipt.passed === true ? 'passed' : 'blocked',
+          this.now(),
+          {
+            checkpoint,
+            receipt_digest: receipt.receipt_digest || null,
+          },
+        ));
+        if (durableJournal
+            && receipt.passed === true
+            && new Set(['after_initial_mutation', 'after_repair_mutation']).has(checkpoint)) {
+          try {
+            const state = campaignControl.initial_state;
+            const eventType = state.phase === CAMPAIGN_STATES.IMPLEMENTING
+              ? CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED
+              : CAMPAIGN_EVENTS.REPAIR_COMPLETED;
+            recordCampaignEvent({
+              eventType,
+              generation: state.generation,
+              stageIdentity: state.live_lease.stage_identity,
+              usage: {
+                changed_files: Array.isArray(receipt.changed_files)
+                  ? receipt.changed_files.length
+                  : state.usage.changed_files,
+                churn: Number.isSafeInteger(receipt.total_churn)
+                  ? receipt.total_churn
+                  : state.usage.churn,
+              },
+              payload: {
+                scope_check_passed: true,
+                scope_check_digest: receipt.receipt_digest,
+              },
+              artifactReference: {
+                kind: 'git_candidate',
+                commit: candidate.commit,
+                tree_sha: candidate.tree_sha,
+                branch: candidate.branch,
+                base,
+                writer_fence: candidate.writer_fence,
+              },
+            });
+          } catch (error) {
+            receipt = {
+              ...receipt,
+              passed: false,
+              reason: error.message || String(error),
+              phase: 'campaign_event_journal',
+            };
+          }
+        }
+        return receipt;
+      },
+      verify: ({ candidate, repair_generation: repairGeneration }) => {
+        const budget = campaignWallBudgetStatus(campaignControl, this.now());
+        if (budget.exhausted) {
+          return {
+            passed: false,
+            retriable: false,
+            phase: 'campaign_wall_budget',
+            reason: 'campaign wall budget exhausted before verification',
+            receipt_digest: campaignCanonicalDigest({
+              tree_sha: candidate.tree_sha,
+              elapsed_seconds: budget.elapsed_seconds,
+            }),
+          };
+        }
+        const verificationEnv = input.verificationEnv || process.env;
+        const request = createVerificationRequest({
+          treeSha: candidate.tree_sha,
+          verifyCmd,
+          env: verificationEnv,
+          envAllowlist: input.verificationEnvAllowlist,
+        });
+        const cached = verificationCache.get(request.request_digest);
+        if (reusableGreenReceipt(cached, request)) {
+          try {
+            recordGreenVerification(cached, repairGeneration);
+          } catch (error) {
+            return {
+              passed: false,
+              retriable: false,
+              phase: 'campaign_event_journal',
+              reason: error.message || String(error),
+              receipt_digest: cached.receipt_digest,
+            };
+          }
+          latestVerification = cached;
+          return {
+            passed: true,
+            cached: true,
+            receipt_digest: cached.receipt_digest,
+            receipt: cached,
+          };
+        }
+        const startedAt = this.now();
+        let addResult;
+        let worktree = null;
+        let parent = null;
+        let worktreeAdded = false;
+        let checkoutAttestation = null;
+        let verifyResult = null;
+        let setupReason = null;
+        let cleanupReason = null;
+        try {
+          addResult = this.gitWorktreeAdd({
+            commit: candidate.commit,
+            cwd: loopCwd,
+            round: repairGeneration + 1,
+            branch: candidate.branch,
+          });
+          worktree = addResult && addResult.worktree;
+          parent = addResult && addResult.parent;
+          setupReason = worktreeResultBlocked(addResult);
+          if (!setupReason) {
+            worktreeAdded = true;
+            try {
+              checkoutAttestation = createDetachedCheckoutAttestation({
+                candidateCommit: candidate.commit,
+                candidateTreeSha: candidate.tree_sha,
+                worktreeResult: addResult,
+              });
+            } catch (error) {
+              setupReason = error.message || String(error);
+            }
+          }
+          if (!setupReason) {
+            verifyResult = this.verifyCommandRunner({
+              verifyCmd,
+              cwd: worktree,
+              env: verificationEnv,
+              round: repairGeneration + 1,
+              commit: candidate.commit,
+              branch: candidate.branch,
+            });
+          }
+        } catch (error) {
+          setupReason = error.message || String(error);
+        } finally {
+          if (worktree && worktreeAdded) {
+            try {
+              cleanupReason = worktreeResultBlocked(this.gitWorktreeRemove({
+                worktree,
+                cwd: loopCwd,
+                round: repairGeneration + 1,
+                commit: candidate.commit,
+                branch: candidate.branch,
+              }));
+            } catch (error) {
+              cleanupReason = error.message || String(error);
+            }
+          }
+          if (parent) {
+            try {
+              this.verifyWorktreeCleanup({
+                targetPath: parent,
+                cwd: loopCwd,
+                round: repairGeneration + 1,
+                commit: candidate.commit,
+                branch: candidate.branch,
+                reason: 'campaign_verify_parent_cleanup',
+              });
+            } catch (error) {
+              cleanupReason = cleanupReason || error.message || String(error);
+            }
+          }
+        }
+        if (setupReason || !verifyResult || verifyResultBlocked(verifyResult)) {
+          return {
+            passed: false,
+            retriable: false,
+            phase: 'vertical_verification_setup',
+            reason: setupReason || verifyResultBlocked(verifyResult) || 'verification unavailable',
+            receipt_digest: campaignCanonicalDigest({
+              tree_sha: candidate.tree_sha,
+              setup_reason: setupReason,
+            }),
+          };
+        }
+        let receipt;
+        try {
+          receipt = createVerificationReceipt({
+            campaignId: campaignControl.campaign_id,
+            request,
+            exitStatus: verifyResult.status,
+            startedAt,
+            endedAt: this.now(),
+            writerFence: candidate.writer_fence,
+            checkoutAttestation,
+            executedArgv: verifyResult.executed_argv,
+            stdout: verifyResult.stdout,
+            stderr: verifyResult.stderr,
+          });
+        } catch (error) {
+          ledger.push(this.ledgerEntry(
+            'campaign_verification',
+            'blocked',
+            startedAt,
+            {
+              tree_sha: candidate.tree_sha,
+              attestation_error: error.message || String(error),
+            },
+          ));
+          return {
+            passed: false,
+            retriable: false,
+            phase: 'verification_attestation',
+            reason: error.message || String(error),
+            receipt_digest: campaignCanonicalDigest({
+              tree_sha: candidate.tree_sha,
+              attestation_error: error.message || String(error),
+            }),
+          };
+        }
+        if (receipt.verdict === 'GREEN') verificationCache.set(request.request_digest, receipt);
+        latestVerification = receipt;
+        ledger.push(this.ledgerEntry(
+          'campaign_verification',
+          receipt.verdict === 'GREEN' ? 'passed' : 'failed',
+          startedAt,
+          {
+            tree_sha: candidate.tree_sha,
+            receipt_digest: receipt.receipt_digest,
+            cached: false,
+            cleanup_warning: cleanupReason,
+          },
+        ));
+        if (receipt.verdict === 'GREEN') {
+          try {
+            recordGreenVerification(receipt, repairGeneration);
+          } catch (error) {
+            return {
+              passed: false,
+              retriable: false,
+              phase: 'campaign_event_journal',
+              reason: error.message || String(error),
+              receipt_digest: receipt.receipt_digest,
+              receipt,
+            };
+          }
+        }
+        return {
+          passed: receipt.verdict === 'GREEN',
+          cached: false,
+          receipt_digest: receipt.receipt_digest,
+          receipt,
+        };
+      },
+      review: (reviewInput) => performReview(reviewInput),
+      adjudicate: ({ review, repair_generation: repairGeneration, final }) => {
+        let dispositionAuthority = null;
+        if (typeof this.campaignDispositionProvider === 'function') {
+          try {
+            dispositionAuthority = this.campaignDispositionProvider({
+              review,
+              repairGeneration,
+              final,
+              contract: campaignControl.contract,
+              campaignId: campaignControl.campaign_id,
+              contractDigest: campaignControl.contract_digest,
+              cwd: loopCwd,
+            });
+          } catch (error) {
+            return {
+              registry_complete: false,
+              repair_gate_passed: false,
+              reason: error.message || String(error),
+              must_fix_now: [],
+              follow_up: [],
+              rejected: [],
+            };
+          }
+        }
+        const adjudication = this.campaignAdjudicator({
+          review,
+          repairGeneration,
+          final,
+          convergenceVerdict,
+          dispositionAuthority,
+          contract: campaignControl.contract,
+          cwd: loopCwd,
+          now: this.now(),
+        });
+        latestAdjudication = adjudication;
+        return adjudication;
+      },
+      convergence: ({
+        repair_generation: repairGeneration,
+        next_repair_generation: nextGeneration,
+        reason,
+      }) => {
+        const budget = campaignWallBudgetStatus(campaignControl, this.now());
+        convergenceArtifacts.push({
+          artifact_generation: repairGeneration + 1,
+          tests_executed: true,
+          ship_ready: reason === 'acceptance',
+          convergence_verdict: reason === 'acceptance' ? 'PASS' : 'REWORK',
+        });
+        const gate = evaluateLoopConvergence(convergenceArtifacts, {
+          // Artifact generation one is the initial candidate; the contract cap
+          // counts repairs after that candidate.
+          generationCap: maxRepairGenerations + 1,
+        });
+        let passed = !budget.exhausted && gate.verdict === 'PASS';
+        let journalReason = null;
+        if (passed && reason !== 'acceptance' && Number.isSafeInteger(nextGeneration)) {
+          const registryDigest = reason === 'review_findings'
+            && latestAdjudication
+            && /^[0-9a-f]{64}$/.test(latestAdjudication.registry_digest || '')
+            ? latestAdjudication.registry_digest
+            : campaignCanonicalDigest({
+              reason,
+              verification_receipt_digest: latestVerification
+                ? latestVerification.receipt_digest
+                : null,
+            });
+          const repairGateDigest = campaignCanonicalDigest({
+            reason,
+            registry_digest: registryDigest,
+            next_generation: nextGeneration,
+          });
+          try {
+            recordCampaignEvent({
+              eventType: CAMPAIGN_EVENTS.REPAIR_AUTHORIZED,
+              generation: nextGeneration,
+              stageIdentity: `campaign-repair-authorization:${nextGeneration}`,
+              payload: {
+                registry_complete: true,
+                registry_digest: registryDigest,
+                repair_gate_passed: true,
+                repair_gate_digest: repairGateDigest,
+              },
+              artifactReference: {
+                kind: 'finding_registry',
+                digest: registryDigest,
+              },
+            });
+          } catch (error) {
+            passed = false;
+            journalReason = error.message || String(error);
+          }
+        }
+        return {
+          passed,
+          reason: passed
+            ? null
+            : journalReason || 'campaign convergence or wall budget gate tripped',
+          generation_cap: maxRepairGenerations + 1,
+          next_repair_generation: nextGeneration,
+          gate,
+        };
+      },
+      finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
+    });
+
+    if (durableJournal && new Set(['ready', 'follow_up']).has(composition.status)) {
+      const terminalEvent = composition.status === 'ready'
+        ? CAMPAIGN_EVENTS.TERMINAL_READY
+        : CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP;
+      const reason = composition.status === 'ready'
+        ? 'campaign acceptance verified'
+        : 'campaign completed with bounded follow-up';
+      const registryDigest = latestAdjudication
+        && /^[0-9a-f]{64}$/.test(latestAdjudication.registry_digest || '')
+        ? latestAdjudication.registry_digest
+        : campaignCanonicalDigest([]);
+      const payload = {
+        reason,
+        registry_complete: true,
+        registry_digest: registryDigest,
+        convergence_digest: composition.receipt_digest,
+      };
+      if (terminalEvent === CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP) {
+        payload.follow_up_digest = campaignCanonicalDigest({
+          follow_up: composition.follow_up || [],
+          unresolved_final_findings: composition.unresolved_final_findings || [],
+        });
+      }
+      try {
+        recordCampaignEvent({
+          eventType: terminalEvent,
+          generation: campaignControl.initial_state.generation,
+          stageIdentity: `campaign-terminal:${campaignControl.initial_state.generation}`,
+          payload,
+          artifactReference: {
+            kind: 'campaign_terminal',
+            digest: composition.receipt_digest,
+          },
+        });
+        campaignControl.completion = this.campaignAdmissionCompleter({
+          repo: loopCwd,
+          campaignControl,
+        });
+      } catch (error) {
+        return {
+          status: 'blocked',
+          phase: 'campaign_terminal_journal',
+          reason: error.message || String(error),
+          rounds: implementationChain.length,
+          verdict: latestReview ? latestReview.verdict : null,
+          roster,
+          resolveResult,
+          base,
+          implementation: implementationChain.at(-1) || null,
+          review: latestReview,
+          implementationChain,
+          reviewChain,
+          campaign_receipt: composition,
+          ledger,
+        };
+      }
+    }
+
+    const lastImplementation = implementationChain.at(-1) || null;
+    const converged = composition.status === 'ready';
+    return {
+      status: converged ? 'converged' : (
+        composition.status === 'follow_up' ? 'follow_up' : 'blocked'
+      ),
+      phase: converged ? 'campaign_terminal_ready' : composition.phase || 'campaign_terminal',
+      reason: converged ? null : composition.reason || 'campaign requires follow-up',
+      rounds: implementationChain.length,
+      verdict: latestReview ? latestReview.verdict : null,
+      roster,
+      resolveResult,
+      base,
+      implementation: lastImplementation,
+      review: latestReview,
+      implementationChain,
+      reviewChain,
+      campaign_receipt: composition,
+      ledger,
+    };
+  }
+
+  _runImplementationReviewLoop(input = {}) {
     // Risk-triggered dynamic review is OPT-IN in the loop (default off): the review step
     // reuses the already-resolved roster and stays byte-compatible with the pre-R5 contract
     // unless the caller explicitly passes dynamicReviewRisk: true.
@@ -1807,11 +3248,22 @@ class AutopilotEngine {
     const branch = input.branch;
     const base = input.base;
     let loopCwd = this.cwd;
-    const verifyCmdProvided = Object.prototype.hasOwnProperty.call(input, 'verifyCmd')
+    let verifyCmdProvided = Object.prototype.hasOwnProperty.call(input, 'verifyCmd')
       && input.verifyCmd !== undefined
       && input.verifyCmd !== null;
-    const verifyCmd = input.verifyCmd;
+    let verifyCmd = input.verifyCmd;
     const noVerifyFirst = input.noVerifyFirst === true;
+    const campaignRequested = input.campaignManaged === true || Boolean(input.campaignContract);
+    let campaignControl = input.legacyUnmanaged === true
+      ? {
+        status: 'legacy_unmanaged',
+        deprecated: true,
+        removal_release: 'v2.35.0',
+        full_enforcement: false,
+      }
+      : null;
+    let campaignMaxRounds = null;
+    let campaignDispatchIdentity = null;
     const verifyState = {
       verifyCmdProvided,
       verifyFirstSignalUnused: false,
@@ -1821,7 +3273,8 @@ class AutopilotEngine {
       bestCommit: null,
     };
     const finish = (result) => {
-      const output = resultWithVerificationFields(result, verifyState);
+      const controlled = campaignControl ? { ...result, campaign_control: campaignControl } : result;
+      const output = resultWithVerificationFields(controlled, verifyState);
       return lifecycleObservation ? lifecycleObservation.finalize(output) : output;
     };
 
@@ -1881,6 +3334,20 @@ class AutopilotEngine {
         ledger,
       });
     }
+    if (campaignRequested && input.noReviewSpec === true) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('campaign_review_spec', 'blocked', startedAt));
+      return finish({
+        status: 'blocked',
+        phase: 'campaign_review_spec',
+        reason: 'managed campaign review requires the frozen task specification',
+        rounds: 0,
+        verdict: null,
+        roster: null,
+        resolveResult: null,
+        ledger,
+      });
+    }
     if (Object.prototype.hasOwnProperty.call(input, 'cwd') && input.cwd !== undefined && input.cwd !== null) {
       if (typeof input.cwd !== 'string' || input.cwd.length === 0) {
         const startedAt = this.now();
@@ -1914,18 +3381,18 @@ class AutopilotEngine {
     }
     promptFile = path.resolve(loopCwd, promptFile);
 
-    // P3.1 is a host-injected observation sidecar only. It never controls the
-    // existing loop, action sinks, acceptance, or terminal result.
-    lifecycleObservation = createEngineLifecycleObservationSession({
-      observer: this.lifecycleObserver,
-      config: input.lifecycleObservation,
-      promptFile,
-      base,
-      branch,
-      verifyCmd: verifyCmdProvided ? verifyCmd : null,
-      expectedEngineRunId: input.runId,
-    });
-    if (lifecycleObservation) lifecycleObservation.attach(ledger);
+    if (!campaignRequested) {
+      lifecycleObservation = createEngineLifecycleObservationSession({
+        observer: this.lifecycleObserver,
+        config: input.lifecycleObservation,
+        promptFile,
+        base,
+        branch,
+        verifyCmd: verifyCmdProvided ? verifyCmd : null,
+        expectedEngineRunId: input.runId,
+      });
+      if (lifecycleObservation) lifecycleObservation.attach(ledger);
+    }
 
     let roster = input.roster || null;
     let resolveResult = null;
@@ -1963,12 +3430,6 @@ class AutopilotEngine {
       }
     }
 
-    if (roster && roster.verify_first === true && !verifyCmdProvided) {
-      const startedAt = this.now();
-      verifyState.verifyFirstSignalUnused = true;
-      ledger.push(this.ledgerEntry('verify_first_signal', 'unused', startedAt));
-    }
-
     try {
       validateReviewRoster(roster);
       validateImplementerRoster(roster);
@@ -1993,14 +3454,13 @@ class AutopilotEngine {
 
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
     let maxRounds = roster.loop_max_rounds;
-    if (Object.prototype.hasOwnProperty.call(input, 'maxRounds') && input.maxRounds !== undefined && input.maxRounds !== null) {
-      if (typeof input.maxRounds === 'string') {
-        maxRounds = Number(input.maxRounds);
-      } else {
-        maxRounds = input.maxRounds;
-      }
+    if (Object.prototype.hasOwnProperty.call(input, 'maxRounds')
+        && input.maxRounds !== undefined
+        && input.maxRounds !== null) {
+      maxRounds = typeof input.maxRounds === 'string'
+        ? Number(input.maxRounds)
+        : input.maxRounds;
     }
-
     try {
       validateInteger(maxRounds, 'maxRounds', 1);
     } catch (error) {
@@ -2014,6 +3474,10 @@ class AutopilotEngine {
         verdict: null,
         roster,
         resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
         ledger,
       });
     }
@@ -2033,71 +3497,40 @@ class AutopilotEngine {
         verdict: null,
         roster,
         resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
         ledger,
       });
     }
 
-    if (requireQualifiedReviewer && roster.reviewer_qualified !== true) {
-      // Fallback-aware pre-flight (v2.32.40): the per-round reviewDiff substitutes
-      // a qualified cross-family fallback reviewer when — and only when — a family
-      // conflict exists between the implementer and the incumbent reviewer AND a
-      // valid ladder row is available (setting reviewer_qualified:true for that
-      // round). Hard-blocking here on the UNqualified incumbent made that
-      // substitution unreachable, leaving the v2.32.25 on_family_conflict:fallback
-      // design dead for implement-review (the default openai×openai roster stayed
-      // permanently reviewer_qualification-blocked at rounds:0). So block ONLY when
-      // the loop is genuinely unviable — NOT ( family conflict AND a valid fallback
-      // row exists ). Use the SAME implementer engine reviewDiff will use
-      // (roster.implementer_engine, matching the loop's reviewDiff call). For
-      // viability, the existence of ANY valid row is decisive; review_risk only
-      // reorders the preference walk (the plain ladder walk finds a valid row
-      // regardless), so pass the roster's computed review_risk honestly rather than
-      // probing both tiers.
-      const preflightImplementerEngine = roster.implementer_engine;
-      const familyConflict = !ensureDistinctReviewFamily({
-        implementerEngine: preflightImplementerEngine,
-        reviewerEngine: roster.reviewer_engine,
+    if (requireQualifiedReviewer && !reviewerQualificationViable(roster)) {
+      const startedAt = this.now();
+      ledger.push(
+        this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
+          reviewer_qualified: roster.reviewer_qualified === true,
+        }),
+      );
+      return finish({
+        status: 'blocked',
+        phase: 'reviewer_qualification',
+        reason: 'reviewer is not qualified or qualification is unknown',
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
       });
-      const fallbackViable = familyConflict
-        && selectFamilyConflictFallback({
-          implementerEngine: preflightImplementerEngine,
-          roster,
-          reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
-        }) !== null;
-      if (!fallbackViable) {
-        const startedAt = this.now();
-        ledger.push(
-          this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
-            reviewer_qualified: roster.reviewer_qualified === true,
-          }),
-        );
-        return finish({
-          status: 'blocked',
-          phase: 'reviewer_qualification',
-          reason: 'reviewer is not qualified or qualification is unknown',
-          rounds: 0,
-          verdict: null,
-          roster,
-          resolveResult,
-          implementation: null,
-          review: null,
-          implementationChain: [],
-          reviewChain: [],
-          ledger,
-        });
-      }
     }
 
-    // Resume-from-review (v2.32.45): opt-in re-entry when the impl leg already
-    // committed but the review leg failed (e.g. a mis-wired endpoint). Instead of
-    // re-dispatching implementation (which fail-closes on "branch already exists"
-    // and forces destroying the verified commit), skip round-1's implementTask and
-    // enter the verify+review phase against the EXISTING base..branch diff. All
-    // guards fail closed to a `resume_invalid` block with ZERO mutation; absent
-    // --resume this whole block is skipped and behavior is byte-identical.
-    const resume = input.resume === true;
+    const resumeImplementation = input.resume === true && !campaignRequested;
     let resumeTipSha = null;
-    if (resume) {
+    if (resumeImplementation) {
       const startedAt = this.now();
       let inspect;
       try {
@@ -2134,6 +3567,241 @@ class AutopilotEngine {
       }));
     }
 
+    if (campaignRequested) {
+      const intakeStartedAt = this.now();
+      let intake;
+      try {
+        // Resolve project Mission enforcement mode. Enforce mode requires a
+        // trusted atomic Mission state store and the sealed campaign's
+        // mission_grant_ref before any implementation dispatch; missing
+        // store/ref fails closed here rather than after spend. Runtime input
+        // cannot override the constructor's store/factory.
+        let missionMode = 'off';
+        try {
+          missionMode = projectMissionMode(loopCwd);
+        } catch (error) {
+          intake = {
+            status: 'blocked',
+            reason: `campaign intake failed closed: ${error.message || String(error)}`,
+            rejection: {
+              owner: 'mission',
+              code: error.code || 'project_governance_invalid',
+              reason: error.message || String(error),
+            },
+            steps: [],
+          };
+        }
+        const missionGrantRef = this.readCampaignMissionGrantRef(
+          input.campaignContract,
+          loopCwd,
+        );
+        if (!intake && missionMode === 'enforce') {
+          const store = this.missionCampaignStore;
+          const hasAtomicStore = store !== null
+            && typeof store === 'object'
+            && typeof store.load === 'function'
+            && typeof store.save === 'function';
+          if (!hasAtomicStore) {
+            intake = {
+              status: 'blocked',
+              reason: 'enforce-mode Mission campaign intake requires an atomic Mission state store',
+              rejection: {
+                owner: 'mission',
+                code: 'mission_state_store_required',
+                reason: 'atomic Mission state load/compare-and-swap save is required under enforce mode',
+              },
+              steps: [],
+            };
+          } else if (typeof missionGrantRef !== 'string') {
+            intake = {
+              status: 'blocked',
+              reason: 'enforce-mode Mission campaign intake requires mission_grant_ref on the campaign contract',
+              rejection: {
+                owner: 'mission',
+                code: 'mission_grant_ref_required',
+                reason: 'sealed campaign contract must carry a content-bound mission_grant_ref under enforce mode',
+              },
+              steps: [],
+            };
+          }
+        }
+        if (!intake) {
+          const missionAdapters = this.buildMissionCampaignAdapters({
+            grant_ref: missionGrantRef,
+          });
+          intake = this.campaignIntake({
+            repo: loopCwd,
+            contractPath: input.campaignContract,
+            sealPath: input.campaignSeal,
+            ledgerPath: input.campaignLedger,
+            promptFile,
+            branch,
+            base,
+            verifyCmd: verifyCmdProvided ? verifyCmd : undefined,
+            roster,
+            resume: input.resume === true,
+            observedAt: intakeStartedAt,
+          }, missionAdapters || undefined);
+        }
+      } catch (error) {
+        intake = {
+          status: 'blocked',
+          reason: `campaign intake failed closed: ${error.message || String(error)}`,
+          rejection: {
+            owner: 'campaign_intake',
+            code: error.code || 'campaign_intake_error',
+          },
+          steps: [],
+        };
+      }
+      campaignControl = intake;
+      ledger.push(this.ledgerEntry(
+        'campaign_intake',
+        intake.status === 'admitted' ? 'admitted' : 'blocked',
+        intakeStartedAt,
+        {
+          campaign_id: intake.campaign_id || null,
+          rejection_owner: intake.rejection ? intake.rejection.owner : null,
+          rejection_code: intake.rejection ? intake.rejection.code : null,
+        },
+      ));
+      if (intake.status !== 'admitted') {
+        return finish({
+          status: 'blocked',
+          phase: 'campaign_intake',
+          reason: intake.reason || 'campaign intake rejected',
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
+      if (!verifyCmdProvided) {
+        verifyCmd = intake.contract.verify_cmd;
+        verifyCmdProvided = true;
+        verifyState.verifyCmdProvided = true;
+      }
+      campaignMaxRounds = (
+        intake.contract.max_repair_generations
+        - intake.initial_state.generation
+        + 1
+      );
+      campaignDispatchIdentity = {
+        runId: intake.campaign_id,
+        ledger: intake.generation_claim.ledger,
+      };
+      maxRounds = Math.min(maxRounds, campaignMaxRounds);
+    }
+
+    // Host-injected observation remains additive and starts only after the
+    // campaign pre-spend gate has admitted the exact verification command.
+    if (!lifecycleObservation) {
+      lifecycleObservation = createEngineLifecycleObservationSession({
+        observer: this.lifecycleObserver,
+        config: input.lifecycleObservation,
+        promptFile,
+        base,
+        branch,
+        verifyCmd: verifyCmdProvided ? verifyCmd : null,
+        expectedEngineRunId: campaignDispatchIdentity
+          ? campaignDispatchIdentity.runId
+          : input.runId,
+      });
+      if (lifecycleObservation) lifecycleObservation.attach(ledger);
+    }
+
+    if (roster && roster.verify_first === true && !verifyCmdProvided) {
+      const startedAt = this.now();
+      verifyState.verifyFirstSignalUnused = true;
+      ledger.push(this.ledgerEntry('verify_first_signal', 'unused', startedAt));
+    }
+
+    const releaseCampaignNoEffect = (rejection) => {
+      if (!campaignControl || campaignControl.status !== 'admitted') return null;
+      const releaseStartedAt = this.now();
+      let release;
+      try {
+        release = this.campaignAdmissionReleaser({
+          repo: loopCwd,
+          campaignControl,
+          rejection,
+          observedAt: releaseStartedAt,
+        });
+      } catch (error) {
+        release = {
+          status: 'blocked',
+          error: error.code || error.message || String(error),
+        };
+      }
+      campaignControl = {
+        ...campaignControl,
+        admission_release: release,
+      };
+      ledger.push(this.ledgerEntry(
+        'campaign_admission_release',
+        release.status === 'released' ? 'released' : 'blocked',
+        releaseStartedAt,
+      ));
+      return release;
+    };
+
+    const durableResumeCandidate = campaignControl
+      && campaignControl.generation_claim
+      && campaignControl.generation_claim.resume_candidate;
+    if (campaignControl
+        && campaignControl.status === 'admitted'
+        && campaignControl.initial_state.phase !== CAMPAIGN_STATES.PREPARED
+        && (!new Set([
+          CAMPAIGN_STATES.VERTICAL_VERIFICATION,
+          CAMPAIGN_STATES.ADJUDICATING,
+        ]).has(campaignControl.initial_state.phase)
+          || !durableResumeCandidate)) {
+      const rejection = {
+        owner: 'campaign_generation',
+        status: 'rejected',
+        code: 'campaign_resume_phase_unsupported',
+        reason: `campaign resume from ${campaignControl.initial_state.phase} cannot dispatch implementation`,
+      };
+      releaseCampaignNoEffect(rejection);
+      return finish({
+        status: 'blocked',
+        phase: 'campaign_resume',
+        reason: rejection.reason,
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        implementation: null,
+        review: null,
+        implementationChain: [],
+        reviewChain: [],
+        ledger,
+      });
+    }
+
+    if (campaignControl && campaignControl.status === 'admitted') {
+      return finish(this._runManagedCampaignComposition({
+        input,
+        campaignControl,
+        roster,
+        resolveResult,
+        loopCwd,
+        promptFile,
+        branch,
+        base,
+        verifyCmd,
+        convergenceVerdict,
+        requireQualifiedReviewer,
+        ledger,
+        releaseCampaignNoEffect,
+      }));
+    }
+
     const implementationChain = [];
     const reviewChain = [];
     const immutableBase = base;
@@ -2145,6 +3813,45 @@ class AutopilotEngine {
     let bestRound = 0;
 
     for (let round = 1; round <= maxRounds; round += 1) {
+      const implementationBudgetAt = this.now();
+      const implementationBudget = campaignMutationBudgetStatus(
+        campaignControl,
+        implementationBudgetAt,
+      );
+      if (implementationBudget.exhausted) {
+        const rejection = {
+          owner: 'campaign_generation',
+          status: 'rejected',
+          code: 'campaign_wall_budget_exhausted',
+          reason: implementationBudget.axis
+            ? `campaign has no ${implementationBudget.axis} budget remaining before implementation dispatch`
+            : 'campaign has no wall-clock budget remaining before implementation dispatch',
+        };
+        ledger.push(this.ledgerEntry(
+          'campaign_wall_budget',
+          'blocked',
+          implementationBudgetAt,
+          {
+            elapsed_seconds: implementationBudget.elapsed_seconds,
+            exhausted_axis: implementationBudget.axis || 'wall',
+          },
+        ));
+        if (implementationChain.length === 0) releaseCampaignNoEffect(rejection);
+        return finish({
+          status: 'blocked',
+          phase: 'campaign_wall_budget',
+          reason: rejection.reason,
+          rounds: round - 1,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
+      }
       const currentBranch = round === 1
         ? branch
         : buildRepairBranchName({
@@ -2153,7 +3860,7 @@ class AutopilotEngine {
           previousCommit: nextBase,
         });
 
-      if (round === 1 && resume) {
+      if (round === 1 && resumeImplementation) {
         // Synthesize the round-1 outcome from the already-committed branch tip
         // (validated by the resume precheck above) instead of dispatching the
         // implementer. The shared verify+diff+review code below runs unchanged
@@ -2196,10 +3903,22 @@ class AutopilotEngine {
           branch: currentBranch,
           base: nextBase,
           roster,
-          runId: input.runId,
-          ledger: input.ledger,
+          runId: campaignDispatchIdentity
+            ? campaignDispatchIdentity.runId
+            : input.runId,
+          ledger: campaignDispatchIdentity
+            ? campaignDispatchIdentity.ledger
+            : input.ledger,
           implementationRound: round,
-          implementationStage: input.implementationStage,
+          implementationStage: campaignDispatchIdentity
+            ? 'campaign-implementation'
+            : input.implementationStage,
+          campaignContractFile: campaignControl && campaignControl.status === 'admitted'
+            ? campaignControl.contract_path
+            : null,
+          campaignContractDigest: campaignControl && campaignControl.status === 'admitted'
+            ? campaignControl.contract_digest
+            : null,
           resultJson: input.resultJson,
           gitDir: input.gitDir,
           extraImplementationArgs: Object.prototype.hasOwnProperty.call(input, 'extraImplementationArgs')
@@ -2216,6 +3935,17 @@ class AutopilotEngine {
       if (lifecycleObservation) lifecycleObservation.observeImplementationResult(implementation, round);
       if (implementation.status !== 'committed') {
         const implementationPhase = implementation.phase || 'dispatch_implementation';
+        if (campaignControl
+            && campaignControl.status === 'admitted'
+            && isCampaignPreSpendRejection(implementation)) {
+          const rejection = {
+            owner: 'implementation_dispatch',
+            status: 'rejected',
+            code: 'campaign_leaf_pre_spend_rejected',
+            reason: implementation.reason || `implementation status ${implementation.status}`,
+          };
+          releaseCampaignNoEffect(rejection);
+        }
         return finish({
           status: 'blocked',
           phase: implementationPhase,
@@ -2480,6 +4210,31 @@ class AutopilotEngine {
         });
       }
 
+      const reviewBudgetAt = this.now();
+      const reviewBudget = campaignWallBudgetStatus(campaignControl, reviewBudgetAt);
+      if (reviewBudget.exhausted) {
+        ledger.push(this.ledgerEntry(
+          'campaign_wall_budget',
+          'blocked',
+          reviewBudgetAt,
+          { elapsed_seconds: reviewBudget.elapsed_seconds },
+        ));
+        return finish({
+          status: 'blocked',
+          phase: 'campaign_wall_budget',
+          reason: 'campaign has no wall-clock budget remaining before review dispatch',
+          rounds: round,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation,
+          review: null,
+          implementationChain,
+          reviewChain,
+          ledger,
+        });
+      }
+
       review = this.reviewDiff({
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
@@ -2500,6 +4255,15 @@ class AutopilotEngine {
         samplingSeed: input.samplingSeed,
         classifyRulesFile: input.classifyRulesFile,
         implementerEngine: roster && roster.implementer_engine,
+        runId: campaignDispatchIdentity
+          ? campaignDispatchIdentity.runId
+          : input.runId,
+        ledger: campaignDispatchIdentity
+          ? campaignDispatchIdentity.ledger
+          : input.ledger,
+        reviewStage: campaignDispatchIdentity
+          ? `campaign-review#r${round}`
+          : input.reviewStage,
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,

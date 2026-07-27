@@ -50,6 +50,8 @@
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
+#       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
+#       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
 #       [--keep-worktree]                      # keep worktree even on success
@@ -112,6 +114,9 @@ QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test s
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
+CAMPAIGN_CONTRACT_FILE=""
+CAMPAIGN_CONTRACT_SHA256=""
+CAMPAIGN_CONTRACT_SNAPSHOT=""
 RUNNER="auto"
 EFFORT="xhigh"
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -152,6 +157,7 @@ SKILLS=()
 EFFECTIVE_SKILL_MODE="off"
 SKILLS_INJECTED_JSON="[]"
 PACKED_PROMPT_TEMP=""
+CAMPAIGN_PROMPT_FILE=""
 SKILL_PACK_CONTENT_TEMP=""
 STRICT_CONTRACT=0
 CONTRACT_FILE=""
@@ -305,6 +311,8 @@ MANIFEST_ENDED_EPOCH=""
 MANIFEST_FINAL_STATUS=""
 OUTCOME_ORPHAN=""     # non-empty path when worktree remove failed and dir remains
 WT_LOCK_FD=""         # dedicated fd holding exclusive lifetime flock on the worktree lock
+WT_BUDGET_LOCK_FD=""  # common-dir creation transaction lock (managed lineage only)
+WT_PENDING_RECORD=""  # crash-recovery record published before git worktree add
 DO_GC=0               # --gc subcommand (stale reaper; no dispatch)
 REAP_UNMARKED=0       # --reap-unmarked recovery flag (requires --yes)
 GC_YES=0              # --yes confirmation for destructive recovery flags
@@ -329,6 +337,8 @@ CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome)
 . "$SELF_DIR/lib/worktree-reap.sh"
 cleanup() {
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+  [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
+  [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
 }
 trap cleanup EXIT
@@ -746,6 +756,22 @@ die_precondition() {
   exit 2
 }
 
+die_resource_budget() {
+  local count="$1" limit="$2"
+  local runner="agy"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null }\n' \
+    "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
+    "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
+    "$count" "$limit" "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" \
+    "$(_flat_json_escape "$DISPATCH_RUN_ID")"
+  exit 2
+}
+
 # write_manifest [pid] — (re)write the run manifest atomically. Best-effort: ANY failure
 # is swallowed (the manifest is a telemetry sidecar, never a dispatch dependency).
 # Called at three points: pre-dispatch (parent pid), detached-child start (child pid —
@@ -813,6 +839,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
+    --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
+    --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
@@ -869,12 +897,19 @@ else
 fi
 LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
 LINEAGE_ROOT=""
+WORKTREE_ROOT_RUN_ID=""
 LINEAGE_DEPTH=0
 if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
   LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID}"
   LINEAGE_ROOT="${AUTOPILOT_ROOT_RUN_ID:-$LINEAGE_PARENT}"
   LINEAGE_DEPTH="${AUTOPILOT_DISPATCH_DEPTH:-1}"
   case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
+  if [ "${#LINEAGE_DEPTH}" -gt 7 ]; then
+    LINEAGE_DEPTH=1
+  elif [ "$((10#$LINEAGE_DEPTH))" -eq 0 ] \
+      || [ "$((10#$LINEAGE_DEPTH))" -gt 1000000 ]; then
+    LINEAGE_DEPTH=1
+  fi
 else
   LINEAGE_ROOT="$DISPATCH_RUN_ID"
   LINEAGE_DEPTH=0
@@ -885,9 +920,28 @@ fi
 # in $((...)), freezing the child depth un-incremented).
 [ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
 [ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
+INHERITED_WORKTREE_ROOT_RUN_ID="${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}"
+WORKTREE_MANAGED=0
+if [ -n "$INHERITED_WORKTREE_ROOT_RUN_ID" ]; then
+  [[ "$INHERITED_WORKTREE_ROOT_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] \
+    || die_precondition "AUTOPILOT_WORKTREE_ROOT_RUN_ID must match [A-Za-z0-9._-]+"
+  WORKTREE_ROOT_RUN_ID="$INHERITED_WORKTREE_ROOT_RUN_ID"
+  WORKTREE_MANAGED=1
+else
+  WORKTREE_ROOT_RUN_ID="$LINEAGE_ROOT"
+  [ -n "$WORKTREE_ROOT_RUN_ID" ] \
+    && WORKTREE_ROOT_RUN_ID="$(
+      printf '%s' "$WORKTREE_ROOT_RUN_ID" | tr -c 'A-Za-z0-9._-' '-'
+    )"
+fi
 LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))
 export AUTOPILOT_PARENT_RUN_ID="$DISPATCH_RUN_ID"
 export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
+if [ "$WORKTREE_MANAGED" -eq 1 ]; then
+  export AUTOPILOT_WORKTREE_ROOT_RUN_ID="$WORKTREE_ROOT_RUN_ID"
+else
+  export AUTOPILOT_WORKTREE_ROOT_RUN_ID=""
+fi
 export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 
 set_runner_flags() {
@@ -940,6 +994,14 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+[ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
+  || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ] || [ -n "$CAMPAIGN_CONTRACT_SHA256" ]; then
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] && [ -n "$CAMPAIGN_CONTRACT_SHA256" ] \
+    || die_precondition "--campaign-contract and --campaign-contract-sha256 are required together"
+  [[ "$CAMPAIGN_CONTRACT_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+    || die_precondition "--campaign-contract-sha256 must be a lowercase SHA-256 digest"
+fi
 [ "$STRICT_CONTRACT" -eq 1 ] && [ "$CONTRACT_FILE_SUPPLIED" -eq 0 ] && die_precondition "--contract-file requires --strict-contract"
 [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] && [ "$STRICT_CONTRACT" -eq 0 ] && die_precondition "--strict-contract requires --contract-file"
 
@@ -1153,6 +1215,37 @@ else
   EFFECTIVE_SKILL_MODE="off"
 fi
 
+# A managed campaign passes the already-sealed contract as an explicit leaf input.
+# This layer does not reinterpret scope authority; it makes the frozen paths and
+# budgets visible to the implementer while ICC retains admission and enforcement.
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
+  CAMPAIGN_CONTRACT_SNAPSHOT="$(mktemp -t 'dispatch-hetero-campaign-contract-XX''XX''XX')"
+  cp -- "$CAMPAIGN_CONTRACT_FILE" "$CAMPAIGN_CONTRACT_SNAPSHOT" \
+    || die_precondition "campaign contract snapshot failed"
+  command -v node >/dev/null 2>&1 \
+    || die_precondition "node is required to verify the campaign contract digest"
+  _campaign_snapshot_digest="$(node -e '
+    const crypto = require("crypto");
+    const fs = require("fs");
+    process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+  ' "$CAMPAIGN_CONTRACT_SNAPSHOT")" \
+    || die_precondition "campaign contract digest verification failed"
+  [ "$_campaign_snapshot_digest" = "$CAMPAIGN_CONTRACT_SHA256" ] \
+    || die_precondition "campaign contract digest changed after intake"
+  CAMPAIGN_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-campaign-prompt-XX''XX''XX')"
+  {
+    printf '%s\n' '=== MACHINE-OWNED CAMPAIGN BOUNDARY ==='
+    printf '%s\n' 'The JSON contract below is immutable. Stay within its allowed paths and budgets.'
+    cat "$CAMPAIGN_CONTRACT_SNAPSHOT"
+    printf '%s\n\n' '=== END CAMPAIGN BOUNDARY ==='
+    cat "$PROMPT_FILE"
+  } > "$CAMPAIGN_PROMPT_FILE"
+  rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
+  CAMPAIGN_CONTRACT_SNAPSHOT=""
+  unset _campaign_snapshot_digest
+  PROMPT_FILE="$CAMPAIGN_PROMPT_FILE"
+fi
+
 # --- context-window gate ---
 # Placed AFTER skill-pack concatenation (the pack inflates PROMPT_FILE, and the engine
 # pays for the packed size, not the original) and BEFORE the worktree exists, so an
@@ -1165,65 +1258,334 @@ if declare -F context_window_gate > /dev/null 2>&1; then
   fi
 fi
 
+# Reconcile crash-window records and count retained occupancy while the caller
+# holds the repository-common budget lock. Unknown/legacy state is preserved and
+# consumes capacity; only exact, dead, clean state is reclaimed.
+_wt_budget_reconcile_and_count() {
+  local repo="$1" common="$2" root_id="$3"
+  local pending_dir="$common/autopilot-worktree-creation"
+  local record fields=() record_root record_run record_loop record_branch record_base record_path
+  local current_tip live_rc probe_fd wt marker line actual_branch actual_head marker_digest
+  local registered_rc worktree_list
+  local -A pending_paths=()
+  WT_BUDGET_COUNT=0
+
+  if [ -e "$pending_dir" ] || [ -L "$pending_dir" ]; then
+    [ -d "$pending_dir" ] && [ ! -L "$pending_dir" ] && [ -O "$pending_dir" ] || return 2
+  else
+    (umask 077; mkdir "$pending_dir") || return 2
+  fi
+
+  for record in "$pending_dir"/*.json; do
+    [ -e "$record" ] || continue
+    [ -f "$record" ] && [ ! -L "$record" ] && [ -O "$record" ] || {
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    }
+    mapfile -t fields < <(node -e '
+const fs = require("fs");
+try {
+  const v = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const keys = ["root_run_id", "run_id", "loop_id", "branch", "base_sha", "planned_path"];
+  if (!v || v.schema !== 1 || keys.some(k => typeof v[k] !== "string" || /[\r\n\t]/.test(v[k]))) process.exit(2);
+  for (const k of keys) console.log(v[k]);
+} catch (_) { process.exit(2); }
+' "$record" 2>/dev/null)
+    if [ "${#fields[@]}" -ne 6 ]; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
+    record_root="${fields[0]}"; record_run="${fields[1]}"; record_loop="${fields[2]}"
+    record_branch="${fields[3]}"; record_base="${fields[4]}"; record_path="${fields[5]}"
+    if ! [[ "$record_root" =~ ^[A-Za-z0-9._-]+$ ]] \
+       || ! [[ "$record_run" =~ ^[A-Za-z0-9._-]+$ ]] \
+       || ! [[ "$record_loop" =~ ^[A-Za-z0-9._-]+$ ]] \
+       || ! [[ "$record_base" =~ ^[0-9a-f]{40,64}$ ]] \
+       || [[ "$record_path" != /* ]] \
+       || ! git check-ref-format --branch "$record_branch" >/dev/null 2>&1; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
+
+    _wt_is_registered_path "$repo" "$record_path"; registered_rc=$?
+    [ "$registered_rc" -ne 2 ] || return 2
+    if [ "$registered_rc" -eq 0 ]; then
+      marker="$record_path/.autopilot-worktree"
+      if [ -e "$marker" ] || [ -L "$marker" ]; then
+        if _wt_read_schema2_marker "$marker" \
+           && [ "$_WT_MARKER_ROOT_RUN_ID" = "$record_root" ] \
+           && [ "$_WT_MARKER_RUN_ID" = "$record_run" ] \
+           && [ "$_WT_MARKER_LOOP_ID" = "$record_loop" ] \
+           && [ "$_WT_MARKER_BRANCH" = "$record_branch" ] \
+           && [ "$_WT_MARKER_BASE_SHA" = "$record_base" ]; then
+          rm -f -- "$record"
+        elif [ "$record_root" = "$root_id" ]; then
+          WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+          pending_paths["$record_path"]=1
+        fi
+        # A marker that exists but does not match is positive evidence of an
+        # ownership conflict, never the add-before-marker crash window.
+        continue
+      fi
+
+      _wt_is_live "$record_path"; live_rc=$?
+      probe_fd="${_WT_PROBE_FD:-}"
+      current_tip="$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$record_branch" 2>/dev/null || true)"
+      actual_branch="$(git -C "$record_path" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      actual_head="$(git -C "$record_path" rev-parse HEAD 2>/dev/null || true)"
+      _wt_is_registered_path "$repo" "$record_path"; registered_rc=$?
+      [ "$registered_rc" -ne 2 ] || {
+        [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
+        return 2
+      }
+      if [ "$live_rc" -eq 0 ] && [ "$registered_rc" -eq 0 ] \
+         && _wt_is_clean "$record_path" \
+         && [ "$actual_branch" = "$record_branch" ] \
+         && [ "$actual_head" = "$record_base" ] \
+         && [ "$current_tip" = "$record_base" ] \
+         && [ ! -e "$marker" ] && [ ! -L "$marker" ] \
+         && _wt_is_clean "$record_path"; then
+        # No --force: git is the last compare/remove guard if dirt appears
+        # after the immediately preceding cleanliness read.
+        git -C "$repo" worktree remove "$record_path" >/dev/null 2>&1 || true
+        _wt_is_registered_path "$repo" "$record_path"; registered_rc=$?
+        [ "$registered_rc" -ne 2 ] || {
+          [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
+          return 2
+        }
+        if [ "$registered_rc" -eq 1 ]; then
+          # Keep the branch and pending record as exact evidence for the Phase
+          # 2/3 lifecycle controller. Deleting a ref here cannot atomically
+          # prove that an ordinary concurrent Git operation did not just check
+          # it out in another worktree.
+          :
+        fi
+      fi
+      [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
+      _WT_PROBE_FD=""
+      if [ -e "$record" ] && [ "$record_root" = "$root_id" ]; then
+        WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+        pending_paths["$record_path"]=1
+      fi
+    else
+      current_tip="$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$record_branch" 2>/dev/null || true)"
+      if [ -z "$current_tip" ]; then
+        rm -f -- "$record"
+      fi
+      if [ -e "$record" ] && [ "$record_root" = "$root_id" ]; then
+        WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      fi
+    fi
+  done
+
+  worktree_list="$(git -C "$repo" worktree list --porcelain 2>/dev/null)" || return 2
+  while IFS= read -r line; do
+    wt="${line#worktree }"
+    [ -d "$wt" ] || continue
+    [ -z "${pending_paths[$wt]+present}" ] || continue
+    marker="$wt/.autopilot-worktree"
+    [ -f "$marker" ] || continue
+    if grep -qx 'schema=1' "$marker" 2>/dev/null; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
+    if ! _wt_read_schema2_marker "$marker"; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
+    [ "$_WT_MARKER_ROOT_RUN_ID" = "$root_id" ] || continue
+    if [ "$_WT_MARKER_RETENTION" = "inspect" ]; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
+    marker_digest="$(sha256sum "$marker" 2>/dev/null | awk '{print $1}')"
+    actual_branch="$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+    actual_head="$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)"
+    current_tip="$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$_WT_MARKER_BRANCH" 2>/dev/null || true)"
+    if [ -z "$marker_digest" ] \
+       || [ "$actual_branch" != "$_WT_MARKER_BRANCH" ] \
+       || [ "$actual_head" != "$current_tip" ] \
+       || ! git -C "$repo" merge-base --is-ancestor "$_WT_MARKER_BASE_SHA" "$actual_head" 2>/dev/null; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
+
+    _wt_is_live "$wt"; live_rc=$?
+    probe_fd="${_WT_PROBE_FD:-}"
+    _wt_is_registered_path "$repo" "$wt"; registered_rc=$?
+    [ "$registered_rc" -ne 2 ] || {
+      [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
+      return 2
+    }
+    if [ "$live_rc" -eq 0 ] && [ "$registered_rc" -eq 0 ] \
+       && [ "$(sha256sum "$marker" 2>/dev/null | awk '{print $1}')" = "$marker_digest" ] \
+       && [ "$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$actual_branch" ] \
+       && [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)" = "$actual_head" ] \
+       && [ "$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$_WT_MARKER_BRANCH" 2>/dev/null || true)" = "$actual_head" ] \
+       && _wt_is_clean "$wt"; then
+      git -C "$repo" worktree remove "$wt" >/dev/null 2>&1 || true
+    fi
+    [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
+    _WT_PROBE_FD=""
+    _wt_is_registered_path "$repo" "$wt"; registered_rc=$?
+    [ "$registered_rc" -ne 2 ] || return 2
+    if [ "$registered_rc" -eq 0 ]; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+    fi
+  done < <(printf '%s\n' "$worktree_list" | sed -n '/^worktree /p')
+  return 0
+}
+
 # --- isolated worktree (the non-skippable safety rail) ---
+BASE_SHA="$(git rev-parse "$BASE")"
+WT_RUN_ID="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
+WT_LOOP_ID="${AUTOPILOT_LOOP_ID:-${LINEAGE_PARENT:-$DISPATCH_RUN_ID}}"
+WT_LOOP_ID="$(printf '%s' "$WT_LOOP_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
-if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE"; then
+WT="$(realpath -m "$WT" 2>/dev/null)" \
+  || die_precondition "cannot canonicalize planned worktree path"
+_wt_repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die_precondition "cannot resolve consuming repository root"
+_wt_common_dir="$(_wt_resolve_common_dir "$_wt_repo_root")" \
+  || die_precondition "cannot resolve canonical git common directory"
+
+_wt_prepare_common_excludes() {
+  mkdir -p "$_wt_common_dir/info" || return 1
+  local exclude="$_wt_common_dir/info/exclude" name
+  for name in .autopilot-worktree .autopilot-worktree.lock; do
+    grep -qxF "$name" "$exclude" 2>/dev/null \
+      || printf '%s\n' "$name" >> "$exclude" \
+      || return 1
+  done
+}
+
+_wt_creation_test_checkpoint() {
+  [ "${AUTOPILOT_TEST_WORKTREE_CRASH_AT:-}" = "$1" ] || return 0
+  case "$1" in
+    after-pending|after-add|after-marker|after-verification) kill -KILL "$$" ;;
+  esac
+}
+
+_wt_lock_fail() {
+  # This path runs before the worker starts, but external state can still race
+  # marker/lock setup. Never force-remove newly dirty data, and delete the ref
+  # only if it still has the exact creation tip.
+  git worktree remove "$WT" >/dev/null 2>&1 || true
+  if [ -z "$WT_PENDING_RECORD" ]; then
+    git update-ref -d "refs/heads/$BRANCH" "$BASE_SHA" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$WT_PENDING_RECORD" ]; then
+    _wt_is_registered_path "${_wt_repo_root:-.}" "$WT"
+    _wt_cleanup_registered_rc=$?
+    _wt_cleanup_branch="$(git rev-parse --verify --quiet "refs/heads/$BRANCH" 2>/dev/null || true)"
+    if [ "$_wt_cleanup_registered_rc" -eq 1 ] && [ -z "$_wt_cleanup_branch" ]; then
+      rm -f -- "$WT_PENDING_RECORD"
+    fi
+  fi
+  [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
+  WT_PENDING_RECORD=""
+  WT_BUDGET_LOCK_FD=""
+  die_precondition "$1"
+}
+
+if [ "$WORKTREE_MANAGED" -eq 1 ]; then
+  # Admission must precede the first pending record, branch, or worktree. Once
+  # active, evidence loss cannot be reinterpreted as an empty lifecycle root.
+  bash "$SELF_DIR/reap-dispatch-worktrees.sh" scan \
+    --repo "$_wt_repo_root" --root-run-id "$WORKTREE_ROOT_RUN_ID" >/dev/null \
+    || die_precondition "cannot admit managed worktree lifecycle root"
+
+  _wt_open_lock_fd "$_wt_common_dir/autopilot-worktree-budget.lock" \
+    || die_precondition "cannot open worktree resource budget lock"
+  WT_BUDGET_LOCK_FD="$_WT_SAFE_LOCK_FD"
+  flock -x "$WT_BUDGET_LOCK_FD" \
+    || die_precondition "cannot acquire worktree resource budget lock"
+
+  # Install bookkeeping exclusions before reconciliation probes can create a
+  # lifetime lock in an add-before-marker crash artifact.
+  _wt_prepare_common_excludes \
+    || die_precondition "cannot register worktree bookkeeping exclusion"
+
+  _wt_budget_reconcile_and_count "$_wt_repo_root" "$_wt_common_dir" "$WORKTREE_ROOT_RUN_ID" \
+    || die_precondition "cannot reconcile worktree creation state"
+  _wt_budget_limit="$(bash "$SELF_DIR/resolve-worktree-teardown.sh" --field max_leaf_worktrees_per_root 2>/dev/null || true)"
+  [[ "$_wt_budget_limit" =~ ^[0-9]+$ ]] || _wt_budget_limit=4
+  if [ "$WT_BUDGET_COUNT" -ge "$_wt_budget_limit" ]; then
+    exec {WT_BUDGET_LOCK_FD}>&-
+    WT_BUDGET_LOCK_FD=""
+    die_resource_budget "$WT_BUDGET_COUNT" "$_wt_budget_limit"
+  fi
+
+  _wt_pending_tmp="$(mktemp "$_wt_common_dir/autopilot-worktree-creation/${WT_RUN_ID}.XXXXXX.tmp")" \
+    || {
+      exec {WT_BUDGET_LOCK_FD}>&-
+      WT_BUDGET_LOCK_FD=""
+      die_precondition "cannot allocate worktree creation record"
+    }
+  WT_PENDING_RECORD="${_wt_pending_tmp%.tmp}.json"
+  (umask 077; printf '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
+    "$(json_escape "$WORKTREE_ROOT_RUN_ID")" "$(json_escape "$WT_RUN_ID")" \
+    "$(json_escape "$WT_LOOP_ID")" "$(json_escape "$BRANCH")" \
+    "$BASE_SHA" "$(json_escape "$WT")" > "$_wt_pending_tmp") \
+    && mv -f -- "$_wt_pending_tmp" "$WT_PENDING_RECORD" \
+    || {
+      rm -f -- "$_wt_pending_tmp"
+      exec {WT_BUDGET_LOCK_FD}>&-
+      WT_BUDGET_LOCK_FD=""
+      die_precondition "cannot publish worktree creation record"
+    }
+  _wt_creation_test_checkpoint after-pending
+else
+  _wt_prepare_common_excludes \
+    || die_precondition "cannot register worktree bookkeeping exclusion"
+fi
+
+if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
   # `git worktree add -b` creates the branch ref BEFORE the dir, so the ref leaks
   # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
-  git branch -D "$BRANCH" >/dev/null 2>&1 || true
-  die_precondition "git worktree add failed"
+  _wt_lock_fail "git worktree add failed"
 fi
+_wt_creation_test_checkpoint after-add
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
 # Both names are registered in the COMMON git dir's info/exclude below: the wrapper
 # commits with `git add -A`, so without the exclude both bookkeeping files would
 # land in every dispatched commit, and `git status --porcelain` cleanliness checks
 # would see them as untracked.
+_wt_marker_tmp="$WT/.autopilot-worktree.tmp.$$"
 {
   printf 'created_at=%s\n' "$(date +%s)"
   printf 'branch=%s\n' "$BRANCH"
-  printf 'schema=1\n'
-} > "$WT/.autopilot-worktree"
+  printf 'base_sha=%s\n' "$BASE_SHA"
+  printf 'run_id=%s\n' "$WT_RUN_ID"
+  printf 'root_run_id=%s\n' "$WORKTREE_ROOT_RUN_ID"
+  printf 'loop_id=%s\n' "$WT_LOOP_ID"
+  [ "$KEEP" -eq 1 ] && printf 'retention=inspect\n'
+  printf 'schema=2\n'
+} > "$_wt_marker_tmp"
+mv -f -- "$_wt_marker_tmp" "$WT/.autopilot-worktree" \
+  || _wt_lock_fail "cannot publish worktree ownership marker"
+_wt_creation_test_checkpoint after-marker
 # Hold exclusive lock on a dedicated fd for the whole dispatch life. Never close
 # early; never exec-replace this shell (would release the lock silently).
-# On lock failure, clean up the just-created worktree+branch before dying —
-# die_precondition alone would leak them (panel round-2 finding).
-_wt_lock_fail() {
-  git worktree remove --force "$WT" >/dev/null 2>&1 || true
-  git branch -D "$BRANCH" >/dev/null 2>&1 || true
-  die_precondition "$1"
-}
+# On lock failure, clean up the just-created worktree+branch before dying.
 _wt_open_lock_fd "$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
 WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
 flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
-# Keep bookkeeping files invisible to git status / git add -A inside the worktree.
-# For linked worktrees, git reads info/exclude from the COMMON git dir (shared
-# repo-wide). The per-worktree gitdir's info/exclude is ignored by git — a name
-# written there still shows in git status. Append is idempotent because the common
-# exclude is shared by the consuming repo and all its worktrees; repeated
-# dispatches must not accumulate duplicate lines.
-if ! {
-  if _wt_common_dir="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" && [ -n "$_wt_common_dir" ]; then
-    true
-  else
-    # Older git lacks --path-format=absolute; fall back and absolutize if relative.
-    _wt_common_dir="$(git -C "$WT" rev-parse --git-common-dir)" &&
-    case "$_wt_common_dir" in
-      /*) true ;;
-      *) _wt_common_dir="$(cd "$WT/$_wt_common_dir" && pwd)" ;;
-    esac
-  fi &&
-  mkdir -p "$_wt_common_dir/info" &&
-  _wt_exclude="$_wt_common_dir/info/exclude" &&
-  for _wt_name in .autopilot-worktree .autopilot-worktree.lock; do
-    grep -qxF "$_wt_name" "$_wt_exclude" 2>/dev/null || printf '%s\n' "$_wt_name" >> "$_wt_exclude"
-  done
-}; then
-  echo "dispatch-hetero: WARNING — failed to register worktree bookkeeping files in git exclude (git status / git add -A may see them)" >&2
+if ! _wt_read_schema2_marker "$WT/.autopilot-worktree" \
+   || [ "$_WT_MARKER_RUN_ID" != "$WT_RUN_ID" ] \
+   || [ "$_WT_MARKER_ROOT_RUN_ID" != "$WORKTREE_ROOT_RUN_ID" ] \
+   || [ "$_WT_MARKER_LOOP_ID" != "$WT_LOOP_ID" ] \
+   || [ "$_WT_MARKER_BRANCH" != "$BRANCH" ] \
+   || [ "$_WT_MARKER_BASE_SHA" != "$BASE_SHA" ]; then
+  _wt_lock_fail "worktree ownership marker verification failed"
 fi
-unset _wt_common_dir _wt_exclude _wt_name
+_wt_creation_test_checkpoint after-verification
+[ -n "$WT_PENDING_RECORD" ] && rm -f -- "$WT_PENDING_RECORD"
+WT_PENDING_RECORD=""
+[ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
+WT_BUDGET_LOCK_FD=""
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
-BASE_SHA="$(git rev-parse "$BASE")"
 
 # Snapshot consuming-repo git identity BEFORE the runner (worktrees share .git/config;
 # a bare `git config user.name` inside the worktree would silently rewrite the host repo).
@@ -1282,10 +1644,38 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
   fi
 }
 
-# A TERM during the long run orphans the worktree + branch AND can leave worker
-# descendants. Trap it to reap the container first, then minimal worktree remove
-# (no project hook — signal-safe) + branch -D (sole branch-delete site) + exit 2.
-trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; reap_worktree_minimal "$WT"; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+# Managed aborts must preserve exact branch evidence before any removal. The
+# legacy minimal remover + branch deletion remains only for unmanaged one-shots.
+abort_dispatch() {
+  reap_container
+  [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
+  [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
+  [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+  if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ]; then
+    local abort_tip
+    abort_tip="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
+    if [ -n "${WT_LOCK_FD:-}" ]; then
+      exec {WT_LOCK_FD}>&- || true
+      WT_LOCK_FD=""
+    fi
+    if [[ "$abort_tip" =~ ^[0-9a-f]{40,64}$ ]] \
+       && bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
+      --repo "$_wt_repo_root" \
+      --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+      --path "$WT" >/dev/null 2>&1; then
+      bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
+        --repo "$_wt_repo_root" \
+        --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+        --path "$WT" --expected-tip "$abort_tip" --yes >/dev/null 2>&1 || true
+    fi
+  else
+    reap_worktree_minimal "$WT"
+    git branch -D "$BRANCH" >/dev/null 2>&1
+  fi
+  exit 2
+}
+trap abort_dispatch INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -1872,6 +2262,7 @@ detached_main() {
   # and the orchestrator (not this leaf) owns its later cleanup.
   KEEP=1
   local packed_prompt_for_child="${PACKED_PROMPT_TEMP:-}"
+  local campaign_prompt_for_child="${CAMPAIGN_PROMPT_FILE:-}"
   # Decouple from the caller's prompt temp lifecycle: copy it into a child-owned file so the
   # parent's EXIT cleanup cannot yank it mid-run.
   local child_prompt="$RESULTS_DIR/${RUN_ID}.${STAGE}.prompt"
@@ -1912,6 +2303,7 @@ detached_main() {
   fi
   rm -f "$child_prompt" 2>/dev/null || true
   [ -n "$packed_prompt_for_child" ] && rm -f "$packed_prompt_for_child" 2>/dev/null || true
+  [ -n "$campaign_prompt_for_child" ] && rm -f "$campaign_prompt_for_child" 2>/dev/null || true
   exit "$OUTCOME_EXIT"
 }
 
@@ -1930,12 +2322,13 @@ dispatch_detached_run() {
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       CLASSIFIED_ERROR \
-      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_DEPTH \
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
+    declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit reap_container run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
@@ -1947,6 +2340,7 @@ dispatch_detached_run() {
   # Prevent the top-level EXIT cleanup from deleting the prompt temp under a detached child.
   # The detached child now owns and removes this prompt copy.
   unset PACKED_PROMPT_TEMP
+  unset CAMPAIGN_PROMPT_FILE
   # The child removes the state file right after sourcing (before the long run) so a caller-kill
   # of the parent — which skips the parent's own cleanup below — cannot leak it.
   setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
@@ -1988,6 +2382,43 @@ else
   MANIFEST_CONTAINMENT="plain"
 fi
 write_manifest "$$"
+# --- strict pre-flight: every acceptance argv must at least be EXECUTABLE ---
+# run_strict_acceptance_checks() spawns these AFTER the runner has been paid for, and
+# spawnSync does NOT throw on ENOENT/EACCES (it returns status=null with .error set), so a
+# typo'd or missing command surfaces there as a generic "exit-code mismatch" — an expensive
+# way to learn about a typo. Executability is decidable at base, for free.
+#
+# Deliberately NOT gated on exit codes: red-at-base is the expected shape for a TDD unit
+# and green-at-base is legitimate for a regression guard, so only "cannot execute at all"
+# is fatal here.
+if [ "$STRICT_CONTRACT" -eq 1 ]; then
+  preflight_err="$(node -e '
+const fs = require("fs");
+const cp = require("child_process");
+let contract;
+try {
+  contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+} catch (err) {
+  process.stdout.write("");
+  process.exit(0);   // schema problems are the checker s job, not this pre-flight s
+}
+const acceptance = Array.isArray(contract.acceptance) ? contract.acceptance : [];
+for (let i = 0; i < acceptance.length; i++) {
+  const argv = Array.isArray(acceptance[i] && acceptance[i].argv) ? acceptance[i].argv : [];
+  if (!argv.length) continue;
+  const r = cp.spawnSync(argv[0], argv.slice(1), { cwd: process.argv[2], stdio: "ignore" });
+  if (r.error && (r.error.code === "ENOENT" || r.error.code === "EACCES")) {
+    process.stdout.write("acceptance command #" + (i + 1) + " is not executable (" + r.error.code + "): " + argv[0]);
+    process.exit(0);
+  }
+}
+process.stdout.write("");
+  ' "$CONTRACT_FILE" "$WT" 2>/dev/null || true)"
+  if [ -n "$preflight_err" ]; then
+    die_precondition "$preflight_err"
+  fi
+fi
+
 [ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-hetero: run_id=${DISPATCH_RUN_ID} manifest=${MANIFEST_FILE:-none} log=${LOG} (watch: scripts/dispatch-status.js --run ${DISPATCH_RUN_ID})" >&2
 if detach_on && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] && [ "${HAVE_SETSID:-0}" -eq 1 ]; then
   RESULTS_DIR="${LEDGER}.results"
@@ -1999,6 +2430,7 @@ fi
 # ---- inline path (DISPATCH_DETACH=0 OR no ledger coords): byte-identical to pre-R1 behavior ----
 run_agent
 [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+[ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
 trap - INT TERM
 compute_artifacts
 classify_outcome

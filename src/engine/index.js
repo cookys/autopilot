@@ -190,6 +190,7 @@ const localDeployment = require('./local-deployment');
 const roles = require('./roles');
 const authenticatedControl = require('./authenticated-control');
 const missionConvergence = require('./mission-convergence');
+const missionInterface = require('../mission/interface');
 
 module.exports = {
   AutopilotEngine,
@@ -373,7 +374,10 @@ module.exports = {
   MISSION_CONVERGENCE_GRANT_BINDING_FIELDS: missionConvergence.GRANT_BINDING_FIELDS,
   MISSION_CONVERGENCE_SCHEMA_VERSION: missionConvergence.MISSION_SCHEMA_VERSION,
   MISSION_CONVERGENCE_STATES: missionConvergence.MISSION_STATES,
+  MISSION_INTERFACE_VERSION: missionInterface.MISSION_INTERFACE_VERSION,
+  MISSION_RECEIPT_SCHEMA_VERSION: missionConvergence.MISSION_RECEIPT_SCHEMA_VERSION,
   MissionReducerError: missionConvergence.MissionReducerError,
+  missionInterface,
   TERMINAL_TRIGGER_ACTIONS: authenticatedControl.TERMINAL_TRIGGER_ACTIONS,
   authorizeCeilingAdjust: authenticatedControl.authorizeCeilingAdjust,
   buildProjection: missionConvergence.buildProjection,

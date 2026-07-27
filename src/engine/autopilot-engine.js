@@ -21,6 +21,12 @@ const {
   releaseCampaignAdmission,
   runCampaignIntake,
 } = require('./campaign-intake');
+const {
+  projectMissionMode,
+} = require('../../scripts/implementation-campaign-check');
+const {
+  createMissionCampaignAdapters,
+} = require('./mission-convergence');
 const { runCampaignComposition } = require('./campaign-composition');
 const {
   CAMPAIGN_EVENTS,
@@ -42,6 +48,14 @@ const { adjudicateCampaignReview } = require('./campaign-adjudication');
 const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergence');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
+
+function isPlainObject(value) {
+  return value !== null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 const MISPLACEMENT_PATH_PATTERNS = [
   /(^|[\/])\.gemini([\/]|$)/,
   /(^|[\/])\.gemini-[^/\\]+([\/]|$)/,
@@ -1361,6 +1375,41 @@ class AutopilotEngine {
     this.campaignDispositionProvider = options.campaignDispositionProvider || null;
     this.campaignScopeChecker = options.campaignScopeChecker || checkCampaignScope;
     this.campaignTreeResolver = options.campaignTreeResolver || defaultCampaignTreeResolver;
+    // Trusted Mission campaign adapter configuration. The engine builds
+    // adapters internally and passes them as the second argument to
+    // campaignIntake — callers never inject a free-form claim predicate.
+    this.missionCampaignStore = options.missionCampaignStore || null;
+    this.missionCampaignGrant = options.missionCampaignGrant || null;
+    this.missionCampaignAdapterOptions = isPlainObject(options.missionCampaignAdapterOptions)
+      ? options.missionCampaignAdapterOptions
+      : {};
+    this.missionAdapterFactory = typeof options.missionAdapterFactory === 'function'
+      ? options.missionAdapterFactory
+      : createMissionCampaignAdapters;
+  }
+
+  buildMissionCampaignAdapters(input = {}) {
+    const store = Object.prototype.hasOwnProperty.call(input, 'missionCampaignStore')
+      ? input.missionCampaignStore
+      : this.missionCampaignStore;
+    const grant = Object.prototype.hasOwnProperty.call(input, 'missionCampaignGrant')
+      ? input.missionCampaignGrant
+      : this.missionCampaignGrant;
+    const extra = isPlainObject(input.missionCampaignAdapterOptions)
+      ? input.missionCampaignAdapterOptions
+      : this.missionCampaignAdapterOptions;
+    const hasAtomicStore = store !== null
+      && typeof store === 'object'
+      && typeof store.load === 'function'
+      && typeof store.save === 'function';
+    if (!hasAtomicStore && grant === null && Object.keys(extra).length === 0) {
+      return null;
+    }
+    return this.missionAdapterFactory({
+      ...extra,
+      store: hasAtomicStore ? store : undefined,
+      grant: isPlainObject(grant) ? grant : (isPlainObject(extra.grant) ? extra.grant : grant),
+    });
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -3490,19 +3539,61 @@ class AutopilotEngine {
       const intakeStartedAt = this.now();
       let intake;
       try {
-        intake = this.campaignIntake({
-          repo: loopCwd,
-          contractPath: input.campaignContract,
-          sealPath: input.campaignSeal,
-          ledgerPath: input.campaignLedger,
-          promptFile,
-          branch,
-          base,
-          verifyCmd: verifyCmdProvided ? verifyCmd : undefined,
-          roster,
-          resume: input.resume === true,
-          observedAt: intakeStartedAt,
-        });
+        // Resolve project Mission enforcement mode. Enforce mode requires a
+        // trusted atomic Mission state store before any implementation
+        // dispatch; missing store fails closed here rather than after spend.
+        let missionMode = 'off';
+        try {
+          missionMode = projectMissionMode(loopCwd);
+        } catch (error) {
+          intake = {
+            status: 'blocked',
+            reason: `campaign intake failed closed: ${error.message || String(error)}`,
+            rejection: {
+              owner: 'mission',
+              code: error.code || 'project_governance_invalid',
+              reason: error.message || String(error),
+            },
+            steps: [],
+          };
+        }
+        if (!intake && missionMode === 'enforce') {
+          const store = Object.prototype.hasOwnProperty.call(input, 'missionCampaignStore')
+            ? input.missionCampaignStore
+            : this.missionCampaignStore;
+          const hasAtomicStore = store !== null
+            && typeof store === 'object'
+            && typeof store.load === 'function'
+            && typeof store.save === 'function';
+          if (!hasAtomicStore) {
+            intake = {
+              status: 'blocked',
+              reason: 'enforce-mode Mission campaign intake requires an atomic Mission state store',
+              rejection: {
+                owner: 'mission',
+                code: 'mission_state_store_required',
+                reason: 'atomic Mission state load/compare-and-swap save is required under enforce mode',
+              },
+              steps: [],
+            };
+          }
+        }
+        if (!intake) {
+          const missionAdapters = this.buildMissionCampaignAdapters(input);
+          intake = this.campaignIntake({
+            repo: loopCwd,
+            contractPath: input.campaignContract,
+            sealPath: input.campaignSeal,
+            ledgerPath: input.campaignLedger,
+            promptFile,
+            branch,
+            base,
+            verifyCmd: verifyCmdProvided ? verifyCmd : undefined,
+            roster,
+            resume: input.resume === true,
+            observedAt: intakeStartedAt,
+          }, missionAdapters || undefined);
+        }
       } catch (error) {
         intake = {
           status: 'blocked',

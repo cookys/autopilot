@@ -438,40 +438,100 @@ function validateContract(contract, context) {
   return errors;
 }
 
+// Module-private registry for attested Mission grant verifier adapters. Only
+// adapters minted through createMissionGrantVerifierAdapter may authorize
+// enforce-mode sealing. Arbitrary caller-supplied functions are never trusted.
+const MISSION_GRANT_VERIFIER_REGISTRY = new WeakSet();
+
+function createMissionGrantVerifierAdapter(handler) {
+  if (typeof handler !== 'function') {
+    throw new TypeError('createMissionGrantVerifierAdapter requires a function handler');
+  }
+  const adapter = Object.freeze({
+    kind: 'mission_grant_verifier_adapter',
+    verify(input) {
+      return handler(input);
+    },
+  });
+  MISSION_GRANT_VERIFIER_REGISTRY.add(adapter);
+  return adapter;
+}
+
+function isAttestedMissionGrantVerifier(value) {
+  return value !== null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && MISSION_GRANT_VERIFIER_REGISTRY.has(value)
+    && typeof value.verify === 'function';
+}
+
+function grantBindingMatchesRef(bindingDigest, grantRef) {
+  return typeof bindingDigest === 'string'
+    && bindingDigest === grantRef
+    && /^[0-9a-f]{64}$/.test(bindingDigest);
+}
+
 // Enforce-mode sealing verifies a content-bound Mission grant. Structural shape
-// is checked by validateContract; this gate additionally requires a host-injected
-// verifier to attest that the grant ref binds this exact contract. A bare
-// boolean/predicate can never claim a grant is verified — the verifier must
-// return a content-bound attestation whose binding_digest equals the grant ref.
-// Without an injected verifier (the pre-integration CLI path) or on any mismatch,
-// sealing fails closed.
+// is checked by validateContract. Authorization accepts only:
+//   1. an internally content-bound Mission grant receipt (binding_digest === ref)
+//   2. a Mission state whose claims include that binding digest
+//   3. a canonical module-private attested verifier adapter
+// Arbitrary context.missionGrantVerifier functions cannot authorize sealing.
+// Without a trusted Mission binding, sealing fails closed.
 function verifyEnforcedMissionGrant(contract, context = {}) {
   const grantRef = contract ? contract.mission_grant_ref : null;
   if (typeof grantRef !== 'string' || !/^[0-9a-f]{64}$/.test(grantRef)) {
     return 'mission_grant_ref: enforce mode requires a content-bound SHA-256 Mission grant digest';
   }
-  const verifier = typeof context.missionGrantVerifier === 'function'
+
+  const receipt = context.missionGrantReceipt;
+  if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) {
+    if (receipt.verified === true && grantBindingMatchesRef(receipt.binding_digest, grantRef)) {
+      return null;
+    }
+    if (receipt.artifact_type === 'mission_campaign_grant_claimed'
+        && grantBindingMatchesRef(receipt.binding_digest, grantRef)) {
+      return null;
+    }
+  }
+
+  const missionState = context.missionState;
+  if (missionState && typeof missionState === 'object' && !Array.isArray(missionState)
+      && missionState.claims && typeof missionState.claims === 'object') {
+    for (const claim of Object.values(missionState.claims)) {
+      if (claim && grantBindingMatchesRef(claim.binding_digest, grantRef)
+          && claim.released !== true) {
+        return null;
+      }
+    }
+  }
+
+  // Only a WeakSet-attested adapter may run as a verifier. Plain functions
+  // (including any context.missionGrantVerifier function) are ignored.
+  const attested = isAttestedMissionGrantVerifier(context.missionGrantVerifier)
     ? context.missionGrantVerifier
-    : null;
-  if (!verifier) {
-    return 'mission_grant_ref: enforced grant verification is unavailable until Mission integration';
+    : (isAttestedMissionGrantVerifier(context.missionGrantVerifierAdapter)
+      ? context.missionGrantVerifierAdapter
+      : null);
+  if (attested) {
+    let attestation;
+    try {
+      attestation = attested.verify({
+        mission_grant_ref: grantRef,
+        campaign_contract_digest: context.contractDigest || null,
+        repo_identity: context.repoIdentity || null,
+      });
+    } catch (_error) {
+      attestation = null;
+    }
+    if (attestation && typeof attestation === 'object'
+        && attestation.verified === true
+        && grantBindingMatchesRef(attestation.binding_digest, grantRef)) {
+      return null;
+    }
   }
-  let attestation;
-  try {
-    attestation = verifier({
-      mission_grant_ref: grantRef,
-      campaign_contract_digest: context.contractDigest || null,
-      repo_identity: context.repoIdentity || null,
-    });
-  } catch (_error) {
-    attestation = null;
-  }
-  if (!attestation || typeof attestation !== 'object'
-      || attestation.verified !== true
-      || attestation.binding_digest !== grantRef) {
-    return 'mission_grant_ref: enforced grant verification is unavailable until Mission integration';
-  }
-  return null;
+
+  return 'mission_grant_ref: enforced grant verification is unavailable until Mission integration';
 }
 
 function resolveOutputPath(rawPath, contractFile) {
@@ -728,6 +788,7 @@ if (require.main === module) main();
 module.exports = {
   PROFILE_REPAIR_CEILINGS,
   canonicalRepoIdentity,
+  createMissionGrantVerifierAdapter,
   inspectSealedCampaignContract,
   isWindowsReservedSegment,
   normalizeAllowedPrefix,

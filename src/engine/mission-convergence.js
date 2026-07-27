@@ -2598,6 +2598,8 @@ function evaluateMissionReducerFixture(input) {
       return runShadowWouldBlockFixture(input);
     case 'projection_roundtrip':
       return runProjectionRoundtripFixture(input);
+    case 'lineage_budget_invariant':
+      return runLineageBudgetInvariantFixture(input);
     default:
       return { error: 'mission_reducer_kind_unknown' };
   }
@@ -2913,6 +2915,52 @@ function runShadowWouldBlockFixture(_input) {
   };
 }
 
+function runLineageBudgetInvariantFixture(input) {
+  const ceiling = requireInteger(input.ceiling, 'lineage_budget_invariant.ceiling', 1);
+  const consumed = requireInteger(input.consumed, 'lineage_budget_invariant.consumed', 0);
+  const requested = requireInteger(input.requested, 'lineage_budget_invariant.requested', 1);
+  const state = createMissionState(defaultTestContract({ ceiling, consumed, mode: 'shadow' }));
+  const preClaimRemaining = Math.max(0, ceiling - consumed);
+  const reservation = {
+    per_axis: SUPPORTED_AXES.map((axisName) => ({
+      axis: axisName,
+      authorized_ceiling: state.axes[axisName].authorized_ceiling,
+      reserved_active: axisName === 'tool_calls' ? requested : (axisName === 'campaigns' ? 1 : 0),
+      durable_consumed: state.axes[axisName].durable_consumed,
+      known: true,
+    })),
+  };
+  const result = reduceMissionState(state, {
+    event_type: 'grant_claimed',
+    sequence: 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: {
+      idempotency_key: 'lineage-invariant',
+      mission_lineage_id: state.mission_lineage_id,
+      task_authority_id: state.task_authority_id,
+      campaign_id: 'invariant-campaign',
+      campaign_contract_digest: SAMPLE_POLICY_HASH,
+      base_sha: SAMPLE_BASE_SHA,
+      acceptance_ids: ['acc-1'],
+      reservation,
+      issued_at: '2026-07-27T00:00:00.000Z',
+      expires_at: '2026-07-27T01:00:00.000Z',
+    },
+  });
+  const wouldBlock = result.receipt.artifact_type === 'mission_would_block_evidence';
+  const effectiveRemaining = wouldBlock
+    ? preClaimRemaining
+    : Math.max(0, result.state.axes.tool_calls.authorized_ceiling
+      - result.state.axes.tool_calls.durable_consumed
+      - result.state.axes.tool_calls.reserved_active);
+  return {
+    would_block: wouldBlock,
+    pre_claim_remaining: preClaimRemaining,
+    effective_remaining: effectiveRemaining,
+    budget_preserved: effectiveRemaining === preClaimRemaining,
+  };
+}
+
 function runProjectionRoundtripFixture(_input) {
   const state = createMissionState(defaultTestContract());
   const first = reduceMissionState(state, {
@@ -3002,27 +3050,26 @@ function evaluateMissionIntegrationFixture(fixture) {
   }
   const state = createMissionState(contract);
 
-  if (id === 'successor-model-branch-reset' || id === 'identity-preserves-remaining') {
+  if (isPlainObject(input.identity_change)) {
+    const preClaimRemaining = Math.max(0,
+      state.axes.tool_calls.authorized_ceiling
+      - state.axes.tool_calls.durable_consumed
+      - state.axes.tool_calls.reserved_active);
     const result = runClaimForIntegration(state, input);
     const tc = result.state.axes.tool_calls;
-    // Shadow would-block evidence carries the overspending axis; the integration
-    // oracle surfaces the effective `BLOCKED` outcome derived from the real
-    // reducer. The reducer itself does NOT transition to BLOCKED in shadow
-    // (Finding 3 — shadow never blocks the effect). The adapter translates
-    // the durable evidence so the corpus expectation (`state: BLOCKED`,
-    // `reason: resource_ceiling:<axis>`) is met by what the real reducer
-    // actually decided: it would-have-blocked this admission.
     let derivedState = result.state.state;
     let derivedReason = result.receipt.reason || null;
+    let remaining = Math.max(0, tc.authorized_ceiling - tc.durable_consumed - tc.reserved_active);
     if (result.receipt.artifact_type === 'mission_would_block_evidence'
       && result.receipt.evidence && result.receipt.evidence.overspend_axis) {
       derivedState = 'BLOCKED';
       derivedReason = `${result.receipt.reason}:${result.receipt.evidence.overspend_axis}`;
+      remaining = preClaimRemaining;
     }
     return {
       state: derivedState,
       reason: derivedReason,
-      remaining_tool_calls: Math.max(0, tc.authorized_ceiling - tc.durable_consumed - tc.reserved_active),
+      remaining_tool_calls: remaining,
       effect_count: result.receipt.artifact_type === 'mission_campaign_grant_claimed' ? 1 : 0,
     };
   }

@@ -47,6 +47,7 @@ const cases = [
   ['stale-control-blocks', { kind: 'control', current_sequence: 7, effect_sequence: 6 }, { state: 'CLOSING', reason: 'control_sequence_stale' }],
   ['shadow-never-blocks-effect', { kind: 'shadow_would_block' }, { effect_allowed: true, would_block: true }],
   ['projection-roundtrip', { kind: 'projection_roundtrip' }, { state_hash_equal: true, raw_transcript_present: false }],
+  ['lineage-budget-would-block-preserves-remaining', { kind: 'lineage_budget_invariant', ceiling: 100, consumed: 99, requested: 2 }, { would_block: true, pre_claim_remaining: 1, effective_remaining: 1, budget_preserved: true }],
 ];
 
 for (const [id, input, expected] of cases) {

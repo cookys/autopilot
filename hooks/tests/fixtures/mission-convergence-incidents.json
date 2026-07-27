@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_convergence_incident_fixtures",
+  "fixtures": [
+    {
+      "id": "successor-model-branch-reset",
+      "input": {
+        "max_tool_calls": 100,
+        "consumed_tool_calls": 99,
+        "requested_tool_calls": 2,
+        "identity_change": {
+          "model": true,
+          "branch": true,
+          "successor": true
+        }
+      },
+      "expected": {
+        "state": "BLOCKED",
+        "reason": "resource_ceiling:tool_calls",
+        "remaining_tool_calls": 1,
+        "effect_count": 0
+      }
+    },
+    {
+      "id": "direct-no-agent-stagnation",
+      "input": {
+        "acceptance_unresolved": true,
+        "max_stagnant_campaigns": 2,
+        "zero_delta_terminal_receipts": 2,
+        "request_third_grant": true
+      },
+      "expected": {
+        "state": "BLOCKED",
+        "reason": "stagnation",
+        "grant_authorized": false,
+        "effect_count": 0
+      }
+    },
+    {
+      "id": "ignored-user-finish",
+      "input": {
+        "finish_requested_sequence": 7,
+        "dispatch_sequence": 6
+      },
+      "expected": {
+        "state": "CLOSING",
+        "reason": "control_sequence_stale",
+        "effect_count": 0
+      }
+    },
+    {
+      "id": "provider-maintenance-leakage",
+      "input": {
+        "required_seat_status": "blocked",
+        "proposed_work": "transport_qualification_repair"
+      },
+      "expected": {
+        "state": "ACTIVE",
+        "reason": "PRESPEND_REJECTED/provider_readiness",
+        "reservation_released": true,
+        "maintenance_candidate_only": true,
+        "effect_count": 0
+      }
+    },
+    {
+      "id": "closure-ratio",
+      "input": {
+        "tool_calls": {
+          "used": 75,
+          "ceiling": 100,
+          "enforced": true
+        },
+        "other_axes_below_ratio": true,
+        "unknown_required_axis": true
+      },
+      "expected": {
+        "state": "CLOSING",
+        "reason": "resource_ratio:tool_calls",
+        "unknown_axis_decisive": false,
+        "effect_count": 0
+      }
+    },
+    {
+      "id": "invalid-review-authority",
+      "input": {
+        "review_kind": "raw_only",
+        "canonical_semantic_digest": null
+      },
+      "expected": {
+        "state": "ACTIVE",
+        "reason": "review_authority_invalid",
+        "mission_progress_delta": 0,
+        "grant_authorized": false,
+        "effect_count": 0
+      }
+    }
+  ],
+  "healthy_controls": [
+    {
+      "id": "identity-preserves-remaining",
+      "input": {
+        "max_tool_calls": 100,
+        "consumed_tool_calls": 99,
+        "requested_tool_calls": 1,
+        "identity_change": {
+          "model": true,
+          "branch": true,
+          "successor": true
+        }
+      },
+      "expected": {
+        "state": "ACTIVE",
+        "remaining_tool_calls": 0,
+        "effect_count": 1
+      }
+    },
+    {
+      "id": "real-progress-resets-stagnation",
+      "input": {
+        "acceptance_unresolved": true,
+        "max_stagnant_campaigns": 2,
+        "zero_delta_terminal_receipts": 1,
+        "acceptance_delta": 1
+      },
+      "expected": {
+        "state": "ACTIVE",
+        "stagnant_campaigns": 0
+      }
+    },
+    {
+      "id": "current-control-sequence",
+      "input": {
+        "finish_requested_sequence": 7,
+        "dispatch_sequence": 7
+      },
+      "expected": {
+        "state": "CLOSING",
+        "reason": "finish_requested"
+      }
+    },
+    {
+      "id": "known-axis-below-ratio",
+      "input": {
+        "tool_calls": {
+          "used": 74,
+          "ceiling": 100,
+          "enforced": true
+        },
+        "unknown_required_axis": true
+      },
+      "expected": {
+        "state": "ACTIVE",
+        "unknown_axis_decisive": false
+      }
+    }
+  ]
+}

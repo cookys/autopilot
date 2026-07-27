@@ -5,7 +5,6 @@
 // Sole owner of task-level can_merge / can_close predicates. Never mutates
 // refs, worktrees, or finish markers. Never trusts schema-only terminal flags.
 
-const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const {
@@ -110,6 +109,20 @@ function assertExactKeys(value, allowed, label) {
       throw new TaskStatusError(
         `${label} is missing "${key}"`,
         'TASK_STATUS_MISSING_FIELD',
+      );
+    }
+  }
+}
+
+function assertKnownKeys(value, allowed, label) {
+  if (!isPlainObject(value)) {
+    throw new TaskStatusError(`${label} must be a plain object`, 'TASK_STATUS_SHAPE');
+  }
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new TaskStatusError(
+        `${label} has unknown field "${key}"`,
+        'TASK_STATUS_UNKNOWN_FIELD',
       );
     }
   }
@@ -224,28 +237,6 @@ function emptyIntegrationEvidence(status, reason, integration) {
   };
 }
 
-function readLifecycleReceiptFile(pathValue) {
-  if (pathValue === null || pathValue === undefined) {
-    return { status: 'missing', receipt: null, reason: 'lifecycle_receipt_missing' };
-  }
-  if (typeof pathValue !== 'string' || pathValue.length === 0) {
-    return { status: 'invalid', receipt: null, reason: 'lifecycle_receipt_path_invalid' };
-  }
-  try {
-    if (!fs.existsSync(pathValue)) {
-      return { status: 'missing', receipt: null, reason: 'lifecycle_receipt_missing' };
-    }
-    const raw = fs.readFileSync(pathValue, 'utf8');
-    const receipt = JSON.parse(raw);
-    if (!isPlainObject(receipt)) {
-      return { status: 'invalid', receipt: null, reason: 'lifecycle_receipt_not_object' };
-    }
-    return { status: 'loaded', receipt, reason: null };
-  } catch (_error) {
-    return { status: 'invalid', receipt: null, reason: 'lifecycle_receipt_unreadable' };
-  }
-}
-
 function missionInvalid(reason) {
   return {
     valid: false,
@@ -271,12 +262,20 @@ function validateFixtureMissionBundle(mission, rootRunId, expectedRepoIdentity) 
       ...missionInvalid('mission_not_terminal'),
       mission_terminal: false,
       state_name: stateName,
-      evidence: emptyMissionEvidence('incomplete', 'mission_not_terminal'),
+      evidence: emptyMissionEvidence('unknown', 'mission_not_terminal'),
     };
   }
   if (!isPlainObject(terminalReceipt)
       || terminalReceipt.artifact_type !== 'mission_terminal_receipt') {
     return missionInvalid('mission_terminal_receipt_missing');
+  }
+  assertKnownKeys(terminalReceipt, new Set([
+    'schema_version', 'artifact_type', 'root_run_id', 'repo_identity', 'state',
+    'terminal_state', 'mission_terminal', 'state_digest', 'terminal_digest',
+    'claimed_campaign_ids', 'can_close', 'receipt_digest',
+  ]), 'mission.terminal_receipt');
+  if (Object.prototype.hasOwnProperty.call(terminalReceipt, 'can_close')) {
+    return missionInvalid('mission_receipt_claims_can_close');
   }
   const receiptState = terminalReceipt.state || terminalReceipt.terminal_state;
   if (receiptState !== stateName) return missionInvalid('mission_state_receipt_mismatch');
@@ -363,6 +362,9 @@ function validateMissionBundle(mission, rootRunId, expectedRepoIdentity) {
   }
   if (typeof state.repo_identity !== 'string' || state.repo_identity.length === 0) {
     return missionInvalid('mission_repo_identity_missing');
+  }
+  if (expectedRepoIdentity && state.repo_identity !== expectedRepoIdentity) {
+    return missionInvalid('mission_repo_identity_mismatch');
   }
   if (!MISSION_TERMINAL_STATES.has(state.state) || !isPlainObject(state.terminal)) {
     return missionInvalid('mission_not_terminal');
@@ -465,6 +467,19 @@ function validateFixtureCampaignEntry(entry, index) {
     ? terminalReceipt.campaign_id
     : null;
   if (!campaignId) return campaignInvalid(null, `campaigns[${index}]_identity_invalid`);
+  assertKnownKeys(terminalReceipt, new Set([
+    'schema_version', 'artifact_type', 'campaign_id', 'tree_sha',
+    'candidate_tree_sha', 'state', 'status', 'exit_code', 'verification_verdict',
+    'verification_receipt_digest', 'follow_up', 'unresolved_final_findings',
+    'terminal_digest', 'receipt_digest',
+  ]), `campaigns[${index}].terminal_receipt`);
+  assertKnownKeys(verificationReceipt, new Set([
+    'schema_version', 'artifact_type', 'campaign_id', 'tree_sha', 'verdict',
+    'exit_code', 'receipt_digest',
+  ]), `campaigns[${index}].verification_receipt`);
+  assertKnownKeys(candidate, new Set([
+    'schema_version', 'artifact_type', 'commit_sha', 'tree_sha', 'writer_fence',
+  ]), `campaigns[${index}].candidate`);
   const treeSha = isPlainObject(terminalReceipt)
     ? (terminalReceipt.tree_sha || terminalReceipt.candidate_tree_sha)
     : null;
@@ -486,6 +501,10 @@ function validateFixtureCampaignEntry(entry, index) {
       || verificationReceipt.exit_code !== 0
       || verificationReceipt.tree_sha !== treeSha) {
     return campaignInvalid(campaignId, 'campaign_verification_not_green');
+  }
+  if (terminalReceipt.terminal_digest !== undefined
+      && terminalReceipt.terminal_digest !== sha256(`terminal-${campaignId}`)) {
+    return campaignInvalid(campaignId, 'campaign_terminal_digest_mismatch');
   }
   const verificationDigestValid = campaignReceiptBodyDigest(verificationReceipt)
     || verificationReceipt.receipt_digest === sha256(`verify-${campaignId}-${treeSha}`)
@@ -925,7 +944,9 @@ function containsAncestor(adapters, ancestor, descendant) {
     'isAncestor',
   );
   if (!anc.ok) return null;
-  return anc.value === true;
+  if (anc.value === true) return true;
+  if (anc.value === false) return false;
+  return null;
 }
 
 function computeIntegration(integration, adapters, candidateResult) {

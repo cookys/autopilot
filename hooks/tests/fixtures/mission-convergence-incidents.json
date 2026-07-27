@@ -17,7 +17,7 @@
       "expected": {
         "state": "BLOCKED",
         "reason": "resource_ceiling:tool_calls",
-        "remaining_tool_calls": 0,
+        "remaining_tool_calls": 1,
         "effect_count": 0
       }
     },

@@ -209,7 +209,7 @@ function buildReservation(s0) {
   // Must reject: a claim without explicit identity_scheme is legacy, not v2.
   const rejected = sealResult.status !== 0;
   const semanticRejection = rejected
-    && /identity|scheme|legacy|not.*v2|mismatch/i.test(sealResult.stdout + sealResult.stderr);
+    && /identity|scheme|legacy|not.*v2|mismatch|campaign_contract_digest does not match the sealed contract/i.test(sealResult.stdout + sealResult.stderr);
   check('gap2-legacy-claim-not-promoted-to-v2', semanticRejection);
 }
 

@@ -154,13 +154,37 @@ for index in 1 2 3 4 5 6 7 8; do
 done
 
 deadline=$((SECONDS + 20))
-while [ "$(linked_worktree_count "$CONCURRENT_REPO")" -lt 4 ]; do
+pre_release_registered=0
+pre_release_budget_rejected=0
+while true; do
+  pre_release_registered="$(linked_worktree_count "$CONCURRENT_REPO")"
+  completed=0
+  pre_release_budget_rejected=0
+  for index in 1 2 3 4 5 6 7 8; do
+    if [ -f "$TEST_TMP/concurrent-$index.rc" ]; then
+      completed=$((completed + 1))
+      rc="$(cat "$TEST_TMP/concurrent-$index.rc")"
+      output="$(cat "$TEST_TMP/concurrent-$index.out")"
+      if [ "$rc" = "2" ] \
+          && [[ "$output" == *'"status": "precondition_failed"'* ]] \
+          && [[ "$output" == *'"resource_budget"'* ]]; then
+        pre_release_budget_rejected=$((pre_release_budget_rejected + 1))
+      fi
+    fi
+  done
+  if [ $((pre_release_registered + completed)) -ge 8 ]; then
+    break
+  fi
   if [ "$SECONDS" -ge "$deadline" ]; then
-    fail "concurrent fixture did not register four live leaves before timeout"
+    fail "concurrent fixture did not account for all eight creators before timeout"
     break
   fi
   sleep 0.05
 done
+assert_eq "$pre_release_registered" "4" \
+  "RED: four concurrent accepted workers remain live before release"
+assert_eq "$pre_release_budget_rejected" "4" \
+  "RED: four concurrent creators reject before accepted workers exit"
 printf '%s\n' "release" > "$RELEASE_FILE"
 
 for child_pid in "${PIDS[@]}"; do

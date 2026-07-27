@@ -2,7 +2,9 @@
 
 > Status: In progress
 >
-> Progress: 16/34 phases READY
+> Progress: 17/34 phases READY
+>
+> Current phase: seq 17 — LSM P2 merge-intent preflight (`IN_PROGRESS`; not READY)
 >
 > Target: v2.34.0
 >
@@ -67,7 +69,7 @@ blocking finding. A transport failure never counts as a verdict.
 | 13 | Mission P0 integration oracle + enforcement probe | ICC P3 + PRO/WLB cores | READY | `21ba802..bacdf7b` | [mission-p0.md](reviews/mission-p0.md) |
 | 14 | Mission P1 reducer + shadow ledger | Mission P0 | READY | `066d190..7fe0a50` | [mission-p1.md](reviews/mission-p1.md) |
 | 15 | Mission P2 ICC binding + Codex enforcement | Mission P1 | READY | `6569345..bd9bc25` | [mission-p2.md](reviews/mission-p2.md) |
-| 16 | LSM P1 task-status aggregation | Mission P2 + ICC/WLB receipts | Pending | pending | pending |
+| 16 | LSM P1 task-status aggregation | Mission P2 + ICC/WLB receipts | READY | `e79d0da..70b50f9` | [lsm-p1.md](reviews/lsm-p1.md) |
 | 17 | LSM P2 merge-intent preflight | LSM P1 | Pending | pending | pending |
 | 18 | LSM P3 merge execution receipts | LSM P2 | Pending | pending | pending |
 | 19 | LSM P4 finish-flow + CEO reporting | LSM P3 | Pending | pending | pending |

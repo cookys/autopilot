@@ -2,7 +2,7 @@
 
 > Status: In progress
 >
-> Progress: 11/34 phases READY
+> Progress: 12/34 phases READY
 >
 > Target: v2.34.0
 >
@@ -62,7 +62,7 @@ blocking finding. A transport failure never counts as a verdict.
 | 8 | WLB P0 RED lifecycle oracle | baseline | READY | `32e10d0..7bc9cad` | [wlb-p0.md](reviews/wlb-p0.md) |
 | 9 | WLB P1 marker + occupancy budget | WLB P0 | READY | `7bc9cad..7484031` | [wlb-p1.md](reviews/wlb-p1.md) |
 | 10 | WLB P2 lifecycle controller | WLB P1 | READY | `0e9c21c..6f61f54` | [wlb-p2.md](reviews/wlb-p2.md) |
-| 11 | WLB P3 exact branch + residue receipt | WLB P2 | Pending | pending | pending |
+| 11 | WLB P3 exact branch + residue receipt | WLB P2 | READY | `788f72e..07295f4` | [wlb-p3.md](reviews/wlb-p3.md) |
 | 12 | WLB P4 compatibility dogfood | WLB P3 | Pending | pending | pending |
 | 13 | Mission P0 integration oracle + enforcement probe | ICC P3 + PRO/WLB cores | Pending | pending | pending |
 | 14 | Mission P1 reducer + shadow ledger | Mission P0 | Pending | pending | pending |

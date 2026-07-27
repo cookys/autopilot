@@ -310,10 +310,11 @@ function validateContract(contract, context) {
   if (context.missionMode === 'enforce' && contract.mission_grant_ref === null) {
     errors.push('mission_grant_ref: required when Mission enforcement is enabled');
   }
-  if (context.missionMode === 'enforce') {
-    errors.push(
-      'mission_grant_ref: enforced grant verification is unavailable until Mission integration',
-    );
+  if (context.missionMode === 'enforce'
+      && contract.mission_grant_ref !== null
+      && (typeof contract.mission_grant_ref !== 'string'
+        || !/^[0-9a-f]{64}$/.test(contract.mission_grant_ref))) {
+    errors.push('mission_grant_ref: enforce mode requires a content-bound SHA-256 Mission grant digest');
   }
   if (contract.repo_identity !== context.repoIdentity) {
     errors.push('repo_identity: does not match canonical repository identity');
@@ -435,6 +436,42 @@ function validateContract(contract, context) {
     pattern: /^[A-Za-z][A-Za-z0-9_-]*[0-9]+$/,
   }, errors);
   return errors;
+}
+
+// Enforce-mode sealing verifies a content-bound Mission grant. Structural shape
+// is checked by validateContract; this gate additionally requires a host-injected
+// verifier to attest that the grant ref binds this exact contract. A bare
+// boolean/predicate can never claim a grant is verified — the verifier must
+// return a content-bound attestation whose binding_digest equals the grant ref.
+// Without an injected verifier (the pre-integration CLI path) or on any mismatch,
+// sealing fails closed.
+function verifyEnforcedMissionGrant(contract, context = {}) {
+  const grantRef = contract ? contract.mission_grant_ref : null;
+  if (typeof grantRef !== 'string' || !/^[0-9a-f]{64}$/.test(grantRef)) {
+    return 'mission_grant_ref: enforce mode requires a content-bound SHA-256 Mission grant digest';
+  }
+  const verifier = typeof context.missionGrantVerifier === 'function'
+    ? context.missionGrantVerifier
+    : null;
+  if (!verifier) {
+    return 'mission_grant_ref: enforced grant verification is unavailable until Mission integration';
+  }
+  let attestation;
+  try {
+    attestation = verifier({
+      mission_grant_ref: grantRef,
+      campaign_contract_digest: context.contractDigest || null,
+      repo_identity: context.repoIdentity || null,
+    });
+  } catch (_error) {
+    attestation = null;
+  }
+  if (!attestation || typeof attestation !== 'object'
+      || attestation.verified !== true
+      || attestation.binding_digest !== grantRef) {
+    return 'mission_grant_ref: enforced grant verification is unavailable until Mission integration';
+  }
+  return null;
 }
 
 function resolveOutputPath(rawPath, contractFile) {
@@ -634,6 +671,20 @@ function main() {
     }
 
     if (options.command === 'seal') {
+      if (options.missionMode === 'enforce') {
+        const grantError = verifyEnforcedMissionGrant(contractFile.value, {
+          repoIdentity,
+          contractDigest: contractFile.digest,
+          missionGrantVerifier: options.missionGrantVerifier,
+        });
+        if (grantError) {
+          emit({
+            verdict: 'REJECTED',
+            contract_sha256: contractFile.digest,
+            errors: [grantError],
+          }, 3);
+        }
+      }
       const output = resolveOutputPath(options.out, contractFile);
       const seal = {
         schema_version: 1,
@@ -684,4 +735,5 @@ module.exports = {
   repoObjectFormat,
   validateContract,
   validBoundedVerifyCommand,
+  verifyEnforcedMissionGrant,
 };

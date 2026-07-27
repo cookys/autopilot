@@ -47,6 +47,8 @@ Commands:
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
   status            State overview: quota, runs, roster, or exact-seat readiness receipt (--json; readiness --probe may spend one bounded minimal request per stale exact tuple).
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
+  mission           Mission convergence control: init|grant|consume|control|check|receipt
+                    over the canonical pure Mission reducer (no task DONE/closeout authority).
                     tokens never printed, never read from argv).
 
 Exit codes:
@@ -265,6 +267,13 @@ if (args[0] === 'status') {
 
 if (args[0] === 'campaign') {
   process.exit(runCampaignCli(args.slice(1), { cwd: process.cwd() }));
+}
+
+if (args[0] === 'mission') {
+  // Deferred import: the Mission CLI module loads only when this subcommand is
+  // invoked (plan P2 single root route to src/mission/cli.js).
+  const { runMissionCli } = require('../src/mission/cli');
+  process.exit(runMissionCli(args.slice(1), { cwd: process.cwd() }));
 }
 
 if (args[0] === 'dispatch') {

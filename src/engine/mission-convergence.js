@@ -3322,15 +3322,21 @@ function applyMissionCampaignReceipt(state, receipt) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
   const claim = state.claims[receipt.claim_id];
-  if (!claim || claim.released || claim.mission_lineage_id && claim.mission_lineage_id !== receipt.mission_lineage_id
+  if (!claim || claim.released
       || receipt.mission_lineage_id !== state.mission_lineage_id
       || receipt.campaign_id !== claim.campaign_id
       || receipt.campaign_contract_digest !== claim.campaign_contract_digest) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
+  // Fail closed on a malformed/partial per-axis usage shape, but feed the
+  // reducer the original {per_axis} payload it expects: reservationFor returns
+  // an axis-keyed map, which handleReconciliation cannot re-parse.
   let actual;
   try { actual = reservationFor({ reservation: receipt.actual_usage }, 'receipt.actual_usage', { requireComplete: false }); }
   catch (_error) { return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state }); }
+  if (!actual || Object.keys(actual).length === 0) {
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
   const semantic = { ...receipt, receipt_digest: undefined };
   const prior = state.receipts && state.receipts[`mission_campaign_receipt:${claim.claim_id}`];
   if (prior) {
@@ -3341,7 +3347,7 @@ function applyMissionCampaignReceipt(state, receipt) {
   const event = {
     event_type: 'reconciliation', sequence: state.events.length + 1,
     mission_lineage_id: state.mission_lineage_id,
-    payload: { claim_id: claim.claim_id, actual_usage: actual },
+    payload: { claim_id: claim.claim_id, actual_usage: receipt.actual_usage },
   };
   const result = reduceMissionState(state, event);
   if (!result || !result.state || result.receipt.artifact_type === 'mission_grant_rejected') {
@@ -3349,6 +3355,46 @@ function applyMissionCampaignReceipt(state, receipt) {
   }
   const receipts = { ...(result.state.receipts || {}), [`mission_campaign_receipt:${claim.claim_id}`]: deepFreeze(deepClone(receipt)) };
   return Object.freeze({ status: 'applied', state: Object.freeze({ ...result.state, receipts: Object.freeze(receipts) }) });
+}
+
+// Module-private identity attestation for Codex enforcement disposition
+// receipts. The Symbol key never leaves this module and the attestation is a
+// keyed digest bound to the receipt content, so a caller cannot forge, clone,
+// or re-key a disposition receipt into a usable enforcement adapter. The
+// attestation is attached as a NON-enumerable property: object spread / clone
+// (the forging vector) drops it, while the genuine receipt returned by
+// evaluateCodexEnforcementDisposition retains it. No public token, registry,
+// verifier predicate, or mutable global state is exported.
+const CODEX_DISPOSITION_ATTESTATION = Symbol('mission.codex.enforcement.disposition');
+const CODEX_DISPOSITION_ATTESTATION_SEED = 'mission-convergence/codex-disposition-attestation/v1';
+
+function codexDispositionAttestationDigest(receipt) {
+  return sha256({
+    seed: CODEX_DISPOSITION_ATTESTATION_SEED,
+    enforceable: receipt.enforceable,
+    mode: receipt.mode,
+    reason: receipt.reason,
+    harness_id: receipt.harness_id,
+    artifact_digest: receipt.artifact_digest,
+    receipt_digest: receipt.receipt_digest,
+  });
+}
+
+function attestCodexDispositionReceipt(receipt) {
+  Object.defineProperty(receipt, CODEX_DISPOSITION_ATTESTATION, {
+    value: codexDispositionAttestationDigest(receipt),
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return receipt;
+}
+
+function codexDispositionReceiptAttested(receipt) {
+  if (!isPlainObject(receipt)) return false;
+  const attestation = receipt[CODEX_DISPOSITION_ATTESTATION];
+  return typeof attestation === 'string'
+    && attestation === codexDispositionAttestationDigest(receipt);
 }
 
 function evaluateCodexEnforcementDisposition({ artifact, capability, expected_harness_id } = {}) {
@@ -3365,63 +3411,281 @@ function evaluateCodexEnforcementDisposition({ artifact, capability, expected_ha
   const enforceable = artifact.codex_enforcement_outcome !== 'unenforceable-now';
   const mode = enforceable ? 'enforce' : 'shadow';
   const reason = enforceable ? artifact.codex_enforcement_outcome : 'unenforceable-now';
-  return Object.freeze({ enforceable, mode, reason, harness_id: expected_harness_id, artifact_digest: sha256(artifact), receipt_digest: sha256({ enforceable, mode, reason, harness_id: expected_harness_id, artifact_digest: sha256(artifact) }) });
+  const receipt = {
+    enforceable,
+    mode,
+    reason,
+    harness_id: expected_harness_id,
+    artifact_digest: sha256(artifact),
+    receipt_digest: sha256({ enforceable, mode, reason, harness_id: expected_harness_id, artifact_digest: sha256(artifact) }),
+  };
+  return Object.freeze(attestCodexDispositionReceipt(receipt));
 }
 
 function createMissionCampaignAdapters(options = {}) {
-  const store = options.store || {};
-  const state = options.state || (typeof store.load === 'function' ? store.load() : null);
-  const claimed = new Set();
+  const store = options.store;
+  const hasAtomicStore = isPlainObject(store)
+    && typeof store.load === 'function'
+    && typeof store.save === 'function';
+  const lineageId = typeof options.mission_lineage_id === 'string' ? options.mission_lineage_id : null;
+
+  function claimPayload(state, input) {
+    const grant = isPlainObject(options.grant) ? options.grant : options;
+    return {
+      idempotency_key: grant.idempotency_key,
+      mission_lineage_id: state.mission_lineage_id,
+      task_authority_id: state.task_authority_id,
+      campaign_id: grant.campaign_id,
+      campaign_contract_digest: input.contractDigest || grant.campaign_contract_digest,
+      base_sha: input.base || grant.base_sha,
+      acceptance_ids: Array.isArray(grant.acceptance_ids) ? grant.acceptance_ids : [],
+      reservation: grant.reservation,
+      issued_at: grant.issued_at || input.observedAt,
+      expires_at: grant.expires_at,
+    };
+  }
+
   return {
     missionClaim(input = {}) {
-      if (state && typeof store.save === 'function' && typeof options.claim === 'function') return options.claim(input, state);
-      const id = `mission-claim-${sha256(JSON.stringify({ lineage: options.mission_lineage_id, digest: input.contractDigest }))}`;
-      if (claimed.has(id)) return { owner: 'mission', status: 'claimed', claim_id: id, resumed: true };
-      claimed.add(id); return { owner: 'mission', status: 'claimed', claim_id: id, mission_lineage_id: options.mission_lineage_id };
+      if (!hasAtomicStore) {
+        return {
+          owner: 'mission',
+          status: 'rejected',
+          code: 'mission_state_store_required',
+          reason: 'atomic Mission state load/compare-and-swap save is required to claim a grant',
+        };
+      }
+      let state;
+      try { state = store.load(); } catch (error) {
+        return { owner: 'mission', status: 'rejected', code: 'mission_state_load_failed', reason: error.message || String(error) };
+      }
+      let stateValid = true;
+      try { validateMissionState(state); } catch (_error) { stateValid = false; }
+      if (!stateValid) {
+        return { owner: 'mission', status: 'rejected', code: 'mission_state_invalid', reason: 'loaded Mission state failed validation' };
+      }
+      if (lineageId !== null && state.mission_lineage_id !== lineageId) {
+        return { owner: 'mission', status: 'rejected', code: 'mission_lineage_mismatch', reason: 'Mission state lineage does not match the requested lineage' };
+      }
+      const payload = claimPayload(state, input);
+      // Exact retry adopts the already-stored claim instead of re-reserving.
+      if (typeof payload.idempotency_key === 'string'
+          && state.claim_idempotency_index
+          && state.claim_idempotency_index[payload.idempotency_key]) {
+        const existingClaimId = state.claim_idempotency_index[payload.idempotency_key];
+        return {
+          owner: 'mission',
+          status: 'claimed',
+          claim_id: existingClaimId,
+          resumed: true,
+          mission_lineage_id: state.mission_lineage_id,
+          control_sequence: state.control_sequence,
+        };
+      }
+      const event = {
+        event_type: 'grant_claimed',
+        sequence: state.events.length + 1,
+        mission_lineage_id: state.mission_lineage_id,
+        payload,
+      };
+      let result;
+      try { result = reduceMissionState(state, event); } catch (error) {
+        return { owner: 'mission', status: 'rejected', code: 'mission_claim_invalid', reason: error.message || String(error) };
+      }
+      if (!result || !result.state || !result.receipt
+          || result.receipt.artifact_type === 'mission_grant_rejected') {
+        return {
+          owner: 'mission',
+          status: 'rejected',
+          code: 'mission_grant_rejected',
+          reason: (result && result.receipt && result.receipt.reason) || 'mission_grant_rejected',
+        };
+      }
+      try { store.save(state, result.state); } catch (error) {
+        return { owner: 'mission', status: 'rejected', code: 'mission_state_cas_failed', reason: error.message || String(error) };
+      }
+      return {
+        owner: 'mission',
+        status: 'claimed',
+        claim_id: result.receipt.claim_id,
+        mission_lineage_id: state.mission_lineage_id,
+        control_sequence: result.state.control_sequence,
+      };
     },
     releaseMission(input = {}) {
-      if (typeof options.release === 'function') return options.release(input, state);
-      return { owner: 'mission_release', status: 'released', claim_id: input.missionClaim && input.missionClaim.claim_id };
+      const missionClaim = input.missionClaim;
+      const claimId = missionClaim && missionClaim.claim_id;
+      if (!hasAtomicStore) {
+        return { owner: 'mission_release', status: 'released', claim_id: claimId };
+      }
+      let state;
+      try { state = store.load(); } catch (error) {
+        return { owner: 'mission_release', status: 'rejected', code: 'mission_state_load_failed', reason: error.message || String(error) };
+      }
+      const claim = state && state.claims && claimId ? state.claims[claimId] : null;
+      // Already terminal: release is idempotent and must not double-free.
+      if (!claim || claim.released || claim.reconciled) {
+        return { owner: 'mission_release', status: 'released', claim_id: claimId };
+      }
+      const event = {
+        event_type: 'no_effect_release',
+        sequence: state.events.length + 1,
+        mission_lineage_id: state.mission_lineage_id,
+        payload: {
+          claim_id: claimId,
+          actual_usage: {
+            per_axis: SUPPORTED_AXES.map((axisName) => ({
+              axis: axisName,
+              authorized_ceiling: state.axes[axisName].authorized_ceiling,
+              reserved_active: 0,
+              durable_consumed: 0,
+              known: true,
+            })),
+          },
+        },
+      };
+      let result;
+      try { result = reduceMissionState(state, event); } catch (error) {
+        return { owner: 'mission_release', status: 'rejected', code: 'mission_release_invalid', reason: error.message || String(error) };
+      }
+      try { store.save(state, result.state); } catch (error) {
+        return { owner: 'mission_release', status: 'rejected', code: 'mission_state_cas_failed', reason: error.message || String(error) };
+      }
+      return { owner: 'mission_release', status: 'released', claim_id: claimId };
     },
   };
 }
 
 function createCodexMissionEnforcementAdapter({ mission_state, grant_receipt, disposition_receipt, request_identity } = {}) {
-  const valid = mission_state && grant_receipt && disposition_receipt
-    && grant_receipt.artifact_type === 'mission_campaign_grant_claimed'
-    && mission_state.claims && mission_state.claims[grant_receipt.claim_id]
-    && disposition_receipt.receipt_digest
-    && (disposition_receipt.enforceable === true || disposition_receipt.mode === 'shadow');
-  const claim = valid && mission_state.claims[grant_receipt.claim_id];
-  return { enforce(request, effect) {
-    if (!valid || !request || request.claim_id !== claim.claim_id || request.mission_lineage_id !== mission_state.mission_lineage_id
-      || request.control_sequence !== mission_state.control_sequence || request.disposition_digest !== disposition_receipt.receipt_digest
-      || request.request_identity !== request_identity || typeof effect !== 'function') return Object.freeze({ enforced: false, reason: 'binding_mismatch' });
-    if (disposition_receipt.mode === 'shadow') { const result = effect(); return Object.freeze({ enforced: false, shadow_would_block: true, result }); }
-    return Object.freeze({ enforced: true, result: effect() });
-  } };
+  const reject = (reason) => Object.freeze({ rejected: true, reason });
+  let stateValid = true;
+  try { validateMissionState(mission_state); } catch (_error) { stateValid = false; }
+  if (!stateValid) return reject('binding_mismatch');
+  // The disposition receipt must be a genuine, attested, enforceable receipt
+  // emitted by evaluateCodexEnforcementDisposition. Forged or cloned receipts
+  // lose the non-enumerable attestation (or mismatch its content binding).
+  if (!codexDispositionReceiptAttested(disposition_receipt) || disposition_receipt.enforceable !== true) {
+    return reject('invalid_or_tampered_disposition');
+  }
+  // The grant receipt must bind exactly to a validated, non-released claim
+  // already present in Mission state.
+  if (!isPlainObject(grant_receipt)
+      || grant_receipt.artifact_type !== 'mission_campaign_grant_claimed'
+      || typeof grant_receipt.claim_id !== 'string') {
+    return reject('binding_mismatch');
+  }
+  const claim = mission_state.claims && mission_state.claims[grant_receipt.claim_id];
+  if (!claim || claim.released
+      || grant_receipt.binding_digest !== claim.binding_digest
+      || grant_receipt.mission_lineage_id !== mission_state.mission_lineage_id) {
+    return reject('binding_mismatch');
+  }
+  const boundClaimId = claim.claim_id;
+  const boundLineage = mission_state.mission_lineage_id;
+  const boundSequence = mission_state.control_sequence;
+  const boundDispositionDigest = disposition_receipt.receipt_digest;
+  const boundIdentity = request_identity;
+  const mode = disposition_receipt.mode;
+  return Object.freeze({
+    enforce(request, effect) {
+      if (!isPlainObject(request)
+          || request.claim_id !== boundClaimId
+          || request.mission_lineage_id !== boundLineage
+          || request.control_sequence !== boundSequence
+          || request.disposition_digest !== boundDispositionDigest
+          || request.request_identity !== boundIdentity
+          || typeof effect !== 'function') {
+        return Object.freeze({ enforced: false, reason: 'binding_mismatch' });
+      }
+      if (mode === 'shadow') {
+        const result = effect();
+        return Object.freeze({ enforced: false, shadow_would_block: true, result });
+      }
+      return Object.freeze({ enforced: true, result: effect() });
+    },
+  });
 }
 
-function fenceMissionEffect(request, effects = {}) {
-  if (!isPlainObject(request) || !Number.isSafeInteger(request.control_sequence) || !Number.isSafeInteger(request.current_sequence)
-      || !['finish_requested', 'scope_frozen', 'abort_requested'].includes(request.action)
-      || request.control_sequence !== request.current_sequence) return Object.freeze({ permitted: false, reason: 'control_sequence_stale' });
-  const fn = effects[request.effect_class || 'runner'];
-  if (typeof fn !== 'function') return Object.freeze({ permitted: false, reason: 'effect_class_not_allowlisted' });
-  return Object.freeze({ permitted: true, result: fn() });
+function fenceMissionEffect({ mission_state, control_receipt, request, effects } = {}) {
+  const deny = (reason) => Object.freeze({ permitted: false, reason });
+  let stateValid = true;
+  try { validateMissionState(mission_state); } catch (_error) { stateValid = false; }
+  if (!stateValid) return deny('binding_mismatch');
+  // Current sequence/state is derived from Mission state only — never from the
+  // request. Bind the control receipt to that sequence when it carries one.
+  const currentSequence = mission_state.control_sequence;
+  const receiptSequence = isPlainObject(control_receipt)
+    && Number.isSafeInteger(control_receipt.sequence)
+    ? control_receipt.sequence
+    : (isPlainObject(control_receipt) && Number.isSafeInteger(control_receipt.control_sequence)
+      ? control_receipt.control_sequence
+      : null);
+  if (receiptSequence !== null && receiptSequence !== currentSequence) {
+    return deny('control_sequence_stale');
+  }
+  if (!isPlainObject(request)
+      || !Number.isSafeInteger(request.control_sequence)
+      || request.control_sequence !== currentSequence) {
+    return deny('control_sequence_stale');
+  }
+  if (!CLOSURE_ALLOWLIST_SET.has(request.effect_class)) {
+    return deny('effect_class_not_allowlisted');
+  }
+  const effectKind = typeof request.effect_kind === 'string' ? request.effect_kind : 'runner';
+  const fn = isPlainObject(effects) ? effects[effectKind] : undefined;
+  if (typeof fn !== 'function') return deny('effect_class_not_allowlisted');
+  return Object.freeze({
+    permitted: true,
+    effect_class: request.effect_class,
+    effect_kind: effectKind,
+    control_sequence: currentSequence,
+    result: fn(),
+  });
 }
 
-function recordMissionClosureEffect(input = {}) {
-  if (!isPlainObject(input) || !CLOSURE_ALLOWLIST_SET.has(input.effect_class)
-      || input.control_sequence !== input.current_sequence) return Object.freeze({ rejected: true, reason: 'stale_or_not_allowlisted' });
-  const body = { schema_version: 1, artifact_type: 'mission_closure_effect', effect_class: input.effect_class, control_sequence: input.control_sequence };
-  return Object.freeze({ ...body, receipt_digest: sha256(body) });
+function recordMissionClosureEffect(state, input = {}) {
+  let stateValid = true;
+  try { validateMissionState(state); } catch (_error) { stateValid = false; }
+  if (!stateValid) return Object.freeze({ rejected: true, reason: 'binding_mismatch' });
+  if (!isPlainObject(input) || !CLOSURE_ALLOWLIST_SET.has(input.effect_class)) {
+    return Object.freeze({ rejected: true, reason: 'effect_class_not_allowlisted' });
+  }
+  const currentSequence = state.control_sequence;
+  if (!Number.isSafeInteger(input.control_sequence) || input.control_sequence !== currentSequence) {
+    return Object.freeze({ rejected: true, reason: 'control_sequence_stale' });
+  }
+  if (typeof input.evidence_ref_digest !== 'string'
+      || !/^[a-f0-9]{64}$/.test(input.evidence_ref_digest)) {
+    return Object.freeze({ rejected: true, reason: 'binding_mismatch' });
+  }
+  const body = {
+    schema_version: 1,
+    artifact_type: 'mission_closure_effect',
+    effect_class: input.effect_class,
+    control_sequence: input.control_sequence,
+    sequence: currentSequence,
+    evidence_ref_digest: input.evidence_ref_digest,
+    mission_state_hash: stateHash(state),
+    mission_lineage_id: state.mission_lineage_id,
+  };
+  const contentDigest = sha256(body);
+  return Object.freeze({ ...body, content_digest: contentDigest, receipt_digest: contentDigest });
 }
 
 function buildMissionTerminalReceipt(state, residue) {
   validateMissionState(state);
   if (!state.terminal || !TERMINAL_STATES.has(state.state) || !isPlainObject(residue)
-      || typeof residue.residue_digest !== 'string' || sha256('residue') !== residue.residue_digest && !/^[a-f0-9]{64}$/.test(residue.residue_digest)) fail('terminal receipt requires terminal state and bound residue');
+      || typeof residue.residue_digest !== 'string') {
+    fail('terminal receipt requires terminal state and bound residue');
+  }
+  // The residue digest must bind the actual residue content (excluding the
+  // residue_digest field itself), not merely satisfy a 64-hex shape check.
+  const residueContent = Object.fromEntries(
+    Object.entries(residue).filter(([key]) => key !== 'residue_digest'),
+  );
+  if (sha256(residueContent) !== residue.residue_digest) {
+    fail('terminal receipt residue_digest does not bind residue content');
+  }
   const body = { schema_version: 1, artifact_type: 'mission_terminal_receipt', mission_terminal: true, state_digest: stateHash(state), terminal_digest: sha256(state.terminal), residue: deepClone(residue), residue_digest: residue.residue_digest };
   return deepFreeze({ ...body, receipt_digest: sha256(body) });
 }
@@ -3472,6 +3736,7 @@ module.exports = {
   sha256,
   stateHash,
   validateMissionContract,
+  validateMissionState,
   validateSourceRef,
   validateSourceRefs,
   // legacy exports retained for callers

@@ -234,8 +234,9 @@ _wt_is_registered_path() {
 
 _wt_is_clean() {
   local wt="$1" status
-  status="$(git -C "$wt" status --porcelain=v1 2>/dev/null)" || return 1
-  [ -z "$status" ]
+  status="$(git -C "$wt" status --porcelain=v1 2>/dev/null)" || return 2
+  [ -z "$status" ] && return 0
+  return 1
 }
 
 # --- _wt_is_live --------------------------------------------------------------

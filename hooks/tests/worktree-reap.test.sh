@@ -132,4 +132,8 @@ _wt_is_live "$TEST_TMP/symlink-lock-wt"
 assert_eq "$?" 2 "worktree liveness probe rejects symlink lock and preserves worktree"
 assert_eq "$(cat "$LOCK_VICTIM")" "$LOCK_BYTES" "worktree lock probe never truncates symlink victim"
 
+# --- 12. cleanliness distinguishes dirty state from status execution failure ---
+( git() { return 2; }; _wt_is_clean "$TEST_TMP/status-failure" )
+assert_eq "$?" 2 "worktree cleanliness reports status command failure distinctly"
+
 finalize_test

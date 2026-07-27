@@ -43,6 +43,14 @@ add_worktree race "wlb/p2-race"
 RACE_WT="$WT"
 write_marker "$RACE_WT" "wlb/p2-race" "p2-race"
 
+add_worktree marker-race "wlb/p2-marker-race"
+MARKER_RACE_WT="$WT"
+write_marker "$MARKER_RACE_WT" "wlb/p2-marker-race" "p2-marker-race"
+
+add_worktree lock-race "wlb/p2-lock-race"
+LOCK_RACE_WT="$WT"
+write_marker "$LOCK_RACE_WT" "wlb/p2-lock-race" "p2-lock-race"
+
 add_worktree dirty "wlb/p2-dirty"
 DIRTY_WT="$WT"
 write_marker "$DIRTY_WT" "wlb/p2-dirty" "p2-dirty"
@@ -72,12 +80,21 @@ printf 'created_at=%s\nbranch=%s\nschema=1\n' \
   "$(date +%s)" "wlb/p2-legacy" > "$LEGACY_WT/.autopilot-worktree"
 : > "$LEGACY_WT/.autopilot-worktree.lock"
 
+add_worktree marker-symlink "wlb/p2-marker-symlink"
+MARKER_SYMLINK_WT="$WT"
+MARKER_TARGET="$TEST_TMP/marker-target"
+printf 'created_at=%s\nbranch=%s\nschema=1\n' \
+  "$(date +%s)" "wlb/p2-marker-symlink" > "$MARKER_TARGET"
+ln -s "$MARKER_TARGET" "$MARKER_SYMLINK_WT/.autopilot-worktree"
+: > "$MARKER_SYMLINK_WT/.autopilot-worktree.lock"
+
 PENDING_DIR="$COMMON/autopilot-worktree-creation"
 mkdir -p "$PENDING_DIR"
 PENDING_RECORD="$PENDING_DIR/p2-pending.json"
 printf \
   '{"schema":1,"root_run_id":"%s","run_id":"p2-pending","loop_id":"p2-loop","branch":"wlb/p2-pending","base_sha":"%s","planned_path":"%s"}\n' \
   "$ROOT_ID" "$BASE" "$TEST_TMP/pending-path" > "$PENDING_RECORD"
+printf '%s\n' '{"schema":' > "$PENDING_DIR/malformed.json"
 
 SCAN_OUT="$TEST_TMP/scan.json"
 "$CONTROLLER" scan --repo "$REPO" --root-run-id "$ROOT_ID" > "$SCAN_OUT"
@@ -87,12 +104,14 @@ node - "$SCAN_OUT" <<'NODE'
 const fs = require("fs");
 const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 if (value.command !== "scan") process.exit(1);
-if (value.owned_worktree_count !== 6) process.exit(2);
-if (value.clean_dead.length !== 2) process.exit(3);
+if (value.owned_worktree_count !== 8) process.exit(2);
+if (value.clean_dead.length !== 4) process.exit(3);
 if (value.dirty.length !== 1) process.exit(4);
 if (value.live.length !== 1) process.exit(5);
 if (value.lock_unsupported.length !== 1) process.exit(6);
 if (!value.malformed.some(x => x.reason === "ownership_identity_mismatch")) process.exit(7);
+if (!value.malformed.some(x => x.reason === "invalid_pending_record")) process.exit(10);
+if (!value.malformed.some(x => x.path.endsWith("/marker-symlink"))) process.exit(11);
 if (value.legacy.length !== 1) process.exit(8);
 if (value.pending_creation.length !== 1) process.exit(9);
 NODE
@@ -108,6 +127,9 @@ assert_exit_code "$?" "2" "reap requires explicit --yes"
 
 REAP_OUT="$TEST_TMP/reap.json"
 AUTOPILOT_TEST_WORKTREE_REAP_RACE_PATH="$RACE_WT" \
+AUTOPILOT_TEST_WORKTREE_REAP_LOCK_RACE_PATH="$LOCK_RACE_WT" \
+AUTOPILOT_TEST_WORKTREE_REAP_MARKER_RACE_PATH="$MARKER_RACE_WT" \
+AUTOPILOT_TEST_MODE=1 \
   "$CONTROLLER" reap --repo "$REPO" --root-run-id "$ROOT_ID" --yes > "$REAP_OUT"
 REAP_RC=$?
 assert_exit_code "$REAP_RC" "0" "reap completes with preserve-first result"
@@ -116,22 +138,85 @@ const fs = require("fs");
 const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 if (value.command !== "reap") process.exit(1);
 if (value.reaped.length !== 1 || value.reaped[0].path !== process.argv[3]) process.exit(2);
-if (value.raced.length !== 1 || value.raced[0].path !== process.argv[4]) process.exit(3);
-if (value.raced[0].reason !== "cleanliness_changed") process.exit(4);
-if (value.owned_worktree_count !== 5) process.exit(5);
+if (value.raced.length !== 3) process.exit(3);
+if (!value.raced.some(x => x.path === process.argv[4] && x.reason === "cleanliness_changed")) process.exit(4);
+if (!value.raced.some(x => x.reason === "lifetime_lock_changed")) process.exit(5);
+if (!value.raced.some(x => x.reason === "marker_changed")) process.exit(8);
+if (value.owned_worktree_count !== 7) process.exit(6);
+if (value.branch_inventory.length !== 1
+    || value.branch_inventory[0].branch !== "hetero/p2-custom-clean") process.exit(7);
+if (value.branch_inventory_records.length !== 1
+    || value.branch_inventory_records[0].branch !== "hetero/p2-custom-clean") process.exit(9);
+const record = JSON.parse(fs.readFileSync(value.branch_inventory_records[0].record, "utf8"));
+if (record.tip !== value.branch_inventory[0].tip
+    || record.branch !== "hetero/p2-custom-clean") process.exit(10);
 NODE
-assert_exit_code "$?" "0" "reap emits exact branch inventory and race reason"
+assert_exit_code "$?" "0" "reap durably journals exact branch inventory before removal"
 
 assert_file_absent "$CLEAN_WT/.git" "dead clean exact worktree is removed"
 assert_eq "$(
   git -C "$REPO" rev-parse --verify --quiet refs/heads/hetero/p2-custom-clean
 )" "$CLEAN_TIP" "reap preserves the exact custom branch tip"
 assert_file_exists "$RACE_WT/.git" "compare/remove race preserves worktree"
+assert_file_exists "$MARKER_RACE_WT/.git" "marker-byte race preserves worktree"
+assert_file_exists "$LOCK_RACE_WT/.git" "lifetime-lock inode race preserves worktree"
 assert_file_exists "$DIRTY_WT/.git" "dirty worktree survives"
 assert_file_exists "$LIVE_WT/.git" "live worktree survives"
 assert_file_exists "$UNSUPPORTED_WT/.git" "lock-unsupported worktree survives"
 assert_file_exists "$MISMATCH_WT/.git" "identity-mismatched worktree survives"
 assert_file_exists "$LEGACY_WT/.git" "legacy worktree survives"
+assert_file_exists "$MARKER_SYMLINK_WT/.git" "symlink marker worktree survives"
+
+PENDING_ONLY_REPO="$TEST_TMP/pending-only-repo"
+mkdir -p "$PENDING_ONLY_REPO"
+git -C "$PENDING_ONLY_REPO" init -q -b develop
+git -C "$PENDING_ONLY_REPO" -c user.email=wlb@test -c user.name=wlb \
+  commit -q --allow-empty -m "pending-only fixture"
+PENDING_ONLY_COMMON="$(
+  git -C "$PENDING_ONLY_REPO" rev-parse --path-format=absolute --git-common-dir
+)"
+mkdir -p "$PENDING_ONLY_COMMON/autopilot-worktree-creation"
+printf \
+  '{"schema":1,"root_run_id":"%s","run_id":"pending-only","loop_id":"p2-loop","branch":"wlb/pending-only","base_sha":"%s","planned_path":"%s"}\n' \
+  "$ROOT_ID" "$(git -C "$PENDING_ONLY_REPO" rev-parse HEAD)" "$TEST_TMP/pending-only-path" \
+  > "$PENDING_ONLY_COMMON/autopilot-worktree-creation/pending-only.json"
+"$CONTROLLER" check --repo "$PENDING_ONLY_REPO" --root-run-id "$ROOT_ID" \
+  > "$TEST_TMP/pending-only-check.json"
+assert_exit_code "$?" "1" "check fails while exact same-root pending creation remains"
+node - "$TEST_TMP/pending-only-check.json" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (value.owned_worktree_count !== 0 || value.unresolved_pending_count !== 1) process.exit(1);
+NODE
+assert_exit_code "$?" "0" "pending-only failure reports its blocker count explicitly"
+
+LINKED_REPO="$TEST_TMP/linked-repo"
+mkdir -p "$LINKED_REPO"
+git -C "$LINKED_REPO" init -q -b develop
+git -C "$LINKED_REPO" -c user.email=wlb@test -c user.name=wlb \
+  commit -q --allow-empty -m "linked fixture"
+LINKED_WT="$TEST_TMP/"$'linked\nowned'
+git -C "$LINKED_REPO" worktree add -q -b "wlb/p2-linked-owned" "$LINKED_WT" develop
+LINKED_BASE="$(git -C "$LINKED_WT" rev-parse HEAD)"
+{
+  printf 'created_at=%s\n' "$(date +%s)"
+  printf 'branch=%s\n' "wlb/p2-linked-owned"
+  printf 'base_sha=%s\n' "$LINKED_BASE"
+  printf 'run_id=%s\n' "p2-linked-owned"
+  printf 'root_run_id=%s\n' "$ROOT_ID"
+  printf 'loop_id=%s\n' "p2-loop"
+  printf 'schema=2\n'
+} > "$LINKED_WT/.autopilot-worktree"
+: > "$LINKED_WT/.autopilot-worktree.lock"
+"$CONTROLLER" check --repo "$LINKED_WT" --root-run-id "$ROOT_ID" \
+  > "$TEST_TMP/linked-root-check.json"
+assert_exit_code "$?" "1" "linked-worktree repo input cannot hide its own owned entry"
+node - "$TEST_TMP/linked-root-check.json" "$LINKED_WT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (value.owned_worktree_count !== 1 || value.owned[0].path !== process.argv[3]) process.exit(1);
+NODE
+assert_exit_code "$?" "0" "NUL porcelain preserves an exact control-character path"
 
 EMPTY_REPO="$TEST_TMP/empty-repo"
 mkdir -p "$EMPTY_REPO"

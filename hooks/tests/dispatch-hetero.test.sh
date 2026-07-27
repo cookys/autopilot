@@ -542,4 +542,37 @@ HB_COUNT="$(grep -c '\"kind\":\"heartbeat\"' "$LEDGER_NOSET" 2>/dev/null)"; HB_C
 assert_eq "0" "$HB_COUNT" "setsid-unavailable fallback bypasses detach-side heartbeats"
 assert_file_absent "${LEDGER_NOSET}.results/rn.implement.result.json" "setsid-unavailable fallback does not emit detached durable result"
 
+# 21a. A detached Grok dispatch must carry the clamped reasoning effort into the
+# serialized child. `run_agent` is serialized for the detached rail, so its
+# sourced Grok helpers must be serialized too; otherwise command substitution
+# yields an empty --reasoning-effort value and Grok exits before a model request.
+STUB_GROK_EFFORT="$TEST_TMP/grok-effort"
+GROK_EFFORT_CAPTURE="$TEST_TMP/grok-effort.txt"
+cat > "$STUB_GROK_EFFORT" <<'EOF'
+#!/usr/bin/env bash
+effort=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --reasoning-effort) effort="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s' "$effort" > "$GROK_EFFORT_CAPTURE"
+[ "$effort" = "high" ] || exit 64
+printf 'grok detached effort\n' > grok-effort.txt
+EOF
+chmod +x "$STUB_GROK_EFFORT"
+LEDGER_GROK="$TEST_TMP/grok-detached-ledger/ledger.jsonl"
+mkdir -p "$TEST_TMP/grok-detached-ledger"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_GROK" >/dev/null
+OUT="$(cd "$SBX" && env GROK_EFFORT_CAPTURE="$GROK_EFFORT_CAPTURE" DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
+  --branch feat/grok-detached-effort --prompt-file "$PROMPT" --ledger "$LEDGER_GROK" \
+  --run-id grok-detached-effort --stage implement 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "detached Grok effort path exit code"
+assert_contains "$OUT" '"status": "committed"' "detached Grok effort path commits"
+assert_file_exists "$GROK_EFFORT_CAPTURE" "detached Grok stub received reasoning effort"
+assert_eq "high" "$(cat "$GROK_EFFORT_CAPTURE" 2>/dev/null)" \
+  "detached Grok receives the clamped high effort"
+
 finalize_test

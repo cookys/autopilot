@@ -1328,9 +1328,11 @@ try {
           return 2
         }
         if [ "$registered_rc" -eq 1 ]; then
-          [ "$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$record_branch" 2>/dev/null || true)" = "$record_base" ] \
-            && git -C "$repo" branch -D "$record_branch" >/dev/null 2>&1 || true
-          rm -f -- "$record"
+          # Keep the branch and pending record as exact evidence for the Phase
+          # 2/3 lifecycle controller. Deleting a ref here cannot atomically
+          # prove that an ordinary concurrent Git operation did not just check
+          # it out in another worktree.
+          :
         fi
       fi
       [ -n "$probe_fd" ] && exec {probe_fd}>&- || true
@@ -1343,9 +1345,6 @@ try {
       current_tip="$(git -C "$repo" rev-parse --verify --quiet "refs/heads/$record_branch" 2>/dev/null || true)"
       if [ -z "$current_tip" ]; then
         rm -f -- "$record"
-      elif [ "$current_tip" = "$record_base" ]; then
-        git -C "$repo" branch -D "$record_branch" >/dev/null 2>&1 \
-          && rm -f -- "$record"
       fi
       if [ -e "$record" ] && [ "$record_root" = "$root_id" ]; then
         WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
@@ -1413,10 +1412,36 @@ WT_RUN_ID="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT_LOOP_ID="${AUTOPILOT_LOOP_ID:-${LINEAGE_PARENT:-$DISPATCH_RUN_ID}}"
 WT_LOOP_ID="$(printf '%s' "$WT_LOOP_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
+_wt_repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die_precondition "cannot resolve consuming repository root"
+_wt_common_dir="$(_wt_resolve_common_dir "$_wt_repo_root")" \
+  || die_precondition "cannot resolve canonical git common directory"
+
+_wt_prepare_common_excludes() {
+  mkdir -p "$_wt_common_dir/info" || return 1
+  local exclude="$_wt_common_dir/info/exclude" name
+  for name in .autopilot-worktree .autopilot-worktree.lock; do
+    grep -qxF "$name" "$exclude" 2>/dev/null \
+      || printf '%s\n' "$name" >> "$exclude" \
+      || return 1
+  done
+}
+
+_wt_creation_test_checkpoint() {
+  [ "${AUTOPILOT_TEST_WORKTREE_CRASH_AT:-}" = "$1" ] || return 0
+  case "$1" in
+    after-pending|after-add|after-marker|after-verification) kill -KILL "$$" ;;
+  esac
+}
 
 _wt_lock_fail() {
-  git worktree remove --force "$WT" >/dev/null 2>&1 || true
-  git branch -D "$BRANCH" >/dev/null 2>&1 || true
+  # This path runs before the worker starts, but external state can still race
+  # marker/lock setup. Never force-remove newly dirty data, and delete the ref
+  # only if it still has the exact creation tip.
+  git worktree remove "$WT" >/dev/null 2>&1 || true
+  if [ -z "$WT_PENDING_RECORD" ]; then
+    git update-ref -d "refs/heads/$BRANCH" "$BASE_SHA" >/dev/null 2>&1 || true
+  fi
   if [ -n "$WT_PENDING_RECORD" ]; then
     _wt_is_registered_path "${_wt_repo_root:-.}" "$WT"
     _wt_cleanup_registered_rc=$?
@@ -1432,10 +1457,6 @@ _wt_lock_fail() {
 }
 
 if [ "$LINEAGE_DEPTH" -gt 0 ]; then
-  _wt_repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
-    || die_precondition "cannot resolve consuming repository root"
-  _wt_common_dir="$(_wt_resolve_common_dir "$_wt_repo_root")" \
-    || die_precondition "cannot resolve canonical git common directory"
   _wt_open_lock_fd "$_wt_common_dir/autopilot-worktree-budget.lock" \
     || die_precondition "cannot open worktree resource budget lock"
   WT_BUDGET_LOCK_FD="$_WT_SAFE_LOCK_FD"
@@ -1444,14 +1465,8 @@ if [ "$LINEAGE_DEPTH" -gt 0 ]; then
 
   # Install bookkeeping exclusions before reconciliation probes can create a
   # lifetime lock in an add-before-marker crash artifact.
-  mkdir -p "$_wt_common_dir/info" \
-    || die_precondition "cannot prepare common git exclude directory"
-  _wt_exclude="$_wt_common_dir/info/exclude"
-  for _wt_name in .autopilot-worktree .autopilot-worktree.lock; do
-    grep -qxF "$_wt_name" "$_wt_exclude" 2>/dev/null \
-      || printf '%s\n' "$_wt_name" >> "$_wt_exclude" \
-      || die_precondition "cannot register worktree bookkeeping exclusion"
-  done
+  _wt_prepare_common_excludes \
+    || die_precondition "cannot register worktree bookkeeping exclusion"
 
   _wt_budget_reconcile_and_count "$_wt_repo_root" "$_wt_common_dir" "$LINEAGE_ROOT" \
     || die_precondition "cannot reconcile worktree creation state"
@@ -1481,6 +1496,10 @@ if [ "$LINEAGE_DEPTH" -gt 0 ]; then
       WT_BUDGET_LOCK_FD=""
       die_precondition "cannot publish worktree creation record"
     }
+  _wt_creation_test_checkpoint after-pending
+else
+  _wt_prepare_common_excludes \
+    || die_precondition "cannot register worktree bookkeeping exclusion"
 fi
 
 if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
@@ -1488,6 +1507,7 @@ if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
   # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
   _wt_lock_fail "git worktree add failed"
 fi
+_wt_creation_test_checkpoint after-add
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
 # Both names are registered in the COMMON git dir's info/exclude below: the wrapper
@@ -1506,6 +1526,7 @@ _wt_marker_tmp="$WT/.autopilot-worktree.tmp.$$"
 } > "$_wt_marker_tmp"
 mv -f -- "$_wt_marker_tmp" "$WT/.autopilot-worktree" \
   || _wt_lock_fail "cannot publish worktree ownership marker"
+_wt_creation_test_checkpoint after-marker
 # Hold exclusive lock on a dedicated fd for the whole dispatch life. Never close
 # early; never exec-replace this shell (would release the lock silently).
 # On lock failure, clean up the just-created worktree+branch before dying.
@@ -1520,36 +1541,11 @@ if ! _wt_read_schema2_marker "$WT/.autopilot-worktree" \
    || [ "$_WT_MARKER_BASE_SHA" != "$BASE_SHA" ]; then
   _wt_lock_fail "worktree ownership marker verification failed"
 fi
+_wt_creation_test_checkpoint after-verification
 [ -n "$WT_PENDING_RECORD" ] && rm -f -- "$WT_PENDING_RECORD"
 WT_PENDING_RECORD=""
 [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
 WT_BUDGET_LOCK_FD=""
-# Keep bookkeeping files invisible to git status / git add -A inside the worktree.
-# For linked worktrees, git reads info/exclude from the COMMON git dir (shared
-# repo-wide). The per-worktree gitdir's info/exclude is ignored by git — a name
-# written there still shows in git status. Append is idempotent because the common
-# exclude is shared by the consuming repo and all its worktrees; repeated
-# dispatches must not accumulate duplicate lines.
-if ! {
-  if _wt_common_dir="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" && [ -n "$_wt_common_dir" ]; then
-    true
-  else
-    # Older git lacks --path-format=absolute; fall back and absolutize if relative.
-    _wt_common_dir="$(git -C "$WT" rev-parse --git-common-dir)" &&
-    case "$_wt_common_dir" in
-      /*) true ;;
-      *) _wt_common_dir="$(cd "$WT/$_wt_common_dir" && pwd)" ;;
-    esac
-  fi &&
-  mkdir -p "$_wt_common_dir/info" &&
-  _wt_exclude="$_wt_common_dir/info/exclude" &&
-  for _wt_name in .autopilot-worktree .autopilot-worktree.lock; do
-    grep -qxF "$_wt_name" "$_wt_exclude" 2>/dev/null || printf '%s\n' "$_wt_name" >> "$_wt_exclude"
-  done
-}; then
-  echo "dispatch-hetero: WARNING — failed to register worktree bookkeeping files in git exclude (git status / git add -A may see them)" >&2
-fi
-unset _wt_common_dir _wt_exclude _wt_name
 LOG="$(mktemp -t "hetero-${BRANCH//\//-}-log-XXXXXX")"
 
 # Snapshot consuming-repo git identity BEFORE the runner (worktrees share .git/config;

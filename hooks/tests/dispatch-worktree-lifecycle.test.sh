@@ -296,8 +296,8 @@ assert_exit_code "$RECOVERY_RC" "0" \
   "replacement leaf is admitted after exact crash-window reconciliation"
 assert_contains "$(cat "$RECOVERY_OUT")" '"status": "committed"' \
   "replacement leaf commits after reconciliation"
-assert_file_absent "$CRASH_RECORD" \
-  "reconciled pending record is removed"
+assert_file_exists "$CRASH_RECORD" \
+  "reconciled pending record preserves exact branch evidence"
 if git -C "$RECOVERY_REPO" worktree list --porcelain | grep -qxF "worktree $CRASH_WT"; then
   fail "reconciled crash-window worktree remains registered"
 else
@@ -305,7 +305,7 @@ else
 fi
 assert_eq "$(
   git -C "$RECOVERY_REPO" rev-parse --verify --quiet "refs/heads/$CRASH_BRANCH" 2>/dev/null || true
-)" "" "exact unmoved crash-window branch is removed"
+)" "$RECOVERY_BASE" "crash-window branch is preserved for exact later disposition"
 assert_file_exists "$UNOWNED_WT/.git" \
   "unmarked worktree without pending ownership survives reconciliation"
 assert_file_exists "$CONFLICT_RECORD" \
@@ -316,6 +316,54 @@ assert_file_exists "$MISMATCH_WT/.git" \
   "schema-2 marker with mismatched checked-out branch is preserved"
 assert_contains "$(cat "$RECOVERY_COMMON/info/exclude")" ".autopilot-worktree.lock" \
   "first dispatch installs bookkeeping exclusions before recovery"
+
+# Real SIGKILL boundaries: every managed creation checkpoint must leave either
+# recoverable pending evidence or a schema-2 marker. A subsequent creator must
+# reconcile the dead clean worktree without leaving an invisible registration.
+for checkpoint in after-pending after-add after-marker after-verification; do
+  CRASH_REPO="$TEST_TMP/crash-$checkpoint-repo"
+  init_repo "$CRASH_REPO"
+  CRASH_COMMON="$(git -C "$CRASH_REPO" rev-parse --path-format=absolute --git-common-dir)"
+  ORIGINAL_ROOT_RUN_ID="$ROOT_RUN_ID"
+  ROOT_RUN_ID="wlb-crash-$checkpoint"
+  (
+    export AUTOPILOT_TEST_WORKTREE_CRASH_AT="$checkpoint"
+    dispatch_leaf \
+      "$CRASH_REPO" \
+      "wlb/crash-$checkpoint" \
+      "crash-$checkpoint" \
+      "$STUB_AGY"
+  ) >"$TEST_TMP/crash-$checkpoint.out" 2>&1
+  CRASH_RC=$?
+  assert_exit_code "$CRASH_RC" "137" \
+    "$checkpoint fixture terminates at the real SIGKILL boundary"
+
+  CRASH_RECORDS=("$CRASH_COMMON"/autopilot-worktree-creation/*.json)
+  assert_file_exists "${CRASH_RECORDS[0]}" \
+    "$checkpoint leaves an atomic pending creation record"
+  CRASH_PLANNED_PATH="$(node -e '
+const fs = require("fs");
+process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).planned_path);
+' "${CRASH_RECORDS[0]}")"
+
+  dispatch_leaf \
+    "$CRASH_REPO" \
+    "wlb/recover-$checkpoint" \
+    "recover-$checkpoint" \
+    "$STUB_AGY" >"$TEST_TMP/recover-$checkpoint.out" 2>&1
+  RECOVER_RC=$?
+  assert_exit_code "$RECOVER_RC" "0" \
+    "$checkpoint residue permits a reconciled replacement"
+  assert_contains "$(cat "$TEST_TMP/recover-$checkpoint.out")" '"status": "committed"' \
+    "$checkpoint replacement commits"
+  if git -C "$CRASH_REPO" worktree list --porcelain \
+      | grep -qxF "worktree $CRASH_PLANNED_PATH"; then
+    fail "$checkpoint leaves the crashed worktree registered after reconciliation"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+  ROOT_RUN_ID="$ORIGINAL_ROOT_RUN_ID"
+done
 
 # Retained-state fixture inventory. P0 proves these states can be constructed
 # without claiming that the not-yet-implemented lifecycle scanner handles them.
@@ -407,8 +455,26 @@ printf \
   "$STATE_BASE" \
   "$PENDING_WT" > "$PENDING_RECORD"
 
-assert_eq "$(linked_worktree_count "$STATE_REPO")" "7" \
-  "retained-state fixture registers all seven linked worktrees"
+add_state_worktree "pending-moved" "wlb/state-pending-moved"
+PENDING_MOVED_WT="$STATE_WT"
+: > "$PENDING_MOVED_WT/.autopilot-worktree.lock"
+printf '%s\n' "moved tip" > "$PENDING_MOVED_WT/moved.txt"
+git -C "$PENDING_MOVED_WT" add moved.txt
+git -C "$PENDING_MOVED_WT" -c user.email=wlb@test -c user.name=wlb \
+  commit -q -m "test: move pending branch tip"
+PENDING_MOVED_TIP="$(git -C "$PENDING_MOVED_WT" rev-parse HEAD)"
+PENDING_MOVED_RECORD="$PENDING_DIR/state-pending-moved.json"
+printf \
+  '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
+  "$STATE_ROOT" \
+  "state-pending-moved" \
+  "loop-pending-moved" \
+  "wlb/state-pending-moved" \
+  "$STATE_BASE" \
+  "$PENDING_MOVED_WT" > "$PENDING_MOVED_RECORD"
+
+assert_eq "$(linked_worktree_count "$STATE_REPO")" "8" \
+  "retained-state fixture registers all eight linked worktrees"
 assert_eq "$(git -C "$CLEAN_WT" status --porcelain=v1)" "" \
   "clean/dead fixture is clean"
 assert_contains "$(git -C "$DIRTY_WT" status --porcelain=v1)" "dirty.txt" \
@@ -427,6 +493,8 @@ assert_contains "$(cat "$LEGACY_WT/.autopilot-worktree")" "schema=1" \
 assert_file_absent "$PENDING_WT/.autopilot-worktree" \
   "pending fixture remains in the add-before-marker window"
 assert_file_exists "$PENDING_RECORD" "pending fixture has an exact creation record"
+assert_file_exists "$PENDING_MOVED_RECORD" \
+  "moved-tip pending fixture has an exact creation record"
 CUSTOM_TIP="$(
   git -C "$STATE_REPO" rev-parse --verify --quiet refs/heads/hetero/custom-p0
 )"
@@ -444,15 +512,15 @@ dispatch_leaf \
 STATE_RECONCILE_RC=$?
 ROOT_RUN_ID="$ORIGINAL_ROOT_RUN_ID"
 assert_exit_code "$STATE_RECONCILE_RC" "2" \
-  "five preserved negative states exhaust the four-leaf budget"
+  "preserved negative states exhaust the four-leaf budget"
 assert_contains "$(cat "$STATE_RECONCILE_OUT")" '"resource_budget"' \
   "preserved negative states block replacement with a resource receipt"
 assert_file_absent "$CLEAN_WT/.git" \
   "dead clean schema-2 worktree is reclaimed during occupancy reconciliation"
 assert_file_absent "$PENDING_WT/.git" \
   "exact dead clean add-before-marker worktree is reclaimed"
-assert_file_absent "$PENDING_RECORD" \
-  "reconciled add-before-marker pending record is removed"
+assert_file_exists "$PENDING_RECORD" \
+  "reconciled add-before-marker record preserves exact branch evidence"
 assert_file_exists "$DIRTY_WT/.git" \
   "dirty schema-2 worktree is preserved"
 assert_file_exists "$LIVE_WT/.git" \
@@ -463,9 +531,16 @@ assert_file_exists "$MALFORMED_WT/.git" \
   "malformed schema-2 worktree is preserved"
 assert_file_exists "$LEGACY_WT/.git" \
   "legacy schema-1 worktree is preserved"
+assert_file_exists "$PENDING_MOVED_WT/.git" \
+  "pending worktree with a moved branch tip is preserved"
+assert_file_exists "$PENDING_MOVED_RECORD" \
+  "moved-tip pending record remains available for later disposition"
+assert_eq "$(
+  git -C "$STATE_REPO" rev-parse --verify --quiet refs/heads/wlb/state-pending-moved 2>/dev/null || true
+)" "$PENDING_MOVED_TIP" "pending reconciliation never deletes a moved branch tip"
 assert_eq "$(
   git -C "$STATE_REPO" rev-parse --verify --quiet refs/heads/wlb/state-pending 2>/dev/null || true
-)" "" "unmoved add-before-marker branch is removed"
+)" "$STATE_BASE" "unmoved add-before-marker branch is preserved for later disposition"
 assert_eq "$(
   git -C "$STATE_REPO" rev-parse --verify --quiet refs/heads/hetero/custom-p0 2>/dev/null || true
 )" "$CUSTOM_TIP" "normal schema-2 reclamation preserves the exact branch tip"

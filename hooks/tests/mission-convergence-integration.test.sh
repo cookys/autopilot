@@ -93,8 +93,8 @@ do
     "RED: healthy control $control must preserve allowed behavior"
 done
 
-assert_contains "$OUT" '"state":"UNSUPERVISED"' \
-  "RED is current unsupervised behavior, not a fixture setup failure"
+# UNSUPERVISED assertion removed: the P1 reducer now produces real state for
+# every frozen fixture, so the RED meta-check no longer applies.
 assert_not_contains "$OUT" "INVALID_FIXTURE" \
   "Incident reasons and terminal ceilings match the independent frozen oracle"
 

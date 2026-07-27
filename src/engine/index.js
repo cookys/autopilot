@@ -188,6 +188,8 @@ const campaignVerification = require('./campaign-verification');
 const implementationCampaign = require('./implementation-campaign');
 const localDeployment = require('./local-deployment');
 const roles = require('./roles');
+const authenticatedControl = require('./authenticated-control');
+const missionConvergence = require('./mission-convergence');
 
 module.exports = {
   AutopilotEngine,
@@ -357,4 +359,36 @@ module.exports = {
   ...productReviewNormalizer,
   ...campaignStatus,
   ...ownerKernel,
+  AUTHENTICATED_CONTROL_ACTIONS: authenticatedControl.CONTROL_ACTIONS,
+  AUTHENTICATED_CONTROL_AUTHORITIES: authenticatedControl.CONTROL_AUTHORITIES,
+  AUTHENTICATED_CONTROL_SCHEMA_VERSION: authenticatedControl.CONTROL_SCHEMA_VERSION,
+  AuthenticatedControlAdapter: authenticatedControl.AuthenticatedControlAdapter,
+  AuthenticatedControlError: authenticatedControl.AuthenticatedControlError,
+  CEILING_LOOSEN_AUTHORITIES: authenticatedControl.CEILING_LOOSEN_AUTHORITIES,
+  MISSION_CONVERGENCE_AXES: missionConvergence.SUPPORTED_AXES,
+  MISSION_CONVERGENCE_ENFORCEMENT_MODES: missionConvergence.ENFORCEMENT_MODES,
+  MISSION_CONVERGENCE_SCHEMA_VERSION: missionConvergence.MISSION_SCHEMA_VERSION,
+  MissionReducerError: missionConvergence.MissionReducerError,
+  TERMINAL_TRIGGER_ACTIONS: authenticatedControl.TERMINAL_TRIGGER_ACTIONS,
+  authorizeCeilingAdjust: authenticatedControl.authorizeCeilingAdjust,
+  computeAxisBudget: missionConvergence.computeAxisBudget,
+  evaluateAuthenticatedControlFixture: authenticatedControl.evaluateAuthenticatedControlFixture,
+  evaluateClaimSequence: missionConvergence.evaluateClaimSequence,
+  evaluateClosureRatio: missionConvergence.evaluateClosureRatio,
+  evaluateConfig: missionConvergence.evaluateConfig,
+  evaluateDoubleClaim: missionConvergence.evaluateDoubleClaim,
+  evaluateIdentityReset: missionConvergence.evaluateIdentityReset,
+  evaluateMissionIntegrationFixture: missionConvergence.evaluateMissionIntegrationFixture,
+  evaluateMissionReducerFixture: missionConvergence.evaluateMissionReducerFixture,
+  evaluateNoEffectRelease: missionConvergence.evaluateNoEffectRelease,
+  evaluateProjectionRoundtrip: missionConvergence.evaluateProjectionRoundtrip,
+  evaluateProviderMaintenance: missionConvergence.evaluateProviderMaintenance,
+  evaluateReconcile: missionConvergence.evaluateReconcile,
+  evaluateResumeClaim: missionConvergence.evaluateResumeClaim,
+  evaluateReviewAuthority: missionConvergence.evaluateReviewAuthority,
+  evaluateSequenceControl: missionConvergence.evaluateSequenceControl,
+  evaluateStagnation: missionConvergence.evaluateStagnation,
+  normalizeControlEvent: authenticatedControl.normalizeControlEvent,
+  remainingForAxis: missionConvergence.remainingForAxis,
+  verifySequence: authenticatedControl.verifySequence,
 };

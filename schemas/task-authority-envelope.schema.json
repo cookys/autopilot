@@ -20,6 +20,10 @@
     "finish_receipt_schema",
     "execution_preferences"
   ],
+  "optional_provenance": [
+    "mission_lineage_id",
+    "mission_policy_digest"
+  ],
   "properties": {
     "schema_version": { "const": 1 },
     "task_authority_id": { "$ref": "#/$defs/sha256" },
@@ -184,7 +188,12 @@
         "data_egress": { "enum": ["local-only", "allowlisted", "online"] },
         "data_egress_source": { "enum": ["project-default", "task-override"] }
       }
-    }
+    },
+    "mission_lineage_id": {
+      "type": "string",
+      "pattern": "^lineage-v1-[0-9a-f]{64}$"
+    },
+    "mission_policy_digest": { "$ref": "#/$defs/sha256" }
   },
   "$defs": {
     "sha256": {

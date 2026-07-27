@@ -590,6 +590,8 @@ function taskAuthorityBody(raw) {
     'escalationPolicy',
     'finishReceiptSchema',
     'taskOverrides',
+    'missionLineageId',
+    'missionPolicyDigest',
   ]), 'task authority input');
   const policy = normalizePolicy(value.policy, value.policyHash);
   const executionPreferences = normalizeExecutionPreferences(
@@ -654,6 +656,8 @@ function normalizeTaskAuthorityEnvelope(raw) {
     'escalation_policy',
     'finish_receipt_schema',
     'execution_preferences',
+    'mission_lineage_id',
+    'mission_policy_digest',
   ]), 'task authority envelope');
   if (value.schema_version !== TASK_AUTHORITY_SCHEMA_VERSION) {
     authorityError(`task authority envelope.schema_version must equal ${TASK_AUTHORITY_SCHEMA_VERSION}`);
@@ -691,7 +695,11 @@ function normalizeTaskAuthorityEnvelope(raw) {
     authorityError('task authority egress policy does not match its frozen execution preference');
   }
   const rawBody = Object.fromEntries(
-    Object.entries(value).filter(([key]) => key !== 'task_authority_id'),
+    Object.entries(value).filter(([key]) => (
+      key !== 'task_authority_id'
+      && key !== 'mission_lineage_id'
+      && key !== 'mission_policy_digest'
+    )),
   );
   if (canonicalJson(rawBody) !== canonicalJson(normalizedBody)) {
     authorityError('task authority envelope is not canonical');

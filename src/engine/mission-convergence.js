@@ -34,7 +34,6 @@
 
 const crypto = require('crypto');
 const {
-  ADAPTER_CAPABILITY_REGISTRY,
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlError,
   CEILING_LOOSEN_AUTHORITIES,
@@ -45,7 +44,7 @@ const {
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
-  hasAdapterCapability,
+  isAuthenticatedAdapterCapability,
   normalizeControlEvent,
   sha256,
   verifySequence,
@@ -315,6 +314,23 @@ function remainingForAxis({ authorized_ceiling, consumed, requested }) {
 
 function claimIdFor(lineageId, idempotencyKey) {
   return `claim-v1-${sha256(`${lineageId}:${idempotencyKey}`)}`;
+}
+
+function canonicalDigestPayload(payload) {
+  // The adapter attaches `_adapter_capability` to payload.event as a
+  // non-enumerable property. canonicalJson (and thus sha256) only traverses
+  // enumerable own keys, so the capability is already excluded from digests.
+  // We rebuild the control event from its enumerable own keys anyway, so the
+  // digest input is provably capability-free even if the capability's property
+  // attributes ever changed.
+  if (payload && payload.event && typeof payload.event === 'object') {
+    const strippedEvent = {};
+    for (const key of Object.keys(payload.event)) {
+      strippedEvent[key] = payload.event[key];
+    }
+    return { ...payload, event: strippedEvent };
+  }
+  return payload;
 }
 
 function eventDigestFor(event) {
@@ -679,19 +695,24 @@ function reduceMissionState(state, event) {
   }
   // Authenticated control events must carry an unforgeable capability
   // minted by a constructed adapter. A raw reducer event MUST NOT acquire
-  // authenticated_user/DOA authority.
+  // authenticated_user/DOA authority. The check uses the narrow predicate
+  // exported by authenticated-control; the registry itself is module-private.
   if (eventType === 'control_event' || eventType === 'ceiling_adjust') {
     if (!payload || payload.event === undefined) {
       fail('control_event requires an adapter-produced event payload', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
-    if (!payload.event._adapter_capability
-      || !hasAdapterCapability(ADAPTER_CAPABILITY_REGISTRY, payload.event._adapter_capability)) {
+    if (!isAuthenticatedAdapterCapability(payload.event._adapter_capability)) {
       fail('control_event must be produced by an AuthenticatedControlAdapter instance', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
   }
+  // Compute the event digest from a canonical payload that OMITS the
+  // non-enumerable/private adapter capability. The capability is attached to
+  // the adapter-produced control event as a non-enumerable property; it must
+  // never reach a digest input, the event log, a projection, or a receipt.
+  const digestPayload = canonicalDigestPayload(payload);
   const eventWithDigest = Object.freeze({
     ...event,
-    event_digest: eventDigestFor({ event_type: eventType, sequence, mission_lineage_id: event.mission_lineage_id, payload }),
+    event_digest: eventDigestFor({ event_type: eventType, sequence, mission_lineage_id: event.mission_lineage_id, payload: digestPayload }),
   });
 
   const handlers = {
@@ -893,10 +914,20 @@ function handleGrantClaimed(state, event, payload) {
         overspend_axis: axis,
         requested: req.reserved_active,
         remaining: newRemaining,
-      });
+      }, { claimId, idempotencyKey, bindingHash, reservation });
     }
   }
   // Apply the reservation.
+  return applyGrantClaim(state, event, payload, {
+    claimId,
+    idempotencyKey,
+    bindingHash,
+    reservation,
+  });
+}
+
+function applyGrantClaim(state, event, payload, grant) {
+  const { claimId, idempotencyKey, bindingHash, reservation } = grant;
   const newAxes = {};
   for (const axisName of SUPPORTED_AXES) {
     const cur = state.axes[axisName];
@@ -986,16 +1017,36 @@ function sameReservation(a, b) {
   return true;
 }
 
-function shadowOrBlock(state, event, reason, evidence = {}) {
+function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
   if (state.enforcement_mode === 'shadow') {
     // In shadow mode, would-block admission must NOT terminalize Mission or
-    // prevent the represented effect. The reducer still records the
-    // auditable `would_block` evidence on the receipt so an operator can
-    // review the would-have-blocked admission after the run. The evidence is
-    // derived from the real reducer's ceiling math (the caller already proved
-    // newRemaining < 0) and recorded DURABLY in state.receipts so it survives
-    // subsequent reductions — shadow never blocks the effect, but it always
-    // leaves a durable audit trail.
+    // prevent the represented grant. The reducer creates the claim — which
+    // durably records the full requested reservation on the claim itself so a
+    // later release/reconciliation can account for it — but does NOT deduct
+    // that reservation from the live axes (shadow preserves the remaining
+    // budget the frozen corpus asserts). The machine state is left unchanged.
+    // Durable `would_block` evidence derived from the real ceiling math is
+    // recorded for operator review. Repeated shadow admissions are auditable
+    // and cumulative: each evidence receipt is stored under its own
+    // event-digest key so prior evidence is never overwritten.
+    const claim = {
+      claim_id: grant.claimId,
+      idempotency_key: grant.idempotencyKey,
+      binding_digest: grant.bindingHash,
+      campaign_id: event.payload.campaign_id,
+      campaign_contract_digest: event.payload.campaign_contract_digest,
+      base_sha: event.payload.base_sha,
+      acceptance_ids: [...(event.payload.acceptance_ids || [])].sort(),
+      control_sequence: event.payload.control_sequence || state.control_sequence,
+      reservation: grant.reservation,
+      issued_at: event.payload.issued_at,
+      expires_at: event.payload.expires_at,
+      terminal: false,
+      released: false,
+      reconciled: false,
+      shadow_would_block: true,
+      event_digest: event.event_digest,
+    };
     const evidenceReceipt = {
       artifact_type: 'mission_would_block_evidence',
       event_type: event.event_type,
@@ -1003,6 +1054,7 @@ function shadowOrBlock(state, event, reason, evidence = {}) {
       would_block: true,
       enforcement_mode: 'shadow',
       evidence,
+      claim_id: grant.claimId,
       mission_lineage_id: state.mission_lineage_id,
       source_event: event,
       next_state: state.state,
@@ -1013,11 +1065,18 @@ function shadowOrBlock(state, event, reason, evidence = {}) {
         mission_lineage_id: state.mission_lineage_id,
       }),
     };
+    const evidenceKey = `mission_would_block_evidence:${event.event_digest}`;
     const durableState = Object.freeze({
       ...appendEvent(state, event),
+      claims: Object.freeze({ ...state.claims, [grant.claimId]: Object.freeze(claim) }),
+      claim_idempotency_index: Object.freeze({
+        ...state.claim_idempotency_index,
+        [grant.idempotencyKey]: grant.claimId,
+      }),
       receipts: Object.freeze({
         ...state.receipts,
-        [evidenceReceipt.artifact_type]: evidenceReceipt,
+        mission_would_block_evidence: evidenceReceipt,
+        [evidenceKey]: evidenceReceipt,
       }),
     });
     return {
@@ -1906,6 +1965,23 @@ function buildProjection(state, sourceRefs = []) {
       control_contract: deepClone(configSnapshot.control_contract),
       lineage_binding: deepClone(configSnapshot.lineage_binding),
       provenance: state.config_provenance,
+      // Complete non-secret contract shape so a restored state can resume
+      // reducer operation with identical admission/control/successor/
+      // stagnation semantics. Every field below affects future admission,
+      // successor inheritance, stagnation, control authorization, or hashing.
+      schema_version: state.config.schema_version,
+      artifact_type: state.config.artifact_type,
+      contract_id: state.config.contract_id,
+      repo_identity: state.config.repo_identity,
+      mission_lineage_id: state.config.mission_lineage_id,
+      task_authority_id: state.config.task_authority_id,
+      policy_hash: state.config.policy_hash,
+      enforcement_mode: state.config.enforcement_mode,
+      contract_state: state.config.state,
+      closure_ratio: state.config.closure_ratio,
+      max_stagnant_campaigns: state.config.max_stagnant_campaigns,
+      axes: deepClone(configSnapshot.axes),
+      red_lines: deepClone(state.red_lines),
     },
     config_digest: contractDigest,
     raw_transcript_present: false,
@@ -2017,8 +2093,10 @@ function restoreProjection(projection) {
     root_run_id: 'projection-restore',
     enforcement_mode: projection.enforcement_mode || 'shadow',
     state: snapshot.machine_state || 'DRAFT',
-    closure_ratio: projection.closure_ratio || DEFAULT_CLOSURE_RATIO,
-    max_stagnant_campaigns: projection.max_stagnant_campaigns || DEFAULT_MAX_STAGNANT,
+    closure_ratio: projection.closure_ratio !== undefined
+      ? projection.closure_ratio : DEFAULT_CLOSURE_RATIO,
+    max_stagnant_campaigns: projection.max_stagnant_campaigns !== undefined
+      ? projection.max_stagnant_campaigns : DEFAULT_MAX_STAGNANT,
     successor_inherits_durable_consumed: !!projection.successor_inherits_durable_consumed,
     axes: Object.freeze({
       campaigns: Object.freeze(axes.campaigns),
@@ -2042,9 +2120,34 @@ function restoreProjection(projection) {
     unknown_required_axes: Object.freeze(snapshot.unknown_required_axes),
     terminal: snapshot.terminal ? deepClone(snapshot.terminal) : null,
     config: deepFreeze({
+      schema_version: configSnapshot.schema_version !== undefined
+        ? configSnapshot.schema_version : MISSION_SCHEMA_VERSION,
+      artifact_type: configSnapshot.artifact_type !== undefined
+        ? configSnapshot.artifact_type : 'mission_convergence_contract',
+      contract_id: configSnapshot.contract_id !== undefined
+        ? configSnapshot.contract_id : `mission-v1-${sha256(projection.mission_lineage_id)}`,
+      repo_identity: configSnapshot.repo_identity !== undefined
+        ? configSnapshot.repo_identity : projection.frozen_intent.objective.slice(0, 1024),
+      mission_lineage_id: configSnapshot.mission_lineage_id !== undefined
+        ? configSnapshot.mission_lineage_id : projection.mission_lineage_id,
+      task_authority_id: configSnapshot.task_authority_id !== undefined
+        ? configSnapshot.task_authority_id : projection.task_authority_id,
+      policy_hash: configSnapshot.policy_hash !== undefined
+        ? configSnapshot.policy_hash : projection.policy_hash,
+      enforcement_mode: configSnapshot.enforcement_mode !== undefined
+        ? configSnapshot.enforcement_mode : projection.enforcement_mode,
+      state: configSnapshot.contract_state !== undefined
+        ? configSnapshot.contract_state : (snapshot.machine_state || 'DRAFT'),
+      closure_ratio: configSnapshot.closure_ratio !== undefined
+        ? configSnapshot.closure_ratio : projection.closure_ratio,
+      max_stagnant_campaigns: configSnapshot.max_stagnant_campaigns !== undefined
+        ? configSnapshot.max_stagnant_campaigns : projection.max_stagnant_campaigns,
+      axes: configSnapshot.axes ? deepClone(configSnapshot.axes) : deepClone(snapshot.axes),
       grant_contract: deepClone(configSnapshot.grant_contract),
       control_contract: deepClone(configSnapshot.control_contract),
       lineage_binding: deepClone(configSnapshot.lineage_binding),
+      red_lines: configSnapshot.red_lines
+        ? deepClone(configSnapshot.red_lines) : Object.freeze([...(projection.red_lines || [])]),
       provenance: deepClone(configSnapshot.provenance),
     }),
     config_provenance: deepFreeze(deepClone(configSnapshot.provenance)),
@@ -2840,7 +2943,6 @@ function evaluateMissionIntegrationFixture(fixture) {
 }
 
 module.exports = {
-  ADAPTER_CAPABILITY_REGISTRY,
   AXIS_SET,
   CEILING_LOOSEN_AUTHORITIES_REF: CEILING_LOOSEN_AUTHORITIES,
   CLOSURE_ALLOWLIST,
@@ -2870,7 +2972,6 @@ module.exports = {
   evaluateIdentityReset,
   evaluateMissionIntegrationFixture,
   evaluateMissionReducerFixture,
-  hasAdapterCapability,
   reduceMissionState,
   remainingForAxis,
   restoreProjection,

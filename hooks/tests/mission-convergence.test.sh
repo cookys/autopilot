@@ -348,6 +348,43 @@ if (createMissionState && reduceMissionState && stateHash) {
       sh.state.receipts && sh.state.receipts.mission_would_block_evidence ? 'PASS' : 'FAIL'}`);
     console.log(`shadow-evidence-has-overspend-axis\t${
       sh.receipt.evidence && sh.receipt.evidence.overspend_axis === 'tool_calls' ? 'PASS' : 'FAIL'}`);
+    // Finding 5: the represented grant is NOT prevented — a claim is durably
+    // created carrying the full requested reservation for later release/
+    // reconciliation, even though the shadow ledger is over its ceiling.
+    const shadowClaimId = sh.receipt.claim_id;
+    const shadowClaim = shadowClaimId ? sh.state.claims[shadowClaimId] : null;
+    console.log(`shadow-grant-claim-created\t${
+      !!shadowClaim && shadowClaim.shadow_would_block === true ? 'PASS' : 'FAIL'}`);
+    console.log(`shadow-grant-reservation-recorded\t${
+      !!shadowClaim
+      && shadowClaim.reservation.tool_calls.reserved_active === 200
+      && shadowClaim.reservation.campaigns.reserved_active === 1 ? 'PASS' : 'FAIL'}`);
+    // Finding 5: repeated shadow admissions remain auditable and cumulative —
+    // a second over-ceiling admission creates a distinct claim and a distinct
+    // per-event evidence receipt without overwriting the first.
+    const sh2 = reduceMissionState(sh.state, {
+      event_type: 'grant_claimed',
+      sequence: sh.state.events.length + 1,
+      mission_lineage_id: sShadow.mission_lineage_id,
+      payload: {
+        idempotency_key: 'shadow-over-2',
+        mission_lineage_id: sShadow.mission_lineage_id,
+        task_authority_id: sShadow.task_authority_id,
+        campaign_id: 'c2',
+        campaign_contract_digest: sShadow.policy_hash,
+        base_sha: '0000000000000000000000000000000000000000',
+        acceptance_ids: ['acc-1'],
+        reservation: overReservation,
+        issued_at: '2026-07-27T00:00:01.000Z',
+        expires_at: '2026-07-27T01:00:00.000Z',
+      },
+    });
+    const evidenceKeys = Object.keys(sh2.state.receipts)
+      .filter((k) => k.startsWith('mission_would_block_evidence:'));
+    console.log(`shadow-repeated-admissions-cumulative\t${
+      sh2.receipt.claim_id !== shadowClaimId
+      && !!sh2.state.claims[sh2.receipt.claim_id]
+      && evidenceKeys.length === 2 ? 'PASS' : 'FAIL'}`);
     // Enforce mode rejects same input (transitions to BLOCKED).
     const enforceContract = makeContract();
     enforceContract.enforcement_mode = 'enforce';
@@ -372,6 +409,10 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`enforce-blocks-overspend\t${
       ef.state.state === 'BLOCKED' && ef.state.terminal && ef.state.terminal.reason === 'resource_ceiling'
       ? 'PASS' : 'FAIL'}`);
+    // Finding 5: enforce mode creates NO claim for the identical request that
+    // shadow durably granted.
+    console.log(`enforce-creates-no-shadow-claim\t${
+      Object.keys(ef.state.claims).length === 0 ? 'PASS' : 'FAIL'}`);
   }
   {
     // ─── Finding 4: Reconciliation receipt correctness ───
@@ -427,9 +468,27 @@ if (createMissionState && reduceMissionState && stateHash) {
       r3.state.axes.tool_calls.durable_consumed >= 11 ? 'PASS' : 'FAIL'}`);
   }
   {
-    // ─── Finding 5: Raw events cannot forge authority ───
+    // ─── Finding 1 + 2 + 6: private registry, non-serialized capability,
+    //     authoritative constructor verifier ───
     const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
-    // Plain JSON object verifier rejected at adapter construction.
+    const engineIndex = require(path.join(root, 'src', 'engine', 'index.js'));
+    const L = 'lineage-v1-' + require('crypto').createHash('sha256').update('L').digest('hex');
+
+    // Finding 1: the capability registry is module-private. No public export
+    // exposes the WeakSet, so no caller can add an arbitrary capability.
+    console.log(`registry-not-exported-authenticated-control\t${
+      ac.ADAPTER_CAPABILITY_REGISTRY === undefined ? 'PASS' : 'FAIL'}`);
+    console.log(`registry-not-exported-engine-index\t${
+      engineIndex.ADAPTER_CAPABILITY_REGISTRY === undefined ? 'PASS' : 'FAIL'}`);
+    console.log(`registry-not-exported-mission-convergence\t${
+      m.ADAPTER_CAPABILITY_REGISTRY === undefined ? 'PASS' : 'FAIL'}`);
+    // A caller-fabricated capability object (even with a real symbol) is not
+    // authenticated — only adapter-minted capabilities validate.
+    console.log(`predicate-rejects-fabricated-capability\t${
+      ac.isAuthenticatedAdapterCapability({ mint: 'AuthenticatedControlAdapter', symbol: Symbol('forged') }) === false
+      ? 'PASS' : 'FAIL'}`);
+
+    // Finding 2: plain JSON object verifier rejected at adapter construction.
     let plainObjectVerifierRejected = false;
     try {
       new ac.AuthenticatedControlAdapter({ verifier: { verified: true } });
@@ -437,65 +496,121 @@ if (createMissionState && reduceMissionState && stateHash) {
       plainObjectVerifierRejected = e.code === 'authenticated_control_verifier_non_serializable';
     }
     console.log(`forgery-plain-object-verifier-rejected\t${plainObjectVerifierRejected ? 'PASS' : 'FAIL'}`);
-    // Missing verifier rejected at adapter construction.
     let missingVerifierRejected = false;
     try { new ac.AuthenticatedControlAdapter(); } catch (e) {
       missingVerifierRejected = e.code === 'authenticated_control_verifier_missing';
     }
     console.log(`forgery-missing-verifier-rejected\t${missingVerifierRejected ? 'PASS' : 'FAIL'}`);
-    // Raw reducer event without capability rejects with MISSION_CONTROL_UNAUTHENTICATED.
-    const sR = createMissionState(makeContract());
-    let rawControlErr = null;
-    try {
-      reduceMissionState(sR, {
-        event_type: 'control_event',
-        sequence: 1,
-        mission_lineage_id: sR.mission_lineage_id,
-        payload: {
-          event: {
-            action: 'finish_requested',
-            authority: 'authenticated_user',
-            sequence: 1,
-            mission_lineage_id: sR.mission_lineage_id,
-          },
-        },
-      });
-    } catch (e) {
-      rawControlErr = e.code;
-    }
-    console.log(`raw-control-event-rejects\t${
-      rawControlErr === 'MISSION_CONTROL_UNAUTHENTICATED' ? 'PASS' : 'FAIL'}`);
-    // Capability not serialized (JSON.stringify drops the symbol).
+
+    // Finding 2: the adapter capability never serializes or hashes.
     const adapter = new ac.AuthenticatedControlAdapter({
       verifier: () => ({ verified: true, authority: 'authenticated_user' }),
     });
-    const cap = adapter.capability;
-    const serialized = JSON.stringify({ cap });
-    const reparsed = JSON.parse(serialized);
+    const canonical = adapter.acceptEvent({
+      mission_lineage_id: L, action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'serialize-test',
+    });
+    // The capability is present for the reducer (non-enumerable) but absent
+    // from every serializable view.
+    console.log(`capability-present-for-reducer\t${
+      ac.isAuthenticatedAdapterCapability(canonical._adapter_capability) ? 'PASS' : 'FAIL'}`);
+    console.log(`capability-non-enumerable\t${
+      Object.keys(canonical).includes('_adapter_capability') === false ? 'PASS' : 'FAIL'}`);
+    const parsed = JSON.parse(JSON.stringify(canonical));
     console.log(`capability-not-serialized\t${
-      reparsed.cap.symbol === undefined ? 'PASS' : 'FAIL'}`);
-    // acceptEvent does not accept a verifier override.
-    const adapter2 = new ac.AuthenticatedControlAdapter({
+      parsed._adapter_capability === undefined && parsed.cap === undefined ? 'PASS' : 'FAIL'}`);
+    // canonicalJson must reject symbol/function rather than serialize them.
+    let canonicalJsonRejectsSymbol = false;
+    try { ac.canonicalJson({ s: Symbol('x') }); } catch (e) { canonicalJsonRejectsSymbol = true; }
+    console.log(`canonical-json-rejects-symbol\t${canonicalJsonRejectsSymbol ? 'PASS' : 'FAIL'}`);
+    let canonicalJsonRejectsFunction = false;
+    try { ac.canonicalJson({ f: () => 1 }); } catch (e) { canonicalJsonRejectsFunction = true; }
+    console.log(`canonical-json-rejects-function\t${canonicalJsonRejectsFunction ? 'PASS' : 'FAIL'}`);
+
+    // Finding 2: a reduced control event's stored payload omits the capability.
+    const sCtl = createMissionState(makeContract());
+    const ctlResult = reduceMissionState(sCtl, {
+      event_type: 'control_event', sequence: 1, mission_lineage_id: sCtl.mission_lineage_id,
+      payload: { event: canonical },
+    });
+    const storedCtlEvent = ctlResult.state.events[ctlResult.state.events.length - 1];
+    console.log(`stored-event-payload-omits-capability\t${
+      storedCtlEvent.payload.event._adapter_capability === undefined ? 'PASS' : 'FAIL'}`);
+    console.log(`stored-event-json-omits-capability\t${
+      JSON.stringify(storedCtlEvent).includes('_adapter_capability') === false ? 'PASS' : 'FAIL'}`);
+    console.log(`receipt-json-omits-capability\t${
+      JSON.stringify(ctlResult.receipt).includes('_adapter_capability') === false ? 'PASS' : 'FAIL'}`);
+
+    // Finding 1: a raw reducer control event without a minted capability rejects.
+    const sRaw = createMissionState(makeContract());
+    let rawControlErr = null;
+    try {
+      reduceMissionState(sRaw, {
+        event_type: 'control_event', sequence: 1, mission_lineage_id: sRaw.mission_lineage_id,
+        payload: { event: { action: 'finish_requested', authority: 'authenticated_user',
+          sequence: 1, mission_lineage_id: sRaw.mission_lineage_id } },
+      });
+    } catch (e) { rawControlErr = e.code; }
+    console.log(`raw-control-event-rejects\t${
+      rawControlErr === 'MISSION_CONTROL_UNAUTHENTICATED' ? 'PASS' : 'FAIL'}`);
+    // A raw event carrying a fabricated capability also rejects.
+    let forgedControlErr = null;
+    try {
+      reduceMissionState(createMissionState(makeContract()), {
+        event_type: 'control_event', sequence: 1, mission_lineage_id: sRaw.mission_lineage_id,
+        payload: { event: { action: 'finish_requested', authority: 'authenticated_user',
+          sequence: 1, mission_lineage_id: sRaw.mission_lineage_id,
+          _adapter_capability: { mint: 'AuthenticatedControlAdapter', symbol: Symbol('forged') } } },
+      });
+    } catch (e) { forgedControlErr = e.code; }
+    console.log(`forged-capability-control-event-rejects\t${
+      forgedControlErr === 'MISSION_CONTROL_UNAUTHENTICATED' ? 'PASS' : 'FAIL'}`);
+
+    // Finding 6: the constructor verifier is authoritative even when
+    // acceptEvent receives extra arguments/options. A rejecting verifier must
+    // keep rejecting; a caller-supplied "approve" option cannot replace it.
+    const rejecting = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: false, reason: 'authenticated_control_verifier_rejected' }),
+    });
+    let rejectingHonored = false;
+    try {
+      rejecting.acceptEvent({ mission_lineage_id: L, action: 'finish_requested',
+        authority: 'authenticated_user', sequence: 1,
+        issued_at: '2026-07-27T00:00:00.000Z', reason: 'x' },
+        { verifier: () => ({ verified: true, authority: 'authenticated_user' }) });
+    } catch (e) {
+      rejectingHonored = e.code === 'authenticated_control_verifier_rejected';
+    }
+    console.log(`verifier-reject-authoritative-with-extra-args\t${rejectingHonored ? 'PASS' : 'FAIL'}`);
+    // A verifier that changes authority is authoritative: an override that
+    // mismatches the raw event authority must reject.
+    const overriding = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_doa' }),
+    });
+    let overrideMismatchRejected = false;
+    try {
+      overriding.acceptEvent({ mission_lineage_id: L, action: 'finish_requested',
+        authority: 'authenticated_user', sequence: 1,
+        issued_at: '2026-07-27T00:00:00.000Z', reason: 'x' },
+        { verifier: () => ({ verified: true, authority: 'authenticated_user' }) });
+    } catch (e) {
+      overrideMismatchRejected = e.code === 'authenticated_control_authority_override_mismatch';
+    }
+    console.log(`verifier-authority-change-authoritative\t${overrideMismatchRejected ? 'PASS' : 'FAIL'}`);
+    // The caller cannot replace the constructor verifier; the approving
+    // constructor verifier still approves despite a rejecting extra option.
+    const approving = new ac.AuthenticatedControlAdapter({
       verifier: () => ({ verified: true, authority: 'authenticated_user' }),
     });
-    let overrideAccepted = false;
+    let approveStillWorks = false;
     try {
-      adapter2.acceptEvent({
-        mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('L').digest('hex'),
-        action: 'ceiling_adjust',
-        authority: 'authenticated_user',
-        sequence: 1,
-        issued_at: '2026-07-27T00:00:00.000Z',
-        reason: 'override-test',
-        ceiling_before: { axis: 'tool_calls', authorized_ceiling: 10, known: true },
-        ceiling_after: { axis: 'tool_calls', authorized_ceiling: 11, known: true },
-      }, { verifier: () => ({ verified: false, reason: 'fraud' }) });
-    } catch (e) {
-      // The override verifier would have rejected, but acceptEvent should NOT use it.
-      overrideAccepted = true; // If acceptEvent honored the override, it would have thrown.
-    }
-    console.log(`accept-event-no-verifier-override\t${
-      overrideAccepted === false ? 'PASS' : 'FAIL'}`);
+      const ev = approving.acceptEvent({ mission_lineage_id: L, action: 'finish_requested',
+        authority: 'authenticated_user', sequence: 1,
+        issued_at: '2026-07-27T00:00:00.000Z', reason: 'x' },
+        { verifier: () => ({ verified: false, reason: 'authenticated_control_verifier_rejected' }) });
+      approveStillWorks = ac.isAuthenticatedAdapterCapability(ev._adapter_capability);
+    } catch (e) { approveStillWorks = false; }
+    console.log(`verifier-cannot-be-replaced-by-caller\t${approveStillWorks ? 'PASS' : 'FAIL'}`);
   }
   {
     // ─── Finding 6: Projection validation, preservation, deep freeze ───
@@ -528,21 +643,49 @@ if (createMissionState && reduceMissionState && stateHash) {
       tamperConfigRejected = e.code === 'PROJECTION_CONFIG_DIGEST_MISMATCH';
     }
     console.log(`projection-tamper-config-rejects\t${tamperConfigRejected ? 'PASS' : 'FAIL'}`);
+    // Tampered source_refs reject: source_refs are bound into projection_digest,
+    // so altering them without recomputing breaks the digest-bound refs.
+    const tamperedRefs = JSON.parse(JSON.stringify(proj));
+    tamperedRefs.source_refs = [{ digest: 'forged-source-ref' }];
+    let tamperRefsRejected = false;
+    try { restoreProjection(tamperedRefs); } catch (e) {
+      tamperRefsRejected = e.code === 'PROJECTION_DIGEST_MISMATCH';
+    }
+    console.log(`projection-tamper-source-refs-rejects\t${tamperRefsRejected ? 'PASS' : 'FAIL'}`);
     // Valid next claim after JSON roundtrip with identical state hash.
     const roundtripClaim = claimEvent(sP, { idempotency_key: 'rt-claim', reserved: 2 });
     const roundResult1 = reduceMissionState(sP, roundtripClaim);
-    const projection = buildProjection(roundResult1.state);
+    const originalState = roundResult1.state;
+    const projection = buildProjection(originalState);
     const serialized = JSON.stringify(projection);
     const restored = restoreProjection(JSON.parse(serialized));
-    const roundResult2 = reduceMissionState(restored, claimEvent(restored, { idempotency_key: 'rt-claim-2', reserved: 1 }));
-    // Both reductions must produce the same axis state (deterministic replay).
-    const liveHash = require('crypto').createHash('sha256').update(JSON.stringify(stableAxes(roundResult2.state.axes))).digest('hex');
-    const restHash = require('crypto').createHash('sha256').update(JSON.stringify(stableAxes(roundResult1.state.axes))).digest('hex');
-    function stableAxes(axes) {
-      return Object.fromEntries(Object.keys(axes).sort().map((k) => [k, axes[k]]));
-    }
+    // Finding 4: the restored state hash MUST equal the original state hash.
+    console.log(`projection-restored-hash-equals-original\t${
+      stateHash(restored) === stateHash(originalState) ? 'PASS' : 'FAIL'}`);
+    console.log(`projection-restored-hash-equals-snapshot\t${
+      stateHash(restored) === projection.state_hash ? 'PASS' : 'FAIL'}`);
+    // Finding 4: a valid next sequenced claim works on the restored state.
+    // Use a distinct campaign_id so the claim is a new logical binding (the
+    // restored state must still enforce single-use admission on the old one).
+    const roundResult2 = reduceMissionState(restored, claimEvent(restored, { idempotency_key: 'rt-claim-2', campaign_id: 'c-next', reserved: 1 }));
     console.log(`projection-roundtrip-replay-valid-next-claim\t${
-      roundResult2.state && roundResult2.state.axes ? 'PASS' : 'FAIL'}`);
+      roundResult2.receipt.artifact_type === 'mission_campaign_grant_claimed'
+      && roundResult2.state.axes.tool_calls.reserved_active
+        === originalState.axes.tool_calls.reserved_active + 1 ? 'PASS' : 'FAIL'}`);
+    // Finding 4: restored config carries the complete non-secret contract shape.
+    const rc = restored.config;
+    const configShapeComplete = rc
+      && rc.grant_contract && Array.isArray(rc.grant_contract.bindings)
+      && rc.grant_contract.idempotency_key_required === true
+      && rc.grant_contract.single_use === true
+      && rc.control_contract && Array.isArray(rc.control_contract.actions)
+      && rc.control_contract.ceiling_loosen_authority === 'authenticated_user'
+      && rc.lineage_binding && typeof rc.lineage_binding.root_run_id === 'string'
+      && rc.axes && rc.axes.tool_calls
+      && Array.isArray(rc.red_lines)
+      && typeof rc.closure_ratio === 'number'
+      && typeof rc.max_stagnant_campaigns === 'number';
+    console.log(`projection-restored-config-complete-shape\t${configShapeComplete ? 'PASS' : 'FAIL'}`);
     // replayEvents not exported.
     console.log(`projection-replay-events-not-exported\t${
       m.replayEvents === undefined ? 'PASS' : 'FAIL'}`);
@@ -556,15 +699,69 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`projection-restored-state-immutable\t${mutationBlocked ? 'PASS' : 'FAIL'}`);
   }
   {
-    // ─── Finding 7: Deep clone/freeze, evaluateConfig rejects ───
-    // Caller mutation cannot mutate state.
+    // ─── Finding 7 + 3: Deep clone/freeze, evaluateConfig rejects ───
+    // Finding 3: real deep-immutability proof. Save originals BEFORE mutation,
+    // attempt nested caller/state mutations, then compare to the saved
+    // originals. A frozen assignment either throws (strict mode) or silently
+    // no-ops; either way the value must equal the saved original afterward.
+    function attempt(fn) { try { fn(); } catch (e) { /* frozen: blocked */ } }
     const sC = createMissionState(makeContract());
-    let callerMutated = false;
-    try {
-      sC.mission_lineage_id = 'tampered';
-    } catch (e) { /* frozen */ }
-    if (sC.mission_lineage_id !== sC.mission_lineage_id) callerMutated = true;
-    console.log(`state-immutable-after-construction\t${sC.mission_lineage_id === sC.mission_lineage_id ? 'PASS' : 'FAIL'}`);
+    const aC = reduceMissionState(sC, claimEvent(sC, { idempotency_key: 'imm-bind', reserved: 4 }));
+    const st = aC.state;
+    // Contract bindings.
+    const origBindings = JSON.stringify(st.config.grant_contract.bindings);
+    attempt(() => { st.config.grant_contract.bindings.push('forged_binding'); });
+    attempt(() => { st.config.grant_contract.bindings[0] = 'forged_binding'; });
+    console.log(`immutability-contract-bindings\t${
+      JSON.stringify(st.config.grant_contract.bindings) === origBindings ? 'PASS' : 'FAIL'}`);
+    // Axes (nested numeric fields).
+    const origToolReserved = st.axes.tool_calls.reserved_active;
+    const origToolCeiling = st.axes.tool_calls.authorized_ceiling;
+    attempt(() => { st.axes.tool_calls.reserved_active = 999999; });
+    attempt(() => { st.axes.tool_calls.authorized_ceiling = 999999; });
+    console.log(`immutability-axes\t${
+      st.axes.tool_calls.reserved_active === origToolReserved
+      && st.axes.tool_calls.authorized_ceiling === origToolCeiling ? 'PASS' : 'FAIL'}`);
+    // Claims (nested reservation).
+    const claimId = aC.receipt.claim_id;
+    const origClaimReserved = st.claims[claimId].reservation.tool_calls.reserved_active;
+    const origClaimTerminal = st.claims[claimId].terminal;
+    attempt(() => { st.claims[claimId].reservation.tool_calls.reserved_active = 999999; });
+    attempt(() => { st.claims[claimId].terminal = true; });
+    attempt(() => { st.claims[claimId].released = true; });
+    console.log(`immutability-claims\t${
+      st.claims[claimId].reservation.tool_calls.reserved_active === origClaimReserved
+      && st.claims[claimId].terminal === origClaimTerminal
+      && st.claims[claimId].released === false ? 'PASS' : 'FAIL'}`);
+    // Events (nested payload).
+    const origEventDigests = JSON.stringify(st.events.map((e) => e.event_digest));
+    const origEventType = st.events[0].event_type;
+    attempt(() => { st.events[0].event_digest = 'f'.repeat(64); });
+    attempt(() => { st.events[0].event_type = 'forged_event'; });
+    attempt(() => { st.events.push({ event_type: 'forged_event' }); });
+    console.log(`immutability-events\t${
+      JSON.stringify(st.events.map((e) => e.event_digest)) === origEventDigests
+      && st.events[0].event_type === origEventType
+      && st.events.length === 1 ? 'PASS' : 'FAIL'}`);
+    // Replay-return state: mutate the input event after reduction, then prove
+    // the recorded event log is unaffected (deep clone on append).
+    const sR = createMissionState(makeContract());
+    const mutableEvent = claimEvent(sR, { idempotency_key: 'imm-replay', reserved: 3 });
+    const r1 = reduceMissionState(sR, mutableEvent);
+    const origRecordedReserved =
+      r1.state.events[0].payload.reservation.per_axis.find((x) => x.axis === 'tool_calls').reserved_active;
+    attempt(() => { mutableEvent.payload.reservation.per_axis.find((x) => x.axis === 'tool_calls').reserved_active = 999999; });
+    attempt(() => { mutableEvent.payload.idempotency_key = 'mutated-after-the-fact'; });
+    const recordedAfter =
+      r1.state.events[0].payload.reservation.per_axis.find((x) => x.axis === 'tool_calls').reserved_active;
+    console.log(`immutability-replay-return-state\t${
+      recordedAfter === origRecordedReserved
+      && r1.state.events[0].payload.idempotency_key === 'imm-replay' ? 'PASS' : 'FAIL'}`);
+    // Top-level scalar field stays frozen.
+    const origLineage = st.mission_lineage_id;
+    attempt(() => { st.mission_lineage_id = 'tampered'; });
+    console.log(`state-immutable-after-construction\t${
+      st.mission_lineage_id === origLineage ? 'PASS' : 'FAIL'}`);
     // Idempotent replay cannot mutate state.
     const sI = createMissionState(makeContract());
     const i1 = reduceMissionState(sI, claimEvent(sI, { idempotency_key: 'imm-1' }));
@@ -644,20 +841,39 @@ for id in \
   grant-exact-replay-idempotent \
   shadow-does-not-block-state shadow-would-block-evidence-recorded \
   shadow-evidence-has-overspend-axis enforce-blocks-overspend \
+  shadow-grant-claim-created shadow-grant-reservation-recorded \
+  shadow-repeated-admissions-cumulative enforce-creates-no-shadow-claim \
   reconcile-consumed-equals-actual \
   reconcile-freed-equals-original-minus-actual \
   reconcile-missing-axes-zero-actual \
   reconcile-missing-axes-free-original \
   reconcile-overspend-blocks-once reconcile-overspend-clears-reservation \
   reconcile-overspend-terminalizes-claim reconcile-overspend-conservative-charge \
+  registry-not-exported-authenticated-control \
+  registry-not-exported-engine-index \
+  registry-not-exported-mission-convergence \
+  predicate-rejects-fabricated-capability \
   forgery-plain-object-verifier-rejected forgery-missing-verifier-rejected \
-  raw-control-event-rejects capability-not-serialized \
-  accept-event-no-verifier-override \
+  capability-present-for-reducer capability-non-enumerable \
+  capability-not-serialized \
+  canonical-json-rejects-symbol canonical-json-rejects-function \
+  stored-event-payload-omits-capability \
+  stored-event-json-omits-capability receipt-json-omits-capability \
+  raw-control-event-rejects forged-capability-control-event-rejects \
+  verifier-reject-authoritative-with-extra-args \
+  verifier-authority-change-authoritative \
+  verifier-cannot-be-replaced-by-caller \
   projection-tamper-digest-rejects projection-tamper-head-rejects \
-  projection-tamper-config-rejects \
+  projection-tamper-config-rejects projection-tamper-source-refs-rejects \
+  projection-restored-hash-equals-original \
+  projection-restored-hash-equals-snapshot \
   projection-roundtrip-replay-valid-next-claim \
+  projection-restored-config-complete-shape \
   projection-replay-events-not-exported \
   projection-restored-state-immutable \
+  immutability-contract-bindings immutability-axes \
+  immutability-claims immutability-events \
+  immutability-replay-return-state \
   state-immutable-after-construction \
   state-idempotent-replay-no-double-reserve \
   config-unknown-key-rejects config-missing-field-rejects \

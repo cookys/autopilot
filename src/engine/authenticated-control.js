@@ -136,8 +136,9 @@ function canonicalJson(value) {
     const keys = Object.keys(value).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
   }
-  if (typeof value === 'symbol') return JSON.stringify(value.toString());
-  if (typeof value === 'function') return JSON.stringify(`__function__:${value.name || 'anonymous'}`);
+  // Symbols and functions are non-serializable by design (the adapter
+  // capability is a symbol). They must never reach a digest or a serialized
+  // channel — fail closed rather than fabricate a string representation.
   fail('canonicalJson: unsupported type');
 }
 
@@ -292,9 +293,11 @@ function invokeVerifier(verifier, rawEvent) {
 
 // ─── Adapter ───────────────────────────────────────────────────────────────
 
-// The capability registry is shared with the reducer (mission-convergence.js)
-// so that only adapter-minted capabilities validate. Plain JSON objects and
-// caller-created functions cannot fabricate an entry.
+// The capability registry is module-private. It is NEVER exported: no caller
+// can obtain the WeakSet, so no caller can `add` an arbitrary capability and
+// forge adapter authority. The only public surface is the narrow predicate
+// `isAuthenticatedAdapterCapability`, whose closure owns the private WeakSet
+// and answers a single yes/no validation question for the reducer.
 const ADAPTER_CAPABILITY_REGISTRY = new WeakSet();
 
 class AuthenticatedControlAdapter {
@@ -354,8 +357,17 @@ class AuthenticatedControlAdapter {
         );
       }
       const canonical = normalizeControlEvent(rawEvent);
-      // Attach the unforgeable capability so the reducer can validate it.
-      canonical._adapter_capability = this._capability;
+      // Attach the unforgeable capability as a NON-ENUMERABLE property so the
+      // reducer can validate it via direct access, while JSON.stringify,
+      // object spread, Object.keys, and canonicalJson all omit it. The
+      // capability can never travel through a serializable channel or reach a
+      // digest input.
+      Object.defineProperty(canonical, '_adapter_capability', {
+        value: this._capability,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
       return canonical;
     }
     const reason = requireStableReason(
@@ -429,15 +441,14 @@ function classifyControlEffect(event, options = {}) {
   return { ok: true };
 }
 
-function hasAdapterCapability(registry, capability) {
+function isAuthenticatedAdapterCapability(capability) {
   if (!capability || typeof capability !== 'object') return false;
   if (typeof capability.mint !== 'string') return false;
   if (typeof capability.symbol !== 'symbol') return false;
-  return registry.has(capability.symbol);
+  return ADAPTER_CAPABILITY_REGISTRY.has(capability.symbol);
 }
 
 module.exports = {
-  ADAPTER_CAPABILITY_REGISTRY,
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlAdapter,
   AuthenticatedControlError,
@@ -452,7 +463,7 @@ module.exports = {
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
-  hasAdapterCapability,
+  isAuthenticatedAdapterCapability,
   isNonSerializableVerifier,
   normalizeControlEvent,
   sha256,

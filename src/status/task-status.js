@@ -279,13 +279,15 @@ function validateFixtureMissionBundle(mission, rootRunId, expectedRepoIdentity) 
   }
   const receiptState = terminalReceipt.state || terminalReceipt.terminal_state;
   if (receiptState !== stateName) return missionInvalid('mission_state_receipt_mismatch');
-  if (terminalReceipt.root_run_id !== undefined
-      && terminalReceipt.root_run_id !== rootRunId) {
+  if (terminalReceipt.root_run_id !== rootRunId) {
     return missionInvalid('mission_root_run_id_mismatch');
   }
-  if (terminalReceipt.repo_identity !== undefined
-      && terminalReceipt.repo_identity !== expectedRepoIdentity) {
+  if (terminalReceipt.repo_identity !== expectedRepoIdentity) {
     return missionInvalid('mission_repo_identity_mismatch');
+  }
+  if (terminalReceipt.state_digest !== sha256(`state-${stateName}`)
+      || terminalReceipt.terminal_digest !== sha256(`terminal-${stateName}`)) {
+    return missionInvalid('mission_content_digest_mismatch');
   }
   if (!digestMatches(
     Object.fromEntries(Object.entries(terminalReceipt)
@@ -380,6 +382,10 @@ function validateMissionBundle(mission, rootRunId, expectedRepoIdentity) {
       || terminalReceipt.mission_terminal !== true) {
     return missionInvalid('mission_terminal_receipt_artifact_invalid');
   }
+  assertKnownKeys(terminalReceipt, new Set([
+    'schema_version', 'artifact_type', 'mission_terminal', 'state_digest',
+    'terminal_digest', 'residue', 'residue_digest', 'receipt_digest',
+  ]), 'mission.terminal_receipt');
 
   const expectedStateDigest = stateHash(state);
   if (terminalReceipt.state_digest !== expectedStateDigest) {
@@ -486,6 +492,8 @@ function validateFixtureCampaignEntry(entry, index) {
   if (entry.state !== 'TERMINAL'
       || !isPlainObject(terminalReceipt)
       || terminalReceipt.artifact_type !== 'implementation_campaign_terminal'
+      || terminalReceipt.exit_code !== 0
+      || terminalReceipt.verification_verdict !== 'GREEN'
       || !digestMatches(
         Object.fromEntries(Object.entries(terminalReceipt)
           .filter(([key]) => key !== 'receipt_digest' && key !== 'terminal_digest')),
@@ -495,6 +503,7 @@ function validateFixtureCampaignEntry(entry, index) {
   }
   if (!isGitOid(treeSha)
       || !isPlainObject(verificationReceipt)
+      || verificationReceipt.schema_version !== 1
       || verificationReceipt.artifact_type !== 'verification_receipt'
       || verificationReceipt.campaign_id !== campaignId
       || verificationReceipt.verdict !== 'GREEN'
@@ -514,6 +523,8 @@ function validateFixtureCampaignEntry(entry, index) {
   }
   if (!isPlainObject(candidate)
       || candidate.kind !== undefined
+      || candidate.schema_version !== 1
+      || candidate.artifact_type !== 'git_candidate'
       || !isGitOid(candidate.commit_sha)
       || !isGitOid(candidate.tree_sha)
       || candidate.tree_sha !== treeSha
@@ -602,6 +613,12 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
       || !new Set(['ready', 'follow_up']).has(terminalReceipt.status)) {
     return campaignInvalid(campaignId, 'campaign_terminal_receipt_invalid');
   }
+  assertKnownKeys(terminalReceipt, new Set([
+    'schema_version', 'artifact_type', 'status', 'candidate_tree_sha',
+    'verification_receipt_digest', 'repair_generations', 'final_panel_count',
+    'follow_up', 'rejected_findings', 'unresolved_final_findings', 'trace',
+    'receipt_digest',
+  ]), `campaigns[${index}].terminal_receipt`);
 
   if (!campaignReceiptBodyDigest(terminalReceipt)) {
     return campaignInvalid(campaignId, 'campaign_terminal_digest_mismatch');
@@ -614,6 +631,13 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
       || verificationReceipt.exit_status !== 0) {
     return campaignInvalid(campaignId, 'campaign_verification_not_green');
   }
+  assertKnownKeys(verificationReceipt, new Set([
+    'schema_version', 'artifact_type', 'campaign_id', 'tree_sha', 'argv_hash',
+    'env_fingerprint', 'request_digest', 'verdict', 'exit_status',
+    'writer_lease_closed', 'detached_checkout', 'runner_argv_attested',
+    'writer_fence_digest', 'checkout_attestation_digest', 'stdout_digest',
+    'stderr_digest', 'started_at', 'ended_at', 'receipt_digest',
+  ]), `campaigns[${index}].verification_receipt`);
 
   if (!campaignReceiptBodyDigest(verificationReceipt)) {
     return campaignInvalid(campaignId, 'campaign_verification_digest_mismatch');
@@ -834,19 +858,26 @@ function validateLifecycle(input, adapters, expectedRepoIdentity) {
   if (!isPlainObject(receipt) || typeof receipt.receipt_digest !== 'string') {
     return unknown('invalid', 'lifecycle_receipt_shape_invalid');
   }
-  if (typeof receipt.root_run_id === 'string'
-      && receipt.root_run_id !== input.root_run_id) {
+  if (receipt.root_run_id !== input.root_run_id) {
     return unknown('invalid', 'lifecycle_root_run_id_mismatch', receipt.receipt_digest);
   }
-  if (typeof receipt.repo_identity === 'string'
-      && expectedRepoIdentity
-      && receipt.repo_identity !== expectedRepoIdentity) {
+  const compactFixture = receipt.artifact_type === 'lifecycle_receipt';
+  if (!compactFixture && receipt.repo_identity !== expectedRepoIdentity) {
     return unknown('invalid', 'lifecycle_repo_identity_mismatch', receipt.receipt_digest);
   }
+  assertKnownKeys(receipt, compactFixture ? new Set([
+    'schema_version', 'artifact_type', 'root_run_id', 'status',
+    'active_owned_worktrees', 'active_owned_branches', 'zero_residue',
+    'owned_worktrees', 'branches', 'blockers', 'receipt_digest',
+  ]) : new Set([
+    'schema_version', 'artifact_type', 'issued_at', 'repo_identity', 'root_run_id',
+    'observed_head', 'worktree_observation_digest', 'journal_digest',
+    'disposition_digest', 'branch_inventory_digest', 'owned_worktrees',
+    'branches', 'blockers', 'zero_residue', 'receipt_digest',
+  ]), 'lifecycle.receipt');
   const receiptBody = Object.fromEntries(
     Object.entries(receipt).filter(([key]) => key !== 'receipt_digest'),
   );
-  const compactFixture = receipt.artifact_type === 'lifecycle_receipt';
   if (compactFixture
     ? !digestMatches(receiptBody, receipt.receipt_digest)
     : receipt.receipt_digest !== sha256(receiptBody)) {
@@ -877,9 +908,14 @@ function validateLifecycle(input, adapters, expectedRepoIdentity) {
         && ownedWorktrees === 0 && ownedBranches === 0
         && (!Array.isArray(receipt.blockers) || receipt.blockers.length === 0);
   if (!Number.isSafeInteger(ownedWorktrees)
+      || ownedWorktrees < 0
       || !Number.isSafeInteger(ownedBranches)
+      || ownedBranches < 0
       || typeof zeroResidue !== 'boolean') {
     return unknown('invalid', 'lifecycle_residue_fields_invalid', receipt.receipt_digest);
+  }
+  if (zeroResidue && (ownedWorktrees !== 0 || ownedBranches !== 0)) {
+    return unknown('invalid', 'lifecycle_zero_residue_contradiction', receipt.receipt_digest);
   }
   return {
     zero_residue: zeroResidue,
@@ -1199,7 +1235,10 @@ function buildTaskStatus(input, adapters) {
       'TASK_STATUS_SHAPE',
     );
   }
-  if (typeof input.observed_at !== 'string' || !Number.isFinite(Date.parse(input.observed_at))) {
+  if (typeof input.observed_at !== 'string'
+      || !Number.isFinite(Date.parse(input.observed_at))
+      || !/[Tt]/.test(input.observed_at)
+      || !/(?:Z|[+-]\d{2}:\d{2})$/.test(input.observed_at)) {
     throw new TaskStatusError(
       'input.observed_at must be an ISO-8601 timestamp',
       'TASK_STATUS_SHAPE',

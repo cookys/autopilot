@@ -28,6 +28,47 @@
     "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
     "task_authority_id": { "$ref": "#/$defs/sha256" },
     "policy_hash": { "$ref": "#/$defs/sha256" },
+    "enforcement_mode": { "type": "string", "enum": ["shadow", "enforce"] },
+    "closure_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "state_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machine_state",
+        "axes",
+        "claims",
+        "control_sequence",
+        "closure_allowlist",
+        "stagnant_campaigns",
+        "acceptance_hashes",
+        "unknown_required_axes",
+        "event_digests"
+      ],
+      "properties": {
+        "machine_state": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "ACTIVE",
+            "CLOSING",
+            "COMPLETE",
+            "BLOCKED",
+            "ABORTING",
+            "ABORTED",
+            "off"
+          ]
+        },
+        "terminal": { "type": ["object", "null"] },
+        "axes": { "type": "array", "items": { "$ref": "#/$defs/axis_state" } },
+        "claims": { "type": "object", "additionalProperties": { "$ref": "#/$defs/claim_state" } },
+        "control_sequence": { "type": "integer", "minimum": 0 },
+        "closure_allowlist": { "type": "array", "items": { "type": "string" } },
+        "stagnant_campaigns": { "type": "integer", "minimum": 0 },
+        "acceptance_hashes": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+        "unknown_required_axes": { "type": "array", "items": { "type": "string" } },
+        "event_digests": { "type": "array", "items": { "$ref": "#/$defs/sha256" } }
+      }
+    },
     "frozen_intent": {
       "type": "object",
       "additionalProperties": false,
@@ -131,8 +172,26 @@
           ]
         },
         "authorized_ceiling": { "type": "integer", "minimum": 0 },
+        "reserved_active": { "type": "integer", "minimum": 0 },
         "durable_consumed": { "type": "integer", "minimum": 0 },
+        "active_actual": { "type": "integer", "minimum": 0 },
+        "enforced": { "type": "boolean" },
         "known": { "type": "boolean" }
+      }
+    },
+    "claim_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "idempotency_key", "terminal", "event_digest"],
+      "properties": {
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "idempotency_key": { "type": "string" },
+        "terminal": { "type": "boolean" },
+        "released": { "type": "boolean" },
+        "reconciled": { "type": "boolean" },
+        "reservation": { "type": "object" },
+        "actual": { "type": ["object", "null"] },
+        "event_digest": { "$ref": "#/$defs/sha256" }
       }
     },
     "decision_entry": {

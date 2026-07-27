@@ -1,8 +1,33 @@
 'use strict';
 
-// Pure module: AuthenticatedControlAdapter interface and sequenced event
-// validation for the Mission Convergence Supervisor. Host-injected; chat text
-// alone has no authority. Model cannot forge boundary events.
+// Authenticated control authority for the Mission Convergence Supervisor.
+//
+// Architectural contract (v1):
+//   * The adapter is a verifier bridge: the only path from a raw control event
+//     to a canonical control event is `acceptEvent`, and that path must call a
+//     host-injected, non-serializable verifier callback. The adapter never
+//     fabricates an `authority` field on its own; arbitrary callers cannot
+//     mint `authenticated_user` events by calling helper methods.
+//   * The verifier is non-serializable on purpose. A plain JSON object
+//     verifier is rejected: the only accepted shapes are `function` values
+//     (including arrow functions, async functions, and bound methods) and
+//     object values that expose a synchronous `verify(rawEvent)` method
+//     whose presence is itself a non-serializable marker (functions and
+//     methods are not preserved by `JSON.stringify`).
+//   * The verifier returns a verdict:
+//        { verified: true,  authority }            // accept, optional authority
+//                                                   // override must match event
+//        { verified: false, reason }              // reject with stable reason
+//     The reason, when present, is a bounded protocol token drawn from a known
+//     set; the adapter does not invent a fallback string.
+//   * The adapter normalizes the event (shape, lineage, action, sequence) and
+//     attaches an `event_digest`. The adapter does NOT apply semantic policy
+//     (e.g. ceiling loosening). That is the reducer's job. Two-layer
+//     separation: verifier = source authenticity; reducer = state semantics.
+//
+// No fixture-answer code lives in this module. The legacy
+// `evaluateAuthenticatedControlFixture` switch is GONE — the state machine in
+// `mission-convergence.js` is the only source of truth.
 
 const crypto = require('crypto');
 
@@ -32,16 +57,28 @@ const TERMINAL_TRIGGER_ACTIONS = new Set([
   'finish_requested',
   'abort_requested',
 ]);
+// Stable reason tokens returned by the verifier or by the reducer sequence
+// check. The adapter never falls back to a literal string outside this set.
+const REJECTION_REASONS = Object.freeze({
+  AUTHENTICATED_CONTROL_INVALID: 'authenticated_control_input_invalid',
+  AUTHENTICATED_CONTROL_VERIFIER_MISSING: 'authenticated_control_verifier_missing',
+  AUTHENTICATED_CONTROL_VERIFIER_NON_SERIALIZABLE: 'authenticated_control_verifier_non_serializable',
+  AUTHENTICATED_CONTROL_VERIFIER_REJECTED: 'authenticated_control_verifier_rejected',
+  AUTHENTICATED_CONTROL_AUTHORITY_OVERRIDE_MISMATCH: 'authenticated_control_authority_override_mismatch',
+  CONTROL_SEQUENCE_STALE: 'control_sequence_stale',
+  CEILING_LOOSEN_UNAUTHORIZED: 'ceiling_loosen_unauthorized',
+});
+const REJECTION_REASON_SET = new Set(Object.values(REJECTION_REASONS));
 
 class AuthenticatedControlError extends Error {
-  constructor(message, code = 'AUTHENTICATED_CONTROL_INVALID') {
+  constructor(message, code = REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID) {
     super(message);
     this.name = 'AuthenticatedControlError';
     this.code = code;
   }
 }
 
-function fail(message, code = 'AUTHENTICATED_CONTROL_INVALID') {
+function fail(message, code = REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID) {
   throw new AuthenticatedControlError(message, code);
 }
 
@@ -89,10 +126,17 @@ function requireIsoTimestamp(value, label) {
 
 function canonicalJson(value) {
   if (value === null) return 'null';
-  if (typeof value !== 'object' || Array.isArray(value)) return JSON.stringify(value);
-  const keys = Object.keys(value).sort();
-  const entries = keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
-  return `{${entries.join(',')}}`;
+  if (value === undefined) return 'null';
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+  }
+  fail('canonicalJson: unsupported type');
 }
 
 function sha256(value) {
@@ -110,6 +154,14 @@ function requireLineageId(value, label) {
   requireNonEmptyString(value, label, 256);
   if (!/^lineage-v1-[0-9a-f]{64}$/.test(value)) {
     fail(`${label} must match lineage-v1-{sha256}`);
+  }
+  return value;
+}
+
+function requireStableReason(value, label) {
+  requireNonEmptyString(value, label, 128);
+  if (!REJECTION_REASON_SET.has(value)) {
+    fail(`${label} must be a stable reason token drawn from the protocol set`);
   }
   return value;
 }
@@ -197,65 +249,102 @@ function normalizeControlEvent(raw) {
   return event;
 }
 
-// Adapter contract: a host binding that returns verified control events.
-// Production adapters are host-injected; chat text alone never produces one.
+// ─── Verifier gating ───────────────────────────────────────────────────────
+//
+// A non-serializable verifier is required. We accept exactly:
+//   * a `function` value, or
+//   * an object exposing a synchronous `verify(rawEvent)` method.
+//
+// Plain JSON objects, strings, numbers, and undefined are rejected. The check
+// is structural — functions and methods do not survive `JSON.stringify`, so
+// the verifier cannot be smuggled through a serializable channel.
+
+function isNonSerializableVerifier(candidate) {
+  if (typeof candidate === 'function') return true;
+  if (candidate && typeof candidate === 'object'
+    && Object.getPrototypeOf(candidate) !== Object.prototype
+    && Object.getPrototypeOf(candidate) !== null) {
+    // Class instance or exotic object: method presence is the marker.
+    return typeof candidate.verify === 'function';
+  }
+  return false;
+}
+
+function validateVerifier(verifier, label) {
+  if (verifier === undefined || verifier === null) {
+    fail(`${label} is required: pass a non-serializable verifier callback`, REJECTION_REASONS.AUTHENTICATED_CONTROL_VERIFIER_MISSING);
+  }
+  if (!isNonSerializableVerifier(verifier)) {
+    fail(
+      `${label} must be a non-serializable verifier (function or object with a verify method); plain JSON objects are not accepted`,
+      REJECTION_REASONS.AUTHENTICATED_CONTROL_VERIFIER_NON_SERIALIZABLE,
+    );
+  }
+  return verifier;
+}
+
+function invokeVerifier(verifier, rawEvent) {
+  if (typeof verifier === 'function') return verifier(rawEvent);
+  return verifier.verify(rawEvent);
+}
+
+// ─── Adapter ───────────────────────────────────────────────────────────────
+
 class AuthenticatedControlAdapter {
-  constructor({ source } = {}) {
+  constructor({ source, verifier } = {}) {
+    // The verifier is mandatory at construction. The adapter cannot be built
+    // without a non-serializable verifier, so there is no path by which a
+    // caller can construct an adapter and then synthesize authority events
+    // out of thin air.
     this.source = typeof source === 'string' && source.length > 0
       ? source
       : 'host-boundary';
+    this._verifier = validateVerifier(verifier, 'AuthenticatedControlAdapter.verifier');
   }
 
-  // acceptEvent returns the canonical event if the host marks it verified.
-  acceptEvent(rawEvent) {
-    return normalizeControlEvent(rawEvent);
+  get verifier() {
+    return this._verifier;
   }
 
-  issueCeilingAdjust({
-    mission_lineage_id,
-    sequence,
-    issued_at,
-    reason,
-    ceiling_before,
-    ceiling_after,
-  }) {
-    return normalizeControlEvent({
-      mission_lineage_id,
-      action: 'ceiling_adjust',
-      authority: 'authenticated_user',
-      sequence,
-      issued_at,
-      reason,
-      ceiling_before,
-      ceiling_after,
-    });
-  }
-
-  issueTerminalTrigger({ mission_lineage_id, action, sequence, issued_at, reason }) {
-    if (!TERMINAL_TRIGGER_ACTIONS.has(action)) {
-      fail(`issueTerminalTrigger only accepts ${Array.from(TERMINAL_TRIGGER_ACTIONS).join(', ')}`);
+  // The ONLY path from a raw event to a canonical event. The verifier is the
+  // gatekeeper. The adapter normalizes AFTER the verifier approves, so a
+  // rejected event never reaches the reducer.
+  acceptEvent(rawEvent, { verifier } = {}) {
+    const active = validateVerifier(verifier || this._verifier, 'acceptEvent.verifier');
+    if (!isPlainObject(rawEvent)) {
+      fail('acceptEvent requires a raw event object', REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID);
     }
-    return normalizeControlEvent({
-      mission_lineage_id,
-      action,
-      authority: 'authenticated_user',
-      sequence,
-      issued_at,
+    const decision = invokeVerifier(active, rawEvent);
+    if (!isPlainObject(decision)) {
+      fail('verifier must return a plain object decision', REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID);
+    }
+    if (decision.verified === true) {
+      if (typeof decision.authority === 'string'
+        && decision.authority !== rawEvent.authority) {
+        fail(
+          'verifier authority override must match the raw event authority',
+          REJECTION_REASONS.AUTHENTICATED_CONTROL_AUTHORITY_OVERRIDE_MISMATCH,
+        );
+      }
+      return normalizeControlEvent(rawEvent);
+    }
+    const reason = requireStableReason(
+      decision.reason || REJECTION_REASONS.AUTHENTICATED_CONTROL_VERIFIER_REJECTED,
+      'verifier decision.reason',
+    );
+    fail(
+      `verifier rejected the event: ${reason}`,
       reason,
-    });
-  }
-
-  issueScopeFrozen({ mission_lineage_id, sequence, issued_at, reason }) {
-    return normalizeControlEvent({
-      mission_lineage_id,
-      action: 'scope_frozen',
-      authority: 'authenticated_user',
-      sequence,
-      issued_at,
-      reason,
-    });
+    );
   }
 }
+
+// ─── Pure semantic helpers (no fixtures) ──────────────────────────────────
+//
+// These functions encapsulate the semantic checks the reducer needs. They
+// take already-normalized events and return either `{ ok: true }` or a stable
+// rejection reason. They do NOT inspect raw event shapes (that is the
+// adapter's job) and they do NOT contain a fixture dispatch.
 
 function verifySequence(event, options = {}) {
   const currentSequence = requireInteger(
@@ -266,7 +355,7 @@ function verifySequence(event, options = {}) {
   if (event.sequence < currentSequence) {
     return {
       ok: false,
-      reason: 'control_sequence_stale',
+      reason: REJECTION_REASONS.CONTROL_SEQUENCE_STALE,
       message: `effect_sequence ${event.sequence} precedes current_sequence ${currentSequence}`,
     };
   }
@@ -295,7 +384,7 @@ function authorizeCeilingAdjust(event) {
   if (loosening && !CEILING_LOOSEN_AUTHORITIES.has(event.authority)) {
     return {
       ok: false,
-      reason: 'ceiling_loosen_unauthorized',
+      reason: REJECTION_REASONS.CEILING_LOOSEN_UNAUTHORIZED,
       message: `authority "${event.authority}" cannot loosen Mission ceilings`,
     };
   }
@@ -310,66 +399,6 @@ function classifyControlEffect(event, options = {}) {
   return { ok: true };
 }
 
-// Pure reducer adapter used by evaluateMissionReducerFixture:
-// evaluates ceiling_adjust / control / shadow_would_block fixtures.
-function evaluateAuthenticatedControlFixture(input) {
-  if (!isPlainObject(input)) {
-    return { error: 'authenticated_control_input_invalid' };
-  }
-  if (input.kind === 'ceiling_adjust') {
-    const authority = input.authority;
-    const oldCeiling = input.old;
-    const nextCeiling = input.next;
-    if (!CONTROL_AUTHORITIES.includes(authority)) {
-      return { error: 'authenticated_control_authority_unknown' };
-    }
-    if (typeof oldCeiling !== 'number' || typeof nextCeiling !== 'number') {
-      return { error: 'ceiling_axis_invalid' };
-    }
-    const loosening = nextCeiling > oldCeiling;
-    if (loosening && !CEILING_LOOSEN_AUTHORITIES.has(authority)) {
-      return { error: 'ceiling_loosen_unauthorized' };
-    }
-    return {
-      ok: true,
-      authority,
-      direction: loosening ? 'loosen' : 'tighten',
-      ceiling_before: { axis: input.axis || 'tool_calls', authorized_ceiling: oldCeiling, known: true },
-      ceiling_after: { axis: input.axis || 'tool_calls', authorized_ceiling: nextCeiling, known: true },
-    };
-  }
-  if (input.kind === 'control') {
-    const currentSequence = Number.isSafeInteger(input.current_sequence)
-      ? input.current_sequence
-      : 0;
-    const effectSequence = Number.isSafeInteger(input.effect_sequence)
-      ? input.effect_sequence
-      : 0;
-    if (effectSequence < currentSequence) {
-      return {
-        state: 'CLOSING',
-        reason: 'control_sequence_stale',
-        effect_sequence: effectSequence,
-        current_sequence: currentSequence,
-      };
-    }
-    if (input.action === 'finish_requested') {
-      return { state: 'CLOSING', reason: 'finish_requested' };
-    }
-    if (input.action === 'abort_requested') {
-      return { state: 'ABORTING', reason: 'abort_requested' };
-    }
-    if (input.action === 'scope_frozen') {
-      return { state: 'CLOSING', reason: 'scope_frozen' };
-    }
-    return { ok: true };
-  }
-  if (input.kind === 'shadow_would_block') {
-    return { effect_allowed: true, would_block: true };
-  }
-  return { error: 'authenticated_control_kind_unknown' };
-}
-
 module.exports = {
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlAdapter,
@@ -379,12 +408,15 @@ module.exports = {
   CONTROL_ACTION_SET,
   CONTROL_AUTHORITIES,
   CONTROL_SCHEMA_VERSION,
+  REJECTION_REASONS,
+  REJECTION_REASON_SET,
   TERMINAL_TRIGGER_ACTIONS,
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
-  evaluateAuthenticatedControlFixture,
+  isNonSerializableVerifier,
   normalizeControlEvent,
   sha256,
+  validateVerifier,
   verifySequence,
 };

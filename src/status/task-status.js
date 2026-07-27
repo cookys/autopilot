@@ -480,10 +480,10 @@ function validateVerificationReceipt(verificationReceipt, campaignId) {
       || !isSha256(verificationReceipt.checkout_attestation_digest)
       || !isSha256(verificationReceipt.stdout_digest)
       || !isSha256(verificationReceipt.stderr_digest)
-      || typeof verificationReceipt.started_at !== 'string'
-      || typeof verificationReceipt.ended_at !== 'string'
-      || !Number.isFinite(Date.parse(verificationReceipt.started_at))
-      || !Number.isFinite(Date.parse(verificationReceipt.ended_at))) {
+      || !isCanonicalTimestamp(verificationReceipt.started_at)
+      || !isCanonicalTimestamp(verificationReceipt.ended_at)
+      || Date.parse(verificationReceipt.ended_at)
+        < Date.parse(verificationReceipt.started_at)) {
     return { ok: false, reason: 'campaign_verification_not_green' };
   }
   const expectedDigest = campaignReceiptBodyDigest(verificationReceipt);
@@ -565,6 +565,7 @@ function validateDurableCampaignState(state) {
 
   const minimumTerminalEvents = 5 + (5 * state.generation);
   if (state.usage.repair_generations !== state.generation
+      || state.generation > state.limits.max_repair_generations
       || state.usage.elapsed_wall_seconds > state.limits.max_wall_seconds
       || state.usage.changed_files > state.limits.max_changed_files
       || state.usage.churn > state.limits.max_churn
@@ -653,6 +654,10 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   }
   if (normalizedCandidate.writer_fence.campaign_id !== campaignId) {
     return campaignInvalid(campaignId, 'campaign_writer_fence_campaign_mismatch');
+  }
+  if (verificationReceipt.writer_fence_digest
+      !== normalizedCandidate.writer_fence.receipt_digest) {
+    return campaignInvalid(campaignId, 'campaign_writer_fence_digest_mismatch');
   }
 
   const unresolved = terminalReceipt.unresolved_final_findings;
@@ -1399,7 +1404,7 @@ function buildTaskStatus(input, adapters) {
       'TASK_STATUS_SHAPE',
     );
   }
-  if (typeof input.observed_at !== 'string' || !Number.isFinite(Date.parse(input.observed_at))) {
+  if (!isCanonicalTimestamp(input.observed_at)) {
     throw new TaskStatusError(
       'input.observed_at must be an ISO-8601 timestamp',
       'TASK_STATUS_SHAPE',

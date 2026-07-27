@@ -12,6 +12,8 @@ const path = require('path');
 const root = process.argv[2];
 const mission = require(path.join(root, 'src/engine/mission-convergence'));
 const icc = require(path.join(root, 'src/engine/implementation-campaign'));
+const campaignVerification = require(path.join(root, 'src/engine/campaign-verification'));
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
 const { buildTaskStatus } = require(path.join(root, 'src/status/task-status'));
 
 const results = [];
@@ -204,28 +206,23 @@ function campaignContract(ticket = 'lsm-p1') {
   };
 }
 
-function buildVerification(campaignId) {
-  const body = {
-    schema_version: 1,
-    artifact_type: 'implementation_campaign_verification',
-    campaign_id: campaignId,
-    tree_sha: CANDIDATE_TREE,
-    argv_hash: mission.sha256('argv'),
-    env_fingerprint: mission.sha256('env'),
-    request_digest: mission.sha256('request'),
-    verdict: 'GREEN',
-    exit_status: 0,
-    writer_lease_closed: true,
-    detached_checkout: true,
-    runner_argv_attested: true,
-    writer_fence_digest: mission.sha256('writer-fence-attestation'),
-    checkout_attestation_digest: mission.sha256('checkout'),
-    stdout_digest: mission.sha256('stdout'),
-    stderr_digest: mission.sha256('stderr'),
-    started_at: '2026-07-27T00:00:02.000Z',
-    ended_at: '2026-07-27T00:00:03.000Z',
+function retainedFinding(item, disposition) {
+  return {
+    id: item.id,
+    claim: item.claim,
+    severity: '🟠',
+    source: 'lsm-real-oracle',
+    evidence: {
+      classification: 'actionable',
+      digest: mission.sha256(item),
+    },
+    adjudication_authority: {
+      authority: 'depth-0',
+      actor_id: 'lsm-owner',
+      review_digest: mission.sha256('review'),
+    },
+    disposition,
   };
-  return { ...body, receipt_digest: icc.canonicalDigest(body) };
 }
 
 function buildCampaignBundle({
@@ -242,49 +239,94 @@ function buildCampaignBundle({
     repoIdentity: REPO_IDENTITY,
     startedAt: '2026-07-27T00:00:00.000Z',
   });
-  const verification = buildVerification(state.campaign_id);
-  const fenceBody = {
-    schema_version: 1,
-    artifact_type: 'implementation_campaign_writer_fence',
-    campaign_id: state.campaign_id,
-    stage_identity: 'lsm-implementer',
-    candidate_commit: CANDIDATE_COMMIT,
-    candidate_tree_sha: CANDIDATE_TREE,
-    status: 'closed',
-    evidence_mode: 'terminal_ledger',
-    closure_evidence_digest: mission.sha256('closure'),
-  };
+  const writerFence = campaignVerification.createWriterFence({
+    campaignId: state.campaign_id,
+    stageIdentity: 'lsm-implementer',
+    candidateCommit: CANDIDATE_COMMIT,
+    candidateTreeSha: CANDIDATE_TREE,
+    implementationResult: {
+      status: 'committed',
+      implementation: { commit: CANDIDATE_COMMIT },
+      implementationResult: { status: 0, signal: null, error: null },
+    },
+  });
   const candidate = icc.normalizeCampaignArtifactReference({
     kind: 'git_candidate',
     commit: CANDIDATE_COMMIT,
     tree_sha: CANDIDATE_TREE,
     branch: 'feat/lsm-p1',
     base: '0'.repeat(40),
-    writer_fence: {
-      ...fenceBody,
-      receipt_digest: icc.canonicalDigest(fenceBody),
+    writer_fence: writerFence,
+  });
+  const verifyCommand = 'node real-lsm-oracle.js';
+  const request = campaignVerification.createVerificationRequest({
+    treeSha: CANDIDATE_TREE,
+    verifyCmd: verifyCommand,
+    env: { PATH: '/usr/bin', CI: '1' },
+    envAllowlist: ['CI'],
+  });
+  const checkoutAttestation = campaignVerification.createDetachedCheckoutAttestation({
+    candidateCommit: CANDIDATE_COMMIT,
+    candidateTreeSha: CANDIDATE_TREE,
+    worktreeResult: {
+      error: null,
+      signal: null,
+      status: 0,
+      detached: true,
+      commit: CANDIDATE_COMMIT,
+      observed_commit: CANDIDATE_COMMIT,
+      observed_tree_sha: CANDIDATE_TREE,
+      worktree: '/tmp/lsm-real-oracle-worktree',
     },
   });
-  const terminalBody = {
-    schema_version: 1,
-    artifact_type: 'implementation_campaign_terminal',
-    // ICC's durable reducer has TERMINAL_STOP, but campaign-composition has no
-    // stop terminal receipt status. Keep the receipt canonical and let LSM
-    // reject the unrepresentable pairing.
-    status: status === 'stop' ? 'ready' : status,
-    candidate_tree_sha: CANDIDATE_TREE,
-    verification_receipt_digest: verification.receipt_digest,
-    repair_generations: 0,
-    final_panel_count: 1,
-    follow_up: followUp,
-    rejected_findings: [],
-    unresolved_final_findings: unresolved,
-    trace: ['implementation', 'vertical_verification', 'final_panel'],
-  };
-  const terminal = {
-    ...terminalBody,
-    receipt_digest: icc.canonicalDigest(terminalBody),
-  };
+  const verification = campaignVerification.createVerificationReceipt({
+    campaignId: state.campaign_id,
+    request,
+    exitStatus: 0,
+    startedAt: '2026-07-27T00:00:02.000Z',
+    endedAt: '2026-07-27T00:00:03.000Z',
+    writerFence,
+    checkoutAttestation,
+    executedArgv: campaignVerification.verificationArgv(verifyCommand),
+    stdout: 'ok\n',
+  });
+  const retainedFollowUp = followUp.map((item) => retainedFinding(item, {
+    disposition: 'follow-up',
+    context: 'LSM deferred work',
+    trigger: 'next phase',
+    proposed_backlog_title: item.claim,
+  }));
+  const retainedUnresolved = unresolved.map((item) => retainedFinding(item, {
+    disposition: 'must-fix-now',
+  }));
+  const compositionCandidate = { ...candidate, committed: true };
+  const terminal = runCampaignComposition({ maxRepairGenerations: 0 }, {
+    preflight: () => ({ passed: true }),
+    implement: () => compositionCandidate,
+    scopeCheck: () => ({ passed: true }),
+    verify: () => ({ ...verification, passed: true }),
+    review: () => ({
+      reviewed: true,
+      verdict: 'SHIP-AS-IS',
+      findings: '[]',
+      review_digest: mission.sha256('review'),
+    }),
+    adjudicate: ({ final }) => ({
+      registry_complete: true,
+      repair_gate_passed: true,
+      registry_digest: mission.sha256(final ? 'final-registry' : 'registry'),
+      must_fix_now: final ? retainedUnresolved : [],
+      follow_up: final ? retainedFollowUp : [],
+      rejected: [],
+    }),
+    convergence: () => ({ passed: true }),
+    finalPanel: () => ({
+      reviewed: true,
+      verdict: 'SHIP-AS-IS',
+      findings: '[]',
+      review_digest: mission.sha256('final-review'),
+    }),
+  });
   const event = (eventType, output, payload, second) => ({
     schema_version: 1,
     event_type: eventType,
@@ -430,7 +472,9 @@ group('canonical-green', () => {
   check('p1-can-close-false', receipt.can_close === false);
   check('p1-merge-preflight-unknown', receipt.failed_predicates.includes('merge_preflight_unknown'));
   check('p1-merge-edges-unknown', receipt.failed_predicates.includes('merge_edges_unknown'));
-  check('receipt-digest-canonical', /^[0-9a-f]{64}$/.test(receipt.receipt_digest));
+  const { receipt_digest: receiptDigest, ...receiptBody } = receipt;
+  check('receipt-digest-canonical',
+    receiptDigest === icc.canonicalDigest(receiptBody));
 });
 
 group('durable-state-authority', () => {
@@ -460,6 +504,42 @@ group('durable-state-authority', () => {
     makeAdapters(),
   );
   check('icc-verification-substitution-rejected', verificationResult.acceptance_verdict === 'unknown');
+
+  const fenceSwap = clone(campaignBundle);
+  fenceSwap.verification_receipt = redigest({
+    ...fenceSwap.verification_receipt,
+    writer_fence_digest: mission.sha256('other-writer-fence'),
+  });
+  fenceSwap.terminal_receipt = redigest({
+    ...fenceSwap.terminal_receipt,
+    verification_receipt_digest: fenceSwap.verification_receipt.receipt_digest,
+  });
+  fenceSwap.state.last_output_artifact_digest = fenceSwap.terminal_receipt.receipt_digest;
+  const fenceResult = buildTaskStatus(
+    makeInput({ campaigns: [fenceSwap] }),
+    makeAdapters(),
+  );
+  check('icc-writer-fence-substitution-rejected',
+    fenceResult.acceptance_verdict === 'unknown');
+
+  const reversedTime = clone(campaignBundle);
+  reversedTime.verification_receipt = redigest({
+    ...reversedTime.verification_receipt,
+    started_at: '2026-07-27T00:00:04.000Z',
+    ended_at: '2026-07-27T00:00:03.000Z',
+  });
+  reversedTime.terminal_receipt = redigest({
+    ...reversedTime.terminal_receipt,
+    verification_receipt_digest: reversedTime.verification_receipt.receipt_digest,
+  });
+  reversedTime.state.last_output_artifact_digest
+    = reversedTime.terminal_receipt.receipt_digest;
+  const reversedTimeResult = buildTaskStatus(
+    makeInput({ campaigns: [reversedTime] }),
+    makeAdapters(),
+  );
+  check('icc-verification-time-order-rejected',
+    reversedTimeResult.acceptance_verdict === 'unknown');
 
   const malformedTime = clone(campaignBundle);
   malformedTime.state.started_at = 'not-a-timestamp';
@@ -518,6 +598,30 @@ group('durable-state-authority', () => {
   );
   check('icc-terminal-repair-count-drift-rejected',
     repairCountResult.acceptance_verdict === 'unknown');
+
+  const repairLimit = clone(campaignBundle);
+  repairLimit.state.limits.max_repair_generations = 0;
+  repairLimit.state.generation = 1;
+  repairLimit.state.usage.repair_generations = 1;
+  repairLimit.terminal_receipt = redigest({
+    ...repairLimit.terminal_receipt,
+    repair_generations: 1,
+  });
+  repairLimit.state.last_output_artifact_digest = repairLimit.terminal_receipt.receipt_digest;
+  while (repairLimit.state.idempotency_records.length < 10) {
+    const index = repairLimit.state.idempotency_records.length;
+    repairLimit.state.idempotency_records.push({
+      key: `padded-${index}`,
+      event_digest: mission.sha256(`padded-${index}`),
+    });
+  }
+  repairLimit.state.event_count = repairLimit.state.idempotency_records.length;
+  const repairLimitResult = buildTaskStatus(
+    makeInput({ campaigns: [repairLimit] }),
+    makeAdapters(),
+  );
+  check('icc-repair-limit-exceeded-rejected',
+    repairLimitResult.acceptance_verdict === 'unknown');
 });
 
 group('mission-campaign-authorization', () => {
@@ -722,6 +826,14 @@ group('receipt-and-fail-closed', () => {
     unknownInputRejected = error.code === 'TASK_STATUS_UNKNOWN_FIELD';
   }
   check('unknown-input-field-rejected', unknownInputRejected);
+
+  let noncanonicalTimeRejected = false;
+  try {
+    buildTaskStatus(makeInput({ observed_at: 'July 27, 2026 00:00:00 UTC' }), makeAdapters());
+  } catch (_error) {
+    noncanonicalTimeRejected = true;
+  }
+  check('noncanonical-observed-time-rejected', noncanonicalTimeRejected);
 
   const allUnknown = buildTaskStatus(makeInput(), makeAdapters({
     inspectLifecycleReceipt: () => ({ status: 'missing' }),

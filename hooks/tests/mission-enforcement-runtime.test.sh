@@ -367,6 +367,43 @@ group('g2', () => {
     } catch (_error) { forgedDispositionRejected = true; }
     check('p2-adapter-forged-disposition-rejected', forgedDispositionRejected);
 
+    // A genuine disposition must be identity-attested, not tagged with a
+    // reflectable own Symbol that a caller can copy onto another object.
+    const dispositionSymbols = Object.getOwnPropertySymbols(dispositionReceipt);
+    check('p2-disposition-has-no-reflectable-attestation-symbol',
+      dispositionSymbols.length === 0);
+    let reflectedCloneRejected = false;
+    try {
+      const reflectedClone = Object.create(
+        Object.getPrototypeOf(dispositionReceipt),
+        Object.getOwnPropertyDescriptors(dispositionReceipt),
+      );
+      const reflectedAdapter = createAdapter({
+        ...binding,
+        disposition_receipt: reflectedClone,
+      });
+      reflectedCloneRejected = !reflectedAdapter
+        || reflectedAdapter.rejected === true
+        || typeof reflectedAdapter.enforce !== 'function';
+    } catch (_error) { reflectedCloneRejected = true; }
+    check('p2-adapter-reflected-disposition-clone-rejected', reflectedCloneRejected);
+
+    // The caller must not choose the identity to which a genuine Codex
+    // disposition is bound. It is derived from the attested harness receipt.
+    const attackerAdapter = createAdapter({
+      ...binding,
+      request_identity: 'attacker-controlled',
+    });
+    const attackerCalls = [];
+    if (attackerAdapter && typeof attackerAdapter.enforce === 'function') {
+      attackerAdapter.enforce({
+        ...validRequest,
+        request_identity: 'attacker-controlled',
+      }, () => { attackerCalls.push('ran'); });
+    }
+    check('p2-adapter-caller-cannot-select-request-identity',
+      attackerCalls.length === 0);
+
     const forgedGrant = {
       ...claimed.receipt,
       binding_digest: m.sha256('caller-forged-grant'),
@@ -391,6 +428,9 @@ group('g2', () => {
     lines.push('p2-adapter-identity-mismatch-blocks-before-effect\tSKIP');
     lines.push('p2-adapter-exact-effect-call-count\tSKIP');
     lines.push('p2-adapter-forged-disposition-rejected\tSKIP');
+    lines.push('p2-disposition-has-no-reflectable-attestation-symbol\tSKIP');
+    lines.push('p2-adapter-reflected-disposition-clone-rejected\tSKIP');
+    lines.push('p2-adapter-caller-cannot-select-request-identity\tSKIP');
     lines.push('p2-adapter-forged-grant-rejected\tSKIP');
   }
 });
@@ -762,6 +802,9 @@ for id in \
   p2-adapter-digest-mismatch-blocks-before-effect \
   p2-adapter-identity-mismatch-blocks-before-effect \
   p2-adapter-exact-effect-call-count p2-adapter-forged-disposition-rejected \
+  p2-disposition-has-no-reflectable-attestation-symbol \
+  p2-adapter-reflected-disposition-clone-rejected \
+  p2-adapter-caller-cannot-select-request-identity \
   p2-adapter-forged-grant-rejected \
   p2-fence-stale-finish-zero-effects p2-fence-stale-scope-zero-effects \
   p2-fence-stale-abort-zero-effects p2-fence-current-effect-runs \

@@ -489,6 +489,89 @@ group('g6', () => {
   }
 });
 
+// ── Group 7: Mission adapters fail closed at the durable boundary. Callers
+// cannot authorize enforced sealing with an injected predicate, a false CAS
+// result is not success, release requires a store, and idempotent retries must
+// preserve the complete campaign binding.
+group('g7', () => {
+  const arbitraryVerifierError = campaignCheck.verifyEnforcedMissionGrant({
+    mission_grant_ref: m.sha256('caller-selected-grant'),
+  }, {
+    contractDigest: m.sha256('contract'),
+    repoIdentity: 'git-common-dir:/tmp/attacker',
+    missionGrantVerifier: () => ({
+      verified: true,
+      binding_digest: m.sha256('caller-selected-grant'),
+    }),
+  });
+  check('p2-arbitrary-mission-grant-verifier-cannot-authorize',
+    typeof arbitraryVerifierError === 'string');
+
+  const noStoreAdapters = engine.createMissionCampaignAdapters({
+    grant: { idempotency_key: 'no-store' },
+  });
+  const noStoreRelease = noStoreAdapters.releaseMission({
+    missionClaim: { claim_id: 'claim-without-store' },
+  });
+  check('p2-release-without-atomic-store-rejected',
+    noStoreRelease && noStoreRelease.status === 'rejected');
+
+  const initial = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
+  const casFalseAdapters = engine.createMissionCampaignAdapters({
+    store: {
+      load: () => initial,
+      save: () => false,
+    },
+    grant: {
+      idempotency_key: 'cas-false',
+      campaign_id: 'cas-false-campaign',
+      acceptance_ids: ['acc-1'],
+      reservation: reservation(initial, 1),
+      expires_at: '2026-07-27T01:00:00.000Z',
+    },
+  });
+  const casFalseResult = casFalseAdapters.missionClaim({
+    contractDigest: m.sha256('P'),
+    base: '0000000000000000000000000000000000000000',
+    observedAt: '2026-07-27T00:00:00.000Z',
+  });
+  check('p2-false-cas-result-rejected',
+    casFalseResult && casFalseResult.status === 'rejected'
+      && casFalseResult.code === 'mission_state_cas_failed');
+
+  let stored = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
+  const store = {
+    load: () => stored,
+    save: (expected, next) => {
+      if (stored !== expected) return false;
+      stored = next;
+      return true;
+    },
+  };
+  const makeAdapters = (campaignId) => engine.createMissionCampaignAdapters({
+    store,
+    grant: {
+      idempotency_key: 'shared-idempotency-key',
+      campaign_id: campaignId,
+      acceptance_ids: ['acc-1'],
+      reservation: reservation(stored, 1),
+      expires_at: '2026-07-27T01:00:00.000Z',
+    },
+  });
+  const claimInput = {
+    contractDigest: m.sha256('P'),
+    base: '0000000000000000000000000000000000000000',
+    observedAt: '2026-07-27T00:00:00.000Z',
+  };
+  const firstClaim = makeAdapters('campaign-a').missionClaim(claimInput);
+  const collision = makeAdapters('campaign-b').missionClaim(claimInput);
+  check('p2-initial-idempotent-claim-succeeds',
+    firstClaim && firstClaim.status === 'claimed');
+  check('p2-idempotency-key-binding-collision-rejected',
+    collision && collision.status === 'rejected'
+      && collision.code === 'mission_idempotency_binding_mismatch');
+});
+
 for (const line of lines) console.log(line);
 NODE
 )"
@@ -526,7 +609,7 @@ do
 done
 
 # ── A group must not have aborted the harness mid-run. ──
-for grp in g1 g2 g3 g4 g5 g6; do
+for grp in g1 g2 g3 g4 g5 g6 g7; do
   assert_not_contains "$OUT" "$grp	FAIL	threw" "ICC group $grp ran to completion"
 done
 
@@ -544,7 +627,11 @@ for id in \
   p2-receipt-changed-lineage-fails-closed \
   p2-enforce-contract-sealable p2-enforce-not-generic-rejection \
   p2-adapters-have-mission-claim p2-adapters-have-release \
-  p2-real-adapter-drives-intake-admission
+  p2-real-adapter-drives-intake-admission \
+  p2-arbitrary-mission-grant-verifier-cannot-authorize \
+  p2-release-without-atomic-store-rejected p2-false-cas-result-rejected \
+  p2-initial-idempotent-claim-succeeds \
+  p2-idempotency-key-binding-collision-rejected
 do
   assert_contains "$OUT" "$id	PASS" "Mission P2 ICC behavior $id must pass"
 done

@@ -4,26 +4,29 @@
 //
 // Architectural contract (v1):
 //   * The adapter is a verifier bridge: the only path from a raw control event
-//     to a canonical control event is `acceptEvent`, and that path must call a
-//     host-injected, non-serializable verifier callback. The adapter never
-//     fabricates an `authority` field on its own; arbitrary callers cannot
-//     mint `authenticated_user` events by calling helper methods.
-//   * The verifier is non-serializable on purpose. A plain JSON object
-//     verifier is rejected: the only accepted shapes are `function` values
-//     (including arrow functions, async functions, and bound methods) and
-//     object values that expose a synchronous `verify(rawEvent)` method
-//     whose presence is itself a non-serializable marker (functions and
-//     methods are not preserved by `JSON.stringify`).
-//   * The verifier returns a verdict:
-//        { verified: true,  authority }            // accept, optional authority
-//                                                   // override must match event
-//        { verified: false, reason }              // reject with stable reason
-//     The reason, when present, is a bounded protocol token drawn from a known
-//     set; the adapter does not invent a fallback string.
-//   * The adapter normalizes the event (shape, lineage, action, sequence) and
-//     attaches an `event_digest`. The adapter does NOT apply semantic policy
-//     (e.g. ceiling loosening). That is the reducer's job. Two-layer
-//     separation: verifier = source authenticity; reducer = state semantics.
+//     to a canonical control event is `acceptEvent`, and that path MUST call
+//     a host-injected, non-serializable verifier callback bound at adapter
+//     construction. The constructor verifier is authoritative: acceptEvent
+//     ignores any caller-supplied verifier override.
+//   * A successful acceptEvent freezes the canonical event object and records
+//     its OBJECT IDENTITY in a module-private WeakSet. The adapter never
+//     hands out a capability/token/getter. The canonical event is the only
+//     bearer of authority.
+//   * The reducer-facing surface is a single narrow function
+//     `consumeAuthenticatedControlEvent(event)` that:
+//       1. checks the object is the exact frozen object currently in the
+//          module-private WeakSet (object identity, not field match);
+//       2. atomically REMOVES the entry (single-use);
+//       3. returns a sanitized, deep-frozen semantic snapshot.
+//     Copying fields, Reflect.ownKeys, JSON roundtrip, reusing a receipt,
+//     or replaying an already-consumed canonical event all fail closed:
+//     the WeakSet entry is gone or never existed, so consume returns
+//     `{ ok: false, reason: 'unauthenticated' }`.
+//   * No public symbol, token, mint function, or registry is exposed. The
+//     registry is closure-private; no caller can add or inspect entries.
+//   * The adapter normalizes the event (shape, lineage, action, sequence)
+//     and attaches an `event_digest`. The adapter does NOT apply semantic
+//     policy (e.g. ceiling loosening). That is the reducer's job.
 //
 // No fixture-answer code lives in this module. The legacy
 // `evaluateAuthenticatedControlFixture` switch is GONE — the state machine in
@@ -136,9 +139,9 @@ function canonicalJson(value) {
     const keys = Object.keys(value).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
   }
-  // Symbols and functions are non-serializable by design (the adapter
-  // capability is a symbol). They must never reach a digest or a serialized
-  // channel — fail closed rather than fabricate a string representation.
+  // Symbols and functions are non-serializable by design. They must never
+  // reach a digest or a serialized channel — fail closed rather than
+  // fabricate a string representation.
   fail('canonicalJson: unsupported type');
 }
 
@@ -267,7 +270,6 @@ function isNonSerializableVerifier(candidate) {
   if (candidate && typeof candidate === 'object'
     && Object.getPrototypeOf(candidate) !== Object.prototype
     && Object.getPrototypeOf(candidate) !== null) {
-    // Class instance or exotic object: method presence is the marker.
     return typeof candidate.verify === 'function';
   }
   return false;
@@ -291,14 +293,39 @@ function invokeVerifier(verifier, rawEvent) {
   return verifier.verify(rawEvent);
 }
 
-// ─── Adapter ───────────────────────────────────────────────────────────────
+// ─── Module-private event-identity registry ────────────────────────────────
+//
+// The WeakSet stores the exact frozen canonical-event object identity minted
+// by a successful `acceptEvent` call. It is closed over the module exports
+// and is NEVER exported: no caller can `add`, `has`, or `delete` entries
+// directly, and no caller can iterate. Object identity is the only
+// authentication key — a copied object, a JSON roundtrip, a Reflect.ownKeys
+// snapshot, or a previously-consumed canonical event all fail `consume`
+// because none of them are the exact frozen object the registry holds.
+//
+// Note: WeakSet keys must be objects (the spec disallows primitives). The
+// canonical event is always a frozen object, so this is the right primitive.
+// The previous design's "Symbol in WeakSet" was a Node-version-specific
+// accident — Symbols are primitives per spec, and a stricter runtime would
+// have rejected it silently. The new design uses object identity, which is
+// both spec-correct and matches the host-boundary attestation model.
 
-// The capability registry is module-private. It is NEVER exported: no caller
-// can obtain the WeakSet, so no caller can `add` an arbitrary capability and
-// forge adapter authority. The only public surface is the narrow predicate
-// `isAuthenticatedAdapterCapability`, whose closure owns the private WeakSet
-// and answers a single yes/no validation question for the reducer.
-const ADAPTER_CAPABILITY_REGISTRY = new WeakSet();
+const AUTHENTICATED_EVENT_REGISTRY = new WeakSet();
+
+function recordCanonicalEvent(canonical) {
+  AUTHENTICATED_EVENT_REGISTRY.add(canonical);
+  return canonical;
+}
+
+function registryHas(canonical) {
+  return AUTHENTICATED_EVENT_REGISTRY.has(canonical);
+}
+
+function registryDelete(canonical) {
+  return AUTHENTICATED_EVENT_REGISTRY.delete(canonical);
+}
+
+// ─── Adapter ───────────────────────────────────────────────────────────────
 
 class AuthenticatedControlAdapter {
   constructor({ source, verifier } = {}) {
@@ -310,36 +337,17 @@ class AuthenticatedControlAdapter {
       ? source
       : 'host-boundary';
     this._verifier = validateVerifier(verifier, 'AuthenticatedControlAdapter.verifier');
-    // Mint an unforgeable process-local capability. The capability is the
-    // ONLY way an event can acquire authenticated_user/DOA authority over
-    // the reducer. The symbol lives in a WeakSet keyed by the adapter
-    // instance; serialization (JSON.stringify) drops the symbol, so the
-    // capability cannot travel through a serializable channel. The
-    // capability object intentionally holds NO reference back to the
-    // adapter instance — that would create a self-cycle in any caller
-    // that serializes the canonical event.
-    this._capabilitySymbol = Symbol('AuthenticatedControlAdapter.capability');
-    ADAPTER_CAPABILITY_REGISTRY.add(this._capabilitySymbol);
-    this._capability = Object.freeze({
-      mint: 'AuthenticatedControlAdapter',
-      symbol: this._capabilitySymbol,
-    });
   }
 
   get verifier() {
     return this._verifier;
   }
 
-  get capability() {
-    return this._capability;
-  }
-
-  // The ONLY path from a raw event to a canonical event. The verifier is the
-  // gatekeeper. The adapter normalizes AFTER the verifier approves, so a
-  // rejected event never reaches the reducer. `acceptEvent` does NOT allow
-  // a caller to override the constructor-injected verifier — the verifier
-  // is bound at adapter construction and is the only authority over the
-  // adapter's canonicalization.
+  // The ONLY path from a raw event to a canonical event. The constructor
+  // verifier is authoritative: any extra arguments (a "verifier override",
+  // a "policy hint", etc.) are ignored. The caller cannot bypass the host
+  // verifier by passing a second function — only the constructor-bound
+  // verifier runs.
   acceptEvent(rawEvent) {
     if (!isPlainObject(rawEvent)) {
       fail('acceptEvent requires a raw event object', REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID);
@@ -357,17 +365,14 @@ class AuthenticatedControlAdapter {
         );
       }
       const canonical = normalizeControlEvent(rawEvent);
-      // Attach the unforgeable capability as a NON-ENUMERABLE property so the
-      // reducer can validate it via direct access, while JSON.stringify,
-      // object spread, Object.keys, and canonicalJson all omit it. The
-      // capability can never travel through a serializable channel or reach a
-      // digest input.
-      Object.defineProperty(canonical, '_adapter_capability', {
-        value: this._capability,
-        enumerable: false,
-        writable: false,
-        configurable: false,
-      });
+      // Freeze the canonical event so its identity is stable for the
+      // registry check. Object.freeze is irreversible from the caller's
+      // perspective; combined with the WeakSet, it gives single-use
+      // event-identity attestation: a caller that mutates a copy, fields,
+      // or JSON-roundtrips the event cannot produce an object the
+      // registry still holds.
+      Object.freeze(canonical);
+      recordCanonicalEvent(canonical);
       return canonical;
     }
     const reason = requireStableReason(
@@ -381,12 +386,88 @@ class AuthenticatedControlAdapter {
   }
 }
 
-// ─── Pure semantic helpers (no fixtures) ──────────────────────────────────
+// ─── Reducer-facing single-use consume ─────────────────────────────────────
 //
-// These functions encapsulate the semantic checks the reducer needs. They
-// take already-normalized events and return either `{ ok: true }` or a stable
-// rejection reason. They do NOT inspect raw event shapes (that is the
-// adapter's job) and they do NOT contain a fixture dispatch.
+// This is the ONLY exported function that authenticates a canonical event
+// for the reducer. It returns a sanitized deep-frozen semantic snapshot —
+// the original canonical event stays in the caller's hands (now "spent"),
+// but the registry entry has been removed. Replaying the same canonical
+// event against `consume` returns `{ ok: false, reason: 'unauthenticated' }`.
+//
+// Snapshot shape (no symbols, no functions, no provenance fields):
+//   {
+//     mission_lineage_id, action, authority, sequence, issued_at, reason,
+//     ceiling_before, ceiling_after, event_digest,
+//   }
+// The snapshot is the only event-shaped object that may enter state.events,
+// receipts, projections, or digest inputs.
+
+function buildSanitizedSnapshot(canonical) {
+  let ceilingBefore = null;
+  let ceilingAfter = null;
+  if (canonical.ceiling_before) {
+    ceilingBefore = Object.freeze({
+      axis: canonical.ceiling_before.axis,
+      authorized_ceiling: canonical.ceiling_before.authorized_ceiling,
+      known: canonical.ceiling_before.known,
+    });
+  }
+  if (canonical.ceiling_after) {
+    ceilingAfter = Object.freeze({
+      axis: canonical.ceiling_after.axis,
+      authorized_ceiling: canonical.ceiling_after.authorized_ceiling,
+      known: canonical.ceiling_after.known,
+    });
+  }
+  return Object.freeze({
+    mission_lineage_id: canonical.mission_lineage_id,
+    action: canonical.action,
+    authority: canonical.authority,
+    sequence: canonical.sequence,
+    issued_at: canonical.issued_at,
+    reason: canonical.reason,
+    ceiling_before: ceilingBefore,
+    ceiling_after: ceilingAfter,
+    event_digest: canonical.event_digest,
+  });
+}
+
+function consumeAuthenticatedControlEvent(event) {
+  if (event === null || typeof event !== 'object' || Array.isArray(event)) {
+    return { ok: false, reason: 'unauthenticated' };
+  }
+  if (!Object.isFrozen(event)) {
+    return { ok: false, reason: 'unauthenticated' };
+  }
+  if (!registryHas(event)) {
+    return { ok: false, reason: 'unauthenticated' };
+  }
+  // Single-use: remove the registry entry before returning the sanitized
+  // snapshot. Any subsequent attempt to authenticate the same event — by
+  // the reducer, by a re-driven replay, or by a forged second pass — will
+  // see an empty registry slot and fail closed.
+  registryDelete(event);
+  return { ok: true, event: buildSanitizedSnapshot(event) };
+}
+
+// `isAuthenticatedAdapterCapability` is the narrow predicate the reducer
+// still uses to decide whether a candidate object is "trusted" without
+// consuming it. It returns true only for the exact frozen canonical object
+// the registry holds at the time of the call. A capability-mint object
+// field (a copied object, a forged `{ mint, symbol }`, a JSON roundtrip)
+// has no identity in the WeakSet, so the predicate returns false.
+//
+// Note: this predicate does NOT remove the entry; that is
+// `consumeAuthenticatedControlEvent`'s job. The reducer must consume — not
+// merely predicate-check — before mutating state.
+function isAuthenticatedAdapterCapability(candidate) {
+  if (candidate === null || typeof candidate !== 'object') return false;
+  if (Array.isArray(candidate)) return false;
+  if (!Object.isFrozen(candidate)) return false;
+  return registryHas(candidate);
+}
+
+// ─── Pure semantic helpers (no fixtures) ──────────────────────────────────
 
 function verifySequence(event, options = {}) {
   const currentSequence = requireInteger(
@@ -441,13 +522,6 @@ function classifyControlEffect(event, options = {}) {
   return { ok: true };
 }
 
-function isAuthenticatedAdapterCapability(capability) {
-  if (!capability || typeof capability !== 'object') return false;
-  if (typeof capability.mint !== 'string') return false;
-  if (typeof capability.symbol !== 'symbol') return false;
-  return ADAPTER_CAPABILITY_REGISTRY.has(capability.symbol);
-}
-
 module.exports = {
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlAdapter,
@@ -463,6 +537,7 @@ module.exports = {
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
+  consumeAuthenticatedControlEvent,
   isAuthenticatedAdapterCapability,
   isNonSerializableVerifier,
   normalizeControlEvent,

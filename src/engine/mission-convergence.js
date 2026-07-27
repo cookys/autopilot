@@ -44,6 +44,7 @@ const {
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
+  consumeAuthenticatedControlEvent,
   isAuthenticatedAdapterCapability,
   normalizeControlEvent,
   sha256,
@@ -462,6 +463,151 @@ function computeProvenance(contract) {
   return provenance;
 }
 
+// `computeConfigDigest` produces a stable, content-bound digest of the
+// normalized operational config. The digest is computed over the COMPLETE
+// set of fields affecting future admission/control, with the cross-field
+// lineage/task/policy bindings explicit. It is stored on the state at
+// construction so every subsequent state hash and projection includes the
+// same digest. Tampering with the config in a projection and re-computing
+// only the outer projection digest will fail at restore: the restored
+// state's config_digest (recomputed from the modified config_snapshot)
+// will not match either the original config_digest in the projection or
+// the state_hash binding in the projection body.
+function computeConfigDigest(contract, provenance) {
+  const perAxis = SUPPORTED_AXES.map((axisName) => ({
+    axis: axisName,
+    authorized_ceiling: contract.axes[axisName].authorized_ceiling,
+    reserved_active: contract.axes[axisName].reserved_active || 0,
+    durable_consumed: contract.axes[axisName].durable_consumed || 0,
+    known: contract.axes[axisName].known,
+    enforced: contract.axes[axisName].enforced !== false,
+  }));
+  return sha256(canonicalJson({
+    schema_version: contract.schema_version,
+    artifact_type: contract.artifact_type,
+    contract_id: contract.contract_id,
+    repo_identity: contract.repo_identity,
+    mission_lineage_id: contract.mission_lineage_id,
+    task_authority_id: contract.task_authority_id,
+    policy_hash: contract.policy_hash,
+    enforcement_mode: contract.enforcement_mode,
+    contract_state: contract.state,
+    closure_ratio: contract.closure_ratio,
+    max_stagnant_campaigns: contract.max_stagnant_campaigns !== undefined
+      ? contract.max_stagnant_campaigns : DEFAULT_MAX_STAGNANT,
+    red_lines: [...(contract.red_lines || [])].sort(),
+    axes: perAxis,
+    grant_contract: contract.grant_contract,
+    control_contract: contract.control_contract,
+    lineage_binding: contract.lineage_binding,
+    config_provenance: provenance,
+  }));
+}
+
+// ─── Source refs (per-entry digest validation) ─────────────────────────────
+//
+// A source ref is a closed canonical pointer to an evidence/snapshot
+// artifact. The ref shape is intentionally narrow:
+//
+//   {
+//     kind: 'evidence' | 'snapshot' | 'commit' | 'spec',
+//     locator: <bounded string>,
+//     label: <bounded string>,
+//     evidence_kind?: <bounded string>,
+//     ref_class?: 'project' | 'task' | 'external',
+//     digest: <sha256 hex>,
+//   }
+//
+// The `digest` is computed from the content of the ref EXCLUDING the digest
+// field. `buildProjection` validates the shape of every ref, computes the
+// expected digest, and rejects refs whose digest does not match. Duplicate
+// locators are rejected. `restoreProjection` repeats the same per-entry
+// digest check on every ref in `source_refs` so a tampered ref that was
+// re-issued into a fresh projection_digest still fails.
+
+const SOURCE_REF_KINDS = Object.freeze(['evidence', 'snapshot', 'commit', 'spec']);
+const SOURCE_REF_KIND_SET = new Set(SOURCE_REF_KINDS);
+const SOURCE_REF_CLASSES = Object.freeze(['project', 'task', 'external']);
+const SOURCE_REF_CLASS_SET = new Set(SOURCE_REF_CLASSES);
+const SOURCE_REF_ALLOWED_KEYS = new Set([
+  'kind', 'locator', 'label', 'evidence_kind', 'ref_class', 'digest',
+]);
+
+function computeSourceRefDigest(content) {
+  // The digest is over the content with the `digest` field omitted; keys
+  // are sorted via canonicalJson so the digest is stable.
+  return sha256(canonicalJson(content));
+}
+
+function validateSourceRef(rawRef, label) {
+  requireObject(rawRef, label);
+  for (const key of Object.keys(rawRef)) {
+    if (!SOURCE_REF_ALLOWED_KEYS.has(key)) {
+      fail(`${label} has unsupported key "${key}"`, 'SOURCE_REF_UNSUPPORTED_KEY');
+    }
+  }
+  const kind = requireProtocolToken(rawRef.kind, `${label}.kind`);
+  if (!SOURCE_REF_KIND_SET.has(kind)) {
+    fail(`${label}.kind must be one of ${SOURCE_REF_KINDS.join(', ')}`, 'SOURCE_REF_KIND_INVALID');
+  }
+  requireString(rawRef.locator, `${label}.locator`, 1, 2048);
+  requireString(rawRef.label, `${label}.label`, 1, 256);
+  if (rawRef.evidence_kind !== undefined) {
+    requireProtocolToken(rawRef.evidence_kind, `${label}.evidence_kind`);
+  }
+  if (rawRef.ref_class !== undefined) {
+    if (!SOURCE_REF_CLASS_SET.has(rawRef.ref_class)) {
+      fail(`${label}.ref_class must be one of ${SOURCE_REF_CLASSES.join(', ')}`, 'SOURCE_REF_CLASS_INVALID');
+    }
+  }
+  if (typeof rawRef.digest !== 'string') {
+    fail(`${label}.digest is required`, 'SOURCE_REF_DIGEST_MISSING');
+  }
+  const claimedDigest = requireSha256(rawRef.digest, `${label}.digest`);
+  // The digest is computed from the canonical content. Optional fields
+  // (`evidence_kind`, `ref_class`) are only included when they are
+  // actually present in the ref; missing fields are not added as
+  // `null` because canonicalJson serializes explicit `null` differently
+  // from a missing key.
+  const contentForDigest = {
+    kind,
+    locator: rawRef.locator,
+    label: rawRef.label,
+  };
+  if (rawRef.evidence_kind !== undefined) contentForDigest.evidence_kind = rawRef.evidence_kind;
+  if (rawRef.ref_class !== undefined) contentForDigest.ref_class = rawRef.ref_class;
+  const expected = computeSourceRefDigest(contentForDigest);
+  if (claimedDigest !== expected) {
+    fail(`${label}.digest does not match the ref content`, 'SOURCE_REF_DIGEST_MISMATCH');
+  }
+  return Object.freeze({
+    kind,
+    locator: rawRef.locator,
+    label: rawRef.label,
+    evidence_kind: rawRef.evidence_kind,
+    ref_class: rawRef.ref_class,
+    digest: claimedDigest,
+  });
+}
+
+function validateSourceRefs(rawRefs, label = 'source_refs') {
+  if (rawRefs === undefined || rawRefs === null) return Object.freeze([]);
+  if (!Array.isArray(rawRefs)) {
+    fail(`${label} must be an array`, 'SOURCE_REFS_NOT_ARRAY');
+  }
+  const seenLocators = new Set();
+  const out = [];
+  for (let i = 0; i < rawRefs.length; i += 1) {
+    const ref = validateSourceRef(rawRefs[i], `${label}[${i}]`);
+    if (seenLocators.has(ref.locator)) {
+      fail(`${label} has duplicate locator "${ref.locator}"`, 'SOURCE_REF_DUPLICATE_LOCATOR');
+    }
+    seenLocators.add(ref.locator);
+    out.push(ref);
+  }
+  return Object.freeze(out);
+}
+
 // ─── State factory ─────────────────────────────────────────────────────────
 
 function createMissionState(contract, options = {}) {
@@ -472,6 +618,14 @@ function createMissionState(contract, options = {}) {
   const maxStagnant = contract.max_stagnant_campaigns !== undefined
     ? contract.max_stagnant_campaigns
     : DEFAULT_MAX_STAGNANT;
+  // `config_digest` is a content-bound digest of the complete normalized
+  // operational config. It is computed once at state construction, stored
+  // on the state, and is the single binding between the state hash and
+  // the config that produced it. A restore cannot succeed if the config
+  // snapshot, the projection's recorded config_digest, and the restored
+  // state's state_hash all line up — but the original state was built
+  // from a different config.
+  const configDigest = computeConfigDigest(contract, provenance);
 
   // Build per-axis budgets from a deep clone of the contract — the
   // caller's input contract must not be mutated, and derived state must
@@ -584,6 +738,7 @@ function createMissionState(contract, options = {}) {
     terminal: null,
     config: deepFreeze(deepClone(contract)),
     config_provenance: Object.freeze(provenance),
+    config_digest: configDigest,
     red_lines: deepClone(contract.red_lines || []),
   });
   validateMissionState(built);
@@ -634,6 +789,13 @@ function stateHash(state) {
     acceptance_hashes: [...(state.acceptance_hashes || [])].sort(),
     unknown_required_axes: [...(state.unknown_required_axes || [])].sort(),
     config_provenance: { ...(state.config_provenance || {}) },
+    // `config_digest` binds the state hash to the complete normalized
+    // operational config. Without it, two states with identical axes/claims
+    // but different configs would hash the same way. With it, a restore
+    // that swaps the config_snapshot (and re-computes only the outer
+    // projection_digest) still fails because the restored state's
+    // config_digest (and therefore state_hash) differs from the original.
+    config_digest: state.config_digest || null,
     red_lines: [...(state.red_lines || [])].sort(),
     axes: {
       campaigns: { ...state.axes.campaigns },
@@ -693,25 +855,41 @@ function reduceMissionState(state, event) {
   if (sequence !== state.events.length + 1) {
     fail(`event.sequence ${sequence} must equal ${state.events.length + 1}`);
   }
-  // Authenticated control events must carry an unforgeable capability
-  // minted by a constructed adapter. A raw reducer event MUST NOT acquire
-  // authenticated_user/DOA authority. The check uses the narrow predicate
-  // exported by authenticated-control; the registry itself is module-private.
+  // Authenticated control events must be the exact frozen canonical object
+  // minted by an AuthenticatedControlAdapter.acceptEvent() call. The narrow
+  // consume function (module-private WeakSet keyed by object identity):
+  //   1. checks the registry,
+  //   2. atomically removes the entry (single-use), and
+  //   3. returns a sanitized deep-frozen snapshot to use in digest, state,
+  //      receipts, and projections.
+  // Any attempt to authenticate a copied, JSON-roundtripped, or
+  // previously-consumed event fails closed: the WeakSet entry is gone
+  // (or was never there), and consume returns unauthenticated.
+  let sanitizedControlEvent = null;
   if (eventType === 'control_event' || eventType === 'ceiling_adjust') {
     if (!payload || payload.event === undefined) {
       fail('control_event requires an adapter-produced event payload', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
-    if (!isAuthenticatedAdapterCapability(payload.event._adapter_capability)) {
+    const consume = consumeAuthenticatedControlEvent(payload.event);
+    if (!consume || consume.ok !== true || !consume.event) {
       fail('control_event must be produced by an AuthenticatedControlAdapter instance', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
+    sanitizedControlEvent = consume.event;
   }
-  // Compute the event digest from a canonical payload that OMITS the
-  // non-enumerable/private adapter capability. The capability is attached to
-  // the adapter-produced control event as a non-enumerable property; it must
-  // never reach a digest input, the event log, a projection, or a receipt.
-  const digestPayload = canonicalDigestPayload(payload);
+  // Build the digest input payload. For control/ceiling events we replace
+  // the raw canonical event with the sanitized snapshot, so the identity-
+  // bearing object (and any field that could carry it) is excluded from
+  // the digest. For other event types, the digest input is the payload as
+  // submitted, with all enumerable own keys.
+  let digestPayload;
+  if (sanitizedControlEvent) {
+    digestPayload = { ...payload, event: sanitizedControlEvent };
+  } else {
+    digestPayload = payload;
+  }
   const eventWithDigest = Object.freeze({
     ...event,
+    payload: digestPayload,
     event_digest: eventDigestFor({ event_type: eventType, sequence, mission_lineage_id: event.mission_lineage_id, payload: digestPayload }),
   });
 
@@ -727,7 +905,7 @@ function reduceMissionState(state, event) {
     closure_evaluated: handleClosureEvaluated,
     successor_inherited: handleSuccessorInherited,
   };
-  const result = handlers[eventType](state, eventWithDigest, payload);
+  const result = handlers[eventType](state, eventWithDigest, payload, sanitizedControlEvent);
   // Deep-freeze the entire returned state and receipt so neither caller
   // mutation nor nested reservation/actual/payload objects can mutate reducer
   // state. Every contract-derived and reducer-derived value is immutable.
@@ -1019,15 +1197,13 @@ function sameReservation(a, b) {
 
 function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
   if (state.enforcement_mode === 'shadow') {
-    // In shadow mode, would-block admission must NOT terminalize Mission or
-    // prevent the represented grant. The reducer creates the claim — which
-    // durably records the full requested reservation on the claim itself so a
-    // later release/reconciliation can account for it — but does NOT deduct
-    // that reservation from the live axes (shadow preserves the remaining
-    // budget the frozen corpus asserts). The machine state is left unchanged.
-    // Durable `would_block` evidence derived from the real ceiling math is
-    // recorded for operator review. Repeated shadow admissions are auditable
-    // and cumulative: each evidence receipt is stored under its own
+    // In shadow mode, would-block admission must NOT terminalize Mission, but
+    // it MUST durably represent the represented grant: the claim is created,
+    // its full requested reservation is applied to state.axes (even above
+    // the configured ceiling — computeAxisBudget reports `remaining=0` and
+    // `overspend=true` rather than refusing), and a `would_block` evidence
+    // receipt is recorded for operator review. Repeated shadow admissions are
+    // auditable and cumulative: each evidence receipt is stored under its own
     // event-digest key so prior evidence is never overwritten.
     const claim = {
       claim_id: grant.claimId,
@@ -1047,6 +1223,29 @@ function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
       shadow_would_block: true,
       event_digest: event.event_digest,
     };
+    // Apply the FULL requested reservation to state.axes. computeAxisBudget
+    // clamps `remaining` to 0 and reports `overspend=true` when the
+    // reservation exceeds the ceiling; the `reserved_active` itself
+    // reflects the actual bookkeeping so a later release/reconciliation can
+    // clear it without negative counters.
+    const newAxes = {};
+    for (const axisName of SUPPORTED_AXES) {
+      const cur = state.axes[axisName];
+      const req = grant.reservation[axisName];
+      if (!req) {
+        newAxes[axisName] = cloneAxis(cur);
+        continue;
+      }
+      const newReserved = cur.reserved_active + req.reserved_active;
+      newAxes[axisName] = computeAxisBudget({
+        authorized_ceiling: cur.authorized_ceiling,
+        reserved_active: newReserved,
+        durable_consumed: cur.durable_consumed,
+        active_actual: cur.active_actual,
+        known: cur.known,
+        enforced: cur.enforced,
+      });
+    }
     const evidenceReceipt = {
       artifact_type: 'mission_would_block_evidence',
       event_type: event.event_type,
@@ -1068,6 +1267,15 @@ function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
     const evidenceKey = `mission_would_block_evidence:${event.event_digest}`;
     const durableState = Object.freeze({
       ...appendEvent(state, event),
+      axes: Object.freeze({
+        campaigns: Object.freeze(newAxes.campaigns),
+        wall_seconds: Object.freeze(newAxes.wall_seconds),
+        tool_calls: Object.freeze(newAxes.tool_calls),
+        engine_attempts: Object.freeze(newAxes.engine_attempts),
+        external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+        canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+        output_bytes: Object.freeze(newAxes.output_bytes),
+      }),
       claims: Object.freeze({ ...state.claims, [grant.claimId]: Object.freeze(claim) }),
       claim_idempotency_index: Object.freeze({
         ...state.claim_idempotency_index,
@@ -1170,15 +1378,20 @@ function handleNoEffectRelease(state, event, payload) {
   if (!claim) return rejection(state, event, 'binding_mismatch');
   if (claim.released) return rejection(state, event, 'grant_already_claimed');
   if (claim.reconciled) return rejection(state, event, 'accounting_breach');
-  // Free the entire reservation, durable_consumed stays at zero.
+  // Free the entire reservation, durable_consumed stays at zero. The
+  // subtraction is clamped to 0 so a release after a partial reclaim
+  // (e.g. due to overspend reconciliation) cannot drive reserved_active
+  // negative. Under normal single-claim flow the bookkeeping is exact;
+  // the clamp is a defensive invariant.
   const newAxes = {};
   for (const axisName of SUPPORTED_AXES) {
     const cur = state.axes[axisName];
     const resv = claim.reservation[axisName];
     if (resv && resv.reserved_active > 0) {
+      const candidate = cur.reserved_active - resv.reserved_active;
       newAxes[axisName] = computeAxisBudget({
         authorized_ceiling: cur.authorized_ceiling,
-        reserved_active: cur.reserved_active - resv.reserved_active,
+        reserved_active: candidate < 0 ? 0 : candidate,
         durable_consumed: cur.durable_consumed,
         active_actual: cur.active_actual,
         known: cur.known,
@@ -1327,13 +1540,14 @@ function handleReconciliation(state, event, payload) {
         continue;
       }
       const observed = mergedActual[axisName].durable_consumed;
-      // Overspend: clear the reservation, conservatively add the FULL
-      // observed actual once (even above the authorized ceiling).
-      const newReserved = cur.reserved_active - resv.reserved_active;
+      // Overspend: clear the reservation (clamped to 0 so partial
+      // reclaims never produce negative counters), conservatively add
+      // the FULL observed actual once (even above the authorized ceiling).
+      const candidateReserved = cur.reserved_active - resv.reserved_active;
       const newConsumed = cur.durable_consumed + observed;
       newAxes[axisName] = computeAxisBudget({
         authorized_ceiling: cur.authorized_ceiling,
-        reserved_active: newReserved,
+        reserved_active: candidateReserved < 0 ? 0 : candidateReserved,
         durable_consumed: newConsumed,
         active_actual: cur.active_actual,
         known: cur.known,
@@ -1414,11 +1628,11 @@ function handleReconciliation(state, event, payload) {
       continue;
     }
     const observed = mergedActual[axisName].durable_consumed;
-    const newReserved = cur.reserved_active - resv.reserved_active;
+    const candidateReserved = cur.reserved_active - resv.reserved_active;
     const newConsumed = cur.durable_consumed + observed;
     newAxes[axisName] = computeAxisBudget({
       authorized_ceiling: cur.authorized_ceiling,
-      reserved_active: newReserved,
+      reserved_active: candidateReserved < 0 ? 0 : candidateReserved,
       durable_consumed: newConsumed,
       active_actual: cur.active_actual,
       known: cur.known,
@@ -1485,9 +1699,9 @@ function handleReconciliation(state, event, payload) {
   };
 }
 
-function handleCeilingAdjust(state, event, payload) {
+function handleCeilingAdjust(state, event, payload, sanitizedControlEvent) {
   // payload is a normalized control event
-  const ce = payload.event || event; // tolerate both
+  const ce = sanitizedControlEvent || payload.event || event; // tolerate both
   const semantic = authorizeCeilingAdjust(ce);
   if (!semantic.ok) {
     return rejection(state, event, semantic.reason);
@@ -1537,8 +1751,8 @@ function handleCeilingAdjust(state, event, payload) {
   };
 }
 
-function handleControlEvent(state, event, payload) {
-  const ce = payload.event || event;
+function handleControlEvent(state, event, payload, sanitizedControlEvent) {
+  const ce = sanitizedControlEvent || payload.event || event;
   if (!CONTROL_ACTION_SET.has(ce.action)) {
     return rejection(state, event, 'effect_class_not_allowlisted');
   }
@@ -1581,7 +1795,7 @@ function handleControlEvent(state, event, payload) {
     nextState = Object.freeze({ ...appendEvent(state, event), state: 'CLOSING', control_sequence: ce.sequence });
   } else if (ce.action === 'ceiling_adjust') {
     // Delegate to ceiling adjust semantics
-    return handleCeilingAdjust(state, event, payload);
+    return handleCeilingAdjust(state, event, payload, sanitizedControlEvent);
   }
   return {
     state: nextState,
@@ -1899,24 +2113,15 @@ function buildProjection(state, sourceRefs = []) {
   );
   // Embed the Mission contract (minus non-secret config fields) so a
   // fresh root context can resume with identical admission/control
-  // semantics. The contract body is content-bound via `contract_digest`
-  // so a tampered config is detected on restore.
+  // semantics. The contract body is content-bound via the
+  // state-owned `config_digest` so a tampered config is detected on
+  // restore. The digest is the single binding between the state hash
+  // and the config that produced it — recomputing the outer
+  // `projection_digest` after a config swap does not fool the binding
+  // check, because the restored state's hash (which depends on
+  // `config_digest`) will not match.
   const configSnapshot = deepClone(state.config);
-  const contractDigest = sha256(canonicalJson({
-    mission_lineage_id: state.mission_lineage_id,
-    task_authority_id: state.task_authority_id,
-    policy_hash: state.policy_hash,
-    enforcement_mode: state.enforcement_mode,
-    closure_ratio: state.closure_ratio,
-    max_stagnant_campaigns: state.max_stagnant_campaigns,
-    successor_inherits_durable_consumed: state.successor_inherits_durable_consumed,
-    red_lines: state.red_lines,
-    axes: perAxis,
-    grant_contract: configSnapshot.grant_contract,
-    control_contract: configSnapshot.control_contract,
-    lineage_binding: configSnapshot.lineage_binding,
-    config_provenance: state.config_provenance,
-  }));
+  const contractDigest = state.config_digest;
   const body = {
     schema_version: MISSION_SCHEMA_VERSION,
     artifact_type: 'mission_projection',
@@ -1945,7 +2150,7 @@ function buildProjection(state, sourceRefs = []) {
       evidence_ref_digest: e.event_digest,
       evidence_state: 'known',
     })),
-    source_refs: sourceRefs,
+    source_refs: validateSourceRefs(sourceRefs, 'projection.source_refs'),
     // digest-bound snapshot of the live state
     state_snapshot: {
       machine_state: state.state,
@@ -2018,25 +2223,53 @@ function restoreProjection(projection) {
   if (head.head_digest !== expectedHeadDigest) {
     fail('ordered_event_head.head_digest does not match the head events', 'PROJECTION_HEAD_DIGEST_MISMATCH');
   }
+  // Per-entry source ref digest validation. The refs are bound into the
+  // outer projection_digest, but a caller who re-issues a fresh digest
+  // around a tampered ref would otherwise slip through. Re-validating
+  // each ref independently — and rejecting malformed, duplicate, or
+  // recomputed-content-mismatch refs — closes that gap.
+  validateSourceRefs(projection.source_refs, 'projection.source_refs');
   // The projection carries a digest-bound config. A tampered config is
-  // detected before any reducer is invoked.
+  // detected before any reducer is invoked. The recomputed digest is the
+  // same `computeConfigDigest` formula used at `createMissionState`; both
+  // the projection's `config_digest` and the restored state's hash (which
+  // depends on `config_digest`) must match. Recomputing only the outer
+  // `projection_digest` after a config swap is not enough: the restored
+  // state's `config_digest` and `state_hash` will diverge.
   const configSnapshot = requireObject(projection.config_snapshot, 'projection.config_snapshot');
   const perAxis = requireObject(projection.state_snapshot, 'projection.state_snapshot').axes;
-  const expectedConfigDigest = sha256(canonicalJson({
-    mission_lineage_id: projection.mission_lineage_id,
-    task_authority_id: projection.task_authority_id,
-    policy_hash: projection.policy_hash,
-    enforcement_mode: projection.enforcement_mode,
-    closure_ratio: projection.closure_ratio,
-    max_stagnant_campaigns: projection.max_stagnant_campaigns,
-    successor_inherits_durable_consumed: projection.successor_inherits_durable_consumed,
-    red_lines: projection.red_lines,
-    axes: perAxis,
+  // Validate config shape: every field that the create-time digest covers
+  // must be present (or a defaulted value is filled in by the snapshot
+  // itself). Cross-field lineage/task/policy bindings are checked here
+  // so a tampered config that passes `computeConfigDigest` for
+  // individual fields is still rejected on the binding check.
+  const reconstructedConfig = {
+    schema_version: configSnapshot.schema_version,
+    artifact_type: configSnapshot.artifact_type,
+    contract_id: configSnapshot.contract_id,
+    repo_identity: configSnapshot.repo_identity,
+    mission_lineage_id: configSnapshot.mission_lineage_id,
+    task_authority_id: configSnapshot.task_authority_id,
+    policy_hash: configSnapshot.policy_hash,
+    enforcement_mode: configSnapshot.enforcement_mode,
+    state: configSnapshot.contract_state,
+    closure_ratio: configSnapshot.closure_ratio,
+    max_stagnant_campaigns: configSnapshot.max_stagnant_campaigns,
+    red_lines: configSnapshot.red_lines || [],
+    axes: configSnapshot.axes,
     grant_contract: configSnapshot.grant_contract,
     control_contract: configSnapshot.control_contract,
     lineage_binding: configSnapshot.lineage_binding,
-    config_provenance: configSnapshot.provenance,
-  }));
+  };
+  // Cross-field lineage/task/policy binding check.
+  if (reconstructedConfig.lineage_binding.task_authority_id !== reconstructedConfig.task_authority_id) {
+    fail('config lineage_binding.task_authority_id does not match task_authority_id', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (reconstructedConfig.lineage_binding.policy_hash !== reconstructedConfig.policy_hash) {
+    fail('config lineage_binding.policy_hash does not match policy_hash', 'PROJECTION_BINDING_MISMATCH');
+  }
+  const reconstructedProvenance = configSnapshot.provenance || {};
+  const expectedConfigDigest = computeConfigDigest(reconstructedConfig, reconstructedProvenance);
   if (projection.config_digest !== expectedConfigDigest) {
     fail('config_digest does not match projection config_snapshot', 'PROJECTION_CONFIG_DIGEST_MISMATCH');
   }
@@ -2151,6 +2384,12 @@ function restoreProjection(projection) {
       provenance: deepClone(configSnapshot.provenance),
     }),
     config_provenance: deepFreeze(deepClone(configSnapshot.provenance)),
+    // The restored state's config_digest is the SAME digest the projection
+    // bound (verified above). It is what `stateHash` then binds into the
+    // canonical state hash; any future mutation of the projection's
+    // config_snapshot (without re-running the digest) produces a state
+    // whose state_hash cannot match the original projection's state_hash.
+    config_digest: projection.config_digest,
     red_lines: Object.freeze(projection.red_lines || []),
   });
   validateMissionState(restored);
@@ -2961,12 +3200,15 @@ module.exports = {
   REJECTION_REASONS_MISSION,
   REJECTION_REASON_SET,
   RESOURCE_AXES,
+  SOURCE_REF_KINDS,
   SUPPORTED_AXES,
   TERMINAL_STATES,
   buildProjection,
   canonicalJson,
   claimIdFor,
   computeAxisBudget,
+  computeConfigDigest,
+  computeSourceRefDigest,
   createMissionState,
   evaluateConfig,
   evaluateIdentityReset,
@@ -2978,6 +3220,8 @@ module.exports = {
   sha256,
   stateHash,
   validateMissionContract,
+  validateSourceRef,
+  validateSourceRefs,
   // legacy exports retained for callers
   evaluateClaimSequence: () => { fail('evaluateClaimSequence is deprecated; use createMissionState + reduceMissionState'); },
   evaluateClosureRatio: () => { fail('evaluateClosureRatio is deprecated; use closure_evaluated event'); },

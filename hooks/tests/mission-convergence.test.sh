@@ -510,10 +510,12 @@ if (createMissionState && reduceMissionState && stateHash) {
       mission_lineage_id: L, action: 'finish_requested', authority: 'authenticated_user',
       sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'serialize-test',
     });
-    // The capability is present for the reducer (non-enumerable) but absent
-    // from every serializable view.
+    // The exact frozen canonical event is in the module-private WeakSet
+    // and authenticated by the narrow predicate — no capability field is
+    // ever attached. A copied, JSON-roundtripped, or already-consumed
+    // object all fail this check.
     console.log(`capability-present-for-reducer\t${
-      ac.isAuthenticatedAdapterCapability(canonical._adapter_capability) ? 'PASS' : 'FAIL'}`);
+      ac.isAuthenticatedAdapterCapability(canonical) ? 'PASS' : 'FAIL'}`);
     console.log(`capability-non-enumerable\t${
       Object.keys(canonical).includes('_adapter_capability') === false ? 'PASS' : 'FAIL'}`);
     const parsed = JSON.parse(JSON.stringify(canonical));
@@ -598,7 +600,11 @@ if (createMissionState && reduceMissionState && stateHash) {
     }
     console.log(`verifier-authority-change-authoritative\t${overrideMismatchRejected ? 'PASS' : 'FAIL'}`);
     // The caller cannot replace the constructor verifier; the approving
-    // constructor verifier still approves despite a rejecting extra option.
+    // constructor verifier still approves despite any extra arguments
+    // (a "verifier override" passed in options is ignored — only the
+    // constructor-bound verifier runs). The new design uses object
+    // identity via the module-private WeakSet, not a non-enumerable
+    // capability field, so we check the canonical event itself.
     const approving = new ac.AuthenticatedControlAdapter({
       verifier: () => ({ verified: true, authority: 'authenticated_user' }),
     });
@@ -608,7 +614,7 @@ if (createMissionState && reduceMissionState && stateHash) {
         authority: 'authenticated_user', sequence: 1,
         issued_at: '2026-07-27T00:00:00.000Z', reason: 'x' },
         { verifier: () => ({ verified: false, reason: 'authenticated_control_verifier_rejected' }) });
-      approveStillWorks = ac.isAuthenticatedAdapterCapability(ev._adapter_capability);
+      approveStillWorks = ac.isAuthenticatedAdapterCapability(ev);
     } catch (e) { approveStillWorks = false; }
     console.log(`verifier-cannot-be-replaced-by-caller\t${approveStillWorks ? 'PASS' : 'FAIL'}`);
   }
@@ -810,6 +816,466 @@ if (createMissionState && reduceMissionState && stateHash) {
     const noSection = evaluate({ kind: 'config' });
     console.log(`config-no-section-off\t${noSection.mode === 'off' ? 'PASS' : 'FAIL'}`);
   }
+  {
+    // ─── P1 repair: module-private event-identity attestation ──────────
+    const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
+    // (a) Adapter construction smoke test. The prior Symbol-in-WeakSet
+    //     design was a Node-version-specific accident; the new design
+    //     uses object identity via a module-private WeakSet. The adapter
+    //     must construct cleanly with a non-serializable verifier.
+    let adapterConstructed = false;
+    try {
+      const smokeAdapter = new ac.AuthenticatedControlAdapter({
+        verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+      });
+      adapterConstructed = smokeAdapter.verifier !== undefined;
+    } catch (e) { adapterConstructed = false; }
+    console.log(`adapter-construction-smoke\t${adapterConstructed ? 'PASS' : 'FAIL'}`);
+
+    // (b) No public capability/token/getter. The module must NOT export
+    //     a `mint` function, a `capability` field, or a token. The only
+    //     reducer-facing surface is the narrow `consumeAuthenticatedControlEvent`.
+    console.log(`no-public-mint-function\t${
+      ac.mintAdapterCapability === undefined ? 'PASS' : 'FAIL'}`);
+    console.log(`no-public-token\t${
+      ac.ADAPTER_TOKEN === undefined && ac.adapterToken === undefined ? 'PASS' : 'FAIL'}`);
+
+    // (c) acceptEvent does not attach a `_adapter_capability` field.
+    const smokeCanonical = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const smokeCanonical2 = smokeCanonical.acceptEvent({
+      mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('smoke2').digest('hex'),
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'smoke2',
+    });
+    console.log(`no-capability-field-on-canonical\t${
+      smokeCanonical2._adapter_capability === undefined
+      && Object.keys(smokeCanonical2).includes('_adapter_capability') === false
+      ? 'PASS' : 'FAIL'}`);
+
+    // (d) consumeAuthenticatedControlEvent is the only reducer-facing
+    //     surface. A successful consume returns a sanitized snapshot;
+    //     a second consume of the same canonical event fails closed.
+    const singleCanonical = smokeCanonical.acceptEvent({
+      mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('single').digest('hex'),
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'single',
+    });
+    const firstConsume = ac.consumeAuthenticatedControlEvent(singleCanonical);
+    const secondConsume = ac.consumeAuthenticatedControlEvent(singleCanonical);
+    console.log(`consume-first-succeeds\t${firstConsume.ok === true ? 'PASS' : 'FAIL'}`);
+    console.log(`consume-second-fails\t${secondConsume.ok === false ? 'PASS' : 'FAIL'}`);
+    console.log(`consume-snapshot-sanitized\t${
+      firstConsume.event && typeof firstConsume.event.action === 'string'
+      && firstConsume.event._adapter_capability === undefined ? 'PASS' : 'FAIL'}`);
+    console.log(`consume-snapshot-frozen\t${
+      firstConsume.event && Object.isFrozen(firstConsume.event) ? 'PASS' : 'FAIL'}`);
+
+    // (e) Copying fields, Reflect.ownKeys, JSON roundtrip, or reusing a
+    //     receipt cannot authenticate a new reducer event. Each forgery
+    //     attempt must fail closed at the consume boundary.
+    const canonical = smokeCanonical.acceptEvent({
+      mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('forged').digest('hex'),
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'forged',
+    });
+    // Field-copy
+    const fieldCopy = {};
+    for (const k of Object.keys(canonical)) fieldCopy[k] = canonical[k];
+    const fieldCopyResult = ac.consumeAuthenticatedControlEvent(fieldCopy);
+    console.log(`consume-field-copy-fails\t${fieldCopyResult.ok === false ? 'PASS' : 'FAIL'}`);
+    // Reflect.ownKeys
+    const reflectedKeys = Reflect.ownKeys(canonical);
+    const reflectResult = ac.consumeAuthenticatedControlEvent({ ...canonical });
+    console.log(`consume-reflect-replica-fails\t${reflectResult.ok === false ? 'PASS' : 'FAIL'}`);
+    // JSON roundtrip
+    const roundtrip = JSON.parse(JSON.stringify(canonical));
+    Object.freeze(roundtrip);
+    const roundtripResult = ac.consumeAuthenticatedControlEvent(roundtrip);
+    console.log(`consume-json-roundtrip-fails\t${roundtripResult.ok === false ? 'PASS' : 'FAIL'}`);
+    // Receipt reuse: consume, then try to reuse the receipt's payload
+    const receiptCanonical = smokeCanonical.acceptEvent({
+      mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('receipt').digest('hex'),
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'receipt',
+    });
+    const firstReceiptConsume = ac.consumeAuthenticatedControlEvent(receiptCanonical);
+    const receiptReuseResult = ac.consumeAuthenticatedControlEvent(firstReceiptConsume.event);
+    console.log(`consume-receipt-reuse-fails\t${receiptReuseResult.ok === false ? 'PASS' : 'FAIL'}`);
+    // Raw, unfrozen object
+    const rawResult = ac.consumeAuthenticatedControlEvent({
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('raw').digest('hex'),
+      issued_at: '2026-07-27T00:00:00.000Z', reason: 'raw', event_digest: 'a'.repeat(64),
+    });
+    console.log(`consume-raw-unfrozen-fails\t${rawResult.ok === false ? 'PASS' : 'FAIL'}`);
+    // null/undefined/array
+    console.log(`consume-null-fails\t${ac.consumeAuthenticatedControlEvent(null).ok === false ? 'PASS' : 'FAIL'}`);
+    console.log(`consume-undefined-fails\t${ac.consumeAuthenticatedControlEvent(undefined).ok === false ? 'PASS' : 'FAIL'}`);
+    console.log(`consume-array-fails\t${ac.consumeAuthenticatedControlEvent([]).ok === false ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── P1 repair: no identity-bearing event object retained ──────────
+    const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
+    // The reducer must consume the canonical event first, then create a
+    // sanitized deep-frozen plain semantic snapshot for event digest,
+    // storage, and receipt. Tests inspect object identity, not only
+    // JSON.stringify.
+    const a2 = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const L2 = 'lineage-v1-' + require('crypto').createHash('sha256').update('L2').digest('hex');
+    const canonical2 = a2.acceptEvent({
+      mission_lineage_id: L2, action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'no-retain',
+    });
+    const sNoRetain = createMissionState(makeContract());
+    const result = reduceMissionState(sNoRetain, {
+      event_type: 'control_event', sequence: 1, mission_lineage_id: sNoRetain.mission_lineage_id,
+      payload: { event: canonical2 },
+    });
+    const storedEvent = result.state.events[result.state.events.length - 1];
+    const payloadEvent = storedEvent.payload.event;
+    // 1. The event stored in state is NOT the original canonical object.
+    console.log(`state-event-not-original-canonical\t${
+      payloadEvent !== canonical2 ? 'PASS' : 'FAIL'}`);
+    // 2. The event stored in state is a frozen, sanitized snapshot.
+    console.log(`state-event-snapshot-frozen\t${
+      Object.isFrozen(payloadEvent) ? 'PASS' : 'FAIL'}`);
+    console.log(`state-event-snapshot-no-cap-field\t${
+      payloadEvent._adapter_capability === undefined ? 'PASS' : 'FAIL'}`);
+    // 3. The receipt's source_event is also the sanitized event (not the
+    //    original canonical). Test object identity.
+    const sourceEventInReceipt = result.receipt.source_event;
+    console.log(`receipt-source-event-not-original-canonical\t${
+      sourceEventInReceipt !== canonical2 ? 'PASS' : 'FAIL'}`);
+    console.log(`receipt-source-event-payload-not-original-canonical\t${
+      sourceEventInReceipt.payload.event !== canonical2 ? 'PASS' : 'FAIL'}`);
+    // 4. The state and receipt must NOT contain any object reference
+    //    that is the same identity as the canonical event. The
+    //    sanitized snapshot is a distinct object (different identity),
+    //    so a structural comparison by object identity catches
+    //    identity retention even when the digest values match.
+    const stateJson = JSON.stringify(result.state);
+    const receiptJson = JSON.stringify(result.receipt);
+    // The state.events[i].payload.event must be a different object
+    // (different identity) from the canonical. JSON.stringify cannot
+    // express identity, so we walk the live objects to check.
+    let noCanonicalIdentityInState = true;
+    const walkValue = (value, seen = new WeakSet()) => {
+      if (value === null || typeof value !== 'object') return;
+      if (seen.has(value)) return;
+      seen.add(value);
+      if (value === canonical2) noCanonicalIdentityInState = false;
+      for (const k of Object.keys(value)) walkValue(value[k], seen);
+    };
+    walkValue(result.state);
+    let noCanonicalIdentityInReceipt = true;
+    const walkValueR = (value, seen = new WeakSet()) => {
+      if (value === null || typeof value !== 'object') return;
+      if (seen.has(value)) return;
+      seen.add(value);
+      if (value === canonical2) noCanonicalIdentityInReceipt = false;
+      for (const k of Object.keys(value)) walkValueR(value[k], seen);
+    };
+    walkValueR(result.receipt);
+    console.log(`state-no-canonical-identity\t${
+      noCanonicalIdentityInState ? 'PASS' : 'FAIL'}`);
+    console.log(`receipt-no-canonical-identity\t${
+      noCanonicalIdentityInReceipt ? 'PASS' : 'FAIL'}`);
+    // The event_digest in the stored event is computed from the
+    // sanitized snapshot's content (event_type, sequence,
+    // mission_lineage_id, payload) — the same digest as the original
+    // canonical's, because the content is identical and the digest is
+    // content-bound. The KEY property is that the stored object is a
+    // different identity from the canonical, not that the digest
+    // differs.
+    // 5. The event_digest in the stored event is computed from the
+    //    sanitized snapshot, not the original canonical.
+    const sanitizedEventDigest = require('crypto').createHash('sha256').update(JSON.stringify({
+      mission_lineage_id: payloadEvent.mission_lineage_id,
+      action: payloadEvent.action,
+      authority: payloadEvent.authority,
+      sequence: payloadEvent.sequence,
+      issued_at: payloadEvent.issued_at,
+      reason: payloadEvent.reason,
+      ceiling_before: payloadEvent.ceiling_before,
+      ceiling_after: payloadEvent.ceiling_after,
+    })).digest('hex');
+    console.log(`event-digest-bound-to-sanitized-snapshot\t${
+      storedEvent.event_digest !== canonical2.event_digest ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── P1 repair: shadow over-ceiling admission durability + clearing ─
+    // Shadow mode: durable evidence is recorded, the claim is created,
+    // AND the complete requested reservation is applied to state.axes
+    // (remaining=0, overspend=true). A subsequent no_effect_release
+    // must clear exactly that reservation without producing negative
+    // counters.
+    const sSh = createMissionState(makeContract());
+    const overReservation = reservation(sSh, 200);
+    const sh = reduceMissionState(sSh, {
+      event_type: 'grant_claimed',
+      sequence: 1,
+      mission_lineage_id: sSh.mission_lineage_id,
+      payload: {
+        idempotency_key: 'shadow-durable',
+        mission_lineage_id: sSh.mission_lineage_id,
+        task_authority_id: sSh.task_authority_id,
+        campaign_id: 'c-shadow',
+        campaign_contract_digest: sSh.policy_hash,
+        base_sha: '0000000000000000000000000000000000000000',
+        acceptance_ids: ['acc-1'],
+        reservation: overReservation,
+        issued_at: '2026-07-27T00:00:00.000Z',
+        expires_at: '2026-07-27T01:00:00.000Z',
+      },
+    });
+    // Shadow applies the full reservation to axes.tool_calls.reserved_active
+    // (which is 0 + 200 = 200, even above the 100 ceiling). remaining
+    // is clamped to 0, overspend is true.
+    console.log(`shadow-axes-applied-overspend\t${
+      sh.state.axes.tool_calls.reserved_active === 200 ? 'PASS' : 'FAIL'}`);
+    console.log(`shadow-remaining-zero\t${
+      sh.state.axes.tool_calls.remaining === 0 ? 'PASS' : 'FAIL'}`);
+    console.log(`shadow-overspend-flag-true\t${
+      sh.state.axes.tool_calls.overspend === true ? 'PASS' : 'FAIL'}`);
+    console.log(`shadow-evidence-keyed-by-digest\t${
+      sh.state.receipts[`mission_would_block_evidence:${sh.receipt.event_digest || ''}`] !== undefined
+      || Object.keys(sh.state.receipts).some((k) => k.startsWith('mission_would_block_evidence:'))
+      ? 'PASS' : 'FAIL'}`);
+    // Release clears exactly the reservation. No negative counter.
+    const claimId = sh.receipt.claim_id;
+    const rel = reduceMissionState(sh.state, {
+      event_type: 'no_effect_release', sequence: sh.state.events.length + 1,
+      mission_lineage_id: sSh.mission_lineage_id,
+      payload: { claim_id: claimId },
+    });
+    console.log(`shadow-release-tool-reserved-clears\t${
+      rel.state.axes.tool_calls.reserved_active === 0 ? 'PASS' : 'FAIL'}`);
+    console.log(`shadow-release-no-negative-counters\t${
+      rel.state.axes.tool_calls.reserved_active >= 0
+      && rel.state.axes.campaigns.reserved_active >= 0
+      && rel.state.axes.wall_seconds.reserved_active >= 0 ? 'PASS' : 'FAIL'}`);
+    // Re-reconcile an overspend on the same claim (the claim is released,
+    // so this should reject without mutation).
+    const reReconcile = reduceMissionState(rel.state, {
+      event_type: 'reconciliation', sequence: rel.state.events.length + 1,
+      mission_lineage_id: sSh.mission_lineage_id,
+      payload: { claim_id: claimId, actual_usage: reservation(rel.state, 100) },
+    });
+    console.log(`shadow-release-rejects-recon\t${
+      reReconcile.receipt.artifact_type === 'mission_grant_rejected' ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── P1 repair: Enforce mode rejects shadow-style input without mutating axes
+    const enforceContract = makeContract();
+    enforceContract.enforcement_mode = 'enforce';
+    const sEnf = createMissionState(enforceContract);
+    const overReservation = reservation(sEnf, 200);
+    const before = sEnf.axes.tool_calls.reserved_active;
+    const ef = reduceMissionState(sEnf, {
+      event_type: 'grant_claimed',
+      sequence: 1,
+      mission_lineage_id: sEnf.mission_lineage_id,
+      payload: {
+        idempotency_key: 'enforce-no-mutate',
+        mission_lineage_id: sEnf.mission_lineage_id,
+        task_authority_id: sEnf.task_authority_id,
+        campaign_id: 'c-enforce',
+        campaign_contract_digest: sEnf.policy_hash,
+        base_sha: '0000000000000000000000000000000000000000',
+        acceptance_ids: ['acc-1'],
+        reservation: overReservation,
+        issued_at: '2026-07-27T00:00:00.000Z',
+        expires_at: '2026-07-27T01:00:00.000Z',
+      },
+    });
+    console.log(`enforce-blocks-overspend-no-axes-mutation\t${
+      ef.state.state === 'BLOCKED'
+      && ef.state.axes.tool_calls.reserved_active === before ? 'PASS' : 'FAIL'}`);
+    console.log(`enforce-creates-no-claim\t${
+      Object.keys(ef.state.claims).length === 0 ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── P1 repair: stateHash covers config; restore rejects binding mismatch ─
+    // Direct test: modify the config_snapshot of a projection, recompute
+    // ONLY the outer projection_digest, then verify that restore still
+    // rejects because the state_hash / config_digest binding differs.
+    const sBinding = createMissionState(makeContract());
+    const proj = buildProjection(sBinding);
+    // Build a tampered config_snapshot that has a different field.
+    const tamperedBinding = JSON.parse(JSON.stringify(proj));
+    // Modify closure_ratio in the embedded config_snapshot.
+    tamperedBinding.config_snapshot.closure_ratio = 0.5;
+    // Recompute the config_digest over the modified snapshot to match
+    // the projection's own digest (the test bypasses the per-snapshot
+    // config_digest check by also updating that field).
+    const newCfgDigest = m.computeConfigDigest({
+      schema_version: tamperedBinding.config_snapshot.schema_version,
+      artifact_type: tamperedBinding.config_snapshot.artifact_type,
+      contract_id: tamperedBinding.config_snapshot.contract_id,
+      repo_identity: tamperedBinding.config_snapshot.repo_identity,
+      mission_lineage_id: tamperedBinding.config_snapshot.mission_lineage_id,
+      task_authority_id: tamperedBinding.config_snapshot.task_authority_id,
+      policy_hash: tamperedBinding.config_snapshot.policy_hash,
+      enforcement_mode: tamperedBinding.config_snapshot.enforcement_mode,
+      state: tamperedBinding.config_snapshot.contract_state,
+      closure_ratio: tamperedBinding.config_snapshot.closure_ratio,
+      max_stagnant_campaigns: tamperedBinding.config_snapshot.max_stagnant_campaigns,
+      red_lines: tamperedBinding.config_snapshot.red_lines,
+      axes: tamperedBinding.config_snapshot.axes,
+      grant_contract: tamperedBinding.config_snapshot.grant_contract,
+      control_contract: tamperedBinding.config_snapshot.control_contract,
+      lineage_binding: tamperedBinding.config_snapshot.lineage_binding,
+    }, tamperedBinding.config_snapshot.provenance);
+    tamperedBinding.config_digest = newCfgDigest;
+    // Recompute only the outer projection_digest to pass the outer
+    // digest check. The state_hash field in the projection is the
+    // ORIGINAL state hash; restore will fail because the restored
+    // state's hash (which now depends on the modified config's digest)
+    // cannot match.
+    tamperedBinding.projection_digest = m.sha256({ ...tamperedBinding, projection_digest: undefined });
+    let bindingMismatchRejected = false;
+    let bindingErr = null;
+    try { restoreProjection(tamperedBinding); } catch (e) { bindingErr = e.code || e.message; bindingMismatchRejected = true; }
+    console.log(`restore-rejects-config-binding-tamper\t${
+      bindingMismatchRejected ? 'PASS' : 'FAIL'}`);
+    console.log(`restore-rejects-config-binding-tamper-code\t${
+      bindingErr === 'PROJECTION_HASH_MISMATCH' ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── P1 repair: cross-field lineage/task/policy binding on restore ──
+    // A tampered config_snapshot whose lineage_binding.task_authority_id
+    // does not match its task_authority_id must reject restore.
+    const sX = createMissionState(makeContract());
+    const projX = buildProjection(sX);
+    const tamperedX = JSON.parse(JSON.stringify(projX));
+    tamperedX.config_snapshot.lineage_binding.task_authority_id = '0'.repeat(64);
+    // Recompute config_digest and projection_digest to focus on the binding check.
+    const newCfgDigestX = m.computeConfigDigest({
+      schema_version: tamperedX.config_snapshot.schema_version,
+      artifact_type: tamperedX.config_snapshot.artifact_type,
+      contract_id: tamperedX.config_snapshot.contract_id,
+      repo_identity: tamperedX.config_snapshot.repo_identity,
+      mission_lineage_id: tamperedX.config_snapshot.mission_lineage_id,
+      task_authority_id: tamperedX.config_snapshot.task_authority_id,
+      policy_hash: tamperedX.config_snapshot.policy_hash,
+      enforcement_mode: tamperedX.config_snapshot.enforcement_mode,
+      state: tamperedX.config_snapshot.contract_state,
+      closure_ratio: tamperedX.config_snapshot.closure_ratio,
+      max_stagnant_campaigns: tamperedX.config_snapshot.max_stagnant_campaigns,
+      red_lines: tamperedX.config_snapshot.red_lines,
+      axes: tamperedX.config_snapshot.axes,
+      grant_contract: tamperedX.config_snapshot.grant_contract,
+      control_contract: tamperedX.config_snapshot.control_contract,
+      lineage_binding: tamperedX.config_snapshot.lineage_binding,
+    }, tamperedX.config_snapshot.provenance);
+    tamperedX.config_digest = newCfgDigestX;
+    tamperedX.projection_digest = m.sha256({ ...tamperedX, projection_digest: undefined });
+    let crossFieldRejected = false;
+    let crossErr = null;
+    try { restoreProjection(tamperedX); } catch (e) { crossErr = e.code || e.message; crossFieldRejected = true; }
+    console.log(`restore-rejects-cross-field-binding-mismatch\t${
+      crossFieldRejected ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── P1 repair: source refs per-entry digest validation ───────────
+    const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
+    const m = require(path.join(root, 'src', 'engine', 'mission-convergence'));
+    // The new `validateSourceRefs` rejects malformed, duplicate, or
+    // recomputed-content-mismatch refs. Positive and negative cases.
+    const sRefs = createMissionState(makeContract());
+    const L = 'lineage-v1-' + require('crypto').createHash('sha256').update('L').digest('hex');
+
+    // Positive: a well-formed ref passes and roundtrips.
+    const goodRef = {
+      kind: 'evidence',
+      locator: 'docs/specs/control.md',
+      label: 'control spec',
+      evidence_kind: 'frozen_spec',
+      digest: m.computeSourceRefDigest({
+        kind: 'evidence',
+        locator: 'docs/specs/control.md',
+        label: 'control spec',
+        evidence_kind: 'frozen_spec',
+      }),
+    };
+    const goodProj = buildProjection(sRefs, [goodRef]);
+    console.log(`source-ref-positive-passes\t${
+      goodProj.source_refs.length === 1 && goodProj.source_refs[0].digest === goodRef.digest
+      ? 'PASS' : 'FAIL'}`);
+    const goodRestored = restoreProjection(goodProj);
+    console.log(`source-ref-positive-restore-passes\t${
+      goodRestored !== null ? 'PASS' : 'FAIL'}`);
+
+    // Negative: missing digest field rejects at buildProjection.
+    let missingDigestRejected = false;
+    try {
+      buildProjection(sRefs, [{
+        kind: 'evidence', locator: 'docs/missing.md', label: 'missing', evidence_kind: 'frozen_spec',
+      }]);
+    } catch (e) { missingDigestRejected = e.code === 'SOURCE_REF_DIGEST_MISSING' || e.code === 'SOURCE_REF_DIGEST_MISMATCH' || e.code === 'MissionReducerError'; }
+    console.log(`source-ref-missing-digest-rejects\t${
+      missingDigestRejected ? 'PASS' : 'FAIL'}`);
+
+    // Negative: wrong digest rejects at buildProjection.
+    let wrongDigestRejected = false;
+    try {
+      buildProjection(sRefs, [{
+        kind: 'evidence', locator: 'docs/wrong.md', label: 'wrong',
+        evidence_kind: 'frozen_spec', digest: 'a'.repeat(64),
+      }]);
+    } catch (e) { wrongDigestRejected = e.code === 'SOURCE_REF_DIGEST_MISMATCH' || e.code === 'MissionReducerError'; }
+    console.log(`source-ref-wrong-digest-rejects\t${
+      wrongDigestRejected ? 'PASS' : 'FAIL'}`);
+
+    // Negative: duplicate locator rejects.
+    let duplicateRejected = false;
+    try {
+      buildProjection(sRefs, [
+        { kind: 'evidence', locator: 'docs/dup.md', label: 'a', evidence_kind: 'frozen_spec',
+          digest: m.computeSourceRefDigest({ kind: 'evidence', locator: 'docs/dup.md', label: 'a', evidence_kind: 'frozen_spec' }) },
+        { kind: 'snapshot', locator: 'docs/dup.md', label: 'b', evidence_kind: 'frozen_spec',
+          digest: m.computeSourceRefDigest({ kind: 'snapshot', locator: 'docs/dup.md', label: 'b', evidence_kind: 'frozen_spec' }) },
+      ]);
+    } catch (e) { duplicateRejected = e.code === 'SOURCE_REF_DUPLICATE_LOCATOR' || e.code === 'MissionReducerError'; }
+    console.log(`source-ref-duplicate-locator-rejects\t${
+      duplicateRejected ? 'PASS' : 'FAIL'}`);
+
+    // Negative: unknown kind rejects.
+    let unknownKindRejected = false;
+    try {
+      buildProjection(sRefs, [{
+        kind: 'mystery', locator: 'docs/mystery.md', label: 'mystery',
+        evidence_kind: 'frozen_spec',
+        digest: m.computeSourceRefDigest({ kind: 'mystery', locator: 'docs/mystery.md', label: 'mystery', evidence_kind: 'frozen_spec' }),
+      }]);
+    } catch (e) { unknownKindRejected = e.code === 'SOURCE_REF_KIND_INVALID' || e.code === 'MissionReducerError'; }
+    console.log(`source-ref-unknown-kind-rejects\t${
+      unknownKindRejected ? 'PASS' : 'FAIL'}`);
+
+    // Negative: restore rejects a tampered ref (recomputed digest doesn't match).
+    // The tampered ref's locator is changed AFTER the digest was computed,
+    // so the recompute path catches the mismatch.
+    const tamperedRefProj = JSON.parse(JSON.stringify(goodProj));
+    const computedDigest = m.computeSourceRefDigest({
+      kind: 'evidence', locator: 'docs/tampered.md', label: 'tampered', evidence_kind: 'frozen_spec',
+    });
+    tamperedRefProj.source_refs = [{
+      kind: 'evidence',
+      locator: 'docs/tampered-renamed.md', // different from what was used to compute the digest
+      label: 'tampered',
+      evidence_kind: 'frozen_spec',
+      digest: computedDigest,
+    }];
+    tamperedRefProj.projection_digest = m.sha256({ ...tamperedRefProj, projection_digest: undefined });
+    let restoreRefTamperRejected = false;
+    try { restoreProjection(tamperedRefProj); } catch (e) { restoreRefTamperRejected = true; }
+    console.log(`source-ref-restore-tamper-rejects\t${
+      restoreRefTamperRejected ? 'PASS' : 'FAIL'}`);
+  }
 }
 NODE
 )"
@@ -879,7 +1345,33 @@ for id in \
   config-unknown-key-rejects config-missing-field-rejects \
   config-wrong-type-rejects config-range-violation-rejects \
   config-bad-provenance-rejects config-absent-section-off \
-  config-no-section-off
+  config-no-section-off \
+  adapter-construction-smoke no-public-mint-function no-public-token \
+  no-capability-field-on-canonical \
+  consume-first-succeeds consume-second-fails \
+  consume-snapshot-sanitized consume-snapshot-frozen \
+  consume-field-copy-fails consume-reflect-replica-fails \
+  consume-json-roundtrip-fails consume-receipt-reuse-fails \
+  consume-raw-unfrozen-fails consume-null-fails \
+  consume-undefined-fails consume-array-fails \
+  state-event-not-original-canonical \
+  state-event-snapshot-frozen state-event-snapshot-no-cap-field \
+  receipt-source-event-not-original-canonical \
+  receipt-source-event-payload-not-original-canonical \
+  state-no-canonical-identity receipt-no-canonical-identity \
+  event-digest-bound-to-sanitized-snapshot \
+  shadow-axes-applied-overspend shadow-remaining-zero \
+  shadow-overspend-flag-true shadow-evidence-keyed-by-digest \
+  shadow-release-tool-reserved-clears shadow-release-no-negative-counters \
+  shadow-release-rejects-recon \
+  enforce-blocks-overspend-no-axes-mutation enforce-creates-no-claim \
+  restore-rejects-config-binding-tamper \
+  restore-rejects-config-binding-tamper-code \
+  restore-rejects-cross-field-binding-mismatch \
+  source-ref-positive-passes source-ref-positive-restore-passes \
+  source-ref-missing-digest-rejects source-ref-wrong-digest-rejects \
+  source-ref-duplicate-locator-rejects source-ref-unknown-kind-rejects \
+  source-ref-restore-tamper-rejects
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

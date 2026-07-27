@@ -482,6 +482,29 @@ function replayCampaignBundle(bundle) {
   }), bundle.events);
 }
 
+function rebindTerminalLedger(bundle) {
+  bundle.events[bundle.events.length - 1].output_artifact_digest
+    = bundle.terminal_receipt.receipt_digest;
+  bundle.state = replayCampaignBundle(bundle);
+}
+
+function rebindVerificationLedger(bundle) {
+  const verticalIndex = bundle.events.findLastIndex(
+    (event) => event.event_type === icc.CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
+  );
+  bundle.events[verticalIndex].output_artifact_digest
+    = bundle.verification_receipt.receipt_digest;
+  bundle.events[verticalIndex].payload.evidence_digest
+    = bundle.verification_receipt.receipt_digest;
+  bundle.events[verticalIndex + 1].input_artifact_digest
+    = bundle.verification_receipt.receipt_digest;
+  bundle.terminal_receipt = redigest({
+    ...bundle.terminal_receipt,
+    verification_receipt_digest: bundle.verification_receipt.receipt_digest,
+  });
+  rebindTerminalLedger(bundle);
+}
+
 group('canonical-green', () => {
   const receipt = buildTaskStatus(makeInput(), makeAdapters());
   check('real-mission-terminal', receipt.mission_terminal === true);
@@ -530,14 +553,15 @@ group('durable-state-authority', () => {
   const rebound = clone(campaignBundle);
   rebound.state.last_output_artifact_digest = mission.sha256('substituted-terminal');
   const reboundResult = buildTaskStatus(makeInput({ campaigns: [rebound] }), makeAdapters());
-  check('icc-state-terminal-digest-substitution-rejected', reboundResult.acceptance_verdict === 'unknown');
+  check('icc-state-tamper-without-ledger-rejected',
+    reboundResult.acceptance_verdict === 'unknown');
 
   const mismatched = clone(campaignBundle);
   mismatched.terminal_receipt = redigest({
     ...mismatched.terminal_receipt,
     status: 'follow_up',
   });
-  mismatched.state.last_output_artifact_digest = mismatched.terminal_receipt.receipt_digest;
+  rebindTerminalLedger(mismatched);
   const mismatchResult = buildTaskStatus(makeInput({ campaigns: [mismatched] }), makeAdapters());
   check('icc-phase-terminal-status-mismatch-rejected', mismatchResult.acceptance_verdict === 'unknown');
 
@@ -554,11 +578,7 @@ group('durable-state-authority', () => {
     ...fenceSwap.verification_receipt,
     writer_fence_digest: mission.sha256('other-writer-fence'),
   });
-  fenceSwap.terminal_receipt = redigest({
-    ...fenceSwap.terminal_receipt,
-    verification_receipt_digest: fenceSwap.verification_receipt.receipt_digest,
-  });
-  fenceSwap.state.last_output_artifact_digest = fenceSwap.terminal_receipt.receipt_digest;
+  rebindVerificationLedger(fenceSwap);
   const fenceResult = buildTaskStatus(
     makeInput({ campaigns: [fenceSwap] }),
     makeAdapters(),
@@ -592,12 +612,7 @@ group('durable-state-authority', () => {
     started_at: '2026-07-27T00:00:04.000Z',
     ended_at: '2026-07-27T00:00:03.000Z',
   });
-  reversedTime.terminal_receipt = redigest({
-    ...reversedTime.terminal_receipt,
-    verification_receipt_digest: reversedTime.verification_receipt.receipt_digest,
-  });
-  reversedTime.state.last_output_artifact_digest
-    = reversedTime.terminal_receipt.receipt_digest;
+  rebindVerificationLedger(reversedTime);
   const reversedTimeResult = buildTaskStatus(
     makeInput({ campaigns: [reversedTime] }),
     makeAdapters(),
@@ -621,6 +636,20 @@ group('durable-state-authority', () => {
   );
   check('icc-terminal-receipt-digest-substitution-rejected',
     terminalDigestResult.acceptance_verdict === 'unknown');
+
+  const malformedFinding = clone(campaignBundle);
+  malformedFinding.terminal_receipt = redigest({
+    ...malformedFinding.terminal_receipt,
+    status: 'follow_up',
+    follow_up: [null],
+  });
+  rebindTerminalLedger(malformedFinding);
+  const malformedFindingResult = buildTaskStatus(
+    makeInput({ campaigns: [malformedFinding] }),
+    makeAdapters(),
+  );
+  check('icc-malformed-terminal-finding-rejected',
+    malformedFindingResult.acceptance_verdict === 'unknown');
 
   const overBudget = clone(campaignBundle);
   overBudget.state.usage.changed_files = overBudget.state.limits.max_changed_files + 1;
@@ -654,8 +683,7 @@ group('durable-state-authority', () => {
     ...repairCountDrift.terminal_receipt,
     repair_generations: 1,
   });
-  repairCountDrift.state.last_output_artifact_digest
-    = repairCountDrift.terminal_receipt.receipt_digest;
+  rebindTerminalLedger(repairCountDrift);
   const repairCountResult = buildTaskStatus(
     makeInput({ campaigns: [repairCountDrift] }),
     makeAdapters(),
@@ -932,8 +960,8 @@ assert_exit_code "$NODE_EXIT" "0" "LSM P1 real-artifact oracle passes"
 assert_not_contains "$(cat "$OUT_FILE")" $'\tFAIL' "every named LSM P1 invariant passes"
 assert_contains "$(cat "$OUT_FILE")" $'p1-can-close-false\tPASS' \
   "P1 never claims closeout while merge preflight is unknown"
-assert_contains "$(cat "$OUT_FILE")" $'icc-state-terminal-digest-substitution-rejected\tPASS' \
-  "durable ICC state is bound to the terminal receipt"
+assert_contains "$(cat "$OUT_FILE")" $'icc-state-tamper-without-ledger-rejected\tPASS' \
+  "durable ICC state is bound to replayed evidence"
 assert_contains "$(cat "$OUT_FILE")" $'lifecycle-contradictory-false-clean-unknown\tPASS' \
   "contradictory lifecycle evidence fails unknown"
 

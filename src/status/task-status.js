@@ -517,6 +517,62 @@ function validateTerminalReceipt(terminalReceipt) {
       || !terminalReceipt.trace.every((item) => typeof item === 'string' && item.length > 0)) {
     return { ok: false, reason: 'campaign_terminal_receipt_invalid' };
   }
+  const findingShapeValid = (item, classification) => {
+    if (!hasExactKeySet(item, [
+      'id', 'claim', 'severity', 'source', 'evidence',
+      'adjudication_authority', 'disposition',
+    ])
+        || typeof item.id !== 'string' || item.id.length === 0
+        || typeof item.claim !== 'string' || item.claim.length === 0
+        || !new Set(['🔴', '🟠', '🟡', '🔵']).has(item.severity)
+        || typeof item.source !== 'string' || item.source.length === 0
+        || !hasExactKeySet(item.evidence, ['classification', 'digest'])
+        || !new Set(['actionable', 'refuted']).has(item.evidence.classification)
+        || !isSha256(item.evidence.digest)
+        || !hasExactKeySet(
+          item.adjudication_authority,
+          ['authority', 'actor_id', 'review_digest'],
+        )
+        || !new Set(['depth-0', 'deterministic-policy'])
+          .has(item.adjudication_authority.authority)
+        || typeof item.adjudication_authority.actor_id !== 'string'
+        || item.adjudication_authority.actor_id.length === 0
+        || !isSha256(item.adjudication_authority.review_digest)) {
+      return false;
+    }
+    if (classification === 'follow_up') {
+      return hasExactKeySet(item.disposition, [
+        'disposition', 'context', 'trigger', 'proposed_backlog_title',
+      ])
+        && item.disposition.disposition === 'follow-up'
+        && ['context', 'trigger', 'proposed_backlog_title'].every(
+          (key) => typeof item.disposition[key] === 'string'
+            && item.disposition[key].length > 0,
+        );
+    }
+    if (classification === 'must_fix_now') {
+      return isPlainObject(item.disposition)
+        && item.disposition.disposition === 'must-fix-now'
+        && Object.keys(item.disposition).every((key) => (
+          new Set(['disposition', 'acceptance_id', 'deferral_harm']).has(key)
+        ));
+    }
+    if (item.evidence.classification === 'refuted') return item.disposition === null;
+    return isPlainObject(item.disposition)
+      && item.disposition.disposition === 'reject-out-of-scope'
+      && Object.keys(item.disposition).every((key) => (
+        new Set(['disposition', 'rationale']).has(key)
+      ));
+  };
+  if (!terminalReceipt.follow_up.every((item) => findingShapeValid(item, 'follow_up'))
+      || !terminalReceipt.unresolved_final_findings.every(
+        (item) => findingShapeValid(item, 'must_fix_now'),
+      )
+      || !terminalReceipt.rejected_findings.every(
+        (item) => findingShapeValid(item, 'rejected'),
+      )) {
+    return { ok: false, reason: 'campaign_terminal_findings_invalid' };
+  }
   const expectedDigest = campaignReceiptBodyDigest(terminalReceipt);
   if (!expectedDigest || terminalReceipt.receipt_digest !== expectedDigest) {
     return { ok: false, reason: 'campaign_terminal_digest_mismatch' };

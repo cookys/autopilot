@@ -86,13 +86,14 @@ function missionCampaignIdFor(repoIdentity, ticket, subjectDigest) {
   return `campaign-v2-${domainSha256(CAMPAIGN_ID_DOMAIN, encoded)}`;
 }
 
+/**
+ * v2 identity is explicit only. Never infer from campaign-id shape or digest
+ * field presence — silent promotion would accept caller-shaped legacy claims
+ * as mission-subject-v2.
+ */
 function isMissionSubjectV2Claim(claimOrPayload) {
   if (!isPlainObject(claimOrPayload)) return false;
-  if (claimOrPayload.identity_scheme === IDENTITY_SCHEME_V2) return true;
-  return typeof claimOrPayload.campaign_id === 'string'
-    && /^campaign-v2-[0-9a-f]{64}$/.test(claimOrPayload.campaign_id)
-    && (typeof claimOrPayload.mission_subject_digest === 'string'
-      || typeof claimOrPayload.campaign_contract_digest === 'string');
+  return claimOrPayload.identity_scheme === IDENTITY_SCHEME_V2;
 }
 
 function claimMissionSubjectDigest(claimOrPayload) {

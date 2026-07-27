@@ -1316,18 +1316,22 @@ function runCampaignIntake(input = {}, adapters = {}) {
       ));
     }
     if (missionClaim.status === 'claimed') {
-      if (typeof missionClaim.campaign_id === 'string'
-          && missionClaim.campaign_id.length > 0
-          && missionClaim.campaign_id !== v2CampaignId) {
+      // v2 seal: adapter result must carry exact nonempty campaign-v2 id and
+      // the seal's claim_id. Absent/empty is rejection, not compatibility.
+      if (typeof missionClaim.campaign_id !== 'string'
+          || missionClaim.campaign_id.length === 0
+          || missionClaim.campaign_id !== v2CampaignId) {
         return releaseAfterRejection(rejected(
           'mission',
           'mission_campaign_id_mismatch',
           'Mission claim campaign_id does not match sealed campaign-v2 id',
         ));
       }
-      if (typeof inspection.claim_id === 'string'
-          && inspection.claim_id.length > 0
-          && missionClaim.claim_id !== inspection.claim_id) {
+      if (typeof inspection.claim_id !== 'string'
+          || inspection.claim_id.length === 0
+          || typeof missionClaim.claim_id !== 'string'
+          || missionClaim.claim_id.length === 0
+          || missionClaim.claim_id !== inspection.claim_id) {
         return releaseAfterRejection(rejected(
           'mission',
           'mission_claim_id_mismatch',

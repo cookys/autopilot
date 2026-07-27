@@ -1023,14 +1023,15 @@ function checkBindings(state, payload) {
     }
     if (!(binding in payload)) return 'binding_mismatch';
   }
-  // v2 subject identity: exact scheme, subject digest, campaign-v2 id, and
-  // optional campaign_contract_digest alias (must equal subject, never raw).
-  if (payload.identity_scheme === IDENTITY_SCHEME_V2
-      || (typeof payload.mission_subject_digest === 'string'
-        && payload.mission_subject_digest.length > 0)) {
-    if (payload.identity_scheme !== IDENTITY_SCHEME_V2) return 'binding_mismatch';
+  // v2 subject identity requires explicit identity_scheme. Partial v2 fields
+  // without the scheme are binding mismatches (no silent promotion).
+  if (payload.identity_scheme === IDENTITY_SCHEME_V2) {
     if (typeof payload.mission_subject_digest !== 'string'
         || !/^[0-9a-f]{64}$/.test(payload.mission_subject_digest)) {
+      return 'binding_mismatch';
+    }
+    if (typeof payload.task_authority_id !== 'string'
+        || !/^[0-9a-f]{64}$/.test(payload.task_authority_id)) {
       return 'binding_mismatch';
     }
     if (typeof payload.campaign_id !== 'string'
@@ -1043,6 +1044,11 @@ function checkBindings(state, payload) {
         && payload.campaign_contract_digest !== payload.mission_subject_digest) {
       return 'binding_mismatch';
     }
+  } else if (typeof payload.mission_subject_digest === 'string'
+      && payload.mission_subject_digest.length > 0
+      && payload.identity_scheme !== IDENTITY_SCHEME_V2) {
+    // Subject digest without explicit v2 scheme is not a valid promotion path.
+    return 'binding_mismatch';
   }
   return null;
 }
@@ -1106,9 +1112,12 @@ function bindingDigest(payload) {
   if (payload.identity_scheme === IDENTITY_SCHEME_V2) {
     // v2 binds subject (not raw final-byte digest) so grant-ref insertion is
     // non-circular. campaign_contract_digest may alias subject only.
+    // task_authority_id is part of the binding tuple so later verification can
+    // compare exact stored lineage + authority without reopening identity.
     return sha256({
       identity_scheme: IDENTITY_SCHEME_V2,
       mission_lineage_id: payload.mission_lineage_id,
+      task_authority_id: payload.task_authority_id,
       campaign_id: payload.campaign_id,
       mission_subject_digest: payload.mission_subject_digest,
       base_sha: payload.base_sha,
@@ -1237,6 +1246,8 @@ function applyGrantClaim(state, event, payload, grant) {
     identity_scheme: payload.identity_scheme === IDENTITY_SCHEME_V2
       ? IDENTITY_SCHEME_V2
       : (payload.identity_scheme || null),
+    mission_lineage_id: payload.mission_lineage_id,
+    task_authority_id: payload.task_authority_id,
     campaign_id: payload.campaign_id,
     campaign_contract_digest: contractDigestField,
     mission_subject_digest: subjectDigest,
@@ -1275,6 +1286,7 @@ function applyGrantClaim(state, event, payload, grant) {
     claim_id: claimId,
     idempotency_key: idempotencyKey,
     mission_lineage_id: state.mission_lineage_id,
+    task_authority_id: state.task_authority_id,
     source_event: event,
     next_state: 'ACTIVE',
     reservation_consumed: reservation,
@@ -1336,6 +1348,8 @@ function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
       identity_scheme: event.payload.identity_scheme === IDENTITY_SCHEME_V2
         ? IDENTITY_SCHEME_V2
         : (event.payload.identity_scheme || null),
+      mission_lineage_id: event.payload.mission_lineage_id,
+      task_authority_id: event.payload.task_authority_id,
       campaign_id: event.payload.campaign_id,
       campaign_contract_digest: shadowContractDigest,
       mission_subject_digest: shadowSubject,
@@ -3485,13 +3499,22 @@ function claimBindingTupleMatches(claim, payload, state) {
   if (state.mission_lineage_id !== payload.mission_lineage_id) return false;
   if (state.task_authority_id !== payload.task_authority_id) return false;
   if (claim.campaign_id !== payload.campaign_id) return false;
-  if (isMissionSubjectV2Claim(claim) || payload.identity_scheme === IDENTITY_SCHEME_V2) {
+  // v2 is explicit only — never promote from field shape / digest presence.
+  const claimV2 = isMissionSubjectV2Claim(claim);
+  const payloadV2 = isMissionSubjectV2Claim(payload);
+  if (claimV2 || payloadV2) {
+    if (!claimV2 || !payloadV2) return false;
     const claimSubject = claimMissionSubjectDigest(claim);
     const payloadSubject = claimMissionSubjectDigest(payload);
     if (!claimSubject || !payloadSubject || claimSubject !== payloadSubject) return false;
-    const claimScheme = claim.identity_scheme || IDENTITY_SCHEME_V2;
-    const payloadScheme = payload.identity_scheme || IDENTITY_SCHEME_V2;
-    if (claimScheme !== payloadScheme) return false;
+    if (claim.identity_scheme !== payload.identity_scheme) return false;
+    // Stored claim lineage/authority must exist and match Mission state.
+    if (typeof claim.mission_lineage_id !== 'string'
+        || claim.mission_lineage_id !== state.mission_lineage_id
+        || typeof claim.task_authority_id !== 'string'
+        || claim.task_authority_id !== state.task_authority_id) {
+      return false;
+    }
   } else if (claim.campaign_contract_digest !== payload.campaign_contract_digest) {
     return false;
   }
@@ -3705,10 +3728,16 @@ function resolveLiveClaimByGrantRef(state, grantRef) {
 
 function claimPayloadFromExistingClaim(state, claim) {
   const reservation = rebuildReservationPerAxis(claim.reservation);
+  // Prefer exact stored claim lineage/authority when present so later
+  // verification can compare claim-retained fields against Mission state.
   const payload = {
     idempotency_key: claim.idempotency_key,
-    mission_lineage_id: state.mission_lineage_id,
-    task_authority_id: state.task_authority_id,
+    mission_lineage_id: typeof claim.mission_lineage_id === 'string'
+      ? claim.mission_lineage_id
+      : state.mission_lineage_id,
+    task_authority_id: typeof claim.task_authority_id === 'string'
+      ? claim.task_authority_id
+      : state.task_authority_id,
     campaign_id: claim.campaign_id,
     campaign_contract_digest: claim.campaign_contract_digest,
     base_sha: claim.base_sha,
@@ -3717,9 +3746,9 @@ function claimPayloadFromExistingClaim(state, claim) {
     issued_at: claim.issued_at,
     expires_at: claim.expires_at,
   };
-  if (claim.identity_scheme === IDENTITY_SCHEME_V2
-      || typeof claim.mission_subject_digest === 'string') {
-    payload.identity_scheme = claim.identity_scheme || IDENTITY_SCHEME_V2;
+  // Explicit scheme only — never promote from mission_subject_digest presence.
+  if (claim.identity_scheme === IDENTITY_SCHEME_V2) {
+    payload.identity_scheme = IDENTITY_SCHEME_V2;
     payload.mission_subject_digest = claimMissionSubjectDigest(claim);
     // Compatibility alias only: must equal subject for v2.
     if (payload.campaign_contract_digest == null) {
@@ -3757,8 +3786,8 @@ function createMissionCampaignAdapters(options = {}) {
       issued_at: grant.issued_at || input.observedAt,
       expires_at: grant.expires_at,
     };
-    if (grant.identity_scheme === IDENTITY_SCHEME_V2
-        || typeof grant.mission_subject_digest === 'string') {
+    // Explicit scheme only — never promote from mission_subject_digest presence.
+    if (grant.identity_scheme === IDENTITY_SCHEME_V2) {
       payload.identity_scheme = IDENTITY_SCHEME_V2;
       payload.mission_subject_digest = grant.mission_subject_digest
         || input.mission_subject_digest

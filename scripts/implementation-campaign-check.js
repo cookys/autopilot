@@ -613,11 +613,21 @@ function mintMissionGrantBindingFromStateFile({
         3,
       );
     }
-    if (typeof state.mission_lineage_id === 'string'
-        && typeof claim.mission_lineage_id === 'string'
-        && claim.mission_lineage_id !== state.mission_lineage_id) {
+    // v2: stored claim lineage + authority must exist and exactly match the
+    // validated Mission state. Missing fields are rejection, not compatibility.
+    if (typeof claim.mission_lineage_id !== 'string'
+        || claim.mission_lineage_id.length === 0
+        || claim.mission_lineage_id !== state.mission_lineage_id) {
       throw new CliError(
         'mission_grant_ref: claim mission_lineage_id does not match Mission state',
+        3,
+      );
+    }
+    if (typeof claim.task_authority_id !== 'string'
+        || claim.task_authority_id.length === 0
+        || claim.task_authority_id !== state.task_authority_id) {
+      throw new CliError(
+        'mission_grant_ref: claim task_authority_id does not match Mission state',
         3,
       );
     }

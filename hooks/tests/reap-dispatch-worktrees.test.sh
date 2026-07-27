@@ -240,4 +240,92 @@ git -C "$EMPTY_REPO" -c user.email=wlb@test -c user.name=wlb \
   > "$TEST_TMP/empty-check.json"
 assert_exit_code "$?" "0" "check succeeds when exact owned worktree count is zero"
 
+TORN_REPO="$TEST_TMP/torn-registry-repo"
+TORN_WT="$TEST_TMP/torn-registry-worktree"
+TORN_ROOT="wlb-p2-torn-root"
+mkdir -p "$TORN_REPO"
+git -C "$TORN_REPO" init -q -b develop
+git -C "$TORN_REPO" -c user.email=wlb@test -c user.name=wlb \
+  commit -q --allow-empty -m "torn fixture"
+TORN_BASE="$(git -C "$TORN_REPO" rev-parse HEAD)"
+TORN_COMMON="$(git -C "$TORN_REPO" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$TORN_COMMON/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+  >> "$TORN_COMMON/info/exclude"
+git -C "$TORN_REPO" worktree add -q -b hetero/p2-torn "$TORN_WT" develop
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/p2-torn\n'
+  printf 'base_sha=%s\n' "$TORN_BASE"
+  printf 'run_id=p2-torn\n'
+  printf 'root_run_id=%s\n' "$TORN_ROOT"
+  printf 'loop_id=p2-torn-loop\n'
+  printf 'schema=2\n'
+} > "$TORN_WT/.autopilot-worktree"
+: > "$TORN_WT/.autopilot-worktree.lock"
+TORN_KEY="$(
+  printf '%s\0%s\0%s\0%s\0' \
+    "$TORN_ROOT" "$TORN_WT" "hetero/p2-torn" "$TORN_BASE" \
+    | sha256sum | awk '{print $1}'
+)"
+AUTOPILOT_TEST_MODE=1 \
+AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_AUTHORITY="$TORN_KEY" \
+  "$CONTROLLER" reap --repo "$TORN_REPO" --root-run-id "$TORN_ROOT" --yes \
+  > "$TEST_TMP/torn-first-reap.json"
+assert_exit_code "$?" "0" "anchor-first kill is reported preserve-first"
+assert_file_exists "$TORN_WT/.git" \
+  "torn commitment never removes the worktree before registry convergence"
+"$CONTROLLER" scan --repo "$TORN_REPO" --root-run-id "$TORN_ROOT" \
+  > "$TEST_TMP/torn-recovery-scan.json"
+assert_exit_code "$?" "0" "fresh scan repairs registry forward from monotonic anchor"
+assert_contains "$(cat "$TEST_TMP/torn-recovery-scan.json")" '"branch":"hetero/p2-torn"' \
+  "recovered scan retains exact branch evidence"
+"$CONTROLLER" reap --repo "$TORN_REPO" --root-run-id "$TORN_ROOT" --yes \
+  > "$TEST_TMP/torn-final-reap.json"
+assert_exit_code "$?" "0" "reap converges after torn commitment repair"
+assert_file_absent "$TORN_WT/.git" "recovered transaction eventually removes worktree"
+
+MIRROR_REPO="$TEST_TMP/mirror-intent-repo"
+MIRROR_WT="$TEST_TMP/mirror-intent-worktree"
+MIRROR_ROOT="wlb-p2-mirror-intent"
+mkdir -p "$MIRROR_REPO"
+git -C "$MIRROR_REPO" init -q -b develop
+git -C "$MIRROR_REPO" -c user.email=wlb@test -c user.name=wlb \
+  commit -q --allow-empty -m "mirror intent fixture"
+MIRROR_BASE="$(git -C "$MIRROR_REPO" rev-parse HEAD)"
+MIRROR_COMMON="$(
+  git -C "$MIRROR_REPO" rev-parse --path-format=absolute --git-common-dir
+)"
+mkdir -p "$MIRROR_COMMON/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+  >> "$MIRROR_COMMON/info/exclude"
+git -C "$MIRROR_REPO" worktree add -q -b hetero/p2-mirror-intent \
+  "$MIRROR_WT" develop
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/p2-mirror-intent\n'
+  printf 'base_sha=%s\n' "$MIRROR_BASE"
+  printf 'run_id=p2-mirror-intent\n'
+  printf 'root_run_id=%s\n' "$MIRROR_ROOT"
+  printf 'loop_id=p2-mirror-intent-loop\n'
+  printf 'schema=2\n'
+} > "$MIRROR_WT/.autopilot-worktree"
+: > "$MIRROR_WT/.autopilot-worktree.lock"
+AUTOPILOT_TEST_MODE=1 AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR=1 \
+  "$CONTROLLER" reap --repo "$MIRROR_REPO" \
+    --root-run-id "$MIRROR_ROOT" --yes >/dev/null 2>&1
+assert_exit_code "$?" "137" \
+  "real kill after mirror publication leaves a write-ahead intent"
+assert_file_exists "$MIRROR_WT/.git" \
+  "pre-authority mirror crash cannot remove the managed worktree"
+"$CONTROLLER" scan --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" \
+  >/dev/null
+assert_exit_code "$?" "0" \
+  "scan rolls back only the intent-bound uncommitted mirror"
+"$CONTROLLER" reap --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" --yes \
+  >/dev/null
+assert_exit_code "$?" "0" "mirror crash recovery remains reappable"
+assert_file_absent "$MIRROR_WT/.git" \
+  "recovered mirror transaction eventually removes its worktree"
+
 finalize_test

@@ -39,6 +39,25 @@ Hard rules:
   depth-0-executed acceptance command. Direct `scripts/dispatch-hetero.sh` invocation is for
   controller internals or diagnostics, not an equivalent L6 workflow. While an l5/l6 session
   marker is active, prompt-only write or author dispatch on this repo fails before the runner.
+- **Bounded leaf lifecycle**: every schema-2 implementation leaf inherits the
+  campaign's stable `root_run_id`, which the canonical campaign controller
+  derives from the sealed `campaign_id` and injects on every initial, repair,
+  and resumed implementation dispatch as
+  `AUTOPILOT_WORKTREE_ROOT_RUN_ID`. It is separate from
+  `AUTOPILOT_ROOT_RUN_ID`, which remains the foreman/watcher trace root. Never
+  substitute a foreman/stage/leaf run id or an ambient checkout path. Managed
+  dispatch depth is normalized to at least `1`, so an inherited zero/malformed
+  depth cannot bypass occupancy admission.
+  Verification-author dispatch is a no-worktree authoring rail and does not
+  consume this occupancy budget.
+  `max_leaf_worktrees_per_root` is a hard occupancy cap (default `4`), so
+  inspect and disposition every retained implementation outcome immediately.
+  Run `reap-dispatch-worktrees.sh`, feed its exact inventory to
+  `reap-dispatch-branches.sh`, then issue and freshness-check one
+  `LifecycleResidueReceipt`. Freshness is not absence: require its
+  `zero_residue` field to be exactly `true`; `false` is a resource blocker.
+  This rail proves resource disposition only and never computes task
+  `can_close`, generation advance, or finish authority.
 - **Context-window gate (v2.32.58)**: all three rails — including the authoring leaf, whose
   payloads are the largest on any rail — size the input against the target engine's window
   before spending; over budget ⇒ `precondition_failed`, no runner spawned. Contract:

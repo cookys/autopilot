@@ -60,6 +60,8 @@ linked_worktree_count() {
 
 dispatch_leaf() {
   local repo="$1" branch="$2" run_id="$3" stub="$4"
+  local keep_args=()
+  [ "${DISPATCH_LEAF_KEEP:-1}" = "0" ] || keep_args+=(--keep-worktree)
   (
     cd "$repo" || exit 98
     env \
@@ -67,6 +69,7 @@ dispatch_leaf() {
       AUTOPILOT_DISPATCH_MANIFEST=0 \
       AUTOPILOT_PARENT_RUN_ID="wlb-parent-p0" \
       AUTOPILOT_ROOT_RUN_ID="$ROOT_RUN_ID" \
+      AUTOPILOT_WORKTREE_ROOT_RUN_ID="$ROOT_RUN_ID" \
       AUTOPILOT_DISPATCH_DEPTH=1 \
       "$DISPATCH" \
         --branch "$branch" \
@@ -75,7 +78,7 @@ dispatch_leaf() {
         --agy-bin "$stub" \
         --context-window off \
         --run-id "$run_id" \
-        --keep-worktree
+        "${keep_args[@]}"
   )
 }
 
@@ -179,6 +182,8 @@ if (value.root_run_id !== "wlb-root-p0"
 NODE
 assert_exit_code "$?" "0" \
   "dogfood worktree result reports zero owned leaves and four exact branches"
+assert_eq "$(linked_worktree_count "$SEQ_REPO")" "0" \
+  "dogfood worktree reap leaves no registered fixture leaf"
 
 SEQ_BRANCH_RESULT="$TEST_TMP/sequential-branch-reap.json"
 "$BRANCH_REAPER" reap --repo "$SEQ_REPO" --into develop \
@@ -396,6 +401,7 @@ for checkpoint in after-pending after-add after-marker after-verification; do
   ROOT_RUN_ID="wlb-crash-$checkpoint"
   (
     export AUTOPILOT_TEST_WORKTREE_CRASH_AT="$checkpoint"
+    export DISPATCH_LEAF_KEEP=0
     dispatch_leaf \
       "$CRASH_REPO" \
       "wlb/crash-$checkpoint" \
@@ -405,6 +411,11 @@ for checkpoint in after-pending after-add after-marker after-verification; do
   CRASH_RC=$?
   assert_exit_code "$CRASH_RC" "137" \
     "$checkpoint fixture terminates at the real SIGKILL boundary"
+  assert_eq "$(
+    git -C "$CRASH_REPO" for-each-ref --format='%(refname)' \
+      refs/autopilot/lifecycle-roots/ | wc -l
+  )" "1" \
+    "$checkpoint occurs only after durable lifecycle-root admission"
 
   CRASH_RECORDS=("$CRASH_COMMON"/autopilot-worktree-creation/*.json)
   assert_file_exists "${CRASH_RECORDS[0]}" \
@@ -628,6 +639,25 @@ for level in l5 l6; do
     "RED: $level contract exposes bounded leaf occupancy"
   assert_contains "$LEVEL_CONTRACT" "never computes" \
     "RED: $level lifecycle rail does not claim task finish authority"
+done
+
+for contract in \
+  "$REPO_ROOT/references/hetero-dispatch.md" \
+  "$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"; do
+  CONTRACT_TEXT="$(cat "$contract")"
+  assert_contains "$CONTRACT_TEXT" \
+    '[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]]' \
+    "lifecycle recipe validates admitted campaign identity before path construction"
+  assert_contains "$CONTRACT_TEXT" 'root_run_id="$campaign_id"' \
+    "lifecycle recipe binds the resource root from sealed campaign identity"
+  assert_contains "$CONTRACT_TEXT" \
+    'mktemp -d "$lifecycle_artifact_dir/root-$root_run_id.XXXXXX"' \
+    "lifecycle recipe isolates every attempt under a contained unique path"
+  assert_contains "$CONTRACT_TEXT" \
+    '|| exit $?' \
+    "lifecycle recipe fails before stale receipt validation on command errors"
+  assert_contains "$CONTRACT_TEXT" "value.zero_residue !== true" \
+    "lifecycle recipe separately requires true zero-residue semantics"
 done
 
 finalize_test

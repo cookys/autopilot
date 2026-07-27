@@ -34,6 +34,22 @@ Hard rules:
   `scripts/dispatch-hetero.sh` invocation is controller-internal or diagnostic only, never an
   equivalent L5 workflow. Contract or caller disagreement is rejected pre-spend; a new scope
   requires a new contract hash.
+- **Bounded leaf lifecycle**: every managed leaf inherits the campaign's stable
+  `root_run_id`, which the canonical campaign controller derives from the
+  sealed `campaign_id` and injects on every initial, repair, and resumed
+  implementation dispatch as `AUTOPILOT_WORKTREE_ROOT_RUN_ID`. This resource
+  identity is separate from `AUTOPILOT_ROOT_RUN_ID`, which remains the
+  foreman/watcher trace root. Managed dispatch depth is normalized to at least
+  `1`, so an inherited zero/malformed depth cannot bypass occupancy admission.
+  Never substitute a foreman/stage/leaf run id or an ambient checkout path.
+  `max_leaf_worktrees_per_root` is a hard occupancy cap (default `4`), so a
+  retained outcome must be inspected and dispositioned immediately rather than
+  left until session end. Use `reap-dispatch-worktrees.sh` first, pass its exact
+  inventory to `reap-dispatch-branches.sh`, then issue and freshness-check one
+  `LifecycleResidueReceipt`. Freshness is not absence: require its
+  `zero_residue` field to be exactly `true`; `false` is a resource blocker.
+  This rail proves resource disposition only and never computes task
+  `can_close`, generation advance, or finish authority.
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 

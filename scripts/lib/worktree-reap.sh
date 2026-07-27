@@ -167,6 +167,7 @@ _wt_read_schema2_marker() {
   _WT_MARKER_RUN_ID=""
   _WT_MARKER_ROOT_RUN_ID=""
   _WT_MARKER_LOOP_ID=""
+  _WT_MARKER_RETENTION=""
   [ -f "$marker" ] && [ ! -L "$marker" ] && [ -O "$marker" ] || return 1
   exec {fd}<"$marker" || return 1
   fd_path="/proc/$$/fd/$fd"
@@ -182,7 +183,15 @@ _wt_read_schema2_marker() {
       return 1
     fi
   done
-  if [ "$(wc -l < "$fd_path" | tr -d ' ')" -ne 7 ]; then
+  local line_count
+  line_count="$(wc -l < "$fd_path" | tr -d ' ')"
+  if [ "$line_count" -eq 8 ]; then
+    [ "$(grep -c '^retention=' "$fd_path" 2>/dev/null)" -eq 1 ] || {
+      exec {fd}>&-
+      return 1
+    }
+    _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")"
+  elif [ "$line_count" -ne 7 ]; then
     exec {fd}>&-
     return 1
   fi
@@ -206,6 +215,8 @@ _wt_read_schema2_marker() {
   [[ "$_WT_MARKER_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   [[ "$_WT_MARKER_ROOT_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   [[ "$_WT_MARKER_LOOP_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [ -z "$_WT_MARKER_RETENTION" ] || [ "$_WT_MARKER_RETENTION" = "inspect" ] \
+    || return 1
   git check-ref-format --branch "$_WT_MARKER_BRANCH" >/dev/null 2>&1 || return 1
   return 0
 }
@@ -314,7 +325,7 @@ _wt_ensure_config() {
 # on full reclaim. Fail-open on hook error/timeout.
 reap_worktree() {
   local wt="${1:-}"
-  local hook_abs="" repo_root hook_rc rm_status rm_stderr
+  local hook_abs="" repo_root hook_rc rm_status rm_stderr managed_tip=""
 
   OUTCOME_ORPHAN="${OUTCOME_ORPHAN:-}"
   if [ -z "$wt" ]; then
@@ -328,6 +339,26 @@ reap_worktree() {
 
   _wt_ensure_config
   repo_root="$(_wt_resolve_repo_root)"
+
+  if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ] \
+     && [ -n "${SELF_DIR:-}" ] \
+     && [ -x "$SELF_DIR/reap-dispatch-worktrees.sh" ]; then
+    # Release the leaf lifetime proof, then durably journal its exact branch
+    # before any project hook can remove or mutate the worktree.
+    if [ -n "${WT_LOCK_FD:-}" ]; then
+      exec {WT_LOCK_FD}>&- || true
+      WT_LOCK_FD=""
+    fi
+    managed_tip="$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)"
+    if ! [[ "$managed_tip" =~ ^[0-9a-f]{40,64}$ ]] \
+       || ! bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
+      --repo "$repo_root" --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+      --path "$wt" >/dev/null 2>&1; then
+      printf 'WARN: managed worktree journal failed; preserving %s\n' "$wt" >&2
+      OUTCOME_ORPHAN="$wt"
+      return 0
+    fi
+  fi
 
   if [ -n "${TEARDOWN_HOOK:-}" ]; then
     if hook_abs="$(_wt_validate_path "$TEARDOWN_HOOK" "$repo_root")"; then
@@ -349,8 +380,26 @@ reap_worktree() {
     fi
   fi
 
-  rm_stderr="$(_wt_git_worktree_remove "$wt")"
-  rm_status=$?
+  if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ] \
+     && [ -n "${SELF_DIR:-}" ] \
+     && [ -x "$SELF_DIR/reap-dispatch-worktrees.sh" ]; then
+    # Managed leaves must enter the exact branch journal before their worktree
+    # disappears. Release this leaf's lifetime proof, then let the lifecycle
+    # controller perform the write-ahead inventory + compare/remove sequence.
+    rm_stderr="$(
+      bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
+        --repo "$repo_root" --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+        --path "$wt" --expected-tip "$managed_tip" --yes 2>&1
+    )"
+    rm_status=$?
+    if [ "$rm_status" -eq 0 ] && [ -d "$wt" ]; then
+      rm_status=1
+      rm_stderr="lifecycle controller preserved the managed worktree"
+    fi
+  else
+    rm_stderr="$(_wt_git_worktree_remove "$wt")"
+    rm_status=$?
+  fi
 
   if [ "$rm_status" -ne 0 ] && [ -d "$wt" ]; then
     printf 'WARN: worktree remove failed; orphan kept at %s (%s)\n' "$wt" "$rm_stderr" >&2

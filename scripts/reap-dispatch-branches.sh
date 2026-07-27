@@ -4,21 +4,31 @@
 set -uo pipefail
 
 usage() {
+  local exit_code="${1:-2}"
   printf '%s\n' \
     'usage: reap-dispatch-branches.sh scan|check|reap [options]' \
     '  shared: --repo <dir> --into <ref> --pattern <bash-ere> --inventory-file <json>' \
     '  check:  --ack <integration-candidate-branch>' \
-    '  reap:   --dry-run --yes --reap-superseded --bundle-dir <dir> --ack-preserved <branch@tip>' >&2
-  exit 2
+    '  reap:   --dry-run --yes --reap-superseded --bundle-dir <dir> --ack-preserved <branch@tip>' \
+    '  exact lifecycle: use the unmodified worktree-controller JSON as --inventory-file;' \
+    '    contained tips are bundle-reaped, uncontained tips require exact --ack-preserved' >&2
+  exit "$exit_code"
 }
 
 die_env() { printf 'error: %s\n' "$*" >&2; exit 2; }
 
 # shellcheck source=lib/json-emit.sh
-. "$(dirname "$0")/lib/json-emit.sh"
+self_dir="$(cd "$(dirname "$0")" && pwd)"
+. "$self_dir/lib/json-emit.sh"
+# shellcheck source=lib/worktree-reap.sh
+. "$self_dir/lib/worktree-reap.sh"
 
 command_name="${1:-}"
-case "$command_name" in scan|check|reap) shift ;; *) usage ;; esac
+case "$command_name" in
+  scan|check|reap) shift ;;
+  --help|-h) usage 0 ;;
+  *) usage ;;
+esac
 
 repo="."
 into="develop"
@@ -43,7 +53,7 @@ while [ "$#" -gt 0 ]; do
     --reap-superseded) [ "$command_name" = reap ] || usage; reap_superseded=1; shift ;;
     --bundle-dir) [ "$command_name" = reap ] && [ "$#" -ge 2 ] || usage; bundle_dir="$2"; shift 2 ;;
     --ack-preserved) [ "$command_name" = reap ] && [ "$#" -ge 2 ] || usage; preserve_ack_specs+=("$2"); shift 2 ;;
-    --help|-h) usage ;;
+    --help|-h) usage 0 ;;
     *) usage ;;
   esac
 done
@@ -179,6 +189,12 @@ into_sha="${snapshot_tip[$into_name]:-}"
 git -C "$repo" cat-file -e "${into_sha}^{commit}" 2>/dev/null || die_env "integration target local branch is not a commit: $into_ref"
 
 if [ -n "$inventory_file" ]; then
+  _wt_open_lock_fd "$common_dir/autopilot-worktree-budget.lock" \
+    || die_env "cannot open exact lifecycle lock"
+  exact_lifecycle_fd="$_WT_SAFE_LOCK_FD"
+  flock -x "$exact_lifecycle_fd" \
+    || die_env "cannot acquire exact lifecycle lock"
+  export AUTOPILOT_LIFECYCLE_LOCK_FD="$exact_lifecycle_fd"
   inventory_file="$(realpath -e "$inventory_file" 2>/dev/null)" \
     || die_env "exact inventory file is not readable"
   [ -f "$inventory_file" ] && [ ! -L "$inventory_file" ] \
@@ -216,7 +232,7 @@ if (value && value.schema === 1
   rootRunId = value.root_run_id;
   branches = value.branches;
 }
-if (!/^[A-Za-z0-9._-]+$/.test(rootRunId) || branches.length === 0) process.exit(2);
+if (!/^[A-Za-z0-9._-]+$/.test(rootRunId)) process.exit(2);
 const seen = new Set();
 for (const item of branches) {
   if (!item || Object.keys(item).sort().join(",") !== "name,tip"
@@ -284,30 +300,121 @@ NODE
   [ -n "$inventory_root_run_id" ] && [ -n "$inventory_digest" ] \
     || die_env "exact inventory metadata is missing"
   journal_args=()
+  canonical_args=()
   for inventory_name in "${inventory_names[@]}"; do
     journal_args+=("$inventory_name" "${inventory_expected[$inventory_name]}")
+    if [ -z "${inventory_reaped_bundle[$inventory_name]:-}" ]; then
+      canonical_args+=("$inventory_name" "${inventory_expected[$inventory_name]}")
+    fi
   done
+  canonical_inventory_scan="$(
+    bash "$self_dir/reap-dispatch-worktrees.sh" scan \
+      --repo "$repo" --root-run-id "$inventory_root_run_id"
+  )" || die_env "cannot independently verify or migrate exact inventory"
   if ! node - "$common_dir/autopilot-worktree-branch-inventory" \
+      "$common_dir/autopilot-worktree-lifecycle-roots" "$repo_identity" \
       "$inventory_root_run_id" "${journal_args[@]}" <<'NODE'
 const crypto = require("crypto");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const [directory, rootRunId, ...pairs] = process.argv.slice(2);
-if (pairs.length === 0 || pairs.length % 2 !== 0
-    || !fs.existsSync(directory)) process.exit(2);
+const [directory, anchorDirectory, repoIdentity, rootRunId, ...pairs] =
+  process.argv.slice(2);
+if (pairs.length % 2 !== 0) process.exit(2);
+if (!fs.existsSync(directory)) process.exit(2);
 const directoryStat = fs.lstatSync(directory);
-if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) process.exit(2);
+if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()
+    || directoryStat.uid !== process.getuid()
+    || (directoryStat.mode & 0o777) !== 0o700) process.exit(2);
+if (!fs.existsSync(anchorDirectory)) process.exit(2);
+const anchorDirectoryStat = fs.lstatSync(anchorDirectory);
+if (!anchorDirectoryStat.isDirectory() || anchorDirectoryStat.isSymbolicLink()
+    || anchorDirectoryStat.uid !== process.getuid()
+    || (anchorDirectoryStat.mode & 0o777) !== 0o700) process.exit(2);
+const key = crypto.createHash("sha256")
+  .update(`${repoIdentity}\0${rootRunId}\0`).digest("hex");
+const anchor = path.join(anchorDirectory, `${key}.json`);
+const sentinel = path.join(directory, `${key}.root.json`);
+const registry = `${anchorDirectory}.registry.json`;
+if (!fs.existsSync(registry)) process.exit(2);
+const registryStat = fs.lstatSync(registry);
+if (!registryStat.isFile() || registryStat.isSymbolicLink()
+    || registryStat.uid !== process.getuid()
+    || (registryStat.mode & 0o777) !== 0o600) process.exit(2);
+const registryBytes = fs.readFileSync(registry, "utf8");
+const registryValue = JSON.parse(registryBytes);
+if (Object.keys(registryValue).sort().join(",") !== "repo_identity,roots,schema"
+    || registryValue.schema !== 1 || registryValue.repo_identity !== repoIdentity
+    || !registryValue.roots || typeof registryValue.roots !== "object"
+    || Array.isArray(registryValue.roots)
+    || !registryValue.roots[key] || registryValue.roots[key].state !== "active"
+    || Object.entries(registryValue.roots).some(([rootKey, root]) =>
+      !/^[0-9a-f]{64}$/.test(rootKey)
+      || !root || typeof root !== "object" || Array.isArray(root)
+      || Object.keys(root).sort().join(",") !== "generation,journal_records,state"
+      || !["initializing", "active"].includes(root.state)
+      || !Number.isSafeInteger(root.generation) || root.generation < 0
+      || !Array.isArray(root.journal_records)
+      || root.journal_records.some((item) =>
+        typeof item !== "string"
+        || !/^[0-9a-f]{64}:[0-9a-f]{64}$/.test(item))
+      || new Set(root.journal_records).size !== root.journal_records.length
+      || root.journal_records.join("\n")
+        !== [...root.journal_records].sort().join("\n"))
+    || registryBytes !== `${JSON.stringify(registryValue)}\n`) process.exit(2);
+function readBinding(file) {
+  if (!fs.existsSync(file)) process.exit(2);
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink()
+      || stat.uid !== process.getuid()
+      || (stat.mode & 0o777) !== 0o600) process.exit(2);
+  const bytes = fs.readFileSync(file, "utf8");
+  const value = JSON.parse(bytes);
+  if (Object.keys(value).sort().join(",")
+      !== "generation,journal_birthtime_ns,journal_device,journal_inode,journal_nonce,journal_records,repo_identity,root_run_id,schema"
+      || value.schema !== 1 || value.repo_identity !== repoIdentity
+      || value.root_run_id !== rootRunId
+      || !Number.isSafeInteger(value.generation) || value.generation < 0
+      || !/^[0-9a-f]{64}$/.test(value.journal_nonce)
+      || !/^[1-9][0-9]*$/.test(value.journal_birthtime_ns)
+      || !/^[0-9]+$/.test(value.journal_device)
+      || !/^[0-9]+$/.test(value.journal_inode)
+      || !Array.isArray(value.journal_records)
+      || value.journal_records.some((item) =>
+        typeof item !== "string"
+        || !/^[0-9a-f]{64}:[0-9a-f]{64}$/.test(item))
+      || new Set(value.journal_records).size !== value.journal_records.length
+      || value.journal_records.join("\n")
+        !== [...value.journal_records].sort().join("\n")
+      || bytes !== `${JSON.stringify(value)}\n`) process.exit(2);
+  return { bytes, value };
+}
+const anchorBinding = readBinding(anchor);
+const sentinelBinding = readBinding(sentinel);
+const journalStat = fs.lstatSync(directory, { bigint: true });
+if (anchorBinding.value.repo_identity !== sentinelBinding.value.repo_identity
+    || anchorBinding.value.root_run_id !== sentinelBinding.value.root_run_id
+    || anchorBinding.value.journal_nonce !== sentinelBinding.value.journal_nonce
+    || anchorBinding.value.journal_birthtime_ns
+      !== sentinelBinding.value.journal_birthtime_ns
+    || anchorBinding.value.journal_device !== sentinelBinding.value.journal_device
+    || anchorBinding.value.journal_inode !== sentinelBinding.value.journal_inode
+    || anchorBinding.value.journal_birthtime_ns !== journalStat.birthtimeNs.toString()
+    || anchorBinding.value.journal_device !== journalStat.dev.toString()
+    || anchorBinding.value.journal_inode !== journalStat.ino.toString()) process.exit(2);
 const expected = new Map();
 for (let index = 0; index < pairs.length; index += 2) {
   expected.set(pairs[index], pairs[index + 1]);
 }
 const journal = new Map();
+const journalRecords = new Map();
 for (const name of fs.readdirSync(directory).sort()) {
   if (!/^[0-9a-f]{64}\.json$/.test(name)) continue;
   const file = path.join(directory, name);
   const stat = fs.lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink()) process.exit(2);
-  const value = JSON.parse(fs.readFileSync(file, "utf8"));
+  const bytes = fs.readFileSync(file, "utf8");
+  const value = JSON.parse(bytes);
   if (value.root_run_id !== rootRunId) continue;
   if (Object.keys(value).sort().join(",")
         !== "branch,captured_at,marker_sha256,path,root_run_id,schema,tip"
@@ -324,14 +431,91 @@ for (const name of fs.readdirSync(directory).sort()) {
     .digest("hex")}.json`;
   if (name !== expectedName) process.exit(2);
   journal.set(value.branch, value.tip);
+  journalRecords.set(name, bytes);
 }
+const mirrorRecords = new Map();
+const mirrorPattern = new RegExp(`^${key}\\.([0-9a-f]{64})\\.record\\.json$`);
+for (const name of fs.readdirSync(anchorDirectory).sort()) {
+  const match = name.match(mirrorPattern);
+  if (!match) continue;
+  const file = path.join(anchorDirectory, name);
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.getuid()
+      || (stat.mode & 0o777) !== 0o600) process.exit(2);
+  mirrorRecords.set(`${match[1]}.json`, fs.readFileSync(file, "utf8"));
+}
+if (journalRecords.size !== mirrorRecords.size) process.exit(2);
+for (const [name, bytes] of journalRecords) {
+  if (mirrorRecords.get(name) !== bytes) process.exit(2);
+}
+const commitments = [...journalRecords.entries()]
+  .map(([name, bytes]) =>
+    `${name.slice(0, -5)}:${crypto.createHash("sha256").update(bytes).digest("hex")}`)
+  .sort();
+const authorityRef = `refs/autopilot/lifecycle-roots/${key}`;
+const authorityOid = spawnSync(
+  "git", ["--git-dir", path.dirname(directory), "rev-parse", "--verify", authorityRef],
+  { encoding: "utf8" },
+);
+if (authorityOid.status !== 0) process.exit(2);
+const authorityBlob = spawnSync(
+  "git", [
+    "--git-dir", path.dirname(directory), "cat-file", "blob",
+    authorityOid.stdout.trim(),
+  ],
+  { encoding: "utf8" },
+);
+if (authorityBlob.status !== 0) process.exit(2);
+const authorityValue = JSON.parse(authorityBlob.stdout);
+if (authorityValue.repo_identity !== repoIdentity
+    || authorityValue.root_run_id !== rootRunId
+    || authorityValue.journal_birthtime_ns
+      !== anchorBinding.value.journal_birthtime_ns
+    || authorityValue.journal_nonce !== anchorBinding.value.journal_nonce
+    || authorityValue.journal_device !== anchorBinding.value.journal_device
+    || authorityValue.journal_inode !== anchorBinding.value.journal_inode
+    || !Number.isSafeInteger(authorityValue.generation)
+    || !Array.isArray(authorityValue.journal_records)
+    || registryValue.roots[key].generation !== authorityValue.generation
+    || registryValue.roots[key].journal_records.join("\n")
+      !== authorityValue.journal_records.join("\n")
+    || anchorBinding.value.generation !== authorityValue.generation
+    || anchorBinding.value.journal_records.join("\n")
+      !== authorityValue.journal_records.join("\n")
+    || authorityValue.journal_records.join("\n")
+      !== commitments.join("\n")) process.exit(2);
 for (const [branch, tip] of expected) {
   if (journal.get(branch) !== tip) process.exit(2);
 }
 NODE
   then
-    die_env "exact inventory is not bound to the canonical branch inventory journal"
+    die_env "exact inventory is not bound to the canonical branch inventory journal or current canonical lifecycle state"
   fi
+  node - "$inventory_root_run_id" "$canonical_inventory_scan" \
+    "${canonical_args[@]}" <<'NODE'
+const rootRunId = process.argv[2];
+const value = JSON.parse(process.argv[3]);
+const pairs = process.argv.slice(4);
+if (pairs.length % 2 !== 0) process.exit(2);
+const expected = new Map();
+for (let index = 0; index < pairs.length; index += 2) {
+  expected.set(pairs[index], pairs[index + 1]);
+}
+if (value.root_run_id !== rootRunId
+    || !Array.isArray(value.journal_branch_inventory)) process.exit(2);
+const canonical = new Map();
+for (const item of value.journal_branch_inventory) {
+  if (!item || typeof item.branch !== "string" || typeof item.tip !== "string"
+      || canonical.has(item.branch)) process.exit(2);
+  canonical.set(item.branch, item.tip);
+}
+if (canonical.size !== expected.size) process.exit(2);
+for (const [branch, tip] of expected) {
+  if (canonical.get(branch) !== tip) process.exit(2);
+}
+NODE
+  [ "$?" -eq 0 ] \
+    || die_env "exact inventory does not match current canonical lifecycle state"
 fi
 
 for preserve_ack_spec in "${preserve_ack_specs[@]}"; do

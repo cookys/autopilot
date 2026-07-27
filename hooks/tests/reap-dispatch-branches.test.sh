@@ -28,6 +28,7 @@ write_inventory_journal() {
   common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
   directory="$common/autopilot-worktree-branch-inventory"
   mkdir -p "$directory"
+  chmod 700 "$directory"
   key="$(
     printf '%s\0%s\0%s\0%s\0' "$root" "$origin" "$branch" "$tip" \
       | sha256sum | awk '{print $1}'
@@ -37,6 +38,7 @@ write_inventory_journal() {
     "$root" "$origin" "$branch" "$tip" \
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" \
     > "$directory/$key.json"
+  chmod 600 "$directory/$key.json"
 }
 
 test_scan_check_and_ack() {
@@ -364,6 +366,129 @@ test_exact_inventory_requires_canonical_journal_ownership() {
 }
 
 test_exact_inventory_requires_canonical_journal_ownership
+
+test_empty_exact_inventory_is_a_valid_noop() {
+  local repo="$TEST_TMP/empty-exact-inventory" inventory out
+  new_repo "$repo"
+  inventory="$TEST_TMP/empty-exact-inventory.json"
+  "$WORKTREE_REAPER" reap --repo "$repo" --root-run-id empty-root --yes \
+    > "$inventory"
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$inventory" --yes)
+  assert_exit_code "$?" "0" \
+    "empty controller inventory is a valid exact-scope no-op"
+  assert_contains "$out" '"root_run_id":"empty-root"' \
+    "empty exact disposition preserves the root resource identity"
+  assert_contains "$out" '"inventory_dispositions":[]' \
+    "empty exact disposition emits an empty disposition set"
+}
+
+test_empty_exact_inventory_is_a_valid_noop
+
+test_empty_exact_inventory_rejects_unresolved_journal() {
+  local repo="$TEST_TMP/empty-exact-stale" wt wt2 base common marker_sha key
+  local actual_inventory forged_empty forged_partial out rc
+  new_repo "$repo"
+  wt="$TEST_TMP/empty-exact-stale-wt"
+  base=$(git -C "$repo" rev-parse HEAD)
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  mkdir -p "$common/info"
+  printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+    >> "$common/info/exclude"
+  git -C "$repo" worktree add -q -b hetero/empty-exact-stale "$wt" develop
+  {
+    printf 'created_at=1\n'
+    printf 'branch=hetero/empty-exact-stale\n'
+    printf 'base_sha=%s\n' "$base"
+    printf 'run_id=empty-exact-stale\n'
+    printf 'root_run_id=empty-exact-stale-root\n'
+    printf 'loop_id=empty-exact-stale-loop\n'
+    printf 'schema=2\n'
+  } > "$wt/.autopilot-worktree"
+  : > "$wt/.autopilot-worktree.lock"
+  wt2="$TEST_TMP/empty-exact-stale-wt-b"
+  git -C "$repo" worktree add -q -b hetero/empty-exact-stale-b "$wt2" develop
+  {
+    printf 'created_at=1\n'
+    printf 'branch=hetero/empty-exact-stale-b\n'
+    printf 'base_sha=%s\n' "$base"
+    printf 'run_id=empty-exact-stale-b\n'
+    printf 'root_run_id=empty-exact-stale-root\n'
+    printf 'loop_id=empty-exact-stale-loop\n'
+    printf 'schema=2\n'
+  } > "$wt2/.autopilot-worktree"
+  : > "$wt2/.autopilot-worktree.lock"
+  actual_inventory="$TEST_TMP/empty-exact-stale-actual.json"
+  "$WORKTREE_REAPER" reap --repo "$repo" \
+    --root-run-id empty-exact-stale-root --yes > "$actual_inventory"
+  assert_exit_code "$?" "0" "stale-empty fixture persists exact branch journal"
+
+  forged_empty="$TEST_TMP/empty-exact-stale-forged.json"
+  node - "$actual_inventory" "$forged_empty" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+value.branch_inventory = [];
+value.journal_branch_inventory = [];
+fs.writeFileSync(process.argv[3], JSON.stringify(value));
+NODE
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$forged_empty" --yes 2>&1)
+  rc=$?
+  set -e
+  assert_eq "$rc" "2" \
+    "forged empty exact inventory cannot hide unresolved canonical journal"
+  assert_contains "$out" "current canonical lifecycle state" \
+    "stale empty rejection names its independent lifecycle comparison"
+  assert_eq "$(git -C "$repo" rev-parse refs/heads/hetero/empty-exact-stale)" \
+    "$base" "stale empty rejection preserves the unresolved exact branch"
+
+  forged_partial="$TEST_TMP/nonempty-exact-stale-forged.json"
+  node - "$actual_inventory" "$forged_partial" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+value.branch_inventory = value.branch_inventory.slice(0, 1);
+value.journal_branch_inventory = value.journal_branch_inventory.slice(0, 1);
+fs.writeFileSync(process.argv[3], JSON.stringify(value));
+NODE
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$forged_partial" --yes 2>&1)
+  rc=$?
+  set -e
+  assert_eq "$rc" "2" \
+    "forged nonempty exact inventory cannot omit another canonical branch"
+  assert_contains "$out" "current canonical lifecycle state" \
+    "partial exact rejection names its canonical-set mismatch"
+  assert_eq "$(git -C "$repo" rev-parse refs/heads/hetero/empty-exact-stale-b)" \
+    "$base" "partial exact rejection preserves the omitted branch"
+}
+
+test_empty_exact_inventory_rejects_unresolved_journal
+
+test_empty_exact_inventory_rejects_lost_journal_directory() {
+  local repo="$TEST_TMP/empty-exact-lost-journal" inventory common out rc
+  new_repo "$repo"
+  inventory="$TEST_TMP/empty-exact-lost-journal.json"
+  "$WORKTREE_REAPER" reap --repo "$repo" \
+    --root-run-id empty-exact-lost-journal --yes > "$inventory"
+  assert_exit_code "$?" "0" \
+    "empty lifecycle fixture establishes a durable root anchor"
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  rm -rf "$common/autopilot-worktree-branch-inventory"
+  mkdir "$common/autopilot-worktree-branch-inventory"
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$inventory" --yes 2>&1)
+  rc=$?
+  set -e
+  assert_eq "$rc" "2" \
+    "cross-bound root sentinel makes a recreated empty journal fail closed"
+  assert_contains "$out" "verify or migrate exact inventory" \
+    "lost journal rejection names the failed canonical preflight"
+}
+
+test_empty_exact_inventory_rejects_lost_journal_directory
 
 test_exact_inventory_recovery_rejects_thin_bundle() {
   local repo="$TEST_TMP/thin-recovery" common identity base tip bundle inventory

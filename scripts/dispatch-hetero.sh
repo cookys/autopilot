@@ -766,7 +766,7 @@ die_resource_budget() {
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
-    "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$LINEAGE_ROOT")" \
+    "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
     "$count" "$limit" "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" \
     "$(_flat_json_escape "$DISPATCH_RUN_ID")"
   exit 2
@@ -897,12 +897,19 @@ else
 fi
 LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID:-}"
 LINEAGE_ROOT=""
+WORKTREE_ROOT_RUN_ID=""
 LINEAGE_DEPTH=0
 if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
   LINEAGE_PARENT="${AUTOPILOT_PARENT_RUN_ID}"
   LINEAGE_ROOT="${AUTOPILOT_ROOT_RUN_ID:-$LINEAGE_PARENT}"
   LINEAGE_DEPTH="${AUTOPILOT_DISPATCH_DEPTH:-1}"
   case "$LINEAGE_DEPTH" in *[!0-9]*|"") LINEAGE_DEPTH=1 ;; esac
+  if [ "${#LINEAGE_DEPTH}" -gt 7 ]; then
+    LINEAGE_DEPTH=1
+  elif [ "$((10#$LINEAGE_DEPTH))" -eq 0 ] \
+      || [ "$((10#$LINEAGE_DEPTH))" -gt 1000000 ]; then
+    LINEAGE_DEPTH=1
+  fi
 else
   LINEAGE_ROOT="$DISPATCH_RUN_ID"
   LINEAGE_DEPTH=0
@@ -913,9 +920,28 @@ fi
 # in $((...)), freezing the child depth un-incremented).
 [ -n "$LINEAGE_PARENT" ] && LINEAGE_PARENT="$(printf '%s' "$LINEAGE_PARENT" | tr -c 'A-Za-z0-9._-' '-')"
 [ -n "$LINEAGE_ROOT" ] && LINEAGE_ROOT="$(printf '%s' "$LINEAGE_ROOT" | tr -c 'A-Za-z0-9._-' '-')"
+INHERITED_WORKTREE_ROOT_RUN_ID="${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}"
+WORKTREE_MANAGED=0
+if [ -n "$INHERITED_WORKTREE_ROOT_RUN_ID" ]; then
+  [[ "$INHERITED_WORKTREE_ROOT_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] \
+    || die_precondition "AUTOPILOT_WORKTREE_ROOT_RUN_ID must match [A-Za-z0-9._-]+"
+  WORKTREE_ROOT_RUN_ID="$INHERITED_WORKTREE_ROOT_RUN_ID"
+  WORKTREE_MANAGED=1
+else
+  WORKTREE_ROOT_RUN_ID="$LINEAGE_ROOT"
+  [ -n "$WORKTREE_ROOT_RUN_ID" ] \
+    && WORKTREE_ROOT_RUN_ID="$(
+      printf '%s' "$WORKTREE_ROOT_RUN_ID" | tr -c 'A-Za-z0-9._-' '-'
+    )"
+fi
 LINEAGE_DEPTH=$((10#$LINEAGE_DEPTH))
 export AUTOPILOT_PARENT_RUN_ID="$DISPATCH_RUN_ID"
 export AUTOPILOT_ROOT_RUN_ID="$LINEAGE_ROOT"
+if [ "$WORKTREE_MANAGED" -eq 1 ]; then
+  export AUTOPILOT_WORKTREE_ROOT_RUN_ID="$WORKTREE_ROOT_RUN_ID"
+else
+  export AUTOPILOT_WORKTREE_ROOT_RUN_ID=""
+fi
 export AUTOPILOT_DISPATCH_DEPTH="$(( LINEAGE_DEPTH + 1 ))"
 
 set_runner_flags() {
@@ -1368,6 +1394,10 @@ try {
       continue
     fi
     [ "$_WT_MARKER_ROOT_RUN_ID" = "$root_id" ] || continue
+    if [ "$_WT_MARKER_RETENTION" = "inspect" ]; then
+      WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
+      continue
+    fi
     marker_digest="$(sha256sum "$marker" 2>/dev/null | awk '{print $1}')"
     actual_branch="$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
     actual_head="$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)"
@@ -1412,6 +1442,8 @@ WT_RUN_ID="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT_LOOP_ID="${AUTOPILOT_LOOP_ID:-${LINEAGE_PARENT:-$DISPATCH_RUN_ID}}"
 WT_LOOP_ID="$(printf '%s' "$WT_LOOP_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
+WT="$(realpath -m "$WT" 2>/dev/null)" \
+  || die_precondition "cannot canonicalize planned worktree path"
 _wt_repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
   || die_precondition "cannot resolve consuming repository root"
 _wt_common_dir="$(_wt_resolve_common_dir "$_wt_repo_root")" \
@@ -1456,7 +1488,13 @@ _wt_lock_fail() {
   die_precondition "$1"
 }
 
-if [ "$LINEAGE_DEPTH" -gt 0 ]; then
+if [ "$WORKTREE_MANAGED" -eq 1 ]; then
+  # Admission must precede the first pending record, branch, or worktree. Once
+  # active, evidence loss cannot be reinterpreted as an empty lifecycle root.
+  bash "$SELF_DIR/reap-dispatch-worktrees.sh" scan \
+    --repo "$_wt_repo_root" --root-run-id "$WORKTREE_ROOT_RUN_ID" >/dev/null \
+    || die_precondition "cannot admit managed worktree lifecycle root"
+
   _wt_open_lock_fd "$_wt_common_dir/autopilot-worktree-budget.lock" \
     || die_precondition "cannot open worktree resource budget lock"
   WT_BUDGET_LOCK_FD="$_WT_SAFE_LOCK_FD"
@@ -1468,7 +1506,7 @@ if [ "$LINEAGE_DEPTH" -gt 0 ]; then
   _wt_prepare_common_excludes \
     || die_precondition "cannot register worktree bookkeeping exclusion"
 
-  _wt_budget_reconcile_and_count "$_wt_repo_root" "$_wt_common_dir" "$LINEAGE_ROOT" \
+  _wt_budget_reconcile_and_count "$_wt_repo_root" "$_wt_common_dir" "$WORKTREE_ROOT_RUN_ID" \
     || die_precondition "cannot reconcile worktree creation state"
   _wt_budget_limit="$(bash "$SELF_DIR/resolve-worktree-teardown.sh" --field max_leaf_worktrees_per_root 2>/dev/null || true)"
   [[ "$_wt_budget_limit" =~ ^[0-9]+$ ]] || _wt_budget_limit=4
@@ -1486,7 +1524,7 @@ if [ "$LINEAGE_DEPTH" -gt 0 ]; then
     }
   WT_PENDING_RECORD="${_wt_pending_tmp%.tmp}.json"
   (umask 077; printf '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
-    "$(json_escape "$LINEAGE_ROOT")" "$(json_escape "$WT_RUN_ID")" \
+    "$(json_escape "$WORKTREE_ROOT_RUN_ID")" "$(json_escape "$WT_RUN_ID")" \
     "$(json_escape "$WT_LOOP_ID")" "$(json_escape "$BRANCH")" \
     "$BASE_SHA" "$(json_escape "$WT")" > "$_wt_pending_tmp") \
     && mv -f -- "$_wt_pending_tmp" "$WT_PENDING_RECORD" \
@@ -1520,8 +1558,9 @@ _wt_marker_tmp="$WT/.autopilot-worktree.tmp.$$"
   printf 'branch=%s\n' "$BRANCH"
   printf 'base_sha=%s\n' "$BASE_SHA"
   printf 'run_id=%s\n' "$WT_RUN_ID"
-  printf 'root_run_id=%s\n' "$LINEAGE_ROOT"
+  printf 'root_run_id=%s\n' "$WORKTREE_ROOT_RUN_ID"
   printf 'loop_id=%s\n' "$WT_LOOP_ID"
+  [ "$KEEP" -eq 1 ] && printf 'retention=inspect\n'
   printf 'schema=2\n'
 } > "$_wt_marker_tmp"
 mv -f -- "$_wt_marker_tmp" "$WT/.autopilot-worktree" \
@@ -1535,7 +1574,7 @@ WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
 flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
 if ! _wt_read_schema2_marker "$WT/.autopilot-worktree" \
    || [ "$_WT_MARKER_RUN_ID" != "$WT_RUN_ID" ] \
-   || [ "$_WT_MARKER_ROOT_RUN_ID" != "$LINEAGE_ROOT" ] \
+   || [ "$_WT_MARKER_ROOT_RUN_ID" != "$WORKTREE_ROOT_RUN_ID" ] \
    || [ "$_WT_MARKER_LOOP_ID" != "$WT_LOOP_ID" ] \
    || [ "$_WT_MARKER_BRANCH" != "$BRANCH" ] \
    || [ "$_WT_MARKER_BASE_SHA" != "$BASE_SHA" ]; then
@@ -1605,10 +1644,38 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
   fi
 }
 
-# A TERM during the long run orphans the worktree + branch AND can leave worker
-# descendants. Trap it to reap the container first, then minimal worktree remove
-# (no project hook — signal-safe) + branch -D (sole branch-delete site) + exit 2.
-trap 'reap_container; [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"; [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"; [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"; [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"; reap_worktree_minimal "$WT"; git branch -D "$BRANCH" >/dev/null 2>&1; exit 2' INT TERM
+# Managed aborts must preserve exact branch evidence before any removal. The
+# legacy minimal remover + branch deletion remains only for unmanaged one-shots.
+abort_dispatch() {
+  reap_container
+  [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
+  [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
+  [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
+  if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ]; then
+    local abort_tip
+    abort_tip="$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)"
+    if [ -n "${WT_LOCK_FD:-}" ]; then
+      exec {WT_LOCK_FD}>&- || true
+      WT_LOCK_FD=""
+    fi
+    if [[ "$abort_tip" =~ ^[0-9a-f]{40,64}$ ]] \
+       && bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
+      --repo "$_wt_repo_root" \
+      --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+      --path "$WT" >/dev/null 2>&1; then
+      bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
+        --repo "$_wt_repo_root" \
+        --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+        --path "$WT" --expected-tip "$abort_tip" --yes >/dev/null 2>&1 || true
+    fi
+  else
+    reap_worktree_minimal "$WT"
+    git branch -D "$BRANCH" >/dev/null 2>&1
+  fi
+  exit 2
+}
+trap abort_dispatch INT TERM
 
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
@@ -2255,7 +2322,7 @@ dispatch_detached_run() {
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       CLASSIFIED_ERROR \
-      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT LINEAGE_DEPTH \
+      ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null

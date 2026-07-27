@@ -499,7 +499,11 @@ const [
   driftContract,
   driftSeal,
 ] = process.argv.slice(2);
-const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const {
+  AutopilotEngine,
+  campaignIdFor,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
@@ -849,7 +853,11 @@ console.log(`worktree_calls=${markers.worktree}`);
 console.log(`invalid_max_phase=${invalidMax.phase}`);
 console.log(`invalid_max_intake_calls=${preflightIntakeCalls}`);
 
-const campaignId = `campaign-v1-${'c'.repeat(64)}`;
+const campaignId = campaignIdFor(
+  admitted.initial_state.repo_identity,
+  admitted.contract.ticket,
+  'c'.repeat(64),
+);
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
 function campaignControlFixture(nonce, initialState = admitted.initial_state) {
   return {
@@ -1124,6 +1132,7 @@ console.log(`expired_review_phase=${expiredBeforeReview.phase}`);
 console.log(`expired_review_calls=${expiredReviewCalls}`);
 
 const implementationCalls = [];
+const implementationEnvs = [];
 const reviewCalls = [];
 const verificationEnvs = [];
 const identityEngine = new AutopilotEngine({
@@ -1132,8 +1141,9 @@ const identityEngine = new AutopilotEngine({
   campaignIntake() {
     return campaignControlFixture('identity');
   },
-  implementationDispatcher(args) {
+  implementationDispatcher(args, options) {
     implementationCalls.push(args);
+    implementationEnvs.push(options.env || {});
     const dispatchedBranch = args[args.indexOf('--branch') + 1];
     return {
       error: null,
@@ -1227,6 +1237,7 @@ const identityEngine = new AutopilotEngine({
     throw new Error('managed PREPARED resume must not use legacy branch precheck');
   },
 });
+process.env.AUTOPILOT_AMBIENT_SECRET = 'must-not-enter-restricted-env';
 const identityResult = identityEngine.runImplementationReviewLoop({
   promptFile,
   branch: 'impl/icc-p1-intake',
@@ -1234,6 +1245,13 @@ const identityResult = identityEngine.runImplementationReviewLoop({
   roster,
   campaignManaged: true,
   campaignContract: contractPath,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_PARENT_RUN_ID: 'foreman-initial',
+      AUTOPILOT_ROOT_RUN_ID: 'foreman-initial',
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+    },
+  },
   verificationEnv: {
     PATH: process.env.PATH || '',
     CI: 'identity-test',
@@ -1251,6 +1269,26 @@ const roundTwoResult = identityEngine.implementTask({
   implementationStage: 'campaign-implementation',
   campaignContractFile: contractPath,
   campaignContractDigest: 'c'.repeat(64),
+  implementationOptions: {
+    env: {
+      AUTOPILOT_PARENT_RUN_ID: 'foreman-round-two',
+      AUTOPILOT_DISPATCH_DEPTH: '0',
+    },
+  },
+});
+const implementationCallsBeforeMismatch = implementationCalls.length;
+const mismatchedRootResult = identityEngine.implementTask({
+  promptFile,
+  branch: 'impl/icc-p1-intake-mismatched-root',
+  base,
+  roster,
+  runId: `campaign-v1-${'d'.repeat(64)}`,
+  ledger: campaignLedger,
+  implementationRound: 3,
+  implementationStage: 'campaign-implementation',
+  campaignContractFile: contractPath,
+  campaignContractDigest: 'c'.repeat(64),
+  implementationOptions: { env: { PATH: process.env.PATH || '' } },
 });
 const managedResumeResult = identityEngine.runImplementationReviewLoop({
   promptFile,
@@ -1260,6 +1298,13 @@ const managedResumeResult = identityEngine.runImplementationReviewLoop({
   campaignManaged: true,
   campaignContract: contractPath,
   resume: true,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_PARENT_RUN_ID: 'foreman-resume',
+      AUTOPILOT_ROOT_RUN_ID: 'foreman-resume',
+      AUTOPILOT_DISPATCH_DEPTH: '9'.repeat(100),
+    },
+  },
 });
 const implementationsBeforeNoSpec = implementationCalls.length;
 const managedNoSpecResult = identityEngine.runImplementationReviewLoop({
@@ -1293,6 +1338,27 @@ console.log(`managed_resume_status=${managedResumeResult.status}`);
 console.log(`managed_resume_phase=${managedResumeResult.phase}`);
 console.log(`managed_resume_reason=${managedResumeResult.reason}`);
 console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
+console.log(`implementation_root=${implementationEnvs[0].AUTOPILOT_ROOT_RUN_ID}`);
+console.log(`round_two_root=${implementationEnvs[1].AUTOPILOT_ROOT_RUN_ID}`);
+console.log(`managed_resume_root=${implementationEnvs[2].AUTOPILOT_ROOT_RUN_ID}`);
+console.log(`implementation_worktree_root=${implementationEnvs[0].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
+console.log(`round_two_worktree_root=${implementationEnvs[1].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
+console.log(`managed_resume_worktree_root=${implementationEnvs[2].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
+console.log(`worktree_roots_exact=${
+  implementationEnvs.every((env) => env.AUTOPILOT_WORKTREE_ROOT_RUN_ID === campaignId)
+}`);
+console.log(`implementation_parent=${implementationEnvs[0].AUTOPILOT_PARENT_RUN_ID}`);
+console.log(`implementation_depth=${implementationEnvs[0].AUTOPILOT_DISPATCH_DEPTH}`);
+console.log(`round_two_depth=${implementationEnvs[1].AUTOPILOT_DISPATCH_DEPTH}`);
+console.log(`managed_resume_depth=${implementationEnvs[2].AUTOPILOT_DISPATCH_DEPTH}`);
+console.log(`restricted_env_leak=${
+  implementationEnvs.some((env) => Object.hasOwn(env, 'AUTOPILOT_AMBIENT_SECRET'))
+}`);
+console.log(`mismatched_root_phase=${mismatchedRootResult.phase}`);
+console.log(`mismatched_root_reason=${mismatchedRootResult.reason}`);
+console.log(`mismatched_root_dispatch_delta=${
+  implementationCalls.length - implementationCallsBeforeMismatch - 1
+}`);
 console.log(`managed_resume_inspect_calls=${resumeInspectCalls}`);
 console.log(`identity_verify_env=${verificationEnvs[0].CI}`);
 console.log(
@@ -1440,6 +1506,37 @@ assert_contains "$INTAKE_OUT" "managed_resume_status=converged" \
   "managed PREPARED resume continues through campaign implementation"
 assert_contains "$INTAKE_OUT" "managed_resume_stage=campaign-implementation" \
   "managed PREPARED resume dispatches the first campaign implementation round"
+assert_contains "$INTAKE_OUT" "implementation_root=foreman-initial" \
+  "managed implementation preserves the watcher lineage root"
+assert_contains "$INTAKE_OUT" "round_two_root=foreman-round-two" \
+  "managed repair preserves its current foreman watcher lineage"
+assert_contains "$INTAKE_OUT" "managed_resume_root=foreman-resume" \
+  "managed resume remains visible to the replacement foreman watcher"
+assert_contains "$INTAKE_OUT" "implementation_worktree_root=campaign-v1-" \
+  "managed implementation derives resource root from sealed campaign identity"
+assert_contains "$INTAKE_OUT" "round_two_worktree_root=campaign-v1-" \
+  "managed repair preserves the campaign resource root"
+assert_contains "$INTAKE_OUT" "managed_resume_worktree_root=campaign-v1-" \
+  "managed resume preserves the original campaign resource root"
+assert_contains "$INTAKE_OUT" "worktree_roots_exact=true" \
+  "initial, repair, and resume roots equal the sealed campaign identity"
+assert_contains "$INTAKE_OUT" "implementation_parent=foreman-initial" \
+  "managed implementation starts observable lineage under its foreman"
+assert_contains "$INTAKE_OUT" "implementation_depth=1" \
+  "managed implementation injects explicit first-leaf depth"
+assert_contains "$INTAKE_OUT" "round_two_depth=1" \
+  "managed implementation cannot disable budgeting with zero depth"
+assert_contains "$INTAKE_OUT" "managed_resume_depth=1" \
+  "managed resume repairs malformed inherited depth before dispatch"
+assert_contains "$INTAKE_OUT" "restricted_env_leak=false" \
+  "managed lineage injection preserves an explicitly restricted dispatcher env"
+assert_contains "$INTAKE_OUT" "mismatched_root_phase=prepare_implementation" \
+  "well-formed mismatched campaign root blocks before dispatch"
+assert_contains "$INTAKE_OUT" \
+  "mismatched_root_reason=managed campaign run id does not match the sealed contract identity" \
+  "mismatched campaign root rejection names the sealed-identity mismatch"
+assert_contains "$INTAKE_OUT" "mismatched_root_dispatch_delta=0" \
+  "mismatched campaign root spends no implementation call"
 assert_contains "$INTAKE_OUT" "managed_resume_inspect_calls=0" \
   "managed campaign replay does not require the legacy ahead-branch precheck"
 assert_contains "$INTAKE_OUT" "identity_verify_env=identity-test" \

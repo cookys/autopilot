@@ -114,6 +114,10 @@ assert_contains "$OUT" '"status": "committed"' "qoder committed status"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
+DIRECT_AUTHORITY_BEFORE="$(
+  git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+    | wc -l
+)"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "committed path exit code"
 assert_contains "$OUT" '"status": "committed"' "committed status"
@@ -125,6 +129,63 @@ BRANCH_EXISTS="$(git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/smoke 
 assert_eq "yes" "$BRANCH_EXISTS" "branch survives for review/merge"
 SMOKE_CONTENT="$(git -C "$SBX" show feat/smoke:ok.txt)"
 assert_eq "ok" "$SMOKE_CONTENT" "artifact verifiable from branch"
+assert_eq "$(
+  git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+    | wc -l
+)" "$DIRECT_AUTHORITY_BEFORE" \
+  "direct one-shot cleanup does not create managed lifecycle authority"
+
+# 4b. managed committed path journals exact custom branch before auto-removal
+MANAGED_ROOT="campaign-v1-$(printf 'a%.0s' {1..64})"
+MANAGED_RETAINED="$TEST_TMP/managed-retained"
+MANAGED_BASE="$(git -C "$SBX" rev-parse develop)"
+git -C "$SBX" worktree add -q -b hetero/managed-retained \
+  "$MANAGED_RETAINED" "$MANAGED_BASE"
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/managed-retained\n'
+  printf 'base_sha=%s\n' "$MANAGED_BASE"
+  printf 'run_id=managed-retained\n'
+  printf 'root_run_id=%s\n' "$MANAGED_ROOT"
+  printf 'loop_id=managed-retained-loop\n'
+  printf 'retention=inspect\n'
+  printf 'schema=2\n'
+} > "$MANAGED_RETAINED/.autopilot-worktree"
+: > "$MANAGED_RETAINED/.autopilot-worktree.lock"
+OUT="$(cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-managed \
+  AUTOPILOT_ROOT_RUN_ID=foreman-managed \
+  AUTOPILOT_WORKTREE_ROOT_RUN_ID="$MANAGED_ROOT" AUTOPILOT_DISPATCH_DEPTH=1 \
+  "$SCRIPT" --branch hetero/managed-smoke --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "managed committed path exit code"
+assert_contains "$OUT" '"worktree": null' \
+  "managed committed worktree is controller-reaped"
+assert_file_exists "$MANAGED_RETAINED/.git" \
+  "managed success cleanup preserves another retained leaf for inspection"
+MANAGED_SCAN="$(
+  "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan \
+    --repo "$SBX" --root-run-id "$MANAGED_ROOT"
+)"
+assert_contains "$MANAGED_SCAN" '"branch":"hetero/managed-smoke"' \
+  "managed auto-removal leaves exact custom branch inventory"
+assert_eq "yes" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/hetero/managed-smoke \
+    >/dev/null && echo yes || echo no
+)" "managed custom branch survives for exact disposition"
+git -C "$SBX" worktree remove --force "$MANAGED_RETAINED"
+git -C "$SBX" branch -D hetero/managed-retained >/dev/null
+
+# 4c. Explicit managed identity is exact input, never lossy-sanitized.
+OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID='bad/root' \
+  "$SCRIPT" --branch hetero/invalid-managed-root --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "invalid explicit managed root fails before dispatch"
+assert_contains "$OUT" "AUTOPILOT_WORKTREE_ROOT_RUN_ID must match" \
+  "invalid managed root failure names the exact contract"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet \
+    refs/heads/hetero/invalid-managed-root >/dev/null && echo yes || echo no
+)" "invalid managed root cannot create a branch"
 
 # 5. duplicate branch → precondition_failed (exit 2)
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?

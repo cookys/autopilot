@@ -167,8 +167,135 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 ### Cleanup (caller's responsibility — both are deliberate persistence)
 
 - `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
-- Kept worktrees (exit 1, or `--keep-worktree`): inspect, then `git worktree remove --force <path>`. Preserve the exact branch tip in a verified bundle before any human/depth-0 compare-delete; never use a bare `git branch -D`. If interrupted, use `git worktree list` / `git worktree prune` first, then the same preserve-first branch disposition.
+- Kept managed worktrees (exit 1, or `--keep-worktree`): inspect, then immediately use the exact root-run lifecycle below. Do not bypass its write-ahead branch inventory with a manual `git worktree remove --force`, and never use a bare `git branch -D`.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
+
+## Managed root-run lifecycle
+
+The stable resource identity is `git-common-dir:<canonical-path>` plus the
+campaign `root_run_id`. The canonical campaign controller derives that root
+from the sealed `campaign_id` and injects it through
+`AUTOPILOT_WORKTREE_ROOT_RUN_ID` on every initial, repair, and resumed
+implementation dispatch. This resource channel is deliberately separate from
+the manifest's `AUTOPILOT_ROOT_RUN_ID`: the latter remains the current foreman
+trace root so `watch-foreman.js --root <foreman-run-id>` continues to observe
+its leaves. All schema-2 implementation descendants inherit the worktree root
+unchanged. The managed campaign adapter also normalizes dispatch depth to a
+positive decimal before spawning the leaf; zero or malformed inherited depth
+cannot disable the budget block.
+An explicitly managed dispatch admits that root durably before publishing a
+pending record or creating a branch/worktree. A direct one-shot dispatch with
+no explicit worktree root keeps the legacy cleanup path and does not create
+lifecycle authority as a side effect.
+`max_leaf_worktrees_per_root` (default `4`) limits simultaneous retained
+schema-2 leaves for that identity; repository lifecycle locking serializes
+admission, reconciliation, scan, and reap. A budget rejection is a
+pre-spend `precondition_failed`, not permission to create another root id.
+
+Once depth 0 has inspected a retained result, disposition it immediately:
+
+```bash
+: "${lifecycle_artifact_dir:?set a caller-owned durable artifact directory}"
+: "${campaign_id:?bind the admitted sealed campaign_id}"
+[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]] \
+  || { printf '%s\n' 'invalid lifecycle campaign_id' >&2; exit 2; }
+root_run_id="$campaign_id"
+lifecycle_dir="$(mktemp -d "$lifecycle_artifact_dir/root-$root_run_id.XXXXXX")" \
+  || exit 2
+worktree_result="$lifecycle_dir/worktrees.json"
+branch_result="$lifecycle_dir/branches.json"
+receipt="$lifecycle_dir/residue-receipt.json"
+bash "$autopilot_root/scripts/reap-dispatch-worktrees.sh" reap \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" --yes \
+  >"$worktree_result" || exit $?
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap \
+  --repo "$consumer_repo" --into "$integration_target" \
+  --inventory-file "$worktree_result" --yes >"$branch_result" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" issue \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --worktree-result "$worktree_result" --branch-result "$branch_result" \
+  --out "$receipt" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" check \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --receipt "$receipt" || exit $?
+node -e '
+const value = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (value.zero_residue !== true) process.exit(1);
+' "$receipt" || { printf '%s\n' 'lifecycle residue remains' >&2; exit 1; }
+```
+
+The artifact directory belongs to depth 0, must survive leaf cleanup, and is
+recorded in the run summary for LSM consumption. Every attempt uses a unique
+mode-0700 `root-<id>.*` directory, so a failed step cannot fall through to a
+stale receipt. The validated id is prefixed with `root-` before path
+construction, so the otherwise valid ids `.` and `..` cannot traverse the
+artifact root. `check` exit 0 means the
+receipt is structurally valid and fresh; depth 0 must also read
+`zero_residue`. A fresh `false` is an exact lifecycle blocker, not a pass.
+
+The worktree controller removes only exact clean/dead owned leaves and writes
+durable branch/tip inventory before removal. Dirty, live, malformed, legacy,
+unsupported, pending, or raced states remain visible blockers. Resolve the
+reported state (for example commit/preserve dirty work or stop a live owner)
+and rerun the same exact-root sequence; never force-remove past it. If an
+exact branch is not contained, rerun the branch disposition with
+`--ack-preserved <branch@tip>` only after an explicit preservation handoff;
+never broaden a regex to make it disappear.
+
+Automatic managed success cleanup targets only the completing leaf. An explicit
+`--keep-worktree` publishes `retention=inspect`; later budget reconciliation
+counts that leaf but cannot remove it before depth 0 dispositions it. Inventory
+copy publication is protected by a write-ahead intent: pre-authority copies may
+be rolled back and a post-authority trailing intent may be cleared only when
+both copies still match. Missing, malformed, or extra evidence never gains
+authority during load and still fails closed.
+Managed `INT`/`TERM` follows the same journal-before-remove rule and never
+deletes the branch in the trap. The final targeted reap is bound to the tip
+captured by the first journal step; a hook or race that advances the branch is
+preserved for explicit disposition instead of creating a second membership.
+Exact branch disposition inherits and verifies the same lifecycle lock fd for
+its controller rescan, then holds that lock through validation and destructive
+disposition, so a new managed leaf cannot enter between canonical inventory and
+branch action.
+
+Before first anchor creation, the controller admits the root into a private
+repo-level registry (`initializing` then `active`). An active registered root
+can never be reinitialized when its per-root evidence disappears. The
+controller then cross-binds a random per-root nonce plus the journal
+directory's birth-time/device/inode generation between a mode-0600 anchor under the Git
+common directory and a mode-0600 sentinel inside the private mode-0700
+branch-inventory directory. Each immutable inventory record is also mirrored
+under the separate anchor directory and compared byte-for-byte on every load.
+The monotonic authority is a canonical JSON Git blob reached through
+`refs/autopilot/lifecycle-roots/<root-key>` and advanced with `git update-ref`
+compare-and-swap. It carries the generation plus every record key/content
+digest, and permanently binds the admitted journal's
+nonce/birth-time/device/inode.
+Anchor and registry are updated afterward and may only be repaired
+forward from that ref; the sentinel keeps immutable directory identity. A kill
+after the authority CAS is recoverable, and coordinated stale snapshots of the
+ordinary anchor+registry files cannot roll the Git authority back. A copied
+sentinel cannot bless a replacement directory, an individual or mirrored pair
+cannot disappear silently, and a missing active anchor is never rebuilt from
+the sentinel. A pre-anchor journal is imported only when its directory is
+owner-private mode 0700 and every imported record is owner-owned mode 0600.
+Empty exact inventory is accepted only after these bindings and a fresh
+controller scan prove no unresolved journal branch. A same-owner adversary that
+can also rewrite the authority ref and Git object database is outside this
+local proof boundary.
+Crash-recovery claims cover process death and `SIGKILL`. Without explicit host
+and filesystem fsync guarantees, power loss may require manual recovery and
+must fail closed rather than prove zero residue.
+
+Managed successful leaves use this controller for automatic cleanup: exact
+branch/tip evidence is committed before the worktree is removed. The legacy
+direct remover remains only for unmanaged depth-zero dispatches.
+
+`LifecycleResidueReceipt` binds the current repository identity, root id,
+worktree observation, exact branch inventory, and disposition journal. It is
+freshness-checked before handoff to the lifecycle state machine, but it proves
+resource disposition only: it never computes task `can_close`, generation
+advance, merge authority, or finish authority.
 
 ## Repo-branch lifecycle
 
@@ -179,7 +306,12 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 * `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
 * Repeated `--pattern <bash-ere>` adds an explicit local family; an empty ERE is rejected because it would match every local branch. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
 
-`scan` emits JSON classification without mutating the repo. `check` is the finish-flow gate: exit 0 means no unacknowledged ahead integration candidate; exit 1 means depth 0 must integrate, explicitly preserve, or discard. `--ack <branch>` records preservation against the exact current tip; malformed, missing, or moved-tip acks are pruned fail-closed.
+`scan` emits JSON classification without destructive mutation (it may create
+owned coordination lock files). `check` is the finish-flow gate: exit 0 means
+no unacknowledged ahead integration candidate; exit 1 means depth 0 must
+integrate, explicitly preserve, or discard. `--ack <branch>` records
+preservation against the exact current tip; malformed, missing, or moved-tip
+acks are pruned fail-closed.
 
 Durable acknowledgement and destructive reap currently support SHA-1 object-format repositories only (40 lowercase hexadecimal object IDs). On SHA-256 repositories `scan` remains available/read-only, but a durable `check --ack` is unavailable (non-40-hex stored acks are pruned and re-arm the gate) and `reap --yes` fails closed during tip validation before any ref deletion.
 

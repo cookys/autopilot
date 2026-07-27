@@ -25,6 +25,7 @@ const { runCampaignComposition } = require('./campaign-composition');
 const {
   CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
+  campaignIdFor,
 } = require('./implementation-campaign');
 const { normalizeProductReviewFindings } = require('./product-review-normalizer');
 const {
@@ -779,6 +780,50 @@ function buildImplementationArgs({
   }
   args.push(...extraImplementationArgs);
   return args;
+}
+
+function deriveCampaignLifecycleRoot({
+  campaignContractFile,
+  campaignContractDigest,
+  runId,
+  cwd,
+}) {
+  const contractPath = path.resolve(cwd || process.cwd(), campaignContractFile);
+  let contract;
+  try {
+    contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  } catch (error) {
+    throw new TypeError(`managed campaign contract is unreadable: ${error.message}`);
+  }
+  const common = spawnSync(
+    'git',
+    ['-C', cwd || process.cwd(), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  if (common.error || common.status !== 0) {
+    throw new TypeError('managed campaign repository identity is unavailable');
+  }
+  let commonDir;
+  try {
+    commonDir = fs.realpathSync(String(common.stdout || '').trim());
+  } catch (_error) {
+    throw new TypeError('managed campaign Git common directory is unreadable');
+  }
+  const repoIdentity = `git-common-dir:${commonDir}`;
+  if (!contract || contract.repo_identity !== repoIdentity) {
+    throw new TypeError('managed campaign contract repository identity does not match cwd');
+  }
+  const expected = campaignIdFor(
+    repoIdentity,
+    contract.ticket,
+    campaignContractDigest,
+  );
+  if (runId !== expected) {
+    throw new TypeError(
+      'managed campaign run id does not match the sealed contract identity',
+    );
+  }
+  return expected;
 }
 
 function buildRepairBranchName({ branch, round, previousCommit }) {
@@ -1954,12 +1999,21 @@ class AutopilotEngine {
     }
 
     let resolvedImplementationStage;
+    let campaignLifecycleRoot = null;
     try {
       resolvedImplementationStage = resolveImplementationLedgerStage({
         implementationStage: input.implementationStage,
         implementationRound: input.implementationRound,
         runId: input.runId,
       });
+      if (input.campaignContractFile) {
+        campaignLifecycleRoot = deriveCampaignLifecycleRoot({
+          campaignContractFile: input.campaignContractFile,
+          campaignContractDigest: input.campaignContractDigest,
+          runId: input.runId,
+          cwd: resolvedTaskCwd,
+        });
+      }
       implementationArgs = buildImplementationArgs({
         roster,
         promptFile: input.promptFile,
@@ -1997,9 +2051,67 @@ class AutopilotEngine {
 
     const startedAt = this.now();
     let implementationResult;
+    const implementationBaseEnv = Object.prototype.hasOwnProperty.call(
+      implementationOptionsInput,
+      'env',
+    )
+      ? implementationOptionsInput.env
+      : process.env;
+    if (campaignLifecycleRoot
+        && (!implementationBaseEnv || typeof implementationBaseEnv !== 'object'
+          || Array.isArray(implementationBaseEnv))) {
+      const blockedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', blockedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'managed implementation env must be an object',
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs,
+        implementation: null,
+        ledger,
+      };
+    }
+    const inheritedDispatchDepth = campaignLifecycleRoot
+      ? (
+        implementationBaseEnv.AUTOPILOT_DISPATCH_DEPTH
+        || '1'
+      )
+      : null;
+    const inheritedDispatchDepthText = String(inheritedDispatchDepth);
+    const inheritedDispatchDepthNumber = Number(inheritedDispatchDepthText);
+    const managedDispatchDepth = campaignLifecycleRoot
+      && /^[1-9][0-9]*$/.test(inheritedDispatchDepthText)
+      && Number.isSafeInteger(inheritedDispatchDepthNumber)
+      && inheritedDispatchDepthNumber <= 1_000_000
+      ? inheritedDispatchDepthText
+      : '1';
+    const managedTraceParent = campaignLifecycleRoot
+      ? (
+        implementationBaseEnv.AUTOPILOT_PARENT_RUN_ID
+        || campaignLifecycleRoot
+      )
+      : null;
+    const managedTraceRoot = campaignLifecycleRoot
+      ? (
+        implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID
+        || managedTraceParent
+      )
+      : null;
     const implementationOptions = {
       ...implementationOptionsInput,
       cwd: resolvedTaskCwd,
+      ...(campaignLifecycleRoot ? {
+        env: {
+          ...implementationBaseEnv,
+          AUTOPILOT_PARENT_RUN_ID: managedTraceParent,
+          AUTOPILOT_ROOT_RUN_ID: managedTraceRoot,
+          AUTOPILOT_WORKTREE_ROOT_RUN_ID: campaignLifecycleRoot,
+          AUTOPILOT_DISPATCH_DEPTH: managedDispatchDepth,
+        },
+      } : {}),
     };
     try {
       implementationResult = this.implementationDispatcher(

@@ -34,9 +34,15 @@ printf '%s\n' dirty > "$WT/dirty.txt"
 
 DIRTY_SCAN="$TEST_TMP/dirty-scan.json"
 "$WORKTREE_REAPER" scan --repo "$REPO" --root-run-id "$ROOT_ID" > "$DIRTY_SCAN"
+DIRTY_BRANCH_RESULT="$TEST_TMP/dirty-branch-result.json"
+"$BRANCH_REAPER" reap --repo "$REPO" --into develop \
+  --inventory-file "$DIRTY_SCAN" --yes > "$DIRTY_BRANCH_RESULT"
+assert_exit_code "$?" "0" \
+  "empty branch disposition preserves current dirty worktree blockers"
 DIRTY_RECEIPT="$TEST_TMP/dirty-receipt.json"
 node "$RECEIPT" issue --repo "$REPO" --root-run-id "$ROOT_ID" \
-  --worktree-result "$DIRTY_SCAN" --out "$DIRTY_RECEIPT"
+  --worktree-result "$DIRTY_SCAN" --branch-result "$DIRTY_BRANCH_RESULT" \
+  --out "$DIRTY_RECEIPT"
 assert_exit_code "$?" "0" "dirty lifecycle observation still issues a fail-closed receipt"
 node - "$DIRTY_RECEIPT" <<'NODE'
 const fs = require("fs");
@@ -191,6 +197,16 @@ git -C "$REPO" worktree remove --force "$MARKER_DRIFT_WT"
 git -C "$REPO" branch -D hetero/p3-marker-drift >/dev/null
 
 JOURNAL_DIR="$COMMON/autopilot-worktree-branch-inventory"
+commit_test_journal() {
+  local root="$1" record_key="$2" root_key record mirror
+  root_key="$(
+    printf '%s\0%s\0' "$IDENTITY" "$root" | sha256sum | awk '{print $1}'
+  )"
+  record="$JOURNAL_DIR/$record_key.json"
+  mirror="$COMMON/autopilot-worktree-lifecycle-roots/$root_key.$record_key.record.json"
+  cp "$record" "$mirror"
+  chmod 600 "$record" "$mirror"
+}
 JOURNAL_DRIFT="$JOURNAL_DIR/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"
 printf \
   '{"schema":1,"root_run_id":"%s","path":"%s","branch":"hetero/p3-journal-drift","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
@@ -221,21 +237,28 @@ HANDOFF_TIP="$(
 )"
 git -C "$REPO" update-ref refs/heads/hetero/p3-handoff "$HANDOFF_TIP"
 git -C "$REPO" branch agent/unrelated-r1-20260727 develop
+"$WORKTREE_REAPER" scan --repo "$REPO" --root-run-id "$HANDOFF_ROOT_ID" >/dev/null
+assert_exit_code "$?" "0" "handoff fixture establishes its anchored journal root"
 HANDOFF_INVENTORY="$TEST_TMP/handoff-inventory.json"
 printf \
   '{"schema":1,"git_common_dir":"%s","root_run_id":"%s","branch_inventory":[{"branch":"hetero/p3-handoff","tip":"%s"}]}\n' \
   "$COMMON" "$HANDOFF_ROOT_ID" "$HANDOFF_TIP" > "$HANDOFF_INVENTORY"
 HANDOFF_PATH="$TEST_TMP/handoff-origin"
-HANDOFF_KEY="$(
-  printf '%s\0%s\0%s\0%s\0' \
-    "$HANDOFF_ROOT_ID" "$HANDOFF_PATH" "hetero/p3-handoff" "$HANDOFF_TIP" \
-    | sha256sum | awk '{print $1}'
-)"
-printf \
-  '{"schema":1,"root_run_id":"%s","path":"%s","branch":"hetero/p3-handoff","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
-  "$HANDOFF_ROOT_ID" "$HANDOFF_PATH" "$HANDOFF_TIP" \
-  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
-  > "$JOURNAL_DIR/$HANDOFF_KEY.json"
+git -C "$REPO" worktree add -q "$HANDOFF_PATH" hetero/p3-handoff
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/p3-handoff\n'
+  printf 'base_sha=%s\n' "$BASE"
+  printf 'run_id=p3-handoff\n'
+  printf 'root_run_id=%s\n' "$HANDOFF_ROOT_ID"
+  printf 'loop_id=p3-handoff-loop\n'
+  printf 'schema=2\n'
+} > "$HANDOFF_PATH/.autopilot-worktree"
+: > "$HANDOFF_PATH/.autopilot-worktree.lock"
+"$WORKTREE_REAPER" journal --repo "$REPO" --root-run-id "$HANDOFF_ROOT_ID" \
+  --path "$HANDOFF_PATH" >/dev/null
+assert_exit_code "$?" "0" "handoff branch enters authority through exact journal command"
+git -C "$REPO" worktree remove "$HANDOFF_PATH"
 HANDOFF_RESULT="$TEST_TMP/handoff-result.json"
 "$BRANCH_REAPER" reap --repo "$REPO" --into develop \
   --inventory-file "$HANDOFF_INVENTORY" \
@@ -318,6 +341,153 @@ if (!value.zero_residue || value.branches.length !== 2
 NODE
 assert_exit_code "$?" "0" "cumulative receipt proves both sequential batches dispositioned"
 
+LOSS_REPO="$TEST_TMP/journal-loss-repo"
+LOSS_WT="$TEST_TMP/journal-loss-worktree"
+LOSS_ROOT_ID="wlb-p3-journal-loss"
+git init -q -b develop "$LOSS_REPO"
+git -C "$LOSS_REPO" config user.email test@example.com
+git -C "$LOSS_REPO" config user.name "Test User"
+git -C "$LOSS_REPO" commit -q --allow-empty -m base
+LOSS_BASE="$(git -C "$LOSS_REPO" rev-parse HEAD)"
+LOSS_COMMON="$(git -C "$LOSS_REPO" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$LOSS_COMMON/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+  >> "$LOSS_COMMON/info/exclude"
+git -C "$LOSS_REPO" worktree add -q -b hetero/p3-journal-loss "$LOSS_WT" develop
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/p3-journal-loss\n'
+  printf 'base_sha=%s\n' "$LOSS_BASE"
+  printf 'run_id=p3-journal-loss\n'
+  printf 'root_run_id=%s\n' "$LOSS_ROOT_ID"
+  printf 'loop_id=p3-journal-loss-loop\n'
+  printf 'schema=2\n'
+} > "$LOSS_WT/.autopilot-worktree"
+: > "$LOSS_WT/.autopilot-worktree.lock"
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null
+assert_exit_code "$?" "0" "journal-loss fixture admits the root before evidence"
+LOSS_REGISTRY="$LOSS_COMMON/autopilot-worktree-lifecycle-roots.registry.json"
+LOSS_ROOT_KEY="$(
+  printf '%s\0%s\0' "git-common-dir:$LOSS_COMMON" "$LOSS_ROOT_ID" \
+    | sha256sum | awk '{print $1}'
+)"
+LOSS_ANCHOR="$LOSS_COMMON/autopilot-worktree-lifecycle-roots/$LOSS_ROOT_KEY.json"
+cp "$LOSS_REGISTRY" "$TEST_TMP/loss-registry-empty-snapshot.json"
+cp "$LOSS_ANCHOR" "$TEST_TMP/loss-anchor-empty-snapshot.json"
+LOSS_RESULT="$TEST_TMP/journal-loss-result.json"
+"$WORKTREE_REAPER" reap --repo "$LOSS_REPO" \
+  --root-run-id "$LOSS_ROOT_ID" --yes > "$LOSS_RESULT"
+assert_exit_code "$?" "0" "journal-loss fixture establishes anchored branch evidence"
+LOSS_RECORD="$(
+  find "$LOSS_COMMON/autopilot-worktree-branch-inventory" -maxdepth 1 \
+    -type f -regextype posix-extended -regex '.*/[0-9a-f]{64}\.json' -print -quit
+)"
+mv "$LOSS_RECORD" "$LOSS_RECORD.lost"
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "durable evidence mirror rejects individual journal record loss"
+mv "$LOSS_RECORD.lost" "$LOSS_RECORD"
+LOSS_RECORD_KEY="$(basename "$LOSS_RECORD" .json)"
+LOSS_MIRROR="$LOSS_COMMON/autopilot-worktree-lifecycle-roots/$LOSS_ROOT_KEY.$LOSS_RECORD_KEY.record.json"
+mv "$LOSS_RECORD" "$LOSS_RECORD.lost"
+mv "$LOSS_MIRROR" "$LOSS_MIRROR.lost"
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "anchor record-set commitment rejects dual journal and mirror loss"
+mv "$LOSS_RECORD.lost" "$LOSS_RECORD"
+mv "$LOSS_MIRROR.lost" "$LOSS_MIRROR"
+cp "$LOSS_REGISTRY" "$TEST_TMP/loss-registry-current.json"
+cp "$LOSS_ANCHOR" "$TEST_TMP/loss-anchor-current.json"
+mv "$LOSS_RECORD" "$LOSS_RECORD.lost"
+mv "$LOSS_MIRROR" "$LOSS_MIRROR.lost"
+cp "$TEST_TMP/loss-registry-empty-snapshot.json" "$LOSS_REGISTRY"
+cp "$TEST_TMP/loss-anchor-empty-snapshot.json" "$LOSS_ANCHOR"
+chmod 600 "$LOSS_REGISTRY"
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "Git-ref authority rejects coordinated stale anchor and registry replay"
+mv "$LOSS_RECORD.lost" "$LOSS_RECORD"
+mv "$LOSS_MIRROR.lost" "$LOSS_MIRROR"
+cp "$TEST_TMP/loss-registry-current.json" "$LOSS_REGISTRY"
+cp "$TEST_TMP/loss-anchor-current.json" "$LOSS_ANCHOR"
+chmod 600 "$LOSS_REGISTRY" "$LOSS_ANCHOR"
+LOSS_SENTINEL="$LOSS_COMMON/autopilot-worktree-branch-inventory/$LOSS_ROOT_KEY.root.json"
+for loss_file in "$LOSS_RECORD" "$LOSS_MIRROR" "$LOSS_ANCHOR" "$LOSS_SENTINEL"; do
+  mv "$loss_file" "$loss_file.lost"
+done
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "active root registry prevents reinitialization after all root evidence is lost"
+for loss_file in "$LOSS_RECORD" "$LOSS_MIRROR" "$LOSS_ANCHOR" "$LOSS_SENTINEL"; do
+  mv "$loss_file.lost" "$loss_file"
+done
+
+EMPTY_REPO="$TEST_TMP/authority-only-repo"
+EMPTY_ROOT_ID="wlb-p3-authority-only"
+git init -q -b develop "$EMPTY_REPO"
+git -C "$EMPTY_REPO" config user.email test@example.com
+git -C "$EMPTY_REPO" config user.name "Test User"
+git -C "$EMPTY_REPO" commit -q --allow-empty -m base
+EMPTY_COMMON="$(git -C "$EMPTY_REPO" rev-parse --path-format=absolute --git-common-dir)"
+"$WORKTREE_REAPER" scan --repo "$EMPTY_REPO" --root-run-id "$EMPTY_ROOT_ID" \
+  >/dev/null
+assert_exit_code "$?" "0" "empty root fixture establishes Git authority"
+mv "$EMPTY_COMMON/autopilot-worktree-branch-inventory" \
+  "$EMPTY_COMMON/autopilot-worktree-branch-inventory.lost"
+mv "$EMPTY_COMMON/autopilot-worktree-lifecycle-roots" \
+  "$EMPTY_COMMON/autopilot-worktree-lifecycle-roots.lost"
+mv "$EMPTY_COMMON/autopilot-worktree-lifecycle-roots.registry.json" \
+  "$EMPTY_COMMON/autopilot-worktree-lifecycle-roots.registry.json.lost"
+"$WORKTREE_REAPER" scan --repo "$EMPTY_REPO" --root-run-id "$EMPTY_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "Git authority rejects fresh identity after all ordinary evidence is lost"
+"$WORKTREE_REAPER" scan --repo "$EMPTY_REPO" --root-run-id "$EMPTY_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "failed recovery cannot promote a fresh empty root on a second scan"
+
+chmod 777 "$LOSS_COMMON/autopilot-worktree-branch-inventory"
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" "world-writable journal directory fails closed"
+chmod 700 "$LOSS_COMMON/autopilot-worktree-branch-inventory"
+mv "$LOSS_COMMON/autopilot-worktree-branch-inventory" \
+  "$LOSS_COMMON/autopilot-worktree-branch-inventory.lost"
+mkdir "$LOSS_COMMON/autopilot-worktree-branch-inventory"
+cp "$LOSS_COMMON/autopilot-worktree-branch-inventory.lost/"*.root.json \
+  "$LOSS_COMMON/autopilot-worktree-branch-inventory/"
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "directory-generation anchor rejects replayed sentinel after journal replacement"
+node - "$LOSS_ANCHOR" "$LOSS_COMMON/autopilot-worktree-branch-inventory/$LOSS_ROOT_KEY.root.json" \
+  "$LOSS_COMMON/autopilot-worktree-branch-inventory" <<'NODE'
+const fs = require("fs");
+const [anchor, sentinel, directory] = process.argv.slice(2);
+const stat = fs.lstatSync(directory, { bigint: true });
+for (const file of [anchor, sentinel]) {
+  const value = JSON.parse(fs.readFileSync(file, "utf8"));
+  value.journal_birthtime_ns = stat.birthtimeNs.toString();
+  value.journal_device = stat.dev.toString();
+  value.journal_inode = stat.ino.toString();
+  fs.writeFileSync(file, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+}
+NODE
+"$WORKTREE_REAPER" scan --repo "$LOSS_REPO" --root-run-id "$LOSS_ROOT_ID" \
+  >/dev/null 2>&1
+assert_exit_code "$?" "2" \
+  "Git authority rejects coordinated active anchor and sentinel replacement"
+
+assert_eq "$(
+  git -C "$LOSS_REPO" rev-parse refs/heads/hetero/p3-journal-loss
+)" "$LOSS_BASE" "journal replacement failure preserves the unresolved exact branch"
+
 SHA_REPO="$TEST_TMP/sha256-receipt-repo"
 SHA_WT="$TEST_TMP/sha256-receipt-worktree"
 SHA_ROOT_ID="wlb-p3-sha256-root"
@@ -381,6 +551,7 @@ write_test_journal() {
     "$ROOT_ID" "$origin" "$branch" "$tip" \
     "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" \
     > "$JOURNAL_DIR/$key.json"
+  commit_test_journal "$ROOT_ID" "$key"
 }
 
 MISSING="$TEST_TMP/missing.json"

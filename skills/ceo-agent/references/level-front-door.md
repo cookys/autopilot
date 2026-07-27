@@ -152,7 +152,13 @@ REACTING too fast, not from seeing too little):
    (`${TMPDIR}/autopilot-dispatch-runs/<foreman-run-id>.ledger.jsonl` by
    convention), exports the foreman lineage (`AUTOPILOT_PARENT_RUN_ID=<foreman-run-id>`,
    `AUTOPILOT_ROOT_RUN_ID=<foreman-run-id>`, `AUTOPILOT_DISPATCH_DEPTH=1`), and writes both
-   the foreman run-id + watcher arg into the foreman prompt.
+   the foreman run-id + watcher arg into the foreman prompt. This is the outer
+   foreman/watcher lineage and remains the leaf manifest's trace root. On
+   L5/L6 managed implementation dispatches, the canonical campaign controller
+   separately injects the sealed `campaign_id` as
+   `AUTOPILOT_WORKTREE_ROOT_RUN_ID`; initial, repair, and resumed leaves
+   therefore share one durable worktree-budget identity even if the foreman
+   session changes, while each remains visible to its current foreman watcher.
 2. **Foreman duties** (in the prompt, non-optional): `run-ledger.sh
    stage-acquire` when starting a phase, `stage-transition` at phase
    boundaries, `stage-heartbeat` at least every 5 minutes inside long stages.
@@ -589,28 +595,68 @@ reaper grammar remain explicit preserve-first harness cleanup responsibility.
 
 Every non-success outcome (`dirty` / `no_op` / `question_suspected` / `failure`)
 **keeps** its worktree by design (caller's cleanup). The CEO reaps kept worktrees
-and branches after handling the outcome:
+and branches immediately after handling the outcome. For managed schema-2
+L5/L6 leaves, keep the campaign `root_run_id` unchanged and use the canonical
+controller sequence; manual removal would discard the write-ahead branch
+inventory:
 
 ```bash
-git worktree remove --force <path>        # `prune` ALONE is a no-op on an on-disk worktree
-# Preserve an out-of-grammar branch tip in a verified bundle, then depth 0 may
-# compare-delete that exact ref. Never use a bare branch -D.
-git worktree prune
+: "${lifecycle_artifact_dir:?set a caller-owned durable artifact directory}"
+: "${campaign_id:?bind the admitted sealed campaign_id}"
+[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]] \
+  || { printf '%s\n' 'invalid lifecycle campaign_id' >&2; exit 2; }
+root_run_id="$campaign_id"
+lifecycle_dir="$(mktemp -d "$lifecycle_artifact_dir/root-$root_run_id.XXXXXX")" \
+  || exit 2
+bash "$autopilot_root/scripts/reap-dispatch-worktrees.sh" reap \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" --yes \
+  >"$lifecycle_dir/worktrees.json" || exit $?
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap \
+  --repo "$consumer_repo" --into "$integration_target" \
+  --inventory-file "$lifecycle_dir/worktrees.json" --yes \
+  >"$lifecycle_dir/branches.json" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" issue \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --worktree-result "$lifecycle_dir/worktrees.json" \
+  --branch-result "$lifecycle_dir/branches.json" \
+  --out "$lifecycle_dir/residue-receipt.json" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" check \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --receipt "$lifecycle_dir/residue-receipt.json" || exit $?
+node -e '
+const value = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (value.zero_residue !== true) process.exit(1);
+' "$lifecycle_dir/residue-receipt.json" \
+  || { printf '%s\n' 'lifecycle residue remains' >&2; exit 1; }
 ```
 
+- Persist the artifact directory outside every leaf and record it in the run
+  summary for LSM. Each attempt gets a unique mode-0700 directory, and every
+  command is fail-fast so a failed attempt cannot validate a stale prior
+  receipt. Bind `root_run_id` explicitly from the admitted sealed
+  `campaign_id`; never read the outer foreman lineage or a leaf result for this
+  value. Validate the id and add the fixed `root-` prefix before path
+  construction. A
+  successful `check` proves freshness only; inspect
+  `zero_residue` separately. `false` blocks resource closure and names the
+  dirty/live/unknown state that must be resolved before rerunning.
 - For the `/l5`/`/l6` agy path, the worktree path is in the outcome JSON (`worktree`
-  field) and the branch in the `branch` field — reap **both**:
-  `git worktree remove --force <worktree>` (if non-null). For a dated branch covered
-  by `reap-dispatch-branches.sh`, let the reaper prove containment, create and verify
-  its bundle, then delete it; do not use an unchecked `git branch -D`. On a
+  field) and the branch in the `branch` field. For a retained managed leaf, the
+  controller sequence above reaps **both** or emits exact blockers; never
+  force-remove past a dirty, live, malformed, legacy, unsupported, pending, or
+  raced state. For a dated branch covered by `reap-dispatch-branches.sh`, let
+  the reaper prove containment, create and verify its bundle, then delete it;
+  do not use an unchecked `git branch -D`. On a
   `committed` outcome the worktree is already auto-removed (`worktree: null`); after
   an identity-preserving merge run the contained reaper pass above. After a
   cherry-pick, keep + ack/handoff the uncontained source. Out-of-grammar
   `hetero/<name>` branches require explicit preserve-first inspected cleanup.
-- For a killed native Claude foreman, the path is deterministic
+- Native Claude foreman worktrees are not schema-2 managed leaves. For a killed
+  native foreman, the path is deterministic
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory
-  `worktree-dispatch-gotchas`).
+  `worktree-dispatch-gotchas`). Preserve its exact branch tip first, then
+  `git worktree remove --force <path>` and `git worktree prune`. Never use a bare branch -D.
 
 ### Quality-floor conventions (v2.31.11)
 

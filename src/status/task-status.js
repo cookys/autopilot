@@ -139,6 +139,10 @@ const PHASE_RECEIPT_STATUS = new Map([
   [CAMPAIGN_STATES.TERMINAL_READY, 'ready'],
   [CAMPAIGN_STATES.TERMINAL_FOLLOW_UP, 'follow_up'],
 ]);
+const RECEIPT_STATUS_EVENT = new Map([
+  ['ready', CAMPAIGN_EVENTS.TERMINAL_READY],
+  ['follow_up', CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP],
+]);
 
 const TERMINAL_RECEIPT_KEYS = Object.freeze([
   'schema_version',
@@ -518,10 +522,10 @@ function validateTerminalReceipt(terminalReceipt) {
     return { ok: false, reason: 'campaign_terminal_receipt_invalid' };
   }
   const findingShapeValid = (item, classification) => {
-    if (!hasExactKeySet(item, [
-      'id', 'claim', 'severity', 'source', 'evidence',
-      'adjudication_authority', 'disposition',
-    ])
+    const baseKeys = [
+      'id', 'claim', 'severity', 'source', 'evidence', 'adjudication_authority',
+    ];
+    if (!isPlainObject(item)
         || typeof item.id !== 'string' || item.id.length === 0
         || typeof item.claim !== 'string' || item.claim.length === 0
         || !new Set(['🔴', '🟠', '🟡', '🔵']).has(item.severity)
@@ -541,38 +545,46 @@ function validateTerminalReceipt(terminalReceipt) {
       return false;
     }
     if (classification === 'follow_up') {
-      return hasExactKeySet(item.disposition, [
+      return hasExactKeySet(item, [...baseKeys, 'disposition'])
+        && item.evidence.classification === 'actionable'
+        && hasExactKeySet(item.disposition, [
         'disposition', 'context', 'trigger', 'proposed_backlog_title',
       ])
-        && item.evidence.classification === 'actionable'
         && item.disposition.disposition === 'follow-up'
         && ['context', 'trigger', 'proposed_backlog_title'].every(
           (key) => typeof item.disposition[key] === 'string'
             && item.disposition[key].length > 0,
-        );
+      );
     }
     if (classification === 'must_fix_now') {
-      return isPlainObject(item.disposition)
+      return hasExactKeySet(item, [...baseKeys, 'disposition'])
         && item.evidence.classification === 'actionable'
+        && isPlainObject(item.disposition)
         && item.disposition.disposition === 'must-fix-now'
         && Object.keys(item.disposition).every((key) => (
-          new Set(['disposition', 'acceptance_id', 'deferral_harm']).has(key)
+          new Set([
+            'disposition', 'acceptance_id', 'rubric_id', 'task_surface', 'deferral_harm',
+          ]).has(key)
         ))
         && ['acceptance_id', 'deferral_harm'].every((key) => (
+          typeof item.disposition[key] === 'string'
+          && item.disposition[key].trim().length > 0
+        ))
+        && ['rubric_id', 'task_surface'].every((key) => (
           item.disposition[key] === undefined
           || (typeof item.disposition[key] === 'string'
-            && item.disposition[key].length > 0)
+            && item.disposition[key].trim().length > 0)
         ));
     }
-    if (item.evidence.classification === 'refuted') return item.disposition === null;
-    return isPlainObject(item.disposition)
+    if (item.evidence.classification === 'refuted') {
+      return hasExactKeySet(item, baseKeys);
+    }
+    return hasExactKeySet(item, [...baseKeys, 'disposition'])
+      && isPlainObject(item.disposition)
       && item.disposition.disposition === 'reject-out-of-scope'
-      && Object.keys(item.disposition).every((key) => (
-        new Set(['disposition', 'rationale']).has(key)
-      ))
-      && (item.disposition.rationale === undefined
-        || (typeof item.disposition.rationale === 'string'
-          && item.disposition.rationale.length > 0));
+      && hasExactKeySet(item.disposition, ['disposition', 'rationale'])
+      && typeof item.disposition.rationale === 'string'
+      && item.disposition.rationale.trim().length > 0;
   };
   if (!terminalReceipt.follow_up.every((item) => findingShapeValid(item, 'follow_up'))
       || !terminalReceipt.unresolved_final_findings.every(
@@ -583,9 +595,43 @@ function validateTerminalReceipt(terminalReceipt) {
       )) {
     return { ok: false, reason: 'campaign_terminal_findings_invalid' };
   }
+  const retainedCount = terminalReceipt.follow_up.length
+    + terminalReceipt.unresolved_final_findings.length;
+  if ((terminalReceipt.status === 'ready' && retainedCount !== 0)
+      || (terminalReceipt.status === 'follow_up' && retainedCount === 0)) {
+    return { ok: false, reason: 'campaign_terminal_status_semantics_invalid' };
+  }
   const expectedDigest = campaignReceiptBodyDigest(terminalReceipt);
   if (!expectedDigest || terminalReceipt.receipt_digest !== expectedDigest) {
     return { ok: false, reason: 'campaign_terminal_digest_mismatch' };
+  }
+  return { ok: true };
+}
+
+function validateTerminalEvent(events, terminalReceipt) {
+  const terminalEvent = events[events.length - 1];
+  const expectedType = RECEIPT_STATUS_EVENT.get(terminalReceipt.status);
+  const payloadKeys = terminalReceipt.status === 'follow_up'
+    ? [
+      'registry_complete', 'registry_digest', 'convergence_digest',
+      'follow_up_digest', 'reason',
+    ]
+    : ['registry_complete', 'registry_digest', 'convergence_digest', 'reason'];
+  if (!isPlainObject(terminalEvent)
+      || terminalEvent.event_type !== expectedType
+      || terminalEvent.output_artifact_digest !== terminalReceipt.receipt_digest
+      || !hasExactKeySet(terminalEvent.payload, payloadKeys)
+      || terminalEvent.payload.registry_complete !== true
+      || !isSha256(terminalEvent.payload.registry_digest)
+      || !isSha256(terminalEvent.payload.convergence_digest)
+      || typeof terminalEvent.payload.reason !== 'string'
+      || terminalEvent.payload.reason.trim().length === 0) {
+    return { ok: false, reason: 'campaign_terminal_event_mismatch' };
+  }
+  if (terminalReceipt.status === 'follow_up'
+      && terminalEvent.payload.follow_up_digest
+        !== canonicalDigest(terminalReceipt.follow_up)) {
+    return { ok: false, reason: 'campaign_terminal_follow_up_digest_mismatch' };
   }
   return { ok: true };
 }
@@ -712,6 +758,10 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   if (!terminalOk.ok) {
     return campaignInvalid(campaignId, terminalOk.reason);
   }
+  const terminalEventOk = validateTerminalEvent(events, terminalReceipt);
+  if (!terminalEventOk.ok) {
+    return campaignInvalid(campaignId, terminalEventOk.reason);
+  }
 
   const verificationOk = validateVerificationReceipt(verificationReceipt, campaignId);
   if (!verificationOk.ok) {
@@ -781,6 +831,7 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
     reason: (finding && typeof finding.claim === 'string' && finding.claim.length > 0)
       ? finding.claim
       : 'unresolved_final_finding',
+    acceptance_id: finding.disposition.acceptance_id,
   }));
 
   if (state.phase === CAMPAIGN_STATES.TERMINAL_STOP) {
@@ -979,6 +1030,26 @@ function bindCampaignEntry(item, missionResult, adapters) {
         ...item.evidence,
         status: 'invalid',
         reason: 'campaign_binding_authority_mismatch',
+      },
+    };
+  }
+  const claimAcceptanceIds = Array.isArray(matched.acceptance_ids)
+    ? new Set(matched.acceptance_ids)
+    : new Set();
+  if (item.blockers.some((blocker) => (
+    blocker.kind === 'unresolved_final_finding'
+    && !claimAcceptanceIds.has(blocker.acceptance_id)
+  ))) {
+    return {
+      ...item,
+      valid: false,
+      accepted: false,
+      terminal: false,
+      binding: null,
+      evidence: {
+        ...item.evidence,
+        status: 'invalid',
+        reason: 'campaign_finding_acceptance_unbound',
       },
     };
   }
@@ -1275,6 +1346,26 @@ function computeIntegration(integration, adapters, candidateResult, gitContext) 
   const remoteRef = integration.remote_ref;
   const pushRequired = integration.push_required === true;
   const requiredConsumerUpdate = integration.required_consumer_update === true;
+  if (!gitContext
+      || typeof gitContext.repo !== 'string'
+      || gitContext.repo.length === 0
+      || typeof gitContext.repo_identity !== 'string'
+      || gitContext.repo_identity.length === 0) {
+    return {
+      product_merged: null,
+      consumer_updated: null,
+      pushed: null,
+      integration_target: {
+        ref: typeof targetRef === 'string' ? targetRef : null,
+        observed_sha: null,
+      },
+      evidence: emptyIntegrationEvidence(
+        'unknown',
+        'repo_identity_unavailable',
+        integration,
+      ),
+    };
+  }
 
   const targetResolved = typeof targetRef === 'string' && targetRef.length > 0
     ? safeCall(adapters.resolveRef, [{ ...gitContext, ref: targetRef }], 'resolveRef')
@@ -1329,8 +1420,8 @@ function computeIntegration(integration, adapters, candidateResult, gitContext) 
       'resolveRef',
     );
     remoteSha = resolved.ok && isGitOid(resolved.value) ? resolved.value : null;
-    pushed = remoteSha
-      ? containsCandidate(adapters, candidateCommit, remoteSha, gitContext)
+    pushed = remoteSha && targetSha
+      ? containsCandidate(adapters, targetSha, remoteSha, gitContext)
       : null;
   }
 
@@ -1364,10 +1455,11 @@ function computeAcceptance(missionResult, campaignResult) {
   let deferredCount = 0;
 
   if (missionResult.valid) blockers.push(...missionResult.blockers);
-  for (const item of campaignResult.items) {
-    if (!item.valid || !item.binding) continue;
-    blockers.push(...item.blockers);
-    deferredCount += item.deferred_count;
+  if (campaignResult.all_valid) {
+    for (const item of campaignResult.items) {
+      blockers.push(...item.blockers);
+      deferredCount += item.deferred_count;
+    }
   }
 
   if (!missionResult.valid || !campaignResult.all_valid) {

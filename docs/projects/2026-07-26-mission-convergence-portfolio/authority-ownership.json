@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "artifact_type": "portfolio_authority_ownership",
+  "portfolio": "mission-convergence-portfolio",
+  "claims": [
+    {
+      "authority": "campaign_generation",
+      "owner": "implementation_campaign_controller",
+      "plan": "docs/plans/2026-07-26-implementation-campaign-convergence-control.md"
+    },
+    {
+      "authority": "provider_readiness",
+      "owner": "provider_readiness_orchestrator",
+      "plan": "docs/plans/2026-07-26-provider-readiness-orchestrator.md"
+    },
+    {
+      "authority": "worktree_lifecycle",
+      "owner": "dispatch_worktree_lifecycle_budget",
+      "plan": "docs/plans/2026-07-26-dispatch-worktree-lifecycle-budget.md"
+    },
+    {
+      "authority": "task_can_close",
+      "owner": "l6_status_merge",
+      "plan": "docs/plans/2026-07-26-l6-status-merge-contract.md"
+    },
+    {
+      "authority": "plan_review",
+      "owner": "plan_review_session_controller",
+      "plan": "docs/plans/2026-07-26-plan-review-session-controller.md"
+    },
+    {
+      "authority": "transcript_adapter",
+      "owner": "cross_harness_transcript_retro",
+      "plan": "docs/plans/2026-07-26-cross-harness-transcript-retro.md"
+    },
+    {
+      "authority": "runner_transport_envelope",
+      "owner": "implementation_campaign_controller",
+      "plan": "docs/plans/2026-07-26-implementation-campaign-convergence-control.md"
+    }
+  ]
+}

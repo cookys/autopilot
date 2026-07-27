@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+. "$(dirname "$0")/lib.sh"
+
+PROBE="$REPO_ROOT/scripts/probe-codex-enforcement.js"
+ARTIFACT="$REPO_ROOT/docs/projects/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json"
+CAPABILITY="$REPO_ROOT/src/harness/capabilities/codex.json"
+
+assert_file_exists "$PROBE" "Codex enforcement probe exists"
+assert_file_exists "$ARTIFACT" "Codex enforcement artifact exists"
+
+OUT="$(node - "$ARTIFACT" "$CAPABILITY" <<'NODE'
+'use strict';
+const fs = require('fs');
+const [artifactPath, capabilityPath] = process.argv.slice(2);
+const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+const capability = JSON.parse(fs.readFileSync(capabilityPath, 'utf8'));
+console.log(`identity=${artifact.schema_version}:${artifact.artifact_type}`);
+console.log(`version=${artifact.codex_version}`);
+console.log(`outcome=${artifact.codex_enforcement_outcome}`);
+console.log(`marketplace=${artifact.evidence.marketplace_installed}`);
+console.log(`plugin=${artifact.evidence.plugin_installed}`);
+console.log(`execution=${artifact.evidence.execution_started}:${artifact.evidence.execution_exit_status}`);
+console.log(`hook=${artifact.evidence.hook_invoked}`);
+console.log(`target_created=${artifact.evidence.blocked_target_created}`);
+console.log(`blocking_gate=${capability.capabilities.blocking_gate}`);
+console.log(`capability_checked=${capability.last_checked_at}`);
+NODE
+)"
+EXIT=$?
+assert_exit_code "$EXIT" "0" "Recorded Codex enforcement artifact parses"
+assert_contains "$OUT" "identity=1:codex_enforcement_probe" \
+  "Artifact has the frozen execution-probe identity"
+assert_contains "$OUT" "version=codex-cli 0.145.0" \
+  "Artifact pins the probed Codex version"
+assert_contains "$OUT" "outcome=block-capable" \
+  "Disposition is selected from execution evidence"
+assert_contains "$OUT" "marketplace=true" "Probe marketplace was installed"
+assert_contains "$OUT" "plugin=true" "Probe plugin was installed"
+assert_contains "$OUT" "execution=true:0" "Harmless execution reached a terminal host result"
+assert_contains "$OUT" "hook=true" "PreToolUse hook received the real tool request"
+assert_contains "$OUT" "target_created=false" "Blocked tool produced no filesystem effect"
+assert_contains "$OUT" "blocking_gate=warning" \
+  "Capability stays below H4 despite the block-capable primitive"
+assert_contains "$OUT" "capability_checked=2026-07-27" "Capability record is fresh"
+
+PROBE_SOURCE="$(cat "$PROBE")"
+assert_not_contains "$PROBE_SOURCE" "'--ignore-user-config'" \
+  "Probe does not disable its own isolated plugin config"
+assert_not_contains "$PROBE_SOURCE" "'--ask-for-approval'" \
+  "Probe uses only options accepted by codex exec"
+assert_contains "$PROBE_SOURCE" "process.once('exit', cleanup)" \
+  "Probe cleans copied credentials and scratch state on handled failure"
+assert_contains "$PROBE_SOURCE" "hookInvoked && !targetCreated" \
+  "Block-capable requires both hook invocation and effect absence"
+
+finalize_test

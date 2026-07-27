@@ -4,25 +4,27 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-07-02",
-  "verified_at": "2026-07-02",
-  "expires_at": "2026-07-16",
+  "last_checked_at": "2026-07-27",
+  "verified_at": "2026-07-27",
+  "expires_at": "2026-08-10",
   "evidence": {
-    "source": "local-probe-and-official-docs",
-    "command": "codex --version; codex plugin marketplace/add/list smoke; OpenAI Codex hooks/plugin docs check",
-    "result": "codex-cli 0.142.5; skills-only plugin packaging verified locally; official docs describe plugin-bundled lifecycle hooks, trust review, PLUGIN_ROOT, and PLUGIN_DATA"
+    "source": "local-execution-probe",
+    "command": "node scripts/probe-codex-enforcement.js --output docs/projects/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json",
+    "result": "codex-cli 0.145.0; an installed isolated PreToolUse hook received the real scratch tool request, returned decision:block, and prevented the harmless target file from being created"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
     "repo_skills": "verified",
     "plugin_packaging": "verified",
-    "hooks": "warning",
+    "hooks": "verified",
     "mutation_dispatch": "unverified",
-    "blocking_gate": "unverified"
+    "blocking_gate": "warning"
   },
   "notes": [
     "Default Autopilot Codex package remains skills-only.",
-    "Codex plugin-bundled hooks are documented, but Autopilot only ships a separate warning-only hook probe package until payload, cwd, env, trust, and failure semantics are recorded as artifacts.",
+    "The execution artifact records blocking semantics only. P2 must still bind Mission identity and control sequence before shipping an enforcement adapter.",
+    "The harmless PreToolUse fixture is block-capable, but H4 gate promotion still requires the governance eval, independent verification, and rollback evidence.",
+    "The main Codex package remains skills-only until P2; the isolated hook probe does not change package defaults.",
     "Do not put real model or effort routing policy in engine code."
   ]
 }

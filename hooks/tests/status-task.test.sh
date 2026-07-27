@@ -472,6 +472,16 @@ function makeAdapters(overrides = {}) {
   };
 }
 
+function replayCampaignBundle(bundle) {
+  const contractDigest = icc.canonicalDigest(bundle.contract);
+  return icc.replayCampaignEvents(icc.createCampaignState({
+    contract: bundle.contract,
+    contractDigest,
+    repoIdentity: REPO_IDENTITY,
+    startedAt: bundle.state.started_at,
+  }), bundle.events);
+}
+
 group('canonical-green', () => {
   const receipt = buildTaskStatus(makeInput(), makeAdapters());
   check('real-mission-terminal', receipt.mission_terminal === true);
@@ -555,6 +565,26 @@ group('durable-state-authority', () => {
   );
   check('icc-writer-fence-substitution-rejected',
     fenceResult.acceptance_verdict === 'unknown');
+
+  const coherentVerificationSwap = clone(campaignBundle);
+  coherentVerificationSwap.verification_receipt = redigest({
+    ...coherentVerificationSwap.verification_receipt,
+    stdout_digest: mission.sha256('coherent-substitute'),
+  });
+  coherentVerificationSwap.terminal_receipt = redigest({
+    ...coherentVerificationSwap.terminal_receipt,
+    verification_receipt_digest:
+      coherentVerificationSwap.verification_receipt.receipt_digest,
+  });
+  coherentVerificationSwap.events[coherentVerificationSwap.events.length - 1]
+    .output_artifact_digest = coherentVerificationSwap.terminal_receipt.receipt_digest;
+  coherentVerificationSwap.state = replayCampaignBundle(coherentVerificationSwap);
+  const coherentVerificationResult = buildTaskStatus(
+    makeInput({ campaigns: [coherentVerificationSwap] }),
+    makeAdapters(),
+  );
+  check('icc-ledger-verification-substitution-rejected',
+    coherentVerificationResult.acceptance_verdict === 'unknown');
 
   const reversedTime = clone(campaignBundle);
   reversedTime.verification_receipt = redigest({

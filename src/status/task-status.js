@@ -14,6 +14,7 @@ const {
   MissionReducerError,
 } = require('../mission/interface');
 const {
+  CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
   campaignIdFor,
   canonicalDigest,
@@ -649,6 +650,18 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   const verificationOk = validateVerificationReceipt(verificationReceipt, campaignId);
   if (!verificationOk.ok) {
     return campaignInvalid(campaignId, verificationOk.reason);
+  }
+  const verticalEvents = events.filter(
+    (event) => event && event.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
+  );
+  const terminalVerificationEvent = verticalEvents[verticalEvents.length - 1];
+  if (!terminalVerificationEvent
+      || terminalVerificationEvent.output_artifact_digest
+        !== verificationReceipt.receipt_digest
+      || !isPlainObject(terminalVerificationEvent.payload)
+      || terminalVerificationEvent.payload.evidence_digest
+        !== verificationReceipt.receipt_digest) {
+    return campaignInvalid(campaignId, 'campaign_verification_ledger_mismatch');
   }
 
   if (terminalReceipt.verification_receipt_digest !== verificationReceipt.receipt_digest) {

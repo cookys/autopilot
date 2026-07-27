@@ -26,5 +26,6 @@
     "The harmless PreToolUse fixture is block-capable, but H4 gate promotion still requires the governance eval, independent verification, and rollback evidence.",
     "The main Codex package remains skills-only until P2; the isolated hook probe does not change package defaults.",
     "Do not put real model or effort routing policy in engine code."
-  ]
+  ],
+  "mission_enforcement_probe_digest": "76e97b27b3b3bbe9260d7baea631367f6965db36e5216aa57757a423ab300b79"
 }

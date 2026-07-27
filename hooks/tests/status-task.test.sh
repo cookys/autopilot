@@ -393,9 +393,12 @@ function buildCampaignBundle({
       registry_digest: mission.sha256('registry'),
       convergence_digest: mission.sha256('convergence'),
       reason: 'canonical terminal',
-    };
+  };
   if (status === 'follow_up') {
-    terminalPayload.follow_up_digest = mission.sha256(terminal.follow_up);
+    terminalPayload.follow_up_digest = mission.sha256({
+      follow_up: terminal.follow_up,
+      unresolved_final_findings: terminal.unresolved_final_findings,
+    });
   }
   applyEvent(
     terminalEvent,

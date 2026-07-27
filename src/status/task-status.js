@@ -630,7 +630,10 @@ function validateTerminalEvent(events, terminalReceipt) {
   }
   if (terminalReceipt.status === 'follow_up'
       && terminalEvent.payload.follow_up_digest
-        !== canonicalDigest(terminalReceipt.follow_up)) {
+        !== canonicalDigest({
+          follow_up: terminalReceipt.follow_up,
+          unresolved_final_findings: terminalReceipt.unresolved_final_findings,
+        })) {
     return { ok: false, reason: 'campaign_terminal_follow_up_digest_mismatch' };
   }
   return { ok: true };

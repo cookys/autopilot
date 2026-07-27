@@ -479,6 +479,27 @@ function makeAdapters(overrides = {}) {
   };
 }
 
+function mergePreflightFixture(overrides = {}) {
+  const body = {
+    schema_version: 1,
+    artifact_type: 'merge_intent_preflight',
+    manifest_seal: mission.sha256('lsm-p2-manifest'),
+    status: 'safe',
+    can_merge: true,
+    edges: [{
+      sequence: 1,
+      status: 'safe',
+      dirty: { staged: [], unstaged: [], untracked: [], ambiguous: [] },
+      incoming_paths: ['src/status/merge-intent.js'],
+      overlapping_paths: [],
+      preservation_proposal: [],
+    }],
+    blockers: [],
+    ...overrides,
+  };
+  return { ...body, receipt_digest: icc.canonicalDigest(body) };
+}
+
 function replayCampaignBundle(bundle) {
   const contractDigest = icc.canonicalDigest(bundle.contract);
   return icc.replayCampaignEvents(icc.createCampaignState({
@@ -531,6 +552,65 @@ group('canonical-green', () => {
   check('coverage-evidence-uses-one-namespace',
     JSON.stringify(receipt.evidence.campaigns.provided_campaign_ids)
       === JSON.stringify(receipt.evidence.campaigns.required_campaign_ids));
+});
+
+group('p2-merge-preflight', () => {
+  const receipt = buildTaskStatus(
+    makeInput({ merge_preflight: mergePreflightFixture() }),
+    makeAdapters(),
+  );
+  check('p2-safe-preflight-can-merge', receipt.can_merge === true);
+  check('p2-preflight-does-not-prove-close', receipt.can_close === false
+    && receipt.failed_predicates.includes('merge_execution_unknown'));
+  check('p2-preflight-evidence-bound', receipt.evidence.merge_preflight.status === 'valid'
+    && receipt.evidence.merge_preflight.preflight_status === 'safe'
+    && /^[0-9a-f]{64}$/.test(receipt.evidence.merge_preflight.manifest_seal));
+
+  const tampered = mergePreflightFixture();
+  tampered.status = 'blocked';
+  const rejected = buildTaskStatus(
+    makeInput({ merge_preflight: tampered }),
+    makeAdapters(),
+  );
+  check('p2-preflight-digest-drift-rejected', rejected.can_merge === false
+    && rejected.evidence.merge_preflight.reason === 'merge_preflight_digest_invalid');
+
+  const overlapping = mergePreflightFixture({
+    status: 'overlapping',
+    can_merge: false,
+    edges: [{
+      sequence: 1,
+      status: 'overlapping',
+      dirty: { staged: ['src/status/merge-intent.js'], unstaged: [], untracked: [], ambiguous: [] },
+      incoming_paths: ['src/status/merge-intent.js'],
+      overlapping_paths: ['src/status/merge-intent.js'],
+      preservation_proposal: ['src/status/merge-intent.js'],
+    }],
+  });
+  const overlapReceipt = buildTaskStatus(
+    makeInput({ merge_preflight: overlapping }),
+    makeAdapters(),
+  );
+  check('p2-overlap-blocks-can-merge', overlapReceipt.can_merge === false
+    && overlapReceipt.failed_predicates.includes('merge_preflight_not_safe'));
+
+  const flatBoundary = mergePreflightFixture({
+    proposed_preservation_paths: [],
+    dirty_inventory: [{
+      edge_sequence: 1,
+      target_ref: TARGET_REF,
+      staged: [],
+      unstaged: [],
+      untracked: [],
+      ambiguous: [],
+    }],
+  });
+  const flatReceipt = buildTaskStatus(
+    makeInput({ merge_preflight: flatBoundary }),
+    makeAdapters(),
+  );
+  check('p2-flat-preflight-boundary-consumed', flatReceipt.can_merge === true
+    && flatReceipt.evidence.merge_preflight.status === 'valid');
 });
 
 group('durable-state-authority', () => {

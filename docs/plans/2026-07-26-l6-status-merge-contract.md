@@ -53,7 +53,7 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
 - `can_close=true` requires zero owned worktrees, zero owned unintegrated branches, zero accepted blockers, and every required merge edge complete.
 - `can_close=true` also requires a valid `mission_terminal=true` receipt and terminal campaign
   receipts. Mission terminal alone is never task closeout.
-- `can_merge=true` requires an accepted terminal review verdict, zero accepted blockers, a sealed merge manifest whose source and target refs still match their pinned SHAs, and no unresolved dirty-path overlap or forbidden edge; push state and post-merge residue do not affect `can_merge`.
+- `can_merge=true` requires an accepted terminal review verdict, zero accepted blockers, a sealed merge manifest whose source and target refs still match their pinned SHAs (or, for an endpoint explicitly produced by an earlier ordered edge, that predecessor's sealed execution result), and no unresolved dirty-path overlap or forbidden edge; push state and post-merge residue do not affect `can_merge`.
 - Worktree and branch ownership comes only from a valid WLB lifecycle receipt bound to the current
   repository/root state, never from branch-name regex or LSM re-scanning.
 - Merge intent is an ordered sealed list of explicit `{source,target,mode}` edges plus explicit forbidden reverse edges.
@@ -109,7 +109,10 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
    target and whose second parent contains the pinned source) and `ff-only` (the target becomes the
    pinned source or its verified descendant without a merge commit). Squash, rebase, and implicit
    default modes are rejected.
-2. Resolve every ref to an immutable SHA and seal the manifest hash.
+2. Resolve every ref to an immutable SHA and seal the manifest hash. When a later edge consumes a
+   source or target ref produced by an earlier ordered edge, also seal `source_from_edge` /
+   `target_from_edge`; the pinned SHA remains the initial preflight observation, while Phase 3
+   revalidates that endpoint against the named predecessor execution receipt.
 3. Inventory staged, unstaged, and untracked target paths. Compare against changed paths introduced
    by each incoming edge.
 4. Report safe, overlapping, ambiguous, or blocked. For overlaps, propose a path-scoped
@@ -126,7 +129,9 @@ scripts before any merge.
 **Depends on:** Phase 2.
 
 1. Require the caller to provide the sealed manifest hash.
-2. Before each edge, revalidate source/target SHAs and dirty inventory; halt on drift.
+2. Before each edge, revalidate source/target SHAs and dirty inventory. An endpoint with a sealed
+   `source_from_edge` / `target_from_edge` binding must match that predecessor execution receipt
+   rather than its initial preflight SHA; halt on any other drift.
 3. Execute only the declared merge mode and record before/after SHAs, merge commit, conflicts, and
    preservation action.
 4. Restore path-scoped preserved changes and verify their staged/unstaged state matches the receipt.

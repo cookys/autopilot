@@ -1492,6 +1492,95 @@ function pushFailed(failed, code) {
   if (!failed.includes(code)) failed.push(code);
 }
 
+function validateMergePreflight(value) {
+  if (value === null) {
+    return {
+      valid: false,
+      safe: false,
+      evidence: {
+        status: 'unknown',
+        reason: 'merge_preflight_unknown',
+        manifest_seal: null,
+        preflight_status: null,
+      },
+    };
+  }
+  const keys = [
+    'schema_version',
+    'artifact_type',
+    'manifest_seal',
+    'status',
+    'can_merge',
+    'edges',
+    'blockers',
+    'receipt_digest',
+  ];
+  const optionalKeys = ['proposed_preservation_paths', 'dirty_inventory'];
+  const allowedKeys = new Set([...keys, ...optionalKeys]);
+  if (!isPlainObject(value)
+      || keys.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
+      || Object.keys(value).some((key) => !allowedKeys.has(key))
+      || value.schema_version !== 1
+      || value.artifact_type !== 'merge_intent_preflight'
+      || !isSha256(value.manifest_seal)
+      || !['safe', 'overlapping', 'ambiguous', 'blocked'].includes(value.status)
+      || typeof value.can_merge !== 'boolean'
+      || !Array.isArray(value.edges)
+      || !Array.isArray(value.blockers)
+      || !isSha256(value.receipt_digest)) {
+    return {
+      valid: false,
+      safe: false,
+      evidence: {
+        status: 'invalid',
+        reason: 'merge_preflight_shape_invalid',
+        manifest_seal: null,
+        preflight_status: null,
+      },
+    };
+  }
+  const { receipt_digest: ignored, ...body } = value;
+  if (canonicalDigest(body) !== value.receipt_digest) {
+    return {
+      valid: false,
+      safe: false,
+      evidence: {
+        status: 'invalid',
+        reason: 'merge_preflight_digest_invalid',
+        manifest_seal: value.manifest_seal,
+        preflight_status: value.status,
+      },
+    };
+  }
+  const safe = value.status === 'safe'
+    && value.can_merge === true
+    && value.edges.length > 0
+    && value.edges.every((edge) => isPlainObject(edge) && edge.status === 'safe')
+    && value.blockers.length === 0;
+  if (value.can_merge !== (value.status === 'safe')) {
+    return {
+      valid: false,
+      safe: false,
+      evidence: {
+        status: 'invalid',
+        reason: 'merge_preflight_verdict_inconsistent',
+        manifest_seal: value.manifest_seal,
+        preflight_status: value.status,
+      },
+    };
+  }
+  return {
+    valid: true,
+    safe,
+    evidence: {
+      status: 'valid',
+      reason: safe ? null : `merge_preflight_${value.status}`,
+      manifest_seal: value.manifest_seal,
+      preflight_status: value.status,
+    },
+  };
+}
+
 function computePredicates({
   missionResult,
   campaignResult,
@@ -1502,12 +1591,12 @@ function computePredicates({
   mergePreflight,
 }) {
   const failed = [];
+  const preflight = validateMergePreflight(mergePreflight);
 
-  // merge_preflight:null means can_merge=false (required merge edges unknown).
-  if (mergePreflight === null) {
+  if (!preflight.valid) {
     pushFailed(failed, 'merge_preflight_unknown');
-  } else {
-    pushFailed(failed, 'merge_preflight_unsupported_in_p1');
+  } else if (!preflight.safe) {
+    pushFailed(failed, 'merge_preflight_not_safe');
   }
 
   // can_close operands — every false/unknown listed; never short-circuit omit.
@@ -1580,17 +1669,22 @@ function computePredicates({
     );
   }
 
-  if (mergePreflight === null) {
+  if (!preflight.valid) {
     pushFailed(failed, 'merge_edges_unknown');
+  } else {
+    // P2 proves permission to merge, not execution. P3 replaces this with a
+    // sealed execution receipt before task closeout can become true.
+    pushFailed(failed, 'merge_execution_unknown');
   }
 
-  // can_merge is always false in P1 when merge_preflight is null.
-  // can_close requires every closeout operand true; merge_edges_unknown keeps
-  // it false under a null preflight.
+  const canMerge = preflight.safe
+    && acceptance.acceptance_verdict === 'accepted'
+    && acceptance.accepted_blockers.length === 0;
   return {
-    can_merge: false,
+    can_merge: canMerge,
     can_close: failed.length === 0,
     failed_predicates: failed,
+    merge_preflight: preflight,
   };
 }
 
@@ -1653,11 +1747,8 @@ function buildTaskStatus(input, adapters) {
     }
   }
 
-  if (input.merge_preflight !== null) {
-    throw new TaskStatusError(
-      'merge_preflight must be null in LSM P1',
-      'TASK_STATUS_SHAPE',
-    );
+  if (input.merge_preflight !== null && !isPlainObject(input.merge_preflight)) {
+    throw new TaskStatusError('merge_preflight must be an object or null', 'TASK_STATUS_SHAPE');
   }
 
   if (input.lifecycle_receipt_path !== null
@@ -1742,8 +1833,7 @@ function buildTaskStatus(input, adapters) {
       lifecycle: lifecycle.evidence,
       integration: integration.evidence,
       merge_preflight: {
-        status: 'unknown',
-        reason: 'merge_preflight_unknown',
+        ...predicates.merge_preflight.evidence,
       },
     },
     can_merge: predicates.can_merge,

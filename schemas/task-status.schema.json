@@ -424,13 +424,25 @@
     "mergePreflightEvidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "reason"],
+      "required": ["status", "reason", "manifest_seal", "preflight_status"],
       "properties": {
         "status": { "$ref": "#/$defs/evidenceStatus" },
         "reason": {
           "oneOf": [
             { "type": "null" },
             { "type": "string" }
+          ]
+        },
+        "manifest_seal": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "preflight_status": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "enum": ["safe", "overlapping", "ambiguous", "blocked"] }
           ]
         }
       }

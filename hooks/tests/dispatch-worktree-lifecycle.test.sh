@@ -5,6 +5,9 @@
 . "$(dirname "$0")/lib.sh"
 
 DISPATCH="$REPO_ROOT/scripts/dispatch-hetero.sh"
+WORKTREE_REAPER="$REPO_ROOT/scripts/reap-dispatch-worktrees.sh"
+BRANCH_REAPER="$REPO_ROOT/scripts/reap-dispatch-branches.sh"
+RECEIPT="$REPO_ROOT/scripts/lifecycle-residue-receipt.js"
 ROOT_RUN_ID="wlb-root-p0"
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s\n' "create the fixture artifact" > "$PROMPT"
@@ -147,6 +150,71 @@ FIFTH_REF="$(
 assert_eq "$FIFTH_REF" "" "RED: rejected fifth leaf leaks no branch"
 assert_eq "$(linked_worktree_count "$SEQ_REPO")" "4" \
   "RED: rejected fifth leaf leaks no registered worktree"
+
+# P4 dogfood: integrate the four retained leaves, release their lifetime locks,
+# and carry the exact root identity through worktree reap, branch disposition,
+# receipt issuance, and receipt freshness validation.
+for index in 1 2 3 4; do
+  git -C "$SEQ_REPO" \
+    -c user.email=wlb@test -c user.name=wlb \
+    merge -q --no-edit "hetero/wlb-sequential-$index"
+  assert_exit_code "$?" "0" \
+    "dogfood leaf $index is integrated before destructive disposition"
+done
+for held_fd in "${SEQ_LOCK_FDS[@]}"; do
+  exec {held_fd}>&-
+done
+
+SEQ_WORKTREE_RESULT="$TEST_TMP/sequential-worktree-reap.json"
+"$WORKTREE_REAPER" reap --repo "$SEQ_REPO" \
+  --root-run-id "$ROOT_RUN_ID" --yes > "$SEQ_WORKTREE_RESULT"
+assert_exit_code "$?" "0" "dogfood controller reaps four exact clean leaves"
+node - "$SEQ_WORKTREE_RESULT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (value.root_run_id !== "wlb-root-p0"
+    || value.owned_worktree_count !== 0
+    || value.reaped.length !== 4
+    || value.branch_inventory.length !== 4) process.exit(1);
+NODE
+assert_exit_code "$?" "0" \
+  "dogfood worktree result reports zero owned leaves and four exact branches"
+
+SEQ_BRANCH_RESULT="$TEST_TMP/sequential-branch-reap.json"
+"$BRANCH_REAPER" reap --repo "$SEQ_REPO" --into develop \
+  --inventory-file "$SEQ_WORKTREE_RESULT" --yes \
+  --bundle-dir "$TEST_TMP/sequential-dogfood-bundles" > "$SEQ_BRANCH_RESULT"
+assert_exit_code "$?" "0" \
+  "dogfood exact inventory reaps all four contained branches"
+for index in 1 2 3 4; do
+  if git -C "$SEQ_REPO" show-ref --verify --quiet \
+      "refs/heads/hetero/wlb-sequential-$index"; then
+    fail "dogfood contained branch $index survives exact disposition"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+done
+
+SEQ_RECEIPT="$TEST_TMP/sequential-lifecycle-receipt.json"
+node "$RECEIPT" issue --repo "$SEQ_REPO" --root-run-id "$ROOT_RUN_ID" \
+  --worktree-result "$SEQ_WORKTREE_RESULT" \
+  --branch-result "$SEQ_BRANCH_RESULT" --out "$SEQ_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" "dogfood lifecycle receipt is issued"
+node - "$SEQ_RECEIPT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (!value.zero_residue || value.owned_worktrees.length !== 0
+    || value.branches.length !== 4
+    || !value.branches.every((item) => item.disposition === "reaped")) {
+  process.exit(1);
+}
+NODE
+assert_exit_code "$?" "0" \
+  "dogfood receipt proves zero owned worktrees and four branch dispositions"
+node "$RECEIPT" check --repo "$SEQ_REPO" --root-run-id "$ROOT_RUN_ID" \
+  --receipt "$SEQ_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" \
+  "dogfood receipt remains fresh for the exact repository and root run"
 
 # Concurrent polarity: the barrier keeps the first four workers live while all
 # eight creators race. A common-dir transaction must yield exactly 4 + 4.
@@ -549,5 +617,17 @@ if [ ! -x "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" ]; then
   printf '%s\n' \
     "RED_EVIDENCE lifecycle_receipt_surface=missing (owned by WLB P2/P3)"
 fi
+
+for level in l5 l6; do
+  LEVEL_CONTRACT="$(cat "$REPO_ROOT/skills/$level/SKILL.md")"
+  assert_contains "$LEVEL_CONTRACT" "LifecycleResidueReceipt" \
+    "RED: $level contract requires the lifecycle residue receipt"
+  assert_contains "$LEVEL_CONTRACT" "root_run_id" \
+    "RED: $level contract carries stable root resource identity"
+  assert_contains "$LEVEL_CONTRACT" "max_leaf_worktrees_per_root" \
+    "RED: $level contract exposes bounded leaf occupancy"
+  assert_contains "$LEVEL_CONTRACT" "never computes" \
+    "RED: $level lifecycle rail does not claim task finish authority"
+done
 
 finalize_test

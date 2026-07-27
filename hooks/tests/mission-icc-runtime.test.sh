@@ -507,6 +507,46 @@ group('g7', () => {
   check('p2-arbitrary-mission-grant-verifier-cannot-authorize',
     typeof arbitraryVerifierError === 'string');
 
+  const forgedGrantRef = m.sha256('caller-selected-grant');
+  const plainReceiptError = campaignCheck.verifyEnforcedMissionGrant({
+    mission_grant_ref: forgedGrantRef,
+  }, {
+    missionGrantReceipt: {
+      verified: true,
+      artifact_type: 'mission_campaign_grant_claimed',
+      binding_digest: forgedGrantRef,
+    },
+  });
+  check('p2-plain-mission-grant-receipt-cannot-authorize',
+    typeof plainReceiptError === 'string');
+
+  const plainStateError = campaignCheck.verifyEnforcedMissionGrant({
+    mission_grant_ref: forgedGrantRef,
+  }, {
+    missionState: {
+      claims: {
+        forged: { binding_digest: forgedGrantRef, released: false },
+      },
+    },
+  });
+  check('p2-plain-mission-state-cannot-authorize',
+    typeof plainStateError === 'string');
+
+  let publicFactoryError = 'factory unavailable';
+  if (typeof campaignCheck.createMissionGrantVerifierAdapter === 'function') {
+    const publicAdapter = campaignCheck.createMissionGrantVerifierAdapter(() => ({
+      verified: true,
+      binding_digest: forgedGrantRef,
+    }));
+    publicFactoryError = campaignCheck.verifyEnforcedMissionGrant({
+      mission_grant_ref: forgedGrantRef,
+    }, {
+      missionGrantVerifierAdapter: publicAdapter,
+    });
+  }
+  check('p2-public-verifier-factory-cannot-self-authorize',
+    typeof publicFactoryError === 'string');
+
   const noStoreAdapters = engine.createMissionCampaignAdapters({
     grant: { idempotency_key: 'no-store' },
   });
@@ -570,6 +610,30 @@ group('g7', () => {
   check('p2-idempotency-key-binding-collision-rejected',
     collision && collision.status === 'rejected'
       && collision.code === 'mission_idempotency_binding_mismatch');
+
+  const preclaimBase = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
+  const preclaimed = m.reduceMissionState(preclaimBase, claimEvent(preclaimBase, {
+    idempotency_key: 'stored-grant-ref',
+    campaign_id: 'stored-campaign',
+    reserved: 1,
+  }));
+  let storedByRef = preclaimed.state;
+  const byRefAdapters = engine.createMissionCampaignAdapters({
+    store: {
+      load: () => storedByRef,
+      save: (expected, next) => {
+        if (storedByRef !== expected) return false;
+        storedByRef = next;
+        return true;
+      },
+    },
+    grant_ref: preclaimed.receipt.binding_digest,
+  });
+  const resumedByRef = byRefAdapters.missionClaim(claimInput);
+  check('p2-trusted-store-grant-ref-resumes-existing-claim',
+    resumedByRef && resumedByRef.status === 'claimed'
+      && resumedByRef.resumed === true
+      && resumedByRef.claim_id === preclaimed.receipt.claim_id);
 });
 
 for (const line of lines) console.log(line);
@@ -629,9 +693,13 @@ for id in \
   p2-adapters-have-mission-claim p2-adapters-have-release \
   p2-real-adapter-drives-intake-admission \
   p2-arbitrary-mission-grant-verifier-cannot-authorize \
+  p2-plain-mission-grant-receipt-cannot-authorize \
+  p2-plain-mission-state-cannot-authorize \
+  p2-public-verifier-factory-cannot-self-authorize \
   p2-release-without-atomic-store-rejected p2-false-cas-result-rejected \
   p2-initial-idempotent-claim-succeeds \
-  p2-idempotency-key-binding-collision-rejected
+  p2-idempotency-key-binding-collision-rejected \
+  p2-trusted-store-grant-ref-resumes-existing-claim
 do
   assert_contains "$OUT" "$id	PASS" "Mission P2 ICC behavior $id must pass"
 done

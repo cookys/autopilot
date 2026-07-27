@@ -48,12 +48,14 @@ assert_not_contains "$ANTI_CHEAT" "symlink " "no oracle is a symlink"
 OUT="$(node - "$REPO_ROOT" "$ARTIFACT" "$CAPABILITY" <<'NODE'
 'use strict';
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const [root, artifactPath, capabilityPath] = process.argv.slice(2);
 
 const m = require(path.join(root, 'src', 'engine', 'mission-convergence'));
 const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
 const engine = require(path.join(root, 'src', 'engine'));
+const missionCli = require(path.join(root, 'src', 'mission', 'cli'));
 
 const lines = [];
 function check(id, cond) { lines.push(`${id}\t${cond ? 'PASS' : 'FAIL'}`); }
@@ -748,6 +750,45 @@ group('g6', () => {
   }
 });
 
+// ── Group 7: the machine CLI must never mint its own authenticated-user
+// authority. Control requires a host-injected, already authenticated adapter;
+// without one the command fails before persisting state.
+group('g7', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mission-p2-cli-control-'));
+  const statePath = path.join(dir, 'state.json');
+  const outPath = path.join(dir, 'next.json');
+  const state = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
+  fs.writeFileSync(statePath, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+  let stdout = '';
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (chunk) => {
+    stdout += String(chunk);
+    return true;
+  };
+  let code;
+  try {
+    code = missionCli.runMissionCli([
+      'control',
+      '--state', statePath,
+      '--out', outPath,
+      '--action', 'finish_requested',
+      '--sequence', '1',
+      '--authority', 'authenticated_user',
+    ]);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  let payload = null;
+  try { payload = JSON.parse(stdout); } catch (_error) { payload = null; }
+  check('p2-cli-control-without-host-auth-rejected',
+    code === 1
+      && !fs.existsSync(outPath)
+      && payload
+      && payload.status === 'rejected'
+      && payload.code === 'mission_control_authentication_required');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 for (const line of lines) console.log(line);
 NODE
 )"
@@ -769,7 +810,7 @@ do
 done
 
 # ── No group may have aborted the harness mid-run. ──
-for grp in g1 g2 g3 g4 g5 g6; do
+for grp in g1 g2 g3 g4 g5 g6 g7; do
   assert_not_contains "$OUT" "$grp	FAIL	threw" "enforcement group $grp ran to completion"
 done
 
@@ -812,7 +853,8 @@ for id in \
   p2-closure-stale-effect-rejected p2-closure-non-allowlisted-rejected \
   p2-terminal-receipt-mission-terminal-true p2-terminal-receipt-no-task-closeout \
   p2-terminal-receipt-schema-version p2-terminal-receipt-digests \
-  p2-terminal-receipt-residue-binding p2-terminal-receipt-tampered-residue-rejected
+  p2-terminal-receipt-residue-binding p2-terminal-receipt-tampered-residue-rejected \
+  p2-cli-control-without-host-auth-rejected
 do
   assert_contains "$OUT" "$id	PASS" "Mission P2 enforcement behavior $id must pass"
 done

@@ -1,4 +1,5 @@
 # Plan — Cross-Harness Transcript Retro
+<!-- autopilot-authority-claims: ["transcript_adapter"] -->
 > Status: Heterogeneous review READY (generation 1) / Owner: CEO / Branch: to be created at execution / Frame: independent L-size follow-up
 
 ## 0. Context / thesis

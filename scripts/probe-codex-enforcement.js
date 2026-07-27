@@ -26,6 +26,16 @@ function writeJson(file, value) {
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
 
+function writeJsonAtomic(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+    mode: 0o600,
+    flag: 'wx',
+  });
+  fs.renameSync(temporary, file);
+}
+
 function parseArgs(argv) {
   const outputIndex = argv.indexOf('--output');
   if (outputIndex === -1 || !argv[outputIndex + 1]) {
@@ -36,7 +46,6 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  try { fs.unlinkSync(args.output); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-codex-enforcement-'));
   const codexHome = path.join(root, 'codex-home');
   const marketplace = path.join(root, 'marketplace');
@@ -116,11 +125,24 @@ function main() {
     "const payload = fs.readFileSync(0, 'utf8');",
     "let parsed = {};",
     "try { parsed = JSON.parse(payload); } catch {}",
-    "const toolInput = JSON.stringify(parsed.tool_input || null);",
+    "const toolName = typeof parsed.tool_name === 'string' ? parsed.tool_name : '';",
+    "const command = parsed.tool_input && typeof parsed.tool_input.cmd === 'string'",
+    "  ? parsed.tool_input.cmd",
+    "  : parsed.tool_input && typeof parsed.tool_input.command === 'string'",
+    "    ? parsed.tool_input.command : '';",
     "const requestedTarget = process.env.AUTOPILOT_CODEX_PROBE_TARGET || '';",
+    "const shellTool = ['Bash', 'exec_command', 'shell', 'shell_command']",
+    "  .some((name) => toolName === name || toolName.endsWith(`.${name}`));",
+    "const exactCommands = new Set([",
+    "  `touch ${requestedTarget}`,",
+    "  `touch '${requestedTarget}'`,",
+    "  `touch \"${requestedTarget}\"`,",
+    "]);",
+    "const requestBound = shellTool && exactCommands.has(command.trim());",
     "const row = JSON.stringify({",
     "  invoked: true,",
-    "  request_bound: requestedTarget.length > 0 && toolInput.includes(requestedTarget),",
+    "  request_bound: requestBound,",
+    "  request_action: requestBound ? 'shell_touch_exact' : 'other',",
     "  payload_sha256: require('crypto').createHash('sha256').update(payload).digest('hex'),",
     "});",
     "fs.appendFileSync(process.env.AUTOPILOT_CODEX_PROBE_LOG, `${row}\\n`, { mode: 0o600 });",
@@ -171,6 +193,7 @@ function main() {
     && fs.readFileSync(hookLog, 'utf8').trim().split(/\n+/)
       .map((line) => JSON.parse(line))
       .some((row) => row.request_bound === true);
+  const requestAction = requestBound ? 'shell_touch_exact' : null;
   const targetCreated = fs.existsSync(blockedTarget);
   let disposition = null;
   if (hookInvoked && requestBound && !targetCreated) disposition = 'block-capable';
@@ -199,6 +222,7 @@ function main() {
       execution_signal: execution.signal || null,
       hook_invoked: hookInvoked,
       request_bound: requestBound,
+      request_action: requestAction,
       blocked_target_created: targetCreated,
       stdout_sha256: sha256(execution.stdout || ''),
       stderr_sha256: sha256(execution.stderr || ''),
@@ -210,7 +234,7 @@ function main() {
         ? 'P2 must enforce through the engine-controlled wrapper; plugin hooks remain shadow.'
         : 'Mission remains shadow and P2 must not claim current-Codex enforcement.',
   };
-  writeJson(args.output, artifact);
+  writeJsonAtomic(args.output, artifact);
   cleanup();
   process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
 }

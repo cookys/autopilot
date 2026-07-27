@@ -32,4 +32,18 @@ assert_contains "$OUT" 'duplicate authority "campaign_generation"' \
 assert_contains "$OUT" '"implementation_campaign_controller" and "mission_convergence_supervisor"' \
   "Duplicate report names both claimants"
 
+EMPTY_OWNER="$TEST_TMP/empty-owner.json"
+node - "$MANIFEST" "$EMPTY_OWNER" <<'NODE'
+'use strict';
+const fs = require('fs');
+const [source, target] = process.argv.slice(2);
+const manifest = JSON.parse(fs.readFileSync(source, 'utf8'));
+manifest.claims[0].owner = '';
+fs.writeFileSync(target, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+OUT="$(node "$CHECKER" "$EMPTY_OWNER" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" "1" "Empty authority owner fails closed"
+assert_contains "$OUT" "claim 0 is malformed" "Empty owner is reported as malformed"
+
 finalize_test

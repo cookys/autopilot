@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "artifact_type": "codex_enforcement_probe",
-  "observed_at": "2026-07-27T07:30:24.672Z",
+  "observed_at": "2026-07-27T07:35:43.351Z",
   "codex_version": "codex-cli 0.145.0",
   "fixture": "harmless_scratch_touch",
   "hook_contract": {
@@ -17,9 +17,10 @@
     "execution_signal": null,
     "hook_invoked": true,
     "request_bound": true,
+    "request_action": "shell_touch_exact",
     "blocked_target_created": false,
-    "stdout_sha256": "a08fbdcc2268087160ffc548bb0aefac75c2a90d303c4f11999178e6c49ac907",
-    "stderr_sha256": "926754e76c2787ba0d8812ab726e585ee3d6a1b21bdd27accc46f0dcdf74e263"
+    "stdout_sha256": "89497412411dc5312b7fb9b27e1ac315d1da6a333fd8e2d23e759819a987c913",
+    "stderr_sha256": "e4de92d68c6e481e0a3dc813fa4f2033cfb35aa2b567b0bc3f0e7e1ce2ab2471"
   },
   "codex_enforcement_outcome": "block-capable",
   "policy": "P2 may implement a current-Codex PreToolUse adapter after identity binding is added."

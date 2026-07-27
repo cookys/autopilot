@@ -1,4 +1,5 @@
 # Plan — L6 Status, Merge, and Honest Closeout Contract
+<!-- autopilot-authority-claims: ["task_can_close"] -->
 > Status: Ownership-consolidated revision; prior generation-1 READY is historical / Owner: CEO / Branch: to be created at execution / Frame: downstream closeout owner
 
 ## 0. Context / thesis

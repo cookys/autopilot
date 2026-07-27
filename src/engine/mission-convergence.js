@@ -2180,6 +2180,7 @@ function buildProjection(state, sourceRefs = []) {
   const configSnapshot = deepClone(state.config);
   const contractDigest = state.config_digest;
   const body = {
+    mission_terminal: false,
     schema_version: MISSION_SCHEMA_VERSION,
     artifact_type: 'mission_projection',
     mission_lineage_id: state.mission_lineage_id,
@@ -3309,6 +3310,122 @@ function evaluateMissionIntegrationFixture(fixture) {
   return { state: 'ACTIVE', reason: 'mission_integration_fixture_unknown', effect_count: null };
 }
 
+
+function applyMissionCampaignReceipt(state, receipt) {
+  try { validateMissionState(state); } catch (_error) {
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  if (!isPlainObject(receipt) || receipt.schema_version !== 1
+      || receipt.artifact_type !== 'campaign_terminal_receipt'
+      || typeof receipt.receipt_digest !== 'string'
+      || sha256(Object.fromEntries(Object.entries(receipt).filter(([k]) => k !== 'receipt_digest'))) !== receipt.receipt_digest) {
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  const claim = state.claims[receipt.claim_id];
+  if (!claim || claim.released || claim.mission_lineage_id && claim.mission_lineage_id !== receipt.mission_lineage_id
+      || receipt.mission_lineage_id !== state.mission_lineage_id
+      || receipt.campaign_id !== claim.campaign_id
+      || receipt.campaign_contract_digest !== claim.campaign_contract_digest) {
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  let actual;
+  try { actual = reservationFor({ reservation: receipt.actual_usage }, 'receipt.actual_usage', { requireComplete: false }); }
+  catch (_error) { return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state }); }
+  const semantic = { ...receipt, receipt_digest: undefined };
+  const prior = state.receipts && state.receipts[`mission_campaign_receipt:${claim.claim_id}`];
+  if (prior) {
+    const priorSemantic = { ...prior, receipt_digest: undefined };
+    if (canonicalJson(priorSemantic) === canonicalJson(semantic)) return Object.freeze({ status: 'replay_noop', state });
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  const event = {
+    event_type: 'reconciliation', sequence: state.events.length + 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: { claim_id: claim.claim_id, actual_usage: actual },
+  };
+  const result = reduceMissionState(state, event);
+  if (!result || !result.state || result.receipt.artifact_type === 'mission_grant_rejected') {
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  const receipts = { ...(result.state.receipts || {}), [`mission_campaign_receipt:${claim.claim_id}`]: deepFreeze(deepClone(receipt)) };
+  return Object.freeze({ status: 'applied', state: Object.freeze({ ...result.state, receipts: Object.freeze(receipts) }) });
+}
+
+function evaluateCodexEnforcementDisposition({ artifact, capability, expected_harness_id } = {}) {
+  const deny = (reason) => Object.freeze({ enforceable: false, mode: 'shadow', reason, receipt_digest: sha256({ enforceable: false, mode: 'shadow', reason }) });
+  if (!isPlainObject(artifact) || !isPlainObject(capability) || typeof expected_harness_id !== 'string'
+      || artifact.schema_version !== 1 || artifact.artifact_type !== 'codex_enforcement_probe'
+      || capability.id !== expected_harness_id || capability.harness_level !== 'H2'
+      || !['block-capable', 'wrapper-required', 'unenforceable-now'].includes(artifact.codex_enforcement_outcome)
+      || capability.mission_enforcement_probe_digest !== sha256(artifact)
+      || !artifact.evidence || artifact.evidence.hook_invoked !== true
+      || artifact.evidence.request_bound !== true || artifact.evidence.blocked_target_created !== false
+      || !/^[a-f0-9]{64}$/.test(artifact.evidence.stdout_sha256 || '')
+      || !/^[a-f0-9]{64}$/.test(artifact.evidence.stderr_sha256 || '')) return deny('invalid_or_tampered_disposition');
+  const enforceable = artifact.codex_enforcement_outcome !== 'unenforceable-now';
+  const mode = enforceable ? 'enforce' : 'shadow';
+  const reason = enforceable ? artifact.codex_enforcement_outcome : 'unenforceable-now';
+  return Object.freeze({ enforceable, mode, reason, harness_id: expected_harness_id, artifact_digest: sha256(artifact), receipt_digest: sha256({ enforceable, mode, reason, harness_id: expected_harness_id, artifact_digest: sha256(artifact) }) });
+}
+
+function createMissionCampaignAdapters(options = {}) {
+  const store = options.store || {};
+  const state = options.state || (typeof store.load === 'function' ? store.load() : null);
+  const claimed = new Set();
+  return {
+    missionClaim(input = {}) {
+      if (state && typeof store.save === 'function' && typeof options.claim === 'function') return options.claim(input, state);
+      const id = `mission-claim-${sha256(JSON.stringify({ lineage: options.mission_lineage_id, digest: input.contractDigest }))}`;
+      if (claimed.has(id)) return { owner: 'mission', status: 'claimed', claim_id: id, resumed: true };
+      claimed.add(id); return { owner: 'mission', status: 'claimed', claim_id: id, mission_lineage_id: options.mission_lineage_id };
+    },
+    releaseMission(input = {}) {
+      if (typeof options.release === 'function') return options.release(input, state);
+      return { owner: 'mission_release', status: 'released', claim_id: input.missionClaim && input.missionClaim.claim_id };
+    },
+  };
+}
+
+function createCodexMissionEnforcementAdapter({ mission_state, grant_receipt, disposition_receipt, request_identity } = {}) {
+  const valid = mission_state && grant_receipt && disposition_receipt
+    && grant_receipt.artifact_type === 'mission_campaign_grant_claimed'
+    && mission_state.claims && mission_state.claims[grant_receipt.claim_id]
+    && disposition_receipt.receipt_digest
+    && (disposition_receipt.enforceable === true || disposition_receipt.mode === 'shadow');
+  const claim = valid && mission_state.claims[grant_receipt.claim_id];
+  return { enforce(request, effect) {
+    if (!valid || !request || request.claim_id !== claim.claim_id || request.mission_lineage_id !== mission_state.mission_lineage_id
+      || request.control_sequence !== mission_state.control_sequence || request.disposition_digest !== disposition_receipt.receipt_digest
+      || request.request_identity !== request_identity || typeof effect !== 'function') return Object.freeze({ enforced: false, reason: 'binding_mismatch' });
+    if (disposition_receipt.mode === 'shadow') { const result = effect(); return Object.freeze({ enforced: false, shadow_would_block: true, result }); }
+    return Object.freeze({ enforced: true, result: effect() });
+  } };
+}
+
+function fenceMissionEffect(request, effects = {}) {
+  if (!isPlainObject(request) || !Number.isSafeInteger(request.control_sequence) || !Number.isSafeInteger(request.current_sequence)
+      || !['finish_requested', 'scope_frozen', 'abort_requested'].includes(request.action)
+      || request.control_sequence !== request.current_sequence) return Object.freeze({ permitted: false, reason: 'control_sequence_stale' });
+  const fn = effects[request.effect_class || 'runner'];
+  if (typeof fn !== 'function') return Object.freeze({ permitted: false, reason: 'effect_class_not_allowlisted' });
+  return Object.freeze({ permitted: true, result: fn() });
+}
+
+function recordMissionClosureEffect(input = {}) {
+  if (!isPlainObject(input) || !CLOSURE_ALLOWLIST_SET.has(input.effect_class)
+      || input.control_sequence !== input.current_sequence) return Object.freeze({ rejected: true, reason: 'stale_or_not_allowlisted' });
+  const body = { schema_version: 1, artifact_type: 'mission_closure_effect', effect_class: input.effect_class, control_sequence: input.control_sequence };
+  return Object.freeze({ ...body, receipt_digest: sha256(body) });
+}
+
+function buildMissionTerminalReceipt(state, residue) {
+  validateMissionState(state);
+  if (!state.terminal || !TERMINAL_STATES.has(state.state) || !isPlainObject(residue)
+      || typeof residue.residue_digest !== 'string' || sha256('residue') !== residue.residue_digest && !/^[a-f0-9]{64}$/.test(residue.residue_digest)) fail('terminal receipt requires terminal state and bound residue');
+  const body = { schema_version: 1, artifact_type: 'mission_terminal_receipt', mission_terminal: true, state_digest: stateHash(state), terminal_digest: sha256(state.terminal), residue: deepClone(residue), residue_digest: residue.residue_digest };
+  return deepFreeze({ ...body, receipt_digest: sha256(body) });
+}
+
 module.exports = {
   AXIS_SET,
   CEILING_LOOSEN_AUTHORITIES_REF: CEILING_LOOSEN_AUTHORITIES,
@@ -3332,6 +3449,13 @@ module.exports = {
   SUPPORTED_AXES,
   TERMINAL_STATES,
   buildProjection,
+  applyMissionCampaignReceipt,
+  createMissionCampaignAdapters,
+  evaluateCodexEnforcementDisposition,
+  createCodexMissionEnforcementAdapter,
+  fenceMissionEffect,
+  recordMissionClosureEffect,
+  buildMissionTerminalReceipt,
   canonicalJson,
   claimIdFor,
   computeAxisBudget,

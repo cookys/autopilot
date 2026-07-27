@@ -538,4 +538,15 @@ assert_contains "$OUT" "p2-apply-mission-campaign-receipt-present	PASS" \
 assert_contains "$OUT" "p2-create-mission-campaign-adapters-present	PASS" \
   "RED: createMissionCampaignAdapters not exported from engine"
 
+for id in \
+  p2-receipt-valid-applies-once p2-receipt-exact-replay-idempotent \
+  p2-receipt-changed-usage-fails-closed p2-receipt-changed-digest-fails-closed \
+  p2-receipt-changed-lineage-fails-closed \
+  p2-enforce-contract-sealable p2-enforce-not-generic-rejection \
+  p2-adapters-have-mission-claim p2-adapters-have-release \
+  p2-real-adapter-drives-intake-admission
+do
+  assert_contains "$OUT" "$id	PASS" "Mission P2 ICC behavior $id must pass"
+done
+
 finalize_test

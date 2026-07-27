@@ -350,6 +350,38 @@ group('g2', () => {
     check('p2-adapter-exact-effect-call-count', effectCalls.length === 1
       && mismatchCalls.length === 0 && seqCalls.length === 0
       && digCalls.length === 0 && idCalls.length === 0);
+
+    const forgedDisposition = {
+      ...dispositionReceipt,
+      receipt_digest: m.sha256('caller-forged-disposition'),
+    };
+    let forgedDispositionRejected = false;
+    try {
+      const forgedAdapter = createAdapter({
+        ...binding,
+        disposition_receipt: forgedDisposition,
+      });
+      forgedDispositionRejected = !forgedAdapter
+        || forgedAdapter.rejected === true
+        || typeof forgedAdapter.enforce !== 'function';
+    } catch (_error) { forgedDispositionRejected = true; }
+    check('p2-adapter-forged-disposition-rejected', forgedDispositionRejected);
+
+    const forgedGrant = {
+      ...claimed.receipt,
+      binding_digest: m.sha256('caller-forged-grant'),
+    };
+    let forgedGrantRejected = false;
+    try {
+      const forgedAdapter = createAdapter({
+        ...binding,
+        grant_receipt: forgedGrant,
+      });
+      forgedGrantRejected = !forgedAdapter
+        || forgedAdapter.rejected === true
+        || typeof forgedAdapter.enforce !== 'function';
+    } catch (_error) { forgedGrantRejected = true; }
+    check('p2-adapter-forged-grant-rejected', forgedGrantRejected);
   } else {
     lines.push('p2-adapter-returns-object\tSKIP');
     lines.push('p2-adapter-valid-request-effect-runs\tSKIP');
@@ -358,6 +390,8 @@ group('g2', () => {
     lines.push('p2-adapter-digest-mismatch-blocks-before-effect\tSKIP');
     lines.push('p2-adapter-identity-mismatch-blocks-before-effect\tSKIP');
     lines.push('p2-adapter-exact-effect-call-count\tSKIP');
+    lines.push('p2-adapter-forged-disposition-rejected\tSKIP');
+    lines.push('p2-adapter-forged-grant-rejected\tSKIP');
   }
 });
 
@@ -489,7 +523,11 @@ group('g5', () => {
   const buildReceipt = engine.buildMissionTerminalReceipt;
   check('p2-build-mission-terminal-receipt-present', typeof buildReceipt === 'function');
   if (typeof buildReceipt === 'function') {
-    const residue = { lifecycle_residue: ['sibling-campaign-1'], residue_digest: m.sha256('residue') };
+    const residuePayload = { lifecycle_residue: ['sibling-campaign-1'] };
+    const residue = {
+      ...residuePayload,
+      residue_digest: m.sha256(residuePayload),
+    };
     const receipt = buildReceipt(state, residue);
     check('p2-terminal-receipt-mission-terminal-true', receipt
       && receipt.mission_terminal === true);
@@ -503,12 +541,22 @@ group('g5', () => {
     check('p2-terminal-receipt-residue-binding', receipt
       && (receipt.residue_digest === residue.residue_digest
         || (receipt.residue && receipt.residue.residue_digest === residue.residue_digest)));
+    let tamperedResidueRejected = false;
+    try {
+      const result = buildReceipt(state, {
+        ...residue,
+        lifecycle_residue: ['different-sibling'],
+      });
+      tamperedResidueRejected = !result || result.rejected === true;
+    } catch (_error) { tamperedResidueRejected = true; }
+    check('p2-terminal-receipt-tampered-residue-rejected', tamperedResidueRejected);
   } else {
     lines.push('p2-terminal-receipt-mission-terminal-true\tSKIP');
     lines.push('p2-terminal-receipt-no-task-closeout\tSKIP');
     lines.push('p2-terminal-receipt-schema-version\tSKIP');
     lines.push('p2-terminal-receipt-digests\tSKIP');
     lines.push('p2-terminal-receipt-residue-binding\tSKIP');
+    lines.push('p2-terminal-receipt-tampered-residue-rejected\tSKIP');
   }
 });
 
@@ -519,6 +567,24 @@ group('g6', () => {
   const fence = engine.fenceMissionEffect;
   check('p2-fence-mission-effect-present', typeof fence === 'function');
   if (typeof fence === 'function') {
+    const auth = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const controlled = (action, sequence) => {
+      const initial = m.createMissionState(makeContract());
+      return m.reduceMissionState(
+        initial,
+        controlEvent(initial, mintControl(
+          auth,
+          initial.mission_lineage_id,
+          action,
+          sequence,
+        )),
+      );
+    };
+    const finish = controlled('finish_requested', 7);
+    const scope = controlled('scope_frozen', 4);
+    const abort = controlled('abort_requested', 9);
     const runnerCalls = [];
     const worktreeCalls = [];
     const reviewerCalls = [];
@@ -527,42 +593,98 @@ group('g6', () => {
       worktree: () => { worktreeCalls.push('ran'); },
       reviewer: () => { reviewerCalls.push('ran'); },
     };
-    // Stale finish dispatch (sequence below current control_sequence)
-    const staleFinish = { action: 'finish_requested', control_sequence: 2, current_sequence: 7 };
-    fence(staleFinish, effects);
+    fence({
+      mission_state: finish.state,
+      control_receipt: finish.receipt,
+      request: {
+        control_sequence: 2,
+        effect_class: 'targeted_verification',
+        effect_kind: 'runner',
+      },
+      effects,
+    });
     check('p2-fence-stale-finish-zero-effects', runnerCalls.length === 0
       && worktreeCalls.length === 0 && reviewerCalls.length === 0);
-    // Stale scope dispatch
-    const staleScope = { action: 'scope_frozen', control_sequence: 1, current_sequence: 4 };
-    fence(staleScope, effects);
+    fence({
+      mission_state: scope.state,
+      control_receipt: scope.receipt,
+      request: {
+        control_sequence: 1,
+        effect_class: 'targeted_verification',
+        effect_kind: 'worktree',
+      },
+      effects,
+    });
     check('p2-fence-stale-scope-zero-effects', runnerCalls.length === 0
       && worktreeCalls.length === 0 && reviewerCalls.length === 0);
-    // Stale abort dispatch
-    const staleAbort = { action: 'abort_requested', control_sequence: 3, current_sequence: 9 };
-    fence(staleAbort, effects);
+    fence({
+      mission_state: abort.state,
+      control_receipt: abort.receipt,
+      request: {
+        control_sequence: 3,
+        effect_class: 'targeted_verification',
+        effect_kind: 'reviewer',
+      },
+      effects,
+    });
     check('p2-fence-stale-abort-zero-effects', runnerCalls.length === 0
       && worktreeCalls.length === 0 && reviewerCalls.length === 0);
+    const current = fence({
+      mission_state: finish.state,
+      control_receipt: finish.receipt,
+      request: {
+        control_sequence: 7,
+        effect_class: 'targeted_verification',
+        effect_kind: 'runner',
+      },
+      effects,
+    });
+    check('p2-fence-current-effect-runs', current && current.permitted === true
+      && runnerCalls.length === 1 && worktreeCalls.length === 0
+      && reviewerCalls.length === 0);
   } else {
     lines.push('p2-fence-stale-finish-zero-effects\tSKIP');
     lines.push('p2-fence-stale-scope-zero-effects\tSKIP');
     lines.push('p2-fence-stale-abort-zero-effects\tSKIP');
+    lines.push('p2-fence-current-effect-runs\tSKIP');
   }
 
   const record = engine.recordMissionClosureEffect;
   check('p2-record-mission-closure-effect-present', typeof record === 'function');
   if (typeof record === 'function') {
-    // Accepts a current allowlisted effect and emits a content-bound receipt
-    const allowlisted = { effect_class: 'frozen_acceptance', control_sequence: 7, current_sequence: 7 };
-    const receipt = record(allowlisted);
+    const auth = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const initial = m.createMissionState(makeContract());
+    const finish = m.reduceMissionState(
+      initial,
+      controlEvent(initial, mintControl(
+        auth,
+        initial.mission_lineage_id,
+        'finish_requested',
+        7,
+      )),
+    );
+    const allowlisted = {
+      effect_class: 'frozen_acceptance',
+      control_sequence: 7,
+      evidence_ref_digest: m.sha256('closure-evidence'),
+    };
+    const receipt = record(finish.state, allowlisted);
     check('p2-closure-allowlisted-effect-accepted', receipt !== null
       && typeof receipt === 'object'
       && receipt.effect_class === 'frozen_acceptance');
     check('p2-closure-receipt-content-bound', receipt
-      && isHex64(receipt.receipt_digest || receipt.content_digest));
+      && isHex64(receipt.receipt_digest || receipt.content_digest)
+      && receipt.evidence_ref_digest === allowlisted.evidence_ref_digest
+      && receipt.mission_state_hash === m.stateHash(finish.state));
     // Rejects a stale effect
     let staleRejected = false;
     try {
-      const staleResult = record({ effect_class: 'frozen_acceptance', control_sequence: 2, current_sequence: 7 });
+      const staleResult = record(finish.state, {
+        ...allowlisted,
+        control_sequence: 2,
+      });
       staleRejected = staleResult === null || staleResult === false
         || (staleResult && staleResult.rejected === true);
     } catch (e) { staleRejected = true; }
@@ -570,7 +692,10 @@ group('g6', () => {
     // Rejects a non-allowlisted effect class
     let nonListedRejected = false;
     try {
-      const nonListedResult = record({ effect_class: 'arbitrary_spawn', control_sequence: 7, current_sequence: 7 });
+      const nonListedResult = record(finish.state, {
+        ...allowlisted,
+        effect_class: 'arbitrary_spawn',
+      });
       nonListedRejected = nonListedResult === null || nonListedResult === false
         || (nonListedResult && nonListedResult.rejected === true);
     } catch (e) { nonListedRejected = true; }
@@ -624,5 +749,29 @@ assert_contains "$OUT" "p2-build-mission-terminal-receipt-present	PASS" \
   "RED: buildMissionTerminalReceipt not exported from engine"
 assert_contains "$OUT" "p2-nonterminal-projection-mission-terminal-false	PASS" \
   "RED: nonterminal buildProjection does not expose mission_terminal=false"
+
+for id in \
+  p2-disposition-block-capable-may-enforce \
+  p2-disposition-wrapper-required-may-enforce \
+  p2-disposition-unenforceable-denied p2-disposition-malformed-denied \
+  p2-disposition-digest-mismatch-denied p2-disposition-identity-mismatch-denied \
+  p2-disposition-unsupported-harness-denied \
+  p2-adapter-returns-object p2-adapter-valid-request-effect-runs \
+  p2-adapter-lineage-mismatch-blocks-before-effect \
+  p2-adapter-sequence-mismatch-blocks-before-effect \
+  p2-adapter-digest-mismatch-blocks-before-effect \
+  p2-adapter-identity-mismatch-blocks-before-effect \
+  p2-adapter-exact-effect-call-count p2-adapter-forged-disposition-rejected \
+  p2-adapter-forged-grant-rejected \
+  p2-fence-stale-finish-zero-effects p2-fence-stale-scope-zero-effects \
+  p2-fence-stale-abort-zero-effects p2-fence-current-effect-runs \
+  p2-closure-allowlisted-effect-accepted p2-closure-receipt-content-bound \
+  p2-closure-stale-effect-rejected p2-closure-non-allowlisted-rejected \
+  p2-terminal-receipt-mission-terminal-true p2-terminal-receipt-no-task-closeout \
+  p2-terminal-receipt-schema-version p2-terminal-receipt-digests \
+  p2-terminal-receipt-residue-binding p2-terminal-receipt-tampered-residue-rejected
+do
+  assert_contains "$OUT" "$id	PASS" "Mission P2 enforcement behavior $id must pass"
+done
 
 finalize_test

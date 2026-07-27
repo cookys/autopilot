@@ -12,12 +12,11 @@
           "model": true,
           "branch": true,
           "successor": true
-        },
-        "enforcement_mode": "enforce"
+        }
       },
       "expected": {
         "state": "BLOCKED",
-        "reason": "resource_ceiling",
+        "reason": "resource_ceiling:tool_calls",
         "remaining_tool_calls": 1,
         "effect_count": 0
       }
@@ -59,6 +58,7 @@
         "state": "ACTIVE",
         "reason": "PRESPEND_REJECTED/provider_readiness",
         "reservation_released": true,
+        "maintenance_candidate_only": true,
         "effect_count": 0
       }
     },

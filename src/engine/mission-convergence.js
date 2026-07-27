@@ -473,40 +473,52 @@ function createMissionState(contract, options = {}) {
       fail('lineage_binding.successor_inherits_durable_consumed must be true to inherit');
     }
     const prev = requireObject(options.inheritFrom, 'options.inheritFrom');
-    if (prev.mission_lineage_id === contract.mission_lineage_id) {
-      fail('successor must have a new mission_lineage_id');
+    // KR1: a successor chain (new session, root run, branch, or model) SHARES
+    // the same mission_lineage_id — establishing a new session/run/branch/model
+    // does not create new budget. The successor must continue inside the
+    // predecessor's lineage so inherited claim_ids (derived from lineage +
+    // idempotency key) stay valid and the lineage budget cannot be reopened.
+    if (prev.mission_lineage_id !== contract.mission_lineage_id) {
+      fail('successor must inherit within the same mission_lineage_id');
     }
-    // Conflicting lineage or policy binding fails closed — successor
-    // MUST agree on task_authority_id and policy_hash.
+    // Conflicting policy binding fails closed — successor MUST agree on
+    // task_authority_id and policy_hash.
     if (prev.task_authority_id !== contract.task_authority_id) {
       fail('successor task_authority_id does not match predecessor');
     }
     if (prev.policy_hash !== contract.policy_hash) {
       fail('successor policy_hash does not match predecessor');
     }
+    // Inherit nonterminal claims verbatim. Terminal/released claims no longer
+    // occupy active reservation and are dropped from the live set (a successor
+    // carries only unresolved nonterminal claims).
+    const inheritedNonterminal = [];
+    for (const claim of Object.values(prev.claims || {})) {
+      if (claim.terminal || claim.released) continue;
+      const cloned = deepClone(claim);
+      inheritedClaims[claim.claim_id] = cloned;
+      inheritedIdempotencyIndex[claim.idempotency_key] = claim.claim_id;
+      inheritedNonterminal.push(cloned);
+    }
     for (const axisName of SUPPORTED_AXES) {
       const src = prev.axes[axisName];
       if (!src) fail(`inheritFrom is missing axis "${axisName}"`);
-      // Inherit durable_consumed from the predecessor. Reset active
-      // counters (active_actual, reserved_active). Terminal/released
-      // claims no longer occupy active reservation; only nonterminal
-      // claims carry their reservation forward.
+      // reserved_active is the sum of the inherited nonterminal claims'
+      // reservations on this axis — the successor does NOT reopen capacity by
+      // zeroing it. durable_consumed is inherited; active counters reset.
+      let reservedActive = 0;
+      for (const claim of inheritedNonterminal) {
+        const resv = claim.reservation && claim.reservation[axisName];
+        if (resv) reservedActive += resv.reserved_active;
+      }
       axes[axisName] = computeAxisBudget({
         authorized_ceiling: src.authorized_ceiling,
-        reserved_active: 0,
+        reserved_active: reservedActive,
         durable_consumed: src.durable_consumed,
         active_actual: 0,
         known: src.known,
         enforced: src.enforced,
       });
-    }
-    // Inherit nonterminal claims and their reservations verbatim;
-    // terminal/released claims need not occupy active reservation and are
-    // dropped from the live set.
-    for (const claim of Object.values(prev.claims || {})) {
-      if (claim.terminal) continue;
-      inheritedClaims[claim.claim_id] = deepClone(claim);
-      inheritedIdempotencyIndex[claim.idempotency_key] = claim.claim_id;
     }
     inheritedStagnation = prev.stagnant_campaigns || 0;
     inheritedAcceptanceHashes = [...(prev.acceptance_hashes || [])];
@@ -553,7 +565,7 @@ function createMissionState(contract, options = {}) {
     terminal: null,
     config: deepFreeze(deepClone(contract)),
     config_provenance: Object.freeze(provenance),
-    red_lines: Object.freeze(contract.red_lines || []),
+    red_lines: deepClone(contract.red_lines || []),
   });
   validateMissionState(built);
   return built;
@@ -691,13 +703,24 @@ function reduceMissionState(state, event) {
     closure_evaluated: handleClosureEvaluated,
     successor_inherited: handleSuccessorInherited,
   };
-  return handlers[eventType](state, eventWithDigest, payload);
+  const result = handlers[eventType](state, eventWithDigest, payload);
+  // Deep-freeze the entire returned state and receipt so neither caller
+  // mutation nor nested reservation/actual/payload objects can mutate reducer
+  // state. Every contract-derived and reducer-derived value is immutable.
+  return {
+    state: deepFreeze(result.state),
+    receipt: deepFreeze(result.receipt),
+  };
 }
 
 function appendEvent(state, eventWithDigest) {
+  // Deep-clone the appended event so the reducer owns an isolated copy of the
+  // caller's payload — a later mutation of the caller's input object cannot
+  // mutate the recorded event log. The clone is frozen; prior events are
+  // already-frozen shared references.
   return {
     ...state,
-    events: Object.freeze([...state.events, eventWithDigest]),
+    events: Object.freeze([...state.events, deepClone(eventWithDigest)]),
   };
 }
 
@@ -965,7 +988,11 @@ function shadowOrBlock(state, event, reason, evidence = {}) {
     // In shadow mode, would-block admission must NOT terminalize Mission or
     // prevent the represented effect. The reducer still records the
     // auditable `would_block` evidence on the receipt so an operator can
-    // review the would-have-blocked admission after the run.
+    // review the would-have-blocked admission after the run. The evidence is
+    // derived from the real reducer's ceiling math (the caller already proved
+    // newRemaining < 0) and recorded DURABLY in state.receipts so it survives
+    // subsequent reductions — shadow never blocks the effect, but it always
+    // leaves a durable audit trail.
     const evidenceReceipt = {
       artifact_type: 'mission_would_block_evidence',
       event_type: event.event_type,
@@ -983,11 +1010,19 @@ function shadowOrBlock(state, event, reason, evidence = {}) {
         mission_lineage_id: state.mission_lineage_id,
       }),
     };
+    const durableState = Object.freeze({
+      ...appendEvent(state, event),
+      receipts: Object.freeze({
+        ...state.receipts,
+        [evidenceReceipt.artifact_type]: evidenceReceipt,
+      }),
+    });
     return {
-      state: appendEvent(state, event),
+      state: durableState,
       receipt: evidenceReceipt,
     };
   }
+  // Enforce mode rejects the same input that shadow would have recorded.
   return rejection(state, event, reason);
 }
 
@@ -1893,6 +1928,16 @@ function restoreProjection(projection) {
   const expectedDigest = sha256({ ...projection, projection_digest: undefined });
   if (projection.projection_digest !== expectedDigest) {
     fail('projection_digest does not match projection body', 'PROJECTION_DIGEST_MISMATCH');
+  }
+  // Validate the ordered event head digest independently. The head is the
+  // canonical ordered record of decisions; a tampered head (re-ordered, dropped,
+  // or forged events) must reject even if a caller tried to re-weave
+  // projection_digest around it.
+  const head = requireObject(projection.ordered_event_head, 'projection.ordered_event_head');
+  const headEvents = Array.isArray(head.events) ? head.events : [];
+  const expectedHeadDigest = sha256(headEvents);
+  if (head.head_digest !== expectedHeadDigest) {
+    fail('ordered_event_head.head_digest does not match the head events', 'PROJECTION_HEAD_DIGEST_MISMATCH');
   }
   // The projection carries a digest-bound config. A tampered config is
   // detected before any reducer is invoked.

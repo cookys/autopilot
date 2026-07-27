@@ -334,50 +334,76 @@ group('g4', () => {
     && unknown.receipt.reason === 'binding_mismatch');
 });
 
-// ── Group 5: validateMissionCampaignReceiptBinding — valid receipt feedback
-// applies exactly once, exact replay is idempotent, changed actual usage /
-// campaign digest / lineage fails closed without a second ICC judgment.
+// ── Group 5: applyMissionCampaignReceipt — pure state transition for valid
+// receipt feedback, exact replay, and conflicting terminal evidence.
 group('g5', () => {
-  const validate = engine.validateMissionCampaignReceiptBinding;
-  check('p2-validate-mission-campaign-receipt-binding-present', typeof validate === 'function');
-  if (typeof validate === 'function') {
+  const apply = engine.applyMissionCampaignReceipt;
+  check('p2-apply-mission-campaign-receipt-present', typeof apply === 'function');
+  if (typeof apply === 'function') {
     const s0 = m.createMissionState(makeContract());
     const a = m.reduceMissionState(s0, claimEvent(s0, { idempotency_key: 'p2-bind', reserved: 8 }));
     const claimId = a.receipt.claim_id;
     const actualUsage = reservation(a.state, 6);
-    const campaignDigest = m.sha256('campaign-contract');
-    const receipt = {
+    const claim = a.state.claims[claimId];
+    const receiptPayload = {
+      schema_version: 1,
+      artifact_type: 'campaign_terminal_receipt',
       claim_id: claimId,
       mission_lineage_id: s0.mission_lineage_id,
-      campaign_digest: campaignDigest,
+      campaign_id: claim.campaign_id,
+      campaign_contract_digest: claim.campaign_contract_digest,
       actual_usage: actualUsage,
     };
+    const receipt = {
+      ...receiptPayload,
+      receipt_digest: m.sha256(receiptPayload),
+    };
     // Valid receipt applies exactly once
-    const first = validate(receipt, a.state);
+    const first = apply(a.state, receipt);
     check('p2-receipt-valid-applies-once', first
-      && (first.valid === true || first.status === 'applied'));
+      && first.status === 'applied' && first.state
+      && first.state.axes.tool_calls.durable_consumed === 6);
     // Exact replay is idempotent
-    const replay = validate(receipt, a.state);
+    const replay = apply(first.state, receipt);
     check('p2-receipt-exact-replay-idempotent', replay
-      && (replay.idempotent === true || replay.status === 'replay_noop'));
+      && replay.status === 'replay_noop'
+      && replay.state.axes.tool_calls.durable_consumed === 6);
     // Changed actual usage fails closed
-    const changedUsage = {
-      ...receipt,
+    const changedUsagePayload = {
+      ...receiptPayload,
       actual_usage: reservation(a.state, 99),
     };
-    const usageResult = validate(changedUsage, a.state);
+    const usageResult = apply(first.state, {
+      ...changedUsagePayload,
+      receipt_digest: m.sha256(changedUsagePayload),
+    });
     check('p2-receipt-changed-usage-fails-closed', usageResult
-      && (usageResult.valid === false || usageResult.status === 'binding_mismatch'));
+      && usageResult.status === 'rejected'
+      && usageResult.reason === 'binding_mismatch');
     // Changed campaign digest fails closed
-    const changedDigest = { ...receipt, campaign_digest: m.sha256('different') };
-    const digestResult = validate(changedDigest, a.state);
+    const changedDigestPayload = {
+      ...receiptPayload,
+      campaign_contract_digest: m.sha256('different'),
+    };
+    const digestResult = apply(first.state, {
+      ...changedDigestPayload,
+      receipt_digest: m.sha256(changedDigestPayload),
+    });
     check('p2-receipt-changed-digest-fails-closed', digestResult
-      && (digestResult.valid === false || digestResult.status === 'binding_mismatch'));
+      && digestResult.status === 'rejected'
+      && digestResult.reason === 'binding_mismatch');
     // Changed lineage fails closed
-    const changedLineage = { ...receipt, mission_lineage_id: 'wrong-lineage' };
-    const lineageResult = validate(changedLineage, a.state);
+    const changedLineagePayload = {
+      ...receiptPayload,
+      mission_lineage_id: 'lineage-v1-' + m.sha256('wrong-lineage'),
+    };
+    const lineageResult = apply(first.state, {
+      ...changedLineagePayload,
+      receipt_digest: m.sha256(changedLineagePayload),
+    });
     check('p2-receipt-changed-lineage-fails-closed', lineageResult
-      && (lineageResult.valid === false || lineageResult.status === 'binding_mismatch'));
+      && lineageResult.status === 'rejected'
+      && lineageResult.reason === 'binding_mismatch');
   } else {
     lines.push('p2-receipt-valid-applies-once\tSKIP');
     lines.push('p2-receipt-exact-replay-idempotent\tSKIP');
@@ -507,8 +533,8 @@ done
 # ── Missing-P2 acceptance: these freeze the exact required P2 binding surface.
 # Each asserts the P2 behavior PASSES; on current HEAD the surface is absent so
 # the assertion fails and this oracle exits nonzero. When P2 lands they go green.
-assert_contains "$OUT" "p2-validate-mission-campaign-receipt-binding-present	PASS" \
-  "RED: validateMissionCampaignReceiptBinding not exported from engine"
+assert_contains "$OUT" "p2-apply-mission-campaign-receipt-present	PASS" \
+  "RED: applyMissionCampaignReceipt not exported from engine"
 assert_contains "$OUT" "p2-create-mission-campaign-adapters-present	PASS" \
   "RED: createMissionCampaignAdapters not exported from engine"
 

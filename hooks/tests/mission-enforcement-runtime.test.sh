@@ -162,43 +162,84 @@ group('g1', () => {
   check('g1-capability-binding', capability.id === 'codex'
     && capability.capabilities
     && new Set(['verified', 'warning', 'unverified']).has(capability.capabilities.blocking_gate));
+  const artifactDigest = m.sha256(artifact);
+  check('p2-capability-probe-digest-bound',
+    capability.mission_enforcement_probe_digest === artifactDigest);
 
   // Canonical P2 export: evaluateCodexEnforcementDisposition
   const evaluate = engine.evaluateCodexEnforcementDisposition;
   check('p2-evaluate-codex-enforcement-disposition-present', typeof evaluate === 'function');
   if (typeof evaluate === 'function') {
     // block-capable and wrapper-required may enforce
-    const blockResult = evaluate(artifact, capability);
-    check('p2-disposition-block-capable-may-enforce', blockResult === true
-      || (blockResult && blockResult.enforceable === true));
+    const blockResult = evaluate({
+      artifact, capability, expected_harness_id: 'codex',
+    });
+    check('p2-disposition-block-capable-may-enforce', blockResult
+      && blockResult.enforceable === true && isHex64(blockResult.receipt_digest));
     const wrapperArtifact = { ...artifact, codex_enforcement_outcome: 'wrapper-required' };
-    const wrapperResult = evaluate(wrapperArtifact, capability);
-    check('p2-disposition-wrapper-required-may-enforce', wrapperResult === true
-      || (wrapperResult && wrapperResult.enforceable === true));
+    const wrapperCapability = {
+      ...capability,
+      mission_enforcement_probe_digest: m.sha256(wrapperArtifact),
+    };
+    const wrapperResult = evaluate({
+      artifact: wrapperArtifact,
+      capability: wrapperCapability,
+      expected_harness_id: 'codex',
+    });
+    check('p2-disposition-wrapper-required-may-enforce',
+      wrapperResult && wrapperResult.enforceable === true);
     // unenforceable-now may NOT enforce
     const unenforceable = { ...artifact, codex_enforcement_outcome: 'unenforceable-now' };
-    const unResult = evaluate(unenforceable, capability);
-    check('p2-disposition-unenforceable-denied', unResult === false
-      || (unResult && unResult.enforceable === false));
+    const unenforceableCapability = {
+      ...capability,
+      mission_enforcement_probe_digest: m.sha256(unenforceable),
+    };
+    const unResult = evaluate({
+      artifact: unenforceable,
+      capability: unenforceableCapability,
+      expected_harness_id: 'codex',
+    });
+    check('p2-disposition-unenforceable-denied',
+      unResult && unResult.enforceable === false);
     // malformed artifact may NOT enforce
-    const malformedResult = evaluate({ schema_version: 99 }, capability);
-    check('p2-disposition-malformed-denied', malformedResult === false
-      || (malformedResult && malformedResult.enforceable === false));
+    const malformedArtifact = { schema_version: 99 };
+    const malformedResult = evaluate({
+      artifact: malformedArtifact,
+      capability: {
+        ...capability,
+        mission_enforcement_probe_digest: m.sha256(malformedArtifact),
+      },
+      expected_harness_id: 'codex',
+    });
+    check('p2-disposition-malformed-denied',
+      malformedResult && malformedResult.enforceable === false);
     // digest mismatch may NOT enforce
     const digestMismatch = { ...artifact, evidence: { ...artifact.evidence, stdout_sha256: '0'.repeat(64) } };
-    const digestResult = evaluate(digestMismatch, capability);
-    check('p2-disposition-digest-mismatch-denied', digestResult === false
-      || (digestResult && digestResult.enforceable === false));
+    const digestResult = evaluate({
+      artifact: digestMismatch,
+      capability,
+      expected_harness_id: 'codex',
+    });
+    check('p2-disposition-digest-mismatch-denied',
+      digestResult && digestResult.enforceable === false);
     // identity mismatch may NOT enforce
     const identityMismatchCap = { ...capability, id: 'not-codex' };
-    const identityResult = evaluate(artifact, identityMismatchCap);
-    check('p2-disposition-identity-mismatch-denied', identityResult === false
-      || (identityResult && identityResult.enforceable === false));
+    const identityResult = evaluate({
+      artifact,
+      capability: identityMismatchCap,
+      expected_harness_id: 'codex',
+    });
+    check('p2-disposition-identity-mismatch-denied',
+      identityResult && identityResult.enforceable === false);
     // unsupported harness may NOT enforce
     const unsupportedCap = { ...capability, harness_level: 'H0' };
-    const unsupportedResult = evaluate(artifact, unsupportedCap);
-    check('p2-disposition-unsupported-harness-denied', unsupportedResult === false
-      || (unsupportedResult && unsupportedResult.enforceable === false));
+    const unsupportedResult = evaluate({
+      artifact,
+      capability: unsupportedCap,
+      expected_harness_id: 'codex',
+    });
+    check('p2-disposition-unsupported-harness-denied',
+      unsupportedResult && unsupportedResult.enforceable === false);
   } else {
     lines.push('p2-disposition-block-capable-may-enforce\tSKIP');
     lines.push('p2-disposition-wrapper-required-may-enforce\tSKIP');
@@ -216,19 +257,26 @@ group('g1', () => {
 // disposition digest, and request identity; mismatches block before effect.
 group('g2', () => {
   const capability = JSON.parse(fs.readFileSync(capabilityPath, 'utf8'));
+  const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
   check('g2-capability-notes-pending-binding', Array.isArray(capability.notes)
     && capability.notes.some((n) => /P2 must still bind Mission identity/.test(n)));
 
   const createAdapter = engine.createCodexMissionEnforcementAdapter;
   check('p2-codex-mission-enforcement-adapter-present', typeof createAdapter === 'function');
-  if (typeof createAdapter === 'function') {
-    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-    const lineage = 'lineage-v1-' + m.sha256('L');
+  const evaluate = engine.evaluateCodexEnforcementDisposition;
+  if (typeof createAdapter === 'function' && typeof evaluate === 'function') {
+    const missionState = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
+    const claimed = m.reduceMissionState(
+      missionState,
+      claimEvent(missionState, { idempotency_key: 'codex-g2', campaign_id: 'codex-g2' }),
+    );
+    const dispositionReceipt = evaluate({
+      artifact, capability, expected_harness_id: 'codex',
+    });
     const binding = {
-      claim_id: 'claim-g2',
-      mission_lineage_id: lineage,
-      control_sequence: 7,
-      disposition_digest: m.sha256(JSON.stringify(artifact)),
+      mission_state: claimed.state,
+      grant_receipt: claimed.receipt,
+      disposition_receipt: dispositionReceipt,
       request_identity: 'codex',
     };
     const adapter = createAdapter(binding);
@@ -238,10 +286,10 @@ group('g2', () => {
     const effectCalls = [];
     const effect = () => { effectCalls.push('ran'); return { blocked: false }; };
     const validRequest = {
-      claim_id: 'claim-g2',
-      mission_lineage_id: lineage,
-      control_sequence: 7,
-      disposition_digest: m.sha256(JSON.stringify(artifact)),
+      claim_id: claimed.receipt.claim_id,
+      mission_lineage_id: claimed.state.mission_lineage_id,
+      control_sequence: claimed.state.control_sequence,
+      disposition_digest: dispositionReceipt.receipt_digest,
       request_identity: 'codex',
     };
     if (typeof adapter.enforce === 'function') {
@@ -564,6 +612,8 @@ done
 # HEAD so the oracle exits nonzero. These go green when P2 ships the surface. ──
 assert_contains "$OUT" "p2-evaluate-codex-enforcement-disposition-present	PASS" \
   "RED: evaluateCodexEnforcementDisposition not exported from engine"
+assert_contains "$OUT" "p2-capability-probe-digest-bound	PASS" \
+  "RED: Codex capability does not bind the exact P0 enforcement artifact digest"
 assert_contains "$OUT" "p2-codex-mission-enforcement-adapter-present	PASS" \
   "RED: createCodexMissionEnforcementAdapter not exported from engine"
 assert_contains "$OUT" "p2-fence-mission-effect-present	PASS" \

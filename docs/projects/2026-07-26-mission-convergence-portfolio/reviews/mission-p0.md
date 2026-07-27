@@ -14,9 +14,10 @@ or package mirror.
 
 ## Deterministic Evidence
 
-- `bash hooks/tests/mission-convergence-integration.test.sh`: PASS, 14 assertions. The six incidents
-  and four controls deterministically expose current `UNSUPERVISED` behavior without a missing-module
-  setup error; an independent frozen table rejects altered terminal states or reasons.
+- `bash hooks/tests/mission-convergence-integration.test.sh`: intentional RED, 4 setup/integrity
+  assertions pass and 10 behavioral assertions fail. The six incidents and four controls execute
+  through a healthy runner but current behavior is `UNSUPERVISED`; an independent frozen table
+  rejects altered terminal states or reasons. P1 must turn these same assertions green.
 - `bash hooks/tests/mission-authority-ownership.test.sh`: PASS, 9 assertions. Seven frozen
   authorities have one non-empty owner, active-plan markers agree with the portfolio manifest, and a
   duplicate or empty owner fails closed.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Mission P0 integration oracle. This test is intentionally RED until P1/P2
-# provide the pure reducer and the ICC binding selected by the enforcement probe.
+# Mission P0 integration oracle. This test exits RED until P1/P2 provide the
+# pure reducer and ICC binding selected by the enforcement probe.
 . "$(dirname "$0")/lib.sh"
 
 FIXTURES="$REPO_ROOT/hooks/tests/fixtures/mission-convergence-incidents.json"
@@ -79,8 +79,8 @@ for fixture in \
   closure-ratio \
   invalid-review-authority
 do
-  assert_contains "$OUT" "$fixture	FAIL	" \
-    "RED: $fixture exposes a Mission-level behavior gap"
+  assert_contains "$OUT" "$fixture	PASS	" \
+    "RED: $fixture must reach its frozen Mission terminal reason"
 done
 
 for control in \
@@ -89,8 +89,8 @@ for control in \
   current-control-sequence \
   known-axis-below-ratio
 do
-  assert_contains "$OUT" "$control	FAIL	" \
-    "RED: healthy control $control awaits the same Mission reducer"
+  assert_contains "$OUT" "$control	PASS	" \
+    "RED: healthy control $control must preserve allowed behavior"
 done
 
 assert_contains "$OUT" '"state":"UNSUPERVISED"' \

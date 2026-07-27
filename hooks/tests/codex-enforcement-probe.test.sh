@@ -21,6 +21,7 @@ console.log(`marketplace=${artifact.evidence.marketplace_installed}`);
 console.log(`plugin=${artifact.evidence.plugin_installed}`);
 console.log(`execution=${artifact.evidence.execution_started}:${artifact.evidence.execution_exit_status}`);
 console.log(`hook=${artifact.evidence.hook_invoked}`);
+console.log(`request_bound=${artifact.evidence.request_bound}`);
 console.log(`target_created=${artifact.evidence.blocked_target_created}`);
 console.log(`blocking_gate=${capability.capabilities.blocking_gate}`);
 console.log(`capability_checked=${capability.last_checked_at}`);
@@ -38,6 +39,7 @@ assert_contains "$OUT" "marketplace=true" "Probe marketplace was installed"
 assert_contains "$OUT" "plugin=true" "Probe plugin was installed"
 assert_contains "$OUT" "execution=true:0" "Harmless execution reached a terminal host result"
 assert_contains "$OUT" "hook=true" "PreToolUse hook received the real tool request"
+assert_contains "$OUT" "request_bound=true" "Hook evidence binds the requested scratch target"
 assert_contains "$OUT" "target_created=false" "Blocked tool produced no filesystem effect"
 assert_contains "$OUT" "blocking_gate=warning" \
   "Capability stays below H4 despite the block-capable primitive"
@@ -50,7 +52,33 @@ assert_not_contains "$PROBE_SOURCE" "'--ask-for-approval'" \
   "Probe uses only options accepted by codex exec"
 assert_contains "$PROBE_SOURCE" "process.once('exit', cleanup)" \
   "Probe cleans copied credentials and scratch state on handled failure"
-assert_contains "$PROBE_SOURCE" "hookInvoked && !targetCreated" \
-  "Block-capable requires both hook invocation and effect absence"
+assert_contains "$PROBE_SOURCE" "hookInvoked && requestBound && !targetCreated" \
+  "Block-capable requires bound hook invocation and effect absence"
+assert_contains "$PROBE_SOURCE" "else if (targetCreated)" \
+  "Wrapper-required requires an observed effect, not plugin installation"
+
+STUB_BIN="$TEST_TMP/bin"
+STUB_ARTIFACT="$TEST_TMP/invalid-probe.json"
+mkdir -p "$STUB_BIN"
+cat > "$STUB_BIN/codex" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "codex-cli fixture"
+  exit 0
+fi
+if [ "${1:-}" = "plugin" ]; then
+  printf '%s\n' '{"status":"ok"}'
+  exit 0
+fi
+printf '%s\n' "fixture exec failed before tool dispatch" >&2
+exit 2
+STUB
+chmod +x "$STUB_BIN/codex"
+OUT="$(PATH="$STUB_BIN:$PATH" node "$PROBE" --output "$STUB_ARTIFACT" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" "1" "Pre-tool execution failure leaves disposition unverified"
+assert_contains "$OUT" "without request-bound hook or effect evidence" \
+  "Invalid probe explains the missing execution evidence"
+assert_file_absent "$STUB_ARTIFACT" "Invalid probe writes no final disposition artifact"
 
 finalize_test

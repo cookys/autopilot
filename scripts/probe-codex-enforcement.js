@@ -36,6 +36,7 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  try { fs.unlinkSync(args.output); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-codex-enforcement-'));
   const codexHome = path.join(root, 'codex-home');
   const marketplace = path.join(root, 'marketplace');
@@ -113,8 +114,13 @@ function main() {
     "'use strict';",
     "const fs = require('fs');",
     "const payload = fs.readFileSync(0, 'utf8');",
+    "let parsed = {};",
+    "try { parsed = JSON.parse(payload); } catch {}",
+    "const toolInput = JSON.stringify(parsed.tool_input || null);",
+    "const requestedTarget = process.env.AUTOPILOT_CODEX_PROBE_TARGET || '';",
     "const row = JSON.stringify({",
     "  invoked: true,",
+    "  request_bound: requestedTarget.length > 0 && toolInput.includes(requestedTarget),",
     "  payload_sha256: require('crypto').createHash('sha256').update(payload).digest('hex'),",
     "});",
     "fs.appendFileSync(process.env.AUTOPILOT_CODEX_PROBE_LOG, `${row}\\n`, { mode: 0o600 });",
@@ -129,6 +135,7 @@ function main() {
     ...process.env,
     CODEX_HOME: codexHome,
     AUTOPILOT_CODEX_PROBE_LOG: hookLog,
+    AUTOPILOT_CODEX_PROBE_TARGET: blockedTarget,
   };
   const version = run('codex', ['--version'], { env });
   const marketplaceAdd = run(
@@ -160,10 +167,18 @@ function main() {
 
   const hookInvoked = fs.existsSync(hookLog)
     && fs.readFileSync(hookLog, 'utf8').trim().length > 0;
+  const requestBound = hookInvoked
+    && fs.readFileSync(hookLog, 'utf8').trim().split(/\n+/)
+      .map((line) => JSON.parse(line))
+      .some((row) => row.request_bound === true);
   const targetCreated = fs.existsSync(blockedTarget);
-  let disposition = 'unenforceable-now';
-  if (hookInvoked && !targetCreated) disposition = 'block-capable';
-  else if (pluginAdd.status === 0) disposition = 'wrapper-required';
+  let disposition = null;
+  if (hookInvoked && requestBound && !targetCreated) disposition = 'block-capable';
+  else if (targetCreated) disposition = 'wrapper-required';
+  if (disposition === null) {
+    cleanup();
+    throw new Error('probe ended without request-bound hook or effect evidence');
+  }
 
   const artifact = {
     schema_version: 1,
@@ -183,6 +198,7 @@ function main() {
       execution_exit_status: execution.status,
       execution_signal: execution.signal || null,
       hook_invoked: hookInvoked,
+      request_bound: requestBound,
       blocked_target_created: targetCreated,
       stdout_sha256: sha256(execution.stdout || ''),
       stderr_sha256: sha256(execution.stderr || ''),

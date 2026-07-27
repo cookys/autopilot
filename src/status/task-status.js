@@ -563,6 +563,15 @@ function validateDurableCampaignState(state) {
     return { ok: false, reason: 'campaign_state_invalid' };
   }
 
+  const minimumTerminalEvents = 5 + (5 * state.generation);
+  if (state.usage.repair_generations !== state.generation
+      || state.usage.elapsed_wall_seconds > state.limits.max_wall_seconds
+      || state.usage.changed_files > state.limits.max_changed_files
+      || state.usage.churn > state.limits.max_churn
+      || state.event_count < minimumTerminalEvents) {
+    return { ok: false, reason: 'campaign_state_impossible' };
+  }
+
   if (state.campaign_id !== campaignIdFor(
     state.repo_identity,
     state.ticket,
@@ -615,6 +624,9 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   }
   if (state.last_output_artifact_digest !== terminalReceipt.receipt_digest) {
     return campaignInvalid(campaignId, 'campaign_terminal_state_binding_mismatch');
+  }
+  if (terminalReceipt.repair_generations !== state.generation) {
+    return campaignInvalid(campaignId, 'campaign_terminal_generation_mismatch');
   }
   if (PHASE_RECEIPT_STATUS.get(state.phase) !== terminalReceipt.status) {
     return campaignInvalid(campaignId, 'campaign_terminal_status_mismatch');
@@ -837,6 +849,21 @@ function bindCampaignEntry(item, missionResult, adapters) {
         ...item.evidence,
         status: 'invalid',
         reason: 'campaign_binding_claim_unmapped',
+      },
+    };
+  }
+  if (matched.campaign_contract_digest !== item.state.contract_digest
+      || matched.base_sha !== item.candidate.base) {
+    return {
+      ...item,
+      valid: false,
+      accepted: false,
+      terminal: false,
+      binding: null,
+      evidence: {
+        ...item.evidence,
+        status: 'invalid',
+        reason: 'campaign_binding_authority_mismatch',
       },
     };
   }
@@ -1088,6 +1115,9 @@ function resolveCandidateTree(adapters, candidate) {
 }
 
 function collectCandidate(campaignResult, adapters) {
+  if (!campaignResult.coverageExact || !campaignResult.all_valid) {
+    return { ok: false, reason: 'campaign_coverage_incomplete' };
+  }
   const validCandidates = campaignResult.items
     .filter((item) => item.valid && item.candidate)
     .map((item) => item.candidate);

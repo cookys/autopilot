@@ -107,41 +107,45 @@ function reservation(state, toolCalls) {
   };
 }
 
-function buildMissionBundle() {
+function buildMissionBundle({ campaignCount = 1 } = {}) {
   let state = mission.createMissionState(missionContract());
-  const claimed = mission.reduceMissionState(state, {
-    event_type: 'grant_claimed',
-    sequence: 1,
-    mission_lineage_id: state.mission_lineage_id,
-    payload: {
-      idempotency_key: 'lsm-claim',
+  const claims = [];
+  for (let index = 0; index < campaignCount; index += 1) {
+    const claimed = mission.reduceMissionState(state, {
+      event_type: 'grant_claimed',
+      sequence: state.events.length + 1,
       mission_lineage_id: state.mission_lineage_id,
-      task_authority_id: state.task_authority_id,
-      campaign_id: 'mission-campaign-v2',
-      campaign_contract_digest: state.policy_hash,
-      base_sha: '0'.repeat(40),
-      acceptance_ids: ['acceptance-1'],
-      reservation: reservation(state, 5),
-      issued_at: '2026-07-27T00:00:00.000Z',
-      expires_at: '2026-07-27T01:00:00.000Z',
-    },
-  });
-  state = claimed.state;
-  state = mission.reduceMissionState(state, {
-    event_type: 'acceptance_satisfied',
-    sequence: state.events.length + 1,
-    mission_lineage_id: state.mission_lineage_id,
-    payload: { acceptance_hash: mission.sha256('acceptance-1') },
-  }).state;
-  state = mission.reduceMissionState(state, {
-    event_type: 'reconciliation',
-    sequence: state.events.length + 1,
-    mission_lineage_id: state.mission_lineage_id,
-    payload: {
-      claim_id: claimed.receipt.claim_id,
-      actual_usage: reservation(state, 5),
-    },
-  }).state;
+      payload: {
+        idempotency_key: `lsm-claim-${index}`,
+        mission_lineage_id: state.mission_lineage_id,
+        task_authority_id: state.task_authority_id,
+        campaign_id: `mission-campaign-v2-${index}`,
+        campaign_contract_digest: icc.canonicalDigest(campaignContract()),
+        base_sha: '0'.repeat(40),
+        acceptance_ids: [`acceptance-${index}`],
+        reservation: reservation(state, 5),
+        issued_at: '2026-07-27T00:00:00.000Z',
+        expires_at: '2026-07-27T01:00:00.000Z',
+      },
+    });
+    state = claimed.state;
+    state = mission.reduceMissionState(state, {
+      event_type: 'acceptance_satisfied',
+      sequence: state.events.length + 1,
+      mission_lineage_id: state.mission_lineage_id,
+      payload: { acceptance_hash: mission.sha256(`acceptance-${index}`) },
+    }).state;
+    state = mission.reduceMissionState(state, {
+      event_type: 'reconciliation',
+      sequence: state.events.length + 1,
+      mission_lineage_id: state.mission_lineage_id,
+      payload: {
+        claim_id: claimed.receipt.claim_id,
+        actual_usage: reservation(state, 5),
+      },
+    }).state;
+    claims.push(state.claims[claimed.receipt.claim_id]);
+  }
   state = mission.reduceMissionState(state, {
     event_type: 'closure_evaluated',
     sequence: state.events.length + 1,
@@ -152,7 +156,8 @@ function buildMissionBundle() {
   const residue = { ...residueBody, residue_digest: mission.sha256(residueBody) };
   return {
     state,
-    claim: state.claims[claimed.receipt.claim_id],
+    claim: claims[0],
+    claims,
     terminal_receipt: mission.buildMissionTerminalReceipt(state, residue),
   };
 }
@@ -187,9 +192,9 @@ function buildBlockedMissionBundle() {
   };
 }
 
-function campaignContract() {
+function campaignContract(ticket = 'lsm-p1') {
   return {
-    ticket: 'lsm-p1',
+    ticket,
     profile: 'poc',
     max_repair_generations: 2,
     max_wall_seconds: 600,
@@ -223,8 +228,13 @@ function buildVerification(campaignId) {
   return { ...body, receipt_digest: icc.canonicalDigest(body) };
 }
 
-function buildCampaignBundle({ status = 'ready', followUp = [], unresolved = [] } = {}) {
-  const contract = campaignContract();
+function buildCampaignBundle({
+  status = 'ready',
+  followUp = [],
+  unresolved = [],
+  ticket = 'lsm-p1',
+} = {}) {
+  const contract = campaignContract(ticket);
   const contractDigest = icc.canonicalDigest(contract);
   let state = icc.createCampaignState({
     contract,
@@ -467,6 +477,78 @@ group('durable-state-authority', () => {
   );
   check('icc-terminal-receipt-digest-substitution-rejected',
     terminalDigestResult.acceptance_verdict === 'unknown');
+
+  const overBudget = clone(campaignBundle);
+  overBudget.state.usage.changed_files = overBudget.state.limits.max_changed_files + 1;
+  const overBudgetResult = buildTaskStatus(
+    makeInput({ campaigns: [overBudget] }),
+    makeAdapters(),
+  );
+  check('icc-impossible-usage-rejected', overBudgetResult.acceptance_verdict === 'unknown');
+
+  const generationDrift = clone(campaignBundle);
+  generationDrift.state.generation = 1;
+  const generationResult = buildTaskStatus(
+    makeInput({ campaigns: [generationDrift] }),
+    makeAdapters(),
+  );
+  check('icc-generation-usage-drift-rejected',
+    generationResult.acceptance_verdict === 'unknown');
+
+  const truncated = clone(campaignBundle);
+  truncated.state.idempotency_records = truncated.state.idempotency_records.slice(0, 1);
+  truncated.state.event_count = 1;
+  const truncatedResult = buildTaskStatus(
+    makeInput({ campaigns: [truncated] }),
+    makeAdapters(),
+  );
+  check('icc-truncated-terminal-history-rejected',
+    truncatedResult.acceptance_verdict === 'unknown');
+
+  const repairCountDrift = clone(campaignBundle);
+  repairCountDrift.terminal_receipt = redigest({
+    ...repairCountDrift.terminal_receipt,
+    repair_generations: 1,
+  });
+  repairCountDrift.state.last_output_artifact_digest
+    = repairCountDrift.terminal_receipt.receipt_digest;
+  const repairCountResult = buildTaskStatus(
+    makeInput({ campaigns: [repairCountDrift] }),
+    makeAdapters(),
+  );
+  check('icc-terminal-repair-count-drift-rejected',
+    repairCountResult.acceptance_verdict === 'unknown');
+});
+
+group('mission-campaign-authorization', () => {
+  const wrongContract = buildCampaignBundle({ ticket: 'other-ticket' });
+  const wrongContractResult = buildTaskStatus(
+    makeInput({ campaigns: [wrongContract] }),
+    makeAdapters(),
+  );
+  check('mission-campaign-contract-mismatch-rejected',
+    wrongContractResult.acceptance_verdict === 'unknown');
+
+  const wrongBase = clone(campaignBundle);
+  wrongBase.candidate.base = '6'.repeat(40);
+  const wrongBaseResult = buildTaskStatus(
+    makeInput({ campaigns: [wrongBase] }),
+    makeAdapters(),
+  );
+  check('mission-campaign-base-mismatch-rejected',
+    wrongBaseResult.acceptance_verdict === 'unknown');
+
+  const twoClaims = buildMissionBundle({ campaignCount: 2 });
+  const partial = buildTaskStatus(makeInput({
+    mission: {
+      state: twoClaims.state,
+      terminal_receipt: twoClaims.terminal_receipt,
+    },
+    campaigns: [campaignBundle],
+  }), makeAdapters());
+  check('partial-coverage-candidate-hidden', partial.candidate_commit === null);
+  check('partial-coverage-integration-unknown',
+    partial.product_merged === null && partial.pushed === null);
 });
 
 group('lifecycle-authority', () => {

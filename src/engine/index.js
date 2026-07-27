@@ -188,6 +188,8 @@ const campaignVerification = require('./campaign-verification');
 const implementationCampaign = require('./implementation-campaign');
 const localDeployment = require('./local-deployment');
 const roles = require('./roles');
+const authenticatedControl = require('./authenticated-control');
+const missionConvergence = require('./mission-convergence');
 
 module.exports = {
   AutopilotEngine,
@@ -357,4 +359,41 @@ module.exports = {
   ...productReviewNormalizer,
   ...campaignStatus,
   ...ownerKernel,
+  AUTHENTICATED_CONTROL_ACTIONS: authenticatedControl.CONTROL_ACTIONS,
+  AUTHENTICATED_CONTROL_AUTHORITIES: authenticatedControl.CONTROL_AUTHORITIES,
+  AUTHENTICATED_CONTROL_REJECTION_REASONS: authenticatedControl.REJECTION_REASONS,
+  AUTHENTICATED_CONTROL_SCHEMA_VERSION: authenticatedControl.CONTROL_SCHEMA_VERSION,
+  AuthenticatedControlAdapter: authenticatedControl.AuthenticatedControlAdapter,
+  AuthenticatedControlError: authenticatedControl.AuthenticatedControlError,
+  CEILING_LOOSEN_AUTHORITIES: authenticatedControl.CEILING_LOOSEN_AUTHORITIES,
+  MISSION_CONVERGENCE_AXES: missionConvergence.SUPPORTED_AXES,
+  MISSION_CONVERGENCE_CLOSURE_ALLOWLIST: missionConvergence.CLOSURE_ALLOWLIST,
+  MISSION_CONVERGENCE_ENFORCEMENT_MODES: missionConvergence.ENFORCEMENT_MODES,
+  MISSION_CONVERGENCE_EVENT_TYPES: missionConvergence.EVENT_TYPES,
+  MISSION_CONVERGENCE_GRANT_BINDING_FIELDS: missionConvergence.GRANT_BINDING_FIELDS,
+  MISSION_CONVERGENCE_SCHEMA_VERSION: missionConvergence.MISSION_SCHEMA_VERSION,
+  MISSION_CONVERGENCE_STATES: missionConvergence.MISSION_STATES,
+  MissionReducerError: missionConvergence.MissionReducerError,
+  TERMINAL_TRIGGER_ACTIONS: authenticatedControl.TERMINAL_TRIGGER_ACTIONS,
+  authorizeCeilingAdjust: authenticatedControl.authorizeCeilingAdjust,
+  buildProjection: missionConvergence.buildProjection,
+  claimIdFor: missionConvergence.claimIdFor,
+  classifyControlEffect: authenticatedControl.classifyControlEffect,
+  computeAxisBudget: missionConvergence.computeAxisBudget,
+  createMissionState: missionConvergence.createMissionState,
+  evaluateConfig: missionConvergence.evaluateConfig,
+  evaluateIdentityReset: missionConvergence.evaluateIdentityReset,
+  evaluateMissionIntegrationFixture: missionConvergence.evaluateMissionIntegrationFixture,
+  evaluateMissionReducerFixture: missionConvergence.evaluateMissionReducerFixture,
+  isNonSerializableVerifier: authenticatedControl.isNonSerializableVerifier,
+  normalizeControlEvent: authenticatedControl.normalizeControlEvent,
+  reduceMissionState: missionConvergence.reduceMissionState,
+  remainingForAxis: missionConvergence.remainingForAxis,
+  replayEvents: missionConvergence.replayEvents,
+  restoreProjection: missionConvergence.restoreProjection,
+  sha256: missionConvergence.sha256,
+  stateHash: missionConvergence.stateHash,
+  validateMissionContract: missionConvergence.validateMissionContract,
+  validateVerifier: authenticatedControl.validateVerifier,
+  verifySequence: authenticatedControl.verifySequence,
 };

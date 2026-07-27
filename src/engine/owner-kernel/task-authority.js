@@ -575,6 +575,28 @@ function normalizeFrozenExecutionPreferences(raw) {
   };
 }
 
+function normalizeOptionalMissionFields(raw) {
+  // Optional provenance: if present, validate pattern + include in canonical
+  // body/id/hash. Absent remains fully compatible with v1 envelopes that do
+  // not bind a Mission.
+  const result = {};
+  if (raw.missionLineageId !== undefined && raw.missionLineageId !== null) {
+    const lineage = raw.missionLineageId;
+    if (typeof lineage !== 'string' || !/^lineage-v1-[0-9a-f]{64}$/.test(lineage)) {
+      authorityError('task authority missionLineageId must match lineage-v1-{sha256}');
+    }
+    result.mission_lineage_id = lineage;
+  }
+  if (raw.missionPolicyDigest !== undefined && raw.missionPolicyDigest !== null) {
+    const digest = raw.missionPolicyDigest;
+    if (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) {
+      authorityError('task authority missionPolicyDigest must be a SHA-256 digest');
+    }
+    result.mission_policy_digest = digest;
+  }
+  return result;
+}
+
 function taskAuthorityBody(raw) {
   const value = plainObject(raw, 'task authority input');
   onlyKeys(value, new Set([
@@ -590,6 +612,8 @@ function taskAuthorityBody(raw) {
     'escalationPolicy',
     'finishReceiptSchema',
     'taskOverrides',
+    'missionLineageId',
+    'missionPolicyDigest',
   ]), 'task authority input');
   const policy = normalizePolicy(value.policy, value.policyHash);
   const executionPreferences = normalizeExecutionPreferences(
@@ -604,6 +628,7 @@ function taskAuthorityBody(raw) {
     value.redLineAdditions === undefined ? [] : value.redLineAdditions,
     'task red line additions',
   );
+  const missionFields = normalizeOptionalMissionFields(value);
   return {
     schema_version: TASK_AUTHORITY_SCHEMA_VERSION,
     task_id: token(value.taskId, 'task id'),
@@ -621,6 +646,7 @@ function taskAuthorityBody(raw) {
     escalation_policy: normalizeEscalationPolicy(value.escalationPolicy),
     finish_receipt_schema: normalizeFinishReceiptSchema(value.finishReceiptSchema),
     execution_preferences: executionPreferences,
+    ...missionFields,
   };
 }
 
@@ -654,6 +680,8 @@ function normalizeTaskAuthorityEnvelope(raw) {
     'escalation_policy',
     'finish_receipt_schema',
     'execution_preferences',
+    'mission_lineage_id',
+    'mission_policy_digest',
   ]), 'task authority envelope');
   if (value.schema_version !== TASK_AUTHORITY_SCHEMA_VERSION) {
     authorityError(`task authority envelope.schema_version must equal ${TASK_AUTHORITY_SCHEMA_VERSION}`);
@@ -687,6 +715,22 @@ function normalizeTaskAuthorityEnvelope(raw) {
     finish_receipt_schema: normalizeFinishReceiptSchema(value.finish_receipt_schema),
     execution_preferences: executionPreferences,
   };
+  // Optional Mission provenance: validate if present, include in canonical
+  // body so the id/hash binds the Mission lineage and policy digest.
+  if (value.mission_lineage_id !== undefined && value.mission_lineage_id !== null) {
+    if (typeof value.mission_lineage_id !== 'string'
+      || !/^lineage-v1-[0-9a-f]{64}$/.test(value.mission_lineage_id)) {
+      authorityError('task authority envelope.mission_lineage_id must match lineage-v1-{sha256}');
+    }
+    normalizedBody.mission_lineage_id = value.mission_lineage_id;
+  }
+  if (value.mission_policy_digest !== undefined && value.mission_policy_digest !== null) {
+    if (typeof value.mission_policy_digest !== 'string'
+      || !/^[a-f0-9]{64}$/.test(value.mission_policy_digest)) {
+      authorityError('task authority envelope.mission_policy_digest must be a SHA-256 digest');
+    }
+    normalizedBody.mission_policy_digest = value.mission_policy_digest;
+  }
   if (normalizedBody.data_egress_policy.mode !== executionPreferences.data_egress) {
     authorityError('task authority egress policy does not match its frozen execution preference');
   }

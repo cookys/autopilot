@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/mission-projection.schema.json",
+  "title": "MissionProjection",
+  "description": "Fresh-context Mission projection: frozen intent/acceptance/red lines/remaining budget/decisions and digest-bound source refs. Used to resume Mission state in a fresh Work Unit without replaying raw transcripts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "mission_lineage_id",
+    "task_authority_id",
+    "policy_hash",
+    "frozen_intent",
+    "remaining_acceptance",
+    "red_lines",
+    "remaining_budget",
+    "current_blockers",
+    "decision_log",
+    "source_refs",
+    "ordered_event_head",
+    "state_hash",
+    "projection_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "mission_projection" },
+    "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
+    "task_authority_id": { "$ref": "#/$defs/sha256" },
+    "policy_hash": { "$ref": "#/$defs/sha256" },
+    "enforcement_mode": { "type": "string", "enum": ["shadow", "enforce"] },
+    "closure_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "state_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machine_state",
+        "axes",
+        "claims",
+        "control_sequence",
+        "closure_allowlist",
+        "stagnant_campaigns",
+        "acceptance_hashes",
+        "unknown_required_axes",
+        "event_digests"
+      ],
+      "properties": {
+        "machine_state": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "ACTIVE",
+            "CLOSING",
+            "COMPLETE",
+            "BLOCKED",
+            "ABORTING",
+            "ABORTED",
+            "off"
+          ]
+        },
+        "terminal": { "type": ["object", "null"] },
+        "axes": { "type": "array", "items": { "$ref": "#/$defs/axis_state" } },
+        "claims": { "type": "object", "additionalProperties": { "$ref": "#/$defs/claim_state" } },
+        "control_sequence": { "type": "integer", "minimum": 0 },
+        "closure_allowlist": { "type": "array", "items": { "type": "string" } },
+        "stagnant_campaigns": { "type": "integer", "minimum": 0 },
+        "acceptance_hashes": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+        "unknown_required_axes": { "type": "array", "items": { "type": "string" } },
+        "event_digests": { "type": "array", "items": { "$ref": "#/$defs/sha256" } }
+      }
+    },
+    "frozen_intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective", "intent_hash"],
+      "properties": {
+        "objective": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "intent_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "remaining_acceptance": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "red_lines": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" }
+    },
+    "remaining_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["per_axis"],
+      "properties": {
+        "per_axis": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/axis_state" }
+        }
+      }
+    },
+    "current_blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["blocker_id", "kind", "summary", "evidence_ref_digest"],
+        "properties": {
+          "blocker_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "verified_blocker",
+              "stagnation",
+              "required_counter_unknown",
+              "scope_debt"
+            ]
+          },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "evidence_ref_digest": { "$ref": "#/$defs/sha256" },
+          "evidence_state": { "type": "string", "enum": ["known", "unknown"] }
+        }
+      }
+    },
+    "decision_log": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/decision_entry" }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source_ref" }
+    },
+    "ordered_event_head": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events", "head_digest"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/event_head_entry" }
+        },
+        "head_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "raw_transcript_present": { "type": "boolean", "const": false },
+    "state_hash": { "$ref": "#/$defs/sha256" },
+    "projection_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "axis_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis", "authorized_ceiling", "durable_consumed", "known"],
+      "properties": {
+        "axis": {
+          "type": "string",
+          "enum": [
+            "campaigns",
+            "wall_seconds",
+            "tool_calls",
+            "engine_attempts",
+            "external_wait_seconds",
+            "canonical_changed_files",
+            "output_bytes"
+          ]
+        },
+        "authorized_ceiling": { "type": "integer", "minimum": 0 },
+        "reserved_active": { "type": "integer", "minimum": 0 },
+        "durable_consumed": { "type": "integer", "minimum": 0 },
+        "active_actual": { "type": "integer", "minimum": 0 },
+        "enforced": { "type": "boolean" },
+        "known": { "type": "boolean" }
+      }
+    },
+    "claim_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "idempotency_key", "terminal", "event_digest"],
+      "properties": {
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "idempotency_key": { "type": "string" },
+        "terminal": { "type": "boolean" },
+        "released": { "type": "boolean" },
+        "reconciled": { "type": "boolean" },
+        "reservation": { "type": "object" },
+        "actual": { "type": ["object", "null"] },
+        "event_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "decision_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "reason", "evidence_state"],
+      "properties": {
+        "decision": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "alternatives": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "impact": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "evidence_ref_digest": { "$ref": "#/$defs/sha256" },
+        "evidence_state": { "type": "string", "enum": ["known", "unknown"] }
+      }
+    },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "digest", "state"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "campaign_receipt",
+            "grant_receipt",
+            "no_effect_release",
+            "reconciliation",
+            "authenticated_control",
+            "closure_allowlist",
+            "provider_readiness",
+            "lifecycle_residue",
+            "acceptance_snapshot",
+            "blocker_summary"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "known",
+            "unknown",
+            "complete",
+            "follow_up",
+            "ready",
+            "ready_unbound",
+            "blocked"
+          ]
+        }
+      }
+    },
+    "event_head_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_type", "digest", "sequence"],
+      "properties": {
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "campaign_terminal",
+            "verified_blocker_resolved",
+            "acceptance_satisfied_delta",
+            "scope_debt_reduced",
+            "authenticated_control",
+            "ceiling_adjust",
+            "grant_claimed",
+            "no_effect_release",
+            "reconciliation"
+          ]
+        },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "sequence": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

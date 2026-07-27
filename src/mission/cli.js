@@ -21,7 +21,6 @@
 const fs = require('fs');
 const path = require('path');
 const mission = require('../engine/mission-convergence');
-const { AuthenticatedControlAdapter } = require('../engine/authenticated-control');
 
 const DEFAULT_NOW = '2026-07-27T00:00:00.000Z';
 const DEFAULT_EXPIRY = '2026-07-27T01:00:00.000Z';
@@ -247,7 +246,7 @@ function cmdConsume(flags) {
   return rejected ? 1 : 0;
 }
 
-function cmdControl(flags) {
+function cmdControl(flags, options = {}) {
   const state = loadState(requireFlag(flags, 'state'));
   if (state.terminal || mission.TERMINAL_STATES.has(state.state)) {
     emit({
@@ -258,12 +257,23 @@ function cmdControl(flags) {
     });
     return 1;
   }
+  // Control never mints its own always-authenticated adapter. A host must
+  // inject an already-authenticated adapter with acceptEvent; the root
+  // machine CLI has no host adapter and therefore fails closed without
+  // writing --out.
+  const adapter = options.authenticatedControlAdapter;
+  if (!adapter || typeof adapter.acceptEvent !== 'function') {
+    emit({
+      status: 'rejected',
+      code: 'mission_control_authentication_required',
+      reason: 'control requires a host-injected authenticatedControlAdapter with acceptEvent',
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   const authority = flags.authority || 'authenticated_user';
   let canonical;
   try {
-    const adapter = new AuthenticatedControlAdapter({
-      verifier: () => ({ verified: true, authority }),
-    });
     canonical = adapter.acceptEvent({
       mission_lineage_id: state.mission_lineage_id,
       action: requireFlag(flags, 'action'),

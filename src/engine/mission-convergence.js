@@ -33,6 +33,8 @@
 //   acceptance_satisfied, closure_evaluated, successor_inherited
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const {
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlError,
@@ -3462,12 +3464,190 @@ function persistMissionStateCas(store, expected, next) {
   return { ok: true };
 }
 
+// Bounded file-backed Mission state store for trusted host wiring.
+// CAS success is only an explicit boolean true. Uses an exclusive lock file,
+// compares the current state hash to the expected snapshot, then writes via
+// temp-file atomic rename. Contention or any error fails closed (returns false
+// or throws from load).
+function createFileBackedMissionStateStore(statePath) {
+  if (typeof statePath !== 'string' || statePath.length === 0) {
+    throw new TypeError('createFileBackedMissionStateStore requires a non-empty state path');
+  }
+  const absolute = path.resolve(statePath);
+  const lockPath = `${absolute}.lock`;
+
+  function readStateUnlocked() {
+    const raw = fs.readFileSync(absolute, 'utf8');
+    const state = JSON.parse(raw);
+    validateMissionState(state);
+    return state;
+  }
+
+  function withExclusiveLock(fn) {
+    const deadline = Date.now() + 8000;
+    let delayMs = 5;
+    let lockFd = null;
+    while (lockFd === null) {
+      try {
+        lockFd = fs.openSync(lockPath, 'wx', 0o600);
+        fs.writeSync(lockFd, String(process.pid));
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        if (Date.now() >= deadline) {
+          const err = new Error('Mission state store lock contention');
+          err.code = 'mission_state_cas_failed';
+          throw err;
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+        delayMs = Math.min(delayMs * 2, 50);
+      }
+    }
+    try {
+      return fn();
+    } finally {
+      try { fs.closeSync(lockFd); } catch (_closeError) { /* ignore */ }
+      try { fs.unlinkSync(lockPath); } catch (_unlinkError) { /* ignore */ }
+    }
+  }
+
+  return {
+    load() {
+      return withExclusiveLock(() => readStateUnlocked());
+    },
+    save(expected, next) {
+      try {
+        return withExclusiveLock(() => {
+          let current;
+          try {
+            current = readStateUnlocked();
+          } catch (error) {
+            return false;
+          }
+          let expectedHash;
+          let currentHash;
+          try {
+            expectedHash = stateHash(expected);
+            currentHash = stateHash(current);
+          } catch (_error) {
+            return false;
+          }
+          if (expectedHash !== currentHash) return false;
+          let nextValid = true;
+          try { validateMissionState(next); } catch (_error) { nextValid = false; }
+          if (!nextValid) return false;
+          const temp = `${absolute}.tmp-${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
+          const bytes = `${JSON.stringify(next, null, 2)}\n`;
+          let fd = null;
+          try {
+            fd = fs.openSync(temp, 'wx', 0o600);
+            fs.fchmodSync(fd, 0o600);
+            fs.writeFileSync(fd, bytes, 'utf8');
+            fs.fsyncSync(fd);
+            fs.closeSync(fd);
+            fd = null;
+            fs.renameSync(temp, absolute);
+            try {
+              const parentFd = fs.openSync(path.dirname(absolute), 'r');
+              try { fs.fsyncSync(parentFd); } finally { fs.closeSync(parentFd); }
+            } catch (_fsyncError) {
+              // Parent fsync is best-effort on filesystems that disallow it.
+            }
+            return true;
+          } catch (_error) {
+            if (fd !== null) {
+              try { fs.closeSync(fd); } catch (_closeError) { /* ignore */ }
+            }
+            try { fs.unlinkSync(temp); } catch (_unlinkError) { /* ignore */ }
+            return false;
+          }
+        });
+      } catch (_error) {
+        return false;
+      }
+    },
+  };
+}
+
+function rebuildReservationPerAxis(claimReservation) {
+  if (!isPlainObject(claimReservation)) return null;
+  // Claims store an axis-keyed reservation map; grant payloads use per_axis.
+  if (Array.isArray(claimReservation.per_axis)) return claimReservation;
+  const perAxis = [];
+  for (const axisName of SUPPORTED_AXES) {
+    const entry = claimReservation[axisName];
+    if (!isPlainObject(entry)) return null;
+    perAxis.push({
+      axis: axisName,
+      authorized_ceiling: entry.authorized_ceiling,
+      reserved_active: entry.reserved_active,
+      durable_consumed: entry.durable_consumed,
+      known: entry.known === true,
+    });
+  }
+  return { per_axis: perAxis };
+}
+
+function resolveLiveClaimByGrantRef(state, grantRef) {
+  if (typeof grantRef !== 'string' || !/^[0-9a-f]{64}$/.test(grantRef)) {
+    return {
+      ok: false,
+      code: 'mission_grant_ref_invalid',
+      reason: 'grant_ref must be a lowercase SHA-256 Mission grant binding digest',
+    };
+  }
+  const matches = [];
+  const claims = state.claims && typeof state.claims === 'object' ? state.claims : {};
+  for (const claim of Object.values(claims)) {
+    if (claim && claim.binding_digest === grantRef) matches.push(claim);
+  }
+  if (matches.length === 0) {
+    return {
+      ok: false,
+      code: 'mission_grant_ref_not_found',
+      reason: 'no Mission claim matches the grant_ref binding digest',
+    };
+  }
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      code: 'mission_grant_ref_ambiguous',
+      reason: 'grant_ref matches more than one Mission claim',
+    };
+  }
+  const claim = matches[0];
+  if (claim.released === true || claim.terminal === true) {
+    return {
+      ok: false,
+      code: 'mission_grant_ref_released',
+      reason: 'matching Mission claim is released or terminal',
+    };
+  }
+  return { ok: true, claim };
+}
+
+function claimPayloadFromExistingClaim(state, claim) {
+  const reservation = rebuildReservationPerAxis(claim.reservation);
+  return {
+    idempotency_key: claim.idempotency_key,
+    mission_lineage_id: state.mission_lineage_id,
+    task_authority_id: state.task_authority_id,
+    campaign_id: claim.campaign_id,
+    campaign_contract_digest: claim.campaign_contract_digest,
+    base_sha: claim.base_sha,
+    acceptance_ids: Array.isArray(claim.acceptance_ids) ? [...claim.acceptance_ids] : [],
+    reservation,
+    issued_at: claim.issued_at,
+    expires_at: claim.expires_at,
+  };
+}
+
 function createMissionCampaignAdapters(options = {}) {
   const store = options.store;
   const hasAtomicStore = isPlainObject(store)
     && typeof store.load === 'function'
     && typeof store.save === 'function';
   const lineageId = typeof options.mission_lineage_id === 'string' ? options.mission_lineage_id : null;
+  const grantRef = typeof options.grant_ref === 'string' ? options.grant_ref : null;
 
   function claimPayload(state, input) {
     const grant = isPlainObject(options.grant) ? options.grant : options;
@@ -3507,6 +3687,62 @@ function createMissionCampaignAdapters(options = {}) {
       if (lineageId !== null && state.mission_lineage_id !== lineageId) {
         return { owner: 'mission', status: 'rejected', code: 'mission_lineage_mismatch', reason: 'Mission state lineage does not match the requested lineage' };
       }
+
+      // Trusted grant_ref path: resolve the exact existing live claim by binding
+      // digest and rebuild the claim payload internally. Exact intake retry
+      // returns that same claim with resumed:true; absent/ambiguous/released/
+      // mismatched refs reject. No caller-supplied grant fields are trusted.
+      if (grantRef !== null) {
+        const resolved = resolveLiveClaimByGrantRef(state, grantRef);
+        if (!resolved.ok) {
+          return {
+            owner: 'mission',
+            status: 'rejected',
+            code: resolved.code,
+            reason: resolved.reason,
+          };
+        }
+        const claim = resolved.claim;
+        if (typeof input.contractDigest === 'string'
+            && input.contractDigest.length > 0
+            && claim.campaign_contract_digest !== input.contractDigest) {
+          return {
+            owner: 'mission',
+            status: 'rejected',
+            code: 'mission_grant_ref_mismatch',
+            reason: 'grant_ref claim campaign_contract_digest does not match intake contractDigest',
+          };
+        }
+        if (typeof input.base === 'string'
+            && input.base.length > 0
+            && claim.base_sha !== input.base) {
+          return {
+            owner: 'mission',
+            status: 'rejected',
+            code: 'mission_grant_ref_mismatch',
+            reason: 'grant_ref claim base_sha does not match intake base',
+          };
+        }
+        // Rebuild payload for internal consistency (not caller-supplied).
+        const rebuilt = claimPayloadFromExistingClaim(state, claim);
+        if (!rebuilt.reservation || !claimBindingTupleMatches(claim, rebuilt, state)) {
+          return {
+            owner: 'mission',
+            status: 'rejected',
+            code: 'mission_grant_ref_mismatch',
+            reason: 'grant_ref claim could not be rebuilt into a matching binding tuple',
+          };
+        }
+        return {
+          owner: 'mission',
+          status: 'claimed',
+          claim_id: claim.claim_id,
+          resumed: true,
+          mission_lineage_id: state.mission_lineage_id,
+          control_sequence: state.control_sequence,
+        };
+      }
+
       const payload = claimPayload(state, input);
       // Exact retry adopts the already-stored claim only when the complete
       // binding tuple matches. A same-key changed binding fails closed with a
@@ -3825,6 +4061,7 @@ module.exports = {
   TERMINAL_STATES,
   buildProjection,
   applyMissionCampaignReceipt,
+  createFileBackedMissionStateStore,
   createMissionCampaignAdapters,
   evaluateCodexEnforcementDisposition,
   createCodexMissionEnforcementAdapter,

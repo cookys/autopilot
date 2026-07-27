@@ -382,6 +382,7 @@ module.exports = {
   authorizeCeilingAdjust: authenticatedControl.authorizeCeilingAdjust,
   buildProjection: missionConvergence.buildProjection,
   applyMissionCampaignReceipt: missionConvergence.applyMissionCampaignReceipt,
+  createFileBackedMissionStateStore: missionConvergence.createFileBackedMissionStateStore,
   createMissionCampaignAdapters: missionConvergence.createMissionCampaignAdapters,
   evaluateCodexEnforcementDisposition: missionConvergence.evaluateCodexEnforcementDisposition,
   createCodexMissionEnforcementAdapter: missionConvergence.createCodexMissionEnforcementAdapter,

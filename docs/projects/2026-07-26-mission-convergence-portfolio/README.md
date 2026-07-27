@@ -2,9 +2,9 @@
 
 > Status: In progress
 >
-> Progress: 18/34 phases READY
+> Progress: 19/34 phases READY
 >
-> Current phase: seq 19 — LSM P4 finish-flow + CEO reporting (`IN_PROGRESS`; not READY)
+> Current phase: seq 20 — LSM P5 docs/package integration (`IN_PROGRESS`; not READY)
 >
 > Target: v2.34.0
 >
@@ -72,7 +72,7 @@ blocking finding. A transport failure never counts as a verdict.
 | 16 | LSM P1 task-status aggregation | Mission P2 + ICC/WLB receipts | READY | `e79d0da..70b50f9` | [lsm-p1.md](reviews/lsm-p1.md) |
 | 17 | LSM P2 merge-intent preflight | LSM P1 | READY | `727bdf9` | [lsm-p2.md](reviews/lsm-p2.md) |
 | 18 | LSM P3 merge execution receipts | LSM P2 | READY | `a401f35` | [lsm-p3.md](reviews/lsm-p3.md) |
-| 19 | LSM P4 finish-flow + CEO reporting | LSM P3 | Pending | pending | pending |
+| 19 | LSM P4 finish-flow + CEO reporting | LSM P3 | READY | `f77866a` | [lsm-p4.md](reviews/lsm-p4.md) |
 | 20 | LSM P5 docs/package integration | LSM P4 | Pending | pending | pending |
 | 21 | ICC P4 057 dogfood + ship integration | Mission/LSM integration | Pending | pending | pending |
 | 22 | PRO P3 native Kimi transport | PRO core; independent | Pending | pending | pending |
